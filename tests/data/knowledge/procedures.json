@@ -1,0 +1,14 @@
+{
+  "format": "tisma-knowledge-procedures",
+  "version": 1,
+  "language": "es",
+  "sources": [{"id": "test", "title": "Datos de prueba del motor", "author": "Equipo del motor", "url": "https://example.com/test"}],
+  "notes": [],
+  "procedures": [
+    {"id": "drying", "name": "Secar el filamento", "for": "Filamento que cruje o deja hilos",
+     "steps": [{"title": "Calentar", "text": "Poner la bobina a la temperatura del material."},
+               {"title": "Esperar", "text": "Dejarla las horas que pide el material."}],
+     "warnings": ["No pasar la temperatura del material."], "prevention": ["Guardarla con desecante."],
+     "notes": null, "applies_to": "Todas"}
+  ]
+}

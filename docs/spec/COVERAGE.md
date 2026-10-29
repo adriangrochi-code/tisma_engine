@@ -55,7 +55,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Relleno de huecos (activar o no) | `perimeters.md`, `walls_extra.md` | ✔ |
 | Un solo perímetro en la capa de arriba (en todas o solo en la de más arriba) y en la primera capa | `walls_extra.md` | ✔ |
 | Perímetros escalonados (Tisma) | `staggered_perimeters.md` | ✔ |
-| Piel difusa (exterior o todas las paredes, espesor, distancia entre puntos) y pintada | `fuzzy_skin.md` | ◐ falta la herramienta para pintarla → `model_tools.md` |
+| Piel difusa (exterior o todas las paredes, espesor, distancia entre puntos) y pintada | `fuzzy_skin.md`, `model_tools.md` (regla 27) | ✔ |
 | Z anti-aliasing (Tisma) | `z_antialiasing.md` | ✔ |
 | Arcos en voladizos (Tisma) | `arc_overhangs.md` | ✔ |
 
@@ -101,7 +101,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Separación Z de abajo, capas de interfaz de abajo | `supports_more.md` | ✔ |
 | Patrón del soporte (rectilíneo, grilla, panal) y de la interfaz (automático, rectilíneo, concéntrico), separación de la interfaz, lazos de contacto | `supports_skirt.md`, `supports_more.md` | ✔ |
 | Vaina alrededor del soporte, radio de cierre | `supports_more.md` | ✔ |
-| Soporte y anti-soporte pintados, y como piezas (bloqueador y forzador) | `supports_more.md` | ◐ falta la herramienta para pintarlos y agregarlos → `model_tools.md` |
+| Soporte y anti-soporte pintados, y como piezas (bloqueador y forzador) | `supports_more.md`, `model_tools.md` (regla 27) | ✔ |
 | Sincronizar las capas del soporte con las de la pieza (multimaterial) | `multi_extruder.md` | ✔ |
 
 ### Velocidades y aceleraciones
@@ -145,7 +145,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Anchos de paredes, externa, primera capa, relleno, sólido, arriba | `perimeters.md`, `surfaces_infill.md` | ✔ |
-| Ancho del soporte; anchos automáticos | — | ✘ → `supports_more.md` y `speeds_accels.md` |
+| Ancho del soporte; anchos automáticos | `supports_more.md` (regla 18) | ◐ los anchos automáticos no cambiaron nada desde la línea de comandos, ni con boquillas distintas por extrusor |
 | Multiplicador de extrusión del filamento | `gcode_motion.md` | ✔ |
 
 ## Filamento
@@ -155,10 +155,10 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Color, diámetro, temperaturas de boquilla y cama (primera capa y resto), cama por tipo de cama | `profiles.md`, `gcode_motion.md` | ✔ |
 | Densidad, costo, peso del carrete: peso y costo de la impresión | `interface.md` (los muestra), `gcode_extras.md` | ✔ |
 | Temperatura de la cámara y mínima de la cámara | `gcode_extras.md` | ✔ |
-| Tipo, soluble, abrasivo | `profiles.md` | ◐ falta qué cambia cada uno → `profiles.md` (actualizar) |
+| Tipo, soluble, abrasivo | `profiles.md` (regla 8, prueba PF8) | ✔ no cambian el laminado |
 | Compensación de la contracción en XY y en Z | `gcode_extras.md` | ◐ en la línea de comandos no cambió nada: falta medirla con la interfaz y una pieza real |
 | G-code de inicio y fin del filamento | `gcode_templates.md` | ✔ |
-| Cambios del filamento sobre la impresora (retracción, salto en Z, barrido por filamento) | — | ✘ → `retraction_travel.md` |
+| Cambios del filamento sobre la impresora (retracción, salto en Z, barrido por filamento) | `retraction_travel.md` (regla 10) | ✔ |
 | Parámetros de cambio de herramienta, carga, descarga, enfriamiento, purga y «ramming» | `multi_extruder.md` | ✔ |
 
 ## Impresora y G-code
@@ -169,7 +169,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Desfase de Z | `gcode_extras.md` | ✔ |
 | Firmware (dialectos) | `gcode_firmware.md`, `gcode_extras.md` | ✔ |
 | Límites de la máquina (avance, aceleración, jerk, avance mínimo) y su uso (escribir, solo estimar, ignorar) | `gcode_firmware.md` | ✔ |
-| Modo silencioso (segunda estimación de tiempo) | `gcode_extras.md` | ✔ |
+| Modo silencioso (segunda estimación de tiempo) | `gcode_extras.md`, `print_time.md` | ✔ |
+| Tiempo de impresión estimado: límites, comandos del G-code, qué cuenta | `print_time.md` | ◐ faltan pares medidos con impresoras reales |
 | Tiempo restante, etiquetas de objetos | `gcode_firmware.md` | ✔ |
 | Miniaturas en el G-code (tamaños y formatos PNG, JPG, QOI, la de las pantallas de BTT) | `gcode_extras.md` | ◐ falta el formato exacto: solo la interfaz las escribe → `formats.md` |
 | G-code binario | `gcode_extras.md` | ✔ |
@@ -179,8 +180,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | G-code de inicio y fin, con variables | `GCODE_OUTPUT.md`, `gcode_templates.md` | ✔ |
 | G-code antes y después del cambio de capa, al cambiar de herramienta, entre objetos, al cambiar de color, en la pausa, plantilla propia; temperaturas automáticas en el inicio | `gcode_templates.md`, `sequential.md`, `multi_extruder.md` | ✔ |
 | Cambios por altura (temperatura, ventilador, flujo, G-code) | `docs/CONFIG.md` (`changes`) | ✔ |
-| Cambio de color y pausa en una capa, desde la vista previa | `gcode_templates.md` | ◐ falta ponerlos desde la vista previa → `preview.md` |
-| Parámetros propios del perfil para usar en el G-code | `docs/CONFIG.md` (`machine.variables`), `gcode_templates.md` | ◐ falta el prefijo con que se usan: no se resolvieron desde la línea de comandos → `presets.md` |
+| Cambio de color y pausa en una capa, desde la vista previa | `gcode_templates.md`, `preview.md` (regla 12) | ✔ |
+| Parámetros propios del perfil para usar en el G-code | `presets.md` (reglas 20 a 22), `gcode_templates.md` | ✔ |
 | Comentarios detallados en el G-code | `gcode_extras.md` | ✔ |
 | Formato del nombre del archivo de salida, con variables | `gcode_templates.md` | ✔ |
 | Scripts de posproceso | `gcode_templates.md` | ✔ |
@@ -194,6 +195,8 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Boquillas de distinto diámetro y mezcla de colores por capas (Tisma) | `multimaterial.md` | ✔ |
+| Mezcla de colores: ciclo de capas de cada proporción, degradés, costo de purga, archivo del proyecto | `color_mixing.md` | ✔ |
+| Multicolor ampliado de Full Spectrum (pedido del dueño, 26-10-2026; Tisma Slicer tiene solo el ciclo por proporción): tipos de mezcla, subcapas, solo superficie, sesgo, predicción, imágenes | `color_mixing_plus.md` | ✔ (ficha; a confirmar midiendo Full Spectrum) |
 | Extrusor por tipo (paredes, relleno, sólido, soporte, interfaz, torre) y para la temperatura de la cama | `multi_extruder.md` | ✔ |
 | Prevención de goteo (bajar la temperatura de los que esperan) | `multi_extruder.md` | ✔ |
 | Torre de purga: ancho, borde, puentes, cono, separación, flujo extra, sin capas ralas, cebado | `multi_extruder.md` | ✔ (el cono y el cebado, sin medir) |
@@ -208,75 +211,80 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Función | Ficha | Estado |
 |---|---|---|
 | Pantalla, exposición, capas iniciales, movimientos, GOO | `resin.md` | ✔ |
-| Inclinación del tanque (rápida, lenta, alta viscosidad) y perfil de impresión del material | — | ✘ → `resin.md` (actualizar) |
-| Correcciones: absoluta, gamma, pata de elefante con ancho mínimo, capas de corrección de Z | `resin.md` | ◐ faltan absoluta, gamma y Z → `resin.md` (actualizar) |
+| Inclinación del tanque (rápida, lenta, alta viscosidad) y perfil de impresión del material | — | ✘ → `resin.md` (actualizar): solo para impresoras con tanque que se inclina; el formato GOO no lo guarda |
+| Correcciones: absoluta, gamma, pata de elefante con ancho mínimo, capas de corrección de Z | `resin.md` (reglas 20 a 22) | ◐ la absoluta no cambió nada desde la línea de comandos; falta medirla desde la interfaz |
 | Formatos de salida además de GOO, y su precisión | `resin.md` | ◐ → `formats.md` |
 | Soportes, base y vaciado | `resin_supports.md` | ◐ faltan tipo de árbol, solo forzados, y las opciones finas de cabeza, pilar, uniones y base → `resin_supports.md` (actualizar) |
 | Costo del frasco, volumen, peso, densidad: costo de la impresión | `gcode_extras.md` | ✔ |
-| Agujeros de drenaje y puntos de soporte a mano | `resin_supports.md` | ◐ falta la herramienta → `model_tools.md` |
+| Agujeros de drenaje y puntos de soporte a mano | `resin_supports.md`, `model_tools.md` (regla 28) | ✔ |
 
 ## Herramientas sobre los modelos
 
 | Función | Ficha | Estado |
 |---|---|---|
-| Mover, rotar, escalar (también por medidas), espejar | `interface.md` (nombra) | ◐ → `model_tools.md` |
+| Mover, rotar, escalar (también por medidas), espejar | `model_tools.md` (reglas 11, 12, 16 y 17) | ✔ |
 | Apoyar sobre una cara | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Cortar: plano, con conectores (espigas, encastres en cola de milano) | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Separar en objetos y en partes | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Medir (distancias, ángulos, diámetros) | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Simplificar la malla | `slicing.md` (contornos) | ◐ falta la de la malla → `model_tools.md` |
-| Texto en relieve y SVG en relieve | — | ✘ → `model_tools.md` |
-| Pintar soportes, costura, piel difusa y colores | `interface.md` (nombra) | ◐ → `model_tools.md` |
-| Partes, volúmenes negativos, modificadores, bloqueadores y forzadores de soporte, modificador por rango de alturas | — | ✘ → `model_tools.md` |
-| Ajustes por objeto, por parte y por rango de alturas | `calibration_models.md` (los usa) | ◐ → `model_tools.md` |
-| Copias (instancias), llenar la cama, escalar al volumen, convertir desde metros o pulgadas, reemplazar por otro STL, recargar desde el disco | `placement.md` (copias) | ◐ → `model_tools.md` |
-| Ordenar (con rotación, separación y alineación) y varias camas | `placement.md` | ◐ falta varias camas → `model_tools.md` |
-| Galería de formas | — | ✘ → `model_tools.md` |
+| Cortar: plano, con conectores (espigas, encastres en cola de milano) | `model_tools.md` (reglas 13 y 18) | ✔ |
+| Separar en objetos y en partes | `model_tools.md` (reglas 14 y 19) | ✔ |
+| Medir (distancias, ángulos, diámetros) | `model_tools.md` (regla 20) | ✔ |
+| Simplificar la malla | `slicing.md` (contornos), `model_tools.md` (regla 21) | ✔ |
+| Texto en relieve y SVG en relieve | `model_tools.md` (reglas 22 y 23) | ✔ |
+| Pintar soportes, costura, piel difusa y colores | `model_tools.md` (regla 27) | ✔ |
+| Partes, volúmenes negativos, modificadores, bloqueadores y forzadores de soporte, modificador por rango de alturas | `model_tools.md`, `supports_more.md` (bloqueadores y forzadores) | ✔ |
+| Ajustes por objeto, por parte y por rango de alturas | `model_tools.md` (reglas 5 a 7), `settings_levels.md` (reglas 10 y 11) | ✔ |
+| Copias (instancias), llenar la cama, escalar al volumen, convertir desde metros o pulgadas, reemplazar por otro STL, recargar desde el disco | `placement.md` (copias), `model_tools.md` (reglas 11, 15, 25 y 30) | ✔ |
+| Ordenar (con rotación, separación y alineación) y varias camas | `placement.md`, `model_tools.md` (regla 26) | ✔ |
+| Galería de formas | `model_tools.md` (regla 24) | ✔ |
 | Orientación automática (Tisma) | `orientation.md` | ✔ |
 | Dividir para que entre (Tisma) | `fragment.md` | ✔ |
-| Reparar la malla | `slicing.md` (mallas sucias) | ◐ falta la reparación al importar → `formats.md` |
+| Reparar la malla | `slicing.md` (mallas sucias), `formats.md` (regla 4) | ✔ |
 
 ## Vista previa
 
 | Función | Ficha | Estado |
 |---|---|---|
 | Leyenda por tipo, deslizadores, tiempos | `interface.md` | ✔ |
-| Otras vistas: altura, ancho, velocidad, ventilador, temperatura, caudal, tiempo de capa (lineal y logarítmico), herramienta, cambio de color | — | ✘ → `preview.md` |
-| Mostrar viajes, barridos, retracciones, costuras, cambios de herramienta y de color, pausas, centro de gravedad, la pieza | `interface.md` (fila de íconos) | ◐ → `preview.md` |
-| Visor de G-code aparte | `interface.md` (Más) | ◐ → `preview.md` |
+| Otras vistas: altura, ancho, velocidad, ventilador, temperatura, caudal, tiempo de capa (lineal y logarítmico), herramienta, cambio de color | `preview.md` | ✔ |
+| Mostrar viajes, barridos, retracciones, costuras, cambios de herramienta y de color, pausas, centro de gravedad, la pieza | `interface.md` (fila de íconos), `preview.md` (reglas 5 y 11) | ✔ |
+| Visor de G-code aparte | `interface.md` (Más), `preview.md` (regla 13) | ✔ |
 | Estimación de tiempo normal y silenciosa, filamento por tipo | `interface.md` | ✔ |
 
 ## Archivos
 
 | Función | Ficha | Estado |
 |---|---|---|
-| Leer STL, OBJ, 3MF, AMF, STEP, SVG, ZIP | — | ✘ → `formats.md` |
-| Proyecto 3MF: qué guarda (piezas, partes, ajustes por objeto, pintura, modificadores, varias camas, análisis, capas no planares) | — | ✘ → `formats.md` |
-| Abrir proyectos de Bambu Studio y OrcaSlicer | — | ✘ → `formats.md` |
-| Exportar la placa como STL u OBJ, con soportes, y las trayectorias como OBJ | — | ✘ → `formats.md` |
+| Leer STL, OBJ, 3MF, AMF, STEP, SVG, ZIP | `formats.md` (reglas 1 a 5 y 17) | ✔ |
+| STEP guardado en el proyecto, cara por triángulo, volver a convertir sin perder la pintura, revisar el sólido | `step_faces.md` | ✔ |
+| Proyecto 3MF: qué guarda (piezas, partes, ajustes por objeto, pintura, modificadores, varias camas, análisis, capas no planares) | `formats.md` | ◐ medidos el paquete, las mallas, las partes y los ajustes; falta lo que se guarda desde la interfaz (regla 10) |
+| Abrir proyectos de Bambu Studio y OrcaSlicer | `formats.md` (regla 18) | ◐ falta medirlo con proyectos reales |
+| Exportar la placa como STL u OBJ, con soportes, y las trayectorias como OBJ | `formats.md` (reglas 15 y 16) | ✔ |
 | Archivos de resina: importar, exportar | `resin.md` | ◐ → `formats.md` |
-| Exportar a una tarjeta o memoria y expulsarla | — | ✘ → `formats.md` |
+| Exportar a una tarjeta o memoria y expulsarla | `formats.md` (regla 19) | ✔ |
 
 ## Perfiles y configuración
 
 | Función | Ficha | Estado |
 |---|---|---|
 | Impresora por modelo, boquilla y cama aparte, datos oficiales | `profiles.md` | ✔ |
-| Perfiles del sistema y del usuario, herencia, guardar, renombrar, borrar, separar del padre | — | ✘ → `presets.md` |
-| Compatibilidad entre perfiles (condiciones) | — | ✘ → `presets.md` |
-| Impresoras físicas (una impresora con su conexión) | `printer_connections.md` | ◐ → `presets.md` |
-| Comparar perfiles, paquetes de configuración, instantáneas, actualizaciones de los perfiles | — | ✘ → `presets.md` |
-| Plantillas de filamento | `interface.md` (menú del filamento) | ◐ → `presets.md` |
+| Miles de impresoras, filamentos y resinas de otros laminadores, descargados de un paquete libre aparte | `profile_pack.md` | ✔ |
+| Asistente sin conexión, glosario, fichas de materiales y tutoriales (pedido del dueño, 26-10-2026) | `assistant.md` | ✔ |
+| Perfiles del sistema y del usuario, herencia, guardar, renombrar, borrar, separar del padre | `presets.md` | ✔ |
+| Compatibilidad entre perfiles (condiciones) | `presets.md` | ✔ |
+| Impresoras físicas (una impresora con su conexión) | `devices.md` | ✔ |
+| Comparar perfiles, paquetes de configuración, instantáneas, actualizaciones de los perfiles | `presets.md` | ◐ falta medir la actualización de los perfiles del sistema y volver a una instantánea |
+| Plantillas de filamento | `interface.md` (menú del filamento) | ◐ falta medir cómo se instalan y se usan (no entraron en `presets.md`) |
 | Buscar un ajuste | `interface.md` | ✔ |
+| Niveles de ajustes (Simple, Advanced, Expert), lista propia de ajustes (Quick settings) | `settings_levels.md` | ◐ falta el comienzo de tres páginas de impresión en Expert y las páginas de material e impresora en Expert |
 | Asistente de primer uso | `interface.md` | ✔ |
-| Preferencias | `interface.md` | ◐ falta la lista completa → `preferences.md` |
+| Preferencias | `interface.md`, `preferences.md` | ✔ |
 
 ## Conexión con impresoras
 
 | Función | Ficha | Estado |
 |---|---|---|
 | USB, Bambu Lab en red local, cámara USB, botón de enviar | `printer_connections.md` | ✔ |
-| PrusaLink, Prusa Connect, OctoPrint, Moonraker, Duet, FlashAir, AstroBox, Repetier, MKS, Flashforge | `printer_connections.md` | ◐ falta el detalle de cada uno → `printer_connections.md` (actualizar) |
+| OctoPrint, Moonraker, Duet, AstroBox, Repetier, Flashforge, Bambu Lab: pantallas, pedidos, errores, por marca | `devices.md` | ✔ |
+| PrusaLink y Prusa Connect con un perfil de Prusa; subir e imprimir en FlashAir y MKS | `devices.md` | ◐ falta medirlos (ver «Lo que falta medir») |
 | Cola de envíos | `interface.md` (Más) | ◐ → `printer_connections.md` |
 | Grabar el firmware de la impresora | `interface.md` (Más) | ◐ → `printer_connections.md` |
 
@@ -289,25 +297,30 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Calibraciones y sus piezas | `calibrations.md`, `calibration_models.md` | ✔ |
 | Revisión antes de imprimir y estabilidad | `print_review.md`, `stability.md` | ✔ |
 | Ubicación en la cama | `placement.md` | ✔ |
+| Impresoras de pellets (pedido del dueño, 26-10-2026; Tisma Slicer no las trata aparte) | `pellets.md` | ✔ |
+| Impresoras de metal por arco, WAAM (pedido del dueño, a futuro) | `waam.md` (estudio) | ◐ las reglas se cierran con una máquina de prueba |
 
 ## Servicios
 
 | Función | Ficha | Estado |
 |---|---|---|
-| Tisma Cloud desde el programa: cuenta, laminar y calcular en la nube | `interface.md` (diálogo) | ◐ → `cloud.md` |
-| Servidor de Tisma Cloud: maestro y nodos, cola con prioridades, cuentas, planes y cobro, seguridad | — | ✘ → `cloud.md` |
-| Informar un problema, con catálogo de errores y recompensa | `interface.md` (qué manda) | ◐ → `problem_reports.md` |
-| Thingiverse dentro del programa | `interface.md` (nombra) | ◐ → `thingiverse.md` |
-| App de teléfono: laminar, ajustes, Ingeniería, impresoras por WiFi y cámara | — | ✘ → `mobile_app.md` |
-| Acceso remoto a las impresoras y detección de fallas con la cámara | — | ✘ → `cloud.md` |
+| Tisma Cloud desde el programa: cuenta, laminar y calcular en la nube | `interface.md` (diálogo), `cloud.md` (reglas 1 a 10) | ✔ |
+| Servidor de Tisma Cloud: maestro y nodos, cola con prioridades, cuentas, planes y cobro, seguridad | `cloud.md` (contrato; el servidor es un programa aparte, `INTEGRATION.md`) | ✔ |
+| Informar un problema, con catálogo de errores y recompensa | `problem_reports.md` (la pantalla), `cloud.md` (regla 11; el catálogo y la recompensa son del servidor) | ✔ |
+| Pieza de prueba propia «Mabel», con mecanismos (pedido del dueño, 26-10-2026; Tisma Slicer no la tiene) | `quality_model.md` | ✔ (ficha) |
+| Recorrido que ahorra tiempo sin cambiar el perfil (pedido del dueño, 26-10-2026) | `toolpath_time.md` | ✔ (ficha) |
+| Biblioteca de modelos de Tisma Cloud con laminados hechos y análisis (pedido del dueño, 26-10-2026; Tisma Slicer no la tiene) | `model_library.md` | ✔ (ficha; más adelante) |
+| Thingiverse dentro del programa | `thingiverse.md` | ✔ (la búsqueda con la API se confirma con un token antes de programarla, regla 20) |
+| App de teléfono: laminar, ajustes, Ingeniería, impresoras por WiFi y cámara | `mobile_app.md` (app nueva, de cero, sobre el motor) | ✔ |
+| Acceso remoto a las impresoras y detección de fallas con la cámara | `cloud.md` (reglas 12 a 17) | ◐ falta la detección de fallas (Obico, servicio aparte) |
 
 ## Interfaz
 
 | Función | Ficha | Estado |
 |---|---|---|
 | Ventana, menús, aspecto, asistente, Ingeniería | `interface.md` | ✔ |
-| Controles de la vista 3D: girar, mover, acercar, vistas, perspectiva u ortogonal | — | ✘ → `preview.md` |
-| Deshacer y rehacer | `interface.md` (atajos) | ◐ → `model_tools.md` |
+| Controles de la vista 3D: girar, mover, acercar, vistas, perspectiva u ortogonal | `preview.md` (regla 10) | ✔ |
+| Deshacer y rehacer | `model_tools.md` (regla 29) | ✔ |
 | Idiomas (inglés y español) | `interface.md` (principio 2) | ✔ |
 
 ## Migración

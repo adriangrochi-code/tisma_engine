@@ -32,6 +32,37 @@ conocimiento de los slicers. Nunca su código fuente (ver `CLEANROOM.md`).
 | Zhang et al., *S³-Slicer*, SIGGRAPH Asia 2022. [ACM SIGGRAPH](https://history.siggraph.org/?p=216073) | Laminado curvo con varios objetivos |
 | Zhang et al., *Support Generation for Robot-Assisted 3D Printing with Curved Layers*, ICRA 2023. [arXiv](https://arxiv.org/pdf/2302.05510) | Soportes para capas curvas |
 | Estudio de acabado con capas curvas (ScienceDirect, 2025). [Artículo](https://www.sciencedirect.com/science/article/pii/S2590123025043178) | Las capas curvas mejoran el acabado hasta unos 55° de inclinación |
+| Ottonello, Hugron, Parmiggiani, Lefebvre. *QuickCurve: revisiting slightly non-planar 3D printing.* arXiv 2406.03966, 2024. [arXiv](https://arxiv.org/abs/2406.03966) | Superficie de corte curva por mínimos cuadrados, sin choques (`qa/2026-10-26-papers-calidad.md`, NP1) |
+| Xu, Li, Chen, Tang. *Curved layer based process planning for multi-axis volume printing of freeform parts.* Computer-Aided Design 114 (2019) 51–63 | Capas curvas por distancia geodésica (MA2) |
+| Zhang, Chen, Fang, Tian, Wang. *Singularity-Aware Motion Planning for Multi-Axis Additive Manufacturing.* IEEE RA-L 6(4), 2021. [arXiv](https://arxiv.org/abs/2103.00273) | Singularidades y choques en 5 ejes (MA3) |
+| Han, Wu, Liu, Song, Cui. *Research on a Support-Free Five-Degree-of-Freedom Additive Manufacturing Method.* Micromachines, 2024. [PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC11279049/) | 5 ejes con cama que gira (MA5) |
+| Andersons, Sanchez, Vaneker. *Wave-inspired path-planning strategy for support-free horizontal overhangs in FDM.* Additive Manufacturing Letters, 2026 | Voladizos horizontales con caminos en ondas (G1) |
+
+## Color, piezas grandes, estabilidad y ahorro de material (`qa/2026-10-26-papers-mas.md`)
+
+| Fuente | Para qué |
+|---|---|
+| Hergel, Lefebvre. *Clean Color: Improving Multi-filament 3D Prints.* Computer Graphics Forum 33(2), 2014 | Goteo con varias boquillas (C1) |
+| Song, Martínez, Bedell, Vennin, Lefebvre. *Colored Fused Filament Fabrication.* ACM TOG 38(5), 2019. [arXiv](https://arxiv.org/abs/1709.09689) | Color por franjas dentro de la capa (C2) |
+| Kuipers, Elkhuizen, Verlinden, Doubrovski. *Hatching for 3D prints.* Computers & Graphics 74, 2018. [arXiv](https://arxiv.org/abs/1805.01375) | Medios tonos con líneas y dos filamentos (C3) |
+| Luo, Baran, Rusinkiewicz, Matusik. *Chopper.* ACM TOG 31(6), 2012 | Partir piezas grandes (F1) |
+| Song, Fu, Liu, Fu. *Printing 3D objects with interlocking parts.* Computer Aided Geometric Design 35–36, 2015 | Partes que se traban (F2) |
+| Chen y otros. *Dapper: Decompose-and-Pack for 3D Printing.* ACM TOG 34(6), 2015 | Partir y acomodar juntos (F3) |
+| Prévost, Whiting, Lefebvre, Sorkine-Hornung. *Make It Stand.* ACM TOG 32(4), 2013 | Que la pieza se pare sola (E1) |
+| Stava, Vanek, Benes, Carr, Měch. *Stress Relief.* ACM TOG 31(4), 2012 | Corregir zonas débiles (E2) |
+| Wang y otros. *Cost-effective Printing of 3D Objects with Skin-Frame Structures.* ACM TOG 32(6), 2013 | Cáscara con armazón interno (E3) |
+| Mueller y otros. *WirePrint: 3D Printed Previews for Fast Prototyping.* UIST 2014 | Vista previa en alambre (W1) |
+
+## Resina (`qa/2026-10-26-papers-resina.md`)
+
+| Fuente | Para qué |
+|---|---|
+| Jacobs. *Rapid Prototyping & Manufacturing: Fundamentals of Stereolithography.* SME, 1992 | Curva de trabajo `Cd = Dp · ln(E / Ec)` (R1) |
+| Gong, Bickham, Woolley, Nordin. Lab on a Chip 17, 2017. [BYU](https://scholarsarchive.byu.edu/facpub/1923) | Profundidad de penetración desde el absorbente (R2) |
+| Pritchard, de Beer, Whelan, Scott, Burns. *Modeling and Correcting Cure-Through in Continuous Stereolithographic 3D Printing,* 2019, DOI 10.1002/admt.201900700 | Curado de más bajo huecos y voladizos (R3) |
+| *Development of a Calibration Procedure of the Additive Masked Stereolithography Method…* Applied Sciences 15(13), 7412, 2025 | Máscara de iluminación de la pantalla (R4) |
+| Pan, He, Xu, Feinerman. Rapid Prototyping Journal 23(2), 2017 | Fuerza de despegue por capa (R6) |
+| Flach, Chartoff. Solid Freeform Fabrication Symposium, 1994. [PDF](https://utw10945.utweb.utexas.edu/Manuscripts/1994/1994-23-Flach.pdf) | Contracción y alabeo (R8) |
 
 ## Estabilidad durante la impresión
 

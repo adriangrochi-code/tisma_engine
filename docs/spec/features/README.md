@@ -23,6 +23,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`dense_infill.md`](dense_infill.md): relleno más denso solo bajo las superficies de arriba | después de F3 | Para revisar |
 | [`pressure_advance_gcode.md`](pressure_advance_gcode.md): estudio: el adelanto del extrusor escrito en el G-code para firmwares sin pressure advance, con los límites en las uniones y la simulación | después de F4, opcional | Para revisar |
 | [`multimaterial.md`](multimaterial.md): boquillas de distinto diámetro por extrusor (paredes finas, relleno grueso) y mezcla de colores por capas, con su costo de purga | después de la primera versión | Para revisar |
+| [`color_mixing_plus.md`](color_mixing_plus.md): multicolor ampliado como Full Spectrum: mezclas por proporción, secuencia, color buscado y degradé; pares automáticos; alto por filamento, subcapas, solo superficie, sesgo, predicción espectral, paleta de calibración y colores desde una imagen | después de `color_mixing.md` | Para revisar |
 | [`structural_analysis.md`](structural_analysis.md): análisis estructural por vóxeles, material con capas más débiles, criterio de rotura, temperatura, paredes y relleno, tabla de materiales, validación con teoría y CalculiX | F7 | Para revisar |
 | [`structural_optimization.md`](structural_optimization.md): relleno mínimo uniforme y por zonas, nervios a lo largo de las tensiones, refuerzos, lattice, orientación recomendada | F7 | Para revisar |
 | [`aerodynamics.md`](aerodynamics.md): arrastre por presión (lattice Boltzmann) y rozamiento con la rugosidad de las capas | F7 | Para revisar |
@@ -40,9 +41,47 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`orientation.md`](orientation.md): orientación automática, menos soporte en FDM y menor fuerza de despegue en resina | después de la primera versión | Para revisar |
 | [`fragment.md`](fragment.md): dividir un objeto que no entra, con cortes en las secciones chicas y encastres (pernos o espigas) | después de la primera versión | Para revisar |
 | [`interface.md`](interface.md): la ventana en orden (barra superior, grupos de herramientas, panel de la placa, botón principal, vista previa, páginas de ajustes, Más, asistente, panel de Ingeniería), todos los menús con sus atajos, el aspecto (colores claro y oscuro, medidas de cada componente) y 39 capturas en [`interface/`](interface/) | P1 | Para revisar |
+| [`profile_pack.md`](profile_pack.md): el paquete libre de perfiles (902 modelos FDM y 156 de resina, 11 651 filamentos, 484 resinas): descarga en el primer arranque, comprobación, compatibles, variables del G-code de inicio, actualizaciones y datos de la comunidad | P3 | Para revisar |
+| [`assistant.md`](assistant.md): asistente sin conexión (problemas con causas y arreglos aplicables, procedimientos, glosario junto a los ajustes, fichas y avisos de materiales) y tutoriales guiados con anclas y eventos de la interfaz | P1 | Para revisar |
+| [`pellets.md`](pellets.md): impresoras de pellets: alimentación, eje E en largo o en volumen, sección redonda del cordón, flujo según la velocidad, topes para boquillas y capas grandes | P3 | Para revisar |
+| [`waam.md`](waam.md): estudio de impresoras de metal por arco: arco en lugar de E, menos arranques, paso entre cordones, intersecciones, espera entre capas, sobremedida para mecanizar | después de la primera versión | Para revisar |
 | [`profiles.md`](profiles.md): impresora por modelo, boquilla y cama aparte, temperatura de cama por tipo de cama, datos solo de fuentes oficiales | P3 | Para revisar |
+| [`mobile_app.md`](mobile_app.md): la app de Android nueva, de cero sobre el motor: API en C del motor, pantallas como el escritorio, laminar en el teléfono, Ingeniería, impresoras de la red, nube | después de P1 | Para revisar |
+| [`cloud.md`](cloud.md): contrato con Tisma Cloud: cuenta, laminar y calcular en la nube, informar problemas, el motor como puente de impresoras y como programa de los nodos | después de la primera versión | Para revisar |
+| [`step_faces.md`](step_faces.md): STEP con caras: calidad al abrir, cara por triángulo, el STEP en el proyecto, pintar y elegir cargas por cara, volver a convertir sin perder lo pintado, revisar el sólido | después de la primera versión | Para revisar |
+| [`problem_reports.md`](problem_reports.md): la pantalla de informar un problema: campos, qué se adjunta y se ve antes, mandar, respuestas del servidor, los informes propios | después de la primera versión | Para revisar |
+| [`thingiverse.md`](thingiverse.md): Thingiverse: búsqueda propia con la API (por Tisma Cloud o con token propio), licencia a la vista y descarga a la placa; el sitio dentro del programa como respaldo; contrato de uso y confirmación con un token | después de la primera versión | Para revisar |
+| [`quality_model.md`](quality_model.md): Mabel, la pieza de prueba propia: una impresora de producción simplificada con voladizos, puentes, paredes finas, texto, medidas de referencia y mecanismos impresos armados (bandeja, tapa, puerta, perillas, rodillos), con guía de revisión | después de F5 | Para revisar |
+| [`toolpath_time.md`](toolpath_time.md): recorrido que ahorra tiempo sin cambiar el perfil: líneas vecinas unidas, orden de islas, retracciones solo cuando hacen falta, esquinas suavizadas | con F5 | Para revisar |
+| [`model_library.md`](model_library.md): biblioteca de modelos de Tisma Cloud: perfiles probados, laminados hechos, análisis de Ingeniería a la vista, «Imprimir» en dos toques, laminados remotos gratis por mes y sin límite en los planes pagos | más adelante | Para revisar |
+| [`preferences.md`](preferences.md): todas las preferencias del programa por página (General, GUI, Other, Camera), las propias del motor, buscador, exportar e importar | P1 | Para revisar |
+| [`walls_extra.md`](walls_extra.md): paredes: ancho fijo o variable, costura, voladizos, paredes extra | después de F2 | Para revisar |
+| [`infill_patterns.md`](infill_patterns.md): patrones de relleno y opciones del relleno que no están en `surfaces_infill.md` | después de F3 | Para revisar |
+| [`retraction_travel.md`](retraction_travel.md): retracción y viajes: vuelta, cambio de capa, barrido, saltos en Z y rampa, viajes por dentro, valores del material | después de F4 | Para revisar |
+| [`speeds_accels.md`](speeds_accels.md): velocidades y aceleraciones por tipo, voladizos, primera capa | después de F4 | Para revisar |
+| [`cooling_more.md`](cooling_more.md): enfriamiento que no está en `cooling.md` | después de F4 | Para revisar |
+| [`fuzzy_skin.md`](fuzzy_skin.md): piel difusa | después de F4 | Para revisar |
+| [`vase_mode.md`](vase_mode.md): una sola pared en espiral | después de F4 | Para revisar |
+| [`gcode_extras.md`](gcode_extras.md): G-code binario, miniaturas, comentarios y otros extras de la salida | después de F4 | Para revisar |
+| [`skirt_brim_raft.md`](skirt_brim_raft.md): falda, borde y balsa más allá de `supports_skirt.md` | F5 | Para revisar |
+| [`supports_more.md`](supports_more.md): soportes: forzados, bloqueadores, separaciones, patrones, interfaz, `snug`, orgánicos, ancho | después de F5 | Para revisar |
+| [`gcode_templates.md`](gcode_templates.md): G-code propio con variables, condiciones y cuentas | después de F6 | Para revisar |
+| [`multi_extruder.md`](multi_extruder.md): varios filamentos: cambio de herramienta, torre de purga, extrusor por función | después de F6 | Para revisar |
+| [`sequential.md`](sequential.md): objeto por objeto, con la holgura de la cabeza | después de F6 | Para revisar |
+| [`devices.md`](devices.md): página Devices y conexión con impresoras por marca, con capturas | F9 | Para revisar |
+| [`presets.md`](presets.md): perfiles del sistema y de la persona: guardar, heredar, compatibilidad, comparar, paquetes, instantáneas, parámetros propios | P3 | Para revisar |
+| [`formats.md`](formats.md): leer STL, OBJ, AMF, 3MF, STEP y SVG, reparación al abrir, el proyecto 3MF y qué guarda, exportar STL y OBJ | F1 (leer), P4 | Para revisar |
+| [`print_time.md`](print_time.md): tiempo estimado: límites de la máquina por firmware, modos normal y silencioso, qué cuenta y qué no, cómo hacerlo más preciso | después de F4 | Para revisar |
+| [`settings_levels.md`](settings_levels.md): niveles de ajustes, lista propia (Quick settings), ajustes por objeto, con capturas | P1 | Para revisar |
+| [`model_tools.md`](model_tools.md): partes, volúmenes negativos, modificadores, rangos de alturas, ajustes por objeto y por parte, y cuál gana; escalar, girar, cortar y separar | F3, P4 | Para revisar |
+| [`preview.md`](preview.md): vista previa: las 13 vistas, leyenda con tiempos y material, escala de colores, deslizadores, con capturas | P1 | Para revisar |
+| [`settings_panel.md`](settings_panel.md): el panel de ajustes en secciones (Calidad, Resistencia, Velocidad…) con apartados finos plegables, niveles Básico, Normal y Avanzado, vista Personalizada, tarjeta de impresora, cama y boquilla con dibujos, configuración de la impresora aparte con su calibración, conexión por red desde un ícono, boquilla con un clic y ventana de la cámara | P1 | Para revisar |
+| [`support_fins.md`](support_fins.md): aletas de soporte que se quitan con la mano, unidas con dientes de una capa, con escala por boquilla, bases, contrafuertes y resina (de Support Fins, MIT) | después de la primera versión | Para revisar |
+| [`credits.md`](credits.md): «Basado en…» en cada función que sale de otra fuente y la página Créditos y fuentes, con las licencias de terceros | P1 | Para revisar |
+| [`plugins.md`](plugins.md): complementos en cualquier lenguaje con un `plugin.json` y JSON por la entrada y la salida; momentos `mesh`, `layers`, `review`, `gcode` y acciones; ajustes que dibuja el motor; instalar soltando un archivo; fallas que no frenan el laminado | después de la primera versión | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
 - Perfiles: los datos de cada impresora y material, desde sus fabricantes (P3).
-- Formatos: proyectos 3MF y lo que guarda Tisma en ellos (P4).
+- Formatos: lo que guarda Tisma en el 3MF desde la interfaz (pintura, modificadores, varias camas, análisis), y
+  los proyectos de Bambu Studio y OrcaSlicer.

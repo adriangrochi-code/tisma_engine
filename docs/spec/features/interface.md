@@ -136,6 +136,18 @@ modelos de prueba se ofrecen con el clic derecho sobre la cama.
 
    El menú de la flecha muestra solo las salidas posibles, con la elegida marcada (captura `31_main_button_menu.png`).
 4. Con «Slice automatically», el paso 2 no hace falta.
+5. **Relaminar por etapas** (diseño; Tisma Slicer hace algo parecido; meta RV5 de `BENCHMARKS.md`): un cambio rehace solo lo que depende de
+   ese ajuste, y el resultado es el mismo que el de un laminado completo.
+
+| Etapa | Ajustes que la rehacen | Qué se rehace |
+|---|---|---|
+| Corte | `layers`, `slicing`, `compensation`, la malla, su escala o su giro | Todo |
+| Trayectorias | `walls`, `fuzzy`, `surfaces`, `infill`, `support`, `adhesion`, `zaa` | Paredes, superficies, relleno, soportes y G-code; no se vuelve a cortar |
+| G-code | `speed`, `cooling`, `retraction`, `extrusion`, `gcode`, `changes`, los límites y aceleraciones de `machine` | Solo el G-code y su revisión |
+
+   - mover la pieza en X e Y sobre la cama rehace solo la etapa de G-code: las trayectorias se trasladan;
+   - un ajuste que no está en la tabla rehace todo, hasta que se ubique en una etapa;
+   - mientras se relamina, la vista previa sigue mostrando el resultado anterior.
 
 ### Vista previa (después de laminar)
 
@@ -172,7 +184,7 @@ Capturas: `41_printer_settings.png`, `42_print_settings.png`, `43_filament_setti
 - **Printer** tiene dos páginas, elegidas con dos chips arriba a la izquierda (Settings y Devices):
   - **Settings:** el perfil de la impresora;
   - **Devices:** impresoras por USB y por red, con su estado, cámara y envío. Cada impresora puede usar una cámara USB
-    de la computadora. Captura `40_devices.png`:
+    de la computadora. El detalle, pantalla por pantalla, está en `devices.md`. Captura `40_devices.png`:
     - a la izquierda, la lista de dispositivos y abajo «+ Add network printer», «Edit printer…» y «Change access
       code…»;
     - a la derecha, el dispositivo elegido: nombre, aviso de cómo conectarlo, cámara, Connection, Active print

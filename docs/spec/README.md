@@ -15,6 +15,7 @@ Los escribió el equipo del dueño, que conoce Tisma Slicer por dentro. Así fun
 | `BEHAVIOR.md` | Cómo tiene que comportarse el laminado: requisitos y lecciones medidas en Tisma |
 | `BENCHMARKS.md` | Números de referencia de Tisma Slicer, medidos como caja negra, para comparar |
 | `COVERAGE.md` | Todo lo que hace Tisma Slicer, función por función, con la ficha que lo cubre: el motor va a reemplazar a Tisma Slicer y no se puede perder nada |
+| `INTEGRATION.md` | Cada parte de Tisma Slicer (laminado, interfaz, conexiones, análisis, servidor, app) y por qué camino llega al motor: ficha, contrato o datos |
 
 Lo que Tisma Slicer ya hace llega como fichas en `features/`, una por función, con las reglas de «Fichas» de
 `CLEANROOM.md`.

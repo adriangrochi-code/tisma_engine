@@ -37,7 +37,11 @@
    S4). Se aparta `support.xy_gap` de la pieza en cada capa: 0,225 mm con un perímetro externo de 0,45.
 3. **Separación en Z:** la última capa de interfaz termina `support.z_gap` por debajo de la pieza.
 4. **Primera capa de la pieza sobre el soporte:** se imprime como puente, con una altura de una capa más la separación
-   (0,4 mm en la prueba S4). Sus perímetros se marcan `;TYPE:Overhang perimeter`.
+   (0,4 mm en la prueba S4). Solo el tramo que está sobre el soporte:
+   - sus perímetros se marcan `;TYPE:Overhang perimeter` con altura 0,4 (en S4, de X 100,2 a 109,8); los perímetros
+     sobre la columna siguen comunes, con 0,2;
+   - el relleno de esa zona es `;TYPE:Bridge infill` con altura 0,4, y entra unos 0,6 mm sobre la parte apoyada (en
+     S4, de X 99,41 a 109,04); el relleno sobre la columna sigue con 0,2.
 5. **Interfaz:** las `support.interface_layers` capas de arriba son densas: líneas a 90° de las de la base, a la
    separación de los cordones (0,357 mm con ancho 0,4). Se marcan `;TYPE:Support material interface`.
 6. **Base:**

@@ -1,0 +1,2 @@
+// The program's icon on Windows: the Tisma application icon of assets/brand/.
+1 ICON "@PROJECT_SOURCE_DIR@/assets/brand/app/tisma.ico"

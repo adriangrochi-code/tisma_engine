@@ -1,0 +1,81 @@
+name: CI
+
+# Windows builds and tests every push. Linux runs inside the work session
+# before every push (tools/ci_linux.sh, the same steps as the Linux jobs
+# here), so on GitHub the Linux jobs only run when started by hand (owner's
+# decision, 2026-10-24). macOS is added at the end of the project (see
+# PLAN.md).
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push cancels the older run of the same branch; a run started by hand
+# never cancels a push run, nor the other way round.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux (${{ matrix.compiler }})
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    env:
+      TISMA_REQUIRE_GPU: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cxx: g++
+          - compiler: clang
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja, lavapipe, glslang and X11 (for the interface)
+        # lavapipe is Mesa's software Vulkan device: the GPU tests run without a GPU.
+        run: >-
+          sudo apt-get update && sudo apt-get install -y ninja-build mesa-vulkan-drivers glslang-tools
+          libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev xvfb
+      - name: Check the generated SPIR-V
+        run: python3 tools/compile_shaders.py --check
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  linux-sanitizers:
+    name: Linux (gcc, ASan + UBSan)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    env:
+      TISMA_REQUIRE_GPU: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja, lavapipe and X11 (for the interface)
+        run: sudo apt-get update && sudo apt-get install -y ninja-build mesa-vulkan-drivers libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev xvfb
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all"
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  windows:
+    name: Windows (MSVC)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure

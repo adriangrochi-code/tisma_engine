@@ -40,6 +40,7 @@
 | `support.tree_branch_distance` | — | 1 | Distancia entre las ramas donde tocan la pieza (sin unidad en Tisma Slicer) |
 | `support.tree_tip_diameter` | mm | 0,8 | Diámetro de las puntas |
 | `support.tree_top_rate` | % | 15 % | Densidad de las puntas bajo la pieza |
+| `support.width` | mm o % de la altura de capa | 0 | Ancho de los cordones del soporte y de su interfaz. 0: el ancho general si se puso; si no, el diámetro de la boquilla del soporte |
 
 ## Reglas
 
@@ -102,6 +103,13 @@
 17. **Interfaz:** `support.interface_layers` capas justo bajo lo que cuelga, sin el margen de la grilla, con líneas a
     45° y 135° en capas alternas (prueba SM13).
 
+### Ancho
+
+18. **Ancho del soporte:** la base y la interfaz usan `support.width`; un porcentaje es de la altura de capa (150 % con
+    capas de 0,2 da 0,3 mm). En 0, el ancho general; sin ancho general, el diámetro de la boquilla que imprime el
+    soporte (0,6 con boquilla de 0,6), no el 112,5 % que usan los perímetros. La primera capa usa el ancho de la
+    primera capa (`layers.first_line_width`, `perimeters.md`), no este (prueba SM14).
+
 ## Pruebas
 
 Medidas en Tisma Slicer (24-10-2026) como caja negra, con los ajustes base de `walls_extra.md` (boquilla 0,4, capas
@@ -130,4 +138,5 @@ sí. `speed.support` 60 mm/s.
 | SM10 | Voladizo, interfaz (Z 7,0 a 7,8) | `support.interface_pattern`, `support.interface_spacing`, `support.interface_contact_loops` | `lines`: 743,0 mm por capa, 98 % a 90°; la última (Z 7,8) 642,5 mm. `automatic`: igual. `concentric`: 15 lazos por capa, cada uno 2,856 mm más largo que el de adentro (0,357 mm entre lazos). Separación 1 mm: 240,9 mm por capa. Lazos de contacto: en Z 7,8, dos lazos cerrados (92,7 y 51,6 mm) y 288,6 mm de líneas; en Z 7,6, un lazo de 71,6 mm y líneas |
 | SM11 | Voladizo | `speed.support_interface` 100 % / 50 % | Interfaz a 60 mm/s / 30 mm/s |
 | SM12 | Voladizo en 3MF con un volumen más | Bloqueador sobre la mitad −Y de lo que cuelga; forzador sobre la mitad +Y | Bloqueador: soporte solo en Y 100 a 111,4 (sin él, 88,6 a 111,4). Forzador con `support.automatic` no: solo en Y 100 a 111,4. Forzador con `support.automatic` sí: todo, como sin forzador. Forzador con `support.enabled` no: ningún soporte. `support.automatic` no sin forzador: ningún soporte |
-| SM13 | Voladizo | `support.style` `organic` | Capas de 0,2, las de la pieza. En Z 7,2, 22 puntas redondas de 0,92 mm de diámetro, separadas entre 2,5 y 3,5 mm. Hacia abajo se juntan: 13 ramas en Z 7,0, 11 en 6,2, 9 en 5,2, 7 en 4,2, 4 troncos de 3,8 a 8 mm en 2,2 y uno de 11 × 22 mm en 0,4. Interfaz: 3 capas de 524,5 mm (Z 7,4 a 7,8), de X 99,4 a 109,8 e Y 90,0 a 110,0, a 45°, 135° y 45°. `support.tree_tip_diameter` 1,5: 18 puntas de 1,95 mm. `support.tree_top_rate` 30 %: 32 puntas. `support.tree_branch_diameter` 4: ramas más gruesas, 128,7 mm en Z 4,2 contra 73,7. `support.tree_branch_distance` 2: igual que 1 en esta pieza |
+| SM13 | Voladizo | `support.style` `organic` | Capas de 0,2, las de la pieza. En Z 7,2, 22 puntas redondas de 0,92 mm de diámetro, separadas entre 2,5 y 3,5 mm. Hacia abajo se juntan: 13 ramas en Z 7,0, 11 en 6,2, 9 en 5,2, 7 en 4,2, 4 troncos de 3,8 a 8 mm en 2,2 y uno de 11 × 22 mm en 0,4. Ancho de las piezas (de borde a borde, menos el ancho de la línea): en Z 7,2, puntas de 0,6 a 1,2 mm; en Z 7,0, 5 ramas solas de 1,1 a 1,3 mm y 8 pares de puntas juntas de unos 3,2 × 1,25 mm; en Z 6,2, ramas de 1,6 a 1,8 mm y pares de 2,5 × 1,7 mm (remedido el 27-10-2026). Interfaz: 3 capas de 524,5 mm (Z 7,4 a 7,8), con los ejes de las líneas de X 100,65 a 109,98 e Y 90,02 a 109,98, a 45°, 135° y 45°: no pisa la columna, que termina en X 100 (el 99,4 de antes era un error). `support.tree_tip_diameter` 1,5: 18 puntas de 1,95 mm. `support.tree_top_rate` 30 %: 32 puntas. `support.tree_branch_diameter` 4: ramas más gruesas, 128,7 mm en Z 4,2 contra 73,7. `support.tree_branch_distance` 2: igual que 1 en esta pieza |
+| SM14 | Voladizo | `support.width` 0 / 0,6 / 150 %; ancho general 0,5; boquilla 0,6; soporte con el extrusor 2 de boquilla 0,6 | 0: soporte e interfaz de 0,4 (la boquilla). 0,6: 0,6. 150 %: 0,3. Ancho general 0,5: 0,5. Boquilla de 0,6: 0,6 (los perímetros, 0,675). Extrusor 2 de 0,6: 0,6. En todos, la primera capa del soporte con 0,4 (200 % de la capa) |

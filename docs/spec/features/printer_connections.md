@@ -75,6 +75,42 @@ llamada que describe la documentación oficial de esa API:
 
 No se copian llamadas de otro programa: se leen de la documentación y se prueban contra un simulador propio.
 
+## Búsqueda en la red
+
+Para el ícono de conexión de `settings_panel.md` (reglas 41 a 43): el programa encuentra solo las impresoras de la red
+local. Encontrar no conecta: conectar lo pide la persona.
+
+**Fuentes:**
+- Bambu Lab: la tabla de puertos de su wiki oficial (`https://wiki.bambulab.com/en/bambu-studio/manual/pin-code`):
+  «Device discovering», puertos 1990 y 2021, SSDP por multicast o broadcast, en modo nube y en modo LAN;
+- OctoPrint: la documentación oficial de su complemento Discovery
+  (`https://docs.octoprint.org/en/master/bundledplugins/discovery.html`);
+- Moonraker: la documentación oficial de su configuración, sección `[zeroconf]`
+  (`https://moonraker.readthedocs.io/en/latest/configuration/`).
+
+| Marca o programa | Cómo se anuncia | Qué hace el programa |
+|---|---|---|
+| Bambu Lab | Anuncios SSDP a los puertos UDP 1990 y 2021, con campos propios para el modelo y el nombre de la impresora (su forma exacta se mide con una impresora real) | Escucha esos puertos; muestra cada impresora una vez por el identificador del anuncio |
+| OctoPrint | Zeroconf (mDNS y DNS-SD) con los servicios `_http._tcp` y `_octoprint._tcp`; el registro TXT trae `path`, `version`, `api` y, si los hay, `model` y `vendor` | Busca `_octoprint._tcp`; la dirección del servidor es la del servicio más `path` |
+| Moonraker (Klipper) | mDNS con el nombre de host de `mdns_hostname` (por defecto el del sistema); SSDP solo si `enable_ssdp` está encendido | Busca nombres `.local` anunciados y, en cada uno, pregunta la información del servidor por la API de Moonraker en el puerto anunciado; si contesta, es una impresora Klipper |
+| Otras (Prusa, Duet, Elegoo, Creality con firmware propio, Flashforge) | Sin fuente oficial revisada | Se agregan a mano; se suman a esta tabla cuando haya documentación del fabricante |
+
+1. **Escucha y búsqueda:**
+   - empiezan al abrir el programa, si la preferencia «Buscar impresoras en la red» está encendida (`preferences.md`);
+   - se repite la búsqueda activa cada 30 s mientras el menú de conexión está abierto, y cada 5 minutos si no.
+2. **Una impresora una sola vez:** se identifica por el identificador del anuncio (Bambu Lab) o por su dirección y
+   puerto. Si aparece por dos caminos (por ejemplo, OctoPrint por `_http._tcp` y `_octoprint._tcp`), se muestra una vez.
+3. **Desaparece** de la lista si pasan 3 minutos sin anuncio ni respuesta. Una impresora ya conectada no desaparece:
+   su estado lo da la conexión.
+4. **Ligar al modelo:** si el anuncio dice el modelo (Bambu Lab, `model` de OctoPrint) y coincide con una impresora
+   del paquete de perfiles, el menú la ofrece para ese modelo; si no, aparece en «Otras impresoras de la red».
+5. **Puertos ocupados:** solo un programa a la vez puede escuchar el puerto UDP 2021. Si otro programa lo tiene (por
+   ejemplo, Bambu Studio abierto), se avisa «Otro programa está escuchando las impresoras Bambu Lab; cerralo o
+   agregá la impresora por su dirección», y se puede agregar a mano.
+6. **Problemas de la red:** si no aparece nada, el menú explica las causas comunes: computadora e impresora en redes
+   distintas, cortafuegos que bloquea UDP 1990 y 2021, o en Windows la red marcada como «Pública».
+7. **Nada sale de la red local:** la búsqueda no usa internet ni manda datos afuera.
+
 ## Cámara USB de la computadora
 
 Lo diseñó el equipo del dueño. Una cámara USB (UVC) conectada a la computadora sirve de cámara de una impresora: para
@@ -107,6 +143,67 @@ las que no tienen, o tienen una lenta (las A1 y P1 de Bambu Lab mandan pocas im�
 - **Si deja de responder:** vuelve a «Exportar».
 - **Con varias impresoras de red para el mismo perfil:** se usa la última a la que se envió.
 
+## Integración en sala limpia
+
+Pedido del dueño (26-10-2026): integrar la conexión con impresoras respetando la sala limpia.
+
+**El problema:** en Tisma Slicer, cada conexión salió de un lugar distinto. El motor no puede tomar ninguno de esos
+códigos:
+
+| Conexión | De dónde salió en Tisma Slicer | Por qué el motor no lo usa |
+|---|---|---|
+| OctoPrint, PrusaLink, Duet, AstroBox, Repetier, FlashAir, MKS | Código de PrusaSlicer | AGPL, programa prohibido (`CLEANROOM.md`) |
+| Moonraker (Klipper) | Código de PrusaSlicer | Ídem |
+| Flashforge | Código de OrcaSlicer, adaptado (`docs/FLASHFORGE.md` de Tisma Slicer lo dice) | Ídem |
+| USB, Bambu Lab en red local, cámara USB | Escrito por el equipo del dueño dentro de Tisma Slicer | Es código de Tisma Slicer: tampoco se lee |
+| Simuladores de prueba de Tisma Slicer (hosts web, Bambu Lab, Flashforge) | Escritos por el equipo del dueño | Son código de Tisma Slicer |
+
+**Fuentes que sí puede usar el motor:** documentación de protocolos (no código) y medición de caja negra.
+
+| Conexión | Fuente para el motor | Tipo | Falta |
+|---|---|---|---|
+| USB (serie) | G-code de la wiki de RepRap y documentación de Marlin | Oficial | Nada |
+| OctoPrint | REST API y complemento Discovery | Oficial | Nada |
+| Moonraker | Su API y su configuración | Oficial | Nada |
+| PrusaLink | Su especificación OpenAPI publicada | Oficial | Nada |
+| Duet (RepRapFirmware) | Pedidos HTTP de su wiki | Oficial | Nada |
+| Repetier-Server | Su Web API | Oficial | Nada |
+| Bambu Lab | Puertos: wiki oficial de Bambu Lab. Protocolo: OpenBambuAPI | Oficial y comunidad (documentación) | Forma exacta del anuncio SSDP, medida con una impresora |
+| Flashforge | ff-5mp-api-py, `docs/protocols.md` (MIT, documentación de la comunidad) | Comunidad | Ver la nota de abajo |
+| Elegoo (SDCP), Creality con firmware propio, Prusa Connect, FlashAir, MKS | Ninguna revisada | — | Documentación del fabricante; hasta entonces no se ofrecen |
+
+**Nota de Flashforge:** las dos fuentes no coinciden. Tisma Slicer usa en el puerto 8898 los pedidos «detalle» y
+«subir G-code» con el número de serie y el código en los encabezados. La documentación de la comunidad lista otros
+nombres (`/info`, `/upload`, `/command`…) con `serialNumber` y `checkCode` en el cuerpo JSON. Puede ser por la versión
+del firmware. Hay que medirlo con una impresora real (regla 4) antes de escribir la regla.
+
+**Cómo se hace:**
+
+1. **Ficha primero:** cada conexión tiene sus reglas en esta ficha, escritas desde las fuentes de la tabla: pedidos,
+   respuestas, errores, tiempos de espera y secretos. Sin nombres de clases ni de archivos de otro programa.
+2. **Simulador propio del motor:** el equipo del motor escribe sus simuladores desde la documentación y esta ficha.
+   No usa los de Tisma Slicer.
+3. **Intercambios grabados (datos, no código):** el equipo que conoce Tisma Slicer graba, con impresoras reales o con
+   Tisma Slicer como caja negra, lo que va y viene por la red en cada caso de prueba. Lo deja en
+   `printer_connections/<conexión>/<caso>.jsonl`, una línea por mensaje:
+
+```json
+{"n": 1, "dir": "out", "proto": "http", "method": "GET", "path": "/api/version", "headers": {"X-Api-Key": "<secreto>"}}
+{"n": 2, "dir": "in", "proto": "http", "status": 200, "body": {"api": "0.1", "server": "1.10.2", "text": "OctoPrint 1.10.2"}}
+```
+
+   - los secretos (claves, contraseñas, códigos de acceso, números de serie) se reemplazan por `<secreto>` antes de
+     guardar, y nunca se graba un código de acceso real de una impresora del dueño;
+   - los archivos subidos se reemplazan por su tamaño y su suma SHA-256;
+   - cada archivo dice de dónde salió: impresora real (modelo y firmware) o Tisma Slicer contra su simulador.
+4. **Medir lo que no está documentado:** con una impresora real (Flashforge, el anuncio de Bambu Lab), se graban los
+   intercambios de la regla 3 y la regla de la ficha se escribe desde esa grabación.
+5. **Prueba cruzada:** el motor, contra los intercambios grabados (reproducidos por su simulador) y, cuando haya,
+   contra impresoras reales. El equipo que conoce Tisma Slicer corre además el motor contra los simuladores de Tisma
+   Slicer como caja negra e informa las diferencias, como en `docs/spec/qa/`.
+6. **Nunca:** las bibliotecas cerradas de los fabricantes (por ejemplo, el complemento de red de Bambu Studio), ni
+   código de otro laminador o de Tisma Slicer, aunque el protocolo sea el mismo.
+
 ## Pruebas
 
 Contra simuladores propios de cada impresora (un programa que contesta como ella), sin impresora real.
@@ -125,3 +222,9 @@ Contra simuladores propios de cada impresora (un programa que contesta como ella
 | CA1 | Cámara simulada que ofrece MJPEG de 1920 × 1080, 1280 × 720 y 640 × 480 a 30 imágenes por segundo | Elige 1280 × 720 MJPEG; muestra 15 imágenes por segundo; la elección vuelve al reiniciar |
 | CA2 | Sin cámaras conectadas | La lista ofrece solo «Sin cámara» (y la de la impresora, si tiene) |
 | CA3 | La cámara deja de mandar imágenes | A los 10 s, aviso en la vista |
+| BD1 | Anuncio SSDP simulado de una Bambu Lab al puerto 2021 | La impresora aparece en el menú de conexión con su modelo y nombre, una sola vez aunque el anuncio se repita |
+| BD2 | Servicio `_octoprint._tcp` simulado con `path` `/octo/` | Aparece con la dirección del servicio más `/octo/` |
+| BD3 | Puerto 2021 ocupado por otro programa | Aviso de la regla 5; agregar a mano sigue funcionando |
+| BD4 | El anuncio deja de llegar | A los 3 minutos sale de la lista, salvo que esté conectada |
+| CL1 | Reproducir `printer_connections/octoprint/probar.jsonl` contra el cliente del motor | Los pedidos del motor coinciden con las líneas `out` (método, ruta y encabezados, con los secretos aparte) |
+| CL2 | Revisar los archivos de `printer_connections/` | Ningún secreto real: solo `<secreto>` |

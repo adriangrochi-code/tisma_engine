@@ -1,0 +1,8 @@
+{
+  "material": "bambu-pla-basic",
+  "model": "solid",
+  "voxel": 1.0,
+  "rows_per_layer": 1,
+  "fixtures": [{"name": "bed", "face": "bottom"}],
+  "loads": [{"name": "push", "face": "top", "force": [0, 0, -100]}]
+}
