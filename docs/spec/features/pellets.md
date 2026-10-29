@@ -23,6 +23,12 @@ y 8 mm y capas de 2,5 y 4 mm. Hoy el motor las rechaza porque `layers.height` no
   - `M200 D… S1` activa la extrusión volumétrica: «el eje E indica milímetros cúbicos en lugar de milímetros
     lineales»;
   - `L` fija un tope de mm³/s.
+- **RepRapFirmware**, `M200` (diccionario de G-code de Duet3D,
+  `https://docs.duet3d.com/User_manual/Reference/Gcodes`):
+  - «Daaa Sets filament diameter (or disables volumetric extrusion) for all extruders»; con D 0 se apaga;
+  - «S[bool] Enable or disable volumetric extrusion for this input channel (RepRapFirmware 3.5 and later)»;
+  - con retracción del laminador, la retracción también va en mm³.
+- **Klipper:** su referencia de G-code (`https://www.klipper3d.org/G-Codes.html`) no tiene `M200`.
 - **Una persona que usa un extrusor de pellets con RepRapFirmware**, foro de Duet
   (`https://forum.duet3d.com/topic/37013/`):
   - el diámetro de filamento del laminador es arbitrario: se ajusta con el multiplicador de extrusión;
@@ -66,10 +72,13 @@ Nuevos, con el formato de `docs/CONFIG.md`:
      ejemplo, 1,75 mm).
 3. **Eje E en volumen** (`machine.e_mode` `volume`):
    - E = volumen del tramo en mm³ × flujo;
-   - después del G-code de inicio se escribe el comando del dialecto que pone el firmware en ese modo: en Marlin,
-     `M200 D… S1`, con `machine.filament_diameter`;
-   - en Klipper y RepRapFirmware, si el dialecto no tiene uno, no se escribe nada y hay un aviso: «Revisá que el
-     firmware espere E en mm³».
+   - solo con `machine.feedstock` `pellet`: con filamento sigue la regla 11 de `gcode_extras.md` (sin `M200`, prueba
+     X11);
+   - después del G-code de inicio se escribe el comando del dialecto que pone el firmware en ese modo, con
+     `machine.filament_diameter`: en Marlin, `M200 D… S1`; en RepRapFirmware, `M200 D…` sin `S` (una D distinta de 0
+     activa la extrusión volumétrica desde la versión 1.19; `S` existe recién desde la 3.5);
+   - en Klipper, que no tiene `M200`, no se escribe nada y hay un aviso: «Revisá que el firmware espere E en mm³»;
+   - la retracción también va en mm³.
 4. **Sección redonda** (`extrusion.section` `rounded`):
    - la sección es h × (w − (1 − π/4) × h), con w el ancho y h el alto del cordón;
    - 1 − π/4 = 0,2146, el 0,215 del artículo de Dyze;
@@ -102,6 +111,7 @@ Boquilla de 5 mm, capa de 2,5 mm, cordón de 6 mm, `machine.filament_diameter` 1
 | PE2 | PE1, `machine.e_mode` `length`, sección `rectangle` | 6,2363 mm de E por mm de cordón |
 | PE3 | PE1, `machine.e_mode` `length`, sección `rounded` | 5,6786 mm de E por mm |
 | PE4 | PE1, `machine.e_mode` `volume`, sección `rounded`, dialecto `marlin` | 13,6587 de E por mm, y `M200 D1.75 S1` después del G-code de inicio |
+| PE4b | PE4 con dialecto `reprapfirmware`; y con `klipper` | `M200 D1.75` después del G-code de inicio, sin aviso. Con `klipper`, sin `M200` y con el aviso |
 | PE5 | Ejemplo de Dyze: capa de 1 mm, cordón de 4 mm, sección `rounded`, `volume` | 3,7854 mm³ por mm (Dyze: 1 × (4 − 0,215 × 1) = 3,785) |
 | PE6 | PE3 con `machine.max_flow` 500 y `speed.walls` 60 | Paredes a 36,6 mm/s como mucho (500 / 13,6587) y un aviso |
 | PE7 | PE3 con `extrusion.flow_by_speed` `[[20, 110], [60, 100]]`, paredes a 40 mm/s | 105 % del flujo: 5,9625 mm de E por mm |
