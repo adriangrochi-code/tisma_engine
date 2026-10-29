@@ -247,6 +247,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   voxel»; un desplazamiento de más de una décima de la pieza da el aviso `large_displacement` (el análisis es lineal).
 - **`--copies` que no entran (BH8):** «100 copies do not fit on the bed (machine.bed): 81 fit», en lugar de un punto
   fuera de la cama.
+- **Los avisos emergentes (UI26)** van arriba del panel Laminar, por delante de las tarjetas de los tutoriales, y
+  los largos se parten en líneas dentro de la vista.
 
 - **TR17:** la ficha de información de un ajuste de lista nombra los valores como la lista («Alineada»), no con la
   palabra del archivo («aligned»).

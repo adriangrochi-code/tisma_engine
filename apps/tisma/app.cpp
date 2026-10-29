@@ -606,6 +606,7 @@ private:
     std::map<std::string, ImTextureID> icons_;
     bool icons_loaded_ = false;
     float moves_top_ = 0.0f; // the move slider's window top in Preview, this frame; 0: in the legend or none
+    float slice_panel_top_ = 0.0f; // the Slice panel's top, this frame; 0: not drawn
     mutable std::set<std::string> missing_icons_; // asked for and not loaded (icon())
     // The settings panel: its tab, level, the section chosen in each tab, the
     // cards open (the first of each section at first), each card's height in
@@ -7748,6 +7749,7 @@ void App::slice_panel() {
             ImGui::EndPopup();
         }
     }
+    slice_panel_top_ = ImGui::GetWindowPos().y;
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
@@ -10165,7 +10167,10 @@ void App::toasts() {
     const double now = ImGui::GetTime();
     toasts_.erase(std::remove_if(toasts_.begin(), toasts_.end(), [&](const Toast& t) { return t.until < now; }),
                   toasts_.end());
+    // Above the Slice panel, which they covered (the spec team's UI26).
     float y = view_pos_.y + view_size_.y - 12.0f * scale_;
+    if (slice_panel_top_ > 0.0f)
+        y = std::min(y, slice_panel_top_ - 8.0f * scale_);
     int i = 0;
     for (auto it = toasts_.rbegin(); it != toasts_.rend(); ++it, ++i) {
         ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 60.0f * scale_, y), ImGuiCond_Always,
@@ -10178,8 +10183,13 @@ void App::toasts() {
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                          ImGuiWindowFlags_NoNav | (it->undo ? 0 : ImGuiWindowFlags_NoInputs));
+        // Over the cards of a tutorial, which covered them (UI26).
+        ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
         ImGui::AlignTextToFramePadding();
+        // Within the view: a long one wraps instead of covering the panel (UI26).
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + std::max(200.0f * scale_, view_size_.x - 140.0f * scale_));
         loc::TextColored(ImVec4(1, 1, 1, 1), "%s", it->text.c_str());
+        ImGui::PopTextWrapPos();
         if (it->undo) {
             ImGui::SameLine();
             if (ImGui::SmallButton(tr(T::Undo))) {
@@ -10405,6 +10415,7 @@ void App::layout() {
             empty_hint();
         if (tab_ == Tab::Preview)
             preview_panels();
+        slice_panel_top_ = 0.0f;
         if ((tab_ == Tab::Prepare || tab_ == Tab::Preview) && (has_plate_ || result_))
             slice_panel();
         if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))

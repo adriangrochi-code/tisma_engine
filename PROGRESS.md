@@ -8152,5 +8152,9 @@ BH8 (mensaje cuando las copias no entran), BH9 (AMF y STEP leídos como STL) y l
 - **BH8:** `copies_that_fit` cuenta cuántas copias deja `place_copies` dentro de la caja de la cama; la línea de
   comandos dice «100 copies do not fit on the bed (machine.bed): 81 fit» (cubo de 20 mm, cama de 250). Prueba.
 
-Quedan: BH7 (no lo reproduje; pedí el archivo), UI26 y los totales de filamento por extrusor.
+- **UI26:** los avisos emergentes se apilan arriba del panel Laminar (antes lo tapaban), van por delante de las
+  tarjetas de los tutoriales y se parten en líneas dentro de la vista (el de «Agregado a tus perfiles…» cruzaba el
+  panel de ajustes). Mirado en la captura; pasan las 116 pruebas de interfaz.
+
+Quedan: BH7 (no lo reproduje; pedí el archivo) y los totales de filamento por extrusor (espera una ficha).
 
