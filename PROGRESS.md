@@ -8452,3 +8452,11 @@ Pasan las 695 pruebas del motor.
   elegida distinto cambia la pared, y buscar menos pasos en `locate`.
 - Leer el STL y escribir el G-code siguen en un núcleo: ~85 y ~185 ms.
 
+## 2026-10-29: release 0.10.0-alpha.3 (pedido del dueño)
+
+El dueño pidió una build de Windows para probar, un ejecutable, sin esperar al lunes. Se publica `0.10.0-alpha.3`
+con lo de hoy: el panel de ajustes como una lista, las fichas para todos los ajustes, la calibración como menú, el
+tutorial con lo básico, las correcciones y las dos vueltas de rendimiento en modelos grandes. El flujo
+`release.yml` compila en Windows y en Linux y publica `tisma-engine-0.10.0-alpha.3-windows-x64.zip`, con
+`tisma.exe` (la interfaz) y `tisma-engine.exe`, al fusionar la PR `dev` → `alpha`.
+

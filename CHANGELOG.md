@@ -10,6 +10,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.10.0-alpha.3] - 2026-10-29
+
 ### Agregado
 
 - **Fichas de información para principiantes:** el botón (i) abre un cuadro en el centro con un dibujo de lo que hace
@@ -1287,7 +1289,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...HEAD
+[0.10.0-alpha.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...v0.10.0-alpha.3
 [0.10.0-alpha.2]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.2
 [0.9.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...v0.9.0-alpha.1
 [0.8.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.7.0-alpha.1...v0.8.0-alpha.1
