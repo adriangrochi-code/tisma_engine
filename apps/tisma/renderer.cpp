@@ -1458,7 +1458,7 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
     // All of the part drawn: what it hides stays out (docs/LARGE_MODELS.md);
     // the nearest layers first, for the depth test.
     const std::vector<PreviewRange> draws =
-        preview_draws(order_, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden);
+        preview_draws(order_, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
     if (!draws.empty()) {
         const unsigned p = p_.preview;
         lit_uniforms(p, f, vp, gbuffer, visibility);

@@ -904,7 +904,9 @@ struct VulkanView::Impl {
             draw.preview[2] = std::uint32_t(lo), draw.preview[3] = std::uint32_t(hi);
             bind(Preview, &extrusions_v);
             push(draw);
-            for (const PreviewRange& r : preview_draws(order, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden)) {
+            const Mat4 clip = f.projection * f.view;
+            for (const PreviewRange& r :
+                 preview_draws(order, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip)) {
                 vkCmdDraw(c, kPreviewVertices, std::uint32_t(r.count), 0, std::uint32_t(r.first));
                 drawn += r.count;
             }

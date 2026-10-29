@@ -7605,3 +7605,21 @@ despiertan la ventana al terminar (`g_background_done`, `glfwPostEmptyEvent`). L
 
 Medido con la esfera de 80 mm laminada, `fast`, llvmpipe, 30 s sin tocar nada: CPU del proceso de 38,4 % a 2,2 % y de
 260 a 15 cuadros. Pasan las 773 pruebas.
+
+## 2026-10-29 (noche): recorte por capas en la vista previa
+
+Bloque nocturno. `preview_draw_order` guarda la caja de cada capa (los cordones con medio ancho a los costados, sus
+puntas y sus ingletes, y la altura que cuelgan), y `preview_draws` deja afuera una capa cuya caja queda entera del
+otro lado de un mismo plano del volumen de visión (`box_outside`). La vista lo hace con la cámara, y el mapa de
+sombras con la de la luz (lo que está fuera de pantalla igual hace sombra). OpenGL y Vulkan.
+
+**La imagen:** las siete capturas de la esfera de 80 mm (oclusión de costado y desde arriba, `fast` de cerca,
+ortográfica, rayos, Vulkan de costado y al ras) son idénticas a las de antes, píxel por píxel.
+
+**Medido** (OpenGL, llvmpipe, `--bench-frames 5`): de cerca, de 82 275 cordones dibujados a 39 868 y a 55 948
+según la vista; el tiempo, igual (1 208 contra 1 210 ms y 874 contra 893 ms): en llvmpipe el costo está en los
+píxeles, y los triángulos fuera de pantalla ya se descartaban baratos. En una placa de verdad ahorra el trabajo de
+vértices de esas capas; no medido. Pruebas nuevas de `box_outside` y del recorte en `preview_draws`.
+
+**Sigue** (paso 5 del plan del equipo de fichas): capas juntas de lejos y el mallado voraz; S11, la regla del puente
+punto por punto, cuando la ficha llegue a `dev`.
