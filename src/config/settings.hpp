@@ -402,6 +402,9 @@ struct Settings {
     // One extruder that changes filaments (an MMU): a change purges the
     // filament (rule 12).
     bool single_extruder_mmu = false;
+    // A high-flow nozzle, by extruder (machine.high_flow_nozzle,
+    // multi_extruder.md): written in the file's data, nothing else.
+    std::vector<bool> high_flow_nozzle{false};
     // The MMU's change on the wipe tower (rule 15), mm: its cooling tube
     // (how long, how far from the nozzle), where a filament parks, and the
     // correction of the load; more motor current during the swap (read).

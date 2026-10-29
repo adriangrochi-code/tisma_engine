@@ -8025,3 +8025,13 @@ La prueba X1 leía todo comentario con «filament» y un número; el bloque de a
 
 La corrida del fuzzer que fallaba (semilla 20261029, 355 corridas, con la 354) pasa ahora: 0 fallas, 8 rechazadas por
 no imprimibles.
+
+## 2026-10-29: `machine.high_flow_nozzle` (multi_extruder.md)
+
+Uno, o uno por extrusor; no cambia el laminado. Va en los ajustes del final del G-code y como `high_flow_nozzle=0`
+o `1` por extrusor (separados por coma) en el bloque de la impresora del G-code binario; en el panel, un interruptor
+en la tarjeta del extrusor (o una fila de lista con varios). Prueba de lectura, de ida y vuelta y del error.
+
+De la lista de ajustes de las fichas que el motor no lee quedan: `walls.vertical_shell`, `machine.process` (WAAM,
+después de la primera versión), `gcode.pressure_advance_in_gcode`, `gcode.pressure_advance_piece` y
+`gcode.thumbnails` (el formato de los comentarios todavía no está en la ficha).

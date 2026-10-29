@@ -132,9 +132,14 @@ std::string binary_gcode(std::string_view text, const Settings& s) {
             t.pop_back();
         return t;
     };
+    // machine.high_flow_nozzle, by extruder (multi_extruder.md): 0 or 1, comma separated.
+    std::string high_flow;
+    for (std::size_t i = 0; i < s.high_flow_nozzle.size(); ++i)
+        high_flow += (i ? "," : "") + std::string(s.high_flow_nozzle[i] ? "1" : "0");
     const Pairs printer = {{"printer_model", variable("printer_model")},
                            {"filament_type", variable("filament_type")},
                            {"nozzle_diameter", number(s.nozzle_diameter)},
+                           {"high_flow_nozzle", high_flow},
                            {"layer_height", number(s.layer_height)},
                            {"temperature", variable("temperature")},
                            {"bed_temperature", variable("bed_temperature")},

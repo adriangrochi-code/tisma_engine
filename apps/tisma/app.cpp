@@ -1208,7 +1208,8 @@ const std::map<T, const char*>& row_keys() {
         {T::WipeTowerExtruder, "extruders.wipe_tower"}, {T::PurgeVolumesRow, "wipe_tower.purge_volumes"},
         {T::WipeTowerSpacing, "wipe_tower.extra_spacing"}, {T::WipeTowerFlow, "wipe_tower.extra_flow"},
         {T::WipeTowerCone, "wipe_tower.cone_angle"}, {T::WipeTowerNoSparse, "wipe_tower.no_sparse_layers"},
-        {T::SingleExtruderMmu, "machine.single_extruder_mmu"}, {T::PurgeMultiplier, "extrusion.purge_multiplier"},
+        {T::SingleExtruderMmu, "machine.single_extruder_mmu"},
+        {T::HighFlowNozzle, "machine.high_flow_nozzle"}, {T::PurgeMultiplier, "extrusion.purge_multiplier"},
         {T::MinPurgeOnTower, "extrusion.min_purge_on_tower"}, {T::CoolingTubeLength, "mmu.cooling_tube_length"},
         {T::CoolingTubePosition, "mmu.cooling_tube_position"}, {T::ParkingPosition, "mmu.parking_position"},
         {T::ExtraLoadingMove, "mmu.extra_loading_move"}, {T::HighCurrentOnSwap, "mmu.high_current_on_swap"},
@@ -7072,6 +7073,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::MachineMaxFlow, "machine.max_flow", s.machine_max_flow, 0.0, 10000.0,
            s.machine_max_flow > 0.0 ? "%.1f mm³/s" : tr(T::NotSet), 0.1f);
         flag(T::RelativeE, "machine.relative_extrusion", s.relative_extrusion);
+        // multi_extruder.md: written in the file's data; one switch, or a list by extruder.
+        if (s.high_flow_nozzle.size() == 1) {
+            bool high = s.high_flow_nozzle.front();
+            flag(T::HighFlowNozzle, "machine.high_flow_nozzle", high);
+            s.high_flow_nozzle.front() = high;
+        } else {
+            count(T::HighFlowNozzle, "machine.high_flow_nozzle", s.high_flow_nozzle.size());
+        }
     } else if (id == "extruders") {
         // Several extruders (multi_extruder.md): a list by extruder edits
         // here while it holds one value for all.

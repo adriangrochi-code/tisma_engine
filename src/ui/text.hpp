@@ -1420,6 +1420,7 @@
     X(LoadTime, "Tiempo de carga", "Load time") \
     X(UnloadTime, "Tiempo de descarga", "Unload time") \
     X(SingleExtruderMmu, "Un extrusor con varios filamentos (MMU)", "One extruder, several filaments (MMU)") \
+    X(HighFlowNozzle, "Boquilla de alto caudal", "High-flow nozzle") \
     X(LimitsTimeOnly, "Solo para el tiempo", "For the time only") \
     X(LimitsEmit, "Escribirlos en el G-code", "Write them in the G-code") \
     X(LimitsIgnore, "No usarlos", "Do not use them") \

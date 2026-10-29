@@ -1666,7 +1666,7 @@ Settings parse_checked(std::string_view text) {
                 "max_accel_z", "max_accel_e", "retract_acceleration", "jerk_x", "jerk_y", "jerk_z", "jerk_e",
                 "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent",
                 "custom_parameters",
-                "extruders", "extruder_offset", "single_extruder_mmu", "display_pixels_x", "display_pixels_y",
+                "extruders", "extruder_offset", "single_extruder_mmu", "high_flow_nozzle", "display_pixels_x", "display_pixels_y",
                 "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology", "calibrations",
                 "feedstock"},
                [&](const json& g, const std::string& n, const std::string& k) {
@@ -1735,6 +1735,18 @@ Settings parse_checked(std::string_view text) {
                    }
                    if (n == "nozzle_diameter")
                        s.nozzle_diameters.clear(); // the same for all
+                   if (n == "high_flow_nozzle") { // one value, or one per extruder
+                       std::vector<bool> list;
+                       for (const json& x : v.is_array() ? v : json::array({v})) {
+                           if (!x.is_boolean())
+                               fail(k, "must be true or false, or a list of them by extruder");
+                           list.push_back(x.get<bool>());
+                       }
+                       if (list.empty() || list.size() > std::size_t(kMaxExtruders))
+                           fail(k, "must be true or false, or a list of them by extruder");
+                       s.high_flow_nozzle = std::move(list);
+                       return;
+                   }
                    if (n == "single_extruder_mmu") {
                        if (!v.is_boolean())
                            fail(k, "must be true or false");
@@ -2954,6 +2966,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"retraction.toolchange_restart_extra", json(s.toolchange_restart_extra).dump()},
         {"gcode.toolchange", text(s.gcode_toolchange)},
         {"machine.single_extruder_mmu", flag(s.single_extruder_mmu)},
+        {"machine.high_flow_nozzle", s.high_flow_nozzle.size() == 1 ? flag(s.high_flow_nozzle.front())
+                                                                    : json(s.high_flow_nozzle).dump()},
         {"extruders.wipe_tower", std::to_string(s.extruder_wipe_tower)},
         {"wipe_tower.enabled", flag(s.wipe_tower)},
         {"wipe_tower.x", num(s.wipe_tower_x)},
@@ -3676,6 +3690,8 @@ std::string settings_json(const Settings& s) {
           {"extruders", s.extruders},
           {"extruder_offset", s.extruder_offset},
           {"single_extruder_mmu", s.single_extruder_mmu},
+          {"high_flow_nozzle", s.high_flow_nozzle.size() == 1 ? json(bool(s.high_flow_nozzle.front()))
+                                                              : json(s.high_flow_nozzle)},
           {"technology", s.machine_technology == MachineTechnology::Msla ? "msla" : "fdm"},
           {"feedstock", s.feedstock == Feedstock::Pellet ? "pellet" : "filament"},
           {"calibrations", calibrations(s.printer_calibrations)},

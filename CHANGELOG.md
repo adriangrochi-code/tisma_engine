@@ -15,6 +15,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **`extrusion.flow_by_speed`** (impresoras de pellets): el flujo según la velocidad de cada tramo, con una lista de
   puntos `[velocidad, %]`.
 - **`extrusion.section`:** la E de un cordón con la sección redonda (como siempre, y como Tisma Slicer) o rectangular.
+- **`machine.high_flow_nozzle`:** la boquilla de alto caudal, una o por extrusor, en los datos del archivo.
 - **`machine.feedstock` y `extrusion.feedstock`** (`filament` o `pellet`), con un aviso si el material no es para la
   impresora, y los topes de caudal de la máquina y del filamento hasta
   10 000 mm³/s, para impresoras de pellets.

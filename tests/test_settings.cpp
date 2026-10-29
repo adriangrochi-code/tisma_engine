@@ -525,6 +525,11 @@ TEST_CASE("compensation, flow and changes are read with their ranges", "[setting
     CHECK(parse_settings(R"({"machine": {"max_flow": 2000}})").machine_max_flow == 2000.0); // pellets.md
     CHECK(parse_settings(R"({"extrusion": {"max_flow": 5000}})").filament_max_flow == 5000.0);
     CHECK(parse_settings("{}").feedstock == Feedstock::Filament);
+    CHECK(parse_settings("{}").high_flow_nozzle == std::vector<bool>{false}); // multi_extruder.md
+    CHECK(parse_settings(R"({"machine": {"high_flow_nozzle": true}})").high_flow_nozzle == std::vector<bool>{true});
+    CHECK(parse_settings(settings_json(parse_settings(R"({"machine": {"high_flow_nozzle": [true, false]}})"))).high_flow_nozzle ==
+          std::vector<bool>{true, false});
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"high_flow_nozzle": 1}})"), ContainsSubstring("machine.high_flow_nozzle"));
     CHECK(parse_settings(settings_json(parse_settings(R"({"machine": {"feedstock": "pellet"}})"))).feedstock ==
           Feedstock::Pellet);
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"feedstock": "granules"}})"), ContainsSubstring("machine.feedstock"));
