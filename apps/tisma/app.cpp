@@ -1277,6 +1277,46 @@ bool g_glossary_tips = true;
 
 // The (i) beside a setting's name: a click opens what the setting does, its
 // key, default and range (docs/UI.md, «Ayuda»).
+// Each choice setting's values: the word the settings file writes and the
+// name its list shows, in the interface's language (TR17), found the first
+// time the row is drawn; and the settings the panel's rows edit.
+std::map<std::string, std::vector<std::pair<std::string, std::string>>> g_choice_names;
+std::string g_choice_language;
+const Settings* g_panel_settings = nullptr;
+
+// A setting's documented text with its choice words as the list names them:
+// "aligned" (quoted or not) becomes «Alineada». Whole words only.
+std::string with_choice_names(const char* key, const std::string& text) {
+    const auto it = g_choice_names.find(key);
+    if (it == g_choice_names.end())
+        return text;
+    std::string out;
+    std::size_t i = 0;
+    const auto word = [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; };
+    while (i < text.size()) {
+        if (!word(text[i])) {
+            out += text[i++];
+            continue;
+        }
+        std::size_t j = i;
+        while (j < text.size() && word(text[j]))
+            ++j;
+        const std::string w = text.substr(i, j - i);
+        std::string name = w;
+        for (const auto& [id, label] : it->second)
+            if (id == w)
+                name = label;
+        // A quoted word that became a name loses its quotes.
+        if (name != w && !out.empty() && out.back() == '"' && j < text.size() && text[j] == '"') {
+            out.pop_back();
+            ++j;
+        }
+        out += name;
+        i = j;
+    }
+    return out;
+}
+
 void info_button(T label, const char* key) {
     const float size = ImGui::GetFontSize() * 0.95f;
     ImGui::SameLine(0.0f, size * 0.35f);
@@ -1320,13 +1360,14 @@ void info_button(T label, const char* key) {
         if (label == T::NozzleTemp || label == T::BedTemp)
             ImGui::TextUnformatted(tr(T::InfoTemperatures));
         else if (doc != docs.end())
-            ImGui::TextUnformatted(doc->second.meaning.c_str());
+            ImGui::TextUnformatted(with_choice_names(key, doc->second.meaning).c_str());
         ImGui::Spacing();
         loc::TextDisabled("%s: %s", tr(T::InfoKey), key);
         if (doc != docs.end() && !doc->second.default_value.empty())
-            loc::TextDisabled("%s: %s", tr(T::InfoDefault), doc_value_text(doc->second.default_value).c_str());
+            loc::TextDisabled("%s: %s", tr(T::InfoDefault),
+                              with_choice_names(key, doc_value_text(doc->second.default_value)).c_str());
         if (doc != docs.end() && !doc->second.range.empty())
-            loc::TextDisabled("%s: %s", tr(T::InfoRange), doc_value_text(doc->second.range).c_str());
+            loc::TextDisabled("%s: %s", tr(T::InfoRange), with_choice_names(key, doc_value_text(doc->second.range)).c_str());
         if (language() == Language::English)
             loc::TextDisabled("%s", tr(T::InfoSpanish));
         if (term) {
@@ -2242,6 +2283,27 @@ bool row(T label, bool& v, const char* tip = nullptr) {
 template <class Enum>
 bool row(T label, Enum& v, std::initializer_list<std::pair<Enum, const char*>> options, const char* tip = nullptr) {
     label_cell(label, tip);
+    // The word the file writes for each choice, for the info card (TR17):
+    // each value set in turn and read back as the file has it.
+    if (g_choice_language != tr(T::Slice))
+        g_choice_names.clear(), g_choice_language = tr(T::Slice);
+    if (g_panel_settings && !g_last_row_key.empty() && !g_choice_names.contains(g_last_row_key)) {
+        const Enum keep = v;
+        std::vector<std::pair<std::string, std::string>> names;
+        std::set<std::string> ids;
+        for (const auto& [value, name] : options) {
+            v = value;
+            for (const auto& [k, text] : describe(*g_panel_settings))
+                if (k == g_last_row_key) {
+                    names.emplace_back(text, name);
+                    ids.insert(text);
+                    break;
+                }
+        }
+        v = keep;
+        // A row whose value is not in the settings reads the same word for all.
+        g_choice_names[g_last_row_key] = ids.size() == names.size() ? names : decltype(names){};
+    }
     const char* current = "";
     for (const auto& [value, name] : options)
         if (value == v)
@@ -6052,6 +6114,7 @@ void App::settings_panel() {
 // The rows of one card, those the panel shows.
 bool App::card_rows(std::string_view id, bool& bed) {
     Settings& s = settings_;
+    g_panel_settings = &s;
     bool changed = false;
     // A row shows if the panel shows its setting; one shown only because it
     // differs from the profile carries its level.

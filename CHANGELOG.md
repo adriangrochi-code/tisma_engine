@@ -209,6 +209,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **TR17:** la ficha de información de un ajuste de lista nombra los valores como la lista («Alineada»), no con la
+  palabra del archivo («aligned»).
+
 - **UI23:** en Vista previa, la barra de movimientos ya no tapa «Exportar G-code»: el panel va encima.
 
 - **Preferencias (UI21):** la impresora y el filamento elegidos la primera vez se guardan al elegirlos, y un cierre

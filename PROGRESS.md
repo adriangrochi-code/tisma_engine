@@ -7903,3 +7903,14 @@ a B en N cuadros). La cúpula, escala arrastrada en 20 cuadros: 22 armados de la
 la misma escala al final (274,80 %) y la misma imagen (salvo el tiempo de la vista en la barra de estado). Prueba
 nueva de `placement_map` y `between` contra `placed_mesh`. Pasan las 179 pruebas de interfaz, placa y vista. Sin
 prueba automática del camino con un modelo grande (hace falta uno de 200 000 triángulos).
+
+## 2026-10-29 (noche): TR17, los valores de las listas por su nombre en la ficha de información
+
+Informe del equipo de fichas: la ficha de un ajuste de lista mostraba los valores por la palabra del archivo
+(«Por defecto: "aligned"», «Rango: aligned, nearest, random, rear») y la lista de al lado, «Alineada». Ahora, la
+primera vez que se dibuja cada lista, se anota qué palabra escribe el archivo para cada opción (se pone cada valor y
+se lee con `describe`), y la ficha cambia esas palabras por los nombres de la lista en la explicación, el valor por
+defecto (sin comillas) y el rango; la línea de la clave sigue igual. Vale para todas las listas del panel; una fila
+cuyo valor no está en los ajustes queda como antes. Mirado con `--info walls.seam` en español («Por defecto:
+Alineada», «Rango: Alineada, Más cercana, Aleatoria, Atrás») y en inglés («Default: Aligned»). Sin prueba automática:
+el texto está en una ventana emergente que `--dump-ui` no lee.
