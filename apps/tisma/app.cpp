@@ -9033,13 +9033,24 @@ const std::map<std::string, TipText>& tip_texts() {
 }
 
 // The assistant's steps (docs/UI.md, «Ayuda»).
-constexpr std::array<std::pair<T, T>, 7> kTour = {{{T::Tour0Title, T::Tour0},
-                                                   {T::Tour1Title, T::Tour1},
-                                                   {T::Tour2Title, T::Tour2},
-                                                   {T::Tour3Title, T::Tour3},
-                                                   {T::Tour4Title, T::Tour4},
-                                                   {T::Tour5Title, T::Tour5},
-                                                   {T::Tour6Title, T::Tour6}}};
+// The welcome, the basic ideas with a drawing each (the owner's request,
+// 2026-10-29: someone who never used a slicer understands them), then how
+// to go from a model to a print.
+struct TourStep {
+    T title, text;
+    Picture picture = Picture::None;
+};
+constexpr std::array<TourStep, 11> kTour = {{{T::Tour0Title, T::Tour0},
+                                             {T::TourSliceTitle, T::TourSlice, Picture::Slicing},
+                                             {T::TourLayersTitle, T::TourLayers, Picture::TopBottom},
+                                             {T::TourSupportTitle, T::TourSupport, Picture::Support},
+                                             {T::TourMaterialTitle, T::TourMaterial, Picture::NozzleTemp},
+                                             {T::Tour1Title, T::Tour1},
+                                             {T::Tour2Title, T::Tour2},
+                                             {T::Tour3Title, T::Tour3},
+                                             {T::Tour4Title, T::Tour4},
+                                             {T::Tour5Title, T::Tour5},
+                                             {T::Tour6Title, T::Tour6}}};
 
 } // namespace
 
@@ -9064,7 +9075,7 @@ void App::help_windows() {
     const bool tour = tour_step_ >= 0 && tour_step_ < int(kTour.size());
     if (!tour && tip_.empty())
         return;
-    const float width = 420.0f * scale_;
+    const float width = (tour ? 500.0f : 420.0f) * scale_;
     // At the bottom of the view; in the preview, whose move slider and legend
     // are down there, at the top under the view's buttons.
     if (tab_ == Tab::Preview)
@@ -9082,11 +9093,25 @@ void App::help_windows() {
     ImGui::Begin("##help", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    const T title = tour ? kTour[std::size_t(tour_step_)].first : tip_texts().at(tip_).title;
-    const T text = tour ? kTour[std::size_t(tour_step_)].second : tip_texts().at(tip_).text;
+    const T title = tour ? kTour[std::size_t(tour_step_)].title : tip_texts().at(tip_).title;
+    const T text = tour ? kTour[std::size_t(tour_step_)].text : tip_texts().at(tip_).text;
     ImGui::PushFont(nullptr, kTitleSize);
     loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
     ImGui::PopFont();
+    // A basic idea's drawing.
+    if (const Picture picture = tour ? kTour[std::size_t(tour_step_)].picture : Picture::None; picture != Picture::None) {
+        const float w = ImGui::GetContentRegionAvail().x, h = 130.0f * scale_;
+        const ImVec2 box = ImGui::GetCursorScreenPos();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(box, ImVec2(box.x + w, box.y + h), ImGui::GetColorU32(rgb(theme_.frame, 0.5f)), 8.0f * scale_);
+        const PictureColors colours{ImGui::GetColorU32(rgb(theme_.text)), ImGui::GetColorU32(rgb(theme_.text_dim)),
+                                    ImGui::GetColorU32(rgb(theme_.accent)), ImGui::GetColorU32(rgb(theme_.accent, 0.35f)),
+                                    ImGui::GetColorU32(rgb(theme_.frame)), ImGui::GetColorU32(rgb(theme_.paint_block)),
+                                    IM_COL32(90, 170, 230, 255)};
+        draw_picture(dl, ImVec2(box.x + w * 0.08f, box.y + h * 0.06f), ImVec2(w * 0.84f, h * 0.88f), picture, colours);
+        ImGui::Dummy(ImVec2(w, h));
+        ImGui::Spacing();
+    }
     ImGui::PushTextWrapPos(0.0f);
     ImGui::TextUnformatted(tr(text));
     ImGui::PopTextWrapPos();

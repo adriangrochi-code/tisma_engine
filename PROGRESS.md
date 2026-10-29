@@ -8259,6 +8259,12 @@ Los 26 ajustes del nivel Básico la tienen; los demás muestran el significado c
 Prueba: cada ajuste básico tiene explicación en los dos idiomas, y cada explicación es de un ajuste básico. Mirado en
 capturas (`--info layers.height`, `support.enabled`, `infill.density`, `walls.count`).
 
-**Sigue:** conceptos básicos en el tutorial de inicio, y un tutorial de calibración básica (qué filamento y a qué
-temperatura, la retracción, y qué calibraciones conviene hacer primero).
+El tutorial de inicio tiene ahora cuatro pasos de conceptos básicos, cada uno con su dibujo, entre la bienvenida y los
+pasos de uso: cómo se imprime una pieza (laminar, capas, G-code), capas, paredes y relleno, lo que cuelga y lo que se
+pega (soportes, primera capa, borde), y el material y su temperatura (con la torre de temperatura y la de retracción).
+Los títulos de los pasos ya no llevan número: el contador «2 / 10» dice dónde está. La tarjeta es más ancha (500) en el
+tutorial. Pasan las 118 pruebas de interfaz.
+
+**Sigue (pedidos del dueño):** fichas largas para todos los ajustes, no solo los básicos; un tutorial de calibración
+básica (qué filamento y a qué temperatura, la retracción, y qué calibraciones conviene hacer primero).
 

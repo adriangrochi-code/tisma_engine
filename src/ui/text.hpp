@@ -213,28 +213,44 @@
       "Welcome to Tisma")\
     X(Tour0, "En un minuto te muestro cómo pasar de un modelo a una pieza impresa. Podés volver a ver esto desde el menú de los tres puntos > Tutorial.",\
       "In a minute, how to go from a model to a printed part. You can see this again from the three-dot menu > Tutorial.")\
-    X(Tour1Title, "1. Abrí un modelo",\
-      "1. Open a model")\
+    X(TourSliceTitle, "Cómo se imprime una pieza",\
+      "How a part is printed")\
+    X(TourSlice, "La impresora no entiende un modelo 3D: sigue instrucciones, punto por punto. Laminar corta el modelo en capas finas, como fetas, y en cada capa dibuja el camino que hace la boquilla mientras derrite plástico. Esas instrucciones son el G-code, el archivo que va a la impresora.",\
+      "The printer does not understand a 3D model: it follows instructions, point by point. Slicing cuts the model into thin layers and, on each one, draws the path the nozzle takes while it melts plastic. Those instructions are the G-code, the file that goes to the printer.")\
+    X(TourLayersTitle, "Capas, paredes y relleno",\
+      "Layers, walls and infill")\
+    X(TourLayers, "Cada capa tiene paredes, que son el contorno de la pieza, y adentro un relleno con huecos que ahorra plástico y tiempo. Arriba y abajo, unas capas macizas cierran la pieza. Capas más finas, más detalle y más tiempo; más paredes y más relleno, más fuerza.",\
+      "Each layer has walls, the outline of the part, and inside an infill with gaps that saves plastic and time. On top and at the bottom, solid layers close the part. Thinner layers mean more detail and more time; more walls and infill, more strength.")\
+    X(TourSupportTitle, "Lo que cuelga y lo que se pega",\
+      "What overhangs and what sticks")\
+    X(TourSupport, "Cada capa se apoya en la de abajo: lo que sobresale en el aire necesita soportes, columnas que se sacan al final. Y todo empieza con la primera capa pegada a la cama; si la pieza tiene poca base, un borde alrededor la ayuda a no despegarse.",\
+      "Each layer rests on the one below: whatever sticks out into the air needs supports, columns removed at the end. And everything starts with the first layer stuck to the bed; if the part has a small base, a brim around it helps it stay down.")\
+    X(TourMaterialTitle, "El material y su temperatura",\
+      "The material and its temperature")\
+    X(TourMaterial, "Cada plástico se derrite a su temperatura: el PLA, el más fácil, entre 195 y 220 °C con la cama a unos 60 °C; el PETG y el ABS piden más. La caja del rollo dice su rango. Elegí tu filamento en el perfil de Material y, para afinarlo, usá Calibración: la torre de temperatura y la de retracción.",\
+      "Each plastic melts at its own temperature: PLA, the easiest, between 195 and 220 °C with the bed at about 60 °C; PETG and ABS ask for more. The spool's box gives its range. Choose your filament in the Material profile and, to fine-tune it, use Calibration: the temperature tower and the retraction test.")\
+    X(Tour1Title, "Abrí un modelo",\
+      "Open a model")\
     X(Tour1, "Arrastrá un STL a la ventana o usá Abrir. El modelo queda centrado y apoyado en la cama. Con Agregar sumás más modelos a la placa.",\
       "Drop an STL on the window or use Open. The model sits centred on the bed. Add puts more models on the plate.")\
-    X(Tour2Title, "2. Elegí impresora, filamento y perfil",\
-      "2. Choose printer, filament and profile")\
+    X(Tour2Title, "Elegí impresora, filamento y perfil",\
+      "Choose printer, filament and profile")\
     X(Tour2, "Arriba del panel de la izquierda: la impresora, el filamento y el perfil de impresión. El catálogo trae los de muchas marcas.",\
       "At the top of the left panel: the printer, the filament and the print profile. The catalog has those of many brands.")\
-    X(Tour3Title, "3. Ajustá lo que necesites",\
-      "3. Adjust what you need")\
-    X(Tour3, "Cada ajuste tiene un botón (i) al lado de su nombre: dice qué hace, su valor por defecto y su rango.",\
-      "Each setting has an (i) button beside its name: what it does, its default and its range.")\
-    X(Tour4Title, "4. Ubicá y prepará la pieza",\
-      "4. Place and prepare the part")\
+    X(Tour3Title, "Ajustá lo que necesites",\
+      "Adjust what you need")\
+    X(Tour3, "Cada ajuste tiene un botón (i) al lado de su nombre: abre una ficha con un dibujo, qué hace, qué cambia en la pieza y un ejemplo.",\
+      "Each setting has an (i) button beside its name: it opens a card with a drawing, what it does, what it changes in the part and an example.")\
+    X(Tour4Title, "Ubicá y prepará la pieza",\
+      "Place and prepare the part")\
     X(Tour4, "La columna a la izquierda de la vista mueve, gira, escala, apoya, ordena y pinta los modelos. Cada herramienta explica cómo se usa la primera vez.",\
       "The column at the left of the view moves, turns, scales, lays flat, arranges and paints the models. Each tool explains itself the first time.")\
-    X(Tour5Title, "5. Laminá y revisá",\
-      "5. Slice and check")\
+    X(Tour5Title, "Laminá y revisá",\
+      "Slice and check")\
     X(Tour5, "Laminar arma el G-code y lo verifica. Vista previa muestra cada capa tal como se va a imprimir.",\
       "Slice makes the G-code and checks it. Preview shows every layer as it will print.")\
-    X(Tour6Title, "6. Imprimí",\
-      "6. Print")\
+    X(Tour6Title, "Imprimí",\
+      "Print")\
     X(Tour6, "Exportar G-code lo guarda en un archivo; Impresora lo manda por USB y muestra cómo va.",\
       "Export G-code saves it to a file; Printer sends it over USB and shows how it goes.")\
     X(TipMoveTitle, "Mover",\

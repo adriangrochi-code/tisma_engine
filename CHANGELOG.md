@@ -14,6 +14,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - **Fichas de información para principiantes:** el botón (i) abre un cuadro en el centro con un dibujo de lo que hace
   el ajuste y una explicación (qué es, qué cambia y un ejemplo con valores). Los ajustes del nivel Básico ya la tienen.
+- **Lo básico en el tutorial de inicio:** cuatro pasos con dibujo antes de los de uso: cómo se imprime una pieza (capas
+  y G-code), capas, paredes y relleno, lo que cuelga y lo que se pega (soportes, primera capa, borde), y el material y su
+  temperatura.
 - **Materiales que toma la impresora:** el catálogo y la lista de perfiles de Filamento ofrecen solo pellets en una
   impresora de pellets y, con filamento, los del diámetro de las impresoras instaladas; el catálogo dice por qué está
   vacío cuando no queda ninguno. El catálogo de filamentos acepta `"feedstock": "pellet"`.
