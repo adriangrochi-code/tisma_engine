@@ -53,7 +53,7 @@ táctil:
      derecha, atrás), Ingeniería y Laminar. Una herramienta con opciones abre una tarjeta debajo y el modelo sigue a la
      vista.
 7. **Impresión y Material:**
-   - las secciones y los apartados plegables de `settings_panel.md`;
+   - las secciones y los apartados de `settings_panel.md`, siempre abiertos;
    - los niveles Básico, Normal, Avanzado y la vista Personalizada;
    - en el teléfono, una sección por pantalla, y cada apartado como tarjeta.
 8. **Impresora:** la configuración aparte de `settings_panel.md` (regla 37), con Conexión y Calibración.

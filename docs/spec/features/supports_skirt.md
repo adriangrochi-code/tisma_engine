@@ -35,12 +35,16 @@
      lados separados, o rodeado. Lo que cuelga de un solo lado (un pilar de un lado, un pilar en el medio, una
      esquina, dos paredes en L que se tocan) es voladizo y lleva soporte en toda su zona. Para decidirlo punto por
      punto: un punto de la zona es de puente si hay una dirección en la que, yendo hacia los dos lados desde ese punto,
-     se llega a la pieza de abajo en los dos sentidos (las líneas del puente empiezan y terminan apoyadas). Los puntos
-     que no lo cumplen son de voladizo. Las direcciones se prueban cada 22,5° como mucho (8 en media vuelta);
+     se llega a la pieza de abajo en los dos sentidos (las líneas del puente empiezan y terminan apoyadas), y en cada
+     punta la línea cruza el borde apoyado con un ángulo de al menos 60° (valor de partida, a ajustar con S11). Los
+     puntos que no lo cumplen son de voladizo. La condición del ángulo es la que separa «dos lados» de «un lado»: la
+     línea y los dos bordes forman un triángulo, así que las dos puntas llegan a 60° solo si los bordes se abren entre
+     sí 60° o menos (se miran de frente); en una L, que se abre 90°, toda línea que toca las dos paredes cruza una de
+     ellas a 45° o menos. Las direcciones se prueban cada 22,5° como mucho (8 en media vuelta);
      no hay largo máximo: un puente largo sigue siendo puente (como en S10, donde `support.free_bridge_length` solo
      cambia el aviso). Así, una losa sobre tres paredes en U es puente (de pared a pared enfrentada),
-     aunque el contorno apoyado sea un solo tramo seguido; en una L, ningún punto tiene apoyo en los dos sentidos de
-     una misma dirección, y es voladizo. Es una diferencia buscada
+     aunque el contorno apoyado sea un solo tramo seguido; en una L, las líneas en diagonal llegan a las dos
+     paredes pero las cruzan muy de costado, y es voladizo. Es una diferencia buscada
      con Tisma Slicer, que trata como puente toda cara que se apoya en algo y solo soporta una franja de ~1,4 mm a cada
      lado de los bordes libres (prueba S11);
    - los puentes (tramos sostenidos en los dos extremos, ver `surfaces_infill.md`) no llevan soporte, salvo con
@@ -95,4 +99,4 @@ inclinación indicada, medida desde la horizontal.
 | S8 | Cubo de S7 | `adhesion.skirt_loops` 3, `adhesion.skirt_distance` 2, `adhesion.skirt_layers` 2 | Tres vueltas en las capas 1 y 2; la externa con el eje a 2,89 mm de la pieza; 287,0 mm por capa |
 | S9 | Cubo de S7 | sin falda, `adhesion.brim_width` 5 | Borde de 14 vueltas en la primera capa: la externa con el eje a 4,82 mm de la pieza (borde a 5,02 mm); 1340,4 mm |
 | S10 | Dos pilares de 5 × 20 × 10 mm separados 10, 20 y 30 mm, con una tabla de 2 mm encima | Soporte encendido; `support.free_bridge_length` 0, 16 y 40; `support.under_bridges` no y sí | Con `under_bridges` no: ningún soporte en los tres puentes, con cualquier `free_bridge_length`. Con sí: soporte bajo los tres, igual con cualquier valor |
-| S11 | Losa de 20 × 20 × 2 mm (Z 8 a 10) apoyada de distintas formas, 3 capas sólidas abajo | `support.under_bridges` no | Sin soporte: dos pilares opuestos (puente de 10 mm), tres paredes en U, un marco que la rodea. Con soporte en toda la zona que cuelga (voladizo): un pilar de un lado, un pilar central, un pilar en una esquina, dos paredes en L. En Tisma Slicer (medido el 28-10-2026) estos cuatro llevan solo una franja bajo los bordes libres (X 108,75 a 111,25 con el borde en 110) y el interior sin soporte: diferencia buscada |
+| S11 | Losa de 20 × 20 × 2 mm (Z 8 a 10) apoyada de distintas formas, 3 capas sólidas abajo | `support.under_bridges` no | Sin soporte: dos pilares opuestos (puente de 10 mm), tres paredes en U, un marco que la rodea, dos paredes en V que se abren 30°. Con soporte en toda la zona que cuelga (voladizo): un pilar de un lado, un pilar central, un pilar en una esquina, dos paredes en L. En Tisma Slicer (medido el 28-10-2026) estos cuatro llevan solo una franja bajo los bordes libres (X 108,75 a 111,25 con el borde en 110) y el interior sin soporte: diferencia buscada |

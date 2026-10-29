@@ -102,6 +102,11 @@ derecha, en `print_review.md`; el tiempo estimado, en `print_time.md`.
 
    Los puntos usan colores distintos, que también aparecen en la leyenda. Viajes, Costuras y Boquilla vienen
    encendidos; los demás, apagados.
+   **Tamaño de los puntos** (pedido del dueño, 28-10-2026: «que no muestre el punteadito de la costura de forma tan
+   grande»): cada punto mide en pantalla lo mismo que el ancho del cordón donde está (un punto de costura sobre una
+   pared de 0,45 mm se ve del ancho de esa pared), con un mínimo de 3 px para que se vea de lejos y un máximo de
+   8 px para que no tape las paredes de cerca. Se dibuja como un disco plano con un borde fino más oscuro, no como
+   una esfera. Con muchos puntos juntos (más de uno cada 2 px en pantalla), se dibuja uno solo.
 12. **Cambio de color, pausa y G-code en una capa,** desde la vista previa:
     - un «+» junto a la manija de arriba del deslizador de capas agrega un cambio de color en esa capa
       (`gcode.color_change`, `gcode_templates.md`);
@@ -140,3 +145,4 @@ Reglas 10 a 13 (diseño a partir de lo que muestra Tisma Slicer):
 | PV8 | «+» en la capa 25 | Marca en el deslizador; el G-code tiene el comando de cambio de color al empezar la capa 25; se guarda y vuelve al abrir el proyecto |
 | PV9 | Pausa con el mensaje «Insertar tuerca» en la capa 30 | El G-code tiene la pausa con ese mensaje al empezar la capa 30 |
 | PV10 | Abrir en el visor un G-code sin etiquetas | Se ve; la vista por tipo dice «Sin tipos»; velocidad y altura funcionan |
+| PV11 | Cubo de 20 mm laminado, costuras encendidas, vista de frente con la pieza ocupando la mitad de la ventana; después acercar hasta que una pared mida 40 px | Cada punto de costura mide lo mismo que el ancho de la pared en pantalla (3 px como mínimo) y nunca más de 8 px; no tapa la pared de al lado |
