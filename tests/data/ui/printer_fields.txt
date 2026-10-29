@@ -1,0 +1,12 @@
+# The printer's page: its fields take a click and what is typed (owner's
+# report, 2026-10-28: they did not react to the mouse).
+click machine.max_height
+select-all
+type 250
+key enter
+expect machine.max_height 250
+click machine.bed
+select-all
+type 310
+key enter
+expect-contains machine.bed 310

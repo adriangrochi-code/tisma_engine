@@ -195,7 +195,8 @@ float intersect_bead(const Ray& ray, Vec3 p0, Vec3 p1, float width, float height
 
 void RayScene::build(std::vector<RayPrimitive> primitives) {
     primitives_ = std::move(primitives);
-    if (primitives_.size() > kMaxPrimitives)
+    truncated_ = primitives_.size() > kMaxPrimitives;
+    if (truncated_)
         primitives_.resize(kMaxPrimitives);
     nodes_.clear();
     depth_ = 0;

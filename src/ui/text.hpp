@@ -81,7 +81,7 @@
     X(LineWidth, "Ancho de línea", "Line width")                                                                      \
     X(Seam, "Costura", "Seam")                                                                                        \
     X(FuzzySkin, "Piel difusa", "Fuzzy skin")                                                                         \
-    X(FuzzyNone, "No", "None")                                                                                        \
+    X(FuzzyNone, "Apagado", "Off")                                                                                        \
     X(FuzzyExternal, "Por fuera", "Outside")                                                                          \
     X(FuzzyAll, "Por fuera y agujeros", "Outside and holes")                                                          \
     X(FuzzyThickness, "Espesor de la piel", "Skin thickness")                                                         \
@@ -964,7 +964,7 @@
     X(SumNotCombined, "Cada capa la suya", "Each layer its own") \
     X(SumSpeed, "%s mm/s", "%s mm/s") \
     X(SumWallSpeed, "%s · externa %s", "%s · outer %s") \
-    X(SumTwoSpeeds, "%s · %s mm/s", "%s · %s mm/s") \
+    X(SumTwoSpeeds, "%s · %s", "%s · %s") \
     X(SumNoSupport, "Sin soportes", "No supports") \
     X(SumAutoSupport, "Automáticos, %s°", "Automatic, %s°") \
     X(SumPaintedSupport, "Solo lo pintado", "Painted only") \
@@ -1037,6 +1037,10 @@
     X(SupportZGap, "Separación en Z", "Z gap") \
     X(SupportBottomZGap, "Separación sobre la pieza", "Gap over the part") \
     X(SupportBuildplateOnly, "Solo desde la cama", "From the bed only") \
+    X(SupportUnderBridges, "Soporte bajo los puentes", "Support under bridges") \
+    X(NotSet, "Sin dato", "Not set") \
+    X(AutoValue, "Automático", "Automatic") \
+    X(NoLimit, "Sin límite", "No limit") \
     X(SupportBottomInterface, "Capas de interfaz sobre la pieza", "Interface layers over the part") \
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \
@@ -1134,7 +1138,7 @@
     X(FilamentStartGcode, "G-code de inicio del filamento", "Filament start G-code") \
     X(FilamentEndGcode, "G-code de fin del filamento", "Filament end G-code") \
     X(DraftShieldRow, "Escudo contra corrientes", "Draft shield") \
-    X(ShieldDisabled, "No", "No") \
+    X(ShieldDisabled, "Apagado", "Off") \
     X(ShieldLimited, "En las capas de la falda", "On the skirt's layers") \
     X(ShieldEnabled, "Hasta arriba", "Up to the top") \
     X(BrimTypeRow, "Dónde va el borde", "Where the brim goes") \

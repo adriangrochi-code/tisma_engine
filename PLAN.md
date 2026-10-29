@@ -676,6 +676,51 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   espiral, sobre capas de abajo planas; reglas 1 a 6 (la de varios objetos, en la interfaz: el motor lamina uno por
   vez). Varios objetos en modo vaso, uno por uno, con la impresión secuencial (2026-10-27)
 
+### Prioridad: modelos grandes (pedido del dueño, 2026-10-28)
+
+El dueño sigue sufriendo con los modelos grandes. Medición de caja negra del equipo de fichas, con GL por software (los
+tiempos absolutos son lentos, la escala vale): una cúpula ondulada de 180 × 180 × 61,8 mm y 4 008 000 triángulos (STL
+binario de 200 MB) tarda 7 a 14 s en abrirse con una captura, y la barra de estado dice «Vista 2471–3686 ms · 0 FPS».
+Va antes que lo demás de P1:
+- [ ] La luz se rompe al mirar desde arriba (informe del dueño, reproducido por el equipo de fichas con
+  `--look 100,100,20,260,30,85`): con oclusión ambiental, cuadrados oscuros en la cara de arriba y el borde en
+  escalones; a 30° se ve bien. Parece que la oclusión o el mapa de sombras se quedan sin resolución cuando la pieza
+  llena la vista desde arriba. Reproducir con la cúpula, arreglar, y mirarlo en una GPU real si hay una.
+  El dueño precisó (2026-10-28): con **Vulkan**, sobre todo en la vista previa laminada (las líneas): bajan los cuadros
+  y aparecen efectos de luz. Hecho ese día: la vista previa dibuja primero las capas cercanas al ojo (desde arriba,
+  de 16,3 a 7,1 s por cuadro en lavapipe con una esfera de 80 mm); la oclusión con fuerza mayor que 1 ya no da luz
+  negativa (píxeles negros, 861 en la vista previa con rayos); falta confirmarlo con el dueño en su GPU
+- [x] Chequeos más estrictos de la interfaz (pedido del dueño, 2026-10-28): cada captura de Preparar y Vista previa
+  revisa la imagen propia de la vista 3D (ningún píxel negro, a lo sumo uno de cada mil que destella); la vista previa
+  de Vulkan comparada con la de OpenGL también desde arriba y de lejos; la oclusión y los rayos a la fuerza máxima
+- [x] Chequeos que siguen (2026-10-28): el control del moiré también con Vulkan (antes leía la vista OpenGL, que con
+  Vulkan no existe); las 13 vistas de color de la vista previa, Vulkan contra OpenGL y con el chequeo; una esfera
+  (`tests/data/sphere.stl`, de `tools/make_test_sphere.py`) en Preparar, Vista previa y desde arriba
+- [ ] Bajar el costo del filtro de moiré por fragmento (unos 2,2 de 7,1 s por cuadro en lavapipe con la esfera de 80 mm)
+- [x] Medir la cúpula por etapas (leer, soldar, árbol de cajas, malla de la placa, primera imagen) y bajar lo que más
+  pese; anotar los números (2026-10-28: `TISMA_TIMING`; de 0,75 a 0,57 s con 2 millones de triángulos; los cuadros,
+  en el rasterizador por software de este contenedor, no se pueden medir acá; después, 0,50 s con la lectura, el giro
+  y el apoyo en paralelo, y V6: 159 en vez de 672 ms por cuadro al mover la vista)
+- [ ] Lo de «Modelos grandes, lo que sigue» (P1) y V3 a V6 de la vista Vulkan, en ese orden de peso
+
+### Pedidos del dueño sobre la interfaz (2026-10-28, por el equipo de fichas)
+
+El dueño probó la aplicación en Windows. Los errores que informó están arreglados (ver `PROGRESS.md`); quedan sus
+pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene que el equipo de fichas actualice
+`settings_panel.md` antes de los que la contradicen):
+- [ ] Ajustes en una sola página por pestaña, con los nombres de sección grandes y sus opciones debajo, sin flechas para
+  abrir y cerrar (como OrcaSlicer), y más juntas
+- [ ] «No planar» como entrada propia en la columna de categorías de impresión (modos y sus ajustes) y en la de la
+  impresora (altura libre del cabezal, ángulos libres en X e Y, radio libre, perfil del cabezal; hoy en «Cabezal»)
+- [ ] El botón Laminar abajo a la derecha (como Cura) y, después de laminar, un menú para guardar el G-code o mandarlo
+  a la impresora conectada
+- [ ] Mover, girar y escalar con controles visuales (deslizadores), no solo números; un menú con el botón derecho para
+  agregar modelos y formas
+- [ ] La primera vez, elegir la impresora y el filamento antes del recorrido de bienvenida
+- [ ] La leyenda de la vista previa no tapa la pieza (encuadre teniendo en cuenta los paneles)
+- [ ] La columna de valores corrida en Windows con escala de pantalla (no reproducido al 100 %)
+- [ ] `--dump-ui` (cada control con su clave, texto, valor y rectángulo) para la revisión de textos del equipo de fichas
+
 ## Fichas nuevas (2026-10-26)
 
 Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pasa sobre ella.
@@ -920,12 +965,13 @@ Con el PR #23 (2026-10-26):
   `variables`) y **`calibration`** (pruebas por franjas, CA1 a CA7; hechos 2026-10-28). Quedan `machine.feedstock`
   (pellets, P3), `machine.high_flow_nozzle`, `machine.process` (WAAM), la prueba VFA y las pruebas por parches. `fins`,
   `fragment` y `waam` son de después de la primera versión, como dicen sus fichas
-- [ ] **Las claves de `support` que faltan** (`supports_more.md`, `supports_skirt.md`, `print_review.md`): hechas el
+- [x] **Las claves de `support` que faltan** (`supports_more.md`, `supports_skirt.md`, `print_review.md`): hechas el
   2026-10-28 `pattern`, `sheath`, `interface_pattern`, `interface_spacing` e `interface_contact_loops` (SM6, SM7,
-  SM10), `enforce_layers` (SM1) y el estilo `snug` con `closing_radius` (SM8, SM9), y `free_bridge_length` con el aviso de
-  puentes largos (R5, R6); falta `under_bridges` (S6), con una pregunta al equipo de fichas (si
-  `free_bridge_length` también decide qué puentes van sin soporte). `fins` (`support_fins.md`) y `waam` son de después de la primera versión, como dicen
-  sus fichas
+  SM10; los lazos en las dos capas de arriba desde la ficha del PR #39), `enforce_layers` (SM1) y el estilo `snug` con
+  `closing_radius` (SM8, SM9), `free_bridge_length` con el aviso de puentes largos (R5, R6) y `under_bridges` (S6,
+  S10: sin él, los puentes no llevan soporte, sea cual sea su largo). Falta igualar la zona de la interfaz de SM10
+  (la nuestra es un 30 % más chica; pregunta enviada al equipo de fichas). `fins` (`support_fins.md`) y `waam` son de
+  después de la primera versión, como dicen sus fichas
 - [x] **`cooling.dynamic_overhang_fan`** y `cooling.overhang_fan_0` a `_3` (`cooling_more.md`, reglas 2 a 4, C2;
   hecho 2026-10-28): el ventilador de cada tramo de pared según su apoyo, el mayor con el de la capa
 - [x] **`cooling.slowdown_logic`** `consistent_surface` (`cooling_more.md`, regla 5, C3) y
@@ -987,7 +1033,9 @@ tapa, el tiempo de la vista en la barra de estado y `--bench-frames`. Pasos:
 - [ ] V4: el recorte en la GPU: un shader de cómputo por cuadro elige por capa lo que se ve (cámara, lo tapado, capas
   juntas de lejos) y dibuja con `vkCmdDrawIndirect`; menos vértices por cordón
 - [ ] V5: rayos primarios para la vista previa («tipo raycaster»), en cómputo
-- [ ] V6: malla simplificada del modelo mientras se mueve (Garland y Heckbert 1997)
+- [x] V6: malla simplificada del modelo mientras se mueve. Hecho 2026-10-28 en las vistas OpenGL y Vulkan, por
+  agrupamiento de vértices en una grilla (Rossignac y Borrel 1993) en vez de Garland y Heckbert 1997: es lineal, en
+  otro hilo, y alcanza para los cuadros en movimiento
 - [ ] Greedy meshing en la vista previa (pedido del dueño, 2026-10-26): juntar los cordones vecinos del mismo tipo en
   menos instancias, como el mallado voraz junta las caras de los vóxeles (`docs/LARGE_MODELS.md`)
 - [ ] Armar los datos de la vista previa en el hilo del laminado (hoy, 120 a 180 ms en el de la interfaz)

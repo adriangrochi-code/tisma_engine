@@ -7,6 +7,9 @@
 #include "slice/placement.hpp"
 
 #include <nlohmann/json.hpp>
+#include <oneapi/tbb/blocked_range.h>
+#include <oneapi/tbb/parallel_for.h>
+#include <oneapi/tbb/parallel_reduce.h>
 
 #include <algorithm>
 #include <cmath>
@@ -46,21 +49,71 @@ Rotation about(double ax, double ay, double az, double angle) {
             t * ax * az - s * ay, t * ay * az + s * ax, t * az * az + c};
 }
 
-// The corners of the mesh scaled about the box centre and turned, before
-// they are set on the bed.
-std::vector<Vec3f> turned(const PlateObject& o) {
-    const BoundingBox box = o.mesh.bounding_box();
-    const double cx = 0.5 * (double(box.min.x) + double(box.max.x)), cy = 0.5 * (double(box.min.y) + double(box.max.y)),
-                 cz = 0.5 * (double(box.min.z) + double(box.max.z));
-    const Rotation& r = o.place.rotation;
-    const auto& s = o.place.scale;
-    std::vector<Vec3f> out;
-    out.reserve(o.mesh.corners().size());
-    for (const Vec3f& v : o.mesh.corners()) {
-        const double x = (double(v.x) - cx) * s[0], y = (double(v.y) - cy) * s[1], z = (double(v.z) - cz) * s[2];
-        out.push_back({float(r[0] * x + r[1] * y + r[2] * z), float(r[3] * x + r[4] * y + r[5] * z),
-                       float(r[6] * x + r[7] * y + r[8] * z)});
+// A box that grows by points, joined across threads.
+struct Box3 {
+    Vec3f lo{std::numeric_limits<float>::max(), std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
+    Vec3f hi{std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest()};
+    void add(const Vec3f& v) {
+        lo = {std::min(lo.x, v.x), std::min(lo.y, v.y), std::min(lo.z, v.z)};
+        hi = {std::max(hi.x, v.x), std::max(hi.y, v.y), std::max(hi.z, v.z)};
     }
+    Box3 joined(const Box3& b) const {
+        Box3 out = *this;
+        out.add(b.lo);
+        out.add(b.hi);
+        return out;
+    }
+};
+
+// Blocks of corners for the threads: a model of millions of triangles
+// (the owner's large-model item, 2026-10-28).
+constexpr std::size_t kCornerBlock = std::size_t(1) << 15;
+
+// The box of `n` points, point(i) each, over the threads.
+template <class Point>
+Box3 box_of(std::size_t n, Point&& point) {
+    return tbb::parallel_reduce(
+        tbb::blocked_range<std::size_t>(0, n, kCornerBlock), Box3{},
+        [&](const tbb::blocked_range<std::size_t>& range, Box3 box) {
+            for (std::size_t i = range.begin(); i != range.end(); ++i)
+                box.add(point(i));
+            return box;
+        },
+        [](const Box3& a, const Box3& b) { return a.joined(b); });
+}
+
+// The turn of a mesh's corners: scaled about its box centre and turned,
+// before they are set on the bed.
+struct Turn {
+    double cx, cy, cz;
+    const Rotation& r;
+    const std::array<double, 3>& s;
+    Vec3f operator()(const Vec3f& v) const {
+        const double x = (double(v.x) - cx) * s[0], y = (double(v.y) - cy) * s[1], z = (double(v.z) - cz) * s[2];
+        return {float(r[0] * x + r[1] * y + r[2] * z), float(r[3] * x + r[4] * y + r[5] * z),
+                float(r[6] * x + r[7] * y + r[8] * z)};
+    }
+};
+
+Turn turn_of(const PlateObject& o) {
+    const std::vector<Vec3f>& c = o.mesh.corners();
+    const Box3 box = box_of(c.size(), [&](std::size_t i) { return c[i]; });
+    return {0.5 * (double(box.lo.x) + double(box.hi.x)), 0.5 * (double(box.lo.y) + double(box.hi.y)),
+            0.5 * (double(box.lo.z) + double(box.hi.z)), o.place.rotation, o.place.scale};
+}
+
+// The turned corners of the mesh, over the threads.
+std::vector<Vec3f> turned(const PlateObject& o) {
+    const std::vector<Vec3f>& c = o.mesh.corners();
+    std::vector<Vec3f> out(c.size());
+    if (c.empty())
+        return out;
+    const Turn turn = turn_of(o);
+    tbb::parallel_for(tbb::blocked_range<std::size_t>(0, c.size(), kCornerBlock),
+                      [&](const tbb::blocked_range<std::size_t>& range) {
+                          for (std::size_t i = range.begin(); i != range.end(); ++i)
+                              out[i] = turn(c[i]);
+                      });
     return out;
 }
 
@@ -105,31 +158,30 @@ Rotation from_euler_degrees(const std::array<double, 3>& d) {
 
 TriangleMesh placed_mesh(const PlateObject& object) {
     std::vector<Vec3f> p = turned(object);
-    TriangleMesh out;
     if (p.empty())
-        return out;
-    float x0 = p[0].x, x1 = x0, y0 = p[0].y, y1 = y0, z0 = p[0].z;
-    for (const Vec3f& v : p)
-        x0 = std::min(x0, v.x), x1 = std::max(x1, v.x), y0 = std::min(y0, v.y), y1 = std::max(y1, v.y),
-        z0 = std::min(z0, v.z);
-    const double dx = object.place.x - 0.5 * (double(x0) + double(x1)), dy = object.place.y - 0.5 * (double(y0) + double(y1));
-    out.reserve(p.size() / 3);
-    const auto at = [&](const Vec3f& v) { return Vec3f{float(v.x + dx), float(v.y + dy), v.z - z0}; };
-    for (std::size_t i = 0; i + 2 < p.size(); i += 3)
-        out.add_triangle(at(p[i]), at(p[i + 1]), at(p[i + 2]));
-    return out;
+        return {};
+    const Box3 box = box_of(p.size(), [&](std::size_t i) { return p[i]; });
+    const double dx = object.place.x - 0.5 * (double(box.lo.x) + double(box.hi.x)),
+                 dy = object.place.y - 0.5 * (double(box.lo.y) + double(box.hi.y));
+    const float z0 = box.lo.z;
+    // Set down where it goes, in place: the turned corners become the mesh.
+    tbb::parallel_for(tbb::blocked_range<std::size_t>(0, p.size(), kCornerBlock),
+                      [&](const tbb::blocked_range<std::size_t>& range) {
+                          for (std::size_t i = range.begin(); i != range.end(); ++i)
+                              p[i] = Vec3f{float(p[i].x + dx), float(p[i].y + dy), p[i].z - z0};
+                      });
+    return TriangleMesh(std::move(p));
 }
 
 TriangleMesh plate_mesh(const std::vector<TriangleMesh>& placed) {
     std::size_t count = 0;
     for (const TriangleMesh& m : placed)
-        count += m.triangle_count();
-    TriangleMesh out;
-    out.reserve(count);
-    for (const TriangleMesh& m : placed)
-        for (std::size_t t = 0; t < m.triangle_count(); ++t)
-            out.add_triangle(m.corner(t, 0), m.corner(t, 1), m.corner(t, 2));
-    return out;
+        count += m.corners().size();
+    std::vector<Vec3f> corners;
+    corners.reserve(count);
+    for (const TriangleMesh& m : placed) // whole blocks of corners, not triangle by triangle
+        corners.insert(corners.end(), m.corners().begin(), m.corners().end());
+    return TriangleMesh(std::move(corners));
 }
 
 Painting plate_painting(const std::vector<PlateObject>& objects) {
@@ -173,14 +225,13 @@ PaintMesh paint_mesh(const std::vector<PlateObject>& objects, const std::vector<
 }
 
 std::array<double, 3> placed_size(const PlateObject& object) {
-    const std::vector<Vec3f> p = turned(object);
-    if (p.empty())
+    if (object.mesh.empty())
         return {0.0, 0.0, 0.0};
-    Vec3f lo = p[0], hi = p[0];
-    for (const Vec3f& v : p)
-        lo = {std::min(lo.x, v.x), std::min(lo.y, v.y), std::min(lo.z, v.z)},
-        hi = {std::max(hi.x, v.x), std::max(hi.y, v.y), std::max(hi.z, v.z)};
-    return {double(hi.x - lo.x), double(hi.y - lo.y), double(hi.z - lo.z)};
+    // The turned corners' box, without keeping them.
+    const Turn turn = turn_of(object);
+    const std::vector<Vec3f>& c = object.mesh.corners();
+    const Box3 box = box_of(c.size(), [&](std::size_t i) { return turn(c[i]); });
+    return {double(box.hi.x - box.lo.x), double(box.hi.y - box.lo.y), double(box.hi.z - box.lo.z)};
 }
 
 std::vector<std::array<double, 2>> arrange(const std::vector<std::array<double, 2>>& sizes, std::array<double, 2> centre,

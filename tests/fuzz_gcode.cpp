@@ -490,6 +490,7 @@ int main(int argc, char** argv) {
         s.support_interface_pattern = SupportInterfacePattern(pick(3));
         s.support_interface_spacing = pick(3) == 0 ? 0.5 * double(pick(4)) : 0.0;
         s.support_contact_loops = pick(3) == 0;
+        s.support_under_bridges = pick(3) == 0;
         s.support_enforce_layers = pick(4) == 0 ? pick(30) : 0;
         s.corner_smoothing = pick(3) == 0 ? 0.01 * double(pick(6)) : 0.0;
         s.monotonic_bottom = pick(2) == 0;
@@ -552,6 +553,7 @@ int main(int argc, char** argv) {
                             int(s.infill_before_walls), s.infill_max_link, s.bridge_angle);
                 std::printf("  arcs %d overlap %.1f speed %.1f max %.2f\n", int(s.arcs), s.arcs_overlap, s.arcs_speed,
                             s.arcs_max_distance);
+                std::printf("  support under bridges %d\n", int(s.support_under_bridges));
                 std::printf("  flavor %d flow caps %.1f %.1f accel %.0f %.0f chamber %.0f/%.0f changes", int(s.flavor),
                             s.machine_max_flow, s.filament_max_flow, s.acceleration, s.travel_acceleration,
                             s.chamber_temperature, s.max_chamber_temp);

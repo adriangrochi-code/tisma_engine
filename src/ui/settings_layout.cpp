@@ -131,8 +131,8 @@ const std::vector<SectionLayout>& print_layout() {
             {"acceleration.short_travel", A}}}}},
         {"support", T::SecSupport, "section_support.svg",
          {{"support", T::SubSupport,
-           {{"support.enabled", B}, {"support.automatic", B}, {"support.buildplate_only", N}, {"support.style", N},
-            {"support.threshold_angle", N}, {"support.enforce_layers", A}, {"support.closing_radius", A},
+           {{"support.enabled", B}, {"support.automatic", B}, {"support.buildplate_only", N}, {"support.under_bridges", N}, {"support.style", N},
+            {"support.threshold_angle", N}, {"support.enforce_layers", A},
             {"support.free_bridge_length", A}}},
           {"tree", T::SubSupportTree,
            {{"support.tree_branch_diameter", N},
@@ -156,7 +156,8 @@ const std::vector<SectionLayout>& print_layout() {
             {"support.pattern", A},
             {"support.sheath", A},
             {"support.line_angle", A},
-            {"support.width", A}}},
+            {"support.width", A},
+            {"support.closing_radius", A}}},
           {"arcs", T::SubArcs,
            {{"arcs.enabled", N}, {"arcs.overlap", A}, {"arcs.speed", A}, {"arcs.max_distance", A}}}}},
         {"adhesion", T::SecAdhesion, "section_adhesion.svg",
@@ -545,6 +546,8 @@ std::optional<double> variable(const Settings& s, const char* name) {
 }
 
 std::string speed_text(double v) { return v > 0.0 ? number(v, 0) : std::string("—"); }
+// A speed with its unit; 0, which takes another speed, as "automatic".
+std::string speed_unit(double v) { return v > 0.0 ? number(v, 0) + " mm/s" : std::string(tr(T::AutoValue)); }
 
 } // namespace
 
@@ -639,15 +642,15 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "first_layer")
         return format(T::SumSpeed, speed_text(s.first_layer_speed).c_str());
     if (id == "walls_surfaces")
-        return format(T::SumWallSpeed, speed_text(s.wall_speed).c_str(),
+        return format(T::SumWallSpeed, speed_unit(s.wall_speed).c_str(),
                       s.outer_wall_speed.percent ? (number(s.outer_wall_speed.value, 0) + " %").c_str()
-                                                 : speed_text(s.outer_wall_speed.value).c_str());
+                                                 : speed_unit(s.outer_wall_speed.value).c_str());
     if (id == "infill_support")
-        return format(T::SumTwoSpeeds, speed_text(s.infill_speed).c_str(), speed_text(s.support_speed).c_str());
+        return format(T::SumTwoSpeeds, speed_unit(s.infill_speed).c_str(), speed_unit(s.support_speed).c_str());
     if (id == "travel")
         return format(T::SumSpeed, speed_text(s.travel_speed).c_str());
-    if (id == "limits")
-        return format(T::SumSpeed, speed_text(s.max_speed).c_str());
+    if (id == "limits") // 0: nothing caps the speeds
+        return s.max_speed > 0.0 ? format(T::SumSpeed, speed_text(s.max_speed).c_str()) : std::string(tr(T::NoLimit));
     if (id == "ironing")
         return s.ironing ? format(T::SumIroning, number(s.ironing_speed, 0).c_str()) : tr(T::SumOff);
     if (id == "overhang_speeds")
@@ -721,11 +724,11 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.fill_mode == FillMode::Union ? "union" : s.fill_mode == FillMode::EvenOdd ? "even-odd" : "fill holes";
     // Material
     if (id == "nozzle_temp")
-        return variable(s, "temperature") ? format(T::SumTemp, int(std::lround(*variable(s, "temperature")))) : "—";
+        return variable(s, "temperature") ? format(T::SumTemp, int(std::lround(*variable(s, "temperature")))) : tr(T::NotSet);
     if (id == "bed_temp")
-        return variable(s, "bed_temperature") ? format(T::SumTemp, int(std::lround(*variable(s, "bed_temperature")))) : "—";
+        return variable(s, "bed_temperature") ? format(T::SumTemp, int(std::lround(*variable(s, "bed_temperature")))) : tr(T::NotSet);
     if (id == "price")
-        return s.filament_density > 0.0 ? format(T::SumDensity, number(s.filament_density, 2).c_str()) : "—";
+        return s.filament_density > 0.0 ? format(T::SumDensity, number(s.filament_density, 2).c_str()) : tr(T::NotSet);
     if (id == "shrinkage")
         return s.shrinkage_xy == 0.0 && s.shrinkage_z == 0.0
                    ? tr(T::SumNoShrinkage)
@@ -811,7 +814,9 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "extruder")
         return format(T::SumMm, number(s.filament_diameter).c_str());
     if (id == "speeds")
-        return format(T::SumFeeds, speed_text(std::min(s.max_feed_x, s.max_feed_y)).c_str());
+        return std::min(s.max_feed_x, s.max_feed_y) > 0.0
+                   ? format(T::SumFeeds, speed_text(std::min(s.max_feed_x, s.max_feed_y)).c_str())
+                   : std::string(tr(T::NotSet));
     if (id == "accelerations")
         return format(T::SumAccel, number(s.acceleration, 0).c_str());
     if (id == "max_temps")
@@ -864,7 +869,7 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "jerk")
         return s.junction_deviation > 0.0 ? format(T::SumJunction, number(s.junction_deviation, 3).c_str())
                : s.jerk_x > 0.0          ? format(T::SumJerk, number(s.jerk_x, 1).c_str())
-                                         : std::string("—");
+                                         : std::string(tr(T::NotSet));
     if (id == "silent")
         return s.silent_mode ? format(T::SumSilent, int(s.silent_limits.size())) : tr(T::SumOff);
     return {};

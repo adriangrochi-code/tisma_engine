@@ -32,6 +32,14 @@ TriangleMesh translated(const TriangleMesh& mesh, Vec3 offset);
 // triangle's unit normal (3 floats), for flat shading.
 std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset);
 
+// A coarse copy of a mesh to draw while the view moves (PLAN.md, V6): vertex
+// clustering (Rossignac and Borrel 1993, "Multi-resolution 3D approximations
+// for rendering complex scenes"). The corners go to the mean of their cell of
+// a grid sized for about `target` triangles; a triangle with two corners in
+// one cell drops out, and a triangle repeated over the same cells is kept
+// once. Below `target` triangles, the mesh as it is.
+TriangleMesh clustered(const TriangleMesh& mesh, std::size_t target);
+
 // A coloured line vertex: position and 0xRRGGBB colour with alpha in the top
 // byte (0xAARRGGBB).
 struct LineVertex {
@@ -136,6 +144,7 @@ std::vector<std::uint8_t> hidden_inside(const PreviewBuffers& preview, double ce
 struct PreviewDrawOrder {
     std::vector<PreviewInstance> instances;
     std::vector<std::size_t> layer_shown, layer_hidden;
+    std::vector<float> layer_z;     // each layer's highest point (the one below's when it has none)
     std::uint32_t hidden_kinds = 0; // bit k: some extrusion of LineKind k is hidden
 };
 PreviewDrawOrder preview_draw_order(const PreviewBuffers& preview);
@@ -153,6 +162,18 @@ inline constexpr std::size_t kWholeLayer = std::size_t(-1);
 std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
                                            std::uint32_t kind_mask, std::size_t top_shown = kWholeLayer,
                                            std::size_t top_hidden = kWholeLayer);
+
+// The same extrusions, as draws in an order for the depth test: the shown
+// range, then the hidden one, each split by layer, first the layers at or
+// below the eye's height from the highest down, then those above it from the
+// lowest up (the runs of these joined into one draw). The nearest beads come
+// first, so those they cover fail the depth test before they are shaded:
+// from above, layer by layer upwards, every layer of a part was shaded on the
+// same pixels and covered by the next (the owner's report, 2026-10-28: the
+// sliced preview of a large part, seen from above, slows down).
+std::vector<PreviewRange> preview_draws(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
+                                        std::uint32_t kind_mask, float eye_z, std::size_t top_shown = kWholeLayer,
+                                        std::size_t top_hidden = kWholeLayer);
 
 // The colour of each line kind in the legend and the view (0xRRGGBB).
 std::uint32_t kind_colour(LineKind kind);

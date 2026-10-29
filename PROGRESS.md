@@ -7220,3 +7220,244 @@ revisadas a ojo. Toda la lista: 724 casos, pasan.
 
 **No probado:** los campos de ingreso de texto (`InputDouble`, en las guías de calibración) siguen con punto: ImGui
 escribe y lee su texto con él.
+
+## 2026-10-28 (noche): modelos grandes, prioridad del dueño
+
+El dueño pidió, por el equipo de fichas, que los modelos grandes sean prioridad; queda como ítem propio en `PLAN.md`,
+antes de lo demás de P1. También informó que «con un objeto grande, al inclinar la cámara hacia abajo, la luz se
+rompe», y el equipo de fichas lo reprodujo con una cúpula ondulada mirada casi desde arriba.
+
+**Mirado:** la cúpula de la fórmula del equipo de fichas (2 003 996 triángulos), desde `--look 100,100,20,260,30,85`
+y a 30°, con oclusión ambiental y con ray tracing:
+- los cuadrados y el borde en escalones son la forma de la pieza: pasado r = 90 la altura es max(0, 2 sen · cos), una
+  grilla de bultos de 2 mm separados por zonas planas, que desde arriba se ven como cuadrados;
+- la misma cúpula sin la onda no muestra cuadrados ni escalones, con ninguna de las dos luces;
+- los anillos tenues alrededor de la cima son los pasos de 8 bits del color de un brillo suave: con las normales en
+  16 bits salen iguales (probado y descartado);
+- el mapa de sombras solo oscurece la cama.
+Se le pidió al equipo de fichas una captura del dueño, su GPU, si usa OpenGL o Vulkan y qué luz tiene puesta.
+
+**Arreglado de paso:** el ray tracing cortaba en silencio la escena en 4 194 304 primitivas
+(`RayScene::kMaxPrimitives`): con un modelo más grande, la luz de lo que quedaba afuera salía mal. Ahora la escena
+cortada cuenta como demasiado grande y la vista lo avisa, como cuando no entra en la GPU. Probado con una cúpula de
+4 210 796 triángulos en ray tracing: aparece el aviso. Sin prueba automática: hace falta una escena de más de 4
+millones de primitivas.
+
+**Sigue:** medir la cúpula por etapas (leer, soldar, árbol de cajas, malla de la placa, primera imagen) y bajar lo
+que más pese.
+
+**Medido, abrir la cúpula en la interfaz** (2 003 996 triángulos, `TISMA_TIMING=1`, GL por software, 4 núcleos
+compartidos con el CI): leer el archivo 149 a 166 ms; antes de la placa 179 ms; mallas puestas en la placa 147 ms;
+malla de la placa 58 ms; vértices de la vista 95 a 102 ms; subirlos a la vista 112 ms; después, cada cuadro tarda 0,9
+a 1,9 s, todo dentro del rasterizador por software (muestreado con gdb: `libgallium`), igual con luz rápida que con
+oclusión. En una GPU real el dibujo no pesa eso; acá no se puede medir.
+
+**Hecho:**
+- `place_model` armaba la malla puesta entera solo para saber su caja; ahora la caja sale de `placed_size`, que
+  recorre las esquinas giradas sin copiarlas (`each_turned`): «antes de la placa» baja de 179 a 55 ms;
+- `placed_mesh` gira las esquinas una sola vez y las usa como la malla (sin una segunda copia): de 147 a 121 ms;
+- `mesh_vertices` arma los vértices en paralelo, cada triángulo en su lugar: de 102 a 94 ms acá (4 núcleos ocupados
+  por el CI; más en una máquina con más núcleos);
+- `TISMA_TIMING=1` escribe en stderr cuánto tarda cada paso al abrir un modelo y los primeros cuadros.
+En total, de unos 0,75 s a unos 0,57 s antes del primer cuadro con 2 millones de triángulos.
+
+**Sigue:** armar la malla de la placa, sus vértices y el árbol de cajas en otro hilo (lo de «Modelos grandes, lo que
+sigue»), y V6 (malla simplificada mientras se mueve) para los cuadros en una GPU real.
+
+## 2026-10-28 (noche): modelos grandes, carga en paralelo y V6
+
+**Hecho:**
+- La lectura del STL binario es paralela: cada faceta se escribe en su lugar; con una coordenada no finita, el error
+  sigue nombrando la primera faceta mala.
+- Girar las piezas, buscar su caja y apoyarlas en la cama va en paralelo (`turned`, `placed_mesh`, `placed_size`), sin
+  copias de más.
+- V6: con más de un millón de triángulos en la placa, un hilo aparte arma una copia simplificada (agrupamiento de
+  vértices de Rossignac y Borrel, 1993; unos 400 000 triángulos repartidos entre las piezas según su tamaño). La vista
+  OpenGL la dibuja mientras la cámara gira, se desplaza o acerca, y hasta dos cuadros después; la selección se dibuja
+  sobre la copia también. `--coarse` la fuerza, para capturas y mediciones.
+
+**Medido, abrir la cúpula en la interfaz** (2 003 996 triángulos, `TISMA_TIMING=1`, GL por software, CI quieto,
+antes → después): leer 150 → 132–150 ms; antes de la placa 55 → 18 ms; mallas puestas 120 → 75 ms; malla de la placa
+~70 → 61 ms; vértices 100 → 86 ms; subirlos 135 → 117 ms. En total, de unos 0,63 s a unos 0,50 s antes del primer
+cuadro.
+
+**Medido, cuadros** (`--bench-frames 3`, la misma cúpula, GL por software): 672 ms por cuadro con la malla entera, 159
+ms con la copia. La captura con `--coarse` se ve igual a la entera, salvo detalles de menos de un milímetro.
+
+**Probado:** una prueba de la copia (esfera de 129 600 triángulos: con el objetivo alto no cambia; con 10 000 queda
+entre 3 000 y 30 000 triángulos, la caja a menos de 1 mm y el volumen a menos de 5 %); la lectura en paralelo con
+100 000 facetas y dos malas. Toda la lista: 725 casos, pasan.
+
+**No probado:** en una GPU real (este contenedor solo tiene rasterizador por software).
+
+**Sigue:** armar la malla de la placa, sus vértices y el árbol de cajas en otro hilo; las claves `orient.*` y las de
+pellets.
+
+## 2026-10-28 (noche): la luz con Vulkan, informe del dueño
+
+El dueño precisó el error de la luz: le pasa con **Vulkan**, en Preparar (antes de laminar), con su modelo grande de
+prueba, al inclinar la cámara para mirar desde arriba: bajan mucho los cuadros por segundo y aparece «un efecto visual
+raro». No tiene captura.
+
+**Hecho:**
+- La vista Vulkan también dibuja la copia simplificada mientras la cámara se mueve (V6). La copia se arma para las
+  dos vistas; antes solo la pedía el camino de OpenGL, y con Vulkan una captura con `--coarse` esperaba para siempre.
+  Con lavapipe (Vulkan por software) y la cúpula de 2 millones de triángulos: 1 174 ms por cuadro con la malla entera,
+  355 ms con la copia (el CI corría a la vez).
+
+**Mirado, sin reproducir el efecto:** la cúpula con Vulkan y con OpenGL, desde arriba (85°, 88° de cerca) y a 30°: las
+dos vistas dan la misma imagen; la vista Vulkan no tiene oclusión ni sombras todavía (V3), así que su luz es solo la
+rápida. Se probó un filtro del brillo para bultos más chicos que un píxel (Toksvig 2005 con las derivadas de normales
+promediadas por esquina, Tokuyoshi y Kaplanyan 2019): en la cúpula no cambia casi nada (sus bultos ocupan varios
+píxeles) y sumaba 0,5 s al abrir 2 millones de triángulos; se dejó afuera hasta saber si el efecto del dueño es un
+brillo que titila.
+
+**Después, el dueño precisó:** el efecto se nota sobre todo **laminado**, en la vista previa con las líneas: baja el
+rendimiento y aparecen efectos de luz. Pidió además chequeos de errores y de la interfaz más estrictos.
+
+**Encontrado y arreglado:**
+- La vista previa dibujaba las capas de abajo hacia arriba. Desde arriba, cada capa más alta está más cerca del ojo,
+  así que la prueba de profundidad no descartaba nada: cada fragmento de cada capa pasaba por el sombreado del cordón
+  (con el filtro de moiré, 16 muestras del perfil con `atan` y `asin` cada una) y lo tapaba la capa siguiente. Ahora
+  `preview_draws` dibuja primero las capas a la altura del ojo y por debajo, de arriba hacia abajo, y después las de
+  más arriba, de abajo hacia arriba; la imagen es la misma (nada se mezcla con transparencia). Medido con una esfera de
+  80 mm laminada (159 333 cordones, lavapipe, CI corriendo): mirando desde arriba (85°), de 16 336 a 7 119 ms por
+  cuadro; a 35°, de 9 753 a 4 868 ms. El filtro de moiré cuesta unos 2,2 s de esos 7,1 (con él apagado, 4 957 ms).
+- Con la fuerza de la oclusión pasada de 1 (la barra llega a 1,5), `mix(1, visibilidad, fuerza)` daba luz ambiente
+  negativa en los rincones; el color negativo hacía que `pow` diera NaN y el píxel saliera negro. Con los rayos, un
+  rincón cerrado daba también luz 0 exacta. Ahora la luz ambiente nunca baja de 0,04 (la luz rebotada que ningún rayo
+  sigue). Sin el arreglo, la vista previa del cubo con rayos y fuerza 1,5 tenía 861 píxeles negros y 11 destellos.
+
+**Chequeos nuevos (más estrictos):**
+- Cada captura de Preparar y Vista previa lee la imagen propia de la vista 3D (antes de que los paneles se dibujen
+  encima; en Vulkan, con `VulkanView::read_picture`) y falla si un píxel es negro o si más de uno de cada mil destella
+  (se aparta de sus ocho vecinos por más de 48 niveles de luma). Si falla, deja la imagen al lado de la captura. Así
+  todas las pruebas de la interfaz que sacan capturas (37) chequean la vista; `--no-view-check` lo saltea. En su
+  primera corrida encontró los píxeles negros de los rayos.
+- Pruebas nuevas: la vista previa de Vulkan contra la de OpenGL también desde arriba y de lejos (líneas de un píxel);
+  la oclusión y los rayos a la fuerza máxima (1,5) en Preparar y Vista previa, con `--ao-strength`.
+- Una prueba del orden de dibujo (desde arriba, desde abajo, desde el medio y con el corte del deslizador).
+- El control del moiré también con Vulkan (`VulkanView::draw_picture`). Con Vulkan, `--moire-check` leía la vista
+  OpenGL, que no existe en ese modo: una imagen vacía recorrida con el tamaño de la vista (comportamiento indefinido).
+- Las 13 vistas de color de la vista previa, cada una Vulkan contra OpenGL y con el chequeo de la vista.
+- Una esfera de 20 mm (`tests/data/sphere.stl`, 2 208 triángulos, hecha por `tools/make_test_sphere.py`) en Preparar,
+  Vista previa y desde arriba, Vulkan contra OpenGL: las diferencias quedan en las líneas de los viajes (cada driver
+  rasteriza distinto las líneas finas), no en las superficies.
+
+**Probado:** toda la lista en `build-next`; las pruebas de la interfaz con el chequeo, en OpenGL y Vulkan (lavapipe).
+
+**No probado:** en una GPU real; el dueño tiene que confirmar si el efecto que veía se fue. El chequeo de destellos no
+mira la vista mientras se mueve (titileo entre cuadros).
+
+**Sigue:** confirmar con el dueño; bajar el costo del filtro de moiré; armar la malla de la placa en otro hilo; las
+fichas nuevas del PR #39 (lazos de contacto en dos capas, lector STEP, margen de la transición de paredes); las claves
+`orient.*` y las de pellets.
+
+## 2026-10-28 (noche): fichas del PR #39 (soporte)
+
+Llegó a `dev` el PR #39 del equipo de fichas (`supports_more.md`, `supports_skirt.md`, `perimeters.md` y la ficha
+nueva `step_reader.md`); `tools/check_spec.py` pasa sobre todas.
+
+**Hecho:**
+- **Lazos de contacto en dos capas** (`supports_more.md`, regla 12, SM10): con 3 capas de interfaz, las dos de arriba
+  empiezan con lazos por el borde de su zona; la de abajo, solo líneas.
+- **`support.under_bridges`** (`supports_skirt.md`, regla 1, S6, S10): nuestro soporte iba también bajo los puentes,
+  y la ficha dice que un puente (sostenido en dos extremos) no lleva soporte salvo con este ajuste, y que
+  `support.free_bridge_length` no lo cambia (solo el aviso). `is_bridge` mira el contorno exterior de cada isla de lo
+  que cuelga: si la capa de abajo lo toca en dos tramos separados, o en un anillo alrededor (una tapa sobre un tubo),
+  es puente. Un voladizo de un solo lado, o el anillo de abajo de una esfera (sostenido solo por dentro), siguen con
+  soporte. Prueba S10 (dos pilares a 10, 20 y 30 mm con una tabla: sin soporte con `free_bridge_length` 0, 16 y 40;
+  con `under_bridges`, soporte) y pruebas de `is_bridge` (tabla, voladizo, tapa sobre un tubo fino, esfera).
+  En el panel va en la tarjeta Soportes; `support.closing_radius` pasó a la tarjeta del patrón (las tarjetas llevan
+  hasta 8 ajustes).
+
+**Medido (SM10, caja negra de nuestro motor):** en Z 7,4 y 7,6, 516,4 mm de líneas de interfaz por capa (la ficha:
+743,0); en Z 7,8, un lazo de 58,0 mm (la ficha: dos, de 92,7 y 51,6). Nuestra zona de interfaz es un 30 % más chica;
+se le preguntó al equipo de fichas por las cajas de los lazos y de las líneas.
+
+**Probado:** toda la lista (767 casos) en `build-next`; el fuzz de G-code, ver abajo.
+
+**No hecho:** `walls.transition_margin` (P13) no está en el motor. La tabla nueva no se explica como un margen de
+espesor: con λ = 5 mm, cualquier margen de 25 % o más saca las crestas de A ≤ 0,15 y ninguna de A ≥ 0,2, ni con 100 %.
+Queda para estudiarlo con la tabla.
+
+**Sigue:** la respuesta sobre la zona de SM10; P13 (`walls.transition_margin`); el lector STEP (`step_reader.md`).
+
+## 2026-10-28 (noche): la impresora del catálogo cerraba la aplicación
+
+El equipo de fichas reprodujo el cierre que vio el dueño en Windows: en una carpeta de ajustes vacía, elegir en la
+lista de impresoras una del catálogo (CR-5 Pro H, Ender-3 V2, MK4) cierra la aplicación al instante
+(`std::bad_alloc`, en `App::printer_card`).
+
+**Causa:** agregar la impresora (`add_catalog_profile`) vuelve a leer todas las listas de perfiles
+(`load_profile_lists`), y la tarjeta seguía con `chosen`, un puntero a la lista vieja; enseguida copiaba su nombre de
+memoria liberada. Lo mismo pasaba en la fila de perfil al guardar o borrar.
+
+**Hecho:**
+- La tarjeta y la fila de perfil buscan de nuevo el perfil elegido después de cada lectura de las listas.
+- Un perfil agregado en la sesión queda en la lista aunque las capturas no lean los perfiles del usuario.
+- Prueba nueva `ui_catalog_printer_picked`: con una carpeta de ajustes vacía, `--pick-catalog-printer "Creality
+  CR-5 Pro H"` hace lo mismo que el clic en la fila, y falla si la impresora no queda elegida. Sin el arreglo, la
+  lectura de memoria liberada no siempre cierra el programa en Release; la ve la compilación con ASan de
+  `tools/ci_linux.sh`.
+
+**Sigue (informes del equipo de fichas de la misma tarde):** los campos de la página de la impresora que no
+responden al mouse; los campos numéricos que no toman lo escrito; las boquillas del fabricante al agregar una
+impresora; el ícono de la sección elegida en el tema claro; los textos y unidades de la revisión.
+
+## 2026-10-28 (noche): la interfaz, informes del dueño y del equipo de fichas
+
+El equipo de fichas probó la aplicación con clics y teclas de verdad (xdotool sobre Xvfb) y pasó lo que el dueño ve en
+Windows. Arreglado, cada uno con su prueba:
+- **Los campos de la página de la impresora no tomaban clics.** ImGui deja detrás de todo a las ventanas que nunca
+  pasan al frente (`NoBringToFrontOnFocus`), y la página es una; la ventana de la vista 3D, transparente y del mismo
+  tamaño, quedaba encima con su lienzo invisible y se llevaba cada clic. Con la página abierta, la vista no pone su
+  lienzo.
+- **Escribir en un campo numérico no hacía nada:** en ImGui un clic sobre un campo de arrastre empieza a arrastrar;
+  para escribir hacía falta doble clic. Ahora un clic sin arrastrar abre la escritura
+  (`ConfigDragClickToInputText`); la coma se lee como punto (ya lo hacía ImGui en los campos numéricos).
+- **Laminar con la página de la impresora abierta:** cambiar de pestaña la cierra.
+- **La búsqueda y los ajustes de la impresora:** al cortar la lista a 10, entra la mejor coincidencia de cada pestaña.
+- **Tema claro:** la sección elegida en violeta oscuro (antes lavanda sobre violeta claro); las listas opacas.
+- **Ceros que no son datos:** «Sin dato», «Automático» y «Sin límite» donde 0 quiere decir que falta el dato, en los
+  campos y en los resúmenes. El motor ya trataba esos 0 como «sin tope».
+- **Nombres de perfiles** con coma decimal en español, solo al mostrarlos.
+
+**Prueba nueva de la interfaz: `--ui-script`.** Pasos de entrada que el programa le da a ImGui como si fueran del mouse
+y del teclado: `click CLAVE` (lleva el campo a la vista como la búsqueda y hace clic en su medio), `select-all`,
+`type`, `key`, `printer-page`, `wait`, `expect` y `expect-contains` (el valor guardado, como lo escribe el archivo de
+ajustes). `label_cell` anota el rectángulo del campo de cada fila. Dos pruebas: la página de la impresora (altura
+máxima y ancho de la cama) y la altura de capa escrita «0,16». Sin los arreglos, las dos fallan (256 en vez de 250;
+0,2 en vez de 0,16).
+
+**Después:** la barra de estado nombra el objeto que queda (no el primer archivo abierto), y las marcas de costura de
+la vista previa miden lo que el cordón en pantalla, de 1 a 3,5 px (antes, 7 px fijos: una línea blanca gruesa de
+lejos; comparado con capturas de antes y después). Sin prueba automática para estos dos.
+
+La tarjeta de los consejos es opaca y en Vista previa va arriba, bajo los botones de la vista (abajo están la barra
+de movimientos y la leyenda); el consejo del laminado se va cuando no hay laminado. Mirado en una captura a
+1440 × 900.
+
+**Boquillas:** el catálogo solo tiene los tamaños con fuente; para la CR-5 Pro H, el fabricante publica solo 0,4 mm.
+Así que no se agregan tamaños inventados, pero la lista de boquillas ahora ofrece «Otra boquilla…» también en las
+impresoras del catálogo (antes, solo en las propias; la regla 23 de `settings_panel.md` lo decía así, se le avisa al
+equipo de fichas). La ficha del catálogo dice «Sin dato» en vez de «-».
+
+**No hecho todavía (de los mismos informes):** la leyenda que
+tapa la pieza en Vista previa; la columna de valores corrida en Windows con escala de pantalla (acá, al 100 %, no se ve);
+`--dump-ui`; y los pedidos de diseño del dueño (secciones sin flechas, Laminar abajo a la derecha, «No planar» en las
+dos columnas, menú para guardar después de laminar).
+
+## 2026-10-29: un campo que perdía lo escrito (encontrado por la prueba nueva)
+
+La compilación con ASan de `tools/ci_linux.sh` hizo fallar `ui_script_printer_fields`: el ancho de la cama quedaba en
+256 después de escribir 310, mientras la altura máxima sí cambiaba. Las filas de los ajustes tomaban su ID de ImGui de
+la etiqueta y de la dirección del valor; el ancho y el fondo de la cama (y los porcentajes, las variables del G-code)
+son copias locales, y con ASan su dirección en la pila cambia de un cuadro a otro: el campo cambiaba de ID a mitad de la
+escritura y lo escrito se perdía. Puede ser lo mismo que el dueño vio en Windows («no se pueden editar los tamaños»).
+Ahora la fila se identifica por su etiqueta, su clave y cuántas filas iguales se dibujaron antes en el cuadro; la
+dirección queda solo para las filas sin clave.
+
+**Error de proceso:** el empuje de b75877f salió con ese CI en rojo (se leyó el resultado y se empujó en el mismo
+paso). Este arreglo va con el CI completo antes de empujar.
+

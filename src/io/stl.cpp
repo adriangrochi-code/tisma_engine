@@ -5,13 +5,18 @@
 
 #include "io/stl.hpp"
 
+#include <oneapi/tbb/blocked_range.h>
+#include <oneapi/tbb/parallel_for.h>
+
 #include <algorithm>
+#include <atomic>
 #include <bit>
 #include <charconv>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <limits>
 #include <locale>
 #include <sstream>
 
@@ -63,18 +68,31 @@ StlFile parse_binary(std::string_view data, std::uint32_t count) {
     StlFile out;
     out.format = StlFormat::Binary;
     out.name = std::string(trim(data.substr(0, kHeaderSize)));
-    out.mesh.reserve(count);
-    const char* p = data.data() + kPreambleSize;
-    for (std::uint32_t i = 0; i < count; ++i, p += kFacetSize) {
-        Vec3f v[3];
-        for (int k = 0; k < 3; ++k) {
-            const char* q = p + 12 + 12 * k; // skip the facet normal
-            v[k] = {load_le_f32(q), load_le_f32(q + 4), load_le_f32(q + 8)};
-            if (!std::isfinite(v[k].x) || !std::isfinite(v[k].y) || !std::isfinite(v[k].z))
-                throw StlError("binary STL: facet " + std::to_string(i) + " has a non-finite coordinate");
-        }
-        out.mesh.add_triangle(v[0], v[1], v[2]);
-    }
+    // The facets over the threads, each into its own place (a model of
+    // millions of triangles); the first facet with a non-finite coordinate,
+    // whichever thread finds it, is the one named.
+    std::vector<Vec3f> corners(std::size_t(count) * 3);
+    std::atomic<std::uint32_t> bad{std::numeric_limits<std::uint32_t>::max()};
+    const char* const facets = data.data() + kPreambleSize;
+    tbb::parallel_for(tbb::blocked_range<std::uint32_t>(0, count, 1u << 14),
+                      [&](const tbb::blocked_range<std::uint32_t>& range) {
+                          for (std::uint32_t i = range.begin(); i != range.end(); ++i) {
+                              const char* p = facets + std::size_t(i) * kFacetSize;
+                              for (int k = 0; k < 3; ++k) {
+                                  const char* q = p + 12 + 12 * k; // skip the facet normal
+                                  const Vec3f v{load_le_f32(q), load_le_f32(q + 4), load_le_f32(q + 8)};
+                                  if (!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z)) {
+                                      std::uint32_t seen = bad.load();
+                                      while (i < seen && !bad.compare_exchange_weak(seen, i)) {
+                                      }
+                                  }
+                                  corners[std::size_t(i) * 3 + std::size_t(k)] = v;
+                              }
+                          }
+                      });
+    if (const std::uint32_t i = bad.load(); i != std::numeric_limits<std::uint32_t>::max())
+        throw StlError("binary STL: facet " + std::to_string(i) + " has a non-finite coordinate");
+    out.mesh = TriangleMesh(std::move(corners));
     return out;
 }
 
