@@ -2,7 +2,8 @@
 
 **Qué hace:**
 - parte los ajustes en secciones por lo que hacen (Calidad, Resistencia, Velocidad…) y cada sección en apartados
-  finos (Altura de capa, Costura, Precisión…), plegables y con un resumen, en lugar de una sola lista larga;
+  finos (Altura de capa, Costura, Precisión…), todos en una sola lista que se recorre con la rueda, con un título
+  por sección y por apartado;
 - tres niveles, **Básico**, **Normal** y **Avanzado**, y un modo **Personalizado** donde la persona elige qué ajustes
   se ven;
 - arriba del panel, solo la impresora, la cama y la boquilla, cada una con un dibujo; la configuración de la
@@ -23,6 +24,11 @@
 **Pedido del dueño (28-10-2026):** «en los menús de calidad no tienen que estar tan separados»; «para lo que siempre
 sale lo mismo, que sea un menú completo… que no utilice las flechas», como OrcaSlicer: el título grande y las opciones
 debajo, y se baja con la rueda. Cambia la regla 2 (antes, tarjetas plegables con flecha).
+
+**Decisión del dueño (29-10-2026):** ninguna tarjeta se pliega. Todas las secciones de la pestaña van en una sola lista,
+una debajo de otra con su título; la columna de íconos de sección queda y lleva la lista a esa sección. Se quita el
+botón «Ver todo junto / Ver por secciones». El nivel Personalizado y «Elegir ajustes…» siguen igual. Cambian las
+reglas 1 a 4.
 
 **Relación con otras fichas:**
 - `interface.md`: la ventana, el panel de la placa (tarjeta Printer con Nozzle y Bed type) y las páginas de ajustes.
@@ -55,9 +61,9 @@ Van en `interface.json` (`docs/UI.md`), no en los perfiles: no cambian el G-code
 | `ui.level` | `normal` | `basic`, `normal`, `advanced` o `custom` |
 | `ui.custom_base` | `normal` | El nivel del que partió la vista propia (regla 15) |
 | `ui.custom_visible` | lista vacía | Las claves que se ven en Personalizado, por pestaña (Impresión, Material) y en la configuración de la impresora |
-| `ui.section` | `quality` | La sección elegida, por pestaña (regla 3) |
+| `ui.section` | `quality` | La sección a la vista al cerrar, por pestaña: al abrir, la lista empieza en ella (regla 3) |
 | `ui.sections_open` | — | Ya no se usa: los apartados están siempre abiertos (regla 2) |
-| `ui.single_column` | no | «Ver todo junto» (regla 4) |
+| `ui.single_column` | — | Ya no se usa: la lista es siempre una sola (regla 4); se lee si existe y se ignora |
 | `ui.camera_window` | — | Posición, tamaño y si estaba abierta la ventana de la cámara (regla 27) |
 
 ## Reglas
@@ -81,10 +87,10 @@ El motor toma de los dos:
 
 1. **Dos niveles: sección y apartado.**
    - **Sección:** una parte grande de lo que hace la impresión. Las secciones van en una columna de íconos con nombre
-     a la izquierda del panel, o en una fila de chips arriba si el panel tiene menos de 32 em de ancho. Se ve una
-     sección a la vez.
-   - **Apartado:** un tramo chico dentro de la sección, con pocos ajustes (entre 1 y 8). Cada apartado es una tarjeta
-     plegable (regla 2).
+     a la izquierda del panel, o en una fila de chips arriba si el panel tiene menos de 32 em de ancho. Todas las
+     secciones de la pestaña van en una sola lista, una debajo de otra con su título (regla 4).
+   - **Apartado:** un tramo chico dentro de la sección, con pocos ajustes (entre 1 y 8). Cada apartado es un bloque
+     siempre abierto (regla 2).
    - La sección y el apartado de cada ajuste van en las tablas de abajo. La pestaña donde aparece (Impresión,
      Material o Impresora) la decide el perfil al que pertenece la clave (`docs/PROFILES.md`).
    - Una clave con `*` incluye todo su grupo de `docs/CONFIG.md`, salvo las que otra fila nombra.
@@ -170,16 +176,19 @@ El motor toma de los dos:
    - debajo, todos sus ajustes, uno por fila, sin tarjeta alrededor y sin espacio extra entre filas (filas de 28 px);
      entre un apartado y el siguiente, 12 px;
    - si tiene ajustes cambiados respecto del perfil guardado, «2 cambios» en violeta al lado del título;
-   - la sección entera se recorre bajando con la rueda o la barra; no se pliega nada. El resumen de cada apartado
-     (la columna de la derecha de las tablas) se usa en la vista de una sola columna (regla 4), en la búsqueda y
-     en la lista que aparece al pasar el puntero por una sección (regla 3);
-   - en la columna de secciones, al hacer clic en una sección se va al principio de esa sección; al pasar el
-     puntero, sus apartados, y un clic en uno lleva la vista a su título;
+   - toda la pestaña se recorre bajando con la rueda o la barra; no se pliega nada y no hay línea de resumen
+     plegada. El resumen de cada apartado (la columna de la derecha de las tablas) se usa solo en la búsqueda y en
+     la lista que aparece al pasar el puntero por una sección (regla 3);
+   - en la columna de secciones, un clic en una sección lleva la lista a su título; al pasar el puntero, sus
+     apartados, y un clic en uno lleva la vista a su título;
    - `ui.sections_open` ya no se usa: se lee si existe y se ignora.
-3. **La sección elegida** se recuerda por pestaña. En la columna de secciones, la que tiene ajustes cambiados lleva un
-   punto violeta, y al pasar el puntero se ve la lista de sus apartados para ir directo a uno.
-4. **Vista de una sola columna** (diseño): un botón arriba del panel, «Ver todo junto», muestra todas las secciones
-   una debajo de otra, cada una con su título, como la columna de categorías de Cura. Se recuerda.
+3. **La sección a la vista:** en la columna de secciones se ilumina el ícono de la sección cuyo título está más arriba
+   en la vista, y cambia al bajar con la rueda. La posición de la lista se recuerda por pestaña. La sección que tiene
+   ajustes cambiados lleva un punto violeta, y al pasar el puntero se ve la lista de sus apartados para ir directo a uno.
+4. **Una sola lista** (decisión del dueño, 29-10-2026): todas las secciones de la pestaña van siempre una debajo de
+   otra, cada una con su título de sección y dentro sus apartados (regla 2), como en OrcaSlicer. No hay botón «Ver
+   todo junto» ni «Ver por secciones». Lo que se ve lo decide el nivel, y en Personalizado «Elegir ajustes…»
+   (reglas 9 a 15).
 5. **Búsqueda:** el campo «Buscar un ajuste» (Ctrl+F) va en el panel de ajustes, como una barra debajo de las filas
    de impresora y boquilla, no en la barra superior (decisión del dueño, 29-10-2026). Abre la pestaña, la sección y
    el apartado del ajuste, lo lleva a la vista y lo resalta 2 s. Si el ajuste está oculto por el nivel, se muestra
@@ -370,7 +379,7 @@ impresora va en un menú aparte, más detallado, con todo lo de la calibración,
     - el tamaño de la punta crece con el diámetro, de 0,2 a 1,2 mm, para que se distingan a simple vista.
 37. **Configuración de la impresora, aparte:** el engranaje de la tarjeta, o la sección Printer de la barra superior
     (`interface.md`), abre una página a todo el ancho con la lista de secciones a la izquierda y los apartados
-    plegables (reglas 2 a 8):
+    siempre abiertos, en una sola lista (reglas 2 a 8):
 
 | Sección | Apartados |
 |---|---|
@@ -438,12 +447,12 @@ conectar desde un ícono chico en la tarjeta de la impresora que abre el menú d
 | # | Escenario | Resultado esperado |
 |---|---|---|
 | SP1 | Recorrer todas las claves de `docs/CONFIG.md` | Cada una tiene sección, apartado y nivel; ninguna cae en Sin ubicar; ningún apartado tiene más de 8 ajustes |
-| SP2 | Pestaña Impresión, primera vez | Sección Calidad elegida; todos sus apartados abiertos, cada uno con su título grande y sus ajustes debajo, sin flechas; se baja con la rueda hasta el último. Al pasar el puntero por Resistencia, Relleno dice «20 % · rectilíneo» |
+| SP2 | Pestaña Impresión, primera vez | La lista empieza en Calidad, con su ícono iluminado; todos los apartados abiertos, cada uno con su título grande y sus ajustes debajo, sin flechas; con la rueda se pasa a Resistencia y su ícono se ilumina, hasta la última sección. Al pasar el puntero por Resistencia, Relleno dice «20 % · rectilíneo» |
 | SP3 | Cambiar `infill.density` a 40 | El título Relleno dice «1 cambio»; al pasar el puntero por Resistencia, Relleno dice «40 % · rectilíneo»; Resistencia tiene el punto en la columna de secciones |
-| SP4 | Elegir la sección Velocidad, cerrar el programa y volver a abrirlo | Se abre en Velocidad, desde el principio de la sección |
+| SP4 | Clic en el ícono Velocidad; cerrar el programa y volver a abrirlo | El clic lleva la lista al título Velocidad; al volver a abrir, la lista empieza en Velocidad |
 | SP5 | `support.enabled` apagado | Soportes muestra solo el interruptor; al encenderlo aparecen los demás apartados, y los dependientes sangrados |
-| SP6 | Buscar «costura» | Se elige Calidad, la vista baja hasta el título Costura y se ve `walls.seam` resaltado |
-| SP6b | «Ver todo junto» | Todas las secciones una debajo de otra con su título, y dentro los apartados con su título; ninguna flecha |
+| SP6 | Buscar «costura» | La lista va hasta el título Costura (sección Calidad, ícono iluminado) y se ve `walls.seam` resaltado |
+| SP6b | Pestaña Impresión, bajar con la rueda hasta el final | Todas las secciones una debajo de otra con su título, y dentro los apartados con su título; ninguna flecha ni línea plegada; no hay botón «Ver todo junto» |
 | SP7 | Nivel Básico, pestaña Impresión | Solo las claves de la tabla de la regla 10; al pie de Relleno, «N ajustes más…»; la sección Velocidad no aparece |
 | SP8 | En Avanzado, `infill.solid_every` a 5; pasar a Básico | Relleno muestra `infill.solid_every` con la etiqueta «Avanzado» y la flecha atrás |
 | SP9 | Laminar el mismo cubo en los cuatro niveles | Los cuatro G-code son iguales byte a byte |
