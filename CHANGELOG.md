@@ -157,6 +157,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Lo escrito en algunos campos se perdía** (el ancho y el fondo de la cama, los porcentajes): el campo tomaba su
+  identidad de la dirección de una copia local, que puede cambiar de un cuadro a otro; entonces el campo «cambiaba» a
+  mitad de la escritura. Ahora cada fila se identifica por su ajuste.
+
 - **Textos:** «Apagado» también para la piel difusa y el escudo contra corrientes (decían «No»); los resúmenes de
   velocidades llevan la unidad en cada valor («40 mm/s · externa 30 mm/s»).
 

@@ -1298,6 +1298,10 @@ const char* g_row_key = nullptr;
 // Each setting field drawn this frame, by key (a second field of the same
 // key as "key#2"): min x, min y, max x, max y, for --ui-script's clicks.
 std::map<std::string, ImVec4> g_field_rects;
+// The last row's key, for its ID (RowId), and how many rows of each label
+// and key were drawn this frame.
+std::string g_last_row_key;
+std::map<std::pair<int, std::string>, int> g_row_ids;
 // The setting the search went to (rule 5): its row lit in this colour, and
 // brought into sight once.
 std::string g_highlight_key;
@@ -2017,6 +2021,7 @@ void label_cell(T label, const char* tip = nullptr) {
     }
     ImGui::TableNextColumn();
     ImGui::SetNextItemWidth(-FLT_MIN);
+    g_last_row_key = key;
     if (!key.empty()) {
         std::string name = key;
         for (int n = 2; g_field_rects.contains(name); ++n)
@@ -2026,13 +2031,21 @@ void label_cell(T label, const char* tip = nullptr) {
     }
 }
 
-// Each row's ID: its label and the address of its value. The address alone
-// is not enough: a local copy (a start G-code variable, a percentage) can sit
-// in the same stack slot as another row's, and the two would move together.
+// Each row's ID: its label and its setting's key, with the number of rows of
+// that label and key drawn before it this frame. The address of the value is
+// only for a row without a key: a local copy (the bed's width, a percentage)
+// can move on the stack from one frame to the next (it did under ASan), and
+// the field then lost what was being typed into it.
 struct RowId {
     RowId(T label, const void* v) {
         ImGui::PushID(static_cast<int>(label));
-        ImGui::PushID(v);
+        if (g_last_row_key.empty()) {
+            ImGui::PushID(v);
+        } else {
+            const int n = g_row_ids[{static_cast<int>(label), g_last_row_key}]++;
+            ImGui::PushID((g_last_row_key + "#" + std::to_string(n)).c_str());
+        }
+        g_last_row_key.clear();
     }
     ~RowId() {
         ImGui::PopID();
@@ -9649,6 +9662,7 @@ void App::dialogs() {
 void App::layout() {
     anchors_.clear();
     g_field_rects.clear();
+    g_row_ids.clear();
     viewport();
     anchor_rect("plate", view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
     top_bar();

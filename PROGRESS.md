@@ -7448,3 +7448,16 @@ tapa la pieza en Vista previa; la columna de valores corrida en Windows con esca
 `--dump-ui`; y los pedidos de diseño del dueño (secciones sin flechas, Laminar abajo a la derecha, «No planar» en las
 dos columnas, menú para guardar después de laminar).
 
+## 2026-10-29: un campo que perdía lo escrito (encontrado por la prueba nueva)
+
+La compilación con ASan de `tools/ci_linux.sh` hizo fallar `ui_script_printer_fields`: el ancho de la cama quedaba en
+256 después de escribir 310, mientras la altura máxima sí cambiaba. Las filas de los ajustes tomaban su ID de ImGui de
+la etiqueta y de la dirección del valor; el ancho y el fondo de la cama (y los porcentajes, las variables del G-code)
+son copias locales, y con ASan su dirección en la pila cambia de un cuadro a otro: el campo cambiaba de ID a mitad de la
+escritura y lo escrito se perdía. Puede ser lo mismo que el dueño vio en Windows («no se pueden editar los tamaños»).
+Ahora la fila se identifica por su etiqueta, su clave y cuántas filas iguales se dibujaron antes en el cuadro; la
+dirección queda solo para las filas sin clave.
+
+**Error de proceso:** el empuje de b75877f salió con ese CI en rojo (se leyó el resultado y se empujó en el mismo
+paso). Este arreglo va con el CI completo antes de empujar.
+
