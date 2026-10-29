@@ -8181,3 +8181,12 @@ impresora y la boquilla, a todo el ancho del panel; la lista de resultados se ab
 enfoca, y desde la página de la impresora vuelve al panel. En la barra superior queda el botón de ayuda. Mirado en la
 captura.
 
+## 2026-10-29: PE4, `M200` en las impresoras de pellets
+
+El equipo de fichas respondió: X11 (`gcode_extras.md`, sin `M200`) es el caso de filamento medido en Tisma Slicer, y
+la regla 3 de `pellets.md` vale solo con pellets. Con `machine.e_mode` `volume` y `machine.feedstock` `pellet`, después
+del G-code de inicio va `M200 D1.75 S1` en Marlin y `M200 D1.75` en RepRapFirmware (`D` distinto de 0 activa la E en
+volumen desde RRF 1.19; `S` existe recién desde 3.5, según la documentación pública de Duet que citó el equipo); en
+Klipper y los demás, nada y el aviso `volumetric_e`. Prueba PE4: la línea justo después del inicio, 13,6587 mm³ de E
+por mm de una pared de 6 × 2,5 mm, RRF sin `S`, Klipper con el aviso, y filamento sin `M200`.
+

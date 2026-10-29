@@ -15,6 +15,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Materiales que toma la impresora:** el catálogo y la lista de perfiles de Filamento ofrecen solo pellets en una
   impresora de pellets y, con filamento, los del diámetro de las impresoras instaladas; el catálogo dice por qué está
   vacío cuando no queda ninguno. El catálogo de filamentos acepta `"feedstock": "pellet"`.
+- **`M200` en impresoras de pellets** con E en mm³: `M200 D1.75 S1` en Marlin, `M200 D1.75` en RepRapFirmware, y en
+  Klipper el aviso `volumetric_e`. Las de filamento siguen sin `M200`.
 - **Aviso `flow_limit`:** cuando el tope de caudal baja la velocidad de las paredes, el relleno o las superficies, el
   laminado dice de cuánto a cuánto.
 

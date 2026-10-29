@@ -2701,6 +2701,18 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     }
     if (!start_gcode.empty())
         out << start_gcode << "\n";
+    // E in mm3 on a pellet printer (pellets.md, rule 3, PE4): after the start
+    // G-code, the firmware's command for it; Marlin's M200 D S1, and
+    // RepRapFirmware's M200 D, whose S came only in 3.5. Not on a filament
+    // printer: there the user puts it in the start G-code (gcode_extras.md, X11).
+    const bool marlin = s.flavor == GcodeFlavor::Marlin || s.flavor == GcodeFlavor::MarlinLegacy;
+    const bool volumetric_command = s.volumetric_e && s.feedstock == Feedstock::Pellet &&
+                                    (marlin || s.flavor == GcodeFlavor::RepRapFirmware);
+    if (volumetric_command) {
+        char text[64];
+        std::snprintf(text, sizeof text, "M200 D%g%s", s.filament_diameter, marlin ? " S1" : "");
+        out << text << (s.verbose_comments ? " ; extrusion in mm3\n" : "\n");
+    }
     if (heat && s.extruders > 1 && dialect.wait != Dialect::Wait::None) {
         for (int e = 1; e <= kMaxExtruders; ++e)
             if (tools_used[std::size_t(e)] && value_of("temperature", std::size_t(e - 1)) > 0.0 &&
@@ -2736,6 +2748,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         warnings->insert(warnings->end(), capability.begin(), capability.end());
         if (std::optional<Warning> melt = melt_limit_warning(s))
             warnings->push_back(std::move(*melt));
+        // A dialect with no such command (Klipper's has none): the firmware has to expect it.
+        if (s.volumetric_e && s.feedstock == Feedstock::Pellet && !volumetric_command)
+            warnings->push_back({"volumetric_e", -1, 0.0,
+                                 "E is in mm3 and this firmware has no command for it: check that it expects E in mm3",
+                                 0.0});
     }
     out << (s.verbose_comments ? "G90 ; use absolute coordinates\n" : "G90\n");
     if (dialect.e_mode)

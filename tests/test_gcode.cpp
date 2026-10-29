@@ -1763,6 +1763,65 @@ TEST_CASE("pellets: a pellet printer slices like a filament one, and warns of a 
     CHECK(feedstock_warnings(test_printer()) == 0);
 }
 
+TEST_CASE("pellets: E in mm3 with the firmware's command after the start G-code (pellets.md, rule 3, PE4)", "[gcode][pellets]") {
+    Settings s = test_printer(parse_settings(R"({"machine": {"feedstock": "pellet", "nozzle_diameter": 5, "max_flow": 2000,
+                                                             "e_mode": "volume"},
+                                                 "extrusion": {"feedstock": "pellet"},
+                                                 "layers": {"height": 2.5, "first_height": 2.5}, "walls": {"width": 6}})"));
+    s.relative_extrusion = true;
+    s.start_gcode = "G28 ; the start";
+    IndexedMesh m;
+    add_box(m, 0, 0, 100, 100, 10);
+    const SlicedModel model = slice_model(m, s);
+    const auto gcode = [&](GcodeFlavor flavor, std::vector<Warning>* warnings = nullptr) {
+        Settings f = s;
+        f.flavor = flavor;
+        std::ostringstream out;
+        write_gcode(out, model, f, warnings);
+        return out.str();
+    };
+    const auto warned = [](const std::vector<Warning>& w) {
+        return std::count_if(w.begin(), w.end(), [](const Warning& x) { return x.kind == "volumetric_e"; });
+    };
+    // Marlin: M200 D1.75 S1 right after the start G-code, and 13.6587 mm3 of E per mm of a 6 by 2.5 mm wall.
+    std::vector<Warning> warnings;
+    const std::string marlin = gcode(GcodeFlavor::Marlin, &warnings);
+    CHECK_THAT(marlin, ContainsSubstring("G28 ; the start\nM200 D1.75 S1\n"));
+    CHECK(warned(warnings) == 0);
+    double width = 0.0, x = 0.0, y = 0.0;
+    std::size_t walls = 0;
+    for (const std::string& line : lines_of(marlin)) {
+        if (line.rfind(";WIDTH:", 0) == 0)
+            width = std::stod(line.substr(7));
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        const std::size_t ax = line.find(" X"), ay = line.find(" Y"), ae = line.find(" E");
+        const double nx = ax != std::string::npos ? std::stod(line.substr(ax + 2)) : x;
+        const double ny = ay != std::string::npos ? std::stod(line.substr(ay + 2)) : y;
+        const double length = std::hypot(nx - x, ny - y);
+        if (ae != std::string::npos && std::abs(width - 6.0) < 1e-9 && length > 20.0) {
+            CHECK_THAT(std::stod(line.substr(ae + 2)) / length, Catch::Matchers::WithinRel(13.6587, 0.002));
+            ++walls;
+        }
+        x = nx, y = ny;
+    }
+    CHECK(walls > 0);
+    // RepRapFirmware: M200 D1.75 (its S came in 3.5), no warning.
+    warnings.clear();
+    const std::string rrf = gcode(GcodeFlavor::RepRapFirmware, &warnings);
+    CHECK_THAT(rrf, ContainsSubstring("G28 ; the start\nM200 D1.75\n"));
+    CHECK(warned(warnings) == 0);
+    // Klipper has no such command: nothing, and a warning.
+    warnings.clear();
+    CHECK_THAT(gcode(GcodeFlavor::Klipper, &warnings), !ContainsSubstring("M200"));
+    CHECK(warned(warnings) == 1);
+    // A filament printer writes none (gcode_extras.md, X11).
+    s.feedstock = s.material_feedstock = Feedstock::Filament;
+    warnings.clear();
+    CHECK_THAT(gcode(GcodeFlavor::Marlin, &warnings), !ContainsSubstring("M200"));
+    CHECK(warned(warnings) == 0);
+}
+
 TEST_CASE("pellets: the bead's section, rounded or a rectangle (pellets.md, rule 4, PE2, PE3, PE5)", "[gcode][pellets]") {
     const double filament = std::numbers::pi * 0.875 * 0.875; // 2.40528 mm2
     // A 5 mm nozzle, 2.5 mm layers, 6 mm beads.
