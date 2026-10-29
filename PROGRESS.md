@@ -7654,3 +7654,16 @@ se ajusta a lo que tiene nunca se angostaba (plegada seguía de 460 px; ahora, 3
 pieza se ajusta al ancho que la leyenda deja y la cámara se corre la mitad de lo tapado. Mirado en capturas a
 1200 × 760 (plegada, la barra adentro) y a 1900 × 1060 (completa, la barra abajo a la derecha, la pieza libre). Falta
 reencuadrar al pasar a Vista previa.
+
+## 2026-10-29 (noche): la copia gruesa quedaba para siempre (encontrado leyendo el código)
+
+Buscando cómo reencuadrar al pasar a Vista previa: `moved_frame_` y la condición de la copia gruesa (V6, «se movió
+hace 2 cuadros o menos») usaban `frames_`, que solo avanza en el modo captura. En la aplicación, `frames_` queda en 0:
+después del primer giro, zoom o paneo, `moved_frame_ = 0` y la condición se cumplía siempre, así que un plato de más
+de un millón de triángulos se dibujaba con su copia simplificada aunque la cámara estuviera quieta. Puede ser parte
+del «efecto visual raro» que el dueño vio con piezas grandes (V6 es del 2026-10-28). Ahora se cuenta con
+`ImGui::GetFrameCount()`, que avanza siempre.
+
+Pasos nuevos de `--ui-script`: `orbit DX DY` (la cámara girada como por un arrastre) y `expect-coarse yes|no`. Con la
+cúpula de 2 003 996 triángulos y captura: tras `orbit 30 0`, copia gruesa; 10 cuadros después, el modelo completo.
+Sin prueba en el CI: hace falta un modelo de más de un millón de triángulos (100 MB), que no va al repositorio.

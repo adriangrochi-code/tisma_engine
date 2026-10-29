@@ -185,6 +185,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Un modelo grande quedaba con su copia simplificada después de mover la vista una vez** (más de un millón de
+  triángulos): la copia de mover la cámara se mostraba para siempre, con menos detalle, porque el programa contaba los
+  cuadros solo en las capturas. Ahora vuelve el modelo completo apenas la cámara se detiene.
+
 - **La leyenda de la vista previa tapaba la barra de movimientos**, y tapaba media pieza en ventanas chicas: la barra
   va ahora a la derecha de la leyenda, o adentro de ella si no hay lugar, y un botón («−») pliega la leyenda a los tipos
   de línea solos. En una vista angosta se pliega sola (si completa taparía más del 45 % del ancho), y al encuadrar en

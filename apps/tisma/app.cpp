@@ -762,7 +762,8 @@ private:
     Background<CoarseBuild> coarse_job_;
     std::uint64_t coarse_version_ = 0;
     std::vector<std::size_t> coarse_object_vertices_;
-    int moved_frame_ = -100; // the last frame the camera moved
+    int moved_frame_ = -100; // the last frame the camera moved (ImGui::GetFrameCount)
+    bool last_coarse_ = false; // the last frame drew the coarse copy (--ui-script's expect-coarse)
     std::uint64_t scene_version_ = 1, ray_version_ = 0;
     bool ray_preview_ = false, ray_failed_ = false;
     std::shared_ptr<RayScene> ray_scene_;
@@ -7200,11 +7201,11 @@ void App::viewport() {
             }
         } else if (pressed_object_ < 0 && painting_object_ < 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
-            moved_frame_ = frames_;
+            moved_frame_ = ImGui::GetFrameCount();
         }
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
             camera_.pan(io.MouseDelta.x, io.MouseDelta.y, view_size_.y);
-            moved_frame_ = frames_;
+            moved_frame_ = ImGui::GetFrameCount();
         }
     }
     if (ImGui::IsItemDeactivated() && editing) {
@@ -7220,7 +7221,7 @@ void App::viewport() {
     if (ImGui::IsItemHovered()) {
         if (io.MouseWheel != 0.0f) {
             camera_.zoom(io.MouseWheel);
-            moved_frame_ = frames_;
+            moved_frame_ = ImGui::GetFrameCount();
         }
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             frame_all();
@@ -10021,8 +10022,11 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     }
     // While the camera moves, a large plate's coarse copy (V6), the same
     // model highlighted in it.
-    f.coarse = (options_.coarse || frames_ - moved_frame_ <= 2) && coarse_version_ == scene_version_ &&
+    // (ImGui's frame count: frames_ counts only a screenshot's frames, and
+    // with it the coarse copy stayed after the first move.)
+    f.coarse = (options_.coarse || ImGui::GetFrameCount() - moved_frame_ <= 2) && coarse_version_ == scene_version_ &&
                !coarse_object_vertices_.empty();
+    last_coarse_ = f.coarse;
     if (f.coarse && f.selected_count > 0)
         for (std::size_t k = 0; k + 1 < object_vertices_.size() && k + 1 < coarse_object_vertices_.size(); ++k)
             if (object_vertices_[k] == f.selected_first) {
@@ -10800,6 +10804,16 @@ void App::script_input() {
                     view_calls_);
         if (view_calls_ > most)
             return fail_step("the view drew " + std::to_string(view_calls_) + " calls");
+        next();
+    } else if (step.verb == "orbit") { // the camera turned as by a drag of KEY by VALUE pixels
+        camera_.orbit(float(std::atof(step.key.c_str())), float(std::atof(step.value.c_str())));
+        moved_frame_ = ImGui::GetFrameCount();
+        next();
+    } else if (step.verb == "expect-coarse") { // yes or no: the last frame drew the coarse copy
+        const bool want = step.key == "yes";
+        std::printf("ui-script: expect-coarse %s: %s\n", step.key.c_str(), last_coarse_ == want ? "ok" : "got the other");
+        if (last_coarse_ != want)
+            return fail_step(last_coarse_ ? "the coarse copy is drawn" : "the full mesh is drawn");
         next();
     } else if (step.verb == "expect-toast") { // a toast with this text, within 30 frames
         for (const Toast& toast : toasts_)
