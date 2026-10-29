@@ -293,6 +293,17 @@ private:
             known_[0] = known_[1] = known_[2] = false; // homed: where exactly, the printer knows
         else if (kind == 'G' && (n == 10 || n == 11) && parameters.empty() && !custom_)
             firmware_retraction(n == 10);
+        else if (kind == 'M' && (n == 104 || n == 109)) {
+            // The nozzle's heater set to 0: nothing may extrude from it until
+            // it is set again (the spec team's BH10).
+            const std::optional<double>& t = param['T' - 'A'];
+            const std::size_t k = t && *t >= 0.0 ? std::size_t(*t) : tool_;
+            if (const std::optional<double>& s = param['S' - 'A']) {
+                if (cold_.size() <= k)
+                    cold_.resize(k + 1, false);
+                cold_[k] = *s < 1.0;
+            }
+        }
         else if (kind == 'M' && n == 106 && !custom_) {
             const std::optional<double>& s = param[limits_.fan_parameter - 'A'];
             if (!s || *s < 0.0 || *s > 255.0)
@@ -447,6 +458,10 @@ private:
             out_.stats.filament += de;
             if (retracted_ > 1e-9)
                 problem("extrudes while the filament is retracted");
+            if (tool_ < cold_.size() && cold_[tool_] && !cold_told_) {
+                problem("extrudes with the nozzle's heater set to 0");
+                cold_told_ = true;
+            }
             // The wipe tower down under the layer (rule 11): anywhere from the
             // bed up to the layer, as thick as the layer.
             const bool lowered = tower_ && limits_.tower_below;
@@ -597,6 +612,8 @@ private:
     std::size_t pieces_ = 0; // its pieces so far (a wipe's)
     bool pulling_ = false;   // the last move was one of them
     std::size_t tool_ = 0;        // the extruder printing, from 0
+    std::vector<bool> cold_;      // each extruder's heater set to 0 (M104 or M109 S0)
+    bool cold_told_ = false;      // that problem said once
     std::vector<double> pulled_;  // each extruder's filament pulled back when it left
     bool tool_back_ = false;      // the tool came back from a change: its own extra
     bool tower_ = false;          // in the wipe tower's lines

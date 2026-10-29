@@ -8109,3 +8109,20 @@ Pasan las 798 pruebas.
   se escribe `M200`. Le pregunté al equipo de fichas cuál vale (propuesta: solo con `machine.feedstock` `pellet`).
 
 **Sigue:** PE4 cuando conteste el equipo de fichas; pellets y filamentos de 2,85 mm en el catálogo (datos oficiales).
+
+## 2026-10-29: BH10 y la extensión de BH5 (búsqueda de bugs del equipo de fichas)
+
+- **BH10 (seguridad):** `calibration.mode` `temperature` con `start` 0 (lo que queda si no se pone) escribía
+  `M104 S0` en la primera franja y toda la pieza se extruía con el calefactor apagado; con `start` 210, `step` −100 la
+  última franja quedaba en 10 °C. Las franjas de temperatura van ahora de 150 a 500 °C (150, la boquilla más fría que
+  acepta el catálogo): «calibration.start: gives 0.0: the bands' values must be from 150 to 500 C» (código 2, como las
+  otras calibraciones). Además, el chequeo del G-code sigue la temperatura de cada extrusor (`M104`/`M109` con `S`, y
+  `T` si lo dice) y da «extrudes with the nozzle's heater set to 0» si extruye uno que quedó en 0; vale también para
+  el G-code del usuario. Pruebas: los dos casos del informe, el daño `M104 S0` en el cubo y el caso bueno (otra
+  temperatura después, y un `M104 T1 S0` de otro extrusor).
+- **BH5, `walls.min_line_width`:** 9,092 mm con boquilla de 0,4 laminaba un cordón demasiado ancho. Es un mínimo, así
+  que solo se controla el tope: hasta cuatro boquillas.
+
+Quedan del informe: BH7 (`--copies` saltea el aviso de «nada que imprimir», y el filamento del resumen del chequeo),
+BH8 (mensaje cuando las copias no entran), BH9 (AMF y STEP leídos como STL) y los totales de filamento por extrusor.
+

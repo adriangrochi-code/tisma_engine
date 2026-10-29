@@ -291,7 +291,11 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS(parse_settings(R"({"calibration": {"band_height": 0}})"));
     // A band's value within what a height change takes: no M104 S1000.
     CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "temperature", "start": 1000}})"),
-                      ContainsSubstring("calibration.start: gives 1000.0: the bands' values must be from 0 to 500 C"));
+                      ContainsSubstring("calibration.start: gives 1000.0: the bands' values must be from 150 to 500 C"));
+    // Nor a band with the heater off (the spec team's BH10): start 0, or a step that reaches a cold value.
+    CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "temperature"}})"), ContainsSubstring("calibration.start"));
+    CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "temperature", "start": 210, "step": -100, "end": 0}})"),
+                      ContainsSubstring("calibration.end: gives 10.0"));
     CHECK_THROWS_WITH(parse_settings(R"({"calibration": {"mode": "retraction", "start": 1, "step": 2, "end": 80}})"),
                       ContainsSubstring("calibration.end"));
     CHECK_THROWS(parse_settings(R"({"calibration": {"mode": "acceleration", "start": 0}})"));
@@ -591,6 +595,12 @@ TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker t
                             R"({"surfaces": {"top_width": 0.05}})", R"({"support": {"enabled": true, "width": 10}})"})
         CHECK_THROWS_WITH(check_settings(parse_settings(bad)), ContainsSubstring("cannot come out of a 0.4 mm nozzle"));
     CHECK_NOTHROW(check_settings(parse_settings(R"({"infill": {"width": 0.6}, "surfaces": {"solid_width": 0.5}})")));
+    // And the thin walls' least bead, a minimum: only its top.
+    CHECK_THROWS_WITH(check_settings(parse_settings(R"({"walls": {"min_line_width": 9.092}})")),
+                      ContainsSubstring("walls.min_line_width: 9.09 mm cannot come out of a 0.4 mm nozzle"));
+    CHECK_THROWS(check_settings(parse_settings(R"({"walls": {"min_line_width": "500%"}})")));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"walls": {"min_line_width": 0}})")));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"walls": {"min_line_width": "150%"}})")));
 }
 
 TEST_CASE("extrusion.flow_by_speed and extrusion.section (pellets.md, rules 4 and 5)", "[settings]") {

@@ -230,7 +230,9 @@ void add_calibration_changes(Settings& s) {
         double lo, hi;
         const char* what;
     };
-    const Range range = b.mode == CalibrationMode::Temperature       ? Range{0.0, 500.0, "from 0 to 500 C"}
+    // A temperature band never turns the heater off (the spec team's BH10):
+    // from 150 C, the coolest nozzle the catalog takes.
+    const Range range = b.mode == CalibrationMode::Temperature       ? Range{150.0, 500.0, "from 150 to 500 C"}
                         : b.mode == CalibrationMode::PressureAdvance ? Range{0.0, 2.0, "from 0 to 2"}
                         : b.mode == CalibrationMode::Retraction      ? Range{0.0, 50.0, "from 0 to 50 mm"}
                         : b.mode == CalibrationMode::MaxFlow         ? Range{0.5, 1000.0, "from 0.5 to 1000 mm3/s"}
@@ -4073,6 +4075,13 @@ void check_settings(const Settings& s) {
                           width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
             throw SettingsError(text);
         }
+    // The thin walls' least bead: a minimum, so only its top (the spec team's
+    // BH5, again: 9 mm on a 0.4 nozzle laid an over-wide bead).
+    if (const double least = s.wall_min_line_width.of(nozzle); least > 4.0 * nozzle) {
+        std::snprintf(text, sizeof text, "walls.min_line_width: %.3g mm cannot come out of a %.3g mm nozzle (up to %.3g mm)",
+                      least, nozzle, 4.0 * nozzle);
+        throw SettingsError(text);
+    }
     // The first layer's bead, by the same rule: 20 mm on a 0.4 nozzle spilt
     // past the skirt and the G-code failed its own check (the spec team's BH1).
     if (const double first = s.first_line_width.of(s.first_layer_height);

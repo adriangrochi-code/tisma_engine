@@ -232,6 +232,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Calibración de temperatura con el calefactor apagado (BH10):** las franjas van de 150 a 500 °C (`start` 0, o un
+  paso que llega a una temperatura fría, es un error), y el chequeo del G-code rechaza extruir con la boquilla en 0
+  (`M104 S0` o `M109 S0` sin otra temperatura después).
+- **`walls.min_line_width`** no puede pasar de cuatro boquillas (BH5).
+
 - **TR17:** la ficha de información de un ajuste de lista nombra los valores como la lista («Alineada»), no con la
   palabra del archivo («aligned»).
 

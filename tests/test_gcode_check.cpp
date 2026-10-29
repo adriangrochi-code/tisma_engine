@@ -163,6 +163,15 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         const std::size_t undo = g.find("\nG1 E", retract + 1);
         g.erase(undo + 1, g.find('\n', undo + 1) - undo);
     }, "while the filament is retracted");
+    // The heater set to 0 and the print going on (the spec team's BH10); set again, it is fine.
+    damaged([&](std::string& g) { g.insert(layer, "M104 S0\n"); }, "with the nozzle's heater set to 0");
+    {
+        std::string g = o.gcode;
+        g.insert(layer, "M104 S0\nM109 S210\nM104 T1 S0\n");
+        const GcodeCheck c = check_gcode(g, o.limits);
+        INFO(problems_of(c));
+        CHECK(c.ok());
+    }
 }
 
 TEST_CASE("G-code check: read in chunks, each problem on its own line", "[gcode][check]") {
