@@ -15,7 +15,9 @@ struct Guide {
     std::string_view key, es, en;
 };
 
-constexpr Guide kGuides[] = {
+// Not constexpr: measuring some 860 long texts at compile time passes
+// clang's step limit.
+const Guide kGuides[] = {
     {"layers.height",
      "La impresora arma la pieza apilando capas finas de plástico, una sobre otra. Este ajuste es el grosor de cada "
      "capa.\n\nCapas más finas dejan la superficie más lisa y los detalles más nítidos, pero hacen falta más capas y la "
