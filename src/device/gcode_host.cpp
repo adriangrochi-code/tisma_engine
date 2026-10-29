@@ -486,10 +486,19 @@ void GcodeHost::run() {
                 const Reply r = send_line(job_->lines[job_->next]);
                 if (r == Reply::Ok) {
                     ++job_->next;
-                    std::lock_guard lock(mutex_);
-                    status_.lines_sent = job_->next;
-                    status_.progress = double(job_->next) / double(std::max<std::size_t>(job_->lines.size(), 1));
-                    status_.elapsed = elapsed;
+                    // After the last line, the whole progress comes with the
+                    // end of the job (finish_job), so that nobody reads a
+                    // finished job still printing.
+                    const bool last = job_->next >= job_->lines.size();
+                    {
+                        std::lock_guard lock(mutex_);
+                        status_.lines_sent = job_->next;
+                        if (!last)
+                            status_.progress = double(job_->next) / double(job_->lines.size());
+                        status_.elapsed = elapsed;
+                    }
+                    if (last)
+                        finish_job(PrinterEvent::Kind::Finished);
                     continue;
                 }
                 if (r == Reply::Gone) {

@@ -1,0 +1,59 @@
+# A length in mm or in % of the nozzle takes the unit typed with it; a bare
+# number keeps the unit the field shows (the spec team's field sweep: "0,3 mm"
+# was kept as 0.3 %). And the panel's limits are those of docs/CONFIG.md.
+click walls.min_line_width
+select-all
+type 0,3 mm
+key enter
+expect walls.min_line_width 0.3
+click walls.min_line_width
+select-all
+type 0,5
+key enter
+expect walls.min_line_width 0.5
+click walls.min_line_width
+select-all
+type 90 %
+key enter
+expect walls.min_line_width 90.0%
+click walls.min_line_width
+select-all
+type 80
+key enter
+expect walls.min_line_width 80.0%
+click slicing.xy_offset
+select-all
+type -9
+key enter
+expect slicing.xy_offset -9
+click compensation.hole_offset
+select-all
+type -4,7
+key enter
+expect compensation.hole_offset -4.7
+click walls.count
+select-all
+type 370
+key enter
+expect walls.count 370
+# Beyond the limit: the most, and a toast says so ("Máximo: 1000").
+click walls.count
+select-all
+type 2000
+key enter
+expect walls.count 1000
+expect-toast Máximo: 1000
+# A click on a checkbox toggles it, and the fields under it come out.
+click support.enabled
+expect support.enabled true
+click support.width
+select-all
+type 0,45 mm
+key enter
+expect support.width 0.45
+# One purge volume for every two filaments, as the file takes one number.
+click wipe_tower.purge_volumes
+select-all
+type 300
+key enter
+expect-contains wipe_tower.purge_volumes [0.0,300.0

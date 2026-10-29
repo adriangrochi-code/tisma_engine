@@ -12,6 +12,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`tisma --draw-stats`:** cuántas llamadas de dibujo y cuántos vértices pide cada cuadro, los de la vista 3D y los de
+  los paneles por separado, para medir la vista previa en cualquier placa de video; y cuánto ocupa la vista en la
+  placa (instancias de la vista previa, recorridos, mallas y destinos de dibujo). Y el paso `slice` de
+  `--ui-script` (lamina como el botón y abre la Vista previa), que ahora corre también sin `--screenshot`.
+
+- **`--ui-script`: `expect-toast TEXTO`** espera un aviso con ese texto, y `click` sobre una casilla la marca o
+  desmarca.
+
 - **`tisma --ui-script pasos.txt`:** pruebas de la interfaz con mouse y teclado de verdad: clic en el campo de un
   ajuste, escribir, teclas, y `expect` con el valor guardado; sale con 1 si un paso falla. Pruebas nuevas de la página
   de la impresora y de un número de impresión escrito con coma.
@@ -80,6 +88,23 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   `material.type` y los demás se leen como los ajustes del motor que nombran (`docs/CONFIG.md`, «material»).
 
 ### Cambiado
+
+- **La ventana descansa cuando no pasa nada:** sin mouse ni teclado por 3 s, sin trabajos en marcha ni impresora
+  conectada, se despierta con un evento o cada 2 s en vez de diez veces por segundo; un laminado u otro trabajo que
+  termina la despierta. Con la esfera de 80 mm laminada (llvmpipe), en 30 s de reposo: de 38 % de CPU y 260 cuadros a
+  2 % y 15.
+
+- **La vista previa dibuja la mitad de los vértices** (OpenGL y Vulkan): de cada cordón, solo los dos costados y la
+  punta que miran al ojo (o a la luz, en la sombra); los otros quedan siempre detrás. La imagen no cambia. Con una
+  esfera de 80 mm laminada (OpenGL, llvmpipe), de 2,6 a 1,4 s por cuadro completo.
+
+- **La vista 3D quieta no se vuelve a dibujar** (OpenGL y Vulkan): si la cámara, las capas, los colores y los datos no
+  cambiaron, se muestra la imagen anterior. Con una esfera de 80 mm laminada (OpenGL, llvmpipe), de 406 llamadas de
+  dibujo por cuadro a 1; mover la vista dibuja todo como antes.
+
+- **Medir en piezas grandes:** la herramienta prepara la malla una vez por pieza y no en cada clic. Con 2 millones de
+  triángulos, el primer clic tarda lo mismo (unos 0,35 s) y los siguientes, de 0,1 a 26 ms (antes, 0,36 a 0,44 s cada
+  uno).
 
 - **Otra boquilla también en las impresoras del catálogo** (pedido del dueño): la lista trae los tamaños que el
   fabricante publica (a menudo solo el de fábrica) y ahora siempre ofrece «Otra boquilla…». La ficha del catálogo
@@ -157,6 +182,24 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Impresión por USB: un trabajo terminado se leía un instante como «imprimiendo al 100 %».** El progreso completo
+  llega ahora junto con el fin del trabajo.
+
+- **Los campos «mm o %» ignoraban la unidad escrita** (ancho de cordón, costura, detalle mínimo, separación y ancho
+  del soporte, velocidad de la pared externa y otros): «0,3 mm» en un campo en % quedaba como 0,3 %. Ahora «mm» o «%»
+  escritos con el número cambian la unidad; un número solo sigue en la unidad que muestra el campo.
+
+- **Límites del panel más estrechos que los del archivo de ajustes:** el desplazamiento XY (±10 mm), la corrección
+  de agujeros (±5 mm), la altura de capa (0,01 a 10 mm), la cantidad de paredes (hasta 1000) y la altura del relleno
+  combinado se recortaban en silencio. Ahora valen los rangos de `docs/CONFIG.md`, y un valor escrito fuera de ellos
+  queda en el límite con un aviso («Máximo: 1000»).
+
+- **El volumen de purga no se podía escribir:** la fila solo decía cuántos valores tenía. Ahora un número vale para
+  todos los pares de filamentos, como en el archivo; una lista con valores distintos se sigue editando en el archivo.
+
+- **Etiquetas cortadas en Soportes** con el panel angosto: «Capas con soporte forzado» y «Ángulo de voladizo» (con 0
+  el campo dice «Automático»). Una etiqueta que no entra muestra su texto completo al pasar el mouse.
+
 - **Lo escrito en algunos campos se perdía** (el ancho y el fondo de la cama, los porcentajes): el campo tomaba su
   identidad de la dirección de una copia local, que puede cambiar de un cuadro a otro; entonces el campo «cambiaba» a
   mitad de la escritura. Ahora cada fila se identifica por su ajuste.
@@ -184,8 +227,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Datos que faltan, mostrados como ceros:** las velocidades, aceleraciones y tirones máximos sin dato de la
   impresora dicen «Sin dato» (el motor ya no los usaba como tope); la capa mínima y la máxima sin valor dicen
   «Automático» (salen de la boquilla); los resúmenes con «—» dicen «Sin dato» o «Sin límite».
-- **Nombres de perfiles con coma decimal en español** («0,20 mm», «CR-5 Pro H 0,4 mm»); el archivo guarda el nombre
-  como siempre.
+- **Nombres de perfiles con coma decimal en español** («0,20 mm», «CR-5 Pro H 0,4 mm»), también en los avisos que
+  aparecen abajo al guardar o cambiar un perfil; el archivo guarda el nombre como siempre.
 
 - **La aplicación se cerraba al elegir una impresora del catálogo** en la lista de impresoras (informe del dueño en
   Windows; en Linux, `std::bad_alloc`): agregar la impresora vuelve a leer las listas de perfiles y la tarjeta seguía

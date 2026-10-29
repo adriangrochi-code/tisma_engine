@@ -7461,3 +7461,165 @@ dirección queda solo para las filas sin clave.
 **Error de proceso:** el empuje de b75877f salió con ese CI en rojo (se leyó el resultado y se empujó en el mismo
 paso). Este arreglo va con el CI completo antes de empujar.
 
+
+## 2026-10-29: mantenimiento
+
+Bloque de mantenimiento programado (cada 8 horas).
+
+**Revisado, sin hallazgos:** `origin/main` y `origin/dev` ya estaban mezclados; la compilación sin avisos con gcc y
+clang; el fuzzer del G-code con 2000 casos y semilla nueva (291028): 26 rechazados como no imprimibles, 0 fallas.
+
+**Encontrado y arreglado:**
+- La fila de ajustes que perdía lo escrito con ASan (entrada anterior): ahora la identifica su clave. El CI completo
+  pasó antes de empujar.
+- **Medir en piezas grandes:** cada clic armaba de nuevo la malla indexada, las normales y los vecinos de toda la pieza.
+  Ahora se arma una vez por pieza y por versión de la escena (`measure_mesh`, `MeasureMesh`). En la cúpula de
+  2.003.996 triángulos: preparar 353 ms una vez; cada clic de 0,1 a 26 ms (antes, de 360 a 438 ms por clic). Las
+  pruebas `[measure]` pasan sin cambios.
+- Los avisos de abajo (guardar o cambiar un perfil) mostraban el nombre del perfil con punto decimal; ahora con coma en
+  español, como las listas.
+
+**No probado:** releídas las entradas «No probado» de los últimos días; siguen abiertas la escala de pantalla de
+Windows (la columna de valores corrida) y el efecto de luz con Vulkan en una GPU real (acá solo lavapipe). Las dos
+necesitan la máquina del dueño.
+
+**Sigue:** los pedidos de diseño del dueño anotados en `PLAN.md` (ajustes en una página, Laminar abajo a la derecha,
+menú para guardar, asistente de la primera impresora), la zona de interfaz de SM10 y P13.
+
+## 2026-10-29: barrido de campos del equipo de fichas
+
+El equipo de fichas pasó `--ui-script` por los 153 ajustes numéricos de `docs/CONFIG.md` (en b75877f): 120 bien, 33
+no. Arreglado:
+
+1. **Unidades en los campos «mm o %»:** una fila nueva (`unit_row`) para los once valores que son mm (o mm/s) o un %
+   de otro. Lee el texto que se escribió al soltar el campo (`typed_text`, con el estado de texto de ImGui): «mm» o
+   «%» cambian la unidad; un número solo queda en la unidad que el campo muestra. Esto es una decisión de la
+   interfaz: en el archivo, un número solo es mm, pero en el campo la unidad está a la vista.
+2. **Límites:** `slicing.xy_offset` ±10, `compensation.hole_offset` ±5, `layers.height` 0,01 a 10, `walls.count`
+   hasta 1000 y `infill.combine_max_height` hasta 1000 %, como `docs/CONFIG.md` y el lector. Un valor escrito fuera
+   del rango deja un aviso con el límite (`note_clamp`); vale para todas las filas numéricas.
+3. **`wipe_tower.purge_volumes`:** campo de un número para todos los pares (la diagonal en 0, como el lector), si
+   todos los pares son iguales; si no, sigue la cuenta.
+4. **Etiquetas cortadas:** dos textos más cortos, y la etiqueta completa al pasar el mouse si no entra.
+5. **`--ui-script`:** `click` sobre una casilla da en la casilla (antes, en el medio de la celda), y `expect-toast`.
+
+Prueba nueva `ui_script_unit_fields`: «0,3 mm» y «90 %» en el mismo campo, un número solo en cada unidad, los cuatro
+límites, el aviso «Máximo: 1000», una casilla y un campo debajo de ella, y la purga. Pasan las 150 pruebas de
+interfaz y ajustes.
+
+**No hecho:** el resto de los límites del panel no se comparó uno por uno con `docs/CONFIG.md` (solo los informados);
+la idea es sacarlos del lector en vez de repetirlos. `calibration.band_height` y `placement.spacing` no tienen fila:
+Ordenar usa `placement.spacing` sin dejar cambiarlo, y el alto de las franjas de calibración no se elige en la
+interfaz. Quedan pendientes.
+
+## 2026-10-29: vista previa paso a paso, paso 2 (la vista quieta no se dibuja)
+
+El equipo de fichas mandó un plan para la vista previa con modelos grandes, pedido del dueño (FPS de ~600 a ~10 en
+una GTX 1060 después de laminar): una técnica por commit, cada una medida antes y después por ellos, con la imagen
+igual. Su línea de base en b75877f (llvmpipe, 1280 × 800): esfera de 80 mm, 461 llamadas y 6,0 M de vértices por
+cuadro; esfera de 200 mm, 1 061 llamadas y 24,3 M; y cada tanto un cuadro unas 7 veces más pesado con la cámara quieta.
+
+**Medir:** `tisma --draw-stats` imprime por cuadro las llamadas de dibujo y los vértices de la vista y, aparte, los
+de los paneles (envuelve los punteros del cargador propio de OpenGL). Para medir en la aplicación sin captura, el paso
+`slice` de `--ui-script` lamina como el botón y abre la Vista previa; el script corría solo con `--screenshot` porque
+esperaba el contador de cuadros de la captura (arreglado).
+
+**Paso 1 (el cuadro pesado periódico):** no se reproduce acá. Con la esfera de prueba escalada a 80 mm (2 208
+triángulos), laminada, en Vista previa, oclusión ambiental o `fast`: un cuadro de 1 210 llamadas cuando cambia la
+vista y después 406 en cada cuadro, sin picos. Se le preguntó al equipo de fichas cada cuántos cuadros vuelve y en qué
+condiciones.
+
+**Paso 2:** `Renderer::draw` guarda la clave del cuadro (`frame_key`: cámara, rectángulo, capas, colores, modo,
+muestras, todo lo de `ViewFrame`) y no dibuja la escena si la clave y los datos son los mismos: solo copia la imagen a
+la ventana. Cualquier `set_*` de datos la borra (`scene_changed`; también `set_model_coarse` y `set_paint`, que antes
+no reiniciaban la oclusión). Con rayos que todavía promedian, se dibuja. En Vulkan, la imagen que ImGui muestra se
+conserva: `VulkanView::record` no graba nada si la clave es la misma. `--bench-frames` fuerza el dibujo (`redraw`).
+
+Medido (OpenGL, llvmpipe, 1280 × 800, esfera de 80 mm laminada, oclusión ambiental, cámara quieta): de 406 llamadas
+por cuadro a 1; en el mismo tiempo, 2 290 cuadros en vez de 150. Prueba nueva `ui_script_idle_view` (paso
+`expect-view-calls 1`); sin el arreglo da 106 con la esfera chica. Pasan las 772 pruebas.
+
+**No medido:** Vulkan en una placa de verdad (acá lavapipe; las pruebas de Vulkan pasan, pero `--draw-stats` cuenta
+solo OpenGL). **Sigue:** paso 1 con los datos del equipo de fichas; paso 3, menos vértices por cordón.
+
+## 2026-10-29: vista previa paso a paso, paso 3 (la mitad de los vértices)
+
+Cada cordón era un prisma de 36 vértices: cuatro costados y dos puntas, todos dibujados. Los costados del rombo son
+paralelos de a pares, así que desde un punto se ven a lo sumo dos, y una sola punta: el shader de vértices (OpenGL y
+Vulkan, la misma lógica) elige esas caras con el signo de la normal por el vector hacia el ojo, y dibuja 18 vértices
+(`kPreviewVertices`). Con una cámara ortográfica cuenta la dirección hacia el ojo (`preview_face_eye`, por la última
+fila de la proyección); en el mapa de sombras, la dirección hacia la luz.
+
+**La imagen:** capturas de la esfera de 80 mm laminada, antes y después, comparadas píxel por píxel sin la barra de
+estado (que trae el tiempo de la vista): de costado con oclusión, en ortográfica y con Vulkan, 0 píxeles distintos;
+de cerca en `fast`, con rayos y con Vulkan casi al ras de la cama, 8, 4 y 27 píxeles sueltos en bordes (empates de
+profundidad). Con la cámara adentro de la pieza (la vista desde arriba a 70 mm, dentro de la esfera) cambia una banda:
+antes se veían las caras de atrás de un cordón cortado por el plano cercano, ahora no.
+
+**Medido** (OpenGL, llvmpipe, 1280 × 800, esfera de 80 mm, 82 275 cordones dibujados, `--bench-frames 10`): de
+2 622 a 1 371 ms por cuadro con oclusión ambiental y de 2 624 a 1 424 ms en `fast`; 1,49 M de vértices por cuadro
+completo (antes, el doble). Pasan las 773 pruebas. **No medido:** una GPU de verdad, y Vulkan antes y después.
+**Sigue:** paso 4, la memoria.
+
+## 2026-10-29: la memoria de la vista previa (paso 4, medido)
+
+El equipo de fichas retiró el paso 1: el «cuadro pesado» era el último de su corrida, que junta los dibujos de
+`--bench-frames` sin cambiar de cuadro. Midió además que el RSS crece unos 3,6 KB por cordón con llvmpipe y pensó
+que podía ser VRAM. No lo es: lo que la vista sube a la placa es una instancia de 56 B por cordón (el prisma lo arma
+el shader) y los destinos de dibujo, de tamaño fijo. Lo que crece es llvmpipe, que guarda en RAM los vértices ya
+transformados (unos 25 flotantes de salidas por vértice). Con la esfera de 80 mm en `fast`, de Preparar a Vista
+previa: con 36 vértices por cordón, +318 MB; con 18 (paso 3), +200 MB.
+
+`--draw-stats` imprime ahora también lo que ocupa la vista, cada vez que cambia: con esa esfera, 5,2 MB de
+instancias (56 B cada una), 0,2 MB de recorridos, 0,2 MB de mallas y 55,8 MB de destinos (G-buffer, oclusión, rayos,
+color, multimuestreo y el mapa de sombras). Las texturas de la escena de rayos no se cuentan. Para s200 (672 k
+cordones), unos 38 MB de instancias.
+
+## 2026-10-29: carrera al terminar una impresión por USB (encontrada por el CI)
+
+`tools/ci_linux.sh` en af8aafa falló en ASan, en «device: the host prints a job to the simulated printer, line by
+line, with resends»: el estado era Printing (3) cuando la prueba ya veía el progreso en 1. `GcodeHost` ponía el
+progreso en 1 al confirmarse la última línea y recién en la vuelta siguiente del bucle pasaba a Idle; con la máquina
+cargada (ASan y mediciones al mismo tiempo) la prueba leyó el estado en ese hueco. Ahora, tras la última línea, el
+progreso completo llega con el fin del trabajo (`finish_job`, bajo el mismo candado que el estado). Las pruebas
+`[device]` pasan 40 veces seguidas. No se empujó nada con el CI en rojo.
+
+El CI siguiente (31d9a5c) falló en gcc en `ui_script_idle_view`: «the slice failed». El paso `slice` del script
+pedía laminar en el primer cuadro y fallaba si en el siguiente no había laminado ni resultado; con las pruebas en
+paralelo, el modelo todavía se cargaba en segundo plano y `start_slice` no hacía nada. Ahora el paso pide laminar en
+cada cuadro hasta que arranca, y falla con un error del laminado o si en 2000 cuadros nunca arrancó. Las pruebas de
+interfaz pasan dos veces seguidas con 8 en paralelo.
+
+## 2026-10-29: la ventana en reposo (pedido del dueño: menos CPU y RAM)
+
+El equipo de fichas confirmó los pasos 2 y 3 en a01b32b (llvmpipe, `fast`): s80, de 6,04 M a 3,04 M vértices por
+cuadro completo, de 1 600 a 858 ms y de 883 a 622 MB de RSS; s200, de 24,3 M a 12,2 M, de 5 500 a 3 165 ms y de 2 706
+a 1 667 MB; en reposo, la vista hace 1 llamada de 3 vértices. Y vio que, quieta, la ventana igual dibujaba los paneles
+unas diez veces por segundo.
+
+Era la espera del bucle: `glfwWaitEventsTimeout(0.1)`. Ahora espera 0,1 s solo si hubo mouse o teclado en los
+últimos 3 s (un tooltip aparece tras una demora sin evento) o hay una impresora conectada (su estado llega de su
+propio hilo); si no, hasta 2 s. Los trabajos de fondo (`Background`: laminado, vóxeles, rayos, malla gruesa)
+despiertan la ventana al terminar (`g_background_done`, `glfwPostEmptyEvent`). Lo que ya contaba como ocupado
+(laminado en marcha, avisos, un campo en uso, rayos que promedian, la captura) sigue sin esperar.
+
+Medido con la esfera de 80 mm laminada, `fast`, llvmpipe, 30 s sin tocar nada: CPU del proceso de 38,4 % a 2,2 % y de
+260 a 15 cuadros. Pasan las 773 pruebas.
+
+## 2026-10-29 (noche): recorte por capas en la vista previa
+
+Bloque nocturno. `preview_draw_order` guarda la caja de cada capa (los cordones con medio ancho a los costados, sus
+puntas y sus ingletes, y la altura que cuelgan), y `preview_draws` deja afuera una capa cuya caja queda entera del
+otro lado de un mismo plano del volumen de visión (`box_outside`). La vista lo hace con la cámara, y el mapa de
+sombras con la de la luz (lo que está fuera de pantalla igual hace sombra). OpenGL y Vulkan.
+
+**La imagen:** las siete capturas de la esfera de 80 mm (oclusión de costado y desde arriba, `fast` de cerca,
+ortográfica, rayos, Vulkan de costado y al ras) son idénticas a las de antes, píxel por píxel.
+
+**Medido** (OpenGL, llvmpipe, `--bench-frames 5`): de cerca, de 82 275 cordones dibujados a 39 868 y a 55 948
+según la vista; el tiempo, igual (1 208 contra 1 210 ms y 874 contra 893 ms): en llvmpipe el costo está en los
+píxeles, y los triángulos fuera de pantalla ya se descartaban baratos. En una placa de verdad ahorra el trabajo de
+vértices de esas capas; no medido. Pruebas nuevas de `box_outside` y del recorte en `preview_draws`.
+
+**Sigue** (paso 5 del plan del equipo de fichas): capas juntas de lejos y el mallado voraz; S11, la regla del puente
+punto por punto, cuando la ficha llegue a `dev`.

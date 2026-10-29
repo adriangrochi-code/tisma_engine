@@ -50,6 +50,7 @@ struct FrameBlock {
     std::int32_t flags[4];
     float grid[4];
     float colours[16][4];
+    float face_eye[4]; // what the preview's drawn faces face (preview_face_eye)
 };
 
 // Each draw's values, as view_common.glsl's Draw push constants.
@@ -119,6 +120,7 @@ struct VulkanView::Impl {
     int width = 0, height = 0;
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     Image colour_ms, depth, resolved, picture;
+    std::vector<double> shown; // the frame in the picture (frame_key); empty: none
     VkRenderPass scene_pass = VK_NULL_HANDLE, composite_pass = VK_NULL_HANDLE;
     VkFramebuffer scene_fb = VK_NULL_HANDLE, composite_fb = VK_NULL_HANDLE;
     VkDescriptorSet picture_set = VK_NULL_HANDLE; // ImGui's texture, the same through resizes
@@ -791,6 +793,8 @@ struct VulkanView::Impl {
         fb.grid[0] = grid_step, fb.grid[1] = float(grid_major_every);
         for (std::size_t k = 0; k < kLineKinds && k < 16; ++k)
             copy(fb.colours[k], f.kind_colours[k], 1.0f);
+        const std::array<float, 4> face_eye = preview_face_eye(f);
+        std::memcpy(fb.face_eye, face_eye.data(), sizeof fb.face_eye);
         std::memcpy(uniforms[slot].mapped, &fb, sizeof fb);
 
         VkClearValue clears[3] = {};
@@ -900,8 +904,10 @@ struct VulkanView::Impl {
             draw.preview[2] = std::uint32_t(lo), draw.preview[3] = std::uint32_t(hi);
             bind(Preview, &extrusions_v);
             push(draw);
-            for (const PreviewRange& r : preview_draws(order, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden)) {
-                vkCmdDraw(c, 36, std::uint32_t(r.count), 0, std::uint32_t(r.first));
+            const Mat4 clip = f.projection * f.view;
+            for (const PreviewRange& r :
+                 preview_draws(order, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip)) {
+                vkCmdDraw(c, kPreviewVertices, std::uint32_t(r.count), 0, std::uint32_t(r.first));
                 drawn += r.count;
             }
             if (f.show_travels && travel_count > 0 && layer_travels.size() > hi + 1) {
@@ -990,6 +996,7 @@ void VulkanView::shutdown() {
 
 void VulkanView::set_bed(const BedPolygon& bed, const BedLook& look) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.plate_count = v.grid_count = v.grid_outline = 0;
@@ -1012,6 +1019,7 @@ void VulkanView::set_bed(const BedPolygon& bed, const BedLook& look) {
 
 void VulkanView::set_model(const std::vector<float>& vertices) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.model_count = 0;
@@ -1023,6 +1031,7 @@ void VulkanView::set_model(const std::vector<float>& vertices) {
 
 void VulkanView::set_model_coarse(const std::vector<float>& vertices) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.model_coarse_count = 0;
@@ -1034,6 +1043,7 @@ void VulkanView::set_model_coarse(const std::vector<float>& vertices) {
 
 void VulkanView::set_paint(const std::vector<float>& vertices, const std::vector<Renderer::PaintGroup>& groups) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.paint_count = 0;
@@ -1046,6 +1056,7 @@ void VulkanView::set_paint(const std::vector<float>& vertices, const std::vector
 
 void VulkanView::set_preview(const PreviewBuffers& p) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     clear_preview();
@@ -1066,6 +1077,7 @@ void VulkanView::set_preview(const PreviewBuffers& p) {
 
 void VulkanView::clear_preview() {
     Impl& v = *impl_;
+    v.shown.clear();
     v.order = {};
     v.layer_extrusions.clear();
     v.layer_travels.clear();
@@ -1073,11 +1085,18 @@ void VulkanView::clear_preview() {
 }
 
 void VulkanView::record(void* command_buffer, int frame, const ViewFrame& f) {
+    // The picture stays from one window frame to the next: with the same
+    // frame and the same data, it is already this one.
+    Impl& v = *impl_;
+    std::vector<double> key = frame_key(f);
+    if (v.ready && key == v.shown)
+        return;
     // Only the targets can fail, before anything is recorded: then the view
     // stops, and the window goes on.
-    Impl& v = *impl_;
     if (!v.guard([&] { v.record(static_cast<VkCommandBuffer>(command_buffer), frame, f, true); }))
         v.ready = false;
+    else
+        v.shown = std::move(key);
 }
 
 bool VulkanView::take_time(double& ms) {
@@ -1090,6 +1109,7 @@ bool VulkanView::take_time(double& ms) {
 
 double VulkanView::bench(const ViewFrame& f, int n) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready || n < 1)
         return 0.0;
     double ms = 0.0;
@@ -1152,6 +1172,7 @@ std::vector<std::uint8_t> VulkanView::read_picture(int& width, int& height) {
 
 std::vector<std::uint8_t> VulkanView::draw_picture(const ViewFrame& f, int& width, int& height) {
     Impl& v = *impl_;
+    v.shown.clear();
     width = height = 0;
     if (!v.ready)
         return {};

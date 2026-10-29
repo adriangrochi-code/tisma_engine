@@ -145,6 +145,9 @@ struct PreviewDrawOrder {
     std::vector<PreviewInstance> instances;
     std::vector<std::size_t> layer_shown, layer_hidden;
     std::vector<float> layer_z;     // each layer's highest point (the one below's when it has none)
+    // Each layer's box, beads and their ends included (min x, y, z, max x, y,
+    // z); empty (min above max) when it has none.
+    std::vector<std::array<float, 6>> layer_box;
     std::uint32_t hidden_kinds = 0; // bit k: some extrusion of LineKind k is hidden
 };
 PreviewDrawOrder preview_draw_order(const PreviewBuffers& preview);
@@ -170,10 +173,17 @@ std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::s
 // first, so those they cover fail the depth test before they are shaded:
 // from above, layer by layer upwards, every layer of a part was shaded on the
 // same pixels and covered by the next (the owner's report, 2026-10-28: the
-// sliced preview of a large part, seen from above, slows down).
+// sliced preview of a large part, seen from above, slows down). With `clip`
+// (the view and projection drawn with), a layer whose box is all outside the
+// view is left out.
 std::vector<PreviewRange> preview_draws(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
                                         std::uint32_t kind_mask, float eye_z, std::size_t top_shown = kWholeLayer,
-                                        std::size_t top_hidden = kWholeLayer);
+                                        std::size_t top_hidden = kWholeLayer, const Mat4* clip = nullptr);
+
+// Whether a box (min x, y, z, max x, y, z) is all outside what `clip` (a
+// view and projection) shows: its eight corners beyond one same plane of the
+// view's volume. Conservative: a box near a corner of the volume may be kept.
+bool box_outside(const Mat4& clip, const std::array<float, 6>& box);
 
 // The colour of each line kind in the legend and the view (0xRRGGBB).
 std::uint32_t kind_colour(LineKind kind);

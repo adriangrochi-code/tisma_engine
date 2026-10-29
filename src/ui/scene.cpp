@@ -473,7 +473,39 @@ PreviewDrawOrder preview_draw_order(const PreviewBuffers& p) {
         }
         out.layer_z[l] = z;
     }
+    // A bead reaches half its width out, its free ends as far, and a mitre
+    // up to its width past the point; it hangs one height under the path.
+    out.layer_box.assign(layers, {1e30f, 1e30f, 1e30f, -1e30f, -1e30f, -1e30f});
+    for (std::size_t l = 0; l < layers; ++l) {
+        std::array<float, 6>& b = out.layer_box[l];
+        for (std::size_t i = p.layer_extrusions[l]; i < p.layer_extrusions[l + 1]; ++i) {
+            const PreviewInstance& e = p.extrusions[i];
+            const float r = e.width + e.height;
+            b = {std::min({b[0], e.x0 - r, e.x1 - r}), std::min({b[1], e.y0 - r, e.y1 - r}),
+                 std::min({b[2], e.z0 - r, e.z1 - r}), std::max({b[3], e.x0 + r, e.x1 + r}),
+                 std::max({b[4], e.y0 + r, e.y1 + r}), std::max({b[5], e.z0 + r, e.z1 + r})};
+        }
+    }
     return out;
+}
+
+bool box_outside(const Mat4& m, const std::array<float, 6>& box) {
+    if (box[0] > box[3])
+        return true; // empty
+    // Per plane of the volume (-w <= x, y, z <= w), whether every corner is beyond it.
+    std::array<bool, 6> beyond;
+    beyond.fill(true);
+    for (int c = 0; c < 8; ++c) {
+        const float x = box[c & 1 ? 3 : 0], y = box[c & 2 ? 4 : 1], z = box[c & 4 ? 5 : 2];
+        const float cx = m[0] * x + m[4] * y + m[8] * z + m[12];
+        const float cy = m[1] * x + m[5] * y + m[9] * z + m[13];
+        const float cz = m[2] * x + m[6] * y + m[10] * z + m[14];
+        const float cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+        beyond[0] = beyond[0] && cx < -cw, beyond[1] = beyond[1] && cx > cw;
+        beyond[2] = beyond[2] && cy < -cw, beyond[3] = beyond[3] && cy > cw;
+        beyond[4] = beyond[4] && cz < -cw, beyond[5] = beyond[5] && cz > cw;
+    }
+    return std::any_of(beyond.begin(), beyond.end(), [](bool b) { return b; });
 }
 
 std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
@@ -497,7 +529,7 @@ std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::s
 
 std::vector<PreviewRange> preview_draws(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
                                         std::uint32_t kind_mask, float eye_z, std::size_t top_shown,
-                                        std::size_t top_hidden) {
+                                        std::size_t top_hidden, const Mat4* clip) {
     std::vector<PreviewRange> out;
     const std::array<PreviewRange, 2> ranges = preview_ranges(order, lo, hi, kind_mask, top_shown, top_hidden);
     if (ranges[0].count + ranges[1].count == 0)
@@ -510,6 +542,8 @@ std::vector<PreviewRange> preview_draws(const PreviewDrawOrder& order, std::size
     while (split <= hi && split < order.layer_z.size() && order.layer_z[split] <= eye_z)
         ++split;
     const auto add = [&](const PreviewRange& range, const std::vector<std::size_t>& starts, std::size_t l) {
+        if (clip && l < order.layer_box.size() && box_outside(*clip, order.layer_box[l]))
+            return;
         const std::size_t b = std::max(range.first, starts[l]);
         const std::size_t e = std::min(range.first + range.count, starts[l + 1]);
         if (e <= b)

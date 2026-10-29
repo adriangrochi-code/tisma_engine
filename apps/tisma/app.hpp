@@ -72,6 +72,7 @@ struct AppOptions {
     std::string ui_script;          // test hook: steps of input played into the window (App::script_input)
     bool view_check = true;         // with screenshot: check the 3D view's picture (no black pixels, few sparkles)
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
+    bool draw_stats = false;        // print each frame's OpenGL draw calls and vertices (view, then panels)
     // What draws the window: "auto" (Vulkan when this machine has it and the
     // view runs on it, else OpenGL), "vulkan" (OpenGL only if Vulkan cannot)
     // or "opengl" (PLAN.md «Vista con Vulkan»).

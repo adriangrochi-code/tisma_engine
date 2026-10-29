@@ -132,7 +132,7 @@
     X(SupportAutomatic, "Soporte automático", "Automatic support")                                                     \
     X(SupportAutomaticTip, "Apagado, solo hay soporte bajo las caras pintadas con Pintar > Soportes",                   \
       "When off, support goes only under the faces painted with Paint > Supports")                                    \
-    X(SupportAngle, "Ángulo de voladizo (0: automático)", "Overhang angle (0: automatic)")                           \
+    X(SupportAngle, "Ángulo de voladizo", "Overhang angle")                                                           \
     X(SkirtLoops, "Vueltas de falda", "Skirt loops")                                                                  \
     X(SkirtDistance, "Distancia de la falda", "Skirt distance")                                                       \
     X(BrimWidth, "Ancho del borde", "Brim width")                                                                     \
@@ -1041,12 +1041,14 @@
     X(NotSet, "Sin dato", "Not set") \
     X(AutoValue, "Automático", "Automatic") \
     X(NoLimit, "Sin límite", "No limit") \
+    X(ValueMax, "Máximo: %s", "Maximum: %s") \
+    X(ValueMin, "Mínimo: %s", "Minimum: %s") \
     X(SupportBottomInterface, "Capas de interfaz sobre la pieza", "Interface layers over the part") \
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \
     X(SupportLineAngle, "Ángulo de las líneas", "Line angle") \
     X(SupportPatternRow, "Patrón de la base", "Base pattern") \
-    X(SupportEnforceLayers, "Soporte forzado en las primeras capas", "Enforce support for the first layers") \
+    X(SupportEnforceLayers, "Capas con soporte forzado", "Layers of enforced support") \
     X(SupportSheath, "Vaina", "Sheath") \
     X(SupportInterfacePatternRow, "Patrón de la interfaz", "Interface pattern") \
     X(SupportInterfaceSpacing, "Separación de la interfaz", "Interface spacing") \

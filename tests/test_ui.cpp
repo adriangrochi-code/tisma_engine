@@ -900,6 +900,35 @@ TEST_CASE("view: the preview's nearest layers are drawn first, for the depth tes
     CHECK(preview_draws(PreviewDrawOrder{}, 0, 3, some, 1.0f).empty());
 }
 
+TEST_CASE("view: the preview leaves out the layers outside the view", "[ui]") {
+    // The identity as the view and projection: what is shown is -1 to 1 on each axis.
+    const Mat4 clip = identity();
+    CHECK_FALSE(box_outside(clip, {-0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f}));
+    CHECK_FALSE(box_outside(clip, {0.5f, 0.5f, 0.5f, 3.0f, 3.0f, 3.0f})); // partly in
+    CHECK(box_outside(clip, {1.5f, -0.5f, -0.5f, 3.0f, 0.5f, 0.5f}));       // right of the view
+    CHECK(box_outside(clip, {-0.5f, -0.5f, -9.0f, 0.5f, 0.5f, -2.0f}));     // behind the near plane
+    CHECK(box_outside(clip, {1e30f, 1e30f, 1e30f, -1e30f, -1e30f, -1e30f})); // empty
+
+    // Four layers of 3 extrusions; layers 2 and 3 are far to the right.
+    PreviewDrawOrder order;
+    order.layer_shown = {0, 3, 6, 9, 12};
+    order.layer_hidden = {12, 12, 12, 12, 12};
+    order.layer_z = {0.2f, 0.4f, 0.6f, 0.8f};
+    order.layer_box = {{-0.5f, -0.5f, 0.0f, 0.5f, 0.5f, 0.2f}, {-0.5f, -0.5f, 0.2f, 0.5f, 0.5f, 0.4f},
+                       {5.0f, -0.5f, 0.4f, 6.0f, 0.5f, 0.6f}, {5.0f, -0.5f, 0.6f, 6.0f, 0.5f, 0.8f}};
+    const auto total = [](const std::vector<PreviewRange>& d) {
+        std::size_t n = 0;
+        for (const PreviewRange& r : d)
+            n += r.count;
+        return n;
+    };
+    CHECK(total(preview_draws(order, 0, 3, 0x6u, -5.0f)) == 12);              // without the view: all
+    const std::vector<PreviewRange> seen = preview_draws(order, 0, 3, 0x6u, -5.0f, kWholeLayer, kWholeLayer, &clip);
+    REQUIRE(seen.size() == 1);
+    CHECK(seen[0].first == 0);
+    CHECK(seen[0].count == 6);
+}
+
 TEST_CASE("view: a coarse copy of a large mesh for moving the view (V6, vertex clustering)", "[ui]") {
     // A sphere of radius 20 in 360 x 180 steps: 129 600 triangles.
     TriangleMesh sphere;
