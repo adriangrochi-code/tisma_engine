@@ -187,6 +187,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/idle_view.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_idle_view.png)
     set_tests_properties(ui_script_idle_view PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # A dialog takes every key: Delete behind the catalog leaves the model (UI25).
+    add_test(NAME ui_script_modal_keys
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --catalog printer
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/modal_keys.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_modal_keys.png)
+    set_tests_properties(ui_script_modal_keys PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The plate's right-click menu adds a cube and a sphere as models.
     add_test(NAME ui_script_plate_menu
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

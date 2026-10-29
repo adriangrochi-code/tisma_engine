@@ -236,6 +236,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   paso que llega a una temperatura fría, es un error), y el chequeo del G-code rechaza extruir con la boquilla en 0
   (`M104 S0` o `M109 S0` sin otra temperatura después).
 - **`walls.min_line_width`** no puede pasar de cuatro boquillas (BH5).
+- **AMF, STEP, SVG y ZIP (BH9):** dicen que todavía no se leen, en lugar de «STL truncado».
+- **Las teclas detrás de un cuadro (UI25):** con un cuadro, un menú o una ventana emergente abiertos, los atajos del
+  plato y de la vista no actúan: Ctrl+A y Supr detrás del catálogo borraban el modelo.
+- **TR20:** el menú de los enlaces dice «Copiar enlace» en español.
 
 - **TR17:** la ficha de información de un ajuste de lista nombra los valores como la lista («Alineada»), no con la
   palabra del archivo («aligned»).

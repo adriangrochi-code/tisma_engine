@@ -82,6 +82,13 @@
 namespace tisma::ui {
 namespace {
 
+// No dialog, menu or popup open: they take every key (the spec team's UI25:
+// Ctrl+A and Delete behind the first-run catalog removed the model).
+bool no_popup() { return !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel); }
+
+// The plate's and the view's keys: not while a field or a popup takes them.
+bool plate_keys() { return !ImGui::GetIO().WantTextInput && no_popup(); }
+
 // Sizes in screen units before the monitor's scale.
 constexpr float kTopBar = 56.0f;
 constexpr float kStatusBar = 30.0f;
@@ -6139,7 +6146,7 @@ void App::settings_panel() {
             4.0f * scale_, ImGui::GetColorU32(rgb(dot)));
     }
     // Ctrl+Alt+1 to 4 choose the level (rule 14).
-    if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyAlt) {
+    if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyAlt && no_popup()) {
         if (ImGui::IsKeyPressed(ImGuiKey_1))
             choose_level(ViewLevel::Basic);
         if (ImGui::IsKeyPressed(ImGuiKey_2))
@@ -8179,9 +8186,9 @@ void App::plate_tools() {
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(3);
 
-    // Shortcuts, when no field takes the keys: M move, R rotate, S scale,
-    // F lay flat, A arrange, Delete removes.
-    if (!ImGui::GetIO().WantTextInput) {
+    // Shortcuts, when no field or dialog takes the keys: M move, R rotate,
+    // S scale, F lay flat, A arrange, Delete removes.
+    if (plate_keys()) {
         if (ImGui::IsKeyPressed(ImGuiKey_M, false))
             tool_ = PlateTool::Move;
         if (ImGui::IsKeyPressed(ImGuiKey_R, false) && !ImGui::GetIO().KeyCtrl)
@@ -9296,8 +9303,8 @@ void App::preview_panels() {
     top_layer_ = std::clamp(top_layer_, 0, layers - 1);
     bottom_layer_ = std::clamp(bottom_layer_, 0, top_layer_);
 
-    // Arrow keys move through the layers when no text field has the keyboard.
-    if (!ImGui::GetIO().WantTextInput) {
+    // Arrow keys move through the layers when no text field or dialog has the keyboard.
+    if (plate_keys()) {
         if (ImGui::IsKeyPressed(ImGuiKey_UpArrow) || ImGui::IsKeyPressed(ImGuiKey_PageUp))
             top_layer_ = std::min(top_layer_ + 1, layers - 1);
         if (ImGui::IsKeyPressed(ImGuiKey_DownArrow) || ImGui::IsKeyPressed(ImGuiKey_PageDown))
@@ -9481,7 +9488,7 @@ void App::preview_panels() {
             ImGui::PopStyleColor();
             ImGui::PopStyleVar();
         }
-        if (!ImGui::GetIO().WantTextInput) {
+        if (plate_keys()) {
             if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
                 move_cut_ = std::max(move_cut_ - 1, 1);
             if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
@@ -10443,17 +10450,17 @@ void App::layout() {
     dialogs();
 
     // Shortcuts.
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
     }
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F, ImGuiInputFlags_RouteGlobal))
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F, ImGuiInputFlags_RouteGlobal))
         search_focus_ = true;
     if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
         help_open_ = !help_open_;
     // The view's keys (preview.md, rule 10) while no text field has the keyboard.
     const ImGuiIO& keys = ImGui::GetIO();
-    if (!keys.WantTextInput && !keys.KeyCtrl && !keys.KeyAlt && !keys.KeySuper && !printer_page_ &&
+    if (plate_keys() && !keys.KeyCtrl && !keys.KeyAlt && !keys.KeySuper && !printer_page_ &&
         tab_ != Tab::Calibration && tab_ != Tab::Device) {
         static constexpr std::pair<ImGuiKey, StandardView> fixed[] = {
             {ImGuiKey_0, StandardView::Iso},  {ImGuiKey_1, StandardView::Top},  {ImGuiKey_2, StandardView::Bottom},
@@ -11233,6 +11240,7 @@ void App::script_input() {
     const auto key_named = [](std::string_view name) {
         return name == "enter" ? ImGuiKey_Enter : name == "escape" ? ImGuiKey_Escape : name == "tab" ? ImGuiKey_Tab
                : name == "backspace"                               ? ImGuiKey_Backspace
+               : name == "delete"                                  ? ImGuiKey_Delete
                                                                    : ImGuiKey_None;
     };
     if (step.verb == "click") {
@@ -11288,6 +11296,10 @@ void App::script_input() {
     } else if (step.verb == "wait") {
         if (f >= std::atoi(step.key.c_str()))
             next();
+    } else if (step.verb == "expect-objects") { // how many objects the plate holds
+        if (objects_.size() != std::size_t(std::atoi(step.key.c_str())))
+            return fail_step("the plate holds " + std::to_string(objects_.size()) + " objects");
+        next();
     } else if (step.verb == "expect" || step.verb == "expect-contains") {
         std::string got;
         bool found = false;
@@ -11353,6 +11365,18 @@ void App::script_input() {
         } else if (f >= 4) {
             next();
         }
+    } else if (step.verb == "click-at") { // a left click at x y in the window, wherever it falls
+        float x = 0.0f, y = 0.0f;
+        if (std::sscanf((step.key + " " + step.value).c_str(), "%f %f", &x, &y) != 2)
+            return fail_step("needs x and y");
+        if (f == 0)
+            io.AddMousePosEvent(x, y);
+        else if (f == 1)
+            io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+        else if (f == 2)
+            io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+        else if (f >= 4)
+            next();
     } else if (step.verb == "click-model") { // a left click in the middle of the view, on a model
         const ImVec2 at(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + 0.5f * view_size_.y);
         if (f == 0) {
@@ -11520,6 +11544,10 @@ void App::frame() {
     ImGui_ImplGlfw_NewFrame();
     script_input(); // after the backend's own input, so the script's wins
     ImGui::NewFrame();
+    // The library's own words in the language (the spec team's TR20: the
+    // link's right-click menu said "Copy Link" in Spanish).
+    const ImGuiLocEntry words[] = {{ImGuiLocKey_CopyLink, tr(T::CopyLink)}, {ImGuiLocKey_OpenLink_s, tr(T::OpenLink)}};
+    ImGui::LocalizeRegisterEntries(words, IM_ARRAYSIZE(words));
     if (GImGui->InputEventsTrail.Size > 0) // this frame took input
         last_input_ = glfwGetTime();
     layout();

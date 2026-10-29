@@ -18,6 +18,8 @@
       "Write the G-code, read it back from the disk and check it (Ctrl+E)")                                           \
     X(ExportNeedsSlice, "Primero hay que laminar", "Slice first")                                                     \
     X(More, "Más", "More")                                                                                            \
+    X(CopyLink, "Copiar enlace", "Copy Link")                                                                         \
+    X(OpenLink, "Abrir '%s'", "Open '%s'")                                                                           \
     X(Printer, "Impresora", "Printer")                                                                                \
     X(Filament, "Filamento", "Filament")                                                                              \
     X(Print, "Impresión", "Print")                                                                                    \

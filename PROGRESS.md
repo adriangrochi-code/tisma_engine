@@ -8126,3 +8126,18 @@ Pasan las 798 pruebas.
 Quedan del informe: BH7 (`--copies` saltea el aviso de «nada que imprimir», y el filamento del resumen del chequeo),
 BH8 (mensaje cuando las copias no entran), BH9 (AMF y STEP leídos como STL) y los totales de filamento por extrusor.
 
+## 2026-10-29: BH9, UI25 y TR20 (segunda ronda del equipo de fichas)
+
+- **UI25:** con el catálogo del primer arranque abierto y el foco fuera del buscador, Ctrl+A y Supr llegaban al plato
+  y borraban el modelo. Los atajos del plato, las flechas de las capas y del corte, las teclas de la vista, Ctrl+O,
+  Ctrl+F y Ctrl+Alt+1 a 4 no actúan si hay un cuadro, un menú o una ventana emergente abiertos (`no_popup`,
+  `plate_keys`). Prueba de interfaz nueva (`modal_keys`): falla sin el arreglo («the plate holds 0 objects») y pasa
+  con él. Para eso, el guion de interfaz tiene dos pasos nuevos (`click-at x y`, `expect-objects n`) y la tecla
+  `delete`. El cierre raro que el equipo vio después (2 de 14 repeticiones) partía de ese estado; no lo reproduje.
+- **TR20:** el menú del clic derecho de los enlaces (de ImGui) dice «Copiar enlace», y su ayuda «Abrir '…'».
+- **BH9:** `.amf`, `.step`, `.stp`, `.svg` y `.zip` dan «AMF files are not supported yet: save the model as STL, OBJ
+  or 3MF» (un AMF comprimido tampoco se toma por 3MF).
+
+Quedan: BH7 (no lo reproduje; pedí el archivo), BH8, BH11 (soportes de resina con normales invertidas), BH12, BH13,
+UI26 y los totales de filamento por extrusor.
+

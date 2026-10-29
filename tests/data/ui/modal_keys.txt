@@ -1,0 +1,9 @@
+# The spec team's UI25: with the first-run printer catalog open and the
+# search field left by a click inside the dialog, Ctrl+A and Delete went to
+# the plate behind it and removed the model. A dialog takes every key.
+wait 3
+click-at 600 520
+select-all
+key delete
+wait 3
+expect-objects 1
