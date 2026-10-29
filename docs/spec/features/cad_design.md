@@ -52,12 +52,17 @@ Los dos valores de tolerancia los elige la ficha (la calidad de STEP que ya usa 
 1. **Integración, dentro del programa** (pedido del dueño): Diseño es una pestaña más de la misma ventana, con la
    misma vista 3D, la misma cama, los mismos colores y los mismos atajos que Preparar; nunca abre otro programa.
    - De SolidCraft se toma el núcleo, no su ventana: el solucionador de restricciones, la línea de tiempo con
-     parámetros, el núcleo B-rep, la teselación y la lectura y escritura de STEP (sus bibliotecas `geom`, `sketch`,
-     `kernel`, `doc`, `io` y `engine`), enlazadas al motor por una interfaz en C. La interfaz la dibuja el motor.
-   - Mientras eso no esté, se puede empezar mandando guiones JSON de comandos a `solidcraft-cli` (`run`), los mismos
-     que usa la ventana de SolidCraft («todo es un comando»), pero el resultado se ve y se edita igual dentro de la
-     pestaña Diseño.
-   - El motor anota en `PLAN.md` el camino elegido antes de construir.
+     parámetros, el núcleo B-rep (`truck`), la teselación y STEP. La interfaz la dibuja el motor.
+   - **Primer paso (D1 a D3):** el programa trae adentro `solidcraft-cli`, en una versión fija, y la pestaña Diseño
+     le manda guiones JSON de comandos (`run`), los mismos que usa la ventana de SolidCraft («todo es un comando»);
+     recibe la pieza (3MF para verla y mandarla a la placa, STEP para guardarla) y la dibuja en su propia vista. Al
+     arrancar, el programa pregunta `commands` y apaga, con «Próximamente», los comandos que esa versión no tiene.
+     La persona no instala nada aparte y nunca ve otra ventana.
+   - **Después:** las bibliotecas de SolidCraft enlazadas al motor por una crate propia en Rust que exporta una
+     interfaz en C (SolidCraft no la trae y no permite código `unsafe`, así que la capa la escribe el motor), para
+     que el boceto se resuelva en vivo al arrastrar sin llamar a otro proceso.
+   - No se usa SolidCraft como programa aparte instalado por la persona: va contra el pedido del dueño.
+   - El motor anota en `PLAN.md` el camino y la versión fija de SolidCraft.
 2. **Crédito:** «Basado en SolidCraft» en Créditos (`credits.md`) y en la ayuda de Diseño, con el enlace al proyecto y
    su licencia.
 
@@ -146,9 +151,19 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
     - el objeto recuerda su diseño: en la lista de objetos, «Editar en Diseño» lo vuelve a abrir;
     - al volver a mandarlo, reemplaza la malla y conserva la posición, el giro, los ajustes propios del objeto, sus
       modificadores y lo pintado, que se reproyecta sobre las caras como en `step_faces.md`;
-    - con Boceto o Primitiva desde Preparar, la pieza va directo a la placa sin abrir Diseño.
+    - un diseño nuevo se **agrega** como objeto nuevo; un diseño abierto con «Editar en Diseño» **reemplaza** a su
+      objeto (lo de arriba); si ese objeto se borró de la placa mientras tanto, se agrega como nuevo.
 22. **Proyecto:** el historial completo (bocetos, parámetros y operaciones) se guarda dentro del proyecto, así que se
     puede reabrir y cambiar una medida. Un programa que no conoce Diseño abre la malla igual.
+    - cada objeto que salió de Diseño guarda adentro del proyecto el archivo de diseño de SolidCraft (`.sc`), el
+      guion de comandos que lo rehace y la versión de SolidCraft con que se hizo;
+    - «Editar en Diseño» abre ese archivo; si la versión que trae el programa es otra, lo rehace con el guion y avisa
+      si algo cambió de volumen o de caja;
+    - un diseño sin guardar sigue en la pestaña al cambiar de pestaña y se pierde solo al cerrar sin guardar (con la
+      pregunta de `project_save.md`).
+22 bis. **Si falta el componente de diseño** (el `solidcraft-cli` que trae el programa no está, está dañado o no
+    responde): la pestaña Diseño se ve con un aviso «Falta el componente de diseño: reinstalá Tisma para usar
+    Diseño.», todo lo demás del programa anda igual, y los objetos que salieron de Diseño se laminan con su malla.
 23. **Medidas:** volumen, área, centro de masa y caja de cada cuerpo, con el material del filamento elegido para el
     peso (`stability.md`).
 
@@ -194,3 +209,5 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
 | CD17 | Dos líneas que se cruzan, `TR` sobre un extremo | Ese extremo se corta en la intersección |
 | CD18 | `AR` polar de un círculo, 6 copias en 360° | Seis círculos a 60° entre sí |
 | CD19 | Pestaña Diseño abierta | La misma ventana, vista y cama que Preparar; no se abre ningún otro programa |
+| CD20 | Diseño nuevo, «Mandar a la placa» dos veces | Dos objetos en la placa; con «Editar en Diseño» sobre uno y volver a mandar, sigue habiendo dos |
+| CD21 | Programa sin el componente de diseño | Pestaña Diseño con «Falta el componente de diseño…»; abrir, laminar y exportar andan igual |
