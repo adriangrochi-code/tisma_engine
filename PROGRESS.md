@@ -7894,3 +7894,12 @@ pruebas de vista, OpenGL contra Vulkan incluidas.
 **Sigue:** en la aplicación, mientras se arrastra un campo de giro, escala o posición de un modelo grande, poner en
 esa matriz el paso de su malla de ahora a la nueva (la caja de la malla girada sin armarla) y rehacer la placa una sola
 vez al soltar.
+
+Hecho, el mismo bloque: `placement_map` (`src/ui/plate.*`) da el paso de la malla del archivo a la cama como lo haría
+`placed_mesh`, sin armarla (dos pasadas por sus esquinas para las cajas), y `between` el paso de una ubicación a otra.
+Mientras un campo de un modelo de 200 000 triángulos o más está activo, la vista dibuja su malla vieja con ese paso;
+al soltar, la placa se rehace una vez. Paso nuevo de `--ui-script`: `drag NOMBRE A B N` (un deslizador arrastrado de A
+a B en N cuadros). La cúpula, escala arrastrada en 20 cuadros: 22 armados de la placa y 76 s → 3 armados y 16,7 s,
+la misma escala al final (274,80 %) y la misma imagen (salvo el tiempo de la vista en la barra de estado). Prueba
+nueva de `placement_map` y `between` contra `placed_mesh`. Pasan las 179 pruebas de interfaz, placa y vista. Sin
+prueba automática del camino con un modelo grande (hace falta uno de 200 000 triángulos).

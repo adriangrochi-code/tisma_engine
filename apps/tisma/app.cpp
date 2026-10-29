@@ -665,6 +665,14 @@ private:
     Vec3 drag_anchor_{};       // the point on the bed plane the drag holds
     bool dragged_ = false;
     Vec3 drag_offset_{};       // how far the dragged model moved since its mesh was made (the view shifts it)
+    // A large model's field being dragged (rotation, scale, position): the
+    // view draws its old mesh through this map until the field is let go,
+    // and the plate is made again once (docs/LARGE_MODELS.md).
+    std::vector<Placement> built_places_; // each object's placement when the plate was last made
+    bool live_pending_ = false;
+    Affine live_from_;                    // the chosen object's map when its mesh was made
+    Mat4 live_model_ = identity();
+    ImVec4 drag_rect_{}; // --ui-script's drag step: the slider's place when it began
     std::vector<TriangleIndex> indexes_; // a search over each placed mesh, made when first needed
     const std::vector<TriangleIndex>& plate_indexes();
     bool keep_scale_ = true;   // the Scale tool scales all three axes together
@@ -3035,7 +3043,9 @@ void App::rebuild_plate() {
     placed_meshes_.clear();
     object_vertices_.clear();
     std::size_t vertices = 0;
+    built_places_.clear();
     for (const PlateObject& o : objects_) {
+        built_places_.push_back(o.place);
         placed_meshes_.push_back(placed_mesh(o));
         object_vertices_.push_back(vertices);
         vertices += 3 * placed_meshes_.back().triangle_count();
@@ -8223,8 +8233,30 @@ void App::plate_tools() {
         cut_plane_overlay();
     if (tool_ == PlateTool::Measure)
         measure_overlay();
-    if (changed)
-        plate_changed();
+    if (changed) {
+        // A large model while its field is dragged: its old mesh drawn moved,
+        // turned and scaled to where the new one goes; the plate made again
+        // once the field is let go (frame()).
+        constexpr std::size_t kLiveTriangles = 200000;
+        const std::size_t i = std::size_t(selected_);
+        if (ImGui::IsAnyItemActive() && o.mesh.triangle_count() >= kLiveTriangles && i < built_places_.size()) {
+            if (!live_pending_) {
+                PlateObject before = o;
+                before.place = built_places_[i];
+                live_from_ = placement_map(before);
+                live_pending_ = true;
+            }
+            const Affine step = between(live_from_, placement_map(o));
+            live_model_ = identity();
+            for (int r = 0; r < 3; ++r) {
+                for (int c = 0; c < 3; ++c)
+                    live_model_[std::size_t(4 * c + r)] = float(step.a[std::size_t(3 * r + c)]);
+                live_model_[std::size_t(12 + r)] = float(step.b[std::size_t(r)]);
+            }
+        } else {
+            plate_changed();
+        }
+    }
     if (mirror_axis >= 0)
         mirror_selected(mirror_axis);
     if (cut)
@@ -10078,6 +10110,12 @@ void App::layout() {
     g_menu_rects.clear();
     g_dump_rows.clear();
     moves_top_ = 0.0f;
+    // A large model's field let go: its plate made again once.
+    if (live_pending_ && !ImGui::IsAnyItemActive()) {
+        live_pending_ = false;
+        live_model_ = identity();
+        plate_changed();
+    }
     g_row_ids.clear();
     viewport();
     anchor_rect("plate", view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
@@ -10246,6 +10284,7 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
             f.model_selected = f.model;
         }
         f.selected_offset = drag_offset_;
+        f.selected_model = live_model_;
     }
     // While the camera moves, a large plate's coarse copy (V6), the same
     // model highlighted in it.
@@ -11087,6 +11126,29 @@ void App::script_input() {
         else if (f == 1003)
             io.AddMouseButtonEvent(0, false);
         else if (f >= 1005)
+            next();
+    } else if (step.verb == "drag") { // a named slider dragged from A to B (0 to 1 across) over N frames: "A B N"
+        const auto it = g_menu_rects.find(step.key);
+        float a = 0.0f, b = 1.0f;
+        int n = 10;
+        std::sscanf(step.value.c_str(), "%f %f %d", &a, &b, &n);
+        n = std::max(n, 1);
+        if (script_frame_ < 1000) {
+            if (it == g_menu_rects.end())
+                return f >= 30 ? fail_step("no slider of that name is on the screen") : void();
+            drag_rect_ = it->second;
+            script_frame_ = 1000;
+            return;
+        }
+        const ImVec4 r = drag_rect_;
+        const int k = f - 1000; // 0: on A, 1: pressed, 2..n+1: moving, n+2: let go
+        const float t = k <= 1 ? a : k <= n + 1 ? a + (b - a) * float(k - 1) / float(n) : b;
+        io.AddMousePosEvent(r.x + t * (r.z - r.x), 0.5f * (r.y + r.w));
+        if (k == 1)
+            io.AddMouseButtonEvent(0, true);
+        else if (k == n + 2)
+            io.AddMouseButtonEvent(0, false);
+        else if (k >= n + 5)
             next();
     } else if (step.verb == "expect-place") { // the chosen model's x, y (mm) or scale (%): within 1, or in A..B
         if (selected_ < 0 || std::size_t(selected_) >= objects_.size())

@@ -425,3 +425,43 @@ TEST_CASE("plate: the rows under an object in the list (settings_levels.md, rule
     CHECK(rows[3] == ObjectRow{ObjectRow::Kind::Volume, {}, 1});
     CHECK(rows[4] == ObjectRow{ObjectRow::Kind::Range, {}, 0});
 }
+
+TEST_CASE("plate: the placing map without the placed mesh, and from one placement to another", "[plate]") {
+    TriangleMesh mesh;
+    mesh.add_triangle({0, 0, 0}, {10, 0, 0}, {0, 20, 5});
+    mesh.add_triangle({10, 0, 0}, {10, 20, 5}, {0, 20, 5});
+    mesh.add_triangle({0, 0, 0}, {0, 20, 5}, {3, 4, 30});
+    PlateObject o{"part", mesh, {}, {}};
+    o.place.x = 40.0, o.place.y = 60.0;
+    o.place.rotation = from_euler_degrees({20.0, -35.0, 70.0});
+    o.place.scale = {1.5, 0.8, 1.2};
+    const auto apply = [](const Affine& m, const Vec3f& v) {
+        const double p[3] = {v.x, v.y, v.z};
+        std::array<double, 3> out{};
+        for (int i = 0; i < 3; ++i)
+            out[std::size_t(i)] = m.a[std::size_t(3 * i)] * p[0] + m.a[std::size_t(3 * i + 1)] * p[1] +
+                                  m.a[std::size_t(3 * i + 2)] * p[2] + m.b[std::size_t(i)];
+        return out;
+    };
+    const TriangleMesh placed = placed_mesh(o);
+    const Affine map = placement_map(o);
+    for (std::size_t i = 0; i < mesh.corners().size(); ++i) {
+        const auto q = apply(map, mesh.corners()[i]);
+        CHECK_THAT(q[0], WithinAbs(placed.corners()[i].x, 1e-3));
+        CHECK_THAT(q[1], WithinAbs(placed.corners()[i].y, 1e-3));
+        CHECK_THAT(q[2], WithinAbs(placed.corners()[i].z, 1e-3));
+    }
+    // From that placement to another: where the second puts each corner.
+    PlateObject o2 = o;
+    o2.place.rotation = from_euler_degrees({0.0, 10.0, -15.0});
+    o2.place.scale = {2.0, 2.0, 2.0};
+    o2.place.x = 10.0;
+    const TriangleMesh placed2 = placed_mesh(o2);
+    const Affine step = between(map, placement_map(o2));
+    for (std::size_t i = 0; i < mesh.corners().size(); ++i) {
+        const auto q = apply(step, placed.corners()[i]);
+        CHECK_THAT(q[0], WithinAbs(placed2.corners()[i].x, 1e-3));
+        CHECK_THAT(q[1], WithinAbs(placed2.corners()[i].y, 1e-3));
+        CHECK_THAT(q[2], WithinAbs(placed2.corners()[i].z, 1e-3));
+    }
+}

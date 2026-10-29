@@ -85,6 +85,13 @@ struct Affine {
 // From the model's frame to the bed, as placed_mesh sets it down (placed:
 // placed_mesh(object)).
 Affine placing(const PlateObject& object, const TriangleMesh& placed);
+// The same map from the object alone, as placed_mesh would set it down, but
+// without making that mesh: two passes over its corners for the boxes.
+Affine placement_map(const PlateObject& object);
+// The map that takes points placed by `from` to where `to` places them:
+// to after from's inverse (from's linear part invertible: the scales are
+// above 0).
+Affine between(const Affine& from, const Affine& to);
 // The volume in the model's new frame when the model's mesh becomes `map`
 // of itself (saved as placed, or mirrored): `from` and `to` are the model's
 // box in the old frame and in the new. Its sizes stretch as the map does
