@@ -713,8 +713,10 @@ pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene
 `settings_panel.md` antes de los que la contradicen):
 - [ ] Ajustes en una sola página por pestaña, con los nombres de sección grandes y sus opciones debajo, sin flechas para
   abrir y cerrar (como OrcaSlicer), y más juntas
-- [ ] «No planar» como entrada propia en la columna de categorías de impresión (modos y sus ajustes) y en la de la
+- [x] «No planar» como entrada propia en la columna de categorías de impresión (modos y sus ajustes) y en la de la
   impresora (altura libre del cabezal, ángulos libres en X e Y, radio libre, perfil del cabezal; hoy en «Cabezal»)
+  (2026-10-29: en Impresión, entre Adhesión y Otros, con Capas curvas, su transición y caudal, y Relleno ondulado; en
+  la impresora, después de Máquina, con Cabezal)
 - [x] El botón Laminar abajo a la derecha (como Cura) y, después de laminar, un menú para guardar el G-code o mandarlo
   a la impresora conectada (2026-10-29: un panel abajo a la derecha de la vista, en Preparar y Vista previa; antes de
   laminar, Laminar; después, el tiempo estimado, «Exportar G-code» y un menú con «Mandar a la impresora» y «Guardar el

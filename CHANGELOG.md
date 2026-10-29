@@ -96,6 +96,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **«No planar»:** sección propia en los ajustes de impresión (capas curvas, relleno ondulado) y en los de la
+  impresora (el cabezal).
+
 - **Vista previa de lejos (OpenGL y Vulkan):** cuando una capa mide menos de un cuarto de píxel, las paredes de 2 o 4 capas se
   dibujan como una sola; la imagen es la misma y el cuadro tarda menos de la mitad en la prueba.
 

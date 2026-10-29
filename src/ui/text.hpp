@@ -804,6 +804,7 @@
     X(SecSupport, "Soportes", "Support") \
     X(SecAdhesion, "Adhesión", "Adhesion") \
     X(SecOther, "Otros", "Others") \
+    X(SecNonplanar, "No planar", "Non-planar") \
     X(SecTemperature, "Temperaturas", "Temperatures") \
     X(SecCooling, "Enfriamiento", "Cooling") \
     X(SecFlow, "Flujo", "Flow") \

@@ -98,6 +98,7 @@ constexpr const char* kIcons[] = {
     "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
     "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",   "tool_cut",   "tool_measure",
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
+    "section_nonplanar",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
     "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help",
 };

@@ -7823,3 +7823,12 @@ capa, sí junta de a 4. El G-code laminado de un STL de 200 mm (la esfera ×10) 
 con grupos de 4, la imagen igual a la de la versión anterior de la vista (diferencia 0). No hay número de antes: el
 binario de comparación ya tenía el cambio. Sin probar: la medición de un G-code abierto con `--look` (habría que
 medir después de que llegue la cámara).
+
+## 2026-10-29 (noche): «No planar» como sección propia
+
+Pedido del dueño de `PLAN.md`. En la columna de Impresión, una sección «No planar» entre Adhesión y Otros, con las
+tarjetas Capas curvas y su transición y caudal (antes en Otros) y Relleno ondulado (antes en Resistencia: los dos
+rellenos que suben y bajan en Z). En la impresora, «No planar» después de Máquina, con la tarjeta Cabezal (ángulos
+libres, altura y radio libres, perfil). Ícono propio (`assets/icons/section_nonplanar.svg`, dos ondas, trazo gris
+como los demás). Un ícono nuevo tiene que estar en la lista `kIcons` de `apps/tisma/app.cpp`: sin eso se dibuja un
+cuadrado negro (pasó en la primera captura). Pasan las pruebas de interfaz; mirado en capturas de las dos secciones.
