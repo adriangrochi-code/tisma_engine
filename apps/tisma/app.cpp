@@ -4398,23 +4398,16 @@ void App::top_bar() {
                2.0f + ImGui::CalcTextSize(label).x;
     };
     const float right = width_of(tr(T::Open)) + more_w + gap;
-    // The search for a setting and the help (assistant.md, rule 1), between
-    // the tabs and the actions, when there is room; F1 and More open the help
-    // anyway.
+    // The help (assistant.md, rule 1), between the tabs and the actions, when
+    // there is room; F1 and More open it anyway. The search for a setting is
+    // in the settings panel, under the printer (the owner's decision, 2026-10-29).
     {
         const float from = ImGui::GetCursorPosX() + 10.0f * scale_;
-        float room = ImGui::GetWindowWidth() - right - 12.0f * scale_ - 16.0f * scale_ - from;
+        const float room = ImGui::GetWindowWidth() - right - 12.0f * scale_ - 16.0f * scale_ - from;
         if (room >= button_h) {
             ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - right - 12.0f * scale_ - gap - button_h, top));
             if (icon_button("##help", "help", tr(T::HelpTip), button_h))
                 help_open_ = !help_open_;
-            room -= button_h + gap;
-        }
-        const float w = std::min(300.0f * scale_, room);
-        if (w > 120.0f * scale_) {
-            ImGui::SetCursorPos(ImVec2(from, top));
-            search_box(w, button_h);
-            ImGui::SameLine();
         }
     }
     ImGui::SameLine(ImGui::GetWindowWidth() - right - 12.0f * scale_);
@@ -6079,6 +6072,10 @@ void App::settings_panel() {
     anchor("printer_selector");
     if (panel_tab_ == SettingsTab::Printer)
         panel_tab_ = SettingsTab::Print;
+    // The search for a setting, under the printer and the nozzle (the owner's
+    // decision, 2026-10-29: it was in the top bar).
+    search_box(ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight());
+    anchor("settings_search");
 
     // The tabs, and the level on their right.
     {
@@ -10466,7 +10463,7 @@ void App::layout() {
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
     }
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_F, ImGuiInputFlags_RouteGlobal))
-        search_focus_ = true;
+        search_focus_ = true, printer_page_ = false; // the field is in the settings panel
     if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
         help_open_ = !help_open_;
     // The view's keys (preview.md, rule 10) while no text field has the keyboard.

@@ -8174,3 +8174,10 @@ Quedan: BH7 (no lo reproduje; pedí el archivo) y los totales de filamento por e
   carga en el cuadro de la interfaz.
 - **BH17:** un STL ASCII que empieza con el BOM de UTF-8 se lee como texto.
 
+## 2026-10-29: el buscador de ajustes en el panel (pedido del dueño)
+
+El campo «Buscar un ajuste (Ctrl+F)» pasó de la barra superior al panel de ajustes, en una barra debajo de la
+impresora y la boquilla, a todo el ancho del panel; la lista de resultados se abre debajo, como antes. Ctrl+F lo
+enfoca, y desde la página de la impresora vuelve al panel. En la barra superior queda el botón de ayuda. Mirado en la
+captura.
+

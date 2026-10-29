@@ -314,7 +314,8 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
   guardan en `%APPDATA%\Tisma\interface.json` (Windows) o `~/.config/tisma/interface.json` (Linux); los perfiles del
   usuario, en la carpeta `profiles` de al lado.
 - **Idiomas:** español (por defecto) e inglés. Se elige en **Más** o con `--lang en`.
-- **Buscar un ajuste:** el campo con lupa de la barra superior (Ctrl+F) busca por el nombre del ajuste, su tarjeta,
+- **Buscar un ajuste:** el campo con lupa del panel de ajustes, debajo de la impresora y la boquilla (Ctrl+F; decisión
+  del dueño, 2026-10-29: antes estaba en la barra superior) busca por el nombre del ajuste, su tarjeta,
   su sección, su clave y lo que hace, sin importar mayúsculas ni tildes. Enter o un clic llevan al ajuste: abren su
   pestaña, su sección y su tarjeta, lo traen a la vista y lo resaltan 2 s; si el nivel lo esconde, se ve igual con la
   etiqueta de su nivel hasta cambiar de sección (ficha `settings_panel.md`, regla 5).
@@ -341,7 +342,7 @@ de licencia. Las pruebas `[credits]` fallan si falta alguna de esas partes.
 Pedido del dueño (2026-10-26): un asistente, un consejo de cada función la primera vez que se usa y un botón de
 información al lado de cada ajuste.
 
-- **Panel de ayuda** (ficha `assistant.md`): F1, el botón **?** de la barra superior (si entra junto al buscador) o
+- **Panel de ayuda** (ficha `assistant.md`): F1, el botón **?** de la barra superior (si entra) o
   **Más > Ayuda**. Se abre sobre el panel de ajustes con un buscador y las pestañas Problemas, Procedimientos,
   Glosario, Tutoriales y Calibraciones; al pie, «Basado en las guías de Rafa Barajas». Sus datos llegan con el paquete
   de perfiles (`knowledge/`, en la carpeta `pack/` junto a las preferencias); sin ellos, el panel lo dice. Tutoriales

@@ -111,6 +111,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Buscar un ajuste** está en el panel de ajustes, debajo de la impresora y la boquilla (pedido del dueño); Ctrl+F
+  lo sigue abriendo, también desde la página de la impresora.
 - **Ancho de los cordones por defecto:** `walls.width` 0 (lo que viene si no se pone) es automático, 1,125 × la boquilla:
   0,45 mm con 0,4 en lugar de 0,4 mm, como dice la ficha y hace Tisma Slicer. Las paredes pasan de 2 a 3 cordones
   entre 1,15 y 1,2 mm, de 3 a 4 entre 1,45 y 1,5 y de 4 a 5 entre 1,95 y 2 (antes, unos 0,1 a 0,2 mm antes). Si la
