@@ -760,6 +760,11 @@ private:
     bool ray_checked_ = false;
     bool moire_checked_ = false;
     bool catalog_printer_picked_ = false; // --pick-catalog-printer done
+    // The Measure tool's prepared mesh (measure_mesh) of one object, for the
+    // plate as it was at scene_version_ measure_version_.
+    MeasureMesh measure_prepared_;
+    int measure_prepared_object_ = -1;
+    std::uint64_t measure_version_ = ~std::uint64_t(0);
     struct ScriptStep {
         std::size_t line = 0;
         std::string verb, key, value;
@@ -7021,8 +7026,13 @@ void App::viewport() {
                 if (int(hit->object) != measure_object_ || measure_picks_.size() >= 2)
                     measure_picks_.clear();
                 measure_object_ = int(hit->object);
+                if (!io.KeyShift && (measure_prepared_object_ != int(hit->object) || measure_version_ != scene_version_)) {
+                    measure_prepared_ = measure_mesh(placed);
+                    measure_prepared_object_ = int(hit->object);
+                    measure_version_ = scene_version_;
+                }
                 measure_picks_.push_back(io.KeyShift ? point_feature(placed, hit->triangle, at)
-                                                     : surface_feature(placed, hit->triangle));
+                                                     : surface_feature(placed, measure_prepared_, hit->triangle));
             } else if (tool_ == PlateTool::LayFlat) {
                 PlateObject& o = objects_[hit->object];
                 o.place.rotation = laid_on(o.place.rotation, triangle_normal(placed_meshes_[hit->object], hit->triangle));

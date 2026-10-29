@@ -1,10 +1,12 @@
 #pragma once
 
+#include "mesh/indexed_mesh.hpp"
 #include "mesh/mesh.hpp"
 
 #include <array>
 #include <cstddef>
 #include <optional>
+#include <vector>
 
 // The Measure tool (docs/spec/features/model_tools.md, rule 20): a face of
 // a model picks its plane, a vertex its point; between two of them, the
@@ -35,6 +37,18 @@ MeasureFeature plane_feature(const TriangleMesh& mesh, std::size_t triangle);
 // diameter, or, when the normals lean on the axis, a cone with its angle and
 // the diameters at its two ends.
 MeasureFeature surface_feature(const TriangleMesh& mesh, std::size_t triangle);
+
+// What surface_feature needs of the whole mesh, built once for every click
+// on it: welding and the triangles around each vertex took some 0.4 s a
+// click on two million triangles, where the stretch clicked is often small.
+struct MeasureMesh {
+    IndexedMesh mesh;
+    std::vector<Point3> normal;               // each triangle's, of unit length
+    std::vector<std::uint32_t> first, around; // vertex i's triangles: around[first[i]] to around[first[i + 1]]
+};
+MeasureMesh measure_mesh(const TriangleMesh& mesh);
+// The same as above, with the mesh's MeasureMesh.
+MeasureFeature surface_feature(const TriangleMesh& source, const MeasureMesh& prepared, std::size_t triangle);
 
 // The triangle's corner nearest to where it was hit.
 MeasureFeature point_feature(const TriangleMesh& mesh, std::size_t triangle, const Point3& hit);

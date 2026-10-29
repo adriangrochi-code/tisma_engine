@@ -81,6 +81,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Medir en piezas grandes:** la herramienta prepara la malla una vez por pieza y no en cada clic. Con 2 millones de
+  triángulos, el primer clic tarda lo mismo (unos 0,35 s) y los siguientes, de 0,1 a 26 ms (antes, 0,36 a 0,44 s cada
+  uno).
+
 - **Otra boquilla también en las impresoras del catálogo** (pedido del dueño): la lista trae los tamaños que el
   fabricante publica (a menudo solo el de fábrica) y ahora siempre ofrece «Otra boquilla…». La ficha del catálogo
   dice «Sin dato» donde no hay fuente (firmware, velocidad máxima…), en vez de «-».
