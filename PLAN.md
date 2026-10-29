@@ -1138,6 +1138,47 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
   puentes; la balsa solo necesita la prueba OR15.
 - O7 y O8 van con sus fichas de interfaz.
 
+### Espacio de diseño CAD con SolidCraft (pedido del dueño, 2026-10-29, por el equipo de fichas)
+
+El dueño quiere diseñar dentro del laminador, como en la pestaña Design experimental de OrcaSlicer 2.5: croquis,
+extruir, revolucionar, barrer, solevar, redondeos, agujeros, roscas, booleanas, variables, STEP y pasar el diseño a la
+placa. La base propuesta es SolidCraft (hoy `github.com/tangency-labs/solidcraft`, antes `bherbruck/solidcraft`).
+
+**Revisado el 2026-10-29** (archivos de licencia, manifiestos, `Cargo.lock` y su lista de licencias; sin abrir código
+de ningún laminador):
+- **Licencia:** «MIT OR Apache-2.0», con `LICENSE-MIT`, `LICENSE-APACHE` y `NOTICE` («SolidCraft contributors»).
+- **Núcleo:** truck (Apache-2.0), sin OCCT ni otro núcleo en C++.
+- **Dependencias:** las 560 cajas que se distribuyen (su `THIRD-PARTY-LICENSES.txt`) tienen licencias permisivas o una
+  opción permisiva; ninguna GPL, LGPL ni AGPL obligatoria. Fuentes bajo OFL 1.1, modelos de prueba CC0 y de dominio
+  público.
+- **Madurez:** es muy nuevo y cambia todos los días. Tiene una semana de historia y 65 versiones; la v0.26.1 es del
+  2026-10-29. Dice «temprano pero usable para piezas simples». El formato de diseño cambia seguido, y su hoja de ruta
+  cambia de núcleo (truck → SMLib).
+- **Formas de entrar:**
+  - no hay biblioteca publicada ni interfaz en C (`unsafe_code = "forbid"`);
+  - `solidcraft-cli` corre guiones JSON (`run`, `commands`) y tiene servidor MCP;
+  - exporta STEP, IGES, 3MF, STL y OBJ;
+  - importa STEP e IGES como sólidos, y 3MF, STL y OBJ solo como mallas;
+  - para Windows hay un MSI de 80 MB y un zip portátil de 101 MB, sin firmar todavía.
+
+**Propuesta (falta que el dueño la confirme):**
+1. **Ahora, (a), un programa aparte:**
+   - un botón «Diseñar» abre SolidCraft, instalado por la persona; la ruta se configura o se busca;
+   - «Pasar a la placa» trae su 3MF o STL, que el motor ya lee;
+   - el motor no compila nada de SolidCraft ni lo distribuye, así que no hay acoplamiento ni riesgo de licencia;
+   - si más adelante el instalador lo incluye, `THIRD_PARTY.md` anota su lista de licencias, las fuentes OFL y los
+     recursos CC0;
+   - créditos: «Basado en SolidCraft».
+2. **Después, (b), guiones JSON:**
+   - un panel propio de diseño en la interfaz arma los comandos y llama a `solidcraft-cli run guion.json --out
+     pieza.3mf`;
+   - la versión queda fija y los comandos se validan con `commands`, porque cambian casi a diario;
+   - así el diseño queda dentro del laminador.
+3. **No por ahora, (c), enlazar sus cajas de Rust con una interfaz en C:** pide Rust dentro de la compilación con
+   MSVC y una capa propia sobre una API sin estabilidad prometida, con el núcleo cambiando.
+
+La ficha de comportamiento (`cad_design.md`) la escribe el equipo de fichas.
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:
