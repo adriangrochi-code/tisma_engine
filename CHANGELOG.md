@@ -92,6 +92,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **La primera vez se elige la impresora y el filamento** antes del recorrido de bienvenida (pedido del dueño): se abre
+  el catálogo de impresoras («paso 1 de 2»), después el de filamentos, y al cerrarlos, elegido o no, el recorrido.
+  `tisma --first-run` arranca así aunque ya haya preferencias.
+
 - **La ventana descansa cuando no pasa nada:** sin mouse ni teclado por 3 s, sin trabajos en marcha ni impresora
   conectada, se despierta con un evento o cada 2 s en vez de diez veces por segundo; un laminado u otro trabajo que
   termina la despierta. Con la esfera de 80 mm laminada (llvmpipe), en 30 s de reposo: de 38 % de CPU y 260 cuadros a

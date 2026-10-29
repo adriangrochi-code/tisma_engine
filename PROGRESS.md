@@ -7676,3 +7676,12 @@ afuera la leyenda (a la izquierda) y la barra de capas (150 px a la derecha) y c
 a que la leyenda lleve 3 cuadros dibujada (`legend_since_`), porque una ventana que se ajusta a su contenido tarda dos
 cuadros en tener su tamaño y el plegado automático uno más (en el primer cuadro medía 24 px). Mirado en capturas a
 1200 × 760: la esfera entera entre la leyenda plegada y la barra de capas. Pasan las 775 pruebas.
+
+## 2026-10-29 (noche): la primera vez, impresora y filamento antes del recorrido
+
+Pedido del dueño de `PLAN.md`. Sin preferencias guardadas (o con `--first-run`), el programa abre el catálogo de
+impresoras con «Para empezar, elegí tu impresora (paso 1 de 2…)»; al cerrarlo (con «Agregar a mis perfiles»,
+Cancelar, Escape o la X) abre el de filamentos (paso 2 de 2), y al cerrar ese, el recorrido de bienvenida
+(`first_run_next`). Mirado en tres capturas con `--first-run` y Escape (catálogo de impresoras, de filamentos,
+bienvenida). Pasan las pruebas de interfaz y textos. Sin prueba automática del orden (el script no puede preguntar
+qué ventana está abierta).

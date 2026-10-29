@@ -73,6 +73,7 @@ struct AppOptions {
     std::string dump_ui;            // with screenshot: write the setting rows drawn (key, label, value, rectangle) as JSON
     bool view_check = true;         // with screenshot: check the 3D view's picture (no black pixels, few sparkles)
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
+    bool first_run = false;         // as on the first run: the printer's and filament's catalogs, then the assistant
     bool draw_stats = false;        // print each frame's OpenGL draw calls and vertices (view, then panels)
     // What draws the window: "auto" (Vulkan when this machine has it and the
     // view runs on it, else OpenGL), "vulkan" (OpenGL only if Vulkan cannot)

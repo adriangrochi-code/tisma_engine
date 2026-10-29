@@ -716,7 +716,8 @@ pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene
   a la impresora conectada
 - [ ] Mover, girar y escalar con controles visuales (deslizadores), no solo números; un menú con el botón derecho para
   agregar modelos y formas
-- [ ] La primera vez, elegir la impresora y el filamento antes del recorrido de bienvenida
+- [x] La primera vez, elegir la impresora y el filamento antes del recorrido de bienvenida (2026-10-29: el catálogo de
+  impresoras, después el de filamentos, cada uno con su paso; cerrarlos sin elegir sigue al siguiente)
 - [x] La leyenda de la vista previa no tapa la pieza (encuadre teniendo en cuenta los paneles). Hecho (2026-10-29):
   la leyenda se pliega (solo los tipos, sin tiempos, partes, filamento ni totales) y la barra de movimientos ya no queda
   debajo de ella (va a su derecha, o adentro si no hay lugar); se pliega sola si completa taparía más del 45 % del ancho

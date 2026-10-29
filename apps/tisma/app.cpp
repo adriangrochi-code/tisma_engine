@@ -507,6 +507,7 @@ private:
     const Profile* find_profile(ProfileKind kind, const std::string& name, bool* builtin = nullptr) const;
     void catalog_dialog();
     void add_catalog_profile(const Profile& profile);
+    void first_run_next();
 
     // Widgets.
     ImTextureRef icon(const char* name) const;
@@ -854,6 +855,9 @@ private:
     std::set<std::string> tips_seen_;
     bool tips_ = true;
     bool first_run_ = false; // no preferences yet: the assistant opens
+    // The first run's setup, before the assistant (owner's request,
+    // 2026-10-28): 1 the printer's catalog, 2 the filament's, 0 done.
+    int setup_step_ = 0;
     PlateTool last_tool_ = PlateTool::Select;
     Tab last_tab_ = Tab::Prepare;
     bool had_result_ = false;
@@ -2429,9 +2433,13 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
-    // The assistant on the first run; screenshots show help only when asked.
-    if (options_.screenshot.empty() && first_run_)
-        tour_step_ = 0;
+    // The first run: the printer and the filament from the catalog, then the
+    // assistant; screenshots show help only when asked (or with --first-run).
+    if ((options_.screenshot.empty() && first_run_) || options_.first_run) {
+        first_run_ = true;
+        setup_step_ = 1;
+        catalog_kind_ = ProfileKind::Printer, catalog_open_ = true;
+    }
     if (!options_.screenshot.empty())
         tips_ = options_.tips;
     if (options_.tour >= 0)
@@ -3531,9 +3539,15 @@ void App::catalog_dialog() {
     const std::string title = std::string(tr(printers ? T::PrinterCatalog : T::FilamentCatalog)) + "###catalog";
     bool open = true;
     if (!ImGui::BeginPopupModal(title.c_str(), &open)) {
-        if (!open)
+        if (!open) {
             catalog_kind_.reset();
+            first_run_next();
+        }
         return;
+    }
+    if (setup_step_ > 0) {
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(setup_step_ == 1 ? T::SetupPrinter : T::SetupFilament));
+        ImGui::Spacing();
     }
     const Catalog* catalog = nullptr;
     try {
@@ -3721,6 +3735,7 @@ void App::catalog_dialog() {
             add_catalog_profile(profile);
             catalog_kind_.reset();
             ImGui::CloseCurrentPopup();
+            first_run_next();
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
@@ -3729,8 +3744,22 @@ void App::catalog_dialog() {
         (ImGui::IsKeyPressed(ImGuiKey_Escape) && catalog_kind_)) {
         catalog_kind_.reset();
         ImGui::CloseCurrentPopup();
+        first_run_next();
     }
     ImGui::EndPopup();
+}
+
+// The first run's next step once a catalog closes, picked or not: the
+// filament's catalog after the printer's, then the assistant.
+void App::first_run_next() {
+    if (setup_step_ == 1) {
+        setup_step_ = 2;
+        catalog_kind_ = ProfileKind::Filament, catalog_open_ = true;
+        catalog_query_.clear();
+    } else if (setup_step_ == 2) {
+        setup_step_ = 0;
+        tour_step_ = 0;
+    }
 }
 
 // A catalog entry becomes one of the user's profiles, and the chosen one.

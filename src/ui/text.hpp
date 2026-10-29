@@ -1041,6 +1041,8 @@
     X(NotSet, "Sin dato", "Not set") \
     X(AutoValue, "Automático", "Automatic") \
     X(NoLimit, "Sin límite", "No limit") \
+    X(SetupPrinter, "Para empezar, elegí tu impresora (paso 1 de 2; se puede cambiar después).", "To start, choose your printer (step 1 of 2; it can be changed later).") \
+    X(SetupFilament, "Ahora, el filamento que vas a usar (paso 2 de 2).", "Now the filament you will use (step 2 of 2).") \
     X(LegendLess, "Menos detalle", "Less detail") \
     X(LegendMore, "Más detalle: tiempos, filamento y totales", "More detail: times, filament and totals") \
     X(ValueMax, "Máximo: %s", "Maximum: %s") \

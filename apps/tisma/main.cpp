@@ -33,7 +33,7 @@ constexpr const char* kUsage =
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
     "                                   [--bench-frames N] [--graphics auto|vulkan|opengl] [--coarse]\n"
-    "                                   [--draw-stats] [--dump-ui rows.json]\n"
+    "                                   [--draw-stats] [--dump-ui rows.json] [--first-run]\n"
     "                                   [--compare-view other.png] [--no-view-check]\n"
     "                                   [--ui-script steps.txt] [--pick-catalog-printer NAME]]\n"
     "\n"
@@ -57,6 +57,8 @@ constexpr const char* kUsage =
     "for, the 3D view's and the panels' apart.\n"
     "--dump-ui writes, with --screenshot, every setting row drawn: its key,\n"
     "label, value, rectangle and whether its label is cut.\n"
+    "--first-run starts as on the first run: the printer's catalog, then the\n"
+    "filament's, then the assistant.\n"
     "Every screenshot of the Prepare or Preview tab also checks the 3D view's own\n"
     "picture and exits with 1 if a pixel is black (a shader's NaN) or more than\n"
     "0.1% of them sparkle (a pixel far from all its neighbours); --no-view-check\n"
@@ -274,6 +276,8 @@ int main(int argc, char** argv) {
             options.bench_frames = std::max(1, std::atoi(value()));
         } else if (arg == "--coarse") {
             options.coarse = true;
+        } else if (arg == "--first-run") {
+            options.first_run = true;
         } else if (arg == "--dump-ui") {
             options.dump_ui = value();
         } else if (arg == "--draw-stats") {
