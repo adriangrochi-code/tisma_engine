@@ -880,8 +880,8 @@ struct VulkanView::Impl {
                 copy(draw.colour, f.model_selected);
                 copy(draw.extra, f.selected_offset);
                 for (int r = 0; r < 3; ++r)
-                    for (int c = 0; c < 4; ++c)
-                        draw.model[r][c] = f.selected_model[std::size_t(4 * c + r)];
+                    for (int k = 0; k < 4; ++k)
+                        draw.model[r][k] = f.selected_model[std::size_t(4 * k + r)];
                 push(draw);
                 vkCmdDraw(c, chosen, 1, first, 0);
             }

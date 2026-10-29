@@ -101,10 +101,11 @@ TriangleMesh translated(const TriangleMesh& mesh, Vec3 offset) {
     return out;
 }
 
-std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset) {
-    // Each triangle's 18 floats in their own place, the triangles in
-    // parallel: a model of millions of triangles (the owner's large-model item).
-    std::vector<float> out(mesh.triangle_count() * 18);
+namespace {
+
+// Each triangle's 18 floats in their own place from out on, the triangles in
+// parallel: a model of millions of triangles (the owner's large-model item).
+void write_vertices(const TriangleMesh& mesh, Vec3 offset, float* out) {
     tbb::parallel_for(tbb::blocked_range<std::size_t>(0, mesh.triangle_count(), 4096),
                       [&](const tbb::blocked_range<std::size_t>& range) {
                           for (std::size_t t = range.begin(); t != range.end(); ++t) {
@@ -114,13 +115,33 @@ std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset) {
                                   p[k] = Vec3{c.x, c.y, c.z} + offset;
                               }
                               const Vec3 n = normalize(cross(p[1] - p[0], p[2] - p[0]));
-                              float* at = out.data() + 18 * t;
+                              float* at = out + 18 * t;
                               for (const Vec3& v : p) {
                                   const float row[6] = {v.x, v.y, v.z, n.x, n.y, n.z};
                                   at = std::copy(row, row + 6, at);
                               }
                           }
                       });
+}
+
+} // namespace
+
+std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset) {
+    std::vector<float> out(mesh.triangle_count() * 18);
+    write_vertices(mesh, offset, out.data());
+    return out;
+}
+
+std::vector<float> mesh_vertices(const std::vector<TriangleMesh>& meshes, Vec3 offset) {
+    std::size_t count = 0;
+    for (const TriangleMesh& m : meshes)
+        count += m.triangle_count();
+    std::vector<float> out(count * 18);
+    float* at = out.data();
+    for (const TriangleMesh& m : meshes) {
+        write_vertices(m, offset, at);
+        at += 18 * m.triangle_count();
+    }
     return out;
 }
 

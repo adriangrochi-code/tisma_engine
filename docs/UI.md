@@ -119,6 +119,10 @@ Medido con una esfera de 1 002 528 triángulos (Release, `tests` sin interfaz):
   (2026-10-29), sobre una copia de las mallas ubicadas que comparte con la copia liviana de la vista; el primer clic lo
   encuentra hecho, o espera lo que le falta. Con la cúpula de 2 003 996 triángulos, el primer clic tardaba 608 ms y
   ahora 0,1 ms.
+- **La malla de la placa** (todas las mallas ubicadas en una) ya no se guarda: los vértices de la vista salen de las
+  mallas ubicadas una tras otra, y la malla entera se arma solo para laminar, para el análisis y para los rayos. Con
+  la cúpula, ese paso al abrir o cambiar la placa pasa de 80–138 ms a 21–28 ms (la caja de la placa), y la memoria
+  baja en una copia de la malla (72 MB).
 - **El motor**, para comparar: leer 83 ms, laminar 2,0 s, G-code 0,5 s, verificarlo 0,04 s y la vista previa 0,06 s.
 - **Vulkan** (2026-10-26, `PLAN.md`, «Vista con Vulkan»): `--graphics auto|vulkan|opengl` elige qué dibuja la
   ventana. El programa detecta si la máquina tiene Vulkan al intentar arrancarlo (el cargador, un dispositivo Vulkan

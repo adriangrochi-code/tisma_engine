@@ -7,6 +7,7 @@
 #include "ui/icons.hpp"
 #include "ui/png.hpp"
 #include "ui/presets.hpp"
+#include "ui/plate.hpp"
 #include "ui/scene.hpp"
 #include "ui/slicing.hpp"
 #include "ui/text.hpp"
@@ -181,6 +182,10 @@ TEST_CASE("ui: a model goes to the middle of the bed, on it", "[ui]") {
     CHECK(v[2] == cube.corner(0, 0).z + 3);
     const TriangleMesh moved = translated(cube, {1, 2, 3});
     CHECK(moved.bounding_box().min.y == cube.bounding_box().min.y + 2);
+    // Several meshes: as their joined mesh gives them.
+    const std::vector<TriangleMesh> both{cube, moved};
+    CHECK(mesh_vertices(both, {0, 1, 0}) == mesh_vertices(plate_mesh(both), {0, 1, 0}));
+    CHECK(mesh_vertices(std::vector<TriangleMesh>{}, {}).empty());
 }
 
 TEST_CASE("ui: the bed's grid follows its polygon", "[ui]") {

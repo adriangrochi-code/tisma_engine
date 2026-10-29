@@ -31,6 +31,9 @@ TriangleMesh translated(const TriangleMesh& mesh, Vec3 offset);
 // One vertex per triangle corner, moved by offset: position (3 floats) and the
 // triangle's unit normal (3 floats), for flat shading.
 std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset);
+// The meshes one after the other, as mesh_vertices(plate_mesh(meshes)) gives
+// them, without making the joined mesh.
+std::vector<float> mesh_vertices(const std::vector<TriangleMesh>& meshes, Vec3 offset);
 
 // A coarse copy of a mesh to draw while the view moves (PLAN.md, V6): vertex
 // clustering (Rossignac and Borrel 1993, "Multi-resolution 3D approximations

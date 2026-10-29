@@ -7929,3 +7929,15 @@ el medio de la vista): el primer clic, de 608 ms a 0,1 ms. Prueba nueva `ui_scri
 (comprobado). Pasan las 128 pruebas de interfaz y vista.
 
 **Sigue:** la malla de la placa y los vértices de la vista en otro hilo (unos 300 ms con la cúpula al abrirla).
+
+## 2026-10-29 (noche): la malla de la placa, solo cuando hace falta
+
+Al armar la placa se juntaban todas las mallas ubicadas en una (`mesh_`) para sacar de ella la caja y los vértices de
+la vista; esa copia se guardaba aunque solo el laminador, el análisis y los rayos la usan. Ahora los vértices salen de
+las mallas ubicadas una tras otra (`mesh_vertices` de varias mallas, con prueba contra la de la malla junta), la caja
+de la placa de sus cajas, y la malla junta se arma en esos tres casos (`plate_now`). Con la cúpula de 2 003 996
+triángulos ese paso pasa de 80–138 ms a 21–28 ms (medido con la CI corriendo al lado), y la memoria baja en una copia
+de 72 MB. También arreglado un aviso de `-Wshadow` en `vk_view.cpp` (de la matriz del modelo elegido). Pasan las 193
+pruebas de interfaz, vista, placa y malla.
+
+**Sigue:** mandar los vértices a la vista (unos 130 ms con la cúpula) sin frenar el cuadro.

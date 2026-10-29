@@ -654,8 +654,10 @@ private:
     Settings settings_ = default_settings();
 
     // The plate: each model as read with where it goes (objects_), each as
-    // placed (placed_meshes_), and all of them in one mesh, as the slicer and
-    // the view take them (mesh_, in bed coordinates: offset_ stays zero).
+    // placed (placed_meshes_), and all of them in one mesh, as the slicer
+    // takes them (plate_now(), in bed coordinates: offset_ stays zero). The
+    // joined mesh is made only for the slicer, the analysis and the rays: the
+    // view's vertices come from the placed meshes (docs/LARGE_MODELS.md).
     std::vector<PlateObject> objects_;
     std::vector<TriangleMesh> placed_meshes_;
     std::vector<std::size_t> object_vertices_; // where each model's vertices start in the view's mesh
@@ -717,7 +719,9 @@ private:
     bool painted_ = false;     // the stroke changed something
     bool paint_dirty_ = true;  // the view's copy of the paint is out of date
     std::optional<float> brush_depth_; // how far ahead of the eye the face under the mouse is
-    std::optional<TriangleMesh> mesh_;
+    bool has_plate_ = false;          // there is a model on the plate
+    std::size_t plate_triangles_ = 0; // all of the plate's
+    TriangleMesh plate_now() const;
     std::filesystem::path model_path_;
     Vec3 offset_{};
     BoundingBox placed_;
@@ -2766,7 +2770,7 @@ bool App::init(std::string& error) {
     } else if (!c.empty()) {
         create_calibration(calibration_kind_from_name(c).value_or(CalibrationKind::Dimensions), false);
     }
-    if (!options_.screenshot.empty() && (options_.view == "preview" || !options_.export_path.empty() || options_.device_print) && mesh_ &&
+    if (!options_.screenshot.empty() && (options_.view == "preview" || !options_.export_path.empty() || options_.device_print) && has_plate_ &&
         !result_)
         start_slice();
     if (!options_.catalog.empty()) {
@@ -3134,16 +3138,29 @@ void App::rebuild_plate() {
     indexes_.clear();
     ++plate_version_;
     offset_ = {};
+    has_plate_ = !objects_.empty();
+    plate_triangles_ = vertices / 3;
     if (objects_.empty()) {
-        mesh_.reset();
         placed_ = {};
         renderer_.set_model({});
         vk_view_.set_model({});
     } else {
-        mesh_ = plate_mesh(placed_meshes_);
-        placed_ = mesh_->bounding_box();
-        timing("plate mesh");
-        const std::vector<float> model = mesh_vertices(*mesh_, offset_);
+        placed_ = {};
+        for (const TriangleMesh& m : placed_meshes_) {
+            const BoundingBox b = m.bounding_box();
+            if (b.empty)
+                continue;
+            if (placed_.empty) {
+                placed_ = b;
+                continue;
+            }
+            placed_.min = {std::min(placed_.min.x, b.min.x), std::min(placed_.min.y, b.min.y),
+                           std::min(placed_.min.z, b.min.z)};
+            placed_.max = {std::max(placed_.max.x, b.max.x), std::max(placed_.max.y, b.max.y),
+                           std::max(placed_.max.z, b.max.z)};
+        }
+        timing("plate's box");
+        const std::vector<float> model = mesh_vertices(placed_meshes_, offset_);
         timing("view's vertices");
         renderer_.set_model(model);
         vk_view_.set_model(model);
@@ -3152,6 +3169,11 @@ void App::rebuild_plate() {
     if (selected_ >= int(objects_.size()))
         selected_ = int(objects_.size()) - 1;
     ++scene_version_;
+}
+
+TriangleMesh App::plate_now() const {
+    TriangleMesh plate = plate_mesh(placed_meshes_);
+    return offset_ == Vec3{} ? plate : translated(plate, offset_);
 }
 
 // A model was moved, turned, scaled, added or removed: the slice and the
@@ -3421,7 +3443,7 @@ void App::begin_save_project(bool ask) {
     }
     std::filesystem::path name = project_path_.filename();
     if (name.empty())
-        name = mesh_ ? model_path_.stem() : std::filesystem::path("tisma");
+        name = has_plate_ ? model_path_.stem() : std::filesystem::path("tisma");
     name.replace_extension(".tisma");
     purpose_ = Purpose::SaveProject;
     browser_.open(FileBrowser::Mode::Save, tr(T::SaveProject), {".tisma"},
@@ -4011,7 +4033,7 @@ void App::begin_export() {
 }
 
 void App::start_slice() {
-    if (!mesh_ || slice_job_.running())
+    if (!has_plate_ || slice_job_.running())
         return;
     // The whole set, profiles merged: what no model can print stops here.
     try {
@@ -4026,7 +4048,7 @@ void App::start_slice() {
         fail(T::CannotSlice, tr(T::VaseManyObjects));
         return;
     }
-    TriangleMesh placed = translated(*mesh_, offset_);
+    TriangleMesh placed = plate_now();
     Settings settings = settings_;
     // The resin tests print on the platform, without supports, pad or
     // hollowing (calibration_models.md, "Resina").
@@ -4185,7 +4207,7 @@ void App::frame_now() {
     if (result_ && viewer_) {
         const auto& p = result_->preview;
         part = {{p.min[0], p.min[1], 0.0f}, {p.max[0], p.max[1], p.max[2]}};
-    } else if (mesh_ && !placed_.empty) {
+    } else if (has_plate_ && !placed_.empty) {
         part = {{placed_.min.x, placed_.min.y, 0.0f}, {placed_.max.x, placed_.max.y, placed_.max.z}};
     }
     if (part) {
@@ -4240,11 +4262,11 @@ void App::set_tab(Tab tab) {
 }
 
 void App::estimate_voxels_if_stale() {
-    if (!mesh_ || !voxels_stale_ || voxel_job_.running())
+    if (!has_plate_ || !voxels_stale_ || voxel_job_.running())
         return;
     voxels_stale_ = false;
     voxels_made_ = revision_;
-    TriangleMesh placed = translated(*mesh_, offset_);
+    TriangleMesh placed = plate_now();
     Settings settings = settings_;
     voxel_job_.start([placed = std::move(placed), settings = std::move(settings)]() {
         return estimate_voxels(placed, settings);
@@ -7176,7 +7198,7 @@ void App::status_bar() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
     ImGui::SetCursorPosY((height - ImGui::GetTextLineHeight()) * 0.5f);
-    if (mesh_) {
+    if (has_plate_) {
         const Vec3f size{placed_.max.x - placed_.min.x, placed_.max.y - placed_.min.y, placed_.max.z - placed_.min.z};
         // The one left on the plate by its own name: after a delete, the file
         // opened first may be gone (QA, 2026-10-28).
@@ -7184,7 +7206,7 @@ void App::status_bar() {
                                  : objects_.size() == 1 && !objects_.front().name.empty() ? objects_.front().name
                                                                                            : utf8(model_path_.filename());
         loc::Text("%s  ·  %s %s  ·  %.1f × %.1f × %.1f mm", name.c_str(),
-                    number_text(mesh_->triangle_count()).c_str(), tr(T::Triangles), double(size.x), double(size.y),
+                    number_text(plate_triangles_).c_str(), tr(T::Triangles), double(size.x), double(size.y),
                     double(size.z));
     } else {
         loc::TextDisabled("%s", tr(T::NoModel));
@@ -7571,7 +7593,7 @@ void App::slice_panel() {
     const bool can_export = result_ && result_->ok && !viewer_ && !stale_ && result_->check.ok();
     if (!can_export || slicing) {
         if (button("##slice", "tisma_slice", slicing ? tr(T::Slicing) : tr(T::Slice), true, false,
-                   mesh_.has_value() && !slicing, tr(T::SliceTip), button_h))
+                   has_plate_ && !slicing, tr(T::SliceTip), button_h))
             start_slice();
         g_menu_rects["slice"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
                                        ImGui::GetItemRectMax().y);
@@ -9626,7 +9648,7 @@ void App::analysis_panel() {
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 420.0f * scale_);
     loc::TextDisabled("%s", tr(T::AnalysisHint));
     ImGui::Separator();
-    if (!mesh_) {
+    if (!has_plate_) {
         ImGui::TextUnformatted(tr(T::AnalysisNeedsModel));
     } else if (voxel_job_.running() || !voxels_) {
         loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::Estimating));
@@ -10259,11 +10281,11 @@ void App::layout() {
             object_settings_window();
         }
         mixing_dialog();
-        if (!mesh_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
+        if (!has_plate_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
             empty_hint();
         if (tab_ == Tab::Preview)
             preview_panels();
-        if ((tab_ == Tab::Prepare || tab_ == Tab::Preview) && (mesh_ || result_))
+        if ((tab_ == Tab::Prepare || tab_ == Tab::Preview) && (has_plate_ || result_))
             slice_panel();
         if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
             part_labels();
@@ -10425,7 +10447,7 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     // The calibration tab shows its sliced part, up to the chosen segment.
     const bool calibration_preview = tab_ == Tab::Calibration && calibration_ && result_ && !stale_ && !viewer_;
     const bool preview = (tab_ == Tab::Preview && result_) || calibration_preview;
-    f.show_model = mesh_.has_value() && !preview;
+    f.show_model = has_plate_ && !preview;
     f.show_paint = f.show_model && tab_ == Tab::Prepare && tool_ == PlateTool::Paint;
     if (f.show_paint)
         update_paint_view();
@@ -10485,7 +10507,7 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
         const float size = length(Vec3{p.max[0] - p.min[0], p.max[1] - p.min[1], p.max[2] - p.min[2]});
         f.ao_radius = ray ? std::clamp(size * 0.04f, 1.5f, 20.0f) : std::clamp(size * 0.03f, 1.0f, 10.0f);
     } else {
-        const float size = mesh_ ? length(Vec3{placed_.max.x - placed_.min.x, placed_.max.y - placed_.min.y,
+        const float size = has_plate_ ? length(Vec3{placed_.max.x - placed_.min.x, placed_.max.y - placed_.min.y,
                                                placed_.max.z - placed_.min.z})
                                  : 100.0f;
         f.ao_radius = ray ? std::clamp(size * 0.12f, 2.0f, 60.0f) : std::clamp(size * 0.05f, 1.0f, 25.0f);
@@ -10555,8 +10577,8 @@ void App::update_ray_scene() {
     std::vector<RayPrimitive> primitives;
     if (want_preview)
         primitives = preview_primitives(preview_buffers_);
-    else if (mesh_)
-        primitives = model_primitives(*mesh_, offset_);
+    else if (has_plate_)
+        primitives = model_primitives(plate_mesh(placed_meshes_), offset_);
     const std::vector<RayPrimitive> plate = plate_primitives(settings_.bed);
     primitives.insert(primitives.end(), plate.begin(), plate.end());
     const std::uint64_t version = scene_version_;
@@ -11506,7 +11528,7 @@ void App::frame() {
         ++frames_;
         // A preview waits for its slice, unless the slice failed (the error is the picture then).
         const bool slice_pending =
-            (options_.view == "preview" || options_.device_print) && mesh_ && !result_ && error_title_.empty();
+            (options_.view == "preview" || options_.device_print) && has_plate_ && !result_ && error_title_.empty();
         // Ray tracing waits for its scene and for enough samples.
         const bool rays_pending = render_mode_ == RenderMode::RayTraced && !ray_failed_ &&
                                   (ray_job_.running() || !renderer_.has_ray_scene() ||
