@@ -867,6 +867,7 @@ public:
         layer_change_retract_ = s.retract_layer_change;
         wipe_ = s.wipe;
         before_wipe_ = std::clamp(s.before_wipe, 0.0, 100.0) / 100.0;
+        after_wipe_ = std::clamp(s.after_wipe, 0.0, 100.0 - before_wipe_ * 100.0) / 100.0;
         lift_above_ = s.lift_above, lift_below_ = s.lift_below;
         firmware_ = s.firmware_retraction;
         if (s.ramping_lift && s.travel_slope > 0.0) {
@@ -1673,10 +1674,12 @@ private:
 
     // The filament pulled back (retraction_travel.md, rules 3 and 7): G10
     // with the firmware's retraction; else E back by its length, standing,
-    // or with retraction.wipe before_wipe of it standing and the rest while
-    // the nozzle goes back over the path just printed at wipe_feed, along
-    // rest * wipe_feed / (0.95 * the retraction's speed). What a shorter path
-    // cannot take is pulled standing at its end. 0: no wipe.
+    // or with retraction.wipe before_wipe of it standing, after_wipe of it
+    // standing after the wipe (orca_2_5.md, rule 2; never more than what
+    // before_wipe leaves) and the rest while the nozzle goes back over the
+    // path just printed at wipe_feed, along rest * wipe_feed / (0.95 * the
+    // retraction's speed). What a shorter path cannot take is pulled
+    // standing at its end. 0: no wipe.
     void retract(double wipe_feed) {
         if (retracted_ || !(retract_ > 0.0))
             return;
@@ -1701,7 +1704,8 @@ private:
             pull(retract_);
             return;
         }
-        const double first = retract_ * before_wipe_, rest = retract_ - first;
+        const double first = retract_ * before_wipe_, after = retract_ * after_wipe_,
+                     rest = std::max(0.0, retract_ - first - after);
         pull(first);
         const double length = rest * wipe_feed / (0.95 * retract_feed_);
         double done = 0.0, pulled = 0.0;
@@ -1722,7 +1726,7 @@ private:
         }
         x_value_ = at.x, y_value_ = at.y;
         other_time_ += done / wipe_feed;
-        pull(rest - pulled);
+        pull(rest - pulled + after);
         wiped_path_.clear();
     }
 
@@ -2029,7 +2033,7 @@ private:
     // firmware's retraction and the ramp's slope (0: a lift straight up).
     double unretract_feed_ = 0.0, restart_extra_ = 0.0;
     bool layer_change_retract_ = false, wipe_ = false, firmware_ = false;
-    double before_wipe_ = 0.0, lift_above_ = 0.0, lift_below_ = 0.0, ramp_tan_ = 0.0;
+    double before_wipe_ = 0.0, after_wipe_ = 0.0, lift_above_ = 0.0, lift_below_ = 0.0, ramp_tan_ = 0.0;
     std::vector<Point2d> wiped_path_; // the path printed since the last travel
     bool layer_z_pending_ = false;     // the layer's move up waits for its first travel's ramp
     bool descend_ = false;             // a new object: the first travel goes over at safe_z_, then down

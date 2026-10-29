@@ -10,6 +10,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Retracción después del barrido** (`retraction.after_wipe`, ficha `orca_2_5.md`, regla 2): la parte de la
+  retracción, en %, que se hace quieta después del barrido; se recorta a 100 − `before_wipe`. En el panel, el barrido
+  y sus dos partes van en su propia tarjeta, «Barrido».
+
 ## [0.10.0-alpha.3] - 2026-10-29
 
 ### Agregado

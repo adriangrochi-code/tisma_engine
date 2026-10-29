@@ -256,6 +256,17 @@
      "still before the wipe starts; the rest is done while wiping.\n\nHigher cuts the pressure right away before "
      "moving; lower leaves more filament to retract during the wipe, which cleans the tip better.\n\nExample: 0 % "
      "does the whole retraction while wiping; 50 % does half standing still and half while wiping."},
+    {"retraction.after_wipe",
+     "Solo cuenta con el barrido encendido. Es qué parte de la retracción, en porcentaje, se hace con la boquilla "
+     "quieta después de barrer. Con la de antes del barrido y esta, lo que queda se hace barriendo; las dos juntas "
+     "nunca pasan de 100 %: si se pide más, esta se recorta.\n\nSirve para terminar de tirar del filamento ya lejos "
+     "de la marca, sin que la retracción alargue el barrido.\n\nEjemplo: 0 % para empezar; con 20 % antes y 30 % "
+     "después, de 2 mm se retraen 0,4 quieta, 1 barriendo y 0,6 quieta al final.",
+     "It only matters with wipe on. It is how much of the retraction, in percent, is done with the nozzle standing "
+     "still after the wipe. With the part before the wipe and this one, what is left is done while wiping; the two "
+     "together never pass 100 %: asked for more, this one is cut.\n\nIt finishes pulling the filament away from "
+     "the mark, without the retraction making the wipe longer.\n\nExample: 0 % to start; with 20 % before and 30 % "
+     "after, of 2 mm 0.4 are pulled standing, 1 while wiping and 0.6 standing at the end."},
     {"retraction.firmware",
      "El firmware es el programa que corre dentro de la impresora. Con este ajuste, el G-code no dice cuánto ni a qué "
      "velocidad retraer: solo dice retraé (G10) y volvé (G11), y la impresora usa los valores que tiene "

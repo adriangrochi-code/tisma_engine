@@ -8480,3 +8480,15 @@ la 0.10.0-alpha.3).
 **Sigue:** O1 (reglas 1 a 5) y la propuesta de cómo integrar SolidCraft para el espacio de diseño CAD (pedido del
 dueño, por el equipo de fichas). Se está revisando su licencia y la de sus dependencias antes de proponer nada.
 
+## 2026-10-29 (noche): OrcaSlicer 2.5, regla 2 (retracción después del barrido)
+
+`retraction.after_wipe`: la parte de la retracción, en %, que se hace con la boquilla quieta después del barrido. Se
+recorta a 100 − `before_wipe`, y lo que queda se hace durante el barrido.
+- **Motor:** en el escritor, `retract`.
+- **Ajustes:** la clave, el filamento la puede pisar como las otras de retracción, y está en `CONFIG.md`.
+- **Panel:** el barrido y sus dos partes pasan a su propia tarjeta, «Barrido», porque la de retracción llegaba a 9
+  ajustes y el máximo es 8. La ficha del ajuste va en español y en inglés.
+- **Pruebas** (`[retraction]`):
+  - con 2 mm, 20 % antes y 30 % después: 0,4 quieta, 1 barriendo y 0,6 quieta, por los mismos 2,73 mm;
+  - OR2, 90 % después: se recorta a 80 %, 0,4 y 1,6 quietas, sin barrido.
+

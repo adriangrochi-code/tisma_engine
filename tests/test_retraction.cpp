@@ -340,6 +340,29 @@ TEST_CASE("retraction: a wipe retracts over the path just printed (R3)", "[retra
     CHECK_THAT(standing, WithinAbs(1.0, 1e-5));
     CHECK_THAT(pulled, WithinAbs(1.0, 1e-4));
     CHECK_THAT(length, WithinAbs(2.73, 0.01));
+    // Part of it standing after the wipe too (orca_2_5.md, rule 2): of 2 mm,
+    // 0.4 before, 0.6 after and 1 while wiping, along the same 2.73 mm.
+    s.before_wipe = 20.0;
+    s.after_wipe = 30.0;
+    first_wipe(read(gcode_of(cube(), s)), length, pulled, standing, feed);
+    CHECK_THAT(standing, WithinAbs(0.4, 1e-5));
+    CHECK_THAT(pulled, WithinAbs(1.6, 1e-4)); // 1 while wiping and 0.6 standing after
+    CHECK_THAT(length, WithinAbs(2.73, 0.01));
+    // OR2: 90 % after is cut to the 80 % that before_wipe leaves: 0.4 mm
+    // standing, then 1.6 mm standing, and no wipe.
+    s.after_wipe = 90.0;
+    const Read r = read(gcode_of(cube(), s));
+    std::vector<double> run;
+    for (std::size_t k = r.layer_starts[5]; k < r.layer_starts[6] && run.size() < 2; ++k) {
+        CHECK_FALSE(wipe(r.moves[k]));
+        if (standing_retraction(r.moves[k]))
+            run.push_back(-r.moves[k].e);
+        else if (!run.empty())
+            run.clear();
+    }
+    REQUIRE(run.size() == 2);
+    CHECK_THAT(run[0], WithinAbs(0.4, 1e-5));
+    CHECK_THAT(run[1], WithinAbs(1.6, 1e-5));
 }
 
 TEST_CASE("retraction: the lift only above or below a height (R4)", "[retraction]") {

@@ -1218,7 +1218,7 @@ const std::map<T, const char*>& row_keys() {
         {T::RetractMinTravel, "retraction.min_travel"}, {T::Abrasive, "extrusion.abrasive"},
         {T::UnretractSpeed, "retraction.unretract_speed"}, {T::RestartExtra, "retraction.restart_extra"},
         {T::RetractLayerChange, "retraction.on_layer_change"}, {T::WipeRow, "retraction.wipe"},
-        {T::BeforeWipe, "retraction.before_wipe"},
+        {T::BeforeWipe, "retraction.before_wipe"}, {T::AfterWipe, "retraction.after_wipe"},
         {T::Coast, "retraction.coast"}, {T::FirmwareRetraction, "retraction.firmware"},
         {T::LiftAbove, "retraction.lift_above"}, {T::LiftBelow, "retraction.lift_below"},
         {T::RampingLift, "travel.ramping_lift"}, {T::TravelSlope, "travel.slope"}, {T::MaxLift, "travel.max_lift"},
@@ -6975,9 +6975,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
            s.unretract_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue), 0.5f);
         mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, 0.0, 10.0, "%.2f mm", 0.01f);
         flag(T::RetractLayerChange, "retraction.on_layer_change", s.retract_layer_change);
+        flag(T::FirmwareRetraction, "retraction.firmware", s.firmware_retraction);
+    } else if (id == "wipe") {
         flag(T::WipeRow, "retraction.wipe", s.wipe);
         mm(T::BeforeWipe, "retraction.before_wipe", s.before_wipe, 0.0, 100.0, "%.0f %%", 0.5f);
-        flag(T::FirmwareRetraction, "retraction.firmware", s.firmware_retraction);
+        mm(T::AfterWipe, "retraction.after_wipe", s.after_wipe, 0.0, 100.0, "%.0f %%", 0.5f);
     } else if (id == "retract_travel") {
         mm(T::RetractLift, "retraction.lift", s.retract_lift, 0.0, 10.0, "%.2f mm", 0.01f);
         mm(T::RetractMinTravel, "retraction.min_travel", s.retract_min_travel, 0.0, 50.0, "%.1f mm", 0.05f);

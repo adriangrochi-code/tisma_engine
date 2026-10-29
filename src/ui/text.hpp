@@ -905,6 +905,7 @@
     X(SubPressure, "Presión", "Pressure") \
     X(SubMaxFlow, "Flujo máximo", "Maximum flow") \
     X(SubRetract, "Retracción", "Retraction") \
+    X(SubWipe, "Barrido", "Wipe") \
     X(SubRetractTravel, "Viajes", "Travel") \
     X(SubNeeds, "Necesidades", "Requirements") \
     X(SubBedVolume, "Cama y volumen", "Bed and volume") \
@@ -999,6 +1000,7 @@
     X(SumHeightSteps, "%d tramos por Z", "%d steps by Z") \
     X(SumAdaptive, "Según la pendiente", "By the slope") \
     X(SumOff, "Apagado", "Off") \
+    X(SumOn, "Encendido", "On") \
     X(SumMm, "%s mm", "%s mm") \
     X(SumScarf, "%s · en bufanda", "%s · scarf") \
     X(SumNoCorrections, "Sin correcciones", "No corrections") \
@@ -1529,6 +1531,7 @@
     X(RetractLayerChange, "Retraer al cambiar de capa", "Retract on layer change") \
     X(WipeRow, "Barrer al retraer", "Wipe while retracting") \
     X(BeforeWipe, "Retracción antes del barrido", "Retraction before the wipe") \
+    X(AfterWipe, "Retracción después del barrido", "Retraction after the wipe") \
     X(FirmwareRetraction, "Retracción del firmware (G10/G11)", "Firmware retraction (G10/G11)") \
     X(LiftAbove, "Saltar solo por encima de", "Lift only above") \
     X(LiftBelow, "Saltar solo por debajo de", "Lift only below") \

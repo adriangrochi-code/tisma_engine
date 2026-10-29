@@ -339,11 +339,11 @@ double* limit_named(Settings& s, std::string_view n) {
     return nullptr;
 }
 
-const std::array<const char*, 14> kFilamentRetractionNames = {
+const std::array<const char*, 15> kFilamentRetractionNames = {
     "retraction.length",      "retraction.speed",      "retraction.unretract_speed", "retraction.restart_extra",
     "retraction.lift",        "retraction.lift_above", "retraction.lift_below",      "retraction.min_travel",
-    "retraction.on_layer_change", "retraction.wipe",   "retraction.before_wipe",     "travel.ramping_lift",
-    "travel.slope",           "travel.max_lift"};
+    "retraction.on_layer_change", "retraction.wipe",   "retraction.before_wipe",     "retraction.after_wipe",
+    "travel.ramping_lift",    "travel.slope",          "travel.max_lift"};
 
 double per_extruder(const std::vector<double>& values, std::size_t extruder, double fallback) {
     if (values.empty())
@@ -409,7 +409,8 @@ Settings with_filament_retraction(const Settings& settings) {
             {"retraction.unretract_speed", &s.unretract_speed}, {"retraction.restart_extra", &s.restart_extra},
             {"retraction.lift", &s.retract_lift},            {"retraction.lift_above", &s.lift_above},
             {"retraction.lift_below", &s.lift_below},        {"retraction.min_travel", &s.retract_min_travel},
-            {"retraction.before_wipe", &s.before_wipe},      {"travel.slope", &s.travel_slope},
+            {"retraction.before_wipe", &s.before_wipe},      {"retraction.after_wipe", &s.after_wipe},
+            {"travel.slope", &s.travel_slope},
             {"travel.max_lift", &s.max_lift}};
         for (const auto& [name, field] : numbers)
             if (key == name)
@@ -2056,7 +2057,7 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "retraction",
                {"length", "speed", "lift", "min_travel", "unretract_speed", "restart_extra", "on_layer_change", "wipe",
-                "before_wipe", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra",
+                "before_wipe", "after_wipe", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra",
                 "coast"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    // A tool change's (multi_extruder.md, rule 5): one value for
@@ -2084,15 +2085,19 @@ Settings parse_checked(std::string_view text) {
                            g.at(n).get<bool>();
                        return;
                    }
-                   if (n == "unretract_speed" || n == "restart_extra" || n == "before_wipe" || n == "lift_above" ||
-                       n == "lift_below") {
+                   if (n == "unretract_speed" || n == "restart_extra" || n == "before_wipe" || n == "after_wipe" ||
+                       n == "lift_above" || n == "lift_below") {
                        const double d = number(g, n, k);
-                       const double top = n == "unretract_speed" ? 1000.0 : n == "before_wipe" ? 100.0 : n == "restart_extra" ? 10.0 : 10000.0;
+                       const double top = n == "unretract_speed"                      ? 1000.0
+                                          : n == "before_wipe" || n == "after_wipe" ? 100.0
+                                          : n == "restart_extra"                    ? 10.0
+                                                                                    : 10000.0;
                        if (!(d >= 0.0 && d <= top))
                            fail(k, "must be from 0 to " + std::to_string(int(top)));
                        (n == "unretract_speed" ? s.unretract_speed
                         : n == "restart_extra" ? s.restart_extra
                         : n == "before_wipe"   ? s.before_wipe
+                        : n == "after_wipe"    ? s.after_wipe
                         : n == "lift_above"    ? s.lift_above
                                                : s.lift_below) = d;
                        return;
@@ -3313,6 +3318,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"retraction.on_layer_change", flag(s.retract_layer_change)},
         {"retraction.wipe", flag(s.wipe)},
         {"retraction.before_wipe", num(s.before_wipe)},
+        {"retraction.after_wipe", num(s.after_wipe)},
         {"retraction.coast", num(s.coast)},
         {"retraction.lift_above", num(s.lift_above)},
         {"retraction.lift_below", num(s.lift_below)},
@@ -3815,6 +3821,7 @@ std::string settings_json(const Settings& s) {
           {"on_layer_change", s.retract_layer_change},
           {"wipe", s.wipe},
           {"before_wipe", s.before_wipe},
+          {"after_wipe", s.after_wipe},
           {"coast", s.coast},
           {"lift_above", s.lift_above},
           {"lift_below", s.lift_below},

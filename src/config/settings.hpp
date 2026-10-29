@@ -605,6 +605,7 @@ struct Settings {
     bool retract_layer_change = false;
     bool wipe = false;
     double before_wipe = 0.0;        // % of the retraction done standing, before the wipe
+    double after_wipe = 0.0;         // % done standing after it, up to 100 - before_wipe (orca_2_5.md, rule 2)
     double coast = 0.0;              // mm of each wall's and infill's end run without E (coasting.md); 0: off
     double lift_above = 0.0, lift_below = 0.0; // mm: the lift only above / below; 0: no limit
     bool firmware_retraction = false; // G10 and G11
@@ -922,7 +923,7 @@ bool color_mixing_offered(const Settings& settings);
 
 // The settings a filament may give its own value of (retraction_travel.md,
 // rule 10), and the settings with the filament's values in place.
-extern const std::array<const char*, 14> kFilamentRetractionNames;
+extern const std::array<const char*, 15> kFilamentRetractionNames;
 Settings with_filament_retraction(const Settings& settings);
 
 // Parses settings JSON. Throws SettingsError naming the key on bad input.

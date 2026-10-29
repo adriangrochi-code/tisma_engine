@@ -311,9 +311,9 @@ const std::vector<SectionLayout>& material_layout() {
             {"retraction.unretract_speed", A},
             {"retraction.restart_extra", A},
             {"retraction.on_layer_change", N},
-            {"retraction.wipe", N},
-            {"retraction.before_wipe", A},
             {"retraction.firmware", A}}},
+          {"wipe", T::SubWipe,
+           {{"retraction.wipe", N}, {"retraction.before_wipe", A}, {"retraction.after_wipe", A}}},
           {"retract_travel", T::SubRetractTravel,
            {{"retraction.lift", B},
             {"retraction.min_travel", N},
@@ -759,6 +759,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                    : tr(T::SumNoRetract);
     if (id == "retract_travel")
         return s.retract_lift > 0.0 ? format(T::SumHop, number(s.retract_lift).c_str()) : tr(T::SumNoHop);
+    if (id == "wipe")
+        return s.wipe ? tr(T::SumOn) : tr(T::SumOff);
     if (id == "coast")
         return s.coast > 0.0 ? number(s.coast) + " mm" : tr(T::SumOff);
     if (id == "material_retraction")
