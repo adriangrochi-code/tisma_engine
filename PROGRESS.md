@@ -7732,4 +7732,9 @@ lo de afuera cuelga). Tiempos iguales con soporte: esfera de prueba 0,16 → 0,1
 medir: una pieza con muchas islas de voladizo y una capa de miles de aristas (cada fila recorre todas las aristas de
 la capa).
 
-**Sigue:** la respuesta sobre la L; el botón Laminar abajo a la derecha o el paso 5 de la vista previa.
+Respuesta del equipo de fichas, el mismo bloque: gana S11 (la L es voladizo, decisión del dueño) y la ficha suma la
+condición de cruzar cada apoyo a 60° o más (`aa0c7c3` en `spec/next`, todavía no en `dev`), la misma que se usó.
+Línea nueva de S11, agregada a la prueba: dos paredes en V que abren 30° son puente adentro de la V y voladizo
+afuera.
+
+**Sigue:** el botón Laminar abajo a la derecha o el paso 5 de la vista previa.

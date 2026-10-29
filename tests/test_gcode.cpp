@@ -2198,6 +2198,33 @@ TEST_CASE("support: bridge or overhang point by point (supports_skirt.md rule 3,
     CHECK(bridged(rect(8, 8, 12, 12)) < 0.01);
     CHECK(bridged(rect(0, 0, 5, 5)) < 0.01);
     CHECK(bridged(join({rect(0, 0, 2, 20), rect(0, 0, 20, 2)})) < 0.01);
+    // Two walls in a V opening 30° (from (10, 0), 15° each side of +Y): inside
+    // it, bridge from wall to wall; outside it, overhang.
+    const auto wall = [&](double side) {
+        const double a = side * 15.0 * std::numbers::pi / 180.0, w = 1.0;
+        const double dx = std::sin(a), dy = std::cos(a), nx = dy, ny = -dx;
+        const auto at = [&](double t, double u) {
+            return Clipper2Lib::Point64(to_units(10.0 + t * dx + u * nx), to_units(t * dy + u * ny));
+        };
+        Polygon p{at(0, -w), at(30, -w), at(30, w), at(0, w)};
+        if (Clipper2Lib::Area(p) < 0)
+            std::reverse(p.begin(), p.end());
+        return Polygons{p};
+    };
+    const Polygons v = Clipper2Lib::Intersect(join({wall(-1.0), wall(1.0)}), slab, Clipper2Lib::FillRule::NonZero);
+    const Polygons v_over = Clipper2Lib::Difference(slab, offset(v, reach), Clipper2Lib::FillRule::NonZero);
+    const Polygons v_bridge = bridged_part(v_over, slab, v, 0.2);
+    const auto inside = [](const Polygons& area, double x, double y) {
+        for (const Polygon& path : area)
+            if (Clipper2Lib::PointInPolygon(Clipper2Lib::Point64(to_units(x), to_units(y)), path) ==
+                Clipper2Lib::PointInPolygonResult::IsInside)
+                return true;
+        return false;
+    };
+    CHECK(inside(v_bridge, 10.0, 15.0));
+    CHECK(inside(v_bridge, 10.0, 8.0));
+    CHECK_FALSE(inside(v_bridge, 2.0, 15.0));
+    CHECK_FALSE(inside(v_bridge, 18.0, 15.0));
     // A slab over two pillars and past them: the part past them hangs.
     const double past = bridged(join({rect(0, 0, 5, 10), rect(15, 0, 20, 10)}));
     CHECK(past > 0.1);
