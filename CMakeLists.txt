@@ -252,6 +252,7 @@ add_library(tisma_core
   src/io/xml.cpp
   src/io/model.cpp
   src/io/threemf.cpp
+  src/io/paths.cpp
   src/calibration/calibration.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp

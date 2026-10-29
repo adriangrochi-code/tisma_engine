@@ -9,6 +9,7 @@
 
 #include <charconv>
 #include <cmath>
+#include <filesystem>
 #include <fstream>
 #include <vector>
 
@@ -130,6 +131,10 @@ ModelFile parse_model(std::string_view data, std::string_view extension) {
 }
 
 ModelFile read_model(const std::filesystem::path& path) {
+    // A folder opens as a stream on some systems and read as a huge size
+    // (the spec team's BH18: "internal: std::bad_alloc").
+    if (std::error_code ec; std::filesystem::is_directory(path, ec))
+        throw ModelError("'" + path.string() + "' is a folder, not a model");
     std::ifstream in(path, std::ios::binary | std::ios::ate);
     if (!in)
         throw ModelError("cannot open '" + path.string() + "'");

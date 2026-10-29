@@ -270,7 +270,7 @@ static Profile parse_profile_checked(std::string_view text) {
     try {
         root = ordered_json::parse(text.begin(), text.end());
     } catch (const ordered_json::parse_error& e) {
-        fail(std::string("not valid JSON: ") + e.what());
+        fail(json_error(text, e.byte));
     }
     if (!root.is_object() || root.value("format", std::string()) != "tisma-profile")
         fail("not a profile (\"format\" must be \"tisma-profile\")");

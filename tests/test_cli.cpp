@@ -472,3 +472,74 @@ TEST_CASE("slice: the object group gives the model its extruder (multi_extruder.
     CHECK_THAT(bad.err, ContainsSubstring("object.extruder: extruder 3, but the machine has 2"));
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("no output goes over an input, another output or a device (the spec team's BH15, BH16)", "[cli]") {
+    namespace fs = std::filesystem;
+    const fs::path dir = test_temp_dir() / "tisma_test_outputs";
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    const fs::path model = dir / "m.stl", config = dir / "c.json";
+    fs::copy_file(kData + "/cube_ascii.stl", model);
+    fs::copy_file(kData + "/settings.json", config);
+    const auto size_of = [](const fs::path& p) { return fs::file_size(p); };
+    const std::uintmax_t model_size = size_of(model), config_size = size_of(config);
+    const auto slice = [&](const std::string& out, std::vector<std::string> more = {}) {
+        std::vector<std::string> args{"slice", model.string(), "--config", config.string(), "-o", out};
+        args.insert(args.end(), more.begin(), more.end());
+        return run(args);
+    };
+    // The model, the settings, "./" and a link to them: refused, both kept.
+    for (const fs::path& over : {model, config, dir / "." / "m.stl"}) {
+        const Run r = slice(over.string());
+        CHECK(r.code == kExitInput);
+        CHECK_THAT(r.err, ContainsSubstring("is the same file as"));
+    }
+    std::error_code ec;
+    fs::create_symlink(model, dir / "link.stl", ec);
+    if (!ec)
+        CHECK(slice((dir / "link.stl").string()).code == kExitInput);
+    CHECK(size_of(model) == model_size);
+    CHECK(size_of(config) == config_size);
+    // Two outputs on one file.
+    const fs::path gcode = dir / "out.gcode";
+    const Run both = slice(gcode.string(), {"--warnings", gcode.string()});
+    CHECK(both.code == kExitInput);
+    CHECK_THAT(both.err, ContainsSubstring("are the same file"));
+    // A folder is not an output (-o names its file inside one, gcode_templates.md, rule 15).
+    const Run folder = slice(gcode.string(), {"--warnings", dir.string()});
+    CHECK(folder.code == kExitInput);
+    CHECK_THAT(folder.err, ContainsSubstring("is a folder"));
+    // A link to the G-code: the file it points to gets it, the link stays.
+    const fs::path real = dir / "real.gcode";
+    { std::ofstream(real) << "old\n"; }
+    fs::create_symlink(real, dir / "to_real.gcode", ec);
+    if (!ec) {
+        CHECK(slice((dir / "to_real.gcode").string()).code == kExitOk);
+        CHECK(fs::is_symlink(dir / "to_real.gcode"));
+        CHECK(size_of(real) > 100);
+    }
+#ifndef _WIN32
+    // A device is not replaced by a file (as root, the rename would succeed).
+    if (fs::exists("/dev/null")) {
+        const Run r = slice("/dev/null");
+        CHECK(r.code == kExitInput);
+        CHECK_THAT(r.err, ContainsSubstring("is not a regular file"));
+        CHECK(fs::is_character_file("/dev/null"));
+    }
+#endif
+    fs::remove_all(dir);
+}
+
+TEST_CASE("a folder given as the model or the settings says so (the spec team's BH18)", "[cli]") {
+    namespace fs = std::filesystem;
+    const fs::path dir = test_temp_dir() / "tisma_test_folder.stl";
+    fs::create_directories(dir);
+    const Run info = run({"info", dir.string()});
+    CHECK(info.code == kExitInput);
+    CHECK_THAT(info.err, ContainsSubstring("is a folder, not a model"));
+    const Run config = run({"slice", kData + "/cube_ascii.stl", "--config", dir.string(), "-o",
+                            (test_temp_dir() / "tisma_test_folder.gcode").string()});
+    CHECK(config.code == kExitInput);
+    CHECK_THAT(config.err, ContainsSubstring("is a folder, not a settings file"));
+    fs::remove_all(dir);
+}

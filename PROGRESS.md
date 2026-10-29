@@ -8158,3 +8158,19 @@ BH8 (mensaje cuando las copias no entran), BH9 (AMF y STEP leídos como STL) y l
 
 Quedan: BH7 (no lo reproduje; pedí el archivo) y los totales de filamento por extrusor (espera una ficha).
 
+## 2026-10-29: las salidas y las entradas (BH15 a BH18, TR21 en parte)
+
+- **BH15 y BH16 (se perdían datos):** `slice … -o m.stl` reemplazaba el modelo por el G-code, `--warnings` igual a
+  `-o` escribía uno sobre el otro, `-o /dev/full` (como root) reemplazaba el dispositivo por un archivo, y `-o` a un
+  enlace reemplazaba el enlace. Módulo nuevo `src/io/paths.*`: `write_target` sigue los enlaces, `output_problem`
+  rechaza lo que existe y no es un archivo común, `same_file` compara por archivo (`equivalent`) o por la ruta
+  absoluta. La línea de comandos revisa cada salida contra cada entrada y contra las otras salidas (código 2), y
+  `write_file` y `export_gcode` escriben el `.part` junto al archivo real. `-o` puede seguir siendo una carpeta
+  (`output.filename_format`). Prueba de la línea de comandos con todos los casos, `/dev/null` incluido.
+- **BH18:** una carpeta como modelo, ajustes o caso de carga dice «'…' is a folder, not a model» (o «not a settings
+  file», «not a load case»), código 2; antes, «internal: std::bad_alloc».
+- **TR21 (la parte del motor):** el JSON que no se lee dice «not valid JSON at line 2, column 24» o «the file is
+  empty» (`json_error`), en los ajustes, los perfiles y el caso de carga. Falta traducir al español los errores de
+  carga en el cuadro de la interfaz.
+- **BH17:** un STL ASCII que empieza con el BOM de UTF-8 se lee como texto.
+

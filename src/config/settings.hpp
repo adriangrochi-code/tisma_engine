@@ -928,6 +928,11 @@ Settings with_filament_retraction(const Settings& settings);
 // Parses settings JSON. Throws SettingsError naming the key on bad input.
 Settings parse_settings(std::string_view json);
 
+// What is wrong with JSON that does not parse, in words: "the file is empty",
+// or "not valid JSON at line L, column C" from the parser's byte position
+// (the spec team's TR21: the library's own text reached the dialogs).
+std::string json_error(std::string_view text, std::size_t byte);
+
 // The settings of an object or a part (model_tools.md, rules 5, 7 and 8):
 // `own`, a JSON object of groups with the profile's keys, over `base`. Only
 // the groups the slicing of a region reads are taken today (walls, infill,

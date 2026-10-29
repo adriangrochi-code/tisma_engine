@@ -232,6 +232,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Las salidas no pisan las entradas (BH15, BH16):** `-o`, `--warnings`, `--vtk` y `--mesh` no pueden ser el
+  modelo, los ajustes, el caso de carga ni otra salida (también por `./` o un enlace): error con código 2. Un enlace
+  se sigue y se escribe el archivo al que apunta; un dispositivo, una tubería o una carpeta no se reemplazan.
+- **Una carpeta como modelo o como ajustes (BH18)** dice «is a folder», con código 2, en lugar de un error interno.
+- **JSON inválido (TR21):** «not valid JSON at line L, column C» o «the file is empty», en lugar del texto de la
+  biblioteca.
+- **STL ASCII con BOM UTF-8 (BH17):** se lee como texto.
 - **Calibración de temperatura con el calefactor apagado (BH10):** las franjas van de 150 a 500 °C (`start` 0, o un
   paso que llega a una temperatura fría, es un error), y el chequeo del G-code rechaza extruir con la boquilla en 0
   (`M104 S0` o `M109 S0` sin otra temperatura después).

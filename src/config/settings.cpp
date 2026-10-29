@@ -11,11 +11,13 @@
 #include <array>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <set>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
@@ -750,12 +752,30 @@ void material_aliases(json& root) {
     }
 }
 
+} // namespace
+
+std::string json_error(std::string_view text, std::size_t byte) {
+    if (text.find_first_not_of(" \t\r\n") == std::string_view::npos)
+        return "the file is empty";
+    const std::size_t at = std::min<std::size_t>(byte > 0 ? byte - 1 : 0, text.size());
+    std::size_t line = 1, column = 1;
+    for (std::size_t i = 0; i < at; ++i) {
+        if (text[i] == '\n')
+            ++line, column = 1;
+        else
+            ++column;
+    }
+    return "not valid JSON at line " + std::to_string(line) + ", column " + std::to_string(column);
+}
+
+namespace {
+
 Settings parse_checked(std::string_view text) {
     json root;
     try {
         root = json::parse(text.begin(), text.end());
     } catch (const json::parse_error& e) {
-        throw SettingsError(std::string("settings: not valid JSON: ") + e.what());
+        throw SettingsError("settings: " + json_error(text, e.byte));
     }
     if (!root.is_object())
         throw SettingsError("settings: the top level must be an object");
@@ -3927,6 +3947,8 @@ std::string settings_json(const Settings& s) {
 }
 
 Settings load_settings(const std::filesystem::path& path) {
+    if (std::error_code ec; std::filesystem::is_directory(path, ec))
+        throw SettingsError("settings: '" + path.string() + "' is a folder, not a settings file");
     std::ifstream in(path, std::ios::binary);
     if (!in)
         throw SettingsError("settings: cannot open '" + path.string() + "'");

@@ -181,6 +181,10 @@ TEST_CASE("settings: the specs' names for settings the engine has under another 
 
 TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings("{"), ContainsSubstring("not valid JSON"));
+    CHECK_THROWS_WITH(parse_settings("{\n  \"layers\": {\"height\": }\n}"),
+                      ContainsSubstring("not valid JSON at line 2, column 24"));
+    CHECK_THROWS_WITH(parse_settings("{\n  \"layers\": {\"height\": }\n}"), !ContainsSubstring("json.exception"));
+    CHECK_THROWS_WITH(parse_settings("  \n"), ContainsSubstring("the file is empty"));
     CHECK_THROWS_WITH(parse_settings("[]"), ContainsSubstring("top level"));
     CHECK_THROWS_WITH(parse_settings(R"({"layer": {}})"), ContainsSubstring("layer: unknown group"));
     CHECK_THROWS_WITH(parse_settings(R"({"layers": {"hieght": 0.2}})"), ContainsSubstring("layers.hieght: unknown setting"));
