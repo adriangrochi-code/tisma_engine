@@ -57,6 +57,10 @@ struct ViewFrame {
     bool debug_visibility = false; // paint the visibility instead of the light (TISMA_DEBUG_VISIBILITY=1)
 };
 
+// Everything in a frame that changes its picture: two frames with the same
+// key and the same data draw the same picture.
+std::vector<double> frame_key(const ViewFrame& f);
+
 // The ray traced frame's inputs and output, read back for checking the GPU
 // against RayScene (the CPU reference).
 struct RayReadback {
@@ -100,7 +104,12 @@ public:
     int ray_samples() const { return ray_samples_; }
     int max_samples() const { return max_samples_; }
 
+    // Draws the frame: the scene only if the frame or the data changed since
+    // the last one drawn (or rays are still averaging), else the last picture
+    // again (the QA team's preview plan, step 2).
     void draw(const ViewFrame& frame);
+    // The next draw draws the scene even if nothing changed (--bench-frames).
+    void redraw() { drawn_.clear(); }
 
     // After a ray traced frame: its G-buffer and visibility.
     RayReadback read_back();
@@ -169,6 +178,8 @@ private:
     int ray_samples_ = 0, ray_current_ = 0;
     std::uint32_t ray_frame_ = 0;
     std::vector<float> ray_signature_;
+    std::vector<double> drawn_; // the frame in colour_ (frame_key); empty: none
+    void scene_changed();       // the data changed: averaging, occlusion and picture start again
 };
 
 } // namespace tisma::ui

@@ -1007,7 +1007,29 @@ void screen_pass(unsigned empty_vao) {
 void put(std::vector<float>& v, const Mat4& m) { v.insert(v.end(), m.begin(), m.end()); }
 void put(std::vector<float>& v, Vec3 p) { v.insert(v.end(), {p.x, p.y, p.z}); }
 
+
 } // namespace
+
+std::vector<double> frame_key(const ViewFrame& f) {
+    std::vector<double> k;
+    const auto add = [&](std::initializer_list<double> values) { k.insert(k.end(), values); };
+    const auto vec = [&](Vec3 p) { add({p.x, p.y, p.z}); };
+    add({double(f.x), double(f.y), double(f.width), double(f.height)});
+    k.insert(k.end(), f.view.begin(), f.view.end());
+    k.insert(k.end(), f.projection.begin(), f.projection.end());
+    for (const Vec3 p : {f.eye, f.key, f.fill, f.sky, f.ground, f.background_top, f.background_bottom, f.plate, f.model,
+                         f.model_selected, f.selected_offset})
+        vec(p);
+    for (const Vec3 p : f.kind_colours)
+        vec(p);
+    add({double(f.selected_first), double(f.selected_count), double(f.show_model), double(f.coarse),
+         double(f.coarse_selected_first), double(f.coarse_selected_count), double(f.show_paint),
+         double(f.show_preview), double(f.show_travels), double(f.first_layer), double(f.last_layer),
+         double(f.top_shown), double(f.top_hidden), double(f.kind_mask), double(f.color_mode), double(f.mode),
+         double(f.samples), double(f.fxaa), double(f.moire_filter), f.ao_radius, f.ao_strength, f.sun_radius,
+         double(f.max_ray_samples), double(f.debug_visibility)});
+    return k;
+}
 
 bool Renderer::init(std::string& error) {
     struct Source {
@@ -1105,7 +1127,12 @@ void Renderer::resize(int width, int height, int samples) {
         colour_fbo_ = make_framebuffer(colour_, 0, colour_depth_);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    scene_changed();
+}
+
+void Renderer::scene_changed() {
     ray_signature_.clear();
+    drawn_.clear();
 }
 
 void Renderer::shutdown() {
@@ -1157,7 +1184,7 @@ void Renderer::set_bed(const BedPolygon& bed, const BedLook& look) {
     grid_outline_ = lines.empty() ? 0 : static_cast<int>(2 * bed.size()); // bed_lines puts it last
     grid_step_ = float(look.step);
     grid_major_every_ = std::max(look.major_every, 1);
-    ray_signature_.clear();
+    scene_changed();
 }
 
 void Renderer::set_model_coarse(const std::vector<float>& vertices) {
@@ -1169,6 +1196,7 @@ void Renderer::set_model_coarse(const std::vector<float>& vertices) {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
     model_coarse_.count = static_cast<int>(vertices.size() / 6);
+    scene_changed();
 }
 
 void Renderer::set_model(const std::vector<float>& vertices) {
@@ -1188,7 +1216,7 @@ void Renderer::set_model(const std::vector<float>& vertices) {
         model_hi_ = Vec3{std::max(model_hi_.x, vertices[i]), std::max(model_hi_.y, vertices[i + 1]),
                          std::max(model_hi_.z, vertices[i + 2])};
     }
-    ray_signature_.clear();
+    scene_changed();
 }
 
 void Renderer::set_paint(const std::vector<float>& vertices, const std::vector<PaintGroup>& groups) {
@@ -1201,6 +1229,7 @@ void Renderer::set_paint(const std::vector<float>& vertices, const std::vector<P
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
     paint_.count = static_cast<int>(vertices.size() / 6);
     paint_groups_ = groups;
+    scene_changed();
 }
 
 void Renderer::set_preview(const PreviewBuffers& p) {
@@ -1233,7 +1262,7 @@ void Renderer::set_preview(const PreviewBuffers& p) {
     min_feed_ = p.min_feed, max_feed_ = p.max_feed;
     min_width_ = p.min_width, max_width_ = p.max_width;
     min_height_ = p.min_height, max_height_ = p.max_height;
-    ray_signature_.clear();
+    scene_changed();
 }
 
 void Renderer::clear_preview() {
@@ -1241,7 +1270,7 @@ void Renderer::clear_preview() {
     layer_extrusions_.clear();
     order_ = {};
     layer_travels_.clear();
-    ray_signature_.clear();
+    scene_changed();
 }
 
 bool Renderer::set_ray_scene(const std::vector<float>& nodes, const std::vector<float>& primitives) {
@@ -1256,7 +1285,7 @@ bool Renderer::set_ray_scene(const std::vector<float>& nodes, const std::vector<
     ray_nodes_ = make_texture(GL_RGBA32F, RayScene::kTextureWidth, node_rows, GL_RGBA, GL_FLOAT, GL_NEAREST, nodes.data());
     ray_prims_ = make_texture(GL_RGBA32F, RayScene::kTextureWidth, primitive_rows, GL_RGBA, GL_FLOAT, GL_NEAREST,
                               primitives.data());
-    ray_signature_.clear();
+    scene_changed();
     return true;
 }
 
@@ -1267,7 +1296,7 @@ void Renderer::clear_ray_scene() {
             *t = 0;
         }
     ray_samples_ = 0;
-    ray_signature_.clear();
+    scene_changed();
 }
 
 void Renderer::lit_uniforms(unsigned p, const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility) {
@@ -1535,56 +1564,65 @@ void Renderer::draw(const ViewFrame& f) {
     glDisable(GL_CULL_FACE);
     glViewport(0, 0, width_, height_);
 
-    // Whatever changes the picture starts the averaging of rays again, and
-    // makes the occlusion be computed again.
-    std::vector<float> signature;
-    put(signature, f.view);
-    put(signature, f.projection);
-    put(signature, f.key);
-    signature.insert(signature.end(),
-                     {float(f.mode), float(f.first_layer), float(f.last_layer), float(f.kind_mask & 0xFFFF),
-                      float(f.kind_mask >> 16), f.ao_radius, f.sun_radius, float(f.show_model), float(f.show_preview),
-                      float(width_), float(height_), float(has_ray_scene()), float(f.moire_filter)});
-    const bool changed = signature != ray_signature_;
-    if (changed) {
-        ray_signature_ = signature;
-        ray_samples_ = 0;
-    }
+    // Nothing changed since the last picture (and no rays averaging): that
+    // picture again, without the scene.
+    std::vector<double> key = frame_key(f);
+    const bool averaging = f.mode == RenderMode::RayTraced && has_ray_scene() && ray_samples_ < f.max_ray_samples;
+    if (key != drawn_ || averaging) {
+        // Whatever changes the picture starts the averaging of rays again, and
+        // makes the occlusion be computed again.
+        std::vector<float> signature;
+        put(signature, f.view);
+        put(signature, f.projection);
+        put(signature, f.key);
+        signature.insert(signature.end(),
+                         {float(f.mode), float(f.first_layer), float(f.last_layer), float(f.kind_mask & 0xFFFF),
+                          float(f.kind_mask >> 16), f.ao_radius, f.sun_radius, float(f.show_model),
+                          float(f.show_preview), float(width_), float(height_), float(has_ray_scene()),
+                          float(f.moire_filter)});
+        const bool changed = signature != ray_signature_;
+        if (changed) {
+            ray_signature_ = signature;
+            ray_samples_ = 0;
+        }
 
-    unsigned visibility = white_;
-    const bool ray = f.mode == RenderMode::RayTraced && has_ray_scene();
-    const bool ambient = f.mode == RenderMode::Ambient || (f.mode == RenderMode::RayTraced && !ray);
-    const bool refresh = ray ? ray_samples_ < f.max_ray_samples : ambient && changed;
-    if (refresh) {
-        glBindFramebuffer(GL_FRAMEBUFFER, g_fbo_);
-        glClearColor(0.5f, 0.5f, 1.0f, 1.0f);
+        unsigned visibility = white_;
+        const bool ray = f.mode == RenderMode::RayTraced && has_ray_scene();
+        const bool ambient = f.mode == RenderMode::Ambient || (f.mode == RenderMode::RayTraced && !ray);
+        const bool refresh = ray ? ray_samples_ < f.max_ray_samples : ambient && changed;
+        if (refresh) {
+            glBindFramebuffer(GL_FRAMEBUFFER, g_fbo_);
+            glClearColor(0.5f, 0.5f, 1.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            draw_scene(f, vp, true, white_);
+        }
+        if (ray) {
+            visibility = refresh ? ray_pass(f) : ray_tex_[ray_current_];
+        } else if (ambient) {
+            if (refresh)
+                shadow_pass(f);
+            visibility = refresh ? ambient_pass(f) : ao_tex_[2];
+        }
+
+        // The lit scene.
+        glBindFramebuffer(GL_FRAMEBUFFER, samples > 1 ? msaa_fbo_ : colour_fbo_);
+        glViewport(0, 0, width_, height_);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        draw_scene(f, vp, true, white_);
-    }
-    if (ray) {
-        visibility = refresh ? ray_pass(f) : ray_tex_[ray_current_];
-    } else if (ambient) {
-        if (refresh)
-            shadow_pass(f);
-        visibility = refresh ? ambient_pass(f) : ao_tex_[2];
-    }
+        glDisable(GL_DEPTH_TEST);
+        glUseProgram(p_.background);
+        uniform(p_.background, "u_top", f.background_top);
+        uniform(p_.background, "u_bottom", f.background_bottom);
+        uniform(p_.background, "u_target", float(width_), float(height_));
+        screen_pass(empty_vao_);
+        draw_scene(f, vp, false, visibility);
+        if (samples > 1) {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_fbo_);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, colour_fbo_);
+            glBlitFramebuffer(0, 0, width_, height_, 0, 0, width_, height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        }
 
-    // The lit scene.
-    glBindFramebuffer(GL_FRAMEBUFFER, samples > 1 ? msaa_fbo_ : colour_fbo_);
-    glViewport(0, 0, width_, height_);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glDisable(GL_DEPTH_TEST);
-    glUseProgram(p_.background);
-    uniform(p_.background, "u_top", f.background_top);
-    uniform(p_.background, "u_bottom", f.background_bottom);
-    uniform(p_.background, "u_target", float(width_), float(height_));
-    screen_pass(empty_vao_);
-    draw_scene(f, vp, false, visibility);
-    if (samples > 1) {
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_fbo_);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, colour_fbo_);
-        glBlitFramebuffer(0, 0, width_, height_, 0, 0, width_, height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        drawn_ = std::move(key);
     }
 
     // Into the window.

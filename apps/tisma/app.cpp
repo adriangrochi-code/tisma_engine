@@ -892,6 +892,7 @@ private:
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
     long long draw_frame_ = 0; // --draw-stats
+    long long view_calls_ = -1; // the 3D view's draw calls in the last frame (--draw-stats)
     bool quit_ = false;
     bool gl_loaded_ = false;
     bool frame_pending_ = false;
@@ -10683,6 +10684,15 @@ void App::script_input() {
             return fail_step("the slice failed");
         set_tab(Tab::Preview);
         next();
+    } else if (step.verb == "expect-view-calls") { // the last frame's view drew at most this many (--draw-stats)
+        if (view_calls_ < 0)
+            return fail_step("needs --draw-stats and OpenGL");
+        const long long most = std::atoll(step.key.c_str());
+        std::printf("ui-script: expect-view-calls %lld: %s%lld\n", most, view_calls_ <= most ? "ok, " : "got ",
+                    view_calls_);
+        if (view_calls_ > most)
+            return fail_step("the view drew " + std::to_string(view_calls_) + " calls");
+        next();
     } else if (step.verb == "expect-toast") { // a toast with this text, within 30 frames
         for (const Toast& toast : toasts_)
             if (toast.text.find(step.value) != std::string::npos) {
@@ -10805,8 +10815,10 @@ void App::frame() {
         if (options_.bench_frames > 0 && !benched_ && settled_frames_ >= 2 && f.mode != RenderMode::RayTraced) {
             glFinish();
             const auto start = std::chrono::steady_clock::now();
-            for (int i = 0; i < options_.bench_frames; ++i)
+            for (int i = 0; i < options_.bench_frames; ++i) {
+                renderer_.redraw(); // the whole scene each time, as when the view moves
                 renderer_.draw(f);
+            }
             glFinish();
             const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
             std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn); preview buffers %.0f ms\n",
@@ -10818,6 +10830,8 @@ void App::frame() {
             check_rays(f);
 
         const DrawStats view = take_draw_stats();
+        if (options_.draw_stats)
+            view_calls_ = view.calls;
         glViewport(0, 0, fb_w, fb_h);
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         if (options_.draw_stats) {

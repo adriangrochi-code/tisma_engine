@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`tisma --draw-stats`:** cuántas llamadas de dibujo y cuántos vértices pide cada cuadro, los de la vista 3D y los de
+  los paneles por separado, para medir la vista previa en cualquier placa de video. Y el paso `slice` de
+  `--ui-script` (lamina como el botón y abre la Vista previa), que ahora corre también sin `--screenshot`.
+
 - **`--ui-script`: `expect-toast TEXTO`** espera un aviso con ese texto, y `click` sobre una casilla la marca o
   desmarca.
 
@@ -83,6 +87,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   `material.type` y los demás se leen como los ajustes del motor que nombran (`docs/CONFIG.md`, «material»).
 
 ### Cambiado
+
+- **La vista 3D quieta no se vuelve a dibujar** (OpenGL y Vulkan): si la cámara, las capas, los colores y los datos no
+  cambiaron, se muestra la imagen anterior. Con una esfera de 80 mm laminada (OpenGL, llvmpipe), de 406 llamadas de
+  dibujo por cuadro a 1; mover la vista dibuja todo como antes.
 
 - **Medir en piezas grandes:** la herramienta prepara la malla una vez por pieza y no en cada clic. Con 2 millones de
   triángulos, el primer clic tarda lo mismo (unos 0,35 s) y los siguientes, de 0,1 a 26 ms (antes, 0,36 a 0,44 s cada

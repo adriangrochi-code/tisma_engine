@@ -7511,3 +7511,33 @@ interfaz y ajustes.
 la idea es sacarlos del lector en vez de repetirlos. `calibration.band_height` y `placement.spacing` no tienen fila:
 Ordenar usa `placement.spacing` sin dejar cambiarlo, y el alto de las franjas de calibración no se elige en la
 interfaz. Quedan pendientes.
+
+## 2026-10-29: vista previa paso a paso, paso 2 (la vista quieta no se dibuja)
+
+El equipo de fichas mandó un plan para la vista previa con modelos grandes, pedido del dueño (FPS de ~600 a ~10 en
+una GTX 1060 después de laminar): una técnica por commit, cada una medida antes y después por ellos, con la imagen
+igual. Su línea de base en b75877f (llvmpipe, 1280 × 800): esfera de 80 mm, 461 llamadas y 6,0 M de vértices por
+cuadro; esfera de 200 mm, 1 061 llamadas y 24,3 M; y cada tanto un cuadro unas 7 veces más pesado con la cámara quieta.
+
+**Medir:** `tisma --draw-stats` imprime por cuadro las llamadas de dibujo y los vértices de la vista y, aparte, los
+de los paneles (envuelve los punteros del cargador propio de OpenGL). Para medir en la aplicación sin captura, el paso
+`slice` de `--ui-script` lamina como el botón y abre la Vista previa; el script corría solo con `--screenshot` porque
+esperaba el contador de cuadros de la captura (arreglado).
+
+**Paso 1 (el cuadro pesado periódico):** no se reproduce acá. Con la esfera de prueba escalada a 80 mm (2 208
+triángulos), laminada, en Vista previa, oclusión ambiental o `fast`: un cuadro de 1 210 llamadas cuando cambia la
+vista y después 406 en cada cuadro, sin picos. Se le preguntó al equipo de fichas cada cuántos cuadros vuelve y en qué
+condiciones.
+
+**Paso 2:** `Renderer::draw` guarda la clave del cuadro (`frame_key`: cámara, rectángulo, capas, colores, modo,
+muestras, todo lo de `ViewFrame`) y no dibuja la escena si la clave y los datos son los mismos: solo copia la imagen a
+la ventana. Cualquier `set_*` de datos la borra (`scene_changed`; también `set_model_coarse` y `set_paint`, que antes
+no reiniciaban la oclusión). Con rayos que todavía promedian, se dibuja. En Vulkan, la imagen que ImGui muestra se
+conserva: `VulkanView::record` no graba nada si la clave es la misma. `--bench-frames` fuerza el dibujo (`redraw`).
+
+Medido (OpenGL, llvmpipe, 1280 × 800, esfera de 80 mm laminada, oclusión ambiental, cámara quieta): de 406 llamadas
+por cuadro a 1; en el mismo tiempo, 2 290 cuadros en vez de 150. Prueba nueva `ui_script_idle_view` (paso
+`expect-view-calls 1`); sin el arreglo da 106 con la esfera chica. Pasan las 772 pruebas.
+
+**No medido:** Vulkan en una placa de verdad (acá lavapipe; las pruebas de Vulkan pasan, pero `--draw-stats` cuenta
+solo OpenGL). **Sigue:** paso 1 con los datos del equipo de fichas; paso 3, menos vértices por cordón.
