@@ -891,6 +891,7 @@ private:
 
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
+    double last_input_ = 0.0;  // glfwGetTime of the last frame that took input (App::frame's wait)
     long long draw_frame_ = 0; // --draw-stats
     std::array<std::size_t, 4> draw_bytes_{}; // the view's buffers last printed (--draw-stats)
     long long view_calls_ = -1; // the 3D view's draw calls in the last frame (--draw-stats)
@@ -2321,6 +2322,7 @@ bool App::init(std::string& error) {
             count_draws();
     }
     glfwSetWindowUserPointer(window_, this);
+    g_background_done = glfwPostEmptyEvent; // jobs that end wake the window
     glfwSetDropCallback(window_, [](GLFWwindow* w, int count, const char** paths) {
         auto* app = static_cast<App*>(glfwGetWindowUserPointer(w));
         for (int i = 0; i < count; ++i)
@@ -2696,6 +2698,7 @@ void App::shutdown() {
         ImGui::DestroyContext();
     }
     vk_.shutdown();
+    g_background_done = nullptr; // a job still running ends after the window
     if (window_)
         glfwDestroyWindow(window_);
     glfwTerminate();
@@ -10716,16 +10719,20 @@ void App::frame() {
         std::snprintf(step, sizeof step, "frame %d", frames_);
         timing(step);
     }
-    // With nothing moving, sleep until an event (or a tenth of a second)
-    // instead of drawing at the screen's rate.
+    // With nothing moving, sleep until an event instead of drawing at the
+    // screen's rate: a tenth of a second at most while the mouse or the keys
+    // were used in the last 3 s (a tooltip shows after a delay with no event)
+    // or a printer is connected (its status comes from its own thread); else
+    // up to 2 s. A background job wakes the window when it ends.
     const bool busy = !options_.screenshot.empty() || slice_job_.running() || voxel_job_.running() ||
                       ray_job_.running() || !toasts_.empty() || ImGui::IsAnyItemActive() ||
                       (render_mode_ == RenderMode::RayTraced && renderer_.has_ray_scene() &&
                        renderer_.ray_samples() < 256);
+    const bool printer = printer_ && printer_->status().state != device::PrinterState::Disconnected;
     if (busy)
         glfwPollEvents();
     else
-        glfwWaitEventsTimeout(0.1);
+        glfwWaitEventsTimeout(printer || glfwGetTime() - last_input_ < 3.0 ? 0.1 : 2.0);
     // Files dropped while a file dialog is open wait for it to close: opening
     // one would change the model under a pending export.
     if (!browser_.is_open())
@@ -10748,6 +10755,8 @@ void App::frame() {
     ImGui_ImplGlfw_NewFrame();
     script_input(); // after the backend's own input, so the script's wins
     ImGui::NewFrame();
+    if (GImGui->InputEventsTrail.Size > 0) // this frame took input
+        last_input_ = glfwGetTime();
     layout();
     // With Vulkan the 3D view is a picture under the panels, drawn below
     // (vk_view.*) before them.

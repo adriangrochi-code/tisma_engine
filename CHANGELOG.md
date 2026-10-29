@@ -89,6 +89,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **La ventana descansa cuando no pasa nada:** sin mouse ni teclado por 3 s, sin trabajos en marcha ni impresora
+  conectada, se despierta con un evento o cada 2 s en vez de diez veces por segundo; un laminado u otro trabajo que
+  termina la despierta. Con la esfera de 80 mm laminada (llvmpipe), en 30 s de reposo: de 38 % de CPU y 260 cuadros a
+  2 % y 15.
+
 - **La vista previa dibuja la mitad de los vértices** (OpenGL y Vulkan): de cada cordón, solo los dos costados y la
   punta que miran al ojo (o a la luz, en la sombra); los otros quedan siempre detrás. La imagen no cambia. Con una
   esfera de 80 mm laminada (OpenGL, llvmpipe), de 2,6 a 1,4 s por cuadro completo.

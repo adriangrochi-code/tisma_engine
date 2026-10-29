@@ -7589,3 +7589,19 @@ pedía laminar en el primer cuadro y fallaba si en el siguiente no había lamina
 paralelo, el modelo todavía se cargaba en segundo plano y `start_slice` no hacía nada. Ahora el paso pide laminar en
 cada cuadro hasta que arranca, y falla con un error del laminado o si en 2000 cuadros nunca arrancó. Las pruebas de
 interfaz pasan dos veces seguidas con 8 en paralelo.
+
+## 2026-10-29: la ventana en reposo (pedido del dueño: menos CPU y RAM)
+
+El equipo de fichas confirmó los pasos 2 y 3 en a01b32b (llvmpipe, `fast`): s80, de 6,04 M a 3,04 M vértices por
+cuadro completo, de 1 600 a 858 ms y de 883 a 622 MB de RSS; s200, de 24,3 M a 12,2 M, de 5 500 a 3 165 ms y de 2 706
+a 1 667 MB; en reposo, la vista hace 1 llamada de 3 vértices. Y vio que, quieta, la ventana igual dibujaba los paneles
+unas diez veces por segundo.
+
+Era la espera del bucle: `glfwWaitEventsTimeout(0.1)`. Ahora espera 0,1 s solo si hubo mouse o teclado en los
+últimos 3 s (un tooltip aparece tras una demora sin evento) o hay una impresora conectada (su estado llega de su
+propio hilo); si no, hasta 2 s. Los trabajos de fondo (`Background`: laminado, vóxeles, rayos, malla gruesa)
+despiertan la ventana al terminar (`g_background_done`, `glfwPostEmptyEvent`). Lo que ya contaba como ocupado
+(laminado en marcha, avisos, un campo en uso, rayos que promedian, la captura) sigue sin esperar.
+
+Medido con la esfera de 80 mm laminada, `fast`, llvmpipe, 30 s sin tocar nada: CPU del proceso de 38,4 % a 2,2 % y de
+260 a 15 cuadros. Pasan las 773 pruebas.
