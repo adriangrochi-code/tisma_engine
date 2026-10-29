@@ -10,9 +10,12 @@ STL. La pieza guarda su historial: se cambia una medida y se rehace entera, tamb
 - 29-10-2026: «manda el trabajo así seguimos basándonos en el CAD en SolidCraft»;
 - 29-10-2026: «la idea es que se base en lo más posible al slicer integrando las herramientas de AutoCAD»: el diseño va
   dentro de la misma ventana del programa, no en otro programa, y el boceto se maneja como en los programas de dibujo
-  técnico (línea de comandos, coordenadas tipeadas, referencias a objetos, ortogonal y rastreo polar).
+  técnico (línea de comandos, coordenadas tipeadas, referencias a objetos, ortogonal y rastreo polar);
+- 29-10-2026: «la idea es una pestaña como es la de ingeniería pero con cosas para diseñar, así podemos empezar el
+  desarrollo»: Diseño es una pestaña de la barra de arriba, al lado de Análisis, y se arma igual que ella.
 
-**Fase:** después de la primera versión, como función experimental que se prende en Preferencias.
+**Fase:** se empieza ahora (pedido del 29-10-2026), por etapas (regla 24); las operaciones que todavía no estén se
+ven apagadas con «Próximamente».
 
 **Base:** SolidCraft (`https://github.com/tangency-labs/solidcraft`, antes `bherbruck/solidcraft`), un CAD paramétrico
 de código abierto escrito en Rust, con licencia «MIT OR Apache-2.0, at your option». No es código de PrusaSlicer ni de
@@ -36,7 +39,7 @@ adentro (su núcleo B-rep es la biblioteca `truck`; la importación de FreeCAD y
 
 | Clave | Tipo | Por defecto | Qué hace |
 |---|---|---|---|
-| `ui.cad_design` | sí/no | no | Muestra el espacio Diseño y las herramientas Boceto y Primitiva en la barra de Preparar |
+| `ui.cad_design` | sí/no | sí | Muestra la pestaña Diseño y las herramientas Boceto y Primitiva en la barra de Preparar |
 | `cad.chord_tolerance` | mm | 0,01 | Cuánto se aparta como máximo la malla de la superficie exacta al mandar a la placa |
 | `cad.angle_tolerance` | grados | 5 | Ángulo máximo entre facetas vecinas de la malla |
 
@@ -60,8 +63,22 @@ Los dos valores de tolerancia los elige la ficha (la calidad de STEP que ya usa 
 
 ### El espacio Diseño
 
-3. **Encender:** apagado de entrada. Se prende en Preferencias › General › Funciones con «Diseño CAD (experimental)».
-   Con eso aparece la pestaña Diseño al lado de Preparar, y en Preparar dos herramientas: **Boceto** y **Primitiva**.
+3. **La pestaña Diseño** (como Análisis):
+   - va en la barra de arriba, entre Vista previa y Análisis, con el ícono de una escuadra y lápiz y el nombre
+     «Diseño» («Design» en inglés); se ve siempre, y se puede ocultar en Preferencias con `ui.cad_design`;
+   - se arma como Análisis: a la izquierda un **panel** con el título «Diseño», el nombre del diseño en violeta y sus
+     secciones; en el medio, la misma vista 3D con la misma cama; abajo, la **línea de comandos** (regla 12); arriba
+     de la vista, una tira de herramientas del boceto mientras se edita uno;
+   - secciones del panel, en este orden: **Nuevo** (Boceto, Primitiva —caja, cilindro, esfera, cono, tubo, toro—,
+     Abrir STEP), **Boceto** (las herramientas de las reglas 4 y 17, y las restricciones de la regla 5, con los grados
+     de libertad que quedan), **Operaciones** (regla 7), **Parámetros** (regla 9), **Historial** (la línea de tiempo
+     de la regla 8, con un renglón por operación, su ícono, su nombre y el ojo para suprimirla) y **Medidas** (regla
+     23);
+   - al pie del panel, el botón violeta a todo el ancho **«Mandar a la placa»** (regla 21), apagado hasta que haya un
+     cuerpo sólido, con la razón debajo («Hacé un sólido primero.»);
+   - cambiar a otra pestaña no pierde nada: al volver, el diseño sigue igual, también el boceto a medio hacer;
+   - en Preparar, dos herramientas más en el grupo Organizar: **Boceto** y **Primitiva**, que abren la pestaña Diseño
+     con esa herramienta ya elegida.
 4. **Bocetos:** sobre un plano de origen, un plano corrido o una cara plana de un cuerpo. Herramientas: línea,
    rectángulo, círculo, arco, polígono, ranura, elipse, curvas spline, cónicas y texto; geometría de construcción,
    proyección, recorte, redondeo y chaflán de esquinas.
@@ -135,11 +152,30 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
 23. **Medidas:** volumen, área, centro de masa y caja de cada cuerpo, con el material del filamento elegido para el
     peso (`stability.md`).
 
+### Etapas
+
+24. **Orden de desarrollo** (para empezar ya):
+    - **D1:** la pestaña y el panel vacíos, la línea de comandos y las primitivas (caja, cilindro, esfera, cono, tubo,
+      toro) con sus medidas editables; «Mandar a la placa» y volver a editar (reglas 3, 12 y 21). Pruebas CD1, CD1b,
+      CD7, CD19.
+    - **D2:** bocetos en un plano con línea, rectángulo, círculo y arco; coordenadas tipeadas, entrada junto al
+      cursor, referencias a objetos, ortogonal y rastreo polar; extruir y revolucionar (reglas 4, 6, 7, 13 a 16).
+      Pruebas CD2, CD13 a CD16.
+    - **D3:** restricciones y cotas con grados de libertad, parámetros, línea de tiempo editable (reglas 5, 8, 9).
+      Pruebas CD3, CD4, CD6.
+    - **D4:** redondeo, chaflán, vaciado, agujeros por norma, roscas, patrones, simetría, combinar; edición del boceto
+      (reglas 7, 17). Pruebas CD5, CD17, CD18.
+    - **D5:** STEP e IGES de entrada y salida, mallas, texto, guardado en el proyecto, medidas (reglas 10, 19, 20,
+      22, 23). Pruebas CD8, CD9, CD11.
+    - Cada etapa se construye sobre el núcleo de SolidCraft (regla 1); lo que todavía no está se ve apagado con
+      «Próximamente».
+
 ## Pruebas
 
 | # | Caso | Resultado |
 |---|---|---|
-| CD1 | `ui.cad_design` apagado | No hay pestaña Diseño ni herramientas Boceto y Primitiva |
+| CD1 | Abrir el programa | La pestaña Diseño está entre Vista previa y Análisis; con `ui.cad_design` apagado no está, ni Boceto y Primitiva en Organizar |
+| CD1b | Pestaña Diseño, sin nada hecho | Panel «Diseño» a la izquierda con Nuevo, Boceto, Operaciones, Parámetros, Historial y Medidas; «Mandar a la placa» apagado con «Hacé un sólido primero.»; la línea de comandos abajo |
 | CD2 | Boceto de un rectángulo de 40 × 30 mm en XY, extruir 20 mm | Un cuerpo de 24 000 mm³ y caja 40 × 30 × 20 |
 | CD3 | CD2 con una cota del ancho, sin restricciones de posición | La barra dice 2 grados de libertad; con «fijo» en una esquina, 0, y el boceto en negro |
 | CD4 | CD2, cambiar el parámetro del ancho a 50 | El cuerpo pasa a 30 000 mm³ sin rehacer nada a mano |
