@@ -26,6 +26,7 @@ struct AppOptions {
     int msaa = -1;                  // multisampling samples; -1: the preference
     int fxaa = -1;                  // 0 off, 1 on; -1: the preference
     int moire = -1;                 // the moiré filter: 0 off, 1 on; -1: the preference
+    float ao_strength = -1.0f;      // the occlusion's strength, 0 to 1.5; negative: the preference
     int color = -1;                 // the preview's view (PreviewView, preview.md rule 1); -1: by kind
     // With screenshot: the camera after framing, {x, y, z, distance, yaw, pitch}
     // (mm and degrees); empty: the framing's own (a close look at the lines).
@@ -66,6 +67,10 @@ struct AppOptions {
     std::string tutorial;         // a guided tutorial of the help's data started at its step tutorial_step
     int tutorial_step = 0;
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
+    bool coarse = false;            // with screenshot: draw a large plate as while the view moves (V6)
+    std::string pick_catalog_printer; // test hook: the printer card picks this catalog printer ("Vendor Model")
+    std::string ui_script;          // test hook: steps of input played into the window (App::script_input)
+    bool view_check = true;         // with screenshot: check the 3D view's picture (no black pixels, few sparkles)
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
     // What draws the window: "auto" (Vulkan when this machine has it and the
     // view runs on it, else OpenGL), "vulkan" (OpenGL only if Vulkan cannot)

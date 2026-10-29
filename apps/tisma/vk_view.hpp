@@ -36,6 +36,7 @@ public:
     // As Renderer's.
     void set_bed(const BedPolygon& bed, const BedLook& look);
     void set_model(const std::vector<float>& vertices);
+    void set_model_coarse(const std::vector<float>& vertices);
     void set_paint(const std::vector<float>& vertices, const std::vector<Renderer::PaintGroup>& groups);
     void set_preview(const PreviewBuffers& preview);
     void clear_preview();
@@ -48,6 +49,14 @@ public:
     // The view's picture for ImGui::Image: the same texture all along, 0
     // until the first record.
     ImTextureID texture() const;
+
+    // The last picture recorded, read back once the device is idle: RGBA,
+    // rows from the top; its size in width and height (0 without one).
+    std::vector<std::uint8_t> read_picture(int& width, int& height);
+
+    // The view of `f` drawn now, outside the window's frames, and read back
+    // as read_picture does (the moiré check).
+    std::vector<std::uint8_t> draw_picture(const ViewFrame& f, int& width, int& height);
 
     // The preview's extrusions the last record drew.
     std::size_t drawn_extrusions() const;

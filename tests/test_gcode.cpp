@@ -7,6 +7,7 @@
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/pipeline.hpp"
+#include "support/support.hpp"
 #include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -1214,8 +1215,8 @@ TEST_CASE("support: the base's pattern and sheath, the interface's pattern, spac
     std::sort(loops.begin(), loops.end());
     REQUIRE(loops.size() >= 5);
     CHECK_THAT(loops.back() - loops[loops.size() - 2], Catch::Matchers::WithinAbs(8.0 * loop_spacing(s.wall_width, 0.2), 0.05));
-    // Contact loops: the top interface starts with a loop round its zone; the
-    // ones below it do not.
+    // Contact loops: the two top interface layers start with a loop round
+    // their zone; the one below them does not (3 interface layers, rule 12).
     s.support_interface_pattern = SupportInterfacePattern::Lines;
     s.support_contact_loops = true;
     model = slice_model(m, s);
@@ -1223,9 +1224,12 @@ TEST_CASE("support: the base's pattern and sheath, the interface's pattern, spac
     for (std::size_t l = 0; l < model.fills.size(); ++l)
         if (!model.fills[l].support_interface.empty())
             top = l;
-    CHECK(measure(model.fills[top].support_interface).closed >= 1);
-    CHECK(measure(model.fills[top].support_interface).open >= 1);
-    CHECK(measure(model.fills[top - 1].support_interface).closed == 0);
+    REQUIRE(s.support_interface_layers == 3);
+    for (const std::size_t k : {top, top - 1}) {
+        CHECK(measure(model.fills[k].support_interface).closed >= 1);
+        CHECK(measure(model.fills[k].support_interface).open >= 1);
+    }
+    CHECK(measure(model.fills[top - 2].support_interface).closed == 0);
 }
 
 TEST_CASE("walls: the stretches over the air are overhang perimeters at the bridges' speed (walls_extra.md, rule 8; "
@@ -2095,6 +2099,72 @@ TEST_CASE("support: from the bed only, a zone that stands on the part goes whole
     add_box(t, 8, 8, 12, 12, 3);
     lifted(t, 0, 0, 20, 20, 3, 4);
     CHECK(support_layers(slice_model(t, s)) > 5);
+}
+
+TEST_CASE("support: no support under a bridge, however long, unless support.under_bridges (supports_skirt.md, S6, "
+          "S10)",
+          "[gcode][support]") {
+    const auto support_layers = [](const SlicedModel& model) {
+        std::size_t n = 0;
+        for (const Polygons& p : model.support_areas)
+            n += p.empty() ? 0 : 1;
+        return n;
+    };
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    // Two pillars of 5 x 20 x 10 mm, 10, 20 and 30 mm apart, a 2 mm table on them.
+    for (const float span : {10.0f, 20.0f, 30.0f}) {
+        IndexedMesh table;
+        add_box(table, 0, 0, 5, 20, 10);
+        add_box(table, 5 + span, 0, 10 + span, 20, 10);
+        const auto base = std::uint32_t(table.vertices.size());
+        add_box(table, 0, 0, 10 + span, 20, 2);
+        for (std::size_t v = base; v < table.vertices.size(); ++v)
+            table.vertices[v].z += 10.0f;
+        INFO("span " << span);
+        s.support_under_bridges = false;
+        for (const double free : {0.0, 16.0, 40.0}) { // only the review's warning reads it
+            s.support_free_bridge_length = free;
+            CHECK(support_layers(slice_model(table, s)) == 0);
+        }
+        s.support_under_bridges = true;
+        CHECK(support_layers(slice_model(table, s)) > 30);
+    }
+    // A ledge held on one side keeps its support.
+    s.support_under_bridges = false;
+    CHECK(support_layers(slice_model(shelf(), s)) > 5);
+}
+
+TEST_CASE("support: a bridge is held at two ends or all round", "[support]") {
+    const auto rect = [](double x0, double y0, double x1, double y1) {
+        return Polygons{{{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)}, {to_units(x1), to_units(y1)},
+                         {to_units(x0), to_units(y1)}}};
+    };
+    const auto disc = [](double r) {
+        Polygon p;
+        for (int k = 0; k < 64; ++k)
+            p.push_back({to_units(r * std::cos(k * std::numbers::pi / 32.0)), to_units(r * std::sin(k * std::numbers::pi / 32.0))});
+        return p;
+    };
+    const auto join = [](Polygons a, const Polygons& b) {
+        return Clipper2Lib::Union(a, b, Clipper2Lib::FillRule::NonZero);
+    };
+    const double reach = 0.6;
+    // Between two pillars.
+    CHECK(is_bridge(rect(5.2, 0, 14.8, 20), join(rect(0, 0, 5, 20), rect(15, 0, 20, 20)), reach));
+    // A ledge off one column; three sides held are still one stretch.
+    CHECK_FALSE(is_bridge(rect(100.2, 90, 110, 110), rect(90, 90, 100, 110), reach));
+    // A lid on a thin tube: held all round.
+    Polygon hole = disc(5.0);
+    std::reverse(hole.begin(), hole.end());
+    const Polygons wall{disc(5.4), hole};
+    CHECK(is_bridge(Polygons{disc(4.8)}, wall, reach));
+    // The underside of a ball: a ring held only inside it.
+    Polygon inner = disc(5.0);
+    std::reverse(inner.begin(), inner.end());
+    CHECK_FALSE(is_bridge(Polygons{disc(6.0), inner}, Polygons{disc(4.8)}, reach));
+    CHECK_FALSE(is_bridge(rect(0, 0, 1, 1), Polygons{}, reach));
 }
 
 TEST_CASE("walls: walls.outer_first prints each island's walls from the outer one in (perimeters.md, P10)", "[gcode]") {

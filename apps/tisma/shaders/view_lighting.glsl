@@ -27,7 +27,8 @@ vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular, vec2 seen
     if (frame.flags.y != 0)
         return vec3(vis.g, vis.r * vis.g, vis.g);
     float direct = vis.r * seen.y;
-    float ambient = mix(1.0, vis.g, frame.target.z) * seen.x;
+    // Never below a little light, as renderer.cpp's (a negative made a NaN).
+    float ambient = max(mix(1.0, vis.g, frame.target.z) * seen.x, 0.04);
     vec3 v = normalize(frame.eye.xyz - p);
     if (dot(n, v) < 0.0)
         n = -n;

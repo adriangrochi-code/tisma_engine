@@ -32,6 +32,10 @@ struct ViewFrame {
     std::size_t selected_first = 0, selected_count = 0; // its vertices in the model's mesh
     Vec3 selected_offset{0, 0, 0}; // drawn this far from its mesh: a model being dragged, before its mesh is redone
     bool show_model = true;
+    // The coarse copy of the model while the view moves (set_model_coarse,
+    // PLAN.md V6), with the chosen model's vertices in it.
+    bool coarse = false;
+    std::size_t coarse_selected_first = 0, coarse_selected_count = 0;
     bool show_paint = false; // the painted faces (set_paint) over the model
     bool show_preview = false;
     bool show_travels = false;
@@ -75,6 +79,9 @@ public:
 
     void set_bed(const BedPolygon& bed, const BedLook& look);
     void set_model(const std::vector<float>& vertices); // mesh_vertices
+    // A coarse copy (clustered, then mesh_vertices) drawn instead while the
+    // view moves; empty: none.
+    void set_model_coarse(const std::vector<float>& vertices);
     // The painted pieces over the model (PaintMesh::vertices), drawn in groups
     // of `count` corners from `first`, each in its colour.
     struct PaintGroup {
@@ -126,7 +133,7 @@ private:
     bool ready_ = false; // init succeeded: without it (a Vulkan window), every call does nothing
     Programs p_;
     unsigned empty_vao_ = 0, white_ = 0;
-    Buffer plate_, grid_, model_, paint_, extrusions_, travels_;
+    Buffer plate_, grid_, model_, model_coarse_, paint_, extrusions_, travels_;
     std::vector<PaintGroup> paint_groups_;
     int grid_outline_ = 0;                    // the outline's vertices, after the grid's in grid_
     float grid_step_ = 10.0f;                 // mm between grid lines

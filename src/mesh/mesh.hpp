@@ -24,6 +24,12 @@ struct BoundingBox {
 // are not kept; they are recomputed from the winding when needed.
 class TriangleMesh {
 public:
+    TriangleMesh() = default;
+    // Its triangles' corners, three by three (a last incomplete one is dropped).
+    explicit TriangleMesh(std::vector<Vec3f> corners) : corners_(std::move(corners)) {
+        corners_.resize(corners_.size() / 3 * 3);
+    }
+
     void reserve(std::size_t triangles) { corners_.reserve(3 * triangles); }
 
     void add_triangle(const Vec3f& a, const Vec3f& b, const Vec3f& c) {

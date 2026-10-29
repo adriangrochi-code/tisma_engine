@@ -110,8 +110,8 @@ std::vector<Toolpath> support_base(const Polygons& base, const Settings& setting
 // A grid support's interface (supports_more.md, rules 11 and 12): lines
 // across the base's, support.interface_spacing of free space apart (0:
 // solid), or concentric loops a bead's spacing apart; with contact loops, the
-// top interface (`contact`, part of `interface`) starts with a loop around
-// each of its zones.
+// two top interface layers (`contact`, part of `interface`) start with a loop
+// around each of its zones.
 std::vector<Toolpath> support_interface(const Polygons& interface, const Polygons& contact, const Settings& settings,
                                         double bead, double width) {
     if (settings.support_interface_pattern == SupportInterfacePattern::Concentric)
@@ -1552,6 +1552,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                    ? int(std::lround(settings.support_bottom_z_gap / stack_height))
                                    : sp.z_gap_layers;
         sp.buildplate_only = settings.support_buildplate_only;
+        sp.under_bridges = settings.support_under_bridges;
         sp.xy_gap = settings.support_xy_gap.of(settings.wall_width);
         // snug: fitted to what hangs, its gaps closed by support.closing_radius
         // (supports_more.md, rule 14).
@@ -1947,10 +1948,16 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           // bead's spacing apart (supports_skirt.md, rules 5 and 6).
                           const double bead = loop_spacing(width, h);
                           out.fills[l].support = support_base(base, settings, bead, width, l);
-                          // The top interface: right under the Z gap.
+                          // The two top interface layers: the part one or two
+                          // layers past the Z gap (supports_more.md, rule 12).
                           Polygons contact;
-                          if (const std::size_t a = l + gap + 1; settings.support_contact_loops && a < out.regions.size())
-                              contact = Clipper2Lib::Intersect(interface, out.regions[a], Clipper2Lib::FillRule::NonZero);
+                          if (settings.support_contact_loops) {
+                              Polygons part;
+                              for (std::size_t k = 1; k <= 2; ++k)
+                                  if (const std::size_t a = l + gap + k; a < out.regions.size())
+                                      part = Clipper2Lib::Union(part, out.regions[a], Clipper2Lib::FillRule::NonZero);
+                              contact = Clipper2Lib::Intersect(interface, part, Clipper2Lib::FillRule::NonZero);
+                          }
                           out.fills[l].support_interface = support_interface(interface, contact, settings, bead, width);
                       });
     for (std::size_t l = period; l < out.layers.size(); ++l)

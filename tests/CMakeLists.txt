@@ -122,6 +122,46 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 800x520 --ray-check --ray-samples 2
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_raytrace.png)
+    # The strict view check of every screenshot (no black pixel, few
+    # sparkles) with the occlusion at its strongest: a strength past 1 made the
+    # ambient light negative, drawn black (2026-10-28).
+    # The rays find the crease under the cube closed (no ambient light at all).
+    foreach(render ao rt)
+      foreach(view prepare preview)
+        add_test(NAME ui_view_${render}_strongest_${view}
+          COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  --render ${render} --ray-samples 2 --ao-strength 1.5 --graphics opengl
+                  --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${render}_strongest_${view}.png)
+        set_tests_properties(ui_view_${render}_strongest_${view}
+                             PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+      endforeach()
+    endforeach()
+    # A printer picked from the catalog in the printer card's list, on an empty
+    # settings folder (a crash, 2026-10-28: the card kept a pointer into the
+    # profile lists that adding the printer reads again).
+    add_test(NAME ui_catalog_printer_home_clean
+      COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home)
+    add_test(NAME ui_catalog_printer_picked
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pick-catalog-printer "Creality CR-5 Pro H"
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_printer.png)
+    set_tests_properties(ui_catalog_printer_home_clean PROPERTIES FIXTURES_SETUP ui_catalog_home)
+    set_tests_properties(ui_catalog_printer_picked PROPERTIES FIXTURES_REQUIRED ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # Fields edited with the mouse and the keyboard, as a person does
+    # (--ui-script, tests/data/ui): the printer's page, and a number of the
+    # print settings typed with a decimal comma.
+    foreach(script printer_fields print_fields)
+      add_test(NAME ui_script_${script}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${script}.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${script}.png)
+      set_tests_properties(ui_script_${script} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
     # The moiré filter: the preview from far away, its layers finer than a
     # pixel, gets smoother with the filter where the filter acts.
     add_test(NAME ui_moire_filter_smooths_fine_lines
@@ -186,19 +226,48 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --graphics vulkan
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_vulkan.png)
       set_tests_properties(ui_vulkan_window PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+      # The moiré filter's check with Vulkan drawing the view.
+      add_test(NAME ui_moire_filter_smooths_fine_lines_vulkan
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview --moire-check
+                --graphics vulkan --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_moire_vulkan.png)
+      set_tests_properties(ui_moire_filter_smooths_fine_lines_vulkan
+                           PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
       # The 3D view with Vulkan (V2) against OpenGL's, picture against picture:
       # the model with a painted seam, close; then the sliced cube's preview.
-      set(TISMA_VIEW_prepare --tool paint --paint seam,enforce,133,131,5,2 --look 124,122,5,60,45,25)
-      set(TISMA_VIEW_preview)
-      foreach(view prepare preview)
+      # Then the preview from above, where the layers lie over each other
+      # (drawn nearest first, 2026-10-28), and from far away, its lines a
+      # pixel or less (the moiré filter).
+      set(TISMA_VIEW_prepare --view prepare --tool paint --paint seam,enforce,133,131,5,2 --look 124,122,5,60,45,25)
+      set(TISMA_VIEW_preview --view preview)
+      set(TISMA_VIEW_preview_top --view preview --look 128,128,5,70,30,85)
+      set(TISMA_VIEW_preview_far --view preview --look 128,128,5,600,30,35)
+      # And each of the preview's colour views (preview.md, rule 1).
+      set(TISMA_VIEWS prepare preview preview_top preview_far)
+      foreach(colour height width speed actual_speed fan temperature flow actual_flow layer_time layer_time_log tool
+                     color_print)
+        set(TISMA_VIEW_preview_${colour} --view preview --color ${colour})
+        list(APPEND TISMA_VIEWS preview_${colour})
+      endforeach()
+      # A curved part too (tools/make_test_sphere.py), close and from above.
+      foreach(view prepare preview preview_top)
+        set(TISMA_VIEW_sphere_${view} ${TISMA_VIEW_${view}})
+        set(TISMA_MODEL_sphere_${view} sphere.stl)
+        list(APPEND TISMA_VIEWS sphere_${view})
+      endforeach()
+      set(TISMA_VIEW_sphere_prepare --view prepare --look 128,128,10,60,30,35)
+      foreach(view ${TISMA_VIEWS})
+        if(NOT TISMA_MODEL_${view})
+          set(TISMA_MODEL_${view} cube_ascii.stl)
+        endif()
         add_test(NAME ui_view_${view}_opengl
           COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/${TISMA_MODEL_${view}} --lang en --size 900x600
                   ${TISMA_VIEW_${view}} --render fast --graphics opengl
                   --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png)
         add_test(NAME ui_view_${view}_vulkan_same_as_opengl
           COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/${TISMA_MODEL_${view}} --lang en --size 900x600
                   ${TISMA_VIEW_${view}} --render fast --graphics vulkan
                   --compare-view ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png
                   --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_vulkan.png)

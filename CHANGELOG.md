@@ -12,6 +12,19 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`tisma --ui-script pasos.txt`:** pruebas de la interfaz con mouse y teclado de verdad: clic en el campo de un
+  ajuste, escribir, teclas, y `expect` con el valor guardado; sale con 1 si un paso falla. Pruebas nuevas de la página
+  de la impresora y de un número de impresión escrito con coma.
+
+- **`support.under_bridges`** (ficha `supports_skirt.md`, regla 1, S6 y S10): soporte también bajo los puentes. Sin
+  él (por defecto), lo que cuelga sostenido en dos extremos, o todo alrededor como una tapa, no lleva soporte, sea
+  cual sea su largo; un voladizo sostenido de un solo lado sí. En el panel, en Soportes.
+
+- **Chequeo de la vista 3D en cada captura** (`tisma --screenshot`, pedido del dueño): en Preparar y Vista previa, la
+  imagen propia de la vista no puede tener píxeles negros (un NaN de la luz) ni más de uno de cada mil que destelle;
+  si falla, sale con 1 y deja la imagen al lado. `--no-view-check` lo saltea; `--ao-strength` elige la fuerza de la
+  oclusión.
+
 - **Grupo `object`** (ficha `multi_extruder.md`, reglas 1 y 13): en la línea de comandos, el extrusor del modelo
   (`object.extruder`) y si una purga va a su relleno o a todo él (`object.wipe_into_infill`, `object.wipe_into_object`).
 
@@ -67,6 +80,23 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   `material.type` y los demás se leen como los ajustes del motor que nombran (`docs/CONFIG.md`, «material»).
 
 ### Cambiado
+
+- **Otra boquilla también en las impresoras del catálogo** (pedido del dueño): la lista trae los tamaños que el
+  fabricante publica (a menudo solo el de fábrica) y ahora siempre ofrece «Otra boquilla…». La ficha del catálogo
+  dice «Sin dato» donde no hay fuente (firmware, velocidad máxima…), en vez de «-».
+
+- **Sin soporte bajo los puentes por defecto** (`support.under_bridges`): antes el soporte iba bajo todo lo que
+  colgaba, también un puente entre dos pilares.
+- **Lazos de contacto en las dos capas de interfaz de arriba** (`support.interface_contact_loops`, ficha
+  `supports_more.md`, regla 12): antes solo en la de arriba.
+
+- **Abrir modelos grandes:** con 2 millones de triángulos, de unos 0,75 s a unos 0,57 s antes del primer cuadro
+  (la caja de la pieza sin armar la malla dos veces, una copia menos y los vértices de la vista en paralelo), y a
+  unos 0,50 s con la lectura del STL binario, el giro y el apoyo en la cama también en paralelo.
+  `TISMA_TIMING=1` muestra cuánto tarda cada paso.
+- **Mover la vista con modelos grandes:** con más de un millón de triángulos en la placa, mientras la cámara gira, se
+  desplaza o acerca, la vista dibuja una copia simplificada de unos 400 000 triángulos, armada en otro hilo; al
+  soltar, vuelve la malla entera. Con GL por software y 2 millones de triángulos, de 672 a 159 ms por cuadro.
 
 - **Las superficies de abajo van en líneas monótonas** (`surfaces.bottom_pattern`, `monotonic` por defecto, como la
   ficha): sin unirlas en zigzag. Las capas sólidas bajo una superficie de arriba siguen en zigzag.
@@ -126,6 +156,52 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   de interfaz (`support.bottom_interface_layers`; sin valor, tantas como `support.interface_layers`, regla 7).
 
 ### Corregido
+
+- **Lo escrito en algunos campos se perdía** (el ancho y el fondo de la cama, los porcentajes): el campo tomaba su
+  identidad de la dirección de una copia local, que puede cambiar de un cuadro a otro; entonces el campo «cambiaba» a
+  mitad de la escritura. Ahora cada fila se identifica por su ajuste.
+
+- **Textos:** «Apagado» también para la piel difusa y el escudo contra corrientes (decían «No»); los resúmenes de
+  velocidades llevan la unidad en cada valor («40 mm/s · externa 30 mm/s»).
+
+- **Los consejos tapaban controles:** la tarjeta era apenas transparente y en Vista previa caía sobre la barra de
+  movimientos y la leyenda. Ahora es opaca y en Vista previa va arriba; el consejo del laminado se va si ya no hay
+  laminado (quedaba después de borrar la pieza).
+
+- **La barra de estado nombraba un objeto borrado:** con un solo objeto en la placa, ahora dice el suyo.
+- **Las marcas de costura de la vista previa eran muy grandes:** puntos de 7 px fijos, que de lejos hacían una línea
+  blanca gruesa sobre la pieza. Ahora miden lo que el cordón en pantalla (de 1 a 3,5 px).
+
+- **Los campos de la página de la impresora no respondían al mouse** (informe del dueño): la ventana de la vista 3D,
+  transparente, quedaba encima de la página y se llevaba los clics. Ahora la página se edita con el mouse.
+- **Escribir en un campo numérico no hacía nada:** un clic empezaba a arrastrar el valor en vez de dejar escribir.
+  Ahora un clic (sin arrastrar) deja escribir el número, y la coma decimal se lee como punto.
+- **Laminar con la página de la impresora abierta** pasaba a Vista previa detrás de la página; ahora la cierra.
+- **La búsqueda no encontraba los ajustes de la impresora** con palabras comunes («ancho»): la lista de 10 se llenaba
+  con los de impresión. Ahora siempre entra la mejor coincidencia de cada pestaña.
+- **Tema claro:** el ícono y el nombre de la sección elegida casi no se veían sobre el violeta; las listas
+  desplegables eran apenas transparentes y dejaban ver el texto de atrás.
+- **Datos que faltan, mostrados como ceros:** las velocidades, aceleraciones y tirones máximos sin dato de la
+  impresora dicen «Sin dato» (el motor ya no los usaba como tope); la capa mínima y la máxima sin valor dicen
+  «Automático» (salen de la boquilla); los resúmenes con «—» dicen «Sin dato» o «Sin límite».
+- **Nombres de perfiles con coma decimal en español** («0,20 mm», «CR-5 Pro H 0,4 mm»); el archivo guarda el nombre
+  como siempre.
+
+- **La aplicación se cerraba al elegir una impresora del catálogo** en la lista de impresoras (informe del dueño en
+  Windows; en Linux, `std::bad_alloc`): agregar la impresora vuelve a leer las listas de perfiles y la tarjeta seguía
+  usando un puntero a la lista vieja. Lo mismo al guardar o borrar un perfil desde su fila.
+
+- **Píxeles negros con la oclusión ambiental fuerte:** con la fuerza de la oclusión pasada de 1 (llega a 1,5), la luz
+  ambiente salía negativa en los rincones y esos píxeles quedaban negros (861 en la vista previa de un cubo con rayos);
+  ahora nunca baja de un poco de luz.
+- **Vista previa laminada lenta mirando desde arriba:** las capas se dibujaban de abajo hacia arriba y desde arriba
+  cada capa se pintaba y se tapaba con la siguiente; ahora van primero las más cercanas al ojo. Con una esfera de 80 mm
+  en Vulkan por software, de 16,3 a 7,1 s por cuadro (en una GPU real los tiempos son mucho menores; la proporción es
+  lo que vale).
+
+- **Ray tracing con modelos de más de 4 194 304 triángulos:** la escena se cortaba en silencio y los rayos pasaban por
+  donde faltaba, así que la luz salía mal en esas partes. Ahora la vista avisa que la escena es demasiado grande para
+  el ray tracing, como cuando no entra en la GPU.
 
 - **Números en la interfaz** (revisión de traducción del equipo de fichas, TR1 a TR5):
   - en castellano, coma decimal en todos lados: los campos, la vista previa, la barra de estado y la calibración de la
