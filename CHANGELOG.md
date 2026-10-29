@@ -96,6 +96,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Soportes bajo puentes:** se decide punto por punto. Una losa sobre tres paredes en U ya no lleva soporte; una
+  sobre dos paredes en L, un pilar de un lado o uno central sí, en toda la zona que cuelga.
+
 - **La primera vez se elige la impresora y el filamento** antes del recorrido de bienvenida (pedido del dueño): se abre
   el catálogo de impresoras («paso 1 de 2»), después el de filamentos, y al cerrarlos, elegido o no, el recorrido.
   `tisma --first-run` arranca así aunque ya haya preferencias.

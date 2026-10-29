@@ -448,6 +448,10 @@ con nombres propios en `docs/CONFIG.md`.
 - [x] Soporte en líneas con separación en Z y XY, interfaz densa y base (tipos `Support material` y
   `Support material interface`)
 - [ ] Puentes cortos sin soporte (`max_bridge_length`)
+- [x] Puente o voladizo punto por punto (`supports_skirt.md`, regla 3, S11; 2026-10-29): la U, los dos pilares y el
+  marco sin soporte; un pilar de un lado, uno central, uno en una esquina y la L con soporte. Pendiente de respuesta
+  del equipo de fichas: la condición de que los dos apoyos se crucen de frente (a 60° o más), que no está en la ficha
+  y es lo que deja la L como voladizo
 - [ ] En GPU: voladizos y proyección, si conviene. Hecho en parte (2026-10-26, pedido del dueño):
   - la columna del soporte va en una grilla de bits de un octavo de cordón (`src/geom/bitgrid.*`); el cierre por un
     cordón es dilatar y erosionar con un disco, y cuesta lo mismo aunque la pieza tenga ruido;

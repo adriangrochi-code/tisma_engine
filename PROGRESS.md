@@ -7710,3 +7710,26 @@ tres cuartos de Y 198,2 mm, en una cama de 256) y `ui_script_scale_sliders` (tre
 prueba automática (mirado en la captura).
 
 **Sigue:** el botón Laminar abajo a la derecha con su menú de guardar, o el paso 5 de la vista previa.
+
+## 2026-10-29 (noche): puente o voladizo punto por punto (S11)
+
+La ficha llegó a `dev` con el PR #43 (`supports_skirt.md`, regla 3; `tools/check_spec.py` pasa). Antes, una isla de
+voladizo era puente entera si la capa de abajo tocaba su contorno en dos tramos separados o en un anillo
+(`is_bridge`), así que una losa sobre tres paredes en U (un solo tramo seguido) llevaba soporte. Ahora
+`bridged_part` decide punto por punto: para cada una de 8 direcciones (cada 22,5°) gira el plano y recorre filas de
+medio cordón; entre el final de un tramo apoyado y el comienzo del siguiente, si la capa no se corta en el medio, la
+franja es puente, sin largo máximo. Lo que queda de la isla, sin restos de menos de un cordón, lleva soporte.
+
+Diferencia con la ficha, preguntada al equipo de fichas: con la regla tal cual, en la L la mitad cercana a la
+esquina sería puente (a 45°, desde (5, 5) se llega a las dos paredes), pero S11 pide soporte en toda la L. Mientras
+llega la respuesta, cada apoyo tiene que cruzarse de frente: el borde de la capa de abajo a 30° o menos de
+perpendicular a la línea. Con eso la L queda voladizo.
+
+**Medido**, por fuera, con las siete losas de S11 (20 × 20 × 2 mm a Z 8–10, soporte encendido), líneas de soporte
+antes → ahora: dos pilares 0 → 0, U 42 → 0, marco 0 → 0, pilar de un lado 42 → 42, pilar central 42 → 42, pilar en
+una esquina 42 → 42, L 42 → 42. Prueba nueva con las mismas formas como polígonos (y una losa que pasa de los pilares:
+lo de afuera cuelga). Tiempos iguales con soporte: esfera de prueba 0,16 → 0,17 s, esfera ×4 0,86 → 0,87 s. Sin
+medir: una pieza con muchas islas de voladizo y una capa de miles de aristas (cada fila recorre todas las aristas de
+la capa).
+
+**Sigue:** la respuesta sobre la L; el botón Laminar abajo a la derecha o el paso 5 de la vista previa.

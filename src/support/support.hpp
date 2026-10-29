@@ -51,6 +51,14 @@ std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std:
 // or a ring held only inside it (the underside of a sphere), is no bridge.
 bool is_bridge(const Polygons& island, const Polygons& below, double reach);
 
+// The part of an overhang island that is bridge, point by point
+// (supports_skirt.md, rule 3, S11): a point whose line, along one of 8
+// directions (every 22.5°), meets the layer below on both sides without
+// leaving `region` (the island's layer) on the way, however far. Both ends
+// must meet the layer below's edge within 30° of straight on, so a corner of
+// two walls in an L is no bridge. Measured on rows `row` mm apart.
+Polygons bridged_part(const Polygons& island, const Polygons& region, const Polygons& below, double row);
+
 // What each layer needs support under: the overhangs the automatic support
 // finds (with automatic on; without under_bridges, not the bridges), plus
 // the enforced ones, less the blocked ones.

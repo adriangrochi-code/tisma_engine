@@ -2167,6 +2167,43 @@ TEST_CASE("support: a bridge is held at two ends or all round", "[support]") {
     CHECK_FALSE(is_bridge(rect(0, 0, 1, 1), Polygons{}, reach));
 }
 
+TEST_CASE("support: bridge or overhang point by point (supports_skirt.md rule 3, S11)", "[support]") {
+    const auto rect = [](double x0, double y0, double x1, double y1) {
+        return Polygons{{{to_units(x0), to_units(y0)}, {to_units(x1), to_units(y0)}, {to_units(x1), to_units(y1)},
+                         {to_units(x0), to_units(y1)}}};
+    };
+    const auto join = [](const std::vector<Polygons>& parts) {
+        Polygons all;
+        for (const Polygons& p : parts)
+            all.insert(all.end(), p.begin(), p.end());
+        return Clipper2Lib::Union(all, Clipper2Lib::FillRule::NonZero);
+    };
+    // A 20 x 20 slab over what holds it; its overhang is what lies more than
+    // `reach` from the layer below. The share of the overhang that is bridge.
+    const double reach = 0.3;
+    const Polygons slab = rect(0, 0, 20, 20);
+    const auto bridged = [&](const Polygons& below) {
+        const Polygons over = Clipper2Lib::Difference(slab, offset(below, reach), Clipper2Lib::FillRule::NonZero);
+        const double area = std::fabs(Clipper2Lib::Area(over));
+        const Polygons part = bridged_part(over, slab, below, 0.2);
+        return area > 0.0 ? std::fabs(Clipper2Lib::Area(part)) / area : 0.0;
+    };
+    // No support: two opposite pillars, three walls in a U, a frame.
+    CHECK(bridged(join({rect(0, 0, 5, 20), rect(15, 0, 20, 20)})) > 0.97);
+    CHECK(bridged(join({rect(0, 0, 2, 20), rect(18, 0, 20, 20), rect(0, 0, 20, 2)})) > 0.97);
+    CHECK(bridged(Clipper2Lib::Difference(slab, rect(2, 2, 18, 18), Clipper2Lib::FillRule::NonZero)) > 0.97);
+    // Support over all the hanging area: a pillar on one side, one in the
+    // middle, one in a corner, two walls in an L.
+    CHECK(bridged(rect(0, 0, 5, 20)) < 0.01);
+    CHECK(bridged(rect(8, 8, 12, 12)) < 0.01);
+    CHECK(bridged(rect(0, 0, 5, 5)) < 0.01);
+    CHECK(bridged(join({rect(0, 0, 2, 20), rect(0, 0, 20, 2)})) < 0.01);
+    // A slab over two pillars and past them: the part past them hangs.
+    const double past = bridged(join({rect(0, 0, 5, 10), rect(15, 0, 20, 10)}));
+    CHECK(past > 0.1);
+    CHECK(past < 0.5);
+}
+
 TEST_CASE("walls: walls.outer_first prints each island's walls from the outer one in (perimeters.md, P10)", "[gcode]") {
     Settings s = test_printer();
     s.wall_count = 3;
