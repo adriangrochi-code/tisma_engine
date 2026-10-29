@@ -11331,7 +11331,8 @@ void App::frame() {
         const bool waiting = slice_job_.running() || voxel_job_.running() || slice_pending || rays_pending ||
                              (options_.coarse && (coarse_job_.running() || coarse_version_ != scene_version_)) ||
                              script_at_ < script_.size() ||
-                             (options_.moire_check && !moire_checked_) || device_pending;
+                             (options_.moire_check && !moire_checked_) || device_pending ||
+                             frame_pending_; // the camera (and --look) not set yet: in Preview it waits for the legend
         if (frames_ == 2) {
             if (options_.view == "analysis")
                 set_tab(Tab::Analysis);

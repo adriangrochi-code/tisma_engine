@@ -7824,6 +7824,10 @@ con grupos de 4, la imagen igual a la de la versión anterior de la vista (difer
 binario de comparación ya tenía el cambio. Sin probar: la medición de un G-code abierto con `--look` (habría que
 medir después de que llegue la cámara).
 
+Arreglado después (2026-10-29, noche): la vista no se da por quieta mientras hay un encuadre pendiente (en Vista
+previa espera a la leyenda, y `--look` se pone al encuadrar). El G-code de 200 mm a 3200 mm: 202 184 cordones con
+grupos de 4, 752 ms por cuadro. Pasan las 194 pruebas de interfaz y de vista.
+
 ## 2026-10-29 (noche): «No planar» como sección propia
 
 Pedido del dueño de `PLAN.md`. En la columna de Impresión, una sección «No planar» entre Adhesión y Otros, con las
