@@ -77,6 +77,7 @@ add_executable(tisma_tests
   test_gcode_check.cpp
   test_gcode_preview.cpp
   test_calibration.cpp
+  test_determinism.cpp
   test_profiles.cpp
   test_project.cpp
   test_catalog.cpp

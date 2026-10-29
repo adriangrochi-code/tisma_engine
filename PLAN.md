@@ -1119,6 +1119,25 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   en paralelo. Gota de 172 080 triángulos: alineada 3,81 → 2,68 s (1,41 → 0,96 veces `nearest`). El G-code es el mismo
   byte a byte. La GPU no rinde acá (ver `PROGRESS.md`)
 
+### Lo nuevo de OrcaSlicer 2.5 (`docs/spec/features/orca_2_5.md`, pedido del dueño, 2026-10-29)
+
+La ficha sale solo de las notas de la versión y de la wiki públicas de OrcaSlicer (nunca de su código). Cada
+ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha:
+
+- [x] O4 (regla 19, OR19): el mismo G-code byte por byte con 1, 2 y 8 núcleos y en dos exportaciones. Ya se cumplía;
+  quedan dos pruebas (`[determinism]`): una T con soportes en árbol y relleno lightning, y dos objetos en dos
+  extrusores con etiquetas M486, piel difusa y arcos.
+- [ ] O1 (reglas 1 a 5): limpiar hacia adentro, retracción después del barrido, paredes sin apoyo al final,
+  modificadores de costura precisa, polyholes.
+- [ ] O2 (reglas 7 a 13 bis): expansión de la superficie de arriba, orden y ángulo fijo arriba y abajo, gyroid y TPMS
+  adaptativos, relleno suavizado, separado por pieza, de varias líneas, espiral hacia adentro.
+- [ ] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera
+  capa según los filamentos usados.
+- [ ] O6 (reglas 24 a 28): `--strict`, apoyar la pieza, inspeccionar, estadísticas, copias a lo largo de Y.
+- [ ] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
+  puentes; la balsa solo necesita la prueba OR15.
+- O7 y O8 van con sus fichas de interfaz.
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:

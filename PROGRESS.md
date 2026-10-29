@@ -8460,3 +8460,23 @@ tutorial con lo básico, las correcciones y las dos vueltas de rendimiento en mo
 `release.yml` compila en Windows y en Linux y publica `tisma-engine-0.10.0-alpha.3-windows-x64.zip`, con
 `tisma.exe` (la interfaz) y `tisma-engine.exe`, al fusionar la PR `dev` → `alpha`.
 
+## 2026-10-29 (noche): OrcaSlicer 2.5, etapa O4 (mismo G-code en cualquier cantidad de núcleos)
+
+El equipo de fichas mandó `orca_2_5.md` (pasa `tools/check_spec.py`). La ficha sale de las notas y la wiki públicas de
+OrcaSlicer, sin código. Empieza por O4, la regla 19: la misma pieza con los mismos ajustes da el mismo G-code byte por
+byte, con cualquier cantidad de núcleos y en cada exportación.
+
+Ya se cumplía. Quedan dos pruebas en `tests/test_determinism.cpp` (`[determinism]`), cada una laminada con 1, 2 y 8
+hilos (`tbb::global_control` y un `task_arena` de ese tamaño) y dos veces con 8:
+- una T con soportes en árbol y relleno lightning;
+- dos T, cada una un objeto en su extrusor, con etiquetas M486 (Marlin), piel difusa externa y arcos sobre los
+  voladizos.
+
+Las dos comprueban que el caso de verdad tiene lo que dice: soporte, `T1` y `M486`.
+
+Se mezclaron en `dev` las fichas de la PR #45 (`spec/next`) y `main`, donde el dueño ya fusionó `alpha` (PR #47, con
+la 0.10.0-alpha.3).
+
+**Sigue:** O1 (reglas 1 a 5) y la propuesta de cómo integrar SolidCraft para el espacio de diseño CAD (pedido del
+dueño, por el equipo de fichas). Se está revisando su licencia y la de sus dependencias antes de proponer nada.
+
