@@ -7816,3 +7816,10 @@ el visor nunca junta capas, ni a 3200 mm: las versiones de lejos se arman, pero 
 cumple. `preview_far` ya acepta las vistas sin nada marcado como tapado (prueba nueva), pero este G-code sí tiene
 cordones tapados y la leyenda deja afuera algún tipo. Contar como dibujados los tipos que la pieza no tiene rompía las
 pruebas del orden de dibujo y no lo arreglaba: queda para el próximo bloque ver qué tipo es.
+
+Siguiente bloque: no era la vista. Con un G-code abierto, `--bench-frames` mide antes de que llegue la cámara de
+`--look` (la pieza encuadrada de cerca, 0,73 píxeles por capa); en los cuadros de la captura, con 0,07 píxeles por
+capa, sí junta de a 4. El G-code laminado de un STL de 200 mm (la esfera ×10) a 3200 mm: 208 220 cordones dibujados
+con grupos de 4, la imagen igual a la de la versión anterior de la vista (diferencia 0). No hay número de antes: el
+binario de comparación ya tenía el cambio. Sin probar: la medición de un G-code abierto con `--look` (habría que
+medir después de que llegue la cámara).
