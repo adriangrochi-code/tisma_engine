@@ -104,9 +104,15 @@ ModelFile parse_obj(std::string_view text) {
 }
 
 ModelFile parse_model(std::string_view data, std::string_view extension) {
+    const std::string ext = lower(extension);
+    // The formats not read yet say so, not that an STL is broken (the spec
+    // team's BH9); a zipped AMF is not a 3MF either.
+    for (const auto& [unread, name] : {std::pair<const char*, const char*>{".amf", "AMF"}, {".step", "STEP"},
+                                       {".stp", "STEP"}, {".svg", "SVG"}, {".zip", "ZIP"}})
+        if (ext == unread)
+            throw ModelError(std::string(name) + " files are not supported yet: save the model as STL, OBJ or 3MF");
     if (looks_like_zip(data))
         return parse_3mf(data);
-    const std::string ext = lower(extension);
     if (ext == ".3mf")
         throw ModelError("3MF: not a ZIP package");
     if (ext == ".obj")
