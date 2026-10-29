@@ -38,7 +38,7 @@ Nuevos, con el formato de `docs/CONFIG.md`:
 |---|---|---|---|---|
 | `machine.feedstock` | texto | `"filament"` | `filament`, `pellet` | Con qué se alimenta la impresora |
 | `machine.e_mode` | texto | `"length"` | `length`, `volume` | Qué escribe el eje E: `length`, mm de filamento de `machine.filament_diameter` (en pellets, un diámetro virtual que el firmware convierte en vueltas del tornillo); `volume`, mm³ de plástico |
-| `extrusion.section` | texto | `"rectangle"` | `rectangle`, `rounded` | Cómo se calcula la sección de un cordón: `rectangle`, ancho × alto (como hoy); `rounded`, alto × (ancho − (1 − π/4) × alto), un rectángulo con los costados redondos |
+| `extrusion.section` | texto | `"rounded"` | `rounded`, `rectangle` | Cómo se calcula la sección de un cordón: `rounded`, alto × (ancho − (1 − π/4) × alto), un rectángulo con los costados redondos (como hoy, medido: regla 4); `rectangle`, ancho × alto |
 | `extrusion.flow_by_speed` | lista de `[velocidad, %]` | `[]` | velocidad de 0 a 10 000 mm/s; % de 10 a 300 | Corrección del flujo según la velocidad del tramo, interpolada en línea recta entre los puntos y constante fuera de ellos. Vacía: sin corrección |
 
 **Topes que cambian** (en filamento siguen igual en la práctica, porque las reglas de la boquilla ya los limitan):
@@ -72,7 +72,10 @@ Nuevos, con el formato de `docs/CONFIG.md`:
    - 1 − π/4 = 0,2146, el 0,215 del artículo de Dyze;
    - con capas finas casi no cambia nada. Con capas gruesas la diferencia es grande: con 6 × 2,5 mm, 13,66 mm² en
      lugar de 15 mm² (−9 %);
-   - también vale para filamento.
+   - también vale para filamento, y es lo que hace hoy: en Tisma Slicer (medido el 29-10-2026), un cordón de pared de
+     0,45 × 0,2 mm sobre el cubo, con filamento de 1,75 mm, lleva 0,033849 mm de E por mm, que es
+     (0,45 − 0,0429) × 0,2 / 2,40528 (sección redonda), no 0,037418 (rectángulo). Por eso `rounded` es el valor por
+     defecto y `rectangle` es la opción, para firmwares o materiales que se calibraron con la sección rectangular.
 5. **Flujo según la velocidad** (`extrusion.flow_by_speed`):
    - el flujo de cada tramo se multiplica por el % de su velocidad final, después del frenado por tiempo mínimo de
      capa y por `max_flow`;
