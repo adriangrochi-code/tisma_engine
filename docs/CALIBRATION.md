@@ -54,7 +54,7 @@ Los tres mecanismos del motor están en `docs/CONFIG.md`:
 | **Avance de presión** | Tubo cuadrado de 36 mm con paredes de 1,6 mm y esquinas vivas, con una ranura entre segmentos de 5 mm. Cada segmento escribe el comando del dialecto (ver abajo) | Esquinas abultadas: poco avance. Finas o con huecos al empezar las líneas: mucho | `extrusion.pressure_advance` |
 | **Tolerancias de encastre** | Siete bloques de 14 × 16 × 5 mm en fila, cada uno con un perno de 8 mm impreso adentro de su agujero, con 0,1, 0,15, 0,2, 0,25, 0,3, 0,4 y 0,5 mm de juego en el radio | El de menos juego cuyo perno sale o gira | Nada: es el juego que hay que dejar en los diseños que encastran. La interfaz lo dice al elegirlo |
 | **Pasos del extrusor** | Sin pieza: un G-code que calienta y extruye 100 mm a 1 mm/s, con una marca en el filamento 120 mm arriba de la entrada | Cuánto quedó hasta la marca | El valor del firmware: `M92 E` (y `M500`) en Marlin, `M92 E` en `config.g` de RepRapFirmware, `rotation_distance` en `printer.cfg` de Klipper. La interfaz calcula el nuevo y lo deja para copiar |
-| **Tope de flujo volumétrico** | El tubo cuadrado del avance de presión, segmentos de 5 mm; en cada segmento todas las líneas corren al flujo del segmento (`changes[].volumetric_flow`), por encima del tope de velocidad y sin el frenado del tiempo mínimo de capa, hasta lo que la máquina se mueve | El último segmento con paredes llenas y parejas: desde el siguiente, el fusor no funde a tiempo | `machine.max_flow`: el motor no pasa de ahí |
+| **Tope de flujo volumétrico** | El tubo cuadrado del avance de presión, franjas de 2 mm sin número (se lee la altura: `inicio + paso · ⌊altura / 2⌋`); en cada segmento todas las líneas corren al flujo del segmento (`changes[].volumetric_flow`), por encima del tope de velocidad y sin el frenado del tiempo mínimo de capa, hasta lo que la máquina se mueve | El último segmento con paredes llenas y parejas: desde el siguiente, el fusor no funde a tiempo | `machine.max_flow`: el motor no pasa de ahí |
 | **Resonancias (aceleración)** | El mismo tubo, cada segmento con su aceleración escrita en el comando del dialecto (`changes[].acceleration`: `M204 P… T…`, o `SET_VELOCITY_LIMIT ACCEL=…` en Klipper) | Las ondas en las paredes justo después de cada esquina: el último segmento sin ondas | `machine.acceleration` (y `travel_acceleration`, si quedaba más baja) |
 | **Pata de elefante** | Bloque de 20 × 20 × 6 mm | El ancho del borde de abajo (la primera capa) y el del cuerpo, con calibre, del mismo lado | `slicing.first_layer_shrink`: el actual más la mitad del exceso (`elephant_foot_from`) |
 
@@ -71,7 +71,7 @@ de siete segmentos hecha de trazos (`label_strokes`, `add_label`). Así la pieza
 | Velocidad máxima | De 100 a 300 % de las velocidades actuales, de a 25 | Desde lo que ya imprime bien hasta el triple |
 | Velocidad de retracción | De 20 a 60 mm/s, de a 5 | El rango habitual de directos y Bowden |
 | Avance de presión | Extrusor directo (retracción de 1,5 mm o menos): de 0 a 0,08, de a 0,01. Bowden: de 0 a 0,8, de a 0,1 | Un tubo Bowden necesita unas diez veces más |
-| Tope de flujo volumétrico | Si `machine.max_flow` se conoce (del catálogo o de una torre anterior): de la mitad a una vez y media, en unos diez pasos. Si no: de 4 a 30 mm³/s de a 2 | El rango de los fusores comunes, o alrededor del tope que ya se sabe |
+| Tope de flujo volumétrico | Si `machine.max_flow` se conoce (del catálogo o de una torre anterior): de la mitad a una vez y media, de a una décima redondeada a 0,5 (mínimo 0,5), franjas de 2 mm (`calibration_models.md`, CM6). Si no: de 5 a 25 mm³/s de a 1, franjas de 2 mm (CM7) | El rango de los fusores comunes, o alrededor del tope que ya se sabe |
 | Resonancias (aceleración) | De 500 mm/s² hasta el doble de la aceleración en uso (al menos 5000), en unos diez pasos de 500 o más | Desde lo que cualquier máquina aguanta hasta el doble de lo que se usa |
 
 **Al usar un valor** (`apply_calibration`):
@@ -125,6 +125,27 @@ documentación pública de cada firmware):
 
 El valor elegido queda en `extrusion.pressure_advance`, que se escribe una vez al empezar cada impresión. Con 0 no
 se escribe nada y vale lo que tenga la impresora.
+
+### De resina
+
+De la ficha `docs/spec/features/resin.md` (reglas 16 a 19), en el motor (`src/resin/resin.*`, y como
+`CalibrationKind::ResinExposure` y `ResinMeasure`). Con una impresora de resina (`machine.technology` `msla`), la
+pestaña Calibrar muestra solo estas dos; se imprimen sobre la plataforma, sin soportes, base ni vaciado.
+
+- **Torre de exposición** (`ResinTower`, `resin_tower_mesh`, `tower_exposure`; forma de la ficha
+  `calibration_models.md`): 30 mm de ancho y 4 de fondo, una base y una franja por exposición, de 1,5 a 3,5 s cada
+  0,25 s, franjas de 2 mm. Cada franja tiene al pie una ranura al frente (0,3 mm de alto y 0,8 de fondo); agujeros
+  redondos que la atraviesan de adelante hacia atrás a media altura, de 0,4, 0,6, 0,8, 1,0 y 1,4 mm, a 3, 7, 11, 15 y
+  19 mm del borde izquierdo (cada uno solo si deja 0,3 mm de pared arriba y abajo), que se cierran con exposición de
+  más; y atrás aletas de 0,15, 0,25, 0,35 y 0,5 mm de espesor, a 22, 24, 26 y 28 mm, que salen 1,5 mm, que faltan o
+  se doblan con exposición de menos. Se imprime sobre la plataforma. La franja `i` empieza en `Z = i · alto`; la 0 es
+  la base, con `resin.exposure`, y la `i ≥ 1` prueba `inicio + (i − 1) · paso`, sin pasar del final; las capas de fondo
+  mantienen su exposición. Solo en formatos que guardan la exposición de cada capa (GOO): el archivo lleva el modo
+  avanzado. Las exposiciones van como cambios por altura (`changes`, clave `exposure`). La exposición de la franja que
+  salió mejor pasa a `resin.exposure`.
+- **Bloque de medidas** (`resin_measure_block`, `resin_scale_from`): un bloque de 30 × 30 × 10 mm. Con X, Y y Z
+  medidos, cada corrección nueva es la actual por la medida deseada sobre la impresa (`resin.scale_x`, `scale_y`,
+  `scale_z`); la tarjeta la calcula y la aplica.
 
 ### Siguientes (estándar)
 

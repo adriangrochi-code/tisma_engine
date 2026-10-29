@@ -372,4 +372,13 @@ namespace tisma::ui {
 using GlGetProc = void (*(*)(const char*))();
 const char* load_gl(GlGetProc get);
 
+// The draw calls since the last take (--draw-stats): how many, and how many
+// vertices they asked for (instances times vertices).
+struct DrawStats {
+    long long calls = 0, vertices = 0;
+};
+// From now on the draw functions count into the stats (after load_gl).
+void count_draws();
+DrawStats take_draw_stats();
+
 } // namespace tisma::ui

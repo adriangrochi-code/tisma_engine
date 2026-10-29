@@ -186,6 +186,7 @@ ModelPart parse_model_part(std::string_view text) {
 struct Volume {
     std::uint32_t first = 0, last = 0;
     bool part = true;
+    bool negative = false; // a volume that takes material away (model_tools.md, rule 2)
 };
 std::map<std::uint32_t, std::vector<Volume>> project_volumes(std::string_view text) {
     std::map<std::uint32_t, std::vector<Volume>> out;
@@ -211,7 +212,9 @@ std::map<std::uint32_t, std::vector<Volume>> project_volumes(std::string_view te
             out[*object].push_back({parse_index(*first, xml, "triangle index"), parse_index(*last, xml, "triangle index"), true});
             volume = &out[*object].back();
         } else if (name == "metadata" && volume && xml.attribute("key").value_or("") == "volume_type") {
-            volume->part = xml.attribute("value").value_or("ModelPart") == "ModelPart";
+            const std::string_view type = xml.attribute("value").value_or("ModelPart");
+            volume->part = type == "ModelPart";
+            volume->negative = type == "NegativeVolume";
         }
     }
     return out;
@@ -284,10 +287,15 @@ struct Builder {
                             : 1;
         const bool mirrored = determinant(transform) < 0.0; // keep the faces outward
         for (std::size_t t = 0; t < object.triangles.size(); ++t) {
-            if (listed && std::any_of(listed->begin(), listed->end(), [&](const Volume& v) {
-                    return !v.part && t >= v.first && t <= v.last;
+            const auto in = [&](const Volume& v) { return t >= v.first && t <= v.last; };
+            const bool negative = listed && std::any_of(listed->begin(), listed->end(), [&](const Volume& v) {
+                                      return v.negative && in(v);
+                                  });
+            if (!negative && listed && std::any_of(listed->begin(), listed->end(), [&](const Volume& v) {
+                    return !v.part && in(v);
                 }))
                 continue;
+            TriangleMesh& to = negative ? out.negative : out.mesh;
             const auto& tri = object.triangles[t];
             for (const std::uint32_t v : tri)
                 if (v >= object.vertices.size())
@@ -297,9 +305,9 @@ struct Builder {
             const Vec3f b = apply(transform, object.vertices[tri[1]], scale);
             const Vec3f c = apply(transform, object.vertices[tri[2]], scale);
             if (mirrored)
-                out.mesh.add_triangle(a, c, b);
+                to.add_triangle(a, c, b);
             else
-                out.mesh.add_triangle(a, b, c);
+                to.add_triangle(a, b, c);
         }
     }
 };

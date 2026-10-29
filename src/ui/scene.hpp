@@ -32,6 +32,14 @@ TriangleMesh translated(const TriangleMesh& mesh, Vec3 offset);
 // triangle's unit normal (3 floats), for flat shading.
 std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset);
 
+// A coarse copy of a mesh to draw while the view moves (PLAN.md, V6): vertex
+// clustering (Rossignac and Borrel 1993, "Multi-resolution 3D approximations
+// for rendering complex scenes"). The corners go to the mean of their cell of
+// a grid sized for about `target` triangles; a triangle with two corners in
+// one cell drops out, and a triangle repeated over the same cells is kept
+// once. Below `target` triangles, the mesh as it is.
+TriangleMesh clustered(const TriangleMesh& mesh, std::size_t target);
+
 // A coloured line vertex: position and 0xRRGGBB colour with alpha in the top
 // byte (0xAARRGGBB).
 struct LineVertex {
@@ -81,7 +89,7 @@ struct PreviewBuffers {
     std::vector<std::size_t> layer_extrusions; // layer l is extrusions[layer_extrusions[l], layer_extrusions[l + 1])
     std::vector<LineVertex> travels;           // pairs for GL_LINES, in layer order
     std::vector<std::size_t> layer_travels;    // the same, in vertices
-    float min_feed = 0, max_feed = 0;          // of the extrusions, mm/s
+    float min_feed = 0, max_feed = 0;          // of the extrusions' `feed`: mm/s, or the view's value
     float min_width = 0, max_width = 0;        // of the extrusions, mm
     float min_height = 0, max_height = 0;      // of the extrusions, mm (layer heights by zone vary them)
     // Per extrusion, 1 when the part hides it from every side as long as all
@@ -89,7 +97,31 @@ struct PreviewBuffers {
     std::vector<std::uint8_t> hidden;
 };
 
-PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb = 0xFF4FA3FF);
+// The number the preview's numeric views colour by (preview.md, rule 1),
+// which the instances carry in `feed`: the feed asked and reached (mm/s), the
+// fan (%), the nozzle's temperature (C), the flow asked and reached (mm3/s),
+// the layer's time (s, or its log10), the extruder and the colour change.
+enum class PreviewValue {
+    Feed,
+    ActualFeed,
+    Fan,
+    Temperature,
+    Flow,
+    ActualFlow,
+    LayerTime,
+    LayerTimeLog,
+    Tool,
+    ColorPrint
+};
+float preview_value(const GcodePreview& preview, const PreviewMove& move, PreviewValue value);
+
+PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb = 0xFF4FA3FF,
+                               PreviewValue value = PreviewValue::Feed);
+
+// A numeric view's legend (rule 7): 11 values in equal steps from the least
+// to the most (in equal steps of the logarithm when `log`, the ends given as
+// their log10); a single one when they are equal.
+std::vector<double> legend_steps(double lo, double hi, bool log);
 
 // Which extrusions the part itself hides from every side when all of it is
 // drawn (docs/LARGE_MODELS.md): the inner walls and the sparse infill that
@@ -112,6 +144,10 @@ std::vector<std::uint8_t> hidden_inside(const PreviewBuffers& preview, double ce
 struct PreviewDrawOrder {
     std::vector<PreviewInstance> instances;
     std::vector<std::size_t> layer_shown, layer_hidden;
+    std::vector<float> layer_z;     // each layer's highest point (the one below's when it has none)
+    // Each layer's box, beads and their ends included (min x, y, z, max x, y,
+    // z); empty (min above max) when it has none.
+    std::vector<std::array<float, 6>> layer_box;
     std::uint32_t hidden_kinds = 0; // bit k: some extrusion of LineKind k is hidden
 };
 PreviewDrawOrder preview_draw_order(const PreviewBuffers& preview);
@@ -119,12 +155,35 @@ PreviewDrawOrder preview_draw_order(const PreviewBuffers& preview);
 // What a view draws of it for layers lo to hi with the kinds of kind_mask:
 // the shown range and the hidden one, which is empty when all of the part is
 // drawn (from its first layer to its last, every kind but the hidden ones and
-// the travels shown). Each as (first instance, count).
+// the travels shown). Each as (first instance, count). With the move slider
+// (preview.md, rule 4), only the first top_shown and top_hidden of the top
+// layer's shown and hidden extrusions.
 struct PreviewRange {
     std::size_t first = 0, count = 0;
 };
+inline constexpr std::size_t kWholeLayer = std::size_t(-1);
 std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
-                                           std::uint32_t kind_mask);
+                                           std::uint32_t kind_mask, std::size_t top_shown = kWholeLayer,
+                                           std::size_t top_hidden = kWholeLayer);
+
+// The same extrusions, as draws in an order for the depth test: the shown
+// range, then the hidden one, each split by layer, first the layers at or
+// below the eye's height from the highest down, then those above it from the
+// lowest up (the runs of these joined into one draw). The nearest beads come
+// first, so those they cover fail the depth test before they are shaded:
+// from above, layer by layer upwards, every layer of a part was shaded on the
+// same pixels and covered by the next (the owner's report, 2026-10-28: the
+// sliced preview of a large part, seen from above, slows down). With `clip`
+// (the view and projection drawn with), a layer whose box is all outside the
+// view is left out.
+std::vector<PreviewRange> preview_draws(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
+                                        std::uint32_t kind_mask, float eye_z, std::size_t top_shown = kWholeLayer,
+                                        std::size_t top_hidden = kWholeLayer, const Mat4* clip = nullptr);
+
+// Whether a box (min x, y, z, max x, y, z) is all outside what `clip` (a
+// view and projection) shows: its eight corners beyond one same plane of the
+// view's volume. Conservative: a box near a corner of the volume may be kept.
+bool box_outside(const Mat4& clip, const std::array<float, 6>& box);
 
 // The colour of each line kind in the legend and the view (0xRRGGBB).
 std::uint32_t kind_colour(LineKind kind);

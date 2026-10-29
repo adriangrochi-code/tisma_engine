@@ -53,6 +53,25 @@ El JSON:
 - `offset` es dónde estaba la pieza en la cama, en mm. Hoy la interfaz siempre centra la pieza; el dato queda para
   cuando se pueda mover.
 - `calibration` está solo si se guardó una torre. Cada segmento es `[z0, z1, valor]`.
+- `models[i].extruder` (solo si no es 1) es el extrusor de la pieza, desde 1, o el número de una mezcla de colores;
+  `models[i].wipe_into_infill` y `wipe_into_object` (solo si son `true`) dejan que un cambio de filamento purgue en su
+  relleno o en toda la pieza (ficha `multi_extruder.md`, reglas 1 y 13).
+- `models[i].settings` (solo si tiene) son los ajustes propios de la pieza: un objeto de grupos con las claves del
+  perfil (`{"infill": {"density": 40}}`), que valen solo para ella (`model_tools.md`, regla 7). Hoy pueden ser de
+  `walls`, `infill` y `surfaces`; otro grupo es un error al abrir.
+- `models[i].volumes` (solo si tiene) son sus modificadores y volúmenes negativos: `kind` (`modifier` o `negative`),
+  `shape` (`box` o `cylinder`), `offset` y `size` en mm (el lugar desde el centro de la caja de la pieza en X e Y y
+  desde su base en Z, en la malla tal como se guarda), `turn` (solo si está girado: su giro propio alrededor de su
+  centro, nueve números por filas) y, en un modificador, `settings` (`model_tools.md`, reglas 2 y 3). La pieza se
+  guarda como está en la cama, con su giro y su escala aplicados: sus volúmenes se guardan donde quedan, y uno de
+  una pieza girada se guarda con `turn`.
+- `models[i].ranges` (solo si tiene) son sus rangos de alturas: `from` y `to` en mm sobre la base de la pieza y
+  `settings`, que pueden tener `layers.height` (regla 6).
+- `color_mixing` (solo si hay mezclas o colores de filamento) tiene las mezclas del proyecto en el formato de la ficha
+  `color_mixing.md` (regla 15): `physical_extruders` con el color de cada filamento y `virtual_extruders` con cada
+  mezcla, su número, `kind` (`fullspectrum` o `gradient`), su color, sus componentes (`extruder` y `ratio`, o
+  `position` en un degradé) y, en un degradé, `minz` y `maxz`. Al abrir el proyecto en una impresora con menos
+  filamentos, las mezclas que usan los que faltan se descartan (regla 5).
 - Las mallas se guardan con los mismos `float` que tenían: vuelven exactas.
 
 **Errores:** un archivo que no empieza con `TISMAPRJ`, cortado, con una versión mayor, con una parte `MESH` antes del

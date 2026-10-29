@@ -1,4 +1,5 @@
 #include "io/stl.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -97,6 +98,18 @@ TEST_CASE("binary STL with a NaN coordinate is rejected", "[stl]") {
     std::vector<Tri> tris = kTwoTris;
     tris[1][2].y = std::numeric_limits<float>::quiet_NaN();
     CHECK_THROWS_WITH(parse_stl(make_binary(tris)), ContainsSubstring("non-finite"));
+    // Read over the threads, it still names the first bad facet.
+    std::vector<Tri> many;
+    for (int i = 0; i < 100000; ++i)
+        many.push_back(kTwoTris[std::size_t(i % 2)]);
+    many[90000][0].x = std::numeric_limits<float>::infinity();
+    many[70001][1].z = std::numeric_limits<float>::quiet_NaN();
+    CHECK_THROWS_WITH(parse_stl(make_binary(many)), ContainsSubstring("facet 70001 has a non-finite"));
+    many[70001][1].z = 0.0f;
+    many[90000][0].x = 0.0f;
+    const StlFile f = parse_stl(make_binary(many));
+    REQUIRE(f.mesh.triangle_count() == 100000);
+    CHECK(f.mesh.corner(99999, 2).x == kTwoTris[1][2].x);
 }
 
 TEST_CASE("ASCII STL is read", "[stl]") {
@@ -170,7 +183,7 @@ TEST_CASE("ASCII and binary files of the same cube agree", "[stl]") {
     std::vector<Tri> tris;
     for (std::size_t i = 0; i < ascii.mesh.triangle_count(); ++i)
         tris.push_back({ascii.mesh.corner(i, 0), ascii.mesh.corner(i, 1), ascii.mesh.corner(i, 2)});
-    const auto path = std::filesystem::temp_directory_path() / "tisma_test_cube_binary.stl";
+    const auto path = test_temp_dir() / "tisma_test_cube_binary.stl";
     {
         std::ofstream out(path, std::ios::binary);
         const std::string bytes = make_binary(tris);

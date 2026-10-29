@@ -96,6 +96,10 @@ Away away(const Toolpath& loop, const std::vector<char>& offered) {
     return out;
 }
 
+// Starts nearer than this to the nearest one tie with it (mm): far above
+// the float noise of slicing, far below anything a printer can tell apart.
+constexpr double kTie = 1e-6;
+
 // Below this many paths, looking at every one is as quick.
 constexpr std::size_t kFiledPaths = 64;
 
@@ -142,7 +146,7 @@ public:
     // Offers every end not yet done, ring by ring from the cursor's cell, to
     // consider(path, back, distance), until the nearest one so far is nearer
     // than the next ring can be: an end filed in ring r + 1 lies at least r
-    // cells away (ties at exactly that are still offered).
+    // cells away (ties within kTie of that are still offered).
     template <class Consider>
     void nearest(const Point2d& cursor, const std::vector<bool>& done, Consider consider, const double& found) {
         if (cells_.empty())
@@ -161,7 +165,7 @@ public:
                         consider(ends_[e].path, ends_[e].back, distance(cursor, ends_[e].p));
                 }
             }
-            if (found < r * cell_)
+            if (found + kTie < r * cell_)
                 break;
         }
     }
@@ -576,9 +580,14 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
         std::size_t best = paths.size();
         bool reverse = false;
         double nearest = std::numeric_limits<double>::max();
+        // Starts within kTie of each other are equally near: geometric ties,
+        // as the two ends of a line across a symmetric island seen from its
+        // axis, then go the same way whatever the float noise of the slice.
         const auto consider = [&](std::size_t i, bool back, double d) {
-            if (d < nearest || (d == nearest && (i < best || (i == best && reverse && !back))))
+            if (d < nearest - kTie)
                 nearest = d, best = i, reverse = back;
+            else if (d <= nearest + kTie && (i < best || (i == best && reverse && !back)))
+                nearest = std::min(nearest, d), best = i, reverse = back;
         };
         if (grid && !seams_move) {
             grid->nearest(cursor, done, consider, nearest);
@@ -603,7 +612,7 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
                 return a > b;
             };
             std::make_heap(by_box.begin(), by_box.end(), farther);
-            while (!by_box.empty() && by_box.front().first <= nearest) {
+            while (!by_box.empty() && by_box.front().first <= nearest + kTie) {
                 const std::size_t i = by_box.front().second;
                 std::pop_heap(by_box.begin(), by_box.end(), farther);
                 by_box.pop_back();

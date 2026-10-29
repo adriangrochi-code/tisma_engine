@@ -27,7 +27,8 @@ un `SlicedModel` con todo lo que se va a imprimir, capa por capa. Después, `exp
 archivo .stl, .obj o .3mf
   │ read_model                        io/model          STL binario o ASCII, OBJ o 3MF (io/threemf sobre io/zip
   │                                                     e io/xml), detectado por el contenido y la extensión
-  │ place_on_bed                      slice/placement   la línea de comandos centra la pieza en la cama
+  │ apply_transform                   slice/transform   escala, giro, corte y separar (grupo transform)
+  │ place_on_bed, place_objects       slice/placement   la línea de comandos centra la pieza o las piezas en la cama
   ▼
 TriangleMesh ─ weld_exact ─────────▶ IndexedMesh       mesh/            vértices compartidos por igualdad exacta
   │
@@ -57,6 +58,8 @@ fill_layer ── en paralelo por capa ─────────────�
   │                                                     soportes e interfaz
   ▼
 SlicedModel
+  │ plan_tools, plan_wipe_tower       slice/wipe_tower  con varios extrusores: el orden de los extrusores en cada
+  │                                                     capa y la torre de purga donde cambian
   │ unprintable_reason                slice/printable   ¿se puede imprimir? (si no: mensaje claro, código 4)
   │ export_gcode                      gcode/export      escribe en .part, vuelve a leer, verifica, renombra
   │   write_gcode                     gcode/writer      orden (gcode/order), viajes (gcode/travel), enfriamiento
@@ -124,7 +127,40 @@ volúmenes que un proyecto marca como modificadores, fuera).
   (`same_sections`, los lados de un prisma), el corte deja el nivel vacío y `pipeline.cpp` copia la región y las
   paredes de la capa de abajo. Las superficies, el relleno y los planes de viaje del G-code se reusan igual cuando
   sus entradas son iguales a las de otra capa.
-- `pipeline.cpp` encadena todas las etapas y `printable.cpp` decide si el resultado se puede imprimir.
+- `pipeline.cpp` encadena todas las etapas y `printable.cpp` decide si el resultado se puede imprimir. Con objetos
+  de varios extrusores (`docs/spec/features/multi_extruder.md`), `slice_tools` lamina la placa entera (el contorno de
+  cada capa, el soporte, la falda y el borde) y después los objetos de cada extrusor sobre esas capas, con un
+  `PartFrame` que les dice qué hay en las otras partes; cada camino lleva su extrusor (`Toolpath::tool`).
+- `wipe_tower.cpp` decide el orden de los extrusores de cada capa (`plan_tools`, que usan el escritor, el
+  verificador y `printable.cpp`) y arma la torre de purga: un bloque de líneas por cambio, el contorno y el relleno.
+- `curved.cpp` tiene las capas curvas (`docs/spec/features/nonplanar.md`): el campo `D` y su ajuste a la cabeza
+  (`curved_field`), la malla refinada (`refined_mesh`) y movida a `z − D` (`flatten_mesh`), que `slice_model` lamina
+  plana, y `curve_gcode`, que el escritor usa al final para devolver cada punto del G-code a su curva.
+- `color_mix.cpp` tiene las mezclas de colores (`docs/spec/features/color_mixing.md`): el ciclo de capas de cada
+  mezcla (`mix_cycle`, `mix_order`), los degradés por bandas (`mix_layers`) y su JSON. Un objeto con el número de una
+  mezcla se lamina como un extrusor más; después `apply_mixes` (en `pipeline.cpp`) le da a cada capa el filamento que
+  le toca, así el resto (plan de herramientas, torre, escritor) solo ve extrusores reales.
+
+### `resin/`: resina
+
+- **`resin.*`:** la impresión de resina (`docs/spec/features/resin.md`). `slice_resin` escala la pieza, la corta en
+  capas iguales con `slice_levels`, corrige cada sección (corrección absoluta, pie de elefante en las de fondo,
+  corrección de Z como intersección con las de abajo) y la pasa a la imagen de la pantalla: `coverage_rows` da, fila
+  por fila, la parte exacta de cada píxel que cubre la sección (cada borde suma, con signo, el área entre él y el lado
+  derecho del píxel; la suma a lo largo de la fila da la cobertura), `resin_grey` la pasa a gris y
+  `GooImageEncoder` la codifica sin guardar la imagen entera. Las capas van en paralelo. `find_cups` busca las
+  ventosas: los huecos de cada sección y cuánto de cada uno queda sobre la sección de abajo y sobre cada hueco de abajo
+  se calculan para todas las capas a la vez; después una pasada desde la plataforma decide cuáles quedan cerrados y
+  los une en ventosas. También están las calibraciones de resina (la torre de exposición y el bloque de medidas).
+- **`goo.*`:** el archivo GOO de Elegoo (cabecera, capas y final, todo en big-endian), su escritura y su lectura.
+- **`supports.*`:** los soportes y la base de resina (`docs/spec/features/resin_supports.md`): los puntos de apoyo,
+  un pilar bajo cada uno que baja hasta la base o hasta la pieza (con una grilla de ocupación por capa para saber
+  dónde la pieza lo tapa), el radio de cada pilar a cada altura y el contorno de la base.
+- **`hollow.*`:** el vaciado con la transformada de distancia exacta sobre una grilla de celdas, las barras
+  interiores y los agujeros de drenaje. `slice_resin` junta la pieza vaciada, los soportes y la base en cada capa.
+- En la interfaz, `Slicer::run` (`src/ui/slicing.*`) lamina con `slice_resin` cuando `machine.technology` es `msla`
+  y deja el resultado en `SliceResult::resin`; `resin_preview` convierte los contornos de cada capa en movimientos
+  para la misma vista previa 3D del G-code.
 
 ### `geom/`: geometría
 
@@ -242,6 +278,9 @@ El programa agrega lo que necesita una ventana: GLFW, Dear ImGui, un cargador pr
 - **`slice/variable_layers.*`:** la altura variable por Z (`docs/VARIABLE_LAYERS.md`): planea la pila de capas con
   la lista de tramos, la pendiente (escalón máximo) y las subcapas de la altura por zona, y cuenta las pieles en capas
   gruesas.
+- **`slice/belt.*`:** las impresoras de cinta (`belt_printer.md`): la pieza girada sobre X para que los planos del
+  pórtico queden planos, el paso del G-code a los ejes de la máquina al final de `write_gcode` y la vista previa con
+  la pieza sobre la cinta. `slice_model` lamina la pieza girada; el verificador hace la cuenta inversa.
 - **`device/`:** las impresoras conectadas (`docs/DEVICE.md`): la interfaz `Printer`, el puerto serie, el host de
   G-code por USB en su propio hilo y la impresora simulada de las pruebas.
 

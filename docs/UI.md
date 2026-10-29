@@ -34,7 +34,7 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 | Lugar | Qué tiene |
 |---|---|
 | Barra superior | El logo; las pestañas **Preparar**, **Vista previa**, **Análisis** y **Calibración**; los botones **Abrir**, **Laminar** (violeta), **Exportar G-code** y **Más** (guardar el proyecto, idioma, tema claro u oscuro, acerca de, salir). |
-| Panel izquierdo | Los ajustes por secciones y tarjetas (ficha `settings_panel.md`, reglas 1 a 14; `src/ui/settings_layout.*`). Arriba, las pestañas **Impresión**, **Material** e **Impresora**, cada una con su fila de perfil (ver «Perfiles y proyectos»), y a la derecha el **nivel**: Básico (lo que casi toda impresión necesita), Normal (más ajustes para afinar) o Avanzado (todos), con Ctrl+Alt+1, 2 y 3. A la izquierda, la columna de secciones con su ícono (Impresión: Calidad, Resistencia, Velocidad, Soportes, Adhesión, Otros; Material: Temperaturas, Enfriamiento, Flujo, Retracción, Necesidades; Impresora: Máquina, Boquilla y extrusor, Límites, G-code); un punto violeta marca la que tiene cambios, y al pasar el puntero se ven sus apartados. A la derecha, los apartados de la sección elegida en **tarjetas plegables**: cerrada, una línea con lo más importante («0,2 mm · primera 0,2 mm», «40 % · Rectilínea»); con cambios respecto del perfil, «2 cambios» en violeta. Los ajustes que cuelgan de un interruptor se ven solo con él encendido (soportes, Z anti-aliasing, relleno ondulado, denso bajo el techo, bufanda; la tarjeta Árbol de Soportes, con el estilo en árbol). Un nivel nunca esconde un ajuste cambiado: se ve con la etiqueta gris de su nivel; al pie de cada tarjeta, «N ajustes más…» con **Mostrar todos**. El nivel, la sección de cada pestaña y las tarjetas abiertas se recuerdan. El nivel no cambia el G-code. Abajo: cargar, guardar y restablecer todos los ajustes como JSON. Las velocidades son de la impresora, y una que no trae las suyas toma las de respaldo de una Ender-3, con un aviso (`docs/CONFIG.md`, «Velocidades»). |
+| Panel izquierdo | Los ajustes por secciones y tarjetas (ficha `settings_panel.md`, reglas 1 a 20; `src/ui/settings_layout.*` y `src/ui/settings_view.*`). Arriba de todo, la **tarjeta de la impresora** (reglas 21 a 36; `src/ui/printer_card.*`): el dibujo del tipo de impresora (resina, cinta, delta, cerrada o abierta; dibujos propios, sin fotos), la lista de impresoras con buscador (las de la persona primero, después las del programa y las del catálogo agrupadas por marca, cada una con su dibujo; al final **Agregar impresora…**), la lista de camas con su dibujo en las impresoras del catálogo que traen varias, el engranaje que abre la **configuración de la impresora** y, debajo, la **boquilla**: un clic pasa al perfil de la impresora con esa boquilla (creado desde el catálogo si no existe), con un aviso que tiene **Deshacer**; una impresora propia ofrece **Otra…**, que cambia solo el diámetro y deja el perfil marcado. La configuración de la impresora es una página a todo el ancho (regla 37), con **‹ Placa** (o Escape) para volver: Máquina, Boquilla y extrusor, Límites y G-code con las mismas tarjetas, y además **Calibración** (cada prueba que sirve a la impresora con lo que fija y su valor, «Sin calibrar», «Calibrado el …» o «Calibrado con otra boquilla», el filamento con que se hizo, **Calibrar** y **Calibrar en orden**; se anota al usar un resultado en Calibrar), **Conexión** (la de la pestaña Impresora) y **Notas** (texto libre). Lo calibrado y las notas se guardan por impresora en `interface.json` (`printers`). Debajo, las pestañas **Impresión** y **Material**, cada una con su fila de perfil (ver «Perfiles y proyectos»), y a la derecha el **nivel**: Básico (lo que casi toda impresión necesita), Normal (más ajustes para afinar), Avanzado (todos) o Personalizado (los que elige la persona), con Ctrl+Alt+1 a 4. Debajo, **Ver todo junto** muestra todas las secciones una debajo de otra, cada una con su título (y **Ver por secciones** vuelve). **Personalizado** empieza con lo que mostraba el nivel de antes; **Elegir ajustes…** (en el menú del nivel y arriba del panel) abre el árbol pestaña › sección › apartado › ajuste con una casilla en cada uno (la de una sección o un apartado marca todo lo de adentro; a medias se ve con una raya), un filtro, «Partir de» Básico, Normal o Avanzado, Todos y Ninguno; en el panel, el ojo tachado sobre un ajuste lo quita, y **+ Agregar ajuste** al pie de cada tarjeta lo devuelve. **Más › Exportar vista… / Importar vista…** la lleva a otra computadora (un JSON `tisma-ui-view`, versión 1; las claves que no existen se ignoran). Cada tarjeta tiene un menú de tres puntos con **Restablecer**, que vuelve sus ajustes a los del perfil guardado. A la izquierda, la columna de secciones con su ícono (Impresión: Calidad, Resistencia, Velocidad, Soportes, Adhesión, Otros; Material: Temperaturas, Enfriamiento, Flujo, Retracción, Necesidades; Impresora: Máquina, Boquilla y extrusor, Límites, G-code); un punto violeta marca la que tiene cambios, y al pasar el puntero se ven sus apartados. A la derecha, los apartados de la sección elegida en **tarjetas plegables**: cerrada, una línea con lo más importante («0,2 mm · primera 0,2 mm», «40 % · Rectilínea»); con cambios respecto del perfil, «2 cambios» en violeta. Los ajustes que cuelgan de un interruptor se ven solo con él encendido (soportes, Z anti-aliasing, relleno ondulado, denso bajo el techo, bufanda; la tarjeta Árbol de Soportes, con el estilo en árbol). Un nivel nunca esconde un ajuste cambiado: se ve con la etiqueta gris de su nivel; al pie de cada tarjeta, «N ajustes más…» con **Mostrar todos**. El nivel, la vista personalizada, «Ver todo junto», la sección de cada pestaña y las tarjetas abiertas se recuerdan (`ui.level`, `ui.custom_base`, `ui.custom_visible`, `ui.custom_known`, `ui.single_column`). El nivel no cambia el G-code. Abajo: cargar, guardar y restablecer todos los ajustes como JSON. Las velocidades son de la impresora, y una que no trae las suyas toma las de respaldo de una Ender-3, con un aviso (`docs/CONFIG.md`, «Velocidades»). |
 | Vista 3D | La cama con su grilla y el modelo, o el G-code. Arriba, las vistas (perspectiva, arriba, frente, atrás, izquierda, derecha) y el zoom. |
 | Barra de estado | El modelo (triángulos y tamaño), el resultado del laminado, la verificación del G-code y si se usó la GPU. |
 
@@ -62,6 +62,31 @@ a centrar. **Laminar** corre el motor en segundo plano y la ventana sigue respon
 
 #### Herramientas de la placa
 
+**Ajustes de una pieza** (fichas `settings_levels.md`, reglas 10 y 11, y `model_tools.md`, regla 7): clic derecho
+sobre una pieza abre su menú. En el nivel Básico solo dice que esto está en Normal y Avanzado; en los demás ofrece
+«Relleno», «Capas y perímetros», «Capas sólidas» y «Agregar ajuste ▸» (paredes, relleno y capas sólidas). Cada uno
+agrega a la pieza esos ajustes con el valor del perfil y abre la ventana «Ajustes de …», con las mismas filas del
+panel, una cruz por ajuste para devolverlo al perfil y «Agregar ajuste». Se guardan en el proyecto
+(`models[i].settings`) y pasan a las piezas que salen de un corte o de separar. `--object-settings JSON` le pone esos
+ajustes a la primera pieza al abrir, para las capturas.
+
+El mismo menú agrega **modificadores**, **volúmenes negativos** y **rangos de alturas** (`model_tools.md`, reglas 2,
+3 y 6). Un modificador o un negativo es una caja o un cilindro, con su lugar (desde el centro de la caja de la pieza en
+X e Y y desde su base en Z) y su tamaño, en las medidas del modelo tal como viene en su archivo; el modificador tiene
+sus ajustes. Un rango tiene desde y hasta (mm sobre la base de la pieza) y sus ajustes, la altura de capa incluida.
+Todo se edita en la ventana «Ajustes de …», se dibuja sobre la vista (los modificadores en naranja, los negativos en
+gris) y se guarda en el proyecto (`models[i].volumes` y `ranges`). Los modificadores y negativos siguen a la pieza al
+moverla, girarla, escalarla y espejarla (crecen con ella). Al cortar o separar, las piezas nuevas no los llevan.
+`--object-add modifier,negative,range` los agrega a la primera pieza al abrir, y `--object-turn X,Y,Z` la gira esos
+grados después, para las capturas.
+
+La pestaña **Objetos**, junto a Impresión y Material (`settings_levels.md`, reglas 11 y 13), lista las piezas de la
+placa y, debajo de cada una, una fila por grupo de sus ajustes propios (Capas y perímetros, Relleno, Capas sólidas),
+por modificador o volumen negativo y por rango de alturas (`object_rows`, `src/ui/plate.*`). Elegir la pieza la elige
+en la placa; elegir una fila muestra abajo «Ajustes de la pieza a cambiar» con sus valores, cada ajuste con una cruz
+para quitarlo de la pieza (el mismo editor que la ventana «Ajustes de …»). `--section objects/infill` (o `walls`,
+`surfaces`, `volume1`, `range1`…) abre la pestaña con esa fila de la primera pieza elegida.
+
 La placa puede tener varios modelos (pedido del dueño, 2026-10-25; los grupos de la ficha `interface.md`). A la
 izquierda de la vista 3D, una columna con:
 
@@ -71,8 +96,10 @@ izquierda de la vista 3D, una columna con:
 | **Quitar**, **Duplicar** | El modelo elegido |
 | **Mover** (M) | Su posición en X e Y (el centro de su caja). Arrastrar un modelo lo mueve con cualquier herramienta |
 | **Rotar** (R) | Ángulos en X, Y y Z (R = Rz·Ry·Rx), ±90° por eje, **Sin giro** |
-| **Escalar** (S) | En % o en mm por eje, los tres juntos o cada uno, **Tamaño original** |
+| **Escalar** (S) | En % o en mm por eje, los tres juntos o cada uno, **Tamaño original**, y **Espejar** en X, Y o Z alrededor del centro de su caja (un modelo girado toma su giro y su tamaño en la malla antes) |
 | **Apoyar en una cara** (F) | Un clic en una cara del modelo la deja contra la cama |
+| **Medir** (U) | Un clic en una cara toma su plano; en una superficie curva reconoce un agujero o un cilindro (su diámetro, con «Debería medir» para escalar a ese diámetro) o un cono (su ángulo y los diámetros de sus dos extremos); Shift + clic, el vértice más cercano. Entre dos elementos del mismo modelo, la distancia (puntos, punto y cara, caras paralelas) o el ángulo entre caras; con una distancia, **Debería medir** y **Escalar** agrandan o achican el modelo parejo en los tres ejes (ficha `model_tools.md`, regla 20). `--measure T1,T2` elige dos triángulos del primer modelo como caras |
+| **Cortar** (C) | Un plano horizontal a la altura que se escribe, dibujado sobre la vista; **Cortar** deja dos piezas cerradas, una al lado de la otra, con el extrusor del modelo (la pintura no pasa a las mitades). «Dar vuelta la parte de abajo» la apoya sobre la cara del corte (ficha `model_tools.md`, reglas 13 y 18). `--cut Z` corta el primer modelo al abrirse. **Separar en piezas** deja cada pedazo suelto del modelo como una pieza, con los huecos que tiene adentro (regla 14) |
 | **Organizar** (A) | Todos los modelos en una grilla compacta, 6 mm entre cajas, centrada en la cama, sin girarlos (ficha `placement.md`, regla 2) |
 | **Pintar** (P) | Soportes, costura (Forzar o Bloquear) o piel difusa, con un pincel de 0,2 a 20 mm: clic izquierdo y arrastrar sobre el modelo pinta, con Shift borra (`docs/PAINTING.md`). Verde forzar, rojo bloquear. Colores aparece apagado hasta que el motor tenga varios extrusores |
 
@@ -118,14 +145,43 @@ muestra el motivo que da el motor, en inglés como en la línea de comandos.
 
 Muestra el G-code tal como se imprime: es el mismo texto que se exporta, leído de nuevo
 (`src/gcode/preview.hpp`). Cada extrusión se dibuja como un cordón de su ancho y su alto.
-- **Barra de capas:** a la derecha; muestra hasta la capa elegida. «Solo esta capa» deja una sola.
+- **Barra de capas:** a la derecha, con dos manijas para la capa de arriba y la de abajo que se ven, cada una con su
+  altura y su número («6.00 (30)», «0.20 (1)»); la rueda y las flechas arriba y abajo mueven la de arriba. «Solo esta
+  capa» deja una sola. Un **«+»** junto a la capa de arriba agrega un cambio de color al empezar esa capa; con clic
+  derecho, un menú con cambio de color, **Pausa…** (pide el mensaje que muestra la impresora, que va como `M117`) y
+  **G-code propio…**. Cada uno es un cambio por altura (`changes`, a mitad de camino entre esa capa y la de abajo, así
+  empieza esa capa), se guarda con los ajustes y en el proyecto, cambia el G-code al laminar de nuevo y queda como una
+  marca de color en la barra: al pasar el puntero se ve qué es, y con clic se edita su texto o se quita.
+- **Barra de movimientos:** abajo, el último movimiento que se dibuja dentro de la capa de arriba, con su número
+  («Movimiento 41 de 41»); las flechas izquierda y derecha lo mueven. La boquilla se dibuja al final de ese
+  movimiento.
 - **Leyenda:** abajo a la izquierda.
-  - **Color por:** tipo de línea, velocidad, ancho o alto de capa.
-  - Cada tipo de línea se puede ocultar, y los viajes se pueden mostrar.
-  - Los números: tiempo estimado, filamento (metros y cm³), capas y líneas del G-code.
+  - **Color por** (ficha `preview.md`, regla 1): tipo de línea, alto de capa, ancho, velocidad, velocidad alcanzada,
+    ventilador, temperatura, caudal, caudal alcanzado, tiempo de capa (lineal o logarítmico), extrusor y color por
+    capa. Cada movimiento lleva lo que el G-code fijó al pasar (M106/M107, M104/M109, T, M600) y su tiempo con las
+    velocidades y aceleraciones de la impresora (`time_preview`, el mismo cálculo que el tiempo estimado, capa por capa
+    desde parado); la velocidad alcanzada es el largo sobre ese tiempo.
+  - Por tipo de línea: cada tipo con su casilla para ocultarlo, su tiempo, una barra con su parte del tiempo de los
+    movimientos y su filamento en metros y gramos (con `extrusion.density`, o 1,24 g/cm³ si no se sabe). En las vistas
+    con números, una escala de 11 pasos iguales de azul (lo menos) a rojo (lo más); en la logarítmica, iguales en
+    logaritmo; el extrusor y el color, uno por fila.
+  - **Fila de íconos** (regla 11), cada uno con su texto al pasar el puntero: viajes, barridos (los viajes que
+    retraen mientras van), retracciones, vueltas de retracción, costuras (donde empieza cada lazo de pared externa),
+    cambios de herramienta, cambios de color, pausas, G-code propio, centro de gravedad de lo dibujado y la boquilla en
+    la última extrusión de la capa de arriba (con su posición y velocidad al pasar el puntero). Las marcas son puntos de
+    colores distintos sobre la vista; viajes, costuras y boquilla vienen encendidos. El lector del G-code las toma de
+    las retracciones (E solo, G10/G11, el barrido), de `;TYPE:External perimeter`, `T`, `;COLOR_CHANGE`/`M600`,
+    `;PAUSE_PRINT`/`M601` y `;TYPE:Custom`.
+  - Los números: tiempo estimado, primera capa, filamento (metros y cm³), capas y líneas del G-code.
+- **Teclas de la vista** (placa y vista previa, regla 10): 0 isométrica, 1 arriba, 2 abajo, 3 frente, 4 atrás,
+  5 izquierda, 6 derecha; K pasa a vista ortogonal y vuelve (se recuerda; se hace con un teleobjetivo: un ángulo de 1°
+  desde lejos, con el mismo tamaño en pantalla, así la luz y las sombras siguen iguales); Z encuadra la pieza elegida
+  o, sin elección, todo; E muestra el nombre de cada pieza; L oculta o muestra la leyenda.
 
-**Abrir** un `.gcode` lo muestra igual, también si no lo escribió el motor: el lector entiende G-code sin los
-comentarios del motor. Ese G-code no se puede volver a laminar ni exportar.
+**Abrir** un `.gcode` (o un `.bgcode`, el G-code binario) lo muestra igual, también si no lo escribió el motor: el
+lector entiende G-code sin los comentarios del motor; sin `;TYPE:`, la vista por tipo dice «Sin tipos» y las demás
+(altura, velocidad, ancho por el caudal) siguen andando. **Más › Vista previa de G-code…** abre uno, y soltar otro
+archivo sobre la ventana lo reemplaza. Ese G-code no se puede volver a laminar ni exportar.
 
 ### Perfiles y proyectos
 
@@ -251,11 +307,68 @@ El botón de la derecha de la barra de vistas elige cómo se dibuja la vista 3D.
   guardan en `%APPDATA%\Tisma\interface.json` (Windows) o `~/.config/tisma/interface.json` (Linux); los perfiles del
   usuario, en la carpeta `profiles` de al lado.
 - **Idiomas:** español (por defecto) e inglés. Se elige en **Más** o con `--lang en`.
+- **Buscar un ajuste:** el campo con lupa de la barra superior (Ctrl+F) busca por el nombre del ajuste, su tarjeta,
+  su sección, su clave y lo que hace, sin importar mayúsculas ni tildes. Enter o un clic llevan al ajuste: abren su
+  pestaña, su sección y su tarjeta, lo traen a la vista y lo resaltan 2 s; si el nivel lo esconde, se ve igual con la
+  etiqueta de su nivel hasta cambiar de sección (ficha `settings_panel.md`, regla 5).
+
+### Créditos y fuentes
+
+Ficha `credits.md`. Las fichas del panel cuya función sale de otra fuente (un artículo, un proyecto, una guía) dicen al
+pie, en gris y chico, «Basado en FFF anti-aliasing (2017), de Song et al.»; el nombre es un enlace que abre la fuente,
+y el mismo texto aparece al pasar el puntero por el título de la ficha. **Más > Créditos y fuentes** junta todas las
+funciones (función, fuente, autor, licencia o tipo) y los componentes de terceros que lleva el programa, con su versión,
+su licencia y el texto del aviso que esa licencia pide repartir.
+
+Decisión del dueño (2026-10-27): todo lo que se tomó de un tercero (un texto, una guía, una documentación, una idea),
+aunque no se haya copiado, va como «Basado en …», nunca como «texto propio»: no son textos nuestros, nos basamos en
+ellos para hacer el nuestro.
+
+Los datos están en `resources/credits.json` y los avisos en `resources/licenses/`; el programa los lleva adentro. Una
+función nueva que sale de otra fuente suma su entrada allí (con `cards`, las fichas donde se ve) y su línea
+**Basado en:** en la ficha; una biblioteca nueva, su fila en `THIRD_PARTY.md`, su entrada en `libraries` y su archivo
+de licencia. Las pruebas `[credits]` fallan si falta alguna de esas partes.
 
 ### Ayuda
 
 Pedido del dueño (2026-10-26): un asistente, un consejo de cada función la primera vez que se usa y un botón de
 información al lado de cada ajuste.
+
+- **Panel de ayuda** (ficha `assistant.md`): F1, el botón **?** de la barra superior (si entra junto al buscador) o
+  **Más > Ayuda**. Se abre sobre el panel de ajustes con un buscador y las pestañas Problemas, Procedimientos,
+  Glosario, Tutoriales y Calibraciones; al pie, «Basado en las guías de Rafa Barajas». Sus datos llegan con el paquete
+  de perfiles (`knowledge/`, en la carpeta `pack/` junto a las preferencias); sin ellos, el panel lo dice. Tutoriales
+  ofrece además el recorrido de la interfaz. `--help-panel problems|procedures|glossary|tutorials|calibrations` lo
+  abre en esa pestaña, `--knowledge CARPETA` lee los datos de otra carpeta y `--help-item ID` abre un problema, un
+  procedimiento o una guía de calibración. En **Más** se apagan los tutoriales, las definiciones del glosario y la
+  ficha del material (`assistant` en las preferencias). Un clic en los avisos del laminado (barra de estado) los
+  lista con **¿Cómo lo arreglo?**, que abre el problema de la ayuda que les corresponde.
+  - **Problemas:** la lista con su síntoma; uno muestra sus causas (las de último recurso al final, con su nota), la
+    pregunta para confirmarla y sus acciones: **Aplicar** un ajuste (el valor de ahora y el nuevo, acotado al rango de
+    `docs/CONFIG.md`; el cambio queda sin guardar en el perfil y el aviso ofrece **Deshacer**), abrir un procedimiento,
+    otro problema (con **Volver**) o la calibración, o un consejo. Una clave que el motor no tiene no da botón.
+  - **Calibraciones:** las guías en orden, del filamento y de la impresora. Una guía dice para qué sirve, cuándo
+    repetirla, la prueba que conviene hacer antes si no tiene fecha en la sección Calibración (con Abrir; no impide
+    seguir), **Calibrar** (si el motor tiene esa prueba), los pasos, la tabla «Lo que ves / Qué significa», el resultado
+    con el valor de ahora y los campos para calcular el valor nuevo: en las torres, inicio, paso y alto de franja
+    (tomados de la última prueba generada) y la altura medida; en las demás, el valor leído o las capas. El valor
+    propuesto se puede corregir antes de **Aplicar** (que fecha la guía y su prueba); si el resultado va en la
+    impresora, lo avisa. Al pie, «Basado en» con sus fuentes, en lugar del pie del panel. **Cómo se hace** abre la
+    guía desde la página de calibraciones y desde la sección Calibración de la impresora.
+  - **Procedimientos:** las advertencias arriba, los pasos con su casilla, cómo evitarlo y las notas.
+  - **Glosario:** los términos en orden alfabético. El botón (i) de un ajuste que nombra un término muestra su
+    definición al pasar el puntero y en la tarjeta.
+  - **Tutoriales guiados:** los de los datos de la ayuda se ofrecen con una tarjeta («¿Te muestro cómo?»: Mostrame,
+    Después, No, gracias) al terminar el asistente del primer arranque, la primera vez que se elige un material o que
+    se abre Análisis; o desde la pestaña Tutoriales (Empezar, o Seguir donde quedó). Cada paso ilumina la parte de la
+    interfaz que nombra y oscurece el resto (sin tapar los clics), con una burbuja al lado: Atrás, Siguiente, Salir, y
+    Abrir si el paso tiene un procedimiento o una calibración. Un paso que espera algo (elegir impresora, agregar un
+    modelo, laminar) sigue solo cuando pasa. Una parte que no está en pantalla abre su panel; si no hay, la burbuja va
+    al centro. Lo visto se guarda en las preferencias (`tutorials`). `--tutorial ID[,PASO]` abre uno para las capturas.
+  - **Ficha del material:** en la pestaña Material, el material del filamento elegido (por su nombre: «Generic ABS»
+    es ABS) con temperaturas, cabina, ventilador, superficies, retracción y secado; lo que la impresora no tiene para
+    ese material (cabina, boquilla endurecida, cama u hotend que no llegan, secado) se avisa ahí y en la barra de
+    estado.
 
 - **Asistente:** se abre solo la primera vez (sin preferencias guardadas), y desde **Más > Tutorial**. Siete pasos
   abajo de la vista: abrir un modelo, elegir impresora, filamento y perfil, los ajustes, las herramientas de la placa,
@@ -284,12 +397,17 @@ tisma modelo.stl --profile filament=PETG --profile "print=0.28 mm" --screenshot 
 
 Varios STL en la línea de comandos arman una placa: el primero la abre y los demás se suman. `--tool
 move|rotate|scale|lay|paint` abre esa herramienta, y `--look X,Y,Z,DISTANCIA,GIRO,INCLINACIÓN` pone la cámara.
-`--paint canal,marca,X,Y,Z,RADIO` pinta (`docs/PAINTING.md`). Las capturas no muestran la ayuda salvo que se pida:
+`--paint canal,marca,X,Y,Z,RADIO` pinta (`docs/PAINTING.md`). `--level basic|normal|advanced|custom` elige el nivel del
+panel, `--search TEXTO` va al primer ajuste que encuentra, `--single-column` muestra todo junto y `--choose-settings`
+abre «Elegir ajustes…»; `--credits` abre Créditos y fuentes. `--ortho` y `--labels` hacen lo de K y E. `--section printer/SECCIÓN` abre la configuración de la impresora en esa sección
+(`machine`, `nozzle`, `limits`, `gcode`, `calibration`, `connection`, `notes`), y `--profile "printer=Marca Modelo 0.4 mm"`
+elige también un modelo del catálogo con esa boquilla, solo para esa vez. Las capturas no muestran la ayuda salvo que se pida:
 `--tips` (los consejos), `--tour PASO` (el asistente, de 0 a 6) y `--info grupo.clave` (la tarjeta de un ajuste).
 
 `--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|pressure_advance|speed|fit|max_flow|acceleration|elephant_foot` crea una
 prueba de calibración como su botón **Crear** (`extruder` abre la de los pasos del extrusor), y
-`--view calibration` muestra su pestaña. `--color kind|speed|width|height` elige el color de la vista previa (por alto
+`--view calibration` muestra su pestaña. `--color kind|height|width|speed|actual_speed|fan|temperature|flow|actual_flow|layer_time|layer_time_log|tool|color_print`
+elige el color de la vista previa (por alto
 de capa: la altura por zona, `docs/LOCAL_LAYERS.md`). `--render fast|ao|rt`, `--msaa N`, `--fxaa on|off` y `--moire on|off` eligen la imagen. `--ray-check` compara los rayos de la GPU con
 los de la CPU y termina con 1 si no coinciden. `--moire-check` dibuja la vista previa desde el doble de lejos, sin
 multimuestreo, con y sin el filtro de moiré, y termina con 1 si donde el filtro actúa los píxeles vecinos no se

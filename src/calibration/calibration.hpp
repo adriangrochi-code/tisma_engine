@@ -131,15 +131,24 @@ enum class CalibrationKind {
     MaxFlow,
     Acceleration,
     ElephantFoot,
+    // Resin (resin.md, rules 16 to 19): the exposure tower and the measuring block.
+    ResinExposure,
+    ResinMeasure,
 };
-inline constexpr int kCalibrationKinds = 12;
+inline constexpr int kCalibrationKinds = 14;
 // "dimensions", "temperature", "retraction", "flow", "speed",
 // "retraction_speed", "pressure_advance", "first_layer", "fit", "max_flow",
-// "acceleration", "elephant_foot".
+// "acceleration", "elephant_foot", "resin_exposure", "resin_measure".
 const char* calibration_kind_name(CalibrationKind kind);
 std::optional<CalibrationKind> calibration_kind_from_name(std::string_view name);
 // Whether the kind is a tower of segments, each trying a value from a range.
 bool is_tower(CalibrationKind kind);
+// Whether the kind is for a resin printer (the others are for FDM ones).
+bool is_resin_calibration(CalibrationKind kind);
+// The exposure tower as a calibration print (calibration_models.md's shape,
+// resin_tower_mesh): its bands' exposures as height changes, from the band
+// over the base; `segment` is the band's height.
+CalibrationPrint resin_exposure_tower(double start, double end, double step, double segment = 2.0);
 CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& settings);
 // A tower of its kind with this range (the ranges an interface lets the user
 // change); empty for kinds that are not towers.

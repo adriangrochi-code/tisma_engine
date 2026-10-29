@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config/settings.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/paint.hpp"
 #include "ui/math.hpp"
@@ -30,12 +31,66 @@ struct Placement {
     std::array<double, 3> scale{1.0, 1.0, 1.0}; // each above 0: a mirror would turn the triangles inside out
 };
 
+// A modifier or a negative volume added to an object (settings_levels.md,
+// rule 10; model_tools.md, rules 2 and 3): a box or a cylinder, placed from
+// the model's own box, as its file has it (the centre in X and Y, the bottom
+// in Z), in the model's millimetres, with a modifier's own settings. It is
+// scaled, turned and set on the bed with the model.
+struct PlateVolume {
+    enum class Kind { Modifier, Negative } kind = Kind::Modifier;
+    enum class Shape { Box, Cylinder } shape = Shape::Box;
+    std::array<double, 3> offset{0.0, 0.0, 0.0}; // mm: its box's centre in X and Y, its bottom in Z
+    std::array<double, 3> size{10.0, 10.0, 10.0}; // mm
+    std::string settings{};
+    Rotation turn = kNoRotation; // its own turn in the model's frame, about its centre
+    friend bool operator==(const PlateVolume&, const PlateVolume&) = default;
+};
+// A height range of an object (model_tools.md, rule 6): from and to over its
+// bottom, mm, with settings of its own (its layer height among them).
+struct PlateRange {
+    double from = 0.0, to = 2.0;
+    std::string settings{};
+    friend bool operator==(const PlateRange&, const PlateRange&) = default;
+};
+
 struct PlateObject {
     std::string name;
     TriangleMesh mesh; // as its file has it
     Placement place;
     Painting painting; // by triangle of the mesh: it follows the model however it is placed
+    // Its extruder (from 1, or a mixed colour's number), and whether a
+    // filament change may purge into its sparse infill or into all of it
+    // (multi_extruder.md, rules 1 and 13).
+    int extruder = 1;
+    bool wipe_into_infill = false, wipe_into_object = false;
+    // Its own settings (model_tools.md, rule 7; settings_levels.md, rules 10
+    // and 11): a JSON object of groups over the profile's; empty: none.
+    std::string settings{};
+    std::vector<PlateVolume> volumes{};
+    std::vector<PlateRange> ranges{};
 };
+
+// A volume's mesh where its object stands (a cylinder of 48 sides, its axis
+// on the model's Z), its faces out: `placed` is placed_mesh(object).
+TriangleMesh volume_mesh(const PlateVolume& volume, const PlateObject& object, const TriangleMesh& placed);
+
+// The model's size as its file has it, before its scale and turn, mm.
+std::array<double, 3> model_size(const PlateObject& object);
+
+// A map x' = a x + b between two frames of a model.
+struct Affine {
+    std::array<double, 9> a{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    std::array<double, 3> b{0.0, 0.0, 0.0};
+};
+// From the model's frame to the bed, as placed_mesh sets it down (placed:
+// placed_mesh(object)).
+Affine placing(const PlateObject& object, const TriangleMesh& placed);
+// The volume in the model's new frame when the model's mesh becomes `map`
+// of itself (saved as placed, or mirrored): `from` and `to` are the model's
+// box in the old frame and in the new. Its sizes stretch as the map does
+// along its axes; a mirror leaves it turned, not mirrored (a box and a
+// cylinder are their own mirror images).
+PlateVolume carried_volume(const PlateVolume& volume, const BoundingBox& from, const Affine& map, const BoundingBox& to);
 
 // r turned by `degrees` about the bed's axis 0 (X), 1 (Y) or 2 (Z).
 Rotation rotated(const Rotation& r, int axis, double degrees);
@@ -121,5 +176,29 @@ std::optional<PlateHit> pick(const std::vector<TriangleMesh>& placed, const std:
 
 // The unit normal of a triangle of a mesh (from its winding).
 Vec3 triangle_normal(const TriangleMesh& mesh, std::size_t triangle);
+
+// An object's own settings (settings_levels.md, rules 10 and 11), as the
+// JSON text PlateObject::settings holds: the keys it sets ("infill.density"),
+// in order; a key added with the profile's value now; a key taken away; and
+// its keys' values taken from settings edited in the panel.
+std::vector<std::string> own_keys(const std::string& own);
+
+// The rows under an object in the list of the plate's objects
+// (settings_levels.md, rules 11 and 13): one per group of its own settings
+// (walls, infill and surfaces, in that order, then any other), one per
+// modifier or negative volume, one per height range.
+struct ObjectRow {
+    enum class Kind { Settings, Volume, Range } kind = Kind::Settings;
+    std::string group{};   // Settings: its group
+    std::size_t index = 0; // Volume and Range: which one
+    friend bool operator==(const ObjectRow&, const ObjectRow&) = default;
+};
+std::vector<ObjectRow> object_rows(const PlateObject& object);
+std::string with_own_key(const std::string& own, const Settings& profile, std::string_view key);
+std::string without_own_key(const std::string& own, std::string_view key);
+std::string own_values(const std::string& own, const Settings& edited);
+// The keys an object may set today (walls, infill and surfaces; own_settings
+// refuses the rest), in the panel's order.
+std::vector<std::string> own_setting_keys(const Settings& profile);
 
 } // namespace tisma::ui

@@ -1,0 +1,581 @@
+// Wall options (docs/spec/features/walls_extra.md): staggered inner seams
+// (W5), one wall on top (W7) and on the first layer (W8).
+
+#include "config/settings.hpp"
+#include "gcode/check.hpp"
+#include "gcode/writer.hpp"
+#include "mesh/indexed_mesh.hpp"
+#include "slice/pipeline.hpp"
+#include "test_printer.hpp"
+
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_floating_point.hpp>
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <map>
+#include <set>
+#include <numbers>
+#include <sstream>
+#include <string>
+#include <tuple>
+#include <vector>
+
+using namespace tisma;
+using Catch::Matchers::WithinAbs;
+using Catch::Matchers::WithinRel;
+
+namespace {
+
+// Boxes from (x0, y0, z0) to (x1, y1, z1), in one mesh.
+IndexedMesh boxes(const std::vector<std::array<float, 6>>& list) {
+    IndexedMesh m;
+    for (const auto& b : list) {
+        const auto base = std::uint32_t(m.vertices.size());
+        for (float z : {b[2], b[5]})
+            for (const auto& p : {std::array<float, 2>{b[0], b[1]}, {b[3], b[1]}, {b[3], b[4]}, {b[0], b[4]}})
+                m.vertices.push_back({p[0], p[1], z});
+        const auto quad = [&](std::uint32_t a, std::uint32_t c, std::uint32_t d, std::uint32_t e) {
+            m.triangles.push_back({base + a, base + c, base + d});
+            m.triangles.push_back({base + a, base + d, base + e});
+        };
+        quad(0, 3, 2, 1);
+        quad(4, 5, 6, 7);
+        quad(0, 1, 5, 4);
+        quad(1, 2, 6, 5);
+        quad(2, 3, 7, 6);
+        quad(3, 0, 4, 7);
+    }
+    return m;
+}
+
+// A cylinder of radius r around (100, 100) from z 0 to h, n sides.
+IndexedMesh cylinder(double r, double h, int n = 96) {
+    IndexedMesh m;
+    for (int ring = 0; ring < 2; ++ring)
+        for (int i = 0; i < n; ++i) {
+            const double a = 2.0 * std::numbers::pi * i / n;
+            m.vertices.push_back({float(100.0 + r * std::cos(a)), float(100.0 + r * std::sin(a)), float(ring * h)});
+        }
+    m.vertices.push_back({100.0f, 100.0f, 0.0f});
+    m.vertices.push_back({100.0f, 100.0f, float(h)});
+    const std::uint32_t bottom = std::uint32_t(2 * n), top = bottom + 1;
+    for (int i = 0; i < n; ++i) {
+        const std::uint32_t a = std::uint32_t(i), b = std::uint32_t((i + 1) % n);
+        m.triangles.push_back({a, b, b + std::uint32_t(n)});
+        m.triangles.push_back({a, b + std::uint32_t(n), a + std::uint32_t(n)});
+        m.triangles.push_back({bottom, b, a});
+        m.triangles.push_back({top, a + std::uint32_t(n), b + std::uint32_t(n)});
+    }
+    return m;
+}
+
+// The spec's base: 0.2 layers, 2 walls, no infill, no solid layers, no skirt.
+Settings base() {
+    Settings s = test_printer();
+    s.layer_height = s.first_layer_height = 0.2;
+    s.wall_count = 2;
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    s.skirt_loops = 0;
+    s.brim_width = 0.0;
+    return s;
+}
+
+std::string gcode_of(const IndexedMesh& mesh, const Settings& s) {
+    const SlicedModel model = slice_model(mesh, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
+    return out.str();
+}
+
+// One run of extrusions of one type, without a travel in between.
+struct Run {
+    int layer = -1;
+    std::string type;
+    double x0 = 0, y0 = 0; // where it starts
+    double length = 0.0;
+};
+
+std::vector<Run> runs_of(const std::string& gcode) {
+    std::vector<Run> out;
+    double x = 0, y = 0, last_e = 0.0; // E is absolute (M82)
+    int layer = -1;
+    std::string type;
+    bool open = false;
+    std::istringstream in(gcode);
+    for (std::string line; std::getline(in, line);) {
+        if (line.starts_with(";LAYER_CHANGE")) {
+            ++layer;
+            open = false;
+            continue;
+        }
+        if (line.starts_with(";TYPE:")) {
+            type = line.substr(6);
+            open = false;
+            continue;
+        }
+        const std::string code = line.substr(0, line.find(';'));
+        if (code.starts_with("G92")) { // E restarts at each layer
+            last_e = 0.0;
+            continue;
+        }
+        if (!code.starts_with("G1 "))
+            continue;
+        double nx = x, ny = y, e = 0.0;
+        bool xy = false;
+        std::istringstream words(code.substr(3));
+        for (std::string w; words >> w;) {
+            const double v = std::atof(w.c_str() + 1);
+            if (w[0] == 'X')
+                nx = v, xy = true;
+            else if (w[0] == 'Y')
+                ny = v, xy = true;
+            else if (w[0] == 'E')
+                e = v;
+        }
+        // An extrusion moves in X or Y to a higher E than the last.
+        if (code.find(" E") == std::string::npos) {
+            if (xy)
+                open = false;
+        } else if (xy && e > last_e) {
+            if (!open) {
+                out.push_back({layer, type, x, y, 0.0});
+                open = true;
+            }
+            out.back().length += std::hypot(nx - x, ny - y);
+        } else {
+            open = false;
+        }
+        if (code.find(" E") != std::string::npos)
+            last_e = e;
+        x = nx, y = ny;
+    }
+    return out;
+}
+
+double length_of(const std::vector<Run>& runs, int layer, const std::string& type) {
+    double total = 0.0;
+    for (const Run& r : runs)
+        if (r.layer == layer && r.type == type)
+            total += r.length;
+    return total;
+}
+
+} // namespace
+
+TEST_CASE("walls: one wall on the first layer (walls_extra.md, rule 11, W8)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.first_layer_one_wall = true;
+    const std::vector<Run> runs = runs_of(gcode_of(boxes({{90, 90, 0, 110, 110, 20}}), s));
+    CHECK(length_of(runs, 0, "Perimeter") == 0.0);
+    CHECK_THAT(length_of(runs, 0, "External perimeter"), WithinAbs(78.34, 1.0));
+    // The two inner walls, over the air where the first layer has only its outer wall.
+    CHECK(length_of(runs, 1, "Perimeter") + length_of(runs, 1, "Overhang perimeter") > 140.0);
+    CHECK(length_of(runs, 1, "External perimeter") > 0.0);
+}
+
+TEST_CASE("walls: the inner walls' seams staggered a bead per level (walls_extra.md, rule 3, W5)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 4;
+    s.seam = SeamMode::Aligned;
+    const IndexedMesh part = cylinder(10.0, 5.0);
+    // Where each wall of layer 10 starts, by its distance from the axis (outer first).
+    const auto starts = [&](const Settings& settings) {
+        std::map<double, std::array<double, 2>, std::greater<>> out;
+        for (const Run& r : runs_of(gcode_of(part, settings)))
+            if (r.layer == 10 && (r.type == "External perimeter" || r.type == "Perimeter"))
+                out[std::hypot(r.x0 - 100.0, r.y0 - 100.0)] = {r.x0, r.y0};
+        std::vector<std::array<double, 2>> list;
+        for (const auto& [radius, p] : out)
+            list.push_back(p);
+        return list;
+    };
+    const std::vector<std::array<double, 2>> plain = starts(s);
+    s.staggered_inner_seams = true;
+    const std::vector<std::array<double, 2>> staggered = starts(s);
+    REQUIRE(plain.size() == 4);
+    REQUIRE(staggered.size() == 4);
+    CHECK_THAT(staggered[0][0], WithinAbs(plain[0][0], 1e-3));
+    CHECK_THAT(staggered[0][1], WithinAbs(plain[0][1], 1e-3));
+    for (std::size_t k = 1; k < 4; ++k) {
+        CAPTURE(k);
+        const double dx = plain[k][0] - staggered[k][0], dy = plain[k][1] - staggered[k][1];
+        CHECK_THAT(std::hypot(dx, dy), WithinAbs(double(k) * s.wall_width, 0.03));
+        // Earlier on its counter-clockwise way round: the usual start comes after it.
+        const double ax = staggered[k][0] - 100.0, ay = staggered[k][1] - 100.0;
+        const double bx = plain[k][0] - 100.0, by = plain[k][1] - 100.0;
+        CHECK(ax * by - ay * bx > 0.0);
+    }
+}
+
+TEST_CASE("walls: one wall over the top surfaces (walls_extra.md, rule 10, W7)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.top_layers = s.bottom_layers = 3;
+    // A block of 30 x 20 x 4 mm with one of 10 x 20 x 4 mm on top.
+    const IndexedMesh step = boxes({{85, 90, 0, 115, 110, 4}, {95, 90, 4, 105, 110, 8}});
+    const std::vector<Run> none = runs_of(gcode_of(step, s));
+    s.top_one_wall = TopOneWall::Top;
+    const std::vector<Run> top = runs_of(gcode_of(step, s));
+    s.top_one_wall = TopOneWall::Topmost;
+    const std::vector<Run> topmost = runs_of(gcode_of(step, s));
+    // The step's top (layer 19, Z 4): the inner walls round all of it, or
+    // only round the block that goes on up (the spec: 186.51 and 106.42 mm).
+    const double inner_none = length_of(none, 19, "Perimeter");
+    const double inner_top = length_of(top, 19, "Perimeter");
+    CHECK_THAT(inner_none, WithinRel(186.51, 0.03));
+    CHECK_THAT(inner_top, WithinRel(106.42, 0.03));
+    CHECK(length_of(top, 19, "Top solid infill") > length_of(none, 19, "Top solid infill") + 50.0);
+    CHECK_THAT(length_of(top, 19, "External perimeter"), WithinAbs(length_of(none, 19, "External perimeter"), 1e-6));
+    // The part's top (layer 39): no inner walls with top or topmost.
+    CHECK(length_of(none, 39, "Perimeter") > 100.0);
+    CHECK(length_of(top, 39, "Perimeter") == 0.0);
+    CHECK(length_of(topmost, 39, "Perimeter") == 0.0);
+    // Topmost leaves the step as it was.
+    CHECK_THAT(length_of(topmost, 19, "Perimeter"), WithinAbs(inner_none, 1e-6));
+    // A layer whose top is covered keeps its walls.
+    CHECK_THAT(length_of(top, 10, "Perimeter"), WithinAbs(length_of(none, 10, "Perimeter"), 1e-6));
+}
+
+TEST_CASE("walls: an overhang held from one side filled with perimeters (walls_extra.md, rule 5, W3)", "[walls]") {
+    Settings s = base();
+    // A column of 10 x 20 x 8 mm with a slab of 20 x 20 x 2 mm on it that
+    // sticks out 10 mm in +X.
+    const IndexedMesh shelf = boxes({{90, 90, 0, 100, 110, 8}, {90, 90, 8, 110, 110, 10}});
+    const double plain = length_of(runs_of(gcode_of(shelf, s)), 40, "Overhang perimeter");
+    s.extra_on_overhangs = true;
+    const std::vector<Run> runs = runs_of(gcode_of(shelf, s));
+    const double filled = length_of(runs, 40, "Overhang perimeter");
+    // The spec: 75.8 mm of overhang perimeters, and 513.2 mm with the zone filled.
+    CHECK_THAT(plain, WithinRel(75.8, 0.1));
+    CHECK_THAT(filled, WithinRel(513.2, 0.12));
+    // Its fill is gone: no bridge under the zone.
+    CHECK(length_of(runs, 40, "Bridge infill") < 1.0);
+    CHECK(length_of(runs, 40, "Solid infill") < 1.0);
+    // The layer above is as without it.
+    CHECK(length_of(runs, 41, "Overhang perimeter") == 0.0);
+}
+
+TEST_CASE("walls: the outer wall with a width of its own (perimeters.md, walls.outer_width)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    s.outer_wall_width = 0.6;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 4}});
+    for (const WallGenerator generator : {WallGenerator::Variable, WallGenerator::Fixed}) {
+        s.wall_generator = generator;
+        const SlicedModel model = slice_model(m, s);
+        const LayerWalls& walls = model.walls[10];
+        // Each loop's width along the sides (the fixed loops have their
+        // points at the corners only) and the distance of its centre from
+        // the outline at X 90.
+        std::map<int, std::vector<double>> widths;
+        std::map<int, double> depth;
+        for (const Toolpath& t : walls.toolpaths)
+            for (const ToolpathPoint& p : t.points) {
+                if (generator == WallGenerator::Fixed || (p.p.y > 95.0 && p.p.y < 105.0))
+                    widths[t.index].push_back(p.width);
+                depth[t.index] = std::min(depth.count(t.index) ? depth[t.index] : 1e9, p.p.x - 90.0);
+            }
+        INFO((generator == WallGenerator::Fixed ? "fixed" : "variable"));
+        REQUIRE(widths.size() == 3);
+        for (const auto& [index, list] : widths)
+            for (const double w : list)
+                CHECK_THAT(w, WithinAbs(index == 0 ? 0.6 : 0.45, 1e-6));
+        // Neighbours overlap (perimeters.md, rule 1): 0.3, then + 0.525 - d,
+        // then + 0.45 - d, d = 0.2 (1 - pi/4); the infill starts where the
+        // third bead's spacing ends.
+        const double d = 0.2 * (1.0 - std::numbers::pi / 4.0);
+        CHECK_THAT(depth[0], WithinAbs(0.3, 0.002));
+        CHECK_THAT(depth[1], WithinAbs(0.825 - d, 0.002));
+        CHECK_THAT(depth[2], WithinAbs(1.275 - 2.0 * d, 0.002));
+        double min_x = 1e9;
+        for (const Polygon& ring : walls.infill)
+            for (const auto& q : ring)
+                min_x = std::min(min_x, to_mm(q.x));
+        CHECK_THAT(min_x - 90.0, WithinAbs(1.5 - 2.5 * d, 0.002));
+    }
+    // At 0 from the nozzle, 1.125 of it, whatever walls.width is (P12).
+    s.outer_wall_width = 0.0;
+    s.wall_width = 0.5;
+    s.wall_generator = WallGenerator::Variable;
+    const SlicedModel same = slice_model(m, s);
+    for (const Toolpath& t : same.walls[10].toolpaths)
+        for (const ToolpathPoint& p : t.points)
+            if (p.p.y > 95.0 && p.p.y < 105.0)
+                CHECK_THAT(p.width, WithinAbs(t.index == 0 ? 1.125 * s.nozzle_diameter : 0.5, 1e-6));
+}
+
+TEST_CASE("first layer: every bead layers.first_line_width wide (perimeters.md, rule 7)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    s.outer_wall_width = 0.6;
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 2;
+    s.skirt_loops = 1;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 4}});
+    const auto first_widths = [&m](const Settings& settings) {
+        const SlicedModel model = slice_model(m, settings);
+        std::set<double> walls, fills, skirt, above;
+        for (const Toolpath& t : model.walls[0].toolpaths)
+            for (const ToolpathPoint& p : t.points)
+                walls.insert(std::round(p.width * 1e6) / 1e6);
+        for (const auto* list : {&model.fills[0].solid, &model.fills[0].top, &model.fills[0].sparse})
+            for (const Toolpath& t : *list)
+                for (const ToolpathPoint& p : t.points)
+                    fills.insert(std::round(p.width * 1e6) / 1e6);
+        for (const Toolpath& t : model.skirt)
+            for (const ToolpathPoint& p : t.points)
+                skirt.insert(std::round(p.width * 1e6) / 1e6);
+        for (const Toolpath& t : model.walls[1].toolpaths)
+            if (t.index == 0)
+                above.insert(std::round(t.points.front().width * 1e6) / 1e6);
+        return std::array<std::set<double>, 4>{walls, fills, skirt, above};
+    };
+    // 200 % of a 0.2 mm first layer: 0.4 mm, the outer wall too; the second
+    // layer keeps its own widths.
+    auto w = first_widths(s);
+    CHECK(w[0] == std::set<double>{0.4});
+    CHECK(w[1] == std::set<double>{0.4});
+    CHECK(w[2] == std::set<double>{0.4});
+    CHECK(w[3].count(0.6) == 1);
+    s.first_layer_height = 0.3; // 0.6 mm
+    w = first_widths(s);
+    CHECK(w[0] == std::set<double>{0.6});
+    CHECK(w[1] == std::set<double>{0.6});
+    s.first_line_width = {0.5, false};
+    CHECK(first_widths(s)[0] == std::set<double>{0.5});
+    s.first_line_width = {}; // 0: as the other layers
+    w = first_widths(s);
+    CHECK(w[0] == std::set<double>{0.45, 0.6});
+}
+
+namespace {
+
+// The distance from the outline at X 90 of each wall loop's centre along the
+// side, and its width, at layer l: the beads of the square's left side.
+std::map<int, std::pair<double, double>> left_side(const SlicedModel& model, std::size_t l) {
+    std::map<int, std::pair<double, double>> out;
+    for (const Toolpath& t : model.walls[l].toolpaths)
+        for (const ToolpathPoint& p : t.points)
+            if (p.p.y > 95.0 && p.p.y < 105.0 && p.p.x < 95.0)
+                out[t.index] = {p.p.x - 90.0, p.width};
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("walls: neighbouring beads overlap by h (1 - pi/4) (perimeters.md, rule 1, P1 and P12)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 4}});
+    for (const WallGenerator generator : {WallGenerator::Variable, WallGenerator::Fixed}) {
+        INFO((generator == WallGenerator::Fixed ? "fixed" : "variable"));
+        s.wall_generator = generator;
+        // P1: 0.45 mm beads on 0.2 mm layers, 0.407 apart.
+        s.layer_height = s.first_layer_height = 0.2;
+        s.wall_width = 0.45, s.outer_wall_width = 0.0;
+        auto side = left_side(slice_model(m, s), 10);
+        if (generator == WallGenerator::Fixed) { // the fixed loops have their points at the corners
+            const SlicedModel model = slice_model(m, s);
+            side.clear();
+            for (const Toolpath& t : model.walls[10].toolpaths)
+                for (const ToolpathPoint& p : t.points)
+                    if (!side.count(t.index) || p.p.x - 90.0 < side[t.index].first)
+                        side[t.index] = {p.p.x - 90.0, p.width};
+        }
+        REQUIRE(side.size() == 3);
+        CHECK_THAT(side[0].first, WithinAbs(0.225, 0.002));
+        CHECK_THAT(side[1].first, WithinAbs(0.632, 0.002));
+        CHECK_THAT(side[2].first, WithinAbs(1.039, 0.002));
+        for (const auto& [index, at] : side)
+            CHECK_THAT(at.second, WithinAbs(0.45, 1e-6));
+    }
+    s.wall_generator = WallGenerator::Variable;
+    // P12: 0.3 mm layers; walls.width 0.5 with the outer one from the nozzle,
+    // then 0.4 with an outer one of 0.6.
+    s.layer_height = s.first_layer_height = 0.3;
+    s.wall_width = 0.5, s.outer_wall_width = 0.0;
+    auto side = left_side(slice_model(m, s), 5);
+    REQUIRE(side.size() == 3);
+    CHECK_THAT(side[0].first, WithinAbs(0.225, 0.002));
+    CHECK_THAT(side[0].second, WithinAbs(0.45, 1e-6));
+    CHECK_THAT(side[1].first, WithinAbs(0.636, 0.002));
+    CHECK_THAT(side[2].first, WithinAbs(1.071, 0.002));
+    CHECK_THAT(side[2].second, WithinAbs(0.5, 1e-6));
+    s.wall_width = 0.4, s.outer_wall_width = 0.6;
+    side = left_side(slice_model(m, s), 5);
+    REQUIRE(side.size() == 3);
+    CHECK_THAT(side[0].first, WithinAbs(0.300, 0.002));
+    CHECK_THAT(side[1].first, WithinAbs(0.736, 0.002));
+    CHECK_THAT(side[2].first, WithinAbs(1.071, 0.002));
+}
+
+TEST_CASE("walls: thin walls of one and two beads (perimeters.md, table P2)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    // Thickness: the beads' distances from the wall's middle and widths.
+    const std::vector<std::tuple<double, std::vector<double>, std::vector<double>>> rows = {
+        {0.4, {0.0}, {0.400}},
+        {0.5, {0.0}, {0.500}},
+        {0.7, {-0.164, 0.164}, {0.371, 0.371}},
+        {1.0, {-0.239, 0.239}, {0.521, 0.521}},
+        // From three beads on, only the middle ones take the difference
+        // (walls.spread_count 1, rule 3).
+        {1.2, {-0.375, 0.0, 0.375}, {0.450, 0.386, 0.450}},
+        {1.5, {-0.525, -0.161, 0.161, 0.525}, {0.450, 0.364, 0.364, 0.450}},
+        {1.1, {-0.264, 0.264}, {0.571, 0.571}},
+        {1.9, {-0.725, -0.261, 0.261, 0.725}, {0.450, 0.564, 0.564, 0.450}},
+        {2.0, {-0.775, -0.368, 0.0, 0.368, 0.775}, {0.450, 0.450, 0.372, 0.450, 0.450}},
+    };
+    for (const auto& [thickness, centres, widths] : rows) {
+        INFO("thickness " << thickness);
+        const float half = float(thickness / 2.0);
+        const SlicedModel model = slice_model(boxes({{100.0f - half, 90, 0, 100.0f + half, 110, 5}}), s);
+        std::vector<std::pair<double, double>> beads; // centre, width at Y 100
+        for (const Toolpath& t : model.walls[11].toolpaths)
+            for (std::size_t i = 1; i < t.points.size(); ++i) {
+                const ToolpathPoint &a = t.points[i - 1], &b = t.points[i];
+                if ((a.p.y - 100.0) * (b.p.y - 100.0) > 0.0 || a.p.y == b.p.y)
+                    continue;
+                const double f = (100.0 - a.p.y) / (b.p.y - a.p.y);
+                beads.push_back({a.p.x + f * (b.p.x - a.p.x) - 100.0, a.width + f * (b.width - a.width)});
+            }
+        std::sort(beads.begin(), beads.end());
+        REQUIRE(beads.size() == centres.size());
+        for (std::size_t i = 0; i < beads.size(); ++i) {
+            CHECK_THAT(beads[i].first, WithinAbs(centres[i], 0.003));
+            CHECK_THAT(beads[i].second, WithinAbs(widths[i], 0.003));
+        }
+    }
+}
+
+TEST_CASE("walls: staggered perimeters, the odd inner loops half a layer up (staggered_perimeters.md, ST1)", "[walls]") {
+    // The 20 mm cube, 3 walls, 0.2 mm layers: the first inner loop half a
+    // layer up with the normal material, 1.5 times on the first layer and
+    // half on the top layer, back at the layer's Z; the others at the layer's Z.
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    s.walls_staggered = true;
+    s.relative_extrusion = true;
+    const IndexedMesh m = boxes({{90, 90, 0, 110, 110, 10}});
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    REQUIRE(check.ok());
+    // Per layer, by bead (outer 0, first inner 1, second inner 2, by their
+    // distance from X 90 along the left side): the Z and the filament per mm.
+    struct Seen {
+        double z = 0.0, e = 0.0, length = 0.0;
+    };
+    std::map<std::pair<int, int>, Seen> seen;
+    std::istringstream in(out.str());
+    int layer = -1;
+    double x = 0.0, y = 0.0, z = 0.0;
+    for (std::string line; std::getline(in, line);) {
+        if (line.rfind(";LAYER_CHANGE", 0) == 0)
+            ++layer;
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        double nx = x, ny = y, nz = z, e = 0.0;
+        std::istringstream words(line.substr(3));
+        for (std::string w; words >> w;) {
+            const double v = std::atof(w.c_str() + 1);
+            if (w[0] == 'X')
+                nx = v;
+            else if (w[0] == 'Y')
+                ny = v;
+            else if (w[0] == 'Z')
+                nz = v;
+            else if (w[0] == 'E')
+                e = v;
+        }
+        const double length = std::hypot(nx - x, ny - y);
+        if (e > 0.0 && length > 5.0 && std::abs(nx - x) < 1e-6 && nx < 92.0) {
+            const int bead = nx - 90.0 < 0.4 ? 0 : nx - 90.0 < 0.8 ? 1 : 2;
+            Seen& k = seen[{layer, bead}];
+            k.z = nz, k.e += e, k.length += length;
+        }
+        x = nx, y = ny, z = nz;
+    }
+    const double normal = 0.033849; // 0.45 x 0.2 on 1.75 mm filament (gcode_motion.md, M1)
+    const auto per_mm = [&](int l, int b) { return seen.at({l, b}).e / seen.at({l, b}).length; };
+    REQUIRE(seen.count({0, 1}));
+    REQUIRE(seen.count({25, 1}));
+    REQUIRE(seen.count({49, 1}));
+    CHECK_THAT(seen.at({0, 1}).z, WithinAbs(0.3, 1e-6));
+    CHECK_THAT(per_mm(0, 1) / per_mm(0, 0), WithinAbs(1.5, 0.02));
+    CHECK_THAT(seen.at({25, 1}).z, WithinAbs(5.3, 1e-6));
+    CHECK_THAT(per_mm(25, 1), WithinAbs(normal, 0.0003));
+    CHECK_THAT(seen.at({25, 0}).z, WithinAbs(5.2, 1e-6));
+    CHECK_THAT(seen.at({25, 2}).z, WithinAbs(5.2, 1e-6));
+    CHECK_THAT(seen.at({49, 1}).z, WithinAbs(10.0, 1e-6));
+    CHECK_THAT(per_mm(49, 1), WithinAbs(normal / 2.0, 0.0003));
+}
+
+namespace {
+
+// A wedge lying flat: its tip at (60, 100), opening along +X at `degrees`,
+// 30 mm long and 3 mm tall.
+IndexedMesh wedge(double degrees) {
+    const double half = 30.0 * std::tan(degrees * std::numbers::pi / 360.0);
+    IndexedMesh m;
+    for (float z : {0.0f, 3.0f}) {
+        m.vertices.push_back({60.0f, 100.0f, z});
+        m.vertices.push_back({90.0f, float(100.0 - half), z});
+        m.vertices.push_back({90.0f, float(100.0 + half), z});
+    }
+    m.triangles = {{0, 2, 1}, {3, 4, 5}, {0, 1, 4}, {0, 4, 3}, {1, 2, 5}, {1, 5, 4}, {2, 0, 3}, {2, 3, 5}};
+    return m;
+}
+
+// The bead counts the wedge's walls go through at layer 5, crossing it at
+// every 0.25 mm along X while it is under 2.5 mm thick.
+std::set<int> counts_along(const SlicedModel& model, double degrees) {
+    std::set<int> out;
+    const double slope = 2.0 * std::tan(degrees * std::numbers::pi / 360.0);
+    for (double x = 60.5; x < 90.0 && (x - 60.0) * slope < 2.5; x += 0.25) {
+        int n = 0;
+        for (const Toolpath& t : model.walls[5].toolpaths)
+            for (std::size_t i = 0; i + 1 < t.points.size() + (t.closed ? 1 : 0); ++i) {
+                const Point2d& a = t.points[i].p;
+                const Point2d& b = t.points[(i + 1) % t.points.size()].p;
+                n += (a.x - x) * (b.x - x) < 0.0;
+            }
+        out.insert(n);
+    }
+    return out;
+}
+
+} // namespace
+
+TEST_CASE("walls: odd bead counts only in corners no wider than walls.transition_angle (perimeters.md, P14)", "[walls]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.wall_width = 0.45;
+    const auto has_odd = [](const std::set<int>& counts) {
+        return std::any_of(counts.begin(), counts.end(), [](int n) { return n % 2 == 1; });
+    };
+    for (const double setting : {1.0, 10.0, 30.0}) {
+        s.wall_transition_angle = setting;
+        for (const double tip : {5.0, 10.0, 20.0}) {
+            INFO("setting " << setting << ", tip " << tip);
+            const std::set<int> counts = counts_along(slice_model(wedge(tip), s), tip);
+            REQUIRE(counts.size() > 1);
+            CHECK(has_odd(counts) == (tip <= setting));
+        }
+    }
+}

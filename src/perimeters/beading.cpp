@@ -20,8 +20,13 @@ int unlimited_count(const BeadingParams& p, double d) {
         // Pairs of preferred-width beads, one from each side.
         return 2 * static_cast<int>(std::floor(d / (2.0 * w) + 0.5));
     case BeadingScheme::Distributed:
-    case BeadingScheme::InwardDistributed:
-        return static_cast<int>(std::floor(d / w + 0.5));
+    case BeadingScheme::InwardDistributed: {
+        int n = static_cast<int>(std::floor(d / w + 0.5));
+        if (p.odd_centre > 0.0 && n >= 3 && n % 2 == 1 && d - (n - 1) * w < p.odd_centre * w)
+            --n;
+        // Thinner than half a bead but not than the smallest detail: one bead.
+        return n == 0 && p.min_detail > 0.0 && d >= p.min_detail ? 1 : n;
+    }
     }
     return 0;
 }
@@ -36,11 +41,18 @@ int bead_count(const BeadingParams& p, double d) {
     return p.wall_count > 0 ? std::min(n, 2 * p.wall_count) : n;
 }
 
+double outer_bead(const BeadingParams& p) {
+    return p.outer_width > 0.0 ? p.outer_width : p.preferred_width;
+}
+
 std::optional<ShellRamp> shell_ramp(const BeadingParams& p) {
     if (p.wall_count <= 0 || p.scheme == BeadingScheme::Uniform)
         return std::nullopt;
-    const double start = transition_thickness(p, 2 * p.wall_count);
-    return ShellRamp{start, start + p.preferred_width / 2.0};
+    const double w = p.preferred_width;
+    const double shell = 2.0 * (outer_bead(p) + (p.wall_count - 1) * w); // both sides, at their widths
+    // Where the count would reach 2M + 1 by Eq. 5, whatever the centre bead asks.
+    const double start = std::max((2 * p.wall_count + 0.5) * w, shell + w / 2.0);
+    return ShellRamp{start, start + w / 2.0};
 }
 
 double transition_thickness(const BeadingParams& p, int n) {
@@ -51,7 +63,8 @@ double transition_thickness(const BeadingParams& p, int n) {
         return (2.0 * std::floor(n / 2.0) + 1.0) * w;
     case BeadingScheme::Distributed:
     case BeadingScheme::InwardDistributed:
-        return (n + 0.5) * w;
+        // To an odd count from 3 on, once its centre bead is odd_centre w* wide.
+        return p.odd_centre > 0.0 && n >= 2 && n % 2 == 0 ? (n + p.odd_centre) * w : (n + 0.5) * w;
     }
     return 0.0;
 }
@@ -60,12 +73,15 @@ Beading compute_beading(const BeadingParams& p, int n, double d) {
     const std::optional<ShellRamp> shell = shell_ramp(p);
     if (!shell || n < 2 * p.wall_count || d <= shell->start)
         return fill(p, n, d);
-    // The shell: the 2M beads of the ramp's start, narrowed towards w*.
+    // The shell: the 2M beads of the ramp's start, narrowed towards w* (the
+    // outer two towards their own width).
     const int m = 2 * p.wall_count;
     Beading b = fill(p, m, shell->start);
     const double s = std::min(1.0, (d - shell->start) / (shell->end - shell->start));
-    for (double& w : b.widths)
-        w += s * (p.preferred_width - w);
+    for (int i = 0; i < m; ++i) {
+        double& w = b.widths[std::size_t(i)];
+        w += s * ((i == 0 || i == m - 1 ? outer_bead(p) : p.preferred_width) - w);
+    }
     double edge = 0.0;
     for (int i = 0; i < p.wall_count; ++i) {
         const std::size_t k = std::size_t(i);
@@ -116,6 +132,12 @@ Beading fill(const BeadingParams& p, int n, double d) {
         // Uniform beads come in from both outlines; the leftover gap stays in the middle.
         for (std::size_t i = b.widths.size() / 2; i < b.widths.size(); ++i)
             b.centres[i] = d - b.centres[b.widths.size() - 1 - i];
+    }
+    if (n == 1 && p.scheme != BeadingScheme::Uniform) {
+        // A wall of one bead: as wide as the wall, never narrower than
+        // min_width, on the wall's middle.
+        b.widths[0] = std::max(b.widths[0], p.min_width);
+        b.centres[0] = d / 2.0;
     }
     return b;
 }

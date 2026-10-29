@@ -50,6 +50,7 @@ struct FrameBlock {
     std::int32_t flags[4];
     float grid[4];
     float colours[16][4];
+    float face_eye[4]; // what the preview's drawn faces face (preview_face_eye)
 };
 
 // Each draw's values, as view_common.glsl's Draw push constants.
@@ -119,6 +120,7 @@ struct VulkanView::Impl {
     int width = 0, height = 0;
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     Image colour_ms, depth, resolved, picture;
+    std::vector<double> shown; // the frame in the picture (frame_key); empty: none
     VkRenderPass scene_pass = VK_NULL_HANDLE, composite_pass = VK_NULL_HANDLE;
     VkFramebuffer scene_fb = VK_NULL_HANDLE, composite_fb = VK_NULL_HANDLE;
     VkDescriptorSet picture_set = VK_NULL_HANDLE; // ImGui's texture, the same through resizes
@@ -127,8 +129,8 @@ struct VulkanView::Impl {
     std::array<VkPipeline, kPipes> pipes{};
 
     // What is drawn.
-    Buffer plate_v, grid_v, model_v, paint_v, extrusions_v, travels_v;
-    std::uint32_t plate_count = 0, grid_count = 0, grid_outline = 0, model_count = 0, paint_count = 0,
+    Buffer plate_v, grid_v, model_v, model_coarse_v, paint_v, extrusions_v, travels_v;
+    std::uint32_t plate_count = 0, grid_count = 0, grid_outline = 0, model_count = 0, model_coarse_count = 0, paint_count = 0,
                   travel_count = 0;
     float grid_step = 10.0f;
     int grid_major_every = 5;
@@ -598,7 +600,9 @@ struct VulkanView::Impl {
                            VK_IMAGE_ASPECT_DEPTH_BIT);
         resolved = make_image(w, h, colour_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
                               VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-        picture = make_image(w, h, colour_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        picture = make_image(w, h, colour_format,
+                             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT, // read_picture
                              VK_SAMPLE_COUNT_1_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 
         // The scene: cleared, drawn multisampled, resolved for the composite.
@@ -789,6 +793,8 @@ struct VulkanView::Impl {
         fb.grid[0] = grid_step, fb.grid[1] = float(grid_major_every);
         for (std::size_t k = 0; k < kLineKinds && k < 16; ++k)
             copy(fb.colours[k], f.kind_colours[k], 1.0f);
+        const std::array<float, 4> face_eye = preview_face_eye(f);
+        std::memcpy(fb.face_eye, face_eye.data(), sizeof fb.face_eye);
         std::memcpy(uniforms[slot].mapped, &fb, sizeof fb);
 
         VkClearValue clears[3] = {};
@@ -849,17 +855,22 @@ struct VulkanView::Impl {
             }
         }
         if (f.show_model && model_count > 0) {
+            // While the view moves, the coarse copy if there is one (V6).
+            const bool coarse = f.coarse && model_coarse_count > 0;
+            const std::uint32_t count = coarse ? model_coarse_count : model_count;
             // The chosen model in its own colour, the rest before and after it.
-            const std::uint32_t first = std::uint32_t(std::min<std::size_t>(f.selected_first, model_count));
-            const std::uint32_t chosen = std::uint32_t(std::min<std::size_t>(f.selected_count, model_count - first));
-            bind(Mesh, &model_v);
+            const std::uint32_t first =
+                std::uint32_t(std::min<std::size_t>(coarse ? f.coarse_selected_first : f.selected_first, count));
+            const std::uint32_t chosen = std::uint32_t(
+                std::min<std::size_t>(coarse ? f.coarse_selected_count : f.selected_count, count - first));
+            bind(Mesh, coarse ? &model_coarse_v : &model_v);
             draw = {};
             copy(draw.colour, f.model);
             push(draw);
             if (first > 0)
                 vkCmdDraw(c, first, 1, 0, 0);
-            if (first + chosen < model_count)
-                vkCmdDraw(c, model_count - first - chosen, 1, first + chosen, 0);
+            if (first + chosen < count)
+                vkCmdDraw(c, count - first - chosen, 1, first + chosen, 0);
             if (chosen > 0) {
                 copy(draw.colour, f.model_selected);
                 copy(draw.extra, f.selected_offset);
@@ -893,11 +904,12 @@ struct VulkanView::Impl {
             draw.preview[2] = std::uint32_t(lo), draw.preview[3] = std::uint32_t(hi);
             bind(Preview, &extrusions_v);
             push(draw);
-            for (const PreviewRange& r : preview_ranges(order, lo, hi, f.kind_mask))
-                if (r.count > 0) {
-                    vkCmdDraw(c, 36, std::uint32_t(r.count), 0, std::uint32_t(r.first));
-                    drawn += r.count;
-                }
+            const Mat4 clip = f.projection * f.view;
+            for (const PreviewRange& r :
+                 preview_draws(order, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip)) {
+                vkCmdDraw(c, kPreviewVertices, std::uint32_t(r.count), 0, std::uint32_t(r.first));
+                drawn += r.count;
+            }
             if (f.show_travels && travel_count > 0 && layer_travels.size() > hi + 1) {
                 const std::size_t t0 = layer_travels[lo], tn = layer_travels[hi + 1] - t0;
                 if (tn > 0) {
@@ -937,7 +949,7 @@ struct VulkanView::Impl {
         if (picture_set)
             ImGui_ImplVulkan_RemoveTexture(picture_set);
         picture_set = VK_NULL_HANDLE;
-        for (Buffer* b : {&plate_v, &grid_v, &model_v, &paint_v, &extrusions_v, &travels_v})
+        for (Buffer* b : {&plate_v, &grid_v, &model_v, &model_coarse_v, &paint_v, &extrusions_v, &travels_v})
             free_buffer(*b);
         for (Buffer& u : uniforms)
             free_buffer(u);
@@ -984,6 +996,7 @@ void VulkanView::shutdown() {
 
 void VulkanView::set_bed(const BedPolygon& bed, const BedLook& look) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.plate_count = v.grid_count = v.grid_outline = 0;
@@ -1006,6 +1019,7 @@ void VulkanView::set_bed(const BedPolygon& bed, const BedLook& look) {
 
 void VulkanView::set_model(const std::vector<float>& vertices) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.model_count = 0;
@@ -1015,8 +1029,21 @@ void VulkanView::set_model(const std::vector<float>& vertices) {
     });
 }
 
+void VulkanView::set_model_coarse(const std::vector<float>& vertices) {
+    Impl& v = *impl_;
+    v.shown.clear();
+    if (!v.ready)
+        return;
+    v.model_coarse_count = 0;
+    v.guard([&] {
+        v.upload(v.model_coarse_v, vertices.data(), vertices.size() * sizeof(float));
+        v.model_coarse_count = std::uint32_t(vertices.size() / 6);
+    });
+}
+
 void VulkanView::set_paint(const std::vector<float>& vertices, const std::vector<Renderer::PaintGroup>& groups) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     v.paint_count = 0;
@@ -1029,6 +1056,7 @@ void VulkanView::set_paint(const std::vector<float>& vertices, const std::vector
 
 void VulkanView::set_preview(const PreviewBuffers& p) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready)
         return;
     clear_preview();
@@ -1049,6 +1077,7 @@ void VulkanView::set_preview(const PreviewBuffers& p) {
 
 void VulkanView::clear_preview() {
     Impl& v = *impl_;
+    v.shown.clear();
     v.order = {};
     v.layer_extrusions.clear();
     v.layer_travels.clear();
@@ -1056,11 +1085,18 @@ void VulkanView::clear_preview() {
 }
 
 void VulkanView::record(void* command_buffer, int frame, const ViewFrame& f) {
+    // The picture stays from one window frame to the next: with the same
+    // frame and the same data, it is already this one.
+    Impl& v = *impl_;
+    std::vector<double> key = frame_key(f);
+    if (v.ready && key == v.shown)
+        return;
     // Only the targets can fail, before anything is recorded: then the view
     // stops, and the window goes on.
-    Impl& v = *impl_;
     if (!v.guard([&] { v.record(static_cast<VkCommandBuffer>(command_buffer), frame, f, true); }))
         v.ready = false;
+    else
+        v.shown = std::move(key);
 }
 
 bool VulkanView::take_time(double& ms) {
@@ -1073,6 +1109,7 @@ bool VulkanView::take_time(double& ms) {
 
 double VulkanView::bench(const ViewFrame& f, int n) {
     Impl& v = *impl_;
+    v.shown.clear();
     if (!v.ready || n < 1)
         return 0.0;
     double ms = 0.0;
@@ -1087,6 +1124,64 @@ double VulkanView::bench(const ViewFrame& f, int n) {
         ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() / n;
     });
     return ms;
+}
+
+std::vector<std::uint8_t> VulkanView::read_picture(int& width, int& height) {
+    Impl& v = *impl_;
+    width = height = 0;
+    std::vector<std::uint8_t> out;
+    if (!v.ready || !v.picture.image || v.width < 1 || v.height < 1)
+        return out;
+    v.guard([&] {
+        vkDeviceWaitIdle(v.d.device); // the frames in flight write it
+        const VkDeviceSize bytes = VkDeviceSize(v.width) * VkDeviceSize(v.height) * 4;
+        Buffer host = v.make_buffer(bytes, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        v.one_time([&](VkCommandBuffer c) {
+            VkImageMemoryBarrier b{};
+            b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+            b.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            b.image = v.picture.image;
+            b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+            vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                                 0, nullptr, 0, nullptr, 1, &b);
+            VkBufferImageCopy region{};
+            region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+            region.imageExtent = {std::uint32_t(v.width), std::uint32_t(v.height), 1};
+            vkCmdCopyImageToBuffer(c, v.picture.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, host.buffer, 1, &region);
+            b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            b.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            vkCmdPipelineBarrier(c, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+                                 nullptr, 0, nullptr, 1, &b);
+        });
+        void* mapped = nullptr;
+        check(vkMapMemory(v.d.device, host.memory, 0, bytes, 0, &mapped), "vkMapMemory");
+        out.assign(static_cast<const std::uint8_t*>(mapped), static_cast<const std::uint8_t*>(mapped) + bytes);
+        vkUnmapMemory(v.d.device, host.memory);
+        v.free_buffer(host);
+        width = v.width, height = v.height;
+    });
+    return out;
+}
+
+std::vector<std::uint8_t> VulkanView::draw_picture(const ViewFrame& f, int& width, int& height) {
+    Impl& v = *impl_;
+    v.shown.clear();
+    width = height = 0;
+    if (!v.ready)
+        return {};
+    const bool drawn = v.guard([&] {
+        v.record_ready(f);
+        vkDeviceWaitIdle(v.d.device);
+        v.one_time([&](VkCommandBuffer c) { v.record(c, 0, f, false); });
+    });
+    return drawn ? read_picture(width, height) : std::vector<std::uint8_t>{};
 }
 
 ImTextureID VulkanView::texture() const { return ImTextureID(impl_->picture_set); }
@@ -1109,10 +1204,19 @@ bool VulkanView::init(const VulkanDevice&, std::string& error) {
 void VulkanView::shutdown() {}
 void VulkanView::set_bed(const BedPolygon&, const BedLook&) {}
 void VulkanView::set_model(const std::vector<float>&) {}
+void VulkanView::set_model_coarse(const std::vector<float>&) {}
 void VulkanView::set_paint(const std::vector<float>&, const std::vector<Renderer::PaintGroup>&) {}
 void VulkanView::set_preview(const PreviewBuffers&) {}
 void VulkanView::clear_preview() {}
 void VulkanView::record(void*, int, const ViewFrame&) {}
+std::vector<std::uint8_t> VulkanView::read_picture(int& width, int& height) {
+    width = height = 0;
+    return {};
+}
+std::vector<std::uint8_t> VulkanView::draw_picture(const ViewFrame&, int& width, int& height) {
+    width = height = 0;
+    return {};
+}
 ImTextureID VulkanView::texture() const { return ImTextureID(0); }
 std::size_t VulkanView::drawn_extrusions() const { return 0; }
 bool VulkanView::take_time(double&) { return false; }

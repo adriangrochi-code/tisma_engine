@@ -37,9 +37,26 @@ add_executable(tisma_tests
   test_infill.cpp
   test_gcode.cpp
   test_resolution.cpp
+  test_corners.cpp
+  test_gcode_arcs.cpp
+  test_firmware.cpp
+  test_template.cpp
+  test_binary.cpp
+  test_retraction.cpp
+  test_walls_extra.cpp
+  test_sequential.cpp
+  test_labels.cpp
+  test_multi_extruder.cpp
+  test_color_mix.cpp
+  test_curved.cpp
+  test_resin.cpp
+  test_belt.cpp
   test_order.cpp
   test_scarf.cpp
   test_settings_layout.cpp
+  test_settings_view.cpp
+  test_printer_card.cpp
+  test_transform.cpp
   test_vase.cpp
   test_travel.cpp
   test_cooling.cpp
@@ -50,6 +67,8 @@ add_executable(tisma_tests
   test_support.cpp
   test_tree_support.cpp
   test_arcs.cpp
+  test_stability.cpp
+  test_speeds.cpp
   test_formats.cpp
   test_bitgrid.cpp
   test_voronoi.cpp
@@ -69,10 +88,11 @@ target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)
-  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp test_plate.cpp test_help.cpp)
+  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp test_plate.cpp test_help.cpp test_credits.cpp test_assistant.cpp)
   target_link_libraries(tisma_tests PRIVATE tisma_ui)
   target_compile_definitions(tisma_tests PRIVATE TISMA_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets"
-                                                 TISMA_DOCS_DIR="${PROJECT_SOURCE_DIR}/docs")
+                                                 TISMA_DOCS_DIR="${PROJECT_SOURCE_DIR}/docs"
+                                                 TISMA_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 endif()
 
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
@@ -102,6 +122,54 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 800x520 --ray-check --ray-samples 2
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_raytrace.png)
+    # The strict view check of every screenshot (no black pixel, few
+    # sparkles) with the occlusion at its strongest: a strength past 1 made the
+    # ambient light negative, drawn black (2026-10-28).
+    # The rays find the crease under the cube closed (no ambient light at all).
+    foreach(render ao rt)
+      foreach(view prepare preview)
+        add_test(NAME ui_view_${render}_strongest_${view}
+          COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  --render ${render} --ray-samples 2 --ao-strength 1.5 --graphics opengl
+                  --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${render}_strongest_${view}.png)
+        set_tests_properties(ui_view_${render}_strongest_${view}
+                             PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+      endforeach()
+    endforeach()
+    # A printer picked from the catalog in the printer card's list, on an empty
+    # settings folder (a crash, 2026-10-28: the card kept a pointer into the
+    # profile lists that adding the printer reads again).
+    add_test(NAME ui_catalog_printer_home_clean
+      COMMAND ${CMAKE_COMMAND} -E rm -rf ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home)
+    add_test(NAME ui_catalog_printer_picked
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pick-catalog-printer "Creality CR-5 Pro H"
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_printer.png)
+    set_tests_properties(ui_catalog_printer_home_clean PROPERTIES FIXTURES_SETUP ui_catalog_home)
+    set_tests_properties(ui_catalog_printer_picked PROPERTIES FIXTURES_REQUIRED ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # Fields edited with the mouse and the keyboard, as a person does
+    # (--ui-script, tests/data/ui): the printer's page, and a number of the
+    # print settings typed with a decimal comma; units, limits, a checkbox and
+    # the purge volume (unit_fields).
+    foreach(script printer_fields print_fields unit_fields)
+      add_test(NAME ui_script_${script}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${script}.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${script}.png)
+      set_tests_properties(ui_script_${script} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
+    # A still view draws nothing new (idle_view): its draw calls counted.
+    add_test(NAME ui_script_idle_view
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/sphere.stl --render ao --graphics opengl --draw-stats
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/idle_view.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_idle_view.png)
+    set_tests_properties(ui_script_idle_view PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The moiré filter: the preview from far away, its layers finer than a
     # pixel, gets smoother with the filter where the filter acts.
     add_test(NAME ui_moire_filter_smooths_fine_lines
@@ -166,19 +234,48 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --graphics vulkan
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_vulkan.png)
       set_tests_properties(ui_vulkan_window PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+      # The moiré filter's check with Vulkan drawing the view.
+      add_test(NAME ui_moire_filter_smooths_fine_lines_vulkan
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview --moire-check
+                --graphics vulkan --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_moire_vulkan.png)
+      set_tests_properties(ui_moire_filter_smooths_fine_lines_vulkan
+                           PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
       # The 3D view with Vulkan (V2) against OpenGL's, picture against picture:
       # the model with a painted seam, close; then the sliced cube's preview.
-      set(TISMA_VIEW_prepare --tool paint --paint seam,enforce,133,131,5,2 --look 124,122,5,60,45,25)
-      set(TISMA_VIEW_preview)
-      foreach(view prepare preview)
+      # Then the preview from above, where the layers lie over each other
+      # (drawn nearest first, 2026-10-28), and from far away, its lines a
+      # pixel or less (the moiré filter).
+      set(TISMA_VIEW_prepare --view prepare --tool paint --paint seam,enforce,133,131,5,2 --look 124,122,5,60,45,25)
+      set(TISMA_VIEW_preview --view preview)
+      set(TISMA_VIEW_preview_top --view preview --look 128,128,5,70,30,85)
+      set(TISMA_VIEW_preview_far --view preview --look 128,128,5,600,30,35)
+      # And each of the preview's colour views (preview.md, rule 1).
+      set(TISMA_VIEWS prepare preview preview_top preview_far)
+      foreach(colour height width speed actual_speed fan temperature flow actual_flow layer_time layer_time_log tool
+                     color_print)
+        set(TISMA_VIEW_preview_${colour} --view preview --color ${colour})
+        list(APPEND TISMA_VIEWS preview_${colour})
+      endforeach()
+      # A curved part too (tools/make_test_sphere.py), close and from above.
+      foreach(view prepare preview preview_top)
+        set(TISMA_VIEW_sphere_${view} ${TISMA_VIEW_${view}})
+        set(TISMA_MODEL_sphere_${view} sphere.stl)
+        list(APPEND TISMA_VIEWS sphere_${view})
+      endforeach()
+      set(TISMA_VIEW_sphere_prepare --view prepare --look 128,128,10,60,30,35)
+      foreach(view ${TISMA_VIEWS})
+        if(NOT TISMA_MODEL_${view})
+          set(TISMA_MODEL_${view} cube_ascii.stl)
+        endif()
         add_test(NAME ui_view_${view}_opengl
           COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/${TISMA_MODEL_${view}} --lang en --size 900x600
                   ${TISMA_VIEW_${view}} --render fast --graphics opengl
                   --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png)
         add_test(NAME ui_view_${view}_vulkan_same_as_opengl
           COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --view ${view}
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/${TISMA_MODEL_${view}} --lang en --size 900x600
                   ${TISMA_VIEW_${view}} --render fast --graphics vulkan
                   --compare-view ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_opengl.png
                   --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_view_${view}_vulkan.png)
@@ -209,6 +306,113 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     add_test(NAME ui_paint_same_gcode
       COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_a.gcode
               ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_b.gcode)
+    # The settings panel (settings_panel.md): the same G-code in Basic and in
+    # Custom (SP9), the search going to a setting (SP6) with all the sections
+    # together (SP6b), and the dialog that chooses what Custom shows.
+    add_test(NAME ui_settings_basic
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --level basic
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_level_basic.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_level_basic.png)
+    add_test(NAME ui_settings_custom_search
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --level custom
+              --search seam --single-column --choose-settings
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_level_custom.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_level_custom.png)
+    add_test(NAME ui_settings_same_gcode
+      COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_level_basic.gcode
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_level_custom.gcode)
+    # The printer's card with a catalog printer of several nozzles and beds
+    # (SP22), and the printer's page on its calibrations (SP28, SP29).
+    add_test(NAME ui_printer_card
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600
+              "--profile" "printer=Raise3D E3 0.4 mm" --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_printer_card.png)
+    add_test(NAME ui_printer_page
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --section printer/calibration
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_printer_page.png)
+    # A cube cut at 4 mm in the interface: two pieces, sliced and exported
+    # with their G-code checked (model_tools.md, rule 13).
+    add_test(NAME ui_cut
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --cut 4
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_cut.gcode --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_cut.png)
+    # The help with the engine's own test data: a problem with its actions
+    # (assistant.md, rules 5 to 8), and the ABS card with its warnings (AS9).
+    add_test(NAME ui_help_problem
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --help-panel problems --help-item stringing
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_help_problem.png)
+    add_test(NAME ui_material_card
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --profile filament=ABS --section material/temperature
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_material_card.png)
+    # A guided tutorial of the test data on its first step (assistant.md, AS12).
+    add_test(NAME ui_tutorial
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --tutorial first_print,1
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_tutorial.png)
+    # A calibration guide with a guide before it not done (assistant.md, AS16, AS17).
+    add_test(NAME ui_calibration_guide
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --help-panel calibrations --help-item max_flow
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_calibration_guide.png)
+    set_tests_properties(ui_help_problem ui_material_card ui_tutorial ui_calibration_guide PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Measure between the cube's bottom and top (model_tools.md, rule 20).
+    add_test(NAME ui_measure
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --tool measure --measure 0,2
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_measure.png)
+    # An object's own settings in their window (settings_levels.md, rule 11).
+    add_test(NAME ui_object_settings
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --object-settings "{\"infill\": {\"density\": 40, \"pattern\": \"grid\"}, \"walls\": {\"count\": 3}}"
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_object_settings.png)
+    # A modifier, a negative volume and a height range of the cube (model_tools.md, rules 2, 3 and 6).
+    add_test(NAME ui_object_volumes
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720 --object-add modifier,negative,range
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_object_volumes.png)
+    # The same turned 45° about Z: the modifier and the negative turn with it.
+    add_test(NAME ui_object_volumes_turned
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720 --object-add modifier,negative
+              --object-turn 0,0,45 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_object_volumes_turned.png)
+    # The Objects tab (settings_levels.md, rules 11 and 13): the cube with its
+    # own infill, a modifier, a negative volume and a range, its Infill row chosen.
+    add_test(NAME ui_objects_list
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
+              --object-settings "{\"infill\": {\"density\": 15, \"pattern\": \"grid\"}}" --object-add modifier,negative,range
+              --section objects/infill --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_objects_list.png)
+    set_tests_properties(ui_cut ui_measure ui_object_settings ui_object_volumes ui_object_volumes_turned ui_objects_list PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # More › Credits and sources, in English (credits.md, CR2 and CR4).
+    add_test(NAME ui_credits
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600 --credits
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_credits.png)
+    # The help panel without the pack's data says it comes with the profiles
+    # (assistant.md, AS1), with an empty data folder of its own.
+    add_test(NAME ui_help_panel
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720 --help-panel problems
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_help_panel.png)
+    set_tests_properties(ui_help_panel PROPERTIES ENVIRONMENT
+                         "ASAN_OPTIONS=detect_leaks=0;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_help_config" TIMEOUT 300)
+    set_tests_properties(ui_printer_card ui_printer_page ui_credits PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    set_tests_properties(ui_settings_basic PROPERTIES FIXTURES_SETUP ui_level_basic)
+    set_tests_properties(ui_settings_custom_search PROPERTIES FIXTURES_SETUP ui_level_custom)
+    set_tests_properties(ui_settings_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_level_basic;ui_level_custom")
+    set_tests_properties(ui_settings_basic ui_settings_custom_search PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
     set_tests_properties(ui_paint_save PROPERTIES FIXTURES_SETUP ui_paint)
     set_tests_properties(ui_paint_reopen PROPERTIES FIXTURES_REQUIRED ui_paint FIXTURES_SETUP ui_paint_b)
     set_tests_properties(ui_paint_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_paint;ui_paint_b")

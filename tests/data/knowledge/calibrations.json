@@ -1,0 +1,32 @@
+{
+  "format": "tisma-knowledge-calibrations",
+  "version": 1,
+  "language": "es",
+  "sources": [{"id": "test", "title": "Datos de prueba del motor", "author": "Equipo del motor", "url": "https://example.com/test"},
+              {"id": "other", "title": "Otra fuente de prueba", "author": "Equipo del motor", "url": "https://example.com/other"}],
+  "notes": ["Datos inventados para las pruebas del motor."],
+  "calibrations": [
+    {"id": "flow", "name": "Flujo", "group": "filament", "order": 4, "before": ["pressure_advance"],
+     "why": "Que cada línea tenga el material justo.", "repeat": "Con cada filamento.",
+     "steps": [{"title": "Imprimir", "text": "Imprimí los parches."}, "Elegí el más liso."],
+     "read": [{"look": "Huecos entre líneas", "means": "Falta material"}],
+     "result": {"key": "extrusion.flow", "text": "flujo nuevo = flujo × (100 + parche) / 100"},
+     "tips": ["Mirá con luz rasante."], "sources": ["other"]},
+    {"id": "temperature_tower", "name": "Torre de temperatura", "group": "filament", "order": 1, "before": [],
+     "why": "La temperatura con mejor acabado.", "repeat": "Con cada filamento.",
+     "steps": ["Imprimí la torre.", "Elegí el bloque mejor."],
+     "read": [{"look": "Hilos", "means": "Demasiado caliente"}],
+     "result": {"key": "machine.variables.temperature", "text": "la temperatura del bloque elegido"}},
+    {"id": "max_flow", "name": "Flujo máximo", "group": "filament", "order": 2, "before": "temperature_tower",
+     "why": "Cuánto material por segundo funde el hot end.", "repeat": "Al cambiar de hot end o de filamento.",
+     "steps": ["Imprimí la prueba.", "Medí la altura donde empeora."],
+     "result": {"key": "extrusion.max_flow", "text": "inicio + altura × paso, y un 10 % menos"},
+     "open": "drying"},
+    {"id": "pressure_advance", "name": "Avance de presión", "group": "filament", "order": 3, "before": ["max_flow"],
+     "why": "Esquinas sin bultos.", "repeat": "Con cada filamento.", "steps": ["Imprimí la torre."],
+     "result": {"key": "extrusion.pressure_advance", "text": "inicio + altura × paso"}},
+    {"id": "input_shaping", "name": "Input shaping", "group": "printer", "order": 5, "before": null,
+     "why": "Menos ecos en las paredes.", "repeat": "Al cambiar la máquina.", "steps": ["Imprimí la prueba."],
+     "result": {"where": "printer_firmware", "text": "la frecuencia con menos ecos, en la impresora"}}
+  ]
+}

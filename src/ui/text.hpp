@@ -81,7 +81,7 @@
     X(LineWidth, "Ancho de línea", "Line width")                                                                      \
     X(Seam, "Costura", "Seam")                                                                                        \
     X(FuzzySkin, "Piel difusa", "Fuzzy skin")                                                                         \
-    X(FuzzyNone, "No", "None")                                                                                        \
+    X(FuzzyNone, "Apagado", "Off")                                                                                        \
     X(FuzzyExternal, "Por fuera", "Outside")                                                                          \
     X(FuzzyAll, "Por fuera y agujeros", "Outside and holes")                                                          \
     X(FuzzyThickness, "Espesor de la piel", "Skin thickness")                                                         \
@@ -102,6 +102,10 @@
     X(NonplanarInfillTip, "El relleno sube y baja en Z mientras avanza, igual en todas las capas, así cada capa se anida en la de abajo y la unión queda inclinada: más resistencia en Z. Solo con patrones que se repiten capa a capa (grilla, triángulos, estrellas, panal, alineado, concéntrico, curvas). Ver docs/NONPLANAR_INFILL.md.", "The infill goes up and down in Z as it runs, the same in every layer, so each layer nests on the one below and the joint leans: stronger in Z. Only with patterns that repeat layer to layer (grid, triangles, stars, honeycomb, aligned, concentric, curves). See docs/NONPLANAR_INFILL.md.") \
     X(NonplanarAmplitude, "Altura de la onda", "Wave height")                                                         \
     X(NonplanarWavelength, "Largo de la onda", "Wavelength")                                                          \
+    X(InterlockWaves, "Ondas entrelazadas", "Interlocking waves") \
+    X(InterlockWavesTip, "El relleno sube y baja como un cartón de huevos, igual en cada capa, así las capas encajan en vez de apoyarse en planos lisos.", "The infill rises and falls like an egg crate, the same in every layer, so the layers nest instead of lying on flat planes.") \
+    X(WaveAmplitude, "Altura de las ondas", "Wave height") \
+    X(WaveLength, "Largo de las ondas", "Wave length") \
     X(TopPattern, "Superficie superior", "Top surface")                                                               \
     X(Monotonic, "Monotónica", "Monotonic")                                                                           \
     X(Rectilinear, "Rectilínea", "Rectilinear")                                                                       \
@@ -128,7 +132,7 @@
     X(SupportAutomatic, "Soporte automático", "Automatic support")                                                     \
     X(SupportAutomaticTip, "Apagado, solo hay soporte bajo las caras pintadas con Pintar > Soportes",                   \
       "When off, support goes only under the faces painted with Paint > Supports")                                    \
-    X(SupportAngle, "Ángulo de voladizo (0: automático)", "Overhang angle (0: automatic)")                           \
+    X(SupportAngle, "Ángulo de voladizo", "Overhang angle")                                                           \
     X(SkirtLoops, "Vueltas de falda", "Skirt loops")                                                                  \
     X(SkirtDistance, "Distancia de la falda", "Skirt distance")                                                       \
     X(BrimWidth, "Ancho del borde", "Brim width")                                                                     \
@@ -141,6 +145,7 @@
     X(SpeedSupport, "Soporte", "Support")                                                                             \
     X(SpeedTravel, "Viajes", "Travel")                                                                                \
     X(SpeedFirstLayer, "Primera capa", "First layer")                                                                 \
+    X(SpeedMaxFlow, "Caudal máximo", "Maximum flow")                                                                  \
     X(SpeedMax, "Máxima", "Maximum")                                                                                  \
     X(LoadSettings, "Cargar…", "Load…")                                                                               \
     X(SaveSettings, "Guardar…", "Save…")                                                                              \
@@ -282,6 +287,29 @@
     X(ToolMoveHint, "El centro de su caja en la cama", "The centre of its box on the bed")                            \
     X(ToolLayFlatHint, "Hacé clic en una cara del modelo: queda apoyada en la cama.", "Click a face of the model: it goes down on the bed.") \
     X(ResetRotation, "Sin giro", "No rotation")                                                                       \
+    X(Mirror, "Espejar", "Mirror")                                                                                    \
+    X(ToolCutTip, "Cortar (C): con un plano horizontal, en dos piezas", "Cut (C): with a horizontal plane, in two pieces") \
+    X(ToolCutHint, "El plano corta la pieza a esta altura sobre la cama. Las dos mitades quedan cerradas, cada una como una pieza.", \
+      "The plane cuts the part at this height over the bed. Both halves come out closed, each one a part.")           \
+    X(ToolMeasureTip, "Medir (U): distancias y ángulos de un modelo", "Measure (U): distances and angles of a model")  \
+    X(ToolMeasureHint, "Clic en una cara del modelo (o Shift + clic: el vértice más cercano). Un agujero, un cilindro o un cono muestra enseguida su diámetro o su ángulo; entre dos elementos del mismo modelo, la distancia o, entre caras, el ángulo.", \
+      "Click a face of a model (or Shift + click: the nearest vertex). A hole, a cylinder or a cone shows its diameter or angle at once; between two picks of the same model, the distance or, between faces, the angle.") \
+    X(MeasurePlane, "Una cara", "A face")                                                                             \
+    X(MeasureHole, "Agujero: Ø %.3f mm", "Hole: Ø %.3f mm")                                                           \
+    X(MeasureCylinder, "Cilindro: Ø %.3f mm", "Cylinder: Ø %.3f mm")                                                  \
+    X(MeasureCone, "Cono: %.2f° · Ø %.3f a %.3f mm", "Cone: %.2f° · Ø %.3f to %.3f mm")                                                                             \
+    X(MeasurePoint, "Un vértice", "A vertex")                                                                         \
+    X(MeasureDistance, "Distancia", "Distance")                                                                       \
+    X(MeasureAngle, "Ángulo", "Angle")                                                                                \
+    X(MeasureShouldBe, "Debería medir", "It should be")                                                               \
+    X(MeasureScale, "Escalar", "Scale")                                                                               \
+    X(CutHeight, "Altura", "Height")                                                                                  \
+    X(CutFlipLower, "Dar vuelta la parte de abajo", "Turn the lower part over")                                       \
+    X(CutButton, "Cortar", "Cut")                                                                                     \
+    X(SplitButton, "Separar en piezas", "Split into pieces")                                                          \
+    X(SplitTip, "Cada pedazo suelto del modelo pasa a ser una pieza, con los huecos que tiene adentro",               \
+      "Each loose piece of the model becomes a part, with the cavities inside it")                                    \
+    X(SplitOnePiece, "El modelo es una sola pieza", "The model is a single piece")                                                                                     \
     X(ScaleTogether, "Los tres ejes juntos", "All three axes together")                                               \
     X(ResetScale, "Tamaño original", "Original size")                                                                 \
     X(Models, "modelos", "models")                                                                                    \
@@ -398,6 +426,13 @@
     X(CalElephantFoot, "Pata de elefante", "Elephant's foot")                                                          \
     X(CalElephantFootWhat, "Cuánto se ensancha la primera capa, para achicarla.", "How much the first layer widens, to shrink it.") \
     X(CalElephantFootHint, "Un bloque de 20 × 20 × 6 mm. Medí con calibre el ancho del borde de abajo (la primera capa) y el del cuerpo, en el mismo lado.", "A 20 × 20 × 6 mm block. Measure with calipers the width of the bottom edge (the first layer) and the body's, on the same side.") \
+    X(CalResinExposure, "Torre de exposición", "Exposure tower") \
+    X(CalResinExposureWhat, "Qué exposición deja los agujeros abiertos y las aletas firmes", "Which exposure keeps the holes open and the fins standing") \
+    X(CalResinExposureHint, "Una franja por exposición, sobre una base. Elegí la más baja cuyas aletas finas salieron derechas y cuyos agujeros chicos no se cerraron.", "A band per exposure, over a base. Pick the lowest whose thin fins came out straight and whose small holes did not close.") \
+    X(CalResinMeasure, "Bloque de medidas", "Measuring block") \
+    X(CalResinMeasureWhat, "La corrección de escala de la resina", "The resin's scale correction") \
+    X(CalResinMeasureHint, "Un bloque de 30 × 30 × 10 mm. Medilo lejos del borde de abajo, que se ensancha.", "A 30 × 30 × 10 mm block. Measure it away from its bottom edge, which spreads.") \
+    X(ResinScaleApplied, "Corrección de escala de la resina aplicada", "Resin scale correction applied") \
     X(MeasuredBottom, "Ancho abajo", "Width at the bottom")                                                             \
     X(MeasuredBody, "Ancho del cuerpo", "Body width")                                                                   \
     X(FirstLayerShrink, "Achique de la primera capa", "First layer shrink")                                             \
@@ -471,6 +506,45 @@
     X(BySpeed, "Velocidad", "Speed")                                                                                  \
     X(ByWidth, "Ancho", "Width")                                                                                      \
     X(ByHeight, "Alto de capa", "Layer height")                                                                       \
+    X(ByActualSpeed, "Velocidad alcanzada", "Actual speed") \
+    X(ByFan, "Ventilador", "Fan speed") \
+    X(ByTemperature, "Temperatura", "Temperature") \
+    X(ByFlow, "Caudal", "Volumetric flow") \
+    X(ByActualFlow, "Caudal alcanzado", "Actual volumetric flow") \
+    X(ByLayerTime, "Tiempo de capa (lineal)", "Layer time (linear)") \
+    X(ByLayerTimeLog, "Tiempo de capa (logarítmico)", "Layer time (logarithmic)") \
+    X(ByTool, "Extrusor", "Tool") \
+    X(ByColorPrint, "Color por capa", "Color print") \
+    X(ToolN, "Extrusor %d", "Tool %d") \
+    X(NoTypes, "Sin tipos: el G-code no dice qué es cada línea", "No types: the G-code does not say what each line is") \
+    X(GcodePreviewMenu, "Vista previa de G-code…", "G-code preview…") \
+    X(AddAtLayer, "Agregar en esta capa un cambio de color (clic derecho: más)", "Add a colour change at this layer (right click: more)") \
+    X(AddColorChange, "Cambio de color", "Colour change") \
+    X(AddPause, "Pausa…", "Pause…") \
+    X(AddCustomGcode, "G-code propio…", "Custom G-code…") \
+    X(PauseMessage, "Mensaje que muestra la impresora", "Message the printer shows") \
+    X(CustomGcodeText, "G-code al empezar la capa", "G-code at the layer's start") \
+    X(ChangeAtLayer, "Capa %d", "Layer %d") \
+    X(RemoveChange, "Quitar", "Remove") \
+    X(ColorChangeAt, "Cambio de color en la capa %d", "Colour change at layer %d") \
+    X(PauseAt, "Pausa en la capa %d", "Pause at layer %d") \
+    X(GcodeAt, "G-code propio en la capa %d", "Custom G-code at layer %d") \
+    X(MoveN, "Movimiento %d de %d", "Move %d of %d") \
+    X(IconTravels, "Viajes: los movimientos sin extruir", "Travels: the moves that do not extrude") \
+    X(IconWipes, "Barridos: la boquilla que barre al terminar un lazo", "Wipes: the nozzle wiping at a loop's end") \
+    X(IconRetracts, "Retracciones: donde se retrae el filamento", "Retractions: where the filament is pulled back") \
+    X(IconUnretracts, "Vueltas de retracción: donde se vuelve a empujar", "Unretractions: where it is pushed back") \
+    X(IconSeams, "Costuras: donde empieza cada lazo de pared externa", "Seams: where each outer wall loop starts") \
+    X(IconToolChanges, "Cambios de herramienta", "Tool changes") \
+    X(IconColorChanges, "Cambios de color", "Colour changes") \
+    X(IconPauses, "Pausas", "Pauses") \
+    X(IconCustom, "G-code propio: donde va un G-code puesto por la persona", "Custom G-code: where the user's own G-code goes") \
+    X(IconGravity, "Centro de gravedad de lo impreso", "Centre of gravity of what is printed") \
+    X(IconNozzle, "Boquilla en el último movimiento dibujado", "Nozzle at the last move drawn") \
+    X(NozzleAt, "X %.2f · Y %.2f · Z %.2f · %.0f mm/s", "X %.2f · Y %.2f · Z %.2f · %.0f mm/s") \
+    X(ColorN, "Color %d", "Color %d") \
+    X(FirstLayerTime, "Primera capa", "First layer") \
+    X(MovesTime, "Movimientos", "Moves") \
     X(Layer, "Capa", "Layer")                                                                                         \
     X(LayerOf, "Capa %d de %d  ·  Z %.2f mm", "Layer %d of %d  ·  Z %.2f mm")                                         \
     X(OnlyThisLayer, "Solo esta capa", "This layer only")                                                             \
@@ -599,8 +673,107 @@
     X(About, "Acerca de Tisma", "About Tisma")                                                                        \
     X(AboutText, "Tisma engine %s: un laminador propio, escrito desde cero.",                                         \
       "Tisma engine %s: an own slicer, written from scratch.")                                                        \
-    X(AboutLibraries, "Usa GLFW, Dear ImGui, nanosvg, oneTBB, Clipper2, nlohmann/json y volk (THIRD_PARTY.md); la fuente es Roboto (Apache-2.0).", \
-      "Uses GLFW, Dear ImGui, nanosvg, oneTBB, Clipper2, nlohmann/json and volk (THIRD_PARTY.md); the font is Roboto (Apache-2.0).") \
+    X(AboutLibraries, "Usa GLFW, Dear ImGui, nanosvg, oneTBB, Clipper2, nlohmann/json y volk; la fuente es Roboto (Apache-2.0). Sus licencias y las fuentes de cada función, en Más › Créditos y fuentes.", \
+      "Uses GLFW, Dear ImGui, nanosvg, oneTBB, Clipper2, nlohmann/json and volk; the font is Roboto (Apache-2.0). Their licenses and where each function comes from, in More › Credits and sources.") \
+    X(BasedOn, "Basado en", "Based on")                                                                               \
+    X(BasedOnBy, ", de ", ", by ")                                                                                    \
+    X(Credits, "Créditos y fuentes", "Credits and sources")                                                           \
+    X(CreditsIntro, "De dónde sale cada función y los componentes de terceros que lleva el programa, con sus licencias.", \
+      "Where each function comes from, and the third-party components the program carries, with their licenses.") \
+    X(CreditsFeatures, "Funciones", "Functions")                                                                      \
+    X(CreditsLibraries, "Componentes de terceros", "Third-party components")                                          \
+    X(CreditsFunction, "Función", "Function")                                                                         \
+    X(CreditsSource, "Basado en", "Based on")                                                                         \
+    X(CreditsAuthor, "Autor", "Author")                                                                               \
+    X(CreditsLicense, "Licencia o tipo", "License or kind")                                                           \
+    X(CreditsComponent, "Componente", "Component")                                                                    \
+    X(CreditsVersion, "Versión", "Version")                                                                           \
+    X(CreditsNotice, "Aviso de la licencia", "License notice")                                                        \
+    X(CreditsShowNotice, "Ver el aviso", "Show the notice")                                                           \
+    X(CreditsLibraryLicense, "Licencia", "License")                                                                   \
+    X(WarnEnclosure, "Este material necesita una impresora cerrada", "This material needs an enclosed printer")       \
+    X(WarnAbrasive, "Este material gasta las boquillas de latón: usá una de acero endurecido",                         \
+      "This material wears brass nozzles out: use a hardened steel one")                                              \
+    X(WarnBedTemperature, "Tu cama no llega a la temperatura de este material",                                       \
+      "Your bed does not reach this material's temperature")                                                          \
+    X(WarnNozzleTemperature, "Tu hotend no llega a la temperatura de este material",                                  \
+      "Your hot end does not reach this material's temperature")                                                      \
+    X(WarnDry, "Conviene secarlo antes de imprimir", "Better dry it before printing")                                 \
+    X(RangeTo, " a ", " to ")                                                                                         \
+    X(Help, "Ayuda", "Help")                                                                                          \
+    X(HelpTip, "Ayuda: problemas de impresión, procedimientos, glosario y tutoriales, sin conexión (F1)",              \
+      "Help: print problems, procedures, glossary and tutorials, offline (F1)")                                        \
+    X(HelpProblems, "Problemas", "Problems")                                                                          \
+    X(HelpProcedures, "Procedimientos", "Procedures")                                                                 \
+    X(HelpGlossary, "Glosario", "Glossary")                                                                           \
+    X(HelpTutorials, "Tutoriales", "Tutorials")                                                                       \
+    X(HelpCalibrations, "Calibraciones", "Calibrations")                                                              \
+    X(HelpSearch, "Buscar en la ayuda", "Search the help")                                                            \
+    X(HelpNoData, "La ayuda se descarga con los perfiles; se va a bajar cuando haya conexión.",                       \
+      "The help is downloaded with the profiles; it will be when there is a connection.")                             \
+    X(HelpNotRead, "Los datos de la ayuda están en esta computadora, pero esta versión todavía no los lee.",          \
+      "The help's data is on this computer, but this version does not read it yet.")                                  \
+    X(HelpBasedOn, "Basado en las guías de", "Based on the guides by")                                                \
+    X(HelpTour, "Recorrido de la interfaz", "A tour of the interface")                                               \
+    X(HelpTourAbout, "Siete pasos, de abrir un modelo a imprimir.", "Seven steps, from opening a model to printing.") \
+    X(HelpStart, "Empezar", "Start")                                                                                  \
+    X(HelpNothingFound, "No se encontró nada", "Nothing found")                                                       \
+    X(MaterialCard, "Ficha del material: %s", "Material card: %s")                                                    \
+    X(GuideOffer, "¿Te muestro cómo?", "Shall I show you how?")                                                      \
+    X(GuideAccept, "Mostrame", "Show me")                                                                             \
+    X(GuideLater, "Después", "Later")                                                                                 \
+    X(GuideNever, "No, gracias", "No, thanks")                                                                        \
+    X(GuideWaits, "Sigue solo cuando lo hagas, o con Siguiente.", "It moves on when you do it, or with Next.")         \
+    X(GuideExit, "Salir", "Exit")                                                                                     \
+    X(GuideContinue, "Seguir", "Continue")                                                    \
+    X(MaterialChamber, "Cabina", "Chamber")                                                                           \
+    X(MaterialFan, "Ventilador", "Fan")                                                                               \
+    X(MaterialEnclosure, "Impresora cerrada", "Enclosed printer")                                                     \
+    X(MaterialNozzle, "Boquilla", "Nozzle")                                                                           \
+    X(MaterialRetraction, "Retracción", "Retraction")                                                                 \
+    X(MaterialDirect, "directa %.1f mm", "direct %.1f mm")                                                            \
+    X(MaterialBowden, "Bowden %.1f mm", "Bowden %.1f mm")                                                             \
+    X(MaterialDrying, "Secado", "Drying")                                                       \
+    X(HelpMaterial, "Material", "Material")                                                                           \
+    X(HelpBack, "‹ Volver", "‹ Back")                                                                                 \
+    X(HelpLastResort, "Probar solo después de las anteriores", "Try only after the ones above")                       \
+    X(HelpApply, "Aplicar", "Apply")                                                                                  \
+    X(HelpOpen, "Abrir", "Open")                                                                                      \
+    X(HelpSee, "Ver", "See")                                                                                          \
+    X(HelpOpenCalibration, "Abrir la calibración", "Open the calibration")                                            \
+    X(HelpPrevention, "Para que no vuelva a pasar", "So it does not happen again")                                    \
+    X(HelpNotes, "Notas", "Notes")                                                                                    \
+    X(HelpLimitUsed, "Se usó el límite: %s", "The limit was used: %s")                                                \
+    X(HelpTutorialSteps, "%d pasos, unos %d min", "%d steps, about %d min")                                           \
+    X(GuidesFilament, "Del filamento: se repiten con cada filamento", "Filament: repeated with each filament")        \
+    X(GuidesPrinter, "De la impresora: al cambiar la máquina", "Printer: when the machine changes")                     \
+    X(GuideRepeat, "Cuándo repetirla: %s", "When to repeat it: %s")                                                  \
+    X(GuideBefore, "Antes conviene hacer: %s", "Better do first: %s")                                                 \
+    X(GuideSteps, "Pasos", "Steps")                                                                                   \
+    X(GuideLook, "Lo que ves", "What you see")                                                                        \
+    X(GuideMeans, "Qué significa", "What it means")                                                                   \
+    X(GuideResult, "Resultado", "Result")                                                                             \
+    X(GuideNow, "Ahora: %s", "Now: %s")                                                                               \
+    X(GuideStart, "Inicio de la prueba", "Test start")                                                                \
+    X(GuideStepPerBand, "Paso por franja", "Step per band")                                                           \
+    X(GuideBand, "Alto de franja (mm)", "Band height (mm)")                                                           \
+    X(GuideHeight, "Altura medida (mm)", "Measured height (mm)")                                                      \
+    X(GuideValue, "Valor leído en la pieza", "Value read on the print")                                               \
+    X(GuideLayers, "Capas de separación", "Layers of gap")                                                            \
+    X(GuideReadValue, "Leído: %s", "Read: %s")                                                                        \
+    X(GuideProposed, "Valor propuesto", "Proposed value")                                                             \
+    X(GuideFirmware, "Este resultado no va en el perfil: se guarda en la impresora.",                                 \
+      "This result does not go in the profile: it is saved in the printer.")                                          \
+    X(GuideTips, "Consejos", "Tips")                                                                                  \
+    X(GuideFrequency, "Frecuencia (Hz)", "Frequency (Hz)")                                                          \
+    X(GuideSend, "Mandar a la impresora", "Send to the printer")                                                      \
+    X(GuideSent, "Mandado a la impresora: %s", "Sent to the printer: %s")                                             \
+    X(GuideHow, "Cómo se hace", "How it is done")                                                                     \
+    X(GuideCalibrate, "Calibrar", "Calibrate")                                                                        \
+    X(ReviewFix, "¿Cómo lo arreglo?", "How do I fix it?")                                                            \
+    X(AssistantTutorials, "Ofrecer los tutoriales", "Offer the tutorials")                                            \
+    X(AssistantGlossary, "Definiciones del glosario junto a los ajustes", "Glossary definitions next to the settings") \
+    X(AssistantMaterial, "Ficha y avisos del material", "Material card and warnings")                                 \
     X(Quit, "Salir", "Quit")                                                                                          \
     X(AnalysisTitle, "Análisis estructural de la pieza impresa", "Structural analysis of the printed part")          \
     X(AnalysisHint, "La pieza se divide en vóxeles que siguen las capas. Más vóxeles: más detalle, más memoria y más tiempo.", \
@@ -616,8 +789,9 @@
     X(OverLimit, "Más que el máximo del análisis (%s vóxeles): no correría a esta calidad",                            \
       "More than the analysis's maximum (%s voxels): it would not run at this quality")                               \
     X(AnalysisNeedsModel, "Abrí un modelo para ver sus vóxeles", "Open a model to see its voxels")                    \
-    X(AnalysisCli, "El análisis completo, con apoyos y cargas, corre por ahora con «tisma-engine analyze» (docs/ANALYSIS.md).", \
-      "The full analysis, with supports and loads, runs for now with \"tisma-engine analyze\" (docs/ANALYSIS.md).") \
+    X(AnalysisCli, "El análisis completo, con apoyos y cargas, corre por ahora en la línea de comandos (docs/ANALYSIS.md):", \
+      "The full analysis, with supports and loads, runs for now on the command line (docs/ANALYSIS.md):") \
+    X(PerLayer, "%d por capa", "%d per layer") \
     X(SecQuality, "Calidad", "Quality") \
     X(SecStrength, "Resistencia", "Strength") \
     X(SecSpeed, "Velocidad", "Speed") \
@@ -656,6 +830,7 @@
     X(SubSupportInterface, "Interfaz", "Interface") \
     X(SubSupportTree, "Árbol", "Tree") \
     X(SubArcs, "Arcos en voladizos", "Arc overhangs") \
+    X(SupportWidth, "Ancho de las líneas", "Line width") \
     X(ArcsEnabled, "Voladizos con arcos", "Overhangs in arcs") \
     X(ArcsOverlap, "Cuánto pisa cada arco", "Arc overlap") \
     X(ArcsSpeed, "Velocidad de los arcos", "Arc speed") \
@@ -682,6 +857,12 @@
     X(SubNeeds, "Necesidades", "Requirements") \
     X(SubBedVolume, "Cama y volumen", "Bed and volume") \
     X(SubEnclosure, "Cabina", "Enclosure") \
+    X(SubStability, "Estabilidad", "Stability") \
+    X(NozzleForce, "Empuje de la boquilla", "Nozzle push") \
+    X(BedAdhesion, "Adherencia a la cama", "Bed hold") \
+    X(MaxDeflection, "Flecha máxima", "Largest bend") \
+    X(SumNozzleForce, "Empuje medido: %s N", "Push measured: %s N") \
+    X(SumNotMeasured, "Sin medir", "Not measured") \
     X(SubNozzle, "Boquilla", "Nozzle") \
     X(SubExtruder, "Extrusor", "Extruder") \
     X(SubSpeedLimits, "Velocidades", "Speeds") \
@@ -710,7 +891,55 @@
     X(ResetCardTip, "Vuelve los ajustes de este apartado a los del perfil guardado", "Takes this part's settings back to the saved profile") \
     X(HiddenChanged, "Cambiado; se ve aunque el nivel lo esconde", "Changed; shown although the level hides it") \
     X(ChooseSettings, "Elegir ajustes…", "Choose settings…") \
+    X(Undo, "Deshacer", "Undo") \
+    X(BackToPlate, "‹ Placa", "‹ Plate") \
+    X(PrinterSettingsTitle, "Configuración de la impresora", "Printer settings") \
+    X(PrinterSettingsTip, "Configuración de la impresora: máquina, boquilla, límites, G-code y calibración", "Printer settings: machine, nozzle, limits, G-code and calibration") \
+    X(SecCalibration, "Calibración", "Calibration") \
+    X(SecConnection, "Conexión", "Connection") \
+    X(SecNotes, "Notas", "Notes") \
+    X(SearchPrinter, "Buscar impresora", "Search printer") \
+    X(MyPrinters, "Mis impresoras", "My printers") \
+    X(OtherPrinters, "Otras", "Others") \
+    X(AddPrinter, "Agregar impresora…", "Add printer…") \
+    X(BedType, "Cama", "Bed") \
+    X(HardenedSteel, "acero endurecido", "hardened steel") \
+    X(OtherNozzle, "Otra…", "Other…") \
+    X(OtherNozzleTitle, "Otra boquilla", "Another nozzle") \
+    X(NozzleChanged, "Boquilla de %s", "%s nozzle") \
+    X(NotCalibrated, "Sin calibrar", "Not calibrated") \
+    X(CalibratedOn, "Calibrado el %s", "Calibrated on %s") \
+    X(CalibratedOtherNozzle, "Calibrado con otra boquilla (%s)", "Calibrated with another nozzle (%s)") \
+    X(CalibratedWith, "con %s", "with %s") \
+    X(CalibratedCount, "%d de %d calibradas", "%d of %d calibrated") \
+    X(CalibrateInOrder, "Calibrar en orden", "Calibrate in order") \
+    X(CalibrateButton, "Calibrar", "Calibrate") \
+    X(OpenInDevices, "Abrir en Dispositivos", "Open in Devices") \
+    X(ConnectionNone, "Sin conectar. La conexión por USB está en la pestaña Impresora.", "Not connected. The USB connection is in the Printer tab.") \
+    X(ConnectionNow, "Conectada por USB: %s", "Connected by USB: %s") \
+    X(NotesHint, "Notas sobre esta impresora: arreglos, repuestos, lo que sirvió…", "Notes about this printer: fixes, spare parts, what worked…") \
+    X(ChooseSettingsTitle, "Los ajustes que se ven en Personalizado", "The settings Custom shows") \
+    X(StartFrom, "Partir de:", "Start from:") \
+    X(AllSettings, "Todos", "All") \
+    X(NoSettings, "Ninguno", "None") \
+    X(Accept, "Aceptar", "Accept") \
+    X(FilterSettings, "Filtrar ajustes", "Filter settings") \
+    X(HideSetting, "Quitar de la vista", "Take out of the view") \
+    X(AddSetting, "+ Agregar ajuste", "+ Add a setting") \
+    X(SearchSettings, "Buscar un ajuste (Ctrl+F)", "Search a setting (Ctrl+F)") \
+    X(SearchNoMatch, "Ningún ajuste coincide", "No setting matches") \
+    X(ExportView, "Exportar vista…", "Export view…") \
+    X(ImportView, "Importar vista…", "Import view…") \
+    X(ExportViewTitle, "Exportar la vista de los ajustes", "Export the settings view") \
+    X(ImportViewTitle, "Importar una vista de los ajustes", "Import a settings view") \
+    X(ViewExported, "Vista guardada en %s", "View saved to %s") \
+    X(ViewImported, "Vista cargada: %d ajustes", "View loaded: %d settings") \
     X(VaseMode, "Modo vaso (espiral)", "Vase mode (spiral)") \
+    X(SequentialRow, "Objeto por objeto", "One object at a time") \
+    X(SequentialTip, "Cada objeto se imprime entero antes del siguiente: si uno falla, los otros siguen. Necesita lugar para el cabezal entre los objetos", "Each object is printed whole before the next: if one fails, the others go on. The head needs room between the objects") \
+    X(ClearanceRadius, "Radio libre del cabezal", "Head clearance radius") \
+    X(ClearanceHeight, "Altura libre bajo el eje X", "Clearance under the X axis") \
+    X(BetweenObjectsGcode, "G-code entre objetos", "G-code between objects") \
     X(VaseModeTip, "Una sola pared que sube en espiral, sin costura: para vasos, macetas y pantallas. Sin relleno ni techo; las capas de abajo son planas. No se puede con soportes.", "One wall rising in a spiral, without a seam: for vases, pots and lampshades. No infill nor top; the bottom layers are flat. Not with supports.") \
     X(VaseManyObjects, "En modo vaso se imprime un solo objeto por vez", "Vase mode prints one object at a time") \
     X(SumLayer, "%s mm · primera %s mm", "%s mm · first %s mm") \
@@ -735,7 +964,7 @@
     X(SumNotCombined, "Cada capa la suya", "Each layer its own") \
     X(SumSpeed, "%s mm/s", "%s mm/s") \
     X(SumWallSpeed, "%s · externa %s", "%s · outer %s") \
-    X(SumTwoSpeeds, "%s · %s mm/s", "%s · %s mm/s") \
+    X(SumTwoSpeeds, "%s · %s", "%s · %s") \
     X(SumNoSupport, "Sin soportes", "No supports") \
     X(SumAutoSupport, "Automáticos, %s°", "Automatic, %s°") \
     X(SumPaintedSupport, "Solo lo pintado", "Painted only") \
@@ -781,6 +1010,17 @@
     X(ScarfSmooth, "Solo lazos lisos", "Smooth loops only") \
     X(ScarfInner, "También paredes internas", "Inner walls too") \
     X(DetectOverhangs, "Paredes en voladizo", "Overhang walls") \
+    X(MinLineWidth, "Cordón más fino", "Thinnest bead") \
+    X(SeamGap, "Hueco en la costura", "Seam gap") \
+    X(OuterWidth, "Ancho de la pared externa", "Outer wall width") \
+    X(SpreadCount, "Cordones que absorben la diferencia", "Beads that take the difference") \
+    X(TransitionLength, "Largo de las transiciones", "Transition length") \
+    X(TransitionAngle, "Ángulo de las transiciones", "Transition angle") \
+    X(FirstLineWidth, "Ancho en la primera capa", "First layer line width") \
+    X(TopWidth, "Ancho de la capa de arriba", "Top surface width") \
+    X(SolidWidth, "Ancho del relleno sólido", "Solid infill width") \
+    X(InfillWidth, "Ancho del relleno", "Infill width") \
+    X(MinDetail, "Detalle más chico", "Smallest detail") \
     X(ScarfTip, "La pared empieza en una rampa desde la capa de abajo y termina pasando sobre ella: casi no deja costura. Ver walls_extra.md.", "The wall starts on a ramp up from the layer below and ends over it: the seam hardly shows. See walls_extra.md.") \
     X(ScaleXRow, "Escala en X", "Scale in X") \
     X(ScaleYRow, "Escala en Y", "Scale in Y") \
@@ -795,12 +1035,33 @@
     X(WallOverlap, "Solapamiento con paredes", "Overlap with walls") \
     X(CombineMaxHeight, "Alto máximo combinado", "Thickest combined") \
     X(SupportZGap, "Separación en Z", "Z gap") \
+    X(SupportBottomZGap, "Separación sobre la pieza", "Gap over the part") \
+    X(SupportBuildplateOnly, "Solo desde la cama", "From the bed only") \
+    X(SupportUnderBridges, "Soporte bajo los puentes", "Support under bridges") \
+    X(NotSet, "Sin dato", "Not set") \
+    X(AutoValue, "Automático", "Automatic") \
+    X(NoLimit, "Sin límite", "No limit") \
+    X(ValueMax, "Máximo: %s", "Maximum: %s") \
+    X(ValueMin, "Mínimo: %s", "Minimum: %s") \
+    X(SupportBottomInterface, "Capas de interfaz sobre la pieza", "Interface layers over the part") \
     X(SupportXyGap, "Separación en XY", "XY gap") \
     X(SupportSpacing, "Espaciado", "Spacing") \
     X(SupportLineAngle, "Ángulo de las líneas", "Line angle") \
+    X(SupportPatternRow, "Patrón de la base", "Base pattern") \
+    X(SupportEnforceLayers, "Capas con soporte forzado", "Layers of enforced support") \
+    X(SupportSheath, "Vaina", "Sheath") \
+    X(SupportInterfacePatternRow, "Patrón de la interfaz", "Interface pattern") \
+    X(SupportInterfaceSpacing, "Separación de la interfaz", "Interface spacing") \
+    X(SupportContactLoops, "Lazos de contacto", "Contact loops") \
+    X(PatternLines, "Líneas", "Lines") \
+    X(PatternGrid, "Grilla", "Grid") \
+    X(PatternAutomatic, "Automático", "Automatic") \
     X(SupportInterface, "Capas de interfaz", "Interface layers") \
     X(SupportStyle, "Estilo", "Style") \
     X(SupportGrid, "Grilla", "Grid") \
+    X(SupportSnug, "Ajustado", "Snug") \
+    X(SupportClosingRadius, "Radio de cierre", "Closing radius") \
+    X(SupportFreeBridge, "Puente sin soporte", "Free bridge length") \
     X(SupportOrganic, "Árbol (orgánico)", "Tree (organic)") \
     X(SupportStyleTip, "Árbol: ramas redondas que se juntan hacia la cama; menos marcas en la pieza y se quitan fácil", \
       "Tree: round branches that join on their way to the bed; fewer marks on the part, easy to remove") \
@@ -822,10 +1083,421 @@
     X(FanAlways, "Ventilador siempre", "Fan always on") \
     X(FanBridges, "Ventilador en puentes", "Fan on bridges") \
     X(FanOffLayers, "Capas sin ventilador", "Layers without fan") \
+    X(FullFanLayer, "Ventilador completo desde la capa", "Full fan from layer") \
+    X(CoolingEnabled, "Enfriamiento automático", "Automatic cooling") \
     X(MinSpeed, "Velocidad mínima", "Minimum speed") \
     X(PressureAdvance, "Avance de presión", "Pressure advance") \
     X(FilamentMaxFlow, "Flujo máximo", "Maximum flow") \
+    X(SpeedBridges, "Puentes", "Bridges") \
+    X(SpeedOverBridges, "Sobre los puentes", "Over bridges") \
+    X(SpeedSmallLoops, "Perímetros chicos", "Small loops") \
+    X(SpeedSupportInterface, "Interfaz del soporte", "Support interface") \
+    X(SpeedGapFill, "Relleno de huecos", "Gap fill") \
+    X(SpeedFirstLayerInfill, "Relleno de la primera capa", "First layer infill") \
+    X(SpeedTravelZ, "Viajes en Z", "Travel in Z") \
+    X(InfillMaxSpeed, "Tope del relleno", "Infill speed cap") \
+    X(InfillMaxCrossingSpeed, "Tope del relleno que se cruza", "Crossing infill speed cap") \
+    X(BridgeFlowRatio, "Flujo de los puentes", "Bridge flow") \
+    X(SubAccelerations, "Aceleraciones", "Accelerations") \
+    X(SubOverhangSpeeds, "Voladizos", "Overhangs") \
+    X(DynamicOverhangs, "Más lento según el apoyo", "Slower by support") \
+    X(Overhang0, "Sin apoyo", "Unsupported") \
+    X(Overhang1, "Apoyado un cuarto", "A quarter supported") \
+    X(Overhang2, "Apoyado la mitad", "Half supported") \
+    X(Overhang3, "Apoyado tres cuartos", "Three quarters supported") \
+    X(SumBySupport, "Según el apoyo", "By support") \
+    X(SubOverhangFan, "Ventilador en voladizos", "Overhang fan") \
+    X(SlowdownLogicRow, "Cómo frenar", "How to slow down") \
+    X(SlowdownUniform, "Todo por igual", "Everything alike") \
+    X(SlowdownConsistentSurface, "Superficie pareja", "Consistent surface") \
+    X(TransitionDistance, "Final de capa a su velocidad", "Layer end at its speed") \
+    X(DynamicOverhangFan, "Ventilador según el apoyo", "Fan by support") \
+    X(OverhangFan0, "Ventilador sin apoyo", "Fan unsupported") \
+    X(OverhangFan1, "Ventilador apoyado un cuarto", "Fan a quarter supported") \
+    X(OverhangFan2, "Ventilador apoyado la mitad", "Fan half supported") \
+    X(OverhangFan3, "Ventilador apoyado tres cuartos", "Fan three quarters supported") \
+    X(FlowSlopeUp, "Subida del caudal", "Flow ramp up") \
+    X(FlowSlopeDown, "Bajada del caudal", "Flow ramp down") \
+    X(SubGcodeTemplates, "Plantillas de G-code", "G-code templates") \
+    X(SubGcodeHeights, "G-code por altura", "G-code by height") \
+    X(CornerSmoothing, "Esquinas redondeadas", "Corner smoothing") \
+    X(BottomPattern, "Patrón de abajo", "Bottom pattern") \
+    X(BridgeAngle, "Dirección de los puentes", "Bridge direction") \
+    X(InfillBeforeWalls, "Relleno antes que las paredes", "Infill before walls") \
+    X(MaxLink, "Unión máxima del relleno", "Maximum infill link") \
+    X(ZOffset, "Desfase de Z", "Z offset") \
+    X(VolumetricE, "E volumétrica", "Volumetric E") \
+    X(VerboseComments, "Comentarios detallados", "Verbose comments") \
+    X(GcodeArcs, "Arcos G2/G3", "G2/G3 arcs") \
+    X(GcodeBinary, "G-code binario (.bgcode)", "Binary G-code (.bgcode)") \
+    X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
+    X(SubJerk, "Tirones y esquinas", "Jerk and corners") \
+    X(SkirtMinFilament, "Filamento mínimo de la falda", "Minimum skirt filament") \
+    X(AutoTemperatures, "Temperaturas automáticas", "Automatic temperatures") \
+    X(SubOutputFile, "Archivo de salida", "Output file") \
+    X(FilenameFormat, "Nombre del archivo", "File name") \
+    X(PostProcessRow, "Scripts de posproceso", "Post-processing scripts") \
+    X(FilamentStartGcode, "G-code de inicio del filamento", "Filament start G-code") \
+    X(FilamentEndGcode, "G-code de fin del filamento", "Filament end G-code") \
+    X(DraftShieldRow, "Escudo contra corrientes", "Draft shield") \
+    X(ShieldDisabled, "Apagado", "Off") \
+    X(ShieldLimited, "En las capas de la falda", "On the skirt's layers") \
+    X(ShieldEnabled, "Hasta arriba", "Up to the top") \
+    X(BrimTypeRow, "Dónde va el borde", "Where the brim goes") \
+    X(BrimOuter, "Afuera", "Outside") \
+    X(BrimInner, "En los agujeros", "In the holes") \
+    X(BrimBoth, "Afuera y en los agujeros", "Outside and in the holes") \
+    X(BrimNone, "Ninguno", "None") \
+    X(BrimGap, "Separación del borde", "Brim gap") \
+    X(SubSilent, "Modo silencioso", "Silent mode") \
+    X(RetractAcceleration, "Aceleración al retraer", "Retraction acceleration") \
+    X(MaxAccelX, "Aceleración máxima en X", "Maximum acceleration in X") \
+    X(MaxAccelY, "Aceleración máxima en Y", "Maximum acceleration in Y") \
+    X(MaxAccelZ, "Aceleración máxima en Z", "Maximum acceleration in Z") \
+    X(MaxAccelE, "Aceleración máxima del extrusor", "Maximum extruder acceleration") \
+    X(JerkX, "Tirón en X", "Jerk in X") \
+    X(JerkY, "Tirón en Y", "Jerk in Y") \
+    X(JerkZ, "Tirón en Z", "Jerk in Z") \
+    X(JerkE, "Tirón del extrusor", "Extruder jerk") \
+    X(JunctionDeviation, "Desviación de unión", "Junction deviation") \
+    X(MinExtrudeFeed, "Avance mínimo al extruir", "Minimum extruding feed") \
+    X(MinTravelFeed, "Avance mínimo al viajar", "Minimum travel feed") \
+    X(LimitsUsageRow, "Límites de la máquina", "Machine limits") \
+    X(ObjectLabelsRow, "Etiquetas de objetos", "Object labels") \
+    X(LabelsNone, "No", "No") \
+    X(LabelsOctoPrint, "Comentarios (OctoPrint)", "Comments (OctoPrint)") \
+    X(LabelsFirmware, "Del firmware (cancelar un objeto)", "The firmware's (cancel one object)") \
+    X(SubExtruders, "Extrusores", "Extruders") \
+    X(SubMultiMaterial, "Varios materiales", "Several materials") \
+    X(ExtrudersRow, "Cantidad de extrusores", "Number of extruders") \
+    X(ExtruderOffsetRow, "Desfase de las boquillas", "Nozzle offsets") \
+    X(ToolchangeLength, "Retracción al cambiar de herramienta", "Retraction at a tool change") \
+    X(ToolchangeRestartExtra, "Extra al volver a la herramienta", "Extra when the tool comes back") \
+    X(ToolchangeGcode, "G-code al cambiar de herramienta", "Tool change G-code") \
+    X(WallsExtruder, "Extrusor de los perímetros", "Walls extruder") \
+    X(InfillExtruder, "Extrusor del relleno", "Infill extruder") \
+    X(SolidInfillExtruder, "Extrusor del relleno sólido", "Solid infill extruder") \
+    X(SupportExtruder, "Extrusor del soporte", "Support extruder") \
+    X(SupportInterfaceExtruder, "Extrusor de la interfaz del soporte", "Support interface extruder") \
+    X(BedTemperatureFrom, "Temperatura de cama del extrusor", "Bed temperature from extruder") \
+    X(OozePrevention, "Bajar la temperatura de los que esperan", "Lower the waiting extruders' temperature") \
+    X(StandbyDelta, "Cuánto bajarla", "By how much") \
+    X(InterfaceShells, "Capas sólidas entre materiales", "Solid layers between materials") \
+    X(SumExtrudersN, "%d extrusores", "%d extruders") \
+    X(SumOneExtruder, "Un extrusor", "One extruder") \
+    X(SumObjectExtruder, "El de cada objeto", "Each object's own") \
+    X(SumByKind, "Por tipo de extrusión", "By kind of extrusion") \
+    X(SubWipeTower, "Torre de purga", "Wipe tower") \
+    X(SubWipeTowerMore, "Más de la torre de purga", "More of the wipe tower") \
+    X(WipeTowerRow, "Torre de purga", "Wipe tower") \
+    X(WipeTowerX, "Posición en X", "X position") \
+    X(WipeTowerY, "Posición en Y", "Y position") \
+    X(WipeTowerRotation, "Giro", "Rotation") \
+    X(WipeTowerWidth, "Ancho", "Width") \
+    X(WipeTowerBrim, "Borde de la torre", "Tower brim") \
+    X(WipeTowerBridging, "Distancia entre apoyos", "Distance between supports") \
+    X(WipeTowerExtruder, "Extrusor de la torre", "Tower extruder") \
+    X(WipeTowerSpacing, "Separación de las líneas", "Line spacing") \
+    X(WipeTowerFlow, "Flujo de las líneas", "Line flow") \
+    X(WipeTowerCone, "Ángulo del cono de la base", "Base cone angle") \
+    X(WipeTowerNoSparse, "Sin torre en las capas sin cambio", "No tower on layers without a change") \
+    X(PurgeVolumesRow, "Volúmenes de purga", "Purge volumes") \
+    X(PurgeMultiplier, "Multiplicador de purga", "Purge multiplier") \
+    X(MinPurgeOnTower, "Purga mínima en la torre", "Minimum purge on the tower") \
+    X(SubMmu, "MMU", "MMU") \
+    X(SyncSupportLayers, "Soporte en las capas de la pieza", "Support on the part's layers") \
+    X(SubInterlocking, "Entrelazado entre materiales", "Interlocking between materials") \
+    X(InterlockBeams, "Vigas entre materiales", "Beams between materials") \
+    X(InterlockWidth, "Ancho de las vigas", "Beam width") \
+    X(InterlockLayers, "Capas por dirección", "Layers per direction") \
+    X(InterlockOrientation, "Dirección de las vigas", "Beam direction") \
+    X(InterlockDepth, "Profundidad (vigas)", "Depth (beams)") \
+    X(InterlockAvoidance, "Distancia al exterior (vigas)", "Distance to the outside (beams)") \
+    X(PaintMaxRegionWidth, "Ancho máximo de una región pintada", "Widest painted region") \
+    X(PaintInterlockingDepth, "Entrelazado de las regiones pintadas", "Painted regions' interlocking") \
+    X(SubMultiNozzle, "Boquillas distintas y colores", "Different nozzles and colours") \
+    X(FineWallsCoarseInfill, "Paredes finas, relleno grueso", "Fine walls, coarse infill") \
+    X(ColorMixingRow, "Mezcla de colores", "Color mixing") \
+    X(ColorMixingCost, "Con una sola boquilla, cada capa con mezcla es un cambio de filamento con su purga: la impresión usa bastante más filamento y tarda más.", "With a single nozzle, every mixed layer is a filament change with its purge: the print uses much more filament and takes longer.") \
+    X(TurnOn, "Prender", "Turn on") \
+    X(DifferentNozzles, "boquillas distintas", "different nozzles") \
+    X(ExtruderNozzle, "   Extrusor %d", "   Extruder %d") \
+    X(ToolMaterialTip, "Extrusor y color del objeto", "The object's extruder and colour") \
+    X(ObjectExtruder, "Extrusor", "Extruder") \
+    X(ObjectInfill, "Relleno", "Infill") \
+    X(ObjectWalls, "Capas y perímetros", "Layers and perimeters") \
+    X(ObjectSurfaces, "Capas sólidas", "Solid layers") \
+    X(Objects, "Objetos", "Objects") \
+    X(ObjectsEmpty, "La placa no tiene piezas.", "The plate has no objects.") \
+    X(ObjectsHint, "Clic derecho sobre una pieza para darle ajustes propios, modificadores, volúmenes negativos o rangos de alturas.", "Right-click an object to give it settings of its own, modifiers, negative volumes or height ranges.") \
+    X(ObjectsPicked, "Ajustes de la pieza a cambiar", "Object settings to modify") \
+    X(ObjectAddSetting, "Agregar ajuste", "Add setting") \
+    X(ObjectSettingsOpen, "Ajustes de la pieza…", "Object settings…") \
+    X(ObjectSettingsTitle, "Ajustes de %s", "Settings of %s") \
+    X(ObjectSettingsHint, "Estos ajustes valen solo para esta pieza; el resto sale del perfil.", "These settings hold for this object only; the rest comes from the profile.") \
+    X(ObjectSettingsNone, "La pieza no tiene ajustes propios.", "The object has no settings of its own.") \
+    X(ObjectSettingsBasic, "Los ajustes por pieza se ponen en los niveles Normal y Avanzado.", "Settings per object are set at the Normal and Advanced levels.") \
+    X(ObjectSettingsRemove, "Quitar de la pieza", "Remove from the object") \
+    X(ObjectOwnSettings, "Ajustes propios: %d", "Own settings: %d") \
+    X(AddModifier, "Agregar modificador", "Add modifier") \
+    X(AddNegativeVolume, "Agregar volumen negativo", "Add negative volume") \
+    X(AddHeightRange, "Agregar rango de alturas", "Add height range") \
+    X(ModifierItem, "Modificador %d", "Modifier %d") \
+    X(NegativeVolumeItem, "Volumen negativo %d", "Negative volume %d") \
+    X(RangeItem, "Alturas de %.2f a %.2f mm", "Heights from %.2f to %.2f mm") \
+    X(HeightFrom, "desde", "from") \
+    X(HeightTo, "hasta", "to") \
+    X(ShapeBox, "Caja", "Box") \
+    X(ShapeCylinder, "Cilindro", "Cylinder") \
+    X(RemoveVolume, "Quitar", "Remove") \
+    X(VolumeOffset, "Lugar (mm)", "Place (mm)") \
+    X(VolumeSize, "Tamaño (mm)", "Size (mm)") \
+    X(ExtruderItem, "Extrusor %d", "Extruder %d") \
+    X(VirtualExtruder, "Extrusor virtual #%d", "Virtual extruder #%d") \
+    X(WipeIntoInfill, "Purgar en su relleno", "Purge into its infill") \
+    X(WipeIntoObject, "Purgar en el objeto", "Purge into the object") \
+    X(ColorMixingDialog, "Extrusores virtuales - Mezcla de colores", "Virtual Extruders - Color Mixing") \
+    X(AddBlend, "Agregar mezcla", "Add blend") \
+    X(MixingIntro, "Un extrusor virtual mezcla filamentos reales capa por capa para crear colores nuevos. Hacé clic en una mezcla de abajo para agregarla al proyecto.", "A virtual extruder blends physical filaments layer by layer to create new colors. Click a blend below to add it to your project.") \
+    X(TwoColorBlends, "Mezclas de dos colores", "Two-color blends") \
+    X(MixingEditorHint, "Mové el deslizador para elegir cuántas capas lleva cada filamento en el patrón que se repite.", "Drag the slider to set how many layers each filament gets in the repeating pattern.") \
+    X(AddThirdExtruder, "Agregar un tercer extrusor", "Add third extruder") \
+    X(DisplayColor, "Color que se muestra", "Display color") \
+    X(LayerSequencePreview, "Secuencia de capas", "Layer sequence preview") \
+    X(MixingTemplateError, "La plantilla de cambio de herramienta no funciona con la mezcla", "The tool change template does not work with mixing") \
+    X(OkButton, "Aceptar", "OK") \
+    X(SubCurved, "Capas curvas", "Curved layers") \
+    X(SubCurvedMore, "Capas curvas: transición y caudal", "Curved layers: transition and flow") \
+    X(SubHead, "Cabezal", "Print head") \
+    X(CurvedModeRow, "Capas curvas", "Curved layers") \
+    X(CurvedWave, "Onda", "Wave") \
+    X(CurvedCone, "Cono", "Cone") \
+    X(CurvedOverhangs, "Voladizos", "Overhangs") \
+    X(CurvedStress, "Tensiones", "Stress") \
+    X(CurvedSurface, "Caras superiores", "Top faces") \
+    X(CurvedAutomatic, "Automático", "Automatic") \
+    X(CurvedPatternRow, "Forma de la onda", "Wave shape") \
+    X(CurvedEgg, "Huevera", "Egg crate") \
+    X(CurvedRidges, "Crestas", "Ridges") \
+    X(CurvedTwisted, "Crestas torcidas", "Twisted ridges") \
+    X(CurvedFitHead, "Ajustar a la cabeza", "Fit to the head") \
+    X(CurvedAmplitude, "Amplitud", "Amplitude") \
+    X(CurvedWavelength, "Largo de onda", "Wavelength") \
+    X(CurvedAngle, "Dirección de las crestas", "Ridge direction") \
+    X(CurvedTwist, "Giro por mm", "Twist per mm") \
+    X(CurvedConeAngle, "Pendiente del cono", "Cone slope") \
+    X(CurvedFlatBelow, "Planas por debajo de", "Flat below") \
+    X(CurvedRampHeight, "Alto de la transición", "Transition height") \
+    X(CurvedFlatTop, "Planas arriba de todo", "Flat at the top") \
+    X(CurvedSegment, "Largo de los tramos", "Piece length") \
+    X(CurvedMaxSlope, "Pendiente máxima", "Steepest slope") \
+    X(CurvedFlowPolicy, "Caudal", "Flow") \
+    X(CurvedFlowKeep, "Mantener", "Keep") \
+    X(CurvedFlowUniform, "Parejo", "Uniform") \
+    X(CurvedFlowOff, "Sin tocar", "Leave as is") \
+    X(CurvedUniformFlow, "Caudal parejo", "Uniform flow") \
+    X(CurvedOverhangThreshold, "Voladizo sin capas curvas", "Overhang without curved layers") \
+    X(HeadFreeAngleX, "Ángulo libre a lo largo de X", "Free angle along X") \
+    X(HeadFreeAngleY, "Ángulo libre a lo largo de Y", "Free angle along Y") \
+    X(HeadClearanceHeight, "Altura libre", "Clearance height") \
+    X(HeadClearanceRadius, "Radio libre", "Clearance radius") \
+    X(HeadProfile, "Perfil de la cabeza", "Head profile") \
+    X(SecResin, "Resina", "Resin") \
+    X(SubResinLayers, "Resina: capas", "Resin: layers") \
+    X(SubResinDisplay, "Pantalla de resina", "Resin display") \
+    X(SubResinExposure, "Exposición", "Exposure") \
+    X(SubResinMoves, "Subida y esperas", "Lift and waits") \
+    X(SubResinCorrections, "Correcciones de resina", "Resin corrections") \
+    X(SubResinMaterial, "Datos de la resina", "Resin data") \
+    X(ResinLayerHeight, "Altura de capa", "Layer height") \
+    X(DisplayPixelsX, "Píxeles en X", "Pixels in X") \
+    X(DisplayPixelsY, "Píxeles en Y", "Pixels in Y") \
+    X(DisplayWidth, "Ancho de la pantalla", "Display width") \
+    X(DisplayHeight, "Alto de la pantalla", "Display height") \
+    X(DisplayMirrorX, "Espejar en X", "Mirror in X") \
+    X(DisplayMirrorY, "Espejar en Y", "Mirror in Y") \
+    X(ResinPrinterName, "Modelo de la impresora en el archivo", "Printer model in the file") \
+    X(ResinProfileName, "Perfil de resina en el archivo", "Resin profile in the file") \
+    X(ResinExposure, "Exposición", "Exposure") \
+    X(ResinBottomExposure, "Exposición de fondo", "Bottom exposure") \
+    X(ResinBottomLayers, "Capas de fondo", "Bottom layers") \
+    X(ResinLightPwm, "Potencia de la luz", "Light power") \
+    X(ResinBottomLightPwm, "Potencia de la luz de fondo", "Bottom light power") \
+    X(ResinLiftDistance, "Subida", "Lift distance") \
+    X(ResinLiftSpeed, "Velocidad de subida", "Lift speed") \
+    X(ResinBottomLiftDistance, "Subida de fondo", "Bottom lift distance") \
+    X(ResinBottomLiftSpeed, "Velocidad de subida de fondo", "Bottom lift speed") \
+    X(ResinRetractSpeed, "Velocidad de bajada", "Retract speed") \
+    X(ResinWaitBeforeExposure, "Espera antes de exponer", "Wait before exposure") \
+    X(ResinWaitAfterCure, "Espera después de exponer", "Wait after curing") \
+    X(ResinWaitAfterLift, "Espera arriba", "Wait after lifting") \
+    X(ResinElephantFoot, "Pie de elefante", "Elephant foot") \
+    X(ResinScaleX, "Escala en X", "Scale in X") \
+    X(ResinScaleY, "Escala en Y", "Scale in Y") \
+    X(ResinScaleZ, "Escala en Z", "Scale in Z") \
+    X(ResinAbsoluteCorrection, "Corrección absoluta", "Absolute correction") \
+    X(ResinZCorrection, "Corrección de Z", "Z correction") \
+    X(ResinGamma, "Gamma del borde", "Edge gamma") \
+    X(ResinAntialiasing, "Suavizado en el archivo", "Anti-aliasing in the file") \
+    X(ResinDensity, "Densidad", "Density") \
+    X(ResinBottleCost, "Costo del frasco", "Bottle cost") \
+    X(ResinBottleVolume, "Volumen del frasco", "Bottle volume") \
+    X(ResinBottleWeight, "Peso del frasco", "Bottle weight") \
+    X(SumResinExposure, "%s s · fondo %s s", "%s s · bottom %s s") \
+    X(SumPixels, "%d × %d px", "%d × %d px") \
+    X(SumLift, "%s mm a %s mm/s", "%s mm at %s mm/s") \
+    X(SumResinDensity, "%s g/ml", "%s g/ml") \
+    X(SubResinSupports, "Resina: soportes", "Resin: supports") \
+    X(Technology, "Tipo de impresora", "Printer type") \
+    X(TechnologyFdm, "Filamento (FDM)", "Filament (FDM)") \
+    X(TechnologyMsla, "Resina (MSLA)", "Resin (MSLA)") \
+    X(SubBelt, "Impresora de cinta", "Belt printer") \
+    X(BeltEnabled, "Impresora de cinta", "Belt printer") \
+    X(BeltEnabledTip, "El pórtico está inclinado sobre una cinta que se lleva la pieza: se lamina en planos paralelos al pórtico y el G-code va en los ejes de la máquina. Sin soportes, balsa, borde ni falda.", "The gantry leans over a belt that carries the part away: the layers are planes along the gantry and the G-code is on the machine's axes. No supports, raft, brim or skirt.") \
+    X(BeltAngle, "Ángulo del pórtico", "Gantry angle") \
+    X(BeltIsZ, "La cinta es el eje Z", "The belt is the Z axis") \
+    X(SumDegrees, "%s°", "%s°") \
+    X(ResinLayersN, "%d capas", "%d layers") \
+    X(ExportGoo, "Exportar GOO", "Export GOO") \
+    X(ResinUsed, "Resina", "Resin") \
+    X(ResinCost, "Costo", "Cost") \
+    X(ResinSliced, "%d capas · %.1f ml · %.1f g", "%d layers · %.1f ml · %.1f g") \
+    X(SubResinPad, "Resina: base", "Resin: pad") \
+    X(SubResinHollow, "Resina: vaciado", "Resin: hollowing") \
+    X(ResinSupports, "Soportes", "Supports") \
+    X(ResinTipDiameter, "Diámetro de la punta", "Tip diameter") \
+    X(ResinTipPenetration, "Penetración de la punta", "Tip penetration") \
+    X(ResinPillarDiameter, "Diámetro de los pilares", "Pillar diameter") \
+    X(ResinElevation, "Elevación", "Elevation") \
+    X(ResinCriticalAngle, "Ángulo de las uniones", "Junction angle") \
+    X(ResinSupportDensity, "Densidad de los puntos", "Point density") \
+    X(ResinPad, "Base", "Pad") \
+    X(ResinPadThickness, "Espesor de la base", "Pad thickness") \
+    X(ResinPadMargin, "Margen de la base", "Pad margin") \
+    X(ResinPadWallSlope, "Inclinación del borde", "Pad wall slope") \
+    X(ResinPadAroundObject, "Base alrededor de la pieza", "Pad around the object") \
+    X(ResinHollow, "Vaciar la pieza", "Hollow the part") \
+    X(ResinHollowWall, "Espesor de la pared", "Wall thickness") \
+    X(ResinHollowClosing, "Redondeo del hueco", "Closing distance") \
+    X(ResinHollowInfill, "Relleno interior", "Inner infill") \
+    X(ResinHollowInfillCell, "Celda del relleno", "Infill cell") \
+    X(SubMmuLoad, "Carga y descarga en la MMU", "MMU load and unload") \
+    X(SubMmuTimes, "Tiempos del cambio", "Change times") \
+    X(CoolingTubeLength, "Largo del tubo de enfriamiento", "Cooling tube length") \
+    X(CoolingTubePosition, "Posición del tubo de enfriamiento", "Cooling tube position") \
+    X(ParkingPosition, "Posición de estacionamiento", "Parking position") \
+    X(ExtraLoadingMove, "Corrección de la carga", "Loading correction") \
+    X(HighCurrentOnSwap, "Más corriente durante el cambio", "More current during the swap") \
+    X(LoadingSpeed, "Velocidad de carga", "Loading speed") \
+    X(LoadingSpeedStart, "Velocidad al empezar a cargar", "Loading start speed") \
+    X(UnloadingSpeed, "Velocidad de descarga", "Unloading speed") \
+    X(UnloadingSpeedStart, "Velocidad al empezar a descargar", "Unloading start speed") \
+    X(CoolingMoves, "Movimientos de enfriamiento", "Cooling moves") \
+    X(CoolingInitialSpeed, "Velocidad del primero", "First move's speed") \
+    X(CoolingFinalSpeed, "Velocidad del último", "Last move's speed") \
+    X(RammingRow, "Compresión antes de descargar", "Ramming before unloading") \
+    X(ToolchangeDelay, "Espera después de descargar", "Wait after unloading") \
+    X(LoadTime, "Tiempo de carga", "Load time") \
+    X(UnloadTime, "Tiempo de descarga", "Unload time") \
+    X(SingleExtruderMmu, "Un extrusor con varios filamentos (MMU)", "One extruder, several filaments (MMU)") \
+    X(LimitsTimeOnly, "Solo para el tiempo", "For the time only") \
+    X(LimitsEmit, "Escribirlos en el G-code", "Write them in the G-code") \
+    X(LimitsIgnore, "No usarlos", "Do not use them") \
+    X(GcodeProgress, "Avance de la impresión (M73)", "Print progress (M73)") \
+    X(SilentModeRow, "Tiene modo silencioso", "Has a silent mode") \
+    X(SilentLimitsRow, "Límites del modo silencioso", "Silent mode limits") \
+    X(SumJunction, "Desviación %s mm", "Deviation %s mm") \
+    X(SumJerk, "Tirón %s mm/s", "Jerk %s mm/s") \
+    X(SumSilent, "%d límites propios", "%d limits of its own") \
+    X(ChamberMinTemp, "Esperar la cámara a", "Wait for the chamber at") \
+    X(SubPrice, "Peso y costo", "Weight and cost") \
+    X(FilamentDensity, "Densidad", "Density") \
+    X(FilamentCost, "Costo por kg", "Cost per kg") \
+    X(SpoolWeight, "Peso del carrete vacío", "Empty spool weight") \
+    X(SubShrinkage, "Contracción", "Shrinkage") \
+    X(ShrinkageXY, "Contracción en XY", "Shrinkage in XY") \
+    X(ShrinkageZ, "Contracción en Z", "Shrinkage in Z") \
+    X(SumNoShrinkage, "Sin compensar", "Not compensated") \
+    X(SumShrinkage, "XY %s %% · Z %s %%", "XY %s %% · Z %s %%") \
+    X(SumDensity, "%s g/cm³", "%s g/cm³") \
+    X(ColorChangeGcode, "Cambio de color", "Colour change") \
+    X(PauseGcode, "Pausa", "Pause") \
+    X(CustomTemplateGcode, "G-code propio por altura", "Custom G-code by height") \
+    X(BeforeLayerGcode, "Antes de cada capa", "Before each layer") \
+    X(AfterLayerGcode, "Después de cada capa", "After each layer") \
+    X(SubRaft, "Balsa", "Raft") \
+    X(RaftLayers, "Capas de la balsa", "Raft layers") \
+    X(RaftGap, "Separación con la pieza", "Gap to the part") \
+    X(RaftExpansion, "Cuánto se agranda", "Expansion") \
+    X(RaftFirstDensity, "Densidad de la primera capa", "First layer density") \
+    X(RaftFirstExpansion, "Agrandar la primera capa", "First layer expansion") \
+    X(SpeedOverRaft, "Primera capa sobre la balsa", "First layer over the raft") \
+    X(AccelOverRaft, "Primera capa sobre la balsa", "First layer over the raft") \
+    X(SumRaft, "%d capas", "%d layers") \
+    X(SubIroning, "Planchado", "Ironing") \
+    X(IroningEnabled, "Planchar", "Iron") \
+    X(IroningSurfacesRow, "Qué superficies", "Which surfaces") \
+    X(IroningTop, "Todas las de arriba", "Every top surface") \
+    X(IroningTopmost, "Solo la más alta", "Only the topmost") \
+    X(IroningSolid, "Todas las capas sólidas", "Every solid layer") \
+    X(IroningFlow, "Flujo", "Flow") \
+    X(IroningSpacing, "Separación", "Spacing") \
+    X(IroningSpeed, "Velocidad", "Speed") \
+    X(SumIroning, "Planchado a %s mm/s", "Ironing at %s mm/s") \
+    X(WallGeneratorRow, "Ancho de los cordones", "Bead width") \
+    X(WallVariable, "Variable", "Variable") \
+    X(WallFixed, "Fijo", "Fixed") \
+    X(WallGapFill, "Relleno de huecos", "Gap fill") \
+    X(SubAccelTravel, "Aceleración de la primera capa y los viajes", "First layer and travel acceleration") \
+    X(AccelDefault, "Por defecto", "Default") \
+    X(AccelWalls, "Paredes internas", "Inner walls") \
+    X(AccelOuterWall, "Pared externa", "Outer wall") \
+    X(AccelInfill, "Relleno", "Infill") \
+    X(AccelSolid, "Relleno sólido", "Solid infill") \
+    X(AccelTop, "Superficie de arriba", "Top surface") \
+    X(AccelBridges, "Puentes", "Bridges") \
+    X(AccelWipeTower, "Torre de purga", "Wipe tower") \
+    X(AccelFirstLayer, "Primera capa", "First layer") \
+    X(AccelTravel, "Viajes", "Travels") \
+    X(AccelShortTravel, "Viajes cortos", "Short travels") \
     X(RetractMinTravel, "Viaje mínimo para retraer", "Shortest travel to retract") \
+    X(UnretractSpeed, "Velocidad de la vuelta", "Unretract speed") \
+    X(RestartExtra, "Extra al volver", "Extra on restart") \
+    X(RetractLayerChange, "Retraer al cambiar de capa", "Retract on layer change") \
+    X(WipeRow, "Barrer al retraer", "Wipe while retracting") \
+    X(BeforeWipe, "Retracción antes del barrido", "Retraction before the wipe") \
+    X(FirmwareRetraction, "Retracción del firmware (G10/G11)", "Firmware retraction (G10/G11)") \
+    X(LiftAbove, "Saltar solo por encima de", "Lift only above") \
+    X(LiftBelow, "Saltar solo por debajo de", "Lift only below") \
+    X(RampingLift, "Salto en rampa", "Ramping lift") \
+    X(TravelSlope, "Pendiente de la rampa", "Ramp slope") \
+    X(MaxLift, "Altura máxima de la rampa", "Ramp maximum height") \
+    X(LiftBeforeObstacle, "Rampa más empinada ante obstáculos", "Steeper ramp before obstacles") \
+    X(AvoidCrossingWalls, "Viajes sin cruzar paredes", "Avoid crossing walls") \
+    X(MaxDetour, "Desvío máximo", "Maximum detour") \
+    X(WallsClockwise, "Lazos en sentido horario", "Clockwise loops") \
+    X(WallsOuterFirst, "Pared externa primero", "Outer wall first") \
+    X(SubWallsMore, "Más opciones de paredes", "More wall options") \
+    X(SubWallsThin, "Paredes finas", "Thin walls") \
+    X(StaggeredSeams, "Costuras internas escalonadas", "Staggered inner seams") \
+    X(TopOneWallRow, "Un solo perímetro arriba", "One wall on top") \
+    X(TopOneWallNone, "No", "No") \
+    X(TopOneWallTop, "En toda superficie de arriba", "On every top surface") \
+    X(TopOneWallTopmost, "Solo en la de más arriba", "Only on the topmost") \
+    X(FirstLayerOneWall, "Un solo perímetro en la primera capa", "One wall on the first layer") \
+    X(ExtraIfNeeded, "Perímetros extra si hacen falta", "Extra walls if needed") \
+    X(AvoidCurledOverhangs, "Esquivar voladizos levantados", "Avoid curled overhangs") \
+    X(ExtraOnOverhangs, "Perímetros extra en voladizos", "Extra perimeters on overhangs") \
+    X(SumWallsMore, "%d de 7 activas", "%d of 7 on") \
+    X(SumWallsThin, "%d cordones reparten el cambio de ancho", "%d beads share the change in width") \
+    X(SumWallsThinOne, "1 cordón toma el cambio de ancho", "1 bead takes the change in width") \
+    X(WallsStaggered, "Perímetros escalonados", "Staggered perimeters") \
+    X(SubMaterialRetraction, "Valores propios del material", "The material's own values") \
+    X(SubCoast, "Coasting", "Coasting") \
+    X(Coast, "Final sin extruir", "End without extruding") \
+    X(SumPrinterValues, "Los de la impresora", "The printer's") \
+    X(SumMaterialValues, "%d del material", "%d of the material's") \
+    X(FilamentRetractionRow, "Retracción y viajes del material", "The material's retraction and travel") \
     X(Abrasive, "Abrasivo", "Abrasive") \
     X(MaxChamberTemp, "Cabina máxima", "Chamber maximum") \
     X(MachineMaxFlow, "Flujo máximo del cabezal", "Hot end maximum flow") \
@@ -841,6 +1513,9 @@
     X(VariablesRow, "Variables del G-code", "G-code variables") \
     X(ListCount, "%d en la lista", "%d in the list") \
     X(ListEditTip, "Se editan en el archivo del perfil (docs/CONFIG.md)", "Edited in the profile's file (docs/CONFIG.md)")
+
+#include <cstdarg>
+#include <string>
 
 namespace tisma::ui {
 
@@ -858,5 +1533,22 @@ Language language();
 
 // The text in the current language.
 const char* tr(T id);
+
+// printf for the interface: as vsnprintf, with each float's decimal point
+// the language's, a comma in Spanish (the spec team's TR1). Other
+// conversions are as printf writes them.
+std::string vformat(const char* fmt, std::va_list args);
+std::string format(const char* fmt, ...)
+#if defined(__GNUC__)
+    __attribute__((format(printf, 1, 2)))
+#endif
+    ;
+
+// A whole number with the language's thousands separator: 4 013 in
+// Spanish, 4,013 in English (TR2).
+std::string grouped(unsigned long long n);
+
+// A number written by printf ("0.20") with the language's decimal point.
+std::string localized(std::string number);
 
 } // namespace tisma::ui

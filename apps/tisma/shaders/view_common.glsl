@@ -13,6 +13,7 @@ layout(set = 0, binding = 0, std140) uniform Frame {
     ivec4 flags;          // x: write the G-buffer, y: show the visibility, z: the moiré filter
     vec4 grid;            // x: mm between grid lines, y: every how many lines a major one
     vec4 colours[16];     // the line kinds' colours
+    vec4 face_eye;        // what the preview's drawn faces face: the eye (w 1), or towards it (w 0)
 } frame;
 
 layout(push_constant) uniform Draw {

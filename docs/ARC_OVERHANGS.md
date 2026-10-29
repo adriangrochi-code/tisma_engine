@@ -50,7 +50,7 @@ tercero), **autor** (la descripción del autor de la técnica).
    - después, un modo de **frentes por distancia** (la idea de las ondas y de Print on Air), calculado con un campo de
      distancia en una grilla. Es lo que mejor midió el único estudio.
 
-## 1. Cómo funciona, con palabras propias
+## 1. Cómo funciona (basado en la descripción de su autor y en los artículos citados)
 
 1. **La zona:** la parte de la capa que no tiene nada debajo y que no es un puente. Un puente tiene apoyo de los dos
    lados; esta zona tiene apoyo de uno solo.

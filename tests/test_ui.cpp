@@ -10,6 +10,7 @@
 #include "ui/scene.hpp"
 #include "ui/slicing.hpp"
 #include "ui/text.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -52,8 +53,9 @@ std::string conversions(const char* text) {
             continue;
         while (*p && !std::isalpha(static_cast<unsigned char>(*p)))
             ++p;
-        if (*p)
-            out += *p;
+        if (!*p)
+            break; // a '%' with no conversion after it: never past the end
+        out += *p;
     }
     return out;
 }
@@ -136,6 +138,29 @@ TEST_CASE("ui: the camera frames a box and moves with the mouse", "[ui]") {
     const Vec3 before = cam.target;
     cam.pan(10, 0, 800);
     CHECK(dot(cam.target - before, cam.right()) < 0.0f);
+}
+
+TEST_CASE("ui: the orthographic view keeps sizes whatever the depth (preview.md, rule 10)", "[ui]") {
+    OrbitCamera cam;
+    cam.target = {0, 0, 0};
+    cam.distance = 300.0f;
+    cam.set_view(StandardView::Front);
+    // A 10 mm bar at the target and 100 mm nearer: its size on the screen.
+    const auto width_at = [&](float y) {
+        const Mat4 vp = cam.projection(1.0f) * cam.view();
+        return transform_point(vp, Vec3{5.0f, y, 0.0f}).x - transform_point(vp, Vec3{-5.0f, y, 0.0f}).x;
+    };
+    const float far = width_at(0.0f), near = width_at(-100.0f);
+    CHECK(near / far > 1.3f); // perspective: nearer is bigger
+    cam.orthographic = true;
+    const float far_o = width_at(0.0f), near_o = width_at(-100.0f);
+    CHECK(near_o / far_o < 1.01f);
+    // The target keeps its size on the screen, so zoom and pan feel the same.
+    CHECK_THAT(double(far_o), Catch::Matchers::WithinRel(double(far), 1e-3));
+    CHECK(length(cam.eye() - cam.target) > 10.0f * cam.distance);
+    // The bottom view looks up.
+    cam.set_view(StandardView::Bottom);
+    CHECK(cam.forward().z > 0.99f);
 }
 
 TEST_CASE("ui: a model goes to the middle of the bed, on it", "[ui]") {
@@ -262,6 +287,42 @@ int hidden_of(const PreviewBuffers& b, std::size_t l, LineKind kind) {
 }
 
 } // namespace
+
+TEST_CASE("ui: the preview's numeric views and their 11 steps (preview.md, rules 1 and 7, PV2, PV3)", "[ui]") {
+    // PV2 and PV3: 11 steps between the least and the most.
+    const std::vector<double> speed = legend_steps(0.0, 230.0, false);
+    REQUIRE(speed.size() == 11);
+    for (std::size_t i = 0; i < speed.size(); ++i)
+        CHECK_THAT(speed[i], Catch::Matchers::WithinAbs(23.0 * double(i), 1e-9));
+    const std::vector<double> width = legend_steps(0.38, 0.76, false);
+    CHECK_THAT(width[1] - width[0], Catch::Matchers::WithinAbs(0.038, 1e-12));
+    // In equal steps of the logarithm; one value alone, one step.
+    const std::vector<double> log = legend_steps(std::log10(20.0), std::log10(62.0), true);
+    CHECK_THAT(log.front(), Catch::Matchers::WithinRel(20.0, 1e-9));
+    CHECK_THAT(log.back(), Catch::Matchers::WithinRel(62.0, 1e-9));
+    CHECK_THAT(log[2] / log[1], Catch::Matchers::WithinRel(log[1] / log[0], 1e-9));
+    CHECK(legend_steps(5.0, 5.0, false) == std::vector<double>{5.0});
+    // The instances carry the view's number.
+    GcodePreview p = read_gcode_preview(";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\n;TYPE:Perimeter\n;WIDTH:0.5\n"
+                                        "M106 S255\nM104 S210\nG1 Z0.2 F600\nG1 X10 Y0 E1\nT1\nG1 X20 E2 F1200\n");
+    time_preview(p, Kinematics{});
+    const PreviewBuffers fan = preview_buffers(p, 0xFF0000FF, PreviewValue::Fan);
+    CHECK(fan.min_feed == 100.0f);
+    const PreviewBuffers flow = preview_buffers(p, 0xFF0000FF, PreviewValue::Flow);
+    CHECK_THAT(double(flow.min_feed), Catch::Matchers::WithinAbs(0.5 * 0.2 * 10.0, 1e-5));
+    CHECK_THAT(double(flow.max_feed), Catch::Matchers::WithinAbs(0.5 * 0.2 * 20.0, 1e-5));
+    const PreviewBuffers tool = preview_buffers(p, 0xFF0000FF, PreviewValue::Tool);
+    CHECK(tool.min_feed == 0.0f);
+    CHECK(tool.max_feed == 1.0f);
+    // The reached speed is never above the asked one (here the move starts
+    // at the corner's speed, its feed).
+    const PreviewMove& first = p.moves[p.extrusions.front()];
+    CHECK(preview_value(p, first, PreviewValue::ActualFeed) <= 10.0f + 1e-4f);
+    CHECK(preview_value(p, first, PreviewValue::ActualFeed) > 9.0f);
+    CHECK(preview_value(p, first, PreviewValue::Temperature) == 210.0f);
+    CHECK_THAT(double(preview_value(p, first, PreviewValue::LayerTime)),
+               Catch::Matchers::WithinAbs(p.layers[first.layer].seconds, 1e-5));
+}
 
 TEST_CASE("ui: the preview leaves out what the part hides when all of it shows", "[ui]") {
     // Six equal layers of a 20 mm square: inside the layers between the
@@ -491,7 +552,7 @@ TEST_CASE("ui: every text has both languages with the same fields", "[ui]") {
 }
 
 TEST_CASE("ui: folders list folders first, then the files asked for", "[ui]") {
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "tisma_ui_files";
+    const std::filesystem::path dir = test_temp_dir() / "tisma_ui_files";
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir / "Sub");
     std::filesystem::create_directories(dir / ".hidden");
@@ -579,6 +640,9 @@ TEST_CASE("ui: a change to a G-code setting makes only the G-code again, the sam
         {"extrusion.flow", [](Settings& s) { s.flow = 95.0; }},
         {"extrusion.pressure_advance", [](Settings& s) { s.pressure_advance = 0.05; }},
         {"extrusion.max_flow", [](Settings& s) { s.filament_max_flow = 2.0, s.machine_max_flow = 3.0; }},
+        {"speed.max_flow", [](Settings& s) { s.speed_max_flow = 2.5; }},
+        {"retraction.coast", [](Settings& s) { s.coast = 0.5; }},
+        {"speed.small_loops", [](Settings& s) { s.small_loop_speed = {15.0, false}; }},
         {"machine.max_temps", [](Settings& s) { s.max_nozzle_temp = 300.0, s.max_bed_temp = 110.0; }},
         {"extrusion.chamber_temperature", [](Settings& s) { s.chamber_temperature = 40.0, s.max_chamber_temp = 60.0; }},
         {"gcode.resolution", [](Settings& s) { s.gcode_resolution = 0.05; }},
@@ -611,6 +675,30 @@ TEST_CASE("ui: a change to a G-code setting makes only the G-code again, the sam
     seam.set_tree(PaintChannel::Seam, 0, {kPaintEnforce});
     CHECK_FALSE(staged.run(translated(placed, {1, 0, 0}), thinner, nullptr, &seam).staged);
     CHECK(staged.run(translated(placed, {1, 0, 0}), thinner, nullptr, &seam).staged);
+}
+
+TEST_CASE("ui: a resin printer slices into layer images and a preview of their outlines", "[ui][resin]") {
+    Settings settings = default_settings();
+    settings.machine_technology = MachineTechnology::Msla;
+    settings.bed = {{0.0, 0.0}, {settings.display_width, 0.0}, {settings.display_width, settings.display_height},
+                    {0.0, settings.display_height}};
+    const TriangleMesh cube = read_cube();
+    const TriangleMesh placed = translated(cube, centre_on_bed(cube.bounding_box(), settings.bed));
+    Slicer slicer;
+    const SliceResult r = slicer.run(placed, settings);
+    REQUIRE(r.ok);
+    REQUIRE(r.resin);
+    CHECK_FALSE(r.model);
+    CHECK(r.gcode.empty());
+    // On supports over the pad by default: 2 + 5 mm under the part.
+    CHECK_THAT(r.resin->layers.back().z, WithinAbs(7.0 + cube.bounding_box().max.z - cube.bounding_box().min.z, 1e-3));
+    CHECK(r.preview.layers.size() == r.resin->layers.size());
+    CHECK(r.preview.kind_moves[std::size_t(LineKind::Support)] > 0);
+    CHECK(r.preview.estimated_seconds == r.resin->seconds);
+    // What does not fit on the display is refused with the engine's reason.
+    const SliceResult off = slicer.run(translated(cube, {-500, 0, 0}), settings);
+    CHECK_FALSE(off.ok);
+    CHECK_THAT(off.error, ContainsSubstring("display"));
 }
 
 TEST_CASE("ui: the slicing job gives checked G-code and its preview", "[ui]") {
@@ -754,4 +842,118 @@ TEST_CASE("ui: the slicer takes a load case for stress-guided infill", "[ui]") {
     const SliceResult unheld = slicer.run(bar, s, &loose);
     REQUIRE(unheld.ok);
     CHECK_THAT(held_over_free(unheld), Catch::Matchers::WithinAbs(1.0, 0.15));
+}
+
+TEST_CASE("ui: the move slider draws the top layer up to a move (preview.md, rule 4)", "[ui]") {
+    PreviewDrawOrder order;
+    order.layer_shown = {0, 10, 25};
+    order.layer_hidden = {25, 27, 30};
+    // Layers 0 and 1, the top one cut after 4 shown and 1 hidden extrusions.
+    const auto cut = preview_ranges(order, 0, 1, 0xFFFFFFFFu, 4, 1);
+    CHECK(cut[0].first == 0);
+    CHECK(cut[0].count == 14);
+    CHECK(cut[1].first == 25);
+    CHECK(cut[1].count == 3); // the hidden ones too: not all of the part is drawn
+    // Whole: the hidden ones stay out.
+    const auto whole = preview_ranges(order, 0, 1, 0xFFFFFFFFu);
+    CHECK(whole[0].count == 25);
+    CHECK(whole[1].count == 0);
+    // A cut past the layer's end draws it all.
+    CHECK(preview_ranges(order, 0, 1, 0xFFFFFFFFu, 100, 100)[0].count == 25);
+}
+
+TEST_CASE("view: the preview's nearest layers are drawn first, for the depth test", "[ui]") {
+    // Four layers of 3 shown extrusions at z 0.2 to 0.8, and 2 hidden ones in layer 1.
+    PreviewDrawOrder order;
+    order.layer_shown = {0, 3, 6, 9, 12};
+    order.layer_hidden = {12, 12, 14, 14, 14};
+    order.layer_z = {0.2f, 0.4f, 0.6f, 0.8f};
+    const std::uint32_t some = 0x6u; // not every kind shown: the hidden ones are drawn too
+    const auto firsts = [](const std::vector<PreviewRange>& d) {
+        std::vector<std::size_t> f;
+        for (const PreviewRange& r : d)
+            f.push_back(r.first);
+        return f;
+    };
+    const auto total = [](const std::vector<PreviewRange>& d) {
+        std::size_t n = 0;
+        for (const PreviewRange& r : d)
+            n += r.count;
+        return n;
+    };
+    // From above: the top layer first, down to the bottom; then the hidden ones.
+    const std::vector<PreviewRange> above = preview_draws(order, 0, 3, some, 50.0f);
+    CHECK(firsts(above) == std::vector<std::size_t>{9, 6, 3, 0, 12});
+    CHECK(total(above) == 14);
+    // From below: upwards, in one draw (the hidden ones follow the shown ones).
+    const std::vector<PreviewRange> below = preview_draws(order, 0, 3, some, -5.0f);
+    CHECK(firsts(below) == std::vector<std::size_t>{0});
+    CHECK(below[0].count == 14);
+    // From between layers 1 and 2: down from layer 1, then up from layer 2.
+    const std::vector<PreviewRange> level = preview_draws(order, 0, 3, some, 0.5f);
+    CHECK(firsts(level) == std::vector<std::size_t>{3, 0, 6});
+    CHECK(level[2].count == 6 + 2);
+    // The layers shown and the move slider's cut, as preview_ranges.
+    const std::vector<PreviewRange> cut = preview_draws(order, 1, 2, some, 50.0f, 2, 0);
+    CHECK(firsts(cut) == std::vector<std::size_t>{6, 3, 12});
+    CHECK(total(cut) == 2 + 3 + 2);
+    CHECK(preview_draws(PreviewDrawOrder{}, 0, 3, some, 1.0f).empty());
+}
+
+TEST_CASE("view: the preview leaves out the layers outside the view", "[ui]") {
+    // The identity as the view and projection: what is shown is -1 to 1 on each axis.
+    const Mat4 clip = identity();
+    CHECK_FALSE(box_outside(clip, {-0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f}));
+    CHECK_FALSE(box_outside(clip, {0.5f, 0.5f, 0.5f, 3.0f, 3.0f, 3.0f})); // partly in
+    CHECK(box_outside(clip, {1.5f, -0.5f, -0.5f, 3.0f, 0.5f, 0.5f}));       // right of the view
+    CHECK(box_outside(clip, {-0.5f, -0.5f, -9.0f, 0.5f, 0.5f, -2.0f}));     // behind the near plane
+    CHECK(box_outside(clip, {1e30f, 1e30f, 1e30f, -1e30f, -1e30f, -1e30f})); // empty
+
+    // Four layers of 3 extrusions; layers 2 and 3 are far to the right.
+    PreviewDrawOrder order;
+    order.layer_shown = {0, 3, 6, 9, 12};
+    order.layer_hidden = {12, 12, 12, 12, 12};
+    order.layer_z = {0.2f, 0.4f, 0.6f, 0.8f};
+    order.layer_box = {{-0.5f, -0.5f, 0.0f, 0.5f, 0.5f, 0.2f}, {-0.5f, -0.5f, 0.2f, 0.5f, 0.5f, 0.4f},
+                       {5.0f, -0.5f, 0.4f, 6.0f, 0.5f, 0.6f}, {5.0f, -0.5f, 0.6f, 6.0f, 0.5f, 0.8f}};
+    const auto total = [](const std::vector<PreviewRange>& d) {
+        std::size_t n = 0;
+        for (const PreviewRange& r : d)
+            n += r.count;
+        return n;
+    };
+    CHECK(total(preview_draws(order, 0, 3, 0x6u, -5.0f)) == 12);              // without the view: all
+    const std::vector<PreviewRange> seen = preview_draws(order, 0, 3, 0x6u, -5.0f, kWholeLayer, kWholeLayer, &clip);
+    REQUIRE(seen.size() == 1);
+    CHECK(seen[0].first == 0);
+    CHECK(seen[0].count == 6);
+}
+
+TEST_CASE("view: a coarse copy of a large mesh for moving the view (V6, vertex clustering)", "[ui]") {
+    // A sphere of radius 20 in 360 x 180 steps: 129 600 triangles.
+    TriangleMesh sphere;
+    constexpr int kAround = 360, kUp = 180;
+    constexpr double kPi = 3.14159265358979323846;
+    const auto at = [&](int i, int j) {
+        const double a = 2.0 * kPi * i / kAround, b = kPi * j / kUp - kPi / 2.0;
+        return Vec3f{float(20.0 * std::cos(b) * std::cos(a)), float(20.0 * std::cos(b) * std::sin(a)),
+                     float(20.0 + 20.0 * std::sin(b))};
+    };
+    for (int i = 0; i < kAround; ++i)
+        for (int j = 0; j < kUp; ++j) {
+            sphere.add_triangle(at(i, j), at(i + 1, j), at(i + 1, j + 1));
+            sphere.add_triangle(at(i, j), at(i + 1, j + 1), at(i, j + 1));
+        }
+    // Small meshes stay as they are.
+    CHECK(clustered(sphere, 200000).triangle_count() == sphere.triangle_count());
+    const TriangleMesh coarse = clustered(sphere, 10000);
+    INFO(coarse.triangle_count());
+    CHECK(coarse.triangle_count() > 3000);
+    CHECK(coarse.triangle_count() < 30000);
+    // The same shape: its box within a cell, its volume within a few percent,
+    // still closed and wound outwards.
+    const BoundingBox a = sphere.bounding_box(), b = coarse.bounding_box();
+    CHECK(std::abs(a.min.x - b.min.x) < 1.0f);
+    CHECK(std::abs(a.max.z - b.max.z) < 1.0f);
+    CHECK_THAT(coarse.signed_volume(), Catch::Matchers::WithinRel(sphere.signed_volume(), 0.05));
 }

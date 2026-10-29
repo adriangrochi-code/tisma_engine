@@ -2,6 +2,7 @@
 
 #include "support/support.hpp"
 
+#include "gcode/order.hpp"
 #include "geom/bitgrid.hpp"
 #include "gpu/compute.hpp"
 
@@ -46,10 +47,43 @@ std::vector<Polygons> overhangs(const std::vector<Polygons>& regions, const std:
     return out;
 }
 
+bool is_bridge(const Polygons& island, const Polygons& below, double reach) {
+    if (island.empty() || below.empty())
+        return false;
+    const Polygons outline{island.front()};
+    const Polygons band = Clipper2Lib::Difference(offset(outline, reach), outline, Clipper2Lib::FillRule::NonZero);
+    const Polygons held = Clipper2Lib::Intersect(band, below, Clipper2Lib::FillRule::NonZero);
+    // Specks of a bead's square or less are where an edge grazes a corner.
+    const double speck = reach * reach * double(kUnitsPerMm) * double(kUnitsPerMm);
+    std::size_t stretches = 0;
+    for (const Polygons& piece : split_islands(held))
+        if (std::fabs(Clipper2Lib::Area(piece)) > speck) {
+            if (piece.size() > 1) // a ring: held all round
+                return true;
+            ++stretches;
+        }
+    return stretches >= 2;
+}
+
 std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                           const SupportParams& params) {
     const std::size_t n = regions.size();
     std::vector<Polygons> over = params.automatic ? overhangs(regions, heights, params) : std::vector<Polygons>(n);
+    if (params.automatic && !params.under_bridges)
+        tbb::parallel_for(std::size_t(1), std::max<std::size_t>(n, 1), [&](std::size_t l) {
+            if (over[l].empty())
+                return;
+            // Held past the reach allowed, by a bead more.
+            const double reach = (params.threshold_angle > 0.0
+                                      ? heights[l] / std::tan(params.threshold_angle * std::numbers::pi / 180.0)
+                                      : params.bead / 2.0) +
+                                 params.bead;
+            Polygons kept;
+            for (Polygons& island : split_islands(over[l]))
+                if (!is_bridge(island, regions[l - 1], reach))
+                    kept.insert(kept.end(), std::make_move_iterator(island.begin()), std::make_move_iterator(island.end()));
+            over[l] = std::move(kept);
+        });
     if (params.enforce || params.block) {
         const auto at = [&](const std::vector<Polygons>* areas, std::size_t l) -> const Polygons* {
             return areas && l < areas->size() && !(*areas)[l].empty() ? &(*areas)[l] : nullptr;
@@ -68,6 +102,10 @@ std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, 
     }
     return over;
 }
+
+namespace {
+void keep_from_bed(std::vector<Polygons>& support, const std::vector<Polygons>& regions, int bottom_gap);
+} // namespace
 
 std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                     const SupportParams& params) {
@@ -91,7 +129,8 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
     if (bounds.left > bounds.right)
         return out;
     const std::int64_t pixel = std::max<std::int64_t>(to_units(params.bead / double(kPixelsPerBead)), 1);
-    const int radius = kPixelsPerBead; // the closing: one bead
+    // The closing: one bead, or params.closing.
+    const int radius = params.closing > 0.0 ? std::max(1, int(std::lround(params.closing / to_mm(pixel)))) : kPixelsPerBead;
     // The overhangs grow by the support's margin and a pixel, then the closing.
     const int margin = 2 * radius + 2 + int(std::ceil(params.margin / to_mm(pixel)));
     const std::int64_t x0 = bounds.left - margin * pixel, y0 = bounds.top - margin * pixel;
@@ -136,14 +175,89 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
             if (c.width() == 0 || c.empty())
                 return;
             // Simplified to half a bead (support needs no detail, and its
-            // lines follow the outline), then kept xy_gap off the part, exactly.
+            // lines follow the outline), then kept xy_gap off the part, exactly,
+            // and bottom_gap_layers over the part it stands on (supports_more.md, rule 6).
             out[l] = Clipper2Lib::Difference(simplify(c.outline(), params.bead / 2.0), offset(regions[l], params.xy_gap),
                                              Clipper2Lib::FillRule::NonZero);
+            for (std::size_t g = 1; g <= std::size_t(std::max(params.bottom_gap_layers, 0)) && g <= l && !out[l].empty(); ++g)
+                // Grown by half a bead: no slivers left hanging over its edge.
+                out[l] = Clipper2Lib::Difference(out[l], offset(regions[l - g], params.bead / 2.0), Clipper2Lib::FillRule::NonZero);
         });
         top = bottom;
     }
+    if (params.buildplate_only)
+        keep_from_bed(out, regions, params.bottom_gap_layers);
     return out;
 }
+
+namespace {
+
+// support.buildplate_only (supports_more.md, rule 2): the support's islands,
+// each layer's joined to the ones of the layer below they overlap, make
+// zones; a zone with an island right over the part (within the bottom gap)
+// stands on it and goes whole, the part of it on the bed too. Own design.
+void keep_from_bed(std::vector<Polygons>& support, const std::vector<Polygons>& regions, int bottom_gap) {
+    struct Island {
+        std::size_t layer;
+        Polygons area;
+        Clipper2Lib::Rect64 box;
+    };
+    std::vector<Island> islands;
+    std::vector<std::size_t> first(support.size() + 1, 0);
+    for (std::size_t l = 0; l < support.size(); ++l) {
+        first[l] = islands.size();
+        if (support[l].empty())
+            continue;
+        Clipper2Lib::PolyTree64 tree;
+        Clipper2Lib::Clipper64 c;
+        c.AddSubject(support[l]);
+        c.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::NonZero, tree);
+        for (const auto& outer : tree) {
+            Island island{l, {outer->Polygon()}, {}};
+            for (const auto& hole : *outer)
+                island.area.push_back(hole->Polygon());
+            island.box = Clipper2Lib::GetBounds(island.area);
+            islands.push_back(std::move(island));
+        }
+    }
+    first[support.size()] = islands.size();
+    std::vector<std::size_t> parent(islands.size());
+    for (std::size_t i = 0; i < parent.size(); ++i)
+        parent[i] = i;
+    const auto root = [&](std::size_t i) {
+        while (parent[i] != i)
+            i = parent[i] = parent[parent[i]];
+        return i;
+    };
+    const auto overlap = [](const Clipper2Lib::Rect64& a, const Clipper2Lib::Rect64& b) {
+        return a.left <= b.right && b.left <= a.right && a.top <= b.bottom && b.top <= a.bottom;
+    };
+    std::vector<char> on_part(islands.size(), 0);
+    for (std::size_t i = 0; i < islands.size(); ++i) {
+        const Island& a = islands[i];
+        if (a.layer == 0)
+            continue;
+        for (std::size_t j = first[a.layer - 1]; j < first[a.layer]; ++j)
+            if (overlap(a.box, islands[j].box) &&
+                !Clipper2Lib::Intersect(a.area, islands[j].area, Clipper2Lib::FillRule::NonZero).empty())
+                parent[root(i)] = root(j);
+        for (std::size_t g = 1; g <= std::size_t(std::max(bottom_gap, 0)) + 1 && g <= a.layer && !on_part[i]; ++g)
+            on_part[i] = area_mm2(Clipper2Lib::Intersect(a.area, regions[a.layer - g], Clipper2Lib::FillRule::NonZero)) > 0.01;
+    }
+    std::vector<char> gone(islands.size(), 0);
+    for (std::size_t i = 0; i < islands.size(); ++i)
+        if (on_part[i])
+            gone[root(i)] = 1;
+    for (std::size_t l = 0; l < support.size(); ++l) {
+        Polygons kept;
+        for (std::size_t i = first[l]; i < first[l + 1]; ++i)
+            if (!gone[root(i)])
+                kept.insert(kept.end(), islands[i].area.begin(), islands[i].area.end());
+        support[l] = std::move(kept);
+    }
+}
+
+} // namespace
 
 void support_column(BitGrid& column, std::span<const BitGrid> parts, std::span<const BitGrid> adds,
                     std::span<BitGrid> kept, int radius) {

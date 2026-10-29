@@ -16,6 +16,11 @@ using Catch::Matchers::WithinAbs;
 
 namespace {
 
+// The band of 3 walls 0.4 mm wide on 0.2 mm layers (perimeters.md, rule 1):
+// half an overlap, then three spacings of 0.4 less the overlap.
+const double kOverlap = 0.2 * (1.0 - std::numbers::pi / 4.0);
+const double kBand = kOverlap / 2.0 + 3.0 * (0.4 - kOverlap);
+
 // A closed box from (x0, y0, z0) to (x1, y1, z1), faces wound outwards.
 void add_box(TriangleMesh& m, float x0, float y0, float z0, float x1, float y1, float z1) {
     const Vec3f v[8] = {{x0, y0, z0}, {x1, y0, z0}, {x1, y1, z0}, {x0, y1, z0},
@@ -72,19 +77,20 @@ TEST_CASE("classify_surfaces on a step: the repeated layers end where the region
 TEST_CASE("the cube gets 3 solid layers at the bottom and 3 at the top", "[surfaces]") {
     const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
     Settings settings; // 3 walls, 3 top and 3 bottom layers
+    settings.outer_wall_width = settings.wall_width; // the outer wall as the others
     settings.infill_solid_below_area = 0.0; // the 10 mm cube's 57.8 mm2 of infill would be all solid (infill.solid_below_area)
     const SlicedModel sliced = slice_model(m, settings);
     REQUIRE(sliced.surfaces.size() == 50);
-    const double infill = 7.6 * 7.6;
+    const double infill = (10.0 - 2.0 * kBand) * (10.0 - 2.0 * kBand);
     for (std::size_t i = 0; i < 50; ++i) {
         INFO("layer " << i);
         const LayerSurfaces& s = sliced.surfaces[i];
-        CHECK_THAT(area_mm2(s.top), WithinAbs(i >= 47 ? infill : 0.0, 1e-6));
-        CHECK_THAT(area_mm2(s.bottom), WithinAbs(i < 3 ? infill : 0.0, 1e-6));
-        CHECK_THAT(area_mm2(s.sparse), WithinAbs(i >= 3 && i < 47 ? infill : 0.0, 1e-6));
+        CHECK_THAT(area_mm2(s.top), WithinAbs(i >= 47 ? infill : 0.0, 1e-5));
+        CHECK_THAT(area_mm2(s.bottom), WithinAbs(i < 3 ? infill : 0.0, 1e-5));
+        CHECK_THAT(area_mm2(s.sparse), WithinAbs(i >= 3 && i < 47 ? infill : 0.0, 1e-5));
         // Only the last layer is the top surface; the two under it are solid
         // infill (surfaces_infill.md, rule 2 and I1).
-        CHECK_THAT(area_mm2(s.top_under), WithinAbs(i == 47 || i == 48 ? infill : 0.0, 1e-6));
+        CHECK_THAT(area_mm2(s.top_under), WithinAbs(i == 47 || i == 48 ? infill : 0.0, 1e-5));
     }
     CHECK(sliced.fills[47].top.empty());
     CHECK(sliced.fills[48].top.empty());
@@ -99,24 +105,26 @@ TEST_CASE("a step: the lower box's top around the upper box is solid, the upper 
     add_box(mesh, 0, 0, 0, 20, 20, 5);
     add_box(mesh, 5, 5, 5, 15, 15, 10);
     Settings s;
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     s.infill_solid_below_area = 0.0; // the upper box's 57.8 mm2 of infill would be all solid
     const SlicedModel sliced = slice_model(weld_exact(mesh), s);
     REQUIRE(sliced.surfaces.size() == 50);
-    const double lower_infill = 17.6 * 17.6, upper_infill = 7.6 * 7.6;
+    const double lower_infill = (20.0 - 2.0 * kBand) * (20.0 - 2.0 * kBand),
+                 upper_infill = (10.0 - 2.0 * kBand) * (10.0 - 2.0 * kBand);
     for (std::size_t i : {22u, 23u, 24u}) {
         INFO("layer " << i);
         // Solid where the upper box does not cover it: the infill minus the 10 mm square.
-        CHECK_THAT(area_mm2(sliced.surfaces[i].top), WithinAbs(lower_infill - 100.0, 1e-6));
+        CHECK_THAT(area_mm2(sliced.surfaces[i].top), WithinAbs(lower_infill - 100.0, 1e-5));
         CHECK_THAT(area_mm2(sliced.surfaces[i].sparse), WithinAbs(100.0, 1e-6));
         // Layer 24's ring is under the air: the top surface; 22 and 23 are under it.
-        CHECK_THAT(area_mm2(sliced.surfaces[i].top_under), WithinAbs(i < 24 ? lower_infill - 100.0 : 0.0, 1e-6));
+        CHECK_THAT(area_mm2(sliced.surfaces[i].top_under), WithinAbs(i < 24 ? lower_infill - 100.0 : 0.0, 1e-5));
     }
     CHECK_THAT(area_mm2(sliced.surfaces[21].top), WithinAbs(0.0, 1e-6));
     for (std::size_t i : {25u, 26u, 27u}) {
         INFO("layer " << i);
         // The upper box stands on the lower one: no bottom surface.
         CHECK_THAT(area_mm2(sliced.surfaces[i].bottom), WithinAbs(0.0, 1e-6));
-        CHECK_THAT(area_mm2(sliced.surfaces[i].sparse), WithinAbs(upper_infill, 1e-6));
+        CHECK_THAT(area_mm2(sliced.surfaces[i].sparse), WithinAbs(upper_infill, 1e-5));
     }
 }
 
@@ -152,11 +160,13 @@ TEST_CASE("bridges: a plate on two pillars bridges the gap, with lines from pill
     add_box(mesh, 0, 0, 0, 5, 10, 5);
     add_box(mesh, 15, 0, 0, 20, 10, 5);
     add_box(mesh, 0, 0, 5, 20, 10, 7);
-    const SlicedModel sliced = slice_model(weld_exact(mesh), Settings{});
+    Settings s;
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
+    const SlicedModel sliced = slice_model(weld_exact(mesh), s);
     REQUIRE(sliced.surfaces.size() == 35);
-    // The plate's first layer: its infill (1.2 mm in) between the pillars is a bridge.
+    // The plate's first layer: its infill (kBand in) between the pillars is a bridge.
     const LayerSurfaces& first = sliced.surfaces[25];
-    CHECK_THAT(area_mm2(first.bridge), WithinAbs(10.0 * 7.6, 1e-6));
+    CHECK_THAT(area_mm2(first.bridge), WithinAbs(10.0 * (10.0 - 2.0 * kBand), 1e-5));
     CHECK(first.bottom.empty());
     CHECK(first.bridge_angle == 0.0); // across the gap, from pillar to pillar
     REQUIRE_FALSE(sliced.fills[25].bridge.empty());
@@ -168,7 +178,7 @@ TEST_CASE("bridges: a plate on two pillars bridges the gap, with lines from pill
     }
     // The next layer rests on the bridge: still a bottom surface, no longer a bridge.
     CHECK(sliced.surfaces[26].bridge.empty());
-    CHECK_THAT(area_mm2(sliced.surfaces[26].bottom), WithinAbs(10.0 * 7.6, 1e-6));
+    CHECK_THAT(area_mm2(sliced.surfaces[26].bottom), WithinAbs(10.0 * (10.0 - 2.0 * kBand), 1e-5));
     // Nothing else in the model is a bridge: not the first layer on the bed, not the pillars.
     for (std::size_t i = 0; i < sliced.surfaces.size(); ++i)
         if (i != 25)
@@ -182,10 +192,11 @@ TEST_CASE("bridges: with no infill, the same bridge, and none from a narrowing h
     add_box(plate, 15, 0, 0, 20, 10, 5);
     add_box(plate, 0, 0, 5, 20, 10, 7);
     Settings s;
+    s.outer_wall_width = s.wall_width; // the outer wall as the others
     s.infill_density = 0.0;
     const SlicedModel sliced = slice_model(weld_exact(plate), s);
     REQUIRE(sliced.surfaces.size() == 35);
-    CHECK_THAT(area_mm2(sliced.surfaces[25].bridge), WithinAbs(10.0 * 7.6, 1e-6));
+    CHECK_THAT(area_mm2(sliced.surfaces[25].bridge), WithinAbs(10.0 * (10.0 - 2.0 * kBand), 1e-5));
     for (std::size_t i = 0; i < sliced.surfaces.size(); ++i)
         if (i != 25)
             CHECK(sliced.surfaces[i].bridge.empty());

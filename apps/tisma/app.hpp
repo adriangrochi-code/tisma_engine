@@ -2,6 +2,7 @@
 
 #include "ui/text.hpp"
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -25,11 +26,23 @@ struct AppOptions {
     int msaa = -1;                  // multisampling samples; -1: the preference
     int fxaa = -1;                  // 0 off, 1 on; -1: the preference
     int moire = -1;                 // the moiré filter: 0 off, 1 on; -1: the preference
-    int color = -1;                 // the preview's colour (ColorMode: 0 kind, 1 speed, 2 width, 3 height); -1: by kind
+    float ao_strength = -1.0f;      // the occlusion's strength, 0 to 1.5; negative: the preference
+    int color = -1;                 // the preview's view (PreviewView, preview.md rule 1); -1: by kind
     // With screenshot: the camera after framing, {x, y, z, distance, yaw, pitch}
     // (mm and degrees); empty: the framing's own (a close look at the lines).
     std::vector<float> look;
-    std::string tool; // the plate tool chosen at start: move, rotate, scale, lay or paint (for screenshots)
+    std::string tool; // the plate tool chosen at start: move, rotate, scale, lay, cut, measure, paint, material, or mixing (its dialog)
+    int measure[2] = {-1, -1}; // with --tool measure: two triangles of the first model picked as faces
+    double cut = 0.0; // above 0: the first object cut at this height over the bed (model_tools.md, rule 13)
+    // The first object's own settings at start, a JSON object of groups, with
+    // their window open (settings_levels.md, rule 11).
+    std::string object_settings;
+    // What to add to the first object at start, for screenshots: "modifier",
+    // "negative" and "range", separated by commas (model_tools.md, rules 2, 3 and 6).
+    std::string object_add;
+    // The first object turned at start about X, Y and Z, degrees, after what
+    // --object-add adds (its volumes turn with it).
+    std::array<double, 3> object_turn{0.0, 0.0, 0.0};
     // Brush strokes painted at start on every model (for screenshots and tests).
     struct Stroke {
         std::string channel; // support, seam or fuzzy
@@ -40,10 +53,26 @@ struct AppOptions {
     bool tips = false; // with screenshot: show the first-use tips (docs/UI.md, «Ayuda»)
     int tour = -1;     // the assistant's step to show at start (0 to 6); -1: none, or the first run's
     std::string info;  // with screenshot: the setting ("group.key") whose info card opens
-    std::string level;   // the settings panel's level: basic, normal or advanced; empty: the remembered one
+    std::string level;   // the settings panel's level: basic, normal, advanced or custom; empty: the remembered one
     std::string section; // the settings panel's section to show ("print/strength", "material/cooling"...)
+    std::string search;  // a search for a setting, gone to as Enter would (settings_panel.md, rule 5)
+    bool single_column = false;   // the panel's «See all together» (rule 4)
+    bool ortho = false;           // the view orthographic (K; preview.md, rule 10)
+    bool labels = false;          // the parts' names over them (E)
+    bool choose_settings = false; // with screenshot: the dialog that chooses what Custom shows (rule 16)
+    bool credits = false;         // with screenshot: More › Credits and sources (credits.md, rule 4)
+    std::string help;             // the help panel open at this tab: problems, procedures, glossary, tutorials, calibrations
+    std::string knowledge;        // the help's data folder instead of the pack's (knowledge/)
+    std::string help_open;        // with help: a problem or procedure id opened in it
+    std::string tutorial;         // a guided tutorial of the help's data started at its step tutorial_step
+    int tutorial_step = 0;
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
+    bool coarse = false;            // with screenshot: draw a large plate as while the view moves (V6)
+    std::string pick_catalog_printer; // test hook: the printer card picks this catalog printer ("Vendor Model")
+    std::string ui_script;          // test hook: steps of input played into the window (App::script_input)
+    bool view_check = true;         // with screenshot: check the 3D view's picture (no black pixels, few sparkles)
     int bench_frames = 0;           // with screenshot: draw the ready 3D view this many times more, timed
+    bool draw_stats = false;        // print each frame's OpenGL draw calls and vertices (view, then panels)
     // What draws the window: "auto" (Vulkan when this machine has it and the
     // view runs on it, else OpenGL), "vulkan" (OpenGL only if Vulkan cannot)
     // or "opengl" (PLAN.md «Vista con Vulkan»).

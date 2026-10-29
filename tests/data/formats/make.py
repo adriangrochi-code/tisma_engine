@@ -68,6 +68,25 @@ config = ('<?xml version="1.0" encoding="UTF-8"?>\n<config>\n <object id="1" ins
           '  </volume>\n  <volume firstid="12" lastid="23">\n'
           '   <metadata type="volume" key="volume_type" value="ParameterModifier"/>\n  </volume>\n </object>\n</config>\n')
 package('box_modifier.3mf', two, more=(('Metadata/Slic3r_PE_model.config', config),))
+# Slicer projects with a negative volume (model_tools.md, MT1 and MT3): the box and, after its 12 triangles, a
+# block the project lists as a negative volume. MT1: 10 x 10 x 20 mm through the middle, out at the top and the
+# bottom. MT3: a closed 10 x 10 x 4 mm hole from Z 3 to 7.
+def with_negative(lo, hi):
+    vertices = ''.join('     <vertex x="%g" y="%g" z="%g" />\n' % (lo[0] + (hi[0] - lo[0]) * (x / 20),
+                                                                   lo[1] + (hi[1] - lo[1]) * (y / 20),
+                                                                   lo[2] + (hi[2] - lo[2]) * (z / 10)) for x, y, z in V)
+    text = model().replace('    </vertices>\n', vertices + '    </vertices>\n', 1)
+    return text.replace('    </triangles>\n', ''.join('     <triangle v1="%d" v2="%d" v3="%d" />\n' %
+                                                     (a + 8, b + 8, c + 8) for a, b, c in F) + '    </triangles>\n', 1)
+
+
+negative = ('<?xml version="1.0" encoding="UTF-8"?>\n<config>\n <object id="1" instances_count="1">\n'
+            '  <volume firstid="0" lastid="11">\n   <metadata type="volume" key="volume_type" value="ModelPart"/>\n'
+            '  </volume>\n  <volume firstid="12" lastid="23">\n'
+            '   <metadata type="volume" key="volume_type" value="NegativeVolume"/>\n  </volume>\n </object>\n</config>\n')
+package('box_negative.3mf', with_negative((5, 5, -5), (15, 15, 15)),
+        more=(('Metadata/Slic3r_PE_model.config', negative),))
+package('box_cavity.3mf', with_negative((5, 5, 3), (15, 15, 7)), more=(('Metadata/Slic3r_PE_model.config', negative),))
 # The mesh in another model file of the package, mirrored by its component (Production Extension).
 inner = model().replace('<build>\n  <item objectid="1" transform="1 0 0 0 1 0 0 0 1 90 90 0" />\n </build>\n', '<build/>\n')
 outer = ('<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xmlns="http://schemas.microsoft.com/'

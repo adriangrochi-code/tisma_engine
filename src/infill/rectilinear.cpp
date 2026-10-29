@@ -72,7 +72,8 @@ Polygons order_monotonic(Polygons pieces, double step, double half_width) {
 } // namespace
 
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
-                                       bool connect, bool fit, bool monotonic, double overlap, double shift) {
+                                       bool connect, bool fit, bool monotonic, double overlap, double shift,
+                                       double max_join) {
     std::vector<Toolpath> out;
     if (!(spacing > 0.0) || region.empty())
         return out;
@@ -165,7 +166,7 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
     if (monotonic)
         open = order_monotonic(std::move(open), step, width / 2.0 * kUnitsPerMm);
     else if (connect)
-        open = join_along_boundary(open, turned, kMaxJoin * step, step);
+        open = join_along_boundary(open, turned, max_join > 0.0 ? max_join * kUnitsPerMm : kMaxJoin * step, step);
     for (const Polygon& piece : open) {
         if (piece.size() < 2)
             continue;
@@ -179,7 +180,7 @@ std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, d
     return out;
 }
 
-std::vector<Toolpath> gap_fill(const Polygons& region, const std::vector<Toolpath>& lines, double width) {
+std::vector<Toolpath> gap_fill(const Polygons& region, const std::vector<Toolpath>& lines, double width, double overlap) {
     if (region.empty())
         return {};
     Polygons left = Clipper2Lib::Difference(region, bead_area(lines), Clipper2Lib::FillRule::NonZero);
@@ -190,6 +191,7 @@ std::vector<Toolpath> gap_fill(const Polygons& region, const std::vector<Toolpat
         return {};
     BeadingParams beads;
     beads.preferred_width = width;
+    beads.overlap = overlap;
     return layer_walls(left, beads).toolpaths;
 }
 
@@ -233,40 +235,58 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     const Polygons solid = surfaces.top_under.empty()
                                ? surfaces.bottom
                                : Clipper2Lib::Union(surfaces.bottom, surfaces.top_under, Clipper2Lib::FillRule::NonZero);
+    const double top = params.top_width > 0.0 ? params.top_width : params.width;
+    const double inner = params.solid_width > 0.0 ? params.solid_width : params.width;
+    // Neighbouring lines overlap as the walls' beads (perimeters.md, rule 1):
+    // a bead's spacing apart, the outer ones a spacing's half from the edge.
+    const double d = std::clamp(params.overlap, 0.0, 0.5 * std::min(top, inner));
     if (params.monotonic_top)
-        out.top = rectilinear_fill(surface, params.width, angle, params.width, false, true, true,
-                                   params.wall_overlap * params.width);
+        out.top = rectilinear_fill(surface, top - d, angle, top, false, true, true, params.wall_overlap * top + d / 2.0);
     else
-        out.top = rectilinear_fill(surface, params.width, angle, params.width, true, true);
-    out.solid = rectilinear_fill(solid, params.width, angle, params.width, true, true);
+        out.top = rectilinear_fill(surface, top - d, angle, top, true, true, false, d / 2.0);
+    // The bottom surfaces monotonic like the top ones (surfaces.bottom_pattern),
+    // reaching as far as the zig-zags; the solid layers under a top surface
+    // zig-zag.
+    if (params.monotonic_bottom && !surfaces.bottom.empty()) {
+        out.solid = rectilinear_fill(surfaces.bottom, inner - d, angle, inner, false, true, true, d / 2.0);
+        for (Toolpath& t : rectilinear_fill(surfaces.top_under, inner - d, angle, inner, true, true, false, d / 2.0))
+            out.solid.push_back(std::move(t));
+    } else {
+        out.solid = rectilinear_fill(solid, inner - d, angle, inner, true, true, false, d / 2.0);
+    }
     if (params.gap_fill && !(out.top.empty() && out.solid.empty())) {
         std::vector<Toolpath> lines = out.top;
         lines.insert(lines.end(), out.solid.begin(), out.solid.end());
         out.gaps = gap_fill(Clipper2Lib::Union(surfaces.top, surfaces.bottom, Clipper2Lib::FillRule::NonZero), lines,
-                            params.width);
+                            params.width, d);
     }
     // Bridge lines stay straight: a join along the edge would hang in the air.
-    out.bridge = rectilinear_fill(surfaces.bridge, params.width, surfaces.bridge_angle, params.width, false, true);
+    const double bridge = params.bridge_width > 0.0 ? params.bridge_width : params.width;
+    out.bridge = rectilinear_fill(surfaces.bridge, bridge, surfaces.bridge_angle, bridge, false, true);
     if (params.density <= 0.0)
         return out;
+    const double w = params.sparse_width > 0.0 ? params.sparse_width : params.width;
+    // The lines apart by the material they lay: a spacing each (w less the overlap).
+    const double ws = w - std::clamp(params.overlap, 0.0, 0.5 * w);
     switch (params.pattern) {
     case InfillPattern::Rectilinear:
     case InfillPattern::Zigzag: // the same in Tisma Slicer (infill_patterns.md, rule 2)
-        out.sparse = rectilinear_fill(surfaces.sparse, params.width / params.density, angle, params.width, true);
+        out.sparse = rectilinear_fill(surfaces.sparse, ws / params.density, angle, w, true, false, false, 0.0, 0.0,
+                                      params.max_link);
         break;
     case InfillPattern::AlignedRectilinear: // every layer at the infill angle (rule 1)
-        out.sparse =
-            rectilinear_fill(surfaces.sparse, params.width / params.density, params.angle, params.width, true);
+        out.sparse = rectilinear_fill(surfaces.sparse, ws / params.density, params.angle, w, true, false, false, 0.0, 0.0,
+                                      params.max_link);
         break;
     case InfillPattern::Grid: {
-        const double spacing = 2.0 * params.width / params.density;
-        out.sparse = rectilinear_fill(surfaces.sparse, spacing, params.angle, params.width);
-        for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 90.0, params.width))
+        const double spacing = 2.0 * ws / params.density;
+        out.sparse = rectilinear_fill(surfaces.sparse, spacing, params.angle, w);
+        for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 90.0, w))
             out.sparse.push_back(std::move(t));
         break;
     }
     case InfillPattern::Gyroid:
-        out.sparse = gyroid_fill(surfaces.sparse, gyroid_period(params.width, params.density), z, params.width);
+        out.sparse = gyroid_fill(surfaces.sparse, gyroid_period(ws, params.density), z, w);
         break;
     case InfillPattern::Triangles:
     case InfillPattern::Stars:
@@ -277,11 +297,11 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         // never meet at one point and draw six-pointed stars. Cubic: the faces
         // of cubes standing on a vertex, so each family moves across its lines
         // by z / sqrt(2) with the height (infill_patterns.md, rules 4 to 6).
-        const double spacing = 3.0 * params.width / params.density;
+        const double spacing = 3.0 * ws / params.density;
         const double shift = params.pattern == InfillPattern::Cubic ? -z / std::numbers::sqrt2 : 0.0;
         for (int k = 0; k < 3; ++k) {
             const double over = params.pattern == InfillPattern::Stars && k == 1 ? 0.5 * spacing : 0.0;
-            for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 60.0 * k, params.width, false,
+            for (Toolpath& t : rectilinear_fill(surfaces.sparse, spacing, params.angle + 60.0 * k, w, false,
                                                 false, false, 0.0, std::fmod(shift, spacing) + over))
                 out.sparse.push_back(std::move(t));
         }
@@ -289,32 +309,29 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     }
     case InfillPattern::AdaptiveCubic:
     case InfillPattern::SupportCubic:
-        out.sparse = adaptive_cubic_fill(surfaces.sparse, params.depth, 3.0 * params.width / params.density,
-                                         params.width, z);
+        out.sparse = adaptive_cubic_fill(surfaces.sparse, params.depth, 3.0 * ws / params.density, w, z);
         break;
     case InfillPattern::Line: // every other line turned 6.7 degrees, the other way on odd layers (rule 3, P3)
-        out.sparse = line_fill(surfaces.sparse, params.width / params.density, angle, layer % 2 == 1 ? -6.7 : 6.7,
-                               params.width);
+        out.sparse = line_fill(surfaces.sparse, ws / params.density, angle, layer % 2 == 1 ? -6.7 : 6.7, w);
         break;
     case InfillPattern::Honeycomb: {
         // The principal direction goes through angle + 90, + 30 and - 30, a
         // layer each (rule 10, P8: 135, 75 and 15 degrees at 45 in layers 6, 7 and 5).
         const double principal = params.angle + 90.0 - 60.0 * double(layer % 3);
-        out.sparse = honeycomb_fill(surfaces.sparse, honeycomb_side(params.width, params.density), principal,
-                                    params.width);
+        out.sparse = honeycomb_fill(surfaces.sparse, honeycomb_side(ws, params.density), principal, w);
         break;
     }
     case InfillPattern::Concentric:
-        out.sparse = concentric_fill(surfaces.sparse, params.width / params.density, params.width);
+        out.sparse = concentric_fill(surfaces.sparse, ws / params.density, w);
         break;
     case InfillPattern::Hilbert: // the same in every layer (rule 12)
-        out.sparse = hilbert_fill(surfaces.sparse, params.width / params.density, params.angle, params.width);
+        out.sparse = hilbert_fill(surfaces.sparse, ws / params.density, params.angle, w);
         break;
     case InfillPattern::Archimedean:
-        out.sparse = archimedean_fill(surfaces.sparse, params.width / params.density, params.centre, params.width);
+        out.sparse = archimedean_fill(surfaces.sparse, ws / params.density, params.centre, w);
         break;
     case InfillPattern::Octagram:
-        out.sparse = octagram_fill(surfaces.sparse, params.width / params.density, params.centre, params.width);
+        out.sparse = octagram_fill(surfaces.sparse, ws / params.density, params.centre, w);
         break;
     case InfillPattern::Lightning:
         break; // all the layers at once, from the top down (lightning_layers)

@@ -12,10 +12,12 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <regex>
 #include <set>
+#include <map>
 #include <numbers>
 #include <sstream>
 #include <string>
@@ -64,6 +66,110 @@ double area_at(const SlicedModel& m, double z) {
 }
 
 } // namespace
+
+TEST_CASE("calibration: bands along the height from the calibration group (calibrations.md, rules 1 to 3; CA1 to CA7)",
+          "[calibration]") {
+    IndexedMesh prism; // 20 x 20 x 25 mm, layers of 0.2, bands of 5 mm
+    {
+        const auto base = std::uint32_t(prism.vertices.size());
+        for (float z : {0.0f, 25.0f})
+            for (const auto& p : {std::array<float, 2>{0, 0}, {20, 0}, {20, 20}, {0, 20}})
+                prism.vertices.push_back({p[0], p[1], z});
+        const auto quad = [&](std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
+            prism.triangles.push_back({base + a, base + b, base + c});
+            prism.triangles.push_back({base + a, base + c, base + d});
+        };
+        quad(0, 3, 2, 1);
+        quad(4, 5, 6, 7);
+        for (std::uint32_t i = 0; i < 4; ++i)
+            quad(i, (i + 1) % 4, 4 + (i + 1) % 4, 4 + i);
+    }
+    // The G-code of the prism with these settings, and the Z of the layer
+    // where a line first appears (0 before the first layer).
+    const auto gcode = [&](const std::string& json) {
+        Settings s = test_printer(parse_settings(json));
+        s.gpu = GpuMode::Off;
+        s.skirt_loops = 0;
+        s.variables["temperature"] = {"220"};
+        return gcode_of(slice_model(prism, s), s);
+    };
+    // The line, alone or with a comment after it.
+    const auto z_of = [](const std::string& g, const std::string& line) {
+        std::size_t at = std::string::npos;
+        for (const char* end : {"\n", " ;"})
+            at = std::min(at, g.find("\n" + line + end));
+        if (at == std::string::npos)
+            return -1.0;
+        const std::size_t z = g.rfind("\n;Z:", at);
+        return z == std::string::npos ? 0.0 : std::stod(g.substr(z + 4));
+    };
+    // CA1: the first band's temperature from the start, then each band's.
+    std::string g = gcode(R"({"calibration": {"mode": "temperature", "start": 230, "step": -5, "end": 210}})");
+    CHECK(z_of(g, "M109 S230") == 0.0);
+    CHECK_THAT(z_of(g, "M104 S225"), WithinAbs(5.2, 1e-9));
+    CHECK_THAT(z_of(g, "M104 S220"), WithinAbs(10.2, 1e-9));
+    CHECK_THAT(z_of(g, "M104 S215"), WithinAbs(15.2, 1e-9));
+    CHECK_THAT(z_of(g, "M104 S210"), WithinAbs(20.2, 1e-9));
+    CHECK(g.find("M104 S205") == std::string::npos); // never past the end
+    CHECK(g.find("M104 S220\n", g.find(";Z:0.4")) > g.find(";Z:10.2")); // the second layer keeps the band's
+    CHECK(count(g, "; calibration") == 5);
+    // CA2 and CA3: pressure advance in each firmware's command.
+    const std::string pa = R"("calibration": {"mode": "pressure_advance", "start": 0, "step": 0.02, "end": 0.08})";
+    g = gcode(R"({"machine": {"flavor": "klipper"}, )" + pa + "}");
+    // The first band's at the start: before the first layer's first extrusion.
+    CHECK(z_of(g, "SET_PRESSURE_ADVANCE ADVANCE=0.0000") >= 0.0);
+    CHECK(z_of(g, "SET_PRESSURE_ADVANCE ADVANCE=0.0000") <= 0.2);
+    CHECK_THAT(z_of(g, "SET_PRESSURE_ADVANCE ADVANCE=0.0200"), WithinAbs(5.2, 1e-9));
+    CHECK_THAT(z_of(g, "SET_PRESSURE_ADVANCE ADVANCE=0.0800"), WithinAbs(20.2, 1e-9));
+    g = gcode(R"({"machine": {"flavor": "marlin"}, )" + pa + "}");
+    CHECK_THAT(z_of(g, "M900 K0.0200"), WithinAbs(5.2, 1e-9));
+    g = gcode(R"({"machine": {"flavor": "reprapfirmware"}, )" + pa + "}");
+    CHECK_THAT(z_of(g, "M572 D0 S0.0200"), WithinAbs(5.2, 1e-9));
+    // CA5: the corners.
+    const std::string corners = R"("calibration": {"mode": "corners", "start": 2, "step": 2, "end": 10})";
+    g = gcode(R"({"machine": {"flavor": "klipper"}, )" + corners + "}");
+    CHECK(z_of(g, "SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY=2.00") >= 0.0);
+    CHECK_THAT(z_of(g, "SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY=4.00"), WithinAbs(5.2, 1e-9));
+    g = gcode(R"({"machine": {"flavor": "marlin"}, )" + corners + "}");
+    CHECK_THAT(z_of(g, "M205 X4.00 Y4.00"), WithinAbs(5.2, 1e-9));
+    g = gcode(R"({"machine": {"flavor": "reprapfirmware"}, )" + corners + "}");
+    CHECK(z_of(g, "M566 X120 Y120") >= 0.0);
+    CHECK_THAT(z_of(g, "M566 X240 Y240"), WithinAbs(5.2, 1e-9));
+    // CA6: the input shaping.
+    const std::string shaper = R"("calibration": {"mode": "input_shaping", "start": 20, "step": 10, "end": 60})";
+    g = gcode(R"({"machine": {"flavor": "klipper"}, )" + shaper + "}");
+    CHECK(z_of(g, "SET_INPUT_SHAPER SHAPER_FREQ_X=20.0 SHAPER_FREQ_Y=20.0") >= 0.0);
+    CHECK_THAT(z_of(g, "SET_INPUT_SHAPER SHAPER_FREQ_X=30.0 SHAPER_FREQ_Y=30.0"), WithinAbs(5.2, 1e-9));
+    g = gcode(R"({"machine": {"flavor": "marlin"}, )" + shaper + "}");
+    CHECK_THAT(z_of(g, "M593 F30.0"), WithinAbs(5.2, 1e-9));
+    // CA7: the acceleration, Marlin 2's M204 P (with the travels' T).
+    g = gcode(R"({"machine": {"flavor": "marlin"},
+                  "calibration": {"mode": "acceleration", "start": 1000, "step": 1000, "end": 5000}})");
+    CHECK_THAT(z_of(g, "M204 P2000 T1250"), WithinAbs(5.2, 1e-9));
+    CHECK_THAT(z_of(g, "M204 P5000 T1250"), WithinAbs(20.2, 1e-9));
+    // CA4: each band's retraction length.
+    g = gcode(R"({"machine": {"relative_extrusion": true},
+                  "calibration": {"mode": "retraction", "start": 0.5, "step": 0.5, "end": 2.5}})");
+    std::map<long, std::set<double>> retractions; // by band
+    double z = 0.0;
+    std::istringstream lines(g);
+    for (std::string line; std::getline(lines, line);) {
+        if (line.rfind(";Z:", 0) == 0)
+            z = std::stod(line.substr(3));
+        else if (line.rfind("G1 E-", 0) == 0 && z > 0.0)
+            retractions[long(std::floor((z - 0.2 + 1e-9) / 5.0))].insert(std::stod(line.substr(5)));
+    }
+    for (long band = 0; band < 5; ++band) {
+        INFO("band " << band);
+        REQUIRE(retractions.count(band));
+        CHECK(retractions[band] == std::set<double>{0.5 + 0.5 * double(band)});
+    }
+    // The bands are written back as the group, not as changes.
+    const Settings back = parse_settings(settings_json(parse_settings(
+        R"({"calibration": {"mode": "temperature", "start": 230, "step": -5, "end": 210}})")));
+    CHECK(back.changes.size() == 5);
+    CHECK(back.calibration.mode == CalibrationMode::Temperature);
+}
 
 TEST_CASE("calibration: the dimensional test is the block with its hole", "[calibration]") {
     const DimensionTest t;
@@ -158,7 +264,10 @@ TEST_CASE("calibration: towers write each segment's value", "[calibration]") {
         s.changes = p.changes;
         const SlicedModel m = slice_model(weld_exact(p.mesh), s);
         const std::string g = gcode_of(m, s);
-        CHECK(count(g, "M104 S") == 4);
+        // The first segment's temperature is also the start's, waited for
+        // (calibrations.md, rule 2), then each segment's.
+        CHECK(count(g, "M104 S") == 5);
+        CHECK(g.find("M109 S230") < g.find(";LAYER_CHANGE"));
         CHECK(g.find("M104 S230") < g.find("M104 S220"));
         CHECK(g.find("M104 S210") < g.find("M104 S200"));
         // The 200 C segment starts after Z 30: its M104 comes with the first layer above it.
@@ -277,9 +386,12 @@ TEST_CASE("calibration: labels, automatic ranges and the chosen value", "[calibr
     CHECK(s.flow == 96.5);
     CHECK_FALSE(apply_calibration(CalibrationKind::Dimensions, 1.0, s));
 
-    // Every automatic print slices into G-code that passes its check.
+    // Every automatic print slices into G-code that passes its check (the
+    // resin ones are tried in test_resin.cpp).
     for (int i = 0; i < kCalibrationKinds; ++i) {
         const CalibrationKind k = CalibrationKind(i);
+        if (is_resin_calibration(k))
+            continue;
         Settings run = plain();
         const CalibrationPrint p = automatic_calibration(k, run);
         run.changes = p.changes;
@@ -478,16 +590,43 @@ TEST_CASE("calibration: flow limit and acceleration towers, the elephant's foot"
     const SlicedModel m = slice_model(weld_exact(flow.mesh), s);
     const std::string g = gcode_of(m, s);
     CHECK(checks(g, gcode_limits(m, s)));
-    // A 0.4 x 0.2 mm line at 16 mm3/s runs at 200 mm/s; at 8 mm3/s, 100 mm/s.
-    const std::size_t top = g.find(";Z:10.2");
-    REQUIRE(top != std::string::npos);
-    CHECK(g.find("F12000", top) != std::string::npos);
-    CHECK(g.find("F6000") < top);
-    CHECK(g.find("F12000") > top);
+    // Each extrusion of a layer at its segment's flow: its section (a
+    // rectangle with rounded sides, gcode_motion.md rules 1 and 4) times its
+    // feed, the feed rounded down to whole mm/min.
+    const auto flows = [&g](const std::string& z) {
+        std::vector<double> out;
+        const std::size_t from = g.find(";Z:" + z + "\n");
+        if (from == std::string::npos)
+            return out;
+        const std::size_t to = g.find(";Z:", from + 3);
+        std::istringstream in(g.substr(from, to - from));
+        double width = 0.0;
+        for (std::string line; std::getline(in, line);) {
+            if (line.rfind(";WIDTH:", 0) == 0)
+                width = std::stod(line.substr(7));
+            const std::size_t e = line.find(" E"), f = line.find(" F");
+            if (line.rfind("G1 X", 0) != 0 || e == std::string::npos || f == std::string::npos)
+                continue;
+            const double section = (width - 0.2) * 0.2 + std::numbers::pi / 4.0 * 0.2 * 0.2;
+            out.push_back(section * std::stod(line.substr(f + 2)) / 60.0);
+        }
+        return out;
+    };
+    // Most at the flow (;WIDTH's three decimals aside), none past it (a few
+    // are held back by the machine's limits).
+    std::vector<double> high = flows("10.200"), low = flows("2.200");
+    REQUIRE(high.size() > 50);
+    REQUIRE(low.size() > 50);
+    std::sort(high.begin(), high.end());
+    std::sort(low.begin(), low.end());
+    CHECK_THAT(high[high.size() / 2], WithinAbs(16.0, 0.03));
+    CHECK_THAT(low[low.size() / 2], WithinAbs(8.0, 0.03));
+    CHECK(high.back() < 16.05);
+    CHECK(low.back() < 8.05);
     // What the machine cannot move is not asked.
     s.max_feed_x = s.max_feed_y = 150.0;
     const std::string slow = gcode_of(slice_model(weld_exact(flow.mesh), s), s);
-    CHECK(slow.find("F12000") == std::string::npos);
+    CHECK(slow.find("F13442") == std::string::npos); // 16 mm3/s on a 0.4 mm bead
     CHECK(slow.find("F9000", slow.find(";Z:10.2")) != std::string::npos);
 
     // The acceleration tower: the start writes the acceleration in use, each
@@ -536,11 +675,20 @@ TEST_CASE("calibration: flow limit and acceleration towers, the elephant's foot"
     REQUIRE(apply_calibration(CalibrationKind::Acceleration, 3000.0, t));
     CHECK(t.acceleration == 3000.0);
     CHECK(t.travel_acceleration == 3000.0); // raised to it
-    CHECK(automatic_calibration(CalibrationKind::MaxFlow, test_printer()).segments.front().value == 4.0);
+    // CM7: without a known max flow, 5 to 25 by 1 in 2 mm bands.
+    const CalibrationPrint common = automatic_calibration(CalibrationKind::MaxFlow, test_printer());
+    REQUIRE(common.segments.size() == 21);
+    CHECK(common.segments.front().value == 5.0);
+    CHECK(common.segments.back().value == 25.0);
+    CHECK(common.segments.front().z1 - common.segments.front().z0 == 2.0);
+    // CM6: around 20, 10 to 30 by 2 in 2 mm bands, 11 of them.
     t.machine_max_flow = 20.0;
     const CalibrationPrint around = automatic_calibration(CalibrationKind::MaxFlow, t);
+    REQUIRE(around.segments.size() == 11);
     CHECK(around.segments.front().value == 10.0);
     CHECK(around.segments.back().value == 30.0);
+    CHECK(around.segments[1].value == 12.0);
+    CHECK(around.segments.front().z1 - around.segments.front().z0 == 2.0);
     CHECK(automatic_calibration(CalibrationKind::Acceleration, t).segments.back().value == 6000.0);
     CHECK(automatic_calibration(CalibrationKind::Acceleration, test_printer()).segments.back().value == 5000.0);
 }

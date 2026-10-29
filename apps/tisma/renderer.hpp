@@ -32,10 +32,16 @@ struct ViewFrame {
     std::size_t selected_first = 0, selected_count = 0; // its vertices in the model's mesh
     Vec3 selected_offset{0, 0, 0}; // drawn this far from its mesh: a model being dragged, before its mesh is redone
     bool show_model = true;
+    // The coarse copy of the model while the view moves (set_model_coarse,
+    // PLAN.md V6), with the chosen model's vertices in it.
+    bool coarse = false;
+    std::size_t coarse_selected_first = 0, coarse_selected_count = 0;
     bool show_paint = false; // the painted faces (set_paint) over the model
     bool show_preview = false;
     bool show_travels = false;
     std::size_t first_layer = 0, last_layer = 0; // the preview's layers drawn, inclusive
+    // The top layer's extrusions drawn up to the move slider (shown, hidden).
+    std::size_t top_shown = std::size_t(-1), top_hidden = std::size_t(-1);
     std::uint32_t kind_mask = 0xFFFFFFFFu;        // bit k: LineKind k is drawn
     ColorMode color_mode = ColorMode::Kind;
     std::array<Vec3, kLineKinds> kind_colours{};
@@ -50,6 +56,17 @@ struct ViewFrame {
     int max_ray_samples = 256;
     bool debug_visibility = false; // paint the visibility instead of the light (TISMA_DEBUG_VISIBILITY=1)
 };
+
+// Everything in a frame that changes its picture: two frames with the same
+// key and the same data draw the same picture.
+std::vector<double> frame_key(const ViewFrame& f);
+
+// The preview's extrusions are prisms of which the vertex shader draws only
+// the faces turned to the eye: two sides and an end, 18 vertices each.
+inline constexpr int kPreviewVertices = 18;
+// What those faces face: the eye (w 1), or the direction towards it for an
+// orthographic camera (w 0).
+std::array<float, 4> preview_face_eye(const ViewFrame& f);
 
 // The ray traced frame's inputs and output, read back for checking the GPU
 // against RayScene (the CPU reference).
@@ -73,6 +90,9 @@ public:
 
     void set_bed(const BedPolygon& bed, const BedLook& look);
     void set_model(const std::vector<float>& vertices); // mesh_vertices
+    // A coarse copy (clustered, then mesh_vertices) drawn instead while the
+    // view moves; empty: none.
+    void set_model_coarse(const std::vector<float>& vertices);
     // The painted pieces over the model (PaintMesh::vertices), drawn in groups
     // of `count` corners from `first`, each in its colour.
     struct PaintGroup {
@@ -91,7 +111,12 @@ public:
     int ray_samples() const { return ray_samples_; }
     int max_samples() const { return max_samples_; }
 
+    // Draws the frame: the scene only if the frame or the data changed since
+    // the last one drawn (or rays are still averaging), else the last picture
+    // again (the QA team's preview plan, step 2).
     void draw(const ViewFrame& frame);
+    // The next draw draws the scene even if nothing changed (--bench-frames).
+    void redraw() { drawn_.clear(); }
 
     // After a ray traced frame: its G-buffer and visibility.
     RayReadback read_back();
@@ -101,6 +126,15 @@ public:
 
     // The preview's extrusions the last frame drew (lit pass).
     std::size_t drawn_extrusions() const { return drawn_extrusions_; }
+
+    // What the view keeps on the GPU, in bytes (--draw-stats): the preview's
+    // instances and travels, the meshes (model, its coarse copy, paint, bed),
+    // and the targets (G-buffer, occlusion, rays, colour, multisampling, the
+    // shadow map). The ray scene's textures are not counted.
+    struct Bytes {
+        std::size_t instances = 0, travels = 0, meshes = 0, targets = 0;
+    };
+    Bytes bytes() const;
 
 private:
     struct Buffer {
@@ -124,7 +158,7 @@ private:
     bool ready_ = false; // init succeeded: without it (a Vulkan window), every call does nothing
     Programs p_;
     unsigned empty_vao_ = 0, white_ = 0;
-    Buffer plate_, grid_, model_, paint_, extrusions_, travels_;
+    Buffer plate_, grid_, model_, model_coarse_, paint_, extrusions_, travels_;
     std::vector<PaintGroup> paint_groups_;
     int grid_outline_ = 0;                    // the outline's vertices, after the grid's in grid_
     float grid_step_ = 10.0f;                 // mm between grid lines
@@ -160,6 +194,9 @@ private:
     int ray_samples_ = 0, ray_current_ = 0;
     std::uint32_t ray_frame_ = 0;
     std::vector<float> ray_signature_;
+    std::vector<double> drawn_; // the frame in colour_ (frame_key); empty: none
+    std::array<float, 4> face_eye_{0, 0, 1, 0}; // the preview's faces drawn face this (preview_face_eye)
+    void scene_changed();       // the data changed: averaging, occlusion and picture start again
 };
 
 } // namespace tisma::ui

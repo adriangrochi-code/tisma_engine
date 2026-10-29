@@ -5,6 +5,7 @@
 #include "gcode/preview.hpp"
 #include "mesh/mesh.hpp"
 #include "report/warnings.hpp"
+#include "resin/resin.hpp"
 #include "slice/pipeline.hpp"
 
 #include <atomic>
@@ -41,6 +42,9 @@ struct SliceResult {
     GcodeCheck check;   // the check of that text
     GcodePreview preview;
     std::vector<Warning> warnings;
+    // A resin printer's print (machine.technology msla, resin.md), in place
+    // of the model and the G-code; the preview shows its layers' outlines.
+    std::shared_ptr<const ResinPrint> resin;
     std::string gpu;    // the device used, or empty for the CPU
     double slice_seconds = 0.0, gcode_seconds = 0.0, check_seconds = 0.0, preview_seconds = 0.0;
 };
@@ -61,6 +65,15 @@ Settings without_gcode_settings(Settings settings);
 // settings but those only the G-code reads (without_gcode_settings) makes
 // only the G-code, its check and its preview again, the same bytes as a whole
 // slice.
+// The plate's negative volumes, in one mesh, and its modifiers, in the
+// plate's coordinates (model_tools.md, rules 2 and 3).
+struct SliceVolumes {
+    TriangleMesh negative;
+    std::vector<MeshModifier> modifiers;
+    bool empty() const { return negative.empty() && modifiers.empty(); }
+};
+bool same_volumes(const SliceVolumes& a, const SliceVolumes& b);
+
 class Slicer {
 public:
     Slicer();
@@ -68,15 +81,23 @@ public:
     // With a load case and infill.stress_density, the infill guided by the
     // stresses under it (docs/INFILL.md); with a painting (by triangle of the
     // mesh), the painted support and seams (docs/PAINTING.md).
+    // With the plate's objects (their triangles in the mesh), sequential
+    // printing prints them one by one (sequential.md), each with its
+    // extruder or one of the project's mixed colours (color_mixing.md).
+    // With volumes, the negative ones and the modifiers of the objects
+    // (model_tools.md, rules 2 and 3).
     SliceResult run(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load = nullptr,
-                    const Painting* painting = nullptr);
+                    const Painting* painting = nullptr, const std::vector<MeshObject>* objects = nullptr,
+                    const std::vector<ColorMix>* mixes = nullptr, const SliceVolumes* volumes = nullptr);
 
 private:
     struct Cut;
     // The slicing stage: the checks of the mesh, the cut and the model's
     // warnings (into out); null with out.error on a refusal.
     std::shared_ptr<const SlicedModel> cut(const TriangleMesh& mesh, const Settings& settings, const AnalysisCase* load,
-                                           const Painting* painting, SliceResult& out);
+                                           const Painting* painting, const std::vector<MeshObject>* objects,
+                                           const std::vector<ColorMix>* mixes, const SliceVolumes* volumes,
+                                           SliceResult& out);
     std::unique_ptr<gpu::Context> gpu_;
     bool gpu_tried_ = false;
     std::shared_ptr<const Cut> last_; // the last run's cut and what it was made from
@@ -121,6 +142,11 @@ inline Fit fit(const Revision& made, const Revision& now) {
     return made.settings != now.settings ? Fit::OutOfDate : Fit::Current;
 }
 
+// Called from a background job's thread when it ends, if set (the window
+// sets glfwPostEmptyEvent): an idle window wakes to take the result instead
+// of waiting for its next event.
+inline std::atomic<void (*)()> g_background_done{nullptr};
+
 // A function run on its own thread, whose result the drawing thread picks up
 // when it is ready. Starting again waits for the run before.
 template <class Result>
@@ -135,6 +161,8 @@ public:
         thread_ = std::thread([this, function = std::move(function)]() mutable {
             result_ = function();
             done_ = true;
+            if (void (*wake)() = g_background_done.load())
+                wake();
         });
     }
     bool running() const { return thread_.joinable() && !done_; }

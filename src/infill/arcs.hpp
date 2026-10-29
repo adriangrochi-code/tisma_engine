@@ -32,6 +32,17 @@ struct ArcZone {
     std::vector<Toolpath> arcs; // in printing order, from the centre out
 };
 
+// The pieces of a layer's region (`region`) past the region below (`below`),
+// wider than `width`, held from one side only, each with the edge it hangs
+// from; pieces whose held edges meet end to end (an L round a corner of what
+// holds them) are one. A piece held from two sides is a bridge, one held all
+// round keeps its bridge: neither is here.
+struct HeldZone {
+    Polygons zone;
+    std::vector<Point2d> edge;
+};
+std::vector<HeldZone> held_zones(const Polygons& region, const Polygons& below, double width);
+
 // The arc zones of a layer: its region (`region`) where it is past the region
 // below (`below`), in pieces held from one side.
 std::vector<ArcZone> overhang_arcs(const Polygons& region, const Polygons& below, const ArcParams& params);

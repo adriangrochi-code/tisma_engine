@@ -8,6 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -77,6 +78,31 @@ std::string write_project(const Project& project) {
         models.push_back({{"name", m.name}, {"mesh", i}, {"offset", m.offset}});
         if (!m.painting.empty())
             models.back()["painting"] = paintings++;
+        if (m.extruder != 1)
+            models.back()["extruder"] = m.extruder;
+        if (m.wipe_into_infill)
+            models.back()["wipe_into_infill"] = true;
+        if (m.wipe_into_object)
+            models.back()["wipe_into_object"] = true;
+        if (!m.settings.empty())
+            models.back()["settings"] = ordered_json::parse(m.settings);
+        for (const ProjectVolume& v : m.volumes) {
+            ordered_json item = {{"kind", v.negative ? "negative" : "modifier"},
+                                 {"shape", v.cylinder ? "cylinder" : "box"},
+                                 {"offset", v.offset},
+                                 {"size", v.size}};
+            if (v.turn != std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1})
+                item["turn"] = v.turn;
+            if (!v.settings.empty())
+                item["settings"] = ordered_json::parse(v.settings);
+            models.back()["volumes"].push_back(std::move(item));
+        }
+        for (const ProjectRange& r : m.ranges) {
+            ordered_json item = {{"from", r.from}, {"to", r.to}};
+            if (!r.settings.empty())
+                item["settings"] = ordered_json::parse(r.settings);
+            models.back()["ranges"].push_back(std::move(item));
+        }
     }
     ordered_json root = {
         {"format", "tisma-project"},
@@ -85,6 +111,9 @@ std::string write_project(const Project& project) {
         {"profiles", profiles},
         {"models", models},
     };
+    // The blends in the file the spec gives them (color_mixing.md, rule 15).
+    if (!project.mixes.empty() || !project.filament_colors.empty())
+        root["color_mixing"] = ordered_json::parse(color_mixes_json(project.mixes, project.filament_colors));
     if (project.calibration) {
         ordered_json segments = ordered_json::array();
         for (const CalibrationSegment& s : project.calibration->segments)
@@ -214,8 +243,106 @@ static Project read_project_checked(std::string_view data) {
                     fail(what + ".painting: " + e.what());
                 }
             }
+            if (m.contains("extruder")) {
+                if (!m.at("extruder").is_number_integer() || m.at("extruder").get<int>() < 1 ||
+                    m.at("extruder").get<int>() > 255)
+                    fail(what + ".extruder: must be from 1 to 255");
+                model.extruder = m.at("extruder").get<int>();
+            }
+            for (const auto& [key, flag] : {std::pair{"wipe_into_infill", &model.wipe_into_infill},
+                                            std::pair{"wipe_into_object", &model.wipe_into_object}})
+                if (m.contains(key)) {
+                    if (!m.at(key).is_boolean())
+                        fail(what + "." + key + ": must be true or false");
+                    *flag = m.at(key).get<bool>();
+                }
+            if (m.contains("settings")) {
+                if (!m.at("settings").is_object())
+                    fail(what + ".settings: must be an object of groups");
+                model.settings = m.at("settings").dump();
+                try {
+                    own_settings(p.settings, model.settings, model.name);
+                } catch (const SettingsError& e) {
+                    fail(what + ".settings: " + e.what());
+                }
+            }
+            const auto three = [&](const ordered_json& o, const char* key, const std::string& where) {
+                std::array<double, 3> a{};
+                const auto it = o.find(key);
+                if (it == o.end() || !it->is_array() || it->size() != 3)
+                    fail(where + "." + key + ": must be [x, y, z] in mm");
+                for (std::size_t k = 0; k < 3; ++k) {
+                    if (!(*it)[k].is_number())
+                        fail(where + "." + key + ": must be [x, y, z] in mm");
+                    a[k] = (*it)[k].get<double>();
+                }
+                return a;
+            };
+            if (m.contains("volumes")) {
+                if (!m.at("volumes").is_array())
+                    fail(what + ".volumes: must be a list");
+                for (std::size_t k = 0; k < m.at("volumes").size(); ++k) {
+                    const ordered_json& v = m.at("volumes")[k];
+                    const std::string at = what + ".volumes[" + std::to_string(k) + "]";
+                    if (!v.is_object())
+                        fail(at + ": must be an object");
+                    ProjectVolume volume;
+                    const std::string kind = v.value("kind", std::string("modifier")), shape = v.value("shape", std::string("box"));
+                    if ((kind != "modifier" && kind != "negative") || (shape != "box" && shape != "cylinder"))
+                        fail(at + ": kind must be modifier or negative, shape box or cylinder");
+                    volume.negative = kind == "negative";
+                    volume.cylinder = shape == "cylinder";
+                    volume.offset = three(v, "offset", at);
+                    volume.size = three(v, "size", at);
+                    if (v.contains("turn")) {
+                        const ordered_json& turn = v.at("turn");
+                        if (!turn.is_array() || turn.size() != 9 ||
+                            !std::all_of(turn.begin(), turn.end(), [](const ordered_json& c) { return c.is_number(); }))
+                            fail(at + ".turn: must be 9 numbers (a turn, by rows)");
+                        for (std::size_t c = 0; c < 9; ++c)
+                            volume.turn[c] = turn[c].get<double>();
+                    }
+                    if (v.contains("settings")) {
+                        if (!v.at("settings").is_object())
+                            fail(at + ".settings: must be an object of groups");
+                        volume.settings = v.at("settings").dump();
+                    }
+                    model.volumes.push_back(std::move(volume));
+                }
+            }
+            if (m.contains("ranges")) {
+                if (!m.at("ranges").is_array())
+                    fail(what + ".ranges: must be a list");
+                for (std::size_t k = 0; k < m.at("ranges").size(); ++k) {
+                    const ordered_json& r = m.at("ranges")[k];
+                    const std::string at = what + ".ranges[" + std::to_string(k) + "]";
+                    if (!r.is_object() || !r.contains("from") || !r.contains("to") || !r.at("from").is_number() ||
+                        !r.at("to").is_number() || !(r.at("to").get<double>() > r.at("from").get<double>()))
+                        fail(at + ": must have from and to in mm, to above from");
+                    ProjectRange range{r.at("from").get<double>(), r.at("to").get<double>(), {}};
+                    if (r.contains("settings")) {
+                        if (!r.at("settings").is_object())
+                            fail(at + ".settings: must be an object of groups");
+                        range.settings = r.at("settings").dump();
+                    }
+                    model.ranges.push_back(std::move(range));
+                }
+            }
             p.models.push_back(std::move(model));
         }
+    }
+    if (root.contains("color_mixing")) {
+        const ordered_json& c = root.at("color_mixing");
+        try {
+            p.mixes = parse_color_mixes(c.dump());
+        } catch (const ColorMixError& e) {
+            fail(e.what());
+        }
+        if (c.is_object() && c.contains("physical_extruders") && c.at("physical_extruders").is_array())
+            for (const ordered_json& f : c.at("physical_extruders"))
+                p.filament_colors.push_back(f.is_object() && f.contains("color") && f.at("color").is_string()
+                                                ? f.at("color").get<std::string>()
+                                                : std::string());
     }
     if (root.contains("calibration")) {
         const ordered_json& c = root.at("calibration");

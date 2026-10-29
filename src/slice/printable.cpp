@@ -4,15 +4,40 @@
 #include "slice/printable.hpp"
 
 #include "slice/pipeline.hpp"
+#include "slice/wipe_tower.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 namespace tisma {
 namespace {
 
 constexpr double kOnEdge = 1e-6; // mm
+
+// The distance between two outlines, mm: 0 when they touch or overlap.
+double outline_distance(const Polygon& a, const Polygon& b) {
+    if (a.empty() || b.empty())
+        return std::numeric_limits<double>::infinity();
+    if (!Clipper2Lib::Intersect(Polygons{a}, Polygons{b}, Clipper2Lib::FillRule::NonZero).empty())
+        return 0.0;
+    double best = std::numeric_limits<double>::infinity();
+    for (const auto* p : {&a, &b}) {
+        const Polygon& from = *p;
+        const Polygon& to = p == &a ? b : a;
+        for (const auto& q : from)
+            for (std::size_t i = 0; i < to.size(); ++i) {
+                const auto& u = to[i];
+                const auto& v = to[(i + 1) % to.size()];
+                const double ux = to_mm(u.x), uy = to_mm(u.y), dx = to_mm(v.x) - ux, dy = to_mm(v.y) - uy;
+                const double px = to_mm(q.x), py = to_mm(q.y), len2 = dx * dx + dy * dy;
+                const double t = len2 > 0.0 ? std::clamp(((px - ux) * dx + (py - uy) * dy) / len2, 0.0, 1.0) : 0.0;
+                best = std::min(best, std::hypot(px - ux - t * dx, py - uy - t * dy));
+            }
+    }
+    return best;
+}
 
 // Inside the polygon or within kOnEdge of its boundary.
 bool on_bed(const std::vector<std::array<double, 2>>& bed, double x, double y) {
@@ -29,6 +54,17 @@ bool on_bed(const std::vector<std::array<double, 2>>& bed, double x, double y) {
     return in;
 }
 
+// A belt printer's bed is only as wide as its belt, which runs on along y
+// (belt_printer.md).
+bool on_bed(const Settings& s, double x, double y) {
+    if (!s.belt_enabled)
+        return on_bed(s.bed, x, y);
+    double lo = std::numeric_limits<double>::infinity(), hi = -lo;
+    for (const auto& p : s.bed)
+        lo = std::min(lo, p[0]), hi = std::max(hi, p[0]);
+    return x >= lo - kOnEdge && x <= hi + kOnEdge;
+}
+
 } // namespace
 
 std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
@@ -38,7 +74,7 @@ std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
     float top = -std::numeric_limits<float>::max(), bottom = std::numeric_limits<float>::max();
     for (const Vec3f& v : mesh.vertices) {
         top = std::max(top, v.z), bottom = std::min(bottom, v.z);
-        if (!s.bed.empty() && !on_bed(s.bed, v.x, v.y)) {
+        if (!s.bed.empty() && !on_bed(s, v.x, v.y)) {
             char text[160];
             std::snprintf(text, sizeof text, "the model is outside the bed (machine.bed): a point at x %.3f, y %.3f",
                           double(v.x), double(v.y));
@@ -63,6 +99,21 @@ std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
                       double(top) - double(bottom), kReach);
         return text;
     }
+    // Left where it is (placement.md, rule 3): a part off the bed has nothing
+    // on the first layer (PL9), one under it nothing at all.
+    if (!s.placement_drop_to_bed) {
+        if (top <= 0.0f)
+            return "the model is under the bed (placement.drop_to_bed is off)";
+        if (bottom > 1e-3f) {
+            char text[200];
+            std::snprintf(text, sizeof text,
+                          "an object has no extrusions on the first layer: its base is at z %.3f, off the bed "
+                          "(placement.drop_to_bed is off)",
+                          double(bottom));
+            return text;
+        }
+        bottom = std::max(bottom, 0.0f);
+    }
     if (s.max_height > 0.0 && double(top) - double(bottom) > s.max_height) {
         char text[160];
         std::snprintf(text, sizeof text, "the model is %.3f mm tall, more than machine.max_height (%.3f mm)",
@@ -75,9 +126,11 @@ std::string unprintable_reason(const IndexedMesh& input, const Settings& s) {
 std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
     const bool any = std::any_of(model.regions.begin(), model.regions.end(), [](const Polygons& r) { return !r.empty(); });
     if (!any) {
-        // Say what emptied it: a shrinking setting, or holes in the mesh.
+        // Say what emptied it: the negative volumes, a shrinking setting, or holes in the mesh.
         std::string reason = "no layer of the model encloses any area";
-        if (s.xy_offset < 0.0) {
+        if (model.cut_away > 0)
+            reason += ": the negative volumes take all of it away";
+        else if (s.xy_offset < 0.0) {
             char text[120];
             std::snprintf(text, sizeof text, ": slicing.xy_offset (%.3g mm) may have shrunk it away", s.xy_offset);
             reason += text;
@@ -89,6 +142,32 @@ std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
             reason += " (is the mesh flat or open?)";
         return reason;
     }
+    // Object by object (sequential.md, rules 2 and 4): every object but the
+    // last under the X axis, and the head's cylinder clear of the others.
+    if (model.sequential) {
+        char text[300];
+        for (std::size_t k = 0; k + 1 < model.objects.size(); ++k)
+            if (const SlicedObject& o = model.objects[k]; o.height > s.clearance_height + 1e-6) {
+                std::snprintf(text, sizeof text,
+                              "'%s' is %.2f mm tall, more than sequential.clearance_height (%.2f mm): the X axis would "
+                              "hit it while the next objects print; only the last object may be taller",
+                              o.label().c_str(), o.height, s.clearance_height);
+                return text;
+            }
+        for (std::size_t i = 0; i < model.objects.size(); ++i)
+            for (std::size_t j = i + 1; j < model.objects.size(); ++j)
+                if (const double d = outline_distance(model.objects[i].outline, model.objects[j].outline);
+                    d < s.clearance_radius - 1e-6) {
+                    std::snprintf(text, sizeof text,
+                                  "'%s' and '%s' are %.2f mm apart, less than sequential.clearance_radius (%.2f mm): the "
+                                  "head would hit one while printing the other; place them farther apart",
+                                  model.objects[i].label().c_str(), model.objects[j].label().c_str(), d, s.clearance_radius);
+                    return text;
+                }
+    }
+    // Vase mode lays one spiral (vase_mode.md, rule 6): several objects only one after another.
+    if (s.vase && model.objects.size() > 1 && !model.sequential)
+        return "vase mode prints one object, or several one after another (sequential.enabled)";
     // The skirt and the brim go around the model: they must fit on the bed too.
     if (!s.bed.empty())
         for (const auto* paths : {&model.skirt, &model.brim})
@@ -103,6 +182,31 @@ std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
                                       paths == &model.skirt ? "skirt_distance" : "brim_width");
                         return text;
                     }
+    // The wipe tower (multi_extruder.md, rule 10): on the bed, clear of the
+    // part's first layer and its skirt and brim.
+    if (const WipeTower tower = plan_wipe_tower(model, s, plan_tools(model, s)); !tower.empty()) {
+        char text[240];
+        for (const auto& q : tower.outline)
+            if (!s.bed.empty() && !on_bed(s.bed, to_mm(q.x), to_mm(q.y))) {
+                std::snprintf(text, sizeof text,
+                              "the wipe tower goes off the bed (machine.bed) at x %.3f, y %.3f: move it "
+                              "(wipe_tower.x, wipe_tower.y) or make it narrower",
+                              to_mm(q.x), to_mm(q.y));
+                return text;
+            }
+        // The skirt's and the brim's loops with what they go round.
+        Polygons first = model.regions.empty() ? Polygons{} : model.regions.front();
+        for (const auto* paths : {&model.skirt, &model.brim})
+            for (const Toolpath& t : *paths) {
+                Polygon loop;
+                for (const ToolpathPoint& p : t.points)
+                    loop.push_back({to_units(p.p.x), to_units(p.p.y)});
+                if (loop.size() >= 3)
+                    first.push_back(std::move(loop));
+            }
+        if (!Clipper2Lib::Intersect(Polygons{tower.outline}, first, Clipper2Lib::FillRule::NonZero).empty())
+            return "the wipe tower lies on the part, its skirt or its brim: move it (wipe_tower.x, wipe_tower.y)";
+    }
     // Something to extrude: a wall, infill of any kind, or gap fill. (The
     // skirt and the brim alone are not a print.)
     auto has = [](const std::vector<Toolpath>& paths) {
@@ -117,8 +221,8 @@ std::string unprintable_reason(const SlicedModel& model, const Settings& s) {
                 return {};
         }
     }
-    return "nothing would be printed: every part of the model is thinner than the lines (check walls.width, "
-           "slicing.xy_offset and the model's scale)";
+    return "nothing would be printed: every part of the model is thinner than the lines (check walls.width, the "
+           "infill widths, slicing.xy_offset and the model's scale)";
 }
 
 } // namespace tisma

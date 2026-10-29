@@ -1,9 +1,12 @@
 #include "ui/plate.hpp"
+#include "ui/measure.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <cstdint>
 
@@ -224,4 +227,201 @@ TEST_CASE("plate: the triangle index finds what looking at every triangle finds"
     CHECK(near.size() < m.triangle_count() / 20);
     CHECK(TriangleIndex().near(lo, hi).empty());
     CHECK_FALSE(TriangleIndex().hit(m, {0, 0, 50}, {0, 0, -1}));
+}
+
+TEST_CASE("measure: planes, points, angles and the scale that makes a distance (MT25)", "[ui][measure]") {
+    // The box of MT14: 30 × 20 × 10 mm from (5, 7, 3).
+    TriangleMesh m;
+    const Vec3f lo{5, 7, 3}, hi{35, 27, 13};
+    const Vec3f v[8] = {{lo.x, lo.y, lo.z}, {hi.x, lo.y, lo.z}, {hi.x, hi.y, lo.z}, {lo.x, hi.y, lo.z},
+                        {lo.x, lo.y, hi.z}, {hi.x, lo.y, hi.z}, {hi.x, hi.y, hi.z}, {lo.x, hi.y, hi.z}};
+    const int f[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                          {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+    for (const auto& t : f)
+        m.add_triangle(v[t[0]], v[t[1]], v[t[2]]);
+    // Triangle 6 is the +X side, 10 the −X side, 2 the top, 4 the front.
+    const MeasureFeature right = plane_feature(m, 6), left = plane_feature(m, 10), top = plane_feature(m, 2);
+    CHECK(right.normal[0] > 0.99);
+    const Measurement across = measure(left, right);
+    REQUIRE(across.distance);
+    CHECK(std::abs(*across.distance - 30.0) < 1e-9);
+    CHECK_FALSE(across.angle);
+    // Writing 45: the box grows evenly to 45 × 30 × 15.
+    const double factor = 45.0 / *across.distance;
+    CHECK(std::abs(factor - 1.5) < 1e-12);
+    const Measurement corner = measure(right, top);
+    REQUIRE(corner.angle);
+    CHECK(std::abs(*corner.angle - 90.0) < 1e-9);
+    // Points: the nearest corner to the hit; a point to a plane.
+    const MeasureFeature a = point_feature(m, 2, {34.0, 26.0, 13.0});
+    CHECK(a.point == Point3{35, 27, 13});
+    const MeasureFeature b = point_feature(m, 0, {5.5, 7.5, 3.0});
+    CHECK(b.point == Point3{5, 7, 3});
+    CHECK(std::abs(*measure(a, b).distance - std::sqrt(900.0 + 400.0 + 100.0)) < 1e-9);
+    CHECK(std::abs(*measure(b, top).distance - 10.0) < 1e-9);
+}
+
+namespace {
+
+// A cylinder (a cone when the top is smaller) of n sides between z = 0 and
+// h, closed; turned inward it is a hole's wall.
+void add_round(TriangleMesh& m, double r0, double r1, double h, int n, bool inward) {
+    constexpr double kTau = 6.283185307179586;
+    const auto at = [&](int i, double r, double z) {
+        const double a = kTau * double(i % n) / n;
+        return Vec3f{float(r * std::cos(a)), float(r * std::sin(a)), float(z)};
+    };
+    for (int i = 0; i < n; ++i) {
+        Vec3f p[4] = {at(i, r0, 0), at(i + 1, r0, 0), at(i + 1, r1, h), at(i, r1, h)};
+        if (inward)
+            std::swap(p[1], p[3]);
+        m.add_triangle(p[0], p[1], p[2]);
+        m.add_triangle(p[0], p[2], p[3]);
+    }
+}
+
+} // namespace
+
+TEST_CASE("measure: a hole's diameter, a cylinder's and a cone's angle", "[ui][measure]") {
+    // A boss of 10 mm and its side: a circle of 10.
+    TriangleMesh boss;
+    add_round(boss, 5, 5, 8, 64, false);
+    const MeasureFeature c = surface_feature(boss, 10);
+    REQUIRE(c.kind == MeasureFeature::Kind::Circle);
+    CHECK(std::abs(c.diameter - 10.0) < 1e-3);
+    CHECK_FALSE(c.hole);
+    CHECK(std::abs(std::abs(c.normal[2]) - 1.0) < 1e-6);
+    CHECK(std::abs(c.point[2] - 4.0) < 1e-4);
+    // The same wall facing in: a hole of 10.
+    TriangleMesh hole;
+    add_round(hole, 5, 5, 8, 64, true);
+    const MeasureFeature h = surface_feature(hole, 3);
+    REQUIRE(h.kind == MeasureFeature::Kind::Circle);
+    CHECK(h.hole);
+    CHECK(std::abs(h.diameter - 10.0) < 1e-3);
+    // A cone from 20 to 10 mm over 5 mm: 90° in all, its two diameters.
+    TriangleMesh cone;
+    add_round(cone, 10, 5, 5, 96, false);
+    const MeasureFeature k = surface_feature(cone, 7);
+    REQUIRE(k.kind == MeasureFeature::Kind::Cone);
+    CHECK(std::abs(k.angle - 90.0) < 0.05);
+    CHECK(std::abs(std::min(k.diameter, k.diameter_end) - 10.0) < 1e-2);
+    CHECK(std::abs(std::max(k.diameter, k.diameter_end) - 20.0) < 1e-2);
+    // A box's face is still its plane; between two circles, their centres.
+    TriangleMesh two;
+    add_round(two, 5, 5, 8, 64, false);
+    CHECK(surface_feature(two, 0).kind == MeasureFeature::Kind::Circle);
+    MeasureFeature other = c;
+    other.point[0] += 30.0;
+    CHECK(std::abs(*measure(c, other).distance - 30.0) < 1e-9);
+}
+
+// Not in the list (hidden): how long a click on a curved surface takes on
+// a mesh of a million triangles; run by hand with "[bench]".
+TEST_CASE("measure: a click on a million-triangle cylinder", "[.][bench][measure]") {
+    TriangleMesh big;
+    add_round(big, 50, 50, 80, 500000, false);
+    const auto start = std::chrono::steady_clock::now();
+    const MeasureFeature c = surface_feature(big, 12345);
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    std::printf("measure: %zu triangles, %.0f ms\n", big.triangle_count(), ms);
+    CHECK(c.kind == MeasureFeature::Kind::Circle);
+    CHECK(std::abs(c.diameter - 100.0) < 1e-2);
+}
+
+TEST_CASE("plate: an object's own settings, added, edited and taken away (settings_levels.md, rules 10 and 11)", "[ui][plate]") {
+    Settings profile;
+    profile.infill_density = 15.0;
+    std::string own;
+    CHECK(own_keys(own).empty());
+    // Added with the profile's value (rule 11).
+    own = with_own_key(own, profile, "infill.density");
+    own = with_own_key(own, profile, "walls.count");
+    CHECK(own_keys(own) == std::vector<std::string>{"infill.density", "walls.count"});
+    CHECK(own_settings(profile, own, "box").infill_density == 15.0);
+    // Edited in the panel: only its keys are taken.
+    Settings edited = own_settings(profile, own, "box");
+    edited.infill_density = 40.0;
+    edited.top_layers = 9; // not one of its keys
+    own = own_values(own, edited);
+    const Settings merged = own_settings(profile, own, "box");
+    CHECK(merged.infill_density == 40.0);
+    CHECK(merged.top_layers == profile.top_layers);
+    // Taken away: back to the profile's; none left, no settings.
+    own = without_own_key(own, "infill.density");
+    CHECK(own_keys(own) == std::vector<std::string>{"walls.count"});
+    own = without_own_key(own, "walls.count");
+    CHECK(own.empty());
+    // A key the engine does not have is not added.
+    CHECK(with_own_key("", profile, "infill.no_such_key").empty());
+    // The keys an object may set: walls, infill and surfaces only.
+    const std::vector<std::string> keys = own_setting_keys(profile);
+    CHECK(std::find(keys.begin(), keys.end(), "infill.pattern") != keys.end());
+    CHECK(std::all_of(keys.begin(), keys.end(), [](const std::string& k) {
+        return k.starts_with("walls.") || k.starts_with("infill.") || k.starts_with("surfaces.");
+    }));
+    for (const std::string& k : keys) {
+        INFO(k);
+        CHECK_NOTHROW(own_settings(profile, with_own_key("", profile, k), "box"));
+    }
+}
+
+TEST_CASE("plate: modifiers and negative volumes follow their model's turn, scale and mirror", "[plate]") {
+    // A model 20 x 10 x 10 mm and a 4 mm box 5 mm toward +X from its centre.
+    PlateObject o;
+    o.name = "block";
+    o.mesh = box(0, 0, 0, 20, 10, 10);
+    o.place.x = 100, o.place.y = 100;
+    const PlateVolume v{PlateVolume::Kind::Modifier, PlateVolume::Shape::Box, {5.0, 0.0, 3.0}, {4.0, 4.0, 4.0}, {}};
+    const auto centre = [](const TriangleMesh& m) {
+        const BoundingBox b = m.bounding_box();
+        return std::array<double, 3>{0.5 * (double(b.min.x) + b.max.x), 0.5 * (double(b.min.y) + b.max.y),
+                                     0.5 * (double(b.min.z) + b.max.z)};
+    };
+    const auto near = [](const std::array<double, 3>& a, const std::array<double, 3>& b) {
+        return std::abs(a[0] - b[0]) < 1e-3 && std::abs(a[1] - b[1]) < 1e-3 && std::abs(a[2] - b[2]) < 1e-3;
+    };
+    // As it stands: X 105, Z 3 to 7.
+    CHECK(near(centre(volume_mesh(v, o, placed_mesh(o))), {105.0, 100.0, 5.0}));
+    // Turned 90° about Z, the box goes to +Y; scaled twice, twice as far and as big.
+    o.place.rotation = rotated(kNoRotation, 2, 90.0);
+    CHECK(near(centre(volume_mesh(v, o, placed_mesh(o))), {100.0, 105.0, 5.0}));
+    o.place.scale = {2.0, 2.0, 2.0};
+    const TriangleMesh big = volume_mesh(v, o, placed_mesh(o));
+    CHECK(near(centre(big), {100.0, 110.0, 10.0}));
+    CHECK_THAT(double(big.bounding_box().max.x) - big.bounding_box().min.x, WithinAbs(8.0, 1e-3));
+    // Saved as placed (the model's mesh as it stands), the volume stays put.
+    PlateObject saved = o;
+    saved.mesh = placed_mesh(o);
+    saved.place.rotation = kNoRotation, saved.place.scale = {1.0, 1.0, 1.0};
+    const PlateVolume carried = carried_volume(v, o.mesh.bounding_box(), placing(o, saved.mesh), saved.mesh.bounding_box());
+    CHECK(near(centre(volume_mesh(carried, saved, placed_mesh(saved))), {100.0, 110.0, 10.0}));
+    CHECK_THAT(carried.size[0], WithinAbs(8.0, 1e-9));
+    // Mirrored in X (unturned): the box goes to the other side, upright.
+    PlateObject flat;
+    flat.mesh = box(0, 0, 0, 20, 10, 10);
+    flat.place.x = 100, flat.place.y = 100;
+    Affine mirror;
+    mirror.a[0] = -1.0, mirror.b[0] = 20.0; // about X 10, the box's centre
+    const BoundingBox box = flat.mesh.bounding_box();
+    const PlateVolume mirrored = carried_volume(v, box, mirror, box);
+    CHECK(near({mirrored.offset[0], mirrored.offset[1], mirrored.offset[2]}, {-5.0, 0.0, 3.0}));
+    CHECK(mirrored.turn == kNoRotation);
+}
+
+TEST_CASE("plate: the rows under an object in the list (settings_levels.md, rules 11 and 13)", "[plate]") {
+    PlateObject o;
+    o.mesh = box(0, 0, 0, 10, 10, 10);
+    CHECK(object_rows(o).empty());
+    o.settings = R"({"infill": {"density": 15, "pattern": "grid"}, "walls": {"count": 3}})";
+    o.volumes.push_back({});
+    o.volumes.push_back({PlateVolume::Kind::Negative});
+    o.ranges.push_back({});
+    const std::vector<ObjectRow> rows = object_rows(o);
+    REQUIRE(rows.size() == 5);
+    CHECK(rows[0] == ObjectRow{ObjectRow::Kind::Settings, "walls", 0});
+    CHECK(rows[1] == ObjectRow{ObjectRow::Kind::Settings, "infill", 0});
+    CHECK(rows[2] == ObjectRow{ObjectRow::Kind::Volume, {}, 0});
+    CHECK(rows[3] == ObjectRow{ObjectRow::Kind::Volume, {}, 1});
+    CHECK(rows[4] == ObjectRow{ObjectRow::Kind::Range, {}, 0});
 }

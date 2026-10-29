@@ -18,6 +18,9 @@
 namespace tisma {
 
 struct WaveParams {
+    // The interlocking waves (interlock_infill.md): the egg crate
+    // amplitude / 2 · sin(2πx/λ) · sin(2πy/λ) instead of the triangle wave.
+    bool egg_crate = false;
     double amplitude = 0.5;  // mm, from trough to crest
     double wavelength = 2.0; // mm, along a line at 45 degrees to `direction`
     double direction = 45.0; // degrees: the waves run along this, 45 degrees off the infill's lines
@@ -27,7 +30,10 @@ struct WaveParams {
     double cell = 0.4;       // mm: the voxels of the depth field the waves fade by
 };
 
-// The waves the settings ask for, or none: off, no sparse infill, a pattern
+// The waves the settings ask for, or none. infill.waves: the egg crate of
+// interlock_infill.md at wave_amplitude of the layer height each way, on any
+// pattern (its surface is the same everywhere, so every pattern nests on it).
+// infill.nonplanar: none when off, no sparse infill, a pattern
 // whose beads do not stack (it changes from layer to layer), or lines too
 // close for the nozzle to clear a crest beside a trough. The amplitude is
 // what the settings ask, capped so that the nozzle's flat end (about 2.5
@@ -36,7 +42,8 @@ struct WaveParams {
 std::optional<WaveParams> wave_params(const Settings& settings);
 
 // The wave's height at p (mm, from -amplitude / 2 to +amplitude / 2): a
-// triangle wave along `direction`, rising amplitude over half a wavelength.
+// triangle wave along `direction`, rising amplitude over half a wavelength;
+// or the egg crate.
 double wave_height(const WaveParams& params, Point2d p);
 
 // How much of the wave a point at this depth in the sparse infill gets: none

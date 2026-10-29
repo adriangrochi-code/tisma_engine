@@ -29,10 +29,12 @@ struct DepthField;
 // With `overlap` (mm, for unjoined lines), the lines reach that far past the
 // region shrunk by half a bead, into the walls around it. `shift` (mm) moves
 // the grid across the lines (the cubic infill's planes with the height).
+// `max_join` (mm), when given, is how far apart along the boundary joined
+// ends may be instead (infill.max_link, surfaces_infill.md rule 7).
 inline constexpr double kMaxJoin = 3.0;
 std::vector<Toolpath> rectilinear_fill(const Polygons& region, double spacing, double angle_degrees, double width,
                                        bool connect = false, bool fit = false, bool monotonic = false,
-                                       double overlap = 0.0, double shift = 0.0);
+                                       double overlap = 0.0, double shift = 0.0, double max_join = 0.0);
 
 // The infill toolpaths of one layer.
 struct LayerFill {
@@ -44,6 +46,10 @@ struct LayerFill {
     std::vector<Toolpath> support;           // support lines (support_areas)
     std::vector<Toolpath> support_interface; // dense support right under the part
     std::vector<Toolpath> arcs; // over overhangs held from one side, in printing order (arc_overhangs.md)
+    // Loops over overhangs held from one side, from the zone's outline in
+    // (walls.extra_on_overhangs, walls_extra.md, rule 5).
+    std::vector<Toolpath> overhang_walls;
+    std::vector<Toolpath> ironing; // over the top surfaces, after their fill (ironing.md)
 };
 
 // What lines leave uncovered in a region, filled with variable-width beads
@@ -51,7 +57,8 @@ struct LayerFill {
 // thickness d gets beads summing to d, and gaps thinner than half a bead get
 // none. Used for the solid surfaces: the bands that fitted lines leave at
 // inner corners and the ends of unjoined lines.
-std::vector<Toolpath> gap_fill(const Polygons& region, const std::vector<Toolpath>& lines, double width);
+std::vector<Toolpath> gap_fill(const Polygons& region, const std::vector<Toolpath>& lines, double width,
+                               double overlap = 0.0);
 
 struct FillParams {
     double width = 0.4;   // bead width
@@ -61,8 +68,15 @@ struct FillParams {
     bool monotonic_top = true; // top surfaces in monotonic order instead of zig-zags
     bool gap_fill = false;     // fill what the solid lines leave with variable-width beads (gap_fill)
     double wall_overlap = 0.25; // monotonic top lines reach this fraction of a bead into the walls
+    double bridge_width = 0.0;  // the bridges' round beads, and how far apart their lines are; 0: width
     const DepthField* depth = nullptr; // adaptive cubic: how deep the sparse infill lies (none: as cubic)
     Point2d centre{};                  // archimedean and octagram: the spirals' centre, the same in every layer
+    double sparse_width = 0.0;         // the sparse infill's bead, from its own nozzle (multimaterial.md, rule 3); 0: width
+    double top_width = 0.0;            // the top surface's bead (surfaces.top_width); 0: width
+    double solid_width = 0.0;          // the other solid infill's bead (surfaces.solid_width); 0: width
+    double overlap = 0.0; // neighbouring lines' overlap (bead_overlap of the layer's height, perimeters.md rule 1)
+    double max_link = 0.0; // mm along the walls the sparse lines may be joined over (infill.max_link); 0: 3 spacings
+    bool monotonic_bottom = false; // bottom surfaces in monotonic order (surfaces.bottom_pattern)
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,

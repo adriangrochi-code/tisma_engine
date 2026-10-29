@@ -10,7 +10,10 @@
 #include "fea/analysis.hpp"
 #include "report/analysis_json.hpp"
 #include "gcode/export.hpp"
+#include "gcode/output.hpp"
+#include "gcode/template.hpp"
 #include "gcode/writer.hpp"
+#include "report/stability.hpp"
 #include "report/warnings.hpp"
 #include "geom/medial_axis.hpp"
 #include "geom/polygons.hpp"
@@ -21,10 +24,17 @@
 #include "slice/layers.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
+#include "slice/transform.hpp"
+#include "resin/goo.hpp"
+#include "resin/resin.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <chrono>
 #include <exception>
 #include <filesystem>
+#include <iostream>
 #include <fstream>
 #include <functional>
 #include <memory>
@@ -37,8 +47,11 @@ namespace {
 
 constexpr std::string_view kUsage =
     "usage:\n"
-    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode> [--warnings <out.json>]\n"
+    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode | out.goo | folder> [--warnings <out.json>]\n"
+    "                     (a .goo file: for a resin printer, docs/spec/features/resin.md)\n"
     "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
+    "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
+    "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
     "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
     "  tisma-engine info <model>\n"
@@ -81,6 +94,8 @@ struct SliceArgs {
     std::string mesh;          // analyze only; empty: not written
     bool progress = false;     // analyze only: progress lines on the output
     bool estimate = false;     // analyze only: the voxels, memory and time, without solving
+    bool yes = false;          // slice only: run the settings' post-processing scripts without asking
+    std::size_t copies = 1;    // slice only: copies of the model on the bed
 };
 
 // Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
@@ -119,6 +134,19 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
             out.progress = true;
         } else if (a == "--estimate" && analyze) {
             out.estimate = true;
+        } else if (a == "--yes" && !analyze) {
+            out.yes = true;
+        } else if (a == "--copies" && !analyze) {
+            std::string n;
+            if (!value(n))
+                return std::nullopt;
+            char* end = nullptr;
+            const long v = std::strtol(n.c_str(), &end, 10);
+            if (n.empty() || *end != '\0' || v < 1 || v > 1000) {
+                err << "error: --copies needs a whole number from 1 to 1000\n";
+                return std::nullopt;
+            }
+            out.copies = std::size_t(v);
         } else if (!a.empty() && a.front() == '-') {
             err << "error: unknown option " << a << "\n";
             return std::nullopt;
@@ -252,6 +280,100 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
     return kExitOk;
 }
 
+// The model as the settings' transform group leaves it (model_tools.md,
+// rules 11 to 14), placed on the bed: one object, its copies, or the pieces a
+// cut or a split made, side by side. False, with the problem in err, when
+// pieces and copies are both asked for.
+bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copies, const std::string& name,
+                 std::vector<MeshObject>& objects, std::ostream& err, TriangleMesh* negative = nullptr) {
+    if (negative && negative->empty())
+        negative = nullptr;
+    // The negative volumes (model_tools.md, rule 2) follow the part; not yet
+    // through a cut, a split or copies.
+    if (negative && (copies > 1 || settings.transform_cut_z || settings.transform_split)) {
+        err << "error: negative volumes do not go with --copies, transform.cut_z or transform.split yet\n";
+        return false;
+    }
+    std::vector<TriangleMesh> parts = apply_transform(std::move(mesh), settings, negative);
+    // Every object the model makes, with the object group's extruder and
+    // purges (multi_extruder.md, rules 1 and 13).
+    const auto as_objects = [&] {
+        for (MeshObject& o : objects) {
+            o.extruder = settings.object_extruder;
+            o.wipe_into_infill = settings.object_wipe_into_infill;
+            o.wipe_into_object = settings.object_wipe_into_object;
+        }
+        return true;
+    };
+    if (parts.size() > 1) {
+        if (copies > 1) {
+            err << "error: --copies does not go with transform.cut_z or transform.split\n";
+            return false;
+        }
+        mesh = place_objects(parts, settings, name, &objects);
+        return as_objects();
+    }
+    mesh = parts.empty() ? TriangleMesh{} : std::move(parts.front());
+    if (copies > 1) {
+        mesh = place_copies(mesh, copies, settings, name, &objects);
+    } else {
+        place_on_bed(mesh, settings, negative);
+        objects.push_back({name, 0, mesh.triangle_count(), 0, 0});
+    }
+    return as_objects();
+}
+
+// Whether the output is a resin printer's GOO file.
+bool goo_output(const std::string& path) {
+    std::string ext = std::filesystem::path(path).extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    return ext == ".goo";
+}
+
+// Resin (resin.md): the part's images and the platform's moves in a GOO
+// file, the part centred on the display unless the settings place it.
+int slice_resin_file(const SliceArgs& args, Settings settings, ModelFile& model, std::ostream& out, std::ostream& err) {
+    if (settings.bed.empty())
+        settings.bed = {{0.0, 0.0},
+                        {settings.display_width, 0.0},
+                        {settings.display_width, settings.display_height},
+                        {0.0, settings.display_height}};
+    std::vector<MeshObject> objects;
+    if (!place_model(model.mesh, settings, args.copies, std::filesystem::path(args.model).filename().string(), objects,
+                     err))
+        return kExitUsage;
+    const auto start = std::chrono::steady_clock::now();
+    ResinPrint print;
+    try {
+        print = slice_resin(weld_exact(model.mesh), settings);
+    } catch (const ResinError& e) {
+        err << "error: " << e.what() << "\n";
+        return kExitModel;
+    }
+    out << "layers: " << print.layers.size() << "\n";
+    out << "volume_mm3: " << print.volume << "\n";
+    out << "weight_g: " << print.weight << "\n";
+    out << "print_seconds: " << std::llround(print.seconds) << "\n";
+    out << "slice_ms: " << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count()
+        << "\n";
+    if (!write_file(args.output, [&](std::ostream& f) { write_goo(f, print, settings, goo_time_now()); })) {
+        err << "error: cannot write '" << args.output << "'\n";
+        return kExitInput;
+    }
+    out << "wrote " << args.output << "\n";
+    // The cups (resin.md, rules 13 to 15).
+    const std::vector<Warning> warnings = resin_warnings(print, std::filesystem::path(args.model).filename().string());
+    out << "warnings: " << warnings.size() << "\n";
+    if (!args.warnings.empty()) {
+        if (!write_file(args.warnings, [&](std::ostream& report) { report << warnings_json(warnings); })) {
+            err << "error: cannot write '" << args.warnings << "'\n";
+            return kExitInput;
+        }
+        out << "wrote " << args.warnings << "\n";
+    }
+    return kExitOk;
+}
+
 int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
     const std::optional<SliceArgs> parsed = parse_slice_args(args, err);
     if (!parsed) {
@@ -267,6 +389,21 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     }
     for (const std::string& group : settings.ignored_groups)
         err << "warning: settings group '" << group << "' is not used yet\n";
+    // A resin printer prints a GOO file (resin.md); a .goo file is for one.
+    if (settings.machine_technology == MachineTechnology::Msla && !goo_output(parsed->output)) {
+        err << "error: machine.technology is msla: the output must be a .goo file\n";
+        return kExitInput;
+    }
+    if (goo_output(parsed->output)) {
+        ModelFile model;
+        double seconds = 0.0;
+        if (int rc = load_model(parsed->model, model, seconds, err); rc != kExitOk)
+            return rc;
+        out << "read " << model.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+        return slice_resin_file(*parsed, settings, model, out, err);
+    }
+    // The templates' input_filename_base (gcode_templates.md, rule 7).
+    settings.input_name = std::filesystem::path(parsed->model).stem().string();
     // The speeds come from the printer's profile; those the file does not give
     // are a stock Ender-3's (docs/CONFIG.md, "Velocidades de respaldo").
     std::string fallback;
@@ -280,10 +417,17 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
         return rc;
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
-    place_on_bed(stl.mesh, settings);
+    // The copies, each an object of the plate (placement.md, rule 2;
+    // sequential.md, rule 2), or the model alone.
+    std::vector<MeshObject> objects;
+    const std::string file_name = std::filesystem::path(parsed->model).filename().string();
+    if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &stl.negative))
+        return kExitUsage;
 
     const auto start = std::chrono::steady_clock::now();
     const IndexedMesh mesh = weld_exact(stl.mesh);
+    const IndexedMesh negative = weld_exact(stl.negative);
+    const IndexedMesh* cut = negative.triangles.empty() ? nullptr : &negative;
     if (const std::string reason = unprintable_reason(mesh, settings); !reason.empty()) {
         err << "error: " << reason << "\n";
         return kExitModel;
@@ -326,13 +470,13 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         warnings.push_back({"speed_fallback", -1, 0.0,
                             "the printer's profile gives no speed for " + fallback + ": a stock Ender-3's are used", 0.0});
     try {
-        sliced = slice_model(mesh, settings, gpu.get(), &stress);
+        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut);
     } catch (const std::runtime_error& e) {
         if (!gpu)
             throw;
         err << "warning: GPU failed (" << e.what() << "), slicing on the CPU\n";
         warnings.push_back({"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
-        sliced = slice_model(mesh, settings, nullptr, &stress);
+        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut);
     }
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (const std::string reason = unprintable_reason(sliced, settings); !reason.empty()) {
@@ -371,20 +515,65 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (sliced.open_contours > 0)
         err << "warning: " << sliced.open_contours
             << " open contours were dropped (holes in the mesh wider than slicing.gap_closing_radius)\n";
-    std::vector<Warning> model = model_warnings(sliced);
+    std::vector<Warning> model = model_warnings(sliced, settings.support_free_bridge_length);
     warnings.insert(warnings.end(), model.begin(), model.end());
-    const GcodeExport exported = export_gcode(parsed->output, sliced, settings, &warnings);
+    const std::vector<Warning> stability = stability_warnings(sliced, settings);
+    warnings.insert(warnings.end(), stability.begin(), stability.end());
+    // Into a folder: the name from output.filename_format, first without the
+    // print's time and weight, then with them (gcode_templates.md, rule 15).
+    std::filesystem::path target = parsed->output;
+    const bool folder = std::filesystem::is_directory(target);
+    try {
+        if (folder)
+            target /= output_filename(settings, sliced, std::nullopt);
+    } catch (const TemplateError& e) {
+        err << "error: " << e.what() << "\n";
+        return kExitInput;
+    }
+    const GcodeExport exported = export_gcode(target, sliced, settings, &warnings);
     if (!exported.written) {
         err << "error: " << exported.error << "\n";
         for (const GcodeProblem& p : exported.check.problems)
             err << "  line " << p.line << ": " << p.message << "\n";
         return exported.check.problem_count > 0 ? kExitGcode : kExitInput;
     }
+    if (folder) {
+        const std::filesystem::path final_name = target.parent_path() / output_filename(settings, sliced, read_gcode_totals(target));
+        std::error_code ec;
+        if (final_name != target)
+            std::filesystem::rename(target, final_name, ec);
+        if (ec) {
+            err << "error: cannot rename " << target.string() << " to " << final_name.string() << "\n";
+            return kExitInput;
+        }
+        target = final_name;
+    }
+    // Post-processing scripts, once confirmed: they run anything (rules 16 and 17).
+    if (!settings.post_process.empty()) {
+        out << "A post-processing script has been detected in the settings:";
+        for (const std::string& script : settings.post_process)
+            out << " " << script;
+        out << "\nContinue (Y/N)? ";
+        std::string answer = parsed->yes ? "Y" : "";
+        if (!parsed->yes)
+            std::getline(std::cin, answer);
+        out << answer << "\n";
+        if (answer != "Y" && answer != "y") {
+            std::error_code ignored;
+            std::filesystem::remove(target, ignored);
+            err << "error: the post-processing was not confirmed: no G-code is kept\n";
+            return kExitInput;
+        }
+        if (const std::string errors = run_post_process(settings, sliced, target); !errors.empty()) {
+            err << "error: post-processing: " << errors;
+            return kExitInput;
+        }
+    }
     out << "write_ms: " << exported.write_seconds * 1000.0 << "\n";
     out << "check_ms: " << exported.check_seconds * 1000.0 << "\n";
     out << "gcode_check: ok (" << exported.check.stats.lines << " lines, " << exported.check.stats.layers
         << " layers, " << exported.check.stats.filament << " mm of filament)\n";
-    out << "wrote " << parsed->output << "\n";
+    out << "wrote " << target.string() << "\n";
     out << "warnings: " << warnings.size() << "\n";
     if (!parsed->warnings.empty()) {
         if (!write_file(parsed->warnings, [&](std::ostream& report) { report << warnings_json(warnings); })) {

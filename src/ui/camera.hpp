@@ -4,7 +4,7 @@
 
 namespace tisma::ui {
 
-enum class StandardView { Iso, Top, Front, Back, Left, Right };
+enum class StandardView { Iso, Top, Front, Back, Left, Right, Bottom };
 
 // A camera that orbits a target point, with +Z up (the printer's axes: the
 // front of the bed is -Y). Angles in radians: yaw turns around Z (0 looks from
@@ -17,6 +17,15 @@ public:
     float yaw = 0.0f;
     float pitch = 0.5f;
     float fov = 0.6f; // vertical field of view, radians
+    // Orthographic (preview.md, rule 10), seen as through a long lens: a
+    // field of view of kOrthoFov from as far as keeps the target's size, so
+    // the views and shaders made for a perspective camera stay as they are.
+    bool orthographic = false;
+    static constexpr float kOrthoFov = 0.0174533f; // 1 degree
+
+    // The field of view and the eye's distance the projection uses.
+    float lens_fov() const { return orthographic ? kOrthoFov : fov; }
+    float lens_distance() const;
 
     Vec3 eye() const;
     Vec3 forward() const; // from the eye toward the target

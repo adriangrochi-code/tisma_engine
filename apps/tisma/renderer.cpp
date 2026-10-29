@@ -150,7 +150,10 @@ vec3 shade(vec3 base, vec3 n, vec3 p, float shininess, float specular, vec2 seen
     if (u_debug != 0)
         return vec3(vis.g, vis.r * vis.g, vis.g);
     float direct = vis.r * seen.y;
-    float ambient = mix(1.0, vis.g, u_ao_strength) * seen.x;
+    // A strength past 1 darkens beyond the occlusion: never below no light
+    // (a negative light made pow() a NaN, drawn black), and a little light
+    // stays even in a closed crease, as bounced light would (no ray follows it).
+    float ambient = max(mix(1.0, vis.g, u_ao_strength) * seen.x, 0.04);
     vec3 v = normalize(u_eye - p);
     if (dot(n, v) < 0.0)
         n = -n;
@@ -228,8 +231,9 @@ void main() {
 // hanging under the nozzle's path. Where the bead goes on into the next move
 // (a join, PreviewInstance), the end lies on the plane halfway between the two
 // directions and both moves share its corners (a mitre); a free end grows by
-// half a width, as the bead does past the nozzle, and gets its cap. 36
-// vertices: four sides of two triangles and two ends of two triangles.
+// half a width, as the bead does past the nozzle, and gets its cap. Of the
+// four sides and two ends, only the two sides and the end turned to the eye are
+// drawn (the others are behind them): 18 vertices, two triangles a face.
 //
 // The rhombus only gives the depth (two neighbours meet along a line, never on
 // a shared face, so nothing flickers); the light follows the profile of a
@@ -295,6 +299,7 @@ uniform int u_colour_mode;
 uniform vec2 u_range;
 uniform uvec2 u_layers; // the first and the last layer shown
 uniform int u_grooves;  // the beads' grooves (not with ray tracing, whose rays see the neighbours)
+uniform vec4 u_face_eye; // what the drawn faces face: the eye (w 1), or towards an orthographic one (w 0)
 out vec3 v_base;
 out vec3 v_normal;
 out vec3 v_position;
@@ -339,11 +344,7 @@ void main() {
     v_cap = 0.0;
     bool joined0 = dot(a_join.xy, a_join.xy) > 0.25, joined1 = dot(a_join.zw, a_join.zw) > 0.25;
     int id = gl_VertexID;
-    bool hidden = (u_kind_mask & (1u << kind)) == 0u || len <= 0.0;
-    // A joined end has no cap: the next move's side goes on from it.
-    if (id >= 24 && ((id - 24) / 6 == 0 ? joined0 : joined1))
-        hidden = true;
-    if (hidden) {
+    if ((u_kind_mask & (1u << kind)) == 0u || len <= 0.0) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // outside the view: the triangle is dropped
         return;
     }
@@ -353,22 +354,54 @@ void main() {
     vec3 up = cross(side, dir);
     float w = a_size.x, h = a_size.y;
 
+    // Of the convex prism, only what faces the eye (u_face_eye: a point with w
+    // 1, a direction towards it with w 0): at most two of the four sides,
+    // which are parallel in pairs, and one end; the others are behind them.
+    // Vertices 0 to 11: those sides; 12 to 17: that end, if it is free (a
+    // joined end has no cap: the next move's side goes on from it).
+    vec3 mid = 0.5 * (a_p0 + a_p1);
+    int face = -1, end = 0;
+    if (id < 12) {
+        int seen = 0;
+        for (int k = 0; k < 4; ++k) {
+            vec2 a = kCorner[k], b = kCorner[(k + 1) % 4];
+            vec3 n = side * ((a.x + b.x) * h) + up * ((a.y + b.y) * w);
+            vec3 on = mid + side * (a.x * 0.5 * w) + up * (a.y * 0.5 * h - 0.5 * h);
+            vec3 to = u_face_eye.w > 0.5 ? u_face_eye.xyz - on : u_face_eye.xyz;
+            if (dot(n, to) > 0.0) {
+                if (seen == id / 6)
+                    face = k;
+                ++seen;
+            }
+        }
+    } else {
+        for (int e = 0; e < 2 && face < 0; ++e) {
+            vec3 outwards = e == 0 ? -dir : dir;
+            vec3 on = (e == 0 ? a_p0 : a_p1) + outwards * (0.5 * w);
+            vec3 to = u_face_eye.w > 0.5 ? u_face_eye.xyz - on : u_face_eye.xyz;
+            if (!(e == 0 ? joined0 : joined1) && dot(outwards, to) > 0.0) {
+                face = 4;
+                end = e;
+            }
+        }
+    }
+    if (face < 0) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+    }
+
     vec2 c;
-    int end;
     vec3 normal;
-    if (id < 24) {
+    if (face < 4) {
         ivec2 q = kQuad[id % 6];
-        c = kCorner[(id / 6 + q.y) % 4];
+        c = kCorner[(face + q.y) % 4];
         end = q.x;
         normal = normalize(side * c.x * h + up * c.y * w);
     } else {
-        end = (id - 24) / 6;
-        c = kCorner[kCap[(id - 24) % 6]];
+        c = kCorner[kCap[(id - 12) % 6]];
         normal = end == 0 ? -dir : dir;
         v_cap = 1.0;
     }
-    // The corner around the end's point, then along the move to its end plane:
-    // the mitre plane at a join, half a width past the point at a free end.
     vec3 offset = side * (c.x * 0.5 * w) + up * (c.y * 0.5 * h - 0.5 * h);
     vec3 point = end == 0 ? a_p0 : a_p1;
     bool joined = end == 0 ? joined0 : joined1;
@@ -1004,7 +1037,39 @@ void screen_pass(unsigned empty_vao) {
 void put(std::vector<float>& v, const Mat4& m) { v.insert(v.end(), m.begin(), m.end()); }
 void put(std::vector<float>& v, Vec3 p) { v.insert(v.end(), {p.x, p.y, p.z}); }
 
+
 } // namespace
+
+std::vector<double> frame_key(const ViewFrame& f) {
+    std::vector<double> k;
+    const auto add = [&](std::initializer_list<double> values) { k.insert(k.end(), values); };
+    const auto vec = [&](Vec3 p) { add({p.x, p.y, p.z}); };
+    add({double(f.x), double(f.y), double(f.width), double(f.height)});
+    k.insert(k.end(), f.view.begin(), f.view.end());
+    k.insert(k.end(), f.projection.begin(), f.projection.end());
+    for (const Vec3 p : {f.eye, f.key, f.fill, f.sky, f.ground, f.background_top, f.background_bottom, f.plate, f.model,
+                         f.model_selected, f.selected_offset})
+        vec(p);
+    for (const Vec3 p : f.kind_colours)
+        vec(p);
+    add({double(f.selected_first), double(f.selected_count), double(f.show_model), double(f.coarse),
+         double(f.coarse_selected_first), double(f.coarse_selected_count), double(f.show_paint),
+         double(f.show_preview), double(f.show_travels), double(f.first_layer), double(f.last_layer),
+         double(f.top_shown), double(f.top_hidden), double(f.kind_mask), double(f.color_mode), double(f.mode),
+         double(f.samples), double(f.fxaa), double(f.moire_filter), f.ao_radius, f.ao_strength, f.sun_radius,
+         double(f.max_ray_samples), double(f.debug_visibility)});
+    return k;
+}
+
+std::array<float, 4> preview_face_eye(const ViewFrame& f) {
+    // An orthographic projection keeps w: its last row is (0, 0, 0, 1).
+    if (f.projection[11] == 0.0f && f.projection[15] == 1.0f) {
+        // The view's third row: from what is looked at towards the eye.
+        const Vec3 back = normalize(Vec3{f.view[2], f.view[6], f.view[10]});
+        return {back.x, back.y, back.z, 0.0f};
+    }
+    return {f.eye.x, f.eye.y, f.eye.z, 1.0f};
+}
 
 bool Renderer::init(std::string& error) {
     struct Source {
@@ -1102,7 +1167,26 @@ void Renderer::resize(int width, int height, int samples) {
         colour_fbo_ = make_framebuffer(colour_, 0, colour_depth_);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    scene_changed();
+}
+
+Renderer::Bytes Renderer::bytes() const {
+    Bytes b;
+    b.instances = std::size_t(extrusions_.count) * sizeof(PreviewInstance);
+    b.travels = std::size_t(travels_.count) * sizeof(LineVertex);
+    b.meshes = std::size_t(model_.count + model_coarse_.count + paint_.count) * 6 * sizeof(float) +
+               std::size_t(plate_.count) * 3 * sizeof(float) + std::size_t(grid_.count) * sizeof(LineVertex);
+    // Per pixel: normal 4, depth 4, occlusion 2 + 2 + 4, rays 8 + 8, colour 4,
+    // and the multisampled colour and depth (4 + 4 a sample) or a depth of 4.
+    const std::size_t pixel = 36 + (samples_ > 1 ? std::size_t(samples_) * 8 : 4);
+    b.targets = std::size_t(width_) * std::size_t(height_) * pixel +
+                std::size_t(shadow_size_) * std::size_t(shadow_size_) * 4;
+    return b;
+}
+
+void Renderer::scene_changed() {
     ray_signature_.clear();
+    drawn_.clear();
 }
 
 void Renderer::shutdown() {
@@ -1116,7 +1200,7 @@ void Renderer::shutdown() {
             glDeleteProgram(*p);
             *p = 0;
         }
-    for (Buffer* b : {&plate_, &grid_, &model_, &paint_, &extrusions_, &travels_}) {
+    for (Buffer* b : {&plate_, &grid_, &model_, &model_coarse_, &paint_, &extrusions_, &travels_}) {
         if (b->vbo)
             glDeleteBuffers(1, &b->vbo);
         if (b->vao)
@@ -1154,7 +1238,19 @@ void Renderer::set_bed(const BedPolygon& bed, const BedLook& look) {
     grid_outline_ = lines.empty() ? 0 : static_cast<int>(2 * bed.size()); // bed_lines puts it last
     grid_step_ = float(look.step);
     grid_major_every_ = std::max(look.major_every, 1);
-    ray_signature_.clear();
+    scene_changed();
+}
+
+void Renderer::set_model_coarse(const std::vector<float>& vertices) {
+    if (!ready_)
+        return;
+    upload(model_coarse_.vao, model_coarse_.vbo, vertices.data(), vertices.size() * sizeof(float));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
+    model_coarse_.count = static_cast<int>(vertices.size() / 6);
+    scene_changed();
 }
 
 void Renderer::set_model(const std::vector<float>& vertices) {
@@ -1174,7 +1270,7 @@ void Renderer::set_model(const std::vector<float>& vertices) {
         model_hi_ = Vec3{std::max(model_hi_.x, vertices[i]), std::max(model_hi_.y, vertices[i + 1]),
                          std::max(model_hi_.z, vertices[i + 2])};
     }
-    ray_signature_.clear();
+    scene_changed();
 }
 
 void Renderer::set_paint(const std::vector<float>& vertices, const std::vector<PaintGroup>& groups) {
@@ -1187,6 +1283,7 @@ void Renderer::set_paint(const std::vector<float>& vertices, const std::vector<P
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
     paint_.count = static_cast<int>(vertices.size() / 6);
     paint_groups_ = groups;
+    scene_changed();
 }
 
 void Renderer::set_preview(const PreviewBuffers& p) {
@@ -1219,7 +1316,7 @@ void Renderer::set_preview(const PreviewBuffers& p) {
     min_feed_ = p.min_feed, max_feed_ = p.max_feed;
     min_width_ = p.min_width, max_width_ = p.max_width;
     min_height_ = p.min_height, max_height_ = p.max_height;
-    ray_signature_.clear();
+    scene_changed();
 }
 
 void Renderer::clear_preview() {
@@ -1227,7 +1324,7 @@ void Renderer::clear_preview() {
     layer_extrusions_.clear();
     order_ = {};
     layer_travels_.clear();
-    ray_signature_.clear();
+    scene_changed();
 }
 
 bool Renderer::set_ray_scene(const std::vector<float>& nodes, const std::vector<float>& primitives) {
@@ -1242,7 +1339,7 @@ bool Renderer::set_ray_scene(const std::vector<float>& nodes, const std::vector<
     ray_nodes_ = make_texture(GL_RGBA32F, RayScene::kTextureWidth, node_rows, GL_RGBA, GL_FLOAT, GL_NEAREST, nodes.data());
     ray_prims_ = make_texture(GL_RGBA32F, RayScene::kTextureWidth, primitive_rows, GL_RGBA, GL_FLOAT, GL_NEAREST,
                               primitives.data());
-    ray_signature_.clear();
+    scene_changed();
     return true;
 }
 
@@ -1253,7 +1350,7 @@ void Renderer::clear_ray_scene() {
             *t = 0;
         }
     ray_samples_ = 0;
-    ray_signature_.clear();
+    scene_changed();
 }
 
 void Renderer::lit_uniforms(unsigned p, const ViewFrame& f, const Mat4& vp, bool gbuffer, unsigned visibility) {
@@ -1310,11 +1407,16 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
     }
     if (f.show_model && model_.count > 0) {
         lit_uniforms(p_.mesh, f, vp, gbuffer, visibility);
-        glBindVertexArray(model_.vao);
+        // While the view moves, the coarse copy if there is one (V6).
+        const bool coarse = f.coarse && model_coarse_.count > 0;
+        const Buffer& model = coarse ? model_coarse_ : model_;
+        glBindVertexArray(model.vao);
         // The chosen model in its own colour, the rest before and after it.
-        const GLint count = model_.count;
-        const GLint first = GLint(std::min<std::size_t>(f.selected_first, std::size_t(count)));
-        const GLint chosen = GLint(std::min<std::size_t>(f.selected_count, std::size_t(count - first)));
+        const GLint count = model.count;
+        const GLint first =
+            GLint(std::min<std::size_t>(coarse ? f.coarse_selected_first : f.selected_first, std::size_t(count)));
+        const GLint chosen = GLint(
+            std::min<std::size_t>(coarse ? f.coarse_selected_count : f.selected_count, std::size_t(count - first)));
         uniform(p_.mesh, "u_colour", f.model);
         uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
         if (first > 0)
@@ -1353,12 +1455,11 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         return;
     const std::size_t layers = layer_extrusions_.size() - 1;
     const std::size_t lo = std::min(f.first_layer, layers - 1), hi = std::clamp(f.last_layer, lo, layers - 1);
-    // All of the part drawn: what it hides stays out (docs/LARGE_MODELS.md).
-    const std::array<PreviewRange, 2> ranges = preview_ranges(order_, lo, hi, f.kind_mask);
-    for (const PreviewRange& range : ranges) {
-        const std::size_t first = range.first, count = range.count;
-        if (count == 0)
-            continue;
+    // All of the part drawn: what it hides stays out (docs/LARGE_MODELS.md);
+    // the nearest layers first, for the depth test.
+    const std::vector<PreviewRange> draws =
+        preview_draws(order_, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
+    if (!draws.empty()) {
         const unsigned p = p_.preview;
         lit_uniforms(p, f, vp, gbuffer, visibility);
         glUniform3fv(at(p, "u_colours"), static_cast<GLsizei>(kLineKinds), &f.kind_colours[0].x);
@@ -1366,6 +1467,7 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         uniform(p, "u_colour_mode", static_cast<int>(f.color_mode));
         uniform(p, "u_moire", f.moire_filter ? 1 : 0);
         uniform(p, "u_grooves", f.mode == RenderMode::RayTraced ? 0 : 1);
+        glUniform4f(at(p, "u_face_eye"), face_eye_[0], face_eye_[1], face_eye_[2], face_eye_[3]);
         glUniform2ui(at(p, "u_layers"), static_cast<GLuint>(lo), static_cast<GLuint>(hi));
         if (f.color_mode == ColorMode::Speed)
             uniform(p, "u_range", min_feed_, max_feed_);
@@ -1373,9 +1475,12 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
             uniform(p, "u_range", min_height_, max_height_);
         else
             uniform(p, "u_range", min_width_, max_width_);
-        // The instances of the first layer drawn start the attribute arrays.
         glBindVertexArray(extrusions_.vao);
         glBindBuffer(GL_ARRAY_BUFFER, extrusions_.vbo);
+    }
+    for (const PreviewRange& range : draws) {
+        const std::size_t first = range.first, count = range.count;
+        // The draw's first instance starts the attribute arrays.
         const std::size_t base = first * sizeof(PreviewInstance);
         const GLsizei stride = sizeof(PreviewInstance);
         glEnableVertexAttribArray(0);
@@ -1392,7 +1497,7 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride, offset(base + offsetof(PreviewInstance, join0_x)));
         for (GLuint a = 0; a < 6; ++a)
             glVertexAttribDivisor(a, 1);
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 36, static_cast<GLsizei>(count));
+        glDrawArraysInstanced(GL_TRIANGLES, 0, kPreviewVertices, static_cast<GLsizei>(count));
         if (!gbuffer)
             drawn_extrusions_ += count;
     }
@@ -1429,7 +1534,10 @@ void Renderer::shadow_pass(const ViewFrame& f) {
     glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
     glViewport(0, 0, shadow_size_, shadow_size_);
     glClear(GL_DEPTH_BUFFER_BIT);
+    const std::array<float, 4> eye = face_eye_;
+    face_eye_ = {f.key.x, f.key.y, f.key.z, 0.0f}; // the faces the light sees
     draw_scene(f, shadow_vp_, true, white_, true);
+    face_eye_ = eye;
     glViewport(0, 0, width_, height_);
     shadowed_ = true;
 }
@@ -1514,56 +1622,66 @@ void Renderer::draw(const ViewFrame& f) {
     glDisable(GL_CULL_FACE);
     glViewport(0, 0, width_, height_);
 
-    // Whatever changes the picture starts the averaging of rays again, and
-    // makes the occlusion be computed again.
-    std::vector<float> signature;
-    put(signature, f.view);
-    put(signature, f.projection);
-    put(signature, f.key);
-    signature.insert(signature.end(),
-                     {float(f.mode), float(f.first_layer), float(f.last_layer), float(f.kind_mask & 0xFFFF),
-                      float(f.kind_mask >> 16), f.ao_radius, f.sun_radius, float(f.show_model), float(f.show_preview),
-                      float(width_), float(height_), float(has_ray_scene()), float(f.moire_filter)});
-    const bool changed = signature != ray_signature_;
-    if (changed) {
-        ray_signature_ = signature;
-        ray_samples_ = 0;
-    }
+    // Nothing changed since the last picture (and no rays averaging): that
+    // picture again, without the scene.
+    face_eye_ = preview_face_eye(f);
+    std::vector<double> key = frame_key(f);
+    const bool averaging = f.mode == RenderMode::RayTraced && has_ray_scene() && ray_samples_ < f.max_ray_samples;
+    if (key != drawn_ || averaging) {
+        // Whatever changes the picture starts the averaging of rays again, and
+        // makes the occlusion be computed again.
+        std::vector<float> signature;
+        put(signature, f.view);
+        put(signature, f.projection);
+        put(signature, f.key);
+        signature.insert(signature.end(),
+                         {float(f.mode), float(f.first_layer), float(f.last_layer), float(f.kind_mask & 0xFFFF),
+                          float(f.kind_mask >> 16), f.ao_radius, f.sun_radius, float(f.show_model),
+                          float(f.show_preview), float(width_), float(height_), float(has_ray_scene()),
+                          float(f.moire_filter)});
+        const bool changed = signature != ray_signature_;
+        if (changed) {
+            ray_signature_ = signature;
+            ray_samples_ = 0;
+        }
 
-    unsigned visibility = white_;
-    const bool ray = f.mode == RenderMode::RayTraced && has_ray_scene();
-    const bool ambient = f.mode == RenderMode::Ambient || (f.mode == RenderMode::RayTraced && !ray);
-    const bool refresh = ray ? ray_samples_ < f.max_ray_samples : ambient && changed;
-    if (refresh) {
-        glBindFramebuffer(GL_FRAMEBUFFER, g_fbo_);
-        glClearColor(0.5f, 0.5f, 1.0f, 1.0f);
+        unsigned visibility = white_;
+        const bool ray = f.mode == RenderMode::RayTraced && has_ray_scene();
+        const bool ambient = f.mode == RenderMode::Ambient || (f.mode == RenderMode::RayTraced && !ray);
+        const bool refresh = ray ? ray_samples_ < f.max_ray_samples : ambient && changed;
+        if (refresh) {
+            glBindFramebuffer(GL_FRAMEBUFFER, g_fbo_);
+            glClearColor(0.5f, 0.5f, 1.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            draw_scene(f, vp, true, white_);
+        }
+        if (ray) {
+            visibility = refresh ? ray_pass(f) : ray_tex_[ray_current_];
+        } else if (ambient) {
+            if (refresh)
+                shadow_pass(f);
+            visibility = refresh ? ambient_pass(f) : ao_tex_[2];
+        }
+
+        // The lit scene.
+        glBindFramebuffer(GL_FRAMEBUFFER, samples > 1 ? msaa_fbo_ : colour_fbo_);
+        glViewport(0, 0, width_, height_);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        draw_scene(f, vp, true, white_);
-    }
-    if (ray) {
-        visibility = refresh ? ray_pass(f) : ray_tex_[ray_current_];
-    } else if (ambient) {
-        if (refresh)
-            shadow_pass(f);
-        visibility = refresh ? ambient_pass(f) : ao_tex_[2];
-    }
+        glDisable(GL_DEPTH_TEST);
+        glUseProgram(p_.background);
+        uniform(p_.background, "u_top", f.background_top);
+        uniform(p_.background, "u_bottom", f.background_bottom);
+        uniform(p_.background, "u_target", float(width_), float(height_));
+        screen_pass(empty_vao_);
+        draw_scene(f, vp, false, visibility);
+        if (samples > 1) {
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_fbo_);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, colour_fbo_);
+            glBlitFramebuffer(0, 0, width_, height_, 0, 0, width_, height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        }
 
-    // The lit scene.
-    glBindFramebuffer(GL_FRAMEBUFFER, samples > 1 ? msaa_fbo_ : colour_fbo_);
-    glViewport(0, 0, width_, height_);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glDisable(GL_DEPTH_TEST);
-    glUseProgram(p_.background);
-    uniform(p_.background, "u_top", f.background_top);
-    uniform(p_.background, "u_bottom", f.background_bottom);
-    uniform(p_.background, "u_target", float(width_), float(height_));
-    screen_pass(empty_vao_);
-    draw_scene(f, vp, false, visibility);
-    if (samples > 1) {
-        glBindFramebuffer(GL_READ_FRAMEBUFFER, msaa_fbo_);
-        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, colour_fbo_);
-        glBlitFramebuffer(0, 0, width_, height_, 0, 0, width_, height_, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        drawn_ = std::move(key);
     }
 
     // Into the window.

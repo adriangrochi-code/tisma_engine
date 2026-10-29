@@ -4,6 +4,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <set>
 #include <string>
 
@@ -15,7 +16,8 @@ TEST_CASE("settings panel: every setting has a section, a card and a level (SP1)
         CAPTURE(key);
         if (key.starts_with("compute.")) // a preference of the program, not of a profile
             continue;
-        if (key.starts_with("placement.")) // the command line's; the interface places objects itself
+        // The command line's: the interface has tools, and each object its menu.
+        if (key.starts_with("placement.") || key.starts_with("transform.") || key.starts_with("object."))
             continue;
         const std::optional<SettingPlace> place = setting_place(key);
         REQUIRE(place);
@@ -96,4 +98,29 @@ TEST_CASE("settings panel: the closed cards' summaries (SP2, SP3)", "[ui][layout
                 CAPTURE(sub.id);
                 CHECK_FALSE(subsection_summary(sub.id, Settings{}).empty());
             }
+}
+
+TEST_CASE("interface text: numbers in the language, the decimal comma in Spanish (the spec team's TR1, TR2, TR4)",
+          "[ui][layout]") {
+    set_language(Language::Spanish);
+    CHECK(format("Z %.2f mm · %.1f %% · %d capas · %s", 10.0, 20.9, 50, "v0.10.0") ==
+          "Z 10,00 mm · 20,9 % · 50 capas · v0.10.0"); // a text's own dots stay
+    CHECK(format("%g mm · %zu", 0.4, std::size_t(3)) == "0,4 mm · 3");
+    CHECK(format("%5.1f|%-6s|%03d|%x", 1.25, "ab", 7, 255u) == "  1,2|ab    |007|ff");
+    CHECK(grouped(4013) == "4 013");
+    CHECK(grouped(1930764) == "1 930 764");
+    CHECK(localized("100.0") == "100,0");
+    // Thin walls: one bead, in the singular.
+    Settings s;
+    s.wall_spread_count = 1;
+    CHECK(subsection_summary("walls_thin", s) == "1 cordón toma el cambio de ancho");
+    set_language(Language::English);
+    CHECK(format("Z %.2f mm", 10.0) == "Z 10.00 mm");
+    CHECK(grouped(4013) == "4,013");
+    CHECK(grouped(240964) == "240,964");
+    CHECK(grouped(12) == "12");
+    CHECK(subsection_summary("walls_thin", s) == "1 bead takes the change in width");
+    s.wall_spread_count = 2;
+    CHECK(subsection_summary("walls_thin", s) == "2 beads share the change in width");
+    set_language(Language::Spanish);
 }

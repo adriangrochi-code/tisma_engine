@@ -3,6 +3,7 @@
 #include "calibration/calibration.hpp"
 #include "config/profiles.hpp"
 #include "io/stl.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
@@ -85,7 +86,7 @@ TEST_CASE("a project reads back as it was written", "[project]") {
     CHECK(back.calibration->segments[1].value == 205.0);
 
     // Through a file, saved over an older one.
-    const auto path = std::filesystem::temp_directory_path() / "tisma_test_project.tisma";
+    const auto path = test_temp_dir() / "tisma_test_project.tisma";
     std::ofstream(path) << "old";
     save_project(path, p);
     CHECK_FALSE(std::filesystem::exists(path.string() + ".tmp"));
@@ -160,4 +161,31 @@ TEST_CASE("damaged or newer projects are rejected with a reason", "[project]") {
     REQUIRE(at != std::string::npos);
     bytes.replace(at, 13, "\"height\": 0.0");
     fails(bytes, "layers.height");
+}
+
+TEST_CASE("a project keeps a model's own settings, volumes and height ranges (model_tools.md)", "[project]") {
+    Project p = sample();
+    ProjectModel& m = p.models.front();
+    m.settings = R"({"walls":{"count":3}})";
+    m.volumes.push_back({false, true, {5.0, 0.0, 2.0}, {8.0, 8.0, 4.0}, R"({"infill":{"density":60}})"});
+    m.volumes.push_back({true, false, {0.0, 0.0, -1.0}, {4.0, 4.0, 20.0}, "", {0, -1, 0, 1, 0, 0, 0, 0, 1}});
+    m.ranges.push_back({4.0, 6.0, R"({"layers":{"height":0.1}})"});
+    const Project back = read_project(write_project(p));
+    const ProjectModel& b = back.models.front();
+    CHECK(b.settings == m.settings);
+    REQUIRE(b.volumes.size() == 2);
+    CHECK_FALSE(b.volumes[0].negative);
+    CHECK(b.volumes[0].cylinder);
+    CHECK(b.volumes[0].offset == m.volumes[0].offset);
+    CHECK(b.volumes[0].size == m.volumes[0].size);
+    CHECK(b.volumes[0].settings == m.volumes[0].settings);
+    CHECK(b.volumes[1].negative);
+    CHECK(b.volumes[1].settings.empty());
+    CHECK(b.volumes[0].turn == m.volumes[0].turn); // upright: not written
+    CHECK(b.volumes[1].turn == m.volumes[1].turn); // a quarter turn about Z
+    REQUIRE(b.ranges.size() == 1);
+    CHECK(b.ranges[0].from == 4.0);
+    CHECK(b.ranges[0].to == 6.0);
+    CHECK(b.ranges[0].settings == m.ranges[0].settings);
+    CHECK(back.models[1].volumes.empty());
 }

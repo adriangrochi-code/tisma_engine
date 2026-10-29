@@ -14,23 +14,28 @@ namespace {
 
 constexpr const char* kUsage =
     "usage: tisma [model.stl|.obj|.3mf | project.tisma | file.gcode | settings.json]...\n"
-    "             [--lang es|en] [--light] [--render fast|ao|rt] [--msaa 1|2|4|8] [--fxaa on|off]\n"
-    "             [--moire on|off] [--device PORT|sim [--device-print]] [--color kind|speed|width|height]\n"
+    "             [--lang es|en] [--light] [--render fast|ao|rt] [--ao-strength S] [--msaa 1|2|4|8] [--fxaa on|off]\n"
+    "             [--moire on|off] [--device PORT|sim [--device-print]] [--color VIEW]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
-    "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|extruder]\n"
+    "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|\n"
+    "                            resin_exposure|resin_measure|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
     "                                   [--layer N] [--look X,Y,Z,DISTANCE,YAW,PITCH]\n"
-    "                                   [--tool move|rotate|scale|lay|paint]\n"
+    "                                   [--tool move|rotate|scale|lay|paint|material|mixing]\n"
     "                                   [--paint support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS]...\n"
     "                                   [--tips] [--tour STEP] [--info GROUP.KEY]\n"
-    "                                   [--level basic|normal|advanced] [--section TAB/SECTION]\n"
+    "                                   [--level basic|normal|advanced|custom] [--section TAB/SECTION]\n"
+    "                                   [--search TEXT] [--single-column] [--choose-settings] [--credits] [--help-panel TAB]\n"
+    "                                   [--ortho] [--labels]\n"
     "                                   [--export out.gcode] [--save-project out.tisma]\n"
     "                                   [--browse folder]\n"
     "                                   [--ray-samples N] [--ray-check] [--moire-check]\n"
-    "                                   [--bench-frames N] [--graphics auto|vulkan|opengl]\n"
-    "                                   [--compare-view other.png]]\n"
+    "                                   [--bench-frames N] [--graphics auto|vulkan|opengl] [--coarse]\n"
+    "                                   [--draw-stats]\n"
+    "                                   [--compare-view other.png] [--no-view-check]\n"
+    "                                   [--ui-script steps.txt] [--pick-catalog-printer NAME]]\n"
     "\n"
     "Opens the Tisma interface. --screenshot draws the window once everything asked\n"
     "for is ready (slicing for --view preview), writes it as a PNG and quits; with\n"
@@ -46,7 +51,21 @@ constexpr const char* kUsage =
     "progress: the view without its ambient occlusion and ray tracing yet, so auto\n"
     "takes OpenGL for now). --compare-view compares the 3D view with the one in\n"
     "another screenshot (drawn by the other graphics) and exits with 1 if more\n"
-    "than 0.5% of its pixels differ by more than 24 levels.\n";
+    "than 0.5% of its pixels differ by more than 24 levels. --coarse draws a plate of\n"
+    "more than a million triangles as while the view moves: its coarse copy.\n"
+    "--draw-stats prints each frame's OpenGL draw calls and the vertices they ask\n"
+    "for, the 3D view's and the panels' apart.\n"
+    "Every screenshot of the Prepare or Preview tab also checks the 3D view's own\n"
+    "picture and exits with 1 if a pixel is black (a shader's NaN) or more than\n"
+    "0.1% of them sparkle (a pixel far from all its neighbours); --no-view-check\n"
+    "skips that. --pick-catalog-printer \"Vendor Model\" picks that printer in the\n"
+    "printer card's list, as a click on its row would (a test of that path).\n"
+    "--ui-script steps.txt plays input into the window before the screenshot, one\n"
+    "step a line: click KEY (a setting's field, brought into sight as the search\n"
+    "does; KEY#2 for its second field), select-all, type TEXT, key NAME (enter,\n"
+    "escape, tab, backspace), printer-page [SECTION], wait FRAMES, expect KEY VALUE\n"
+    "and expect-contains KEY TEXT (the setting as the settings file writes it); it\n"
+    "exits with 1 if a step fails.\n";
 
 } // namespace
 
@@ -90,18 +109,62 @@ int main(int argc, char** argv) {
         } else if (arg == "--tool") {
             options.tool = value();
             if (options.tool != "move" && options.tool != "rotate" && options.tool != "scale" && options.tool != "lay" &&
-                options.tool != "paint") {
-                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay or paint\n");
+                options.tool != "paint" && options.tool != "material" && options.tool != "mixing" && options.tool != "cut" &&
+                options.tool != "measure") {
+                std::fprintf(stderr, "error: --tool must be move, rotate, scale, lay, cut, measure, paint, material or mixing\n");
                 return 2;
             }
+        } else if (arg == "--object-add") {
+            options.object_add = value();
+        } else if (arg == "--object-turn") {
+            auto& d = options.object_turn;
+            if (std::sscanf(value(), "%lf,%lf,%lf", &d[0], &d[1], &d[2]) != 3) {
+                std::fprintf(stderr, "error: --object-turn takes three angles in degrees, as 0,0,45\n");
+                return 2;
+            }
+        } else if (arg == "--object-settings") {
+            options.object_settings = value();
+        } else if (arg == "--measure") {
+            // Two triangles of the first model picked as faces by the Measure tool.
+            if (std::sscanf(value(), "%d,%d", &options.measure[0], &options.measure[1]) != 2) {
+                std::fprintf(stderr, "error: --measure takes two triangle numbers, as 0,5\n");
+                return 2;
+            }
+        } else if (arg == "--cut") {
+            options.cut = std::atof(value()); // cut the first object at this height over the bed
         } else if (arg == "--info") {
             options.info = value();
         } else if (arg == "--level") {
             options.level = value();
-            if (options.level != "basic" && options.level != "normal" && options.level != "advanced") {
-                std::fprintf(stderr, "error: --level must be basic, normal or advanced\n");
+            if (options.level != "basic" && options.level != "normal" && options.level != "advanced" &&
+                options.level != "custom") {
+                std::fprintf(stderr, "error: --level must be basic, normal, advanced or custom\n");
                 return 2;
             }
+        } else if (arg == "--search") {
+            options.search = value();
+        } else if (arg == "--single-column") {
+            options.single_column = true;
+        } else if (arg == "--ortho") {
+            options.ortho = true;
+        } else if (arg == "--labels") {
+            options.labels = true;
+        } else if (arg == "--choose-settings") {
+            options.choose_settings = true;
+        } else if (arg == "--credits") {
+            options.credits = true;
+        } else if (arg == "--knowledge") {
+            options.knowledge = value();
+        } else if (arg == "--tutorial") {
+            // ID or ID,STEP (from 1): a guided tutorial of the help's data on screen.
+            const std::string t = value();
+            options.tutorial = t.substr(0, t.find(','));
+            if (t.find(',') != std::string::npos)
+                options.tutorial_step = std::max(0, std::atoi(t.c_str() + t.find(',') + 1) - 1);
+        } else if (arg == "--help-item") {
+            options.help_open = value();
+        } else if (arg == "--help-panel") {
+            options.help = value(); // problems, procedures, glossary, tutorials, calibrations
         } else if (arg == "--section") {
             options.section = value(); // print/quality, material/cooling, printer/machine...
         } else if (arg == "--tips") {
@@ -183,6 +246,13 @@ int main(int argc, char** argv) {
                 return 2;
             }
             options.fxaa = on == "on" ? 1 : 0;
+        } else if (arg == "--ao-strength") {
+            const double strength = std::atof(value());
+            if (!(strength >= 0.0 && strength <= 1.5)) {
+                std::fprintf(stderr, "error: --ao-strength must be between 0 and 1.5\n");
+                return 2;
+            }
+            options.ao_strength = float(strength);
         } else if (arg == "--moire") {
             const std::string_view on = value();
             if (on != "on" && on != "off") {
@@ -200,6 +270,16 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--bench-frames") {
             options.bench_frames = std::max(1, std::atoi(value()));
+        } else if (arg == "--coarse") {
+            options.coarse = true;
+        } else if (arg == "--draw-stats") {
+            options.draw_stats = true;
+        } else if (arg == "--ui-script") {
+            options.ui_script = value();
+        } else if (arg == "--pick-catalog-printer") {
+            options.pick_catalog_printer = value();
+        } else if (arg == "--no-view-check") {
+            options.view_check = false;
         } else if (arg == "--compare-view") {
             options.compare_view = value();
         } else if (arg == "--ray-check") {
@@ -208,9 +288,18 @@ int main(int argc, char** argv) {
             options.moire_check = true;
         } else if (arg == "--color") {
             const std::string_view c = value();
-            options.color = c == "kind" ? 0 : c == "speed" ? 1 : c == "width" ? 2 : c == "height" ? 3 : -2;
+            // The preview's views, in the order of preview.md (rule 1).
+            static constexpr std::string_view views[] = {"kind",        "height",     "width",          "speed",
+                                                         "actual_speed", "fan",        "temperature",    "flow",
+                                                         "actual_flow", "layer_time", "layer_time_log", "tool",
+                                                         "color_print"};
+            options.color = -2;
+            for (int k = 0; k < int(std::size(views)); ++k)
+                if (c == views[k])
+                    options.color = k;
             if (options.color == -2) {
-                std::fprintf(stderr, "error: --color must be kind, speed, width or height\n");
+                std::fprintf(stderr, "error: --color must be kind, height, width, speed, actual_speed, fan, temperature, "
+                                     "flow, actual_flow, layer_time, layer_time_log, tool or color_print\n");
                 return 2;
             }
         } else if (arg == "--device") {
@@ -222,7 +311,8 @@ int main(int argc, char** argv) {
             const std::string& c = options.calibration;
             if (c != "extruder" && !tisma::calibration_kind_from_name(c)) {
                 std::fprintf(stderr, "error: --calibration must be dimensions, first_layer, temperature, flow, retraction, "
-                                     "retraction_speed, pressure_advance, speed, fit or extruder\n");
+                                     "retraction_speed, pressure_advance, speed, fit, max_flow, acceleration, "
+                                     "elephant_foot, resin_exposure, resin_measure or extruder\n");
                 return 2;
             }
         } else if (arg == "--light") {

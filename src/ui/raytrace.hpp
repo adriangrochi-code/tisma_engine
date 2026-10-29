@@ -79,6 +79,9 @@ public:
     std::size_t primitive_count() const { return primitives_.size(); }
     std::size_t node_count() const { return nodes_.size(); }
     std::size_t depth() const { return depth_; }
+    // More than kMaxPrimitives were given and the rest left out: rays would
+    // pass where they are, so the light is wrong there.
+    bool truncated() const { return truncated_; }
 
     // Whether anything the filter lets through is hit before ray.tmax (any
     // hit, in no particular order), and the nearest such hit (-1 if none).
@@ -108,6 +111,7 @@ private:
     std::vector<RayPrimitive> primitives_;
     std::vector<Node> nodes_;
     std::size_t depth_ = 0;
+    bool truncated_ = false;
 };
 
 // The primitives of the scenes the view shows: the model's triangles moved by

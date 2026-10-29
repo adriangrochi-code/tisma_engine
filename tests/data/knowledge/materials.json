@@ -1,0 +1,21 @@
+{
+  "format": "tisma-knowledge-materials",
+  "version": 1,
+  "language": "es",
+  "sources": [{"id": "test", "title": "Datos de prueba del motor", "author": "Equipo del motor", "url": "https://example.com/test"}],
+  "notes": ["Datos inventados para las pruebas del asistente; no son valores recomendados."],
+  "fields": {"name": "Nombre"},
+  "materials": [
+    {"name": "PLA", "family": "PLA", "category": "básicos", "nozzle_material": "latón", "abrasive": false,
+     "nozzle_temp": [190, 220], "bed_temp": [50, 60], "fan": [80, 100], "bed_required": "opcional",
+     "enclosure": "no necesaria", "surfaces": ["PEI liso"], "base_table": null, "drying": null,
+     "sources": [{"id": "test", "title": "Datos de prueba del motor", "author": "Equipo del motor", "url": "https://example.com/test"}]},
+    {"name": "ABS", "family": "ABS", "category": "de ingeniería", "nozzle_material": "latón", "abrasive": false,
+     "nozzle_temp": [235, 255], "bed_temp": [95, 110], "fan": [0, 20], "bed_required": "necesaria",
+     "enclosure": "necesaria", "surfaces": ["PEI texturado"],
+     "base_table": {"nozzle_temp": [240, 250], "bed_temp": [100, 100], "chamber_temp": 45, "fan": 10,
+                    "enclosure": "necesaria", "retraction": {"direct": 0.8, "bowden": null}, "nozzle_diameter_min": 0.4},
+     "drying": {"before_printing": "si", "temp": [65, 80], "hours_before_printing": 4, "hours_mild": 2, "hours_severe": 6},
+     "sources": [{"id": "test", "title": "Datos de prueba del motor", "author": "Equipo del motor", "url": "https://example.com/test", "pages": [1]}]}
+  ]
+}

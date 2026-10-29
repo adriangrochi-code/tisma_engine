@@ -23,6 +23,7 @@ Reglas:
 |---|---|---|---|---|
 | `height` | número | 0.2 | 0,01 a 10 | Alto de las capas, salvo la primera. Al laminar, nunca más que la boquilla ni `machine.max_layer_height`, ni menos que `machine.min_layer_height` (`check_settings`) |
 | `first_height` | número | 0.2 | 0,01 a 10 | Alto de la primera capa, con los mismos topes que `height` |
+| `first_line_width` | número o texto | `"200%"` | 0 a 40 mm, o 0 a 1000 % | Ancho de todos los cordones de la primera capa (paredes, la externa también, rellenos, falda, borde, soporte y la primera capa de la balsa): en mm, o en % de `first_height` (`"200%"` con 0,2 da 0,4 mm). 0: como las demás capas. Como `walls.width`, entre un cuarto y cuatro veces `machine.nozzle_diameter` (0,1 a 1,6 mm con boquilla de 0,4). Ficha `perimeters.md`, regla 7; `supports_more.md`, SM14 |
 
 Además, en `layers`, **la altura de capa por zona** (`docs/LOCAL_LAYERS.md`):
 
@@ -55,6 +56,10 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 |---|---|---|---|---|
 | `count` | entero | 3 | 0 a 1000 | Paredes desde cada borde. Donde la pieza es más angosta que esas paredes, los cordones cambian de ancho para llenarla sin huecos (Kuipers et al. 2020); donde es más ancha, quedan las paredes al ancho de `width` y el medio queda para el relleno. 0: sin paredes, todo es relleno |
 | `width` | número | 0.4 | 0,05 a 40 | Ancho preferido de los cordones (w*); por ahora fijo, más adelante saldrá de la boquilla del grupo `machine`. Al laminar, de un cuarto a cuatro veces la boquilla; fuera de 0,6 a 2,5 veces, un aviso |
+| `outer_width` | número | 0 | 0, o 0,05 a 40 | Ancho del cordón de la pared externa, en mm (ficha `perimeters.md`, regla 1 y P12); los demás siguen en `width` y el relleno empieza donde termina la última pared. 0: 1,125 × la boquilla (0,45 con 0,4), aunque `width` tenga otro valor. Con boquillas distintas, en proporción a la de las paredes |
+| `spread_count` | entero | 1 | 1 a 100 | En una pared más fina o más gruesa que sus cordones nominales, cuántos cordones desde el medio absorben la diferencia de ancho; los demás quedan nominales (ficha `perimeters.md`, regla 3, tabla P2: con 1,2 mm, 0,450 / 0,386 / 0,450). El esquema «distribuido hacia adentro» de Kuipers et al. 2020 con N = este valor |
+| `transition_length` | número o texto | `"100%"` | 0 a 40 mm, o 0 a 1000 % | Largo, a lo largo de la pared, de la rampa en la que pasa de N a N + 1 cordones: en mm, o en % de la boquilla. 0: el paso de un cordón (ficha `perimeters.md`; Kuipers et al. 2020, sección 3.4) |
+| `transition_angle` | número | 10 | 0 a 179 | Solo en las esquinas del contorno no más abiertas que este ángulo, en grados, una pared pasa por cantidades impares de cordones (con uno en el medio); en una cuña más abierta van solo cantidades pares (ficha `perimeters.md`, P14: con 10°, una cuña de 5° o de 10° pasa por 1, 2, 3, 4…; una de 20°, por 2, 4, 6…). Es el marcado del centro de Kuipers et al. 2020 (sección 3.3) con α_max = 180° − este ángulo |
 | `seam` | texto | `"aligned"` | `aligned`, `nearest`, `random`, `rear` | Dónde empieza cada lazo: `aligned`, en una esquina cóncava si hay, cerca de la costura de la capa de abajo; `nearest`, el punto más cercano al final del movimiento anterior; `random`, al azar pero igual en cada corrida; `rear`, el punto de Y máxima |
 | `scarf` | texto | `"nowhere"` | `nowhere`, `contours`, `everywhere` | Costura en bufanda (ficha `walls_extra.md`, regla 4): la pared externa empieza en una rampa que sube desde la capa de abajo en vez de un escalón, y al final del lazo pasa otra vez sobre la rampa con el cordón cada vez más fino, con el filamento de un lazo común. Casi no deja costura. `contours`: solo la pared de afuera de cada pieza; `everywhere`: también la de los agujeros. Nunca en la primera capa |
 | `scarf_only_smooth` | booleano | `true` | — | La bufanda solo en los lazos sin esquinas marcadas (giros de más de 30°): en un cubo, la costura queda en una esquina, donde no se ve |
@@ -63,6 +68,20 @@ Y **la altura variable por Z** (`docs/VARIABLE_LAYERS.md`):
 | `scarf_entire_loop` | booleano | `false` | — | La rampa da la vuelta entera: la pared externa sube en espiral a lo largo de toda la capa y una segunda vuelta la completa |
 | `scarf_max_segment` | número | 1 | más de 0, hasta 1000 | El tramo más largo de la rampa y de su segunda pasada, en mm |
 | `scarf_inner` | booleano | `false` | — | También las paredes internas empiezan en rampa |
+| `seam_gap` | número o texto | `"15%"` | 0 a 40 mm | Un lazo cerrado de pared termina esto antes de su inicio, en mm o en % de `machine.nozzle_diameter` (0,06 mm con boquilla de 0,4): la costura no se engrosa (ficha `perimeters.md`, regla 5, P1). No en las costuras en rampa ni en el modo vaso |
+| `min_line_width` | número o texto | `"85%"` | 0 a 40 mm | Ancho mínimo de un cordón, en mm o en % de `machine.nozzle_diameter` (0,34 mm con boquilla de 0,4): una pared de un solo cordón más fina que esto se imprime con un cordón de este ancho, centrado en la pared (ficha `perimeters.md`, regla 3) |
+| `min_detail` | número o texto | `"25%"` | 0 a 40 mm | Una pared más fina que esto, en mm o en % de la boquilla (0,1 mm con 0,4), no se imprime; si la pieza entera queda vacía, es un error |
+| `generator` | texto | `"variable"` | `variable`, `fixed` | `variable`: cordones de ancho variable que llenan la región (Kuipers et al. 2020). `fixed`: lazos de `width` a `width` de distancia, cada uno donde entra un cordón entero, y lo que queda en el medio, con relleno de huecos (ficha `walls_extra.md`, regla 1). El relleno concéntrico sigue con ancho variable |
+| `gap_fill` | booleano | `true` | — | Con `generator` `fixed`: lo que queda entre las paredes (y entre ellas y la región del relleno) de al menos medio cordón se llena con cordones de ancho variable, `;TYPE:Gap fill`, a `speed.gap_fill`; los extremos libres siguen medio ancho hasta el borde del hueco. Apagado, quedan vacíos (regla 2) |
+| `outer_first` | booleano | `false` | | En cada isla, las paredes de afuera hacia adentro: la externa primero (ficha `perimeters.md`, regla 4, P10). Apagado, de adentro hacia afuera, la externa última |
+| `clockwise` | booleano | `false` | | Los lazos de las paredes (también los de los agujeros y la espiral del modo vaso) van en sentido horario; apagado, todos en antihorario (ficha `retraction_travel.md`, regla 9, prueba R8). Cada lazo empieza en la misma costura |
+| `staggered_inner_seams` | booleano | `false` | | Cada pared interna empieza antes que la de afuera sobre su propio lazo, `width` por nivel de profundidad: las costuras forman un zigzag hacia adentro en vez de una línea (ficha `walls_extra.md`, regla 3, prueba W5). La de afuera queda donde dice `seam` |
+| `staggered` | booleano | `false` | | Perímetros escalonados: los lazos internos impares (el 1.º interno, el 3.º…) media capa más arriba, donde la capa siguiente sigue encima; en la primera capa llevan 1,5 veces el material y bajo una superficie de arriba vuelven a la Z de la capa con la mitad. El externo no se mueve. No con el modo vaso ni con capas curvas (ficha `staggered_perimeters.md`, ST1). **Patente:** la ficha anota que se parece a una técnica patentada en EE. UU.; antes de usarlo en una versión comercial lo confirma un abogado |
+| `top_one_wall` | texto | `"none"` | `none`, `top`, `topmost` | Un solo perímetro sobre las superficies de arriba (regla 10, prueba W7): donde la capa de arriba deja la región abierta (más ancha que un cordón) queda solo la pared de afuera, las internas van alrededor de lo que sigue subiendo y la superficie de arriba gana ese lugar. `top`: en cada capa; `topmost`: solo en la última capa de la pieza |
+| `first_layer_one_wall` | booleano | `false` | | La primera capa lleva solo la pared de afuera (regla 11, prueba W8) |
+| `extra_if_needed` | booleano | `true` | | Perímetros extra en las paredes inclinadas (regla 6). Se lee y se guarda: Tisma Slicer no agregó ninguno en las piezas de la ficha, y el motor tampoco |
+| `extra_on_overhangs` | booleano | `false` | | Un voladizo sostenido de un solo lado (donde un puente no puede anclarse de los dos) se llena, dentro de las paredes, con lazos desde su contorno hacia adentro, `;TYPE:Overhang perimeter`, a la velocidad de los puentes y con su cordón redondo, en vez de su relleno (regla 5, prueba W3). Con `arcs.enabled`, esas zonas son de los arcos |
+| `avoid_curled_overhangs` | booleano | `false` | | Viajes que esquivan los voladizos que se pueden levantar (regla 9). Se lee y se guarda; no cambia el G-code: la ficha no lo midió |
 | `detect_overhangs` | booleano | `true` | — | Los tramos de pared que quedan enteros sobre el aire (el cordón sin nada de la capa de abajo debajo) o sobre el soporte se marcan `;TYPE:Overhang perimeter` y van a la velocidad y con el ventilador de los puentes (ficha `walls_extra.md`, regla 8). Apagado, la pared se imprime entera como cualquier otra. Sobre el soporte, el tramo es igual de grueso que la capa más la separación en Z (ficha `supports_skirt.md`, regla 4) |
 
 ### `vase`
@@ -99,8 +118,25 @@ sólido. Con soportes, el soporte va igual debajo y la capa sobre él lleva arco
 |---|---|---|---|---|
 | `enabled` | booleano | `false` | | Activa los arcos |
 | `overlap` | número | 10 | 0 a 90 | Cuánto pisa cada arco al anterior, en % del ancho: los arcos van a `walls.width × (1 − overlap)` (0,36 mm con 0,4) |
-| `speed` | número | 5 | 0 a 1000 | Velocidad de los arcos, en mm/s; 0, la de los puentes (`speed.solid_infill`). Es la de la ficha, no una de la impresora: lenta para que cada arco se enfríe antes del siguiente |
+| `speed` | número | 5 | 0 a 1000 | Velocidad de los arcos, en mm/s; 0, la de los puentes (`speed.bridges`). Es la de la ficha, no una de la impresora: lenta para que cada arco se enfríe antes del siguiente |
 | `max_distance` | número | 0 | 0 a 1000 | Hasta qué distancia del centro llegan los arcos, en mm; más allá, el voladizo se imprime como siempre. 0: sin límite |
+
+### `review`
+
+La revisión de estabilidad (fichas `docs/spec/features/stability.md` y `print_review.md`, regla 6), solo en piezas sin
+soportes: avisa de partes que empiezan en el aire (crítico), de lo impreso que se vuelca por su peso, de columnas
+esbeltas que se doblan con el empuje de la boquilla y de la pieza que se despega de la cama. Los avisos van en
+`--warnings` con `severity` (`critical`, `warning` o `information`). Los dos primeros valores se miden con la pieza de
+calibración de la ficha (regla 6); mientras no estén medidos (0), las columnas solo se informan (las tres más
+flexibles, en mm por newton, si se doblan al menos una décima de `max_deflection` por newton) y el despegue no se
+revisa. El módulo a través de las capas es el del PLA (2600 MPa) hasta
+que el perfil del filamento traiga su material. En el perfil de la impresora.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `nozzle_force` | número | 0 | 0 a 1000 | Empuje lateral de la boquilla sobre la capa que imprime, en N; 0: sin medir |
+| `bed_adhesion` | número | 0 | 0 a 1000 | Lo que aguanta la unión con la cama, en N/mm², para esa cama y ese material; 0: sin medir |
+| `max_deflection` | número | 0.1 | más de 0, hasta 10 | Flecha máxima aceptada en la punta de una parte esbelta, en mm |
 
 ### `surfaces`
 
@@ -110,18 +146,29 @@ sólido. Con soportes, el soporte va igual debajo y la capa sobre él lleva arco
 | `bottom_layers` | entero | 3 | 0 a 1000 | Capas sólidas encima de cada superficie inferior expuesta |
 | `top_min_thickness` | mm | 0 | 0 a 100 | Si las capas sólidas de arriba suman menos, se agregan capas del alto nominal hasta llegar (`docs/INFILL.md`) |
 | `bottom_min_thickness` | mm | 0 | 0 a 100 | Lo mismo con las de abajo |
+| `interface_shells` | booleano | `false` | | Con varios extrusores, donde la parte de uno apoya sobre la de otro, cada una lleva sus capas sólidas de arriba y de abajo como si fueran piezas separadas; sin esto, lo de los otros materiales tapa como si fuera la misma pieza (ficha `multi_extruder.md`, regla 16, ME10) |
+| `top_width` | número | 0 | 0 a 10 | Ancho de los cordones de la capa de arriba de todo, en mm; 0: el diámetro de la boquilla, sin seguir a `walls.width` (ficha `surfaces_infill.md`, I9) |
+| `solid_width` | número | 0 | 0 a 10 | Ancho de los cordones del resto del relleno sólido, en mm; 0: 1,125 × la boquilla (I9) |
 | `top_pattern` | texto | `"monotonic"` | `monotonic`, `rectilinear` | Superficies superiores: `monotonic`, líneas sueltas todas en el mismo sentido, cada una después de las de abajo que la tocan (sin volver sobre lo hecho); `rectilinear`, en zigzag como las inferiores |
+| `bottom_pattern` | texto | `"monotonic"` | `monotonic`, `rectilinear` | Las superficies de abajo, como `top_pattern`: líneas en orden monótono, sin unir (ficha `surfaces_infill.md`); las capas sólidas bajo una superficie de arriba siguen en zigzag. `rectilinear`: zigzag |
+| `bridge_angle` | número | 0 | −360 a 360 | Dirección de las líneas de todos los puentes, en grados (ficha `surfaces_infill.md`); 0: la de cada puente, según dónde se apoya |
 
 ### `infill`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `density` | número | 20 | 0 a 100 | Densidad del relleno disperso, en %: líneas separadas `walls.width` / densidad. 0: sin relleno disperso. Las superficies sólidas van siempre al 100 % |
+| `density` | número | 20 | 0 a 100 | Densidad del relleno disperso, en %: líneas separadas `infill.width` / densidad. 0: sin relleno disperso. Las superficies sólidas van siempre al 100 % |
 | `angle` | número | 45 | cualquiera | Ángulo de las líneas respecto del eje X, en grados; las capas impares suman 90 |
+| `width` | número | 0 | 0 a 10 | Ancho de los cordones del relleno poco denso, en mm (su separación sigue a la densidad); 0: 1,125 × la boquilla (ficha `surfaces_infill.md`, I9). Con boquillas distintas, en proporción a la del relleno |
 | `wall_overlap` | número | 25 | 0 a 100 | Cuánto entran en la pared interna, en % del ancho de cordón, las líneas sólidas que no se unen en zigzag (superficies superiores monotónicas). Con 25 %, el material depositado queda entre −0,5 % y +1,5 % del área |
+| `before_walls` | booleano | false | | En cada isla, los rellenos (el poco denso primero) antes que las paredes (ficha `gcode_motion.md`, regla 8, M8) |
+| `max_link` | número | 50 | 0 a 1000 | Largo máximo, en mm, del tramo que une dos líneas del relleno poco denso siguiendo el borde (ficha `surfaces_infill.md`, regla 7); 0: tres separaciones de líneas, como antes |
 | `nonplanar` | sí/no | no | — | Relleno ondulado: sube y baja en Z, igual en todas las capas, solo con patrones que se repiten capa a capa (`docs/NONPLANAR_INFILL.md`) |
 | `nonplanar_amplitude` | % | 250 | 0 a 500 | Altura de la onda, de valle a cresta, en % de la altura de capa |
 | `nonplanar_wavelength` | mm | 2 | 0,5 a 20 | Largo de la onda |
+| `waves` | sí/no | no | — | Relleno ondulado entrelazado (ficha `interlock_infill.md`): el relleno poco denso sobre la superficie `a · sin(2πX/λ) · sin(2πY/λ)`, con X e Y de la cama, la misma en todas las capas, así cada capa encaja en la de abajo. Las ondas se apagan cerca de las paredes y del relleno sólido; el material sigue el espesor real hasta la capa de abajo. Con cualquier patrón; no con `nonplanar`, `gcode.arcs`, el modo espiral ni las capas curvas |
+| `wave_amplitude` | % | 50 | 0 a 200 | `a`, en % de la altura de capa: cuánto sube y baja el relleno desde la capa |
+| `wave_length` | mm | 10 | 1 a 100 | `λ`: distancia entre dos crestas, en X y en Y |
 | `solid_every` | entero | 0 | 0 a 1000 | Las capas N, 2N, 3N… llevan relleno sólido en todo el relleno disperso, impreso como puente sobre el de abajo; 0: nunca (`docs/INFILL.md`) |
 | `solid_below_area` | número | 70 | 0 a 10000 | Una isla del relleno de una capa más chica que esto, en mm², se llena sólida: una pata fina, un perno (ficha `surfaces_infill.md`, regla 9). Se mide lo que queda adentro de las paredes, no la cara entera: con 3 paredes de 0,4 mm, un cilindro de 4,8 mm de radio (72 mm² de cara) deja unos 41 mm² de relleno y sale sólido. Con `density` 0 no se aplica. 0: nunca |
 | `pattern` | texto | `"rectilinear"` | `rectilinear`, `grid`, `gyroid`, `triangles`, `cubic`, `adaptive_cubic`, `support_cubic`, `lightning`, `stars`, `aligned_rectilinear`, `zigzag`, `line`, `honeycomb`, `concentric`, `hilbert`, `archimedean`, `octagram` | Patrón del relleno disperso: `rectilinear`, líneas que giran 90° cada capa y se unen en zigzag; `grid`, las dos direcciones en cada capa, cada una al doble de separación (el mismo material); `gyroid`, el corte de la superficie giroide a la altura de cada capa, con el período que da la densidad (`angle` no se usa); `triangles`, tres familias de líneas a `angle`, +60° y +120°, cada una con un tercio del material, iguales en todas las capas; `cubic`, las mismas tres familias corridas `z / √2` con la altura: las caras de cubos apoyados en un vértice, resistentes en las tres direcciones; `adaptive_cubic`, el cúbico a 0°, 60° y 120° con cubos chicos junto a las paredes y superficies y más grandes adentro, con menos material en piezas grandes; `support_cubic`, el adaptativo sin contar las capas sólidas de abajo, que el relleno no sostiene; `lightning`, solo ramas desde las paredes hasta debajo de los techos, para piezas que solo se miran; `stars`, los triángulos con una familia corrida media separación (estrellas de seis puntas, el patrón por defecto de Tisma Slicer); `aligned_rectilinear`, el rectilíneo sin girar entre capas; `zigzag`, igual al rectilíneo; `line`, el rectilíneo con una línea de cada dos girada 6,7°; `honeycomb`, panales hexagonales que coinciden en todas las capas, con la dirección principal girando 60° por capa; `concentric`, lazos paralelos al borde; `hilbert`, la curva de Hilbert girada `angle`; `archimedean`, cuerdas de una espiral de Arquímedes alrededor del centro de la pieza; `octagram`, una espiral con forma de estrella de ocho puntas; las tres curvas son iguales en todas las capas (`docs/INFILL.md`) |
@@ -136,20 +183,39 @@ sólido. Con soportes, el soporte va igual debajo y la capa sobre él lleva arco
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `nozzle_diameter` | número | 0.4 | > 0 | Diámetro de la boquilla, en mm |
+| `nozzle_diameter` | número o lista | 0.4 | > 0; lista: 0,05 a 5, hasta 16 | Diámetro de la boquilla, en mm. Una lista da la de cada extrusor, desde el primero (ficha `multimaterial.md`, regla 1); una lista más corta que los extrusores repite el último valor; un número las cambia todas. Los anchos de las líneas (`walls.width`, `support.width`) son para la boquilla del primero: cada línea toma el de su extrusor en proporción (las paredes y lo que se imprime con su ancho, el del extrusor de las paredes; el relleno ralo, el del relleno). Con boquillas distintas, ninguna capa pasa el 75 % de la boquilla más fina (regla 2), salvo el relleno combinado de la gruesa con `multi.fine_walls_coarse_infill` |
 | `filament_diameter` | número | 1.75 | > 0 | Diámetro del filamento, en mm: la E de cada tramo es su volumen sobre esta sección |
-| `relative_extrusion` | booleano | false | | `true`: E relativa (`M83`), cada movimiento lleva su E; `false`: absoluta (`M82`), con `G92 E0` en cada capa |
-| `flavor` | texto | `"reprap"` | `marlin`, `klipper`, `reprap` | Dialecto de G-code (cambiará los comandos de ventilador, temperatura y aceleración) |
-| `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin |
-| `variables` | objeto | `{}` | nombre: valor o lista | Valores para `[nombre]`, `{nombre}` y `{nombre[i]}` dentro del G-code de inicio y fin. Los da quien llama al motor (el adaptador de Tisma pone ahí los valores de sus perfiles), así los nombres de los perfiles no entran al motor. Los números se escriben como en el JSON; un nombre desconocido queda como está. Los nombres no llevan saltos de línea ni corchetes; en el comentario del final del G-code, los saltos de línea de los valores se escriben como `\n` |
+| `relative_extrusion` | booleano | false | | `true`: E relativa (`M83`), cada movimiento lleva su E (en Marlin, con `G92 E0` después del salto en Z de cada capa, para que el firmware no pierda precisión; ficha `gcode_firmware.md`, regla 3); `false`: absoluta (`M82`), con `G92 E0` en cada capa |
+| `flavor` | texto | `"reprap"` | `marlin`, `marlin_legacy`, `klipper`, `reprap`, `reprapfirmware`, `repetier`, `smoothie`, `teacup`, `makerware`, `sailfish`, `mach3`, `machinekit`, `no_extrusion` | Dialecto de G-code. `marlin` es Marlin 2 y `marlin_legacy` Marlin 1 (su `M204 S` es la aceleración al imprimir); `reprapfirmware` es el de Duet (temperatura con `G10 S… P0`, espera con `M116`), y `reprap` el RepRap genérico. Con `variables.temperature` y un G-code de inicio sin comandos de temperatura, el motor fija la de la boquilla antes del inicio (`M104 S…`) y la espera después (`M109 S…`), cada dialecto con los suyos (ficha `gcode_firmware.md`, regla 1). Los antiguos (ficha `gcode_extras.md`, regla 6; `src/gcode/dialect.hpp`): `repetier` y `smoothie` escriben como `reprap`; `teacup` apaga el ventilador con `M106 S0`; `makerware` y `sailfish` ponen la E siempre absoluta, sin `M82` ni `G92`, el ventilador con `M126` y `M127`, `M104 S… T0` y `M73 P…` (avance) en cada capa, y `makerware` además `M101` antes de extruir y `M103` después; `mach3` y `machinekit` llaman `A` al extrusor y escriben temperaturas y ventilador con `P` (`M104 P215`, `M106 P252.45`), `machinekit` vuelve `A` a 0 en cada capa y termina con `M2`; `no_extrusion`, los mismos movimientos sin E. Con los antiguos, salvo `repetier` y `smoothie`, no se escriben aceleraciones (`M204`) ni avance de presión. La vista previa del panel lee la `A` de `mach3` y `machinekit`; con `no_extrusion` solo ve viajes |
+| `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin, en el lenguaje de plantillas (ficha `gcode_templates.md`; ver «Plantillas de G-code» abajo). El orden al empezar: las temperaturas automáticas (`gcode.auto_temperatures`), este inicio, la espera de la boquilla y el inicio del filamento (`extrusion.start_gcode`); al terminar, el fin del filamento y después este |
+| `variables` | objeto | `{}` | nombre: valor o lista | Variables de las plantillas de G-code (ver «Plantillas de G-code»), una lista por extrusor: `[nombre]`, `{nombre}`, `{nombre[0]}`. Las da quien llama al motor (el adaptador de Tisma pone ahí los valores de sus perfiles), así los nombres de los perfiles no entran al motor. Los números se escriben como en el JSON. Un nombre desconocido es un error: no se escribe el G-code. Los nombres no llevan saltos de línea ni corchetes; en el comentario del final del G-code, los saltos de línea de los valores se escriben como `\n` |
 | `max_feed_x`, `max_feed_y` | número | — (del perfil de la impresora) | > 0, o `null` | Velocidad máxima de cada eje, en mm/s, para estimar el tiempo. Sin valor (`null`): no se sabe y no se aplica |
 | `max_feed_z` | número | — (del perfil de la impresora) | > 0, o `null` | Ídem para Z |
 | `max_feed_e` | número | — (del perfil de la impresora) | > 0, o `null` | Ídem para el extrusor |
+| `max_speed`, `max_acceleration` | número | — | > 0 | Los nombres de las fichas (`SETTINGS_V1.md`) para un solo límite en X e Y: `max_speed` pone `max_feed_x` y `max_feed_y`, `max_acceleration` pone `max_accel_x` y `max_accel_y`. Darlo junto con uno de esos es un error |
+| `custom_parameters` | objeto | `{}` | nombre: número, texto o verdadero/falso | Parámetros propios de la impresora para las plantillas, como `custom_parameter_printer_<nombre>` (ficha `presets.md`, reglas 21 y 22; `gcode_templates.md`). Listas u objetos adentro son un error. Los del material van en `material.custom_parameters` (o `extrusion.custom_parameters`), como `custom_parameter_filament_<nombre>[0]`; los de la impresión, en `print.custom_parameters`, como `custom_parameter_print_<nombre>` |
 | `acceleration` | número | 1000 | > 0 | Aceleración de los movimientos que extruyen, en mm/s². Se escribe después del G-code de inicio, con `travel_acceleration`, para que la impresora use lo que supone el tiempo estimado: `M204 P… T…` (Marlin y RepRapFirmware) o `SET_VELOCITY_LIMIT ACCEL=…` (Klipper, un solo valor) |
 | `travel_acceleration` | número | 1250 | > 0 | Aceleración de los viajes y las retracciones, en mm/s² |
 | `corner_speed` | número | — (del perfil de la impresora; respaldo 10) | ≥ 0 | Velocidad a la que se puede pasar por una esquina de 90° o más, en mm/s; en giros más suaves, la menor de las dos velocidades por el coseno del giro, nunca menos que esto |
+| `max_accel_x`, `max_accel_y`, `max_accel_z`, `max_accel_e` | número | 0 | ≥ 0 | Aceleración máxima de cada eje, en mm/s² (`M201`; ficha `gcode_firmware.md`, regla 2). En la estimación, la aceleración de un movimiento no pasa la de ningún eje que mueve (escalada por cuánto lo mueve). 0: no se sabe |
+| `retract_acceleration` | número | 0 | ≥ 0 | Aceleración de las retracciones (`M204 R`), en mm/s². 0: la de los viajes |
+| `jerk_x`, `jerk_y`, `jerk_z`, `jerk_e` | número | 0 | ≥ 0 | Tirón de cada eje (`M205 X Y Z E`), en mm/s: cuánto cambia de golpe su velocidad en una esquina. En la estimación, la velocidad en la unión de dos movimientos es la mayor con la que ningún eje cambia más que su tirón. 0: no se sabe |
+| `junction_deviation` | número | 0 | ≥ 0 | Desviación de unión de Marlin (`M205 J`), en mm; reemplaza al tirón. En la estimación, la velocidad en una esquina es la del círculo que la redondea a esa distancia del vértice, a la menor de las dos aceleraciones: radio d·sen(a/2)/(1 − sen(a/2)), con a el ángulo entre los movimientos, y velocidad √(aceleración · radio). 0: no |
+| `min_extrude_feed`, `min_travel_feed` | número | 0 | ≥ 0 | Avance mínimo al extruir y al viajar (`M205 S T`), en mm/s: ningún movimiento va más lento |
+| `limits_usage` | texto | `"time_only"` | `time_only`, `emit`, `ignore` | Para qué son los límites (ficha `gcode_firmware.md`, regla 2): `time_only`, solo para estimar el tiempo; `emit`, además se escriben antes del G-code de inicio (Marlin 2: `M201`, `M203`, `M204 P R T`, `M205 X Y Z E` o `M205 J`, `M205 S T`; Marlin 1: con `M204 S T`; RepRapFirmware: `M201`, `M203` y `M566` en mm/min, `M204 P T`; Klipper: error, los toma de su configuración; los demás: nada) y ninguna aceleración por tipo los pasa (`acceleration`, `travel_acceleration`); `ignore`, la estimación no usa estos últimos límites (aceleraciones por eje, tirones, desviación, avances mínimos, aceleración de retracción) |
+| `silent_mode` | booleano | `false` | | La impresora tiene modo silencioso (ficha `gcode_extras.md`, regla 7): el G-code lleva una segunda estimación, `; estimated printing time (silent mode)` y la de la primera capa, con los límites de `silent`, y `M73 Q S` con `gcode.progress` |
+| `silent` | objeto | `{}` | | Los límites del modo silencioso, por nombre: cualquiera de `max_feed_x` … `max_feed_e`, `max_accel_x` … `max_accel_e`, `acceleration`, `travel_acceleration`, `retract_acceleration`, `jerk_x` … `jerk_e`, `junction_deviation`, `min_extrude_feed`, `min_travel_feed` y `corner_speed`, ≥ 0. El que falta es el normal. Solo cambian la estimación; los que se escriben son los normales |
 | `bed` | lista de puntos | `[]` | vacía, o 3 o más `[x, y]` | Polígono de la cama en mm (por ejemplo `[[0, 0], [250, 0], [250, 210], [0, 210]]`, la cama del banco). Si se da, un modelo con algún vértice fuera de ella (el borde cuenta como dentro) no se lamina: `slice` termina con código 4. Vacío: no se comprueba, porque el motor no mueve los modelos en X e Y y los del banco están centrados en el origen. En Z la pieza siempre se imprime apoyada en la cama: las alturas del G-code (y las de `changes`) cuentan desde su punto más bajo, esté donde esté la malla |
-| `max_height` | número | 0 | ≥ 0 | Altura máxima de impresión en mm; un modelo más alto termina con código 4. 0: no se comprueba |
+| `max_height` | número | 0 | ≥ 0 | Altura máxima de impresión en mm; un modelo más alto termina con código 4. 0: no se comprueba (en resina, 150 mm, los de la Elegoo Mars 5) |
+| `technology` | texto | `"fdm"` | `fdm`, `msla` | Qué impresora es: `fdm` extruye filamento; `msla` es de resina con pantalla (ficha `resin.md`). La interfaz muestra los ajustes de esa clase y lamina para ella (con `msla`, un archivo GOO); en la línea de comandos, `msla` pide una salida `.goo`, y una salida `.goo` lamina para resina con cualquiera de las dos |
+| `calibrations` | objeto | `{}` | | Las calibraciones de la impresora hechas, por id de guía o nombre de prueba: `{"input_shaping": {"date": "2026-10-27", "nozzle": 0.4}}`. Las escribe la interfaz al aplicar un resultado (`assistant.md`, regla 22; `settings_panel.md`, regla 38). No cambia el G-code |
+| `display_pixels_x`, `display_pixels_y` | entero | 4098, 2560 | 1 a 32767 | Resina (ficha `resin.md`): resolución de la pantalla. El píxel mide `display_width / display_pixels_x` (0,035 mm en la Mars 5), y en Y lo mismo con la altura |
+| `display_width`, `display_height` | número | 143.43, 89.6 | más de 0 a 1000 | Resina: tamaño del área que ilumina la pantalla, en mm. X e Y se miden desde su esquina; la pieza va centrada en ella salvo que `placement` diga otra cosa, y si no entra, `slice` termina con código 4 |
+| `display_mirror_x`, `display_mirror_y` | booleano | `true`, `false` | | Resina: espejar las imágenes; con `display_mirror_x` las columnas van al revés, con `display_mirror_y` las filas |
+| `extruders` | entero | 1 | 1 a 16 | Cantidad de extrusores (ficha `multi_extruder.md`). Cada objeto de la placa se imprime con el suyo (en la interfaz, en el objeto; por omisión el 1) y cada tipo de extrusión con el de `extruders`. Con más de uno: cada extrusor que se usa se calienta al empezar (`M104 S… T<n>` con `variables.temperature[n]`, esperado con `M109 S… T<n>` después del inicio), se corre `gcode.toolchange` con `previous_extruder` −1 y se elige el primero (`T<n>`); cada capa empieza con el extrusor con el que terminó la anterior y sigue con los demás en orden, un cambio por extrusor (reglas 3 y 6, ME1). La cama de la primera capa es la `first_layer_bed_temperature` (o `bed_temperature`) del primer extrusor que imprime, y desde la segunda capa la `bed_temperature` del primero que imprime en ella, con `M140` (regla 4, ME3). Los objetos de cada extrusor se laminan aparte sobre las capas de la placa: cada uno lleva sus perímetros donde toca a otro; lo de un extrusor anterior queda de ese. Sin `layers.detail_height` |
+| `single_extruder_mmu` | booleano | `false` | | Un solo extrusor que cambia de filamento (MMU): cada cambio purga en la torre el volumen de `wipe_tower.purge_volumes` (ficha `multi_extruder.md`, regla 12); sin esto, con varias boquillas, la torre solo ceba |
+| `extruder_offset` | lista | `[]` | `[x, y]` de −1000 a 1000 por extrusor | Desfase de cada boquilla respecto de la primera, en mm: se resta de las X e Y que escribe esa herramienta (regla 8, ME5); al cambiar, la boquilla nueva se mueve primero sobre el mismo punto. Con `single_extruder_mmu` (una sola boquilla) no se usa |
+| `z_offset` | número | 0 | −10 a 10 | Se suma a todas las Z de la pieza en el G-code, también al comentario `;Z:` (ficha `gcode_extras.md`, regla 5); puede dar Z negativas. No toca el G-code de inicio. Los cambios por altura (`changes`) van por esa Z escrita |
 | `min_layer_height`, `max_layer_height` | número | 0 | 0, o 0,01 a 10 | Las alturas de capa que imprime la máquina, en mm, para la altura variable (`docs/VARIABLE_LAYERS.md`). Nunca más que `nozzle_diameter`. 0: 0,04 mm y el diámetro de la boquilla |
 | `max_flow` | número | 0 | 0 a 1000 | Flujo volumétrico máximo del hot end, en mm³/s. Ninguna extrusión lo pasa: su velocidad baja a flujo / (ancho × alto × `extrusion.flow`), redondeada hacia abajo a mm/min enteros. Con `extrusion.max_flow` vale el menor de los dos. 0: sin límite |
 | `max_nozzle_temp`, `max_bed_temp` | número | 0 | 0 a 600 | Temperaturas máximas de la boquilla y la cama, en °C. Si las variables `temperature` o `bed_temperature`, o los cambios por altura, piden más, hay un aviso. 0: no se sabe |
@@ -161,7 +227,7 @@ Estas claves las llena el catálogo (`docs/CATALOG.md`, «Capacidades») con los
 
 ### `speed`
 
-Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ninguna pasa de `first_layer`.
+Velocidades en mm/s. Ninguna extrusión pasa de `max`; en la primera capa, ninguna pasa de `first_layer`, salvo el relleno con `first_layer_infill`.
 
 **Velocidades** (decisión del dueño, 2026-10-26): ninguna velocidad tiene un valor por defecto en el motor. Todas
 salen del perfil de la impresora elegida, porque dependen de la impresora: las de este grupo, `retraction.speed`,
@@ -196,12 +262,65 @@ velocidad máxima conocida no pasa de ella en ninguna de las de respaldo.
 | `walls` | número | — (del perfil de la impresora; respaldo 40) | Paredes internas |
 | `outer_wall` | número o texto | — (del perfil de la impresora; respaldo 30) | Pared externa: mm/s, o un porcentaje de `walls` como `"50%"` |
 | `infill` | número | — (del perfil de la impresora; respaldo 60) | Relleno disperso |
-| `solid_infill` | número | — (del perfil de la impresora; respaldo 60) | Superficies inferiores, puentes y relleno de huecos |
+| `solid_infill` | número | — (del perfil de la impresora; respaldo 60) | Superficies inferiores, y puentes y relleno de huecos sin velocidad propia |
 | `top_solid_infill` | número | — (del perfil de la impresora; respaldo 40) | Superficies superiores |
 | `support` | número | — (del perfil de la impresora; respaldo 40) | Soporte e interfaz |
+| `support_interface` | número o texto | — (sin valor: `support`) | Interfaz del soporte, en mm/s o un porcentaje de `support` como `"50%"` (ficha `supports_more.md`, regla 13, SM11) |
 | `travel` | número | — (del perfil de la impresora; respaldo 180) | Viajes |
 | `first_layer` | número | — (del perfil de la impresora; respaldo 25) | Tope de la primera capa |
 | `max` | número | — (del perfil de la impresora; sin respaldo) | Tope de toda extrusión; sin valor, ninguno |
+| `max_flow` | número | 0 | Tope del caudal de toda extrusión del perfil de impresión, en mm³/s, de 0 a 1000 (`gcode_motion.md`, regla 4): como `machine.max_flow`, vale el menor de los tres. 0: sin tope propio |
+| `bridges` | número | — (sin valor: `solid_infill`) | Puentes y perímetros en voladizo (`gcode_motion.md`, `walls_extra.md`, regla 8); los arcos sobre voladizos sin `arcs.speed` |
+| `gap_fill` | número | — (sin valor: `solid_infill`) | Relleno de huecos (`speeds_accels.md`, regla 1) |
+| `over_bridges` | número o texto | — (sin valor: `solid_infill`) | Relleno sólido de la capa que va justo encima de un puente sobre el aire, en mm/s o un porcentaje de `solid_infill` como `"50%"`; no la capa sobre las capas sólidas puestas sobre el relleno (`infill.solid_every`) (`speeds_accels.md`, regla 2). Los tramos de cada línea sobre el puente van a esta velocidad, el resto a la suya |
+| `small_loops` | número o texto | — (sin valor: la de cada pared) | Perímetros cerrados de menos de 40,84 mm de largo (una circunferencia de 6,5 mm de radio), también el externo, en mm/s o un porcentaje de `walls` como `"25%"` (`gcode_motion.md`, regla 3, M4) |
+| `first_layer_infill` | número o texto | — (sin valor: `first_layer`) | Relleno sólido y superficie de la primera capa, en mm/s o un porcentaje de `solid_infill`; no queda topado por `first_layer` (`speeds_accels.md`, regla 3) |
+| `dynamic_overhangs` | booleano | `false` | Las paredes más lentas cuanto menos de su cordón se apoya en la capa de abajo (`speeds_accels.md`, reglas 6 y 7): la parte apoyada sale de cuánto queda el centro del cordón adentro o afuera de la capa de abajo, contra su ancho; a 0, 25, 50 y 75 % van a `overhang_0` a `overhang_3`, apoyadas del todo a la suya, y en línea recta entre esos puntos, nunca más rápido que la suya. Los tramos en el aire (`Overhang perimeter`) van a `overhang_0`. No en el modo vaso |
+| `overhang_0`, `overhang_1`, `overhang_2`, `overhang_3` | número o texto | 15, 15, 20, 25 | mm/s, o un porcentaje de `outer_wall` como `"50%"`; los de la ficha, no de la impresora |
+| `flow_slope_up`, `flow_slope_down` | número | 0 | Ecualizador del caudal (`speeds_accels.md`, reglas 8 y 9), en mm³/s²: cuánto puede subir o bajar por segundo el caudal (sección del cordón por su velocidad) de una extrusión a la siguiente. Donde baja, el final de la primera se parte en pedazos cada vez más lentos hasta el caudal de la siguiente; donde sube, el comienzo de la segunda, cada vez más rápidos, salvo después de una retracción. Hasta 16 pedazos; si el camino es más corto que la rampa, la rampa se aprieta. 0: libre (de 0 a 1000) |
+| `first_layer_over_raft` | número o texto | — (sin valor: `first_layer`) | Tope de todas las extrusiones de la primera capa de la pieza sobre la balsa, en mm/s o un porcentaje de cada velocidad como `"50%"` (`skirt_brim_raft.md`, regla 12); la capa siguiente vuelve a las suyas |
+| `travel_z` | número | — (sin valor: `travel`) | Movimientos en Z: cambios de capa, saltos de `retraction.lift` y las subidas del Z anti-aliasing (`speeds_accels.md`, regla 4) |
+
+### `acceleration`
+
+Aceleraciones por tipo, en mm/s² (ficha `speeds_accels.md`, reglas 10 a 13). Antes de cada extrusión se fija la de
+su tipo y, al terminar el tipo, se vuelve a `default`; antes de cada viaje, la de los viajes. El comando es
+`M204 S…` (RepRapFirmware y Klipper), o en Marlin `M204 P…` para imprimir y `M204 T…` para los viajes, escrito solo
+cuando cambia. Con `default` en 0 no se usan las de los tipos: solo se fija la de los viajes y las extrusiones siguen
+con ella. Todas en 0 (lo de siempre): nada más que la `machine.acceleration` del comienzo. El tiempo estimado sigue
+cada cambio. Todavía no hay topes por los límites de la máquina (se escriben en el G-code con `gcode_firmware.md`,
+que falta), ni la de la torre de purga.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `default` | número | 0 | 0 a 100 000 | A la que se vuelve después de cada tipo, y la del soporte, la falda y el relleno de huecos. 0: sin aceleraciones por tipo |
+| `walls` | número | 0 | 0 a 100 000 | Paredes internas; 0: `default` |
+| `outer_wall` | número | 0 | 0 a 100 000 | Pared externa; 0: `walls` |
+| `infill` | número | 0 | 0 a 100 000 | Relleno disperso; 0: `default` |
+| `solid_infill` | número | 0 | 0 a 100 000 | Relleno sólido; 0: `infill` |
+| `top_solid_infill` | número | 0 | 0 a 100 000 | Superficie de arriba; 0: `solid_infill` |
+| `bridges` | número | 0 | 0 a 100 000 | Puentes y perímetros en voladizo; 0: `default` |
+| `wipe_tower` | número | 0 | 0 a 100 000 | La torre de purga (ficha `speeds_accels.md`); 0: `default` |
+| `first_layer` | número | 0 | 0 a 100 000 | Toda la primera capa (con balsa, la de la balsa); 0: la de cada tipo |
+| `first_layer_over_raft` | número | 0 | 0 a 100 000 | La primera capa de la pieza sobre la balsa; 0: la de cada tipo |
+| `travel` | número | 0 | 0 a 100 000 | Viajes; 0: ninguna propia |
+| `short_travel` | número | 0 | 0 a 100 000 | Viajes más cortos que `retraction.min_travel`; 0: `travel` |
+
+### `ironing`
+
+Planchado (ficha `ironing.md`): después del relleno de arriba de cada isla, en la misma capa y a la misma Z, la
+boquilla vuelve a pasar sobre la superficie expuesta (también sobre los perímetros, hasta media boquilla del borde) en
+líneas a 45° de las del relleno de arriba, `;TYPE:Ironing`. Cada línea va como un cordón de `spacing × flow` de ancho
+y la altura de la capa: por mm, `flow` de lo que pondría una capa normal a esa separación (0,003 mm³ con los valores
+de siempre). Las partes más angostas que dos líneas no se planchan.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | booleano | `false` | — | Plancha |
+| `surfaces` | texto | `"top"` | `top`, `topmost`, `solid` | `top`: lo que la capa de arriba no cubre; `topmost`: lo que nada de más arriba cubre (la superficie más alta de cada parte); `solid`: todas las superficies sólidas de cada capa |
+| `flow` | número | 15 | más de 0 a 100 | Material, en % de una capa de la altura normal |
+| `spacing` | número | 0,1 | 0,01 a 2 | Separación entre líneas, en mm |
+| `speed` | número | 15 | más de 0 a 1000 | Velocidad, en mm/s (la de la ficha, no una de la impresora) |
 
 ### `retraction`
 
@@ -211,6 +330,30 @@ velocidad máxima conocida no pasa de ella en ninguna de las de respaldo.
 | `speed` | número | — (del perfil de la impresora; respaldo 25) | > 0 | Velocidad de la retracción y de su vuelta, en mm/s |
 | `lift` | número | 0 | 0 a 10 | Cuánto sube Z durante un viaje que retrae, en mm |
 | `min_travel` | número | 2 | ≥ 0 | Los viajes más cortos que esto (medidos por el camino que siguen) no retraen, en mm; un viaje que sale de la pieza retrae siempre |
+| `unretract_speed` | número | 0 | 0 a 1000 | Velocidad de la vuelta del filamento, en mm/s; 0: la de `speed` (ficha `retraction_travel.md`, regla 1, prueba R1) |
+| `restart_extra` | número | 0 | 0 a 10 | Filamento de más que empuja la vuelta, en mm: la vuelta es la retracción más esto (regla 1) |
+| `on_layer_change` | booleano | `false` | | Todo cambio de capa retrae antes de subir, aunque el viaje al primer punto de la capa sea más corto que `min_travel`; la vuelta, al empezar a extruir (regla 2, prueba R2) |
+| `wipe` | booleano | `false` | | En vez de retraer quieta, la boquilla vuelve sobre el camino recién impreso mientras retrae, al 80 % de `speed.travel`, a lo largo de lo que queda por retraer × esa velocidad / (0,95 × `speed`); después siguen el viaje, el salto y la vuelta de siempre. Si el camino desde el último viaje es más corto, lo que no alcanzó se retrae quieto al final (regla 3, prueba R3). No va con `firmware` |
+| `before_wipe` | número | 0 | 0 a 100 | Parte de la retracción, en %, que se hace quieta antes del barrido (regla 3) |
+| `coast` | número | 0 | 0 a 20 | Coasting (ficha `coasting.md`), en mm: el final de cada perímetro (también el externo) y de cada relleno se recorre a su velocidad sin extruir (`G1` con X e Y, sin E); la presión que queda en la boquilla lo termina. No en un trazo de menos de 3 veces este largo, ni en un tramo de pared que sigue en el siguiente (los voladizos), ni en modo vaso o en los cordones no planares. 0: apagado |
+| `lift_above`, `lift_below` | número | 0 | ≥ 0 | El salto en Z (`lift`, o la rampa de `travel`) solo en las capas cuya Z está por encima de `lift_above` y por debajo de `lift_below`, en mm; 0: sin límite (regla 4, prueba R4) |
+| `firmware` | booleano | `false` | | Cada retracción es un `G10` y cada vuelta un `G11`, sin movimientos de E: el largo y la velocidad los pone el firmware (`M207`, `M208`); `length` sigue diciendo si se retrae (0: no) y el salto en Z sigue en el G-code. `restart_extra` no se escribe (regla 7, prueba R6) |
+| `toolchange_length` | número o lista | 10 | 0 a 200 | Con varios extrusores, cuánto retrae, quieta, la herramienta que se deja antes de un cambio, en mm (lo que ya retrajo cuenta); un valor para todas o una lista por extrusor (una lista corta repite el último). Al volver a usar esa herramienta, su filamento vuelve eso más `toolchange_restart_extra` (ficha `multi_extruder.md`, regla 5, ME2) |
+| `toolchange_restart_extra` | número o lista | 0 | 0 a 10 | Filamento de más al volver a usar una herramienta después de un cambio, en mm, por extrusor como `toolchange_length` |
+
+### `travel`
+
+De la ficha `docs/spec/features/retraction_travel.md`. `ramping_lift`, `slope`, `max_lift` y `lift_before_obstacle` van
+en el perfil de impresora, como el salto; `avoid_crossing_walls` y `max_detour`, en el de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `ramping_lift` | booleano | `false` | | El salto en Z de un viaje que retrae se hace en rampa, subiendo mientras viaja con la pendiente `slope` hasta `max_lift`; el resto del viaje va a esa altura y al final baja en vertical. Un viaje corto sube hasta donde llega. El primer viaje de una capa sube desde la capa de abajo: el movimiento en Z del cambio de capa espera a la rampa, salvo que haya G-code de `gcode.after_layer` (regla 5, prueba R5). Con `slope` 0, salto vertical de `retraction.lift` |
+| `slope` | número | 0 | 0 a 89 | Pendiente de la rampa, en grados |
+| `max_lift` | número | 0 | 0 a 10 | Altura de la rampa, en mm; 0: `retraction.lift` |
+| `lift_before_obstacle` | booleano | `false` | | Rampa más empinada si hay un obstáculo cerca del comienzo del viaje (regla 6). Se lee y se guarda, pero no cambia el G-code: la ficha no lo midió |
+| `avoid_crossing_walls` | booleano | `true` | | Un viaje dentro de una isla sigue un camino por dentro de la pieza, a un cordón de las paredes, que no las cruza (rodea un agujero en vez de cruzarlo; `docs/spec/BEHAVIOR.md`, «Viajes y retracción»). Apagado, todo viaje va recto, y retrae si cruza paredes o sale de la pieza (regla 8, prueba R7). Tisma Slicer lo trae apagado; en el motor viene prendido porque es el comportamiento acordado con el dueño |
+| `max_detour` | número o texto | 0 | ≥ 0, o `"N%"` | Si el camino por dentro es más largo que el recto más esto (en mm, o en % del viaje recto, como `"200%"`), el viaje va recto, cruzando las paredes, y retrae; 0: sin límite (regla 8) |
 
 ### `adhesion`
 
@@ -221,7 +364,16 @@ Falda y borde alrededor de la primera capa (fase F5), como tipo `Skirt/Brim` del
 | `skirt_loops` | entero | 1 | 0–1000 | Vueltas de falda; 0 no hace falda |
 | `skirt_distance` | número | 6 | ≥ 0 | Distancia en mm entre la pieza (o su borde) y la primera vuelta de falda (ficha `supports_skirt.md`) |
 | `skirt_layers` | entero | 1 | 0–1000 | En cuántas capas se repite la falda |
-| `brim_width` | número | 0 | ≥ 0 | Ancho del borde en mm: tantas vueltas de un cordón como entren, pegadas a la pieza y unidas entre piezas cercanas; 0 no hace borde |
+| `brim_width` | número | 0 | ≥ 0 | Ancho del borde en mm: tantas vueltas de un cordón como entren, pegadas a la pieza y unidas entre piezas cercanas; 0 no hace borde. Con balsa, ninguno |
+| `brim_type` | texto | `"outer"` | `outer`, `inner`, `outer_and_inner`, `none` | Dónde va el borde (ficha `skirt_brim_raft.md`, reglas 5 a 7): alrededor del contorno de afuera, dentro de los agujeros de la primera capa desde su borde hacia adentro (rodeando las islas que haya en ellos, hasta llenar el agujero), o los dos |
+| `brim_gap` | número | 0 | 0 a 100 | Separación en mm entre la pieza y la primera vuelta del borde (regla 8); el borde sigue teniendo `brim_width` de ancho |
+| `skirt_min_filament` | número | 0 | 0 a 100 000 | Largo mínimo de filamento de la falda en la primera capa, en mm (regla 1): si `skirt_loops` gasta menos, se agregan vueltas hacia afuera hasta pasarlo (a lo sumo 1000). Cada vuelta gasta su largo por el ancho del cordón y la altura de la primera capa, sobre la sección del filamento. 0: no |
+| `draft_shield` | texto | `"disabled"` | `disabled`, `limited`, `enabled` | Escudo contra corrientes (regla 4): con `limited` o `enabled` la falda se mide desde la pieza aunque haya borde, y la vuelta del borde que caería debajo de ella se quita; `enabled` la repite en todas las capas, hasta la última; `limited`, en las `skirt_layers` primeras |
+| `raft_layers` | entero | 0 | 0 a 100 | Capas de la balsa (ficha `skirt_brim_raft.md`, reglas 9 a 14): soporte debajo de toda la pieza, que sube esas capas y `raft_gap`. La primera capa de la balsa tiene la altura de `layers.first_height`; las demás, tres cuartos de `machine.nozzle_diameter` (0,3 mm con boquilla de 0,4). De arriba hacia abajo: `support.interface_layers` de interfaz densa a 135° y 45° alternados (como mucho todas menos la primera; con una sola capa, esa es de interfaz), y la base a `support.spacing`, a `support.line_angle` la de más arriba y girada 90° en capas alternas. La pieza empieza con una capa de `layers.height`, sin la compensación de pata de elefante; la falda rodea la primera capa de la balsa. 0: sin balsa |
+| `raft_gap` | número | 0,1 | 0 a 100 | Separación en Z entre la balsa y la pieza, en mm |
+| `raft_expansion` | número | 1,5 | 0 a 100 | Cuánto se agranda la balsa alrededor de la primera capa de la pieza, en mm (el valor exacto, sin ajustarse a la grilla de las líneas) |
+| `raft_first_layer_density` | número | 90 | 5 a 100 | Densidad de las líneas de la primera capa de la balsa, en % |
+| `raft_first_layer_expansion` | número | 3 | 0 a 100 | Cuánto más se agranda la primera capa de la balsa, en mm |
 
 ### `support`
 
@@ -233,14 +385,28 @@ puentes cortos sin soporte vienen después.
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `enabled` | booleano | false | | Activa los soportes |
+| `synchronize_layers` | booleano | `false` | | El soporte en las capas de la pieza (ficha `multi_extruder.md`, regla 19, ME12): se lee y se guarda. El motor siempre imprime el soporte en las capas de la pieza (como con el ajuste); las capas propias del soporte, más gruesas, no están hechas |
+| `buildplate_only` | booleano | false | | Solo el soporte que apoya en la cama: una zona de soporte (sus islas, unidas capa a capa donde se tocan) que en alguna capa apoya sobre la pieza se quita entera, también lo que tiene sobre la cama (ficha `supports_more.md`, regla 2, SM2). Solo en el soporte de grilla |
+| `under_bridges` | booleano | false | | Soporte también bajo los puentes: sin él, lo que cuelga sostenido en dos extremos (el borde de abajo lo toca en dos tramos separados o todo alrededor, como una tapa) no lleva soporte, sea cual sea su largo (ficha `supports_skirt.md`, regla 1, S6 y S10); un voladizo sostenido de un solo lado sí lo lleva |
 | `automatic` | booleano | true | | false: solo hay soporte bajo las caras pintadas para tenerlo (`docs/PAINTING.md`; ficha `supports_more.md`, regla 3). Las caras pintadas para no tenerlo nunca lo llevan |
 | `threshold_angle` | número | 0 | 0 a menos de 90 | Una cara más tendida que este ángulo, medido desde la horizontal, lleva soporte; 0 es automático: cada capa puede salir medio cordón más afuera que la de abajo |
 | `z_gap` | número | 0.2 | ≥ 0 | Separación en Z entre el soporte y la pieza de arriba, en mm (se redondea a capas enteras; valor de banco) |
+| `bottom_z_gap` | número | 0 | ≥ 0 | Separación en Z entre la pieza y el soporte que apoya sobre ella, en mm (se redondea a capas enteras); 0: la de `z_gap` (ficha `supports_more.md`, regla 6). Solo en el soporte de grilla; los árboles ya dejan `z_gap` |
 | `xy_gap` | número o texto | `"50%"` | ≥ 0 | Separación horizontal entre el soporte y la pieza: en mm, o un porcentaje del ancho de las paredes (`walls.width`) como `"50%"` (ficha `supports_skirt.md`, regla 2) |
+| `width` | número o texto | 0 | 0 a 40 mm | Ancho de los cordones del soporte y de su interfaz: en mm, o en % de la altura de capa (`"150%"` da 0,3 mm con capas de 0,2); 0, el de las paredes (`walls.width`). Ficha `supports_more.md`, regla 18 |
 | `spacing` | número | 2.5 | > 0 | Espacio libre entre las líneas de la base, en mm: entre los centros hay además la separación de un cordón (2,857 mm con cordones de 0,4 y capas de 0,2; ficha `supports_skirt.md`, regla 6). Líneas en zigzag sobre una grilla fija al origen; la interfaz va a 90° de ellas, a la separación de los cordones |
 | `line_angle` | número | 0 | −360 a 360 | Dirección de las líneas de la base, en grados, la misma en todas las capas |
+| `enforce_layers` | entero | 0 | 0–100000 | Soporte bajo todo lo que cuelga en las primeras N capas, sin importar el ángulo y aunque `enabled` esté apagado; es solo base, sin interfaz, en las capas 0 a N − 4, como mide Tisma Slicer (ficha `supports_more.md`, regla 1, SM1). Con menos de 4, nada |
+| `pattern` | texto | `lines` | `lines`, `grid`, `honeycomb` | Patrón de la base del soporte en grilla (ficha `supports_more.md`, regla 9, SM6): líneas a `line_angle`; `grid`, las mismas giradas 90° en capas alternas; `honeycomb`, panales hexagonales con la misma densidad |
+| `sheath` | booleano | true | | Un lazo cerrado por el borde de cada zona de la base y el patrón adentro, a la separación de un cordón; `false`: solo el patrón, en zigzag (regla 10, SM7) |
+| `interface_pattern` | texto | `lines` | `lines`, `concentric`, `automatic` | Patrón de la interfaz: líneas a 90° de las de la base (`automatic` también, mientras no haya material soluble), o lazos paralelos al borde de la zona, hacia adentro, a la separación de los cordones (regla 11, SM10) |
+| `interface_spacing` | número | 0 | 0 a 100 | Espacio libre entre las líneas de la interfaz, en mm; 0: juntas, una capa sólida (regla 11) |
+| `interface_contact_loops` | booleano | false | | La capa de interfaz de arriba (la que queda bajo la separación en Z) empieza con un lazo por el borde de cada zona, y el resto va en líneas (regla 12) |
+| `bottom_interface_layers` | entero | −1 | −1–1000 | Capas de interfaz del soporte que apoya sobre la pieza: el que tiene la pieza debajo en las capas siguientes a `bottom_z_gap` va como la interfaz de arriba; −1: tantas como `interface_layers` (ficha `supports_more.md`, regla 7). Solo en el soporte de grilla |
 | `interface_layers` | entero | 3 | 0–1000 | Capas densas bajo la pieza (valor de banco): el soporte que tiene la pieza encima en las capas siguientes a la separación en Z va en líneas a la separación de los cordones, a 90° de la base (con `style` `organic`, a 45° y 135° en capas alternas) |
-| `style` | texto | `"grid"` | `grid`, `organic` | `grid`: columnas rectas bajo lo que cuelga. `organic`: soportes en árbol (ficha `supports_more.md`, reglas 15 a 17): bajo lo que cuelga, `interface_layers` capas de interfaz enteras; debajo, puntas redondas que bajan como ramas, se juntan y engordan hasta troncos sobre la cama, y esquivan la pieza; donde no pueden esquivarla, se apoyan en ella, con la separación en Z. Cada rama lleva una pared (dos si es gruesa) y el relleno del soporte adentro |
+| `style` | texto | `"grid"` | `grid`, `snug`, `organic` | `grid`: columnas rectas bajo lo que cuelga, con un margen de 1,6 mm. `snug`: ajustadas a lo que cuelga, sin margen, y los huecos entre zonas más angostos que el doble de `closing_radius` se cierran (regla 14, SM8 y SM9). `organic`: soportes en árbol (ficha `supports_more.md`, reglas 15 a 17): bajo lo que cuelga, `interface_layers` capas de interfaz enteras; debajo, puntas redondas que bajan como ramas, se juntan y engordan hasta troncos sobre la cama, y esquivan la pieza; donde no pueden esquivarla, se apoyan en ella, con la separación en Z. Cada rama lleva una pared (dos si es gruesa) y el relleno del soporte adentro |
+| `closing_radius` | número | 2 | 0 a 100 | Con `style` `snug`, el radio con que se cierran los huecos entre zonas de soporte, en mm: se juntan las que quedan a menos del doble |
+| `free_bridge_length` | número | 16 | 0 a 1000 | Lo que la impresora puede tender en el aire, en mm (`SETTINGS_V1.md`). Un puente con un tramo más largo sin nada debajo (ni la capa de abajo, agrandada medio cordón, ni soporte) da el aviso `long_bridge`, uno por cada serie de capas seguidas (ficha `print_review.md`, regla 2, R5 y R6). 0: no se revisa |
 | `tree_angle` | número | 40 | 0 a 85 | Inclinación máxima de una rama, en grados desde la vertical, para esquivar la pieza |
 | `tree_angle_preferred` | número | 25 | 0 a 85 | Inclinación de una rama para juntarse con otra |
 | `tree_branch_diameter` | número | 2 | más de 0, hasta 100 | Diámetro de las ramas más finas, en mm |
@@ -257,24 +423,274 @@ Enfriamiento según `docs/spec/BEHAVIOR.md` («Enfriamiento») y la ficha `cooli
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `min_layer_time` | número | 5 | ≥ 0 | Tiempo mínimo de capa, en s; una capa más rápida se imprime más lento (valor de banco) |
-| `min_speed` | número | — (del perfil de la impresora; respaldo 10) | > 0 | Primera etapa: las extrusiones bajan todas en la misma proporción, pero no por debajo de esto (en mm/s; es del perfil de la impresora, como toda velocidad); si no alcanza, la segunda etapa las pone a todas a una misma velocidad, la más alta que llega al tiempo, nunca por debajo de 1 mm/min; las que ya iban más lento no cambian |
+| `min_speed` | número | — (del perfil de la impresora; respaldo 10) | > 0 | Una capa corta pone todas las extrusiones más rápidas a una misma velocidad, la más alta que llega al tiempo mínimo, primero no por debajo de esto (en mm/s; es del perfil de la impresora, como toda velocidad); si no alcanza, más abajo, nunca por debajo de 1 mm/min. Las que ya iban más lento no cambian, y los puentes y perímetros sobre el aire no se frenan (ficha `cooling.md`, regla 2, K2 a K5) |
 | `fan_min` | número | 35 | 0–100 | Ventilador de una capa que tarda casi `fan_below_time`, en %. Entre `min_layer_time` y `fan_below_time` el ventilador baja en línea recta de `fan_max` a `fan_min` según el tiempo de la capa |
 | `fan_max` | número | 100 | 0–100 | Ventilador de una capa que tarda `min_layer_time` o menos, y de toda capa que tuvo que ir más lento, en % |
 | `fan_below_time` | número | 60 | ≥ 0 | Una capa que tarda esto o más va sin ventilador (o con `fan_min`, si `fan_always`), en s |
 | `fan_always` | booleano | false | | El ventilador nunca baja de `fan_min`, ni en las capas largas (sí en las primeras, `fan_off_layers`) |
 | `fan_bridges` | número | 100 | 0–100 | Ventilador mientras se imprime un puente, en %; al terminar el puente vuelve el de la capa |
 | `fan_off_layers` | entero | 3 | 0–1000 | Las primeras capas van sin ventilador, salvo las que tienen que ir más lento por el tiempo mínimo: esas lo llevan al máximo, como todas (decisión del dueño, 2026-10-24) |
-| `keep_outer_speed` | booleano | true | | Para llegar al tiempo mínimo, primero se frena todo lo que no es pared externa (como la primera etapa, sin bajar de `min_speed`), y la pared externa sigue a su velocidad: el plástico sale de la boquilla a la misma temperatura y la pieza brilla parejo (`docs/GLOSS.md`, G1 y G2). Si eso no alcanza, se frena todo como en las dos etapas. `false`: las dos etapas de siempre, como Tisma Slicer |
+| `full_fan_layer` | entero | 0 | 0–100000 | Capa, contada desde 1, en la que el ventilador llega a su valor: desde la primera con ventilador (después de `fan_off_layers`) sube en línea recta, la capa n con `(n − fan_off_layers) / (full_fan_layer − fan_off_layers)` de lo que le toca. 0, o no mayor que `fan_off_layers`: el valor completo desde la primera (ficha `cooling_more.md`, regla 1, C1) |
+| `dynamic_overhang_fan` | booleano | false | | Ventilador de las paredes según cuánto de su cordón se apoya en la capa de abajo (como `speed.dynamic_overhangs`): `overhang_fan_0` a `_3` con 0, 25, 50 y 75 % apoyado, en línea recta entre ellos, y de `overhang_fan_3` a 0 entre 75 y 100 %. Vale el mayor entre ese y el de la capa; donde la capa va sin ventilador, lo que se apoya más del 75 % no lo enciende. Los puentes y los perímetros en voladizo siguen con `fan_bridges`, y las capas sin ventilador (`fan_off_layers`) siguen sin él (ficha `cooling_more.md`, reglas 3 y 4, C2) |
+| `overhang_fan_0`, `overhang_fan_1`, `overhang_fan_2`, `overhang_fan_3` | % | 0 | 0–100 | Ventilador de `dynamic_overhang_fan` con 0, 25, 50 y 75 % del cordón apoyado |
+| `enabled` | booleano | true | | El enfriamiento automático (ficha `cooling.md`): apagado, ninguna capa se frena por `min_layer_time` y no hay ventilador por el tiempo de la capa (con `fan_always`, `fan_min`); el de los puentes y los cambios por altura siguen |
+| `keep_outer_speed` | booleano | true | | Para llegar al tiempo mínimo, primero se frena todo lo que no es pared externa (a una velocidad común, sin bajar de `min_speed`), y la pared externa sigue a su velocidad: el plástico sale de la boquilla a la misma temperatura y la pieza brilla parejo (`docs/GLOSS.md`, G1 y G2). Si eso no alcanza, lo demás queda en `min_speed` y la pared externa baja a su propia velocidad común, sin bajar de `min_speed`; si tampoco alcanza, todo baja junto de `min_speed`. `false` (con `slowdown_logic` `uniform`): todo por igual, como Tisma Slicer |
+| `slowdown_logic` | texto | `uniform` | `uniform`, `consistent_surface` | `consistent_surface`: lo mismo que `keep_outer_speed`, y además la pared que toca a la externa se frena al final, con ella (ficha `cooling_more.md`, regla 5, C3). `uniform`: solo la externa, si `keep_outer_speed`; si no, todo por igual |
+| `transition_distance` | número | 0 | ≥ 0 | Con `slowdown_logic` `consistent_surface`, los últimos mm de extrusión de una capa frenada vuelven a su velocidad (ficha `cooling_more.md`, regla 6, C4); el resto de la capa se frena un poco más para llegar igual al tiempo mínimo |
+
+### `object`
+
+El modelo de la línea de comandos como objeto (ficha `multi_extruder.md`, reglas 1 y 13): todos los objetos que da
+(las copias, las piezas de un corte o una separación) toman estos valores. En la interfaz cada objeto tiene los suyos
+en su menú.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `extruder` | entero | 1 | 1 a `machine.extruders` | Extrusor con que se imprime el objeto (las claves de `extruders` mandan sobre él para lo suyo) |
+| `wipe_into_infill` | booleano | `false` | — | Con una MMU de una sola boquilla, parte de la purga de un cambio va a imprimir el relleno poco denso de este objeto con el filamento nuevo |
+| `wipe_into_object` | booleano | `false` | — | Como `wipe_into_infill`, pero en todo el objeto |
 
 ### `placement`
 
-Dónde pone la pieza la línea de comandos (ficha `docs/spec/features/placement.md`, reglas 2 y 4). La interfaz ubica
+Dónde pone la pieza la línea de comandos (ficha `docs/spec/features/placement.md`, reglas 2 a 4). La interfaz ubica
 las piezas en la placa ella misma y no usa estos ajustes; tampoco están en su panel.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `arrange` | booleano | `true` | — | Con una cama (`machine.bed`), el centro de la caja de la pieza va a `center`; `false` la deja donde viene en X e Y. Sin cama no se mueve nada. En Z la pieza siempre se apoya en la cama |
+| `arrange` | booleano | `true` | — | Con una cama (`machine.bed`), el centro de la caja de la pieza va a `center`; `false` la deja donde viene en X e Y. Sin cama no se mueve nada, salvo que se dé `center` a mano (PL15). En Z la pieza siempre se apoya en la cama |
 | `center` | `[x, y]` o `null` | `null` | mm | Dónde queda el centro de la pieza; `null` es el centro de la caja de la cama |
+| `spacing` | número | 6 | 0 a 1000 | Con `slice --copies N`, las copias van en una grilla compacta con esta separación entre sus cajas, y el conjunto centrado como una pieza sola (ficha `placement.md`, regla 2, PL7 y PL8); en la impresión secuencial, al menos `sequential.clearance_radius` (ficha `sequential.md`, regla 2). Es lo que la ficha `sequential.md` llama `arrange.distance` |
+| `drop_to_bed` | booleano | `true` | — | Lleva la base de cada objeto a Z = 0: lo que flota baja y lo que está en parte debajo de la cama sube (ficha `placement.md`, regla 3, PL4). Con `false` la pieza queda donde viene en Z: lo que está debajo de Z = 0 no se imprime (PL5), y un objeto que no toca la cama es un error, «no extrusions on the first layer», sin archivo (PL9) |
+
+### `transform`
+
+Lo que la línea de comandos le hace a la pieza antes de ubicarla (ficha `docs/spec/features/model_tools.md`, reglas 11
+a 14), alrededor del centro de su caja y en este orden: escala, giro, corte, separar. La interfaz lo hace con sus
+herramientas y no usa estos ajustes; tampoco están en su panel.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `scale` | número o `"N%"` | 1 | más de 0 a 1000 | Escala igual en los tres ejes: `2` y `"200%"` son lo mismo |
+| `scale_to_fit` | `[x, y, z]` o `null` | `null` | mm, más de 0 | Escala igual en los tres ejes hasta el mayor tamaño que entra en esa caja (el menor de los tres cocientes); con `scale`, se aplican los dos |
+| `rotate_x`, `rotate_y`, `rotate_z` | número | 0 | −360 a 360 | Giro en grados alrededor de X, después de Y, después de Z; la pieza vuelve a apoyarse en la cama |
+| `cut_z` | número o `null` | `null` | más de 0 a 10000 | Corta la pieza con un plano a esa altura sobre la cama: las dos mitades, cerradas con la cara del corte, quedan como dos objetos sin girar, cada uno apoyado en la cama y uno al lado del otro con `placement.spacing` |
+| `split` | booleano | `false` | | Cada pedazo suelto de la malla pasa a ser un objeto (con los huecos que tiene adentro), ordenados con `placement.spacing` |
+
+### `sequential`
+
+De la ficha `docs/spec/features/sequential.md`: objeto por objeto. `enabled` va en el perfil de impresión; los dos
+espacios del cabezal, en el de impresora.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | booleano | `false` | | Con varios objetos (las copias de `slice --copies`, o los modelos de la placa en la interfaz), cada uno se lamina aparte y se imprime entero antes del siguiente, en el orden en que vienen (regla 1, SQ1). Al terminar uno: retrae, sube a la capa más alta impresa hasta ahí si hace falta, viaja al centro de la caja del siguiente, escribe las temperaturas de la primera capa sin esperar (`M140` y `M104` con `first_layer_bed_temperature` y `first_layer_temperature` de `machine.variables`, o `bed_temperature` y `temperature`) y `gcode.between_objects` (si ese texto ya pone temperaturas, solo el texto), apaga el ventilador, y la primera capa del siguiente viaja a esa altura hasta su primer punto y recién ahí baja (regla 3, SQ3). Cada objeto tiene su falda, su borde, su balsa y sus primeras capas (velocidad, ventilador, aceleración). Es la única forma de imprimir varios objetos en modo vaso (regla 5) |
+| `clearance_radius` | número | 20 | 0 a 1000 | Radio, en mm, de un cilindro centrado en la boquilla que encierra el cabezal: las copias se acomodan al menos a esta distancia, y dos objetos más cerca son un error (regla 2, SQ2) |
+| `clearance_height` | número | 20 | 0 a 1000 | Distancia en Z, en mm, de la punta de la boquilla a lo primero que puede chocar arriba (el eje X): un objeto más alto que esto que no es el último es un error (regla 4; Tisma Slicer no lo rechaza, SQ4) |
+
+### `extruders`
+
+De la ficha `docs/spec/features/multi_extruder.md`: qué extrusor imprime qué, con `machine.extruders` mayor que 1. Va en
+el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `walls` | entero | 0 | 0 a 16 | Extrusor de los perímetros (también los de voladizo, los arcos y el relleno entre perímetros), desde 1; 0: el del objeto (regla 2, ME3) |
+| `infill` | entero | 0 | 0 a 16 | Extrusor del relleno ralo; 0: el del objeto |
+| `solid_infill` | entero | 0 | 0 a 16 | Extrusor del relleno sólido, las superficies, los puentes y el planchado; 0: el del objeto |
+| `support` | entero | 0 | 0 a 16 | Extrusor del soporte; 0: el que esté imprimiendo (sin cambio de herramienta) |
+| `support_interface` | entero | 0 | 0 a 16 | Extrusor de la interfaz del soporte; 0: el que esté imprimiendo |
+| `bed_temperature_from` | entero | 0 | 0 a 16 | Extrusor cuyas temperaturas de cama valen; 0: el primero que imprime en la primera capa (para la primera) y en la segunda (para el resto) (regla 4, ME3) |
+| `ooze_prevention` | booleano | `false` | | Los extrusores que esperan bajan a su temperatura más `standby_delta`: al empezar (sin esperarlos) y antes de cada cambio la que se deja (`M104 … ;cooldown`); la que entra espera su temperatura con `M109` (regla 7, ME4) |
+| `standby_delta` | número | −5 | −300 a 300 | Cuánto cambia la temperatura de los que esperan, en °C |
+| `wipe_tower` | entero | 0 | 0 a 16 | Extrusor que imprime la torre de purga en las capas sin cambio; 0: el que esté imprimiendo |
+
+### `interlocking`
+
+De la ficha `docs/spec/features/multi_extruder.md` (regla 17): vigas entre materiales. Va en el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `beams` | booleano | `false` | | Donde se tocan las partes de dos extrusores, lo que está a menos de `depth` anchos de viga del borde entre ellas (y a más de `boundary_avoidance` del exterior) se corta en franjas de `beam_width` a `orientation` grados, giradas 90° cada `beam_layers` capas, que van a una parte y a la otra por turnos: cada material entra en el otro con vigas (ME11; diseño propio). Las partes se laminan con esas regiones: sus perímetros siguen las vigas |
+| `beam_width` | número | 0,8 | 0,1 a 100 | Ancho de las vigas, en mm |
+| `beam_layers` | entero | 2 | 1 a 100 | Capas antes de que las vigas giren 90° |
+| `orientation` | número | 22,5 | −360 a 360 | Dirección de las vigas, en grados |
+| `depth` | entero | 2 | 0 a 100 | Hasta dónde llegan desde el borde entre materiales, en anchos de viga |
+| `boundary_avoidance` | entero | 2 | 0 a 100 | Distancia al exterior de la pieza sin vigas, en anchos de viga |
+
+### `multi`
+
+De la ficha `docs/spec/features/multimaterial.md`: boquillas distintas y mezcla de colores. Va en el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `fine_walls_coarse_infill` | booleano | `false` | | Con boquillas de tamaños distintos (`machine.nozzle_diameter` como lista): los perímetros, el relleno sólido, el soporte, su interfaz y la torre de purga con la boquilla más fina; el relleno ralo con la más gruesa, combinado en tantas capas como entren en el 75 % de su boquilla (regla 3, MM1). Reemplaza los `extruders.*` mientras está prendido; al apagarlo vuelven los del perfil (regla 4, MM2) |
+| `color_mixing` | booleano o `null` | `null` | | Ofrecer colores mezclados (reglas 9 y 11). `null`: según la impresora, no con una MMU de una sola boquilla (`machine.single_extruder_mmu`, que purga en cada cambio) y sí con una boquilla por filamento. En la interfaz, prenderla con una MMU avisa antes del costo (MM4) |
+
+Con una MMU de una sola boquilla, después de laminar se avisa cuánto filamento va a la purga, en la torre y dentro de los
+objetos, en gramos si se conoce `extrusion.density` (aviso `purge`, regla 10, MM5).
+
+### `curved`
+
+De la ficha `docs/spec/features/nonplanar.md`: capas curvas en una impresora de 3 ejes. Cada capa es la superficie
+`z = s + D(x, y, z)`: la malla se refina, se mueve a `z − D`, se lamina con capas planas y cada punto del G-code vuelve
+a su curva, con el material por el espesor local `J = 1 / (1 − ∂D/∂z)`. `x` e `y` se miden desde el centro de la caja
+de la pieza. Va en el perfil de impresión. Necesita E relativa (regla 7) y no va con el modo vaso, el Z anti-aliasing,
+el relleno ondulado, la costura en rampa, los arcos G2/G3, la impresión secuencial, las alturas por zona, la torre de
+purga ni las caras pintadas.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `mode` | texto | `"disabled"` | `disabled`, `wave`, `conical`, `overhangs`, `stress`, `surface`, `automatic` | `wave`: una onda. `conical`: con `fit_head`, un cono alrededor del centro de la pieza con la pendiente que piden sus voladizos en cada radio (`nonplanar_modes.md`, reglas 1 a 8: cero en el centro, crece pareja a lo largo de max(R/4, 5 mm) antes del primer radio que pide, sube en una rampa `S` hasta el voladizo más bajo); sin `fit_head`, el cono fijo `tan(cone_angle) · (√(x² + y² + 4) − 2)`. `overhangs` (reglas 9 a 13): capas planas dentro de la sección donde empieza el voladizo, que bajan afuera con la pendiente que lo saca del soporte (como mucho el 90 % de lo que deja la cabeza, su ángulo libre y su holgura), el borde suavizado en alrededor de 1 mm. `surface` (reglas 14 a 18): las capas de arriba paralelas a las caras de arriba inclinadas, con una deformación `h(x, y)` ajustada por mínimos cuadrados a sus pendientes (cada cara pesa por su área y por lo horizontal que es; como mucho la pendiente libre de la cabeza), que crece pareja con la altura desde `flat_below` hasta donde empiezan las caras inclinadas. En todos, la deformación se achica hasta que `J` quede en [0,6; 1,4] y la cabeza no choque; si no queda nada que curvar, o ya achicada no saca ningún voladizo del soporte, la pieza se lamina plana. `automatic` (reglas 19 y 20): la de `overhangs` más la de `surface`; si la suma se pasa de algún límite, se achica solo la de las caras de arriba. `stress` (con el análisis estructural) todavía no está: da error |
+| `pattern` | texto | `"egg"` | `egg`, `ridges`, `twisted` | La onda: `egg` `a · sin(kx) · sin(ky)`; `ridges` `a · sin(k(x cos θ + y sin θ))`; `twisted`, crestas cuya dirección gira `twist` grados por mm de altura (regla 1) |
+| `amplitude` | número | 0,6 | 0 a 50 | Amplitud `a` de la onda, en mm, sin `fit_head` |
+| `wavelength` | número | 16 | 1 a 1000 | Largo `λ` de la onda, en mm, sin `fit_head` (`k = 2π / λ`) |
+| `angle` | número | 0 | −360 a 360 | Dirección θ de las crestas, en grados; con 0 la altura cambia a lo largo de X |
+| `twist` | número | 3 | −360 a 360 | `twisted`: giro de la dirección, en grados por mm de altura |
+| `cone_angle` | número | 15 | −60 a 60 | `conical` sin `fit_head`: pendiente del cono, en grados; positivo sube hacia afuera |
+| `fit_head` | booleano | `true` | | Capas tan curvas como deja la cabeza (regla 3): `λ = π · head.clearance_height / tan` del menor ángulo libre (de 4 a 100 mm), la amplitud con esa pendiente y como mucho la mitad de `head.clearance_height`, y achicada por bisección hasta que `J` quede entre 0,6 y 1,4 en toda la pieza (NP1: 0,954 mm). Sin esto, una capa más empinada que lo que deja la cabeza, que sube junto a la boquilla más que `head.clearance_height` o con `J` fuera de esos límites es un error |
+| `flat_below` | número | 0,6 | 0 a 1000 | Por debajo de esta altura de la pieza, en mm, las capas son planas (regla 8) |
+| `ramp_height` | número | 5 | 0,1 a 1000 | Alto de la transición de plano a curvo, en mm: `rampa = S((z − flat_below) / ramp_height)`, con `S(t) = t²(3 − 2t)` |
+| `flat_top` | booleano | `false` | | Vuelve a capas planas en los últimos `ramp_height` mm de la pieza |
+| `segment_length` | número | 0,5 | 0,05 a 50 | Cada cuánto se parte un movimiento sobre una capa curva; los tramos que quedan en línea (dentro de `gcode.resolution`) y con casi el mismo `J` se vuelven a unir |
+| `max_slope` | número | 20 | 1 a 80 | Pendiente máxima, en grados, si la cabeza no se midió |
+| `flow_policy` | texto | `"preserve"` | `preserve`, `uniform`, `off` | `preserve`: donde la capa es más gruesa (`J` > 1) la velocidad baja para mantener el caudal; donde es más fina no sube. `uniform` hace hoy lo mismo que `preserve`. `off`: no toca las velocidades |
+| `uniform_flow` | número | 0 | 0 a 1000 | Caudal de `uniform`, en mm³/s (se lee; todavía no se usa) |
+| `overhang_threshold` | número | 45 | 10 a 80 | El voladizo más inclinado, en grados desde la vertical, que sale bien con capas planas (`nonplanar_modes.md`); lo usan `conical` con `fit_head` y `overhangs`: los voladizos entre este ángulo y 80° piden la pendiente que los deja en 5° menos (o al menos 2° menos) |
+
+Cada tramo extruye su material plano por `J` en su punto medio (regla 4, NP3) y va como mucho a la velocidad que deja
+`machine.max_feed_z` en Z (regla 5). El verificador del G-code comprueba que cada punto extruido esté sobre la curva de
+su capa y que su material sea el plano por `J`.
+
+### `head`
+
+De la ficha `docs/spec/features/nonplanar.md` (reglas 3 y 6): la cabeza alrededor de la boquilla, para las capas
+curvas. Va en el perfil de impresora.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `free_angle_x`, `free_angle_y` | número | 0 | 0, o 1 a 89 | La pendiente más empinada, en grados, que la cabeza deja subir a lo largo de X y de Y; 0: no medido (`curved.max_slope`). Una capa con pendiente `(gx, gy)` entra si `(gx / tan αx)² + (gy / tan αy)² ≤ 1` |
+| `clearance_height` | número | 3 | más de 0 a 1000 | Distancia vertical, en mm, de la punta de la boquilla a lo más bajo de la cabeza a su alrededor |
+| `clearance_radius` | número | 15 | más de 0 a 1000 | Distancia horizontal, en mm, de la boquilla a lo más lejano de esas partes bajas |
+| `profile` | lista o texto | `[]` | alturas más de 0, ángulos de 1 a 89 | El ángulo libre medido a varias alturas: `[[2, 45], [5, 30]]` o `"2:45;5:30"`. Lo ya impreso no puede subir más que cada altura dentro de la distancia que alcanza su ángulo |
+
+### `belt`
+
+De la ficha `docs/spec/features/belt_printer.md`: impresoras de cinta, con el pórtico inclinado sobre una cinta que
+se lleva la pieza (Z sin fin). Va en el perfil de impresora.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | sí/no | no | — | La impresora es de cinta: la pieza, apoyada en la cinta como en una cama, se lamina en planos paralelos al pórtico, `h` aparte entre ellos, y el G-code va en los ejes de la máquina |
+| `angle` | número | 45 | 10 a 80 | Ángulo α, en grados, entre el pórtico (el plano de impresión) y la cinta |
+| `belt_is_z` | sí/no | sí | — | Sí: la cinta es el eje Z del firmware y el pórtico el Y. No: la cinta es Y y el pórtico Z |
+
+Con `x` a lo ancho de la cinta, `y` a lo largo y `z` la altura sobre ella, la capa de `;Z:` `s` es el plano
+`y · sin α + z · cos α = s`. Cada punto va a X = `x`, la cinta a `s / sin α` (avanza `h / sin α` por capa) y el
+pórtico a `z / sin α`, la distancia desde la cinta a lo largo del pórtico. `;Z:` lleva `s`, no la posición de la
+cinta. La cama solo limita X: la cinta sigue a lo largo de Y. En la cinta no hay soportes, balsa, borde, torre de
+purga, impresión secuencial, modo espiral, arcos `G2`/`G3`, capas curvas ni ondas en el relleno (un error lo dice); la
+falda no se imprime.
+
+### `resin`
+
+De la ficha `docs/spec/features/resin.md`: impresión de resina con pantalla (MSLA). `slice` con una salida `.goo`
+lamina para resina y escribe el archivo GOO de Elegoo: cada capa es una imagen en grises de la pantalla
+(`machine.display_*`), con cada píxel según la parte de su área que cubre la sección (exacta, redondeada hacia
+arriba). Los valores por defecto son los de la Elegoo Mars 5 con una resina estándar genérica. La altura de capa va
+en el perfil de impresión, con los soportes, la base y el vaciado; `printer_name` en el de impresora y lo demás en el de
+material.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `layer_height` | número | 0.05 | 0,005 a 0,5 | Altura de todas las capas, en mm. La capa `n` (desde 0) tiene su tope en `(n + 1) · altura` y se corta en su mitad |
+| `exposure`, `bottom_exposure` | número | 2.5, 30 | más de 0 a 600 | Exposición de las capas normales y de las de fondo, en s |
+| `bottom_layers` | entero | 5 | 0 a 1000 | Capas de fondo: usan `bottom_exposure`, la subida de fondo y `bottom_light_pwm`. Con 0, igual la primera es de fondo |
+| `elephant_foot` | número | 0.2 | 0 a 2 | Cuánto se achica la primera capa en XY, en mm. La capa `i` de las `N` de fondo se achica `elephant_foot · (1 − i / N)` |
+| `scale_x`, `scale_y`, `scale_z` | número | 1 | 0,5 a 2 | Corrección de escala de la resina: la pieza se escala antes de cortar, en X e Y desde el centro de su caja y en Z desde su base |
+| `lift_distance`, `lift_speed` | número | 5, 1.6667 | 0 a 100; más de 0 a 100 | Subida de la plataforma después de cada capa normal, en mm y mm/s. La bajada recorre la misma distancia |
+| `bottom_lift_distance`, `bottom_lift_speed` | número | 7, 1.3333 | 0 a 100; más de 0 a 100 | Lo mismo en las capas de fondo |
+| `retract_speed` | número | 2.5 | más de 0 a 100 | Velocidad de bajada, en mm/s |
+| `wait_before_exposure` | número | 2.5 | 0 a 600 | Espera con la plataforma abajo antes de exponer, en s |
+| `wait_after_cure` | número | 1 | 0 a 600 | Espera después de exponer, antes de subir, en s |
+| `wait_after_lift` | número | 0 | 0 a 600 | Espera arriba, antes de bajar, en s |
+| `light_pwm`, `bottom_light_pwm` | entero | 255 | 0 a 255 | Potencia de la luz de las capas normales y de las de fondo |
+| `antialiasing` | entero | 8 | 1 a 16 | Nivel de suavizado que se anota en el archivo; las imágenes siempre llevan el suavizado exacto |
+| `density` | número | 1 | más de 0 a 10 | Densidad de la resina en g/ml, para el peso |
+| `bottle_cost` | número | 0 | 0 o más | Costo del frasco de resina (ficha `gcode_extras.md`, regla 2): la impresión cuesta sus ml × `bottle_cost` / `bottle_volume`, y va en la cabecera del archivo |
+| `bottle_volume` | número | 1000 | más de 0 | Volumen del frasco, en ml |
+| `bottle_weight` | número | 1 | más de 0 a 1000 | Peso del frasco, en kg; la interfaz da con él la densidad (peso sobre volumen) |
+| `gamma` | número | 1 | 0 a 5 | Curva de los grises del borde: cada gris `g` pasa a `255 · (g / 255)^gamma`, redondeado y nunca a 0. 1 deja el suavizado como sale, más alto oscurece el borde; 0 lo quita: un píxel queda blanco si la sección cubre la mitad o más, si no negro |
+| `z_correction_layers` | entero | 0 | 0 a 100 | De cada sección se ilumina solo lo que tiene debajo las secciones de estas capas: lo que cuelga queda sin exponer en sus primeras capas, porque la luz de las de arriba lo cura igual |
+| `absolute_correction` | número | 0 | −1 a 1 | Agranda (+) o achica (−) cada sección en XY, en mm |
+| `printer_name` | texto | `"MARS 5"` | hasta 31 bytes | Modelo de la impresora que se anota en la cabecera del archivo |
+| `profile_name` | texto | `""` | hasta 31 bytes | Nombre del perfil de resina que se anota en la cabecera |
+| `supports` | booleano | `true` | | Soportes (ficha `resin_supports.md`): puntos de apoyo en las caras que miran hacia abajo, cada uno con una punta que entra en la pieza sobre un pilar que baja hasta la base (o la plataforma). Con soportes, la pieza empieza en `pad_thickness + support_elevation` (sin base, en `support_elevation`) |
+| `support_tip_diameter` | número | 0.4 | 0,1 a 2 | Diámetro de la punta que toca la pieza, en mm |
+| `support_tip_penetration` | número | 0.2 | 0 a 2 | Cuánto entra la punta en la pieza, en mm |
+| `support_pillar_diameter` | número | 1 | 0,2 a 5 | Diámetro de los pilares, en mm; al pie se ensanchan al doble |
+| `support_elevation` | número | 5 | 0 a 50 | Cuánto levantan los soportes a la pieza sobre la base, en mm |
+| `support_critical_angle` | número | 45 | 10 a 80 | Ángulo de las uniones entre soportes, en grados desde la vertical |
+| `support_density` | número | 100 | 10 a 400 | Densidad relativa de los puntos de apoyo, en %: con 100, uno cada 4 mm en cada dirección |
+| `pad` | booleano | `true` | | Base bajo los soportes, pegada a la plataforma. Sin soportes y sin `pad_around_object` no tiene qué sostener: `slice` termina con código 4 |
+| `pad_thickness` | número | 2 | 0,1 a 10 | Espesor de la base, en mm |
+| `pad_margin` | número | 1.6 | 0 a 20 | Cuánto se extiende la base alrededor de lo que sostiene, en mm |
+| `pad_wall_slope` | número | 90 | 10 a 90 | Inclinación del borde de la base, en grados; 90 es vertical, menos la ensancha hacia abajo |
+| `pad_around_object` | booleano | `false` | | Base alrededor de la pieza, que queda apoyada en la plataforma sin elevarse |
+| `hollow` | booleano | `false` | | Vaciar la pieza: el hueco queda a `hollow_wall` o más de la superficie, también arriba y abajo. Un hueco cerrado es una ventosa hasta que tiene agujeros de drenaje |
+| `hollow_wall` | número | 3 | 0,5 a 20 | Espesor mínimo de la pared del vaciado, en mm |
+| `hollow_closing` | número | 2 | 0 a 20 | Cuánto se redondea el hueco, en mm: no sigue los detalles más chicos que esto, y la pared es más gruesa en las esquinas |
+| `hollow_infill` | número | 0 | 0 a 60 | Relleno interior del hueco, en %: barras de sección cuadrada verticales y a 45° en los planos XZ e YZ, con densidad = 5 · (ancho / celda)² |
+| `hollow_infill_cell` | número | 8 | 2 a 50 | Tamaño de la celda del relleno interior, en mm |
+
+### `painting`
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `max_region_width` | número | 0 | 0 a 1000 | Ancho máximo de una región pintada de un color, en mm; 0: sin límite (regla 18): se lee y se guarda; el motor todavía no lamina los colores pintados |
+| `interlocking_depth` | número | 0 | 0 a 1000 | Entrelazado entre regiones pintadas, en mm (regla 18): se lee y se guarda |
+
+### `mmu`
+
+De la ficha `docs/spec/features/multi_extruder.md` (regla 15): un solo extrusor que cambia de filamento
+(`machine.single_extruder_mmu`), con la torre de purga. Va en el perfil de impresora.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `cooling_tube_length` | número | 5 | 0 a 1000 | Largo del tubo de enfriamiento, en mm: los movimientos de enfriamiento van y vuelven esto |
+| `cooling_tube_position` | número | 91,5 | 0 a 1000 | Distancia de la boquilla al tubo, en mm: la descarga saca el filamento hasta el medio del tubo (esto más medio tubo) |
+| `parking_position` | número | 92 | 0 a 1000 | Hasta dónde sale un filamento para estacionarlo, en mm: la carga lo empuja esto más `extra_loading_move` |
+| `extra_loading_move` | número | −2 | −1000 a 1000 | Corrección de la carga, en mm |
+| `high_current_on_swap` | booleano | `false` | | Más corriente en el motor durante el cambio: se lee y se guarda; el motor no escribe el comando |
+
+Cada cambio, sobre la torre (ficha, regla 15, ME9; diseño propio sobre las medidas de la ficha): la compresión con el
+filamento que sale (líneas de 1,5 veces el ancho de las paredes, un tramo por cuarto de segundo de
+`extrusion.ramming`, cada uno a la velocidad de su caudal); la descarga hasta el medio del tubo (los primeros 15 mm a
+`extrusion.unloading_speed_start`, el último cuarto más lento, dos tercios a la mitad de `unloading_speed` y el resto
+al 30 %, lo demás a `unloading_speed`; lo que ya retrajo cuenta); la espera de `extrusion.toolchange_delay` (`G4`);
+`extrusion.cooling_moves` idas y vueltas de `cooling_tube_length` en el tubo con la velocidad del filamento de
+`cooling_initial_speed` a `cooling_final_speed`, la boquilla moviéndose a lo largo de la torre mientras tanto; la
+retracción de cambio, el fin del filamento, `gcode.toolchange`, `T<n>` y el inicio del filamento nuevo; la carga
+(un quinto a `loading_speed_start`, siete décimos a `loading_speed`, el último décimo a `loading_speed_start`), y la
+purga en la torre. Sin la torre, el cambio no hace compresión ni movimientos sobre ella.
+
+### `wipe_tower`
+
+De la ficha `docs/spec/features/multi_extruder.md` (reglas 9 a 14): la torre de purga, con `machine.extruders` mayor que 1.
+Va en el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `enabled` | booleano | `false` | | Torre de purga: los cambios de herramienta se hacen sobre ella. Solo con E relativa (`machine.relative_extrusion`; regla 9). Es un rectángulo con la esquina en (`x`, `y`), de `width` de ancho y tan hondo como pide la capa con más purga; en cada capa hasta la del último cambio: un lazo alrededor, un bloque de líneas a lo ancho por cada cambio, impreso por la herramienta que entra (con `machine.single_extruder_mmu`, las que hacen el volumen de `purge_volumes`; con varias boquillas, 5 líneas para cebar), y el resto de adentro lleno: denso en la primera capa, con columnas cada `bridging` arriba. En la primera capa también su borde. Antes de cada cambio el cabezal viaja a la torre; el cambio se hace ahí (regla 10 a 12, ME6 y ME7). Una torre fuera de la cama o sobre la pieza, su falda o su borde es un error |
+| `x`, `y` | número | 180, 140 | −10000 a 10000 | La esquina de la torre en la cama, en mm |
+| `rotation` | número | 0 | −360 a 360 | Giro de la torre, en grados, alrededor de su esquina |
+| `width` | número | 60 | 1 a 1000 | Ancho de la torre, en mm |
+| `brim_width` | número | 2 | 0 a 100 | Borde de la torre en la primera capa, en mm (en lazos de un cordón) |
+| `bridging` | número | 10 | 1 a 100 | Distancia máxima entre las columnas de las capas ralas, en mm: las líneas de purga de arriba van de una a otra |
+| `cone_angle` | número | 0 | 0 a 90 | Base en cono (regla 14): se lee y se guarda; la ficha no lo midió y el motor no la hace |
+| `extra_spacing` | número | 100 | 50 a 500 | Separación de las líneas de la torre, en % de su ancho: más, torre más honda |
+| `extra_flow` | número | 100 | 50 a 500 | Ancho de las líneas de la torre, en % del de las paredes: más, menos largo para el mismo volumen |
+| `no_sparse_layers` | booleano | `false` | | Sin torre en las capas sin cambio (regla 11, ME7): la torre tiene solo la primera capa y las de un cambio, cada una sobre la anterior; en una capa con cambio, la boquilla viaja a la torre a la altura de la capa, baja hasta la torre y, al terminar ahí, sube derecho antes de volver a la pieza. Cuidado: baja al lado de la pieza |
+| `purge_volumes` | número o lista de listas | 140 entre distintos, 0 en la diagonal | 0 a 10000 | Cuánto purgar al pasar de un filamento a otro, en mm³: un número para todos los pares distintos, o una fila por extrusor que sale con una columna por el que entra. Se multiplica por `extrusion.purge_multiplier` del que entra |
 
 ### `compute`
 
@@ -303,6 +719,27 @@ de la pieza de prueba.
 | `scale_x`, `scale_y`, `scale_z` | número | 100 | 50 a 200 | Escala del modelo en %, por eje, alrededor del centro de su base (Z desde abajo): la pieza queda donde estaba en la cama. Las comprobaciones de la cama y la altura ven la pieza escalada |
 | `hole_offset` | número | 0 | −5 a 5 | Cuánto crecen los agujeros, en mm sobre el radio (negativo: se achican). Solo los agujeros: los bordes de afuera no se mueven, y una isla dentro de un agujero se conserva |
 
+### `print`
+
+Valores propios del perfil de impresión para las plantillas de G-code (ficha `presets.md`, reglas 21 y 22).
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `custom_parameters` | objeto | `{}` | nombre: número, texto o verdadero/falso | Cada uno entra a las plantillas como `custom_parameter_print_<nombre>`. Listas u objetos adentro son un error |
+| `variables` | objeto | `{}` | nombre: número, texto o verdadero/falso | Cada uno entra a las plantillas como `print_<nombre>` |
+
+### `calibration`
+
+Una prueba por franjas a lo largo de la altura (ficha `calibrations.md`, reglas 1 a 3): la franja `i` (desde 0) empieza
+en Z = `i · band_height` y prueba `start + i · step`, sin pasar de `end`. Se convierte en cambios por altura al leer los
+ajustes, cada uno con un comentario `; calibration`; al escribir los ajustes queda como este grupo, no como cambios.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `mode` | texto | `off` | `off`, `temperature`, `pressure_advance`, `retraction`, `max_flow`, `acceleration`, `corners`, `input_shaping` | Qué cambia: la temperatura de la boquilla (la espera inicial ya es la de la primera franja), el avance de presión, el largo de retracción, el caudal forzado (mm³/s), la aceleración (con el comando del dialecto), la velocidad en las esquinas (Klipper `SET_VELOCITY_LIMIT SQUARE_CORNER_VELOCITY`, RepRapFirmware `M566` en mm/min, el resto `M205 X Y`) o la frecuencia del input shaping (Klipper `SET_INPUT_SHAPER`, el resto `M593 F`) |
+| `start`, `step`, `end` | número | 0 | −1 000 000 a 1 000 000 | Valor de la primera franja, cuánto cambia en cada una (puede ser negativo) y el último. Con `step` 0, o hacia el otro lado, una sola franja. Los valores de las franjas tienen que estar dentro de lo que acepta un cambio por altura: temperatura 0 a 500 °C, avance de presión 0 a 2, retracción 0 a 50 mm, caudal 0,5 a 1000 mm³/s, aceleración 100 a 100 000 mm/s²; esquinas 0 a 1000 mm/s e input shaping 1 a 1000 Hz |
+| `band_height` | número | 5 | 0,05 a 1000 | Alto de cada franja, en mm |
+
 ### `extrusion`
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -310,9 +747,30 @@ de la pieza de prueba.
 | `flow` | número | 100 | 10 a 300 | Flujo en %: la E de cada extrusión es ancho × alto × largo / sección del filamento × flujo |
 | `pressure_advance` | número | 0 | 0 a 2 | Avance de presión del firmware, escrito una vez después del G-code de inicio con el comando del dialecto: `M900 K…` (Marlin, linear advance), `SET_PRESSURE_ADVANCE ADVANCE=…` (Klipper) o `M572 D0 S…` (RepRapFirmware). 0: no se escribe y queda lo que tenga la impresora. Lo da la calibración de avance de presión |
 | `max_flow` | número | 0 | 0 a 1000 | Flujo volumétrico máximo del filamento, en mm³/s (como `machine.max_flow`; vale el menor de los dos). 0: sin límite propio |
-| `chamber_temperature` | número | 0 | 0 a 200 | Temperatura de cámara que pide el filamento, en °C. Si la impresora calienta la cámara (`machine.max_chamber_temp`), se escribe después del G-code de inicio, sin pasar de su máximo: `M141 S…`, o `SET_HEATER_TEMPERATURE HEATER=chamber TARGET=…` en Klipper; al final se apaga. Si no la calienta o no llega, hay un aviso. 0: ninguna |
+| `min_purge_on_tower` | número o lista | 0 | 0 a 10000 | Con una MMU y objetos que reciben la purga (en la interfaz y la API, por objeto: purgar en su relleno o en todo el objeto), lo que se purga igual en la torre antes, en mm³, por extrusor que entra. Después del cambio, el filamento nuevo imprime primero el relleno ralo (o todo) de esos objetos que todavía no se imprimió en esa capa, y la torre recibe solo lo que falta (ficha `multi_extruder.md`, regla 13, ME8) |
+| `loading_speed`, `loading_speed_start` | número | 28, 3 | más de 0 a 1000 | Velocidades de carga del filamento en una MMU, en mm/s (ver `mmu`) |
+| `unloading_speed`, `unloading_speed_start` | número | 90, 100 | más de 0 a 1000 | Velocidades de descarga, en mm/s (ver `mmu`) |
+| `cooling_moves` | entero | 4 | 0 a 100 | Idas y vueltas de enfriamiento de la punta en el tubo de la MMU |
+| `cooling_initial_speed`, `cooling_final_speed` | número | 2,2, 3,4 | más de 0 a 1000 | Velocidad del filamento en el primero y el último movimiento de enfriamiento, en mm/s |
+| `ramming` | lista | de 7 a 11 en 11 pasos | hasta 100 caudales de 0 a 100 | Caudal de la compresión antes de descargar, en mm³/s, uno por cada cuarto de segundo (los valores por defecto son propios del motor) |
+| `toolchange_delay` | número | 0 | 0 a 1000 | Espera después de descargar, en s (`G4`) |
+| `load_time`, `unload_time` | número | 0 | 0 a 1000 | Tiempo que tarda la carga y la descarga, en s, para la estimación del tiempo (no se escribe nada) |
+| `purge_multiplier` | número o lista | 100 | 0 a 1000 | % del volumen de purga (`wipe_tower.purge_volumes`) que pide el filamento al entrar, uno para todos o uno por extrusor (ficha `multi_extruder.md`, regla 12) |
+| `infill_max_speed` | número | 0 | 0 a 1000 | Tope del relleno disperso con este filamento, en mm/s, para los patrones cuyas líneas no se cruzan en la capa (`rectilinear`, `gyroid`, `honeycomb` y los demás). 0: sin tope (`speeds_accels.md`, regla 5; la `material.infill_max_speed` de la ficha) |
+| `infill_max_crossing_speed` | número | 0 | 0 a 1000 | Ídem para los patrones cuyas líneas se cruzan en la misma capa: `grid`, `triangles`, `stars`, `cubic`, `adaptive_cubic`, `support_cubic` |
+| `bridge_flow_ratio` | número | 1 | 0,1 a 2 | Multiplica la sección del cordón redondo de los puentes y de los perímetros sobre el aire. El cordón es redondo, de diámetro `machine.nozzle_diameter` × √`bridge_flow_ratio` (con 0,4 de boquilla, 0,052245 mm de filamento por mm), y las líneas del puente van a esa distancia: con menos flujo, más juntas (`speeds_accels.md`, regla 14; `gcode_motion.md`, regla 1) |
+| `chamber_temperature` | número | 0 | 0 a 200 | Temperatura de cámara que pide el filamento, en °C. Si la impresora calienta la cámara (`machine.max_chamber_temp`), se escribe antes del G-code de inicio, para que caliente junto con la boquilla, y otra vez después, sin pasar de su máximo: `M141 S…`, o `SET_HEATER_TEMPERATURE HEATER=chamber TARGET=…` en Klipper; al final se apaga. Si no la calienta o no llega, hay un aviso. 0: ninguna |
+| `chamber_min_temperature` | número | 0 | 0 a 200 | Con cámara: después del G-code de inicio, espera a que la cámara llegue a esto antes de volver a pedir `chamber_temperature` (`M191 S…`, o `TEMPERATURE_WAIT SENSOR="heater_generic chamber" MINIMUM=…` en Klipper; ficha `gcode_extras.md`, regla 3). 0: no espera |
+| `density` | número | 0 | 0 a 30 | Densidad del filamento, en g/cm³, para el peso al final del G-code (`; filament used [g]`, regla 1). 0: no se sabe y no se escribe el peso |
+| `cost` | número | 0 | ≥ 0 | Costo del filamento por kg, para `; filament cost` |
+| `spool_weight` | número | 0 | ≥ 0 | Peso del carrete vacío, en g (para que la interfaz compare con el carrete pesado) |
+| `shrinkage_xy`, `shrinkage_z` | número | 0 | 0 a 20 | Cuánto se contrae el filamento al enfriarse, en %, a lo ancho de las capas y en Z: la pieza se lamina 100 / (100 − p) veces más grande, alrededor del centro de su base como `compensation`, para que al contraerse quede de la medida pedida (ficha `gcode_extras.md`, regla 4; con 1 %, un cubo de 99 mm se lamina de 100). Se suma a la escala de `compensation` |
+| `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin del filamento (ficha `gcode_templates.md`, reglas 9 y 12): el inicio va después del de la impresora y de la espera de la boquilla, el fin antes del de la impresora. Mismo lenguaje de plantillas |
+| `retraction`, `travel` | objeto | `{}` | | Los valores propios del filamento para la retracción y los viajes (ficha `retraction_travel.md`, regla 10, pruebas R9 a R11): `{"retraction": {"length": 0.8, "lift": 0}, "travel": {"slope": 5}}`. Se pueden dar `length`, `speed`, `unretract_speed`, `restart_extra`, `lift`, `lift_above`, `lift_below`, `min_travel`, `on_layer_change`, `wipe` y `before_wipe` de `retraction`, y `ramping_lift`, `slope` y `max_lift` de `travel`. Un valor puesto reemplaza al de la impresora para todo lo que imprime este filamento, aunque sea 0 (un salto de 0 anula el de la impresora); `null` o sin la clave, vale el de la impresora. Una `speed` de 0 deja la de la impresora |
 | `abrasive` | booleano | false | | El filamento gasta una boquilla de latón (con fibra de carbono o de vidrio). Sin `machine.hardened_nozzle`, hay un aviso |
 | `needs_enclosure` | booleano | false | | El filamento pide impresora cerrada. Sin `machine.enclosed`, hay un aviso |
+| `type` | texto | `""` | | El material del filamento (`PLA`, `PETG`…), para la ficha del asistente (`assistant.md`, regla 13). Vacío: se busca por el nombre del perfil. No cambia el G-code |
+| `calibrations` | objeto | `{}` | | Las calibraciones del filamento hechas, por id de guía o nombre de prueba: `{"flow": {"date": "2026-10-27", "nozzle": 0.4, "printer": "…"}}`. Las escribe la interfaz al aplicar un resultado (`assistant.md`, regla 22; `settings_panel.md`, regla 38); una fecha cuenta solo en su impresora. No cambia el G-code |
 
 Los avisos de capacidades (`nozzle_temperature`, `bed_temperature`, `chamber`, `enclosure`, `abrasive`) van con los
 demás avisos del G-code (`src/report/warnings.hpp`; en la interfaz, en la barra de estado); no frenan la exportación.
@@ -324,6 +782,55 @@ De la ficha `docs/spec/features/gcode_extras.md`. Va en el perfil de impresora (
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
 | `resolution` | número | 0.0125 | 0 a 1 | Resolución del G-code, en mm: un punto de una trayectoria no se escribe cuando el movimiento que lo reemplaza pasa a menos de esto, y el ancho, la Z y el cordón de abajo no cambian más de 0,0005 mm (`src/gcode/resolution.hpp`). La costura y los extremos quedan. 0: se escriben todos los puntos. Un cilindro de 128 lados (prueba C17 de `slicing.md`) pasa de 41 859 a 6 140 extrusiones, 64 por vuelta, y ningún tramo de menos de 0,01 mm |
+| `toolchange` | texto | `""` | | G-code de cada cambio de herramienta (ficha `multi_extruder.md`, regla 5), con `previous_extruder`, `next_extruder` (desde 0) y `toolchange_z` (la Z de la capa). El cambio: la retracción de `retraction.toolchange_length`; con `extruders.ooze_prevention`, la que deja a su temperatura de espera (`M104 S… T<n> ;cooldown`); el fin del filamento que sale (`extrusion.end_gcode`); este texto; `T<n>` si el texto no tiene ya esa línea; con `ooze_prevention`, la espera de la que entra (`M109 S… T<n>`); el inicio del filamento que entra (`extrusion.start_gcode`). Al empezar también se corre, con `previous_extruder` −1 (regla 6). Cada cambio queda fuera de las etiquetas de objetos |
+| `progress` | booleano | `false` | | `M73 P<porcentaje> R<minutos restantes>` al empezar y cada vez que cambia el porcentaje entero o los minutos, por el tiempo estimado (ficha `gcode_firmware.md`, regla 5), hasta `M73 P100 R0` al final; con `machine.silent_mode`, también `M73 Q S` con el tiempo del modo silencioso (salvo con `reprap` y los dialectos antiguos). Las marcas van al empezar cada capa y cada trayectoria |
+| `object_labels` | texto | `"none"` | `none`, `octoprint`, `firmware` | Cada objeto de la placa (o copia de `slice --copies`) marcado en el G-code, para cancelar uno solo durante la impresión (ficha `gcode_firmware.md`, regla 4). `firmware`: en Marlin, al empezar `M486 S<n>`, `M486 A<nombre> (Instance <k>)` y `M486 S-1` por objeto, y en cada capa sus movimientos entre `M486 S<n>` y `M486 S-1`; en RepRapFirmware, lo mismo con `M486 S<n> A"<nombre> (Instance <k>)"` en una línea; en Klipper, `EXCLUDE_OBJECT_DEFINE NAME='<nombre>' CENTER=x,y POLYGON=[[x,y],...]` (la envolvente del objeto; espacios y puntos como `_`) y en cada capa `EXCLUDE_OBJECT_START`/`EXCLUDE_OBJECT_END`; en los demás firmwares, nada. `octoprint`: comentarios `; printing object <nombre> id:<objeto> copy <copia>` y `; stop printing object …`. En cada capa, los objetos de a uno: todas las islas de uno antes del siguiente |
+| `auto_temperatures` | booleano | `true` | | Si el G-code de inicio de la impresora (ya resuelto) no tiene comandos de temperatura (`M104`, `M109`, `M140`, `M190`, `M141`, `M191`, `M116`, `G10 S`), el motor escribe antes la de la cama con espera (`M190 S…`, con `variables.bed_temperature`) y la de la boquilla (`M104 S…`), y después del inicio espera la boquilla (`M109 S…`), cada dialecto con los suyos (ficha `gcode_templates.md`, regla 10). `false`: nunca |
+| `arcs` | booleano | `false` | | Los tramos de una trayectoria plana de un solo ancho que siguen un círculo se escriben como un arco: `G2` (horario) o `G3` (antihorario), con el centro `I J` relativo a donde empieza y la E de su largo (ficha `gcode_extras.md`, regla 10). Un arco junta 3 movimientos o más, cubre a lo sumo media vuelta, pasa a menos de `resolution` de cada punto y a menos del doble del medio de cada movimiento (`src/gcode/arcs.hpp`). Con `resolution` 0, a menos de 0,001 mm. La impresora tiene que aceptar arcos (en Marlin, `ARC_SUPPORT`; en Klipper, la sección `[gcode_arcs]`). En el cilindro de 10 mm de radio de X10 el G-code baja de 179 a 46 kB; en el Benchy, 2 885 arcos y de 7,39 a 6,95 MB |
+| `binary` | booleano | `false` | | El archivo en el formato binario (`.bgcode`; ficha `gcode_extras.md`, regla 9; `src/gcode/binary.hpp`): encabezado `GCDE`, versión 1 y CRC32; bloques de datos del archivo (`Producer`), de la impresora (`printer_model`, `filament_type`, `nozzle_diameter`, `layer_height`, temperaturas, `fill_density`…), de la impresión (el resumen del final: filamento y tiempos), del slicer (cada ajuste) y el G-code en bloques de 64 KiB como mucho, cortados en finales de línea; sin comprimir y el G-code sin codificar. El CRC32 de cada bloque cubre su encabezado, sus parámetros y sus datos. Se verifica el texto y después se relee el binario antes de darle el nombre; un nombre que termina en `.gcode` pasa a `.bgcode`. Todavía sin miniaturas |
+| `verbose_comments` | booleano | `false` | | Cada línea que escribe el motor lleva al final `; ` y qué hace (ficha `gcode_extras.md`, regla 12): `perimeter`, `infill`, `infill (bridge)`, `skirt`, `support material`, `gap fill`, `ironing` en las extrusiones; `retract`, `unretract`, `lift`, `lower`, `move to layer height` (después del G-code del usuario), `reset extrusion distance`, `simple layer change`, `travel to first layer point`, `move to first perimeter point` (o `infill`, `skirt`…), `travel`, `enable fan`, `disable fan`, `set acceleration`, `use absolute coordinates`, `use absolute distances for extrusion` (o `relative`). El G-code del usuario no cambia |
+| `volumetric_e` | booleano | `false` | | Toda E (extrusión y retracción) en mm³ de plástico en vez de mm de filamento: la E de siempre por la sección del filamento (ficha `gcode_extras.md`, regla 11). El motor no escribe `M200`: va en el G-code de inicio |
+| `color_change` | texto | `"M600"` | | Lo que se escribe en un cambio de color de `changes` (ficha `gcode_templates.md`, regla 13), con las variables de `machine.variables`, después de la marca `;COLOR_CHANGE` |
+| `pause` | texto | `"M601"` | | Lo mismo para una pausa, después de `;PAUSE_PRINT` |
+| `custom_template` | texto | `""` | | Lo mismo para el G-code propio de un cambio con `"custom": true`, después de `;CUSTOM_GCODE` (ficha `gcode_templates.md`, regla 13) |
+| `corner_smoothing` | número | 0 | 0 a 0,05 | Las esquinas de las paredes internas y de los rellenos se redondean con un arco que no se aparta del vértice más que esto, en mm, para que la impresora no frene del todo en él; nunca la pared externa (ficha `toolpath_time.md`, regla 7, TT7). El arco no toma más del 45 % de ninguno de sus dos tramos. 0: esquinas en punta |
+| `before_layer` | texto | `""` | | G-code justo antes del movimiento en Z de cada cambio de capa, desde la segunda capa (regla 11, prueba T8), con las variables y además `layer_num` (desde 0), `layer_z` y `max_layer_z` (la Z escrita, sin ceros de más). Va como G-code propio (`;TYPE:Custom`); si tiene algo más que comentarios, el viaje siguiente vuelve a escribir todos los ejes |
+| `after_layer` | texto | `""` | | Lo mismo, justo después del movimiento en Z |
+| `between_objects` | texto | `""` | | En la impresión secuencial, el G-code entre un objeto y el siguiente (ficha `sequential.md`, regla 3), con las variables y `current_object_idx`, el número del objeto que sigue (desde 0). Si pone temperaturas (`M104`, `M109`, `M140`, `M190`), el motor no escribe las suyas |
+
+
+### `output`
+
+De la ficha `docs/spec/features/gcode_templates.md` (reglas 15 a 17). Va en el perfil de impresión.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `filename_format` | texto | `"[input_filename_base].gcode"` | no vacío | Nombre del archivo cuando `slice -o` es una carpeta, en el lenguaje de plantillas, con las variables de la impresión, `fill_density` (`"15%"`) y `default_output_extension` (`".gcode"`, con el punto). `print_time` (`11m`, `1h7m`) y `total_weight` (g, con `extrusion.density`) se conocen al terminar: el archivo se escribe primero con ellas sin reemplazar (`{print_time}`) y después se renombra (prueba T11) |
+| `post_process` | lista de rutas | `[]` | | Scripts que se corren sobre el G-code terminado (reglas 16 y 17), cada uno con la ruta del G-code como único argumento; pueden cambiar el archivo. En su entorno: `SLIC3R_PP_OUTPUT_NAME` (la ruta), `SLIC3R_PP_HOST` (`File`) y cada variable de las plantillas como `SLIC3R_<NOMBRE>` en mayúsculas, con `_` en vez de los puntos (`SLIC3R_LAYERS_HEIGHT`, `SLIC3R_LAYER_HEIGHT`, `SLIC3R_TEMPERATURE`). Antes de correrlos, la línea de comandos pregunta «Continue (Y/N)?» (o `--yes`); con `N` no queda G-code. Un script que no termina en 0 hace fallar el comando. La interfaz todavía no los corre |
+
+### Plantillas de G-code
+
+De la ficha `docs/spec/features/gcode_templates.md` (reglas 1 a 8; `src/gcode/template.hpp`). Todos los textos de
+G-code (`machine.start_gcode` y `end_gcode`, `extrusion.start_gcode` y `end_gcode`, `gcode.before_layer`, `after_layer`,
+`color_change`, `pause` y el `gcode` de `changes`) se resuelven al escribir:
+
+- `[nombre]` se cambia por el valor de la variable; `{expresión}` por el de la expresión: números, `"textos"`, `true`,
+  `false`; `+ - * / %` (un entero dividido por un entero da un entero; `+` une textos); comparaciones, `and`, `or`,
+  `not`; `(condición ? sí : no)`; `texto =~ /expresión regular/`; `nombre[i]` de una lista (un valor solo es una
+  lista de uno, y una lista de uno vale como su valor en cuentas y comparaciones); `(1, 2, 3)` hace una lista;
+- funciones: `min`, `max`, `int` (sin redondear), `round` (las mitades hacia arriba), `digits(valor, ancho[,
+  decimales])` y `zdigits` (rellena con espacios o ceros), `is_nil`, `one_of(valor, opciones…)`, `size` y `empty` (de
+  listas), `interpolate_table(x, (x0, y0), (x1, y1)…)`;
+- `{if …}…{elsif …}…{else}…{endif}`; `{local nombre = …}` (en esa plantilla) y `{global nombre = …}` (también en las
+  que siguen);
+- variables: cada ajuste por su nombre (`{layers.height}`), algunos por su nombre de siempre (`layer_height`,
+  `first_layer_height`, `nozzle_diameter`, `filament_diameter`), las de `machine.variables` y las de la impresión:
+  `total_layer_count`, `num_extruders`, `initial_extruder`, `initial_tool`, `is_extruder_used`,
+  `input_filename_base` (el nombre del modelo en la línea de comandos), `first_layer_print_min`, `_max` y `_size`,
+  `year`, `timestamp`, y `layer_num`, `layer_z` y `max_layer_z` (la primera capa hasta el primer cambio; en el fin, la
+  última);
+- un error (variable o función desconocida, mal usada, de sintaxis) hace fallar la exportación con la sección, la
+  línea y una marca en la columna.
 
 ### `changes` (lista)
 
@@ -351,14 +858,49 @@ Cambios desde una altura, para las torres de calibración. A diferencia de los g
 | `pressure_advance` | número | 0 a 2 | Avance de presión, con el comando del dialecto (como `extrusion.pressure_advance`; acá 0 sí se escribe) |
 | `volumetric_flow` | número | 0,5 a 1000 | Flujo volumétrico forzado, en mm³/s: desde esa altura, toda extrusión corre a la velocidad que da ese flujo en su cordón, por encima de `speed.max` y de `machine.max_flow` y sin el frenado del tiempo mínimo de capa, hasta `machine.max_feed_x` o `_y`. Es para la torre de tope de flujo (`docs/CALIBRATION.md`); el verificador admite esas velocidades |
 | `acceleration` | número | 100 a 100 000 | Aceleración, con el comando del dialecto (`M204 P… T…` con `machine.travel_acceleration`, o `SET_VELOCITY_LIMIT ACCEL=…`). El tiempo estimado sigue con `machine.acceleration` |
+| `exposure` | número | 0,1 a 600 | Resina: exposición en s de las capas normales desde esa altura (la capa cuya mitad está en ella o más arriba; las de fondo mantienen la suya). Es para la torre de exposición (`docs/CALIBRATION.md`) |
 | `gcode` | texto | | G-code que se escribe al empezar la capa, con las variables de `machine.variables` |
+| `color_change` | booleano | | Cambio de color a esa altura: `gcode.color_change` (`M600`) al empezar la capa (ficha `gcode_templates.md`, regla 13) |
+| `pause` | booleano | | Pausa a esa altura: `gcode.pause` (`M601`) |
+| `custom` | booleano | | El G-code propio a esa altura: `gcode.custom_template`, después de `;CUSTOM_GCODE` |
 
 El verificador del G-code juzga cada capa con la retracción y el flujo que le tocan (`docs/GCODE_CHECK.md`).
 
+### `material` (los nombres de las fichas)
+
+Las fichas (`docs/spec/SETTINGS_V1.md` y `docs/spec/features/`) nombran los ajustes del filamento en un grupo
+`material`. El motor los guarda en otros grupos, así que `material` se lee como otro nombre de esos ajustes y no se
+escribe: al leer, cada clave pasa a su lugar.
+
+| Clave | Va a |
+|---|---|
+| `nozzle_temp`, `first_nozzle_temp` | `machine.variables.temperature` y `first_layer_temperature` |
+| `bed_temp`, `first_bed_temp` | `machine.variables.bed_temperature` y `first_layer_bed_temperature` |
+| `flow_factor` | `extrusion.flow` × 100 (un factor 0,95 es un flujo de 95 %) |
+| `variables` | `machine.variables`, cada nombre |
+| `type`, `density`, `cost`, `spool_weight`, `shrinkage_xy`, `shrinkage_z`, `chamber_temperature`, `chamber_min_temperature`, `start_gcode`, `end_gcode`, `infill_max_speed`, `infill_max_crossing_speed`, `min_purge_on_tower`, `purge_multiplier`, `ramming`, `loading_speed`, `loading_speed_start`, `unloading_speed`, `unloading_speed_start`, `cooling_moves`, `cooling_initial_speed`, `cooling_final_speed`, `toolchange_delay`, `load_time`, `unload_time` | `extrusion`, con el mismo nombre |
+
+Una clave que no está en la tabla es un error, y también una que viene a la vez por su nombre del motor
+(`material.cost` y `extrusion.cost`). El asistente acepta estos nombres en sus acciones (`material.nozzle_temp`).
+
+### Otros nombres de las fichas
+
+Algunas claves de las fichas son ajustes que el motor ya tiene con otro nombre, con el mismo significado y valor
+(medición del equipo de fichas, `docs/spec/qa/2026-10-28-ajustes.md`). Se leen igual y pasan a su clave del motor:
+
+| Clave de la ficha | Clave del motor |
+|---|---|
+| `support.angle_limit` | `support.threshold_angle` |
+| `arrange.distance` | `placement.spacing` |
+| `filament.pressure_advance` | `extrusion.pressure_advance` |
+| `machine.e_mode` (`"length"` o `"volume"`) | `gcode.volumetric_e` (`false` o `true`) |
+
+Dadas con los dos nombres a la vez, es un error. Los grupos `arrange` y `filament` no tienen otras claves todavía:
+cualquier otra es un error.
+
 ## Grupos previstos (todavía no implementados)
 
-`material`. Se define acá
-cuando se implementan, a partir de las fichas de `docs/spec/features/`.
+Ninguno. Un grupo nuevo se define acá cuando se implementa, a partir de las fichas de `docs/spec/features/`.
 
 ## Ejemplo
 

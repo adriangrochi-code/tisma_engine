@@ -19,7 +19,37 @@ struct BeadingParams {
     double preferred_width = 0.4; // w*, usually the nozzle diameter
     double inward_beads = 1.5;    // N in Table 1f: how many inner beads take the difference
     int wall_count = 0;           // M walls from each outline at most; 0: fill the whole region
+    // Thin walls (perimeters.md, rule 3): a feature at least min_detail thick
+    // gets a bead, and a single bead is never narrower than min_width, centred
+    // on the feature. 0: as the quantization gives (half of w*).
+    double min_detail = 0.0;
+    double min_width = 0.0;
+    // The outer bead's width within the shell (walls.outer_width,
+    // perimeters.md); 0: w*.
+    double outer_width = 0.0;
+    // How much neighbouring beads overlap (bead_overlap of the layer's
+    // height, perimeters.md rule 1). layer_walls works in spacings: the
+    // widths above less this, min_width and min_detail as they are, on the
+    // region shrunk by half of it, and gives the beads this wider.
+    double overlap = 0.0;
+    // The length of the ramp from n to n + 1 beads along the wall
+    // (walls.transition_length, perimeters.md); 0: w*.
+    double transition_length = 0.0;
+    // Odd counts (a bead on the centre) only where the outline's corner is
+    // no wider than this (walls.transition_angle, perimeters.md P14); the
+    // centre's marking with alpha_max = 180 - this (Kuipers et al. 2020,
+    // Section 3.3). Degrees.
+    double transition_angle = 45.0;
+    // A bead on the centre (an odd count from 3 on) only once it would be
+    // this many w* wide; the steps to an even count stay half a bead after
+    // the last one. Table P2 of perimeters.md puts 2 beads in 1.1 mm and 3
+    // in 1.2, 4 in 1.9 and 5 in 2.0: 0.8 (own reading of the measured
+    // table). 0: Eq. 5 as it is.
+    double odd_centre = 0.0;
 };
+
+// The outer bead's width within the shell: outer_width, or w*.
+double outer_bead(const BeadingParams& params);
 
 // The beads across a thickness, from one outline to the other: widths[i] and
 // the distance of each bead's centre line from the first outline. Symmetric:
@@ -44,7 +74,8 @@ double transition_thickness(const BeadingParams& params, int n);
 // of it, continuous in the thickness: from `start`, where the unlimited count
 // would reach 2M + 1, the 2M beads narrow linearly to w* until `end`, w*/2
 // thicker, so the middle gap opens from 0 to w*; beyond `end` the beads stay at
-// w*. The uniform scheme already leaves its gap in the middle and needs no
+// w*. With an outer width of its own the two outer beads go to it instead, and
+// the ramp starts late enough for the shell to leave that gap. The uniform scheme already leaves its gap in the middle and needs no
 // ramp. Empty without a limit.
 struct ShellRamp {
     double start = 0.0, end = 0.0; // thicknesses

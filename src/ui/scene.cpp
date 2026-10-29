@@ -2,10 +2,14 @@
 
 #include "ui/scene.hpp"
 
+#include <oneapi/tbb/blocked_range.h>
 #include <oneapi/tbb/parallel_for.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstdint>
+#include <vector>
 
 namespace tisma::ui {
 namespace {
@@ -97,18 +101,25 @@ TriangleMesh translated(const TriangleMesh& mesh, Vec3 offset) {
 }
 
 std::vector<float> mesh_vertices(const TriangleMesh& mesh, Vec3 offset) {
-    std::vector<float> out;
-    out.reserve(mesh.triangle_count() * 18);
-    for (std::size_t t = 0; t < mesh.triangle_count(); ++t) {
-        Vec3 p[3];
-        for (int k = 0; k < 3; ++k) {
-            const Vec3f& c = mesh.corner(t, k);
-            p[k] = Vec3{c.x, c.y, c.z} + offset;
-        }
-        const Vec3 n = normalize(cross(p[1] - p[0], p[2] - p[0]));
-        for (const Vec3& v : p)
-            out.insert(out.end(), {v.x, v.y, v.z, n.x, n.y, n.z});
-    }
+    // Each triangle's 18 floats in their own place, the triangles in
+    // parallel: a model of millions of triangles (the owner's large-model item).
+    std::vector<float> out(mesh.triangle_count() * 18);
+    tbb::parallel_for(tbb::blocked_range<std::size_t>(0, mesh.triangle_count(), 4096),
+                      [&](const tbb::blocked_range<std::size_t>& range) {
+                          for (std::size_t t = range.begin(); t != range.end(); ++t) {
+                              Vec3 p[3];
+                              for (int k = 0; k < 3; ++k) {
+                                  const Vec3f& c = mesh.corner(t, k);
+                                  p[k] = Vec3{c.x, c.y, c.z} + offset;
+                              }
+                              const Vec3 n = normalize(cross(p[1] - p[0], p[2] - p[0]));
+                              float* at = out.data() + 18 * t;
+                              for (const Vec3& v : p) {
+                                  const float row[6] = {v.x, v.y, v.z, n.x, n.y, n.z};
+                                  at = std::copy(row, row + 6, at);
+                              }
+                          }
+                      });
     return out;
 }
 
@@ -154,7 +165,39 @@ std::vector<float> bed_triangles(const BedPolygon& bed) {
     return out;
 }
 
-PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb) {
+float preview_value(const GcodePreview& preview, const PreviewMove& m, PreviewValue value) {
+    const auto actual = [&] {
+        const double length = std::hypot(double(m.x1) - m.x0, double(m.y1) - m.y0, double(m.z1) - m.z0);
+        return m.seconds > 0.0f ? float(length / m.seconds) : m.feed;
+    };
+    const auto layer_seconds = [&] { return m.layer < preview.layers.size() ? preview.layers[m.layer].seconds : 0.0; };
+    switch (value) {
+    case PreviewValue::Feed: return m.feed;
+    case PreviewValue::ActualFeed: return actual();
+    case PreviewValue::Fan: return float(m.fan);
+    case PreviewValue::Temperature: return float(m.temperature);
+    case PreviewValue::Flow: return m.width * m.height * m.feed;
+    case PreviewValue::ActualFlow: return m.width * m.height * actual();
+    case PreviewValue::LayerTime: return float(layer_seconds());
+    case PreviewValue::LayerTimeLog: return float(std::log10(std::max(layer_seconds(), 0.01)));
+    case PreviewValue::Tool: return float(m.tool);
+    case PreviewValue::ColorPrint: return float(m.color);
+    }
+    return m.feed;
+}
+
+std::vector<double> legend_steps(double lo, double hi, bool log) {
+    if (!(hi > lo))
+        return {log ? std::pow(10.0, lo) : lo};
+    std::vector<double> out;
+    for (int i = 0; i <= 10; ++i) {
+        const double v = lo + (hi - lo) * i / 10.0;
+        out.push_back(log ? std::pow(10.0, v) : v);
+    }
+    return out;
+}
+
+PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel_argb, PreviewValue value) {
     PreviewBuffers out;
     out.extrusions.reserve(preview.extrusions.size());
     out.layer_extrusions.reserve(preview.layers.size() + 1);
@@ -196,14 +239,14 @@ PreviewBuffers preview_buffers(const GcodePreview& preview, std::uint32_t travel
             PreviewInstance p;
             p.x0 = m.x0, p.y0 = m.y0, p.z0 = m.z0;
             p.x1 = m.x1, p.y1 = m.y1, p.z1 = m.z1;
-            p.width = m.width, p.height = m.height, p.feed = m.feed;
+            p.width = m.width, p.height = m.height, p.feed = preview_value(preview, m, value);
             p.kind_layer = static_cast<std::uint32_t>(m.kind) | (m.layer << 8);
             if (joinable)
                 join(out.extrusions.back(), p);
             out.extrusions.push_back(p);
             joinable = true;
-            out.min_feed = first ? m.feed : std::min(out.min_feed, m.feed);
-            out.max_feed = first ? m.feed : std::max(out.max_feed, m.feed);
+            out.min_feed = first ? p.feed : std::min(out.min_feed, p.feed);
+            out.max_feed = first ? p.feed : std::max(out.max_feed, p.feed);
             out.min_width = first ? m.width : std::min(out.min_width, m.width);
             out.max_width = first ? m.width : std::max(out.max_width, m.width);
             out.min_height = first ? m.height : std::min(out.min_height, m.height);
@@ -419,20 +462,107 @@ PreviewDrawOrder preview_draw_order(const PreviewBuffers& p) {
     for (std::size_t i = 0; i < p.hidden.size(); ++i)
         if (p.hidden[i] != 0)
             out.hidden_kinds |= 1u << (p.extrusions[i].kind_layer & 0xFFu);
+    out.layer_z.assign(layers, 0.0f);
+    for (std::size_t l = 0; l < layers; ++l) {
+        float z = l > 0 ? out.layer_z[l - 1] : 0.0f;
+        bool any = false;
+        for (std::size_t i = p.layer_extrusions[l]; i < p.layer_extrusions[l + 1]; ++i) {
+            const PreviewInstance& e = p.extrusions[i];
+            z = any ? std::max({z, e.z0, e.z1}) : std::max(e.z0, e.z1);
+            any = true;
+        }
+        out.layer_z[l] = z;
+    }
+    // A bead reaches half its width out, its free ends as far, and a mitre
+    // up to its width past the point; it hangs one height under the path.
+    out.layer_box.assign(layers, {1e30f, 1e30f, 1e30f, -1e30f, -1e30f, -1e30f});
+    for (std::size_t l = 0; l < layers; ++l) {
+        std::array<float, 6>& b = out.layer_box[l];
+        for (std::size_t i = p.layer_extrusions[l]; i < p.layer_extrusions[l + 1]; ++i) {
+            const PreviewInstance& e = p.extrusions[i];
+            const float r = e.width + e.height;
+            b = {std::min({b[0], e.x0 - r, e.x1 - r}), std::min({b[1], e.y0 - r, e.y1 - r}),
+                 std::min({b[2], e.z0 - r, e.z1 - r}), std::max({b[3], e.x0 + r, e.x1 + r}),
+                 std::max({b[4], e.y0 + r, e.y1 + r}), std::max({b[5], e.z0 + r, e.z1 + r})};
+        }
+    }
     return out;
 }
 
+bool box_outside(const Mat4& m, const std::array<float, 6>& box) {
+    if (box[0] > box[3])
+        return true; // empty
+    // Per plane of the volume (-w <= x, y, z <= w), whether every corner is beyond it.
+    std::array<bool, 6> beyond;
+    beyond.fill(true);
+    for (int c = 0; c < 8; ++c) {
+        const float x = box[c & 1 ? 3 : 0], y = box[c & 2 ? 4 : 1], z = box[c & 4 ? 5 : 2];
+        const float cx = m[0] * x + m[4] * y + m[8] * z + m[12];
+        const float cy = m[1] * x + m[5] * y + m[9] * z + m[13];
+        const float cz = m[2] * x + m[6] * y + m[10] * z + m[14];
+        const float cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+        beyond[0] = beyond[0] && cx < -cw, beyond[1] = beyond[1] && cx > cw;
+        beyond[2] = beyond[2] && cy < -cw, beyond[3] = beyond[3] && cy > cw;
+        beyond[4] = beyond[4] && cz < -cw, beyond[5] = beyond[5] && cz > cw;
+    }
+    return std::any_of(beyond.begin(), beyond.end(), [](bool b) { return b; });
+}
+
 std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
-                                           std::uint32_t kind_mask) {
+                                           std::uint32_t kind_mask, std::size_t top_shown, std::size_t top_hidden) {
     if (order.layer_shown.size() < 2 || order.layer_hidden.size() != order.layer_shown.size())
         return {};
     const std::size_t layers = order.layer_shown.size() - 1;
     lo = std::min(lo, layers - 1);
     hi = std::clamp(hi, lo, layers - 1);
+    const bool cut = top_shown != kWholeLayer || top_hidden != kWholeLayer;
     const std::uint32_t kinds_drawn = kind_mask | order.hidden_kinds | (1u << unsigned(LineKind::Travel));
-    const bool whole = lo == 0 && hi == layers - 1 && kinds_drawn == 0xFFFFFFFFu;
-    return {PreviewRange{order.layer_shown[lo], order.layer_shown[hi + 1] - order.layer_shown[lo]},
-            PreviewRange{order.layer_hidden[lo], whole ? 0 : order.layer_hidden[hi + 1] - order.layer_hidden[lo]}};
+    const bool whole = lo == 0 && hi == layers - 1 && kinds_drawn == 0xFFFFFFFFu && !cut;
+    const std::size_t shown_end = std::min(order.layer_shown[hi + 1],
+                                           top_shown == kWholeLayer ? order.layer_shown[hi + 1] : order.layer_shown[hi] + top_shown);
+    const std::size_t hidden_end =
+        std::min(order.layer_hidden[hi + 1],
+                 top_hidden == kWholeLayer ? order.layer_hidden[hi + 1] : order.layer_hidden[hi] + top_hidden);
+    return {PreviewRange{order.layer_shown[lo], shown_end - order.layer_shown[lo]},
+            PreviewRange{order.layer_hidden[lo], whole ? 0 : hidden_end - order.layer_hidden[lo]}};
+}
+
+std::vector<PreviewRange> preview_draws(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
+                                        std::uint32_t kind_mask, float eye_z, std::size_t top_shown,
+                                        std::size_t top_hidden, const Mat4* clip) {
+    std::vector<PreviewRange> out;
+    const std::array<PreviewRange, 2> ranges = preview_ranges(order, lo, hi, kind_mask, top_shown, top_hidden);
+    if (ranges[0].count + ranges[1].count == 0)
+        return out;
+    const std::size_t layers = order.layer_shown.size() - 1;
+    lo = std::min(lo, layers - 1);
+    hi = std::clamp(hi, lo, layers - 1);
+    // The first layer above the eye.
+    std::size_t split = lo;
+    while (split <= hi && split < order.layer_z.size() && order.layer_z[split] <= eye_z)
+        ++split;
+    const auto add = [&](const PreviewRange& range, const std::vector<std::size_t>& starts, std::size_t l) {
+        if (clip && l < order.layer_box.size() && box_outside(*clip, order.layer_box[l]))
+            return;
+        const std::size_t b = std::max(range.first, starts[l]);
+        const std::size_t e = std::min(range.first + range.count, starts[l + 1]);
+        if (e <= b)
+            return;
+        if (!out.empty() && out.back().first + out.back().count == b)
+            out.back().count += e - b; // the next layer up, right after this one
+        else
+            out.push_back({b, e - b});
+    };
+    for (int k = 0; k < 2; ++k) {
+        if (ranges[std::size_t(k)].count == 0)
+            continue;
+        const std::vector<std::size_t>& starts = k == 0 ? order.layer_shown : order.layer_hidden;
+        for (std::size_t l = split; l-- > lo;)
+            add(ranges[std::size_t(k)], starts, l);
+        for (std::size_t l = split; l <= hi; ++l)
+            add(ranges[std::size_t(k)], starts, l);
+    }
+    return out;
 }
 
 std::uint32_t kind_colour(LineKind kind) {
@@ -455,6 +585,77 @@ std::uint32_t kind_colour(LineKind kind) {
     case LineKind::Other: return 0x6C6C78;
     }
     return 0x808080;
+}
+
+TriangleMesh clustered(const TriangleMesh& mesh, std::size_t target) {
+    const std::size_t n = mesh.triangle_count();
+    if (n <= target || target == 0)
+        return mesh;
+    // A regular surface mesh has about two triangles per vertex: cells of
+    // side h hold one vertex each over the area A, so h = sqrt(2 A / target).
+    double area = 0.0;
+    for (std::size_t t = 0; t < n; ++t) {
+        const Vec3f &a = mesh.corner(t, 0), &b = mesh.corner(t, 1), &c = mesh.corner(t, 2);
+        const Vec3 u{b.x - a.x, b.y - a.y, b.z - a.z}, v{c.x - a.x, c.y - a.y, c.z - a.z};
+        area += 0.5 * double(length(cross(u, v)));
+    }
+    const BoundingBox box = mesh.bounding_box();
+    // No finer than 2^21 cells along an axis, the key's room.
+    const double extent = std::max({double(box.max.x - box.min.x), double(box.max.y - box.min.y),
+                                    double(box.max.z - box.min.z), 1e-3});
+    const double h = std::max(std::sqrt(2.0 * area / double(target)), extent / 2.0e6);
+    const auto cell_of = [&](const Vec3f& p) {
+        const auto at = [&](float x, float lo) { return std::uint64_t(std::max(0.0, std::floor((double(x) - lo) / h))); };
+        return at(p.x, box.min.x) | at(p.y, box.min.y) << 21 | at(p.z, box.min.z) << 42;
+    };
+    // Each cell's index, its corners' sum and count: an open-addressing table
+    // twice as large as the cells there may be.
+    std::size_t size = 1;
+    while (size < 4 * target)
+        size <<= 1;
+    std::vector<std::uint64_t> keys(size, ~std::uint64_t(0));
+    std::vector<std::uint32_t> slot_cell(size, 0);
+    std::vector<std::array<double, 3>> sum;
+    std::vector<std::uint32_t> count;
+    std::vector<std::uint32_t> corner_cell(3 * n);
+    for (std::size_t i = 0; i < 3 * n; ++i) {
+        const Vec3f& p = mesh.corners()[i];
+        const std::uint64_t key = cell_of(p);
+        std::size_t at = std::size_t((key * 0x9E3779B97F4A7C15ull) >> 20) & (size - 1);
+        while (keys[at] != key && keys[at] != ~std::uint64_t(0))
+            at = (at + 1) & (size - 1);
+        if (keys[at] != key) {
+            if (sum.size() * 2 >= size) // a full table: the grid was too fine for this shape
+                return mesh;
+            keys[at] = key;
+            slot_cell[at] = std::uint32_t(sum.size());
+            sum.push_back({0.0, 0.0, 0.0});
+            count.push_back(0);
+        }
+        const std::uint32_t c = slot_cell[at];
+        sum[c][0] += p.x, sum[c][1] += p.y, sum[c][2] += p.z;
+        ++count[c];
+        corner_cell[i] = c;
+    }
+    // The surviving triangles over their cells, each once, wound as they
+    // were (the smallest cell first, the order kept).
+    std::vector<std::array<std::uint32_t, 3>> kept;
+    kept.reserve(target * 2);
+    for (std::size_t t = 0; t < n; ++t) {
+        std::array<std::uint32_t, 3> c{corner_cell[3 * t], corner_cell[3 * t + 1], corner_cell[3 * t + 2]};
+        if (c[0] == c[1] || c[1] == c[2] || c[0] == c[2])
+            continue;
+        std::rotate(c.begin(), std::min_element(c.begin(), c.end()), c.end());
+        kept.push_back(c);
+    }
+    std::sort(kept.begin(), kept.end());
+    kept.erase(std::unique(kept.begin(), kept.end()), kept.end());
+    std::vector<Vec3f> corners;
+    corners.reserve(3 * kept.size());
+    for (const auto& c : kept)
+        for (const std::uint32_t k : c)
+            corners.push_back(Vec3f{float(sum[k][0] / count[k]), float(sum[k][1] / count[k]), float(sum[k][2] / count[k])});
+    return TriangleMesh(std::move(corners));
 }
 
 } // namespace tisma::ui

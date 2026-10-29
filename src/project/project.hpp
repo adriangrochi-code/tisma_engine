@@ -4,6 +4,7 @@
 #include "config/settings.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/paint.hpp"
+#include "slice/color_mix.hpp"
 
 #include <array>
 #include <filesystem>
@@ -23,11 +24,36 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+// A modifier or negative volume added to a model, a box or a cylinder placed
+// from the model's box (the centre in X and Y, the bottom in Z), and a height
+// range of it (model_tools.md, rules 2, 3 and 6).
+struct ProjectVolume {
+    bool negative = false;
+    bool cylinder = false;
+    std::array<double, 3> offset{0.0, 0.0, 0.0}, size{10.0, 10.0, 10.0};
+    std::string settings{};
+    std::array<double, 9> turn{1, 0, 0, 0, 1, 0, 0, 0, 1}; // its own turn, by rows
+};
+struct ProjectRange {
+    double from = 0.0, to = 2.0;
+    std::string settings{};
+};
+
 struct ProjectModel {
     std::string name;                // the file it came from, or the calibration's name
     TriangleMesh mesh;               // as it was loaded, in its own coordinates
     std::array<double, 3> offset{};  // where it was on the bed, mm
     Painting painting;               // its painted faces (docs/PAINTING.md), by triangle of the mesh
+    // Its extruder (from 1, or a blend's number), and whether a filament
+    // change may purge into its sparse infill or into all of it
+    // (multi_extruder.md, rules 1 and 13).
+    int extruder = 1;
+    bool wipe_into_infill = false, wipe_into_object = false;
+    // Its own settings (model_tools.md, rule 7): a JSON object of groups
+    // over the profile's; empty: none.
+    std::string settings{};
+    std::vector<ProjectVolume> volumes{};
+    std::vector<ProjectRange> ranges{};
 };
 
 // The calibration being printed: which one, and the value of each segment.
@@ -42,6 +68,10 @@ struct Project {
     std::array<std::string, 3> profiles; // the chosen profile of each ProfileKind, "" for none
     std::vector<ProjectModel> models;
     std::optional<ProjectCalibration> calibration;
+    // The project's mixed colours and the colour of each filament
+    // (color_mixing.md): they travel with the models, not with a profile.
+    std::vector<ColorMix> mixes;
+    std::vector<std::string> filament_colors;
 };
 
 // The file: "TISMAPRJ", the format version (32 bits), then chunks, each a

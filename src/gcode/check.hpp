@@ -1,6 +1,9 @@
 #pragma once
 
+#include "slice/curved.hpp"
+
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -15,11 +18,32 @@ struct Settings;
 struct GcodeLimits {
     double min_x = 0.0, min_y = 0.0, max_x = 0.0, max_y = 0.0; // where moves may go, mm
     double max_z = 0.0;           // the top layer plus the travel lift, mm
+    double min_z = 0.0;           // below the bed only with a negative machine.z_offset
     double max_feed = 0.0;        // the fastest move, mm/s
     double filament_area = 1.0;   // mm2
     double retract_length = 0.0;  // mm of filament
+    // retraction_travel.md: the filament pushed past each retraction undone
+    // (rule 1), a retraction partly while the nozzle wipes (rule 3), and G10
+    // and G11 in place of E (rule 7).
+    double restart_extra = 0.0;
+    bool wipe = false;
+    bool firmware_retraction = false;
+    // Several extruders (multi_extruder.md, rule 5): a tool change's
+    // retraction and the extra when the tool comes back, by extruder from 0;
+    // empty with one extruder.
+    std::vector<double> toolchange_length, toolchange_restart_extra;
+    // The wipe tower without sparse layers (rule 11): its extrusions may lie
+    // under the layer's Z, as thick as the layer.
+    bool tower_below = false;
+    // A single-extruder MMU (rule 15): the change's G-code unloads and loads
+    // the filament; the new one comes with its tip at the nozzle.
+    bool mmu = false;
     double flow = 1.0;            // the share of width x height x length laid down (extrusion.flow / 100)
     bool relative_extrusion = false;
+    // The dialect (gcode_extras.md, rule 6): the extruder's axis ('A' on Mach3
+    // and Machinekit; 0: none, no_extrusion) and the letter of M106's value.
+    char e_axis = 'E';
+    char fan_parameter = 'S';
     // Z anti-aliasing (docs/ZAA.md): how far an extrusion may leave its layer's
     // Z, down and up, as shares of the layer height; its bead is as thick as
     // what is left down to the layer's bottom.
@@ -28,6 +52,15 @@ struct GcodeLimits {
     // a ;NONPLANAR block may leave its layer's Z either way; there each
     // move's ;HEIGHT is its bead's own thickness.
     double wave = 0.0;
+    // Curved layers (nonplanar.md): each extrusion at its layer's flat Z
+    // bent by the field, its bead as thick as the layer by J there.
+    std::optional<CurvedField> curved;
+    double z_offset = 0.0; // machine.z_offset, which the field does not bend
+    // A belt printer (belt_printer.md): the moves are on the machine's axes,
+    // the belt and the gantry, and go back to the slicing planes to be checked.
+    bool belt = false;
+    double belt_angle = 45.0; // degrees
+    bool belt_is_z = true;
     // The scarf seam (docs/spec/features/walls_extra.md, rule 4) and vase
     // mode's turns: how far below its layer's Z an extrusion in a ;NONPLANAR
     // block may go, as a share of the layer's height (they start down at the

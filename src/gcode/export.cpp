@@ -3,6 +3,7 @@
 
 #include "gcode/export.hpp"
 
+#include "gcode/binary.hpp"
 #include "gcode/writer.hpp"
 #include "slice/pipeline.hpp"
 
@@ -76,6 +77,39 @@ GcodeExport export_gcode(const std::filesystem::path& path, const SlicedModel& m
     out.check_seconds = seconds_since(check_start);
 
     std::error_code ec;
+    // The binary format (gcode_extras.md, rule 9): from the G-code that passed
+    // its check, read back too, and its G-code the same text.
+    if (out.check.ok() && settings.gcode_binary) {
+        const std::string binary = binary_gcode(text, settings);
+        {
+            std::ofstream file(part, std::ios::binary | std::ios::trunc);
+            file.write(binary.data(), std::streamsize(binary.size()));
+            file.close();
+            if (!file) {
+                std::filesystem::remove(part, ignored);
+                out.error = "writing '" + part.string() + "' failed (is the disk full?)";
+                return out;
+            }
+        }
+        std::string back;
+        {
+            std::ifstream file(part, std::ios::binary | std::ios::ate);
+            const std::streamoff size = file ? std::streamoff(file.tellg()) : -1;
+            back.resize(size > 0 ? std::size_t(size) : 0);
+            file.seekg(0);
+            file.read(back.data(), std::streamsize(back.size()));
+        }
+        try {
+            const BinaryGcode read = read_binary_gcode(back);
+            if (!text.starts_with(read.gcode) || read.gcode.empty())
+                throw std::runtime_error("its G-code is not the one checked");
+        } catch (const std::exception& e) {
+            std::filesystem::rename(part, rejected, ec);
+            out.error = std::string("the binary G-code does not read back: ") + e.what() + "; kept as '" + rejected.string() + "'";
+            return out;
+        }
+        out.bytes = back.size();
+    }
     if (!out.check.ok()) {
         std::filesystem::rename(part, rejected, ec);
         out.error = "the G-code failed its check (" + std::to_string(out.check.problem_count) + " problems; first, line " +

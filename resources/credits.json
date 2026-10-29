@@ -1,0 +1,167 @@
+{
+  "format": "tisma-credits",
+  "version": 1,
+  "about": "Where each function comes from (docs/spec/features/credits.md): the cards that show «Based on», and the libraries the program carries with their notices. tests/test_credits.cpp compares this file with the specs' «Basado en» lines and with THIRD_PARTY.md.",
+  "features": [
+    {
+      "feature": {"es": "Aletas de soporte", "en": "Support fins"},
+      "spec": "support_fins.md",
+      "source": "Support Fins",
+      "author": "gittrahan",
+      "license": {"es": "MIT", "en": "MIT"},
+      "url": "https://github.com/gittrahan/support-fins",
+      "cards": []
+    },
+    {
+      "feature": {"es": "Asistente y tutoriales", "en": "Assistant and tutorials"},
+      "spec": "assistant.md",
+      "source": "Guías de impresión 3D (PDF)",
+      "author": "Rafa Barajas",
+      "license": {"es": "Basado en sus guías en PDF (problemas, materiales, glosario, parámetros y secado)", "en": "Based on the PDF guides (problems, materials, glossary, parameters and drying)"},
+      "url": "https://www.rafabarajas.com",
+      "cards": []
+    },
+    {
+      "feature": {"es": "Guías de calibración", "en": "Calibration guides"},
+      "spec": "assistant.md",
+      "source": "OrcaSlicer calibration wiki",
+      "author": "OrcaSlicer",
+      "license": {"es": "Basado en su documentación", "en": "Based on its documentation"},
+      "url": "https://github.com/SoftFever/OrcaSlicer/wiki/calibration_guide",
+      "cards": []
+    },
+    {
+      "feature": {"es": "Guías de calibración", "en": "Calibration guides"},
+      "spec": "assistant.md",
+      "source": "Ellis' Print Tuning Guide",
+      "author": "Andrew Ellis",
+      "license": {"es": "Basado en la guía", "en": "Based on the guide"},
+      "url": "https://ellis3dp.com/Print-Tuning-Guide/",
+      "cards": []
+    },
+    {
+      "feature": {"es": "Guías de calibración", "en": "Calibration guides"},
+      "spec": "assistant.md",
+      "source": "Klipper",
+      "author": "Klipper",
+      "license": {"es": "Basado en su documentación", "en": "Based on its documentation"},
+      "url": "https://www.klipper3d.org/",
+      "cards": []
+    },
+    {
+      "feature": {"es": "Perfiles de resina del paquete", "en": "Resin profiles of the pack"},
+      "spec": "profile_pack.md",
+      "source": "UVtools",
+      "author": "sn4k3",
+      "license": {"es": "AGPL-3.0 (datos, en el repositorio de perfiles)", "en": "AGPL-3.0 (data, in the profiles' repository)"},
+      "url": "https://github.com/sn4k3/UVtools",
+      "cards": []
+    },
+    {
+      "feature": {"es": "Paredes de ancho variable", "en": "Variable-width walls"},
+      "spec": "perimeters.md",
+      "source": "Adaptive width control of contour-parallel toolpaths (2020)",
+      "short": "Adaptive width control (2020)",
+      "author": "Kuipers et al.",
+      "license": {"es": "Artículo", "en": "Paper"},
+      "url": "https://doi.org/10.1016/j.cad.2020.102907",
+      "cards": ["walls"]
+    },
+    {
+      "feature": {"es": "Capas curvas en 3 ejes", "en": "Curved layers on 3 axes"},
+      "spec": "nonplanar_modes.md",
+      "source": "CurviSlicer (2019)",
+      "author": "Etienne et al.",
+      "license": {"es": "Artículo", "en": "Paper"},
+      "url": "https://hal.science/hal-02120033",
+      "cards": ["curved", "curved_more"]
+    },
+    {
+      "feature": {"es": "Capas según las tensiones", "en": "Layers along the stresses"},
+      "spec": "nonplanar_modes.md",
+      "source": "S³-Slicer (2022)",
+      "author": "Zhang et al.",
+      "license": {"es": "Artículo", "en": "Paper"},
+      "url": "https://history.siggraph.org/?p=216073",
+      "cards": []
+    },
+    {
+      "feature": {"es": "Soportes en árbol de resina", "en": "Resin tree supports"},
+      "spec": "resin_supports.md",
+      "source": "Clever Support (2014)",
+      "author": "Vanek, Garcia Galicia & Benes",
+      "license": {"es": "Artículo", "en": "Paper"},
+      "url": "https://www.cs.purdue.edu/homes/bbenes/papers/Vanek14SGP.pdf",
+      "cards": ["resin_supports"]
+    },
+    {
+      "feature": {"es": "Impresoras Bambu Lab en red local", "en": "Bambu Lab printers on the local network"},
+      "spec": "printer_connections.md",
+      "source": "OpenBambuAPI",
+      "author": "Doridian",
+      "license": {"es": "Basado en su documentación", "en": "Based on its documentation"},
+      "url": "https://github.com/Doridian/OpenBambuAPI",
+      "cards": []
+    },
+    {
+      "feature": {"es": "Relleno ondulado", "en": "Wavy infill"},
+      "spec": "",
+      "source": "ZigZagZ (2021)",
+      "author": "Allum et al.",
+      "license": {"es": "Artículo", "en": "Paper"},
+      "url": "https://doi.org/10.1016/j.addma.2020.101715",
+      "cards": ["wavy"]
+    },
+    {
+      "feature": {"es": "Z anti-aliasing", "en": "Z anti-aliasing"},
+      "spec": "z_antialiasing.md",
+      "source": "Anti-aliasing for fused filament deposition (2017)",
+      "short": "FFF anti-aliasing (2017)",
+      "author": "Song et al.",
+      "license": {"es": "Artículo", "en": "Paper"},
+      "url": "https://arxiv.org/abs/1609.03032",
+      "cards": ["slopes"]
+    },
+    {
+      "feature": {"es": "Arcos en voladizos", "en": "Arc overhangs"},
+      "spec": "arc_overhangs.md",
+      "source": "Arc overhang",
+      "author": "Steven McCulloch",
+      "license": {"es": "Basado en la idea publicada", "en": "Based on the published idea"},
+      "url": "https://github.com/stmcculloch/arc-overhang",
+      "cards": ["arcs"]
+    },
+    {
+      "feature": {"es": "Relleno rayo", "en": "Lightning infill"},
+      "spec": "infill_patterns.md",
+      "source": "Ribbed Support Vaults for 3D Printing of Hollowed Objects (2020)",
+      "short": "Ribbed Support Vaults (2020)",
+      "author": "Tricard, Claux & Lefebvre",
+      "license": {"es": "Artículo", "en": "Paper"},
+      "url": "https://doi.org/10.1111/cgf.13750",
+      "cards": []
+    },
+    {
+      "feature": {"es": "Vaciado de piezas de resina", "en": "Hollowing of resin parts"},
+      "spec": "",
+      "source": "Distance Transforms of Sampled Functions (2012)",
+      "short": "Distance Transforms (2012)",
+      "author": "Felzenszwalb & Huttenlocher",
+      "license": {"es": "Artículo", "en": "Paper"},
+      "url": "https://theoryofcomputing.org/articles/v008a019/",
+      "cards": ["resin_hollow"]
+    }
+  ],
+  "libraries": [
+    {"name": "Clipper2", "version": "1.5.4", "license": "BSL-1.0", "url": "https://github.com/AngusJohnson/Clipper2", "notices": ["boost-1.0.txt"]},
+    {"name": "Vulkan-Headers", "version": "vulkan-sdk-1.4.350.1", "license": "Apache-2.0 AND MIT", "url": "https://github.com/KhronosGroup/Vulkan-Headers", "notices": ["vulkan-headers.txt", "apache-2.0.txt"]},
+    {"name": "volk", "version": "vulkan-sdk-1.4.350.1", "license": "MIT", "url": "https://github.com/zeux/volk", "notices": ["volk.txt"]},
+    {"name": "nlohmann/json", "version": "3.12.0", "license": "MIT", "url": "https://github.com/nlohmann/json", "notices": ["nlohmann-json.txt"]},
+    {"name": "Boost.Polygon", "version": "boost-1.90.0", "license": "BSL-1.0", "url": "https://github.com/boostorg/polygon", "notices": ["boost-1.0.txt"]},
+    {"name": "Boost.Config", "version": "boost-1.90.0", "license": "BSL-1.0", "url": "https://github.com/boostorg/config", "notices": ["boost-1.0.txt"]},
+    {"name": "oneTBB", "version": "2022.3.0", "license": "Apache-2.0", "url": "https://github.com/uxlfoundation/oneTBB", "notices": ["apache-2.0.txt", "onetbb-third-party.txt"]},
+    {"name": "GLFW", "version": "3.4", "license": "Zlib", "url": "https://github.com/glfw/glfw", "notices": ["glfw.txt"]},
+    {"name": "Dear ImGui", "version": "1.92.9b", "license": "MIT AND Apache-2.0", "url": "https://github.com/ocornut/imgui", "notices": ["imgui.txt", "apache-2.0.txt"]},
+    {"name": "nanosvg", "version": "239e102ec2c691f2902e20ace2ed36ee4a35cfe6", "license": "Zlib", "url": "https://github.com/memononen/nanosvg", "notices": ["nanosvg.txt"]}
+  ]
+}

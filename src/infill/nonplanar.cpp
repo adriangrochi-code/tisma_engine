@@ -12,6 +12,19 @@
 namespace tisma {
 
 std::optional<WaveParams> wave_params(const Settings& s) {
+    if (s.infill_waves) {
+        if (!(s.infill_density > 0.0) || !(s.infill_wave_amplitude > 0.0) || !(s.infill_wave_length > 0.0))
+            return std::nullopt;
+        WaveParams p;
+        p.egg_crate = true;
+        p.amplitude = 2.0 * s.layer_height * s.infill_wave_amplitude / 100.0;
+        p.wavelength = s.infill_wave_length;
+        p.cell = std::clamp(p.amplitude, 0.25, 0.5);
+        p.fade = 2.0 * p.amplitude;
+        p.margin = 0.5 * p.amplitude + 0.5 * s.wall_width + 0.5 * p.cell;
+        p.step = std::min(0.25, p.wavelength / 16.0);
+        return p;
+    }
     // A caller of the library can skip the JSON ranges: no wave without a
     // length (the cuts every wavelength / 8 would have none).
     if (!s.infill_nonplanar || !(s.infill_density > 0.0) || !(s.infill_nonplanar_amplitude > 0.0) ||
@@ -57,6 +70,10 @@ std::optional<WaveParams> wave_params(const Settings& s) {
 double wave_height(const WaveParams& params, Point2d p) {
     if (!(params.wavelength > 0.0))
         return 0.0;
+    if (params.egg_crate) {
+        const double k = 2.0 * std::numbers::pi / params.wavelength;
+        return 0.5 * params.amplitude * std::sin(k * p.x) * std::sin(k * p.y);
+    }
     const double a = params.direction * std::numbers::pi / 180.0;
     // Lines 45 degrees off the waves' direction see them a wavelength long.
     const double t = (p.x * std::cos(a) + p.y * std::sin(a)) / (params.wavelength / std::numbers::sqrt2);

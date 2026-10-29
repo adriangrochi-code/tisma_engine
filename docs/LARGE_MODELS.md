@@ -38,7 +38,8 @@ la GPU decenas de millones de vértices por cuadro aunque la mayoría estén tap
    luz rápida, igual a la de OpenGL imagen contra imagen).
 4. Rayos primarios para la vista previa, como un modo de la vista.
 5. Capas juntas de lejos, mallado voraz de los cordones vecinos, y menos vértices por cordón (solo las caras que miran
-   a la cámara).
+   a la cámara). Hechas las caras que miran a la cámara (18 vértices en vez de 36) y el recorte por capas contra el
+   volumen de visión (2026-10-29); faltan las capas juntas y el mallado voraz.
 6. Malla simplificada del modelo mientras se mueve.
 
 Cada paso se compara con la imagen de antes: lo que cambia es el tiempo, no lo que se ve.

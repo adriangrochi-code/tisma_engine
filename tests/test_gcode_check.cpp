@@ -7,12 +7,14 @@
 #include "slice/pipeline.hpp"
 #include "slice/printable.hpp"
 #include "test_printer.hpp"
+#include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
 #include <filesystem>
 #include <functional>
 #include <sstream>
@@ -130,8 +132,14 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         REQUIRE(at != std::string::npos);
         g.replace(at, what.size(), with);
     };
-    damaged([](std::string& g) { g.resize(g.size() / 2); }, "cut short");
-    damaged([](std::string& g) { g.resize(g.rfind("; estimated printing time")); }, "closing summary is missing");
+    damaged(
+        [](std::string& g) {
+            g.resize(g.size() / 2);
+            while (!g.empty() && g.back() == '\n') // in the middle of a line, wherever the half falls
+                g.pop_back();
+        },
+        "cut short");
+    damaged([](std::string& g) { g.resize(g.find("; estimated printing time")); }, "closing summary is missing");
     damaged([&](std::string& g) { g.insert(layer, "G1 X500 Y500\n"); }, "leaves the allowed area");
     damaged([&](std::string& g) { g.insert(layer, "G1 X5 Ynan\n"); }, "unreadable parameter 'Ynan'");
     damaged([&](std::string& g) { g.insert(layer, "G1 X5 F99999\n"); }, "above the fastest allowed");
@@ -243,13 +251,14 @@ TEST_CASE("a model with nothing to extrude is not printable", "[gcode][check]") 
     Settings s = test_printer();
     s.wall_count = 0;
     s.wall_width = 0.8;
+    s.infill_width = s.solid_width = s.top_width = 0.8;
     const SlicedModel model = slice_model(m, s);
     CHECK_THAT(unprintable_reason(model, s), ContainsSubstring("nothing would be printed"));
     CHECK(unprintable_reason(slice_model(cube(), test_printer()), test_printer()).empty());
 }
 
 TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]") {
-    const auto dir = std::filesystem::temp_directory_path();
+    const auto dir = test_temp_dir();
     const auto path = dir / "tisma_test_export.gcode";
     auto part = path, rejected = path;
     part += ".part";
@@ -283,6 +292,73 @@ TEST_CASE("export: a checked file under its name, or nothing", "[gcode][check]")
     const GcodeExport nowhere = export_gcode(dir / "tisma_no_such_dir" / "x.gcode", model, s);
     CHECK(!nowhere.written);
     CHECK_THAT(nowhere.error, ContainsSubstring("cannot write"));
+}
+
+TEST_CASE("G-code check: a wipe's step whose E rounds to the last one's stays in the wipe", "[gcode][check]") {
+    // The fuzzer's run 287 (seed 20261028): a wipe went over a point 0.001
+    // mm from the next, both steps wrote the same E, and the pieces after it
+    // read as a second retraction.
+    Settings s = test_printer();
+    s.wipe = true;
+    const Output o = slice_and_write(cube(), s);
+    REQUIRE(check_gcode(o.gcode, o.limits).ok());
+    // The first wipe step: a move in X and Y whose E is below the last E.
+    std::istringstream in(o.gcode);
+    std::string line, out;
+    double last_e = 0.0;
+    bool done = false;
+    while (std::getline(in, line)) {
+        out += line + "\n";
+        const std::size_t e = line.find(" E");
+        if (done || !line.starts_with("G1 ") || e == std::string::npos)
+            continue;
+        const double value = std::stod(line.substr(e + 2));
+        if (value < last_e - 1e-9 && line.find(" X") != std::string::npos) {
+            // A step of the same E right after it, a hair away.
+            const std::size_t x = line.find(" X");
+            const double at = std::stod(line.substr(x + 2));
+            char extra[96];
+            std::snprintf(extra, sizeof extra, "G1 X%.3f E%.5f\n", at + 0.001, value);
+            out += extra;
+            done = true;
+        }
+        last_e = value;
+    }
+    REQUIRE(done);
+    const GcodeCheck c = check_gcode(out, o.limits);
+    INFO(problems_of(c));
+    CHECK(c.ok());
+}
+
+TEST_CASE("placement.drop_to_bed off: what is under the bed is not printed, a part off it is refused (placement.md, "
+          "PL5, PL9)",
+          "[gcode][check]") {
+    Settings s = test_printer();
+    s.placement_drop_to_bed = false;
+    // PL5: a 20 mm cube from Z -5 to 15, as it comes: 10 mm printed, from the bed.
+    IndexedMesh low;
+    add_box(low, 90, 90, -5, 110, 110, 10);
+    REQUIRE(unprintable_reason(low, s).empty());
+    const Output o = slice_and_write(low, s);
+    const GcodeCheck c = check_gcode(o.gcode, o.limits);
+    INFO(problems_of(c));
+    CHECK(c.ok());
+    CHECK_THAT(o.gcode, ContainsSubstring(";Z:0.200\n"));
+    CHECK(c.stats.max_z > 9.99);
+    CHECK(c.stats.max_z < 10.01);
+    // On by default: the same part drops to the bed, 15 mm tall (PL4).
+    s.placement_drop_to_bed = true;
+    const Output dropped = slice_and_write(low, s);
+    CHECK(check_gcode(dropped.gcode, dropped.limits).stats.max_z > 14.99);
+    // PL9: a cube from Z 50 to 70 off the bed is refused; one under it too.
+    s.placement_drop_to_bed = false;
+    IndexedMesh high;
+    add_box(high, 90, 90, 50, 110, 110, 70);
+    CHECK_THAT(unprintable_reason(high, s), ContainsSubstring("no extrusions on the first layer"));
+    IndexedMesh under;
+    add_box(under, 90, 90, -20, 110, 110, -1);
+    CHECK_THAT(unprintable_reason(under, s), ContainsSubstring("under the bed"));
+    CHECK(parse_settings(R"({"placement": {"drop_to_bed": false}})").placement_drop_to_bed == false);
 }
 
 TEST_CASE("G-code check: a part below or above z = 0 prints from the bed up", "[gcode][check]") {
