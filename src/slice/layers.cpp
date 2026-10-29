@@ -39,14 +39,17 @@ void triangle_level_ranges(const IndexedMesh& mesh, std::span<const float> value
                            std::vector<std::uint32_t>& first, std::vector<std::uint32_t>& end) {
     first.resize(mesh.triangles.size());
     end.resize(mesh.triangles.size());
-    for (std::size_t t = 0; t < mesh.triangles.size(); ++t) {
-        const auto& tri = mesh.triangles[t];
-        const float a = values[tri[0]], b = values[tri[1]], c = values[tri[2]];
-        const auto lo = std::upper_bound(isos.begin(), isos.end(), std::min({a, b, c})) - isos.begin();
-        const auto hi = std::upper_bound(isos.begin(), isos.end(), std::max({a, b, c})) - isos.begin();
-        first[t] = static_cast<std::uint32_t>(lo);
-        end[t] = static_cast<std::uint32_t>(std::max(lo, hi));
-    }
+    tbb::parallel_for(tbb::blocked_range<std::size_t>(0, mesh.triangles.size(), 4096),
+                      [&](const tbb::blocked_range<std::size_t>& r) {
+                          for (std::size_t t = r.begin(); t != r.end(); ++t) {
+                              const auto& tri = mesh.triangles[t];
+                              const float a = values[tri[0]], b = values[tri[1]], c = values[tri[2]];
+                              const auto lo = std::upper_bound(isos.begin(), isos.end(), std::min({a, b, c})) - isos.begin();
+                              const auto hi = std::upper_bound(isos.begin(), isos.end(), std::max({a, b, c})) - isos.begin();
+                              first[t] = static_cast<std::uint32_t>(lo);
+                              end[t] = static_cast<std::uint32_t>(std::max(lo, hi));
+                          }
+                      });
 }
 
 std::vector<char> same_crossings(std::span<const float> values, std::span<const float> isos) {
@@ -210,17 +213,36 @@ std::vector<std::vector<Contour>> slice_levels(const IndexedMesh& mesh, std::spa
     std::vector<std::uint32_t> first_level, end_level;
     triangle_level_ranges(mesh, values, plan.key_isos, first_level, end_level);
     // 64-bit counts: tall triangles times thin layers pass 2^32 crossings.
+    // On all cores, by a fixed number of chunks of triangles: each chunk
+    // counts its crossings per level, the counts add up in chunk order, and
+    // each chunk fills its own slots, so every level keeps the triangles in
+    // their order whatever the threads.
+    const std::size_t n = mesh.triangles.size();
+    const std::size_t chunks = n < 100000 ? 1 : 32, per_chunk = (n + chunks - 1) / chunks;
+    std::vector<std::size_t> counts(chunks * key_count, 0);
+    tbb::parallel_for(std::size_t(0), chunks, [&](std::size_t c) {
+        std::size_t* row = counts.data() + c * key_count;
+        for (std::size_t t = c * per_chunk; t < std::min(n, (c + 1) * per_chunk); ++t)
+            for (std::uint32_t k = first_level[t]; k < end_level[t]; ++k)
+                ++row[k];
+    });
     std::vector<std::size_t> row_start(key_count + 1, 0);
-    for (std::size_t t = 0; t < mesh.triangles.size(); ++t)
-        for (std::uint32_t k = first_level[t]; k < end_level[t]; ++k)
-            ++row_start[k + 1];
-    for (std::size_t k = 0; k < key_count; ++k)
-        row_start[k + 1] += row_start[k];
+    for (std::size_t k = 0; k < key_count; ++k) {
+        std::size_t at = row_start[k];
+        for (std::size_t c = 0; c < chunks; ++c) {
+            const std::size_t count = counts[c * key_count + k];
+            counts[c * key_count + k] = at; // where chunk c starts in level k
+            at += count;
+        }
+        row_start[k + 1] = at;
+    }
     std::vector<std::uint32_t> bucket(row_start[key_count]);
-    std::vector<std::size_t> fill(row_start.begin(), row_start.end() - 1);
-    for (std::size_t t = 0; t < mesh.triangles.size(); ++t)
-        for (std::uint32_t k = first_level[t]; k < end_level[t]; ++k)
-            bucket[fill[k]++] = static_cast<std::uint32_t>(t);
+    tbb::parallel_for(std::size_t(0), chunks, [&](std::size_t c) {
+        std::size_t* fill = counts.data() + c * key_count;
+        for (std::size_t t = c * per_chunk; t < std::min(n, (c + 1) * per_chunk); ++t)
+            for (std::uint32_t k = first_level[t]; k < end_level[t]; ++k)
+                bucket[fill[k]++] = static_cast<std::uint32_t>(t);
+    });
 
     // Levels are independent: slice them in parallel, one segment buffer per chunk.
     return assemble(mesh, values, isos, plan, max_gap, same_section,
