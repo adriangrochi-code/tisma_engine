@@ -8072,3 +8072,17 @@ Del informe del equipo de fichas sobre las páginas en español:
 
 Mirado con `--dump-ui` (la fila de la falda, ninguna etiqueta cortada). Pasan las 136 pruebas de interfaz, textos y
 límites.
+
+## 2026-10-29: BH5 y BH6 (búsqueda de bugs del equipo de fichas)
+
+- **BH5:** `infill.width` 10, `surfaces.solid_width` 5 o `support.width` 10 con boquilla de 0,4 laminaban y el G-code
+  pasaba su chequeo (`;WIDTH:10.0`). `check_settings` controla ahora esos anchos y `surfaces.top_width` con la misma
+  regla que `walls.width` (de un cuarto a cuatro boquillas): «infill.width: 10 mm cannot come out of a 0.4 mm nozzle
+  (0.1 to 1.6 mm)». Prueba con los cuatro y un caso bueno.
+- **BH6:** sin `machine.variables.temperature` (ni `first_layer_temperature`, ni un cambio por altura con
+  temperatura) y sin nada en el G-code de inicio que caliente (M104, M109, una macro `PRINT_START`/`START_PRINT`, un
+  calentador, o la variable de temperatura), la línea de comandos da el aviso `no_heating` (`heating_warning`). En la
+  línea de comandos y no en los avisos del G-code: la interfaz siempre pone una temperatura. Prueba de los casos;
+  la prueba del JSON de avisos de la línea de comandos ahora espera ese aviso (sus ajustes no tienen temperatura).
+
+Pasan las 798 pruebas.

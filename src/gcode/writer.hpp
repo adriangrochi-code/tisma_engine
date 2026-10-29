@@ -7,6 +7,7 @@
 #include "slice/pipeline.hpp"
 
 #include <ostream>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -31,6 +32,11 @@ std::string chamber_gcode(GcodeFlavor flavor, double celsius);
 // not heat, an enclosure, a hardened nozzle. write_gcode adds them to its
 // warnings.
 std::vector<Warning> capability_warnings(const Settings& settings);
+
+// No nozzle temperature anywhere and nothing in the start G-code that heats
+// it (the spec team's BH6): the command line warns; the interface always
+// gives a temperature.
+std::optional<Warning> heating_warning(const Settings& settings);
 
 // The command that sets the accelerations: M204 P (printing) T (travel) in
 // Marlin and RepRapFirmware, SET_VELOCITY_LIMIT ACCEL= in Klipper (one value

@@ -157,12 +157,13 @@ TEST_CASE("slice writes the warnings as JSON when asked", "[cli]") {
     const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/printer_settings.json", "-o",
                        gcode.string(), "--warnings", json.string()});
     CHECK(r.code == kExitOk);
-    CHECK_THAT(r.out, ContainsSubstring("warnings: 0"));
+    // No nozzle temperature in these settings: the one warning says so (BH6).
+    CHECK_THAT(r.out, ContainsSubstring("warnings: 1"));
     std::ifstream f(json);
     std::stringstream text;
     text << f.rdbuf();
     CHECK_THAT(text.str(), ContainsSubstring("\"version\": 1"));
-    CHECK_THAT(text.str(), ContainsSubstring("\"warnings\": []"));
+    CHECK_THAT(text.str(), ContainsSubstring("\"kind\": \"no_heating\""));
     f.close();
     // Settings without the printer's speeds: a stock Ender-3's, and a warning
     // that says so (owner's decision, 2026-10-26).

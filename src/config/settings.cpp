@@ -4061,6 +4061,18 @@ void check_settings(const Settings& s) {
                       s.outer_wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
         throw SettingsError(text);
     }
+    // The other beads by the same rule: 10 mm of infill or support from a 0.4
+    // nozzle sliced and passed the G-code check (the spec team's BH5).
+    for (const auto& [key, width] : std::initializer_list<std::pair<const char*, double>>{
+             {"infill.width", s.infill_width},
+             {"surfaces.solid_width", s.solid_width},
+             {"surfaces.top_width", s.top_width},
+             {"support.width", s.support_width.value > 0.0 ? s.support_width.of(s.layer_height) : 0.0}})
+        if (width > 0.0 && (width < 0.25 * nozzle || width > 4.0 * nozzle)) {
+            std::snprintf(text, sizeof text, "%s: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)", key,
+                          width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
+            throw SettingsError(text);
+        }
     // The first layer's bead, by the same rule: 20 mm on a 0.4 nozzle spilt
     // past the skirt and the G-code failed its own check (the spec team's BH1).
     if (const double first = s.first_line_width.of(s.first_layer_height);

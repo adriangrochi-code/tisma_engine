@@ -1696,6 +1696,20 @@ TEST_CASE("extras: volumetric E in mm3, retractions too (gcode_extras.md, rule 1
     CHECK(check_gcode(volumetric.str(), gcode_limits(model, s)).ok());
 }
 
+TEST_CASE("the command line warns when nothing heats the nozzle (the spec team's BH6)", "[gcode]") {
+    Settings s = test_printer();
+    REQUIRE(heating_warning(s));
+    CHECK(heating_warning(s)->kind == "no_heating");
+    Settings hot = s;
+    hot.variables["temperature"] = {"210"};
+    CHECK_FALSE(heating_warning(hot));
+    Settings started = s;
+    started.start_gcode = "M109 S215";
+    CHECK_FALSE(heating_warning(started));
+    started.start_gcode = "PRINT_START EXTRUDER=215"; // a firmware macro that heats
+    CHECK_FALSE(heating_warning(started));
+}
+
 TEST_CASE("a speed cap under 1 mm/min writes F1, not F0 (the spec team's BH3)", "[gcode]") {
     IndexedMesh m;
     add_box(m, 0, 0, 20, 20, 2);

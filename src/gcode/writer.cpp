@@ -2113,6 +2113,31 @@ std::string chamber_gcode(GcodeFlavor flavor, double celsius) {
                                           : "M141 S" + t + " ; the chamber";
 }
 
+std::optional<Warning> heating_warning(const Settings& s) {
+    // No nozzle temperature and nothing in the start G-code that heats it:
+    // the print would extrude cold (the spec team's BH6; the interface always
+    // gives one, the command line may not). A start macro may heat it, so a
+    // warning, not an error.
+    const auto number = [&](const char* variable) {
+        const auto it = s.variables.find(variable);
+        return it == s.variables.end() || it->second.empty() ? 0.0 : std::atof(it->second.front().c_str());
+    };
+    if (s.machine_technology != MachineTechnology::Fdm || number("temperature") > 0.0 ||
+        number("first_layer_temperature") > 0.0)
+        return std::nullopt;
+    for (const HeightChange& c : s.changes)
+        if (c.temperature)
+            return std::nullopt;
+    const std::string g = s.start_gcode + "\n" + s.filament_start_gcode;
+    for (const char* heats : {"M104", "M109", "HEATER", "PRINT_START", "START_PRINT", "[temperature", "{temperature"})
+        if (g.find(heats) != std::string::npos)
+            return std::nullopt;
+    return Warning{"no_heating", -1, 0.0,
+                   "the G-code never heats the nozzle: no machine.variables.temperature and no M104 or M109 in the "
+                   "start G-code",
+                   0.0};
+}
+
 std::vector<Warning> capability_warnings(const Settings& s) {
     std::vector<Warning> out;
     const auto number = [&](const char* variable) {

@@ -519,6 +519,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     warnings.insert(warnings.end(), model.begin(), model.end());
     const std::vector<Warning> stability = stability_warnings(sliced, settings);
     warnings.insert(warnings.end(), stability.begin(), stability.end());
+    if (const std::optional<Warning> cold = heating_warning(settings))
+        warnings.push_back(*cold);
     // Into a folder: the name from output.filename_format, first without the
     // print's time and weight, then with them (gcode_templates.md, rule 15).
     std::filesystem::path target = parsed->output;

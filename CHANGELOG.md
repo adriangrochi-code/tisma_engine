@@ -359,6 +359,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- **Anchos fuera de la boquilla (BH5):** `infill.width`, `surfaces.solid_width`, `surfaces.top_width` y
+  `support.width` ahora se controlan como `walls.width`: de un cuarto a cuatro veces la boquilla, o un error que lo
+  dice. Antes un relleno de 10 mm con boquilla de 0,4 laminaba sin aviso.
+- **Sin temperatura de boquilla (BH6):** la línea de comandos avisa cuando ni los ajustes ni el G-code de inicio
+  calientan la boquilla.
 - **Textos del panel (TR8, TR10, TR11, TR15, TR19):** ningún campo vacío muestra un guion suelto: dice «Automático»,
   «Sin límite», «Apagado» o «Sin dato» según lo que hace el 0; la lista de calibraciones lleva las unidades; los
   resúmenes dicen qué es cada número («Separación 100 % · flujo 100 %», «Boquilla 260 °C · cama Sin dato»); lo

@@ -586,6 +586,11 @@ TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker t
     CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 1.6}})")));
     CHECK_THROWS(check_settings(parse_settings(R"({"layers": {"first_line_width": "1000%"}})")));
     CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 0}})")));
+    // The other beads too (the spec team's BH5).
+    for (const char* bad : {R"({"infill": {"width": 10}})", R"({"surfaces": {"solid_width": 5}})",
+                            R"({"surfaces": {"top_width": 0.05}})", R"({"support": {"enabled": true, "width": 10}})"})
+        CHECK_THROWS_WITH(check_settings(parse_settings(bad)), ContainsSubstring("cannot come out of a 0.4 mm nozzle"));
+    CHECK_NOTHROW(check_settings(parse_settings(R"({"infill": {"width": 0.6}, "surfaces": {"solid_width": 0.5}})")));
 }
 
 TEST_CASE("extrusion.flow_by_speed and extrusion.section (pellets.md, rules 4 and 5)", "[settings]") {
