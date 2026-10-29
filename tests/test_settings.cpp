@@ -576,12 +576,17 @@ TEST_CASE("pellet printers: thick layers from a wide nozzle, and never thicker t
     CHECK_NOTHROW(check_settings(parse_settings(R"({"layers": {"first_line_width": 0}})")));
 }
 
-TEST_CASE("extrusion.flow_by_speed (pellets.md, rule 5)", "[settings]") {
+TEST_CASE("extrusion.flow_by_speed and extrusion.section (pellets.md, rules 4 and 5)", "[settings]") {
     const Settings s = parse_settings(R"({"extrusion": {"flow_by_speed": [[60, 100], [20, 110]]}})");
     REQUIRE(s.flow_by_speed.size() == 2);
     CHECK(s.flow_by_speed[0] == std::array<double, 2>{20.0, 110.0}); // by speed
     CHECK(parse_settings(settings_json(s)).flow_by_speed == s.flow_by_speed);
     CHECK(parse_settings("{}").flow_by_speed.empty());
+    CHECK(parse_settings("{}").bead_section == BeadSection::Rounded);
+    CHECK(parse_settings(R"({"extrusion": {"section": "rectangle"}})").bead_section == BeadSection::Rectangle);
+    CHECK(parse_settings(settings_json(parse_settings(R"({"extrusion": {"section": "rectangle"}})"))).bead_section ==
+          BeadSection::Rectangle);
+    CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"section": "round"}})"), ContainsSubstring("extrusion.section"));
     for (const char* bad : {R"([[20]])", R"([[20, 5]])", R"([[20, 400]])", R"([[-1, 100]])", R"([[20000, 100]])", R"(5)"})
         CHECK_THROWS_WITH(parse_settings(std::string(R"({"extrusion": {"flow_by_speed": )") + bad + "}}"),
                           ContainsSubstring("extrusion.flow_by_speed"));

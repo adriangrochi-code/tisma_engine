@@ -14,6 +14,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - **`extrusion.flow_by_speed`** (impresoras de pellets): el flujo según la velocidad de cada tramo, con una lista de
   puntos `[velocidad, %]`.
+- **`extrusion.section`:** la E de un cordón con la sección redonda (como siempre, y como Tisma Slicer) o rectangular.
+- **`walls.transition_margin`:** las paredes no pasan a un cordón más en oscilaciones chicas del espesor (de hasta
+  0,155 mm sobre el cambio).
 - **Menú del botón derecho en la placa:** fuera de los modelos, «Agregar modelo…», «Agregar forma» (cubo, cilindro y
   esfera de 20 mm) y «Organizar».
 - **Deslizadores en Mover, Girar y Escalar**, bajo cada número: la cama de punta a punta, −180° a 180°, 10 % a 1000 %.
@@ -348,6 +351,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- **Perímetros escalonados con capas de alturas distintas:** un G-code bueno no pasaba su chequeo cuando la última capa
+  era más fina que la de abajo (el tope del chequeo no contaba la media capa de los cordones levantados).
 - **Un tope de velocidad de menos de 1 mm/min** (por ejemplo `extrusion.infill_max_speed` 0,002) escribía `F0` y el
   G-code no pasaba su chequeo; ahora va a `F1`.
 - **Capas curvas:** con el modo apagado ya no se ven sus filas, y cada una solo en los modos y formas que la usan.

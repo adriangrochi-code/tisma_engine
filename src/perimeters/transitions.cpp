@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 namespace tisma {
 
@@ -97,10 +98,120 @@ std::vector<Chain> central_chains(const MedialGraph& g) {
 
 } // namespace
 
+namespace {
+
+// walls.transition_margin (perimeters.md, P13 and P13b): each connected
+// stretch of the centre at one count, with only lower counts around it,
+// whose thickest point passes the change from the count below by at most
+// kMarginSwing, takes the count below. By stretches of nodes, not along one
+// chain: a wavy edge branches the centre at its crests.
+std::size_t flatten_small_swings(const MedialGraph& g, const BeadingParams& params, std::vector<int>& counts) {
+    std::vector<std::vector<std::uint32_t>> next_to(g.nodes.size()), any_next(g.nodes.size());
+    for (const MedialGraph::Edge& e : g.edges) {
+        any_next[e.a].push_back(e.b);
+        any_next[e.b].push_back(e.a);
+        if (e.central && counts[e.a] >= 0 && counts[e.b] >= 0) {
+            next_to[e.a].push_back(e.b);
+            next_to[e.b].push_back(e.a);
+        }
+    }
+    // How far an island of the centre looks, across the part that is not
+    // central, for the centre it swings from (own choice: a few beads).
+    const double reach = 5.0 * params.preferred_width;
+    std::vector<double> walked(g.nodes.size(), -1.0);
+    std::vector<std::uint32_t> touched;
+    std::size_t flattened = 0;
+    std::vector<bool> seen(g.nodes.size(), false);
+    std::vector<std::uint32_t> stretch, todo;
+    for (std::uint32_t start = 0; start < g.nodes.size(); ++start) {
+        if (seen[start] || counts[start] < 0)
+            continue;
+        const int count = counts[start];
+        int below = -1;
+        bool higher = false;
+        double thickest = 0.0;
+        stretch.clear();
+        todo.assign(1, start);
+        seen[start] = true;
+        while (!todo.empty()) {
+            const std::uint32_t i = todo.back();
+            todo.pop_back();
+            stretch.push_back(i);
+            thickest = std::max(thickest, 2.0 * g.nodes[i].radius);
+            for (const std::uint32_t j : next_to[i]) {
+                if (counts[j] == count) {
+                    if (!seen[j]) {
+                        seen[j] = true;
+                        todo.push_back(j);
+                    }
+                } else if (counts[j] > count) {
+                    higher = true;
+                } else {
+                    below = std::max(below, counts[j]);
+                }
+            }
+        }
+        // An island of the centre (its ends not central, as at a wavy edge's
+        // crest, where the edge slopes past walls.transition_angle): the
+        // nearest centre across what is not central, within `reach`. A wall
+        // of even thickness has none, and keeps its count.
+        if (below < 0 && !higher) {
+            for (const std::uint32_t i : touched)
+                walked[i] = -1.0;
+            touched.clear();
+            std::vector<std::pair<double, std::uint32_t>> front;
+            for (const std::uint32_t i : stretch) {
+                walked[i] = 0.0;
+                touched.push_back(i);
+                front.push_back({0.0, i});
+            }
+            while (!front.empty()) {
+                std::pop_heap(front.begin(), front.end(), std::greater<>());
+                const auto [d, i] = front.back();
+                front.pop_back();
+                if (d > walked[i])
+                    continue;
+                for (const std::uint32_t j : any_next[i]) {
+                    const double dj = d + std::hypot(g.nodes[j].p.x - g.nodes[i].p.x, g.nodes[j].p.y - g.nodes[i].p.y);
+                    if (dj > reach || (walked[j] >= 0.0 && walked[j] <= dj))
+                        continue;
+                    if (counts[j] >= 0) { // another stretch of the centre
+                        if (counts[j] > count)
+                            higher = true;
+                        else if (counts[j] < count)
+                            below = std::max(below, counts[j]);
+                        continue;
+                    }
+                    if (walked[j] < 0.0)
+                        touched.push_back(j);
+                    walked[j] = dj;
+                    front.push_back({dj, j});
+                    std::push_heap(front.begin(), front.end(), std::greater<>());
+                }
+            }
+        }
+        // From 2 beads up, as measured (2 to 3, 3 to 4 and 4 to 5): a lone
+        // bead, or none, stays as it is.
+        if (below < 2 || higher || thickest - transition_thickness(params, below) > kMarginSwing)
+            continue;
+        for (const std::uint32_t i : stretch)
+            counts[i] = below;
+        ++flattened;
+    }
+    return flattened;
+}
+
+} // namespace
+
 TransitionResult apply_transitions(MedialGraph& g, const BeadingParams& params, const TransitionSettings& settings) {
     TransitionResult result;
     const double ramp = settings.transition_length >= 0.0 ? settings.transition_length : params.preferred_width;
-    const std::vector<int> counts = central_bead_counts(g, params);
+    std::vector<int> counts = central_bead_counts(g, params);
+    // Again until nothing moves: a crest at n + 2 flattened to n + 1 can
+    // leave the stretch around it a small swing past n.
+    if (settings.margin > 0.0)
+        while (flatten_small_swings(g, params, counts) > 0) {
+        }
     result.bead_counts.assign(g.nodes.size(), -1.0);
     for (std::size_t i = 0; i < counts.size(); ++i)
         if (counts[i] >= 0)

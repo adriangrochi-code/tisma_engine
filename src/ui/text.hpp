@@ -1023,6 +1023,7 @@
     X(SpreadCount, "Cordones que absorben la diferencia", "Beads that take the difference") \
     X(TransitionLength, "Largo de las transiciones", "Transition length") \
     X(TransitionAngle, "Ángulo de las transiciones", "Transition angle") \
+    X(TransitionMargin, "Margen de transición", "Transition margin") \
     X(FirstLineWidth, "Ancho en la primera capa", "First layer line width") \
     X(TopWidth, "Ancho de la capa de arriba", "Top surface width") \
     X(SolidWidth, "Ancho del relleno sólido", "Solid infill width") \
@@ -1408,6 +1409,9 @@
     X(CoolingFinalSpeed, "Velocidad del último", "Last move's speed") \
     X(RammingRow, "Compresión antes de descargar", "Ramming before unloading") \
     X(FlowBySpeedRow, "Flujo según la velocidad", "Flow by speed") \
+    X(BeadSectionRow, "Sección del cordón", "Bead section") \
+    X(BeadSectionRounded, "Redondeada", "Rounded") \
+    X(BeadSectionRectangle, "Rectangular", "Rectangle") \
     X(ToolchangeDelay, "Espera después de descargar", "Wait after unloading") \
     X(LoadTime, "Tiempo de carga", "Load time") \
     X(UnloadTime, "Tiempo de descarga", "Unload time") \

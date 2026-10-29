@@ -3,6 +3,7 @@
 
 #include "config/settings.hpp"
 #include "gcode/dialect.hpp"
+#include "geom/bead.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -875,7 +876,7 @@ Settings parse_checked(std::string_view text) {
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
                 "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "staggered", "top_one_wall",
                 "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
-                "spread_count", "transition_length", "transition_angle"},
+                "spread_count", "transition_length", "transition_angle", "transition_margin"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -959,10 +960,12 @@ Settings parse_checked(std::string_view text) {
             s.wall_spread_count = static_cast<int>(v.get<long long>());
             return;
         }
-        if (n == "min_line_width" || n == "min_detail" || n == "seam_gap" || n == "transition_length") {
+        if (n == "min_line_width" || n == "min_detail" || n == "seam_gap" || n == "transition_length" ||
+            n == "transition_margin") {
             Speed& target = n == "min_line_width"      ? s.wall_min_line_width
                             : n == "seam_gap"          ? s.wall_seam_gap
                             : n == "transition_length" ? s.wall_transition_length
+                            : n == "transition_margin" ? s.wall_transition_margin
                                                        : s.wall_min_detail;
             if (g.at(n).is_string()) {
                 const std::string t = g.at(n).get<std::string>();
@@ -2516,8 +2519,12 @@ Settings parse_checked(std::string_view text) {
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
                 "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
                 "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
-                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed"},
+                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed", "section"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "section") { // pellets.md, rule 4
+            s.bead_section = choice<BeadSection>(g, n, k, {{"rounded", BeadSection::Rounded}, {"rectangle", BeadSection::Rectangle}});
+            return;
+        }
         if (n == "flow_by_speed") { // pellets.md, rule 5
             const json& v = g.at(n);
             const char* what = "must be a list of up to 100 [speed, %] points, speeds from 0 to 10000 mm/s and "
@@ -2851,6 +2858,12 @@ double fastest_extrusion(const Settings& s) {
     return s.max_speed > 0.0 ? std::min(fastest, s.max_speed) : fastest;
 }
 
+double extruded_section(BeadSection section, double width, double height) {
+    if (section == BeadSection::Rectangle)
+        return width > 0.0 && height > 0.0 ? width * height : 0.0;
+    return bead_area(width, height);
+}
+
 double flow_at_speed(const std::vector<std::array<double, 2>>& points, double speed) {
     if (points.empty())
         return 1.0;
@@ -2911,6 +2924,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.seam_gap", s.wall_seam_gap.percent ? num(s.wall_seam_gap.value) + "%" : num(s.wall_seam_gap.value)},
         {"walls.transition_length", s.wall_transition_length.percent ? num(s.wall_transition_length.value) + "%"
                                                                      : num(s.wall_transition_length.value)},
+        {"walls.transition_margin", s.wall_transition_margin.percent ? num(s.wall_transition_margin.value) + "%"
+                                                                     : num(s.wall_transition_margin.value)},
         {"walls.min_detail", s.wall_min_detail.percent ? num(s.wall_min_detail.value) + "%" : num(s.wall_min_detail.value)},
         {"vase.enabled", flag(s.vase)},
         {"sequential.enabled", flag(s.sequential)},
@@ -2959,6 +2974,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"extrusion.cooling_final_speed", num(s.cooling_final_speed)},
         {"extrusion.ramming", json(s.ramming).dump()},
         {"extrusion.flow_by_speed", json(s.flow_by_speed).dump()},
+        {"extrusion.section", s.bead_section == BeadSection::Rectangle ? "rectangle" : "rounded"},
         {"extrusion.toolchange_delay", num(s.toolchange_delay)},
         {"extrusion.load_time", num(s.load_time)},
         {"extrusion.unload_time", num(s.unload_time)},
@@ -3440,6 +3456,9 @@ std::string settings_json(const Settings& s) {
           {"transition_length", s.wall_transition_length.percent
                                     ? ordered_json(json(s.wall_transition_length.value).dump() + "%")
                                     : ordered_json(s.wall_transition_length.value)},
+          {"transition_margin", s.wall_transition_margin.percent
+                                    ? ordered_json(json(s.wall_transition_margin.value).dump() + "%")
+                                    : ordered_json(s.wall_transition_margin.value)},
           {"min_detail", s.wall_min_detail.percent ? ordered_json(json(s.wall_min_detail.value).dump() + "%")
                                                    : ordered_json(s.wall_min_detail.value)}}},
         {"vase", {{"enabled", s.vase}}},
@@ -3836,6 +3855,7 @@ std::string settings_json(const Settings& s) {
           {"cooling_final_speed", s.cooling_final_speed},
           {"ramming", s.ramming},
           {"flow_by_speed", s.flow_by_speed},
+          {"section", s.bead_section == BeadSection::Rectangle ? "rectangle" : "rounded"},
           {"toolchange_delay", s.toolchange_delay},
           {"load_time", s.load_time},
           {"unload_time", s.unload_time},

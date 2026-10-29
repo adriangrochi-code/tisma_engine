@@ -7976,3 +7976,36 @@ valor por defecto de todo el G-code.
   vacío dice «Sin medir» y un ángulo libre sin medir «Sin dato».
 
 Pasan las 210 pruebas de interfaz, textos, ajustes y G-code.
+
+## 2026-10-29: mantenimiento (08:41), `extrusion.section` y `walls.transition_margin`
+
+**Mantenimiento.** `tisma_fuzz_gcode 2000` con la semilla 20261029: 2000 corridas, 27 rechazadas por no imprimibles,
+1 falla (corrida 354): «move to Z7.064 is out of 0 to 7.00167». Perímetros escalonados con alturas de capa variables
+(capas de hasta 0,45 mm abajo y una última más fina) y sin salto: el bucle levantado media capa de la capa anterior a
+la última pasaba el tope del chequeo, que sumaba esa media capa solo con el relleno ondulado. El G-code estaba bien; el
+tope del chequeo (`gcode_limits`) ahora suma la media capa más gruesa de los bucles levantados también sin ondas.
+Prueba nueva con capas de 0,4 y una última de 0,15. De paso: cambiar un encabezado mientras compila deja objetos con
+la versión vieja de `Settings` (un `free` inválido en `~Settings`); se arregla tocando el encabezado y compilando
+otra vez (anotado para no confundirlo con un error del motor).
+
+**`extrusion.section`** (`pellets.md`, regla 4): el equipo de fichas midió en Tisma Slicer que la E de cada cordón es la
+de la sección redonda (0,033849 mm de E por mm a 0,45 × 0,2), así que el valor por defecto es `rounded`, como el motor
+hacía siempre, y `rectangle` (w × h) es la opción. Cuentan con ella la E del escritor, el tope de caudal y el chequeo;
+los anchos y las separaciones no cambian. Pruebas PE2 (6,2363 mm de E por mm), PE3 (5,6786), PE5 (3,7854 mm³ por mm)
+y cada E de una caja con las dos secciones.
+
+**`walls.transition_margin`** (`perimeters.md`, P13 y P13b): el equipo de fichas midió que el corte no depende del
+margen (25 % y 100 % cortan igual) ni del ancho de la pared (0,45 y 0,6 mm), y está entre 0,15 y 0,16 mm de espesor
+por encima del cambio. Con margen mayor que 0, un tramo de N + 1 cordones entre dos anclas opuestas cuyo punto más
+grueso pasa el cambio por 0,155 mm o menos queda en N, sea del largo que sea (`kMarginSwing`,
+`flatten_small_swings`); con 0, como antes. Se mira por tramos conexos del centro con la misma cantidad y solo menos
+alrededor, no a lo largo de una cadena: el borde ondulado ramifica el centro en las crestas, y con amplitud 0,15 las
+dos anclas de una cresta quedaban en cadenas distintas. Una cresta que llega a N + 2 se aplana a N + 1 y después,
+otra vuelta, a N; una isla del centro (donde el borde ondulado se inclina más que `walls.transition_angle`, lo de
+alrededor no es centro) toma la cantidad del centro más cercano a través de lo que no es centro, hasta 5 anchos de
+cordón; una pared pareja no tiene ninguno y queda como está. Solo desde 2
+cordones (lo medido va de 2 a 3, 3 a 4 y 4 a 5): con 25 % por defecto, una cuña fina perdía su único cordón. Por defecto 25 %. Prueba con la tira ondulada de P13 (40 mm, λ = 5): con
+amplitud 0,05, 0,1 y 0,15, margen 0 da tramos de 3 cordones y 25 % y 100 % ninguno; con 0,2 y 0,25 quedan los de 3 con
+cualquier margen. No imita el salto de largo de los tramos con margen 0 (de 1,6 a 1,0 mm entre 0,15 y 0,16).
+
+**Sigue:** `machine.feedstock` (PE1, PE9) y lo demás de la lista de ajustes que no lee el motor.

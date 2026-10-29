@@ -854,6 +854,7 @@ public:
         // The melt limit: the lowest of the hot end's, the filament's and the
         // print's own (speed.max_flow, gcode_motion.md, rule 4); 0: none.
         flow_by_speed_ = s.flow_by_speed;
+        section_ = s.bead_section;
         for (const double limit : {s.machine_max_flow, s.filament_max_flow, s.speed_max_flow})
             if (limit > 0.0)
                 max_flow_ = max_flow_ > 0.0 ? std::min(max_flow_, limit) : limit;
@@ -1490,7 +1491,8 @@ public:
         // Off the layer's Z (Z anti-aliasing, a scarf ramp, a wavy or raised
         // bead), the layer's bead by the share of its height that is there
         // (z_antialiasing.md rule 3, staggered_perimeters.md ST1).
-        const double section = !(height_ > 0.0) ? bead_area(width, height) : bead_area(width, height_) * height / height_;
+        const double section = !(height_ > 0.0) ? extruded_section(section_, width, height)
+                                                : extruded_section(section_, width, height_) * height / height_;
         feed = melt_feed(feed, width, height);
         const double e = section * length / filament_area_ * flow_ * speed_flow(feed);
         if (bridge_ || tail_)
@@ -1563,7 +1565,7 @@ public:
         const double width = points[a.first].width, length = a.length();
         walk(length);
         feed = melt_feed(feed, width, height_);
-        const double e = bead_area(width, height_) * length / filament_area_ * flow_ * speed_flow(feed);
+        const double e = extruded_section(section_, width, height_) * length / filament_area_ * flow_ * speed_flow(feed);
         if (bridge_ || tail_)
             other_time_ += length / feed;
         else
@@ -1792,7 +1794,7 @@ private:
         // Never under 1 mm/min, the least F can say: a cap of 0.002 mm/s
         // (extrusion.infill_max_speed) wrote F0 (the spec team's BH3).
         feed = std::max(feed, 1.0 / 60.0);
-        const double section = bead_area(width, height);
+        const double section = extruded_section(section_, width, height);
         if (forced_flow_ > 0.0 && section * flow_ > 0.0)
             return std::min(feed_limit_, std::max(1.0, std::floor(forced_flow_ / (section * flow_) * 60.0)) / 60.0);
         if (max_flow_ > 0.0 && section * flow_ > 0.0) {
@@ -1987,6 +1989,7 @@ private:
     std::map<double, double> extruded_, surface_extruded_;
     double max_flow_ = 0.0; // mm3/s; 0: no limit
     std::vector<std::array<double, 2>> flow_by_speed_;
+    BeadSection section_ = BeadSection::Rounded;
     double forced_flow_ = 0.0; // mm3/s every extrusion runs at; 0: the feeds asked
     double feed_limit_ = 0.0;  // mm/s the machine moves: a forced flow never asks more
     double other_time_ = 0.0;

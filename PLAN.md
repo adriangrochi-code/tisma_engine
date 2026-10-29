@@ -831,8 +831,9 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   velocidades del perfil de impresión que el paquete da a cada impresora (`defaults.print`) van a su perfil de
   impresora: las velocidades son de la impresora (decisión del dueño, 2026-10-26; `docs/CONFIG.md`, «Velocidades»)
 - [ ] `pellets.md` (P3): impresoras de pellets. Hecho (2026-10-26): los topes de `layers.height` (10 mm) y
-  `walls.width` (40 mm); (2026-10-29) `extrusion.flow_by_speed` (regla 5, PE7); falta `machine.feedstock` y
-  `extrusion.section` (preguntado al equipo de fichas: la sección del motor ya es la redonda)
+  `walls.width` (40 mm); (2026-10-29) `extrusion.flow_by_speed` (regla 5, PE7) y `extrusion.section` (regla 4,
+  PE2, PE3, PE5: la redonda por defecto, medida en Tisma Slicer; la rectangular como opción); falta
+  `machine.feedstock` (PE1, PE9)
 - [ ] `devices.md` (F9; sus pantallas en P1)
 - [ ] Después de la primera versión: `color_mixing.md`, `support_fins.md`, `plugins.md`, `waam.md`
 
@@ -968,7 +969,7 @@ Con el PR #23 (2026-10-26):
   `band_height`), `gcode` 5, `surfaces` 4, `infill`, `object` y `speed` 3, `extrusion`, `filament`, `orient` y `print`
   2, y siete sueltas. Los nombres de las fichas son el contrato (`SETTINGS_V1.md`): lo que el motor ya hace con otro
   nombre se resuelve con un alias; lo demás, con su ficha. Primero los alias, después por grupo en el orden de la tabla
-- [ ] **`walls.transition_margin`** (`walls.transition_angle` hecho el 2026-10-28) (`perimeters.md` P13 y P14, medidas por el equipo de
+- [x] **`walls.transition_margin`** (hecho el 2026-10-29 con la tabla P13b: corte fijo de 0,155 mm; `walls.transition_angle` hecho el 2026-10-28) (`perimeters.md` P13 y P14, medidas por el equipo de
   fichas el 2026-10-28): en una cuña, los conteos impares (cordón del medio) solo si el ángulo de su punta es a lo
   sumo el ajuste; más abierta, solo conteos pares (P14, 1°, 10° y 30° con puntas de 5°, 10° y 20°). El margen saca
   solo los vaivenes chicos alrededor del punto de cambio (P13: ±0,05 y ±0,1 sobre 1,15 mm se van con 25 %; ±0,2

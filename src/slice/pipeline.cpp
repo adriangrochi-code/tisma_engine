@@ -1275,6 +1275,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     beading.inward_beads = double(settings.wall_spread_count);
     beading.transition_length = settings.wall_transition_length.of(settings.nozzle_diameter);
     beading.transition_angle = settings.wall_transition_angle;
+    beading.transition_margin = settings.wall_transition_margin.of(settings.nozzle_diameter);
     beading.odd_centre = 0.8; // perimeters.md, table P2
     beading.wall_count = settings.wall_count;
     beading.min_detail = settings.wall_min_detail.of(settings.nozzle_diameter);

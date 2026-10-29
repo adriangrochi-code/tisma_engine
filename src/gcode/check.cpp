@@ -493,7 +493,7 @@ private:
                 // rule 3); in a nonplanar block ;HEIGHT is the bead's own, the
                 // layer's is the last one out of it.
                 const double base = nonplanar_ && layer_height_ > 0.0 ? layer_height_ : *height_;
-                const double per_mm = (base > 0.0 ? bead_area(*width_, base) * thickness / base : 0.0) /
+                const double per_mm = (base > 0.0 ? extruded_section(limits_.section, *width_, base) * thickness / base : 0.0) /
                                       limits_.filament_area * flow_ * flow_at_speed(limits_.flow_by_speed, feed_);
                 const double expected = per_mm * length;
                 // ;HEIGHT, written to 3 decimals, may hide half the last one:
@@ -694,11 +694,12 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
             thickest = std::max(thickest, layer.top - layer.bottom);
         limits.wave = std::max(limits.wave, 0.5 * thickest);
     }
-    if (const std::optional<WaveParams> waves = wave_params(s)) {
-        // The crests, and the travels over them, go up to half the amplitude higher.
+    if (const std::optional<WaveParams> waves = wave_params(s)) // the crests: half the amplitude higher
         limits.wave = std::max(limits.wave, 0.5 * waves->amplitude);
-        limits.max_z += limits.wave;
-    }
+    // The raised loops and the crests, and the travels over them, go that
+    // much higher than the top layer (a staggered top layer with no lift
+    // went past it: fuzzer, seed 20261029, run 354).
+    limits.max_z += limits.wave;
     double speed_factor = 1.0, retract_speed = std::max(s.retract_speed, s.unretract_speed);
     for (const HeightChange& c : s.changes) {
         speed_factor = std::max(speed_factor, c.speed.value_or(100.0) / 100.0);
@@ -734,6 +735,7 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     const double area = std::numbers::pi * r * r, e_scale = s.volumetric_e ? area : 1.0;
     limits.filament_area = s.volumetric_e ? 1.0 : area;
     limits.flow_by_speed = s.flow_by_speed;
+    limits.section = s.bead_section;
     limits.retract_length = s.retract_length * e_scale;
     limits.restart_extra = s.restart_extra * e_scale;
     limits.wipe = s.wipe;

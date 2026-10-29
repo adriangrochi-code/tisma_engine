@@ -25,6 +25,7 @@ struct GcodeLimits {
     // extrusion.flow_by_speed (pellets.md, rule 5): each extrusion's E by
     // its F.
     std::vector<std::array<double, 2>> flow_by_speed;
+    BeadSection section = BeadSection::Rounded; // extrusion.section
     double retract_length = 0.0;  // mm of filament
     // retraction_travel.md: the filament pushed past each retraction undone
     // (rule 1), a retraction partly while the nozzle wipes (rule 3), and G10

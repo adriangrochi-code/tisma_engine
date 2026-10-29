@@ -3,6 +3,7 @@
 #include "gcode/check.hpp"
 #include "gcode/preview.hpp"
 #include "gcode/writer.hpp"
+#include "geom/bead.hpp"
 #include "report/warnings.hpp"
 #include "io/stl.hpp"
 #include "mesh/indexed_mesh.hpp"
@@ -1712,6 +1713,49 @@ TEST_CASE("a speed cap under 1 mm/min writes F1, not F0 (the spec team's BH3)", 
     }
     CHECK(out.str().find(" F1\n") != std::string::npos);
     CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("pellets: the bead's section, rounded or a rectangle (pellets.md, rule 4, PE2, PE3, PE5)", "[gcode][pellets]") {
+    const double filament = std::numbers::pi * 0.875 * 0.875; // 2.40528 mm2
+    // A 5 mm nozzle, 2.5 mm layers, 6 mm beads.
+    CHECK_THAT(extruded_section(BeadSection::Rectangle, 6.0, 2.5) / filament, Catch::Matchers::WithinAbs(6.2363, 1e-4));
+    CHECK_THAT(extruded_section(BeadSection::Rounded, 6.0, 2.5) / filament, Catch::Matchers::WithinAbs(5.6786, 1e-4));
+    CHECK_THAT(extruded_section(BeadSection::Rounded, 6.0, 2.5), Catch::Matchers::WithinAbs(13.6587, 1e-4));
+    CHECK_THAT(extruded_section(BeadSection::Rounded, 4.0, 1.0), Catch::Matchers::WithinAbs(3.7854, 1e-4)); // PE5
+
+    IndexedMesh m;
+    add_box(m, 0, 0, 20, 20, 2);
+    Settings s = test_printer();
+    s.relative_extrusion = true;
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream rounded, rectangle;
+    write_gcode(rounded, model, s);
+    s.bead_section = BeadSection::Rectangle;
+    write_gcode(rectangle, model, s);
+    // Each extrusion's E with the width and height it is written with.
+    const auto es = [](const std::string& gcode) {
+        std::vector<std::array<double, 3>> out;
+        double width = 0.0, height = 0.0;
+        for (const std::string& line : lines_of(gcode)) {
+            if (line.rfind(";WIDTH:", 0) == 0)
+                width = std::stod(line.substr(7));
+            else if (line.rfind(";HEIGHT:", 0) == 0)
+                height = std::stod(line.substr(8));
+            const std::size_t e = line.find(" E");
+            if (line.rfind("G1 ", 0) == 0 && e != std::string::npos && line.find(" X") != std::string::npos &&
+                std::stod(line.substr(e + 2)) > 0.0)
+                out.push_back({std::stod(line.substr(e + 2)), width, height});
+        }
+        return out;
+    };
+    const auto a = es(rounded.str()), b = es(rectangle.str());
+    REQUIRE(a.size() == b.size());
+    REQUIRE(a.size() > 100);
+    for (std::size_t i = 0; i < a.size(); i += 7) {
+        const double w = b[i][1], h = b[i][2];
+        CHECK_THAT(b[i][0], Catch::Matchers::WithinAbs(a[i][0] * w * h / bead_area(w, h), 2e-5 + 0.02 * b[i][0]));
+    }
+    CHECK(check_gcode(rectangle.str(), gcode_limits(model, s)).ok());
 }
 
 TEST_CASE("pellets: the flow by the move's speed (pellets.md, rule 5, PE7)", "[gcode][pellets]") {

@@ -1109,7 +1109,7 @@ const std::map<T, const char*>& row_keys() {
         {T::ScarfSegment, "walls.scarf_max_segment"}, {T::ScarfSmooth, "walls.scarf_only_smooth"},
         {T::ScarfInner, "walls.scarf_inner"}, {T::DetectOverhangs, "walls.detect_overhangs"},
         {T::MinLineWidth, "walls.min_line_width"}, {T::MinDetail, "walls.min_detail"},
-        {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::SpreadCount, "walls.spread_count"}, {T::TransitionLength, "walls.transition_length"}, {T::TransitionAngle, "walls.transition_angle"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
+        {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::SpreadCount, "walls.spread_count"}, {T::TransitionLength, "walls.transition_length"}, {T::TransitionAngle, "walls.transition_angle"}, {T::TransitionMargin, "walls.transition_margin"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
         {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
@@ -1216,7 +1216,7 @@ const std::map<T, const char*>& row_keys() {
         {T::UnloadingSpeed, "extrusion.unloading_speed"}, {T::UnloadingSpeedStart, "extrusion.unloading_speed_start"},
         {T::CoolingMoves, "extrusion.cooling_moves"}, {T::CoolingInitialSpeed, "extrusion.cooling_initial_speed"},
         {T::CoolingFinalSpeed, "extrusion.cooling_final_speed"}, {T::RammingRow, "extrusion.ramming"},
-        {T::FlowBySpeedRow, "extrusion.flow_by_speed"},
+        {T::FlowBySpeedRow, "extrusion.flow_by_speed"}, {T::BeadSectionRow, "extrusion.section"},
         {T::ToolchangeDelay, "extrusion.toolchange_delay"}, {T::LoadTime, "extrusion.load_time"},
         {T::UnloadTime, "extrusion.unload_time"}, {T::InterlockBeams, "interlocking.beams"},
         {T::InterlockWidth, "interlocking.beam_width"}, {T::InterlockLayers, "interlocking.beam_layers"},
@@ -6357,6 +6357,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         if (shown("walls.transition_length"))
             changed |= unit_row(T::TransitionLength, s.wall_transition_length, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
         mm(T::TransitionAngle, "walls.transition_angle", s.wall_transition_angle, 0.0, 179.0, "%.0f°", 0.5f);
+        if (shown("walls.transition_margin"))
+            changed |= unit_row(T::TransitionMargin, s.wall_transition_margin, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
     } else if (id == "walls_more") {
         flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
         flag(T::WallsStaggered, "walls.staggered", s.walls_staggered);
@@ -6844,6 +6846,10 @@ bool App::card_rows(std::string_view id, bool& bed) {
         else
             count(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.size());
         count(T::FlowBySpeedRow, "extrusion.flow_by_speed", s.flow_by_speed.size()); // pellets.md, rule 5
+        if (shown("extrusion.section")) // pellets.md, rule 4
+            changed |= row(T::BeadSectionRow, s.bead_section,
+                           {{BeadSection::Rounded, tr(T::BeadSectionRounded)},
+                            {BeadSection::Rectangle, tr(T::BeadSectionRectangle)}});
     } else if (id == "pressure") {
         mm(T::PressureAdvance, "extrusion.pressure_advance", s.pressure_advance, 0.0, 2.0, "%.3f", 0.001f);
     } else if (id == "max_flow") {

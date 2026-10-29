@@ -73,6 +73,9 @@ enum class IroningSurfaces { Top, Topmost, Solid };
 enum class CurvedMode { Disabled, Wave, Conical, Overhangs, Stress, Surface, Automatic };
 enum class CurvedPattern { Egg, Ridges, Twisted };
 enum class CurvedFlow { Preserve, Uniform, Off };
+// The section a bead's E is counted with (extrusion.section, pellets.md,
+// rule 4): a rectangle with round sides, h (w - (1 - pi/4) h), or w x h.
+enum class BeadSection { Rounded, Rectangle };
 // What the printer is: one that extrudes filament, or a resin printer with
 // a display (resin.md).
 enum class MachineTechnology { Fdm, Msla };
@@ -169,6 +172,10 @@ struct Settings {
     // The ramp from n to n + 1 beads along a wall (walls.transition_length,
     // perimeters.md): mm, or a share of the nozzle; 0: the bead's spacing.
     Speed wall_transition_length{100.0, true};
+    // Flatten the small swings past a change in the bead count
+    // (walls.transition_margin, perimeters.md P13): mm, or a share of the
+    // nozzle; 0: none.
+    Speed wall_transition_margin{25.0, true};
     // Odd bead counts only in corners no wider than this, degrees
     // (walls.transition_angle, perimeters.md P14).
     double wall_transition_angle = 10.0;
@@ -764,6 +771,7 @@ struct Settings {
     // rule 5): [mm/s, %] points by speed, a straight line between them and
     // the end values past them; empty: none.
     std::vector<std::array<double, 2>> flow_by_speed;
+    BeadSection bead_section = BeadSection::Rounded;
     // The filament's own start and end G-code (gcode_templates.md, rules 9
     // and 12): after the printer's start, before the printer's end.
     std::string filament_start_gcode, filament_end_gcode;
@@ -830,6 +838,9 @@ void require_speeds(const Settings& settings);
 // The fastest an extrusion is asked to go, mm/s: the fastest extrusion speed,
 // capped by speed.max when that is set.
 double fastest_extrusion(const Settings& settings);
+
+// The section of a bead w wide and h high as extrusion.section counts it.
+double extruded_section(BeadSection section, double width, double height);
 
 // extrusion.flow_by_speed at this speed (mm/s), as a factor: 1 with no points.
 double flow_at_speed(const std::vector<std::array<double, 2>>& points, double speed);
