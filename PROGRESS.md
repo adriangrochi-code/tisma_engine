@@ -7646,3 +7646,11 @@ la leyenda ocupaba unos 460 × 520 px y tapaba la barra de movimientos, que se u
 Mirado en capturas (la barra adentro de la leyenda, la leyenda completa después de un cuadro de acomodo). Pasan las
 138 pruebas de vista e interfaz. **Falta:** encuadrar la pieza en lo que la leyenda y los paneles dejan libre; el
 plegado no se probó con un clic (el script no tiene un paso para botones sin clave).
+
+Siguiente bloque, misma leyenda: se pliega sola si, completa, taparía más del 45 % del ancho de la vista
+(`legend_full_w_`, su ancho la última vez que se dibujó completa), salvo que se haya elegido con el botón
+(`legend_choice_`). La tabla de totales pasó a columnas de ancho fijo: con columnas que se estiran, una ventana que
+se ajusta a lo que tiene nunca se angostaba (plegada seguía de 460 px; ahora, 350). Al encuadrar en Vista previa, la
+pieza se ajusta al ancho que la leyenda deja y la cámara se corre la mitad de lo tapado. Mirado en capturas a
+1200 × 760 (plegada, la barra adentro) y a 1900 × 1060 (completa, la barra abajo a la derecha, la pieza libre). Falta
+reencuadrar al pasar a Vista previa.

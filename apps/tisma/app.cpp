@@ -722,7 +722,13 @@ private:
     // the centre of gravity and the nozzle (travels: show_travels_).
     bool show_wipes_ = false, show_gravity_ = false, show_nozzle_ = true;
     bool show_legend_ = true;  // L hides the preview's legend
-    bool legend_full_ = true;  // its times, shares and filament by kind, and the totals (else only the kinds)
+    // The legend whole (times, shares and filament by kind, and the totals)
+    // or folded to the kinds: as last chosen with its button, else whole
+    // while it covers at most 45 % of the view's width (legend_full_w_, its
+    // width when last drawn whole).
+    std::optional<bool> legend_choice_;
+    float legend_full_w_ = 0.0f;
+    bool legend_full_ = true; // this frame's
     ImVec4 legend_rect_{};     // where it was drawn last frame (min x, y, max x, y); empty when hidden
     bool show_labels_ = false; // E shows the parts' names
     std::array<bool, kMarkKinds> show_marks_{false, false, true, false, false, false, false}; // seams on
@@ -3992,7 +3998,14 @@ void App::frame_now() {
         lo = {centre.x - reach, centre.y - reach, 0.0f};
         hi = {centre.x + reach, centre.y + reach, part->second.z};
     }
-    camera_.fit(lo, hi, view_size_.x / std::max(view_size_.y, 1.0f));
+    // In the preview the legend covers the left of the view: the part fits
+    // what is left, and goes right by half what it covers.
+    float covered = 0.0f;
+    if (tab_ == Tab::Preview && show_legend_ && legend_rect_.z > legend_rect_.x)
+        covered = std::clamp(legend_rect_.z - view_pos_.x, 0.0f, view_size_.x * 0.5f);
+    camera_.fit(lo, hi, (view_size_.x - covered) / std::max(view_size_.y, 1.0f));
+    if (covered > 0.0f)
+        camera_.pan(0.5f * covered, 0.0f, view_size_.y);
     // The calibration and device panels cover the left of the view: the part goes right.
     if (tab_ == Tab::Calibration || tab_ == Tab::Device)
         camera_.pan(225.0f * scale_, 0.0f, view_size_.y);
@@ -8980,6 +8993,7 @@ void App::preview_panels() {
     ImGui::Begin("##legend", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    legend_full_ = legend_choice_ ? *legend_choice_ : legend_full_w_ <= 0.45f * view_size_.x;
     const PreviewLayer& layer = p.layers[std::size_t(top_layer_)];
     loc::Text(tr(T::LayerOf), top_layer_ + 1, layers, layer.z);
     // Fewer columns, so that less of the part is covered (owner's report):
@@ -8988,7 +9002,7 @@ void App::preview_panels() {
         const float button = ImGui::GetFrameHeight();
         ImGui::SameLine(0.0f, 2.0f * ImGui::GetStyle().ItemSpacing.x);
         if (ImGui::Button(legend_full_ ? "-##legend_full" : "+##legend_full", ImVec2(button, button)))
-            legend_full_ = !legend_full_;
+            legend_choice_ = !legend_full_;
         if (ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(legend_full_ ? T::LegendLess : T::LegendMore));
     }
@@ -9177,7 +9191,7 @@ void App::preview_panels() {
         });
     }
     ImGui::Separator();
-    if (ImGui::BeginTable("##numbers", 2)) {
+    if (ImGui::BeginTable("##numbers", 2, ImGuiTableFlags_SizingFixedFit)) { // fixed: the legend can narrow
         auto line = [](const char* name, const std::string& value) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
@@ -9210,6 +9224,8 @@ void App::preview_panels() {
     }
     const ImVec2 at = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
     legend_rect_ = ImVec4(at.x, at.y, at.x + size.x, at.y + size.y);
+    if (legend_full_)
+        legend_full_w_ = size.x;
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
