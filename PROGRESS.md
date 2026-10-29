@@ -7914,3 +7914,18 @@ defecto (sin comillas) y el rango; la línea de la clave sigue igual. Vale para 
 cuyo valor no está en los ajustes queda como antes. Mirado con `--info walls.seam` en español («Por defecto:
 Alineada», «Rango: Alineada, Más cercana, Aleatoria, Atrás») y en inglés («Default: Aligned»). Sin prueba automática:
 el texto está en una ventana emergente que `--dump-ui` no lee.
+
+## 2026-10-29 (noche): el árbol de cajas de un modelo grande, en otro hilo
+
+De «Modelos grandes, lo que sigue»: el árbol de cajas de cada modelo (el que usan el clic, el menú del botón derecho y
+el pincel) se armaba en el primer clic después de abrir o cambiar la placa. Ahora, con 200 000 triángulos o más, se
+arma en otro hilo apenas se arma la placa (`update_indexes`, cada cuadro); el clic lo toma hecho o espera lo que le
+falta, y uno de una placa vieja se descarta por su número (`plate_version_`). La copia de las mallas ubicadas que usa
+ese hilo es la misma que la de la copia liviana de la vista (`placed_copy`, compartida mientras alguno la tiene).
+
+Medido con la cúpula de 2 003 996 triángulos (`TISMA_TIMING`, paso nuevo `click-model` de `--ui-script`, un clic en
+el medio de la vista): el primer clic, de 608 ms a 0,1 ms. Prueba nueva `ui_script_click_large_model`, con una esfera de
+239 200 triángulos hecha al probar (`tools/make_test_sphere.py` acepta los pasos); falla si el árbol se arma en el clic
+(comprobado). Pasan las 128 pruebas de interfaz y vista.
+
+**Sigue:** la malla de la placa y los vértices de la vista en otro hilo (unos 300 ms con la cúpula al abrirla).

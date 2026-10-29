@@ -99,6 +99,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Modelos grandes:** girar, escalar o mover uno de 200 000 triángulos o más con sus campos o deslizadores ya no
   rehace toda la placa en cada cuadro: la vista lo muestra en su lugar nuevo y la placa se rehace al soltar (con 2
   millones de triángulos, 20 pasos de escala: 76 → 17 s).
+- **Modelos grandes:** el primer clic o pincel sobre un modelo de 200 000 triángulos o más ya no espera a que se arme su
+  árbol de búsqueda: se arma en segundo plano al abrirlo o cambiarlo (con 2 millones de triángulos, de 608 ms a 0,1 ms).
 
 - **«No planar»:** sección propia en los ajustes de impresión (capas curvas, relleno ondulado) y en los de la
   impresora (el cabezal).

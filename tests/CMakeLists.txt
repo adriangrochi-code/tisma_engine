@@ -495,4 +495,21 @@ if(Python3_Interpreter_FOUND)
   endif()
   # Every number of the settings panel reaches its whole range in docs/CONFIG.md.
   add_test(NAME ui_limits_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_ui_limits.py ${PROJECT_SOURCE_DIR})
+  # A large model (239 200 triangles): its box tree is made on another
+  # thread right after the plate, and the first click on it finds it made
+  # (docs/LARGE_MODELS.md).
+  if(TARGET tisma AND TISMA_XVFB_RUN)
+    add_test(NAME ui_big_sphere_make
+      COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/make_test_sphere.py
+              ${CMAKE_CURRENT_BINARY_DIR}/big_sphere.stl 400 300)
+    set_tests_properties(ui_big_sphere_make PROPERTIES FIXTURES_SETUP big_sphere)
+    add_test(NAME ui_script_click_large_model
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/big_sphere.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/click_model.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_click_large_model.png)
+    set_tests_properties(ui_script_click_large_model PROPERTIES FIXTURES_REQUIRED big_sphere
+      ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300 PASS_REGULAR_EXPRESSION "the box tree was made ahead"
+      FAIL_REGULAR_EXPRESSION "error: ")
+  endif()
 endif()

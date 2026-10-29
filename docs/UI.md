@@ -115,7 +115,10 @@ Medido con una esfera de 1 002 528 triángulos (Release, `tests` sin interfaz):
   al soltarlo.
 - **Clic y pincel:** cada modelo ubicado tiene un árbol de cajas (`TriangleIndex`, `src/ui/plate.*`), armado la primera
   vez que hace falta después de un cambio (250 ms). Un clic pasa de 57 ms a 3 µs, y un paso del pincel, de 13–18 ms
-  a 2 ms.
+  a 2 ms. Con 200 000 triángulos o más en la placa, el árbol se arma en otro hilo apenas se arma la placa
+  (2026-10-29), sobre una copia de las mallas ubicadas que comparte con la copia liviana de la vista; el primer clic lo
+  encuentra hecho, o espera lo que le falta. Con la cúpula de 2 003 996 triángulos, el primer clic tardaba 608 ms y
+  ahora 0,1 ms.
 - **El motor**, para comparar: leer 83 ms, laminar 2,0 s, G-code 0,5 s, verificarlo 0,04 s y la vista previa 0,06 s.
 - **Vulkan** (2026-10-26, `PLAN.md`, «Vista con Vulkan»): `--graphics auto|vulkan|opengl` elige qué dibuja la
   ventana. El programa detecta si la máquina tiene Vulkan al intentar arrancarlo (el cargador, un dispositivo Vulkan

@@ -673,8 +673,23 @@ private:
     Affine live_from_;                    // the chosen object's map when its mesh was made
     Mat4 live_model_ = identity();
     ImVec4 drag_rect_{}; // --ui-script's drag step: the slider's place when it began
-    std::vector<TriangleIndex> indexes_; // a search over each placed mesh, made when first needed
+    // A search over each placed mesh: for a large plate made on another
+    // thread right after the plate (docs/LARGE_MODELS.md), else when first
+    // needed. plate_version_ counts the plates made.
+    std::vector<TriangleIndex> indexes_;
+    std::uint64_t plate_version_ = 0, indexes_version_ = 0;
+    struct IndexBuild {
+        std::uint64_t version = 0;
+        std::vector<TriangleIndex> indexes;
+    };
+    Background<IndexBuild> index_job_;
     const std::vector<TriangleIndex>& plate_indexes();
+    void update_indexes();
+    // A copy of the placed meshes for the jobs on other threads, shared while
+    // one of them holds it.
+    std::weak_ptr<const std::vector<TriangleMesh>> placed_copy_;
+    std::uint64_t placed_copy_version_ = 0;
+    std::shared_ptr<const std::vector<TriangleMesh>> placed_copy();
     bool keep_scale_ = true;   // the Scale tool scales all three axes together
     // The Cut tool (model_tools.md, rules 13 and 18): the plane's height over
     // the bed, and whether the part below is turned over onto its cut face.
@@ -3117,6 +3132,7 @@ void App::rebuild_plate() {
     paint_dirty_ = true;
     drag_offset_ = {};
     indexes_.clear();
+    ++plate_version_;
     offset_ = {};
     if (objects_.empty()) {
         mesh_.reset();
@@ -3200,12 +3216,55 @@ void App::arrange_plate() {
 }
 
 const std::vector<TriangleIndex>& App::plate_indexes() {
-    if (indexes_.size() != placed_meshes_.size()) {
+    if (indexes_version_ == plate_version_)
+        return indexes_;
+    // The job for this plate, if it runs, is done sooner than a new search.
+    index_job_.wait();
+    if (std::optional<IndexBuild> b = index_job_.take(); b && b->version == plate_version_) {
+        indexes_ = std::move(b->indexes);
+    } else {
         indexes_.clear();
         for (const TriangleMesh& m : placed_meshes_)
             indexes_.emplace_back(m);
     }
+    indexes_version_ = plate_version_;
     return indexes_;
+}
+
+// Each frame: a large plate's search is made on another thread as soon as
+// the plate is, so that the first click on a model of millions of triangles
+// does not wait for it (docs/LARGE_MODELS.md); a small one's, when needed.
+void App::update_indexes() {
+    constexpr std::size_t kIndexAheadFrom = 200000;
+    if (std::optional<IndexBuild> b = index_job_.take(); b && b->version == plate_version_) {
+        indexes_ = std::move(b->indexes);
+        indexes_version_ = b->version;
+        timing("box tree taken");
+    }
+    if (indexes_version_ == plate_version_ || index_job_.running())
+        return;
+    std::size_t total = 0;
+    for (const TriangleMesh& m : placed_meshes_)
+        total += m.triangle_count();
+    if (total < kIndexAheadFrom)
+        return;
+    index_job_.start([meshes = placed_copy(), version = plate_version_]() {
+        IndexBuild out;
+        out.version = version;
+        for (const TriangleMesh& m : *meshes)
+            out.indexes.emplace_back(m);
+        return out;
+    });
+}
+
+std::shared_ptr<const std::vector<TriangleMesh>> App::placed_copy() {
+    std::shared_ptr<const std::vector<TriangleMesh>> copy = placed_copy_.lock();
+    if (!copy || placed_copy_version_ != plate_version_) {
+        copy = std::make_shared<const std::vector<TriangleMesh>>(placed_meshes_);
+        placed_copy_ = copy;
+        placed_copy_version_ = plate_version_;
+    }
+    return copy;
 }
 
 // The ray from the eye through the mouse, in the view.
@@ -10458,10 +10517,10 @@ void App::update_coarse_model() {
         coarse_version_ = scene_version_;
         return;
     }
-    coarse_job_.start([meshes = placed_meshes_, offset = offset_, version = scene_version_, total]() {
+    coarse_job_.start([meshes = placed_copy(), offset = offset_, version = scene_version_, total]() {
         CoarseBuild out;
         out.version = version;
-        for (const TriangleMesh& m : meshes) {
+        for (const TriangleMesh& m : *meshes) {
             out.objects.push_back(out.vertices.size() / 6);
             const std::size_t share = std::max<std::size_t>(1000, kCoarseTarget * m.triangle_count() / total);
             const std::vector<float> v = mesh_vertices(clustered(m, share), offset);
@@ -11159,6 +11218,24 @@ void App::script_input() {
         } else if (f >= 4) {
             next();
         }
+    } else if (step.verb == "click-model") { // a left click in the middle of the view, on a model
+        const ImVec2 at(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + 0.5f * view_size_.y);
+        if (f == 0) {
+            io.AddMousePosEvent(at.x, at.y);
+        } else if (f == 1) {
+            // Made ahead: taken from its job, or the job still running.
+            const bool ahead = indexes_version_ == plate_version_ || index_job_.running();
+            timing("before picking");
+            if (!pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()))
+                return fail_step("no model under the point");
+            timing("picked");
+            std::printf("ui-script: click-model: the box tree was made %s\n", ahead ? "ahead" : "on the click");
+            io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+        } else if (f == 2) {
+            io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+        } else if (f >= 4) {
+            next();
+        }
     } else if (step.verb == "menu") { // a click on an open menu's entry, by its name in English
         if (f == 0)
             return;
@@ -11328,6 +11405,7 @@ void App::frame() {
     glfwGetFramebufferSize(window_, &fb_w, &fb_h);
     const Vec3 clear = vec(theme_.window);
     update_coarse_model(); // for both views, before the frame that reads it
+    update_indexes();
     ViewFrame f = view_frame(fb_w, fb_h);
     if (vulkan_) {
         // The 3D view first, into its picture, then the window and the panels.

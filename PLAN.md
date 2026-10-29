@@ -673,7 +673,8 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   clic y el pincel buscan en un árbol de cajas (`docs/UI.md`, «Modelos grandes»)
 - [ ] Modelos grandes, lo que sigue: armar el árbol de cajas y la malla de la placa en segundo plano; los campos de
   giro y escala sin rehacer toda la placa en cada cambio (2026-10-29: hecho lo segundo, con un modelo de 200 000
-  triángulos o más la vista lo dibuja con una matriz mientras se arrastra y la placa se rehace al soltar)
+  triángulos o más la vista lo dibuja con una matriz mientras se arrastra y la placa se rehace al soltar; hecho el
+  árbol de cajas en otro hilo; falta la malla de la placa)
 - [ ] Perfiles de impresoras y filamentos (P3)
 - [ ] Fichas de la interfaz de Tisma, cuando lleguen
 - [x] Modo vaso (`vase_mode.md`, pedido del dueño de una pared en espiral, 2026-10-26): una sola pared que sube en
