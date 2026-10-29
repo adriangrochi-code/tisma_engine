@@ -521,7 +521,13 @@ TEST_CASE("compensation, flow and changes are read with their ranges", "[setting
                       ContainsSubstring("extrusion.chamber_temperature"));
     CHECK_THROWS_WITH(parse_settings(R"({"extrusion": {"abrasive": 1}})"),
                       ContainsSubstring("extrusion.abrasive: must be true or false"));
-    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_flow": 2000}})"), ContainsSubstring("machine.max_flow"));
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_flow": 20000}})"), ContainsSubstring("machine.max_flow"));
+    CHECK(parse_settings(R"({"machine": {"max_flow": 2000}})").machine_max_flow == 2000.0); // pellets.md
+    CHECK(parse_settings(R"({"extrusion": {"max_flow": 5000}})").filament_max_flow == 5000.0);
+    CHECK(parse_settings("{}").feedstock == Feedstock::Filament);
+    CHECK(parse_settings(settings_json(parse_settings(R"({"machine": {"feedstock": "pellet"}})"))).feedstock ==
+          Feedstock::Pellet);
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"feedstock": "granules"}})"), ContainsSubstring("machine.feedstock"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"max_nozzle_temp": 900}})"),
                       ContainsSubstring("machine.max_nozzle_temp"));
     CHECK_THROWS_WITH(parse_settings(R"({"machine": {"enclosed": "yes"}})"),

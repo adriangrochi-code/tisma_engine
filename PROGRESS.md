@@ -8009,3 +8009,19 @@ amplitud 0,05, 0,1 y 0,15, margen 0 da tramos de 3 cordones y 25 % y 100 % ningu
 cualquier margen. No imita el salto de largo de los tramos con margen 0 (de 1,6 a 1,0 mm entre 0,15 y 0,16).
 
 **Sigue:** `machine.feedstock` (PE1, PE9) y lo demás de la lista de ajustes que no lee el motor.
+
+## 2026-10-29: `machine.feedstock` (pellets.md, regla 1, PE1)
+
+`machine.feedstock` (`filament` por defecto, o `pellet`) se lee, se guarda y está en la tarjeta del extrusor del
+panel; el laminado es el mismo. Los topes de `machine.max_flow` y `extrusion.max_flow` pasan de 1000 a 10 000 mm³/s
+(«Topes que cambian» de la ficha), en el lector, `docs/CONFIG.md` y el panel. Prueba PE1: una caja de 100 mm en una
+impresora de pellets (boquilla de 5 mm, capas de 2,5, cordones de 6) lamina en 4 capas y su G-code pasa el chequeo.
+PE9: el equipo de fichas agregó `extrusion.feedstock` (en el perfil del material; sin la clave, filamento). Si no
+coincide con `machine.feedstock`, `capability_warnings` da el aviso «feedstock» («this material is for filament and
+the printer melts pellets», o al revés) y lamina igual; prueba con los cuatro casos. Como los demás avisos del
+laminado, el texto va en inglés. Falta filtrar la lista de materiales por esa clave (con los perfiles, P3).
+
+La prueba X1 leía todo comentario con «filament» y un número; el bloque de ajustes del final ahora trae `; feedstock = filament`: lee solo las líneas del resumen. Pasan las 797 pruebas.
+
+La corrida del fuzzer que fallaba (semilla 20261029, 355 corridas, con la 354) pasa ahora: 0 fallas, 8 rechazadas por
+no imprimibles.

@@ -1667,7 +1667,8 @@ Settings parse_checked(std::string_view text) {
                 "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent",
                 "custom_parameters",
                 "extruders", "extruder_offset", "single_extruder_mmu", "display_pixels_x", "display_pixels_y",
-                "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology", "calibrations"},
+                "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology", "calibrations",
+                "feedstock"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "custom_parameters") {
@@ -1676,6 +1677,10 @@ Settings parse_checked(std::string_view text) {
                    }
                    if (n == "calibrations") {
                        read_calibrations(v, k, s.printer_calibrations);
+                       return;
+                   }
+                   if (n == "feedstock") { // pellets.md, rule 1
+                       s.feedstock = choice<Feedstock>(g, n, k, {{"filament", Feedstock::Filament}, {"pellet", Feedstock::Pellet}});
                        return;
                    }
                    if (n == "technology") {
@@ -1810,8 +1815,8 @@ Settings parse_checked(std::string_view text) {
                            v.get<bool>();
                    } else if (n == "max_flow" || n == "max_nozzle_temp" || n == "max_bed_temp" || n == "max_chamber_temp") {
                        const double d = number(g, n, k);
-                       if (d < 0.0 || d > (n == "max_flow" ? 1000.0 : 600.0))
-                           fail(k, n == "max_flow" ? "must be from 0 to 1000 mm3/s" : "must be from 0 to 600 C");
+                       if (d < 0.0 || d > (n == "max_flow" ? 10000.0 : 600.0)) // pellets.md: 10 000 mm3/s
+                           fail(k, n == "max_flow" ? "must be from 0 to 10000 mm3/s" : "must be from 0 to 600 C");
                        (n == "max_flow"          ? s.machine_max_flow
                         : n == "max_nozzle_temp" ? s.max_nozzle_temp
                         : n == "max_bed_temp"    ? s.max_bed_temp
@@ -2519,8 +2524,12 @@ Settings parse_checked(std::string_view text) {
                 "cost", "spool_weight", "shrinkage_xy", "shrinkage_z", "start_gcode", "end_gcode", "retraction", "travel",
                 "purge_multiplier", "min_purge_on_tower", "loading_speed", "loading_speed_start", "unloading_speed",
                 "unloading_speed_start", "cooling_moves", "cooling_initial_speed", "cooling_final_speed", "ramming",
-                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed", "section"},
+                "toolchange_delay", "load_time", "unload_time", "calibrations", "type", "custom_parameters", "flow_by_speed", "section", "feedstock"},
                [&](const json& g, const std::string& n, const std::string& k) {
+        if (n == "feedstock") { // pellets.md, rule 1
+            s.material_feedstock = choice<Feedstock>(g, n, k, {{"filament", Feedstock::Filament}, {"pellet", Feedstock::Pellet}});
+            return;
+        }
         if (n == "section") { // pellets.md, rule 4
             s.bead_section = choice<BeadSection>(g, n, k, {{"rounded", BeadSection::Rounded}, {"rectangle", BeadSection::Rectangle}});
             return;
@@ -2650,8 +2659,8 @@ Settings parse_checked(std::string_view text) {
         }
         const double v = number(g, n, k);
         if (n == "max_flow" || n == "chamber_temperature" || n == "chamber_min_temperature") {
-            if (v < 0.0 || v > (n == "max_flow" ? 1000.0 : 200.0))
-                fail(k, n == "max_flow" ? "must be from 0 to 1000 mm3/s" : "must be from 0 to 200 C");
+            if (v < 0.0 || v > (n == "max_flow" ? 10000.0 : 200.0)) // pellets.md: 10 000 mm3/s
+                fail(k, n == "max_flow" ? "must be from 0 to 10000 mm3/s" : "must be from 0 to 200 C");
             (n == "max_flow"              ? s.filament_max_flow
              : n == "chamber_temperature" ? s.chamber_temperature
                                           : s.chamber_min_temperature) = v;
@@ -2975,6 +2984,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"extrusion.ramming", json(s.ramming).dump()},
         {"extrusion.flow_by_speed", json(s.flow_by_speed).dump()},
         {"extrusion.section", s.bead_section == BeadSection::Rectangle ? "rectangle" : "rounded"},
+        {"extrusion.feedstock", s.material_feedstock == Feedstock::Pellet ? "pellet" : "filament"},
         {"extrusion.toolchange_delay", num(s.toolchange_delay)},
         {"extrusion.load_time", num(s.load_time)},
         {"extrusion.unload_time", num(s.unload_time)},
@@ -3115,6 +3125,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.bed", json(s.bed).dump()},
         {"machine.max_height", num(s.max_height)},
         {"machine.technology", s.machine_technology == MachineTechnology::Msla ? "msla" : "fdm"},
+        {"machine.feedstock", s.feedstock == Feedstock::Pellet ? "pellet" : "filament"},
         {"belt.enabled", flag(s.belt_enabled)},
         {"belt.angle", num(s.belt_angle)},
         {"belt.belt_is_z", flag(s.belt_is_z)},
@@ -3666,6 +3677,7 @@ std::string settings_json(const Settings& s) {
           {"extruder_offset", s.extruder_offset},
           {"single_extruder_mmu", s.single_extruder_mmu},
           {"technology", s.machine_technology == MachineTechnology::Msla ? "msla" : "fdm"},
+          {"feedstock", s.feedstock == Feedstock::Pellet ? "pellet" : "filament"},
           {"calibrations", calibrations(s.printer_calibrations)},
           {"display_pixels_x", s.display_pixels_x},
           {"display_pixels_y", s.display_pixels_y},
@@ -3856,6 +3868,7 @@ std::string settings_json(const Settings& s) {
           {"ramming", s.ramming},
           {"flow_by_speed", s.flow_by_speed},
           {"section", s.bead_section == BeadSection::Rectangle ? "rectangle" : "rounded"},
+          {"feedstock", s.material_feedstock == Feedstock::Pellet ? "pellet" : "filament"},
           {"toolchange_delay", s.toolchange_delay},
           {"load_time", s.load_time},
           {"unload_time", s.unload_time},

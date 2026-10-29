@@ -79,6 +79,8 @@ enum class BeadSection { Rounded, Rectangle };
 // What the printer is: one that extrudes filament, or a resin printer with
 // a display (resin.md).
 enum class MachineTechnology { Fdm, Msla };
+// What an FDM printer melts (machine.feedstock, pellets.md, rule 1).
+enum class Feedstock { Filament, Pellet };
 
 // The most extruders a machine has: as many as the colour channel of the
 // painting tells apart (kPaintMaxMark, docs/PAINTING.md).
@@ -463,6 +465,9 @@ struct Settings {
     // The printer's kind: the interface shows the settings of that kind and
     // slices for it (an MSLA printer gets a GOO file).
     MachineTechnology machine_technology = MachineTechnology::Fdm;
+    // Filament, or pellets through a screw (machine.feedstock): the slicing is
+    // the same; machine.filament_diameter is then the firmware's virtual one.
+    Feedstock feedstock = Feedstock::Filament;
     // An MSLA resin printer (docs/spec/features/resin.md): its display's
     // pixels, the size of the area it lights (mm), and whether the images are
     // mirrored. The defaults are an Elegoo Mars 5's.
@@ -772,6 +777,9 @@ struct Settings {
     // the end values past them; empty: none.
     std::vector<std::array<double, 2>> flow_by_speed;
     BeadSection bead_section = BeadSection::Rounded;
+    // What the material is made for (extrusion.feedstock, pellets.md, rule
+    // 1): one that differs from machine.feedstock gives a warning.
+    Feedstock material_feedstock = Feedstock::Filament;
     // The filament's own start and end G-code (gcode_templates.md, rules 9
     // and 12): after the printer's start, before the printer's end.
     std::string filament_start_gcode, filament_end_gcode;

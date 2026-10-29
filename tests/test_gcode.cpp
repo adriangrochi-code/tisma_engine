@@ -1606,8 +1606,8 @@ TEST_CASE("extras: filament used, weight and cost at the end (gcode_extras.md, r
         write_gcode(out, slice_model(m, settings), settings);
         std::map<std::string, double> values;
         for (const std::string& line : lines_of(out.str()))
-            if (const std::size_t eq = line.find(" = "); line.rfind("; ", 0) == 0 && eq != std::string::npos &&
-                                                         (line.find("filament") != std::string::npos))
+            if (const std::size_t eq = line.find(" = ");
+                eq != std::string::npos && (line.rfind("; filament ", 0) == 0 || line.rfind("; total filament ", 0) == 0))
                 values[line.substr(2, eq - 2)] = std::stod(line.substr(eq + 3));
         return values;
     };
@@ -1713,6 +1713,40 @@ TEST_CASE("a speed cap under 1 mm/min writes F1, not F0 (the spec team's BH3)", 
     }
     CHECK(out.str().find(" F1\n") != std::string::npos);
     CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("pellets: a pellet printer slices like a filament one, and warns of a filament material (pellets.md, rule 1, PE1, PE9)", "[gcode][pellets]") {
+    // A 5 mm nozzle, 2.5 mm layers and 6 mm beads, on pellets.
+    const Settings s = test_printer(parse_settings(R"({"machine": {"feedstock": "pellet", "nozzle_diameter": 5,
+                                                                   "max_flow": 2000},
+                                                       "layers": {"height": 2.5, "first_height": 2.5},
+                                                       "walls": {"width": 6}})"));
+    CHECK(s.feedstock == Feedstock::Pellet);
+    REQUIRE_NOTHROW(check_settings(s));
+    IndexedMesh m;
+    add_box(m, 0, 0, 100, 100, 10);
+    const SlicedModel model = slice_model(m, s);
+    CHECK(model.layers.size() == 4);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string() : check.problems.front().message));
+    CHECK(check.ok());
+    // PE9: a filament material on it (or one without the key) warns, and still slices; a pellet one does not.
+    const auto feedstock_warnings = [](const Settings& settings) {
+        std::size_t n = 0;
+        for (const Warning& w : capability_warnings(settings))
+            n += w.kind == "feedstock";
+        return n;
+    };
+    CHECK(feedstock_warnings(s) == 1);
+    Settings pellet = s;
+    pellet.material_feedstock = Feedstock::Pellet;
+    CHECK(feedstock_warnings(pellet) == 0);
+    Settings filament_printer = pellet;
+    filament_printer.feedstock = Feedstock::Filament;
+    CHECK(feedstock_warnings(filament_printer) == 1); // the other way round
+    CHECK(feedstock_warnings(test_printer()) == 0);
 }
 
 TEST_CASE("pellets: the bead's section, rounded or a rectangle (pellets.md, rule 4, PE2, PE3, PE5)", "[gcode][pellets]") {

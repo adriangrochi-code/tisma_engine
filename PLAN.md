@@ -832,8 +832,9 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   impresora: las velocidades son de la impresora (decisión del dueño, 2026-10-26; `docs/CONFIG.md`, «Velocidades»)
 - [ ] `pellets.md` (P3): impresoras de pellets. Hecho (2026-10-26): los topes de `layers.height` (10 mm) y
   `walls.width` (40 mm); (2026-10-29) `extrusion.flow_by_speed` (regla 5, PE7) y `extrusion.section` (regla 4,
-  PE2, PE3, PE5: la redonda por defecto, medida en Tisma Slicer; la rectangular como opción); falta
-  `machine.feedstock` (PE1, PE9)
+  PE2, PE3, PE5: la redonda por defecto, medida en Tisma Slicer; la rectangular como opción), `machine.feedstock`
+  y `extrusion.feedstock` (regla 1, PE1, PE9: el aviso si no coinciden) y los topes de caudal a 10 000 mm³/s;
+  falta filtrar la lista de materiales por `extrusion.feedstock` (con los perfiles, P3)
 - [ ] `devices.md` (F9; sus pantallas en P1)
 - [ ] Después de la primera versión: `color_mixing.md`, `support_fins.md`, `plugins.md`, `waam.md`
 

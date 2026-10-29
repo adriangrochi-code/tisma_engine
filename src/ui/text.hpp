@@ -50,6 +50,10 @@
     X(StartGcode, "G-code de inicio", "Start G-code")                                                                 \
     X(EndGcode, "G-code de fin", "End G-code")                                                                        \
     X(FilamentDiameter, "Diámetro", "Diameter")                                                                       \
+    X(FeedstockRow, "Alimentación", "Feedstock") \
+    X(MaterialFeedstockRow, "Material para", "Material for") \
+    X(FeedstockFilament, "Filamento", "Filament") \
+    X(FeedstockPellet, "Pellets", "Pellets") \
     X(NozzleTemp, "Temperatura de boquilla", "Nozzle temperature")                                                    \
     X(BedTemp, "Temperatura de cama", "Bed temperature")                                                              \
     X(TempTip, "Va al G-code de inicio como [temperature] y [bed_temperature]",                                       \

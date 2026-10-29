@@ -1094,7 +1094,7 @@ const std::map<T, const char*>& row_keys() {
         {T::Overhang0, "speed.overhang_0"}, {T::Overhang1, "speed.overhang_1"}, {T::Overhang2, "speed.overhang_2"},
         {T::Overhang3, "speed.overhang_3"}, {T::FlowSlopeUp, "speed.flow_slope_up"},
         {T::FlowSlopeDown, "speed.flow_slope_down"},
-        {T::FilamentDiameter, "machine.filament_diameter"}, {T::NozzleTemp, "machine.variables"},
+        {T::FilamentDiameter, "machine.filament_diameter"}, {T::FeedstockRow, "machine.feedstock"}, {T::NozzleTemp, "machine.variables"},
         {T::BedTemp, "machine.variables"}, {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
         {T::FanMax, "cooling.fan_max"}, {T::MinLayerTime, "cooling.min_layer_time"},
         {T::KeepOuterSpeed, "cooling.keep_outer_speed"}, {T::BedWidth, "machine.bed"}, {T::BedDepth, "machine.bed"},
@@ -1217,6 +1217,7 @@ const std::map<T, const char*>& row_keys() {
         {T::CoolingMoves, "extrusion.cooling_moves"}, {T::CoolingInitialSpeed, "extrusion.cooling_initial_speed"},
         {T::CoolingFinalSpeed, "extrusion.cooling_final_speed"}, {T::RammingRow, "extrusion.ramming"},
         {T::FlowBySpeedRow, "extrusion.flow_by_speed"}, {T::BeadSectionRow, "extrusion.section"},
+        {T::MaterialFeedstockRow, "extrusion.feedstock"},
         {T::ToolchangeDelay, "extrusion.toolchange_delay"}, {T::LoadTime, "extrusion.load_time"},
         {T::UnloadTime, "extrusion.unload_time"}, {T::InterlockBeams, "interlocking.beams"},
         {T::InterlockWidth, "interlocking.beam_width"}, {T::InterlockLayers, "interlocking.beam_layers"},
@@ -6850,10 +6851,13 @@ bool App::card_rows(std::string_view id, bool& bed) {
             changed |= row(T::BeadSectionRow, s.bead_section,
                            {{BeadSection::Rounded, tr(T::BeadSectionRounded)},
                             {BeadSection::Rectangle, tr(T::BeadSectionRectangle)}});
+        if (shown("extrusion.feedstock")) // pellets.md, rule 1
+            changed |= row(T::MaterialFeedstockRow, s.material_feedstock,
+                           {{Feedstock::Filament, tr(T::FeedstockFilament)}, {Feedstock::Pellet, tr(T::FeedstockPellet)}});
     } else if (id == "pressure") {
         mm(T::PressureAdvance, "extrusion.pressure_advance", s.pressure_advance, 0.0, 2.0, "%.3f", 0.001f);
     } else if (id == "max_flow") {
-        mm(T::FilamentMaxFlow, "extrusion.max_flow", s.filament_max_flow, 0.0, 1000.0,
+        mm(T::FilamentMaxFlow, "extrusion.max_flow", s.filament_max_flow, 0.0, 10000.0,
            s.filament_max_flow > 0.0 ? "%.1f mm³/s" : "—", 0.1f);
         mm(T::InfillMaxSpeed, "extrusion.infill_max_speed", s.infill_max_speed, 0.0, 1000.0,
            s.infill_max_speed > 0.0 ? "%.0f mm/s" : "—", 0.5f);
@@ -7061,8 +7065,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::MaxLayerHeight, "machine.max_layer_height", s.max_layer_height, 0.0, 10.0,
            s.max_layer_height > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.002f, tr(T::LayerLimitTip));
     } else if (id == "extruder") {
+        if (shown("machine.feedstock")) // pellets.md, rule 1
+            changed |= row(T::FeedstockRow, s.feedstock,
+                           {{Feedstock::Filament, tr(T::FeedstockFilament)}, {Feedstock::Pellet, tr(T::FeedstockPellet)}});
         mm(T::FilamentDiameter, "machine.filament_diameter", s.filament_diameter, 1.0, 3.5, "%.2f mm", 0.005f);
-        mm(T::MachineMaxFlow, "machine.max_flow", s.machine_max_flow, 0.0, 1000.0,
+        mm(T::MachineMaxFlow, "machine.max_flow", s.machine_max_flow, 0.0, 10000.0,
            s.machine_max_flow > 0.0 ? "%.1f mm³/s" : tr(T::NotSet), 0.1f);
         flag(T::RelativeE, "machine.relative_extrusion", s.relative_extrusion);
     } else if (id == "extruders") {

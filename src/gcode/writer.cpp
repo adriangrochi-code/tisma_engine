@@ -2123,6 +2123,13 @@ std::vector<Warning> capability_warnings(const Settings& s) {
         out.push_back({kind, -1, 0.0, std::move(message), value});
     };
     char text[200];
+    // A filament on a pellet printer, or the other way round (pellets.md,
+    // rule 1, PE9): a warning; the slicing is the same.
+    if (s.material_feedstock != s.feedstock && s.machine_technology == MachineTechnology::Fdm)
+        add("feedstock",
+            s.feedstock == Feedstock::Pellet ? "this material is for filament and the printer melts pellets"
+                                             : "this material is for pellets and the printer takes filament",
+            0.0);
     if (const double t = number("temperature"); s.max_nozzle_temp > 0.0 && t > s.max_nozzle_temp) {
         std::snprintf(text, sizeof text, "the filament wants %.0f C at the nozzle; the printer reaches %.0f C", t,
                       s.max_nozzle_temp);
