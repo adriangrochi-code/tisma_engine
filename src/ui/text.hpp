@@ -386,9 +386,30 @@
     X(DeviceCannotOpen, "No se pudo abrir el puerto: %s", "Cannot open the port: %s")                                 \
     X(DeviceResends, "%zu líneas reenviadas", "%zu lines sent again")                                                 \
     X(CalibrationTitle, "Calibración de la impresora", "Printer calibration")                                         \
-    X(CalibrationHint, "Tocá Crear: la pieza se arma y se lamina sola, con rangos elegidos desde tus ajustes. Imprimila, mirala y elegí lo que salió mejor.", \
-      "Press Create: the part is built and sliced by itself, with ranges chosen from your settings. Print it, look at it and pick what came out best.") \
+    X(CalibrationHint, "Elegí una prueba: se abre su ficha, con qué hace y cómo se lee. Al crearla, la pieza se arma y se lamina sola.", \
+      "Pick a test: its card opens, with what it does and how to read it. Created, the part is built and sliced by itself.") \
+    X(CalSectionBasic, "Básicas, en este orden", "The basics, in this order")                                       \
+    X(CalSectionMore, "Más pruebas", "More tests")                                                                    \
+    X(CalHowToRead, "Cómo se lee", "How to read it")                                                                  \
+    X(CalYourFilament, "Tu filamento: %s · boquilla %s · cama %s", "Your filament: %s · nozzle %s · bed %s")       \
+    X(CalNoFilament, "el de los ajustes", "the one in the settings")                                                 \
+    X(CalTowerRange, "Con tu filamento, la torre prueba de %s a %s, de a 5 °C.",                                      \
+      "With your filament, the tower tries %s to %s, 5 °C apart.")                                                     \
+    X(CalContinue, "Continuar: %s", "Continue: %s")                                                                   \
+    X(CalAllBasicDone, "Las cuatro básicas están hechas con este filamento.", "The four basic ones are done with this filament.") \
+    X(CalWhyFirst, "Por qué primero", "Why first")                                                                    \
     X(Create, "Crear", "Create")                                                                                      \
+    X(CalBasicIntro, "Con estas cuatro pruebas cortas, en este orden y con el rollo que vas a usar, casi cualquier filamento imprime bien. Cada una arma su pieza sola: imprimila, mirala y elegí la que salió mejor.",\
+      "With these four short tests, in this order and with the spool you will use, almost any filament prints well. Each one builds its own part: print it, look at it and pick the one that came out best.")\
+    X(CalBasicFirstLayer, "La cama bien nivelada y la boquilla a la altura justa: si la primera capa no se pega pareja, nada de lo demás sale bien.",\
+      "The bed level and the nozzle at the right height: if the first layer does not stick evenly, nothing else comes out well.")\
+    X(CalBasicTemperature, "La mejor temperatura para tu rollo, dentro del rango que dice su caja: una torre que prueba de a 5 °C.",\
+      "The best temperature for your spool, within the range on its box: a tower that tries it 5 °C at a time.")\
+    X(CalBasicFlow, "Cuánto plástico empujar: ni huecos entre las líneas ni de más.",\
+      "How much plastic to push: no gaps between the lines and no excess.")\
+    X(CalBasicRetraction, "Cuánto tirar del filamento antes de cada viaje para que no queden hilos.",\
+      "How far to pull the filament back before each travel so no strings are left.")\
+    X(CalBasicDone, "Hecha", "Done")\
     X(CalDimensionsWhat, "Corrige la escala en X, Y y Z y el tamaño de los agujeros.", "Corrects the scale in X, Y and Z and the size of holes.") \
     X(CalTemperatureWhat, "Voladizos, techo plano, resistencia entre capas y detalle, a cada temperatura.",             \
       "Overhangs, a flat roof, layer strength and detail, at each temperature.")                                       \

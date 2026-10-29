@@ -927,6 +927,11 @@ private:
     std::optional<CalibrationPrint> calibration_;
     CalibrationKind calibration_kind_ = CalibrationKind::Dimensions;
     std::optional<double> chosen_value_;
+    // The calibration card asked for this frame and the one open: a test's
+    // kind, or one of the cards below.
+    static constexpr int kNoCard = -1, kExtruderCard = -2;
+    int calibration_card_ = kNoCard, calibration_card_shown_ = kNoCard;
+    std::string calibration_card_range_; // the temperature tower's, for its card
     // The extruder steps test: open, the value in the printer now, and what
     // was left of the 120 mm mark after extruding 100 mm.
     bool extruder_open_ = false, extruder_scroll_ = false;
@@ -9842,10 +9847,24 @@ void App::analysis_panel() {
 // The guided calibration: create (the part is built with ranges from the
 // settings and sliced), print, then pick the segment that came out best or
 // enter the measures.
+// The tests worth making first, in this order (the owner's request,
+// 2026-10-29), and why each one.
+constexpr CalibrationKind kBasicCalibrations[] = {CalibrationKind::FirstLayer, CalibrationKind::Temperature,
+                                                  CalibrationKind::Flow, CalibrationKind::Retraction};
+T basic_calibration_why(CalibrationKind kind) {
+    switch (kind) {
+    case CalibrationKind::FirstLayer: return T::CalBasicFirstLayer;
+    case CalibrationKind::Temperature: return T::CalBasicTemperature;
+    case CalibrationKind::Flow: return T::CalBasicFlow;
+    case CalibrationKind::Retraction: return T::CalBasicRetraction;
+    default: return T::CalibrationTitle; // none
+    }
+}
+
 void App::calibration_panel() {
     const float margin = 12.0f * scale_;
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
-    ImGui::SetNextWindowSize(ImVec2(450.0f * scale_, view_size_.y - 72.0f * scale_));
+    ImGui::SetNextWindowSize(ImVec2(380.0f * scale_, view_size_.y - 72.0f * scale_));
     ImGui::SetNextWindowBgAlpha(0.95f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
@@ -9896,18 +9915,35 @@ void App::calibration_panel() {
         {CalibrationKind::ResinMeasure, T::CalResinMeasure, T::CalResinMeasureWhat, T::CalResinMeasureHint},
     };
     const float button_h = 30.0f * scale_;
-    // A card's title and what it is for, with its button on the right.
-    const auto card_head = [&](T title, T what, bool active, const char* label, bool enabled) {
-        const float create_w = ImGui::CalcTextSize(label).x + button_h * 1.6f;
-        const float row_right = ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x;
-        ImGui::BeginGroup();
-        ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x - create_w - 8.0f * scale_);
-        loc::TextColored(rgb(active ? theme_.accent_hover : theme_.text), "%s", tr(title));
-        loc::TextDisabled("%s", tr(what));
-        ImGui::PopTextWrapPos();
-        ImGui::EndGroup();
-        ImGui::SameLine(row_right - create_w);
-        return button("##create", "tisma_calibrate", label, !active, false, enabled, nullptr, button_h);
+    const std::string& printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
+    const std::string& filament = chosen_profile_[std::size_t(ProfileKind::Filament)];
+    // The list is short, like Orca's calibration menu: a row per test with
+    // its name, whether it was done with this printer and filament, and an
+    // arrow; pressed, the test's card opens in the middle of the window
+    // (the owner's request, 2026-10-29).
+    const auto row = [&](T title, bool active, bool done) {
+        const float w = ImGui::GetContentRegionAvail().x, h = ImGui::GetFrameHeight() + 8.0f * scale_;
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        const bool pressed = ImGui::Selectable("##row", active, 0, ImVec2(w, h));
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        const float line = ImGui::GetTextLineHeight(), mid = at.y + h * 0.5f;
+        dl->AddText(ImVec2(at.x + 8.0f * scale_, mid - line * 0.5f),
+                    ImGui::GetColorU32(rgb(active ? theme_.accent_hover : theme_.text)), tr(title));
+        const float s = line * 0.16f, right = at.x + w - 10.0f * scale_;
+        const ImVec2 arrow[] = {{right - 1.6f * s, mid - 2.0f * s}, {right, mid}, {right - 1.6f * s, mid + 2.0f * s}};
+        const ImU32 arrow_colour = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+        dl->AddLine(arrow[0], arrow[1], arrow_colour, 1.5f * scale_);
+        dl->AddLine(arrow[1], arrow[2], arrow_colour, 1.5f * scale_);
+        if (done) {
+            const char* text = tr(T::CalBasicDone);
+            dl->AddText(ImVec2(right - 3.0f * s - 8.0f * scale_ - ImGui::CalcTextSize(text).x, mid - line * 0.5f),
+                        ImGui::GetColorU32(rgb(theme_.paint_enforce)), text);
+        }
+        return pressed;
+    };
+    const auto section = [&](T title) {
+        ImGui::Dummy(ImVec2(0, 6.0f * scale_));
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
     };
     // Segment chips, bottom to top as printed (left to right for the fit test).
     const auto chips = [&](const CalibrationPrint& c) {
@@ -9928,20 +9964,72 @@ void App::calibration_panel() {
             ImGui::PopID();
         }
     };
-    for (const Card& card : cards) {
-        // With a resin printer, only the resin tests (interface.md); else the others.
-        if (is_resin_calibration(card.kind) != (settings_.machine_technology == MachineTechnology::Msla))
-            continue;
+    // The four tests worth making first, in order, and which filament to
+    // choose and how hot (the owner's request, 2026-10-29); then the rest.
+    // With a resin printer, only the resin tests (interface.md).
+    const bool resin = settings_.machine_technology == MachineTechnology::Msla;
+    std::vector<const Card*> order;
+    for (const CalibrationKind kind : kBasicCalibrations)
+        for (const Card& card : cards)
+            if (card.kind == kind && !resin)
+                order.push_back(&card);
+    const std::size_t basic_count = order.size();
+    for (const Card& card : cards)
+        if (is_resin_calibration(card.kind) == resin &&
+            std::find(order.begin(), order.begin() + std::ptrdiff_t(basic_count), &card) ==
+                order.begin() + std::ptrdiff_t(basic_count))
+            order.push_back(&card);
+    const auto done = [&](CalibrationKind kind) {
+        return calibration_record(settings_, calibration_kind_name(kind), printer, filament).has_value();
+    };
+    // The next basic test not done with this printer and filament.
+    std::optional<CalibrationKind> next_basic;
+    if (!resin)
+        for (const CalibrationKind kind : kBasicCalibrations)
+            if (!next_basic && !done(kind))
+                next_basic = kind;
+    const auto title_of = [&](CalibrationKind kind) {
+        for (const Card& c : cards)
+            if (c.kind == kind)
+                return c.title;
+        return T::CalibrationTitle;
+    };
+    if (!resin) {
+        // The filament in use, found from the chosen profile, and its
+        // temperatures (the owner's request, 2026-10-29: no table of
+        // materials, the one chosen).
+        const auto degrees = [&](const char* name) {
+            const auto it = settings_.variables.find(name);
+            return it != settings_.variables.end() && !it->second.empty() ? it->second.front() + " °C" : std::string("-");
+        };
+        const std::string name = !filament.empty()                 ? filament
+                                 : !settings_.filament_type.empty() ? settings_.filament_type
+                                                                    : std::string(tr(T::CalNoFilament));
+        ImGui::Spacing();
+        loc::Text(tr(T::CalYourFilament), name.c_str(), degrees("temperature").c_str(),
+                  degrees("bed_temperature").c_str());
+        // Where the basic calibration goes on (the owner's request, 2026-10-29).
+        ImGui::Spacing();
+        if (next_basic) {
+            if (button("##continue", "tisma_calibrate", format(tr(T::CalContinue), tr(title_of(*next_basic))).c_str(),
+                       true, false, true, nullptr, button_h))
+                calibration_card_ = int(*next_basic);
+        } else {
+            loc::TextColored(rgb(theme_.paint_enforce), "%s", tr(T::CalAllBasicDone));
+        }
+    }
+    for (std::size_t i = 0; i < order.size(); ++i) {
+        const Card& card = *order[i];
+        if (i == 0 && basic_count > 0) {
+            section(T::CalSectionBasic);
+            loc::SetItemTooltip("%s", tr(T::CalBasicIntro));
+        }
+        if (i == basic_count && basic_count > 0)
+            section(T::CalSectionMore);
         ImGui::PushID(int(card.kind));
-        ImGui::Separator();
         const bool active = calibration_ && calibration_kind_ == card.kind;
-        if (card_head(card.title, card.what, active, tr(T::Create), !slice_job_.running()))
-            create_calibration(card.kind, false);
-        // Its guide, when the pack has one (assistant.md, rule 20).
-        if (const std::string_view guide = guide_for_test(calibration_kind_name(card.kind));
-            !guide.empty() && knowledge_ && find_guide(*knowledge_, guide) && ImGui::SmallButton(tr(T::GuideHow)))
-            open_guide(guide);
-
+        if (row(card.title, active, done(card.kind)))
+            calibration_card_ = int(card.kind);
         if (active) {
             const CalibrationPrint& c = *calibration_;
             // 1: created and sliced.
@@ -10109,11 +10197,8 @@ void App::calibration_panel() {
     // The extruder's steps: no part to slice, a G-code to run and a sum (FDM only).
     if (settings_.machine_technology != MachineTechnology::Msla) {
         ImGui::PushID("extruder");
-        ImGui::Separator();
-        if (card_head(T::CalExtruder, T::CalExtruderWhat, extruder_open_, tr(T::Open), true)) {
-            extruder_open_ = !extruder_open_;
-            extruder_scroll_ = extruder_open_;
-        }
+        if (row(T::CalExtruder, extruder_open_, false))
+            calibration_card_ = kExtruderCard;
         if (extruder_scroll_) { // the card opens at the bottom of the list: bring it up
             ImGui::SetScrollHereY(0.0f);
             extruder_scroll_ = false;
@@ -10150,6 +10235,128 @@ void App::calibration_panel() {
         loc::TextDisabled("%s", tr(T::MoreCalibrationsList));
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
+
+    // The card of the test pressed: what it does, why first for the basic
+    // ones, how to read it, and its button (the owner's request, 2026-10-29:
+    // the details in a window, not crowded in the list).
+    if (calibration_card_ != kNoCard) {
+        ImGui::OpenPopup("##calibration_card");
+        calibration_card_shown_ = calibration_card_;
+        calibration_card_ = kNoCard;
+        // The temperature tower's range for the filament in use, as Create would build it.
+        calibration_card_range_.clear();
+        if (calibration_card_shown_ == int(CalibrationKind::Temperature)) {
+            const CalibrationPrint tower = automatic_calibration(CalibrationKind::Temperature, settings_);
+            if (!tower.segments.empty()) {
+                const auto [lo, hi] = std::minmax(tower.segments.front().value, tower.segments.back().value);
+                calibration_card_range_ = format(tr(T::CalTowerRange), format("%g °C", lo).c_str(),
+                                                 format("%g °C", hi).c_str());
+            }
+        }
+    }
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 36.0f, 0.0f));
+    if (ImGui::BeginPopup("##calibration_card")) {
+        const int shown = calibration_card_shown_;
+        const Card* card = nullptr;
+        for (const Card& c : cards)
+            if (int(c.kind) == shown)
+                card = &c;
+        const T title = shown == kExtruderCard ? T::CalExtruder
+                        : card                   ? card->title
+                                                 : T::CalibrationTitle;
+        ImGui::PushTextWrapPos(0.0f);
+        ImGui::PushFont(nullptr, ImGui::GetFontSize() * 1.25f);
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::PopFont();
+        ImGui::Spacing();
+        bool close = false;
+        if (shown == kExtruderCard) {
+            ImGui::TextUnformatted(tr(T::CalExtruderWhat));
+            ImGui::Spacing();
+            if (button("##open_extruder", "tisma_calibrate", tr(extruder_open_ ? T::Close : T::Open), true, false, true,
+                       nullptr, button_h)) {
+                extruder_open_ = !extruder_open_;
+                extruder_scroll_ = extruder_open_;
+                close = true;
+            }
+        } else if (card) {
+            // The drawing of what the test is about, for the basic ones.
+            const Picture picture = card->kind == CalibrationKind::FirstLayer    ? Picture::FirstLayer
+                                    : card->kind == CalibrationKind::Temperature ? Picture::NozzleTemp
+                                    : card->kind == CalibrationKind::Flow        ? Picture::Filament
+                                    : card->kind == CalibrationKind::Retraction  ? Picture::Retraction
+                                                                                 : Picture::None;
+            if (picture != Picture::None) {
+                const float w = ImGui::GetContentRegionAvail().x, h = ImGui::GetFontSize() * 8.0f;
+                const ImVec2 box = ImGui::GetCursorScreenPos();
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                dl->AddRectFilled(box, ImVec2(box.x + w, box.y + h), ImGui::GetColorU32(ImGuiCol_FrameBg, 0.5f), 8.0f);
+                const PictureColors colours{ImGui::GetColorU32(ImGuiCol_Text), ImGui::GetColorU32(ImGuiCol_TextDisabled),
+                                            ImGui::GetColorU32(ImGuiCol_CheckMark),
+                                            ImGui::GetColorU32(ImGuiCol_CheckMark, 0.35f),
+                                            ImGui::GetColorU32(ImGuiCol_FrameBg), IM_COL32(229, 72, 77, 255),
+                                            IM_COL32(90, 170, 230, 255)};
+                draw_picture(dl, ImVec2(box.x + w * 0.1f, box.y + h * 0.06f), ImVec2(w * 0.8f, h * 0.88f), picture,
+                             colours);
+                ImGui::Dummy(ImVec2(w, h));
+                ImGui::Spacing();
+            }
+            ImGui::TextUnformatted(tr(card->what));
+            if (const T why = basic_calibration_why(card->kind); why != T::CalibrationTitle) {
+                ImGui::SeparatorText(tr(T::CalWhyFirst));
+                ImGui::TextUnformatted(tr(why));
+            }
+            ImGui::SeparatorText(tr(T::CalHowToRead));
+            ImGui::TextUnformatted(tr(card->hint));
+            // The tower's range for the filament in use, chosen when the card opened.
+            if (card->kind == CalibrationKind::Temperature && !calibration_card_range_.empty()) {
+                ImGui::Spacing();
+                loc::TextColored(rgb(theme_.accent_hover), "%s", calibration_card_range_.c_str());
+            }
+            const bool was_done = done(card->kind);
+            if (was_done) {
+                ImGui::Spacing();
+                loc::TextColored(rgb(theme_.paint_enforce), "%s", tr(T::CalBasicDone));
+            }
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+            if (button("##create", "tisma_calibrate", tr(T::Create), true, false, !slice_job_.running(), nullptr,
+                       button_h)) {
+                create_calibration(card->kind, false);
+                close = true;
+            }
+            // Its guide, when the pack has one (assistant.md, rule 20).
+            if (const std::string_view guide = guide_for_test(calibration_kind_name(card->kind));
+                !guide.empty() && knowledge_ && find_guide(*knowledge_, guide)) {
+                ImGui::SameLine();
+                if (button("##guide", nullptr, tr(T::GuideHow), false, false, true, nullptr, button_h)) {
+                    open_guide(guide);
+                    close = true;
+                }
+            }
+            // Done: on to the next basic test.
+            if (was_done && next_basic && *next_basic != card->kind) {
+                ImGui::SameLine();
+                if (button("##next", nullptr, format(tr(T::CalContinue), tr(title_of(*next_basic))).c_str(), false,
+                           false, true, nullptr, button_h)) {
+                    calibration_card_ = int(*next_basic);
+                    close = true;
+                }
+            }
+        }
+        // And a way out besides clicking outside.
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x -
+                             ImGui::CalcTextSize(tr(T::Close)).x - ImGui::GetStyle().FramePadding.x * 2.0f);
+        if (ImGui::Button(tr(T::Close)))
+            close = true;
+        ImGui::PopTextWrapPos();
+        if (close)
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);

@@ -8266,5 +8266,34 @@ Los títulos de los pasos ya no llevan número: el contador «2 / 10» dice dón
 tutorial. Pasan las 118 pruebas de interfaz.
 
 **Sigue (pedidos del dueño):** fichas largas para todos los ajustes, no solo los básicos; un tutorial de calibración
-básica (qué filamento y a qué temperatura, la retracción, y qué calibraciones conviene hacer primero).
+básica (qué filamento y a qué temperatura, la retracción, y qué calibraciones conviene hacer primero). Hecho en la
+entrada siguiente.
 
+## 2026-10-29: una ficha para cada ajuste y la calibración como menú (pedidos del dueño)
+
+**Fichas para todos los ajustes.** Las 432 claves de las tres pestañas tienen su explicación larga en español y en
+inglés (qué es, qué cambia y un ejemplo). Las 406 que faltaban se redactaron en nueve grupos (máquina, resina,
+material, soportes, paredes, relleno, velocidad, G-code y varios extrusores), un archivo por grupo en
+`src/ui/guides/*.inc` que `setting_guide.cpp` incluye en su tabla. Las fuentes: `docs/CONFIG.md`, los demás documentos
+de `docs/` y los comentarios de `settings.hpp`. Las de ajustes que el motor guarda pero todavía no usa lo dicen. Unas
+220 tienen dibujo (`picture_for`). La prueba ahora pide explicación para cada clave del panel en los dos idiomas, y que
+cada explicación sea de una clave del panel, sin repetidas. La prueba encontró una clave sin ficha, `changes`.
+
+**La calibración como menú.** El dueño pidió una lista concisa como el menú de calibración de otros laminadores, con
+la información en una ventana al tocar cada prueba, y después sacar la tabla de cuatro materiales y detectar el
+filamento elegido. La pestaña queda así:
+- arriba, el filamento elegido con sus temperaturas y **Continuar** con la siguiente básica pendiente;
+- **Básicas, en este orden**: primera capa, temperatura, flujo y retracción;
+- **Más pruebas**: las demás, y los pasos del extrusor.
+
+Cada fila tiene el nombre, «Hecha» y una flecha. La ficha se abre en el centro con:
+- un dibujo;
+- qué hace, por qué va primero y cómo se lee;
+- en la de temperatura, el rango que va a probar la torre con ese filamento (el mismo que arma **Crear**);
+- los botones **Crear**, **Cómo se hace**, **Continuar** y **Cerrar**.
+
+La prueba activa sigue guiando debajo de su fila, como antes. El panel pasa de 450 a 380 de ancho. Se miró en
+capturas: la lista, la ficha de temperatura y la ficha de un ajuste avanzado (`--info adhesion.skirt_layers`). Pasan
+las 137 pruebas de interfaz y calibración.
+
+**Sigue:** ver en Windows la lista y las fichas.

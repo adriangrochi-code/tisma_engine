@@ -13,7 +13,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Agregado
 
 - **Fichas de información para principiantes:** el botón (i) abre un cuadro en el centro con un dibujo de lo que hace
-  el ajuste y una explicación (qué es, qué cambia y un ejemplo con valores). Los ajustes del nivel Básico ya la tienen.
+  el ajuste y una explicación (qué es, qué cambia y un ejemplo con valores). Todos los ajustes la tienen (432), en
+  español y en inglés; los que el motor guarda pero todavía no usan lo dicen.
+- **Calibración más simple:** la pestaña es una lista corta de pruebas, como un menú: primero las cuatro básicas en
+  orden (primera capa, temperatura, flujo, retracción), después las demás. Cada una dice «Hecha» si ya se hizo con esta
+  impresora y este filamento; al tocarla se abre su ficha en el centro con un dibujo, qué hace, por qué va primero, cómo
+  se lee y **Crear**. Arriba, el filamento elegido con sus temperaturas y **Continuar** con la siguiente básica
+  pendiente; la ficha de la torre de temperatura dice qué rango va a probar con ese filamento.
 - **Lo básico en el tutorial de inicio:** cuatro pasos con dibujo antes de los de uso: cómo se imprime una pieza (capas
   y G-code), capas, paredes y relleno, lo que cuelga y lo que se pega (soportes, primera capa, borde), y el material y su
   temperatura.

@@ -246,6 +246,16 @@ constexpr Guide kGuides[] = {
      "laminar.\n\nEjemplo: 250 mm en muchas impresoras; mirá los datos de la tuya.",
      "It is the tallest your printer can print. If the part is taller, the program warns you before "
      "slicing.\n\nExample: 250 mm on many printers; check yours."},
+// The rest, by group (the owner's request: a card like these for every setting).
+#include "ui/guides/machine.inc"
+#include "ui/guides/resin.inc"
+#include "ui/guides/material.inc"
+#include "ui/guides/support.inc"
+#include "ui/guides/walls.inc"
+#include "ui/guides/infill.inc"
+#include "ui/guides/speed.inc"
+#include "ui/guides/gcode.inc"
+#include "ui/guides/multi.inc"
 };
 
 } // namespace

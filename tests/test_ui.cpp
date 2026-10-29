@@ -579,18 +579,18 @@ TEST_CASE("ui: the engine's load errors in Spanish (the spec team's TR21)", "[ui
     set_language(before);
 }
 
-TEST_CASE("ui: every basic setting explains itself to a beginner, in both languages", "[ui]") {
-    // The owner's request, 2026-10-29: a longer explanation with an example.
+TEST_CASE("ui: every setting explains itself to a beginner, in both languages", "[ui]") {
+    // The owner's requests, 2026-10-29: a longer explanation with an example,
+    // first for the basic settings and then for every one.
     const Language before = language();
-    std::set<std::string_view> basic;
+    std::set<std::string_view> keys;
     for (const SettingsTab tab : {SettingsTab::Print, SettingsTab::Material, SettingsTab::Printer})
         for (const SectionLayout& section : settings_layout(tab))
             for (const SubsectionLayout& sub : section.subsections)
                 for (const SettingEntry& e : sub.settings)
-                    if (e.level == SettingLevel::Basic)
-                        basic.insert(e.key);
-    REQUIRE(!basic.empty());
-    for (const std::string_view key : basic) {
+                    keys.insert(e.key);
+    REQUIRE(keys.size() > 400);
+    for (const std::string_view key : keys) {
         INFO(key);
         set_language(Language::Spanish);
         const std::string_view es = setting_guide(key);
@@ -600,10 +600,12 @@ TEST_CASE("ui: every basic setting explains itself to a beginner, in both langua
         CHECK(en.size() > 100);
         CHECK(es != en);
     }
-    // And every explanation is of a real setting.
+    // And every explanation is of a real setting, once.
+    std::set<std::string_view> seen;
     for (std::size_t i = 0; i < setting_guide_count(); ++i) {
         INFO(setting_guide_key(i));
-        CHECK(basic.contains(setting_guide_key(i)));
+        CHECK(keys.contains(setting_guide_key(i)));
+        CHECK(seen.insert(setting_guide_key(i)).second);
     }
     set_language(before);
 }
