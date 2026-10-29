@@ -8,6 +8,7 @@
 
 #include <tbb/blocked_range.h>
 #include <tbb/parallel_for.h>
+#include <tbb/parallel_reduce.h>
 #include <tbb/parallel_scan.h>
 #include <tbb/parallel_sort.h>
 
@@ -151,34 +152,47 @@ std::size_t orient_consistently(IndexedMesh& mesh) {
         std::uint32_t triangle;
         bool forward; // a -> b with a < b
     };
-    std::vector<EdgeUse> uses;
-    uses.reserve(3 * n);
-    for (std::size_t t = 0; t < n; ++t)
-        for (int k = 0; k < 3; ++k) {
-            const std::uint32_t a = mesh.triangles[t][std::size_t(k)], b = mesh.triangles[t][std::size_t((k + 1) % 3)];
-            if (a == b)
-                continue;
-            uses.push_back({(std::uint64_t(std::min(a, b)) << 32) | std::max(a, b), std::uint32_t(t), a < b});
+    // On all cores: three uses a triangle, in place; an edge of a triangle
+    // with two equal corners gets the largest key and is cut off after the
+    // sort.
+    constexpr std::uint64_t kNone = ~std::uint64_t(0);
+    std::vector<EdgeUse> uses(3 * n);
+    tbb::parallel_for(std::size_t(0), n, [&](std::size_t t) {
+        for (std::size_t k = 0; k < 3; ++k) {
+            const std::uint32_t a = mesh.triangles[t][k], b = mesh.triangles[t][(k + 1) % 3];
+            uses[3 * t + k] = a == b ? EdgeUse{kNone, std::uint32_t(t), false}
+                                     : EdgeUse{(std::uint64_t(std::min(a, b)) << 32) | std::max(a, b),
+                                               std::uint32_t(t), a < b};
         }
+    });
     // In parallel: the edges of a large mesh are millions (the order is total,
     // so the result is the same as a sequential sort's).
     tbb::parallel_sort(uses.begin(), uses.end(), [](const EdgeUse& l, const EdgeUse& r) {
         return l.key < r.key || (l.key == r.key && l.triangle < r.triangle);
     });
-    // Each manifold edge (two uses by two triangles): whether its triangles
-    // agree (a shared edge runs opposite ways in two triangles wound alike).
-    const auto each_pair = [&](auto&& visit) {
-        for (std::size_t i = 0; i < uses.size();) {
-            std::size_t j = i;
-            while (j < uses.size() && uses[j].key == uses[i].key)
-                ++j;
-            if (j - i == 2 && uses[i].triangle != uses[i + 1].triangle)
-                visit(uses[i], uses[i + 1], uses[i].forward != uses[i + 1].forward);
-            i = j;
-        }
+    uses.erase(std::lower_bound(uses.begin(), uses.end(), kNone,
+                                [](const EdgeUse& u, std::uint64_t key) { return u.key < key; }),
+               uses.end());
+    // A manifold edge: two uses of one key by two triangles, the first of
+    // them at i. Whether its triangles agree (a shared edge runs opposite
+    // ways in two triangles wound alike).
+    const auto pair_at = [&](std::size_t i) {
+        return i + 1 < uses.size() && uses[i].key == uses[i + 1].key && (i == 0 || uses[i - 1].key != uses[i].key) &&
+               (i + 2 == uses.size() || uses[i + 2].key != uses[i].key) && uses[i].triangle != uses[i + 1].triangle;
     };
-    bool any_disagree = false;
-    each_pair([&](const EdgeUse&, const EdgeUse&, bool agree) { any_disagree = any_disagree || !agree; });
+    const auto each_pair = [&](auto&& visit) {
+        for (std::size_t i = 0; i < uses.size(); ++i)
+            if (pair_at(i))
+                visit(uses[i], uses[i + 1], uses[i].forward != uses[i + 1].forward);
+    };
+    const bool any_disagree = tbb::parallel_reduce(
+        tbb::blocked_range<std::size_t>(0, uses.size()), false,
+        [&](const tbb::blocked_range<std::size_t>& r, bool found) {
+            for (std::size_t i = r.begin(); i != r.end() && !found; ++i)
+                found = pair_at(i) && uses[i].forward == uses[i + 1].forward;
+            return found;
+        },
+        [](bool x, bool y) { return x || y; });
     if (!any_disagree)
         return 0; // the common case: nothing to turn, and no links built
     // Pairs of triangles across manifold edges.
