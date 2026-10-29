@@ -7875,3 +7875,8 @@ Esfera ×4 sobre llvmpipe, OpenGL, oclusión ambiental, 1200 × 760, a 700 mm: c
 
 **Sigue:** medir qué parte del sombreador pesa (las derivadas, `bead_seen` con sus `asin` y `atan`) antes de tocar
 otra cosa; con las capas juntas de lejos, el filtro ya trabaja sobre menos cordones.
+
+Siguiente bloque: sin `bead_seen` dentro del bucle, 1370 ms (con el filtro entero, 1334; sin filtro, 958): no es lo
+que pesa. En llvmpipe los fragmentos van de a cuatro y una condición que cumple uno la pagan todos, así que el bucle
+cuesta casi entero; en una GPU de verdad no tiene por qué. Queda medirlo en la máquina del dueño (la barra de estado
+dice el tiempo de la vista) antes de cambiar nada.
