@@ -12001,6 +12001,8 @@ int App::run() {
     // otherwise end the program without saving.
     std::signal(SIGTERM, on_stop_signal);
     std::signal(SIGINT, on_stop_signal);
+    if (options_.term_while_starting)
+        std::raise(SIGTERM);
     std::string error;
     if (!init(error)) {
         std::fprintf(stderr, "error: %s\n", error.c_str());

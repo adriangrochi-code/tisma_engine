@@ -8305,6 +8305,7 @@ El CI de Linux en `957aa5f` falló una vez en `ui_sigterm_keeps_preferences`, en
 catálogo). Con ASan y la máquina cargada, el arranque pasó los 6 s de la prueba, y la señal lo mató sin guardar las
 preferencias. Se reprodujo a mano con la señal a 0,05 s y a 1 s. Ahora el manejador va al principio de `run()`: una
 señal durante el arranque deja que termine `init()`, no entra al bucle y `shutdown()` guarda. Prueba nueva,
-`ui_sigterm_while_starting` (`tests/ui_sigterm.sh` con un retraso de 0,05 s). Pasa en la compilación sin ASan; la de
-ASan la corre el CI.
+`ui_sigterm_while_starting`: con `--term-while-starting`, `tisma` se manda SIGTERM a sí mismo apenas pone el
+manejador, antes de abrir la ventana. Un primer intento con la señal a los 0,05 s falló en el CI con ASan: en ese
+tiempo el proceso todavía no llega a `main()` (cargador y ASan), y ninguna espera fija evita esa carrera.
 

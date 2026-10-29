@@ -209,7 +209,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     # And while it starts, before its window is up.
     add_test(NAME ui_sigterm_while_starting
       COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/ui_sigterm.sh ${CMAKE_CURRENT_BINARY_DIR}/ui_sigterm_start_home
-              ${TISMA_XVFB_RUN} $<TARGET_FILE:tisma> 0.05)
+              ${TISMA_XVFB_RUN} $<TARGET_FILE:tisma> start)
     set_tests_properties(ui_sigterm_keeps_preferences ui_sigterm_while_starting PROPERTIES
                          ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 120)
     # The Slice button at the bottom right, then its save menu.

@@ -81,6 +81,7 @@ struct AppOptions {
     std::string graphics = "auto";
     bool ray_check = false;         // with screenshot: check the GPU's shadow rays against the CPU's
     bool moire_check = false;       // with screenshot: check that the moiré filter smooths lines finer than a pixel
+    bool term_while_starting = false; // a SIGTERM to itself before the window opens, for its test (UI21)
     std::string compare_view;       // with screenshot: compare the 3D view with this screenshot's (the other graphics')
     std::string device;             // connect at start: a serial port, or "sim" for the simulated printer
     bool device_print = false;      // with screenshot and device: print what is sliced and wait for it to finish
