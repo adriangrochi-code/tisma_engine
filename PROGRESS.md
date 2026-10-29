@@ -7851,3 +7851,11 @@ ejecución termina con 1: cualquier prueba de interfaz que dibuje esa pantalla f
 todos sus íconos, así que las de Impresión siempre se revisan y las de la impresora con las pruebas de su página.
 Control: sin `section_nonplanar` en la lista, `--section print/nonplanar` sale con 1 y el mensaje. Pasan las 167
 pruebas de interfaz.
+
+## 2026-10-29 (noche): UI23, el panel de Laminar bajo la barra de movimientos
+
+Informe del equipo de fichas: en Vista previa a 1440 × 900 la barra de movimientos (abajo a la derecha, cuando no va
+dentro de la leyenda) tapaba «Exportar G-code» y el botón de su menú: los dos se anclaban en la misma esquina. Ahora
+el panel va encima de la barra (`moves_top_`, la altura de su ventana en este cuadro). Paso nuevo de `--ui-script`:
+`expect-apart A B` (dos controles con nombre en pantalla, ninguno sobre el otro); la barra se llama `moves`. La prueba
+`ui_script_slice_panel` pasa a 1440 × 900 y lo comprueba; con el panel otra vez en la esquina, falla («they overlap»).

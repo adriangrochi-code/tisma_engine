@@ -597,6 +597,7 @@ private:
     ImFont* font_ = nullptr;
     std::map<std::string, ImTextureID> icons_;
     bool icons_loaded_ = false;
+    float moves_top_ = 0.0f; // the move slider's window top in Preview, this frame; 0: in the legend or none
     mutable std::set<std::string> missing_icons_; // asked for and not loaded (icon())
     // The settings panel: its tab, level, the section chosen in each tab, the
     // cards open (the first of each section at first), each card's height in
@@ -7421,9 +7422,12 @@ void App::view_tools() {
 // a menu of the other ways (to the printer, the project).
 void App::slice_panel() {
     const float margin = 14.0f * scale_, button_h = 44.0f * scale_;
-    // In Preview the layer slider takes the right edge.
+    // In Preview the layer slider takes the right edge, and the move slider,
+    // when it is not in the legend, the bottom: the panel goes above it (UI23).
     const float right = view_pos_.x + view_size_.x - margin - (tab_ == Tab::Preview ? 150.0f * scale_ : 0.0f);
-    ImGui::SetNextWindowPos(ImVec2(right, view_pos_.y + view_size_.y - margin), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+    const float bottom = tab_ == Tab::Preview && moves_top_ > 0.0f ? moves_top_ - 8.0f * scale_
+                                                                  : view_pos_.y + view_size_.y - margin;
+    ImGui::SetNextWindowPos(ImVec2(right, bottom), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
     ImGui::SetNextWindowBgAlpha(0.92f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f * scale_);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f * scale_, 10.0f * scale_));
@@ -9160,6 +9164,7 @@ void App::preview_panels() {
         loc::TextDisabled(tr(T::MoveN), move_cut_, int(top.count));
     };
     bool slider_in_legend = false;
+    moves_top_ = 0.0f;
     if (top.count > 1) {
         const ImGuiStyle& look = ImGui::GetStyle();
         const float text = ImGui::CalcTextSize(format(tr(T::MoveN), int(top.count), int(top.count)).c_str()).x;
@@ -9179,6 +9184,10 @@ void App::preview_panels() {
                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
             move_slider(std::max(w, 120.0f * scale_));
+            moves_top_ = ImGui::GetWindowPos().y; // the Slice panel goes above it (UI23)
+            g_menu_rects["moves"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                           ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                           ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
             ImGui::End();
             ImGui::PopStyleColor();
             ImGui::PopStyleVar();
@@ -10068,6 +10077,7 @@ void App::layout() {
     g_field_rects.clear();
     g_menu_rects.clear();
     g_dump_rows.clear();
+    moves_top_ = 0.0f;
     g_row_ids.clear();
     viewport();
     anchor_rect("plate", view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
@@ -11099,6 +11109,16 @@ void App::script_input() {
         }
         if (f >= 30)
             fail_step("it is not on the screen");
+    } else if (step.verb == "expect-apart") { // two named controls drawn, neither over the other
+        const auto a = g_menu_rects.find(step.key), b = g_menu_rects.find(step.value);
+        if (a == g_menu_rects.end() || b == g_menu_rects.end())
+            return f >= 30 ? fail_step("one of them is not on the screen") : void();
+        const ImVec4 r = a->second, q = b->second;
+        const bool apart = r.z <= q.x || q.z <= r.x || r.w <= q.y || q.w <= r.y;
+        std::printf("ui-script: expect-apart %s %s: %s\n", step.key.c_str(), step.value.c_str(), apart ? "ok" : "they overlap");
+        if (!apart)
+            return fail_step("they overlap");
+        next();
     } else if (step.verb == "expect-objects") { // this many models on the plate, the last one's name with VALUE
         const std::size_t want = std::size_t(std::atoll(step.key.c_str()));
         const std::string last = objects_.empty() ? std::string() : objects_.back().name;

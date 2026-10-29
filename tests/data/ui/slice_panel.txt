@@ -4,5 +4,10 @@
 menu slice
 wait 60
 expect-control export
+# In Preview, the move slider and the panel do not cover each other (UI23).
+slice
+wait 10
+expect-apart export moves
+expect-apart save_more moves
 menu save_more
 menu project

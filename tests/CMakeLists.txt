@@ -191,9 +191,10 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               $<TARGET_FILE:tisma>)
     set_tests_properties(ui_sigterm_keeps_preferences PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 120)
     # The Slice button at the bottom right, then its save menu.
+    # At 1440 x 900, where the move slider is not in the legend (UI23).
     add_test(NAME ui_script_slice_panel
-      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1600x1000x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1440x900
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/slice_panel.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_slice_panel.png)
     set_tests_properties(ui_script_slice_panel PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)

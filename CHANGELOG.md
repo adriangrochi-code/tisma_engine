@@ -205,6 +205,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **UI23:** en Vista previa, la barra de movimientos ya no tapa «Exportar G-code»: el panel va encima.
+
 - **Preferencias (UI21):** la impresora y el filamento elegidos la primera vez se guardan al elegirlos, y un cierre
   de sesión o un apagado (SIGTERM) cierra el programa guardando, como el botón de la ventana.
 - **Formas (UI22):** se llaman «Cubo», «Cilindro» y «Esfera», sin «.stl».
