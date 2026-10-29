@@ -1427,7 +1427,8 @@ Settings parse_checked(std::string_view text) {
              : n == "wait_after_cure"    ? s.resin_wait_after_cure
                                          : s.resin_wait_after_lift) = in(0.0, 600.0);
         else if (n == "light_pwm" || n == "bottom_light_pwm")
-            (n == "light_pwm" ? s.resin_light_pwm : s.resin_bottom_light_pwm) = int(in(0.0, 255.0, true));
+            // From 1: 0 is the light off, and nothing would cure (the spec team's BH13).
+            (n == "light_pwm" ? s.resin_light_pwm : s.resin_bottom_light_pwm) = int(in(1.0, 255.0, true));
         else if (n == "antialiasing")
             s.resin_antialiasing = int(in(1.0, 16.0, true));
         else if (n == "density")

@@ -460,6 +460,8 @@ TEST_CASE("resin: what does not fit, and the settings read and written", "[resin
     CHECK(again.resin_absolute_correction == -0.02);
     CHECK(again.resin_printer_name == "SATURN");
     CHECK_THROWS_AS(parse_settings(R"({"resin": {"light_pwm": 300}})"), SettingsError);
+    CHECK_THROWS_WITH(parse_settings(R"({"resin": {"light_pwm": 0}})"), ContainsSubstring("resin.light_pwm")); // the light off (BH13)
+    CHECK_THROWS_AS(parse_settings(R"({"resin": {"bottom_light_pwm": 0}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"resin": {"bottom_layers": 2.5}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"machine": {"display_pixels_x": 0}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"resin": {"printer_name": "a name far longer than thirty-one bytes"}})"),

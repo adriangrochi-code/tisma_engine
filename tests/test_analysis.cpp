@@ -278,6 +278,25 @@ TEST_CASE("analysis: warnings and errors", "[analysis]") {
             unsafe = unsafe || w.code == "unsafe";
         CHECK(unsafe);
     }
+    SECTION("a force past small strains says so (the spec team's BH12)") {
+        const AnalysisCase c = parse_analysis_case(R"({"model": "solid", "fixtures": [{"face": "bottom"}],
+            "loads": [{"face": "top", "force": [1e30, 0, 0]}]})");
+        const AnalysisReport r = run_analysis(column, beads_04(), c);
+        bool large = false;
+        for (const AnalysisWarning& w : r.warnings)
+            large = large || w.code == "large_displacement";
+        CHECK(large);
+    }
+    SECTION("a voxel as big as the part says to make it smaller (BH12)") {
+        const AnalysisCase c = parse_analysis_case(R"({"model": "solid", "voxel": 50, "fixtures": [{"face": "bottom"}],
+            "loads": [{"face": "top", "force": [0, 0, -1]}]})");
+        const AnalysisReport r = run_analysis(column, beads_04(), c);
+        std::string messages;
+        for (const AnalysisWarning& w : r.warnings)
+            messages += w.message + "\n";
+        CHECK_THAT(messages, ContainsSubstring("touches no part of the model: the model is only 0 voxels of 50 mm, try a "
+                                               "smaller voxel"));
+    }
     SECTION("too many voxels") {
         const AnalysisCase c = parse_analysis_case(R"({"max_voxels": 1000, "fixtures": [{"face": "bottom"}],
             "loads": [{"face": "top", "force": [0, 0, -1]}]})");

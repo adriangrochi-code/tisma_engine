@@ -616,7 +616,7 @@ material.
 | `wait_before_exposure` | número | 2.5 | 0 a 600 | Espera con la plataforma abajo antes de exponer, en s |
 | `wait_after_cure` | número | 1 | 0 a 600 | Espera después de exponer, antes de subir, en s |
 | `wait_after_lift` | número | 0 | 0 a 600 | Espera arriba, antes de bajar, en s |
-| `light_pwm`, `bottom_light_pwm` | entero | 255 | 0 a 255 | Potencia de la luz de las capas normales y de las de fondo |
+| `light_pwm`, `bottom_light_pwm` | entero | 255 | 1 a 255 | Potencia de la luz de las capas normales y de las de fondo (0 sería la luz apagada: nada se cura) |
 | `antialiasing` | entero | 8 | 1 a 16 | Nivel de suavizado que se anota en el archivo; las imágenes siempre llevan el suavizado exacto |
 | `density` | número | 1 | más de 0 a 10 | Densidad de la resina en g/ml, para el peso |
 | `bottle_cost` | número | 0 | 0 o más | Costo del frasco de resina (ficha `gcode_extras.md`, regla 2): la impresión cuesta sus ml × `bottle_cost` / `bottle_volume`, y va en la cabecera del archivo |

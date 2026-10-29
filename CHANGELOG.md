@@ -242,6 +242,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **TR20:** el menú de los enlaces dice «Copiar enlace» en español.
 - **Resina con las normales al revés (BH11):** una pieza «de adentro para afuera» recibe los mismos soportes y la misma
   base que la derecha (antes, un solo pilar bajo una caja).
+- **`resin.light_pwm` y `bottom_light_pwm` 0 (BH13):** son un error (la luz apagada no cura nada); van de 1 a 255.
+- **Análisis (BH12):** un soporte que no toca la pieza porque el vóxel es tan grande como ella dice «try a smaller
+  voxel»; un desplazamiento de más de una décima de la pieza da el aviso `large_displacement` (el análisis es lineal).
 
 - **TR17:** la ficha de información de un ajuste de lista nombra los valores como la lista («Alineada»), no con la
   palabra del archivo («aligned»).

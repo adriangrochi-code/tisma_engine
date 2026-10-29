@@ -7052,8 +7052,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::ResinExposure, "resin.exposure", s.resin_exposure, 0.1, 600.0, "%.2f s", 0.01f);
         mm(T::ResinBottomExposure, "resin.bottom_exposure", s.resin_bottom_exposure, 0.1, 600.0, "%.1f s", 0.1f);
         whole(T::ResinBottomLayers, "resin.bottom_layers", s.resin_bottom_layers, 0, 1000);
-        whole(T::ResinLightPwm, "resin.light_pwm", s.resin_light_pwm, 0, 255);
-        whole(T::ResinBottomLightPwm, "resin.bottom_light_pwm", s.resin_bottom_light_pwm, 0, 255);
+        whole(T::ResinLightPwm, "resin.light_pwm", s.resin_light_pwm, 1, 255);
+        whole(T::ResinBottomLightPwm, "resin.bottom_light_pwm", s.resin_bottom_light_pwm, 1, 255);
     } else if (id == "resin_moves") {
         mm(T::ResinLiftDistance, "resin.lift_distance", s.resin_lift_distance, 0.0, 100.0, "%.1f mm", 0.1f);
         mm(T::ResinLiftSpeed, "resin.lift_speed", s.resin_lift_speed, 0.01, 100.0, "%.2f mm/s", 0.01f);

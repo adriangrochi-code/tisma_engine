@@ -8144,5 +8144,10 @@ BH8 (mensaje cuando las copias no entran), BH9 (AMF y STEP leídos como STL) y l
   cavidad siga hacia adentro). Prueba: el cubo al revés da los mismos píxeles en la base, los pilares y la pieza; por la
   línea de comandos, los dos `.goo` de la caja de 30 × 20 × 8 difieren en un solo byte de la cabecera.
 
-Quedan: BH7 (no lo reproduje; pedí el archivo), BH8, BH12, BH13, UI26 y los totales de filamento por extrusor.
+- **BH13:** `resin.light_pwm` y `resin.bottom_light_pwm` van de 1 a 255 (0 es la luz apagada); el panel también.
+- **BH12:** «fixture 'fixture 1' touches no part of the model: the model is only 0 voxels of 50 mm, try a smaller
+  voxel» cuando la pieza tiene menos de 27 vóxeles; y el aviso `large_displacement` cuando la pieza se mueve más de
+  una décima de su tamaño (1e30 N). Pruebas de los dos.
+
+Quedan: BH7 (no lo reproduje; pedí el archivo), BH8, UI26 y los totales de filamento por extrusor.
 
