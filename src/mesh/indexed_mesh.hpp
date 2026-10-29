@@ -25,6 +25,10 @@ struct IndexedMesh {
 // decide what to do with them.
 IndexedMesh weld_exact(const TriangleMesh& mesh);
 
+// The same, always on all cores (weld_exact takes it for large meshes); for
+// the tests that compare the two.
+IndexedMesh weld_exact_parallel(const TriangleMesh& mesh);
+
 // Makes the winding agree across every edge shared by exactly two triangles,
 // and turns each connected piece so that it encloses a positive volume
 // (normals outward). One facet wound the wrong way used to split every
