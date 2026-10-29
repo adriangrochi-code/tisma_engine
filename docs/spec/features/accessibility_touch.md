@@ -47,7 +47,7 @@ teléfono».
 | `ui.text_scale` | 100 a 200 % | 100 % | Agranda textos y controles, aparte de la escala de Windows (regla 5) |
 | `ui.high_contrast` | sí, no, «como el sistema» | como el sistema | Tema de alto contraste (regla 4) |
 | `ui.reduce_motion` | sí, no, «como el sistema» | como el sistema | Sin animaciones de cámara ni transiciones (regla 7) |
-| `ui.touch_mode` | `auto`, `on`, `off` | `auto` | Interfaz táctil (reglas 10 a 15) |
+| `ui.touch_mode` | `automatic`, `on`, `off` | `automatic` | Interfaz táctil (reglas 10 a 15) |
 | `ui.sounds` | sí, no | no | Un sonido al terminar de laminar o imprimir, además del aviso en pantalla |
 
 ## Reglas: accesibilidad
@@ -83,7 +83,7 @@ teléfono».
 
 ## Reglas: modo táctil
 
-10. **Cuándo:** con `auto`, el modo táctil sigue a la computadora, como pidió el dueño (29-10-2026): en una Surface,
+10. **Cuándo:** con `automatic`, el modo táctil sigue a la computadora, como pidió el dueño (29-10-2026): en una Surface,
     al sacar el teclado la interfaz pasa sola a táctil, y al ponerlo vuelve.
     - Windows 11 ya no tiene «modo tableta»: lo reemplazó por posturas con y sin teclado (nota de Microsoft en
       `UIViewSettings`). La señal es `UIViewSettings.GetPreferredInteractionMode` (táctil o mouse) con su aviso
@@ -153,7 +153,7 @@ teléfono».
 | AC7 | `--dump-ui` de cada pantalla | Cada control con nombre, rol y valor; ninguno sin nombre |
 | TC1 | `ui.touch_mode` `on`, 1280 × 800 | Barra de abajo, botón principal abajo a la derecha, blancos de 48 px o más |
 | TC2 | Modo táctil, gestos simulados: un dedo, dos dedos, pellizco, doble toque, mantener | Girar, mover, acercar, encuadrar, menú del clic derecho |
-| TC3 | Surface u otro convertible con Windows 11 y con Windows 10, `auto`: sacar el teclado y ponerlo | La interfaz pasa a táctil y vuelve; si la señal de Windows no llega, la persona puede cambiarlo con un toque |
+| TC3 | Surface u otro convertible con Windows 11 y con Windows 10, `automatic`: sacar el teclado y ponerlo | La interfaz pasa a táctil y vuelve; si la señal de Windows no llega, la persona puede cambiarlo con un toque |
 | TC5 | Modo táctil, tableta tomada con las dos manos | La barra, el botón principal y las herramientas se alcanzan con los pulgares sin soltar la tableta |
 | TC6 | Sección Impresora con una impresora con cámara | Estado grande, cámara que se agranda, pausar/seguir/cancelar |
 | TC7 | «Ver esta impresora desde Tisma Cloud» encendido; abrir la impresora desde la app del teléfono | Estado y cámara llegan; con la app cerrada no se sube ninguna imagen; el indicador muestra imágenes por minuto y datos |
