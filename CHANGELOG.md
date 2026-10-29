@@ -96,6 +96,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Vista previa de lejos (OpenGL):** cuando una capa mide menos de un cuarto de píxel, las paredes de 2 o 4 capas se
+  dibujan como una sola; la imagen es la misma y el cuadro tarda menos de la mitad en la prueba.
+
 - **Laminar abajo a la derecha:** el botón está en un panel abajo a la derecha de la vista; después de laminar, el
   mismo lugar muestra el tiempo, «Exportar G-code» y un menú para mandarlo a la impresora o guardar el proyecto.
 

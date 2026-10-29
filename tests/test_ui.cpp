@@ -974,20 +974,35 @@ TEST_CASE("preview: far away, the walls of a group of layers are drawn as one", 
     const PreviewDrawOrder full = preview_draw_order(p);
     REQUIRE(full.instances.size() == 21);
     const PreviewDrawOrder far = merged_layers(full, 2);
-    // Walls in layers 9, 7, 5, 3 and 1, two layers high; the skin stays.
-    CHECK(far.instances.size() == 11);
+    // Walls in layers 9, 7, 5, 3 and 1, two layers high (the walls of the
+    // layers below are right under them); the skin is among the others.
+    CHECK(far.instances.size() == 10);
     CHECK(far.layer_shown.size() == 11);
-    for (std::size_t l = 0; l < 10; ++l) {
-        const std::size_t n = far.layer_shown[l + 1] - far.layer_shown[l];
-        CHECK(n == (l % 2 == 1 ? 2u : 0u) + (l == 5 ? 1u : 0u));
-    }
-    for (const PreviewInstance& e : far.instances) {
-        const LineKind k = LineKind(e.kind_layer & 0xFFu);
-        CHECK_THAT(e.height, Catch::Matchers::WithinAbs(k == LineKind::TopSolidInfill ? 0.2 : 0.4, 1e-6));
-    }
+    for (std::size_t l = 0; l < 10; ++l)
+        CHECK(far.layer_shown[l + 1] - far.layer_shown[l] == (l % 2 == 1 ? 2u : 0u));
+    for (const PreviewInstance& e : far.instances)
+        CHECK_THAT(e.height, Catch::Matchers::WithinAbs(0.4, 1e-6));
+    const PreviewDrawOrder others = other_than_walls(full);
+    REQUIRE(others.instances.size() == 1);
+    CHECK(others.layer_shown[6] - others.layer_shown[5] == 1);
+    // A wall that steps out more than half a pixel from the one above stays.
+    PreviewBuffers dome = p;
+    for (PreviewInstance& e : dome.extrusions)
+        if ((e.kind_layer >> 8) % 2 == 0)
+            e.y0 = e.y1 = -1.0f;
+    CHECK(merged_layers(preview_draw_order(dome), 2).instances.size() == 20);
     // The top layer keeps its walls; nothing hidden to draw.
     CHECK(far.layer_shown[10] - far.layer_shown[9] == 2);
     CHECK(far.layer_hidden.front() == far.layer_hidden.back());
     // A group of 1 is the same order.
     CHECK(merged_layers(full, 1).instances.size() == full.instances.size());
+}
+
+TEST_CASE("preview: the group of layers drawn as one by a layer's size on the screen", "[ui][preview]") {
+    CHECK(far_group(2.0f) == 1);
+    CHECK(far_group(0.3f) == 1);
+    CHECK(far_group(0.25f) == 2);
+    CHECK(far_group(0.1f) == 4);
+    CHECK(far_group(0.05f) == 4);
+    CHECK(far_group(0.01f) == 4);
 }

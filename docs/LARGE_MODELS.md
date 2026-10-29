@@ -39,8 +39,9 @@ la GPU decenas de millones de vértices por cuadro aunque la mayoría estén tap
 4. Rayos primarios para la vista previa, como un modo de la vista.
 5. Capas juntas de lejos, mallado voraz de los cordones vecinos, y menos vértices por cordón (solo las caras que miran
    a la cámara). Hechas las caras que miran a la cámara (18 vértices en vez de 36) y el recorte por capas contra el
-   volumen de visión (2026-10-29); las capas juntas, armadas (`merged_layers`) pero todavía no usadas en la vista;
-   falta el mallado voraz.
+   volumen de visión (2026-10-29); las capas juntas de lejos en OpenGL (2026-10-29: paredes de grupos de 2 y 4 capas
+   cuando el grupo mide menos de medio píxel; misma imagen, menos de la mitad del tiempo a 1400 mm en llvmpipe); faltan
+   Vulkan y el mallado voraz.
 6. Malla simplificada del modelo mientras se mueve.
 
 Cada paso se compara con la imagen de antes: lo que cambia es el tiempo, no lo que se ve.

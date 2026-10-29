@@ -1291,8 +1291,9 @@ void Renderer::set_preview(const PreviewBuffers& p) {
         return;
     // Drawing order (docs/LARGE_MODELS.md): what can show, then what the
     // part hides when all of it is drawn.
-    order_ = preview_draw_order(p);
-    std::vector<PreviewInstance>& ordered = order_.instances;
+    orders_ = preview_orders(p);
+    std::vector<PreviewInstance>& ordered = orders_.instances;
+    layer_height_ = orders_.full.layer_z.empty() ? 0.0f : orders_.full.layer_z.back() / float(orders_.full.layer_z.size());
     preview_box_ = !ordered.empty();
     preview_lo_ = Vec3{1e30f, 1e30f, 1e30f}, preview_hi_ = Vec3{-1e30f, -1e30f, -1e30f};
     for (const PreviewInstance& e : ordered) {
@@ -1322,7 +1323,7 @@ void Renderer::set_preview(const PreviewBuffers& p) {
 void Renderer::clear_preview() {
     extrusions_.count = travels_.count = 0;
     layer_extrusions_.clear();
-    order_ = {};
+    orders_ = {};
     layer_travels_.clear();
     scene_changed();
 }
@@ -1457,8 +1458,22 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
     const std::size_t lo = std::min(f.first_layer, layers - 1), hi = std::clamp(f.last_layer, lo, layers - 1);
     // All of the part drawn: what it hides stays out (docs/LARGE_MODELS.md);
     // the nearest layers first, for the depth test.
-    const std::vector<PreviewRange> draws =
-        preview_draws(order_, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
+    // From far, where a layer is under half a pixel high, the walls of a group
+    // of layers are drawn as one (merged_layers).
+    const bool whole = preview_whole(orders_.full, lo, hi, f.kind_mask, f.top_shown, f.top_hidden);
+    const int group = whole && preview_box_
+                          ? far_group(layer_pixels(f.projection, f.height, f.eye, preview_lo_, preview_hi_, layer_height_))
+                          : 1;
+    const PreviewDrawOrder* walls = orders_.far_walls(group, whole);
+    if (!gbuffer)
+        drawn_group_ = walls ? group : 1;
+    std::vector<PreviewRange> draws =
+        preview_draws(walls ? *walls : orders_.full, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
+    if (walls) {
+        const std::vector<PreviewRange> rest =
+            preview_draws(orders_.others, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
+        draws.insert(draws.end(), rest.begin(), rest.end());
+    }
     if (!draws.empty()) {
         const unsigned p = p_.preview;
         lit_uniforms(p, f, vp, gbuffer, visibility);

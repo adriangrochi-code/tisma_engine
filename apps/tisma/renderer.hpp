@@ -126,6 +126,7 @@ public:
 
     // The preview's extrusions the last frame drew (lit pass).
     std::size_t drawn_extrusions() const { return drawn_extrusions_; }
+    int drawn_group() const { return drawn_group_; } // the last frame's group of layers drawn as one (merged_layers)
 
     // What the view keeps on the GPU, in bytes (--draw-stats): the preview's
     // instances and travels, the meshes (model, its coarse copy, paint, bed),
@@ -164,7 +165,10 @@ private:
     float grid_step_ = 10.0f;                 // mm between grid lines
     int grid_major_every_ = 5;
     std::vector<std::size_t> layer_extrusions_, layer_travels_;
-    PreviewDrawOrder order_; // the extrusions in drawing order (docs/LARGE_MODELS.md); its instances moved to the GPU
+    // The extrusions in drawing order, and as seen from far (docs/LARGE_MODELS.md); their instances moved to the GPU.
+    PreviewOrders orders_;
+    float layer_height_ = 0.0f; // the preview's mean layer height, mm
+    int drawn_group_ = 1;       // the last frame's group of layers drawn as one
     std::size_t drawn_extrusions_ = 0;
     float min_feed_ = 0, max_feed_ = 0, min_width_ = 0, max_width_ = 0, min_height_ = 0, max_height_ = 0;
     int max_samples_ = 1, max_texture_ = 1024;

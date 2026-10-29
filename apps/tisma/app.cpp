@@ -11227,8 +11227,9 @@ void App::frame() {
             }
             glFinish();
             const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-            std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn); preview buffers %.0f ms\n",
-                        ms / options_.bench_frames, options_.bench_frames, renderer_.drawn_extrusions(), preview_ms_);
+            std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn, layers by %d); preview buffers %.0f ms\n",
+                        ms / options_.bench_frames, options_.bench_frames, renderer_.drawn_extrusions(),
+                        renderer_.drawn_group(), preview_ms_);
             std::fflush(stdout);
             benched_ = true;
         }

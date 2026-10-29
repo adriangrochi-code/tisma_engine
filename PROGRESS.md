@@ -7785,3 +7785,21 @@ de 2, 21 cordones pasan a 11 y las paredes tienen 0,4 mm de alto.
 
 **Sin terminar:** todavía no se usa. Falta subir esas versiones a la vista (OpenGL y Vulkan), elegir el grupo por el
 tamaño de una capa en pantalla, comparar imágenes de lejos y medir.
+
+Siguiente bloque, en OpenGL: la vista guarda en la GPU, después de la vista previa completa, lo que no es pared una
+vez (`other_than_walls`) y las paredes de grupos de 2 y de 4 capas (`preview_orders`). Con toda la pieza a la vista,
+`layer_pixels` mide cuánto ocupa una capa en pantalla en su punto más cercano al ojo, y `far_group` elige el grupo
+más grande que queda por debajo de medio píxel. Primer intento con un píxel entero y sacando toda pared de las capas
+de abajo: en la cúpula de la esfera, donde cada capa se corre hacia adentro, se veían anillos de piel y paredes
+internas (2084 píxeles distintos a 700 mm). Ahora una pared de una capa de abajo se saca solo si tiene una del mismo
+tipo de la capa de arriba a menos de medio píxel; si no, queda.
+
+**Medido** (esfera ×4 de 80 mm, 1200 × 760, oclusión ambiental, llvmpipe; el binario de antes contra el de ahora, con
+la misma cámara; píxeles de la vista que difieren en más de 24 de 255): a 700 mm, sin grupo, 0 (máximo 9); a 1400 mm,
+grupos de 2, 82 275 → 57 166 cordones, 578 → 221 ms por cuadro, 0 píxeles (máximo 19); a 2600 mm, grupos de 4,
+82 275 → 45 240 cordones, 474 → 213 ms, 0 (máximo 5); de cerca (180 mm), igual imagen a imagen. Los tiempos de antes
+se tomaron con la CI corriendo en la misma máquina: valen el orden, no el número. Memoria de la GPU para las
+instancias: 5,2 → 9,1 MB (las paredes de cada grupo se guardan otra vez). Los grupos de 8 solo servían con la pieza a
+más de 2,6 m y costaban más memoria: no se arman.
+
+**Falta:** Vulkan (sigue dibujando todas las capas), medir con una pieza grande de verdad y el mallado voraz.
