@@ -621,7 +621,6 @@ private:
     ViewLevel view_level_ = ViewLevel::Normal;
     std::array<std::string, 3> panel_section_{"quality", "temperature", "machine"};
     std::map<std::string, bool> card_open_;
-    std::map<std::string, float> card_heights_;
     std::set<std::string> show_all_cards_;
     std::set<std::string> changed_keys_;
     // Custom (rules 15 to 19): the settings it shows; «See all together»
@@ -4828,8 +4827,8 @@ bool App::card_shown(const SubsectionLayout& sub) const {
 
 // A card of the panel: its title, «N changes» in violet and its menu (Reset,
 // rule 8), with its settings always below it: the panel is one list to
-// scroll, titles and settings, nothing to fold (the owner's decision,
-// 2026-10-29). Its background is as tall as the card was in the last frame.
+// scroll, titles and settings, nothing to fold, on the panel's own white
+// with no box around (the owner's decisions, 2026-10-29).
 void App::settings_card(const SubsectionLayout& sub, int changes, bool& reset) {
     const std::string id(sub.id);
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -4837,10 +4836,6 @@ void App::settings_card(const SubsectionLayout& sub, int changes, bool& reset) {
     const float width = ImGui::GetContentRegionAvail().x;
     const float pad = 9.0f * scale_, line = ImGui::GetTextLineHeight();
     const float header = line;
-    const auto height = card_heights_.find(id);
-    const float tall = height != card_heights_.end() ? height->second : header + 2.0f * pad;
-    dl->AddRectFilled(start, ImVec2(start.x + width, start.y + tall), ImGui::GetColorU32(rgb(theme_.frame, 0.45f)),
-                      7.0f * scale_);
     ImGui::PushID(id.c_str());
     const bool hovered = ImGui::IsWindowHovered() &&
                          ImGui::IsMouseHoveringRect(start, ImVec2(start.x + width, start.y + header + 2.0f * pad * 0.85f));
@@ -5978,28 +5973,14 @@ void App::section_cards(const SectionLayout& section, bool& changed, bool& bed) 
                         ImGui::EndPopup();
                     }
                 }
-            } else {
-                // Basic tells what it hides (rule 11).
-                int hidden = 0;
-                for (const SettingEntry& e : sub.settings)
-                    hidden += setting_applies(e.key) && !setting_shown(e.key, sub.id);
-                if (hidden > 0) {
-                    ImGui::Spacing();
-                    loc::TextDisabled("%s", format(tr(view_level_ == ViewLevel::Basic ? T::MoreSettings
-                                                                                        : T::MoreSettingsAdvanced),
-                                                     hidden)
-                                                  .c_str());
-                    ImGui::SameLine();
-                    if (ImGui::SmallButton(tr(T::ShowAll)))
-                        show_all_cards_.insert(std::string(sub.id));
-                }
             }
+            // No «N more settings» line under the cards: a higher level shows
+            // more, and that says itself (the owner's decision, 2026-10-29).
             const float pad = 9.0f * scale_;
             card_credits(sub.id, start.x + pad, start.x + card_width - pad);
             ImGui::PopID();
         }
         const float end = ImGui::GetCursorScreenPos().y + 4.0f * scale_;
-        card_heights_[std::string(sub.id)] = end - start.y;
         ImGui::SetCursorScreenPos(ImVec2(start.x, end + 7.0f * scale_));
         ImGui::Dummy(ImVec2(0, 0));
     }
@@ -6210,8 +6191,10 @@ void App::settings_panel() {
         }
         if (ImGui::GetCursorScreenPos().y <= view_top + view_height / 3.0f)
             in_view = std::string(section->id);
+        // In the theme's violet: on the panel's white, with no boxes, the
+        // titles carry the structure.
         ImGui::PushFont(nullptr, ImGui::GetFontSize() * 1.15f);
-        loc::TextColored(rgb(theme_.lavender), "%s", tr(section->title));
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(section->title));
         ImGui::PopFont();
         ImGui::Spacing();
         section_cards(*section, changed, bed);

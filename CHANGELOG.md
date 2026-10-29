@@ -115,7 +115,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - **El panel de ajustes es una sola lista** que se recorre con la barra o la rueda (pedido del dueño): cada sección con
   su título y sus tarjetas siempre abiertas, sin plegar; los íconos de la izquierda llevan a cada sección. El nivel
-  Personalizado sigue eligiendo qué ajustes se ven.
+  Personalizado sigue eligiendo qué ajustes se ven. Sin recuadros grises: títulos y ajustes sobre el fondo del panel, y
+  sin las líneas «N ajustes más en Avanzado».
 - **Buscar un ajuste** está en el panel de ajustes, debajo de la impresora y la boquilla (pedido del dueño); Ctrl+F
   lo sigue abriendo, también desde la página de la impresora.
 - **Ancho de los cordones por defecto:** `walls.width` 0 (lo que viene si no se pone) es automático, 1,125 × la boquilla:

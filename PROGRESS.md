@@ -8221,3 +8221,8 @@ que se cruzan («crosses itself: its points must go around the bed in order»; u
 va primero) y después el área («has no area: its points are on one line»). Los puntos repetidos y el sentido horario
 siguen valiendo; una cama cóncava también. Pruebas de los cinco casos.
 
+Después, también pedido del dueño: sin los recuadros grises de los apartados (los títulos y los ajustes van sobre el
+fondo blanco del panel; el título de la sección pasa al violeta del tema, que se lee sobre blanco y sobre oscuro) y
+sin las líneas «N ajustes más en Avanzado · Mostrar todos» (con un nivel más alto se ven más ajustes, y eso se
+entiende solo). Mirado en capturas con el tema claro y el oscuro.
+
