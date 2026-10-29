@@ -180,9 +180,10 @@ El motor toma de los dos:
    punto violeta, y al pasar el puntero se ve la lista de sus apartados para ir directo a uno.
 4. **Vista de una sola columna** (diseño): un botón arriba del panel, «Ver todo junto», muestra todas las secciones
    una debajo de otra, cada una con su título, como la columna de categorías de Cura. Se recuerda.
-5. **Búsqueda:** el buscador de la barra superior (`interface.md`) abre la pestaña, la sección y el apartado del
-   ajuste, lo lleva a la vista y lo resalta 2 s. Si el ajuste está oculto por el nivel, se muestra igual, marcado
-   (regla 12).
+5. **Búsqueda:** el campo «Buscar un ajuste» (Ctrl+F) va en el panel de ajustes, como una barra debajo de las filas
+   de impresora y boquilla, no en la barra superior (decisión del dueño, 29-10-2026). Abre la pestaña, la sección y
+   el apartado del ajuste, lo lleva a la vista y lo resalta 2 s. Si el ajuste está oculto por el nivel, se muestra
+   igual, marcado (regla 12).
 6. **Ajustes que dependen de otro** van sangrados debajo de él y se ven solo cuando sirven:
 
 | Interruptor | Lo que se oculta apagado |
