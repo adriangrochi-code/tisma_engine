@@ -8199,3 +8199,17 @@ menos de `gcode.resolution`, que el escritor junta en nada. `unprintable_reason`
 más que la resolución (y que 0,01 mm). La línea del chequeo dice «mm of filament net of retractions» (el número es
 neto de las retracciones; el pie del G-code da el filamento usado). Prueba con un camino de 5 µm.
 
+## 2026-10-29: el panel de ajustes, una sola lista (pedido del dueño)
+
+El dueño pidió que el panel no tenga tarjetas que se despliegan, sino títulos y ajustes, para bajar con la barra o la
+rueda, como Orca Slicer:
+- todas las secciones de la pestaña van una debajo de la otra en una lista, cada una con su título;
+- las tarjetas muestran siempre su título y sus ajustes: sin flecha, sin resumen, sin plegar (`settings_card`);
+- la columna de íconos sigue: un clic baja la lista hasta la sección (`jump_section_`), y se ilumina la que está a la
+  vista (la última cuyo título pasó el tercio de arriba, o la última si la lista llegó al fondo); `--section` y la
+  búsqueda también bajan hasta su sección;
+- el botón «Ver todo junto» ya no hace falta y no está; `--single-column` saca la columna de íconos;
+- el nivel Personalizado y «Elegir ajustes…» siguen igual, para que cada persona vea solo lo que quiere.
+
+Mirado en capturas (la lista al empezar y con `--section print/speed`). Pasan las 116 pruebas de interfaz.
+

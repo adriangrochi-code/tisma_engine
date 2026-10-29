@@ -530,7 +530,7 @@ private:
                 const char* tip, float height);
     bool icon_button(const char* id, const char* icon_name, const char* tip, float size);
     // The settings panel by sections and cards (docs/spec/features/settings_panel.md).
-    bool settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary, bool& reset);
+    void settings_card(const SubsectionLayout& sub, int changes, bool& reset);
     bool card_rows(std::string_view id, bool& bed);
     // An object's menu and the window with its own settings (settings_levels.md, rules 10 and 11).
     void object_menu();
@@ -629,7 +629,8 @@ private:
     // shown whatever the level until the section changes), and the dialog
     // that chooses what Custom shows, with its draft and its filter.
     CustomView custom_view_;
-    bool single_column_ = false;
+    bool single_column_ = false; // without the column of section icons
+    std::string jump_section_;   // a section icon clicked: the list scrolls to it next frame
     std::string search_query_;
     bool search_focus_ = false;
     bool search_list_hovered_ = false;
@@ -2601,6 +2602,7 @@ bool App::init(std::string& error) {
         objects_tab_ = tab == "objects"; // objects/<row>: the list, its row chosen below (after --object-add)
         panel_tab_ = tab == "material" ? SettingsTab::Material : tab == "printer" ? SettingsTab::Printer : SettingsTab::Print;
         panel_section_[std::size_t(panel_tab_)] = options_.section.substr(slash + 1);
+        jump_section_ = options_.section.substr(slash + 1); // the list scrolls to it
         // The printer's settings are on its page (settings_panel.md, rule 37).
         if (panel_tab_ == SettingsTab::Printer)
             printer_page_ = true, printer_section_ = options_.section.substr(slash + 1), panel_tab_ = SettingsTab::Print;
@@ -4605,6 +4607,7 @@ void App::go_to_setting(const std::string& key) {
     else
         panel_tab_ = place->tab;
     panel_section_[std::size_t(place->tab)] = std::string(place->section->id);
+    jump_section_ = std::string(place->section->id); // then the row's own scroll
     card_open_[std::string(place->subsection->id)] = true;
     show_all_cards_.clear();
     revealed_keys_.clear();
@@ -4823,30 +4826,24 @@ bool App::card_shown(const SubsectionLayout& sub) const {
                        [&](const SettingEntry& e) { return setting_shown(e.key, sub.id); });
 }
 
-// A card of the panel: its title, «N changes» in violet, its menu (Reset,
-// rule 8) and, folded, the line that sums it up; a click on the title folds
-// or opens it. Its background is as tall as the card was in the last frame.
-bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, const std::string& summary, bool& reset) {
+// A card of the panel: its title, «N changes» in violet and its menu (Reset,
+// rule 8), with its settings always below it: the panel is one list to
+// scroll, titles and settings, nothing to fold (the owner's decision,
+// 2026-10-29). Its background is as tall as the card was in the last frame.
+void App::settings_card(const SubsectionLayout& sub, int changes, bool& reset) {
     const std::string id(sub.id);
-    const auto known = card_open_.find(id);
-    bool open = known != card_open_.end() ? known->second : first;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const ImVec2 start = ImGui::GetCursorScreenPos();
     const float width = ImGui::GetContentRegionAvail().x;
     const float pad = 9.0f * scale_, line = ImGui::GetTextLineHeight();
-    const float header = open ? line : 2.0f * line + 2.0f * scale_;
+    const float header = line;
     const auto height = card_heights_.find(id);
     const float tall = height != card_heights_.end() ? height->second : header + 2.0f * pad;
     dl->AddRectFilled(start, ImVec2(start.x + width, start.y + tall), ImGui::GetColorU32(rgb(theme_.frame, 0.45f)),
                       7.0f * scale_);
     ImGui::PushID(id.c_str());
-    ImGui::SetCursorScreenPos(ImVec2(start.x, start.y));
-    ImGui::SetNextItemAllowOverlap();
-    if (ImGui::InvisibleButton("##head", ImVec2(width, header + 2.0f * pad * 0.85f))) {
-        open = !open;
-        card_open_[id] = open;
-    }
-    const bool hovered = ImGui::IsItemHovered();
+    const bool hovered = ImGui::IsWindowHovered() &&
+                         ImGui::IsMouseHoveringRect(start, ImVec2(start.x + width, start.y + header + 2.0f * pad * 0.85f));
     // Where the card's function comes from, over its title (credits.md, rule 3).
     if (hovered && ImGui::GetMousePos().y < start.y + pad + line) {
         const std::vector<const FeatureCredit*> from = credits_for_card(credits(), sub.id);
@@ -4857,19 +4854,10 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
             loc::SetTooltip("%s", text.c_str());
         }
     }
-    // The arrow, the title and the changes.
+    // The title and the changes.
     const ImU32 strong = ImGui::GetColorU32(rgb(theme_.text)), dim = ImGui::GetColorU32(rgb(theme_.text_dim));
     const ImU32 violet = ImGui::GetColorU32(rgb(theme_.accent_hover));
-    const float a = line * 0.32f;
-    const ImVec2 c(start.x + pad + a, start.y + pad + line * 0.5f);
-    if (open)
-        dl->AddTriangleFilled(ImVec2(c.x - a, c.y - a * 0.6f), ImVec2(c.x + a, c.y - a * 0.6f), ImVec2(c.x, c.y + a * 0.7f),
-                              hovered ? violet : dim);
-    else
-        dl->AddTriangleFilled(ImVec2(c.x - a * 0.6f, c.y - a), ImVec2(c.x - a * 0.6f, c.y + a), ImVec2(c.x + a * 0.7f, c.y),
-                              hovered ? violet : dim);
-    const float text_x = start.x + pad + 2.0f * a + 8.0f * scale_;
-    dl->AddText(ImVec2(text_x, start.y + pad), hovered ? violet : strong, tr(sub.title));
+    dl->AddText(ImVec2(start.x + pad, start.y + pad), strong, tr(sub.title));
     // The menu: three dots at the right of the title.
     const float dots = line * 1.1f;
     const ImVec2 menu_at(start.x + width - pad - dots, start.y + pad);
@@ -4892,23 +4880,8 @@ bool App::settings_card(const SubsectionLayout& sub, bool first, int changes, co
         const float w = ImGui::CalcTextSize(count.c_str()).x;
         dl->AddText(ImVec2(menu_at.x - 6.0f * scale_ - w, start.y + pad), violet, count.c_str());
     }
-    if (!open) {
-        // The summary, cut to the card's width.
-        std::string text = summary;
-        const float room = width - (text_x - start.x) - pad;
-        while (text.size() > 1 && ImGui::CalcTextSize(text.c_str()).x > room) {
-            do
-                text.pop_back();
-            while (!text.empty() && (static_cast<unsigned char>(text.back()) & 0xC0) == 0x80);
-            if (!text.empty())
-                text.pop_back();
-            text += "…";
-        }
-        dl->AddText(ImVec2(text_x, start.y + pad + line + 2.0f * scale_), dim, text.c_str());
-    }
     ImGui::SetCursorScreenPos(ImVec2(start.x + pad, start.y + pad + header + pad * 0.7f));
     ImGui::PopID();
-    return open;
 }
 
 // «Basado en Support Fins, de gittrahan» at a card's foot, small and grey,
@@ -5960,7 +5933,6 @@ bool App::section_button(std::string_view id, const char* name, const char* icon
 // at its foot what the level hides (rule 11) or, in Custom, the settings to
 // add back (rule 16).
 void App::section_cards(const SectionLayout& section, bool& changed, bool& bed) {
-    bool first = true;
     for (const SubsectionLayout& sub : section.subsections) {
         if (!card_shown(sub))
             continue;
@@ -5970,7 +5942,7 @@ void App::section_cards(const SectionLayout& section, bool& changed, bool& bed) 
         const ImVec2 start = ImGui::GetCursorScreenPos();
         const float card_width = ImGui::GetContentRegionAvail().x;
         bool reset = false;
-        const bool open = settings_card(sub, first, changes, subsection_summary(sub.id, settings_), reset);
+        settings_card(sub, changes, reset);
         if (reset) {
             // Back to the saved profile, this card's settings only (rule 8).
             std::vector<std::string> keys;
@@ -5984,7 +5956,7 @@ void App::section_cards(const SectionLayout& section, bool& changed, bool& bed) 
                 fail(T::CannotOpen, e.what());
             }
         }
-        if (open) {
+        {
             ImGui::PushID(sub.id.data(), sub.id.data() + sub.id.size());
             changed |= card_rows(sub.id, bed);
             if (view_level_ == ViewLevel::Custom) {
@@ -6030,7 +6002,6 @@ void App::section_cards(const SectionLayout& section, bool& changed, bool& bed) 
         card_heights_[std::string(sub.id)] = end - start.y;
         ImGui::SetCursorScreenPos(ImVec2(start.x, end + 7.0f * scale_));
         ImGui::Dummy(ImVec2(0, 0));
-        first = false;
     }
 }
 
@@ -6165,11 +6136,9 @@ void App::settings_panel() {
         anchor("filament_selector");
     if (panel_tab_ == SettingsTab::Material)
         material_card();
-    // «See all together» (rule 4), and in Custom «Choose settings…» (rule 16).
-    if (ImGui::SmallButton(tr(single_column_ ? T::SeeBySection : T::SeeAllTogether)))
-        single_column_ = !single_column_;
+    // In Custom, «Choose settings…» (rule 16): only the ones each person wants.
+    // Every section shows in one list now (the owner's decision, 2026-10-29).
     if (view_level_ == ViewLevel::Custom) {
-        ImGui::SameLine();
         if (ImGui::SmallButton(tr(T::ChooseSettings))) {
             choose_draft_ = custom_view_;
             choose_open_ = true;
@@ -6210,11 +6179,9 @@ void App::settings_panel() {
                                    [&](const SettingEntry& e) { return changed_keys_.contains(std::string(e.key)); });
             });
             const std::string icon_name(section->icon.substr(0, section->icon.size() - 4));
-            if (section_button(section->id, tr(section->title), icon_name.c_str(), section->id == chosen, marked, column)) {
-                chosen = std::string(section->id);
-                show_all_cards_.clear();
-                revealed_keys_.clear();
-            }
+            // The list scrolls to it; it is lit while it is in view.
+            if (section_button(section->id, tr(section->title), icon_name.c_str(), section->id == chosen, marked, column))
+                jump_section_ = std::string(section->id);
             if (ImGui::IsItemHovered()) {
                 ImGui::BeginTooltip();
                 ImGui::TextUnformatted(tr(section->title));
@@ -6229,22 +6196,32 @@ void App::settings_panel() {
         ImGui::SameLine(0, 4.0f * scale_);
     }
 
-    // The chosen section's cards, or every section's one below the other.
+    // Every section's cards one below the other, under its title: one list to
+    // scroll with the bar or the wheel, as other slicers show it (the owner's
+    // decision, 2026-10-29). The section whose title went past the top third
+    // last is the one in view.
     ImGui::BeginChild("##cards", ImVec2(0, -footer));
+    const float view_top = ImGui::GetWindowPos().y, view_height = ImGui::GetWindowHeight();
+    std::string in_view = sections.empty() ? std::string() : std::string(sections.front()->id);
     for (const SectionLayout* section : sections) {
-        if (!single_column_ && section->id != chosen)
-            continue;
-        if (single_column_) {
-            ImGui::PushFont(nullptr, ImGui::GetFontSize() * 1.15f);
-            loc::TextColored(rgb(theme_.lavender), "%s", tr(section->title));
-            ImGui::PopFont();
-            ImGui::Spacing();
+        if (jump_section_ == section->id) {
+            ImGui::SetScrollHereY(0.0f);
+            jump_section_.clear();
         }
+        if (ImGui::GetCursorScreenPos().y <= view_top + view_height / 3.0f)
+            in_view = std::string(section->id);
+        ImGui::PushFont(nullptr, ImGui::GetFontSize() * 1.15f);
+        loc::TextColored(rgb(theme_.lavender), "%s", tr(section->title));
+        ImGui::PopFont();
+        ImGui::Spacing();
         section_cards(*section, changed, bed);
-        if (single_column_)
-            ImGui::Spacing();
+        ImGui::Spacing();
     }
+    // At the bottom, the last one.
+    if (!sections.empty() && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f && ImGui::GetScrollMaxY() > 0.0f)
+        in_view = std::string(sections.back()->id);
     ImGui::EndChild();
+    chosen = in_view;
     g_custom_rows = false;
 
     // Settings files.
