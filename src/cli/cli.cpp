@@ -315,6 +315,10 @@ bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copie
     }
     mesh = parts.empty() ? TriangleMesh{} : std::move(parts.front());
     if (copies > 1) {
+        if (const std::size_t fit = copies_that_fit(mesh, copies, settings); fit < copies) {
+            err << "error: " << copies << " copies do not fit on the bed (machine.bed): " << fit << " fit\n";
+            return false;
+        }
         mesh = place_copies(mesh, copies, settings, name, &objects);
     } else {
         place_on_bed(mesh, settings, negative);

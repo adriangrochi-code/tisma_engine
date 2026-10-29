@@ -122,3 +122,16 @@ TEST_CASE("labels: one object at a time, each layer wrapped in its label", "[lab
     const std::size_t layers = count(text, ";LAYER_CHANGE");
     CHECK(count(text, "M486 S0\n") + count(text, "M486 S1\n") == layers + 2);
 }
+
+TEST_CASE("copies: how many fit on the bed (the spec team's BH8)", "[labels][placement]") {
+    Settings s = base(GcodeFlavor::Marlin, ObjectLabels::None);
+    s.placement_arrange = true;
+    // 20 mm cubes 6 mm apart on a 200 mm bed: 7 by 7.
+    CHECK(copies_that_fit(cube20(), 4, s) == 4);
+    const std::size_t fit = copies_that_fit(cube20(), 100, s);
+    CHECK(fit < 100);
+    CHECK(fit >= 36);
+    CHECK(copies_that_fit(cube20(), fit, s) == fit);
+    s.bed.clear(); // nowhere to arrange them: all of them, as place_copies leaves them
+    CHECK(copies_that_fit(cube20(), 100, s) == 100);
+}

@@ -124,6 +124,29 @@ TriangleMesh place_copies(const TriangleMesh& mesh, std::size_t copies, const Se
     return out;
 }
 
+std::size_t copies_that_fit(const TriangleMesh& mesh, std::size_t copies, const Settings& s) {
+    if (mesh.empty() || copies <= 1 || s.bed.empty() || !s.placement_arrange)
+        return copies;
+    double lo[2] = {s.bed.front()[0], s.bed.front()[1]}, hi[2] = {lo[0], lo[1]};
+    for (const auto& p : s.bed)
+        for (int a = 0; a < 2; ++a)
+            lo[a] = std::min(lo[a], p[std::size_t(a)]), hi[a] = std::max(hi[a], p[std::size_t(a)]);
+    const BoundingBox box = mesh.bounding_box();
+    const std::array<double, 2> size{double(box.max.x) - double(box.min.x), double(box.max.y) - double(box.min.y)};
+    const double spacing = s.sequential ? std::max(s.placement_spacing, s.clearance_radius) : s.placement_spacing;
+    constexpr double kSlack = 1e-6;
+    for (std::size_t n = copies; n > 0; --n) {
+        const std::vector<std::array<double, 2>> at =
+            arrange_boxes(std::vector<std::array<double, 2>>(n, size), bed_centre(s), spacing);
+        if (std::all_of(at.begin(), at.end(), [&](const std::array<double, 2>& c) {
+                return c[0] - 0.5 * size[0] >= lo[0] - kSlack && c[0] + 0.5 * size[0] <= hi[0] + kSlack &&
+                       c[1] - 0.5 * size[1] >= lo[1] - kSlack && c[1] + 0.5 * size[1] <= hi[1] + kSlack;
+            }))
+            return n;
+    }
+    return 0;
+}
+
 TriangleMesh place_objects(const std::vector<TriangleMesh>& meshes, const Settings& s, const std::string& name,
                            std::vector<MeshObject>* objects) {
     TriangleMesh out;

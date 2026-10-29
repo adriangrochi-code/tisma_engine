@@ -8149,5 +8149,8 @@ BH8 (mensaje cuando las copias no entran), BH9 (AMF y STEP leídos como STL) y l
   voxel» cuando la pieza tiene menos de 27 vóxeles; y el aviso `large_displacement` cuando la pieza se mueve más de
   una décima de su tamaño (1e30 N). Pruebas de los dos.
 
-Quedan: BH7 (no lo reproduje; pedí el archivo), BH8, UI26 y los totales de filamento por extrusor.
+- **BH8:** `copies_that_fit` cuenta cuántas copias deja `place_copies` dentro de la caja de la cama; la línea de
+  comandos dice «100 copies do not fit on the bed (machine.bed): 81 fit» (cubo de 20 mm, cama de 250). Prueba.
+
+Quedan: BH7 (no lo reproduje; pedí el archivo), UI26 y los totales de filamento por extrusor.
 

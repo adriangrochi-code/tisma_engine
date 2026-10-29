@@ -245,6 +245,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **`resin.light_pwm` y `bottom_light_pwm` 0 (BH13):** son un error (la luz apagada no cura nada); van de 1 a 255.
 - **Análisis (BH12):** un soporte que no toca la pieza porque el vóxel es tan grande como ella dice «try a smaller
   voxel»; un desplazamiento de más de una décima de la pieza da el aviso `large_displacement` (el análisis es lineal).
+- **`--copies` que no entran (BH8):** «100 copies do not fit on the bed (machine.bed): 81 fit», en lugar de un punto
+  fuera de la cama.
 
 - **TR17:** la ficha de información de un ajuste de lista nombra los valores como la lista («Alineada»), no con la
   palabra del archivo («aligned»).

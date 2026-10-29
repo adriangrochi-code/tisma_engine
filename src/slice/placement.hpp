@@ -82,6 +82,11 @@ std::array<double, 2> bed_centre(const Settings& settings);
 TriangleMesh place_copies(const TriangleMesh& mesh, std::size_t copies, const Settings& settings, const std::string& name,
                           std::vector<MeshObject>* objects);
 
+// How many of `copies` place_copies would lay inside the bed's box, all of
+// them when the copies are not arranged on a bed (the spec team's BH8: 100
+// copies said only that a point was outside the bed).
+std::size_t copies_that_fit(const TriangleMesh& mesh, std::size_t copies, const Settings& settings);
+
 // Several objects in one mesh (model_tools.md, rules 13 and 14): each
 // lowered onto the bed and the set arranged as copies are, with
 // placement.spacing between their boxes; object k named `name` and its
