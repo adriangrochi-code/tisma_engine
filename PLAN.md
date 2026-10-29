@@ -717,11 +717,11 @@ pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene
 - [ ] Mover, girar y escalar con controles visuales (deslizadores), no solo números; un menú con el botón derecho para
   agregar modelos y formas
 - [ ] La primera vez, elegir la impresora y el filamento antes del recorrido de bienvenida
-- [ ] La leyenda de la vista previa no tapa la pieza (encuadre teniendo en cuenta los paneles). Hecho (2026-10-29):
+- [x] La leyenda de la vista previa no tapa la pieza (encuadre teniendo en cuenta los paneles). Hecho (2026-10-29):
   la leyenda se pliega (solo los tipos, sin tiempos, partes, filamento ni totales) y la barra de movimientos ya no queda
   debajo de ella (va a su derecha, o adentro si no hay lugar); se pliega sola si completa taparía más del 45 % del ancho
-  de la vista, y al encuadrar en Vista previa la pieza va a lo que la leyenda deja libre. Falta reencuadrar al pasar a
-  Vista previa (hoy solo al encuadrar estando en ella).
+  de la vista, y al encuadrar en Vista previa la pieza va entre la leyenda y la barra de capas; al pasar entre Preparar
+  y Vista previa se reencuadra si la cámara no se tocó desde el último encuadre.
 - [ ] La columna de valores corrida en Windows con escala de pantalla (no reproducido al 100 %)
 - [x] `--dump-ui` (cada control con su clave, texto, valor y rectángulo) para la revisión de textos del equipo de fichas: las filas de ajustes (2026-10-29); los botones y menús, más adelante
 

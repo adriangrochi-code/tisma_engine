@@ -730,6 +730,7 @@ private:
     float legend_full_w_ = 0.0f;
     bool legend_full_ = true; // this frame's
     ImVec4 legend_rect_{};     // where it was drawn last frame (min x, y, max x, y); empty when hidden
+    int legend_drawn_ = -1, legend_since_ = 0; // its last frame drawn, and the first of that run (ImGui's count)
     bool show_labels_ = false; // E shows the parts' names
     std::array<bool, kMarkKinds> show_marks_{false, false, true, false, false, false, false}; // seams on
     ColorMode color_mode_ = ColorMode::Kind; // the shader's, from the view
@@ -763,6 +764,7 @@ private:
     std::uint64_t coarse_version_ = 0;
     std::vector<std::size_t> coarse_object_vertices_;
     int moved_frame_ = -100; // the last frame the camera moved (ImGui::GetFrameCount)
+    bool camera_framed_ = false; // the camera is as the last framing left it (no orbit, pan or zoom since)
     bool last_coarse_ = false; // the last frame drew the coarse copy (--ui-script's expect-coarse)
     std::uint64_t scene_version_ = 1, ray_version_ = 0;
     bool ray_preview_ = false, ray_failed_ = false;
@@ -3999,17 +4001,21 @@ void App::frame_now() {
         lo = {centre.x - reach, centre.y - reach, 0.0f};
         hi = {centre.x + reach, centre.y + reach, part->second.z};
     }
-    // In the preview the legend covers the left of the view: the part fits
-    // what is left, and goes right by half what it covers.
-    float covered = 0.0f;
-    if (tab_ == Tab::Preview && show_legend_ && legend_rect_.z > legend_rect_.x)
-        covered = std::clamp(legend_rect_.z - view_pos_.x, 0.0f, view_size_.x * 0.5f);
-    camera_.fit(lo, hi, (view_size_.x - covered) / std::max(view_size_.y, 1.0f));
-    if (covered > 0.0f)
-        camera_.pan(0.5f * covered, 0.0f, view_size_.y);
+    // In the preview the legend covers the left of the view and the layer
+    // slider its right: the part fits between them, in their middle.
+    float left = 0.0f, right = 0.0f;
+    if (tab_ == Tab::Preview && result_) {
+        right = 150.0f * scale_;
+        if (show_legend_ && legend_rect_.z > legend_rect_.x)
+            left = std::clamp(legend_rect_.z - view_pos_.x, 0.0f, view_size_.x * 0.5f);
+    }
+    camera_.fit(lo, hi, std::max(view_size_.x - left - right, 1.0f) / std::max(view_size_.y, 1.0f));
+    if (left != right)
+        camera_.pan(0.5f * (left - right), 0.0f, view_size_.y);
     // The calibration and device panels cover the left of the view: the part goes right.
     if (tab_ == Tab::Calibration || tab_ == Tab::Device)
         camera_.pan(225.0f * scale_, 0.0f, view_size_.y);
+    camera_framed_ = true;
     if (options_.look.size() == 6) {
         constexpr float kDegrees = 3.14159265f / 180.0f;
         camera_.target = {options_.look[0], options_.look[1], options_.look[2]};
@@ -4025,6 +4031,11 @@ void App::set_tab(Tab tab) {
     const auto aside = [](Tab t) { return t == Tab::Calibration || t == Tab::Device; };
     if (aside(tab) != aside(tab_) && !frame_pending_ && view_size_.y > 10.0f)
         camera_.pan((aside(tab) ? 225.0f : -225.0f) * scale_, 0.0f, view_size_.y);
+    // Between Prepare and Preview a camera left as framed frames again: the
+    // preview's legend covers the left of the view (framing leaves it out).
+    const auto shown = [](Tab t) { return t == Tab::Prepare || t == Tab::Preview; };
+    if (camera_framed_ && tab != tab_ && shown(tab) && shown(tab_))
+        frame_all();
     // Another tab leaves the printer's page, which would cover it (a slice
     // went to the preview behind the page, 2026-10-28).
     if (tab != tab_)
@@ -7202,10 +7213,12 @@ void App::viewport() {
         } else if (pressed_object_ < 0 && painting_object_ < 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
             moved_frame_ = ImGui::GetFrameCount();
+            camera_framed_ = false;
         }
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
             camera_.pan(io.MouseDelta.x, io.MouseDelta.y, view_size_.y);
             moved_frame_ = ImGui::GetFrameCount();
+            camera_framed_ = false;
         }
     }
     if (ImGui::IsItemDeactivated() && editing) {
@@ -7222,6 +7235,7 @@ void App::viewport() {
         if (io.MouseWheel != 0.0f) {
             camera_.zoom(io.MouseWheel);
             moved_frame_ = ImGui::GetFrameCount();
+            camera_framed_ = false;
         }
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             frame_all();
@@ -7274,8 +7288,10 @@ void App::view_tools() {
                 frame_all();
             } else if (t.action == -1) {
                 camera_.zoom(1.0f);
+                camera_framed_ = false;
             } else if (t.action == -2) {
                 camera_.zoom(-1.0f);
+                camera_framed_ = false;
             } else {
                 frame_all();
             }
@@ -9225,6 +9241,9 @@ void App::preview_panels() {
     }
     const ImVec2 at = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
     legend_rect_ = ImVec4(at.x, at.y, at.x + size.x, at.y + size.y);
+    if (legend_drawn_ != ImGui::GetFrameCount() - 1)
+        legend_since_ = ImGui::GetFrameCount();
+    legend_drawn_ = ImGui::GetFrameCount();
     if (legend_full_)
         legend_full_w_ = size.x;
     ImGui::End();
@@ -10879,7 +10898,11 @@ void App::frame() {
         ImGui::GetBackgroundDrawList()->AddImage(vk_view_.texture(), view_pos_,
                                                  ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
     ImGui::Render();
-    if (frame_pending_ && view_size_.x > 10.0f && view_size_.y > 10.0f)
+    // In the preview, framing waits for the legend to have its size (an
+    // auto-sized window takes two frames, the fold one more): it leaves it out.
+    const bool legend_settling = tab_ == Tab::Preview && legend_drawn_ == ImGui::GetFrameCount() &&
+                                 ImGui::GetFrameCount() - legend_since_ < 3;
+    if (frame_pending_ && view_size_.x > 10.0f && view_size_.y > 10.0f && !legend_settling)
         frame_now();
 
     int fb_w = 0, fb_h = 0;

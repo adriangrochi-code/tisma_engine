@@ -7667,3 +7667,12 @@ del «efecto visual raro» que el dueño vio con piezas grandes (V6 es del 2026-
 Pasos nuevos de `--ui-script`: `orbit DX DY` (la cámara girada como por un arrastre) y `expect-coarse yes|no`. Con la
 cúpula de 2 003 996 triángulos y captura: tras `orbit 30 0`, copia gruesa; 10 cuadros después, el modelo completo.
 Sin prueba en el CI: hace falta un modelo de más de un millón de triángulos (100 MB), que no va al repositorio.
+
+## 2026-10-29 (noche): encuadre al pasar a Vista previa
+
+Al pasar entre Preparar y Vista previa, si la cámara quedó como la dejó el último encuadre (`camera_framed_`: lo
+borran el giro, el paneo, la rueda y los botones de acercar), se encuadra de nuevo. En Vista previa el encuadre deja
+afuera la leyenda (a la izquierda) y la barra de capas (150 px a la derecha) y centra la pieza entre las dos; espera
+a que la leyenda lleve 3 cuadros dibujada (`legend_since_`), porque una ventana que se ajusta a su contenido tarda dos
+cuadros en tener su tamaño y el plegado automático uno más (en el primer cuadro medía 24 px). Mirado en capturas a
+1200 × 760: la esfera entera entre la leyenda plegada y la barra de capas. Pasan las 775 pruebas.

@@ -192,7 +192,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **La leyenda de la vista previa tapaba la barra de movimientos**, y tapaba media pieza en ventanas chicas: la barra
   va ahora a la derecha de la leyenda, o adentro de ella si no hay lugar, y un botón («−») pliega la leyenda a los tipos
   de línea solos. En una vista angosta se pliega sola (si completa taparía más del 45 % del ancho), y al encuadrar en
-  Vista previa la pieza va a lo que la leyenda deja libre.
+  Vista previa la pieza va entre la leyenda y la barra de capas; al pasar a Vista previa con la cámara sin tocar, se
+  reencuadra.
 
 - **Impresión por USB: un trabajo terminado se leía un instante como «imprimiendo al 100 %».** El progreso completo
   llega ahora junto con el fin del trabajo.
