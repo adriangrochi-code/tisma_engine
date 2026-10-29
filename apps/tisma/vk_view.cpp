@@ -59,6 +59,7 @@ struct DrawBlock {
     float extra[4] = {};
     std::uint32_t preview[4] = {};
     float range[4] = {};
+    float model[3][4] = {{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}}; // rows of an affine map of the mesh's points
 };
 
 struct CompositeBlock {
@@ -878,6 +879,9 @@ struct VulkanView::Impl {
             if (chosen > 0) {
                 copy(draw.colour, f.model_selected);
                 copy(draw.extra, f.selected_offset);
+                for (int r = 0; r < 3; ++r)
+                    for (int c = 0; c < 4; ++c)
+                        draw.model[r][c] = f.selected_model[std::size_t(4 * c + r)];
                 push(draw);
                 vkCmdDraw(c, chosen, 1, first, 0);
             }

@@ -7880,3 +7880,17 @@ Siguiente bloque: sin `bead_seen` dentro del bucle, 1370 ms (con el filtro enter
 que pesa. En llvmpipe los fragmentos van de a cuatro y una condición que cumple uno la pagan todos, así que el bucle
 cuesta casi entero; en una GPU de verdad no tiene por qué. Queda medirlo en la máquina del dueño (la barra de estado
 dice el tiempo de la vista) antes de cambiar nada.
+
+## 2026-10-29 (noche): girar y escalar modelos grandes sin rehacer la placa (sin terminar)
+
+Medido con la cúpula de 2 003 996 triángulos: cada cambio de un campo de giro o escala rehace la placa en 340 a 500 ms
+(las mallas ubicadas 110 a 145, la malla de la placa 70 a 110, los vértices de la vista 105, mandarlos 50 a 145).
+Con los deslizadores eso pasa en cada cuadro del arrastre: 2 o 3 cuadros por segundo.
+
+Primer paso: la vista dibuja el modelo elegido con una matriz (`ViewFrame::selected_model`; en OpenGL `u_model`, en
+Vulkan tres filas más en el bloque de cada dibujo, SPIR-V regenerado). Con la identidad no cambia nada: pasan las 126
+pruebas de vista, OpenGL contra Vulkan incluidas.
+
+**Sigue:** en la aplicación, mientras se arrastra un campo de giro, escala o posición de un modelo grande, poner en
+esa matriz el paso de su malla de ahora a la nueva (la caja de la malla girada sin armarla) y rehacer la placa una sola
+vez al soltar.

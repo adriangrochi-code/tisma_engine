@@ -205,12 +205,13 @@ const std::string kMeshVertex = kVersion + R"(
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 uniform mat4 u_view_projection;
+uniform mat4 u_model; // the chosen model turned and scaled before its mesh is redone; else the identity
 uniform vec3 u_offset;
 out vec3 v_position;
 out vec3 v_normal;
 void main() {
-    v_position = a_position + u_offset;
-    v_normal = a_normal;
+    v_position = (u_model * vec4(a_position, 1.0)).xyz + u_offset;
+    v_normal = mat3(u_model) * a_normal;
     gl_Position = u_view_projection * vec4(v_position, 1.0);
 }
 )";
@@ -1047,6 +1048,7 @@ std::vector<double> frame_key(const ViewFrame& f) {
     add({double(f.x), double(f.y), double(f.width), double(f.height)});
     k.insert(k.end(), f.view.begin(), f.view.end());
     k.insert(k.end(), f.projection.begin(), f.projection.end());
+    k.insert(k.end(), f.selected_model.begin(), f.selected_model.end());
     for (const Vec3 p : {f.eye, f.key, f.fill, f.sky, f.ground, f.background_top, f.background_bottom, f.plate, f.model,
                          f.model_selected, f.selected_offset})
         vec(p);
@@ -1420,6 +1422,7 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
             std::min<std::size_t>(coarse ? f.coarse_selected_count : f.selected_count, std::size_t(count - first)));
         uniform(p_.mesh, "u_colour", f.model);
         uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
+        uniform(p_.mesh, "u_model", identity());
         if (first > 0)
             glDrawArrays(GL_TRIANGLES, 0, first);
         if (first + chosen < count)
@@ -1427,8 +1430,10 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
         if (chosen > 0) {
             uniform(p_.mesh, "u_colour", f.model_selected);
             uniform(p_.mesh, "u_offset", f.selected_offset);
+            uniform(p_.mesh, "u_model", f.selected_model);
             glDrawArrays(GL_TRIANGLES, first, chosen);
             uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
+            uniform(p_.mesh, "u_model", identity());
         }
         // The paint on the same faces, pulled towards the eye in depth so it
         // wins over them.

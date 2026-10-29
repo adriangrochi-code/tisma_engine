@@ -31,6 +31,10 @@ struct ViewFrame {
     Vec3 model_selected{0.80f, 0.62f, 0.97f}; // the chosen model of the plate
     std::size_t selected_first = 0, selected_count = 0; // its vertices in the model's mesh
     Vec3 selected_offset{0, 0, 0}; // drawn this far from its mesh: a model being dragged, before its mesh is redone
+    // And turned and scaled by this (an affine map of its mesh's points): a
+    // large model while its rotation or scale field is dragged, before its
+    // mesh is redone.
+    Mat4 selected_model = identity();
     bool show_model = true;
     // The coarse copy of the model while the view moves (set_model_coarse,
     // PLAN.md V6), with the chosen model's vertices in it.
