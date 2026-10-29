@@ -84,6 +84,9 @@ std::vector<char> same_sections(const IndexedMesh& mesh, std::span<const float> 
         std::fill(same.begin(), same.end(), char(0));
         return same;
     }
+    // No level crosses what the one below does (a sphere): nothing to rule out.
+    if (std::find(same.begin(), same.end(), char(1)) == same.end())
+        return same;
     // The levels crossing an edge whose crossing moves in x and y: one of a
     // triangle that does not stand upright, with its ends apart seen from
     // above. Counted in a difference array.

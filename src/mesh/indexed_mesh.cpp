@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <bit>
 
+#include <tbb/parallel_sort.h>
+
 namespace tisma {
 namespace {
 
@@ -78,30 +80,37 @@ std::size_t orient_consistently(IndexedMesh& mesh) {
                 continue;
             uses.push_back({(std::uint64_t(std::min(a, b)) << 32) | std::max(a, b), std::uint32_t(t), a < b});
         }
-    std::sort(uses.begin(), uses.end(),
-              [](const EdgeUse& l, const EdgeUse& r) { return l.key < r.key || (l.key == r.key && l.triangle < r.triangle); });
-    // Pairs of triangles across manifold edges, and whether they agree (a
-    // shared edge runs opposite ways in two triangles wound alike).
+    // In parallel: the edges of a large mesh are millions (the order is total,
+    // so the result is the same as a sequential sort's).
+    tbb::parallel_sort(uses.begin(), uses.end(), [](const EdgeUse& l, const EdgeUse& r) {
+        return l.key < r.key || (l.key == r.key && l.triangle < r.triangle);
+    });
+    // Each manifold edge (two uses by two triangles): whether its triangles
+    // agree (a shared edge runs opposite ways in two triangles wound alike).
+    const auto each_pair = [&](auto&& visit) {
+        for (std::size_t i = 0; i < uses.size();) {
+            std::size_t j = i;
+            while (j < uses.size() && uses[j].key == uses[i].key)
+                ++j;
+            if (j - i == 2 && uses[i].triangle != uses[i + 1].triangle)
+                visit(uses[i], uses[i + 1], uses[i].forward != uses[i + 1].forward);
+            i = j;
+        }
+    };
+    bool any_disagree = false;
+    each_pair([&](const EdgeUse&, const EdgeUse&, bool agree) { any_disagree = any_disagree || !agree; });
+    if (!any_disagree)
+        return 0; // the common case: nothing to turn, and no links built
+    // Pairs of triangles across manifold edges.
     struct Link {
         std::uint32_t other;
         bool agree;
     };
     std::vector<std::vector<Link>> links(n);
-    bool any_disagree = false;
-    for (std::size_t i = 0; i < uses.size();) {
-        std::size_t j = i;
-        while (j < uses.size() && uses[j].key == uses[i].key)
-            ++j;
-        if (j - i == 2 && uses[i].triangle != uses[i + 1].triangle) {
-            const bool agree = uses[i].forward != uses[i + 1].forward;
-            links[uses[i].triangle].push_back({uses[i + 1].triangle, agree});
-            links[uses[i + 1].triangle].push_back({uses[i].triangle, agree});
-            any_disagree = any_disagree || !agree;
-        }
-        i = j;
-    }
-    if (!any_disagree)
-        return 0; // the common case: nothing to turn
+    each_pair([&](const EdgeUse& a, const EdgeUse& b, bool agree) {
+        links[a.triangle].push_back({b.triangle, agree});
+        links[b.triangle].push_back({a.triangle, agree});
+    });
     // Each connected piece: turned to agree with its first triangle, then as a
     // whole if its volume comes out negative.
     std::vector<std::int8_t> turn(n, -1); // -1 unseen, 0 keep, 1 turn
