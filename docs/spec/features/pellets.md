@@ -26,7 +26,7 @@ y 8 mm y capas de 2,5 y 4 mm. Hoy el motor las rechaza porque `layers.height` no
 - **RepRapFirmware**, `M200` (diccionario de G-code de Duet3D,
   `https://docs.duet3d.com/User_manual/Reference/Gcodes`):
   - «Daaa Sets filament diameter (or disables volumetric extrusion) for all extruders»; con D 0 se apaga;
-  - «S[bool] Enable or disable volumetric extrusion for this input channel (RepRapFirmware 3.5 and later)»;
+  - `S` (sí o no): «Enable or disable volumetric extrusion for this input channel (RepRapFirmware 3.5 and later)»;
   - con retracción del laminador, la retracción también va en mm³.
 - **Klipper:** su referencia de G-code (`https://www.klipper3d.org/G-Codes.html`) no tiene `M200`.
 - **Una persona que usa un extrusor de pellets con RepRapFirmware**, foro de Duet
