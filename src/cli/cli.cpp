@@ -619,7 +619,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     out << "write_ms: " << exported.write_seconds * 1000.0 << "\n";
     out << "check_ms: " << exported.check_seconds * 1000.0 << "\n";
     out << "gcode_check: ok (" << exported.check.stats.lines << " lines, " << exported.check.stats.layers
-        << " layers, " << exported.check.stats.filament << " mm of filament)\n";
+        << " layers, " << exported.check.stats.filament << " mm of filament net of retractions)\n";
     out << "wrote " << target.string() << "\n";
     out << "warnings: " << warnings.size() << "\n";
     if (!parsed->warnings.empty()) {

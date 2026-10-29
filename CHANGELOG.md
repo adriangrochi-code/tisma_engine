@@ -243,6 +243,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **JSON inválido (TR21):** «not valid JSON at line L, column C» o «the file is empty», en lugar del texto de la
   biblioteca.
 - **STL ASCII con BOM UTF-8 (BH17):** se lee como texto.
+- **`--copies` con una pieza que no se imprime (BH7):** da «nothing would be printed» como con una sola copia; un camino más
+  corto que `gcode.resolution` no cuenta como algo impreso.
 - **Calibración de temperatura con el calefactor apagado (BH10):** las franjas van de 150 a 500 °C (`start` 0, o un
   paso que llega a una temperatura fría, es un error), y el chequeo del G-code rechaza extruir con la boquilla en 0
   (`M104 S0` o `M109 S0` sin otra temperatura después).

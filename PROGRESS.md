@@ -8190,3 +8190,12 @@ volumen desde RRF 1.19; `S` existe recién desde 3.5, según la documentación p
 Klipper y los demás, nada y el aviso `volumetric_e`. Prueba PE4: la línea justo después del inicio, 13,6587 mm³ de E
 por mm de una pared de 6 × 2,5 mm, RRF sin `S`, Klipper con el aviso, y filamento sin `M200`.
 
+## 2026-10-29: BH7
+
+Con el archivo del equipo de fichas (un cubo de 0,15 mm al revés, más bajo que la primera capa, soportes activos):
+una copia daba «nothing would be printed» y `--copies 2` laminaba un G-code con solo la falda y un «External
+perimeter» sin extrusión. Las copias van centradas en la cama y el redondeo dejaba un camino de pared de dos puntos a
+menos de `gcode.resolution`, que el escritor junta en nada. `unprintable_reason` cuenta ahora un camino solo si mide
+más que la resolución (y que 0,01 mm). La línea del chequeo dice «mm of filament net of retractions» (el número es
+neto de las retracciones; el pie del G-code da el filamento usado). Prueba con un camino de 5 µm.
+
