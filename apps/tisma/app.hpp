@@ -56,7 +56,7 @@ struct AppOptions {
     std::string level;   // the settings panel's level: basic, normal, advanced or custom; empty: the remembered one
     std::string section; // the settings panel's section to show ("print/strength", "material/cooling"...)
     std::string search;  // a search for a setting, gone to as Enter would (settings_panel.md, rule 5)
-    bool single_column = false;   // the panel's «See all together» (rule 4)
+    bool single_column = false;   // accepted and ignored: the panel is one list always (settings_panel.md, rule 4)
     bool ortho = false;           // the view orthographic (K; preview.md, rule 10)
     bool labels = false;          // the parts' names over them (E)
     bool choose_settings = false; // with screenshot: the dialog that chooses what Custom shows (rule 16)

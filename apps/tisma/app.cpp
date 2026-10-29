@@ -628,7 +628,6 @@ private:
     // shown whatever the level until the section changes), and the dialog
     // that chooses what Custom shows, with its draft and its filter.
     CustomView custom_view_;
-    bool single_column_ = false; // without the column of section icons
     std::string jump_section_;   // a section icon clicked: the list scrolls to it next frame
     std::string search_query_;
     bool search_focus_ = false;
@@ -2576,6 +2575,10 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    // The list opens where it was left, at the section in view then
+    // (settings_panel.md, rule 3).
+    if (jump_section_.empty())
+        jump_section_ = panel_section_[std::size_t(panel_tab_)];
     // The first run: the printer and the filament from the catalog, then the
     // assistant; screenshots show help only when asked (or with --first-run).
     if ((options_.screenshot.empty() && first_run_) || options_.first_run) {
@@ -2590,8 +2593,6 @@ bool App::init(std::string& error) {
     g_open_info = options_.info;
     if (!options_.level.empty())
         choose_level(view_level_from(options_.level));
-    if (options_.single_column)
-        single_column_ = true;
     if (options_.ortho)
         camera_.orthographic = true;
     if (options_.labels)
@@ -2950,7 +2951,7 @@ void App::load_preferences() {
                             keys->insert(key.get<std::string>());
             if (view_level_ == ViewLevel::Custom && custom_view_.known.empty())
                 custom_view_ = custom_view_from(custom_view_.base);
-            single_column_ = ui.value("single_column", false);
+            // ui.single_column is retired (settings_panel.md, rule 4): one list always.
             bed_type_ = ui.value("bed_type", std::string());
             camera_.orthographic = ui.value("orthographic", false);
             if (ui.contains("section") && ui.at("section").is_array())
@@ -3014,7 +3015,6 @@ void App::save_preferences() {
         j["ui"]["custom_base"] = std::string(view_level_name(custom_view_.base));
         j["ui"]["custom_visible"] = custom_view_.visible;
         j["ui"]["custom_known"] = custom_view_.known;
-        j["ui"]["single_column"] = single_column_;
         j["ui"]["bed_type"] = bed_type_;
         j["ui"]["orthographic"] = camera_.orthographic;
         for (const auto& [printer, notes] : printer_notes_)
@@ -6049,8 +6049,10 @@ void App::settings_panel() {
             ImGui::PushStyleColor(ImGuiCol_Text, chosen ? rgb(0xFFFFFF) : rgb(theme_.text_dim));
             if (ImGui::Button(tr(title), ImVec2(tab_width, 0))) {
                 objects_tab_ = objects;
-                if (!objects)
+                if (!objects && panel_tab_ != tab) {
                     panel_tab_ = tab;
+                    jump_section_ = panel_section_[std::size_t(tab)]; // where its list was left
+                }
             }
             ImGui::PopStyleColor(3);
             ImGui::SameLine(0, gap);
@@ -6151,7 +6153,7 @@ void App::settings_panel() {
     const float footer = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
     const float column = 70.0f * scale_;
     // The column of sections (all together, none).
-    if (!single_column_) {
+    {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         ImGui::BeginChild("##sections", ImVec2(column, -footer), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar);
         for (const SectionLayout* section : sections) {

@@ -8233,3 +8233,10 @@ escritor cuenta la E de cada herramienta (`count_e`, `tool_e`), y con más de un
 `[cm3]`, `[g]` y `; filament cost` dan la lista; `total filament used [g]` y `total filament cost` siguen con el total.
 Prueba con la torre de purga de dos extrusores: dos valores, los dos mayores que 0, y los gramos suman el total.
 
+Con la ficha nueva del equipo (`settings_panel.md`, reglas 1 a 4, spec/next 2f38602; todavía no está en `main`): la
+lista abre en la sección que estaba a la vista al cerrar (`ui.section`, por pestaña), y al pasar de Impresión a
+Material y de vuelta, cada pestaña vuelve a la suya; `ui.single_column` y `--single-column` quedan retirados (se leen
+y no hacen nada). La página de la impresora ya usa las mismas tarjetas siempre abiertas; falta saber si sus
+secciones también van en una sola lista con Calibración, Conexión y Notas (pregunta al equipo de fichas). La vuelta a
+la sección guardada no tiene prueba automática: las capturas no leen las preferencias.
+
