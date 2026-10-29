@@ -20,6 +20,10 @@
 - «una interfaz cómoda, simple, pero a su vez muy capaz»;
 - «ajustes de avanzado, normal y básico» y «un modo custom en el que podamos elegir qué cosas se ven y qué cosas no».
 
+**Pedido del dueño (28-10-2026):** «en los menús de calidad no tienen que estar tan separados»; «para lo que siempre
+sale lo mismo, que sea un menú completo… que no utilice las flechas», como OrcaSlicer: el título grande y las opciones
+debajo, y se baja con la rueda. Cambia la regla 2 (antes, tarjetas plegables con flecha).
+
 **Relación con otras fichas:**
 - `interface.md`: la ventana, el panel de la placa (tarjeta Printer con Nozzle y Bed type) y las páginas de ajustes.
 - `settings_levels.md`: cómo reparte los ajustes por nivel Tisma Slicer, medido. Esta ficha fija los nombres
@@ -52,7 +56,7 @@ Van en `interface.json` (`docs/UI.md`), no en los perfiles: no cambian el G-code
 | `ui.custom_base` | `normal` | El nivel del que partió la vista propia (regla 15) |
 | `ui.custom_visible` | lista vacía | Las claves que se ven en Personalizado, por pestaña (Impresión, Material) y en la configuración de la impresora |
 | `ui.section` | `quality` | La sección elegida, por pestaña (regla 3) |
-| `ui.sections_open` | el primer apartado de cada sección | Los apartados abiertos, por pestaña (regla 2) |
+| `ui.sections_open` | — | Ya no se usa: los apartados están siempre abiertos (regla 2) |
 | `ui.single_column` | no | «Ver todo junto» (regla 4) |
 | `ui.camera_window` | — | Posición, tamaño y si estaba abierta la ventana de la cámara (regla 27) |
 
@@ -160,13 +164,18 @@ El motor toma de los dos:
      apartado **Sin ubicar** de la sección Otros, y la prueba SP1 falla hasta que se le asigne uno.
    - Capas no planares, Varios materiales y los apartados de resina solo aparecen con una impresora que los usa.
    - `compute.*` no va en el panel: es una preferencia del programa.
-2. **Cada apartado es una tarjeta plegable** con:
-   - su nombre y, cerrado, una línea de resumen con los valores más importantes, como en las tablas, calculada con
-     los valores actuales;
-   - si tiene ajustes cambiados respecto del perfil guardado, «2 cambios» en violeta al lado del nombre;
-   - una flecha que la abre o la cierra. Pueden estar varios abiertos; los abiertos se recuerdan
-     (`ui.sections_open`).
-   La primera vez, en cada sección solo está abierto el primer apartado (Altura de capa en Calidad).
+2. **Cada apartado es un bloque siempre abierto, sin flechas** (pedido del 28-10-2026):
+   - arriba, su nombre como título, en letra más grande y en negrita (16 px, contra 13 px de los ajustes), con una
+     línea fina debajo;
+   - debajo, todos sus ajustes, uno por fila, sin tarjeta alrededor y sin espacio extra entre filas (filas de 28 px);
+     entre un apartado y el siguiente, 12 px;
+   - si tiene ajustes cambiados respecto del perfil guardado, «2 cambios» en violeta al lado del título;
+   - la sección entera se recorre bajando con la rueda o la barra; no se pliega nada. El resumen de cada apartado
+     (la columna de la derecha de las tablas) se usa en la vista de una sola columna (regla 4), en la búsqueda y
+     en la lista que aparece al pasar el puntero por una sección (regla 3);
+   - en la columna de secciones, al hacer clic en una sección se va al principio de esa sección; al pasar el
+     puntero, sus apartados, y un clic en uno lleva la vista a su título;
+   - `ui.sections_open` ya no se usa: se lee si existe y se ignora.
 3. **La sección elegida** se recuerda por pestaña. En la columna de secciones, la que tiene ajustes cambiados lleva un
    punto violeta, y al pasar el puntero se ve la lista de sus apartados para ir directo a uno.
 4. **Vista de una sola columna** (diseño): un botón arriba del panel, «Ver todo junto», muestra todas las secciones
@@ -428,12 +437,12 @@ conectar desde un ícono chico en la tarjeta de la impresora que abre el menú d
 | # | Escenario | Resultado esperado |
 |---|---|---|
 | SP1 | Recorrer todas las claves de `docs/CONFIG.md` | Cada una tiene sección, apartado y nivel; ninguna cae en Sin ubicar; ningún apartado tiene más de 8 ajustes |
-| SP2 | Pestaña Impresión, primera vez | Sección Calidad elegida, con Altura de capa abierta y los demás apartados cerrados con su resumen. En Resistencia, Relleno cerrado dice «20 % · rectilíneo» |
-| SP3 | Cambiar `infill.density` a 40 y cerrar Relleno | El resumen dice «40 % · rectilíneo» y «1 cambio»; Resistencia tiene el punto en la columna de secciones |
-| SP4 | Abrir Costura y Precisión, elegir la sección Velocidad, cerrar el programa y volver a abrirlo | Se abre en Velocidad; en Calidad siguen abiertos Altura de capa, Costura y Precisión |
+| SP2 | Pestaña Impresión, primera vez | Sección Calidad elegida; todos sus apartados abiertos, cada uno con su título grande y sus ajustes debajo, sin flechas; se baja con la rueda hasta el último. Al pasar el puntero por Resistencia, Relleno dice «20 % · rectilíneo» |
+| SP3 | Cambiar `infill.density` a 40 | El título Relleno dice «1 cambio»; al pasar el puntero por Resistencia, Relleno dice «40 % · rectilíneo»; Resistencia tiene el punto en la columna de secciones |
+| SP4 | Elegir la sección Velocidad, cerrar el programa y volver a abrirlo | Se abre en Velocidad, desde el principio de la sección |
 | SP5 | `support.enabled` apagado | Soportes muestra solo el interruptor; al encenderlo aparecen los demás apartados, y los dependientes sangrados |
-| SP6 | Buscar «costura» | Se elige Calidad, se abre Costura y se ve `walls.seam` resaltado |
-| SP6b | «Ver todo junto» | Todas las secciones una debajo de otra con su título; los apartados mantienen su estado |
+| SP6 | Buscar «costura» | Se elige Calidad, la vista baja hasta el título Costura y se ve `walls.seam` resaltado |
+| SP6b | «Ver todo junto» | Todas las secciones una debajo de otra con su título, y dentro los apartados con su título; ninguna flecha |
 | SP7 | Nivel Básico, pestaña Impresión | Solo las claves de la tabla de la regla 10; al pie de Relleno, «N ajustes más…»; la sección Velocidad no aparece |
 | SP8 | En Avanzado, `infill.solid_every` a 5; pasar a Básico | Relleno muestra `infill.solid_every` con la etiqueta «Avanzado» y la flecha atrás |
 | SP9 | Laminar el mismo cubo en los cuatro niveles | Los cuatro G-code son iguales byte a byte |
