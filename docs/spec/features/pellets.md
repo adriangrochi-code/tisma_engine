@@ -106,4 +106,4 @@ Boquilla de 5 mm, capa de 2,5 mm, cordón de 6 mm, `machine.filament_diameter` 1
 | PE6 | PE3 con `machine.max_flow` 500 y `speed.walls` 60 | Paredes a 36,6 mm/s como mucho (500 / 13,6587) y un aviso |
 | PE7 | PE3 con `extrusion.flow_by_speed` `[[20, 110], [60, 100]]`, paredes a 40 mm/s | 105 % del flujo: 5,9625 mm de E por mm |
 | PE8 | Filamento de 0,4 mm con `layers.height` 2,5 | Error como hoy: la capa pasa la boquilla |
-| PE9 | Material de filamento en una impresora de pellets | Aviso; lamina igual |
+| PE9 | PE1 con un material con `extrusion.feedstock` `filament` (o sin la clave) | Aviso «Este material es de filamento y la impresora es de pellets»; lamina igual. Con `extrusion.feedstock` `pellet`, sin aviso; en una impresora de filamento, el aviso al revés |
