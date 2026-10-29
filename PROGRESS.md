@@ -7832,3 +7832,13 @@ rellenos que suben y bajan en Z). En la impresora, «No planar» después de Má
 libres, altura y radio libres, perfil). Ícono propio (`assets/icons/section_nonplanar.svg`, dos ondas, trazo gris
 como los demás). Un ícono nuevo tiene que estar en la lista `kIcons` de `apps/tisma/app.cpp`: sin eso se dibuja un
 cuadrado negro (pasó en la primera captura). Pasan las pruebas de interfaz; mirado en capturas de las dos secciones.
+
+## 2026-10-29 (noche): UI21 y UI22 (equipo de fichas)
+
+- **UI21:** lo elegido en el primer uso se perdía si el programa terminaba por SIGTERM (un cierre de sesión, un
+  apagado) o se caía: `interface.json` solo se escribía al cerrar la ventana. Ahora se escribe al agregar un perfil del
+  catálogo y al terminar el primer uso, y SIGTERM y SIGINT cierran el programa como el botón de la ventana (la ventana
+  despierta al menos cada 2 s). Prueba `ui_sigterm_keeps_preferences` (`tests/ui_sigterm.sh`): HOME vacío, SIGTERM a
+  los 6 s, sale con 0 y deja `interface.json`; con el binario de antes sale con 143 y sin preferencias.
+- **UI22:** las formas del menú de la placa se llamaban «Cubo.stl»: no tienen archivo, ahora «Cubo», «Cilindro»,
+  «Esfera».

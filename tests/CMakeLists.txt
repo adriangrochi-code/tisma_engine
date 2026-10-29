@@ -184,6 +184,12 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/plate_menu.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_plate_menu.png)
     set_tests_properties(ui_script_plate_menu PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # A SIGTERM (a logout, a shutdown) ends the program as its window's close
+    # button does: it exits with 0 and keeps the preferences (UI21).
+    add_test(NAME ui_sigterm_keeps_preferences
+      COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/ui_sigterm.sh ${CMAKE_CURRENT_BINARY_DIR}/ui_sigterm_home ${TISMA_XVFB_RUN}
+              $<TARGET_FILE:tisma>)
+    set_tests_properties(ui_sigterm_keeps_preferences PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 120)
     # The Slice button at the bottom right, then its save menu.
     add_test(NAME ui_script_slice_panel
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

@@ -71,6 +71,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <csignal>
 #include <optional>
 #include <set>
 #include <sstream>
@@ -89,6 +90,10 @@ constexpr float kFontSize = 15.0f;
 constexpr float kTitleSize = 21.0f;
 constexpr double kToastSeconds = 6.0;
 constexpr std::uint32_t kWarningColour = 0xE5A13A; // a warning in the help (an amber of its own)
+
+// Set by SIGTERM or SIGINT: the main loop ends as when the window closes.
+volatile std::sig_atomic_t g_stop_signal = 0;
+void on_stop_signal(int) { g_stop_signal = 1; }
 
 constexpr const char* kIcons[] = {
     "tisma_plate",      "tisma_print",     "tisma_filament", "tisma_printer",     "tisma_more",      "tisma_folder",
@@ -3774,6 +3779,9 @@ void App::first_run_next() {
     } else if (setup_step_ == 2) {
         setup_step_ = 0;
         tour_step_ = 0;
+        // Kept now, not only at exit: a crash or a SIGTERM would lose it (UI21).
+        if (options_.screenshot.empty())
+            save_preferences();
     }
 }
 
@@ -3801,6 +3809,9 @@ void App::add_catalog_profile(const Profile& catalog) {
         user_profiles_[std::size_t(profile.kind)].push_back(profile);
     if (const Profile* saved = find_profile(profile.kind, profile.name))
         choose_profile(profile.kind, *saved);
+    // The choice kept at once, as the profile itself is (UI21).
+    if (options_.screenshot.empty())
+        save_preferences();
     // The catalog's printers have no speeds of their own (printer_profile).
     notify(format(tr(profile.kind == ProfileKind::Printer ? T::CatalogSpeedFallback : T::ProfileAdded),
                   shown_name(profile.name).c_str()));
@@ -7502,7 +7513,7 @@ void App::plate_menu() {
 
 // A shape from the Add menu, named after it, on the plate.
 void App::add_shape(TriangleMesh mesh, T name) {
-    add_mesh(std::move(mesh), from_utf8(std::string(tr(name)) + ".stl"));
+    add_mesh(std::move(mesh), from_utf8(tr(name))); // no file, so no ending (UI22)
 }
 
 void App::object_menu() {
@@ -11358,7 +11369,12 @@ int App::run() {
         shutdown();
         return 1;
     }
-    while (!glfwWindowShouldClose(window_) && !quit_)
+    // A logout or a shutdown (SIGTERM) and Ctrl+C end the program as its
+    // window's close button does, so the preferences are saved (UI21). The
+    // window wakes at least every 2 s, which bounds the wait.
+    std::signal(SIGTERM, on_stop_signal);
+    std::signal(SIGINT, on_stop_signal);
+    while (!glfwWindowShouldClose(window_) && !quit_ && !g_stop_signal)
         frame();
     shutdown();
     return failed_ ? 1 : 0;
