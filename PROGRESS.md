@@ -7859,3 +7859,15 @@ dentro de la leyenda) tapaba «Exportar G-code» y el botón de su menú: los do
 el panel va encima de la barra (`moves_top_`, la altura de su ventana en este cuadro). Paso nuevo de `--ui-script`:
 `expect-apart A B` (dos controles con nombre en pantalla, ninguno sobre el otro); la barra se llama `moves`. La prueba
 `ui_script_slice_panel` pasa a 1440 × 900 y lo comprueba; con el panel otra vez en la esquina, falla («they overlap»).
+
+## 2026-10-29 (noche): el costo del filtro de moiré, medido (sin cambio)
+
+Esfera ×4 sobre llvmpipe, OpenGL, oclusión ambiental, 1200 × 760, a 700 mm: con el filtro 1419 ms por cuadro, sin
+él 1003 ms (un 29 %). Dos ideas descartadas por la medición:
+- Pasar el promedio de las 16 muestras al sombreador de vértices (es por cordón salvo la dirección de la mirada): a esa
+  distancia cada cordón ocupa menos de un píxel, y sus 18 vértices harían más cuentas que sus píxeles.
+- 8 muestras en vez de 16: 1494 → 1378 ms a 700 mm y lo mismo a 400 mm (2088 → 2099); la imagen casi igual (ningún
+  píxel más de 24). No paga lo que cambia.
+
+**Sigue:** medir qué parte del sombreador pesa (las derivadas, `bead_seen` con sus `asin` y `atan`) antes de tocar
+otra cosa; con las capas juntas de lejos, el filtro ya trabaja sobre menos cordones.
