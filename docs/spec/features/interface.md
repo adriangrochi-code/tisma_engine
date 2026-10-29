@@ -84,6 +84,13 @@ overlap, Iron flow, Iron spacing / Iron speed, Strength, Dimensions, Correction,
 calibra sola la primera capa, no aparece esa prueba. Con una de resina, solo las de resina (`resin.md`). Los mismos
 modelos de prueba se ofrecen con el clic derecho sobre la cama.
 
+**Mover, Rotar y Escalar con deslizadores** (pedido del dueño, 28-10-2026: «sliders y formas más cómodas visuales»):
+cada tarjeta muestra el valor con su campo y, debajo, un deslizador. Mover: X e Y entre los bordes de la cama, Z desde
+la cama. Rotar: cada eje entre −180° y 180°, con marcas cada 45°. Escalar: entre 10 % y 400 % (con el teclado se
+puede escribir más), y el candado de escala pareja. Al arrastrar, la pieza se mueve en la vista en el momento y el
+cambio entra en el deshacer al soltar. Si la pieza se borra con la tarjeta abierta, la tarjeta se cierra (prueba
+UI11).
+
 ### Placa
 
 - **Vista 3D:** ocupa todo el ancho que deja el panel. Fondo oscuro en los dos temas (degradé de `#1C1C21` arriba a
@@ -136,6 +143,15 @@ modelos de prueba se ofrecen con el clic derecho sobre la cama.
 
    El menú de la flecha muestra solo las salidas posibles, con la elegida marcada (captura `31_main_button_menu.png`).
 4. Con «Slice automatically», el paso 2 no hace falta.
+6. **Dónde va** (pedido del dueño, 28-10-2026: «el botón de laminar abajo a la derecha, tipo como lo tiene Cura»; «al
+   laminar vaya automáticamente a vista previa»):
+   - el botón principal vive en un panel flotante abajo a la derecha de la vista 3D, no en la barra de arriba;
+   - después de laminar, el panel muestra el tiempo y el material estimados arriba y, abajo, la salida elegida con su
+     flecha (regla 3) y el menú con «Enviar a la impresora» y «Guardar el proyecto» (`project_save.md`);
+   - al terminar un laminado pedido con el botón, la vista pasa sola a Vista previa. Con «Slice automatically» no se
+     cambia de vista (sería molesto con cada cambio de ajuste);
+   - en Vista previa, el deslizador de movimientos termina a la izquierda del panel y nunca lo tapa (prueba UI10);
+   - en modo táctil, el panel es la barra de abajo de `accessibility_touch.md`.
 5. **Relaminar por etapas** (diseño; Tisma Slicer hace algo parecido; meta RV5 de `BENCHMARKS.md`): un cambio rehace solo lo que depende de
    ese ajuste, y el resultado es el mismo que el de un laminado completo.
 
@@ -386,6 +402,8 @@ Escenarios para comprobar en la pantalla, como se observaron en Tisma Slicer.
 | UI7 | Laminar | Aparecen la vista previa con su leyenda y deslizadores y la tarjeta Sliced Info; botón principal «Export G-code» con su flecha; barra de estado con tiempo, peso y costo |
 | UI8 | Flecha del botón principal, sin impresoras conectadas | Solo «Export G-code», marcada |
 | UI9 | Esconder el panel | La vista 3D ocupa todo el ancho; abajo a la derecha flotan «<<», el botón principal y su flecha |
+| UI10 | Laminar un cubo con el botón, ventana de 1440 × 900 | La vista pasa sola a Vista previa; el panel de abajo a la derecha muestra tiempo y material, la salida y su menú; el deslizador de movimientos termina antes del panel, sin taparlo |
+| UI11 | Seleccionar una pieza y abrir Mover, Rotar y Escalar | Cada valor tiene debajo un deslizador: X e Y entre los bordes de la cama, Z de la rotación entre −180° y 180°, la escala entre 10 % y 400 % (más con el teclado); al arrastrar, la pieza se mueve en la vista en el momento; con la pieza borrada, la tarjeta se cierra y nada se cuelga |
 | UI10 | Página Print en modo Simple | Pocas páginas (capas y perímetros, relleno, falda y borde, soportes) y, abajo a la izquierda, el aviso de modo Simple con «Mostrar todos los ajustes» |
 | UI11 | Calibrar con una impresora que calibra sola la primera capa | Sin la prueba de primera capa |
 | UI12 | Ingeniería > Analysis sin apoyos ni cargas | «Analyze» apagado, con «Add a fixed face and a load.» |
