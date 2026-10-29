@@ -911,7 +911,7 @@ struct VulkanView::Impl {
             const Mat4 clip = f.projection * f.view;
             // From far, where a layer is under a quarter of a pixel high, the
             // walls of a group of layers are drawn as one (merged_layers).
-            const bool whole = preview_whole(orders.full, lo, hi, f.kind_mask, f.top_shown, f.top_hidden);
+            const bool whole = preview_far(orders.full, lo, hi, f.kind_mask, f.top_shown, f.top_hidden);
             const int group =
                 whole ? far_group(layer_pixels(f.projection, f.height, f.eye, preview_lo, preview_hi, layer_height)) : 1;
             const PreviewDrawOrder* walls = orders.far_walls(group, whole);

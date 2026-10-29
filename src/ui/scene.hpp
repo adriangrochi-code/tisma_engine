@@ -207,6 +207,12 @@ inline constexpr std::size_t kWholeLayer = std::size_t(-1);
 // the part hides stays out.
 bool preview_whole(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi, std::uint32_t kind_mask,
                    std::size_t top_shown = kWholeLayer, std::size_t top_hidden = kWholeLayer);
+// Whether a far-away order (merged_layers, other_than_walls) may stand for
+// those layers: all of the part, or every layer uncut when the preview marks
+// nothing hidden (a G-code file opened to view: the legend's kinds are then
+// left out by the shader, as in the full order).
+bool preview_far(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi, std::uint32_t kind_mask,
+                 std::size_t top_shown = kWholeLayer, std::size_t top_hidden = kWholeLayer);
 std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
                                            std::uint32_t kind_mask, std::size_t top_shown = kWholeLayer,
                                            std::size_t top_hidden = kWholeLayer);

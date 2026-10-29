@@ -688,6 +688,17 @@ PreviewDrawOrder other_than_walls(const PreviewDrawOrder& order) {
     return out;
 }
 
+bool preview_far(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi, std::uint32_t kind_mask,
+                 std::size_t top_shown, std::size_t top_hidden) {
+    if (order.layer_shown.size() < 2 || order.layer_hidden.size() != order.layer_shown.size())
+        return false;
+    const std::size_t layers = order.layer_shown.size() - 1;
+    const bool nothing_hidden = order.layer_hidden.back() == order.layer_hidden.front();
+    return preview_whole(order, lo, hi, kind_mask, top_shown, top_hidden) ||
+           (nothing_hidden && lo == 0 && std::min(hi, layers - 1) == layers - 1 && top_shown == kWholeLayer &&
+            top_hidden == kWholeLayer);
+}
+
 int far_group(float layer_pixels) {
     int group = 1;
     while (group < kFarGroups && layer_pixels * float(group * 2) <= 0.5f)

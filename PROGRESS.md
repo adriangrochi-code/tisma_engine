@@ -7810,3 +7810,9 @@ de 24 (máximo 23); a 2600 mm, grupos de 4, 483 → 294 ms (máximo 8); de cerca
 `--bench-frames` dice el grupo dibujado («layers by N») en las dos vistas.
 
 **Falta:** medir con una pieza grande de verdad y el mallado voraz.
+
+Pieza grande: el G-code de la esfera de 200 mm (`bench/s200.gcode`, 1000 capas, 569 113 cordones a la vista) abierto en
+el visor nunca junta capas, ni a 3200 mm: las versiones de lejos se arman, pero la condición «toda la pieza» no se
+cumple. `preview_far` ya acepta las vistas sin nada marcado como tapado (prueba nueva), pero este G-code sí tiene
+cordones tapados y la leyenda deja afuera algún tipo. Contar como dibujados los tipos que la pieza no tiene rompía las
+pruebas del orden de dibujo y no lo arreglaba: queda para el próximo bloque ver qué tipo es.

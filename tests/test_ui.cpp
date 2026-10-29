@@ -1006,3 +1006,19 @@ TEST_CASE("preview: the group of layers drawn as one by a layer's size on the sc
     CHECK(far_group(0.05f) == 4);
     CHECK(far_group(0.01f) == 4);
 }
+
+TEST_CASE("preview: the far-away order stands for every layer uncut when nothing is hidden", "[ui][preview]") {
+    PreviewBuffers p;
+    p.layer_extrusions.push_back(0);
+    for (std::uint32_t l = 0; l < 4; ++l) {
+        const float z = 0.2f * float(l + 1);
+        p.extrusions.push_back({0, 0, z, 10, 0, z, 0.4f, 0.2f, 30, std::uint32_t(LineKind::OuterWall) | (l << 8)});
+        p.layer_extrusions.push_back(p.extrusions.size());
+    }
+    const PreviewDrawOrder order = preview_draw_order(p); // nothing marked hidden, as a G-code file
+    const std::uint32_t some = 1u << unsigned(LineKind::OuterWall);
+    CHECK_FALSE(preview_whole(order, 0, 3, some));
+    CHECK(preview_far(order, 0, 3, some));
+    CHECK_FALSE(preview_far(order, 0, 2, some));    // a cut from the top
+    CHECK_FALSE(preview_far(order, 0, 3, some, 0)); // the move slider
+}

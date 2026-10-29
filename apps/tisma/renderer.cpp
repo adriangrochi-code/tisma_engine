@@ -1460,7 +1460,7 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
     // the nearest layers first, for the depth test.
     // From far, where a layer is under half a pixel high, the walls of a group
     // of layers are drawn as one (merged_layers).
-    const bool whole = preview_whole(orders_.full, lo, hi, f.kind_mask, f.top_shown, f.top_hidden);
+    const bool whole = preview_far(orders_.full, lo, hi, f.kind_mask, f.top_shown, f.top_hidden);
     const int group = whole && preview_box_
                           ? far_group(layer_pixels(f.projection, f.height, f.eye, preview_lo_, preview_hi_, layer_height_))
                           : 1;
