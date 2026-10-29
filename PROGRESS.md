@@ -8399,3 +8399,56 @@ Boost.
 - Soldar en paralelo: unos 80 ms.
 - `hypot` por `sqrt` en las distancias del Voronoi: 8 % de las instrucciones; cambia el último bit.
 
+## 2026-10-29: piezas grandes, segunda vuelta (pedido del dueño)
+
+El dueño pidió seguir mejorando el rendimiento en modelos grandes. Se midió por fases en la esfera de un millón de
+triángulos, con el reloj y el tiempo de CPU de cada fase (relojes puestos a mano solo para medir), y se fue por los
+tramos que corrían en un solo núcleo. Al empezar la vuelta:
+
+| Fase | Reloj | CPU |
+|---|---|---|
+| Paredes | 593 ms | 2330 ms (3,9 veces: bien repartida) |
+| Cortar las capas | 210 ms | 390 ms |
+| Orientar | 100 ms | 250 ms |
+| Contorno de los objetos, después de laminar | ~85 ms | un núcleo |
+| Leer | ~85 ms | un núcleo |
+| Soldar | ~110 ms | un núcleo |
+| Escribir | ~185 ms | un núcleo |
+
+**Hecho** (el G-code de la esfera, del Benchy y de la esfera chica, igual byte a byte salvo donde se dice):
+- **`sqrt` en lugar de `std::hypot`** en las distancias del diagrama de Voronoi. `hypot` era un octavo de las
+  instrucciones, y protege de un desborde que estas coordenadas no alcanzan. Cambia el último decimal en 2 líneas de
+  la esfera y 12 del Benchy. Pasan la prueba contra Boost y las del diagrama. Esfera: de 1,60–1,72 a 1,44–1,56 s.
+- **Soldar en paralelo** desde 300 000 esquinas: una tabla compartida con compare-and-swap, que guarda la primera
+  esquina de cada punto, y una suma prefija que numera igual que la versión en serie. Pasa de 120–145 a 95–110 ms; lo
+  limita la memoria, no los núcleos. Una prueba compara las dos versiones.
+- **Orientar:** armar las aristas y buscar las que no coinciden, en paralelo. Pasa de 95 a 80–90 ms: ahora lo limita
+  el ordenamiento, que recorre memoria.
+- **Cortar las capas:** los rangos de nivel de cada triángulo y el agrupado por nivel, en paralelo. El agrupado va por
+  32 trozos fijos, así que el orden dentro de cada nivel es el mismo con cualquier cantidad de hilos. Pasa de 210 a
+  145 ms.
+- **El contorno de cada objeto:** después de laminar se copiaba la malla entera del objeto (un millón de triángulos) y
+  se ordenaban todos sus vértices en un núcleo, solo para su altura y su contorno. Ahora se toman los vértices tal
+  como están, y la envolvente descarta antes de ordenar los puntos que quedan dentro del octógono de los extremos (Akl
+  y Toussaint 1978). Unos 80 ms menos. Prueba nueva con 20 000 puntos.
+
+**Probado y descartado:**
+- Resolver el Voronoi por tramos continuos cambia la costura en 4 capas de la esfera, y en ellas la pared interior es
+  más corta: hay un cambio real de geometría que las pruebas del diagrama no ven.
+- Un conjunto hash lineal para orientar no gana nada frente al ordenamiento, porque lo limita la memoria.
+- El asignador de memoria de oneTBB (`tbbmalloc`) en lugar del del sistema: sin diferencia medible (1,37–1,67 contra
+  1,44–1,94 s).
+
+**Medido** (4 núcleos, corridas alternadas, comando `slice` completo):
+
+| | Antes de hoy | Lo subido al mediodía | Ahora |
+|---|---|---|---|
+| Esfera de 1 millón de triángulos | 2,01 a 2,21 s | 1,63 a 1,93 s | 1,45 a 1,60 s |
+
+Pasan las 695 pruebas del motor.
+
+**Sigue:**
+- Las paredes son el 40 % del tiempo, aunque ya usan bien los núcleos. Queda entender por qué una raíz casi plana
+  elegida distinto cambia la pared, y buscar menos pasos en `locate`.
+- Leer el STL y escribir el G-code siguen en un núcleo: ~85 y ~185 ms.
+

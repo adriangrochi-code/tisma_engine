@@ -127,10 +127,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
-- **Piezas grandes más rápidas:** la esfera de un millón de triángulos lamina en unos 1,6 s en lugar de 1,9 s, con
-  el mismo G-code. Orientar los triángulos no arma listas que no necesita y ordena en paralelo; las capas que no se
-  repiten no recorren la malla otra vez; el diagrama de Voronoi de las paredes calcula exacto dónde termina un
-  segmento nuevo en vez de buscarlo.
+- **Piezas grandes más rápidas:** la esfera de un millón de triángulos lamina en 1,45 a 1,6 s, cuando antes tardaba de
+  2,0 a 2,2 s, con el mismo G-code salvo algún último decimal. Cambios:
+  - Orientar los triángulos ya no arma listas que no necesita, y ordena en paralelo.
+  - Soldar los vértices, agrupar los triángulos por capa y armar las aristas usan todos los núcleos.
+  - Las capas que no se repiten no recorren la malla otra vez.
+  - El diagrama de Voronoi de las paredes calcula exacto dónde termina un segmento nuevo, y mide distancias sin
+    `hypot`.
+  - El contorno de cada objeto en la cama se saca sin copiar su malla.
 - **El panel de ajustes es una sola lista** que se recorre con la barra o la rueda (pedido del dueño): cada sección con
   su título y sus tarjetas siempre abiertas, sin plegar; los íconos de la izquierda llevan a cada sección. El nivel
   Personalizado sigue eligiendo qué ajustes se ven. Sin recuadros grises: títulos y ajustes sobre el fondo del panel, y
