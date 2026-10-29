@@ -11174,8 +11174,8 @@ void App::frame() {
             view_ms_ = view_ms_ > 0.0 ? 0.9 * view_ms_ + 0.1 * ms : ms; // smoothed
         if (options_.bench_frames > 0 && !benched_ && settled_frames_ >= 2) {
             const double ms = vk_view_.bench(f, options_.bench_frames);
-            std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn, Vulkan); preview buffers %.0f ms\n",
-                        ms, options_.bench_frames, vk_view_.drawn_extrusions(), preview_ms_);
+            std::printf("view: %.2f ms per frame (%d frames, %zu extrusions drawn, layers by %d, Vulkan); preview buffers %.0f ms\n",
+                        ms, options_.bench_frames, vk_view_.drawn_extrusions(), vk_view_.drawn_group(), preview_ms_);
             std::fflush(stdout);
             benched_ = true;
         }

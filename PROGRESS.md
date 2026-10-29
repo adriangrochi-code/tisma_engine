@@ -7803,3 +7803,10 @@ instancias: 5,2 → 9,1 MB (las paredes de cada grupo se guardan otra vez). Los 
 más de 2,6 m y costaban más memoria: no se arman.
 
 **Falta:** Vulkan (sigue dibujando todas las capas), medir con una pieza grande de verdad y el mallado voraz.
+
+Siguiente bloque: lo mismo en Vulkan (`vk_view.cpp`). Misma esfera, mismas cámaras, binario de antes contra el de
+ahora (con la CI corriendo en la misma máquina): a 1400 mm, grupos de 2, 581 → 416 ms, 0 píxeles distintos en más
+de 24 (máximo 23); a 2600 mm, grupos de 4, 483 → 294 ms (máximo 8); de cerca, la misma imagen y el mismo tiempo.
+`--bench-frames` dice el grupo dibujado («layers by N») en las dos vistas.
+
+**Falta:** medir con una pieza grande de verdad y el mallado voraz.
