@@ -50,6 +50,7 @@ struct FrameBlock {
     std::int32_t flags[4];
     float grid[4];
     float colours[16][4];
+    float face_eye[4]; // what the preview's drawn faces face (preview_face_eye)
 };
 
 // Each draw's values, as view_common.glsl's Draw push constants.
@@ -792,6 +793,8 @@ struct VulkanView::Impl {
         fb.grid[0] = grid_step, fb.grid[1] = float(grid_major_every);
         for (std::size_t k = 0; k < kLineKinds && k < 16; ++k)
             copy(fb.colours[k], f.kind_colours[k], 1.0f);
+        const std::array<float, 4> face_eye = preview_face_eye(f);
+        std::memcpy(fb.face_eye, face_eye.data(), sizeof fb.face_eye);
         std::memcpy(uniforms[slot].mapped, &fb, sizeof fb);
 
         VkClearValue clears[3] = {};
@@ -902,7 +905,7 @@ struct VulkanView::Impl {
             bind(Preview, &extrusions_v);
             push(draw);
             for (const PreviewRange& r : preview_draws(order, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden)) {
-                vkCmdDraw(c, 36, std::uint32_t(r.count), 0, std::uint32_t(r.first));
+                vkCmdDraw(c, kPreviewVertices, std::uint32_t(r.count), 0, std::uint32_t(r.first));
                 drawn += r.count;
             }
             if (f.show_travels && travel_count > 0 && layer_travels.size() > hi + 1) {

@@ -4,8 +4,8 @@
 // One extrusion per instance, expanded into a prism around the move, as
 // renderer.cpp's kPreviewVertex: the cross-section a rhombus as wide as the
 // line and as high as the layer, hanging under the nozzle's path; a joined end
-// on the mitre plane, a free end half a width past the point with its cap. 36
-// vertices: four sides of two triangles and two ends of two triangles.
+// on the mitre plane, a free end half a width past the point with its cap. 18
+// vertices: the two sides and the end turned to the eye, two triangles each.
 layout(location = 0) in vec3 a_p0;
 layout(location = 1) in vec3 a_p1;
 layout(location = 2) in vec2 a_size;
@@ -57,11 +57,7 @@ void main() {
     v_neighbours = vec2(0.0);
     bool joined0 = dot(a_join.xy, a_join.xy) > 0.25, joined1 = dot(a_join.zw, a_join.zw) > 0.25;
     int id = gl_VertexIndex;
-    bool hidden = (draw.preview.x & (1u << kind)) == 0u || len <= 0.0;
-    // A joined end has no cap: the next move's side goes on from it.
-    if (id >= 24 && ((id - 24) / 6 == 0 ? joined0 : joined1))
-        hidden = true;
-    if (hidden) {
+    if ((draw.preview.x & (1u << kind)) == 0u || len <= 0.0) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // outside the view: the triangle is dropped
         return;
     }
@@ -71,17 +67,51 @@ void main() {
     vec3 up = cross(side, dir);
     float w = a_size.x, h = a_size.y;
 
+    // Of the convex prism, only what faces the eye (frame.face_eye: a point
+    // with w 1, a direction towards it with w 0): at most two of the four sides,
+    // which are parallel in pairs, and one end; the others are behind them.
+    // Vertices 0 to 11: those sides; 12 to 17: that end, if it is free (a
+    // joined end has no cap: the next move's side goes on from it).
+    vec3 mid = 0.5 * (a_p0 + a_p1);
+    int face = -1, end = 0;
+    if (id < 12) {
+        int seen = 0;
+        for (int k = 0; k < 4; ++k) {
+            vec2 a = kCorner[k], b = kCorner[(k + 1) % 4];
+            vec3 n = side * ((a.x + b.x) * h) + up * ((a.y + b.y) * w);
+            vec3 on = mid + side * (a.x * 0.5 * w) + up * (a.y * 0.5 * h - 0.5 * h);
+            vec3 to = frame.face_eye.w > 0.5 ? frame.face_eye.xyz - on : frame.face_eye.xyz;
+            if (dot(n, to) > 0.0) {
+                if (seen == id / 6)
+                    face = k;
+                ++seen;
+            }
+        }
+    } else {
+        for (int e = 0; e < 2 && face < 0; ++e) {
+            vec3 outwards = e == 0 ? -dir : dir;
+            vec3 on = (e == 0 ? a_p0 : a_p1) + outwards * (0.5 * w);
+            vec3 to = frame.face_eye.w > 0.5 ? frame.face_eye.xyz - on : frame.face_eye.xyz;
+            if (!(e == 0 ? joined0 : joined1) && dot(outwards, to) > 0.0) {
+                face = 4;
+                end = e;
+            }
+        }
+    }
+    if (face < 0) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+    }
+
     vec2 c;
-    int end;
     vec3 normal;
-    if (id < 24) {
+    if (face < 4) {
         ivec2 q = kQuad[id % 6];
-        c = kCorner[(id / 6 + q.y) % 4];
+        c = kCorner[(face + q.y) % 4];
         end = q.x;
         normal = normalize(side * c.x * h + up * c.y * w);
     } else {
-        end = (id - 24) / 6;
-        c = kCorner[kCap[(id - 24) % 6]];
+        c = kCorner[kCap[(id - 12) % 6]];
         normal = end == 0 ? -dir : dir;
         v_cap = 1.0;
     }

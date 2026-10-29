@@ -231,8 +231,9 @@ void main() {
 // hanging under the nozzle's path. Where the bead goes on into the next move
 // (a join, PreviewInstance), the end lies on the plane halfway between the two
 // directions and both moves share its corners (a mitre); a free end grows by
-// half a width, as the bead does past the nozzle, and gets its cap. 36
-// vertices: four sides of two triangles and two ends of two triangles.
+// half a width, as the bead does past the nozzle, and gets its cap. Of the
+// four sides and two ends, only the two sides and the end turned to the eye are
+// drawn (the others are behind them): 18 vertices, two triangles a face.
 //
 // The rhombus only gives the depth (two neighbours meet along a line, never on
 // a shared face, so nothing flickers); the light follows the profile of a
@@ -298,6 +299,7 @@ uniform int u_colour_mode;
 uniform vec2 u_range;
 uniform uvec2 u_layers; // the first and the last layer shown
 uniform int u_grooves;  // the beads' grooves (not with ray tracing, whose rays see the neighbours)
+uniform vec4 u_face_eye; // what the drawn faces face: the eye (w 1), or towards an orthographic one (w 0)
 out vec3 v_base;
 out vec3 v_normal;
 out vec3 v_position;
@@ -342,11 +344,7 @@ void main() {
     v_cap = 0.0;
     bool joined0 = dot(a_join.xy, a_join.xy) > 0.25, joined1 = dot(a_join.zw, a_join.zw) > 0.25;
     int id = gl_VertexID;
-    bool hidden = (u_kind_mask & (1u << kind)) == 0u || len <= 0.0;
-    // A joined end has no cap: the next move's side goes on from it.
-    if (id >= 24 && ((id - 24) / 6 == 0 ? joined0 : joined1))
-        hidden = true;
-    if (hidden) {
+    if ((u_kind_mask & (1u << kind)) == 0u || len <= 0.0) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // outside the view: the triangle is dropped
         return;
     }
@@ -356,22 +354,54 @@ void main() {
     vec3 up = cross(side, dir);
     float w = a_size.x, h = a_size.y;
 
+    // Of the convex prism, only what faces the eye (u_face_eye: a point with w
+    // 1, a direction towards it with w 0): at most two of the four sides,
+    // which are parallel in pairs, and one end; the others are behind them.
+    // Vertices 0 to 11: those sides; 12 to 17: that end, if it is free (a
+    // joined end has no cap: the next move's side goes on from it).
+    vec3 mid = 0.5 * (a_p0 + a_p1);
+    int face = -1, end = 0;
+    if (id < 12) {
+        int seen = 0;
+        for (int k = 0; k < 4; ++k) {
+            vec2 a = kCorner[k], b = kCorner[(k + 1) % 4];
+            vec3 n = side * ((a.x + b.x) * h) + up * ((a.y + b.y) * w);
+            vec3 on = mid + side * (a.x * 0.5 * w) + up * (a.y * 0.5 * h - 0.5 * h);
+            vec3 to = u_face_eye.w > 0.5 ? u_face_eye.xyz - on : u_face_eye.xyz;
+            if (dot(n, to) > 0.0) {
+                if (seen == id / 6)
+                    face = k;
+                ++seen;
+            }
+        }
+    } else {
+        for (int e = 0; e < 2 && face < 0; ++e) {
+            vec3 outwards = e == 0 ? -dir : dir;
+            vec3 on = (e == 0 ? a_p0 : a_p1) + outwards * (0.5 * w);
+            vec3 to = u_face_eye.w > 0.5 ? u_face_eye.xyz - on : u_face_eye.xyz;
+            if (!(e == 0 ? joined0 : joined1) && dot(outwards, to) > 0.0) {
+                face = 4;
+                end = e;
+            }
+        }
+    }
+    if (face < 0) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+    }
+
     vec2 c;
-    int end;
     vec3 normal;
-    if (id < 24) {
+    if (face < 4) {
         ivec2 q = kQuad[id % 6];
-        c = kCorner[(id / 6 + q.y) % 4];
+        c = kCorner[(face + q.y) % 4];
         end = q.x;
         normal = normalize(side * c.x * h + up * c.y * w);
     } else {
-        end = (id - 24) / 6;
-        c = kCorner[kCap[(id - 24) % 6]];
+        c = kCorner[kCap[(id - 12) % 6]];
         normal = end == 0 ? -dir : dir;
         v_cap = 1.0;
     }
-    // The corner around the end's point, then along the move to its end plane:
-    // the mitre plane at a join, half a width past the point at a free end.
     vec3 offset = side * (c.x * 0.5 * w) + up * (c.y * 0.5 * h - 0.5 * h);
     vec3 point = end == 0 ? a_p0 : a_p1;
     bool joined = end == 0 ? joined0 : joined1;
@@ -1031,6 +1061,16 @@ std::vector<double> frame_key(const ViewFrame& f) {
     return k;
 }
 
+std::array<float, 4> preview_face_eye(const ViewFrame& f) {
+    // An orthographic projection keeps w: its last row is (0, 0, 0, 1).
+    if (f.projection[11] == 0.0f && f.projection[15] == 1.0f) {
+        // The view's third row: from what is looked at towards the eye.
+        const Vec3 back = normalize(Vec3{f.view[2], f.view[6], f.view[10]});
+        return {back.x, back.y, back.z, 0.0f};
+    }
+    return {f.eye.x, f.eye.y, f.eye.z, 1.0f};
+}
+
 bool Renderer::init(std::string& error) {
     struct Source {
         unsigned* target;
@@ -1413,6 +1453,7 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         uniform(p, "u_colour_mode", static_cast<int>(f.color_mode));
         uniform(p, "u_moire", f.moire_filter ? 1 : 0);
         uniform(p, "u_grooves", f.mode == RenderMode::RayTraced ? 0 : 1);
+        glUniform4f(at(p, "u_face_eye"), face_eye_[0], face_eye_[1], face_eye_[2], face_eye_[3]);
         glUniform2ui(at(p, "u_layers"), static_cast<GLuint>(lo), static_cast<GLuint>(hi));
         if (f.color_mode == ColorMode::Speed)
             uniform(p, "u_range", min_feed_, max_feed_);
@@ -1442,7 +1483,7 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
         glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, stride, offset(base + offsetof(PreviewInstance, join0_x)));
         for (GLuint a = 0; a < 6; ++a)
             glVertexAttribDivisor(a, 1);
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 36, static_cast<GLsizei>(count));
+        glDrawArraysInstanced(GL_TRIANGLES, 0, kPreviewVertices, static_cast<GLsizei>(count));
         if (!gbuffer)
             drawn_extrusions_ += count;
     }
@@ -1479,7 +1520,10 @@ void Renderer::shadow_pass(const ViewFrame& f) {
     glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
     glViewport(0, 0, shadow_size_, shadow_size_);
     glClear(GL_DEPTH_BUFFER_BIT);
+    const std::array<float, 4> eye = face_eye_;
+    face_eye_ = {f.key.x, f.key.y, f.key.z, 0.0f}; // the faces the light sees
     draw_scene(f, shadow_vp_, true, white_, true);
+    face_eye_ = eye;
     glViewport(0, 0, width_, height_);
     shadowed_ = true;
 }
@@ -1566,6 +1610,7 @@ void Renderer::draw(const ViewFrame& f) {
 
     // Nothing changed since the last picture (and no rays averaging): that
     // picture again, without the scene.
+    face_eye_ = preview_face_eye(f);
     std::vector<double> key = frame_key(f);
     const bool averaging = f.mode == RenderMode::RayTraced && has_ray_scene() && ray_samples_ < f.max_ray_samples;
     if (key != drawn_ || averaging) {

@@ -7541,3 +7541,22 @@ por cuadro a 1; en el mismo tiempo, 2 290 cuadros en vez de 150. Prueba nueva `u
 
 **No medido:** Vulkan en una placa de verdad (acá lavapipe; las pruebas de Vulkan pasan, pero `--draw-stats` cuenta
 solo OpenGL). **Sigue:** paso 1 con los datos del equipo de fichas; paso 3, menos vértices por cordón.
+
+## 2026-10-29: vista previa paso a paso, paso 3 (la mitad de los vértices)
+
+Cada cordón era un prisma de 36 vértices: cuatro costados y dos puntas, todos dibujados. Los costados del rombo son
+paralelos de a pares, así que desde un punto se ven a lo sumo dos, y una sola punta: el shader de vértices (OpenGL y
+Vulkan, la misma lógica) elige esas caras con el signo de la normal por el vector hacia el ojo, y dibuja 18 vértices
+(`kPreviewVertices`). Con una cámara ortográfica cuenta la dirección hacia el ojo (`preview_face_eye`, por la última
+fila de la proyección); en el mapa de sombras, la dirección hacia la luz.
+
+**La imagen:** capturas de la esfera de 80 mm laminada, antes y después, comparadas píxel por píxel sin la barra de
+estado (que trae el tiempo de la vista): de costado con oclusión, en ortográfica y con Vulkan, 0 píxeles distintos;
+de cerca en `fast`, con rayos y con Vulkan casi al ras de la cama, 8, 4 y 27 píxeles sueltos en bordes (empates de
+profundidad). Con la cámara adentro de la pieza (la vista desde arriba a 70 mm, dentro de la esfera) cambia una banda:
+antes se veían las caras de atrás de un cordón cortado por el plano cercano, ahora no.
+
+**Medido** (OpenGL, llvmpipe, 1280 × 800, esfera de 80 mm, 82 275 cordones dibujados, `--bench-frames 10`): de
+2 622 a 1 371 ms por cuadro con oclusión ambiental y de 2 624 a 1 424 ms en `fast`; 1,49 M de vértices por cuadro
+completo (antes, el doble). Pasan las 773 pruebas. **No medido:** una GPU de verdad, y Vulkan antes y después.
+**Sigue:** paso 4, la memoria.

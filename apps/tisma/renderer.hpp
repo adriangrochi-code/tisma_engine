@@ -61,6 +61,13 @@ struct ViewFrame {
 // key and the same data draw the same picture.
 std::vector<double> frame_key(const ViewFrame& f);
 
+// The preview's extrusions are prisms of which the vertex shader draws only
+// the faces turned to the eye: two sides and an end, 18 vertices each.
+inline constexpr int kPreviewVertices = 18;
+// What those faces face: the eye (w 1), or the direction towards it for an
+// orthographic camera (w 0).
+std::array<float, 4> preview_face_eye(const ViewFrame& f);
+
 // The ray traced frame's inputs and output, read back for checking the GPU
 // against RayScene (the CPU reference).
 struct RayReadback {
@@ -179,6 +186,7 @@ private:
     std::uint32_t ray_frame_ = 0;
     std::vector<float> ray_signature_;
     std::vector<double> drawn_; // the frame in colour_ (frame_key); empty: none
+    std::array<float, 4> face_eye_{0, 0, 1, 0}; // the preview's faces drawn face this (preview_face_eye)
     void scene_changed();       // the data changed: averaging, occlusion and picture start again
 };
 

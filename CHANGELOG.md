@@ -88,6 +88,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **La vista previa dibuja la mitad de los vértices** (OpenGL y Vulkan): de cada cordón, solo los dos costados y la
+  punta que miran al ojo (o a la luz, en la sombra); los otros quedan siempre detrás. La imagen no cambia. Con una
+  esfera de 80 mm laminada (OpenGL, llvmpipe), de 2,6 a 1,4 s por cuadro completo.
+
 - **La vista 3D quieta no se vuelve a dibujar** (OpenGL y Vulkan): si la cámara, las capas, los colores y los datos no
   cambiaron, se muestra la imagen anterior. Con una esfera de 80 mm laminada (OpenGL, llvmpipe), de 406 llamadas de
   dibujo por cuadro a 1; mover la vista dibuja todo como antes.
