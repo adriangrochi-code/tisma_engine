@@ -188,8 +188,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Datos que faltan, mostrados como ceros:** las velocidades, aceleraciones y tirones máximos sin dato de la
   impresora dicen «Sin dato» (el motor ya no los usaba como tope); la capa mínima y la máxima sin valor dicen
   «Automático» (salen de la boquilla); los resúmenes con «—» dicen «Sin dato» o «Sin límite».
-- **Nombres de perfiles con coma decimal en español** («0,20 mm», «CR-5 Pro H 0,4 mm»); el archivo guarda el nombre
-  como siempre.
+- **Nombres de perfiles con coma decimal en español** («0,20 mm», «CR-5 Pro H 0,4 mm»), también en los avisos que
+  aparecen abajo al guardar o cambiar un perfil; el archivo guarda el nombre como siempre.
 
 - **La aplicación se cerraba al elegir una impresora del catálogo** en la lista de impresoras (informe del dueño en
   Windows; en Linux, `std::bad_alloc`): agregar la impresora vuelve a leer las listas de perfiles y la tarjeta seguía

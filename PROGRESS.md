@@ -7461,3 +7461,27 @@ dirección queda solo para las filas sin clave.
 **Error de proceso:** el empuje de b75877f salió con ese CI en rojo (se leyó el resultado y se empujó en el mismo
 paso). Este arreglo va con el CI completo antes de empujar.
 
+
+## 2026-10-29: mantenimiento
+
+Bloque de mantenimiento programado (cada 8 horas).
+
+**Revisado, sin hallazgos:** `origin/main` y `origin/dev` ya estaban mezclados; la compilación sin avisos con gcc y
+clang; el fuzzer del G-code con 2000 casos y semilla nueva (291028): 26 rechazados como no imprimibles, 0 fallas.
+
+**Encontrado y arreglado:**
+- La fila de ajustes que perdía lo escrito con ASan (entrada anterior): ahora la identifica su clave. El CI completo
+  pasó antes de empujar.
+- **Medir en piezas grandes:** cada clic armaba de nuevo la malla indexada, las normales y los vecinos de toda la pieza.
+  Ahora se arma una vez por pieza y por versión de la escena (`measure_mesh`, `MeasureMesh`). En la cúpula de
+  2.003.996 triángulos: preparar 353 ms una vez; cada clic de 0,1 a 26 ms (antes, de 360 a 438 ms por clic). Las
+  pruebas `[measure]` pasan sin cambios.
+- Los avisos de abajo (guardar o cambiar un perfil) mostraban el nombre del perfil con punto decimal; ahora con coma en
+  español, como las listas.
+
+**No probado:** releídas las entradas «No probado» de los últimos días; siguen abiertas la escala de pantalla de
+Windows (la columna de valores corrida) y el efecto de luz con Vulkan en una GPU real (acá solo lavapipe). Las dos
+necesitan la máquina del dueño.
+
+**Sigue:** los pedidos de diseño del dueño anotados en `PLAN.md` (ajustes en una página, Laminar abajo a la derecha,
+menú para guardar, asistente de la primera impresora), la zona de interfaz de SM10 y P13.
