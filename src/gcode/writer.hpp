@@ -38,6 +38,12 @@ std::vector<Warning> capability_warnings(const Settings& settings);
 // gives a temperature.
 std::optional<Warning> heating_warning(const Settings& settings);
 
+// The speeds the melt limit (the lowest of machine.max_flow,
+// extrusion.max_flow and speed.max_flow) slows down, by kind of extrusion,
+// with their beads and the layer height (pellets.md, rule 6): one warning
+// saying from how much to how much; none when no speed passes it.
+std::optional<Warning> melt_limit_warning(const Settings& settings);
+
 // The command that sets the accelerations: M204 P (printing) T (travel) in
 // Marlin and RepRapFirmware, SET_VELOCITY_LIMIT ACCEL= in Klipper (one value
 // for both), from each firmware's public documentation. Written after the

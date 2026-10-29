@@ -8100,4 +8100,12 @@ Pasan las 798 pruebas.
   queda vacío, porque hoy solo tiene filamentos de 1,75 mm (mirado en la captura).
 - Prueba nueva del catálogo: la clave, el perfil, los dos filtros, `printer_of_profile` y una alimentación mal escrita.
 
-**Sigue:** pellets.md PE4, PE6 y PE8; pellets y filamentos de 2,85 mm en el catálogo (datos oficiales).
+- **Regla 6 y PE6:** `melt_limit_warning` da un aviso `flow_limit` por laminado cuando el tope de caudal (el menor de
+  `machine.max_flow`, `extrusion.max_flow` y `speed.max_flow`) baja la velocidad de las paredes, el relleno, el
+  relleno sólido o las superficies superiores, con su ancho y `layers.height`: «the melt limit of 500 mm3/s slows walls
+  60.0 -> 36.6 mm/s». Prueba PE6 (cubo de 100 mm, boquilla de 5 mm, capa de 2,5, cordón de 6: ninguna pared pasa de
+  500 / 13,6587 mm/s, y un solo aviso) y PE8 (boquilla de 0,4 con capa de 2,5: error, como antes).
+- **PE4 queda en espera:** pide `M200 D1.75 S1` con `machine.e_mode` `volume`, y X11 (`gcode_extras.md`) dice que no
+  se escribe `M200`. Le pregunté al equipo de fichas cuál vale (propuesta: solo con `machine.feedstock` `pellet`).
+
+**Sigue:** PE4 cuando conteste el equipo de fichas; pellets y filamentos de 2,85 mm en el catálogo (datos oficiales).

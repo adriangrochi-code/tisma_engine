@@ -1806,6 +1806,53 @@ TEST_CASE("pellets: the bead's section, rounded or a rectangle (pellets.md, rule
     CHECK(check_gcode(rectangle.str(), gcode_limits(model, s)).ok());
 }
 
+TEST_CASE("pellets: the melt limit slows the walls and says how much (pellets.md, rule 6, PE6, PE8)", "[gcode][pellets]") {
+    // PE3 with machine.max_flow 500 and speed.walls 60: walls at 500 / 13.6587 = 36.6 mm/s at most, and a warning.
+    const Settings s = test_printer(parse_settings(R"({"machine": {"feedstock": "pellet", "nozzle_diameter": 5,
+                                                                   "max_flow": 500},
+                                                       "extrusion": {"feedstock": "pellet"},
+                                                       "layers": {"height": 2.5, "first_height": 2.5},
+                                                       "walls": {"width": 6}, "speed": {"walls": 60}})"));
+    IndexedMesh m;
+    add_box(m, 0, 0, 100, 100, 10);
+    const SlicedModel model = slice_model(m, s);
+    std::ostringstream out;
+    std::vector<Warning> warnings;
+    write_gcode(out, model, s, &warnings);
+    double fastest = 0.0, feed = 0.0;
+    std::size_t moves = 0;
+    bool wall = false;
+    for (const std::string& line : lines_of(out.str())) {
+        if (line.rfind(";TYPE:", 0) == 0)
+            wall = line == ";TYPE:Perimeter" || line == ";TYPE:External perimeter";
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        if (const std::size_t f = line.find(" F"); f != std::string::npos)
+            feed = std::stod(line.substr(f + 2)) / 60.0;
+        if (wall && line.find(" E") != std::string::npos && line.find(" X") != std::string::npos)
+            fastest = std::max(fastest, feed), ++moves;
+    }
+    REQUIRE(moves > 0);
+    CHECK(fastest <= 500.0 / 13.6587);
+    CHECK(fastest > 36.0);
+    const auto melt = std::find_if(warnings.begin(), warnings.end(), [](const Warning& w) { return w.kind == "flow_limit"; });
+    REQUIRE(melt != warnings.end());
+    CHECK_THAT(melt->message, ContainsSubstring("walls 60.0 -> 36.6 mm/s"));
+    CHECK(std::count_if(warnings.begin(), warnings.end(), [](const Warning& w) { return w.kind == "flow_limit"; }) == 1);
+    CHECK_FALSE(melt_limit_warning(test_printer())); // no limit, no warning
+    Settings fits = s;
+    fits.wall_speed = 30.0; // the walls fit; the infill, faster, does not
+    REQUIRE(melt_limit_warning(fits));
+    CHECK_THAT(melt_limit_warning(fits)->message, !ContainsSubstring("walls"));
+    fits.machine_max_flow = 5000.0;
+    CHECK_FALSE(melt_limit_warning(fits));
+
+    // PE8: a 0.4 mm filament nozzle with 2.5 mm layers is still an error: the layer is thicker than the nozzle.
+    Settings filament = test_printer();
+    filament.layer_height = filament.first_layer_height = 2.5;
+    CHECK_THROWS_AS(check_settings(filament), SettingsError);
+}
+
 TEST_CASE("pellets: the flow by the move's speed (pellets.md, rule 5, PE7)", "[gcode][pellets]") {
     const std::vector<std::array<double, 2>> table{{20.0, 110.0}, {60.0, 100.0}};
     CHECK_THAT(flow_at_speed(table, 40.0), Catch::Matchers::WithinAbs(1.05, 1e-12)); // PE7

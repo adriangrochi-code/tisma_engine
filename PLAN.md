@@ -835,7 +835,8 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   PE2, PE3, PE5: la redonda por defecto, medida en Tisma Slicer; la rectangular como opción), `machine.feedstock`
   y `extrusion.feedstock` (regla 1, PE1, PE9: el aviso si no coinciden) y los topes de caudal a 10 000 mm³/s;
   la lista de materiales y el catálogo, filtrados por alimentación y por el diámetro de las impresoras instaladas
-  (regla 1 y `profiles.md` regla 5); faltan las pruebas PE4, PE6 y PE8 y pellets en el catálogo
+  (regla 1 y `profiles.md` regla 5); el aviso del tope de caudal (regla 6, PE6) y PE8; falta PE4 (`M200`, pregunta al
+  equipo de fichas: X11 dice que no se escribe) y pellets en el catálogo
 - [ ] `devices.md` (F9; sus pantallas en P1)
 - [ ] Después de la primera versión: `color_mixing.md`, `support_fins.md`, `plugins.md`, `waam.md`
 

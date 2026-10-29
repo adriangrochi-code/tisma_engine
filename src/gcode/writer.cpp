@@ -2138,6 +2138,42 @@ std::optional<Warning> heating_warning(const Settings& s) {
                    0.0};
 }
 
+std::optional<Warning> melt_limit_warning(const Settings& s) {
+    double limit = 0.0;
+    for (const double l : {s.machine_max_flow, s.filament_max_flow, s.speed_max_flow})
+        if (l > 0.0)
+            limit = limit > 0.0 ? std::min(limit, l) : l;
+    if (limit <= 0.0 || s.flow <= 0.0 || s.layer_height <= 0.0)
+        return std::nullopt;
+    const double nozzle = s.nozzle_diameter;
+    const auto width = [&](double w, double automatic) { return w > 0.0 ? w : automatic * nozzle; };
+    const struct {
+        const char* kind;
+        double speed, width;
+    } kinds[] = {
+        {"walls", s.wall_speed, s.wall_width},
+        {"infill", s.infill_speed, width(s.infill_width, 1.125)},
+        {"solid infill", s.solid_infill_speed, width(s.solid_width, 1.125)},
+        {"top surfaces", s.top_solid_infill_speed, width(s.top_width, 1.0)},
+    };
+    std::string message;
+    double slowest = 0.0;
+    char text[96];
+    for (const auto& k : kinds) {
+        const double section = extruded_section(s.bead_section, k.width, s.layer_height) * s.flow / 100.0;
+        if (k.speed <= 0.0 || section <= 0.0 || k.speed * section <= limit)
+            continue;
+        const double capped = limit / section;
+        std::snprintf(text, sizeof text, "%s%s %.1f -> %.1f mm/s", message.empty() ? "" : ", ", k.kind, k.speed, capped);
+        message += text;
+        slowest = slowest > 0.0 ? std::min(slowest, capped) : capped;
+    }
+    if (message.empty())
+        return std::nullopt;
+    std::snprintf(text, sizeof text, "the melt limit of %g mm3/s slows ", limit);
+    return Warning{"flow_limit", -1, 0.0, text + message, slowest};
+}
+
 std::vector<Warning> capability_warnings(const Settings& s) {
     std::vector<Warning> out;
     const auto number = [&](const char* variable) {
@@ -2698,6 +2734,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     if (warnings) {
         const std::vector<Warning> capability = capability_warnings(s);
         warnings->insert(warnings->end(), capability.begin(), capability.end());
+        if (std::optional<Warning> melt = melt_limit_warning(s))
+            warnings->push_back(std::move(*melt));
     }
     out << (s.verbose_comments ? "G90 ; use absolute coordinates\n" : "G90\n");
     if (dialect.e_mode)

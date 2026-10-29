@@ -15,6 +15,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Materiales que toma la impresora:** el catálogo y la lista de perfiles de Filamento ofrecen solo pellets en una
   impresora de pellets y, con filamento, los del diámetro de las impresoras instaladas; el catálogo dice por qué está
   vacío cuando no queda ninguno. El catálogo de filamentos acepta `"feedstock": "pellet"`.
+- **Aviso `flow_limit`:** cuando el tope de caudal baja la velocidad de las paredes, el relleno o las superficies, el
+  laminado dice de cuánto a cuánto.
 
 - **`extrusion.flow_by_speed`** (impresoras de pellets): el flujo según la velocidad de cada tramo, con una lista de
   puntos `[velocidad, %]`.
