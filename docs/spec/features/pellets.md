@@ -37,6 +37,7 @@ Nuevos, con el formato de `docs/CONFIG.md`:
 | Clave | Tipo | Por defecto | Rango | Qué hace |
 |---|---|---|---|---|
 | `machine.feedstock` | texto | `"filament"` | `filament`, `pellet` | Con qué se alimenta la impresora |
+| `extrusion.feedstock` | texto | `"filament"` | `filament`, `pellet` | En qué forma viene el material (va en el perfil de material, como `extrusion.infill_max_speed`). Un material de pellets no tiene diámetro de filamento: se ignora si viene |
 | `machine.e_mode` | texto | `"length"` | `length`, `volume` | Qué escribe el eje E: `length`, mm de filamento de `machine.filament_diameter` (en pellets, un diámetro virtual que el firmware convierte en vueltas del tornillo); `volume`, mm³ de plástico |
 | `extrusion.section` | texto | `"rounded"` | `rounded`, `rectangle` | Cómo se calcula la sección de un cordón: `rounded`, alto × (ancho − (1 − π/4) × alto), un rectángulo con los costados redondos (como hoy, medido: regla 4); `rectangle`, ancho × alto |
 | `extrusion.flow_by_speed` | lista de `[velocidad, %]` | `[]` | velocidad de 0 a 10 000 mm/s; % de 10 a 300 | Corrección del flujo según la velocidad del tramo, interpolada en línea recta entre los puntos y constante fuera de ellos. Vacía: sin corrección |
@@ -55,7 +56,9 @@ Nuevos, con el formato de `docs/CONFIG.md`:
 1. **Alimentación con pellets** (`machine.feedstock` `pellet`):
    - los materiales que se ofrecen son los de pellets (`profile_pack.md` y `profiles.md`, regla 5: igual que con el
      diámetro del filamento);
-   - un material de filamento en una impresora de pellets, o al revés, da un aviso, no un error;
+   - un material dice su forma con `extrusion.feedstock`. Si no coincide con `machine.feedstock` (un material de
+     filamento en una impresora de pellets, o al revés), hay un aviso, no un error: «Este material es de filamento y
+     la impresora es de pellets» (o al revés). Un perfil de material viejo, sin la clave, cuenta como `filament`;
    - lo demás del laminado es igual que con filamento.
 2. **Eje E en largo** (`machine.e_mode` `length`):
    - E = volumen del tramo / (π × (`machine.filament_diameter` / 2)²) × flujo, como hoy;
