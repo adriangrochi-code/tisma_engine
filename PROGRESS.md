@@ -7685,3 +7685,20 @@ Cancelar, Escape o la X) abre el de filamentos (paso 2 de 2), y al cerrar ese, e
 (`first_run_next`). Mirado en tres capturas con `--first-run` y Escape (catálogo de impresoras, de filamentos,
 bienvenida). Pasan las pruebas de interfaz y textos. Sin prueba automática del orden (el script no puede preguntar
 qué ventana está abierta).
+
+## 2026-10-29 (noche): menú del botón derecho en la placa
+
+Primera mitad del pedido del dueño «mover, girar y escalar con deslizadores; un menú con el botón derecho para agregar
+modelos y formas». Un clic derecho (sin arrastrar) sobre la placa, fuera de los modelos, abre un menú con «Agregar
+modelo…» (el mismo explorador que el botón +), «Agregar forma» (cubo, cilindro y esfera de 20 mm, cada uno un modelo
+más en la placa, que se ordena) y «Organizar». Sobre un modelo sigue abriéndose su propio menú. Las formas salen de
+`src/mesh/shapes.*` (diseño propio: caja de 12 triángulos, cilindro de 64 lados, esfera de 32 bandas por 64 gajos,
+paradas en Z = 0 y centradas en X e Y).
+
+Pasos nuevos de `--ui-script`: `right-click-plate` (falla si hay un modelo bajo el punto), `menu NOMBRE` (pasa el
+ratón por la entrada de un menú abierto, por un nombre en inglés, y hace clic: así se abren los submenús) y
+`expect-objects N TEXTO`. Prueba `ui_script_plate_menu`: agrega un cubo y una esfera al cubo de prueba y comprueba
+3 modelos. Prueba de las formas: cerradas (volumen del cubo 1000 mm³, el del cilindro el del polígono inscrito, la
+esfera entre el 98 % y el 100 % de la bola), paradas en la cama. Mirado en la captura.
+
+**Sigue:** los deslizadores de mover, girar y escalar.

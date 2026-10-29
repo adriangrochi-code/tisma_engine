@@ -161,6 +161,9 @@
     X(ZoomFit, "Encuadrar", "Frame all")                                                                              \
     X(ToolAdd, "Agregar modelo", "Add a model")                                                                       \
     X(ToolAddTip, "Agregar un modelo a la placa; se ordenan todos", "Add a model to the plate; all of them are arranged") \
+    X(AddShape, "Agregar forma", "Add a shape")                                                                       \
+    X(ShapeCube, "Cubo", "Cube")                                                                                      \
+    X(ShapeSphere, "Esfera", "Sphere")                                                                                \
     X(ToolRemoveTip, "Quitar el modelo elegido (Supr)", "Remove the chosen model (Delete)")                           \
     X(ToolDuplicateTip, "Duplicar el modelo elegido", "Duplicate the chosen model")                                   \
     X(ToolMoveTip, "Mover (M): arrastrá el modelo sobre la cama o escribí su posición", "Move (M): drag the model on the bed or type its position") \

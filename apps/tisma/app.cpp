@@ -26,6 +26,7 @@
 #include "gcode/writer.hpp"
 #include "io/model.hpp"
 #include "io/stl.hpp"
+#include "mesh/shapes.hpp"
 #include "project/project.hpp"
 #include "ui/camera.hpp"
 #include "ui/credits.hpp"
@@ -519,6 +520,8 @@ private:
     bool card_rows(std::string_view id, bool& bed);
     // An object's menu and the window with its own settings (settings_levels.md, rules 10 and 11).
     void object_menu();
+    void plate_menu();
+    void add_shape(TriangleMesh mesh, T name);
     void object_settings_window();
     bool own_settings_editor(std::string& own, const std::string& under, bool layers, std::string_view where);
     bool volume_editor(PlateObject& o, std::size_t k, bool& removed);
@@ -1324,6 +1327,9 @@ const char* g_row_key = nullptr;
 // key as "key#2"): min x, min y, max x, max y, for --ui-script's clicks.
 std::map<std::string, ImVec4> g_field_rects;
 std::string g_last_field; // the last of them, for a field narrower than its cell
+// The entries of a menu drawn this frame, by a name in English, for
+// --ui-script's menu step: min x, min y, max x, max y.
+std::map<std::string, ImVec4> g_menu_rects;
 // --dump-ui: each setting row drawn this frame, by its field's name in
 // g_field_rects: its label, and whether the label's column cuts it.
 struct DumpRow {
@@ -7269,14 +7275,21 @@ void App::viewport() {
         if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             frame_all();
     }
-    // A right click on a model, not a drag: its menu (settings_levels.md, rule 10).
-    if (editing && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
-        io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f)
-        if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray())) {
+    // A right click, not a drag: on a model, its menu (settings_levels.md,
+    // rule 10); on the plate, add a model or a shape, or arrange them (own
+    // design, the owner's request).
+    if (tab_ == Tab::Prepare && !calibration_ && !viewer_ && ImGui::IsItemHovered() &&
+        ImGui::IsMouseReleased(ImGuiMouseButton_Right) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f) {
+        const auto hit = editing ? pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()) : std::nullopt;
+        if (hit) {
             selected_ = int(hit->object);
             ImGui::OpenPopup("##object_menu");
+        } else {
+            ImGui::OpenPopup("##plate_menu");
         }
+    }
     object_menu();
+    plate_menu();
     ImGui::End();
     ImGui::PopStyleVar();
 }
@@ -7385,6 +7398,54 @@ void App::view_tools() {
 // A model's menu (settings_levels.md, rule 10): at the Normal and Advanced
 // levels, shortcuts that give it settings of its own, starting from the
 // profile's values, and any other setting it may have.
+void App::plate_menu() {
+    if (!ImGui::BeginPopup("##plate_menu"))
+        return;
+    // Each entry's place, by a name in English, for --ui-script's menu step.
+    const auto placed = [](const char* name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    const bool add_model = ImGui::MenuItem((std::string(tr(T::ToolAdd)) + "...").c_str());
+    placed("model");
+    if (add_model) {
+        purpose_ = Purpose::AddModel;
+        browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
+    }
+    const bool shapes = ImGui::BeginMenu(tr(T::AddShape));
+    placed("shape");
+    if (shapes) {
+        // 20 mm across: big enough to see, small enough for any bed.
+        const struct {
+            const char* name;
+            T label;
+        } items[] = {{"cube", T::ShapeCube}, {"cylinder", T::ShapeCylinder}, {"sphere", T::ShapeSphere}};
+        for (const auto& item : items) {
+            const bool chosen = ImGui::MenuItem(tr(item.label));
+            placed(item.name);
+            if (!chosen)
+                continue;
+            add_shape(item.label == T::ShapeCube       ? make_box(20, 20, 20)
+                      : item.label == T::ShapeCylinder ? make_cylinder(10, 20)
+                                                       : make_sphere(10),
+                      item.label);
+        }
+        ImGui::EndMenu();
+    }
+    const bool arrange = ImGui::MenuItem(tr(T::TipArrangeTitle), "A", false, !objects_.empty());
+    placed("arrange");
+    if (arrange) {
+        arrange_plate();
+        tip("arrange");
+    }
+    ImGui::EndPopup();
+}
+
+// A shape from the Add menu, named after it, on the plate.
+void App::add_shape(TriangleMesh mesh, T name) {
+    add_mesh(std::move(mesh), from_utf8(std::string(tr(name)) + ".stl"));
+}
+
 void App::object_menu() {
     if (!ImGui::BeginPopup("##object_menu"))
         return;
@@ -9900,6 +9961,7 @@ void App::dialogs() {
 void App::layout() {
     anchors_.clear();
     g_field_rects.clear();
+    g_menu_rects.clear();
     g_dump_rows.clear();
     g_row_ids.clear();
     viewport();
@@ -10862,6 +10924,44 @@ void App::script_input() {
         std::printf("ui-script: expect-coarse %s: %s\n", step.key.c_str(), last_coarse_ == want ? "ok" : "got the other");
         if (last_coarse_ != want)
             return fail_step(last_coarse_ ? "the coarse copy is drawn" : "the full mesh is drawn");
+        next();
+    } else if (step.verb == "right-click-plate") { // a right click on the plate, away from the models
+        const ImVec2 at(view_pos_.x + 0.8f * view_size_.x, view_pos_.y + 0.3f * view_size_.y);
+        if (f == 0) {
+            io.AddMousePosEvent(at.x, at.y);
+        } else if (f == 1) {
+            if (pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()))
+                return fail_step("a model is under the point");
+            io.AddMouseButtonEvent(ImGuiMouseButton_Right, true);
+        } else if (f == 2) {
+            io.AddMouseButtonEvent(ImGuiMouseButton_Right, false);
+        } else if (f >= 4) {
+            next();
+        }
+    } else if (step.verb == "menu") { // a click on an open menu's entry, by its name in English
+        if (f == 0)
+            return;
+        if (f >= 1008) // clicked: the menu has closed
+            return next();
+        const auto it = g_menu_rects.find(step.key);
+        if (it == g_menu_rects.end())
+            return f >= 30 && f < 1000 ? fail_step("no menu entry of that name is on the screen") : void();
+        const ImVec4 r = it->second;
+        io.AddMousePosEvent(0.5f * (r.x + r.z), 0.5f * (r.y + r.w));
+        if (script_frame_ < 1000) // hovered for a few frames (a submenu opens on hover), then clicked
+            script_frame_ = 1000;
+        else if (f == 1004)
+            io.AddMouseButtonEvent(0, true);
+        else if (f == 1005)
+            io.AddMouseButtonEvent(0, false);
+    } else if (step.verb == "expect-objects") { // this many models on the plate, the last one's name with VALUE
+        const std::size_t want = std::size_t(std::atoll(step.key.c_str()));
+        const std::string last = objects_.empty() ? std::string() : objects_.back().name;
+        const bool ok = objects_.size() == want && last.find(step.value) != std::string::npos;
+        std::printf("ui-script: expect-objects %zu %s: %s%zu %s\n", want, step.value.c_str(), ok ? "ok, " : "got ",
+                    objects_.size(), last.c_str());
+        if (!ok)
+            return fail_step("the plate has " + std::to_string(objects_.size()) + " models, the last " + last);
         next();
     } else if (step.verb == "expect-toast") { // a toast with this text, within 30 frames
         for (const Toast& toast : toasts_)

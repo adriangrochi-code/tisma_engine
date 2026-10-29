@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Menú del botón derecho en la placa:** fuera de los modelos, «Agregar modelo…», «Agregar forma» (cubo, cilindro y
+  esfera de 20 mm) y «Organizar».
+
 - **`tisma --dump-ui filas.json`** (con `--screenshot`): cada fila de ajustes dibujada, con su clave, su etiqueta, el
   valor guardado, su rectángulo y si la columna le corta la etiqueta; para revisar textos y campos sin mirar la imagen.
 

@@ -715,7 +715,8 @@ pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene
 - [ ] El botón Laminar abajo a la derecha (como Cura) y, después de laminar, un menú para guardar el G-code o mandarlo
   a la impresora conectada
 - [ ] Mover, girar y escalar con controles visuales (deslizadores), no solo números; un menú con el botón derecho para
-  agregar modelos y formas
+  agregar modelos y formas (2026-10-29: el menú, hecho: clic derecho en la placa, fuera de los modelos, con «Agregar
+  modelo…», «Agregar forma» —cubo, cilindro y esfera de 20 mm— y «Organizar». Faltan los deslizadores)
 - [x] La primera vez, elegir la impresora y el filamento antes del recorrido de bienvenida (2026-10-29: el catálogo de
   impresoras, después el de filamentos, cada uno con su paso; cerrarlos sin elegir sigue al siguiente)
 - [x] La leyenda de la vista previa no tapa la pieza (encuadre teniendo en cuenta los paneles). Hecho (2026-10-29):

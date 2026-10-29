@@ -167,6 +167,7 @@ add_custom_command(
 add_library(tisma_core
   src/mesh/mesh.cpp
   src/mesh/indexed_mesh.cpp
+  src/mesh/shapes.cpp
   src/mesh/paint.cpp
   src/slice/level_set.cpp
   src/slice/contours.cpp
