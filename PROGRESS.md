@@ -8035,3 +8035,18 @@ en la tarjeta del extrusor (o una fila de lista con varios). Prueba de lectura, 
 De la lista de ajustes de las fichas que el motor no lee quedan: `walls.vertical_shell`, `machine.process` (WAAM,
 después de la primera versión), `gcode.pressure_advance_in_gcode`, `gcode.pressure_advance_piece` y
 `gcode.thumbnails` (el formato de los comentarios todavía no está en la ficha).
+
+## 2026-10-29: BH4, el ancho de los cordones por defecto
+
+Informe del equipo de fichas: en tiras planas (40 × T × 3 mm, solo paredes, capa 0,2, boquilla 0,4) el motor pasaba de
+2 a 3 cordones hacia 1,05 mm, de 3 a 4 hacia 1,29 y de 4 a 5 hacia 1,75; Tisma Slicer y la ficha, entre 1,15 y 1,2,
+1,45 y 1,5, y 1,95 y 2. Reproducido con 3 y con 10 paredes. No eran las transiciones: con `walls.width` 0,45 el motor
+da exactamente los puntos de Tisma Slicer. El ancho por defecto del motor era 0,4; la ficha dice 0: automático,
+1,125 × la boquilla. Ahora `walls.width` 0 es el valor por defecto y vale 1,125 × la boquilla al leer los ajustes
+(`wall_width_auto`, también si la boquilla viene de otro grupo), y en el panel el ancho automático sigue a la boquilla
+hasta que se cambia a mano (la fila dice «Automático»). `docs/CONFIG.md`: «0,05 a 40, o 0 (automático)».
+
+Las pruebas medidas con 0,4 lo dicen ahora: la impresora de pruebas (`test_printer`) pone 0,4 si nada lo pone, como
+hace con las velocidades, y las que arman `Settings` a mano (superficies, piel difusa, análisis, `slice_model`)
+ponen 0,4. Prueba nueva: el ancho automático (0,45; 0,675 con boquilla de 0,6; 0,9 con 0,8) y las tiras del informe
+con el ancho por defecto (1,0 y 1,15: 2; 1,2 y 1,45: 3; 1,5 y 1,95: 4; 2,0: 5). Pasan las 798 pruebas.

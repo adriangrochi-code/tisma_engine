@@ -30,6 +30,15 @@ using Catch::Matchers::WithinRel;
 
 namespace {
 
+// The settings the analysis tests were measured with: 0.4 mm beads (walls.width
+// is automatic otherwise, 1.125 nozzles).
+Settings beads_04() {
+    Settings s;
+    s.wall_width = 0.4;
+    s.wall_width_auto = false;
+    return s;
+}
+
 // A box from (0, 0, 0) to (x, y, z), facing out.
 IndexedMesh box_mesh(float x, float y, float z) {
     IndexedMesh m;
@@ -125,7 +134,7 @@ TEST_CASE("analysis case: errors name the key", "[analysis]") {
 }
 
 TEST_CASE("analysis: voxels from the quality and the line width", "[analysis]") {
-    Settings s; // 0.4 mm lines, 0.2 mm layers
+    Settings s = beads_04(); // 0.4 mm lines, 0.2 mm layers
     AnalysisCase c;
     CHECK(analysis_resolution(c, s) == std::pair<double, int>{0.2, 1});
     c.quality = AnalysisQuality::High;
@@ -145,7 +154,7 @@ TEST_CASE("analysis: a solid column pulled up, exact stress and safety", "[analy
         "fixtures": [{"face": "bottom", "axes": "z"}, {"face": "x_min", "axes": "x"}, {"face": "y_min", "axes": "y"}],
         "loads": [{"face": "top", "force": [0, 0, 160]}],
         "solver": {"tolerance": 1e-10}})");
-    const AnalysisReport r = run_analysis(column, Settings{}, c);
+    const AnalysisReport r = run_analysis(column, beads_04(), c);
     REQUIRE(r.valid);
     CHECK(r.warnings.empty());
     CHECK(r.grid.nx == 20);
@@ -213,7 +222,7 @@ TEST_CASE("analysis: as printed, a plate held at one end and pushed at the other
     const AnalysisCase c = parse_analysis_case(R"({
         "fixtures": [{"name": "clamp", "face": "x_min"}],
         "loads": [{"name": "push", "face": "x_max", "force": [0, 0, -5]}]})");
-    const AnalysisReport r = run_analysis(plate, Settings{}, c);
+    const AnalysisReport r = run_analysis(plate, beads_04(), c);
     REQUIRE(r.valid);
     CHECK(r.layers.size() == 10);
     REQUIRE(r.direction.size() == r.grid.solid.size());
@@ -240,7 +249,7 @@ TEST_CASE("analysis: warnings and errors", "[analysis]") {
         const AnalysisCase c = parse_analysis_case(R"({"model": "solid",
             "fixtures": [{"name": "far", "box": {"min": [50, 50, 0], "max": [60, 60, 1]}}],
             "loads": [{"face": "top", "force": [0, 0, -1]}]})");
-        const AnalysisReport r = run_analysis(column, Settings{}, c);
+        const AnalysisReport r = run_analysis(column, beads_04(), c);
         CHECK(!r.valid);
         std::string codes;
         for (const AnalysisWarning& w : r.warnings)
@@ -252,7 +261,7 @@ TEST_CASE("analysis: warnings and errors", "[analysis]") {
     SECTION("a load beside the part finds nothing") {
         const AnalysisCase c = parse_analysis_case(R"({"model": "solid", "fixtures": [{"face": "bottom"}],
             "loads": [{"box": {"min": [50, 50, 0], "max": [60, 60, 1]}, "force": [0, 0, -1]}]})");
-        const AnalysisReport r = run_analysis(column, Settings{}, c);
+        const AnalysisReport r = run_analysis(column, beads_04(), c);
         CHECK(!r.valid);
         REQUIRE(!r.warnings.empty());
         CHECK(r.warnings.front().code == "load_not_applied");
@@ -260,7 +269,7 @@ TEST_CASE("analysis: warnings and errors", "[analysis]") {
     SECTION("a heavy load breaks the part") {
         const AnalysisCase c = parse_analysis_case(R"({"model": "solid", "fixtures": [{"face": "bottom"}],
             "loads": [{"face": "top", "force": [0, 0, 1000]}]})");
-        const AnalysisReport r = run_analysis(column, Settings{}, c);
+        const AnalysisReport r = run_analysis(column, beads_04(), c);
         CHECK(r.valid);
         CHECK(r.result.min_safety < 1.0);
         CHECK(r.below[0] > 0);
@@ -272,7 +281,7 @@ TEST_CASE("analysis: warnings and errors", "[analysis]") {
     SECTION("too many voxels") {
         const AnalysisCase c = parse_analysis_case(R"({"max_voxels": 1000, "fixtures": [{"face": "bottom"}],
             "loads": [{"face": "top", "force": [0, 0, -1]}]})");
-        CHECK_THROWS_AS(run_analysis(column, Settings{}, c), AnalysisError);
+        CHECK_THROWS_AS(run_analysis(column, beads_04(), c), AnalysisError);
     }
 }
 
@@ -281,14 +290,14 @@ TEST_CASE("analysis: estimate, progress and the voxel mesh", "[analysis]") {
     const AnalysisCase c = parse_analysis_case(R"({"model": "solid",
         "fixtures": [{"face": "bottom"}], "loads": [{"face": "top", "force": [0, 0, -10]}]})");
 
-    const AnalysisEstimate e = estimate_analysis(column, Settings{}, c);
+    const AnalysisEstimate e = estimate_analysis(column, beads_04(), c);
     // The cheap count of the box agrees with the grid the estimate built.
-    CHECK(analysis_grid_voxels(column, Settings{}, c) == e.grid.solid.size());
+    CHECK(analysis_grid_voxels(column, beads_04(), c) == e.grid.solid.size());
     AnalysisCase as_printed = c;
     as_printed.model = AnalysisModel::AsPrinted;
     as_printed.quality = AnalysisQuality::High;
-    CHECK(analysis_grid_voxels(column, Settings{}, as_printed) ==
-          estimate_analysis(column, Settings{}, as_printed).grid.solid.size());
+    CHECK(analysis_grid_voxels(column, beads_04(), as_printed) ==
+          estimate_analysis(column, beads_04(), as_printed).grid.solid.size());
     CHECK(e.part_voxels == 20000);
     CHECK(e.printed_voxels == 20000);
     CHECK(e.rows_per_layer == 1);
@@ -296,7 +305,7 @@ TEST_CASE("analysis: estimate, progress and the voxel mesh", "[analysis]") {
     CHECK(e.seconds > 0.0);
 
     std::vector<std::pair<std::string, double>> steps;
-    const AnalysisReport r = run_analysis(column, Settings{}, c, nullptr,
+    const AnalysisReport r = run_analysis(column, beads_04(), c, nullptr,
                                           [&](std::string_view stage, double done) { steps.emplace_back(stage, done); });
     REQUIRE(r.valid);
     REQUIRE(steps.size() >= 5);
@@ -335,7 +344,7 @@ TEST_CASE("analysis: how much the result depends on the voxel size", "[analysis]
     SECTION("a bent plate with coarse voxels: a warning and the extrapolated value") {
         const AnalysisCase c = parse_analysis_case(R"({"model": "solid", "voxel": 0.5, "rows_per_layer": 2,
             "fixtures": [{"face": "x_min"}], "loads": [{"face": "x_max", "force": [0, 0, -5]}]})");
-        const AnalysisReport r = run_analysis(plate, Settings{}, c);
+        const AnalysisReport r = run_analysis(plate, beads_04(), c);
         REQUIRE(r.valid);
         REQUIRE(r.resolution.done);
         CHECK(r.resolution.voxel == 1.0);
@@ -352,7 +361,7 @@ TEST_CASE("analysis: how much the result depends on the voxel size", "[analysis]
     SECTION("as printed at normal quality the coarser voxels cannot hold the gaps") {
         const AnalysisCase c = parse_analysis_case(R"({"fixtures": [{"face": "x_min"}],
             "loads": [{"face": "x_max", "force": [0, 0, -5]}]})");
-        const AnalysisReport r = run_analysis(plate, Settings{}, c);
+        const AnalysisReport r = run_analysis(plate, beads_04(), c);
         CHECK(r.valid);
         CHECK(!r.resolution.done);
         CHECK_THAT(r.resolution.reason, ContainsSubstring("gaps of sparse infill"));
@@ -360,7 +369,7 @@ TEST_CASE("analysis: how much the result depends on the voxel size", "[analysis]
     SECTION("not asked for") {
         const AnalysisCase c = parse_analysis_case(R"({"model": "solid", "resolution_check": false,
             "fixtures": [{"face": "x_min"}], "loads": [{"face": "x_max", "force": [0, 0, -5]}]})");
-        const AnalysisReport r = run_analysis(plate, Settings{}, c);
+        const AnalysisReport r = run_analysis(plate, beads_04(), c);
         CHECK(!r.resolution.done);
         CHECK(r.resolution.reason == "not asked for");
     }
@@ -374,7 +383,7 @@ TEST_CASE("analysis: the voxels stay in the model's coordinates", "[analysis]") 
         v.x += 10.0f, v.y -= 5.0f, v.z += 3.0f;
     const AnalysisCase c = parse_analysis_case(R"({"model": "solid", "resolution_check": false,
         "fixtures": [{"face": "bottom"}], "loads": [{"face": "top", "force": [0, 0, -1]}]})");
-    const AnalysisReport r = run_analysis(block, Settings{}, c);
+    const AnalysisReport r = run_analysis(block, beads_04(), c);
     REQUIRE(r.valid);
     CHECK(r.grid.x0 == 10.0);
     CHECK(r.grid.y0 == -5.0);

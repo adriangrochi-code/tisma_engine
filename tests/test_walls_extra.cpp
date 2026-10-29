@@ -420,6 +420,30 @@ TEST_CASE("walls: neighbouring beads overlap by h (1 - pi/4) (perimeters.md, rul
     CHECK_THAT(side[2].first, WithinAbs(1.071, 0.002));
 }
 
+TEST_CASE("walls: the default bead width is 1.125 nozzles, and the counts change where Tisma Slicer's do (BH4)", "[walls]") {
+    CHECK(parse_settings("{}").wall_width == 0.45);
+    CHECK(parse_settings("{}").wall_width_auto);
+    CHECK_THAT(parse_settings(R"({"machine": {"nozzle_diameter": 0.6}})").wall_width, WithinAbs(0.675, 1e-12));
+    CHECK(parse_settings(R"({"walls": {"width": 0.4}})").wall_width == 0.4);
+    CHECK(parse_settings(R"({"walls": {"width": 0}, "machine": {"nozzle_diameter": 0.8}})").wall_width == 0.9);
+    CHECK(parse_settings(settings_json(parse_settings("{}"))).wall_width_auto); // written as 0
+    // Flat strips with the default width: the spec team's black-box counts.
+    Settings s = parse_settings(R"({"walls": {"count": 10}, "layers": {"height": 0.2, "first_height": 0.2}})");
+    s.infill_density = 0.0;
+    s.top_layers = s.bottom_layers = 0;
+    for (const auto& [thickness, beads] : std::vector<std::pair<double, std::size_t>>{
+             {1.0, 2}, {1.15, 2}, {1.2, 3}, {1.45, 3}, {1.5, 4}, {1.95, 4}, {2.0, 5}}) {
+        INFO("thickness " << thickness);
+        const float half = float(thickness / 2.0);
+        const SlicedModel model = slice_model(boxes({{100.0f - half, 90, 0, 100.0f + half, 110, 3}}), s);
+        std::size_t n = 0;
+        for (const Toolpath& t : model.walls[8].toolpaths)
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                n += (t.points[i - 1].p.y - 100.0) * (t.points[i].p.y - 100.0) < 0.0;
+        CHECK(n == beads);
+    }
+}
+
 TEST_CASE("walls: thin walls of one and two beads (perimeters.md, table P2)", "[walls]") {
     Settings s = base();
     s.wall_count = 3;

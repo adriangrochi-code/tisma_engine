@@ -191,7 +191,8 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK_THROWS_WITH(parse_settings(R"({"layers": 3})"), ContainsSubstring("must be an object"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": 2.5}})"), ContainsSubstring("walls.count: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"walls": {"count": -1}})"), ContainsSubstring("walls.count: must be a whole number"));
-    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0}})"), ContainsSubstring("walls.width: must be from 0.05 to 40 mm"));
+    CHECK_THROWS_WITH(parse_settings(R"({"walls": {"width": 0.01}})"),
+                      ContainsSubstring("walls.width: must be 0 (from the nozzle) or from 0.05 to 40 mm"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"top_layers": 1.5}})"), ContainsSubstring("surfaces.top_layers: must be a whole number"));
     CHECK_THROWS_WITH(parse_settings(R"({"surfaces": {"bottom": 3}})"), ContainsSubstring("surfaces.bottom: unknown setting"));
     CHECK(parse_settings(R"({"infill": {"pattern": "grid"}})").infill_pattern == InfillPattern::Grid);
@@ -410,7 +411,7 @@ TEST_CASE("slice_model applies XY offset and the first-layer shrink", "[settings
 TEST_CASE("slice_model builds the walls of every layer and leaves the middle for infill", "[settings]") {
     const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
     Settings s; // 3 walls of 0.4 mm
-    s.outer_wall_width = s.wall_width; // the outer wall as the others
+    s.wall_width = s.outer_wall_width = 0.4; // 0.4 mm beads (as measured), the outer wall as the others
     const SlicedModel sliced = slice_model(m, s);
     REQUIRE(sliced.walls.size() == sliced.layers.size());
     for (const LayerWalls& w : sliced.walls) {

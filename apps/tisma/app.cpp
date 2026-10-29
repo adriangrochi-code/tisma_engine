@@ -6289,7 +6289,12 @@ bool App::card_rows(std::string_view id, bool& bed) {
            tr(T::DetailToleranceTip));
         mm(T::DetailMargin, "layers.detail_margin", s.detail_margin, 0.0, 10.0, "%.2f mm", 0.01f, tr(T::DetailMarginTip));
     } else if (id == "line_width") {
-        mm(T::LineWidth, "walls.width", s.wall_width, 0.05, 40.0, "%.2f mm", 0.002f);
+        // Automatic, 1.125 nozzles, until it is changed here (perimeters.md, BH4).
+        const double width = s.wall_width;
+        const std::string width_format = s.wall_width_auto ? std::string("%.2f mm · ") + tr(T::AutoValue) : "%.2f mm";
+        mm(T::LineWidth, "walls.width", s.wall_width, 0.05, 40.0, width_format.c_str(), 0.002f);
+        if (s.wall_width != width)
+            s.wall_width_auto = false;
         mm(T::OuterWidth, "walls.outer_width", s.outer_wall_width, 0.0, 40.0, s.outer_wall_width > 0.0 ? "%.2f mm" : "—",
            0.002f);
         if (shown("layers.first_line_width"))
@@ -7033,6 +7038,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
                 differ = differ || nozzle_of(s, e) != nozzle_of(s, 1);
             if (row(T::Nozzle, s.nozzle_diameter, 0.1, 2.0, differ ? tr(T::DifferentNozzles) : "%.2f mm", 0.005f)) {
                 s.nozzle_diameters.clear();
+                if (s.wall_width_auto) // an automatic width follows the nozzle (BH4)
+                    s.wall_width = auto_wall_width(s.nozzle_diameter);
                 changed = true;
             }
             for (int e = 1; e <= s.extruders && s.extruders > 1 && !s.single_extruder_mmu; ++e) {

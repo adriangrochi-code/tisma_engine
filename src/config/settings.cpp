@@ -989,9 +989,11 @@ Settings parse_checked(std::string_view text) {
             s.outer_wall_width = v;
             return;
         }
-        if (!(v >= 0.05 && v <= 40.0)) // and a quarter to four nozzles (check_settings; pellets.md)
-            fail(k, "must be from 0.05 to 40 mm");
-        s.wall_width = v;
+        if (!(v == 0.0 || (v >= 0.05 && v <= 40.0))) // and a quarter to four nozzles (check_settings; pellets.md)
+            fail(k, "must be 0 (from the nozzle) or from 0.05 to 40 mm");
+        s.wall_width_auto = v == 0.0;
+        if (v > 0.0)
+            s.wall_width = v;
     });
     read_group(root, "object", {"extruder", "wipe_into_infill", "wipe_into_object"},
                [&](const json& g, const std::string& n, const std::string& k) {
@@ -2799,6 +2801,9 @@ Settings parse_checked(std::string_view text) {
                    (n == "start" ? s.calibration.start : n == "step" ? s.calibration.step : s.calibration.end) = d;
                });
     add_calibration_changes(s);
+    // walls.width 0: from the nozzle, whichever group set it (BH4).
+    if (s.wall_width_auto)
+        s.wall_width = auto_wall_width(s.nozzle_diameter);
     return s;
 }
 
@@ -2926,7 +2931,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.count", std::to_string(s.wall_count)},
         {"walls.spread_count", std::to_string(s.wall_spread_count)},
         {"walls.transition_angle", num(s.wall_transition_angle)},
-        {"walls.width", num(s.wall_width)},
+        {"walls.width", s.wall_width_auto ? "0" : num(s.wall_width)},
         {"walls.outer_width", num(s.outer_wall_width)},
         {"walls.seam", s.seam == SeamMode::Aligned ? "aligned" : s.seam == SeamMode::Nearest ? "nearest"
                        : s.seam == SeamMode::Random  ? "random" : "rear"},
@@ -3451,7 +3456,7 @@ std::string settings_json(const Settings& s) {
          {{"count", s.wall_count},
           {"spread_count", s.wall_spread_count},
           {"transition_angle", s.wall_transition_angle},
-          {"width", s.wall_width},
+          {"width", s.wall_width_auto ? 0.0 : s.wall_width},
           {"outer_width", s.outer_wall_width},
           {"seam", seam},
           {"scarf", s.scarf == ScarfMode::Contours ? "contours" : s.scarf == ScarfMode::Everywhere ? "everywhere" : "nowhere"},

@@ -105,6 +105,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Ancho de los cordones por defecto:** `walls.width` 0 (lo que viene si no se pone) es automático, 1,125 × la boquilla:
+  0,45 mm con 0,4 en lugar de 0,4 mm, como dice la ficha y hace Tisma Slicer. Las paredes pasan de 2 a 3 cordones
+  entre 1,15 y 1,2 mm, de 3 a 4 entre 1,45 y 1,5 y de 4 a 5 entre 1,95 y 2 (antes, unos 0,1 a 0,2 mm antes). Si la
+  boquilla cambia, el ancho automático la sigue.
 - **Modelos grandes:** girar, escalar o mover uno de 200 000 triángulos o más con sus campos o deslizadores ya no
   rehace toda la placa en cada cuadro: la vista lo muestra en su lugar nuevo y la placa se rehace al soltar (con 2
   millones de triángulos, 20 pasos de escala: 76 → 17 s).

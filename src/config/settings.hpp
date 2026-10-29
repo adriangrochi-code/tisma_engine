@@ -181,7 +181,11 @@ struct Settings {
     // Odd bead counts only in corners no wider than this, degrees
     // (walls.transition_angle, perimeters.md P14).
     double wall_transition_angle = 10.0;
-    double wall_width = 0.4; // preferred bead width w*
+    // The preferred bead width w*. walls.width 0, the default, is automatic:
+    // 1.125 nozzles (perimeters.md; 0.45 with 0.4, as Tisma Slicer: the
+    // spec team's BH4), kept so by parse_settings and the panel.
+    double wall_width = 0.45;
+    bool wall_width_auto = true;
     double outer_wall_width = 0.0; // the outer wall's bead, mm (perimeters.md, P12); 0: 1.125 nozzles
     SeamMode seam = SeamMode::Aligned;
     // The scarf seam (docs/spec/features/walls_extra.md, rule 4): a loop starts
@@ -852,6 +856,9 @@ double fastest_extrusion(const Settings& settings);
 
 // The section of a bead w wide and h high as extrusion.section counts it.
 double extruded_section(BeadSection section, double width, double height);
+
+// walls.width 0: 1.125 nozzles (perimeters.md).
+inline double auto_wall_width(double nozzle) { return 1.125 * nozzle; }
 
 // extrusion.flow_by_speed at this speed (mm/s), as a factor: 1 with no points.
 double flow_at_speed(const std::vector<std::array<double, 2>>& points, double speed);
