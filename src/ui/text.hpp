@@ -1041,6 +1041,8 @@
     X(NotSet, "Sin dato", "Not set") \
     X(AutoValue, "Automático", "Automatic") \
     X(NoLimit, "Sin límite", "No limit") \
+    X(LegendLess, "Menos detalle", "Less detail") \
+    X(LegendMore, "Más detalle: tiempos, filamento y totales", "More detail: times, filament and totals") \
     X(ValueMax, "Máximo: %s", "Maximum: %s") \
     X(ValueMin, "Mínimo: %s", "Minimum: %s") \
     X(SupportBottomInterface, "Capas de interfaz sobre la pieza", "Interface layers over the part") \

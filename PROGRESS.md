@@ -7632,3 +7632,17 @@ de la ventana, y `cut` si la columna de la etiqueta la corta (lo que el equipo d
 de campos). Imprime «dump-ui: N rows, M with the label cut» y sale con 1 si no hubo filas. Prueba `ui_dump_rows`.
 Los botones, listas y menús que no son filas de ajustes quedan para después (el ítem de `PLAN.md` queda marcado
 solo para las filas).
+
+## 2026-10-29 (noche): la leyenda de la vista previa
+
+Bloque nocturno, un ítem de `PLAN.md` (la leyenda que tapa la pieza). Con la esfera de 80 mm laminada a 1200 × 760,
+la leyenda ocupaba unos 460 × 520 px y tapaba la barra de movimientos, que se ubicaba sin mirarla.
+- La barra de movimientos usa el rectángulo de la leyenda del cuadro anterior (`legend_rect_`): va entre la leyenda y
+  la barra de capas si hay al menos 120 px, y si no, adentro de la leyenda bajo «Capa N de M», con ancho fijo (para que
+  el ancho de la leyenda no se persiga a sí mismo).
+- Un botón «−» / «+» junto a «Capa N de M» pliega la leyenda: los tipos con su casilla y su color, sin las columnas de
+  tiempo, parte y filamento, y de los totales solo el tiempo estimado. Por defecto, completa (regla 2 de `preview.md`).
+
+Mirado en capturas (la barra adentro de la leyenda, la leyenda completa después de un cuadro de acomodo). Pasan las
+138 pruebas de vista e interfaz. **Falta:** encuadrar la pieza en lo que la leyenda y los paneles dejan libre; el
+plegado no se probó con un clic (el script no tiene un paso para botones sin clave).

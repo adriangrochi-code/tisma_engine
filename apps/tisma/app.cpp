@@ -722,6 +722,8 @@ private:
     // the centre of gravity and the nozzle (travels: show_travels_).
     bool show_wipes_ = false, show_gravity_ = false, show_nozzle_ = true;
     bool show_legend_ = true;  // L hides the preview's legend
+    bool legend_full_ = true;  // its times, shares and filament by kind, and the totals (else only the kinds)
+    ImVec4 legend_rect_{};     // where it was drawn last frame (min x, y, max x, y); empty when hidden
     bool show_labels_ = false; // E shows the parts' names
     std::array<bool, kMarkKinds> show_marks_{false, false, true, false, false, false, false}; // seams on
     ColorMode color_mode_ = ColorMode::Kind; // the shader's, from the view
@@ -8919,42 +8921,55 @@ void App::preview_panels() {
     if (only_layer_)
         bottom_layer_ = top_layer_;
     // The move slider (rule 4), at the bottom: the last move drawn in the
-    // top layer, with its number; left and right step it.
-    {
-        const PreviewLayer& top = p.layers[std::size_t(top_layer_)];
-        if (move_cut_layer_ != top_layer_)
-            move_cut_ = int(top.count), move_cut_layer_ = top_layer_;
-        move_cut_ = std::clamp(move_cut_, 1, std::max(int(top.count), 1));
-        if (top.count > 1) {
-            const float w = std::min(420.0f * scale_, view_size_.x * 0.3f);
-            // Right of the legend, left of the layer slider.
-            ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - margin - 150.0f * scale_,
-                                           view_pos_.y + view_size_.y - margin),
-                                    ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+    // top layer, with its number; left and right step it. Right of the
+    // legend (as drawn last frame), left of the layer slider; in the legend,
+    // under its layer line, when the room between is too narrow.
+    const PreviewLayer& top = p.layers[std::size_t(top_layer_)];
+    if (move_cut_layer_ != top_layer_)
+        move_cut_ = int(top.count), move_cut_layer_ = top_layer_;
+    move_cut_ = std::clamp(move_cut_, 1, std::max(int(top.count), 1));
+    const auto move_slider = [&](float width) {
+        ImGui::SetNextItemWidth(width);
+        ImGui::SliderInt("##move_cut", &move_cut_, 1, int(top.count), "");
+        ImGui::SameLine();
+        loc::TextDisabled(tr(T::MoveN), move_cut_, int(top.count));
+    };
+    bool slider_in_legend = false;
+    if (top.count > 1) {
+        const ImGuiStyle& look = ImGui::GetStyle();
+        const float text = ImGui::CalcTextSize(format(tr(T::MoveN), int(top.count), int(top.count)).c_str()).x;
+        const float extra = text + look.ItemSpacing.x + 2.0f * look.WindowPadding.x;
+        const float right = view_pos_.x + view_size_.x - margin - 150.0f * scale_;
+        const bool legend = show_legend_ && legend_rect_.z > legend_rect_.x;
+        const float left = legend ? legend_rect_.z + margin : view_pos_.x + margin;
+        const float w = std::min({420.0f * scale_, view_size_.x * 0.3f, right - left - extra});
+        slider_in_legend = legend && w < 120.0f * scale_;
+        if (!slider_in_legend) {
+            ImGui::SetNextWindowPos(ImVec2(right, view_pos_.y + view_size_.y - margin), ImGuiCond_Always,
+                                    ImVec2(1.0f, 1.0f));
             ImGui::SetNextWindowBgAlpha(0.85f);
             ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
             ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
             ImGui::Begin("##moves", nullptr,
                          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-            ImGui::SetNextItemWidth(w);
-            ImGui::SliderInt("##move_cut", &move_cut_, 1, int(top.count), "");
-            ImGui::SameLine();
-            loc::TextDisabled(tr(T::MoveN), move_cut_, int(top.count));
+            move_slider(std::max(w, 120.0f * scale_));
             ImGui::End();
             ImGui::PopStyleColor();
             ImGui::PopStyleVar();
-            if (!ImGui::GetIO().WantTextInput) {
-                if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
-                    move_cut_ = std::max(move_cut_ - 1, 1);
-                if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
-                    move_cut_ = std::min(move_cut_ + 1, int(top.count));
-            }
+        }
+        if (!ImGui::GetIO().WantTextInput) {
+            if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow))
+                move_cut_ = std::max(move_cut_ - 1, 1);
+            if (ImGui::IsKeyPressed(ImGuiKey_RightArrow))
+                move_cut_ = std::min(move_cut_ + 1, int(top.count));
         }
     }
     preview_overlay(p);
-    if (!show_legend_)
+    if (!show_legend_) {
+        legend_rect_ = {};
         return;
+    }
 
     // The legend and the numbers, bottom left.
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + view_size_.y - margin), ImGuiCond_Always,
@@ -8967,6 +8982,18 @@ void App::preview_panels() {
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
     const PreviewLayer& layer = p.layers[std::size_t(top_layer_)];
     loc::Text(tr(T::LayerOf), top_layer_ + 1, layers, layer.z);
+    // Fewer columns, so that less of the part is covered (owner's report):
+    // the button folds the times, shares, filament and totals away.
+    {
+        const float button = ImGui::GetFrameHeight();
+        ImGui::SameLine(0.0f, 2.0f * ImGui::GetStyle().ItemSpacing.x);
+        if (ImGui::Button(legend_full_ ? "-##legend_full" : "+##legend_full", ImVec2(button, button)))
+            legend_full_ = !legend_full_;
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(legend_full_ ? T::LegendLess : T::LegendMore));
+    }
+    if (slider_in_legend)
+        move_slider(200.0f * scale_); // fixed: the legend's width follows what it holds
     if (calibration_ && !viewer_)
         for (const CalibrationSegment& seg : calibration_->segments)
             if (layer.z > seg.z0 + 1e-6 && layer.z <= seg.z1 + 1e-6) {
@@ -8998,7 +9025,7 @@ void App::preview_panels() {
         const double all = p.moves_seconds;
         const double area = 3.14159265358979 * 0.25 * result_->settings.filament_diameter * result_->settings.filament_diameter;
         const double density = result_->settings.filament_density > 0.0 ? result_->settings.filament_density : 1.24;
-        if (ImGui::BeginTable("##kinds", 4, ImGuiTableFlags_SizingFixedFit)) {
+        if (ImGui::BeginTable("##kinds", legend_full_ ? 4 : 1, ImGuiTableFlags_SizingFixedFit)) {
             for (std::size_t k = 1; k < kLineKinds; ++k) {
                 if (p.kind_moves[k] == 0)
                     continue;
@@ -9017,6 +9044,10 @@ void App::preview_panels() {
                 ImGui::SameLine();
                 ImGui::AlignTextToFramePadding();
                 ImGui::TextUnformatted(tr(kind_text(LineKind(k))));
+                if (!legend_full_) {
+                    ImGui::PopID();
+                    continue;
+                }
                 ImGui::TableNextColumn();
                 ImGui::AlignTextToFramePadding();
                 if (all > 0.0)
@@ -9156,24 +9187,29 @@ void App::preview_panels() {
         };
         if (p.estimated_seconds >= 0.0)
             line(tr(T::EstimatedTime), format_duration(p.estimated_seconds));
-        if (p.first_layer_seconds > 0.0)
-            line(tr(T::FirstLayerTime), format_duration(p.first_layer_seconds));
-        if (result_->resin) {
-            // A resin print: the resin it takes, by its bottle (gcode_extras.md, rule 2).
-            line(tr(T::ResinUsed), format("%.1f ml  ·  %.1f g", result_->resin->volume / 1000.0, result_->resin->weight));
-            if (result_->resin->cost > 0.0)
-                line(tr(T::ResinCost), format("%.2f", result_->resin->cost));
-            line(tr(T::Layers), std::to_string(layers));
-        } else {
-            const double area = 3.14159265358979 * 0.25 * result_->settings.filament_diameter *
-                                result_->settings.filament_diameter;
-            line(tr(T::FilamentUsed),
-                 format("%.2f m  ·  %.1f cm³", p.filament / 1000.0, p.filament * area / 1000.0));
-            line(tr(T::Layers), std::to_string(layers));
-            line(tr(T::Lines), number_text(p.lines));
+        if (legend_full_) { // folded: the time only
+            if (p.first_layer_seconds > 0.0)
+                line(tr(T::FirstLayerTime), format_duration(p.first_layer_seconds));
+            if (result_->resin) {
+                // A resin print: the resin it takes, by its bottle (gcode_extras.md, rule 2).
+                line(tr(T::ResinUsed),
+                     format("%.1f ml  ·  %.1f g", result_->resin->volume / 1000.0, result_->resin->weight));
+                if (result_->resin->cost > 0.0)
+                    line(tr(T::ResinCost), format("%.2f", result_->resin->cost));
+                line(tr(T::Layers), std::to_string(layers));
+            } else {
+                const double area = 3.14159265358979 * 0.25 * result_->settings.filament_diameter *
+                                    result_->settings.filament_diameter;
+                line(tr(T::FilamentUsed),
+                     format("%.2f m  ·  %.1f cm³", p.filament / 1000.0, p.filament * area / 1000.0));
+                line(tr(T::Layers), std::to_string(layers));
+                line(tr(T::Lines), number_text(p.lines));
+            }
         }
         ImGui::EndTable();
     }
+    const ImVec2 at = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
+    legend_rect_ = ImVec4(at.x, at.y, at.x + size.x, at.y + size.y);
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
