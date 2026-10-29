@@ -521,6 +521,7 @@ private:
     // An object's menu and the window with its own settings (settings_levels.md, rules 10 and 11).
     void object_menu();
     void plate_menu();
+    void slice_panel();
     void add_shape(TriangleMesh mesh, T name);
     void object_settings_window();
     bool own_settings_editor(std::string& own, const std::string& under, bool layers, std::string_view where);
@@ -4151,7 +4152,7 @@ void App::top_bar() {
         return std::round(button_h * 0.32f) * 2.0f + std::round(button_h * 0.5f) + ImGui::GetStyle().ItemInnerSpacing.x +
                2.0f + ImGui::CalcTextSize(label).x;
     };
-    const float right = width_of(tr(T::Open)) + width_of(tr(T::Slice)) + width_of(tr(T::Export)) + more_w + gap * 3.0f;
+    const float right = width_of(tr(T::Open)) + more_w + gap;
     // The search for a setting and the help (assistant.md, rule 1), between
     // the tabs and the actions, when there is room; F1 and More open the help
     // anyway.
@@ -4177,20 +4178,6 @@ void App::top_bar() {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
     }
-    ImGui::SameLine(0, gap);
-    ImGui::SetCursorPosY(top);
-    const bool slicing = slice_job_.running();
-    if (button("##slice", "tisma_slice", slicing ? tr(T::Slicing) : tr(T::Slice), true, false,
-               mesh_.has_value() && !slicing, tr(T::SliceTip), button_h))
-        start_slice();
-    anchor("slice_button");
-    ImGui::SameLine(0, gap);
-    ImGui::SetCursorPosY(top);
-    const bool can_export = result_ && result_->ok && !viewer_ && !stale_ && result_->check.ok();
-    if (button("##export", "tisma_save", tr(result_ && result_->resin ? T::ExportGoo : T::Export), false, false, can_export,
-               can_export ? tr(T::ExportTip) : tr(T::ExportNeedsSlice), button_h))
-        begin_export();
-    anchor("send_button");
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(top);
     if (icon_button("##more", "tisma_more", tr(T::More), button_h))
@@ -7398,6 +7385,66 @@ void App::view_tools() {
 // A model's menu (settings_levels.md, rule 10): at the Normal and Advanced
 // levels, shortcuts that give it settings of its own, starting from the
 // profile's values, and any other setting it may have.
+// Slice, and then save or send, at the bottom right of the view (the
+// owner's request, as other slicers place it): before slicing, or with the
+// slice out of date, the Slice button; after, the time and Export G-code with
+// a menu of the other ways (to the printer, the project).
+void App::slice_panel() {
+    const float margin = 14.0f * scale_, button_h = 44.0f * scale_;
+    // In Preview the layer slider takes the right edge.
+    const float right = view_pos_.x + view_size_.x - margin - (tab_ == Tab::Preview ? 150.0f * scale_ : 0.0f);
+    ImGui::SetNextWindowPos(ImVec2(right, view_pos_.y + view_size_.y - margin), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+    ImGui::SetNextWindowBgAlpha(0.92f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f * scale_, 10.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##slice_panel", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    const bool slicing = slice_job_.running();
+    const bool can_export = result_ && result_->ok && !viewer_ && !stale_ && result_->check.ok();
+    if (!can_export || slicing) {
+        if (button("##slice", "tisma_slice", slicing ? tr(T::Slicing) : tr(T::Slice), true, false,
+                   mesh_.has_value() && !slicing, tr(T::SliceTip), button_h))
+            start_slice();
+        g_menu_rects["slice"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                       ImGui::GetItemRectMax().y);
+        anchor("slice_button");
+    } else {
+        if (!result_->resin && result_->preview.estimated_seconds > 0.0)
+            loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(result_->preview.estimated_seconds).c_str());
+        if (button("##export", "tisma_save", tr(result_->resin ? T::ExportGoo : T::Export), true, false, true,
+                   tr(T::ExportTip), button_h))
+            begin_export();
+        g_menu_rects["export"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                        ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        anchor("send_button");
+        ImGui::SameLine(0, 2.0f * scale_);
+        if (button("##save_more", "tisma_more", nullptr, true, false, true, tr(T::SaveOptions), button_h))
+            ImGui::OpenPopup("##save_menu");
+        g_menu_rects["save_more"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                           ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (ImGui::BeginPopup("##save_menu")) {
+            const bool connected = printer_ && printer_->status().state == device::PrinterState::Idle;
+            const bool send = ImGui::MenuItem(tr(connected ? T::SendToPrinter : T::SendToPrinterNone), nullptr, false,
+                                              connected && device_can_print() && !result_->resin);
+            g_menu_rects["send"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                          ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+            if (send)
+                device_print();
+            const bool project = ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S");
+            g_menu_rects["project"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                             ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+            if (project)
+                begin_save_project(false);
+            ImGui::EndPopup();
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
 void App::plate_menu() {
     if (!ImGui::BeginPopup("##plate_menu"))
         return;
@@ -10016,6 +10063,8 @@ void App::layout() {
             empty_hint();
         if (tab_ == Tab::Preview)
             preview_panels();
+        if ((tab_ == Tab::Prepare || tab_ == Tab::Preview) && (mesh_ || result_))
+            slice_panel();
         if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
             part_labels();
         if (tab_ == Tab::Analysis)
@@ -11011,6 +11060,13 @@ void App::script_input() {
         if (!ok)
             return fail_step("it is " + std::to_string(got));
         next();
+    } else if (step.verb == "expect-control") { // a named control (menu entry, slider, button) is on the screen
+        if (g_menu_rects.contains(step.key)) {
+            std::printf("ui-script: expect-control %s: ok\n", step.key.c_str());
+            return next();
+        }
+        if (f >= 30)
+            fail_step("it is not on the screen");
     } else if (step.verb == "expect-objects") { // this many models on the plate, the last one's name with VALUE
         const std::size_t want = std::size_t(std::atoll(step.key.c_str()));
         const std::string last = objects_.empty() ? std::string() : objects_.back().name;

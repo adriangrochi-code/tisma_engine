@@ -1,0 +1,8 @@
+# The Slice button at the bottom right slices (no slice step here: the
+# click must do it); then the same place offers Export G-code and a menu
+# with the other ways to save.
+menu slice
+wait 60
+expect-control export
+menu save_more
+menu project

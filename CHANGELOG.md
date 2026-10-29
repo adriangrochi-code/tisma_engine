@@ -96,6 +96,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **Laminar abajo a la derecha:** el botón está en un panel abajo a la derecha de la vista; después de laminar, el
+  mismo lugar muestra el tiempo, «Exportar G-code» y un menú para mandarlo a la impresora o guardar el proyecto.
+
 - **Soportes bajo puentes:** se decide punto por punto. Una losa sobre tres paredes en U ya no lleva soporte; una
   sobre dos paredes en L, un pilar de un lado o uno central sí, en toda la zona que cuelga.
 

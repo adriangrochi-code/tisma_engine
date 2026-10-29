@@ -7738,3 +7738,20 @@ Línea nueva de S11, agregada a la prueba: dos paredes en V que abren 30° son p
 afuera.
 
 **Sigue:** el botón Laminar abajo a la derecha o el paso 5 de la vista previa.
+
+## 2026-10-29 (noche): Laminar abajo a la derecha
+
+Pedido del dueño de `PLAN.md`. Laminar y Exportar salieron de la barra de arriba y pasaron a un panel abajo a la
+derecha de la vista (en Vista previa, a la izquierda de la barra de capas). Antes de laminar, o con el laminado
+desactualizado, muestra Laminar (Laminando… mientras corre). Después, el tiempo estimado, «Exportar G-code» (o el
+archivo de resina) y, al lado, un botón con el menú de las otras formas: «Mandar a la impresora» (solo con una
+impresora conectada y libre; si no, dice «sin conectar») y «Guardar el proyecto». Los anclajes del recorrido
+(`slice_button`, `send_button`) siguen a los botones.
+
+Paso nuevo de `--ui-script`: `expect-control NOMBRE` (un control con nombre está en pantalla). Prueba
+`ui_script_slice_panel`: clic en Laminar del panel, sin el paso `slice`, y aparece Exportar; después el menú y
+«Guardar el proyecto». Control: sin el clic, Exportar no aparece y el script falla. Pasan las 151 pruebas de interfaz.
+Mirado en capturas de Preparar y Vista previa a 1200 × 760. Sin probar: «Mandar a la impresora» con una impresora
+(la simulada de las pruebas del dispositivo no se conecta desde el script).
+
+**Sigue:** el paso 5 de la vista previa (capas lejanas juntas, mallado voraz).

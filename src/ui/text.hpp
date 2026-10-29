@@ -164,6 +164,9 @@
     X(AddShape, "Agregar forma", "Add a shape")                                                                       \
     X(ShapeCube, "Cubo", "Cube")                                                                                      \
     X(ShapeSphere, "Esfera", "Sphere")                                                                                \
+    X(SendToPrinter, "Mandar a la impresora", "Send to the printer")                                                  \
+    X(SendToPrinterNone, "Mandar a la impresora (sin conectar)", "Send to the printer (not connected)")               \
+    X(SaveOptions, "Más formas de guardar", "More ways to save")                                                      \
     X(ToolRemoveTip, "Quitar el modelo elegido (Supr)", "Remove the chosen model (Delete)")                           \
     X(ToolDuplicateTip, "Duplicar el modelo elegido", "Duplicate the chosen model")                                   \
     X(ToolMoveTip, "Mover (M): arrastrá el modelo sobre la cama o escribí su posición", "Move (M): drag the model on the bed or type its position") \

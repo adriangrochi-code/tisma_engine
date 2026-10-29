@@ -715,8 +715,10 @@ pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene
   abrir y cerrar (como OrcaSlicer), y más juntas
 - [ ] «No planar» como entrada propia en la columna de categorías de impresión (modos y sus ajustes) y en la de la
   impresora (altura libre del cabezal, ángulos libres en X e Y, radio libre, perfil del cabezal; hoy en «Cabezal»)
-- [ ] El botón Laminar abajo a la derecha (como Cura) y, después de laminar, un menú para guardar el G-code o mandarlo
-  a la impresora conectada
+- [x] El botón Laminar abajo a la derecha (como Cura) y, después de laminar, un menú para guardar el G-code o mandarlo
+  a la impresora conectada (2026-10-29: un panel abajo a la derecha de la vista, en Preparar y Vista previa; antes de
+  laminar, Laminar; después, el tiempo estimado, «Exportar G-code» y un menú con «Mandar a la impresora» y «Guardar el
+  proyecto»; Laminar y Exportar salieron de la barra de arriba)
 - [x] Mover, girar y escalar con controles visuales (deslizadores), no solo números; un menú con el botón derecho para
   agregar modelos y formas (2026-10-29: clic derecho en la placa, fuera de los modelos, con «Agregar modelo…»,
   «Agregar forma» —cubo, cilindro y esfera de 20 mm— y «Organizar»; un deslizador bajo cada número de Mover (la cama
