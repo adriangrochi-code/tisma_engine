@@ -13,6 +13,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -134,4 +135,43 @@ TEST_CASE("copies: how many fit on the bed (the spec team's BH8)", "[labels][pla
     CHECK(copies_that_fit(cube20(), fit, s) == fit);
     s.bed.clear(); // nowhere to arrange them: all of them, as place_copies leaves them
     CHECK(copies_that_fit(cube20(), 100, s) == 100);
+}
+
+TEST_CASE("an object's outline is the hull of its points, also with the octagon filter", "[labels]") {
+    // Many points (the filter runs from 65), a few on the hull's edges and
+    // corners repeated: every point inside or on the outline, every corner a
+    // point, convex and counter-clockwise.
+    std::vector<Vec3f> points;
+    std::uint32_t mix = 7;
+    for (int i = 0; i < 20000; ++i) {
+        mix = mix * 1664525u + 1013904223u;
+        const float x = float(mix % 20001) / 100.0f - 100.0f;
+        mix = mix * 1664525u + 1013904223u;
+        const float y = float(mix % 20001) / 100.0f - 100.0f;
+        if (x * x / 1.5f + y * y < 8000.0f) // an ellipse's inside
+            points.push_back({x, y, float(i % 7)});
+    }
+    for (const Vec3f c : {Vec3f{-120, 0, 0}, Vec3f{0, -95, 1}, Vec3f{110, 3, 2}, Vec3f{0, 99, 3}, Vec3f{-120, 0, 4}})
+        points.push_back(c);
+    points.push_back({-5, -95, 0}); // on the edge between two corners? not a corner itself
+    const Polygon hull = outline_of(points);
+    REQUIRE(hull.size() >= 4);
+    const auto cross = [](const Clipper2Lib::Point64& o, const Clipper2Lib::Point64& a, const Clipper2Lib::Point64& b) {
+        return double(a.x - o.x) * double(b.y - o.y) - double(a.y - o.y) * double(b.x - o.x);
+    };
+    for (std::size_t i = 0; i < hull.size(); ++i) {
+        const auto& a = hull[i];
+        const auto& b = hull[(i + 1) % hull.size()];
+        CHECK(cross(a, b, hull[(i + 2) % hull.size()]) > 0.0); // convex, counter-clockwise, no straight corner
+        CHECK(std::any_of(points.begin(), points.end(), [&](const Vec3f& p) {
+            return to_units(p.x) == a.x && to_units(p.y) == a.y;
+        }));
+    }
+    for (const Vec3f& p : points) {
+        const Clipper2Lib::Point64 q{to_units(p.x), to_units(p.y)};
+        bool inside = true;
+        for (std::size_t i = 0; i < hull.size(); ++i)
+            inside = inside && cross(hull[i], hull[(i + 1) % hull.size()], q) >= 0.0;
+        CHECK(inside);
+    }
 }

@@ -333,19 +333,53 @@ Painting object_painting(const Painting& painting, const MeshObject& object) {
     return out;
 }
 
-// The convex hull of a mesh's vertices on the bed, counter-clockwise.
-Polygon outline_of(const IndexedMesh& mesh) {
+// The convex hull of points on the bed, counter-clockwise.
+Polygon outline_of(std::span<const Vec3f> points) {
     std::vector<Clipper2Lib::Point64> p;
-    p.reserve(mesh.vertices.size());
-    for (const Vec3f& v : mesh.vertices)
+    p.reserve(points.size());
+    for (const Vec3f& v : points)
         p.push_back({to_units(v.x), to_units(v.y)});
+    const auto turn = [](const Clipper2Lib::Point64& o, const Clipper2Lib::Point64& a, const Clipper2Lib::Point64& b) {
+        return double(a.x - o.x) * double(b.y - o.y) - double(a.y - o.y) * double(b.x - o.x);
+    };
+    // Akl and Toussaint's filter (1978): the extreme points in eight
+    // directions make an octagon inside the hull, and a point strictly inside
+    // it is no corner of the hull. A large part's half a million vertices
+    // come down to the few near its outline before the sort; the hull is the
+    // same.
+    if (p.size() > 64) {
+        // The point lowest in x, then in x + y, in y, in y - x, and so on
+        // round: the octagon's corners, counter-clockwise from the left.
+        const auto key = [](const Clipper2Lib::Point64& q, std::size_t d) {
+            const std::int64_t keys[8] = {q.x, q.x + q.y, q.y, q.y - q.x, -q.x, -q.x - q.y, -q.y, q.x - q.y};
+            return keys[d];
+        };
+        std::array<Clipper2Lib::Point64, 8> ext;
+        ext.fill(p.front());
+        for (const auto& q : p)
+            for (std::size_t d = 0; d < 8; ++d)
+                if (key(q, d) < key(ext[d], d))
+                    ext[d] = q;
+        std::vector<Clipper2Lib::Point64> octagon;
+        for (const auto& e : ext)
+            if (octagon.empty() || !(e == octagon.back()))
+                octagon.push_back(e);
+        while (octagon.size() > 1 && octagon.front() == octagon.back())
+            octagon.pop_back();
+        if (octagon.size() >= 3) {
+            const auto inside = [&](const Clipper2Lib::Point64& q) {
+                for (std::size_t i = 0; i < octagon.size(); ++i)
+                    if (!(turn(octagon[i], octagon[(i + 1) % octagon.size()], q) > 0.0))
+                        return false;
+                return true;
+            };
+            p.erase(std::remove_if(p.begin(), p.end(), inside), p.end());
+        }
+    }
     std::sort(p.begin(), p.end(), [](const Clipper2Lib::Point64& a, const Clipper2Lib::Point64& b) { return a.x < b.x || (a.x == b.x && a.y < b.y); });
     p.erase(std::unique(p.begin(), p.end()), p.end());
     if (p.size() < 3)
         return Polygon(p.begin(), p.end());
-    const auto turn = [](const Clipper2Lib::Point64& o, const Clipper2Lib::Point64& a, const Clipper2Lib::Point64& b) {
-        return double(a.x - o.x) * double(b.y - o.y) - double(a.y - o.y) * double(b.x - o.x);
-    };
     Polygon hull(2 * p.size());
     std::size_t k = 0;
     for (std::size_t i = 0; i < p.size(); ++i) { // lower, then upper (Andrew's monotone chain)
@@ -360,6 +394,24 @@ Polygon outline_of(const IndexedMesh& mesh) {
     }
     hull.resize(k - 1);
     return hull;
+}
+
+Polygon outline_of(const IndexedMesh& mesh) { return outline_of(std::span<const Vec3f>(mesh.vertices)); }
+
+// The vertices one object's triangles use, without building its mesh.
+std::vector<Vec3f> object_points(const IndexedMesh& mesh, const MeshObject& object) {
+    const std::size_t end = std::min(mesh.triangles.size(), object.first + object.count);
+    std::vector<char> used(mesh.vertices.size(), 0);
+    for (std::size_t t = object.first; t < end; ++t)
+        for (const std::uint32_t v : mesh.triangles[t])
+            used[v] = 1;
+    if (std::find(used.begin(), used.end(), char(0)) == used.end())
+        return mesh.vertices; // all of them, as a weld leaves a single object
+    std::vector<Vec3f> out;
+    for (std::size_t v = 0; v < used.size(); ++v)
+        if (used[v])
+            out.push_back(mesh.vertices[v]);
+    return out;
 }
 
 // Appends an object sliced apart after the layers of `out` (sequential.md, rule 1).
@@ -784,13 +836,13 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         }
         apply_mixes(out, blends);
         for (const MeshObject& o : *objects) {
-            const IndexedMesh mesh = object_mesh(input, o);
-            if (mesh.triangles.empty())
+            const std::vector<Vec3f> points = object_points(input, o); // its height and outline, without its mesh
+            if (points.empty())
                 continue;
-            float lo = mesh.vertices.front().z, hi = lo;
-            for (const Vec3f& v : mesh.vertices)
+            float lo = points.front().z, hi = lo;
+            for (const Vec3f& v : points)
                 lo = std::min(lo, v.z), hi = std::max(hi, v.z);
-            out.objects.push_back({o.name, o.object, o.instance, outline_of(mesh), double(hi) - double(lo), 0, out.raft_layers, {}, {},
+            out.objects.push_back({o.name, o.object, o.instance, outline_of(points), double(hi) - double(lo), 0, out.raft_layers, {}, {},
                                    o.wipe_into_infill, o.wipe_into_object});
         }
         return out;
