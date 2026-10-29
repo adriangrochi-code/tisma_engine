@@ -472,6 +472,7 @@ private:
     void compare_view(const std::vector<std::uint8_t>& picture, int fb_w, int fb_h);
     void check_view(int fb_w, int fb_h);
     void script_input();
+    void dump_ui();
     void check_moire(int fb_w, int fb_h);
     // The Device page (docs/DEVICE.md).
     void device_panel();
@@ -1308,6 +1309,14 @@ const char* g_row_key = nullptr;
 // key as "key#2"): min x, min y, max x, max y, for --ui-script's clicks.
 std::map<std::string, ImVec4> g_field_rects;
 std::string g_last_field; // the last of them, for a field narrower than its cell
+// --dump-ui: each setting row drawn this frame, by its field's name in
+// g_field_rects: its label, and whether the label's column cuts it.
+struct DumpRow {
+    std::string name, label;
+    bool cut = false;
+};
+bool g_dump_ui = false;
+std::vector<DumpRow> g_dump_rows;
 // The last row's key, for its ID (RowId), and how many rows of each label
 // and key were drawn this frame.
 std::string g_last_row_key;
@@ -2003,9 +2012,10 @@ void label_cell(T label, const char* tip = nullptr) {
     const float column = ImGui::GetContentRegionAvail().x;
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(tr(label));
+    const bool cut = ImGui::GetItemRectMax().x > cell.x + column; // the column hides its end
     if (tip && ImGui::IsItemHovered())
         loc::SetTooltip("%s", tip);
-    else if (ImGui::IsItemHovered() && ImGui::GetItemRectMax().x > cell.x + column) // cut by the column
+    else if (ImGui::IsItemHovered() && cut)
         loc::SetTooltip("%s", tr(label));
     if (const char* info = row_key(label))
         info_button(label, info);
@@ -2042,6 +2052,8 @@ void label_cell(T label, const char* tip = nullptr) {
         const ImVec2 at = ImGui::GetCursorScreenPos();
         g_field_rects[name] = ImVec4(at.x, at.y, at.x + ImGui::GetContentRegionAvail().x, at.y + ImGui::GetFrameHeight());
         g_last_field = name;
+        if (g_dump_ui)
+            g_dump_rows.push_back({name, tr(label), cut});
     }
 }
 
@@ -2630,6 +2642,7 @@ bool App::init(std::string& error) {
         catalog_open_ = true;
         catalog_query_ = options_.catalog_query;
     }
+    g_dump_ui = !options_.dump_ui.empty();
     if (!options_.ui_script.empty()) {
         std::ifstream in(from_utf8(options_.ui_script));
         if (!in) {
@@ -9786,6 +9799,7 @@ void App::dialogs() {
 void App::layout() {
     anchors_.clear();
     g_field_rects.clear();
+    g_dump_rows.clear();
     g_row_ids.clear();
     viewport();
     anchor_rect("plate", view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
@@ -10584,6 +10598,41 @@ void App::check_view(int fb_w, int fb_h) {
 // would give it (owner's request, 2026-10-28: every field must work). The
 // mouse goes to the field's middle and clicks there, so a field drawn where it
 // cannot be clicked fails.
+// --dump-ui: the setting rows of the last frame as JSON, for checking texts
+// and fields without reading the picture (the spec team's request): each
+// row's key, label, value as the settings file writes it, rectangle (x, y,
+// width, height in window pixels) and whether its label is cut.
+void App::dump_ui() {
+    std::map<std::string, std::string> values;
+    for (const auto& [key, value] : describe(settings_))
+        values[key] = value;
+    nlohmann::json rows = nlohmann::json::array();
+    for (const DumpRow& r : g_dump_rows) {
+        const std::string key = r.name.substr(0, r.name.find('#'));
+        const auto rect = g_field_rects.find(r.name);
+        nlohmann::json row = {{"key", key}, {"label", r.label}, {"cut", r.cut}};
+        if (const auto v = values.find(key); v != values.end())
+            row["value"] = v->second;
+        if (rect != g_field_rects.end())
+            row["rect"] = {rect->second.x, rect->second.y, rect->second.z - rect->second.x,
+                           rect->second.w - rect->second.y};
+        rows.push_back(std::move(row));
+    }
+    const auto cut = std::count_if(g_dump_rows.begin(), g_dump_rows.end(), [](const DumpRow& r) { return r.cut; });
+    std::printf("dump-ui: %zu rows, %td with the label cut\n", g_dump_rows.size(), cut);
+    if (g_dump_rows.empty()) { // the panel was not drawn: nothing to check
+        std::fprintf(stderr, "error: --dump-ui found no setting rows\n");
+        failed_ = true;
+    }
+    std::ofstream out(from_utf8(options_.dump_ui));
+    out << nlohmann::json{{"language", language() == Language::Spanish ? "es" : "en"}, {"rows", rows}}.dump(2)
+        << "\n";
+    if (!out) {
+        std::fprintf(stderr, "error: cannot write %s\n", options_.dump_ui.c_str());
+        failed_ = true;
+    }
+}
+
 void App::script_input() {
     if (script_at_ >= script_.size() || ImGui::GetFrameCount() < 3)
         return;
@@ -10937,6 +10986,8 @@ void App::frame() {
                 std::fprintf(stderr, "error: cannot write %s\n", options_.screenshot.c_str());
                 failed_ = true;
             }
+            if (!options_.dump_ui.empty())
+                dump_ui();
             if (!options_.compare_view.empty())
                 compare_view(flipped, fb_w, fb_h);
             if (options_.view_check && (tab_ == Tab::Prepare || tab_ == Tab::Preview))

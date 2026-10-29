@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`tisma --dump-ui filas.json`** (con `--screenshot`): cada fila de ajustes dibujada, con su clave, su etiqueta, el
+  valor guardado, su rectángulo y si la columna le corta la etiqueta; para revisar textos y campos sin mirar la imagen.
+
 - **`tisma --draw-stats`:** cuántas llamadas de dibujo y cuántos vértices pide cada cuadro, los de la vista 3D y los de
   los paneles por separado, para medir la vista previa en cualquier placa de video; y cuánto ocupa la vista en la
   placa (instancias de la vista previa, recorridos, mallas y destinos de dibujo). Y el paso `slice` de

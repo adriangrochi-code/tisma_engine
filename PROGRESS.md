@@ -7623,3 +7623,12 @@ vértices de esas capas; no medido. Pruebas nuevas de `box_outside` y del recort
 
 **Sigue** (paso 5 del plan del equipo de fichas): capas juntas de lejos y el mallado voraz; S11, la regla del puente
 punto por punto, cuando la ficha llegue a `dev`.
+
+## 2026-10-29 (noche): `--dump-ui`
+
+Bloque nocturno. `tisma --dump-ui filas.json --screenshot …` escribe las filas de ajustes del cuadro de la captura:
+clave, etiqueta (en el idioma elegido), valor como lo escribe el archivo de ajustes, rectángulo del campo en píxeles
+de la ventana, y `cut` si la columna de la etiqueta la corta (lo que el equipo de fichas buscaba a mano en el barrido
+de campos). Imprime «dump-ui: N rows, M with the label cut» y sale con 1 si no hubo filas. Prueba `ui_dump_rows`.
+Los botones, listas y menús que no son filas de ajustes quedan para después (el ítem de `PLAN.md` queda marcado
+solo para las filas).

@@ -163,6 +163,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${script}.png)
       set_tests_properties(ui_script_${script} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     endforeach()
+    # The setting rows as JSON (--dump-ui), for the spec team's text checks.
+    add_test(NAME ui_dump_rows
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --level advanced
+              --dump-ui ${CMAKE_CURRENT_BINARY_DIR}/ui_dump_rows.json
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_dump_rows.png)
+    set_tests_properties(ui_dump_rows PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # A still view draws nothing new (idle_view): its draw calls counted.
     add_test(NAME ui_script_idle_view
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

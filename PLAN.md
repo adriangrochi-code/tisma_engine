@@ -719,7 +719,7 @@ pedidos de diseño, que cambian lo que dicen las fichas de la interfaz (conviene
 - [ ] La primera vez, elegir la impresora y el filamento antes del recorrido de bienvenida
 - [ ] La leyenda de la vista previa no tapa la pieza (encuadre teniendo en cuenta los paneles)
 - [ ] La columna de valores corrida en Windows con escala de pantalla (no reproducido al 100 %)
-- [ ] `--dump-ui` (cada control con su clave, texto, valor y rectángulo) para la revisión de textos del equipo de fichas
+- [x] `--dump-ui` (cada control con su clave, texto, valor y rectángulo) para la revisión de textos del equipo de fichas: las filas de ajustes (2026-10-29); los botones y menús, más adelante
 
 ## Fichas nuevas (2026-10-26)
 
