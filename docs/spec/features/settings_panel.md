@@ -175,6 +175,8 @@ El motor toma de los dos:
      línea fina debajo;
    - debajo, todos sus ajustes, uno por fila, sin tarjeta alrededor y sin espacio extra entre filas (filas de 28 px);
      entre un apartado y el siguiente, 12 px;
+   - sin recuadro gris detrás de cada apartado: los títulos y los ajustes van sobre el fondo del panel; el título de
+     cada sección va en el violeta del tema (decisión del dueño, 29-10-2026);
    - si tiene ajustes cambiados respecto del perfil guardado, «2 cambios» en violeta al lado del título;
    - toda la pestaña se recorre bajando con la rueda o la barra; no se pliega nada y no hay línea de resumen
      plegada. El resumen de cada apartado (la columna de la derecha de las tablas) se usa solo en la búsqueda y en
@@ -246,10 +248,9 @@ El motor toma de los dos:
     - Comparación: la lista Basic de Cura (fuente de la regla 1) trae lo mismo en espíritu (altura de capa, paredes,
       capas de arriba y abajo, densidad y patrón de relleno, temperaturas, retracción, ventilador, soporte y
       adhesión), más la velocidad de impresión, que el motor deja en Normal.
-11. **Básico avisa lo que oculta:** al pie de cada apartado con ajustes ocultos, «3 ajustes más en Normal y
-    Avanzado» y el botón «Mostrar todos», que muestra el apartado entero hasta que se cierre o se cambie de sección.
-    El nivel elegido no cambia. Una sección entera oculta en Básico (por ejemplo, Velocidad) no tiene botón: se ve
-    al cambiar de nivel.
+11. **Lo oculto no se anuncia:** debajo de los apartados no hay línea «N ajustes más en Normal y Avanzado» ni botón
+    «Mostrar todos» (decisión del dueño, 29-10-2026). Lo que el nivel oculta se ve al cambiar de nivel, en
+    Personalizado con «Elegir ajustes…», o con la búsqueda (regla 5), que lo muestra marcado (regla 12).
 12. **Nada cambiado queda oculto:** un ajuste distinto del perfil guardado, o distinto del valor por defecto en un
     perfil del usuario, se muestra en cualquier nivel, con la etiqueta gris «Avanzado» (o «Normal») y la flecha para
     volverlo atrás. Así un nivel más bajo nunca esconde un cambio.
@@ -392,6 +393,11 @@ impresora va en un menú aparte, más detallado, con todo lo de la calibración,
 | Notas | Texto libre de la persona |
 
     Las claves de cada apartado son las de la tabla «Impresora» de la regla 1.
+    - Máquina, Boquilla y extrusor, Límites y G-code son ajustes: van en una sola lista con sus títulos, como el panel
+      (reglas 1 a 4), y sus íconos llevan la lista a cada una.
+    - Calibración, Conexión y Notas no son ajustes sino estado, acciones y texto libre: cada una es su propia página
+      detrás de su ícono, debajo de los otros cuatro, separados por una línea.
+    - Propuesta de la ficha (29-10-2026), para confirmar con el dueño.
 38. **Sección Calibración:** una fila por cada prueba de `calibrations.md` que sirve a esa impresora (regla 5 de esa
     ficha), con:
     - el ajuste que fija y su valor actual en el perfil (por ejemplo, flujo 98 %, retracción 0,8 mm);
@@ -453,7 +459,7 @@ conectar desde un ícono chico en la tarjeta de la impresora que abre el menú d
 | SP5 | `support.enabled` apagado | Soportes muestra solo el interruptor; al encenderlo aparecen los demás apartados, y los dependientes sangrados |
 | SP6 | Buscar «costura» | La lista va hasta el título Costura (sección Calidad, ícono iluminado) y se ve `walls.seam` resaltado |
 | SP6b | Pestaña Impresión, bajar con la rueda hasta el final | Todas las secciones una debajo de otra con su título, y dentro los apartados con su título; ninguna flecha ni línea plegada; no hay botón «Ver todo junto» |
-| SP7 | Nivel Básico, pestaña Impresión | Solo las claves de la tabla de la regla 10; al pie de Relleno, «N ajustes más…»; la sección Velocidad no aparece |
+| SP7 | Nivel Básico, pestaña Impresión | Solo las claves de la tabla de la regla 10; ninguna línea «N ajustes más…» ni botón «Mostrar todos»; sin recuadro gris detrás de los apartados; la sección Velocidad no aparece |
 | SP8 | En Avanzado, `infill.solid_every` a 5; pasar a Básico | Relleno muestra `infill.solid_every` con la etiqueta «Avanzado» y la flecha atrás |
 | SP9 | Laminar el mismo cubo en los cuatro niveles | Los cuatro G-code son iguales byte a byte |
 | SP10 | Básico › Personalizado | Se ven los mismos ajustes que en Básico; `ui.custom_base` es `basic` |
