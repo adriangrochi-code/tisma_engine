@@ -26,10 +26,15 @@ double dist2(double ax, double ay, double bx, double by) {
 }
 
 // Distance from (x, y) to the closed segment from (ax, ay) to (bx, by).
+// The length of (x, y). Not std::hypot: it guards against overflow, which
+// the diagram's coordinates (units of 1 nm, a box radius at most a few
+// metres away) cannot reach, and it cost an eighth of a large slice.
+inline double norm(double x, double y) { return std::sqrt(x * x + y * y); }
+
 double segment_distance(double ax, double ay, double bx, double by, double x, double y) {
     const double dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
     const double t = len2 > 0.0 ? std::clamp(((x - ax) * dx + (y - ay) * dy) / len2, 0.0, 1.0) : 0.0;
-    return std::hypot(x - (ax + t * dx), y - (ay + t * dy));
+    return norm(x - (ax + t * dx), y - (ay + t * dy));
 }
 
 } // namespace
@@ -94,7 +99,7 @@ VoronoiDiagram::VoronoiDiagram(double min_x, double min_y, double max_x, double 
     grid_scale_ = double(kGrid) / std::max({max_x - min_x, max_y - min_y, 1e-300});
     grid_.assign(std::size_t(kGrid) * kGrid, -1);
     const double cx = (min_x + max_x) / 2.0, cy = (min_y + max_y) / 2.0;
-    const double radius = std::max(std::hypot(max_x - min_x, max_y - min_y) / 2.0, 1.0);
+    const double radius = std::max(norm(max_x - min_x, max_y - min_y) / 2.0, 1.0);
     on_point_ = kOnPoint * radius;
     // Three dummy sites counter-clockwise at 90, 210 and 330 degrees; the
     // centre is their one node, with a ray to a far node between each pair.
@@ -164,7 +169,7 @@ bool VoronoiDiagram::violated(double x, double y, double r, std::int32_t site) c
     if (!in_cone(s, x, y))
         return false;
     const double dx = s.x2 - s.x, dy = s.y2 - s.y;
-    const double line = std::abs(dx * (y - s.y) - dy * (x - s.x)) / std::hypot(dx, dy);
+    const double line = std::abs(dx * (y - s.y) - dy * (x - s.x)) / norm(dx, dy);
     return line < r;
 }
 
@@ -269,11 +274,11 @@ bool VoronoiDiagram::split_point(std::int32_t h, std::int32_t site, double& px, 
             if (q == so.a || q == so.b)
                 continue; // q's own segment: the bisector runs through q itself
             // A parabola with focus q: it comes closest to q at its apex.
-            const double dx = so.x2 - so.x, dy = so.y2 - so.y, len = std::hypot(dx, dy);
+            const double dx = so.x2 - so.x, dy = so.y2 - so.y, len = norm(dx, dy);
             const double ux = dx / len, uy = dy / len;
             const double along = (sq.x - so.x) * ux + (sq.y - so.y) * uy;
             const double ox = so.x + along * ux, oy = so.y + along * uy;
-            const double depth = std::hypot(sq.x - ox, sq.y - oy);
+            const double depth = norm(sq.x - ox, sq.y - oy);
             if (depth <= on_point_)
                 continue;
             const double tu = (u.x - ox) * ux + (u.y - oy) * uy, tw = (w.x - ox) * ux + (w.y - oy) * uy;
@@ -360,7 +365,7 @@ void VoronoiDiagram::locate(std::int32_t h, std::int32_t site, double& x, double
     double ox = 0.0, oy = 0.0, ux = 0.0, uy = 0.0, nx = 0.0, ny = 0.0, depth = 0.0, tu = 0.0, tw = 0.0;
     double px0 = 0.0, py0 = 0.0, dx0 = 0.0, dy0 = 0.0;
     auto unit = [](double& vx, double& vy) {
-        const double len = std::hypot(vx, vy);
+        const double len = norm(vx, vy);
         if (len > 0.0)
             vx /= len, vy /= len;
         return len > 0.0;
@@ -385,7 +390,7 @@ void VoronoiDiagram::locate(std::int32_t h, std::int32_t site, double& x, double
             ux = tx, uy = ty;
             const double along = (q.x - t.x) * ux + (q.y - t.y) * uy;
             ox = t.x + along * ux, oy = t.y + along * uy;
-            depth = std::hypot(q.x - ox, q.y - oy);
+            depth = norm(q.x - ox, q.y - oy);
             if (depth > on_point_) {
                 parabola = true;
                 nx = (q.x - ox) / depth, ny = (q.y - oy) / depth;
@@ -464,7 +469,7 @@ void VoronoiDiagram::locate(std::int32_t h, std::int32_t site, double& x, double
     double ex, ey, fx, fy;
     at(0.0, ex, ey);
     at(1.0, fx, fy);
-    const double tolerance = kPlace * on_point_ / kOnPoint / std::max(std::hypot(fx - ex, fy - ey), 1e-300);
+    const double tolerance = kPlace * on_point_ / kOnPoint / std::max(norm(fx - ex, fy - ey), 1e-300);
     auto solve = [&](double a, double b, double fa, double fb, auto&& fn) {
         int kept = 0; // -1: a kept last time, +1: b kept
         for (int k = 0; k < kBisection && b - a > tolerance; ++k) {
