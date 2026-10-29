@@ -7574,3 +7574,12 @@ previa: con 36 vértices por cordón, +318 MB; con 18 (paso 3), +200 MB.
 instancias (56 B cada una), 0,2 MB de recorridos, 0,2 MB de mallas y 55,8 MB de destinos (G-buffer, oclusión, rayos,
 color, multimuestreo y el mapa de sombras). Las texturas de la escena de rayos no se cuentan. Para s200 (672 k
 cordones), unos 38 MB de instancias.
+
+## 2026-10-29: carrera al terminar una impresión por USB (encontrada por el CI)
+
+`tools/ci_linux.sh` en af8aafa falló en ASan, en «device: the host prints a job to the simulated printer, line by
+line, with resends»: el estado era Printing (3) cuando la prueba ya veía el progreso en 1. `GcodeHost` ponía el
+progreso en 1 al confirmarse la última línea y recién en la vuelta siguiente del bucle pasaba a Idle; con la máquina
+cargada (ASan y mediciones al mismo tiempo) la prueba leyó el estado en ese hueco. Ahora, tras la última línea, el
+progreso completo llega con el fin del trabajo (`finish_job`, bajo el mismo candado que el estado). Las pruebas
+`[device]` pasan 40 veces seguidas. No se empujó nada con el CI en rojo.

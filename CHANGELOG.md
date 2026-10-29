@@ -177,6 +177,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Impresión por USB: un trabajo terminado se leía un instante como «imprimiendo al 100 %».** El progreso completo
+  llega ahora junto con el fin del trabajo.
+
 - **Los campos «mm o %» ignoraban la unidad escrita** (ancho de cordón, costura, detalle mínimo, separación y ancho
   del soporte, velocidad de la pared externa y otros): «0,3 mm» en un campo en % quedaba como 0,3 %. Ahora «mm» o «%»
   escritos con el número cambian la unidad; un número solo sigue en la unidad que muestra el campo.
