@@ -3306,7 +3306,7 @@ void App::save_profile_as(ProfileKind kind, std::string name) {
     load_profile_lists();
     chosen_profile_[std::size_t(kind)] = name;
     profiles_checked_.clear();
-    notify(format(tr(T::ProfileSaved), name.c_str()));
+    notify(format(tr(T::ProfileSaved), shown_name(name).c_str()));
 }
 
 // The profile row at the top of a settings section: the list, save, and a
@@ -3374,7 +3374,7 @@ void App::profile_row(ProfileKind kind) {
                 load_profile_lists();
                 chosen_profile_[k].clear();
                 chosen = nullptr, picked = nullptr; // the lists were read again
-                notify(format(tr(T::ProfileDeleted), name.c_str()));
+                notify(format(tr(T::ProfileDeleted), shown_name(name).c_str()));
             }
         }
         ImGui::EndPopup();
@@ -3631,7 +3631,7 @@ void App::add_catalog_profile(const Profile& catalog) {
         choose_profile(profile.kind, *saved);
     // The catalog's printers have no speeds of their own (printer_profile).
     notify(format(tr(profile.kind == ProfileKind::Printer ? T::CatalogSpeedFallback : T::ProfileAdded),
-                  profile.name.c_str()));
+                  shown_name(profile.name).c_str()));
 }
 
 void App::export_gcode_to(const std::filesystem::path& path) {
