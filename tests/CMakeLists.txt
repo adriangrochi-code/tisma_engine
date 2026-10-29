@@ -206,7 +206,12 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     add_test(NAME ui_sigterm_keeps_preferences
       COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/ui_sigterm.sh ${CMAKE_CURRENT_BINARY_DIR}/ui_sigterm_home ${TISMA_XVFB_RUN}
               $<TARGET_FILE:tisma>)
-    set_tests_properties(ui_sigterm_keeps_preferences PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 120)
+    # And while it starts, before its window is up.
+    add_test(NAME ui_sigterm_while_starting
+      COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/ui_sigterm.sh ${CMAKE_CURRENT_BINARY_DIR}/ui_sigterm_start_home
+              ${TISMA_XVFB_RUN} $<TARGET_FILE:tisma> 0.05)
+    set_tests_properties(ui_sigterm_keeps_preferences ui_sigterm_while_starting PROPERTIES
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 120)
     # The Slice button at the bottom right, then its save menu.
     # At 1440 x 900, where the move slider is not in the legend (UI23).
     add_test(NAME ui_script_slice_panel

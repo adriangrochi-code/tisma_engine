@@ -8297,3 +8297,14 @@ capturas: la lista, la ficha de temperatura y la ficha de un ajuste avanzado (`-
 las 137 pruebas de interfaz y calibración.
 
 **Sigue:** ver en Windows la lista y las fichas.
+
+## 2026-10-29: SIGTERM mientras arranca (encontrado por el CI)
+
+El CI de Linux en `957aa5f` falló una vez en `ui_sigterm_keeps_preferences`, en la compilación con ASan: «exit
+143». `tisma` ponía el manejador de SIGTERM y SIGINT después de `init()` (ventana, contexto gráfico, fuentes,
+catálogo). Con ASan y la máquina cargada, el arranque pasó los 6 s de la prueba, y la señal lo mató sin guardar las
+preferencias. Se reprodujo a mano con la señal a 0,05 s y a 1 s. Ahora el manejador va al principio de `run()`: una
+señal durante el arranque deja que termine `init()`, no entra al bucle y `shutdown()` guarda. Prueba nueva,
+`ui_sigterm_while_starting` (`tests/ui_sigterm.sh` con un retraso de 0,05 s). Pasa en la compilación sin ASan; la de
+ASan la corre el CI.
+

@@ -254,6 +254,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Una señal de cierre mientras `tisma` arranca** (al cerrar la sesión, por ejemplo) ya no lo termina sin guardar:
+  el manejador está puesto antes de abrir la ventana. Lo encontró la prueba de SIGTERM en la compilación con ASan.
 - **Las salidas no pisan las entradas (BH15, BH16):** `-o`, `--warnings`, `--vtk` y `--mesh` no pueden ser el
   modelo, los ajustes, el caso de carga ni otra salida (también por `./` o un enlace): error con código 2. Un enlace
   se sigue y se escribe el archivo al que apunta; un dispositivo, una tubería o una carpeta no se reemplazan.

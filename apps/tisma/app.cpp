@@ -11993,17 +11993,19 @@ void App::frame() {
 }
 
 int App::run() {
+    // A logout or a shutdown (SIGTERM) and Ctrl+C end the program as its
+    // window's close button does, so the preferences are saved (UI21). The
+    // window wakes at least every 2 s, which bounds the wait. Set before the
+    // window opens: a signal while it starts, which can take seconds, would
+    // otherwise end the program without saving.
+    std::signal(SIGTERM, on_stop_signal);
+    std::signal(SIGINT, on_stop_signal);
     std::string error;
     if (!init(error)) {
         std::fprintf(stderr, "error: %s\n", error.c_str());
         shutdown();
         return 1;
     }
-    // A logout or a shutdown (SIGTERM) and Ctrl+C end the program as its
-    // window's close button does, so the preferences are saved (UI21). The
-    // window wakes at least every 2 s, which bounds the wait.
-    std::signal(SIGTERM, on_stop_signal);
-    std::signal(SIGINT, on_stop_signal);
     while (!glfwWindowShouldClose(window_) && !quit_ && !g_stop_signal)
         frame();
     failed_ = failed_ || !missing_icons_.empty();
