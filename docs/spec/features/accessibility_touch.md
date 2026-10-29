@@ -119,7 +119,8 @@ teléfono».
     (i); los menús que se abren al pasar, se abren al tocar.
 14. **Mover, rotar y escalar con el dedo:** manijas grandes sobre la pieza y, además, los mismos deslizadores del
     pedido del 28-10-2026.
-15. **Sección Impresora (táctil y escritorio):** al tocar Impresora en la barra se ve la impresora elegida:
+15. **Sección Impresora (táctil y escritorio):** al tocar Impresora en la barra se ve la impresora elegida (el
+    detalle, igual en escritorio, en `print_monitor.md`):
     - estado, temperaturas, avance, capa y tiempo que falta, en letra grande;
     - la cámara grande (`printer_connections.md`, «Cámara de la impresora»), que se agranda a pantalla completa con un
       toque;
