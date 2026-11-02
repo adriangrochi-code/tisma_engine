@@ -67,56 +67,13 @@ double number(const ordered_json& j, const std::string& what) {
     return j.get<double>();
 }
 
-// Base64 (RFC 4648, with padding): the paintings inside a 3MF's JSON.
-std::string base64(std::string_view bytes) {
-    static constexpr char kDigits[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string out;
-    out.reserve((bytes.size() + 2) / 3 * 4);
-    for (std::size_t i = 0; i < bytes.size(); i += 3) {
-        const std::uint32_t a = static_cast<unsigned char>(bytes[i]);
-        const std::uint32_t b = i + 1 < bytes.size() ? static_cast<unsigned char>(bytes[i + 1]) : 0;
-        const std::uint32_t c = i + 2 < bytes.size() ? static_cast<unsigned char>(bytes[i + 2]) : 0;
-        const std::uint32_t v = a << 16 | b << 8 | c;
-        out += kDigits[v >> 18 & 63];
-        out += kDigits[v >> 12 & 63];
-        out += i + 1 < bytes.size() ? kDigits[v >> 6 & 63] : '=';
-        out += i + 2 < bytes.size() ? kDigits[v & 63] : '=';
-    }
-    return out;
-}
+// A painting in a 3MF: Metadata/tisma_paint_<k>.bin, "TPNT", the version
+// (32 bits) and painting_to_bytes. The header keeps the file from starting
+// like a program, which the server refuses (a count of 23117 is "MZ").
+constexpr std::string_view kPaintMagic = "TPNT";
+constexpr std::uint32_t kPaintVersion = 1;
 
-std::string from_base64(std::string_view text, const std::string& what) {
-    const auto digit = [&](char c) -> std::uint32_t {
-        if (c >= 'A' && c <= 'Z')
-            return std::uint32_t(c - 'A');
-        if (c >= 'a' && c <= 'z')
-            return std::uint32_t(c - 'a' + 26);
-        if (c >= '0' && c <= '9')
-            return std::uint32_t(c - '0' + 52);
-        if (c == '+')
-            return 62;
-        if (c == '/')
-            return 63;
-        fail(what + ": not base64");
-    };
-    if (text.size() % 4 != 0)
-        fail(what + ": not base64");
-    std::string out;
-    out.reserve(text.size() / 4 * 3);
-    for (std::size_t i = 0; i < text.size(); i += 4) {
-        const bool pad2 = text[i + 2] == '=', pad3 = text[i + 3] == '=';
-        if ((pad2 && !pad3) || ((pad2 || pad3) && i + 4 != text.size()))
-            fail(what + ": not base64");
-        const std::uint32_t v = digit(text[i]) << 18 | digit(text[i + 1]) << 12 | (pad2 ? 0 : digit(text[i + 2]) << 6) |
-                                (pad3 ? 0 : digit(text[i + 3]));
-        out += char(v >> 16 & 0xFF);
-        if (!pad2)
-            out += char(v >> 8 & 0xFF);
-        if (!pad3)
-            out += char(v & 0xFF);
-    }
-    return out;
-}
+std::string paint_entry(std::size_t k) { return "Metadata/tisma_paint_" + std::to_string(k) + ".bin"; }
 
 constexpr std::string_view kProjectEntry = "Metadata/tisma_project.json";
 
@@ -198,7 +155,7 @@ std::string write_project(const Project& project) {
 }
 
 // Where a project's meshes and paintings are: the MESH and PNT chunks of the
-// engine's own file, or the build items and the base64 paintings of a 3MF.
+// engine's own file, or the build items and the paint files of a 3MF.
 struct ProjectParts {
     std::size_t meshes = 0, paintings = 0;
     std::function<TriangleMesh(std::size_t)> mesh;    // throws StlError or ModelError
@@ -444,17 +401,19 @@ static Project read_project_checked(std::string_view data) {
 }
 
 std::string write_project_3mf(const Project& project) {
-    ordered_json root = project_json(project, false);
-    ordered_json paintings = ordered_json::array();
+    const ordered_json root = project_json(project, false);
     std::vector<ThreeMfObject> objects;
+    std::vector<ZipEntryToWrite> extra{{std::string(kProjectEntry), root.dump(1)}};
     for (const ProjectModel& m : project.models) {
         objects.push_back({m.name, &m.mesh, m.offset});
-        if (!m.painting.empty())
-            paintings.push_back(base64(painting_to_bytes(m.painting)));
+        if (!m.painting.empty()) {
+            std::string bytes(kPaintMagic);
+            put_le(bytes, kPaintVersion, 4);
+            bytes += painting_to_bytes(m.painting);
+            extra.push_back({paint_entry(extra.size() - 1), std::move(bytes)});
+        }
     }
-    if (!paintings.empty())
-        root["paintings"] = std::move(paintings);
-    return write_3mf_objects(objects, {{std::string(kProjectEntry), root.dump(1)}});
+    return write_3mf_objects(objects, std::move(extra));
 }
 
 // A 3MF with the engine's data: each build item, placed, is a model's mesh;
@@ -462,34 +421,27 @@ std::string write_project_3mf(const Project& project) {
 static Project read_project_3mf(std::string_view data) {
     std::optional<std::string> json_text;
     std::vector<ThreeMfItem> items;
+    std::vector<std::string> paintings; // Metadata/tisma_paint_0.bin, 1, ... while they are there
     try {
         items = read_3mf_items(data, &json_text, kProjectEntry);
+        const ZipArchive zip(data);
+        for (const ZipArchive::Entry* e; (e = zip.find(paint_entry(paintings.size())));) {
+            const std::string bytes = zip.read(*e);
+            const std::string what = paint_entry(paintings.size());
+            if (bytes.size() < 8 || !bytes.starts_with(kPaintMagic))
+                fail(what + ": not a painting");
+            if (get_le(bytes, 4, 4) > kPaintVersion)
+                fail(what + ": newer than this program reads");
+            paintings.push_back(bytes.substr(8));
+        }
     } catch (const ModelError& e) {
         fail(e.what());
+    } catch (const ZipError& e) {
+        fail(std::string("3MF: ") + e.what());
     }
     if (!json_text)
         fail("this 3MF has no Tisma project data (" + std::string(kProjectEntry) +
              "): projects of other slicers are not read yet");
-    // The paintings, base64 in the JSON.
-    std::vector<std::string> paintings;
-    {
-        ordered_json root;
-        try {
-            root = ordered_json::parse(*json_text);
-        } catch (const ordered_json::parse_error&) {
-            // project_from_json says what is wrong
-        }
-        if (root.is_object() && root.contains("paintings")) {
-            const ordered_json& list = root.at("paintings");
-            if (!list.is_array())
-                fail("paintings: must be a list");
-            for (std::size_t k = 0; k < list.size(); ++k) {
-                if (!list[k].is_string())
-                    fail("paintings[" + std::to_string(k) + "]: must be base64 text");
-                paintings.push_back(from_base64(list[k].get<std::string>(), "paintings[" + std::to_string(k) + "]"));
-            }
-        }
-    }
     ProjectParts source;
     source.meshes = items.size();
     source.paintings = paintings.size();

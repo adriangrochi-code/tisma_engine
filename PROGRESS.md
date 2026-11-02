@@ -8937,7 +8937,9 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   motor fallaba contra él; el servidor simulado lo aceptaba.
 - `write_project_3mf` y `read_project` (`formats.md`, reglas 6 a 11; `docs/PROJECT.md`, «El paquete 3MF»):
   - un 3MF estándar, con cada modelo como objeto y su corrimiento en el ítem de `<build>`;
-  - más `Metadata/tisma_project.json`: el mismo JSON del archivo propio, con la pintura en base64;
+  - más `Metadata/tisma_project.json`: el mismo JSON del archivo propio;
+  - y cada pintura en `Metadata/tisma_paint_<k>.bin`, con el encabezado propio `TPNT` (sin él, una pintura con 23 117
+    triángulos pintados empezaría con «MZ», que el servidor rechaza como programa);
   - las coordenadas con 9 cifras, para que vuelvan como el mismo `float`.
 - `save_project` escribe el paquete cuando el nombre termina en `.3mf`. Así lo guarda «Laminar en la nube», y el
   diálogo de guardar ofrece `.3mf` además de `.tisma`.
@@ -8950,6 +8952,7 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   - `[cli][cloud]`: el mismo G-code desde `.tisma` y desde `.3mf`;
   - `[cloud]`: 422 para lo que no es un 3MF;
   - `ui_project_3mf_*`: guardar como `.3mf`, abrirlo y obtener el mismo G-code que el proyecto original.
-- **Falta confirmar:** qué conserva `sanitize_project` en el nodo; ya se le preguntó al equipo de fichas. Si quita
-  los archivos de `Metadata/` o cambia los objetos, el nodo pierde los ajustes.
+- El equipo de fichas confirmó que el nodo (`sanitize_project`) copia cada entrada tal cual y no toca
+  `3D/3dmodel.model`. También pasó lo que revisa el servidor: rutas, cifrado, 10 000 entradas, nada que parezca un
+  programa y nada de DOCTYPE.
 

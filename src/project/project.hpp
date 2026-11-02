@@ -84,7 +84,8 @@ std::string write_project(const Project& project);
 // The same project as a 3MF package (formats.md, rules 6 to 11): each model
 // an object of the standard 3D/3dmodel.model, its offset in its build item,
 // so any 3MF reader sees the plate; the rest in Metadata/tisma_project.json
-// (the JSON chunk's data, each painting in base64 under "paintings").
+// (the JSON chunk's data) and each painting in Metadata/tisma_paint_<k>.bin
+// ("TPNT", a 32-bit version, painting_to_bytes).
 std::string write_project_3mf(const Project& project);
 // Either file, told by its first bytes. A 3MF's models come back placed
 // (their offsets applied, offsets 0). Throws ProjectError on a damaged or

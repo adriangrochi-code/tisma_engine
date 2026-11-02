@@ -91,8 +91,12 @@ servidor solo acepta un ZIP con `3D/*.model` con triángulos.
 |---|---|
 | `[Content_Types].xml`, `_rels/.rels` | Los del estándar |
 | `3D/3dmodel.model` | Cada modelo es un objeto con su malla; su corrimiento va en la transformación de su ítem de `<build>`. Cualquier lector de 3MF ve la placa |
-| `Metadata/tisma_project.json` | El mismo JSON que la parte `JSON` del archivo propio, con los corrimientos en 0. `"mesh": n` es el ítem n de `<build>` y `"painting": k` es la entrada k de `"paintings"`, la pintura en base64 (`painting_to_bytes`) |
+| `Metadata/tisma_project.json` | El mismo JSON que la parte `JSON` del archivo propio, con los corrimientos en 0. `"mesh": n` es el ítem n de `<build>` y `"painting": k` es el archivo `tisma_paint_<k>.bin` |
+| `Metadata/tisma_paint_<k>.bin` | Una pintura: `TPNT`, la versión (32 bits, 1) y la misma pintura que la parte `PNT ` (`painting_to_bytes`). El encabezado evita que empiece como un programa (`MZ`, ELF y otros), que el servidor rechaza |
 
+- Lo que revisa el servidor (equipo de fichas, 2026-11-02): ZIP sin rutas raras ni cifrado, hasta 10 000 entradas,
+  ningún archivo de programa (por extensión ni por sus primeros bytes), y nada de `<!DOCTYPE` en `.model` ni
+  `.rels`. El nodo copia cada entrada tal cual.
 - Las coordenadas se escriben con 9 cifras, para que vuelvan como el mismo `float`. El mismo proyecto da el mismo
   G-code desde `.tisma` y desde `.3mf` (pruebas `ui_project_3mf_*` y `[cli][cloud]`).
 - Al abrirlo, los modelos vuelven ya ubicados, con su ítem aplicado y corrimiento 0.

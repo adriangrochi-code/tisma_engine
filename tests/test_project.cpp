@@ -213,6 +213,22 @@ TEST_CASE("a project as a 3MF package: any reader sees the plate, the engine rea
         ++triangles;
     CHECK(triangles == 8);
     REQUIRE(zip.find("Metadata/tisma_project.json"));
+    // The painting in its own file, with a header that is no program's (the
+    // server refuses entries starting with MZ, ELF, Mach-O or #!), and no
+    // DOCTYPE in the XML parts.
+    const ZipArchive::Entry* paint = zip.find("Metadata/tisma_paint_0.bin");
+    REQUIRE(paint);
+    CHECK(zip.read(*paint).starts_with("TPNT"));
+    CHECK_FALSE(zip.find("Metadata/tisma_paint_1.bin"));
+    for (const ZipArchive::Entry& e : zip.entries()) {
+        const std::string entry = zip.read(e);
+        INFO(e.name);
+        for (const char* magic : {"MZ", "\x7f" "ELF", "#!", "\xca\xfe\xba\xbe", "\xfe\xed\xfa\xce", "\xfe\xed\xfa\xcf",
+                                  "\xce\xfa\xed\xfe", "\xcf\xfa\xed\xfe"})
+            CHECK_FALSE(entry.starts_with(magic));
+        CHECK(entry.find("<!DOCTYPE") == std::string::npos);
+        CHECK(entry.find("<!ENTITY") == std::string::npos);
+    }
     // Any 3MF reader: the two objects, where they stand on the plate.
     const ModelFile plate = parse_3mf(bytes);
     CHECK(plate.objects == 2);
