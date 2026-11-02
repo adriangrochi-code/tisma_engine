@@ -73,6 +73,33 @@ Los límites de la máquina (aceleraciones, velocidades y tirones máximos por e
      genérico, que lleva solo `M73 P R`.
 6. **Tiempo estimado al final:** comentario `; estimated printing time (normal mode) = <h>h <m>m <s>s`
    (`GCODE_OUTPUT.md`).
+7. **Impresoras que analizan el archivo antes de imprimir (Anycubic Kobra 3, Kobra S1, Kobra X y sus variantes
+   Combo, V2 y Max)**, pedido de un probador (31-10-2026: «la Kobra los lee todos, pero solo imprime con los de
+   Anycubic Slicer»). Esas máquinas llevan un firmware propio de Anycubic derivado de Klipper que lee el archivo
+   entero («parsing») antes de empezar, y rechaza o se traba con lo que no entiende; las Kobra anteriores (Kobra,
+   Kobra 2, Neo, Go, Plus, Max, con Marlin) imprimen cualquier G-code. Lo que se sabe por fuentes públicas
+   (02-11-2026), sin documentación oficial de Anycubic sobre el formato:
+   - Kobra S1, S1 Max y X aceptan solo `.gcode` plano; la Kobra 3 V2 y la 3 Max también `.gcode.3mf` si el firmware lo
+     trae ([SimplyPrint, tipos de archivo](https://help.simplyprint.io/en/article/anycubic-kobra-x-kobra-s1-and-kobra-3-connecting-and-which-file-types-work-1r760ze/)).
+   - El analizador se cae con la línea `; filament_colour_type = 1;1;1;1` del bloque de configuración que escriben los
+     programas derivados de Bambu Studio ([OrcaSlicer #12444](https://github.com/OrcaSlicer/OrcaSlicer/issues/12444)),
+     y con listas de filamentos separadas por `;` en vez de `=` o `:`
+     ([OrcaSlicer #16336](https://github.com/OrcaSlicer/OrcaSlicer/issues/16336)); la recomendación de esos programas
+     es omitir el bloque de configuración entero (opción «skip config block»).
+   - Anycubic Slicer Next es un derivado de OrcaSlicer; OrcaSlicer, ElegooSlicer y Cura traen perfiles de la Kobra S1
+     que imprimen ([SimplyPrint, Kobra S1](https://simplyprint.io/compatibility/anycubic-kobra-s1)).
+   Regla: la ficha de la impresora lleva un indicador «el firmware analiza el archivo» (propuesto
+   `machine.strict_parser` = `anycubic`), encendido en los perfiles de esas Kobra. Con él, el motor:
+   - escribe `.gcode` plano (no binario, no 3MF) aunque el perfil pida otra cosa, y lo dice en el aviso previo a la
+     exportación;
+   - no escribe el bloque de configuración al final del archivo ni ninguna línea cuyo valor tenga `;` adentro;
+   - escribe al principio del archivo los comentarios de resumen que leen esas máquinas con los mismos nombres que
+     el programa de la marca: cantidad total de capas, altura de capa, filamento usado en mm y en g, tiempo estimado,
+     y la miniatura PNG que el perfil pida (`gcode_extras.md`, regla 8);
+   - mantiene las etiquetas de objetos de Klipper (regla 4) y el avance `M73` (regla 5).
+   Lo que falta verificar con una impresora real (prueba FW10): qué líneas exactas exige el analizador. El probador
+   tiene que mandar un archivo del mismo modelo exportado con Anycubic Slicer Next y decir qué modelo de Kobra es;
+   la prueba compara los comentarios del principio de ambos archivos y se imprime el del motor.
 
 ## Pruebas
 
@@ -90,3 +117,4 @@ del cubo de 20 mm, con centros en X = 100 y X = 74. Los valores de los límites 
 | FW7 | Klipper con avance; impresión de 7 min 38 s | 107 líneas `M73`, de `P0 R7` a `P100`; al final, `; estimated printing time (normal mode) = 7m 38s` |
 | FW8 | RepRap genérico, `emit`, etiquetas `firmware`, avance, modo silencioso | Sin límites, sin `M486` ni comentarios de objetos y sin error. `M73 P R` sin `Q` ni `S`. `M104 S200` antes del inicio y `M109 S200` después |
 | FW9 | Marlin 1 y Marlin 2, `emit`, aceleraciones 1100 al imprimir, 1200 al retraer y 1300 al viajar | Marlin 1: `M204 S1100 T1200`. Marlin 2: `M204 P1100 R1200 T1300` |
+| FW10 | Perfil Anycubic Kobra S1 (o la Kobra del probador), `strict_parser` = `anycubic`, cubo de 20 mm | Pendiente de medir: archivo `.gcode` plano sin bloque de configuración, sin `;` dentro de valores; los comentarios del principio con los mismos nombres que el archivo de Anycubic Slicer Next del mismo cubo; la impresora lo imprime sin quedarse en «parsing» |
