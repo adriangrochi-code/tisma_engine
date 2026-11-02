@@ -8777,3 +8777,19 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   credenciales de verdad con un nombre único que borra al terminar. **No probado:** macOS (la prueba se salta).
 - **Sigue en C2:** el diálogo de Tisma Cloud (servidor, correo, contraseña, entrar y salir, horas, planes con el actual
   marcado, el enlace a la página de pago), el chip de la barra superior, informar un problema y laminar en la nube.
+
+### Tisma Cloud, C2: el diálogo de la cuenta
+
+- Más › «Tisma Cloud…» abre el diálogo (`interface.md`, «Diálogos»): título violeta, qué hace, Servidor, Correo y
+  Contraseña, el estado, y Salir, Cerrar y Entrar. Con sesión: plan y pago, horas del mes (como las manda el servidor:
+  regla 5a), trabajos a la vez. Siempre: los planes públicos (se piden de nuevo al abrir), el actual marcado, y
+  «Pagar o cambiar de plan…» con el `billing_url` de `/v1/health` (`src/ui/links.*`: el navegador del sistema).
+- Una llamada a la vez, fuera del hilo de la interfaz (`std::async`). 401 borra la sesión y pide entrar (CC2, CC15),
+  429 tiene su aviso. El servidor y el correo van en las preferencias (`cloud`); el token, en el almacén de claves.
+- **Pruebas:** guion `cloud` contra el servidor simulado (`tisma_mock_cloud` corre el programa con la dirección del
+  servidor; `--cloud-server`), con el `secret-tool` de prueba: planes sin sesión (CC13), contraseña mala, entrar, horas
+  (CC14), salir. Pasos de guion nuevos: `cloud-field`, `cloud-wait`, `expect-cloud`.
+- **Pregunté al equipo de fichas:** la dirección de fábrica del servidor (hoy el campo empieza vacío) y si el pago va
+  por `billing_url`.
+- **Sigue en C2:** el chip de la barra superior, informar un problema (`problem_reports.md`) y laminar o analizar en la
+  nube desde la interfaz con el avance en la barra de estado.

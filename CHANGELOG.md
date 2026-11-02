@@ -12,6 +12,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Diálogo de Tisma Cloud** (Más › «Tisma Cloud…»; fichas `cloud.md` e `interface.md`): servidor, correo y
+  contraseña; con la sesión abierta, el plan, si está pagado, las horas del mes tal como las manda el servidor y los
+  trabajos a la vez; siempre, los planes públicos con el tuyo marcado y «Pagar o cambiar de plan…», que abre la página
+  de la cuenta en el navegador. La sesión se guarda en el almacén de claves del sistema; una sesión vencida o una
+  cuenta apagada piden entrar de nuevo.
 - **Cliente de Tisma Cloud, primera parte** (ficha `cloud.md`, prioridad del dueño): la conexión propia con el servidor
   (HTTPS con los certificados del sistema; WinHTTP en Windows, OpenSSL 3 en Linux) y el cliente: entrar y salir, la
   cuenta y sus horas, los planes públicos, informar un problema y laminar o analizar en la nube (mandar, seguir,

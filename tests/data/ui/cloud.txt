@@ -1,0 +1,27 @@
+# The Tisma Cloud dialog against the mock server (cloud.md, rules 2 to 5a;
+# interface.md, «Diálogos»): Más opens it; the public plans come without a
+# session (CC13); a wrong password says the server's words; a good one opens
+# the session with the account's hours as the server sends them (CC14); Log out
+# closes it.
+menu more
+menu cloud
+expect-control cloud_window
+cloud-wait
+expect-cloud plans 2
+expect-cloud logged no
+cloud-field email ana@example.com
+cloud-field password wrong
+menu cloud_login
+cloud-wait
+expect-cloud status Wrong email or password
+expect-cloud logged no
+cloud-field password secret123
+menu cloud_login
+cloud-wait
+expect-cloud logged yes
+expect-cloud plan Maker
+expect-cloud hours 9.25
+expect-control cloud_hours
+menu cloud_logout
+cloud-wait
+expect-cloud logged no

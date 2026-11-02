@@ -59,6 +59,37 @@
     X(ViewQualityCustom, "Personalizada", "Custom") \
     X(QualityAutomaticShort, "Calidad automática", "Automatic quality") \
     X(QualityStatus, "%s · %d FPS", "%s · %d FPS") \
+    X(CloudMenu, "Tisma Cloud…", "Tisma Cloud…") \
+    X(CloudTitle, "Tisma Cloud", "Tisma Cloud") \
+    X(CloudWhat, "Laminá y corré los análisis estructurales en los servidores de Tisma Cloud. La cuenta y el plan se manejan en el sitio web.", "Slice and run the structural analyses on the Tisma Cloud servers. The account and the plan are managed on the web site.") \
+    X(CloudServer, "Servidor", "Server") \
+    X(CloudEmail, "Correo", "E-mail") \
+    X(CloudPassword, "Contraseña", "Password") \
+    X(CloudNotLogged, "Sin sesión.", "Not logged in.") \
+    X(CloudLoggedAs, "Con la sesión de %s.", "Logged in as %s.") \
+    X(CloudLogIn, "Entrar", "Log in") \
+    X(CloudLogOut, "Salir", "Log out") \
+    X(CloudWorking, "Hablando con el servidor…", "Talking to the server…") \
+    X(CloudExpired, "La sesión terminó: entrá de nuevo.", "The session ended: log in again.") \
+    X(CloudTooMany, "Demasiados pedidos: probá de nuevo en un rato.", "Too many requests: try again in a while.") \
+    X(CloudNeedServer, "Escribí la dirección del servidor de Tisma Cloud.", "Enter the address of the Tisma Cloud server.") \
+    X(CloudNeedLogin, "Escribí el correo y la contraseña.", "Enter the e-mail and the password.") \
+    X(CloudNoStore, "Este equipo no tiene almacén de claves: la sesión dura hasta cerrar el programa.", "This computer has no secret store: the session lasts until the program closes.") \
+    X(CloudPlan, "Plan", "Plan") \
+    X(CloudHours, "Horas del mes", "Hours this month") \
+    X(CloudHoursValue, "%s h de %s h (quedan %s h)", "%s h of %s h (%s h left)") \
+    X(CloudPaidUntil, "Pagado hasta el %s", "Paid until %s") \
+    X(CloudNotPaid, "Sin pagar", "Not paid") \
+    X(CloudJobs, "Trabajos a la vez", "Jobs at a time") \
+    X(CloudJobsValue, "%d de %d", "%d of %d") \
+    X(CloudPlans, "Planes", "Plans") \
+    X(CloudPlanHours, "%s h por mes", "%s h a month") \
+    X(CloudPlanJobs, "%d a la vez", "%d at a time") \
+    X(CloudPlanYours, "el tuyo", "yours") \
+    X(CloudFree, "Gratis", "Free") \
+    X(CloudNoPlans, "El servidor no mandó planes.", "The server sent no plans.") \
+    X(CloudBilling, "Pagar o cambiar de plan…", "Pay or change the plan…") \
+    X(CloudBillingTip, "Abre la página de la cuenta en el navegador: el pago no pasa por este programa.", "Opens the account page in the browser: payments do not go through this program.") \
     X(ViewHeldOcclusion, "oclusión congelada al mover", "occlusion held while moving") \
     X(ViewNoOcclusionMoving, "sin oclusión al mover", "no occlusion while moving") \
     X(ViewLoweredNotice, "Bajamos la calidad mientras se mueve para que la vista siga fluida. Podés cambiarlo en Configuración › Video.", "The quality goes down while something moves so the view stays smooth. You can change it in Settings › Video.") \

@@ -102,6 +102,9 @@ target_link_libraries(tisma_tests PRIVATE tisma_net tisma_httplib)
 add_executable(tisma_fake_secret_tool fake_secret_tool.cpp)
 add_dependencies(tisma_tests tisma_fake_secret_tool)
 target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SECRET_TOOL="$<TARGET_FILE:tisma_fake_secret_tool>")
+# The mock Tisma Cloud server around a program (the interface's cloud tests).
+add_executable(tisma_mock_cloud mock_cloud_main.cpp)
+target_link_libraries(tisma_mock_cloud PRIVATE tisma_core tisma_httplib nlohmann_json::nlohmann_json tisma_warnings)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)
@@ -319,6 +322,15 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     endforeach()
     # The handles drawn on the model (move arrows, rotation rings, scale
     # boxes), dragged in the view.
+    # The Tisma Cloud dialog against the mock server; the token goes to the
+    # stand-in secret-tool, never to this machine's store.
+    add_test(NAME ui_script_cloud
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud.png)
+    set_tests_properties(ui_script_cloud PROPERTIES TIMEOUT 300 ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_secrets.txt")
     add_test(NAME ui_script_place_undo
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tool move

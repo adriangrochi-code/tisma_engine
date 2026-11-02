@@ -13,6 +13,8 @@
 #include "cad/design.hpp"
 #include "cad/fasteners.hpp"
 #include "cad/gears.hpp"
+#include "cloud/client.hpp"
+#include "cloud/secret_store.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/painted.hpp"
 #include "ui/system_info.hpp"
@@ -42,6 +44,7 @@
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
 #include "ui/help.hpp"
+#include "ui/links.hpp"
 #include "ui/plate.hpp"
 #include "ui/png.hpp"
 #include "ui/presets.hpp"
@@ -79,6 +82,7 @@
 #include <cctype>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <map>
 #include <numbers>
 #include <memory>
@@ -535,7 +539,20 @@ private:
     void fasteners_panel();
     // Configuración (preferences.md): the dialog, the Video page's qualities
     // (view_auto_quality.md, rules 3 and 4) and the machine it runs on.
+    struct CloudReply {
+        enum class Kind { Refresh, Login, Logout } kind = Kind::Refresh;
+        bool ok = false;
+        cloud::Failure error;
+        std::string token, billing_url, store_error;
+        bool token_read = false; // the store was read for the token
+        std::optional<cloud::Account> account;
+        std::vector<cloud::Plan> plans;
+        bool plans_ok = false;
+    };
     void config_window();
+    void cloud_window();
+    void cloud_start(CloudReply::Kind kind);
+    void cloud_finished(CloudReply reply);
     // The handles on the chosen model (the owner's request, 2026-11-02, with a
     // picture): arrows to move, rings to turn, boxes to scale, by axis in the
     // bed's colours (X red, Y green, Z blue), dragged in the view.
@@ -926,6 +943,15 @@ private:
     // Configuración (preferences.md): open or not, its page and search, and
     // every option as it was when it opened (Cancelar puts them back).
     bool config_open_ = false;
+    // Tisma Cloud (cloud.md): the dialog, the last answers and the one call in flight.
+    bool cloud_open_ = false;
+    std::string cloud_server_, cloud_email_, cloud_password_, cloud_token_, cloud_billing_; // cloud.server, cloud.email
+    bool cloud_token_read_ = false;
+    std::optional<cloud::Account> cloud_account_;
+    std::vector<cloud::Plan> cloud_plans_;
+    std::string cloud_status_;
+    bool cloud_status_error_ = false;
+    std::future<CloudReply> cloud_job_;
     int config_page_ = 0;
     std::string config_query_;
     struct ConfigState {
@@ -2949,6 +2975,8 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    if (!options_.cloud_server.empty()) // the server for this run (tests: the mock one)
+        cloud_server_ = options_.cloud_server;
     read_graphics_info();
     if (view_quality_ != "custom" && options_.render < 0 && options_.msaa < 0 && options_.fxaa < 0 && options_.screenshot.empty())
         apply_quality(view_quality_);
@@ -3318,6 +3346,10 @@ void App::load_preferences() {
             panel_folded_ = ui->value("panel_folded", false);
             lowered_notice_shown_ = ui->value("lowered_notice_shown", false);
         }
+        if (const auto c = j.find("cloud"); c != j.end() && c->is_object()) {
+            cloud_server_ = c->value("server", std::string());
+            cloud_email_ = c->value("email", std::string());
+        }
         if (j.contains("settings")) {
             try {
                 settings_ = parse_settings(j.at("settings").dump());
@@ -3421,6 +3453,9 @@ void App::save_preferences() {
         j["ui"]["show_frame_time"] = show_frame_time_;
         j["ui"]["panel_folded"] = panel_folded_;
         j["ui"]["lowered_notice_shown"] = lowered_notice_shown_;
+        // Tisma Cloud: the server and the e-mail; the token is in the system's store (cloud.md, rule 3).
+        j["cloud"]["server"] = cloud_server_;
+        j["cloud"]["email"] = cloud_email_;
         for (const auto& [printer, notes] : printer_notes_)
             if (!notes.empty())
                 j["printers"][printer]["notes"] = notes;
@@ -4949,6 +4984,11 @@ void App::top_bar() {
                                         ImGui::GetItemRectMax().y);
         if (config)
             config_open_ = true;
+        const bool cloud = ImGui::MenuItem(tr(T::CloudMenu));
+        g_menu_rects["cloud"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                       ImGui::GetItemRectMax().y);
+        if (cloud)
+            cloud_open_ = true;
         ImGui::Separator();
         if (ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S"))
             begin_save_project(false);
@@ -12127,6 +12167,277 @@ void App::restore_config(const ConfigState& c) {
 // Configuración (preferences.md): pages on the left, the options on the
 // right, a search over all of them, Cancelar and Aceptar at the foot. The
 // view stays visible behind it, so the Video page's changes show at once.
+namespace {
+
+// The address as typed, with https:// when it has no scheme (problem_reports.md, rule 5).
+std::string cloud_address(std::string text) {
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))
+        text.pop_back();
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())))
+        text.erase(text.begin());
+    if (!text.empty() && text.rfind("http://", 0) != 0 && text.rfind("https://", 0) != 0)
+        text = "https://" + text;
+    return text;
+}
+
+// This computer's name, sent as the session's device (cloud.md, rule 2).
+std::string device_name() {
+    for (const char* name : {"COMPUTERNAME", "HOSTNAME"})
+        if (const char* v = std::getenv(name); v && *v)
+            return std::string("Tisma (") + v + ")";
+    return "Tisma";
+}
+
+} // namespace
+
+// One call to Tisma Cloud at a time, outside the interface's thread; the
+// dialog keeps showing what it had until the answer comes.
+void App::cloud_start(CloudReply::Kind kind) {
+    if (cloud_job_.valid())
+        return;
+    cloud_server_ = cloud_address(cloud_server_);
+    if (cloud_server_.empty()) {
+        cloud_status_ = tr(T::CloudNeedServer);
+        cloud_status_error_ = true;
+        return;
+    }
+    if (kind == CloudReply::Kind::Login && (cloud_email_.empty() || cloud_password_.empty())) {
+        cloud_status_ = tr(T::CloudNeedLogin);
+        cloud_status_error_ = true;
+        return;
+    }
+    cloud_status_ = tr(T::CloudWorking);
+    cloud_status_error_ = false;
+    std::string password = std::move(cloud_password_);
+    cloud_password_.clear();
+    cloud_job_ = std::async(std::launch::async, [kind, server = cloud_server_, email = cloud_email_,
+                                                 password = std::move(password), token = cloud_token_,
+                                                 read = cloud_token_read_]() mutable {
+        CloudReply r;
+        r.kind = kind;
+        if (kind == CloudReply::Kind::Refresh && token.empty() && !read) {
+            token = cloud::load_secret(server).value_or("");
+            r.token_read = true;
+        }
+        cloud::Client client(server, token);
+        if (kind == CloudReply::Kind::Logout) {
+            cloud::Failure ignored;
+            client.logout(ignored); // a closed session is closed already
+            cloud::forget_secret(server);
+            r.ok = true;
+            return r;
+        }
+        if (kind == CloudReply::Kind::Login) {
+            if (!client.login(email, password, device_name(), token, r.error))
+                return r;
+            if (!cloud::store_secret(server, token, r.store_error))
+                r.store_error = r.store_error.empty() ? "none" : r.store_error;
+        }
+        r.token = token;
+        cloud::Failure quiet;
+        client.health(r.billing_url, quiet);
+        r.plans_ok = client.plans(r.plans, quiet);
+        if (!token.empty()) {
+            cloud::Account account;
+            if (client.account(account, r.error))
+                r.account = account;
+            else
+                return r;
+        }
+        r.ok = true;
+        return r;
+    });
+}
+
+void App::cloud_finished(CloudReply r) {
+    if (r.token_read)
+        cloud_token_read_ = true;
+    cloud_status_error_ = !r.ok;
+    if (r.kind == CloudReply::Kind::Logout) {
+        cloud_token_.clear();
+        cloud_account_.reset();
+        cloud_status_ = tr(T::CloudNotLogged);
+        return;
+    }
+    if (r.ok || !r.error.expired())
+        cloud_token_ = r.token;
+    if (r.plans_ok)
+        cloud_plans_ = std::move(r.plans);
+    if (!r.billing_url.empty())
+        cloud_billing_ = r.billing_url;
+    if (!r.ok) {
+        // A session that ended (401: expired, closed or the account turned
+        // off) asks to log in again (rules 2 and 4, CC2, CC15).
+        if (r.error.expired()) {
+            cloud_token_.clear();
+            cloud_account_.reset();
+            cloud::forget_secret(cloud_server_);
+            cloud_status_ = r.kind == CloudReply::Kind::Login ? r.error.message : std::string(tr(T::CloudExpired));
+        } else if (r.error.status == 429) {
+            cloud_status_ = tr(T::CloudTooMany);
+        } else {
+            cloud_status_ = r.error.message;
+        }
+        return;
+    }
+    cloud_account_ = r.account;
+    cloud_status_ = cloud_account_ ? format(tr(T::CloudLoggedAs), cloud_account_->email.c_str()) : tr(T::CloudNotLogged);
+    if (r.kind == CloudReply::Kind::Login) {
+        save_preferences(); // the server and the e-mail, never the token
+        if (!r.store_error.empty())
+            notify(tr(T::CloudNoStore));
+    }
+}
+
+// The Tisma Cloud dialog (interface.md, «Diálogos»; cloud.md, rules 1 to 5a):
+// the server, the e-mail and the password; with a session, the account and
+// its hours; always, the public plans, the current one marked, and the way
+// to the account's page for paying.
+void App::cloud_window() {
+    if (cloud_job_.valid() && cloud_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+        cloud_finished(cloud_job_.get());
+    if (cloud_job_.valid())
+        frame_pending_ = true; // keep drawing until the answer comes
+    if (cloud_open_) {
+        ImGui::OpenPopup("###cloud");
+        cloud_open_ = false;
+        cloud_start(CloudReply::Kind::Refresh); // the plans are asked again each time (rule 5a)
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing,
+                            ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(560.0f * scale_, vp->Size.x - 40.0f * scale_), 0.0f), ImGuiCond_Appearing);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, rgb(theme_.panel));
+    if (!ImGui::BeginPopupModal((std::string(tr(T::CloudTitle)) + "###cloud").c_str(), nullptr,
+                                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::PopStyleColor();
+        return;
+    }
+    const auto rect_of = [](const std::string& name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    g_menu_rects["cloud_window"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                          ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                          ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    const float width = 520.0f * scale_;
+    const bool busy = cloud_job_.valid();
+    const bool signed_in = cloud_account_.has_value();
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::CloudTitle));
+    ImGui::PopFont();
+    loc::TextDisabled("%s", tr(T::CloudWhat));
+    ImGui::Spacing();
+    const float label_w = 120.0f * scale_;
+    const auto field = [&](T label, const char* id, std::string& value, ImGuiInputTextFlags flags) {
+        ImGui::AlignTextToFramePadding();
+        loc::Text("%s", tr(label));
+        ImGui::SameLine(label_w);
+        ImGui::SetNextItemWidth(width - label_w);
+        ImGui::BeginDisabled(busy || signed_in);
+        ImGui::InputText(id, &value, flags);
+        ImGui::EndDisabled();
+        rect_of(id + 2);
+    };
+    field(T::CloudServer, "##cloud.server", cloud_server_, 0);
+    field(T::CloudEmail, "##cloud.email", cloud_email_, 0);
+    if (!signed_in)
+        field(T::CloudPassword, "##cloud.password", cloud_password_, ImGuiInputTextFlags_Password);
+    // The state: working, an error in red, or who is logged in.
+    if (!cloud_status_.empty()) {
+        if (cloud_status_error_)
+            loc::TextColored(rgb(0xE5484D), "%s", cloud_status_.c_str());
+        else
+            loc::TextDisabled("%s", cloud_status_.c_str());
+    } else {
+        loc::TextDisabled("%s", tr(T::CloudNotLogged));
+    }
+    rect_of("cloud_status");
+
+    // The account (cloud.md, rule 5a: the hours as the server sends them).
+    if (cloud_account_) {
+        const cloud::Account& a = *cloud_account_;
+        ImGui::SeparatorText(a.email.c_str());
+        const auto row = [&](T label, const std::string& value) {
+            loc::TextDisabled("%s", tr(label));
+            ImGui::SameLine(label_w + 40.0f * scale_);
+            loc::Text("%s", value.c_str());
+        };
+        row(T::CloudPlan, a.plan + " · " +
+                              (a.paid ? format(tr(T::CloudPaidUntil), a.paid_until.substr(0, 10).c_str())
+                                      : std::string(tr(T::CloudNotPaid))));
+        row(T::CloudHours, format(tr(T::CloudHoursValue), number(a.hours_used, 2).c_str(),
+                                  number(a.hours_included, 2).c_str(), number(a.hours_left, 2).c_str()));
+        rect_of("cloud_hours");
+        row(T::CloudJobs, format(tr(T::CloudJobsValue), a.active_jobs, a.max_concurrent));
+    }
+
+    // The public plans, the current one marked (rule 5a).
+    ImGui::SeparatorText(tr(T::CloudPlans));
+    if (cloud_plans_.empty()) {
+        loc::TextDisabled("%s", busy ? tr(T::CloudWorking) : tr(T::CloudNoPlans));
+    } else if (ImGui::BeginTable("##cloud_plans", 4, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+        for (const cloud::Plan& p : cloud_plans_) {
+            const bool yours = cloud_account_ && cloud_account_->plan == p.name;
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            if (yours)
+                loc::TextColored(rgb(theme_.accent_hover), "%s (%s)", p.name.c_str(), tr(T::CloudPlanYours));
+            else
+                loc::Text("%s", p.name.c_str());
+            ImGui::TableNextColumn();
+            loc::Text(tr(T::CloudPlanHours), number(p.monthly_hours, p.monthly_hours == std::floor(p.monthly_hours) ? 0 : 1).c_str());
+            ImGui::TableNextColumn();
+            loc::Text(tr(T::CloudPlanJobs), p.max_concurrent);
+            ImGui::TableNextColumn();
+            if (p.price_cents == 0)
+                loc::Text("%s", tr(T::CloudFree));
+            else
+                loc::Text("%.2f %s", double(p.price_cents) / 100.0, p.currency.c_str());
+        }
+        ImGui::EndTable();
+    }
+    rect_of("cloud_plans");
+    if (!cloud_billing_.empty()) {
+        if (ImGui::SmallButton(tr(T::CloudBilling)))
+            ui::open_link(cloud_billing_);
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::CloudBillingTip));
+    }
+    ImGui::PopTextWrapPos();
+
+    // The buttons, at the bottom right: Log out, Close, Log in.
+    ImGui::Spacing();
+    ImGui::Separator();
+    const float bw = 110.0f * scale_, gap = ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, width - 3.0f * bw - 2.0f * gap));
+    ImGui::BeginDisabled(busy || !signed_in);
+    if (ImGui::Button(tr(T::CloudLogOut), ImVec2(bw, 0)))
+        cloud_start(CloudReply::Kind::Logout);
+    ImGui::EndDisabled();
+    rect_of("cloud_logout");
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::Close), ImVec2(bw, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        cloud_password_.clear();
+        ImGui::CloseCurrentPopup();
+    }
+    rect_of("cloud_close");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(busy || signed_in);
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+    if (ImGui::Button(tr(T::CloudLogIn), ImVec2(bw, 0)) ||
+        (!signed_in && !busy && ImGui::IsKeyPressed(ImGuiKey_Enter) && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)))
+        cloud_start(CloudReply::Kind::Login);
+    ImGui::PopStyleColor(3);
+    ImGui::EndDisabled();
+    rect_of("cloud_login");
+    ImGui::EndPopup();
+    ImGui::PopStyleColor();
+}
+
 void App::config_window() {
     if (!config_open_) {
         config_before_.reset();
@@ -14253,6 +14564,7 @@ void App::layout() {
     }
     help_windows();
     config_window();
+    cloud_window();
     guide_overlay();
     if (!g_clamped.empty()) {
         notify(std::move(g_clamped));
@@ -15379,6 +15691,39 @@ void App::script_input() {
         }
         if (f >= 30)
             fail_step("it is not on the screen");
+    } else if (step.verb == "cloud-field") { // a field of the Tisma Cloud dialog: server, email or password
+        std::string& field = step.key == "server" ? cloud_server_ : step.key == "email" ? cloud_email_ : cloud_password_;
+        if (step.key != "server" && step.key != "email" && step.key != "password")
+            return fail_step("no such field");
+        field = step.value;
+        next();
+    } else if (step.verb == "cloud-wait") { // until the call to Tisma Cloud is answered (up to 20 s)
+        if (!cloud_job_.valid() && f >= 2) {
+            std::printf("ui-script: cloud-wait: %s\n", cloud_status_.c_str());
+            next();
+        } else if (f > 1200) {
+            fail_step("no answer");
+        }
+    } else if (step.verb == "expect-cloud") { // logged yes|no, plans N, plan NAME, hours LEFT, status TEXT
+        std::string got;
+        if (step.key == "logged")
+            got = cloud_account_ ? "yes" : "no";
+        else if (step.key == "plans")
+            got = std::to_string(cloud_plans_.size());
+        else if (step.key == "plan")
+            got = cloud_account_ ? cloud_account_->plan : "";
+        else if (step.key == "hours")
+            got = cloud_account_ ? format("%g", cloud_account_->hours_left) : "";
+        else if (step.key == "status")
+            got = cloud_status_;
+        else
+            return fail_step("unknown key");
+        const bool ok = step.key == "status" ? got.find(step.value) != std::string::npos : got == step.value;
+        std::printf("ui-script: expect-cloud %s %s: %s%s\n", step.key.c_str(), step.value.c_str(), ok ? "ok" : "got ",
+                    ok ? "" : got.c_str());
+        if (!ok)
+            return fail_step("it is " + got);
+        next();
     } else if (step.verb == "expect-in-view") { // a named control drawn whole inside the 3D view
         const auto it = g_menu_rects.find(step.key);
         if (it == g_menu_rects.end())

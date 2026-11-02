@@ -67,7 +67,7 @@ if(WIN32)
 endif()
 
 target_include_directories(tisma PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(tisma PRIVATE tisma_ui tisma_imgui nlohmann_json::nlohmann_json tisma_warnings)
+target_link_libraries(tisma PRIVATE tisma_ui tisma_net tisma_imgui nlohmann_json::nlohmann_json tisma_warnings)
 if(MSVC)
   # A windowed program that still starts at main().
   target_link_options(tisma PRIVATE /ENTRY:mainCRTStartup)
