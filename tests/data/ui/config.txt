@@ -1,0 +1,27 @@
+# Configuración (preferences.md): Más's first entry and the status bar's gear
+# open it (PF8); every option the preferences keep has a control on some page
+# (PF7); «Volver a lo recomendado» picks this machine's quality (llvmpipe: the
+# light one, view_auto_quality.md rule 4) and Cancelar puts everything back.
+expect-no-control config_window
+menu more
+menu config
+expect-control config_window
+menu config_cancel
+expect-no-control config_window
+menu config_gear
+expect-control config_window
+menu config_page_general
+menu config_page_interface
+menu config_page_camera
+menu config_page_assistant
+menu config_page_plugins
+menu config_page_other
+menu config_page_video
+expect-control pref.ui.max_fps
+expect-control pref.ui.graphics_api
+expect-config-covers
+expect-quality automatic ao 4
+menu config_recommended
+expect-quality automatic fast 2
+menu config_cancel
+expect-quality automatic ao 4

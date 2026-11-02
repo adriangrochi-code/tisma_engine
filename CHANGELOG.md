@@ -12,6 +12,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Configuración** (ficha `preferences.md`, prioridad del dueño del 2026-11-02): la primera entrada de Más, Ctrl+, o
+  Ctrl+P, o el engranaje de la barra de estado. Páginas General, Interfaz, **Video**, Cámara, Asistente, Complementos y
+  Otros, un buscador sobre todas, Cancelar (deshace) y Aceptar (guarda). La página Video muestra el equipo (procesador,
+  memoria, placa de video, pantalla, batería) y reúne lo que antes solo se cambiaba desde la línea de comandos: API
+  gráfica, calidad (Automática, Alta, Equilibrada, Liviana, Personalizada), modo de imagen, intensidad de la oclusión,
+  suavizado, FXAA, filtro de moiré, tope de cuadros por segundo (60 de fábrica), sincronización vertical, ahorro a
+  batería (tope de 30 y calidad liviana a batería), cálculo en la placa y el tiempo de la vista. La vista nunca dibuja
+  más rápido que el tope. Cambiar el modo de imagen o el suavizado a mano pasa la calidad a Personalizada.
 - **Dos apartados en la barra de arriba** (pedido del dueño, 2026-11-02): **Impresión 3D** (Preparar, Vista previa,
   Análisis, Calibración, Impresora) e **Ingeniería** (Diseño). Cada apartado muestra solo sus pestañas
   y su propio panel a la izquierda, así la interfaz no se llena; al volver a un apartado, abre en la última pestaña

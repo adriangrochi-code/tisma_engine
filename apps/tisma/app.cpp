@@ -15,6 +15,7 @@
 #include "cad/gears.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/painted.hpp"
+#include "ui/system_info.hpp"
 #include "cad/process.hpp"
 #include "cad/solidcraft.hpp"
 #include "calibration/calibration.hpp"
@@ -519,6 +520,14 @@ private:
     // Fasteners (the owner's request, 2026-11-02): bolts, nuts, washers and
     // threaded rods with the ISO metric thread, made by the engine.
     void fasteners_panel();
+    // Configuración (preferences.md): the dialog, the Video page's qualities
+    // (view_auto_quality.md, rules 3 and 4) and the machine it runs on.
+    void config_window();
+    void apply_quality(const std::string& quality);
+    std::string recommended_quality() const;
+    void video_set_by_hand();
+    void read_graphics_info();
+    double frame_cap() const; // the frames a second the view may draw now; 0: no cap
     // The Design panel's pages: the design, Fasteners, Gears.
     enum class DesignPage { Design, Fasteners, Gears };
     void open_page(DesignPage page);
@@ -886,6 +895,42 @@ private:
     bool gear_dirty_ = true;
     bool gear_edited_ = false;
     int gear_mate_teeth_ = 20;
+
+    // Configuración (preferences.md): open or not, its page and search, and
+    // every option as it was when it opened (Cancelar puts them back).
+    bool config_open_ = false;
+    int config_page_ = 0;
+    std::string config_query_;
+    struct ConfigState {
+        bool english = false, dark = true;
+        RenderMode render = RenderMode::Ambient;
+        int msaa = 4;
+        bool fxaa = true, moire = true;
+        float ao_strength = 1.0f;
+        bool tips = true, tutorials = true, glossary = true, material = true, cad_design = true, orthographic = false;
+        ViewLevel level = ViewLevel::Normal;
+        GpuMode gpu = GpuMode::Auto;
+        std::string graphics_api, view_quality;
+        int max_fps = 60;
+        bool vsync = true, lower_while_moving = true, battery_saver = true, show_frame_time = true;
+    };
+    std::optional<ConfigState> config_before_;
+    ConfigState config_state() const;
+    void restore_config(const ConfigState& c);
+    std::set<std::string> config_keys_seen_; // the options drawn while it was open, for the scripted test (PF7)
+    // Video (preferences.md, rule 8; view_auto_quality.md).
+    std::string graphics_api_ = "auto";      // ui.graphics_api: auto, vulkan, opengl (read before the window opens)
+    std::string view_quality_ = "automatic"; // ui.view_quality: automatic, high, balanced, light, custom
+    int max_fps_ = 60;                       // ui.max_fps: 0 the screen's rate, -1 no cap
+    bool vsync_ = true;
+    bool lower_while_moving_ = true;
+    bool battery_saver_ = true;
+    bool show_frame_time_ = true;
+    SystemInfo system_;
+    double system_read_ = 0.0; // when the memory and the power were last read
+    std::string gpu_vendor_, gpu_renderer_, gpu_version_, gpu_kind_;
+    int screen_width_ = 0, screen_height_ = 0, screen_hz_ = 0;
+    double frame_started_ = 0.0;
     // The tab each section opens on: the last one used there.
     Tab last_print_tab_ = Tab::Prepare;
     Tab last_engineering_tab_ = Tab::Design;
@@ -2710,10 +2755,25 @@ bool App::init(std::string& error) {
     // only once the Vulkan view does all the OpenGL one does (PLAN.md «Vista
     // con Vulkan»): until then «auto» is OpenGL.
     constexpr bool kVulkanViewReady = false;
+    // The Video page's choice (ui.graphics_api, ui.vsync), read before the
+    // window opens; the command line's --graphics wins over it.
+    if (options_.screenshot.empty() && options_.graphics == "auto") {
+        std::ifstream in(preferences_path(), std::ios::binary);
+        try {
+            const nlohmann::json j = in ? nlohmann::json::parse(in) : nlohmann::json();
+            if (const auto ui = j.find("ui"); ui != j.end() && ui->is_object()) {
+                const std::string api = ui->value("graphics_api", std::string("auto"));
+                if (api == "vulkan" || api == "opengl")
+                    options_.graphics = api;
+                vsync_ = ui->value("vsync", true);
+            }
+        } catch (const std::exception&) {
+        }
+    }
     if (options_.graphics == "vulkan" || (options_.graphics == "auto" && kVulkanViewReady)) {
         std::string why = "cannot open a window for Vulkan";
         open_window(true);
-        vulkan_ = window_ && vk_.init(window_, true, why) && vk_view_.init(*vk_.device(), why);
+        vulkan_ = window_ && vk_.init(window_, vsync_, why) && vk_view_.init(*vk_.device(), why);
         if (!vulkan_) {
             vk_view_.shutdown();
             vk_.shutdown();
@@ -2737,7 +2797,7 @@ bool App::init(std::string& error) {
             return false;
         }
         glfwMakeContextCurrent(window_);
-        glfwSwapInterval(1);
+        glfwSwapInterval(vsync_ ? 1 : 0);
         if (const char* missing = load_gl(glfwGetProcAddress)) {
             error = std::string("the OpenGL driver lacks ") + missing;
             return false;
@@ -2832,6 +2892,9 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    read_graphics_info();
+    if (view_quality_ != "custom" && options_.render < 0 && options_.msaa < 0 && options_.fxaa < 0 && options_.screenshot.empty())
+        apply_quality(view_quality_);
     start_solidcraft_probe();
     // The list opens where it was left, at the section in view then
     // (settings_panel.md, rule 3).
@@ -3183,6 +3246,19 @@ void App::load_preferences() {
         device_port_ = j.value("device_port", std::string("sim"));
         device_baud_ = j.value("device_baud", 115200);
         ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
+        if (const auto ui = j.find("ui"); ui != j.end() && ui->is_object()) {
+            graphics_api_ = ui->value("graphics_api", std::string("auto"));
+            if (graphics_api_ != "vulkan" && graphics_api_ != "opengl")
+                graphics_api_ = "auto";
+            view_quality_ = ui->value("view_quality", std::string("automatic"));
+            if (view_quality_ != "high" && view_quality_ != "balanced" && view_quality_ != "light" && view_quality_ != "custom")
+                view_quality_ = "automatic";
+            max_fps_ = std::clamp(ui->value("max_fps", 60), -1, 240);
+            vsync_ = ui->value("vsync", true);
+            lower_while_moving_ = ui->value("lower_while_moving", true);
+            battery_saver_ = ui->value("battery_saver", true);
+            show_frame_time_ = ui->value("show_frame_time", true);
+        }
         if (j.contains("settings")) {
             try {
                 settings_ = parse_settings(j.at("settings").dump());
@@ -3277,6 +3353,13 @@ void App::save_preferences() {
         j["ui"]["bed_type"] = bed_type_;
         j["ui"]["orthographic"] = camera_.orthographic;
         j["ui"]["cad_design"] = cad_design_;
+        j["ui"]["graphics_api"] = graphics_api_;
+        j["ui"]["view_quality"] = view_quality_;
+        j["ui"]["max_fps"] = max_fps_;
+        j["ui"]["vsync"] = vsync_;
+        j["ui"]["lower_while_moving"] = lower_while_moving_;
+        j["ui"]["battery_saver"] = battery_saver_;
+        j["ui"]["show_frame_time"] = show_frame_time_;
         for (const auto& [printer, notes] : printer_notes_)
             if (!notes.empty())
                 j["printers"][printer]["notes"] = notes;
@@ -4783,9 +4866,19 @@ void App::top_bar() {
     }
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(top);
-    if (icon_button("##more", "tisma_more", tr(T::More), button_h))
+    const bool more = icon_button("##more", "tisma_more", tr(T::More), button_h);
+    g_menu_rects["more"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                  ImGui::GetItemRectMax().y);
+    if (more)
         ImGui::OpenPopup("##more_menu");
     if (ImGui::BeginPopup("##more_menu")) {
+        // Configuración first (preferences.md, PF8).
+        const bool config = ImGui::MenuItem(tr(T::ConfigMenu), "Ctrl+,");
+        g_menu_rects["config"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                        ImGui::GetItemRectMax().y);
+        if (config)
+            config_open_ = true;
+        ImGui::Separator();
         if (ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S"))
             begin_save_project(false);
         if (ImGui::MenuItem(tr(T::SaveProjectAs), "Ctrl+Shift+S"))
@@ -7760,16 +7853,37 @@ void App::status_bar() {
     }
     // On the right: the 3D view's time per frame on the GPU, and what sliced.
     std::string right;
-    if (view_ms_ > 0.0)
+    if (view_ms_ > 0.0 && show_frame_time_)
         right = format(tr(T::ViewTime), view_ms_, 1000.0 / std::max(view_ms_, 0.01));
+    // The quality and the cap (view_auto_quality.md, rule 8).
+    {
+        const double cap = frame_cap();
+        const std::string quality = tr(view_quality_ == "automatic" ? T::QualityAutomaticShort
+                                       : view_quality_ == "high"     ? T::ViewQualityHigh
+                                       : view_quality_ == "balanced" ? T::ViewQualityBalanced
+                                       : view_quality_ == "light"    ? T::ViewQualityLight
+                                                                     : T::ViewQualityCustom);
+        std::string q = cap > 0.0 ? format(tr(T::QualityStatus), quality.c_str(), int(cap)) : quality;
+        if (battery_saver_ && system_.power == PowerSource::Battery)
+            q += std::string(" · ") + tr(T::ConfigOnBatteryShort);
+        right = q + (right.empty() ? "" : "  ·  ") + right;
+    }
     if (result_ && !viewer_)
         right += (right.empty() ? "" : "  ·  ") + (result_->gpu.empty() ? std::string("CPU") : "GPU: " + result_->gpu);
+    // The gear that opens Configuración, next to the view's time (preferences.md).
+    const float gear = ImGui::GetFrameHeight();
     if (!right.empty()) {
-        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right.c_str()).x - 12.0f * scale_);
+        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right.c_str()).x - 12.0f * scale_ - gear - 8.0f * scale_);
         loc::TextDisabled("%s", right.c_str());
         if (view_ms_ > 0.0 && ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(T::ViewTimeTip));
     }
+    ImGui::SameLine(ImGui::GetWindowWidth() - gear - 8.0f * scale_);
+    ImGui::SetCursorPosY((height - gear) * 0.5f);
+    if (icon_button("##config_gear", "section_machine", tr(T::ConfigMenu), gear))
+        config_open_ = true;
+    g_menu_rects["config_gear"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                         ImGui::GetItemRectMax().y);
     ImGui::End();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
@@ -8010,8 +8124,8 @@ void App::view_tools() {
     if (ImGui::BeginPopup("##render_menu")) {
         loc::TextDisabled("%s", tr(T::Render));
         for (int m = 0; m < 3; ++m) {
-            if (ImGui::RadioButton(tr(modes[m]), int(render_mode_) == m))
-                render_mode_ = static_cast<RenderMode>(m);
+            if (ImGui::RadioButton(tr(modes[m]), int(render_mode_) == m) && int(render_mode_) != m)
+                render_mode_ = static_cast<RenderMode>(m), video_set_by_hand();
             loc::SetItemTooltip("%s", tr(mode_tips[m]));
         }
         if (render_mode_ != RenderMode::Fast) {
@@ -8035,11 +8149,12 @@ void App::view_tools() {
         ImGui::SetNextItemWidth(200.0f * scale_);
         if (ImGui::BeginCombo("##msaa", name(std::min(msaa_, choices.back())).c_str())) {
             for (int n : choices)
-                if (ImGui::Selectable(name(n).c_str(), n == msaa_))
-                    msaa_ = n;
+                if (ImGui::Selectable(name(n).c_str(), n == msaa_) && n != msaa_)
+                    msaa_ = n, video_set_by_hand();
             ImGui::EndCombo();
         }
-        ImGui::Checkbox(tr(T::Fxaa), &fxaa_);
+        if (ImGui::Checkbox(tr(T::Fxaa), &fxaa_))
+            video_set_by_hand();
         ImGui::Checkbox(tr(T::MoireFilter), &moire_);
         if (ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(T::MoireFilterTip));
@@ -11376,6 +11491,457 @@ void App::gears_panel() {
     ImGui::PopStyleVar(2);
 }
 
+// What draws the view and on what machine (view_auto_quality.md, rule 1):
+// the graphics card from the window's graphics, the screen from GLFW, the
+// processor, memory and power from the system.
+void App::read_graphics_info() {
+    system_ = system_info();
+    system_read_ = glfwGetTime();
+    if (vulkan_) {
+        gpu_renderer_ = vk_.device_name();
+        gpu_vendor_.clear();
+        gpu_version_ = "Vulkan " + vk_.api_version();
+        gpu_kind_ = vk_.device_kind();
+    } else if (gl_loaded_) {
+        const auto text = [](GLenum name) {
+            const GLubyte* t = glGetString(name);
+            return t ? std::string(reinterpret_cast<const char*>(t)) : std::string();
+        };
+        gpu_vendor_ = text(GL_VENDOR);
+        gpu_renderer_ = text(GL_RENDERER);
+        gpu_version_ = "OpenGL " + text(GL_VERSION);
+        gpu_kind_.clear();
+    }
+    if (GLFWmonitor* monitor = glfwGetPrimaryMonitor())
+        if (const GLFWvidmode* mode = glfwGetVideoMode(monitor))
+            screen_width_ = mode->width, screen_height_ = mode->height, screen_hz_ = mode->refreshRate;
+}
+
+// The quality this machine gets when it chooses by itself. Until the first
+// run's measurement (rule 2) lands, by the kind of card: one drawn by the
+// processor (llvmpipe, SwiftShader, Microsoft's basic driver) gets the light
+// quality, an integrated one the balanced, the rest the high.
+std::string App::recommended_quality() const {
+    std::string name = gpu_renderer_ + " " + gpu_vendor_;
+    for (char& c : name)
+        c = char(std::tolower(static_cast<unsigned char>(c)));
+    const auto has = [&](const char* word) { return name.find(word) != std::string::npos; };
+    if (has("llvmpipe") || has("softpipe") || has("swiftshader") || has("software") || has("basic render") ||
+        gpu_kind_ == "cpu")
+        return "light";
+    if (gpu_kind_ == "integrated" || has("intel") || has("uhd") || has("iris") || has("vega 8") ||
+        has("radeon(tm) graphics") || has("mali") || has("adreno"))
+        return "balanced";
+    return "high";
+}
+
+// The fixed qualities (view_auto_quality.md, rule 4); automatic takes the
+// recommended one; custom leaves the options as they are.
+void App::apply_quality(const std::string& quality) {
+    view_quality_ = quality;
+    std::string q = quality == "automatic" ? recommended_quality() : quality;
+    // On battery with the saver on, the light one (rule 7).
+    if (quality == "automatic" && battery_saver_ && system_.power == PowerSource::Battery)
+        q = "light";
+    const int most = vulkan_ ? 8 : std::max(renderer_.max_samples(), 1);
+    if (q == "high")
+        render_mode_ = RenderMode::Ambient, msaa_ = std::min(8, most), fxaa_ = true;
+    else if (q == "balanced")
+        render_mode_ = RenderMode::Ambient, msaa_ = std::min(4, most), fxaa_ = true;
+    else if (q == "light")
+        render_mode_ = RenderMode::Fast, msaa_ = std::min(2, most), fxaa_ = true;
+}
+
+// A drawing option changed by hand: the quality is the person's now (rule 4).
+void App::video_set_by_hand() {
+    view_quality_ = "custom";
+}
+
+// The cap of frames a second (rule 3): the chosen one, the screen's rate for
+// 0, none for -1; 30 on battery with the saver on (rule 7).
+double App::frame_cap() const {
+    double cap = max_fps_ < 0 ? 0.0 : max_fps_ == 0 ? double(std::max(screen_hz_, 30)) : double(max_fps_);
+    if (battery_saver_ && system_.power == PowerSource::Battery)
+        cap = cap > 0.0 ? std::min(cap, 30.0) : 30.0;
+    return cap;
+}
+
+App::ConfigState App::config_state() const {
+    ConfigState c;
+    c.english = language() == Language::English;
+    c.dark = theme_.dark;
+    c.render = render_mode_, c.msaa = msaa_, c.fxaa = fxaa_, c.moire = moire_, c.ao_strength = ao_strength_;
+    c.tips = tips_, c.tutorials = assistant_tutorials_, c.glossary = assistant_glossary_, c.material = assistant_material_;
+    c.cad_design = cad_design_, c.orthographic = camera_.orthographic, c.level = view_level_, c.gpu = settings_.gpu;
+    c.graphics_api = graphics_api_, c.view_quality = view_quality_, c.max_fps = max_fps_, c.vsync = vsync_;
+    c.lower_while_moving = lower_while_moving_, c.battery_saver = battery_saver_, c.show_frame_time = show_frame_time_;
+    return c;
+}
+
+void App::restore_config(const ConfigState& c) {
+    if ((language() == Language::English) != c.english)
+        set_language(c.english ? Language::English : Language::Spanish);
+    if (theme_.dark != c.dark) {
+        theme_ = c.dark ? dark_theme() : light_theme();
+        apply_theme();
+    }
+    render_mode_ = c.render, msaa_ = c.msaa, fxaa_ = c.fxaa, moire_ = c.moire, ao_strength_ = c.ao_strength;
+    tips_ = c.tips, assistant_tutorials_ = c.tutorials, g_glossary_tips = assistant_glossary_ = c.glossary;
+    assistant_material_ = c.material;
+    cad_design_ = c.cad_design, camera_.orthographic = c.orthographic;
+    if (view_level_ != c.level)
+        choose_level(c.level);
+    settings_.gpu = c.gpu;
+    graphics_api_ = c.graphics_api, view_quality_ = c.view_quality, max_fps_ = c.max_fps;
+    if (vsync_ != c.vsync) {
+        vsync_ = c.vsync;
+        if (vulkan_)
+            vk_.set_vsync(vsync_);
+        else
+            glfwSwapInterval(vsync_ ? 1 : 0);
+    }
+    lower_while_moving_ = c.lower_while_moving, battery_saver_ = c.battery_saver, show_frame_time_ = c.show_frame_time;
+}
+
+// Configuración (preferences.md): pages on the left, the options on the
+// right, a search over all of them, Cancelar and Aceptar at the foot. The
+// view stays visible behind it, so the Video page's changes show at once.
+void App::config_window() {
+    if (!config_open_) {
+        config_before_.reset();
+        return;
+    }
+    if (!config_before_) {
+        config_before_ = config_state();
+        system_ = system_info(); // the memory and power as they are now
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const ImVec2 size(std::min(760.0f * scale_, vp->Size.x - 40.0f * scale_), std::min(560.0f * scale_, vp->Size.y - 40.0f * scale_));
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing,
+                            ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(size, ImGuiCond_Appearing);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    bool open = true;
+    if (!ImGui::Begin(tr(T::ConfigTitle), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::End();
+        ImGui::PopStyleColor();
+        return;
+    }
+    g_menu_rects["config_window"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                           ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                           ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    const auto rect_of = [](const std::string& name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    // The search (rule 3), over every page.
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    char query[128] = {};
+    config_query_.copy(query, sizeof query - 1);
+    if (ImGui::InputTextWithHint("##config_search", tr(T::ConfigSearch), query, sizeof query))
+        config_query_ = query;
+    std::string wanted = config_query_;
+    for (char& c : wanted)
+        c = char(std::tolower(static_cast<unsigned char>(c)));
+
+    static constexpr T kPages[] = {T::ConfigGeneral, T::ConfigInterface, T::ConfigVideo, T::ConfigCamera,
+                                   T::ConfigAssistant, T::ConfigPlugins, T::ConfigOther};
+    static constexpr const char* kPageIds[] = {"general", "interface", "video", "camera", "assistant", "plugins", "other"};
+    const float foot = ImGui::GetFrameHeightWithSpacing() * 1.6f;
+    ImGui::BeginChild("##config_pages", ImVec2(150.0f * scale_, -foot));
+    for (int i = 0; i < int(std::size(kPages)); ++i) {
+        if (ImGui::Selectable(tr(kPages[i]), config_page_ == i && wanted.empty()))
+            config_page_ = i, config_query_.clear(), wanted.clear();
+        rect_of(std::string("config_page_") + kPageIds[i]);
+    }
+    ImGui::EndChild();
+    ImGui::SameLine();
+    ImGui::BeginChild("##config_options", ImVec2(0, -foot));
+    ImGui::PushTextWrapPos(0.0f);
+    const float control_x = 250.0f * scale_;
+    const float control_w = std::max(ImGui::GetContentRegionAvail().x - control_x, 160.0f * scale_);
+    int shown_page = -1;
+    // One option: its name on the left, its control on the right. Drawn when
+    // its page is chosen, or when the search finds its name.
+    const auto row = [&](int page, T label, const std::string& key, const std::function<void()>& control,
+                         const char* note = nullptr) {
+        std::string name = tr(label);
+        for (char& c : name)
+            c = char(std::tolower(static_cast<unsigned char>(c)));
+        if (wanted.empty() ? page != config_page_ : name.find(wanted) == std::string::npos)
+            return;
+        if (!wanted.empty() && shown_page != page) { // the page's name above its hits
+            shown_page = page;
+            ImGui::Spacing();
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(kPages[page]));
+            ImGui::Separator();
+        }
+        ImGui::PushID(key.c_str());
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(label));
+        ImGui::SameLine(control_x);
+        ImGui::SetNextItemWidth(control_w);
+        control();
+        rect_of("pref." + key);
+        config_keys_seen_.insert(key);
+        if (note) {
+            ImGui::SetCursorPosX(control_x);
+            loc::TextDisabled("%s", note);
+        }
+        ImGui::PopID();
+    };
+    const auto toggle = [&](bool& v) {
+        return [&v] { ImGui::Checkbox("##v", &v); };
+    };
+    const auto soon = [&] {
+        ImGui::BeginDisabled(true);
+        ImGui::TextUnformatted(tr(T::ComingSoon));
+        ImGui::EndDisabled();
+    };
+
+    // General.
+    row(0, T::Language, "language", [&] {
+        const bool english = language() == Language::English;
+        if (ImGui::BeginCombo("##v", english ? "English" : "Español")) {
+            if (ImGui::Selectable("Español", !english))
+                set_language(Language::Spanish);
+            if (ImGui::Selectable("English", english))
+                set_language(Language::English);
+            ImGui::EndCombo();
+        }
+    });
+    row(0, T::ConfigComputeGpu, "compute.gpu", [&] {
+        int v = settings_.gpu == GpuMode::Auto ? 0 : 1;
+        if (ImGui::Combo("##v", &v, (std::string(tr(T::ConfigAutomatic)) + '\0' + tr(T::ConfigNo) + '\0' + '\0').c_str()))
+            settings_.gpu = v == 0 ? GpuMode::Auto : GpuMode::Off, ++revision_.settings;
+    }, tr(T::ConfigComputeGpuNote));
+
+    // Interfaz.
+    row(1, T::Theme, "theme", [&] {
+        if (ImGui::BeginCombo("##v", tr(theme_.dark ? T::Dark : T::Light))) {
+            if (ImGui::Selectable(tr(T::Dark), theme_.dark) && !theme_.dark)
+                theme_ = dark_theme(), apply_theme();
+            if (ImGui::Selectable(tr(T::Light), !theme_.dark) && theme_.dark)
+                theme_ = light_theme(), apply_theme();
+            ImGui::EndCombo();
+        }
+    });
+    row(1, T::ConfigLevel, "ui.level", [&] {
+        const T names[] = {T::LevelBasic, T::LevelNormal, T::LevelAdvanced, T::LevelCustom};
+        const ViewLevel levels[] = {ViewLevel::Basic, ViewLevel::Normal, ViewLevel::Advanced, ViewLevel::Custom};
+        int at = 1;
+        for (int k = 0; k < 4; ++k)
+            if (levels[k] == view_level_)
+                at = k;
+        if (ImGui::BeginCombo("##v", tr(names[at]))) {
+            for (int k = 0; k < 4; ++k)
+                if (ImGui::Selectable(tr(names[k]), k == at))
+                    choose_level(levels[k]);
+            ImGui::EndCombo();
+        }
+    });
+    row(1, T::DesignPref, "ui.cad_design", [&] {
+        if (ImGui::Checkbox("##v", &cad_design_) && !cad_design_ && engineering_tab(tab_))
+            set_tab(Tab::Prepare);
+    });
+
+    // Video (rule 8): the machine, then the options in the spec's order.
+    if (wanted.empty() && config_page_ == 2) {
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ConfigMachine));
+        ImGui::Separator();
+        const std::string cpu = system_.cpu.empty() ? std::string("?") : system_.cpu;
+        loc::TextDisabled(tr(T::ConfigMachineCpu), cpu.c_str(), system_.physical_cores, system_.logical_cores);
+        loc::TextDisabled(tr(T::ConfigMachineRam), bytes_text(system_.ram_total).c_str(), bytes_text(system_.ram_free).c_str());
+        loc::TextDisabled(tr(T::ConfigMachineGpu), (gpu_vendor_.empty() ? gpu_renderer_ : gpu_vendor_ + " · " + gpu_renderer_).c_str(),
+                          gpu_version_.c_str());
+        if (screen_width_ > 0 && screen_hz_ > 0)
+            loc::TextDisabled(tr(T::ConfigMachineScreen), screen_width_, screen_height_, screen_hz_, double(scale_));
+        else if (screen_width_ > 0) // a screen that does not say its rate (a virtual one)
+            loc::TextDisabled(tr(T::ConfigMachineScreenNoRate), screen_width_, screen_height_, double(scale_));
+        loc::TextDisabled("%s", tr(system_.power == PowerSource::Battery  ? T::ConfigOnBattery
+                                   : system_.power == PowerSource::Mains ? T::ConfigOnMains
+                                                                         : T::ConfigPowerUnknown));
+        if (ImGui::Button(tr(T::ConfigRecommended)))
+            apply_quality("automatic");
+        rect_of("config_recommended");
+        ImGui::SameLine();
+        ImGui::BeginDisabled(true);
+        ImGui::Button(tr(T::ConfigMeasureAgain));
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            loc::SetTooltip("%s", tr(T::ComingSoon));
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ConfigVideoOptions));
+        ImGui::Separator();
+    }
+    row(2, T::ConfigGraphicsApi, "ui.graphics_api", [&] {
+        const char* names[] = {tr(T::ConfigAutomatic), "Vulkan", "OpenGL"};
+        const char* ids[] = {"auto", "vulkan", "opengl"};
+        int at = graphics_api_ == "vulkan" ? 1 : graphics_api_ == "opengl" ? 2 : 0;
+        if (ImGui::BeginCombo("##v", names[at])) {
+            for (int k = 0; k < 3; ++k) {
+                const bool can = k != 1 || VulkanWindow::built();
+                if (ImGui::Selectable(names[k], k == at, can ? 0 : ImGuiSelectableFlags_Disabled))
+                    graphics_api_ = ids[k];
+                if (!can && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    loc::SetTooltip("%s", tr(T::ConfigNoVulkan));
+            }
+            ImGui::EndCombo();
+        }
+    }, (std::string(tr(T::ConfigNowDrawing)) + (vulkan_ ? "Vulkan" : "OpenGL") + ". " + tr(T::ConfigAppliesOnStart)).c_str());
+    row(2, T::ConfigGpuDevice, "ui.gpu_device", [&] {
+        ImGui::TextUnformatted(gpu_renderer_.empty() ? tr(T::ConfigAutomatic) : gpu_renderer_.c_str());
+    }, tr(T::ConfigGpuDeviceNote));
+    row(2, T::ConfigRenderLevel, "ui.render_level", soon);
+    row(2, T::ConfigQuality, "ui.view_quality", [&] {
+        const char* ids[] = {"automatic", "high", "balanced", "light", "custom"};
+        const T names[] = {T::ConfigAutomatic, T::ViewQualityHigh, T::ViewQualityBalanced, T::ViewQualityLight, T::ViewQualityCustom};
+        int at = 0;
+        for (int k = 0; k < 5; ++k)
+            if (view_quality_ == ids[k])
+                at = k;
+        if (ImGui::BeginCombo("##v", tr(names[at]))) {
+            for (int k = 0; k < 5; ++k)
+                if (ImGui::Selectable(tr(names[k]), k == at))
+                    apply_quality(ids[k]);
+            ImGui::EndCombo();
+        }
+    }, view_quality_ == "automatic" ? format(tr(T::ConfigQualityChosen), tr(recommended_quality() == "high"      ? T::ViewQualityHigh
+                                                                              : recommended_quality() == "balanced" ? T::ViewQualityBalanced
+                                                                                                                    : T::ViewQualityLight))
+                                         .c_str()
+                                    : nullptr);
+    row(2, T::Render, "render", [&] {
+        const T modes[] = {T::RenderFast, T::RenderAmbient, T::RenderRay};
+        if (ImGui::BeginCombo("##v", tr(modes[int(render_mode_)]))) {
+            for (int m = 0; m < 3; ++m)
+                if (ImGui::Selectable(tr(modes[m]), int(render_mode_) == m) && int(render_mode_) != m)
+                    render_mode_ = static_cast<RenderMode>(m), video_set_by_hand();
+            ImGui::EndCombo();
+        }
+    });
+    row(2, T::AoStrength, "ao_strength", [&] {
+        if (ImGui::SliderFloat("##v", &ao_strength_, 0.0f, 1.5f, "%.2f"))
+            video_set_by_hand();
+    });
+    row(2, T::ConfigBedShadow, "ui.bed_shadow", soon);
+    row(2, T::Antialiasing, "msaa", [&] {
+        std::vector<int> choices = {1};
+        const int most = vulkan_ ? 8 : std::min(renderer_.max_samples(), 8);
+        for (int n = 2; n <= most; n *= 2)
+            choices.push_back(n);
+        const auto name = [](int n) { return n == 1 ? std::string(tr(T::MsaaOff)) : "MSAA " + std::to_string(n) + "×"; };
+        if (ImGui::BeginCombo("##v", name(std::min(msaa_, choices.back())).c_str())) {
+            for (int n : choices)
+                if (ImGui::Selectable(name(n).c_str(), n == msaa_) && n != msaa_)
+                    msaa_ = n, video_set_by_hand();
+            ImGui::EndCombo();
+        }
+    });
+    row(2, T::Fxaa, "fxaa", [&] {
+        if (ImGui::Checkbox("##v", &fxaa_))
+            video_set_by_hand();
+    });
+    row(2, T::MoireFilter, "moire_filter", toggle(moire_));
+    row(2, T::ConfigRenderScale, "ui.render_scale", soon);
+    row(2, T::ConfigLowerWhileMoving, "ui.lower_while_moving", toggle(lower_while_moving_), tr(T::ConfigLowerWhileMovingNote));
+    row(2, T::ConfigMaxFps, "ui.max_fps", [&] {
+        const int values[] = {30, 60, 75, 120, 144, 0, -1};
+        const auto name = [&](int v) {
+            return v > 0 ? std::to_string(v) : std::string(tr(v == 0 ? T::ConfigFpsScreen : T::ConfigFpsNone));
+        };
+        if (ImGui::BeginCombo("##v", name(max_fps_).c_str())) {
+            for (const int v : values)
+                if (ImGui::Selectable(name(v).c_str(), v == max_fps_))
+                    max_fps_ = v;
+            ImGui::EndCombo();
+        }
+    });
+    row(2, T::ConfigVsync, "ui.vsync", [&] {
+        if (ImGui::Checkbox("##v", &vsync_)) {
+            if (vulkan_)
+                vk_.set_vsync(vsync_);
+            else
+                glfwSwapInterval(vsync_ ? 1 : 0);
+        }
+    });
+    row(2, T::ConfigBatterySaver, "ui.battery_saver", toggle(battery_saver_));
+    row(2, T::ConfigComputeGpu, "compute.gpu#video", [&] {
+        int v = settings_.gpu == GpuMode::Auto ? 0 : 1;
+        if (ImGui::Combo("##v", &v, (std::string(tr(T::ConfigAutomatic)) + '\0' + tr(T::ConfigNo) + '\0' + '\0').c_str()))
+            settings_.gpu = v == 0 ? GpuMode::Auto : GpuMode::Off, ++revision_.settings;
+    });
+    row(2, T::ConfigShowFrameTime, "ui.show_frame_time", toggle(show_frame_time_));
+
+    // Cámara.
+    row(3, T::ConfigPerspective, "ui.orthographic", [&] {
+        int v = camera_.orthographic ? 1 : 0;
+        if (ImGui::Combo("##v", &v, (std::string(tr(T::ConfigPerspectiveOn)) + '\0' + tr(T::ConfigOrthographic) + '\0' + '\0').c_str()))
+            camera_.orthographic = v == 1;
+    });
+
+    // Asistente.
+    row(4, T::TipsOn, "tips", toggle(tips_));
+    row(4, T::AssistantTutorials, "assistant.tutorials", toggle(assistant_tutorials_));
+    row(4, T::AssistantGlossary, "assistant.glossary_tips", [&] {
+        if (ImGui::Checkbox("##v", &assistant_glossary_))
+            g_glossary_tips = assistant_glossary_;
+    });
+    row(4, T::AssistantMaterial, "assistant.material_tips", toggle(assistant_material_));
+    row(4, T::TipsAgain, "tips_seen", [&] {
+        if (ImGui::Button(tr(T::ConfigShowAgain)))
+            tips_seen_.clear(), tips_ = true;
+    });
+
+    // Complementos.
+    row(5, T::ConfigRunPlugins, "plugins.run", soon);
+
+    // Otros: back to the factory values (rule 5), with a confirmation.
+    row(6, T::ConfigFactory, "factory", [&] {
+        if (ImGui::Button(tr(T::ConfigFactoryButton)))
+            ImGui::OpenPopup("##config_factory");
+        if (ImGui::BeginPopup("##config_factory")) {
+            ImGui::TextUnformatted(tr(T::ConfigFactoryAsk));
+            if (ImGui::Button(tr(T::ConfigFactoryYes))) {
+                ConfigState factory;
+                factory.english = false, factory.graphics_api = "auto", factory.view_quality = "automatic";
+                restore_config(factory);
+                apply_quality("automatic");
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button(tr(T::Cancel)))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+    }, tr(T::ConfigFactoryNote));
+    row(6, T::ConfigExport, "export", soon);
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+
+    // Cancelar puts back what was there; Aceptar keeps it and saves.
+    ImGui::Separator();
+    const float button_w = 120.0f * scale_;
+    ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 2.0f * button_w - ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().WindowPadding.x);
+    bool cancel = ImGui::Button(tr(T::Cancel), ImVec2(button_w, 0));
+    rect_of("config_cancel");
+    ImGui::SameLine();
+    const bool ok = ImGui::Button(tr(T::ConfigOk), ImVec2(button_w, 0));
+    rect_of("config_ok");
+    if (!open || (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
+        cancel = true;
+    ImGui::End();
+    ImGui::PopStyleColor();
+    if (cancel && config_before_)
+        restore_config(*config_before_);
+    if (ok)
+        save_preferences();
+    if (ok || cancel) {
+        config_open_ = false;
+        config_before_.reset();
+    }
+}
+
 // The command line under the view (rule 12): a tool by its name, then its
 // sizes one by one with the default between brackets; Enter or Space
 // confirm, Enter on an empty line repeats the last tool, Esc cancels.
@@ -13156,6 +13722,7 @@ void App::layout() {
         tip("slice");
     }
     help_windows();
+    config_window();
     guide_overlay();
     if (!g_clamped.empty()) {
         notify(std::move(g_clamped));
@@ -13174,6 +13741,10 @@ void App::layout() {
         else
             send_design_to_plate(); // cad_design.md, rule 21
     }
+    // Configuración: Ctrl+, and Ctrl+P (preferences.md).
+    if (no_popup() && (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma, ImGuiInputFlags_RouteGlobal) ||
+                       ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, ImGuiInputFlags_RouteGlobal)))
+        config_open_ = true;
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
@@ -14389,6 +14960,32 @@ void App::script_input() {
         if (area < want)
             return fail_step("the paint covers " + std::to_string(area) + " mm2");
         next();
+    } else if (step.verb == "expect-config-covers") { // every option the preferences keep has a control (PF7)
+        static const char* const kOptionKeys[] = {
+            "language", "theme", "render", "msaa", "fxaa", "moire_filter", "ao_strength", "tips", "assistant.tutorials",
+            "assistant.glossary_tips", "assistant.material_tips", "ui.level", "ui.orthographic", "ui.cad_design",
+            "ui.graphics_api", "ui.view_quality", "ui.max_fps", "ui.vsync", "ui.lower_while_moving", "ui.battery_saver",
+            "ui.show_frame_time", "compute.gpu"};
+        std::string missing;
+        for (const char* key : kOptionKeys)
+            if (!config_keys_seen_.contains(key))
+                missing += std::string(missing.empty() ? "" : ", ") + key;
+        std::printf("ui-script: expect-config-covers: %s\n", missing.empty() ? "ok" : ("missing " + missing).c_str());
+        if (!missing.empty())
+            return fail_step("no control for " + missing);
+        next();
+    } else if (step.verb == "expect-quality") { // the Video page's quality and the drawing it set: "QUALITY RENDER MSAA"
+        std::istringstream want(step.key + " " + step.value);
+        std::string quality, render;
+        int msaa = 0;
+        want >> quality >> render >> msaa;
+        const char* modes[] = {"fast", "ao", "rt"};
+        const bool ok = view_quality_ == quality && render == modes[int(render_mode_)] && (msaa == 0 || msaa == msaa_);
+        std::printf("ui-script: expect-quality %s %s: %s%s %s %d\n", step.key.c_str(), step.value.c_str(), ok ? "ok, " : "got ",
+                    view_quality_.c_str(), modes[int(render_mode_)], msaa_);
+        if (!ok)
+            return fail_step("the quality is " + view_quality_);
+        next();
     } else if (step.verb == "expect-apart") { // two named controls drawn, neither over the other
         const auto a = g_menu_rects.find(step.key), b = g_menu_rects.find(step.value);
         if (a == g_menu_rects.end() || b == g_menu_rects.end())
@@ -14437,6 +15034,14 @@ void App::frame() {
                       (render_mode_ == RenderMode::RayTraced && renderer_.has_ray_scene() &&
                        renderer_.ray_samples() < 256);
     const bool printer = printer_ && printer_->status().state != device::PrinterState::Disconnected;
+    // Never faster than the cap (view_auto_quality.md, rule 3): what is left
+    // of the frame's time is spent waiting for events, so the machine rests.
+    if (const double cap = frame_cap(); cap > 0.0 && options_.screenshot.empty()) {
+        const double left = frame_started_ + 1.0 / cap - glfwGetTime();
+        if (left > 0.0005)
+            glfwWaitEventsTimeout(left);
+    }
+    frame_started_ = glfwGetTime();
     if (busy)
         glfwPollEvents();
     else

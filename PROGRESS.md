@@ -8645,3 +8645,22 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
 
 **Sigue:** más piezas para Ingeniería (cremallera, polea dentada GT2, inserto térmico, bisagra), con lo que pida el
 dueño; después D3 de `cad_design.md`.
+
+## 2026-11-02 (noche): Configuración y la página Video, etapa A (`preferences.md`, `view_auto_quality.md`)
+
+Prioridad del dueño (por el equipo de fichas): primero Configuración con la página Video y la calidad automática.
+- **Configuración:** Más › «Configuración…» (la primera entrada), Ctrl+, y Ctrl+P, y un engranaje en la barra de
+  estado. Siete páginas, buscador, Cancelar vuelve todo como estaba, Aceptar guarda. Valores de fábrica con
+  confirmación. La vista se ve detrás y los cambios de Video se aplican al momento.
+- **Video:** el equipo (`src/ui/system_info.*`: procesador, núcleos, memoria, batería; la placa desde OpenGL o
+  Vulkan, con su tipo y versiones; la pantalla desde GLFW), «Volver a lo recomendado», y las opciones de la regla 8.
+  Calidades fijas de la regla 4; la automática elige por ahora según la placa (por software: Liviana; integrada:
+  Equilibrada; el resto: Alta) hasta la medición de la regla 2. Tope de cuadros por segundo (60; la pantalla; sin
+  tope) que espera eventos en lo que sobra del cuadro; sincronización vertical en vivo con OpenGL y con Vulkan (la
+  cadena de imágenes se rehace). Ahorro a batería: tope 30 y Liviana.
+- **Pruebas:** `[system]` y el guion `config` (PF7: cada opción que guardan las preferencias tiene control; PF8: Más y
+  el engranaje la abren; «Volver a lo recomendado» elige Liviana con llvmpipe; Cancelar deshace).
+- **Falta (etapa B y lo marcado «Próximamente»):** la medición del primer arranque y «Medir de nuevo», bajar la
+  calidad al mover y congelar la oclusión al pintar, la resolución de la vista, la sombra sobre la cama, el nivel de
+  OpenGL (`legacy_windows.md`), elegir la placa en equipos con dos, exportar e importar las preferencias, y cambiar la
+  API gráfica sin cerrar el programa (hoy se aplica al volver a abrirlo).

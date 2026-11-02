@@ -11,6 +11,71 @@
     X(TabAnalysis, "Análisis", "Analysis")                                                                            \
     X(TabDesign, "Diseño", "Design")                                                                                  \
     X(TabFasteners, "Tornillería", "Fasteners") \
+    X(ConfigMenu, "Configuración…", "Settings…") \
+    X(ConfigTitle, "Configuración", "Settings") \
+    X(ConfigSearch, "Buscar una opción", "Search an option") \
+    X(ConfigGeneral, "General", "General") \
+    X(ConfigInterface, "Interfaz", "Interface") \
+    X(ConfigVideo, "Video", "Video") \
+    X(ConfigCamera, "Cámara", "Camera") \
+    X(ConfigAssistant, "Asistente", "Assistant") \
+    X(ConfigPlugins, "Complementos", "Plug-ins") \
+    X(ConfigOther, "Otros", "Other") \
+    X(ConfigComputeGpu, "Cálculo en la placa de video", "Computing on the graphics card") \
+    X(ConfigComputeGpuNote, "El laminado y el análisis usan la placa si hay; No los deja en el procesador.", "Slicing and the analysis use the card when there is one; No keeps them on the processor.") \
+    X(ConfigAutomatic, "Automática", "Automatic") \
+    X(ConfigNo, "No", "No") \
+    X(ConfigLevel, "Nivel de ajustes", "Settings level") \
+    X(ConfigMachine, "Este equipo", "This machine") \
+    X(ConfigMachineCpu, "Procesador: %s (%d núcleos, %d hilos)", "Processor: %s (%d cores, %d threads)") \
+    X(ConfigMachineRam, "Memoria: %s, %s libres", "Memory: %s, %s free") \
+    X(ConfigMachineGpu, "Placa de video: %s · %s", "Graphics card: %s · %s") \
+    X(ConfigMachineScreen, "Pantalla: %d × %d a %d Hz, escala %.2f", "Screen: %d × %d at %d Hz, scale %.2f") \
+    X(ConfigMachineScreenNoRate, "Pantalla: %d × %d, escala %.2f", "Screen: %d × %d, scale %.2f") \
+    X(ConfigOnBattery, "A batería", "On battery") \
+    X(ConfigOnBatteryShort, "a batería", "on battery") \
+    X(ConfigOnMains, "Enchufado", "Plugged in") \
+    X(ConfigPowerUnknown, "Sin batería", "No battery") \
+    X(ConfigRecommended, "Volver a lo recomendado", "Back to the recommended") \
+    X(ConfigMeasureAgain, "Medir de nuevo", "Measure again") \
+    X(ConfigVideoOptions, "Opciones", "Options") \
+    X(ConfigGraphicsApi, "API gráfica", "Graphics API") \
+    X(ConfigNoVulkan, "No hay Vulkan en este equipo", "There is no Vulkan on this machine") \
+    X(ConfigNowDrawing, "Ahora dibuja con ", "Drawing now with ") \
+    X(ConfigAppliesOnStart, "Un cambio se aplica al volver a abrir el programa.", "A change applies when the program opens again.") \
+    X(ConfigGpuDevice, "Placa de video", "Graphics card") \
+    X(ConfigGpuDeviceNote, "Automática pide la de alto rendimiento. Con OpenGL en Windows la elige Windows (Configuración de gráficos).", "Automatic asks for the high-performance one. With OpenGL on Windows, Windows picks it (Graphics settings).") \
+    X(ConfigRenderLevel, "Nivel de OpenGL", "OpenGL level") \
+    X(ConfigQuality, "Calidad", "Quality") \
+    X(ConfigQualityChosen, "Para este equipo: %s", "For this machine: %s") \
+    X(ViewQualityHigh, "Alta", "High") \
+    X(ViewQualityBalanced, "Equilibrada", "Balanced") \
+    X(ViewQualityLight, "Liviana", "Light") \
+    X(ViewQualityCustom, "Personalizada", "Custom") \
+    X(QualityAutomaticShort, "Calidad automática", "Automatic quality") \
+    X(QualityStatus, "%s · %d FPS", "%s · %d FPS") \
+    X(ConfigBedShadow, "Sombra sobre la cama", "Shadow on the bed") \
+    X(ConfigRenderScale, "Resolución de la vista", "View resolution") \
+    X(ConfigLowerWhileMoving, "Bajar la calidad al mover", "Lower the quality while moving") \
+    X(ConfigLowerWhileMovingNote, "Mientras algo se mueve la vista baja lo que haga falta y al soltar vuelve a la imagen completa.", "While something moves the view lowers what it must, and back to the full picture when released.") \
+    X(ConfigMaxFps, "Tope de cuadros por segundo", "Frame rate cap") \
+    X(ConfigFpsScreen, "La pantalla", "The screen's") \
+    X(ConfigFpsNone, "Sin tope", "No cap") \
+    X(ConfigVsync, "Sincronización vertical", "Vertical sync") \
+    X(ConfigBatterySaver, "Ahorro a batería", "Battery saver") \
+    X(ConfigShowFrameTime, "Mostrar el tiempo de la vista", "Show the view's time") \
+    X(ConfigPerspective, "Cámara", "Camera") \
+    X(ConfigPerspectiveOn, "Perspectiva", "Perspective") \
+    X(ConfigOrthographic, "Ortogonal", "Orthographic") \
+    X(ConfigShowAgain, "Mostrar de nuevo", "Show again") \
+    X(ConfigRunPlugins, "Correr complementos al laminar", "Run plug-ins when slicing") \
+    X(ConfigFactory, "Valores de fábrica", "Factory values") \
+    X(ConfigFactoryButton, "Volver a los valores de fábrica", "Back to the factory values") \
+    X(ConfigFactoryAsk, "¿Volver todas las opciones a los valores de fábrica? Los perfiles y los proyectos no cambian.", "Put every option back to its factory value? Profiles and projects do not change.") \
+    X(ConfigFactoryYes, "Sí, volver", "Yes, put them back") \
+    X(ConfigFactoryNote, "No toca perfiles ni proyectos.", "Leaves profiles and projects alone.") \
+    X(ConfigExport, "Exportar e importar las preferencias", "Export and import the preferences") \
+    X(ConfigOk, "Aceptar", "OK") \
     X(FastenerThumbScrew, "Tornillo de mano", "Thumb screw") \
     X(FastenerThumbNut, "Tuerca de mano", "Thumb nut") \
     X(FastenerStandoff, "Separador roscado", "Threaded standoff") \

@@ -312,6 +312,7 @@ if(TISMA_BUILD_UI)
     src/ui/plate.cpp
     src/ui/measure.cpp
     src/ui/help.cpp
+    src/ui/system_info.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
   target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
