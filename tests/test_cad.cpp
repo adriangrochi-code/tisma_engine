@@ -4,6 +4,7 @@
 
 #include "cad/design.hpp"
 #include "cad/process.hpp"
+#include "cad/sketch.hpp"
 #include "cad/solidcraft.hpp"
 #include "io/model.hpp"
 #include "mesh/shapes.hpp"
@@ -42,10 +43,19 @@ void set_env(const char* name, const char* value) {
 #endif
 }
 
+Feature prim(const char* name, Primitive kind, std::array<double, kMaxSizes> sizes, bool suppressed = false) {
+    Feature f;
+    f.name = name;
+    f.kind = kind;
+    f.sizes = sizes;
+    f.suppressed = suppressed;
+    return f;
+}
+
 Design box_design(double l = 40.0, double w = 30.0, double h = 20.0) {
     Design d;
     d.name = "Test";
-    d.features.push_back({"Box", Primitive::Box, {l, w, h}});
+    d.features.push_back(prim("Box", Primitive::Box, {l, w, h}));
     return d;
 }
 
@@ -71,7 +81,7 @@ TEST_CASE("cad: a primitive is SolidCraft's command, standing on the bed", "[cad
     CHECK(script.at("commands")[1].at("params").at("quality") == "fine");
     // A tube is a cylinder with a longer cylinder cut out of it alone.
     Design tube;
-    tube.features.push_back({"Tube", Primitive::Tube, {20.0, 12.0, 10.0}});
+    tube.features.push_back(prim("Tube", Primitive::Tube, {20.0, 12.0, 10.0}));
     const std::vector<std::string> cut = build_commands(tube);
     REQUIRE(cut.size() == 2);
     const nlohmann::json hole = nlohmann::json::parse(cut[1]);
@@ -83,15 +93,15 @@ TEST_CASE("cad: a primitive is SolidCraft's command, standing on the bed", "[cad
     // Every other primitive names its command.
     for (const Primitive p : {Primitive::Cylinder, Primitive::Sphere, Primitive::Cone, Primitive::Torus}) {
         Design one;
-        one.features.push_back({"A", p, default_sizes(p)});
+        one.features.push_back(prim("A", p, default_sizes(p)));
         const std::vector<std::string> own = build_commands(one);
         REQUIRE(own.size() == 1);
         CHECK(nlohmann::json::parse(own[0]).at("command") == command_of(p));
     }
     // A suppressed feature (the eye in Historial) and bad sizes are left out.
     Design mixed = box_design();
-    mixed.features.push_back({"Hidden", Primitive::Sphere, {10.0, 0.0, 0.0}, true});
-    mixed.features.push_back({"Flat", Primitive::Cylinder, {10.0, 0.0, 0.0}});
+    mixed.features.push_back(prim("Hidden", Primitive::Sphere, {10.0, 0.0, 0.0}, true));
+    mixed.features.push_back(prim("Flat", Primitive::Cylinder, {10.0, 0.0, 0.0}));
     CHECK(build_commands(mixed).size() == 1);
     CHECK(mixed.has_body());
     CHECK_FALSE(Design{}.has_body());
@@ -111,7 +121,7 @@ TEST_CASE("cad: the mesh quality for a chord tolerance, and the design round tri
     CHECK(quality_for(0.01, 1000.0) == MeshQuality::Finest);
     CHECK(quality_for(0.0, 1000.0) == MeshQuality::Standard);
     Design d = box_design();
-    d.features.push_back({"Ring", Primitive::Torus, {30.0, 8.0, 0.0}, true});
+    d.features.push_back(prim("Ring", Primitive::Torus, {30.0, 8.0, 0.0}, true));
     CHECK_THAT(nominal_size(d), WithinAbs(40.0, 1e-9));
     const Design back = parse_design(design_json(d));
     REQUIRE(back.features.size() == 2);
@@ -170,10 +180,10 @@ TEST_CASE("cad: the bundled tool probed and a design built through it (CD2's box
     CHECK_THAT(built.measure, ContainsSubstring("volume_mm3"));
     // A tube, through the cut; a sphere, a cone and a torus.
     Design more;
-    more.features.push_back({"Tube", Primitive::Tube, {20.0, 12.0, 20.0}});
-    more.features.push_back({"Ball", Primitive::Sphere, {10.0, 0.0, 0.0}});
-    more.features.push_back({"Cone", Primitive::Cone, {20.0, 0.0, 20.0}});
-    more.features.push_back({"Ring", Primitive::Torus, {30.0, 8.0, 0.0}});
+    more.features.push_back(prim("Tube", Primitive::Tube, {20.0, 12.0, 20.0}));
+    more.features.push_back(prim("Ball", Primitive::Sphere, {10.0, 0.0, 0.0}));
+    more.features.push_back(prim("Cone", Primitive::Cone, {20.0, 0.0, 20.0}));
+    more.features.push_back(prim("Ring", Primitive::Torus, {30.0, 8.0, 0.0}));
     const BuildResult four = build_design(kFake, more, MeshQuality::Fine);
     INFO(four.error);
     REQUIRE(four.ok);
@@ -182,7 +192,7 @@ TEST_CASE("cad: the bundled tool probed and a design built through it (CD2's box
     CHECK_THAT(four.volume_mm3, WithinRel(expected, 0.01));
     // Nothing to build: no run, an empty mesh.
     Design empty;
-    empty.features.push_back({"Hidden", Primitive::Box, {10.0, 10.0, 10.0}, true});
+    empty.features.push_back(prim("Hidden", Primitive::Box, {10.0, 10.0, 10.0}, true));
     const BuildResult none = build_design(kFake, empty, MeshQuality::Standard);
     CHECK(none.ok);
     CHECK(none.mesh.empty());
@@ -215,3 +225,229 @@ TEST_CASE("cad: the tool missing, damaged or not answering (CD21)", "[cad]") {
     CHECK(bad.status == 2);
     CHECK_THAT(bad.err, ContainsSubstring("usage"));
 }
+
+TEST_CASE("cad: points typed as the drafting programs take them (rule 13, CD13, CD14)", "[cad]") {
+    const Pt last{10.0, 5.0};
+    REQUIRE(parse_typed_point("0,0", last));
+    CHECK(*parse_typed_point("0,0", last) == Pt{0.0, 0.0});
+    CHECK(*parse_typed_point("40.5, 30", last) == Pt{40.5, 30.0});
+    CHECK(*parse_typed_point("@40,0", last) == Pt{50.0, 5.0});
+    CHECK(*parse_typed_point("@-40,0", last) == Pt{-30.0, 5.0});
+    // CD14: @50<30 from the origin ends at (43.301, 25).
+    const Pt polar = *parse_typed_point("@50<30", Pt{});
+    CHECK_THAT(polar.x, WithinAbs(43.301, 1e-3));
+    CHECK_THAT(polar.y, WithinAbs(25.0, 1e-9));
+    CHECK_FALSE(parse_typed_point("40", last));
+    CHECK_FALSE(parse_typed_point("50<30", last)); // polar is always relative
+    CHECK_FALSE(parse_typed_point("a,b", last));
+    CHECK(parse_typed_value("12,5") == 12.5);
+    CHECK(parse_typed_value(" 7 ") == 7.0);
+    CHECK_FALSE(parse_typed_value("x"));
+}
+
+TEST_CASE("cad: ortho and polar tracking (rule 16, CD16)", "[cad]") {
+    const Pt from{0.0, 0.0};
+    // F8: a segment at 10 degrees from the horizontal comes out horizontal.
+    const Pt c{30.0 * std::cos(10.0 * std::numbers::pi / 180.0), 30.0 * std::sin(10.0 * std::numbers::pi / 180.0)};
+    const Pt ortho = tracked_point(from, c, true, 0.0);
+    CHECK_THAT(ortho.y, WithinAbs(0.0, 1e-12));
+    CHECK_THAT(ortho.x, WithinAbs(c.x, 1e-9));
+    CHECK(tracked_point(from, {2.0, 30.0}, true, 0.0) == Pt{0.0, 30.0});
+    // F10 at 45 degrees: 43 degrees snaps to 45, the length kept; 20 does not.
+    const Pt near45{30.0 * std::cos(43.0 * std::numbers::pi / 180.0), 30.0 * std::sin(43.0 * std::numbers::pi / 180.0)};
+    const Pt polar = tracked_point(from, near45, false, 45.0);
+    CHECK_THAT(polar.x, WithinAbs(polar.y, 1e-9));
+    CHECK_THAT(std::hypot(polar.x, polar.y), WithinAbs(30.0, 1e-9));
+    const Pt off{30.0 * std::cos(20.0 * std::numbers::pi / 180.0), 30.0 * std::sin(20.0 * std::numbers::pi / 180.0)};
+    CHECK(tracked_point(from, off, false, 45.0) == off);
+}
+
+TEST_CASE("cad: the object snaps (rule 15, CD15)", "[cad]") {
+    Sketch s;
+    s.entities.push_back({Entity::Kind::Chain, {{0.0, 0.0}, {40.0, 0.0}}}); // l1
+    s.entities.push_back({Entity::Kind::Circle, {{20.0, 20.0}}, 5.0});       // c1
+    SnapOptions o;
+    // Endpoint before midpoint before nearest; the midpoint of l1 is (20, 0).
+    Snap snap = snap_point(s, {20.5, 0.3}, o);
+    CHECK(snap.kind == SnapKind::Midpoint);
+    CHECK(snap.at == Pt{20.0, 0.0});
+    CHECK(snap.entity == 0);
+    snap = snap_point(s, {39.5, 0.5}, o);
+    CHECK(snap.kind == SnapKind::Endpoint);
+    CHECK(snap.at == Pt{40.0, 0.0});
+    snap = snap_point(s, {20.5, 19.5}, o);
+    CHECK(snap.kind == SnapKind::Center);
+    snap = snap_point(s, {25.3, 20.2}, o);
+    CHECK(snap.kind == SnapKind::Quadrant);
+    CHECK(snap.at == Pt{25.0, 20.0});
+    snap = snap_point(s, {10.0, 0.6}, o);
+    CHECK(snap.kind == SnapKind::Nearest);
+    CHECK_THAT(snap.at.y, WithinAbs(0.0, 1e-12));
+    CHECK(snap_point(s, {10.0, 10.0}, o).kind == SnapKind::None);
+    // Perpendicular and tangent from a start point.
+    o.from = Pt{10.0, 8.0};
+    snap = snap_point(s, {10.2, 0.4}, o);
+    CHECK(snap.kind == SnapKind::Perpendicular);
+    CHECK(snap.at == Pt{10.0, 0.0});
+    o.from = Pt{20.0, 0.0};
+    const double t = std::acos(5.0 / 20.0);
+    const Pt tangent{20.0 + 5.0 * std::cos(-std::numbers::pi / 2.0 + t), 20.0 + 5.0 * std::sin(-std::numbers::pi / 2.0 + t)};
+    o.radius = 1.0; // the quadrant (25, 20) lies 1.3 mm from the tangent point, and would win
+    snap = snap_point(s, {tangent.x + 0.3, tangent.y - 0.2}, o);
+    CHECK(snap.kind == SnapKind::Tangent);
+    o.radius = 2.0;
+    CHECK_THAT(std::hypot(snap.at.x - 20.0, snap.at.y - 20.0), WithinAbs(5.0, 1e-9));
+    // An intersection of two lines wins over the nearest.
+    s.entities.push_back({Entity::Kind::Chain, {{10.0, -5.0}, {10.0, 15.0}}}); // l2 (its midpoint away from the crossing)
+    o.from.reset();
+    snap = snap_point(s, {10.4, 0.4}, o);
+    CHECK(snap.kind == SnapKind::Intersection);
+    CHECK_THAT(snap.at.x, WithinAbs(10.0, 1e-9));
+    CHECK_THAT(snap.at.y, WithinAbs(0.0, 1e-9));
+    // F3 off: only the grid, when it is on.
+    o.enabled = false;
+    CHECK(snap_point(s, {20.5, 0.3}, o).kind == SnapKind::None);
+    o.grid = true;
+    snap = snap_point(s, {20.6, 0.3}, o);
+    CHECK(snap.kind == SnapKind::Grid);
+    CHECK(snap.at == Pt{21.0, 0.0});
+    // CD15: a line from the midpoint of another leaves the midpoint constraint, by SolidCraft's ids.
+    Sketch two;
+    two.entities.push_back({Entity::Kind::Chain, {{0.0, 0.0}, {40.0, 0.0}}});
+    two.entities.push_back({Entity::Kind::Chain, {{20.0, 0.0}, {20.0, 30.0}}});
+    two.constraints.push_back({Constraint::Kind::Midpoint, {1, 0}, 0, 0});
+    const std::vector<std::string> commands = sketch_commands(two, {}, "Part");
+    bool found = false;
+    for (const std::string& c : commands) {
+        const nlohmann::json j = nlohmann::json::parse(c);
+        if (j.at("command") == "sketch.constraint.midpoint") {
+            found = true;
+            CHECK(j.at("params").at("point") == "l2.start");
+            CHECK(j.at("params").at("line") == "l1");
+        }
+    }
+    CHECK(found);
+}
+
+TEST_CASE("cad: a sketch's script, its ids and its round trip (rules 4, 7; CD13)", "[cad]") {
+    Sketch s;
+    // CD13: L, 0,0, @40,0, @0,30, @-40,0, C: a closed 40 x 30 rectangle with its dimensions.
+    Entity chain{Entity::Kind::Chain, {{0.0, 0.0}, {40.0, 0.0}, {40.0, 30.0}, {0.0, 30.0}}, 0.0, true};
+    s.entities.push_back(chain);
+    s.dimensions = {{0, 0, 40.0}, {0, 1, 30.0}, {0, 2, 40.0}};
+    s.entities.push_back({Entity::Kind::Circle, {{20.0, 15.0}}, 5.0});
+    s.entities.push_back({Entity::Kind::Rectangle, {{50.0, 0.0}, {60.0, 10.0}}});
+    s.entities.push_back({Entity::Kind::Arc, {{70.0, 0.0}, {75.0, 0.0}, {70.0, 5.0}}});
+    CHECK(s.has_region());
+    CHECK(point_id(s, {0, 0}) == "l1.start");
+    CHECK(point_id(s, {0, 3}) == "l4.start");
+    CHECK(line_id(s, 0, 3) == "l4");
+    CHECK(point_id(s, {1, 0}) == "c1.center");
+    CHECK(point_id(s, {2, 1}) == "l5.end"); // the rectangle's bottom-right corner: the fifth line's end
+    CHECK(line_id(s, 2, 2) == "l7");
+    CHECK(point_id(s, {3, 2}) == "a1.end");
+    SketchOperation op;
+    op.distance = 20.0;
+    const std::vector<std::string> commands = sketch_commands(s, op, "Plate");
+    REQUIRE(commands.size() >= 9);
+    nlohmann::json first = nlohmann::json::parse(commands.front());
+    CHECK(first.at("command") == "sketch.create");
+    CHECK(first.at("params").at("plane") == "XY");
+    nlohmann::json line = nlohmann::json::parse(commands[1]);
+    CHECK(line.at("command") == "sketch.line");
+    CHECK(line.at("params").at("points").size() == 4);
+    CHECK(line.at("params").at("closed") == true);
+    nlohmann::json dim = nlohmann::json::parse(commands[5]);
+    CHECK(dim.at("command") == "sketch.dimension");
+    CHECK(dim.at("params").at("entities") == nlohmann::json::array({"l1"}));
+    CHECK(dim.at("params").at("value") == 40.0);
+    CHECK(nlohmann::json::parse(commands[commands.size() - 2]).at("command") == "sketch.finish");
+    nlohmann::json last = nlohmann::json::parse(commands.back());
+    CHECK(last.at("command") == "solid.extrude");
+    CHECK(last.at("params").at("distance") == 20.0);
+    CHECK(last.at("params").at("body_name") == "Plate");
+    op.kind = SketchOperation::Kind::Revolve;
+    op.axis = 'x';
+    op.angle = 180.0;
+    last = nlohmann::json::parse(sketch_commands(s, op, "Knob").back());
+    CHECK(last.at("command") == "solid.revolve");
+    CHECK(last.at("params").at("axis") == "x");
+    CHECK(last.at("params").at("angle") == 180.0);
+    // The round trip, inside a design too.
+    Sketch back;
+    SketchOperation back_op;
+    parse_sketch(sketch_json(s, op), back, back_op);
+    CHECK(back == s);
+    CHECK(back_op == op);
+    Design d;
+    Feature f;
+    f.name = "Plate";
+    f.type = Feature::Type::Sketch;
+    f.sketch = s;
+    f.operation = op;
+    d.features.push_back(f);
+    const Design parsed = parse_design(design_json(d));
+    REQUIRE(parsed.features.size() == 1);
+    CHECK(parsed.features[0].type == Feature::Type::Sketch);
+    CHECK(parsed.features[0].sketch == s);
+    CHECK(parsed.features[0].operation == op);
+    CHECK(d.has_body());
+    CHECK_THAT(nominal_size(d), WithinAbs(75.0, 1e-9));
+    // A sketch with nothing closed makes no body.
+    Design open;
+    Feature line_only;
+    line_only.type = Feature::Type::Sketch;
+    line_only.sketch.entities.push_back({Entity::Kind::Chain, {{0.0, 0.0}, {10.0, 0.0}}});
+    open.features.push_back(line_only);
+    CHECK_FALSE(open.has_body());
+}
+
+TEST_CASE("cad: a rectangle extruded and a profile revolved through the tool (CD2)", "[cad]") {
+    if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
+        SKIP("the stand-in solidcraft-cli was not built");
+    set_env("TISMA_FAKE_SOLIDCRAFT_HANG", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_BROKEN", nullptr);
+    // CD2: a 40 x 30 rectangle on XY extruded 20 mm: 24 000 mm3, box 40 x 30 x 20.
+    Design d;
+    Feature f;
+    f.name = "Plate";
+    f.type = Feature::Type::Sketch;
+    f.sketch.entities.push_back({Entity::Kind::Rectangle, {{0.0, 0.0}, {40.0, 30.0}}});
+    f.operation.distance = 20.0;
+    d.features.push_back(f);
+    BuildResult built = build_design(kFake, d, MeshQuality::Standard);
+    INFO(built.error);
+    REQUIRE(built.ok);
+    CHECK_THAT(built.volume_mm3, WithinAbs(24000.0, 1e-3));
+    BoundingBox b = built.mesh.bounding_box();
+    CHECK_THAT(double(b.max.x - b.min.x), WithinAbs(40.0, 1e-4));
+    CHECK_THAT(double(b.max.y - b.min.y), WithinAbs(30.0, 1e-4));
+    CHECK_THAT(double(b.max.z - b.min.z), WithinAbs(20.0, 1e-4));
+    // The same outline as CD13's closed chain, on XZ: the box stands along -Z... the tool lays XZ as +X, -Z.
+    d.features[0].sketch = {};
+    d.features[0].sketch.plane = SketchPlane::XZ;
+    d.features[0].sketch.entities.push_back({Entity::Kind::Chain, {{0.0, 0.0}, {40.0, 0.0}, {40.0, 30.0}, {0.0, 30.0}}, 0.0, true});
+    built = build_design(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    CHECK_THAT(built.volume_mm3, WithinAbs(24000.0, 1e-3));
+    b = built.mesh.bounding_box();
+    CHECK_THAT(double(b.max.y - b.min.y), WithinAbs(20.0, 1e-4));
+    CHECK_THAT(double(b.max.z - b.min.z), WithinAbs(30.0, 1e-4));
+    // A 10 x 20 rectangle 5 mm off the y axis revolved about it: a tube of
+    // radii 5 and 15, 20 tall.
+    d.features[0].sketch = {};
+    d.features[0].sketch.entities.push_back({Entity::Kind::Rectangle, {{5.0, 0.0}, {15.0, 20.0}}});
+    d.features[0].operation.kind = SketchOperation::Kind::Revolve;
+    d.features[0].operation.axis = 'y';
+    built = build_design(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    CHECK_THAT(built.volume_mm3, WithinRel(std::numbers::pi * (225.0 - 25.0) * 20.0, 0.01));
+    // A circle revolved about the x axis: a torus.
+    d.features[0].sketch = {};
+    d.features[0].sketch.entities.push_back({Entity::Kind::Circle, {{0.0, 15.0}}, 4.0});
+    d.features[0].operation.axis = 'x';
+    built = build_design(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    CHECK_THAT(built.volume_mm3, WithinRel(2.0 * std::numbers::pi * std::numbers::pi * 15.0 * 16.0, 0.01));
+}
+

@@ -63,9 +63,12 @@ const char* command_of(Primitive kind) {
     return "";
 }
 
+bool Feature::buildable() const {
+    return type == Type::Sketch ? sketch.has_region() : sizes_ok(kind, sizes);
+}
+
 bool Design::has_body() const {
-    return std::any_of(features.begin(), features.end(),
-                       [](const Feature& f) { return !f.suppressed && sizes_ok(f.kind, f.sizes); });
+    return std::any_of(features.begin(), features.end(), [](const Feature& f) { return !f.suppressed && f.buildable(); });
 }
 
 std::string Design::free_name(const std::string& base) const {
@@ -96,8 +99,23 @@ MeshQuality quality_for(double chord_tolerance, double size) {
 double nominal_size(const Design& design) {
     double size = 0.0;
     for (const Feature& f : design.features) {
-        if (f.suppressed || !sizes_ok(f.kind, f.sizes))
+        if (f.suppressed || !f.buildable())
             continue;
+        if (f.type == Feature::Type::Sketch) {
+            double lo_x = 0.0, hi_x = 0.0, lo_y = 0.0, hi_y = 0.0;
+            bool any = false;
+            for (const Entity& e : f.sketch.entities)
+                for (std::size_t k = 0; k < (e.kind == Entity::Kind::Rectangle ? 4 : e.points.size()); ++k) {
+                    const Pt p = point_of(e, k);
+                    const double r = e.kind == Entity::Kind::Circle ? e.radius : 0.0;
+                    lo_x = any ? std::min(lo_x, p.x - r) : p.x - r, hi_x = any ? std::max(hi_x, p.x + r) : p.x + r;
+                    lo_y = any ? std::min(lo_y, p.y - r) : p.y - r, hi_y = any ? std::max(hi_y, p.y + r) : p.y + r;
+                    any = true;
+                }
+            size = std::max({size, hi_x - lo_x, hi_y - lo_y,
+                             f.operation.kind == SketchOperation::Kind::Extrude ? f.operation.distance : 0.0});
+            continue;
+        }
         for (std::size_t i = 0; i < size_count(f.kind); ++i)
             size = std::max(size, f.sizes[i]);
     }
@@ -112,6 +130,11 @@ json command(const char* name, json params) {
 
 // The commands of one feature: the body stands on z = 0, centred in X and Y.
 void feature_commands(const Feature& f, std::vector<json>& out) {
+    if (f.type == Feature::Type::Sketch) {
+        for (const std::string& c : sketch_commands(f.sketch, f.operation, f.name))
+            out.push_back(json::parse(c));
+        return;
+    }
     const auto& s = f.sizes;
     switch (f.kind) {
     case Primitive::Box:
@@ -195,7 +218,7 @@ const char* kind_name(Primitive kind) {
 std::vector<std::string> build_commands(const Design& design) {
     std::vector<json> commands;
     for (const Feature& f : design.features)
-        if (!f.suppressed && sizes_ok(f.kind, f.sizes))
+        if (!f.suppressed && f.buildable())
             feature_commands(f, commands);
     std::vector<std::string> out;
     out.reserve(commands.size());
@@ -207,7 +230,7 @@ std::vector<std::string> build_commands(const Design& design) {
 std::string script_json(const Design& design, const std::string& export_3mf, MeshQuality quality) {
     json commands = json::array();
     for (const Feature& f : design.features)
-        if (!f.suppressed && sizes_ok(f.kind, f.sizes)) {
+        if (!f.suppressed && f.buildable()) {
             std::vector<json> own;
             feature_commands(f, own);
             for (json& c : own)
@@ -221,6 +244,13 @@ std::string script_json(const Design& design, const std::string& export_3mf, Mes
 std::string design_json(const Design& design) {
     json features = json::array();
     for (const Feature& f : design.features) {
+        if (f.type == Feature::Type::Sketch) {
+            features.push_back({{"name", f.name},
+                                {"kind", "sketch"},
+                                {"sketch", json::parse(sketch_json(f.sketch, f.operation))},
+                                {"suppressed", f.suppressed}});
+            continue;
+        }
         json sizes = json::array();
         for (std::size_t i = 0; i < size_count(f.kind); ++i)
             sizes.push_back(f.sizes[i]);
@@ -246,6 +276,13 @@ Design parse_design(const std::string& text) {
         Feature feature;
         feature.name = f.value("name", std::string());
         const std::string kind = f.value("kind", std::string());
+        if (kind == "sketch") {
+            feature.type = Feature::Type::Sketch;
+            parse_sketch(f.value("sketch", json::object()).dump(), feature.sketch, feature.operation);
+            feature.suppressed = f.value("suppressed", false);
+            d.features.push_back(std::move(feature));
+            continue;
+        }
         bool known = false;
         for (const Primitive p : {Primitive::Box, Primitive::Cylinder, Primitive::Sphere, Primitive::Cone, Primitive::Tube, Primitive::Torus})
             if (kind == kind_name(p))

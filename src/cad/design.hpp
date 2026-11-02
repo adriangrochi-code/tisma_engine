@@ -6,6 +6,8 @@
 // first step) and the project can keep it (rule 22). Own design, over
 // SolidCraft's public command names; see PROVENANCE.md.
 
+#include "cad/sketch.hpp"
+
 #include <array>
 #include <cstddef>
 #include <string>
@@ -36,9 +38,17 @@ const char* command_of(Primitive kind);
 
 struct Feature {
     std::string name; // unique in the design: the body's name too
+    // A primitive with its sizes (stage D1), or a sketch with the operation
+    // that makes a body of it (stage D2).
+    enum class Type { Primitive, Sketch } type = Type::Primitive;
     Primitive kind = Primitive::Box;
     std::array<double, kMaxSizes> sizes{20.0, 20.0, 20.0};
+    Sketch sketch;
+    SketchOperation operation;
     bool suppressed = false; // the eye in Historial (rule 3): left out of the build
+    // Whether it would make a body: a primitive's sizes make a solid, a
+    // sketch has a closed region.
+    bool buildable() const;
 };
 
 struct Design {
