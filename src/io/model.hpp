@@ -1,6 +1,11 @@
 #pragma once
 
+#include "io/zip.hpp"
 #include "mesh/mesh.hpp"
+
+#include <array>
+#include <optional>
+#include <vector>
 
 #include <cstddef>
 #include <filesystem>
@@ -45,6 +50,27 @@ ModelFile parse_obj(std::string_view text);
 // Metadata/Slic3r_PE_model.config), but for the negative volumes, which go
 // to ModelFile::negative. Throws ModelError.
 ModelFile parse_3mf(std::string_view package);
+
+// Each printable item on a 3MF package's build plate as its own mesh, placed
+// (its transforms applied, in millimetres), in the build's order, with its
+// object's name; and, with `extra`, the package's file `extra_name` (none if
+// it has no such file). Throws ModelError.
+struct ThreeMfItem {
+    std::string name;
+    TriangleMesh mesh;
+};
+std::vector<ThreeMfItem> read_3mf_items(std::string_view package, std::optional<std::string>* extra = nullptr,
+                                        std::string_view extra_name = {});
+
+// A 3MF package with these objects, one build item each, moved by `offset`
+// (mm), its vertices written so they read back to the same floats, and these
+// other files in it (formats.md, rule 11: the engine's own data).
+struct ThreeMfObject {
+    std::string name;
+    const TriangleMesh* mesh = nullptr;
+    std::array<double, 3> offset{0.0, 0.0, 0.0};
+};
+std::string write_3mf_objects(const std::vector<ThreeMfObject>& objects, std::vector<ZipEntryToWrite> extra = {});
 
 // A 3MF package with one object of this mesh on its build plate, named, in
 // millimetres (3MF Core Specification): the model file, its content types

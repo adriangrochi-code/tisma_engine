@@ -401,6 +401,26 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     add_test(NAME ui_project_same_gcode
       COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_project_a.gcode
               ${CMAKE_CURRENT_BINARY_DIR}/ui_project_b.gcode)
+    # The same project as a 3MF package (formats.md, rule 11): opened as a
+    # project, not as a model, and sliced to the same G-code.
+    add_test(NAME ui_project_3mf_save
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_project.tisma --lang en --size 900x600
+              --save-project ${CMAKE_CURRENT_BINARY_DIR}/ui_project.3mf
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_3mf_a.png)
+    add_test(NAME ui_project_3mf_reopen
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_project.3mf --lang en --size 900x600
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_project_c.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_3mf_b.png)
+    add_test(NAME ui_project_3mf_same_gcode
+      COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_project_a.gcode
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_project_c.gcode)
+    set_tests_properties(ui_project_3mf_save PROPERTIES FIXTURES_REQUIRED ui_project FIXTURES_SETUP ui_project_3mf
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    set_tests_properties(ui_project_3mf_reopen PROPERTIES FIXTURES_REQUIRED ui_project_3mf FIXTURES_SETUP ui_project_c
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    set_tests_properties(ui_project_3mf_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_project;ui_project_c")
     # A plate of two models (the second one added and the plate arranged),
     # with the Scale tool open, sliced; its project opens to the same G-code.
     add_test(NAME ui_plate_save

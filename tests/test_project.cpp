@@ -2,7 +2,9 @@
 
 #include "calibration/calibration.hpp"
 #include "config/profiles.hpp"
+#include "io/model.hpp"
 #include "io/stl.hpp"
+#include "io/zip.hpp"
 #include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -189,3 +191,75 @@ TEST_CASE("a project keeps a model's own settings, volumes and height ranges (mo
     CHECK(b.ranges[0].settings == m.ranges[0].settings);
     CHECK(back.models[1].volumes.empty());
 }
+
+TEST_CASE("a project as a 3MF package: any reader sees the plate, the engine reads it all back (formats.md, rule 11)",
+          "[project]") {
+    Project p = sample();
+    p.models[1].painting.set_tree(PaintChannel::Seam, 2, {Painting::kSplit, 0, 1, 2, 1});
+    p.models[0].settings = R"({"walls":{"count":3}})";
+    p.models[0].volumes.push_back({false, true, {5.0, 0.0, 2.0}, {8.0, 8.0, 4.0}, R"({"infill":{"density":60}})"});
+    p.models[0].ranges.push_back({4.0, 6.0, R"({"layers":{"height":0.1}})"});
+    p.models[1].extruder = 2;
+    const std::string bytes = write_project_3mf(p);
+
+    // A standard 3MF, as the server checks it: a ZIP with 3D/3dmodel.model and its triangles.
+    REQUIRE(looks_like_zip(bytes));
+    const ZipArchive zip(bytes);
+    const ZipArchive::Entry* model = zip.find("3D/3dmodel.model");
+    REQUIRE(model);
+    const std::string xml = zip.read(*model);
+    std::size_t triangles = 0;
+    for (std::size_t at = 0; (at = xml.find("<triangle ", at)) != std::string::npos; ++at)
+        ++triangles;
+    CHECK(triangles == 8);
+    REQUIRE(zip.find("Metadata/tisma_project.json"));
+    // Any 3MF reader: the two objects, where they stand on the plate.
+    const ModelFile plate = parse_3mf(bytes);
+    CHECK(plate.objects == 2);
+    CHECK(plate.mesh.triangle_count() == 8);
+    CHECK(plate.mesh.bounding_box().max.x == 138.0f); // the first tetrahedron moved to 128
+
+    // The engine: everything back, the models placed (offsets applied).
+    CHECK(looks_like_project(bytes));
+    const Project back = read_project(bytes);
+    CHECK(settings_json(back.settings) == settings_json(p.settings));
+    CHECK(back.profiles == p.profiles);
+    REQUIRE(back.models.size() == 2);
+    for (std::size_t i = 0; i < 2; ++i) {
+        CHECK(back.models[i].name == p.models[i].name);
+        CHECK(back.models[i].offset == std::array<double, 3>{0.0, 0.0, 0.0});
+        REQUIRE(back.models[i].mesh.triangle_count() == p.models[i].mesh.triangle_count());
+        for (std::size_t c = 0; c < p.models[i].mesh.corners().size(); ++c) {
+            const Vec3f a = p.models[i].mesh.corners()[c], b = back.models[i].mesh.corners()[c];
+            CHECK(b.x == float(double(a.x) + p.models[i].offset[0]));
+            CHECK(b.y == float(double(a.y) + p.models[i].offset[1]));
+            CHECK(b.z == float(double(a.z) + p.models[i].offset[2]));
+        }
+    }
+    CHECK(back.models[0].painting.empty());
+    CHECK(back.models[1].painting == p.models[1].painting);
+    CHECK(back.models[0].settings == p.models[0].settings);
+    REQUIRE(back.models[0].volumes.size() == 1);
+    CHECK(back.models[0].volumes[0].offset == p.models[0].volumes[0].offset);
+    REQUIRE(back.models[0].ranges.size() == 1);
+    CHECK(back.models[1].extruder == 2);
+    REQUIRE(back.calibration);
+    CHECK(back.calibration->segments.size() == 2);
+
+    // Saved by its name: .3mf is the package, .tisma the engine's own file.
+    const auto dir = test_temp_dir();
+    save_project(dir / "tisma_test_project.3mf", p);
+    save_project(dir / "tisma_test_project.tisma", p);
+    CHECK(is_project_file(dir / "tisma_test_project.3mf"));
+    CHECK(is_project_file(dir / "tisma_test_project.tisma"));
+    CHECK(looks_like_zip(write_project_3mf(Project{})));
+    CHECK(load_project(dir / "tisma_test_project.3mf").models.size() == 2);
+    std::filesystem::remove(dir / "tisma_test_project.3mf");
+    std::filesystem::remove(dir / "tisma_test_project.tisma");
+
+    // A 3MF of another program is a model, not a project.
+    const std::string plain = write_3mf(tetrahedron(5.0f), "plain");
+    CHECK_FALSE(looks_like_project(plain));
+    CHECK_THROWS_WITH(read_project(plain), Catch::Matchers::ContainsSubstring("no Tisma project data"));
+}
+

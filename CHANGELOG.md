@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Proyecto como 3MF** (ficha `formats.md`, reglas 6 a 11): guardar el proyecto con nombre `.3mf` hace un 3MF
+  estándar, con cada pieza en su lugar, que cualquier programa abre, más los datos del motor en
+  `Metadata/tisma_project.json`. Abrir un `.3mf` así lo abre como proyecto. «Laminar en la nube» manda este paquete:
+  el servidor real solo acepta un 3MF.
 - **Atajos con Ctrl más firmes** (UI48): Ctrl+Z, Ctrl+Y, Ctrl+Mayús+Z, Ctrl+, y Ctrl+P se leen de cada pulsación,
   así un Ctrl+Z muy rápido no se toma como Z (encuadrar).
 - **Diálogo de Tisma Cloud** (UI47): «Cerrar sesión» en vez de «Salir», y solo la acción que corresponde.

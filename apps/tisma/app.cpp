@@ -3605,10 +3605,11 @@ void App::fail(T title, std::string message, std::vector<std::string> details) {
 void App::open_path(const std::filesystem::path& path) {
     const std::string ext = lower_extension(path);
     last_folder_ = path.parent_path();
-    if (is_model(path))
-        load_model(path);
-    else if (ext == ".tisma")
+    // A 3MF the engine saved is a project (formats.md, rule 11), not a model.
+    if (ext == ".tisma" || (ext == ".3mf" && is_project_file(path)))
         open_project(path);
+    else if (is_model(path))
+        load_model(path);
     else if (ext == ".gcode" || ext == ".gco" || ext == ".g" || ext == ".bgcode")
         load_gcode(path);
     else if (ext == ".json")
@@ -4000,12 +4001,16 @@ void App::begin_save_project(bool ask) {
         save_project_to(project_path_);
         return;
     }
+    // The engine's own file by default; a project kept as .3mf stays one
+    // (formats.md, rule 11). A new project is not offered as .3mf, so it
+    // never takes the name of the model's own 3MF.
     std::filesystem::path name = project_path_.filename();
     if (name.empty())
         name = has_plate_ ? model_path_.stem() : std::filesystem::path("tisma");
-    name.replace_extension(".tisma");
+    if (lower_extension(name) != ".3mf")
+        name.replace_extension(".tisma");
     purpose_ = Purpose::SaveProject;
-    browser_.open(FileBrowser::Mode::Save, tr(T::SaveProject), {".tisma"},
+    browser_.open(FileBrowser::Mode::Save, tr(T::SaveProject), {".tisma", ".3mf"},
                   project_path_.empty() ? last_folder_ : project_path_.parent_path(), utf8(name));
 }
 
@@ -16600,7 +16605,7 @@ void App::frame() {
     if (!browser_.is_open())
         for (const std::filesystem::path& path : std::exchange(dropped_, {})) {
             // A model dropped on a plate joins it, as Add does.
-            if (is_model(path) && !objects_.empty() && !calibration_ && !viewer_)
+            if (is_model(path) && !objects_.empty() && !calibration_ && !viewer_ && !is_project_file(path))
                 add_model(path);
             else
                 open_path(path);

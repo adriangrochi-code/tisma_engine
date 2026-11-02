@@ -195,3 +195,22 @@ TEST_CASE("slice of a project: what is not a project, and a bad command line, sa
     CHECK(looks_like_project(read_text(project)));
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("slice of a project: the same G-code from the engine's own file and from its 3MF package", "[cli][cloud]") {
+    const auto dir = fresh_dir("tisma_test_node_3mf");
+    Project p = box_project(100.0, 100.0);
+    p.models.push_back(p.models.front());
+    p.models.back().offset = {140.0, 90.0, 0.0};
+    save_project(dir / "plate.tisma", p);
+    save_project(dir / "plate.3mf", p);
+    CHECK(read_text(dir / "plate.3mf").starts_with("PK"));
+    for (const char* name : {"plate.tisma", "plate.3mf"}) {
+        const Run r = run({"slice", (dir / name).string(), "-o", (dir / (std::string(name) + ".gcode")).string(), "--summary",
+                           (dir / (std::string(name) + ".json")).string(), "--sandbox"});
+        INFO(name << ": " << r.err);
+        REQUIRE(r.code == kExitOk);
+    }
+    CHECK(read_text(dir / "plate.tisma.gcode") == read_text(dir / "plate.3mf.gcode"));
+    std::filesystem::remove_all(dir);
+}
+

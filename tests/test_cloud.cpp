@@ -3,6 +3,8 @@
 // client goes), on 127.0.0.1 with cpp-httplib's server.
 
 #include "cloud/client.hpp"
+#include "io/model.hpp"
+#include "mesh/shapes.hpp"
 #include "cloud/report.hpp"
 #include "cloud/secret_store.hpp"
 #include "net/http.hpp"
@@ -29,6 +31,9 @@ using nlohmann::json;
 using tisma::test::MockCloud;
 
 namespace {
+
+// A project the server takes: a 3MF with a model (the real server opens it).
+std::string small_3mf() { return tisma::write_3mf(tisma::make_box(10.0, 10.0, 10.0), "box"); }
 
 std::filesystem::path temp_file(const std::string& name, const std::string& content) {
     const std::filesystem::path p = std::filesystem::temp_directory_path() / name;
@@ -171,7 +176,8 @@ TEST_CASE("cloud: a problem report goes with or without an account (CC6)", "[clo
 
 TEST_CASE("cloud: a job goes from queued to done and its result comes down (CC3)", "[cloud]") {
     MockCloud mock;
-    const std::filesystem::path project = temp_file("tisma_cloud_project.3mf", "PK fake 3mf");
+    const std::string package = small_3mf();
+    const std::filesystem::path project = temp_file("tisma_cloud_project.3mf", package);
     const std::filesystem::path result = std::filesystem::temp_directory_path() / "tisma_cloud_result.gcode";
     std::filesystem::remove(result);
     cloud::Client client(mock.url(), "T1");
@@ -192,7 +198,7 @@ TEST_CASE("cloud: a job goes from queued to done and its result comes down (CC3)
         CHECK(mock.kind_ == "slice");
         CHECK(mock.params_ == "{}");
         CHECK(mock.filename_ == "project.3mf");
-        CHECK(mock.project_ == "PK fake 3mf");
+        CHECK(mock.project_ == package);
     }
     std::ifstream in(result, std::ios::binary);
     const std::string gcode((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -216,7 +222,7 @@ TEST_CASE("cloud: the account's jobs are listed (rule 10)", "[cloud]") {
     CHECK(jobs[0].seconds == 61.0);
     CHECK(jobs[0].created_at == "2026-11-01T18:20:00Z");
     // One sent: it comes first.
-    const std::filesystem::path project = temp_file("tisma_cloud_list.3mf", "PK fake 3mf");
+    const std::filesystem::path project = temp_file("tisma_cloud_list.3mf", small_3mf());
     cloud::Job sent;
     REQUIRE(client.submit("slice", "{}", project.string(), sent, error));
     REQUIRE(client.jobs(jobs, error));
@@ -249,7 +255,7 @@ TEST_CASE("cloud: the account's own reports, the newest first (problem_reports.m
 
 TEST_CASE("cloud: cancelling a running job cancels it on the server too (CC4)", "[cloud]") {
     MockCloud mock;
-    const std::filesystem::path project = temp_file("tisma_cloud_cancel.3mf", "PK");
+    const std::filesystem::path project = temp_file("tisma_cloud_cancel.3mf", small_3mf());
     cloud::Client client(mock.url(), "T1");
     client.poll_ms = 5;
     cloud::Job job;
@@ -278,6 +284,12 @@ TEST_CASE("cloud: a project too large is refused with the server's words (CC5), 
     CHECK(error.status == 413);
     CHECK(error.message == "The project is larger than the plan allows");
     std::filesystem::remove(project);
+    // What is not a 3MF, as the real server says it (422).
+    const std::filesystem::path binary = temp_file("tisma_cloud_binary.3mf", "TISMAPRJ not a zip");
+    CHECK_FALSE(client.submit("slice", "{}", binary.string(), job, error));
+    CHECK(error.status == 422);
+    CHECK(error.message == "The project is not a 3MF file");
+    std::filesystem::remove(binary);
 
     // Nothing listens on port 9 here: an error with words, no status.
     cloud::Client nowhere("http://127.0.0.1:9", "T1");

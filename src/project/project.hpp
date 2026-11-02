@@ -81,13 +81,25 @@ struct Project {
 // model's painting in a "PNT " chunk (painting_to_bytes). Readers skip tags
 // they do not know.
 std::string write_project(const Project& project);
-// Throws ProjectError on a damaged or newer file, naming what is wrong.
+// The same project as a 3MF package (formats.md, rules 6 to 11): each model
+// an object of the standard 3D/3dmodel.model, its offset in its build item,
+// so any 3MF reader sees the plate; the rest in Metadata/tisma_project.json
+// (the JSON chunk's data, each painting in base64 under "paintings").
+std::string write_project_3mf(const Project& project);
+// Either file, told by its first bytes. A 3MF's models come back placed
+// (their offsets applied, offsets 0). Throws ProjectError on a damaged or
+// newer file, or a 3MF without the engine's data, naming what is wrong.
 Project read_project(std::string_view data);
 
-// Whether these bytes start like a project file (its first eight bytes).
+// Whether these bytes are a project file: the engine's own (its first eight
+// bytes) or a 3MF with Metadata/tisma_project.json.
 bool looks_like_project(std::string_view data);
 
-// Writes the file aside and moves it over, so a failed save keeps the old one.
+// The same for a file: only its first bytes, or a whole 3MF.
+bool is_project_file(const std::filesystem::path& path);
+
+// Writes the file aside and moves it over (a 3MF package when the name ends
+// in .3mf, the engine's own file otherwise), so a failed save keeps the old one.
 void save_project(const std::filesystem::path& path, const Project& project);
 Project load_project(const std::filesystem::path& path);
 

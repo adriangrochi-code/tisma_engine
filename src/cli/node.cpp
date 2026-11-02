@@ -58,12 +58,6 @@ std::optional<std::string> read_whole(const std::filesystem::path& path) {
     return data;
 }
 
-bool starts_like_project(const std::string& path) {
-    std::ifstream in(std::filesystem::path(path), std::ios::binary);
-    char head[8] = {};
-    in.read(head, sizeof head);
-    return in.gcount() == sizeof head && looks_like_project(std::string_view(head, sizeof head));
-}
 
 // "1h 2m 3s", "4m 5s", "6s".
 std::string duration_text(double seconds) {
@@ -103,7 +97,7 @@ bool node_slice_wanted(std::span<const std::string_view> args) {
         config |= a == "--config" || a == "-c";
     }
     const std::string input = first_input(args);
-    return !config && !input.empty() && starts_like_project(input);
+    return !config && !input.empty() && is_project_file(input);
 }
 
 int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
@@ -169,7 +163,8 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     if (!data)
         return fail(kExitInput, "cannot read the project '" + a.project + "'");
     if (!looks_like_project(*data))
-        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma: projects of other slicers are not read yet");
+        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma (its own file, or a 3MF with " +
+                                    "Metadata/tisma_project.json): projects of other slicers are not read yet");
     Project project;
     try {
         project = read_project(*data);

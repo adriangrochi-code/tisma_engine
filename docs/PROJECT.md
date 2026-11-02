@@ -2,7 +2,8 @@
 
 Un proyecto (`.tisma`) guarda en un solo archivo todo lo necesario para retomar una impresión: los ajustes, los
 perfiles elegidos (`docs/PROFILES.md`), las piezas y la calibración que se está imprimiendo. Pedido del dueño
-(«opciones de guardar», 2026-10-24). Formato propio; 3MF llega en P4 (`PLAN.md`).
+(«opciones de guardar», 2026-10-24). Dos formas del mismo contenido: el archivo propio (`.tisma`) y un paquete 3MF
+(`.3mf`, desde el 2026-11-02; ver «El paquete 3MF»).
 
 ## En la interfaz
 
@@ -80,6 +81,23 @@ ajustes nombran su clave).
 
 **Guardar es seguro:** se escribe a un archivo aparte y después se mueve encima del anterior, así un error al guardar
 no deja un proyecto a medias.
+
+## El paquete 3MF
+
+`formats.md`, reglas 6 a 11. Se guarda así cuando el nombre termina en `.3mf`, y así va siempre a Tisma Cloud: el
+servidor solo acepta un ZIP con `3D/*.model` con triángulos.
+
+| Archivo | Qué tiene |
+|---|---|
+| `[Content_Types].xml`, `_rels/.rels` | Los del estándar |
+| `3D/3dmodel.model` | Cada modelo es un objeto con su malla; su corrimiento va en la transformación de su ítem de `<build>`. Cualquier lector de 3MF ve la placa |
+| `Metadata/tisma_project.json` | El mismo JSON que la parte `JSON` del archivo propio, con los corrimientos en 0. `"mesh": n` es el ítem n de `<build>` y `"painting": k` es la entrada k de `"paintings"`, la pintura en base64 (`painting_to_bytes`) |
+
+- Las coordenadas se escriben con 9 cifras, para que vuelvan como el mismo `float`. El mismo proyecto da el mismo
+  G-code desde `.tisma` y desde `.3mf` (pruebas `ui_project_3mf_*` y `[cli][cloud]`).
+- Al abrirlo, los modelos vuelven ya ubicados, con su ítem aplicado y corrimiento 0.
+- Abrir un `.3mf` lo trata como proyecto si tiene `Metadata/tisma_project.json`; si no, es un modelo.
+- Un 3MF de otro programa todavía no se lee como proyecto (`formats.md`, regla 18).
 
 ## En el código
 

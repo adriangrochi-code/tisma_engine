@@ -3,6 +3,8 @@
 // A mock Tisma Cloud server for the tests, built from docs/spec/features/cloud.md
 // with cpp-httplib's server, on 127.0.0.1 and a free port.
 
+#include "io/zip.hpp"
+
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 
@@ -83,6 +85,12 @@ public:
             if (file.content.size() > (std::size_t(1) << 20)) {
                 res.status = 413;
                 res.set_content(R"({"detail": "The project is larger than the plan allows"})", "application/json");
+                return;
+            }
+            // As the real server: a ZIP with a 3D/*.model that has triangles.
+            if (const char* problem = not_3mf(file.content)) {
+                res.status = 422;
+                res.set_content(json{{"detail", problem}}.dump(), "application/json");
                 return;
             }
             std::lock_guard lock(mutex_);
@@ -182,6 +190,21 @@ private:
                                                   : R"({"detail": "Session expired"})",
                         "application/json");
         return false;
+    }
+    // Why an upload is not a project the server takes, or null.
+    static const char* not_3mf(const std::string& bytes) {
+        if (!tisma::looks_like_zip(bytes))
+            return "The project is not a 3MF file";
+        try {
+            const tisma::ZipArchive zip(bytes);
+            for (const tisma::ZipArchive::Entry& e : zip.entries())
+                if (e.name.starts_with("3D/") && e.name.ends_with(".model") &&
+                    zip.read(e).find("<triangle ") != std::string::npos)
+                    return nullptr;
+        } catch (const std::exception&) {
+            return "The project is not a 3MF file";
+        }
+        return "The 3MF file has no model";
     }
     std::string job_json() const {
         json j = {{"id", "j1"},        {"kind", kind_},       {"status", state_},

@@ -8931,3 +8931,25 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
     entre ellos: el deshacer funcionaba ya, y sigue funcionando por el camino nuevo;
   - paso de guion nuevo `key-quick` (aprieta y suelta todo en un cuadro), usado en `place_undo`.
 
+### El proyecto como paquete 3MF
+
+- El servidor real solo acepta un ZIP con `3D/*.model` y triángulos. «Laminar en la nube» con el archivo propio del
+  motor fallaba contra él; el servidor simulado lo aceptaba.
+- `write_project_3mf` y `read_project` (`formats.md`, reglas 6 a 11; `docs/PROJECT.md`, «El paquete 3MF»):
+  - un 3MF estándar, con cada modelo como objeto y su corrimiento en el ítem de `<build>`;
+  - más `Metadata/tisma_project.json`: el mismo JSON del archivo propio, con la pintura en base64;
+  - las coordenadas con 9 cifras, para que vuelvan como el mismo `float`.
+- `save_project` escribe el paquete cuando el nombre termina en `.3mf`. Así lo guarda «Laminar en la nube», y el
+  diálogo de guardar ofrece `.3mf` además de `.tisma`.
+- Abrir un `.3mf` con los datos del motor lo abre como proyecto; sin ellos, sigue siendo un modelo.
+- La línea de comandos de los nodos lee los dos formatos.
+- El servidor simulado ahora revisa la subida como el real: si no es un ZIP, 422 «The project is not a 3MF file»;
+  si no tiene modelo, «The 3MF file has no model».
+- **Pruebas:**
+  - `[project]`: la ida y vuelta completa, y que cualquier lector vea la placa;
+  - `[cli][cloud]`: el mismo G-code desde `.tisma` y desde `.3mf`;
+  - `[cloud]`: 422 para lo que no es un 3MF;
+  - `ui_project_3mf_*`: guardar como `.3mf`, abrirlo y obtener el mismo G-code que el proyecto original.
+- **Falta confirmar:** qué conserva `sanitize_project` en el nodo; ya se le preguntó al equipo de fichas. Si quita
+  los archivos de `Metadata/` o cambia los objetos, el nodo pierde los ajustes.
+
