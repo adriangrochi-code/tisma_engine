@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Laminar en la nube** (Más › «Laminar en la nube»; ficha `cloud.md`, reglas 6 a 9): la placa va como proyecto a
+  Tisma Cloud con la sesión; la barra de estado dice si está en cola o cuánto lleva, con una × para cancelarlo
+  (también en el servidor); el G-code que vuelve se abre en la vista previa como un laminado propio. Sin sesión, abre
+  el diálogo de Tisma Cloud. Un proyecto demasiado grande, parámetros mal y demasiados pedidos tienen su aviso.
 - **Informar un problema** (Más › «Informar un problema…»; ficha `problem_reports.md`): qué pasó, en pocas palabras,
   los pasos y qué se esperaba; con permiso, la versión, el sistema, la impresora con sus perfiles y el registro de la
   sesión, que se puede ver antes de mandar. Se manda con o sin cuenta; el aviso dice cuántas veces se informó antes el

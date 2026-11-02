@@ -87,6 +87,8 @@
 #include <map>
 #include <numbers>
 #include <memory>
+#include <mutex>
+#include <atomic>
 #include <csignal>
 #include <optional>
 #include <set>
@@ -555,6 +557,21 @@ private:
     void cloud_start(CloudReply::Kind kind);
     void cloud_finished(CloudReply reply);
     void report_window();
+    Project current_project() const;
+    void start_cloud_slice();
+    void cloud_slice_step();
+    struct CloudSliceState { // shared with the call's thread
+        std::mutex mutex;
+        std::string status; // queued, running, done...
+        int progress = 0;
+        std::atomic<bool> cancel{false};
+    };
+    struct CloudSliceReply {
+        bool ok = false;
+        cloud::Failure error;
+        cloud::Job job;
+        std::filesystem::path result;
+    };
     void log_line(const std::string& line);
     struct ReportReply {
         bool ok = false;
@@ -966,6 +983,9 @@ private:
     std::string report_title_, report_description_, report_steps_, report_expected_, report_status_;
     std::future<ReportReply> report_job_;
     std::string session_log_; // what this session said: notices, errors, steps (the report's log)
+    // Slicing in the cloud (cloud.md, rules 6 to 9): the job in flight and its state.
+    std::future<CloudSliceReply> cloud_slice_;
+    std::shared_ptr<CloudSliceState> cloud_slice_state_;
     int config_page_ = 0;
     std::string config_query_;
     struct ConfigState {
@@ -3938,7 +3958,9 @@ void App::begin_save_project(bool ask) {
                   project_path_.empty() ? last_folder_ : project_path_.parent_path(), utf8(name));
 }
 
-void App::save_project_to(const std::filesystem::path& path) {
+// The plate as a project: the settings, the profiles, each model as placed
+// with its volumes and ranges, the mixes and the calibration.
+Project App::current_project() const {
     Project p;
     p.settings = settings_;
     p.profiles = chosen_profile_;
@@ -3962,6 +3984,11 @@ void App::save_project_to(const std::filesystem::path& path) {
     p.filament_colors = filament_colors_;
     if (calibration_)
         p.calibration = ProjectCalibration{calibration_->kind, calibration_->unit, calibration_->segments};
+    return p;
+}
+
+void App::save_project_to(const std::filesystem::path& path) {
+    const Project p = current_project();
     try {
         save_project(path, p);
     } catch (const std::exception& e) {
@@ -5005,6 +5032,11 @@ void App::top_bar() {
                                        ImGui::GetItemRectMax().y);
         if (cloud)
             cloud_open_ = true;
+        const bool cloud_slice = ImGui::MenuItem(tr(T::CloudSliceMenu), nullptr, false, has_plate_ && !cloud_slice_.valid());
+        g_menu_rects["cloud_slice"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                             ImGui::GetItemRectMax().y);
+        if (cloud_slice)
+            start_cloud_slice();
         const bool report = ImGui::MenuItem(tr(T::ReportMenu));
         g_menu_rects["report"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
                                         ImGui::GetItemRectMax().y);
@@ -7995,6 +8027,27 @@ void App::status_bar() {
                 ImGui::EndTooltip();
             }
         }
+    }
+    // Slicing in the cloud: its state and a way to cancel it (cloud.md, rule 8).
+    if (cloud_slice_.valid() && cloud_slice_state_) {
+        std::string state;
+        {
+            std::lock_guard lock(cloud_slice_state_->mutex);
+            state = cloud_slice_state_->status == "running" ? format(tr(T::CloudSliceRunning), cloud_slice_state_->progress)
+                    : cloud_slice_state_->status == "queued" ? std::string(tr(T::CloudSliceQueued))
+                                                              : std::string(tr(T::CloudSliceSending));
+        }
+        ImGui::SameLine(0, 24.0f * scale_);
+        loc::TextColored(rgb(theme_.accent_hover), "%s", state.c_str());
+        g_menu_rects["cloud_slice_state"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                                   ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        ImGui::SameLine();
+        if (ImGui::SmallButton("x##cloud_slice_cancel"))
+            cloud_slice_state_->cancel = true;
+        g_menu_rects["cloud_slice_cancel"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                                    ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::CloudSliceCancelTip));
     }
     // On the right: the 3D view's time per frame on the GPU, and what sliced.
     std::string right;
@@ -12310,11 +12363,97 @@ void App::cloud_finished(CloudReply r) {
     }
 }
 
+// Slicing in the cloud (cloud.md, rules 6 to 9; CC3, CC4, CC5): the plate as
+// a project (3MF), sent with the session; its state in the status bar; the
+// G-code, when it comes, opened in the preview as a local slice.
+void App::start_cloud_slice() {
+    if (cloud_slice_.valid() || !has_plate_)
+        return;
+    if (cloud_token_.empty() || cloud_address(cloud_server_).empty()) {
+        notify(tr(T::CloudSliceLogin));
+        cloud_open_ = true;
+        return;
+    }
+    const std::filesystem::path dir = std::filesystem::temp_directory_path();
+    const std::string stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const std::filesystem::path project = dir / ("tisma-cloud-" + stamp + ".3mf");
+    try {
+        save_project(project, current_project());
+    } catch (const std::exception& e) {
+        fail(T::CannotSave, e.what());
+        return;
+    }
+    log_line("cloud: slicing " + utf8(project.filename()) + " on " + cloud_server_);
+    auto state = std::make_shared<CloudSliceState>();
+    cloud_slice_state_ = state;
+    cloud_slice_ = std::async(std::launch::async, [state, project, dir, stamp, server = cloud_server_, token = cloud_token_] {
+        CloudSliceReply r;
+        cloud::Client client(server, token);
+        const std::filesystem::path result = dir / ("tisma-cloud-" + stamp + ".gcode");
+        r.ok = client.run("slice", "{}", utf8(project), utf8(result), r.job, r.error,
+                          [&](const cloud::Job& job) {
+                              std::lock_guard lock(state->mutex);
+                              state->status = job.status;
+                              state->progress = job.progress;
+                          },
+                          state->cancel);
+        std::error_code ec;
+        std::filesystem::remove(project, ec);
+        if (r.ok) {
+            // Binary G-code is known by its first bytes (cloud.md, rule 18).
+            std::ifstream in(result, std::ios::binary);
+            char magic[4] = {};
+            in.read(magic, 4);
+            in.close();
+            r.result = result;
+            if (std::string(magic, 4) == "GCDE") {
+                r.result = dir / ("tisma-cloud-" + stamp + ".bgcode");
+                std::filesystem::rename(result, r.result, ec);
+            }
+        }
+        return r;
+    });
+}
+
+void App::cloud_slice_step() {
+    if (!cloud_slice_.valid())
+        return;
+    frame_pending_ = true; // the state changes while it runs
+    if (cloud_slice_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+    const CloudSliceReply r = cloud_slice_.get();
+    cloud_slice_state_.reset();
+    if (r.ok) {
+        const auto t = r.job.summary.find("print_time");
+        notify(format(tr(T::CloudSliceDone), t != r.job.summary.end() ? t->second.c_str() : utf8(r.result.filename()).c_str()));
+        open_path(r.result); // the preview, as a local slice (rule 9)
+        return;
+    }
+    if (r.error.message == "Cancelled") {
+        notify(tr(T::CloudSliceCancelled));
+        return;
+    }
+    if (r.error.expired()) {
+        cloud_token_.clear();
+        cloud_account_.reset();
+        cloud::forget_secret(cloud_server_);
+        notify(tr(T::CloudExpired), true);
+        cloud_open_ = true;
+        return;
+    }
+    const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
+                            : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
+                            : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
+                                                    : r.error.message;
+    notify(format(tr(T::CloudSliceFailed), why.c_str()), true);
+}
+
 // The Tisma Cloud dialog (interface.md, «Diálogos»; cloud.md, rules 1 to 5a):
 // the server, the e-mail and the password; with a session, the account and
 // its hours; always, the public plans, the current one marked, and the way
 // to the account's page for paying.
 void App::cloud_window() {
+    cloud_slice_step();
     if (cloud_job_.valid() && cloud_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
         cloud_finished(cloud_job_.get());
     if (cloud_job_.valid())
@@ -15927,6 +16066,11 @@ void App::script_input() {
             return fail_step("no such field");
         field = step.value;
         next();
+    } else if (step.verb == "cloud-slice-wait") { // until the slicing in the cloud ends (up to 60 s)
+        if (!cloud_slice_.valid() && f >= 2)
+            next();
+        else if (f > 3600)
+            fail_step("no answer");
     } else if (step.verb == "report-wait") { // until the problem report is answered (up to 20 s)
         if (!report_job_.valid() && f >= 2) {
             std::printf("ui-script: report-wait: %s (title \"%s\")\n", report_status_.c_str(), report_title_.c_str());
@@ -15955,6 +16099,10 @@ void App::script_input() {
             got = cloud_status_;
         else if (step.key == "report")
             got = report_status_;
+        else if (step.key == "viewer")
+            got = viewer_ ? "yes" : "no";
+        else if (step.key == "slicing")
+            got = cloud_slice_.valid() ? "yes" : "no";
         else
             return fail_step("unknown key");
         const bool ok = step.key == "status" || step.key == "report" ? got.find(step.value) != std::string::npos

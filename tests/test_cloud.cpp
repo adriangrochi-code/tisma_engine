@@ -225,7 +225,7 @@ TEST_CASE("cloud: cancelling a running job cancels it on the server too (CC4)", 
 
 TEST_CASE("cloud: a project too large is refused with the server's words (CC5), and no server is an error", "[cloud]") {
     MockCloud mock;
-    const std::filesystem::path project = temp_file("tisma_cloud_big.3mf", std::string(5000, 'x'));
+    const std::filesystem::path project = temp_file("tisma_cloud_big.3mf", std::string(1500000, 'x'));
     cloud::Client client(mock.url(), "T1");
     cloud::Job job;
     cloud::Failure error;

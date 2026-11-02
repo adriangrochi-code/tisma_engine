@@ -8808,3 +8808,18 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   760 px; ahora es una ventana aparte, como dice la ficha.
 - **Pruebas:** `[cloud]` (IP3, IP4, IP8, IP5) y el guion `report` contra el servidor simulado (IP2, IP5, IP6, IP7, CC6).
 - **Falta de esta ficha:** ofrecer informar después de un cierre inesperado (IP9) y «Mis informes» (IP10).
+
+### Tisma Cloud, C2: laminar en la nube desde la interfaz
+
+- Más › «Laminar en la nube»: la placa se guarda como proyecto 3MF temporal (`current_project`, el mismo armado que
+  «Guardar el proyecto») y va con `Client::run` en otro hilo. La barra de estado dice «Nube: mandando el proyecto»,
+  «en cola» o «laminando N %», con una × que cancela también en el servidor (CC4). El resultado (texto o binario, por
+  sus primeros bytes) se abre en la vista previa como un laminado propio (regla 9, CC3), con el tiempo del resumen en el
+  aviso. Sin sesión, abre el diálogo de la cuenta. 401 pide entrar de nuevo; 413, 422 y 429 tienen su aviso (CC5).
+- **Encontrado al probar:** el servidor simulado aceptaba hasta 4 KB y el 3MF de un cubo pesa más: el aviso de proyecto
+  demasiado grande salió bien; el límite del simulado pasó a 1 MB.
+- **Pruebas:** guion `cloud_slice` contra el servidor simulado: sin sesión abre el diálogo, entrar, laminar y
+  cancelar, laminar y ver el G-code en la vista previa.
+- **Falta en C2:** el chip de la barra superior, analizar (FEA) en la nube desde Ingeniería (la llamada es la misma,
+  `kind` `fea` y sus parámetros), la lista de trabajos (`GET /v1/jobs`), ofrecer informar después de un cierre (IP9) y
+  «Mis informes» (IP10). Después, C3 (la línea de comandos de los nodos).

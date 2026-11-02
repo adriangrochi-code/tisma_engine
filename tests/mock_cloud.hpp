@@ -80,7 +80,7 @@ public:
                 return;
             }
             const httplib::FormData file = req.form.get_file("file");
-            if (file.content.size() > 4096) {
+            if (file.content.size() > (std::size_t(1) << 20)) {
                 res.status = 413;
                 res.set_content(R"({"detail": "The project is larger than the plan allows"})", "application/json");
                 return;

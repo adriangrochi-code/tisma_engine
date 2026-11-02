@@ -82,6 +82,17 @@
     X(ReportFailed, "No se pudo mandar el informe: %s", "The report could not be sent: %s") \
     X(ReportTooMany, "Se mandaron demasiados informes: probá de nuevo en una hora.", "Too many reports were sent: try again in an hour.") \
     X(CloudMenu, "Tisma Cloud…", "Tisma Cloud…") \
+    X(CloudSliceMenu, "Laminar en la nube", "Slice in the cloud") \
+    X(CloudSliceLogin, "Entrá a Tisma Cloud para laminar en la nube.", "Log in to Tisma Cloud to slice in the cloud.") \
+    X(CloudSliceQueued, "Nube: en cola", "Cloud: queued") \
+    X(CloudSliceRunning, "Nube: laminando %d %%", "Cloud: slicing %d %%") \
+    X(CloudSliceSending, "Nube: mandando el proyecto", "Cloud: sending the project") \
+    X(CloudSliceCancelTip, "Cancelar el laminado en la nube (también en el servidor)", "Cancel the slicing in the cloud (on the server too)") \
+    X(CloudSliceDone, "Laminado en la nube: %s", "Sliced in the cloud: %s") \
+    X(CloudSliceCancelled, "Laminado en la nube cancelado.", "Slicing in the cloud cancelled.") \
+    X(CloudSliceFailed, "El laminado en la nube falló: %s", "Slicing in the cloud failed: %s") \
+    X(CloudTooLarge, "El proyecto es más grande de lo que acepta el servidor.", "The project is larger than the server accepts.") \
+    X(CloudBadParams, "El servidor no aceptó los parámetros: %s", "The server did not accept the parameters: %s") \
     X(CloudTitle, "Tisma Cloud", "Tisma Cloud") \
     X(CloudWhat, "Laminá y corré los análisis estructurales en los servidores de Tisma Cloud. La cuenta y el plan se manejan en el sitio web.", "Slice and run the structural analyses on the Tisma Cloud servers. The account and the plan are managed on the web site.") \
     X(CloudServer, "Servidor", "Server") \
