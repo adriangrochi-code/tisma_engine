@@ -12,6 +12,11 @@
     X(TabDesign, "Diseño", "Design")                                                                                  \
     X(TabFasteners, "Tornillería", "Fasteners") \
     X(ConfigMenu, "Configuración…", "Settings…") \
+    X(PanelFolded, "Panel de ajustes plegado", "Settings panel folded") \
+    X(CompactTitle, "Impresora, filamento y perfil", "Printer, filament and profile") \
+    X(PanelFoldedNote, "Deja solo la impresora, el filamento y el perfil de impresión en un recuadro, y la vista a todo el ancho.", "Keeps only the printer, the filament and the print profile in a small card, and the view at full width.") \
+    X(PanelFoldTip, "Plegar el panel: queda la impresora, el filamento y el perfil arriba de la vista", "Fold the panel: the printer, the filament and the profile stay on top of the view") \
+    X(PanelUnfoldTip, "Abrir el panel de ajustes", "Open the settings panel") \
     X(ConfigTitle, "Configuración", "Settings") \
     X(ConfigSearch, "Buscar una opción", "Search an option") \
     X(ConfigGeneral, "General", "General") \

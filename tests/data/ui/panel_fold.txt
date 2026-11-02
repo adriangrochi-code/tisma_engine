@@ -1,0 +1,10 @@
+# The print panel folds away (the owner's request, 2026-11-02): the view takes
+# the whole width and a card keeps the printer, the filament and the profile;
+# its » brings the panel back.
+expect-no-control compact_panel
+menu panel_fold
+expect-control compact_panel
+expect-no-control panel_fold
+menu panel_unfold
+expect-control panel_fold
+expect-no-control compact_panel

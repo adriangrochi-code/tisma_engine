@@ -523,6 +523,12 @@ private:
     // Configuración (preferences.md): the dialog, the Video page's qualities
     // (view_auto_quality.md, rules 3 and 4) and the machine it runs on.
     void config_window();
+    // The print panel folded away (the owner's request, 2026-11-02): the view
+    // takes the whole width; in Prepare a small card keeps the printer, the
+    // filament and the print profile.
+    bool panel_folded_now() const;
+    void compact_panel();
+    void unfold_button();
     void apply_quality(const std::string& quality);
     std::string recommended_quality() const;
     void video_set_by_hand();
@@ -913,6 +919,7 @@ private:
         std::string graphics_api, view_quality;
         int max_fps = 60;
         bool vsync = true, lower_while_moving = true, battery_saver = true, show_frame_time = true;
+        bool panel_folded = false;
     };
     std::optional<ConfigState> config_before_;
     ConfigState config_state() const;
@@ -926,6 +933,7 @@ private:
     bool lower_while_moving_ = true;
     bool battery_saver_ = true;
     bool show_frame_time_ = true;
+    bool panel_folded_ = false;     // ui.panel_folded
     SystemInfo system_;
     double system_read_ = 0.0; // when the memory and the power were last read
     std::string gpu_vendor_, gpu_renderer_, gpu_version_, gpu_kind_;
@@ -3258,6 +3266,7 @@ void App::load_preferences() {
             lower_while_moving_ = ui->value("lower_while_moving", true);
             battery_saver_ = ui->value("battery_saver", true);
             show_frame_time_ = ui->value("show_frame_time", true);
+            panel_folded_ = ui->value("panel_folded", false);
         }
         if (j.contains("settings")) {
             try {
@@ -3360,6 +3369,7 @@ void App::save_preferences() {
         j["ui"]["lower_while_moving"] = lower_while_moving_;
         j["ui"]["battery_saver"] = battery_saver_;
         j["ui"]["show_frame_time"] = show_frame_time_;
+        j["ui"]["panel_folded"] = panel_folded_;
         for (const auto& [printer, notes] : printer_notes_)
             if (!notes.empty())
                 j["printers"][printer]["notes"] = notes;
@@ -6490,8 +6500,21 @@ void App::settings_panel() {
         panel_tab_ = SettingsTab::Print;
     // The search for a setting, under the printer and the nozzle (the owner's
     // decision, 2026-10-29: it was in the top bar).
-    search_box(ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight());
-    anchor("settings_search");
+    {
+        const float fold = ImGui::GetFrameHeight();
+        search_box(ImGui::GetContentRegionAvail().x - fold - ImGui::GetStyle().ItemSpacing.x, ImGui::GetFrameHeight());
+        anchor("settings_search");
+        // Fold the panel away (the owner's request, 2026-11-02).
+        ImGui::SameLine();
+        if (ImGui::Button("«##fold", ImVec2(fold, fold))) {
+            panel_folded_ = true;
+            frame_pending_ = true;
+        }
+        g_menu_rects["panel_fold"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                            ImGui::GetItemRectMax().y);
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::PanelFoldTip));
+    }
 
     // The tabs, and the level on their right.
     {
@@ -7891,7 +7914,7 @@ void App::status_bar() {
 
 void App::viewport() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
-    const float top = kTopBar * scale_, bottom = kStatusBar * scale_, left = kPanel * scale_;
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_, left = panel_folded_now() ? 0.0f : kPanel * scale_;
     view_pos_ = ImVec2(vp->Pos.x + left, vp->Pos.y + top);
     view_size_ = ImVec2(std::max(vp->Size.x - left, 1.0f), std::max(vp->Size.y - top - bottom, 1.0f));
     // Under the printer's page, no canvas: ImGui keeps windows that never come
@@ -11491,6 +11514,78 @@ void App::gears_panel() {
     ImGui::PopStyleVar(2);
 }
 
+// The print panel folds in Prepare and Preview; the other tabs need theirs.
+bool App::panel_folded_now() const {
+    return panel_folded_ && !printer_page_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview);
+}
+
+// The folded panel's card in Prepare: the printer with its nozzle, the
+// filament and the print profile, at the top left of the view under its
+// buttons, for those who set things once and only slice.
+void App::compact_panel() {
+    // At the top right, under the view's buttons: the plate's tools keep the left.
+    const float margin = 12.0f * scale_, width = std::min(360.0f * scale_, view_size_.x - 2.0f * margin);
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - margin - width, view_pos_.y + 60.0f * scale_));
+    ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.94f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f * scale_, 10.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##compact_panel", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
+    g_menu_rects["compact_panel"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                           ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                           ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    refresh_profiles();
+    // The way back to the whole panel, on the card's title line.
+    loc::TextDisabled("%s", tr(T::CompactTitle));
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - ImGui::GetFrameHeight() * 1.6f);
+    if (ImGui::SmallButton("»##unfold_card")) {
+        panel_folded_ = false;
+        frame_pending_ = true;
+    }
+    g_menu_rects["panel_unfold"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                          ImGui::GetItemRectMax().y);
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::PanelUnfoldTip));
+    ImGui::BeginGroup();
+    printer_card();
+    ImGui::EndGroup();
+    loc::TextDisabled("%s", tr(T::Material));
+    profile_row(ProfileKind::Filament);
+    loc::TextDisabled("%s", tr(T::Print));
+    profile_row(ProfileKind::Print);
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+// The way back to the whole panel: a tab at the left edge of the view.
+void App::unfold_button() {
+    const float w = 22.0f * scale_, h = 64.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x, view_pos_.y + view_size_.y * 0.5f - h * 0.5f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::Begin("##unfold", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoFocusOnAppearing);
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+    if (ImGui::Button("»##unfold", ImVec2(w, h))) {
+        panel_folded_ = false;
+        frame_pending_ = true;
+    }
+    ImGui::PopStyleColor(3);
+    g_menu_rects["panel_unfold"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                          ImGui::GetItemRectMax().y);
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::PanelUnfoldTip));
+    ImGui::End();
+    ImGui::PopStyleVar(2);
+}
+
 // What draws the view and on what machine (view_auto_quality.md, rule 1):
 // the graphics card from the window's graphics, the screen from GLFW, the
 // processor, memory and power from the system.
@@ -11575,6 +11670,7 @@ App::ConfigState App::config_state() const {
     c.cad_design = cad_design_, c.orthographic = camera_.orthographic, c.level = view_level_, c.gpu = settings_.gpu;
     c.graphics_api = graphics_api_, c.view_quality = view_quality_, c.max_fps = max_fps_, c.vsync = vsync_;
     c.lower_while_moving = lower_while_moving_, c.battery_saver = battery_saver_, c.show_frame_time = show_frame_time_;
+    c.panel_folded = panel_folded_;
     return c;
 }
 
@@ -11601,6 +11697,7 @@ void App::restore_config(const ConfigState& c) {
             glfwSwapInterval(vsync_ ? 1 : 0);
     }
     lower_while_moving_ = c.lower_while_moving, battery_saver_ = c.battery_saver, show_frame_time_ = c.show_frame_time;
+    panel_folded_ = c.panel_folded;
 }
 
 // Configuración (preferences.md): pages on the left, the options on the
@@ -11740,6 +11837,7 @@ void App::config_window() {
             ImGui::EndCombo();
         }
     });
+    row(1, T::PanelFolded, "ui.panel_folded", toggle(panel_folded_), tr(T::PanelFoldedNote));
     row(1, T::DesignPref, "ui.cad_design", [&] {
         if (ImGui::Checkbox("##v", &cad_design_) && !cad_design_ && engineering_tab(tab_))
             set_tab(Tab::Prepare);
@@ -13654,7 +13752,12 @@ void App::layout() {
     } else {
         // In Design, the panel takes the print settings' column (the owner's
         // request, 2026-11-02: the view stays clear).
-        if (tab_ == Tab::Design && design_page_ == DesignPage::Fasteners)
+        if (panel_folded_now()) {
+            if (tab_ == Tab::Prepare)
+                compact_panel(); // with its own way back
+            else
+                unfold_button();
+        } else if (tab_ == Tab::Design && design_page_ == DesignPage::Fasteners)
             fasteners_panel(); // a page of the Design panel, in its place
         else if (tab_ == Tab::Design && design_page_ == DesignPage::Gears)
             gears_panel();
@@ -14965,7 +15068,7 @@ void App::script_input() {
             "language", "theme", "render", "msaa", "fxaa", "moire_filter", "ao_strength", "tips", "assistant.tutorials",
             "assistant.glossary_tips", "assistant.material_tips", "ui.level", "ui.orthographic", "ui.cad_design",
             "ui.graphics_api", "ui.view_quality", "ui.max_fps", "ui.vsync", "ui.lower_while_moving", "ui.battery_saver",
-            "ui.show_frame_time", "compute.gpu"};
+            "ui.show_frame_time", "compute.gpu", "ui.panel_folded"};
         std::string missing;
         for (const char* key : kOptionKeys)
             if (!config_keys_seen_.contains(key))

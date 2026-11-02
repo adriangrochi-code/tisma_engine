@@ -8664,3 +8664,11 @@ Prioridad del dueño (por el equipo de fichas): primero Configuración con la p�
   calidad al mover y congelar la oclusión al pintar, la resolución de la vista, la sombra sobre la cama, el nivel de
   OpenGL (`legacy_windows.md`), elegir la placa en equipos con dos, exportar e importar las preferencias, y cambiar la
   API gráfica sin cerrar el programa (hoy se aplica al volver a abrirlo).
+- **Panel plegable (pedido del dueño, durante el bloque):** «« pliega el panel de ajustes en Preparar y Vista previa;
+  la vista toma todo el ancho; en Preparar un recuadro arriba a la derecha deja la impresora con su boquilla, el
+  filamento y el perfil de impresión, con » para volver; en Vista previa, una pestaña violeta en el borde izquierdo.
+  Guion `panel_fold`.
+
+**Sigue (pedido del dueño con una imagen):** manijas en la vista para mover, girar y escalar la pieza arrastrando
+(flechas por eje, anillos de giro y manijas de escala, X rojo, Y verde, Z azul), como en los otros laminadores; cubre
+también UI30 y UI34. Después, la etapa B de la calidad automática.

@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Panel de ajustes plegable** (pedido del dueño, 2026-11-02): «« al lado del buscador lo pliega y la vista toma
+  todo el ancho; en Preparar queda arriba a la derecha un recuadro con la impresora y la boquilla, el filamento y el
+  perfil de impresión, y su » lo vuelve a abrir. Se recuerda (`ui.panel_folded`, también en Configuración › Interfaz).
 - **Configuración** (ficha `preferences.md`, prioridad del dueño del 2026-11-02): la primera entrada de Más, Ctrl+, o
   Ctrl+P, o el engranaje de la barra de estado. Páginas General, Interfaz, **Video**, Cámara, Asistente, Complementos y
   Otros, un buscador sobre todas, Cancelar (deshace) y Aceptar (guarda). La página Video muestra el equipo (procesador,
