@@ -91,10 +91,17 @@ ejecutó aquí):
 3. **La pestaña Diseño** (como Análisis):
    - **secciones de la barra de arriba** (pedido del dueño del 02-11-2026, que reemplaza el lugar anterior «entre
      Vista previa y Análisis»): un selector con forma de píldora al lado del logo cambia entre «Impresión 3D»
-     (Preparar, Vista previa, Análisis, Calibración, Impresora) e «Ingeniería» (Diseño). Cada sección
-     muestra solo sus pestañas y su propio panel izquierdo, y vuelve a la última pestaña usada en ella. Diseño va en
-     Ingeniería, con el ícono de una escuadra y lápiz y el nombre «Diseño» («Design» en inglés); con
-     `ui.cad_design` apagado no hay sección Ingeniería;
+     (Preparar, Vista previa, Calibración, Impresora) e «Ingeniería» (Estructural, Aerodinámica, Diseño). Cada
+     sección muestra solo sus pestañas y su propio panel izquierdo, y vuelve a la última pestaña usada en ella;
+   - **Ingeniería tiene los tres trabajos de ingeniería** (corrección del dueño, 02-11-2026: «en Ingeniería se perdió
+     el CFD y el FEA»): **Estructural** (el análisis por elementos finitos y la optimización: el panel de Ingeniería de
+     `interface.md` con su pestaña Structural, `structural_analysis.md` y `structural_optimization.md`), **Aerodinámica**
+     (el CFD de `aerodynamics.md`, la pestaña Aerodynamics de ese mismo panel) y **Diseño**. La pestaña «Análisis» de
+     Impresión 3D se va: su contenido pasa a Estructural, completo y no solo la estimación de vóxeles (apoyos, cargas y
+     límites marcados en la pieza con el mouse, material, temperatura, factor de seguridad, resolución, «Calcular en la
+     nube», Analizar, el mapa de colores con el veredicto y Optimizar);
+   - Diseño lleva el ícono de una escuadra y lápiz y el nombre «Diseño» («Design» en inglés); con `ui.cad_design`
+     apagado, Ingeniería queda con Estructural y Aerodinámica;
    - la biblioteca de piezas (tornillería, engranajes y las que siguen) va adentro de Diseño, no en otra pestaña
      (pedido del dueño del 02-11-2026): sus páginas se abren desde «Nuevo» en la misma columna (`design_parts.md`);
    - se arma como Análisis: a la izquierda, en la columna del panel y no flotando sobre la vista, un **panel** con el
@@ -234,7 +241,7 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
 
 | # | Caso | Resultado |
 |---|---|---|
-| CD1 | Abrir el programa y tocar «Ingeniería» en el selector junto al logo | La barra muestra solo Diseño; en el panel, «Nuevo» tiene «Tornillería» y «Engranajes», que abren su página en la misma columna con «< Diseño» para volver (`design_parts.md`); el panel de Diseño ocupa la columna izquierda; volver a «Impresión 3D» abre la última pestaña usada allí; con `ui.cad_design` apagado no hay sección Ingeniería, ni Boceto y Primitiva en Organizar |
+| CD1 | Abrir el programa y tocar «Ingeniería» en el selector junto al logo | La barra muestra Estructural, Aerodinámica y Diseño, e Impresión 3D ya no tiene «Análisis»; en Estructural se marca una cara fija y una carga con el mouse y «Analizar» da el mapa y el veredicto; en Aerodinámica se elige dirección y velocidad y da el arrastre y el mapa de presión; en el panel, «Nuevo» tiene «Tornillería» y «Engranajes», que abren su página en la misma columna con «< Diseño» para volver (`design_parts.md`); el panel de Diseño ocupa la columna izquierda; volver a «Impresión 3D» abre la última pestaña usada allí; con `ui.cad_design` apagado Ingeniería queda con Estructural y Aerodinámica, y no hay Boceto ni Primitiva en Organizar |
 | CD1b | Pestaña Diseño, sin nada hecho | Panel «Diseño» a la izquierda con Nuevo, Boceto, Operaciones, Parámetros, Historial y Medidas; «Mandar a la placa» apagado con «Hacé un sólido primero.»; la línea de comandos abajo |
 | CD2 | Boceto de un rectángulo de 40 × 30 mm en XY, extruir 20 mm | Un cuerpo de 24 000 mm³ y caja 40 × 30 × 20 |
 | CD3 | CD2 con una cota del ancho, sin restricciones de posición | La barra dice 2 grados de libertad; con «fijo» en una esquina, 0, y el boceto en negro |
