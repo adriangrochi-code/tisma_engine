@@ -151,7 +151,12 @@ struct Theme {
     std::uint32_t view_top, view_bottom, plate, model;
     std::uint32_t sky, ground; // the ambient light from above and from below
     std::uint32_t grid_minor, grid_major;
-    std::uint32_t paint_enforce = 0x2FBF71, paint_block = 0xE5484D; // the Paint tool's marks
+    std::uint32_t paint_enforce = 0x2FBF71, paint_block = 0xE5484D; // the Paint tool's buttons and texts
+    // While painting (the testers' UI35): the part light and neutral, the marks
+    // dark. Measured on the screen with ambient occlusion (WCAG 2.1's
+    // luminance contrast): 5.0 on a lit face and 3.0 on a shaded one, against
+    // 1.2 and 1.0 for the green mark on the violet part before.
+    std::uint32_t paint_part = 0xE4E2E8, paint_mark_enforce = 0x0E6536, paint_mark_block = 0xA51E26;
 };
 
 Theme dark_theme() {
@@ -9558,11 +9563,23 @@ void App::paint_card(ImVec2 at) {
     }
     ImGui::Separator();
     if (paint_channel_ != PaintChannel::Fuzzy) { // fuzzy skin is painted or not
+        // Each mark with a swatch of the colour it paints (UI35).
+        const auto swatch = [&](std::uint32_t colour) {
+            ImGui::SameLine(0, 4.0f * scale_);
+            const float s = ImGui::GetTextLineHeight() * 0.8f;
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            const float y = p.y + (ImGui::GetFrameHeight() - s) * 0.5f;
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(p.x, y), ImVec2(p.x + s, y + s),
+                                                      ImGui::GetColorU32(rgb(colour)), 3.0f * scale_);
+            ImGui::Dummy(ImVec2(s, ImGui::GetFrameHeight()));
+        };
         if (ImGui::RadioButton(tr(T::PaintEnforce), paint_mark_ == kPaintEnforce))
             paint_mark_ = kPaintEnforce;
+        swatch(theme_.paint_mark_enforce);
         ImGui::SameLine();
         if (ImGui::RadioButton(tr(T::PaintBlock), paint_mark_ == kPaintBlock))
             paint_mark_ = kPaintBlock;
+        swatch(theme_.paint_mark_block);
     }
     ImGui::SetNextItemWidth(170.0f * scale_);
     ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, field_text(tr(T::BrushSize), "%.1f mm", brush_radius_), ImGuiSliderFlags_Logarithmic);
@@ -9635,7 +9652,7 @@ void App::update_paint_view() {
     const PaintMesh m = paint_mesh(objects_, placed_meshes_, paint_channel_);
     std::vector<Renderer::PaintGroup> groups;
     for (const PaintMesh::Group& g : m.groups)
-        groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_block : theme_.paint_enforce)});
+        groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_mark_block : theme_.paint_mark_enforce)});
     renderer_.set_paint(m.vertices, groups);
     vk_view_.set_paint(m.vertices, groups);
 }
@@ -14303,6 +14320,8 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.plate = vec(theme_.plate);
     f.model = vec(theme_.model);
     f.model_selected = f.model * 0.6f + Vec3{1, 1, 1} * 0.4f;
+    if (tab_ == Tab::Prepare && tool_ == PlateTool::Paint) // the marks stand out on a light part (UI35)
+        f.model = f.model_selected = vec(theme_.paint_part);
     if (tab_ == Tab::Prepare && objects_.size() > 1 && selected_ >= 0 &&
         std::size_t(selected_) + 1 < object_vertices_.size()) {
         f.selected_first = object_vertices_[std::size_t(selected_)];

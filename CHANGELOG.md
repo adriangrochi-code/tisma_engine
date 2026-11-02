@@ -92,6 +92,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- La pintura se ve sobre la pieza (reporte UI35 de los probadores): mientras se pinta, la pieza se dibuja gris claro y
+  las marcas en verde y rojo oscuros, con un contraste medido en pantalla de 5,0 en una cara iluminada y 3,0 en una
+  en sombra con oclusión ambiental (antes 1,2 y 1,0). Cada marca muestra su color al lado de su nombre.
 - En una ventana angosta la barra de la vista ya no se sale por la derecha: el botón del modo de imagen queda solo con
   su ícono y dice el modo en su ayuda (reporte UI42 del equipo de fichas).
 - Diseño sin el componente: una sola línea de error, traducida, y sin el subtítulo «Design» de un diseño sin nombre

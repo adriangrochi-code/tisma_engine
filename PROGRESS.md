@@ -8714,3 +8714,14 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   lotes). Queda para el próximo bloque de rendimiento de la vista previa: juntar esos lotes, porque en placas viejas
   (HD 4000) las llamadas pesan.
 - **No probado:** las capturas en una placa real con la calidad automática; el aviso de la primera vez en Windows.
+
+### UI35: la pintura de soportes se ve poco
+
+- **Medido** (contraste de luminancia de WCAG 2.1, píxeles de la captura con oclusión ambiental, OpenGL, llvmpipe):
+  la marca verde sobre la pieza violeta daba 1,19 en la cara iluminada y 1,02 en la cara en sombra. Solo el tono las
+  separaba; la oclusión oscurece igual a las dos.
+- **Hecho:** con la herramienta Pintar la pieza se dibuja gris claro (E4E2E8) y las marcas en verde oscuro (0E6536) y
+  rojo oscuro (A51E26): 5,02 en la cara iluminada y 2,99 en la sombreada. Las tarjetas de la pintura muestran el color
+  de cada marca. Los colores de los botones y textos no cambian.
+- **No automatizado:** la medición es a mano sobre capturas (`contrast.py` de la sesión); no hay paso de guion que lea
+  píxeles.
