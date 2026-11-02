@@ -8725,3 +8725,10 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   de cada marca. Los colores de los botones y textos no cambian.
 - **No automatizado:** la medición es a mano sobre capturas (`contrast.py` de la sesión); no hay paso de guion que lea
   píxeles.
+
+### UI31: el ícono a veces no se ve en Windows
+
+- `tisma.exe` ya lleva el ícono (recurso 1, `tisma.ico` con 7 tamaños de 16 a 256 px, revisado) y la ventana lo pone
+  con GLFW. El paquete trae además `tisma-engine.exe`, el programa de línea de comandos, que no tenía ícono: ahora lleva
+  el mismo. **No probado en Windows** (lo compila la CI de Windows). Si el probador lo ve en un acceso directo hecho
+  antes, puede ser la caché de íconos de Windows: pregunto al equipo de fichas en qué archivo o acceso lo vio.

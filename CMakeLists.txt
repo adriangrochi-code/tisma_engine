@@ -287,6 +287,12 @@ target_compile_definitions(tisma_core PUBLIC TISMA_VERSION="${TISMA_VERSION_TEXT
 
 add_executable(tisma-engine apps/main.cpp)
 target_link_libraries(tisma-engine PRIVATE tisma_core tisma_warnings)
+if(WIN32)
+  # The command-line program shows the Tisma icon too (the testers' UI31: the
+  # package's other .exe had none).
+  configure_file(apps/tisma/tisma.rc.in ${CMAKE_CURRENT_BINARY_DIR}/tisma-engine.rc @ONLY)
+  target_sources(tisma-engine PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/tisma-engine.rc)
+endif()
 
 if(TISMA_BUILD_UI)
   # What the interface does without OpenGL (camera, draw data, icons, texts,
