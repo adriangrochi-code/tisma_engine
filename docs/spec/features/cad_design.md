@@ -171,7 +171,20 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
     STL, OBJ y glTF como cuerpos de malla (se ven, se miden, se mueven y se exportan, pero las operaciones de sólido
     necesitan un cuerpo B-rep); «Convertir malla» rehace como sólido paramétrico las piezas cerradas de sección
     constante con caras planas y cilíndricas.
-20. **Exportar:** STEP AP242 (con nombres, colores y ensambles), 3MF, STL y OBJ.
+19 bis. **Dibujos 2D de otros programas** (pedido del dueño, 02-11-2026: «lo de AutoCAD en cuanto sea posible»):
+    - **DXF** (ASCII, la referencia pública de Autodesk): «Traer DXF» en un boceto lee líneas, círculos, arcos,
+      polilíneas, elipses, splines, puntos, texto y bloques (con escala, giro y matrices), en milímetros según
+      `$INSUNITS`; lo de espacio papel no se trae. Es el comando `sketch.insert_dxf` de SolidCraft;
+    - **SVG**: «Traer SVG» en un boceto (logos, contornos dibujados en otro programa), con `sketch.insert_svg`;
+    - lo traído queda como curvas del boceto: se recorta, se acota y se extruye como lo dibujado a mano;
+    - un archivo que no se puede leer avisa con el motivo y no cambia el boceto.
+20. **Exportar:** STEP AP242 (con nombres, colores y ensambles), 3MF, STL y OBJ; el boceto abierto, como **DXF**
+    (`sketch.export_dxf`), y la vista actual como DXF de líneas, con las aristas ocultas punteadas o sin ellas
+    (`file.export_view_dxf`).
+20 bis. **SolidCraft abierto mientras se diseña:** al entrar a Diseño, el motor arranca una sola vez el componente en
+    su modo de sesión (`solidcraft-cli mcp`, que mantiene el diseño abierto) y le manda cada orden por ahí, en vez de
+    arrancar un programa por orden. Se cierra al cerrar el programa o tras 10 minutos sin usar Diseño. Si la sesión se
+    cae, se vuelve a abrir sola rehaciendo el diseño con su guion (regla 22) y avisa una vez.
 21. **Mandar a la placa** (Ctrl+Mayús+P):
     - la pieza pasa a Preparar como un objeto, hecha malla con `cad.chord_tolerance` y `cad.angle_tolerance`, apoyada
       en la cama y centrada si es nueva;
@@ -209,6 +222,11 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
       (reglas 7, 17). Pruebas CD5, CD17, CD18.
     - **D5:** STEP e IGES de entrada y salida, mallas, texto, guardado en el proyecto, medidas (reglas 10, 19, 20,
       22, 23). Pruebas CD8, CD9, CD11.
+    - **D5b (en la 1.0, después de la nube):** DXF y SVG de entrada y salida, y la sesión abierta (reglas 19 bis, 20
+      y 20 bis). Pruebas CD22 a CD25.
+    - **D6 (después de la 1.0, en cuanto SolidCraft lo tenga):** planos 2D de la pieza (vistas, cortes, cotas y
+      rótulo, a PDF y DXF) con el espacio de dibujo que SolidCraft está haciendo (`docs/drawing-foundations.md` de
+      su repositorio); capas y panel de propiedades con pinzamientos. Ficha propia cuando su contrato esté publicado.
     - Cada etapa se construye sobre el núcleo de SolidCraft (regla 1); lo que todavía no está se ve apagado con
       «Próximamente».
 
@@ -238,3 +256,7 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
 | CD19 | Pestaña Diseño abierta | La misma ventana, vista y cama que Preparar; no se abre ningún otro programa |
 | CD20 | Diseño nuevo, «Mandar a la placa» dos veces | Dos objetos en la placa; con «Editar en Diseño» sobre uno y volver a mandar, sigue habiendo dos |
 | CD21 | Programa sin el componente de diseño | Pestaña Diseño con «Falta el componente de diseño…»; abrir, laminar y exportar andan igual |
+| CD22 | «Traer DXF» de un rectángulo de 40 × 20 en pulgadas (`$INSUNITS` 1) con un círculo de 10 de diámetro adentro | Boceto con un rectángulo de 1016 × 508 mm y un círculo de 254 mm; extruir da una placa con agujero |
+| CD23 | «Traer SVG» de un contorno cerrado | Un perfil cerrado que se extruye |
+| CD24 | Exportar como DXF un boceto con línea, arco y círculo; traer ese DXF a un boceto nuevo | Las tres curvas, con las mismas medidas (diferencia menor que 0,001 mm) |
+| CD25 | 20 operaciones seguidas en Diseño | Un solo proceso del componente abierto durante todas; si se lo cierra a la fuerza, la orden siguiente lo vuelve a abrir y el diseño queda igual |

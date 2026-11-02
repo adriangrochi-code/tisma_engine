@@ -7,7 +7,7 @@
 
 **Fase** (decisión del dueño, 02-11-2026: el laminado en la nube entra en la versión 1.0 de enero):
 - **en la 1.0:** la cuenta (reglas 1 a 5) con los planes públicos a la vista, laminar y calcular en la nube (reglas 6
-  a 10) desde el escritorio y desde la app de Android, informar un problema (regla 11) y el motor en los nodos (la línea
+  a 10, 10b y 10c: también el análisis aerodinámico y la orientación automática) desde el escritorio y desde la app de Android, informar un problema (regla 11) y el motor en los nodos (la línea
   de comandos que llaman los servidores);
 - **después de la 1.0:** el puente de impresoras, la biblioteca de modelos y Thingiverse por el servidor.
 
@@ -53,19 +53,24 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
 
 5a. **Planes a la vista:** el panel de la cuenta muestra los planes de `GET /v1/plans` (no hace falta sesión): `name`,
     `monthly_hours`, `max_concurrent`, `price_cents` y `currency`, tal como los manda el servidor, con el plan actual
-    marcado. El motor no guarda ni inventa planes: la administración los cambia en el servidor y la lista se pide de nuevo al abrir el
+    marcado, y `classes`: los cálculos que incluye cada plan (regla 10b). El motor no guarda ni inventa planes: la administración los cambia en el servidor y la lista se pide de nuevo al abrir el
     panel. Las horas del mes (`GET /v1/me`) ya incluyen las que la administración dio o quitó a la cuenta; el motor
     muestra el número que recibe, sin sumar nada.
 
 ## Laminar y calcular en la nube
 
 6. **Mandar un trabajo:** `POST /v1/jobs`, multipart, con:
-   - `kind`: `slice` o `fea`;
+   - `kind`: `slice`, `fea`, `aero` u `orient`;
    - `file`: el proyecto 3MF (`formats.md`);
    - `params`: JSON.
      - `slice`: vacío.
      - `fea`: `mode` (`analyze`, `lightest-infill`, `resin-structure`), `quality` (`fast`, `normal`, `high`,
        `ultra`), `object`, `instance`, y opcionales `solid`, `zones`, `ribs`.
+     - `aero` (análisis aerodinámico, `aerodynamics.md`): `object`, `instance`, `quality` (`friction`, `fast`,
+       `normal`, `high`: solo rozamiento, 16, 24 o 32 celdas en el tamaño frontal), `speed` (m/s, más de 0 y hasta
+       100) y `direction` (`x`, `-x`, `y`, `-y`, `z`, `-z`, o la dirección de la vista como tres números).
+     - `orient` (orientación automática, `orientation.md`): `object` e `instance`; el método y la precisión salen de
+       los ajustes `orient.*` del proyecto.
 
    Devuelve el trabajo (regla 7).
 7. **Un trabajo:** `GET /v1/jobs/{id}` devuelve:
@@ -80,6 +85,20 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
    - un laminado da G-code de texto o binario, que se abre en la vista previa como un laminado local;
    - un análisis da su resultado, que se abre en Ingeniería (`structural_analysis.md`).
 10. **Lista:** `GET /v1/jobs` lista los trabajos de la cuenta.
+10b. **Lo pesado, en la nube y cobrado por plan** (decisión del dueño, 02-11-2026):
+    - cada cálculo pesado tiene, al lado de su botón, la opción **«En la nube»**: laminar, análisis estructural,
+      relleno mínimo, análisis aerodinámico y orientación automática. Con sesión iniciada y el cálculo incluido en el
+      plan, la opción está prendida por defecto en el teléfono y apagada en la computadora (`cloud.prefer`);
+    - lo que incluye el plan está en `classes` de `GET /v1/plans` (los nombres de cola: `slice`, `slice_large`,
+      `fea`, `fea_optimize`, `aero`, `orient`). Un cálculo que el plan no incluye se muestra con un candado y «Incluido
+      en el plan …», con los planes que lo tienen, y abre la página de la cuenta; si igual se manda, el servidor
+      contesta 402 con ese mismo texto en `detail` (regla 4);
+    - sin sesión o sin conexión, todo se sigue calculando en la computadora como siempre: la nube nunca es
+      obligatoria en el escritorio.
+10c. **Resultados de los cálculos nuevos:** `aero` da un archivo `.taero` del motor (el resultado de
+    `aerodynamics.md`: arrastre, coeficientes, Reynolds, rugosidad y el mapa por cara), que el motor abre en Ingeniería
+    como un análisis local; `orient` da un JSON con `rotation` (matriz de 3 × 3, por filas), `cost` y el costo de la
+    orientación que tenía, y el motor gira la pieza con eso (se deshace como cualquier giro).
 
 ## Informar un problema
 
@@ -146,6 +165,28 @@ Los nodos corren el motor como programa aparte para cada trabajo. El contrato es
     - el resultado `.tea` es un archivo del motor, que el motor sabe abrir en Ingeniería;
     - el resumen lleva el veredicto del análisis (`structural_analysis.md`) o `error`. Avance y códigos de salida, como
       en la regla 18.
+19b. **Análisis aerodinámico:**
+
+    ```text
+    tisma-engine aero <proyecto.3mf> -o <resultado.taero> --summary <resumen.json> --sandbox --object <n>
+      --instance <n> --quality <calidad> --speed <m/s> --direction <eje | x,y,z> [--threads <n>] [--no-gpu]
+    ```
+
+    - la pieza, su altura de capa y su material salen del proyecto; los parámetros son los de la regla 6;
+    - el resumen lleva `drag_n`, `cd`, `cd_pressure`, `cd_friction`, `reynolds` y `reynolds_simulated`, o `error`.
+      Avance y códigos de salida, como en la regla 18.
+19c. **Orientación automática:**
+
+    ```text
+    tisma-engine orient <proyecto.3mf> -o <orientacion.json> --summary <resumen.json> --sandbox --object <n>
+      --instance <n> [--threads <n>] [--no-gpu]
+    ```
+
+    - escribe el JSON de la regla 10c; el resumen lleva `cost`, `cost_before` y `candidates` (cuántas probó), o
+      `error`.
+19d. **`--threads <n>`** (en `slice`, `analyze`, `aero` y `orient`): el motor usa como mucho `n` hilos de cálculo. El
+    nodo lo pasa con los núcleos de procesador que el plan de la persona reserva para cada trabajo; así un nodo reparte
+    sus núcleos entre varios trabajos a la vez sin que uno tome todo. Sin la opción, usa todos.
 20. **`--sandbox`:** no corre scripts de posproceso (`gcode_templates.md`, regla 16) ni complementos
     (`plugins.md`), no abre conexiones de red y no lee ni escribe fuera de las rutas que recibe. El tiempo máximo lo
     pone el nodo, que corta el proceso.
@@ -184,3 +225,7 @@ Contra un servidor de prueba que el equipo del motor arma desde esta ficha.
 | CC13 | Abrir el panel de la cuenta sin sesión | Se ven los planes públicos que manda el servidor; un plan oculto no aparece |
 | CC14 | La administración da 3 horas a una cuenta de un plan de 5 | El panel muestra 8 horas del mes al volver a pedir `/v1/me` |
 | CC15 | La administración deshabilita la cuenta con la sesión abierta | El próximo pedido da 401; la interfaz pide entrar de nuevo |
+| CC16 | Plan que incluye solo `slice`; pedir un análisis aerodinámico | Candado e «Incluido en el plan …» antes de mandar; si se manda, 402 con el texto del servidor |
+| CC17 | `tisma-engine aero` de un cubo de 20 mm, `--quality fast --speed 10 --direction x --sandbox` | Archivo `.taero`, resumen con `cd` entre 0,8 y 1,3 (un cubo de cara al aire, Hoerner) y código 0 |
+| CC18 | `tisma-engine orient` de una pieza en L apoyada de canto | JSON con `rotation`; `cost` no mayor que `cost_before` (regla 1 de `orientation.md`) |
+| CC19 | `tisma-engine slice … --threads 1` en una máquina de 4 núcleos | El proceso no pasa de un núcleo ocupado; el G-code es el mismo que sin la opción |
