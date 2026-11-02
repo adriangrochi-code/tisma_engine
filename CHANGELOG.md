@@ -64,6 +64,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- Los ajustes de la interfaz del soporte (capas de abajo, patrón y separación) se ven en el nivel Normal, no solo en
+  Avanzado (reporte UI36 de los probadores: no se encontraban). Están en Soportes › Interfaz, con los soportes prendidos.
 - El consejo de una herramienta se va al cerrarla, y el de una pestaña al dejarla (reporte UI38 de los probadores: el de
   Pintar quedaba en pantalla).
 
