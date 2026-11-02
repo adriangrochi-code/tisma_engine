@@ -20,8 +20,8 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
 
 ## Reglas generales
 
-1. **Dirección:** el servidor se configura en Preferences (`preferences.md`); por defecto, el de Tisma Cloud. Todo va
-   por HTTPS; los pedidos y las respuestas son JSON, salvo los archivos.
+1. **Dirección:** el servidor se configura en Preferences (`preferences.md`); por defecto, el de Tisma Cloud,
+   `https://tismaservidores.net` (confirmado por el dueño, 02-11-2026); la persona puede escribir otro. Todo va por HTTPS; los pedidos y las respuestas son JSON, salvo los archivos.
 2. **Sesión:** `POST /v1/auth/login` con `email`, `password` y `device` (el nombre del equipo) devuelve `token` y
    `email`.
    - Cada pedido lleva `Authorization: Bearer <token>`.
