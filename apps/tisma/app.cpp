@@ -555,6 +555,8 @@ private:
         bool plans_ok = false;
         std::vector<cloud::Job> jobs; // the account's (rule 10)
         bool jobs_ok = false;
+        std::vector<cloud::SentReport> reports; // the account's own (problem_reports.md, rule 11)
+        bool reports_ok = false;
     };
     void config_window();
     void cloud_window();
@@ -979,6 +981,7 @@ private:
     std::optional<cloud::Account> cloud_account_;
     std::vector<cloud::Plan> cloud_plans_;
     std::vector<cloud::Job> cloud_jobs_;
+    std::vector<cloud::SentReport> cloud_reports_;
     std::string cloud_status_;
     bool cloud_status_error_ = false;
     std::future<CloudReply> cloud_job_;
@@ -12324,6 +12327,7 @@ void App::cloud_start(CloudReply::Kind kind) {
             else
                 return r;
             r.jobs_ok = client.jobs(r.jobs, quiet);
+            r.reports_ok = client.my_reports(r.reports, quiet);
         }
         r.ok = true;
         return r;
@@ -12338,6 +12342,7 @@ void App::cloud_finished(CloudReply r) {
         cloud_token_.clear();
         cloud_account_.reset();
         cloud_jobs_.clear();
+        cloud_reports_.clear();
         cloud_status_ = tr(T::CloudNotLogged);
         return;
     }
@@ -12354,6 +12359,7 @@ void App::cloud_finished(CloudReply r) {
             cloud_token_.clear();
             cloud_account_.reset();
             cloud_jobs_.clear();
+            cloud_reports_.clear();
             cloud::forget_secret(cloud_server_);
             cloud_status_ = r.kind == CloudReply::Kind::Login ? r.error.message : std::string(tr(T::CloudExpired));
         } else if (r.error.status == 429) {
@@ -12366,6 +12372,8 @@ void App::cloud_finished(CloudReply r) {
     cloud_account_ = r.account;
     if (r.jobs_ok)
         cloud_jobs_ = std::move(r.jobs);
+    if (r.reports_ok)
+        cloud_reports_ = std::move(r.reports);
     cloud_status_ = cloud_account_ ? format(tr(T::CloudLoggedAs), cloud_account_->email.c_str()) : tr(T::CloudNotLogged);
     if (r.kind == CloudReply::Kind::Login) {
         save_preferences(); // the server and the e-mail, never the token
@@ -12583,6 +12591,51 @@ void App::cloud_window() {
             }
         }
         rect_of("cloud_job_list");
+
+        // The reports this account sent (problem_reports.md, rule 11; IP10),
+        // in their own window over the dialog.
+        if (ImGui::SmallButton(format(tr(T::MyReportsButton), int(cloud_reports_.size())).c_str()))
+            ImGui::OpenPopup("###my_reports");
+        rect_of("cloud_my_reports");
+        ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing,
+                                ImVec2(0.5f, 0.5f));
+        if (ImGui::BeginPopupModal((std::string(tr(T::MyReportsTitle)) + "###my_reports").c_str(), nullptr,
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+            rect_of("my_reports_window");
+            if (cloud_reports_.empty()) {
+                loc::TextDisabled("%s", tr(T::MyReportsNone));
+            } else if (const float row_h = ImGui::GetTextLineHeightWithSpacing() + 2.0f * ImGui::GetStyle().CellPadding.y;
+                       ImGui::BeginTable(
+                           "##my_reports", 3, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                           ImVec2(std::min(620.0f * scale_, vp->Size.x - 80.0f * scale_),
+                                  std::min(row_h * float(std::min<std::size_t>(cloud_reports_.size(), 10)) + 2.0f,
+                                           vp->Size.y - 200.0f * scale_)))) {
+                for (const cloud::SentReport& sent : cloud_reports_) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    loc::TextDisabled("%s", sent.created_at.substr(0, 10).c_str());
+                    ImGui::TableNextColumn();
+                    loc::Text("%s", sent.title.c_str());
+                    ImGui::TableNextColumn();
+                    const std::string& s = sent.status;
+                    const char* state = s == "new"         ? tr(T::ReportStateNew)
+                                        : s == "confirmed" ? tr(T::ReportStateConfirmed)
+                                        : s == "fixed"     ? tr(T::ReportStateFixed)
+                                        : s == "wontfix" || s == "wont_fix" || s == "won't fix" ? tr(T::ReportStateWontFix)
+                                        : s == "duplicate" ? tr(T::ReportStateDuplicate)
+                                                           : s.c_str();
+                    if (s == "fixed" && !sent.fixed_in.empty())
+                        loc::Text(tr(T::ReportStateFixedIn), sent.fixed_in.c_str());
+                    else
+                        loc::Text("%s", state);
+                }
+                ImGui::EndTable();
+            }
+            if (ImGui::Button(tr(T::Close), ImVec2(110.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+                ImGui::CloseCurrentPopup();
+            rect_of("my_reports_close");
+            ImGui::EndPopup();
+        }
     }
 
     // The public plans, the current one marked (rule 5a).
@@ -16169,6 +16222,8 @@ void App::script_input() {
             got = std::to_string(cloud_plans_.size());
         else if (step.key == "jobs")
             got = std::to_string(cloud_jobs_.size());
+        else if (step.key == "reports") // the account's own, newest first: "N TITLE-OF-THE-FIRST"
+            got = std::to_string(cloud_reports_.size()) + (cloud_reports_.empty() ? "" : " " + cloud_reports_.front().title);
         else if (step.key == "plan")
             got = cloud_account_ ? cloud_account_->plan : "";
         else if (step.key == "hours")
@@ -16189,7 +16244,7 @@ void App::script_input() {
             got = cloud_slice_.valid() ? "yes" : "no";
         else
             return fail_step("unknown key");
-        const bool ok = step.key == "status" || step.key == "report" || step.key == "report_log" ? got.find(step.value) != std::string::npos
+        const bool ok = step.key == "status" || step.key == "report" || step.key == "report_log" || step.key == "reports" ? got.find(step.value) != std::string::npos
                                                                      : got == step.value;
         std::printf("ui-script: expect-cloud %s %s: %s%s\n", step.key.c_str(), step.value.c_str(), ok ? "ok" : "got ",
                     ok ? "" : got.c_str());

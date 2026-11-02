@@ -92,6 +92,15 @@
     X(CloudStateFailed, "Falló", "Failed") \
     X(CloudStateCancelled, "Cancelado", "Cancelled") \
     X(CloudJobMinutes, "%s min", "%s min") \
+    X(MyReportsButton, "Mis informes (%d)…", "My reports (%d)…") \
+    X(MyReportsTitle, "Mis informes", "My reports") \
+    X(MyReportsNone, "Todavía no mandaste informes con esta cuenta.", "You have not sent any reports with this account yet.") \
+    X(ReportStateNew, "Nuevo", "New") \
+    X(ReportStateConfirmed, "Confirmado", "Confirmed") \
+    X(ReportStateFixed, "Arreglado", "Fixed") \
+    X(ReportStateFixedIn, "Arreglado en %s", "Fixed in %s") \
+    X(ReportStateWontFix, "No se arregla", "Won't fix") \
+    X(ReportStateDuplicate, "Repetido", "Duplicate") \
     X(CloudChipTip, "Tu cuenta de Tisma Cloud: entrar, horas del mes y planes", "Your Tisma Cloud account: log in, the month's hours and the plans") \
     X(CloudSliceMenu, "Laminar en la nube", "Slice in the cloud") \
     X(CloudSliceLogin, "Entrá a Tisma Cloud para laminar en la nube.", "Log in to Tisma Cloud to slice in the cloud.") \

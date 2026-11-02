@@ -94,6 +94,16 @@ public:
             state_ = "queued";
             res.set_content(job_json(), "application/json");
         });
+        // The account's own reports, oldest first: the client sorts them (IP10).
+        server_.Get("/v1/me/reports", [](const httplib::Request& req, httplib::Response& res) {
+            if (!authorized(req, res))
+                return;
+            res.set_content(R"([{"id": 3, "created_at": "2026-10-20T10:00:00Z", "title": "The supports are missing",
+                                 "status": "fixed", "fixed_in": "0.10.0-alpha.3"},
+                                {"id": 9, "created_at": "2026-11-01T09:30:00Z", "title": "Tisma closed while slicing",
+                                 "status": "confirmed"}])",
+                            "application/json");
+        });
         // The account's jobs: the one sent, if any, and an older analysis that failed.
         server_.Get("/v1/jobs", [this](const httplib::Request& req, httplib::Response& res) {
             if (!authorized(req, res))

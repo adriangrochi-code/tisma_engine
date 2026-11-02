@@ -231,6 +231,24 @@ TEST_CASE("cloud: the account's jobs are listed (rule 10)", "[cloud]") {
     std::filesystem::remove(project);
 }
 
+TEST_CASE("cloud: the account's own reports, the newest first (problem_reports.md, rule 11; IP10)", "[cloud]") {
+    MockCloud mock;
+    cloud::Client client(mock.url(), "T1");
+    std::vector<cloud::SentReport> reports;
+    cloud::Failure error;
+    REQUIRE(client.my_reports(reports, error));
+    REQUIRE(reports.size() == 2);
+    CHECK(reports[0].id == "9");
+    CHECK(reports[0].title == "Tisma closed while slicing");
+    CHECK(reports[0].status == "confirmed");
+    CHECK(reports[0].fixed_in.empty());
+    CHECK(reports[1].status == "fixed");
+    CHECK(reports[1].fixed_in == "0.10.0-alpha.3");
+    cloud::Client stranger(mock.url(), "");
+    CHECK_FALSE(stranger.my_reports(reports, error));
+    CHECK(error.expired());
+}
+
 TEST_CASE("cloud: cancelling a running job cancels it on the server too (CC4)", "[cloud]") {
     MockCloud mock;
     const std::filesystem::path project = temp_file("tisma_cloud_cancel.3mf", "PK");

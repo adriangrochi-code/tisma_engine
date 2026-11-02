@@ -248,6 +248,48 @@ bool Client::submit(const std::string& kind, const std::string& params_json, con
     return false;
 }
 
+bool Client::my_reports(std::vector<SentReport>& reports, Failure& error) {
+    const net::Response r = net::perform(api("GET", url_ + "/v1/me/reports", token_, 30));
+    if (!r.ok()) {
+        error = failure(r);
+        return false;
+    }
+    try {
+        const nlohmann::json j = nlohmann::json::parse(r.body);
+        // A list, or {"reports": [...]}, or {"items": [...]}.
+        const nlohmann::json& list = j.is_object() && j.contains("reports") ? j["reports"]
+                                     : j.is_object() && j.contains("items") ? j["items"]
+                                                                             : j;
+        if (!list.is_array()) {
+            error = unexpected();
+            return false;
+        }
+        const auto text = [](const nlohmann::json& o, const char* key) {
+            if (!o.contains(key))
+                return std::string();
+            const nlohmann::json& v = o[key];
+            return v.is_string() ? v.get<std::string>() : v.is_number_integer() ? std::to_string(v.get<long long>()) : "";
+        };
+        reports.clear();
+        for (const nlohmann::json& item : list) {
+            if (!item.is_object())
+                continue;
+            SentReport report{text(item, "id"), text(item, "created_at"), text(item, "title"), text(item, "status"),
+                              text(item, "fixed_in")};
+            if (report.fixed_in.empty())
+                report.fixed_in = text(item, "fixed_version");
+            reports.push_back(std::move(report));
+        }
+        // The newest first (rule 11, IP10): ISO dates sort as text.
+        std::stable_sort(reports.begin(), reports.end(),
+                         [](const SentReport& a, const SentReport& b) { return a.created_at > b.created_at; });
+        return true;
+    } catch (const std::exception&) {
+        error = unexpected();
+        return false;
+    }
+}
+
 bool Client::jobs(std::vector<Job>& jobs, Failure& error) {
     const net::Response r = net::perform(api("GET", url_ + "/v1/jobs", token_, 30));
     if (!r.ok()) {

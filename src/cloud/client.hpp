@@ -40,6 +40,13 @@ struct Plan {
     int remote_printers = 0;
 };
 
+// A report the account sent (GET /v1/me/reports; problem_reports.md, rule 11).
+struct SentReport {
+    std::string id, created_at, title;
+    std::string status;   // new, confirmed, fixed, wontfix or duplicate, as the server writes it
+    std::string fixed_in; // the version that fixes it, when the server says
+};
+
 struct Job {
     std::string id;
     std::string kind;   // slice or fea
@@ -87,6 +94,8 @@ public:
     // when there is one. similar: how many reports of the same problem the
     // server has besides this one.
     bool report(const std::map<std::string, std::string>& fields, int& similar, Failure& error);
+    // GET /v1/me/reports: the account's own reports, the newest first.
+    bool my_reports(std::vector<SentReport>& reports, Failure& error);
 
     // A job: kind "slice" or "fea", params a JSON object, the project (3MF).
     bool submit(const std::string& kind, const std::string& params_json, const std::string& project_path, Job& job,

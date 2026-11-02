@@ -8898,3 +8898,15 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - **No probado:** un cierre real del programa en Windows. Los procesos de Windows se prueban solo en la prueba
   `[ui]`.
 
+### Informar un problema: «Mis informes» (IP10)
+
+- `Client::my_reports` (`GET /v1/me/reports`, `problem_reports.md`, regla 11). Lee una lista, `{"reports": [...]}` o
+  `{"items": [...]}`. Los ordena del más nuevo al más viejo por `created_at`. La versión que lo arregla sale de
+  `fixed_in` o `fixed_version`.
+- En el diálogo de Tisma Cloud, con sesión, el botón «Mis informes (N)…» abre su propia ventana con la fecha, el
+  título y el estado: nuevo, confirmado, arreglado (con «en X» si viene), no se arregla o repetido. Un estado que no
+  conoce se muestra tal cual. La tabla toma la altura de sus filas, hasta diez.
+- **Pruebas:** `[cloud]` (dos informes, el más nuevo primero, la versión, 401 sin sesión); el guion `cloud` (IP10).
+- **A confirmar con el equipo de fichas:** la forma de la respuesta y los nombres de los estados y de la versión
+  (la ficha no los dice).
+
