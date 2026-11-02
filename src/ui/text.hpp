@@ -82,6 +82,7 @@
     X(ReportFailed, "No se pudo mandar el informe: %s", "The report could not be sent: %s") \
     X(ReportTooMany, "Se mandaron demasiados informes: probá de nuevo en una hora.", "Too many reports were sent: try again in an hour.") \
     X(CloudMenu, "Tisma Cloud…", "Tisma Cloud…") \
+    X(CloudChipTip, "Tu cuenta de Tisma Cloud: entrar, horas del mes y planes", "Your Tisma Cloud account: log in, the month's hours and the plans") \
     X(CloudSliceMenu, "Laminar en la nube", "Slice in the cloud") \
     X(CloudSliceLogin, "Entrá a Tisma Cloud para laminar en la nube.", "Log in to Tisma Cloud to slice in the cloud.") \
     X(CloudSliceQueued, "Nube: en cola", "Cloud: queued") \

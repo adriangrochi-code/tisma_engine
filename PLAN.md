@@ -968,7 +968,7 @@ Con el PR #23 (2026-10-26):
   - [x] C1 (2026-11-02): la capa HTTP propia (`src/net/`: WinHTTP en Windows, cpp-httplib y OpenSSL 3 en Linux y
     macOS) y el cliente (`src/cloud/client.*`, código del dueño sin la capa HTTP de PrusaSlicer, más `/v1/plans`),
     probados contra un servidor simulado (CC1 a CC6, CC13 a CC15 del lado del cliente);
-  - [ ] C2: el panel de la cuenta (entrar, horas, planes con el actual marcado, el enlace a la página de pago),
+  - [ ] C2: el panel de la cuenta (hecho 2026-11-02, con el chip de la barra superior) (entrar, horas, planes con el actual marcado, el enlace a la página de pago),
     informar un problema, el token en el almacén de claves del sistema (regla 3), laminar y analizar en la nube desde
     la interfaz con su avance en la barra de estado;
   - [ ] C3: la línea de comandos de los nodos (reglas 18 a 21: `slice` y `analyze` con `--summary`, `--sandbox`,

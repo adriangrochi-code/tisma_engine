@@ -132,7 +132,7 @@ constexpr const char* kIcons[] = {
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_nonplanar",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
-    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help",
+    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help", "account",
 };
 
 const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".bgcode", ".json"};
@@ -4876,7 +4876,9 @@ void App::top_bar() {
     };
     bool compact_tabs = false, compact_sections = false;
     {
-        const float right = width_of(tr(T::Open)) + button_h + 8.0f * scale_ + 12.0f * scale_ + button_h + 16.0f * scale_;
+        // Open, More, the help and the Tisma Cloud chip (its icon at least).
+        const float right = width_of(tr(T::Open)) + button_h + 8.0f * scale_ + 12.0f * scale_ + button_h + 16.0f * scale_ +
+                            button_h + 8.0f * scale_;
         const float room = ImGui::GetWindowWidth() - right - ImGui::GetCursorPosX();
         const auto needed = [&](bool tabs_short, bool sections_short) {
             float w = 0.0f;
@@ -4945,10 +4947,19 @@ void App::top_bar() {
         ImGui::SameLine(0, 4.0f * scale_);
     }
 
-    // The actions, on the right.
+    // The actions, on the right: the Tisma Cloud chip (interface.md, rule 7:
+    // the person icon and «Tisma Cloud», only the icon when the window is
+    // narrow, none when even that does not fit: More has it too), Open and
+    // More.
     const float more_w = button_h;
     const float gap = 8.0f * scale_;
-    const float right = width_of(tr(T::Open)) + more_w + gap;
+    float right = width_of(tr(T::Open)) + more_w + gap;
+    const char* const chip_label = "Tisma Cloud";
+    const float spare = ImGui::GetWindowWidth() - right - 12.0f * scale_ - ImGui::GetCursorPosX() - 10.0f * scale_;
+    const bool chip_text = spare >= width_of(chip_label) + 2.0f * gap + button_h;
+    const bool chip_shown = chip_text || spare >= button_h + gap;
+    if (chip_shown)
+        right += (chip_text ? width_of(chip_label) : button_h) + gap;
     // The help (assistant.md, rule 1), between the tabs and the actions, when
     // there is room; F1 and More open it anyway. The search for a setting is
     // in the settings panel, under the printer (the owner's decision, 2026-10-29).
@@ -4966,6 +4977,17 @@ void App::top_bar() {
     }
     ImGui::SameLine(ImGui::GetWindowWidth() - right - 12.0f * scale_);
     ImGui::SetCursorPosY(top);
+    if (chip_shown) {
+        const bool chip = chip_text ? button("##cloud_chip", "account", chip_label, false, cloud_open_, true,
+                                             tr(T::CloudChipTip), button_h)
+                                    : icon_button("##cloud_chip", "account", tr(T::CloudChipTip), button_h);
+        g_menu_rects["cloud_chip"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                            ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (chip)
+            cloud_open_ = true;
+        ImGui::SameLine(0, gap);
+        ImGui::SetCursorPosY(top);
+    }
     if (button("##open", "tisma_folder", tr(T::Open), false, false, true, tr(T::OpenTip), button_h)) {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);

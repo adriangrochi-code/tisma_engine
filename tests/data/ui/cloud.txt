@@ -1,10 +1,10 @@
 # The Tisma Cloud dialog against the mock server (cloud.md, rules 2 to 5a;
-# interface.md, «Diálogos»): Más opens it; the public plans come without a
-# session (CC13); a wrong password says the server's words; a good one opens
+# interface.md, «Diálogos»): the top bar's Tisma Cloud chip opens it
+# (interface.md, rule 7), and so does Más › Tisma Cloud…; the public plans come
+# without a session (CC13); a wrong password says the server's words; a good one opens
 # the session with the account's hours as the server sends them (CC14); Log out
 # closes it.
-menu more
-menu cloud
+menu cloud_chip
 expect-control cloud_window
 cloud-wait
 expect-cloud plans 2
@@ -25,3 +25,7 @@ expect-control cloud_hours
 menu cloud_logout
 cloud-wait
 expect-cloud logged no
+menu cloud_close
+menu more
+menu cloud
+expect-control cloud_window

@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Chip de Tisma Cloud** en la barra superior (ficha `interface.md`, regla 7): el ícono de persona y «Tisma Cloud»
+  abren el diálogo de la cuenta; en una ventana angosta queda solo el ícono, y si tampoco entra, sigue en Más.
 - **El motor en los nodos de la nube** (ficha `cloud.md`, reglas 18 y 20): `tisma-engine slice <proyecto> -o
   <salida.gcode> --summary <resumen.json> --sandbox [--no-gpu]` lamina un proyecto guardado por la interfaz (piezas,
   ubicación, ajustes propios, volúmenes, rangos, pintura y mezclas) sin leer la carpeta de datos del usuario; da

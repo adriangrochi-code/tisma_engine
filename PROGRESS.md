@@ -8853,3 +8853,14 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
     que manda «Laminar en la nube» con el nombre `.3mf`;
   - los proyectos de otros laminadores;
   - un avance más fino mientras corta (hoy salta de 10 a 85).
+
+### Tisma Cloud, C2: el chip de la barra superior
+
+- `interface.md`, regla 7: un chip con el ícono de persona (`assets/icons/account.svg`, dibujo propio) y «Tisma Cloud»,
+  antes de Abrir. Abre el diálogo de la cuenta.
+  - En una ventana angosta queda solo el ícono; si tampoco entra, no se dibuja y sigue en Más › Tisma Cloud….
+  - Las pestañas cuentan el ícono al decidir si van sin nombre.
+- **Visto en capturas:** completo a 1440 px, solo el ícono a 760 px, sin chip a 640 px. A 640 px, en el primer
+  intento, el ícono tapaba la pestaña Impresora: por eso se oculta.
+- **Pruebas:** el guion `cloud` abre el diálogo con el chip y después por Más.
+
