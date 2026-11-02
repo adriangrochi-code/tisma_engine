@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Tus trabajos en la nube** (ficha `cloud.md`, regla 10): con la sesión iniciada, el diálogo de Tisma Cloud lista
+  los trabajos de la cuenta (`GET /v1/jobs`) con la fecha, si es laminado o análisis, el estado (con el avance si
+  corre y el motivo al pasar el mouse si falló) y los minutos usados.
 - **Chip de Tisma Cloud** en la barra superior (ficha `interface.md`, regla 7): el ícono de persona y «Tisma Cloud»
   abren el diálogo de la cuenta; en una ventana angosta queda solo el ícono, y si tampoco entra, sigue en Más.
 - **El motor en los nodos de la nube** (ficha `cloud.md`, reglas 18 y 20): `tisma-engine slice <proyecto> -o

@@ -552,6 +552,8 @@ private:
         std::optional<cloud::Account> account;
         std::vector<cloud::Plan> plans;
         bool plans_ok = false;
+        std::vector<cloud::Job> jobs; // the account's (rule 10)
+        bool jobs_ok = false;
     };
     void config_window();
     void cloud_window();
@@ -975,6 +977,7 @@ private:
     bool cloud_token_read_ = false;
     std::optional<cloud::Account> cloud_account_;
     std::vector<cloud::Plan> cloud_plans_;
+    std::vector<cloud::Job> cloud_jobs_;
     std::string cloud_status_;
     bool cloud_status_error_ = false;
     std::future<CloudReply> cloud_job_;
@@ -12296,6 +12299,7 @@ void App::cloud_start(CloudReply::Kind kind) {
                 r.account = account;
             else
                 return r;
+            r.jobs_ok = client.jobs(r.jobs, quiet);
         }
         r.ok = true;
         return r;
@@ -12309,6 +12313,7 @@ void App::cloud_finished(CloudReply r) {
     if (r.kind == CloudReply::Kind::Logout) {
         cloud_token_.clear();
         cloud_account_.reset();
+        cloud_jobs_.clear();
         cloud_status_ = tr(T::CloudNotLogged);
         return;
     }
@@ -12324,6 +12329,7 @@ void App::cloud_finished(CloudReply r) {
         if (r.error.expired()) {
             cloud_token_.clear();
             cloud_account_.reset();
+            cloud_jobs_.clear();
             cloud::forget_secret(cloud_server_);
             cloud_status_ = r.kind == CloudReply::Kind::Login ? r.error.message : std::string(tr(T::CloudExpired));
         } else if (r.error.status == 429) {
@@ -12334,6 +12340,8 @@ void App::cloud_finished(CloudReply r) {
         return;
     }
     cloud_account_ = r.account;
+    if (r.jobs_ok)
+        cloud_jobs_ = std::move(r.jobs);
     cloud_status_ = cloud_account_ ? format(tr(T::CloudLoggedAs), cloud_account_->email.c_str()) : tr(T::CloudNotLogged);
     if (r.kind == CloudReply::Kind::Login) {
         save_preferences(); // the server and the e-mail, never the token
@@ -12510,6 +12518,47 @@ void App::cloud_window() {
                                   number(a.hours_included, 2).c_str(), number(a.hours_left, 2).c_str()));
         rect_of("cloud_hours");
         row(T::CloudJobs, format(tr(T::CloudJobsValue), a.active_jobs, a.max_concurrent));
+
+        // The account's jobs (rule 10), the server's order, in a box that
+        // scrolls past five rows so the dialog keeps its buttons on screen.
+        ImGui::SeparatorText(tr(T::CloudJobList));
+        if (cloud_jobs_.empty()) {
+            loc::TextDisabled("%s", busy ? tr(T::CloudWorking) : tr(T::CloudNoJobs));
+        } else {
+            const float row_h = ImGui::GetTextLineHeightWithSpacing() + 2.0f * ImGui::GetStyle().CellPadding.y;
+            const float table_h = row_h * float(std::min<std::size_t>(cloud_jobs_.size(), 5)) + 2.0f;
+            if (ImGui::BeginTable("##cloud_job_list", 4,
+                                  ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                                  ImVec2(0.0f, table_h))) {
+                for (const cloud::Job& j : cloud_jobs_) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    std::string when = j.created_at.substr(0, 16);
+                    std::replace(when.begin(), when.end(), 'T', ' ');
+                    loc::TextDisabled("%s", when.c_str());
+                    ImGui::TableNextColumn();
+                    loc::Text("%s", j.kind == "fea" ? tr(T::CloudKindFea) : j.kind == "slice" ? tr(T::CloudKindSlice) : j.kind.c_str());
+                    ImGui::TableNextColumn();
+                    const T state = j.status == "queued"    ? T::CloudStateQueued
+                                    : j.status == "running" ? T::CloudStateRunning
+                                    : j.status == "done"    ? T::CloudStateDone
+                                    : j.status == "failed"  ? T::CloudStateFailed
+                                                            : T::CloudStateCancelled;
+                    if (j.status == "running")
+                        loc::Text("%s %d %%", tr(state), j.progress);
+                    else if (j.status == "failed")
+                        loc::TextColored(rgb(kWarningColour), "%s", tr(state));
+                    else
+                        loc::Text("%s", tr(state));
+                    if (!j.error.empty() && ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", j.error.c_str());
+                    ImGui::TableNextColumn();
+                    loc::TextDisabled(tr(T::CloudJobMinutes), number(j.seconds / 60.0, 1).c_str());
+                }
+                ImGui::EndTable();
+            }
+        }
+        rect_of("cloud_job_list");
     }
 
     // The public plans, the current one marked (rule 5a).
@@ -16064,12 +16113,14 @@ void App::script_input() {
         } else if (f > 1200) {
             fail_step("no answer");
         }
-    } else if (step.verb == "expect-cloud") { // logged yes|no, plans N, plan NAME, hours LEFT, status TEXT
+    } else if (step.verb == "expect-cloud") { // logged yes|no, plans N, jobs N, plan NAME, hours LEFT, status TEXT
         std::string got;
         if (step.key == "logged")
             got = cloud_account_ ? "yes" : "no";
         else if (step.key == "plans")
             got = std::to_string(cloud_plans_.size());
+        else if (step.key == "jobs")
+            got = std::to_string(cloud_jobs_.size());
         else if (step.key == "plan")
             got = cloud_account_ ? cloud_account_->plan : "";
         else if (step.key == "hours")

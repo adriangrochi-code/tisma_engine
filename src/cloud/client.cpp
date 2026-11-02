@@ -32,9 +32,15 @@ void flatten(const nlohmann::json& j, const std::string& prefix, std::map<std::s
 }
 
 void parse_job_json(const nlohmann::json& j, Job& job) {
-    job.id = j.value("id", std::string());
-    job.status = j.value("status", std::string());
-    job.progress = j.value("progress", 0);
+    const auto text = [&](const char* key) {
+        return j.contains(key) && j[key].is_string() ? j[key].get<std::string>() : std::string();
+    };
+    // The server's ids are text; a number is taken as its digits.
+    job.id = j.contains("id") && j["id"].is_number_integer() ? std::to_string(j["id"].get<long long>()) : text("id");
+    job.kind = text("kind");
+    job.status = text("status");
+    job.created_at = text("created_at");
+    job.progress = j.contains("progress") && j["progress"].is_number() ? int(j["progress"].get<double>()) : 0;
     job.error = j.contains("error") && j["error"].is_string() ? j["error"].get<std::string>() : std::string();
     job.result_filename =
         j.contains("result_filename") && j["result_filename"].is_string() ? j["result_filename"].get<std::string>() : "";
@@ -240,6 +246,37 @@ bool Client::submit(const std::string& kind, const std::string& params_json, con
     }
     error = unexpected();
     return false;
+}
+
+bool Client::jobs(std::vector<Job>& jobs, Failure& error) {
+    const net::Response r = net::perform(api("GET", url_ + "/v1/jobs", token_, 30));
+    if (!r.ok()) {
+        error = failure(r);
+        return false;
+    }
+    try {
+        const nlohmann::json j = nlohmann::json::parse(r.body);
+        // A list, or {"jobs": [...]}, or {"items": [...]}.
+        const nlohmann::json& list = j.is_object() && j.contains("jobs")    ? j["jobs"]
+                                     : j.is_object() && j.contains("items") ? j["items"]
+                                                                             : j;
+        if (!list.is_array()) {
+            error = unexpected();
+            return false;
+        }
+        jobs.clear();
+        for (const nlohmann::json& item : list) {
+            if (!item.is_object())
+                continue;
+            Job job;
+            parse_job_json(item, job);
+            jobs.push_back(std::move(job));
+        }
+        return true;
+    } catch (const std::exception&) {
+        error = unexpected();
+        return false;
+    }
 }
 
 bool Client::status(const std::string& job_id, Job& job, Failure& error) {

@@ -42,7 +42,9 @@ struct Plan {
 
 struct Job {
     std::string id;
+    std::string kind;   // slice or fea
     std::string status; // queued, running, done, failed, cancelled
+    std::string created_at; // as the server writes it (ISO 8601)
     int progress = 0;
     std::string error;
     std::string result_filename;
@@ -90,6 +92,9 @@ public:
     bool submit(const std::string& kind, const std::string& params_json, const std::string& project_path, Job& job,
                 Failure& error);
     bool status(const std::string& job_id, Job& job, Failure& error);
+    // GET /v1/jobs (cloud.md, rule 10): the account's jobs, as the server
+    // orders them.
+    bool jobs(std::vector<Job>& jobs, Failure& error);
     bool cancel(const std::string& job_id, Failure& error);
     bool download(const std::string& job_id, const std::string& path, Failure& error);
 

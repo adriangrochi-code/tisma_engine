@@ -8864,3 +8864,18 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   intento, el ícono tapaba la pestaña Impresora: por eso se oculta.
 - **Pruebas:** el guion `cloud` abre el diálogo con el chip y después por Más.
 
+### Tisma Cloud, C2: la lista de trabajos
+
+- `Client::jobs` (`GET /v1/jobs`, `cloud.md`, regla 10). Lee una lista, `{"jobs": [...]}` o `{"items": [...]}`,
+  porque la ficha no dice la forma. Cada trabajo trae además su tipo y su fecha de creación; un `id` numérico se
+  lee como texto.
+- El diálogo de la cuenta, con sesión, muestra «Tus trabajos»:
+  - fecha, tipo (laminado o análisis), estado y minutos usados;
+  - el avance si corre;
+  - en ámbar si falló, con el motivo al pasar el mouse;
+  - pasadas cinco filas, la tabla se desplaza para que los botones sigan en pantalla.
+  Se pide con la cuenta cada vez que se abre el diálogo.
+- **Pruebas:** `[cloud]` (la lista, el trabajo recién mandado primero, 401 sin sesión); el guion `cloud` (un
+  trabajo después de entrar). El servidor simulado tiene `GET /v1/jobs`.
+- **Falta:** abrir desde la lista el resultado de un trabajo terminado.
+

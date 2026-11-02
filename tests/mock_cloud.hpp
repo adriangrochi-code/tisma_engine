@@ -94,6 +94,19 @@ public:
             state_ = "queued";
             res.set_content(job_json(), "application/json");
         });
+        // The account's jobs: the one sent, if any, and an older analysis that failed.
+        server_.Get("/v1/jobs", [this](const httplib::Request& req, httplib::Response& res) {
+            if (!authorized(req, res))
+                return;
+            std::lock_guard lock(mutex_);
+            json list = json::array();
+            if (!state_.empty())
+                list.push_back(json::parse(job_json()));
+            list.push_back({{"id", "j0"}, {"kind", "fea"}, {"status", "failed"}, {"progress", 40}, {"seconds", 61.0},
+                            {"error", "The part has no supports"}, {"result_filename", nullptr},
+                            {"created_at", "2026-11-01T18:20:00Z"}});
+            res.set_content(json{{"jobs", list}}.dump(), "application/json");
+        });
         server_.Get(R"(/v1/jobs/([a-z0-9]+))", [this](const httplib::Request& req, httplib::Response& res) {
             if (!authorized(req, res))
                 return;
@@ -158,7 +171,8 @@ private:
     std::string job_json() const {
         json j = {{"id", "j1"},        {"kind", kind_},       {"status", state_},
                   {"progress", state_ == "done" ? 100 : state_ == "running" ? 50 : 0},
-                  {"seconds", 12.5},   {"error", nullptr},    {"result_filename", "project.gcode"}};
+                  {"seconds", 12.5},   {"error", nullptr},    {"result_filename", "project.gcode"},
+                  {"created_at", "2026-11-02T20:00:00Z"}};
         if (state_ == "done")
             j["summary"] = {{"print_time", "1h 2m 3s"}, {"filament_g", 12.3}, {"result", {{"verdict", "ok"}}}};
         return j.dump();

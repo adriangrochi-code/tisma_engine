@@ -202,6 +202,35 @@ TEST_CASE("cloud: a job goes from queued to done and its result comes down (CC3)
     std::filesystem::remove(project);
 }
 
+TEST_CASE("cloud: the account's jobs are listed (rule 10)", "[cloud]") {
+    MockCloud mock;
+    cloud::Client client(mock.url(), "T1");
+    std::vector<cloud::Job> jobs;
+    cloud::Failure error;
+    REQUIRE(client.jobs(jobs, error));
+    REQUIRE(jobs.size() == 1);
+    CHECK(jobs[0].id == "j0");
+    CHECK(jobs[0].kind == "fea");
+    CHECK(jobs[0].status == "failed");
+    CHECK(jobs[0].error == "The part has no supports");
+    CHECK(jobs[0].seconds == 61.0);
+    CHECK(jobs[0].created_at == "2026-11-01T18:20:00Z");
+    // One sent: it comes first.
+    const std::filesystem::path project = temp_file("tisma_cloud_list.3mf", "PK fake 3mf");
+    cloud::Job sent;
+    REQUIRE(client.submit("slice", "{}", project.string(), sent, error));
+    REQUIRE(client.jobs(jobs, error));
+    REQUIRE(jobs.size() == 2);
+    CHECK(jobs[0].id == "j1");
+    CHECK(jobs[0].kind == "slice");
+    CHECK(jobs[0].status == "queued");
+    // Without a session: the server's 401.
+    cloud::Client stranger(mock.url(), "");
+    CHECK_FALSE(stranger.jobs(jobs, error));
+    CHECK(error.expired());
+    std::filesystem::remove(project);
+}
+
 TEST_CASE("cloud: cancelling a running job cancels it on the server too (CC4)", "[cloud]") {
     MockCloud mock;
     const std::filesystem::path project = temp_file("tisma_cloud_cancel.3mf", "PK");

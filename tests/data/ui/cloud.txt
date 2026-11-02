@@ -2,7 +2,8 @@
 # interface.md, «Diálogos»): the top bar's Tisma Cloud chip opens it
 # (interface.md, rule 7), and so does Más › Tisma Cloud…; the public plans come
 # without a session (CC13); a wrong password says the server's words; a good one opens
-# the session with the account's hours as the server sends them (CC14); Log out
+# the session with the account's hours as the server sends them (CC14) and
+# its jobs (rule 10); Log out
 # closes it.
 menu cloud_chip
 expect-control cloud_window
@@ -22,6 +23,8 @@ expect-cloud logged yes
 expect-cloud plan Maker
 expect-cloud hours 9.25
 expect-control cloud_hours
+expect-cloud jobs 1
+expect-control cloud_job_list
 menu cloud_logout
 cloud-wait
 expect-cloud logged no
