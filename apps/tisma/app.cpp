@@ -11,6 +11,11 @@
 #include "vk_window.hpp"
 
 #include "cad/design.hpp"
+#include "cad/fasteners.hpp"
+#include "cad/gears.hpp"
+#include "mesh/indexed_mesh.hpp"
+#include "slice/painted.hpp"
+#include "ui/system_info.hpp"
 #include "cad/process.hpp"
 #include "cad/solidcraft.hpp"
 #include "calibration/calibration.hpp"
@@ -75,6 +80,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <numbers>
 #include <memory>
 #include <csignal>
 #include <optional>
@@ -114,7 +120,7 @@ constexpr const char* kIcons[] = {
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
     "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
     "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",   "tool_cut",   "tool_measure",
-    "tool_sketch",      "tool_primitive",   "tisma_design",
+    "tool_sketch",      "tool_primitive",   "tisma_design",   "tisma_fasteners",
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_nonplanar",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
@@ -396,6 +402,26 @@ void keep_unreadable(const std::filesystem::path& path) {
 }
 
 enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device };
+// The tabs of the Ingeniería section; the rest are Impresión 3D's (the
+// owner's request, 2026-11-02: each section with its tabs and its own panel).
+// Fasteners live inside Design (the owner, the same day).
+bool engineering_tab(Tab t) {
+    return t == Tab::Design;
+}
+
+// A measure as the interface writes it: up to `decimals` places, no trailing
+// zeros, the language's decimal point.
+std::string number(double v, int decimals) {
+    std::string out = format("%.*f", decimals, v);
+    const char point = out.find(',') != std::string::npos ? ',' : '.';
+    if (out.find(point) != std::string::npos) {
+        while (out.back() == '0')
+            out.pop_back();
+        if (out.back() == point)
+            out.pop_back();
+    }
+    return out == "-0" ? "0" : out;
+}
 // The preview's views (preview.md, rule 1), in its order: what colours the
 // lines, the shader's way to colour them, and the number the instances carry.
 enum class PreviewView {
@@ -491,6 +517,43 @@ private:
     void edit_in_design(std::size_t object);
     void open_design(bool sketch);
     void start_solidcraft_probe();
+    void show_in_view(const TriangleMesh& mesh);
+    // Fasteners (the owner's request, 2026-11-02): bolts, nuts, washers and
+    // threaded rods with the ISO metric thread, made by the engine.
+    void fasteners_panel();
+    // Configuración (preferences.md): the dialog, the Video page's qualities
+    // (view_auto_quality.md, rules 3 and 4) and the machine it runs on.
+    void config_window();
+    // The handles on the chosen model (the owner's request, 2026-11-02, with a
+    // picture): arrows to move, rings to turn, boxes to scale, by axis in the
+    // bed's colours (X red, Y green, Z blue), dragged in the view.
+    bool gizmo(bool editing);
+    void selected_changed_live();
+    // The print panel folded away (the owner's request, 2026-11-02): the view
+    // takes the whole width; in Prepare a small card keeps the printer, the
+    // filament and the print profile.
+    bool panel_folded_now() const;
+    void update_view_hold();
+    void compact_panel();
+    void unfold_button();
+    void apply_quality(const std::string& quality);
+    std::string recommended_quality() const;
+    void video_set_by_hand();
+    void read_graphics_info();
+    double frame_cap() const; // the frames a second the view may draw now; 0: no cap
+    // The Design panel's pages: the design, Fasteners, Gears.
+    enum class DesignPage { Design, Fasteners, Gears };
+    void open_page(DesignPage page);
+    void show_page();
+    void gears_panel();
+    void rebuild_gear();
+    void send_gear_to_plate(bool with_mate);
+    std::string gear_name(const cad::GearSpec& spec) const;
+    void send_part(const TriangleMesh& mesh, const std::string& name, const std::string& json, bool replace);
+    void rebuild_fastener();
+    void send_fastener_to_plate(bool with_nut);
+    void edit_fastener(std::size_t object);
+    std::string fastener_name(const cad::FastenerSpec& spec) const;
     void calibration_panel();
     void use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab);
     void add_model(const std::filesystem::path& path);
@@ -509,9 +572,11 @@ private:
     void mixing_dialog();
     std::string filament_color(int extruder) const;
     void objects_material_changed();
-    void brush_stroke(std::size_t object);
+    void brush_stroke(std::size_t object, ImVec2 at);
+    void brush_drag(std::size_t object);
     void update_paint_view();
     Vec3 mouse_ray() const;
+    Vec3 ray_at(ImVec2 at) const;
     void load_calibration(CalibrationPrint print);
     void create_calibration(CalibrationKind kind, bool custom);
     void begin_export();
@@ -569,7 +634,7 @@ private:
     // Profiles (docs/PROFILES.md).
     std::filesystem::path profiles_root() const;
     void load_profile_lists();
-    void profile_row(ProfileKind kind);
+    void profile_row(ProfileKind kind, bool compact = false);
     std::vector<double> printer_diameters() const;
     void choose_profile(ProfileKind kind, const Profile& profile);
     // Speeds the settings lack: a stock Ender-3's, and a word about it.
@@ -784,6 +849,7 @@ private:
     bool painted_ = false;     // the stroke changed something
     bool paint_dirty_ = true;  // the view's copy of the paint is out of date
     std::optional<float> brush_depth_; // how far ahead of the eye the face under the mouse is
+    ImVec2 last_stroke_{0.0f, 0.0f};   // where the stroke's last dab went, on the screen
     bool has_plate_ = false;          // there is a model on the plate
     std::size_t plate_triangles_ = 0; // all of the plate's
     TriangleMesh plate_now() const;
@@ -824,6 +890,84 @@ private:
     cad::SolidCraftInfo solidcraft_;
     bool solidcraft_probed_ = false;
     int design_target_ = 0;      // the plate object being edited (its design_id); 0: a new design
+    // The Fasteners tab: the part being set up, its mesh, and the plate
+    // object it came from when edited again (its design_id; 0: a new part).
+    cad::FastenerSpec fastener_;
+    TriangleMesh fastener_mesh_;
+    BoundingBox fastener_box_;
+    std::string fastener_error_;
+    bool fastener_dirty_ = true;
+    bool fastener_edited_ = false; // a field typed, made again once it is left
+    int fastener_target_ = 0;
+    DesignPage design_page_ = DesignPage::Design;
+    // The Gears page: the gear, its mesh, and the teeth of the one it meshes with.
+    cad::GearSpec gear_;
+    TriangleMesh gear_mesh_;
+    BoundingBox gear_box_;
+    std::string gear_error_;
+    bool gear_dirty_ = true;
+    bool gear_edited_ = false;
+    int gear_mate_teeth_ = 20;
+
+    // Configuración (preferences.md): open or not, its page and search, and
+    // every option as it was when it opened (Cancelar puts them back).
+    bool config_open_ = false;
+    int config_page_ = 0;
+    std::string config_query_;
+    struct ConfigState {
+        bool english = false, dark = true;
+        RenderMode render = RenderMode::Ambient;
+        int msaa = 4;
+        bool fxaa = true, moire = true;
+        float ao_strength = 1.0f;
+        bool tips = true, tutorials = true, glossary = true, material = true, cad_design = true, orthographic = false;
+        ViewLevel level = ViewLevel::Normal;
+        GpuMode gpu = GpuMode::Auto;
+        std::string graphics_api, view_quality;
+        int max_fps = 60;
+        bool vsync = true, lower_while_moving = true, battery_saver = true, show_frame_time = true;
+        bool panel_folded = false;
+    };
+    std::optional<ConfigState> config_before_;
+    ConfigState config_state() const;
+    void restore_config(const ConfigState& c);
+    std::set<std::string> config_keys_seen_; // the options drawn while it was open, for the scripted test (PF7)
+    // Video (preferences.md, rule 8; view_auto_quality.md).
+    std::string graphics_api_ = "auto";      // ui.graphics_api: auto, vulkan, opengl (read before the window opens)
+    std::string view_quality_ = "automatic"; // ui.view_quality: automatic, high, balanced, light, custom
+    int max_fps_ = 60;                       // ui.max_fps: 0 the screen's rate, -1 no cap
+    bool vsync_ = true;
+    bool lower_while_moving_ = true;
+    bool battery_saver_ = true;
+    bool show_frame_time_ = true;
+    bool panel_folded_ = false;     // ui.panel_folded
+    float compact_bottom_ = 0.0f;
+    // What the view lowers while something moves (view_auto_quality.md, rules 5, 6, 8).
+    int ao_hold_ = 0;                  // ViewFrame::ao_hold for this frame
+    int ao_hold_seen_ = 0;             // the most since the script last asked (expect-held)
+    long ao_passes_mark_ = 0;          // the renderer's occlusions when the script last asked
+    bool lowered_ = false;             // lowered since the motion started, until it stops
+    bool lowered_notice_shown_ = false; // ui.lowered_notice_shown: the first time's toast
+    Mat4 last_view_{};                 // the camera of the last frame, to see it move   // the folded panel's card: where it ends on the screen, this frame
+    struct GizmoDrag {
+        int kind = 0; // 0 move along an axis, 1 turn about one, 2 scale along one, 3 scale all
+        int axis = 0;
+        ImVec2 start, last;
+        Placement place0;
+        double total = 0.0;   // mm, degrees or the factor so far
+        double applied = 0.0; // degrees applied (the turn snaps with Shift)
+        bool moved = false;
+    };
+    std::optional<GizmoDrag> gizmo_drag_;
+    ImVec2 drag_from_{0.0f, 0.0f}; // the scripted drag's start
+    SystemInfo system_;
+    double system_read_ = 0.0; // when the memory and the power were last read
+    std::string gpu_vendor_, gpu_renderer_, gpu_version_, gpu_kind_;
+    int screen_width_ = 0, screen_height_ = 0, screen_hz_ = 0;
+    double frame_started_ = 0.0;
+    // The tab each section opens on: the last one used there.
+    Tab last_print_tab_ = Tab::Prepare;
+    Tab last_engineering_tab_ = Tab::Design;
     int next_design_id_ = 1;
     bool design_pick_primitive_ = false; // the Primitiva tool from Prepare: the chooser opens
     bool design_pick_sketch_ = false;    // the Boceto tool from Prepare: the plane is asked
@@ -2465,15 +2609,24 @@ bool row(T label, int& v, int min, int max, const char* fmt = "%d", const char* 
 // gives it. The field shows its unit; a number typed with "mm" or "%" (the
 // spec team's field sweep: "0,3 mm" was kept as 0.3 %) switches to it, and a
 // bare number keeps the unit shown. `empty`: what 0 shows, if it means "the
-// other's" or "no limit".
+// other's" or "no limit". The button after the field switches the unit (the
+// testers' UI32: the millimetres were not found), converting the value by
+// `base`, what 100 % is; with no base the number stays.
 bool unit_row(T label, Speed& v, double min, double mm_max, double percent_max, const char* mm_fmt, float mm_speed,
-              const char* empty = nullptr) {
+              const char* empty = nullptr, double base = 0.0) {
     label_cell(label);
     const RowId id(label, &v);
     double max = v.percent ? percent_max : mm_max;
     const char* fmt = empty && v.value <= 0.0 ? empty : v.percent ? "%.0f %%" : mm_fmt;
+    const std::string mm_unit = std::string(mm_fmt).find("mm/s") != std::string::npos ? "mm/s" : "mm";
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float unit_w = ImGui::CalcTextSize("mm/s").x + 2.0f * style.FramePadding.x;
+    ImGui::SetNextItemWidth(std::max(ImGui::GetContentRegionAvail().x - unit_w - style.ItemInnerSpacing.x, 40.0f));
     bool changed = ImGui::DragScalar("##v", ImGuiDataType_Double, &v.value, v.percent ? 0.5f : mm_speed, &min, &max,
                                      field_text("##v", fmt, v.value), ImGuiSliderFlags_AlwaysClamp);
+    if (!g_last_field.empty()) // the field without the unit's button
+        g_field_rects[g_last_field] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                             ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
     if (const std::string* typed = typed_text()) {
         if (const std::optional<Typed> t = read_typed(*typed); t && t->unit) {
             v.percent = t->unit == '%';
@@ -2483,6 +2636,16 @@ bool unit_row(T label, Speed& v, double min, double mm_max, double percent_max, 
         }
         note_clamp(typed, min, max, v.percent ? "%.0f %%" : mm_fmt);
     }
+    ImGui::SameLine(0, style.ItemInnerSpacing.x);
+    if (ImGui::Button(v.percent ? "%##unit" : (mm_unit + "##unit").c_str(), ImVec2(unit_w, 0))) {
+        if (base > 0.0 && v.value > 0.0)
+            v.value = v.percent ? v.value * base / 100.0 : v.value / base * 100.0;
+        v.percent = !v.percent;
+        v.value = std::clamp(v.value, min, v.percent ? percent_max : mm_max);
+        changed = true;
+    }
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::UnitSwitchTip));
     return changed;
 }
 
@@ -2626,10 +2789,25 @@ bool App::init(std::string& error) {
     // only once the Vulkan view does all the OpenGL one does (PLAN.md «Vista
     // con Vulkan»): until then «auto» is OpenGL.
     constexpr bool kVulkanViewReady = false;
+    // The Video page's choice (ui.graphics_api, ui.vsync), read before the
+    // window opens; the command line's --graphics wins over it.
+    if (options_.screenshot.empty() && options_.graphics == "auto") {
+        std::ifstream in(preferences_path(), std::ios::binary);
+        try {
+            const nlohmann::json j = in ? nlohmann::json::parse(in) : nlohmann::json();
+            if (const auto ui = j.find("ui"); ui != j.end() && ui->is_object()) {
+                const std::string api = ui->value("graphics_api", std::string("auto"));
+                if (api == "vulkan" || api == "opengl")
+                    options_.graphics = api;
+                vsync_ = ui->value("vsync", true);
+            }
+        } catch (const std::exception&) {
+        }
+    }
     if (options_.graphics == "vulkan" || (options_.graphics == "auto" && kVulkanViewReady)) {
         std::string why = "cannot open a window for Vulkan";
         open_window(true);
-        vulkan_ = window_ && vk_.init(window_, true, why) && vk_view_.init(*vk_.device(), why);
+        vulkan_ = window_ && vk_.init(window_, vsync_, why) && vk_view_.init(*vk_.device(), why);
         if (!vulkan_) {
             vk_view_.shutdown();
             vk_.shutdown();
@@ -2653,7 +2831,7 @@ bool App::init(std::string& error) {
             return false;
         }
         glfwMakeContextCurrent(window_);
-        glfwSwapInterval(1);
+        glfwSwapInterval(vsync_ ? 1 : 0);
         if (const char* missing = load_gl(glfwGetProcAddress)) {
             error = std::string("the OpenGL driver lacks ") + missing;
             return false;
@@ -2748,6 +2926,9 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    read_graphics_info();
+    if (view_quality_ != "custom" && options_.render < 0 && options_.msaa < 0 && options_.fxaa < 0 && options_.screenshot.empty())
+        apply_quality(view_quality_);
     start_solidcraft_probe();
     // The list opens where it was left, at the section in view then
     // (settings_panel.md, rule 3).
@@ -3099,6 +3280,21 @@ void App::load_preferences() {
         device_port_ = j.value("device_port", std::string("sim"));
         device_baud_ = j.value("device_baud", 115200);
         ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
+        if (const auto ui = j.find("ui"); ui != j.end() && ui->is_object()) {
+            graphics_api_ = ui->value("graphics_api", std::string("auto"));
+            if (graphics_api_ != "vulkan" && graphics_api_ != "opengl")
+                graphics_api_ = "auto";
+            view_quality_ = ui->value("view_quality", std::string("automatic"));
+            if (view_quality_ != "high" && view_quality_ != "balanced" && view_quality_ != "light" && view_quality_ != "custom")
+                view_quality_ = "automatic";
+            max_fps_ = std::clamp(ui->value("max_fps", 60), -1, 240);
+            vsync_ = ui->value("vsync", true);
+            lower_while_moving_ = ui->value("lower_while_moving", true);
+            battery_saver_ = ui->value("battery_saver", true);
+            show_frame_time_ = ui->value("show_frame_time", true);
+            panel_folded_ = ui->value("panel_folded", false);
+            lowered_notice_shown_ = ui->value("lowered_notice_shown", false);
+        }
         if (j.contains("settings")) {
             try {
                 settings_ = parse_settings(j.at("settings").dump());
@@ -3193,6 +3389,15 @@ void App::save_preferences() {
         j["ui"]["bed_type"] = bed_type_;
         j["ui"]["orthographic"] = camera_.orthographic;
         j["ui"]["cad_design"] = cad_design_;
+        j["ui"]["graphics_api"] = graphics_api_;
+        j["ui"]["view_quality"] = view_quality_;
+        j["ui"]["max_fps"] = max_fps_;
+        j["ui"]["vsync"] = vsync_;
+        j["ui"]["lower_while_moving"] = lower_while_moving_;
+        j["ui"]["battery_saver"] = battery_saver_;
+        j["ui"]["show_frame_time"] = show_frame_time_;
+        j["ui"]["panel_folded"] = panel_folded_;
+        j["ui"]["lowered_notice_shown"] = lowered_notice_shown_;
         for (const auto& [printer, notes] : printer_notes_)
             if (!notes.empty())
                 j["printers"][printer]["notes"] = notes;
@@ -3497,7 +3702,10 @@ std::shared_ptr<const std::vector<TriangleMesh>> App::placed_copy() {
 
 // The ray from the eye through the mouse, in the view.
 Vec3 App::mouse_ray() const {
-    const ImVec2 m = ImGui::GetIO().MousePos;
+    return ray_at(ImGui::GetIO().MousePos);
+}
+
+Vec3 App::ray_at(ImVec2 m) const {
     const float nx = (m.x - view_pos_.x) / view_size_.x * 2.0f - 1.0f;
     const float ny = 1.0f - (m.y - view_pos_.y) / view_size_.y * 2.0f;
     const float half = std::tan(0.5f * camera_.lens_fov()), aspect = view_size_.x / std::max(view_size_.y, 1.0f);
@@ -3859,7 +4067,8 @@ std::vector<double> App::printer_diameters() const {
     return out;
 }
 
-void App::profile_row(ProfileKind kind) {
+// compact: the list only, the whole width (the folded panel's card).
+void App::profile_row(ProfileKind kind, bool compact) {
     const std::size_t k = std::size_t(kind);
     ImGui::PushID(int(k));
     const float size = ImGui::GetFrameHeight();
@@ -3869,7 +4078,7 @@ void App::profile_row(ProfileKind kind) {
     std::string preview = chosen ? shown_name(chosen->name) : std::string(tr(T::NoProfile));
     if (chosen && profile_modified_[k])
         preview += " *";
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.0f * (size + gap));
+    ImGui::SetNextItemWidth(compact ? ImGui::CalcItemWidth() : ImGui::GetContentRegionAvail().x - 2.0f * (size + gap));
     const Profile* picked = nullptr;
     if (ImGui::BeginCombo("##profile", preview.c_str())) {
         // Only the materials the printer takes (pellets.md, rule 1; profiles.md,
@@ -3897,6 +4106,15 @@ void App::profile_row(ProfileKind kind) {
     }
     if (chosen && profile_modified_[k] && ImGui::IsItemHovered())
         loc::SetTooltip("%s", tr(T::ProfileModifiedTip));
+    if (compact) {
+        ImGui::PopID();
+        if (picked) {
+            choose_profile(kind, *picked);
+            if (kind == ProfileKind::Printer)
+                bed_type_.clear();
+        }
+        return;
+    }
     auto save_as = [&] {
         save_profile_kind_ = kind;
         save_profile_open_ = true;
@@ -4463,8 +4681,11 @@ void App::frame_now() {
         const auto& p = result_->preview;
         part = {{p.min[0], p.min[1], 0.0f}, {p.max[0], p.max[1], p.max[2]}};
     } else if (tab_ == Tab::Design) {
-        if (!design_box_.empty)
-            part = {{design_box_.min.x, design_box_.min.y, 0.0f}, {design_box_.max.x, design_box_.max.y, design_box_.max.z}};
+        const BoundingBox& box = design_page_ == DesignPage::Fasteners ? fastener_box_
+                                 : design_page_ == DesignPage::Gears   ? gear_box_
+                                                                       : design_box_;
+        if (!box.empty)
+            part = {{box.min.x, box.min.y, 0.0f}, {box.max.x, box.max.y, box.max.z}};
     } else if (has_plate_ && !placed_.empty) {
         part = {{placed_.min.x, placed_.min.y, 0.0f}, {placed_.max.x, placed_.max.y, placed_.max.z}};
     }
@@ -4520,10 +4741,14 @@ void App::set_tab(Tab tab) {
         estimate_voxels_if_stale();
     // The Design tab shows the design in the same view, over the same bed;
     // leaving it brings the plate back (cad_design.md, rules 3 and 19).
+    if (engineering_tab(tab))
+        last_engineering_tab_ = tab;
+    else
+        last_print_tab_ = tab;
     if (tab == Tab::Design && was != Tab::Design) {
         command_focus_ = true;
-        show_design();
-    } else if (was == Tab::Design && tab != Tab::Design) {
+        show_page();
+    } else if (engineering_tab(was) && !engineering_tab(tab)) {
         rebuild_plate();
         frame_all();
     }
@@ -4568,7 +4793,11 @@ void App::top_bar() {
     ImGui::PopFont();
     ImGui::SameLine(0, 22.0f * scale_);
 
-    // The tabs.
+    // The two sections (the owner's request, 2026-11-02): Impresión 3D with
+    // the plate, the preview, the analysis, the calibrations and the printer,
+    // and Ingeniería with Design and Fasteners. Each opens on its last tab.
+    const bool engineering = engineering_tab(tab_);
+    // The tabs of the section.
     struct TabButton {
         Tab tab;
         const char* icon;
@@ -4580,12 +4809,66 @@ void App::top_bar() {
                               {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
                               {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
                               {Tab::Device, "tisma_printer", T::TabDevice}};
+    // A narrow window: the tabs, then the sections too, keep only their icons
+    // (their names in the tooltip), so nothing runs under Open (2026-11-02:
+    // at 900 px Calibration ran into it).
+    const auto width_of = [&](const char* label) {
+        const float pad = std::round(button_h * 0.32f), icon_size = std::round(button_h * 0.5f);
+        return pad * 2.0f + icon_size + (label ? ImGui::GetStyle().ItemInnerSpacing.x + 2.0f + ImGui::CalcTextSize(label).x : 0.0f);
+    };
+    bool compact_tabs = false, compact_sections = false;
+    {
+        const float right = width_of(tr(T::Open)) + button_h + 8.0f * scale_ + 12.0f * scale_ + button_h + 16.0f * scale_;
+        const float room = ImGui::GetWindowWidth() - right - ImGui::GetCursorPosX();
+        const auto needed = [&](bool tabs_short, bool sections_short) {
+            float w = 0.0f;
+            if (cad_design_)
+                w += width_of(sections_short ? nullptr : tr(T::ModePrint)) +
+                     width_of(sections_short ? nullptr : tr(T::ModeEngineering)) + 20.0f * scale_;
+            for (const TabButton& t : tabs)
+                if (engineering_tab(t.tab) == engineering)
+                    w += width_of(tabs_short ? nullptr : tr(t.label)) + 4.0f * scale_;
+            return w;
+        };
+        compact_tabs = needed(false, false) > room;
+        compact_sections = compact_tabs && needed(true, false) > room;
+    }
+    if (cad_design_) {
+        // A pill behind the two, drawn under them once their width is known.
+        const float pad = 3.0f * scale_;
+        ImGui::SetCursorPosY(top);
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const auto section_button = [&](const char* id, const char* icon_name, T label, T tip_text, bool on, Tab to,
+                                        const char* name) {
+            ImGui::SetCursorPosY(top);
+            const std::string tip = compact_sections ? std::string(tr(label)) + ": " + tr(tip_text) : std::string(tr(tip_text));
+            if (button(id, icon_name, compact_sections ? nullptr : tr(label), false, on, true, tip.c_str(), button_h) && !on)
+                set_tab(to == Tab::Preview && !result_.has_value() ? Tab::Prepare : to);
+            g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                        ImGui::GetItemRectMax().y);
+        };
+        dl->ChannelsSplit(2);
+        dl->ChannelsSetCurrent(1);
+        section_button("##mode_print", "tisma_print", T::ModePrint, T::ModePrintTip, !engineering, last_print_tab_,
+                       "mode_print");
+        ImGui::SameLine(0, 2.0f * scale_);
+        section_button("##mode_engineering", "tisma_design", T::ModeEngineering, T::ModeEngineeringTip, engineering,
+                       last_engineering_tab_, "mode_engineering");
+        const ImVec2 end = ImGui::GetItemRectMax();
+        dl->ChannelsSetCurrent(0);
+        dl->AddRectFilled(ImVec2(start.x - pad, origin.y + top - pad), ImVec2(end.x + pad, end.y + pad),
+                          ImGui::GetColorU32(rgb(theme_.frame)), ImGui::GetStyle().FrameRounding * 1.8f);
+        dl->ChannelsMerge();
+        ImGui::SameLine(0, 18.0f * scale_);
+    }
+
     for (const TabButton& t : tabs) {
-        if (t.tab == Tab::Design && !cad_design_) // hidden by ui.cad_design (cad_design.md, CD1)
+        if (engineering_tab(t.tab) != engineering) // the other section's
             continue;
         ImGui::SetCursorPosY(top);
         const bool enabled = t.tab != Tab::Preview || result_.has_value();
-        if (button(tr(t.label), t.icon, tr(t.label), false, tab_ == t.tab, enabled, nullptr, button_h))
+        if (button(tr(t.label), t.icon, compact_tabs ? nullptr : tr(t.label), false, tab_ == t.tab, enabled,
+                   compact_tabs ? tr(t.label) : nullptr, button_h))
             set_tab(t.tab);
         // Named for the scripted tests: tab_prepare, tab_design...
         g_menu_rects[std::string("tab_") + (t.tab == Tab::Prepare       ? "prepare"
@@ -4607,10 +4890,6 @@ void App::top_bar() {
     // The actions, on the right.
     const float more_w = button_h;
     const float gap = 8.0f * scale_;
-    auto width_of = [&](const char* label) {
-        return std::round(button_h * 0.32f) * 2.0f + std::round(button_h * 0.5f) + ImGui::GetStyle().ItemInnerSpacing.x +
-               2.0f + ImGui::CalcTextSize(label).x;
-    };
     const float right = width_of(tr(T::Open)) + more_w + gap;
     // The help (assistant.md, rule 1), between the tabs and the actions, when
     // there is room; F1 and More open it anyway. The search for a setting is
@@ -4620,7 +4899,10 @@ void App::top_bar() {
         const float room = ImGui::GetWindowWidth() - right - 12.0f * scale_ - 16.0f * scale_ - from;
         if (room >= button_h) {
             ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - right - 12.0f * scale_ - gap - button_h, top));
-            if (icon_button("##help", "help", tr(T::HelpTip), button_h))
+            const bool help = icon_button("##help", "help", tr(T::HelpTip), button_h);
+            g_menu_rects["help"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                          ImGui::GetItemRectMax().y);
+            if (help)
                 help_open_ = !help_open_;
         }
     }
@@ -4632,9 +4914,19 @@ void App::top_bar() {
     }
     ImGui::SameLine(0, gap);
     ImGui::SetCursorPosY(top);
-    if (icon_button("##more", "tisma_more", tr(T::More), button_h))
+    const bool more = icon_button("##more", "tisma_more", tr(T::More), button_h);
+    g_menu_rects["more"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                  ImGui::GetItemRectMax().y);
+    if (more)
         ImGui::OpenPopup("##more_menu");
     if (ImGui::BeginPopup("##more_menu")) {
+        // Configuración first (preferences.md, PF8).
+        const bool config = ImGui::MenuItem(tr(T::ConfigMenu), "Ctrl+,");
+        g_menu_rects["config"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                        ImGui::GetItemRectMax().y);
+        if (config)
+            config_open_ = true;
+        ImGui::Separator();
         if (ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S"))
             begin_save_project(false);
         if (ImGui::MenuItem(tr(T::SaveProjectAs), "Ctrl+Shift+S"))
@@ -5165,6 +5457,13 @@ void App::help_panel() {
     if (ImGui::Button("×", ImVec2(ImGui::GetFrameHeight(), 0)) ||
         (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
         help_open_ = false;
+    // The welcome tour again, from the help too (the testers' UI33).
+    if (ImGui::SmallButton(tr(T::Tutorial))) {
+        tour_step_ = 0;
+        help_open_ = false;
+    }
+    g_menu_rects["help_tutorial"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                           ImGui::GetItemRectMax().y);
     ImGui::SetNextItemWidth(-FLT_MIN);
     char query[256] = {};
     help_query_.copy(query, sizeof query - 1);
@@ -6239,8 +6538,21 @@ void App::settings_panel() {
         panel_tab_ = SettingsTab::Print;
     // The search for a setting, under the printer and the nozzle (the owner's
     // decision, 2026-10-29: it was in the top bar).
-    search_box(ImGui::GetContentRegionAvail().x, ImGui::GetFrameHeight());
-    anchor("settings_search");
+    {
+        const float fold = ImGui::GetFrameHeight();
+        search_box(ImGui::GetContentRegionAvail().x - fold - ImGui::GetStyle().ItemSpacing.x, ImGui::GetFrameHeight());
+        anchor("settings_search");
+        // Fold the panel away (the owner's request, 2026-11-02).
+        ImGui::SameLine();
+        if (ImGui::Button("«##fold", ImVec2(fold, fold))) {
+            panel_folded_ = true;
+            frame_pending_ = true;
+        }
+        g_menu_rects["panel_fold"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                            ImGui::GetItemRectMax().y);
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::PanelFoldTip));
+    }
 
     // The tabs, and the level on their right.
     {
@@ -6532,12 +6844,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::OuterWidth, "walls.outer_width", s.outer_wall_width, 0.0, 40.0, s.outer_wall_width > 0.0 ? "%.2f mm" : tr(T::AutoValue),
            0.002f);
         if (shown("layers.first_line_width"))
-            changed |= unit_row(T::FirstLineWidth, s.first_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::FirstLineWidth, s.first_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.first_layer_height);
         mm(T::TopWidth, "surfaces.top_width", s.top_width, 0.0, 10.0, s.top_width > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.002f);
         mm(T::SolidWidth, "surfaces.solid_width", s.solid_width, 0.0, 10.0, s.solid_width > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.002f);
         mm(T::InfillWidth, "infill.width", s.infill_width, 0.0, 10.0, s.infill_width > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.002f);
         if (shown("walls.seam_gap"))
-            changed |= unit_row(T::SeamGap, s.wall_seam_gap, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::SeamGap, s.wall_seam_gap, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.nozzle_diameter);
     } else if (id == "seam") {
         if (shown("walls.seam"))
             changed |= row(T::Seam, s.seam,
@@ -6591,15 +6905,19 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::WallsOuterFirst, "walls.outer_first", s.walls_outer_first);
     } else if (id == "walls_thin") {
         if (shown("walls.min_line_width"))
-            changed |= unit_row(T::MinLineWidth, s.wall_min_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::MinLineWidth, s.wall_min_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.nozzle_diameter);
         if (shown("walls.min_detail"))
-            changed |= unit_row(T::MinDetail, s.wall_min_detail, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::MinDetail, s.wall_min_detail, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.nozzle_diameter);
         whole(T::SpreadCount, "walls.spread_count", s.wall_spread_count, 1, 100);
         if (shown("walls.transition_length"))
-            changed |= unit_row(T::TransitionLength, s.wall_transition_length, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::TransitionLength, s.wall_transition_length, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.nozzle_diameter);
         mm(T::TransitionAngle, "walls.transition_angle", s.wall_transition_angle, 0.0, 179.0, "%.0f°", 0.5f);
         if (shown("walls.transition_margin"))
-            changed |= unit_row(T::TransitionMargin, s.wall_transition_margin, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::TransitionMargin, s.wall_transition_margin, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.nozzle_diameter);
     } else if (id == "walls_more") {
         flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
         flag(T::WallsStaggered, "walls.staggered", s.walls_staggered);
@@ -6669,7 +6987,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::CombineAuto, "infill.combine_auto", s.infill_combine_auto, tr(T::CombineInfillTip));
         whole(T::CombineInfill, "infill.combine_layers", s.infill_combine_layers, 1, 20, "%d", tr(T::CombineInfillTip));
         if (shown("infill.combine_max_height"))
-            changed |= unit_row(T::CombineMaxHeight, s.infill_combine_max_height, 0.01, 10.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::CombineMaxHeight, s.infill_combine_max_height, 0.01, 10.0, 1000.0, "%.2f mm", 0.01f,
+                                nullptr, s.nozzle_diameter);
     } else if (id == "wavy") {
         flag(T::NonplanarInfill, "infill.nonplanar", s.infill_nonplanar, tr(T::NonplanarInfillTip));
         mm(T::NonplanarAmplitude, "infill.nonplanar_amplitude", s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);
@@ -6692,7 +7011,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "walls_surfaces") {
         mm(T::SpeedWalls, "speed.walls", s.wall_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         if (shown("speed.outer_wall"))
-            changed |= unit_row(T::SpeedOuterWall, s.outer_wall_speed, 1.0, 1000.0, 1000.0, "%.0f mm/s", 0.5f);
+            changed |= unit_row(T::SpeedOuterWall, s.outer_wall_speed, 1.0, 1000.0, 1000.0, "%.0f mm/s", 0.5f, nullptr,
+                                s.wall_speed);
         mm(T::SpeedSolid, "speed.solid_infill", s.solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTop, "speed.top_solid_infill", s.top_solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         // 0: the solid infill's.
@@ -6780,7 +7100,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SupportBottomZGap, "support.bottom_z_gap", s.support_bottom_z_gap, 0.0, 5.0,
            s.support_bottom_z_gap > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.01f);
         if (shown("support.xy_gap"))
-            changed |= unit_row(T::SupportXyGap, s.support_xy_gap, 0.0, 10.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::SupportXyGap, s.support_xy_gap, 0.0, 10.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.wall_width_auto ? 1.125 * s.nozzle_diameter : s.wall_width);
     } else if (id == "interface") {
         whole(T::SupportInterface, "support.interface_layers", s.support_interface_layers, 0, 20);
         whole(T::SupportBottomInterface, "support.bottom_interface_layers", s.support_bottom_interface_layers, -1, 20,
@@ -6804,7 +7125,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::SupportSheath, "support.sheath", s.support_sheath);
         mm(T::SupportLineAngle, "support.line_angle", s.support_line_angle, -360.0, 360.0, "%.0f°", 0.5f);
         if (shown("support.width"))
-            changed |= unit_row(T::SupportWidth, s.support_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::SupportWidth, s.support_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.layer_height);
         if (s.support_style == SupportStyle::Snug)
             mm(T::SupportClosingRadius, "support.closing_radius", s.support_closing_radius, 0.0, 100.0, "%.2f mm", 0.01f);
     } else if (id == "arcs") {
@@ -7120,7 +7442,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::AfterWipe, "retraction.after_wipe", s.after_wipe, 0.0, 100.0, "%.0f %%", 0.5f);
         flag(T::WipeInward, "retraction.wipe_inward", s.wipe_inward);
         if (shown("retraction.wipe_inward_distance"))
-            changed |= unit_row(T::WipeInwardDistance, s.wipe_inward_distance, 0.0, 10.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::WipeInwardDistance, s.wipe_inward_distance, 0.0, 10.0, 1000.0, "%.2f mm", 0.01f,
+                                nullptr, s.wall_width_auto ? 1.125 * s.nozzle_diameter : s.wall_width);
     } else if (id == "retract_travel") {
         mm(T::RetractLift, "retraction.lift", s.retract_lift, 0.0, 10.0, "%.2f mm", 0.01f);
         mm(T::RetractMinTravel, "retraction.min_travel", s.retract_min_travel, 0.0, 50.0, "%.1f mm", 0.05f);
@@ -7591,16 +7914,41 @@ void App::status_bar() {
     }
     // On the right: the 3D view's time per frame on the GPU, and what sliced.
     std::string right;
-    if (view_ms_ > 0.0)
+    if (view_ms_ > 0.0 && show_frame_time_)
         right = format(tr(T::ViewTime), view_ms_, 1000.0 / std::max(view_ms_, 0.01));
+    // The quality and the cap (view_auto_quality.md, rule 8).
+    {
+        const double cap = frame_cap();
+        const std::string quality = tr(view_quality_ == "automatic" ? T::QualityAutomaticShort
+                                       : view_quality_ == "high"     ? T::ViewQualityHigh
+                                       : view_quality_ == "balanced" ? T::ViewQualityBalanced
+                                       : view_quality_ == "light"    ? T::ViewQualityLight
+                                                                     : T::ViewQualityCustom);
+        std::string q = cap > 0.0 ? format(tr(T::QualityStatus), quality.c_str(), int(cap)) : quality;
+        if (battery_saver_ && system_.power == PowerSource::Battery)
+            q += std::string(" · ") + tr(T::ConfigOnBatteryShort);
+        if (ao_hold_ == 1)
+            q += std::string(" · ") + tr(T::ViewHeldOcclusion);
+        else if (ao_hold_ == 2)
+            q += std::string(" · ") + tr(T::ViewNoOcclusionMoving);
+        right = q + (right.empty() ? "" : "  ·  ") + right;
+    }
     if (result_ && !viewer_)
         right += (right.empty() ? "" : "  ·  ") + (result_->gpu.empty() ? std::string("CPU") : "GPU: " + result_->gpu);
+    // The gear that opens Configuración, next to the view's time (preferences.md).
+    const float gear = ImGui::GetFrameHeight();
     if (!right.empty()) {
-        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right.c_str()).x - 12.0f * scale_);
+        ImGui::SameLine(ImGui::GetWindowWidth() - ImGui::CalcTextSize(right.c_str()).x - 12.0f * scale_ - gear - 8.0f * scale_);
         loc::TextDisabled("%s", right.c_str());
         if (view_ms_ > 0.0 && ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(T::ViewTimeTip));
     }
+    ImGui::SameLine(ImGui::GetWindowWidth() - gear - 8.0f * scale_);
+    ImGui::SetCursorPosY((height - gear) * 0.5f);
+    if (icon_button("##config_gear", "section_machine", tr(T::ConfigMenu), gear))
+        config_open_ = true;
+    g_menu_rects["config_gear"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                         ImGui::GetItemRectMax().y);
     ImGui::End();
     ImGui::PopStyleVar();
     ImGui::PopStyleColor();
@@ -7608,7 +7956,7 @@ void App::status_bar() {
 
 void App::viewport() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
-    const float top = kTopBar * scale_, bottom = kStatusBar * scale_, left = kPanel * scale_;
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_, left = panel_folded_now() ? 0.0f : kPanel * scale_;
     view_pos_ = ImVec2(vp->Pos.x + left, vp->Pos.y + top);
     view_size_ = ImVec2(std::max(vp->Size.x - left, 1.0f), std::max(vp->Size.y - top - bottom, 1.0f));
     // Under the printer's page, no canvas: ImGui keeps windows that never come
@@ -7669,11 +8017,12 @@ void App::viewport() {
         if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray())) {
             selected_ = int(hit->object);
             painting_object_ = int(hit->object);
-            brush_stroke(hit->object);
+            last_stroke_ = io.MousePos;
+            brush_stroke(hit->object, io.MousePos);
         }
     } else if (painting && painting_object_ >= 0 && ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
                (io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
-        brush_stroke(std::size_t(painting_object_));
+        brush_drag(std::size_t(painting_object_));
     }
     if (painting && ImGui::IsItemDeactivated()) {
         if (painted_) { // the slice no longer matches the paint
@@ -7688,7 +8037,8 @@ void App::viewport() {
         const float pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.lens_fov())) * 0.5f * view_size_.y;
         ImGui::GetWindowDrawList()->AddCircle(io.MousePos, pixels, IM_COL32(255, 255, 255, 200), 48, 1.5f * scale_);
     }
-    if (editing && !painting && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    const bool on_gizmo = gizmo(editing && !painting);
+    if (editing && !painting && !on_gizmo && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         pressed_object_ = -1;
         dragged_ = false;
         const Vec3 d = mouse_ray(), e = camera_.eye();
@@ -7733,7 +8083,7 @@ void App::viewport() {
                 drag_anchor_ = *p;
                 dragged_ = true;
             }
-        } else if (pressed_object_ < 0 && painting_object_ < 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
             moved_frame_ = ImGui::GetFrameCount();
             camera_framed_ = false;
@@ -7747,7 +8097,7 @@ void App::viewport() {
     if (ImGui::IsItemDeactivated() && editing) {
         if (dragged_)
             plate_changed(); // the move is over: now the slice is out of date
-        else if (pressed_object_ < 0 && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint &&
+        else if (pressed_object_ < 0 && !on_gizmo && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint &&
                  ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
                  std::abs(io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left]) < 9.0f)
             selected_ = -1; // a click on the empty bed
@@ -7840,8 +8190,8 @@ void App::view_tools() {
     if (ImGui::BeginPopup("##render_menu")) {
         loc::TextDisabled("%s", tr(T::Render));
         for (int m = 0; m < 3; ++m) {
-            if (ImGui::RadioButton(tr(modes[m]), int(render_mode_) == m))
-                render_mode_ = static_cast<RenderMode>(m);
+            if (ImGui::RadioButton(tr(modes[m]), int(render_mode_) == m) && int(render_mode_) != m)
+                render_mode_ = static_cast<RenderMode>(m), video_set_by_hand();
             loc::SetItemTooltip("%s", tr(mode_tips[m]));
         }
         if (render_mode_ != RenderMode::Fast) {
@@ -7865,16 +8215,17 @@ void App::view_tools() {
         ImGui::SetNextItemWidth(200.0f * scale_);
         if (ImGui::BeginCombo("##msaa", name(std::min(msaa_, choices.back())).c_str())) {
             for (int n : choices)
-                if (ImGui::Selectable(name(n).c_str(), n == msaa_))
-                    msaa_ = n;
+                if (ImGui::Selectable(name(n).c_str(), n == msaa_) && n != msaa_)
+                    msaa_ = n, video_set_by_hand();
             ImGui::EndCombo();
         }
-        ImGui::Checkbox(tr(T::Fxaa), &fxaa_);
+        if (ImGui::Checkbox(tr(T::Fxaa), &fxaa_))
+            video_set_by_hand();
         ImGui::Checkbox(tr(T::MoireFilter), &moire_);
         if (ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(T::MoireFilterTip));
         // The Design tab and the Prepare tools that open it (cad_design.md, rule 3).
-        if (ImGui::Checkbox(tr(T::DesignPref), &cad_design_) && !cad_design_ && tab_ == Tab::Design)
+        if (ImGui::Checkbox(tr(T::DesignPref), &cad_design_) && !cad_design_ && engineering_tab(tab_))
             set_tab(Tab::Prepare);
         ImGui::EndPopup();
     }
@@ -8078,6 +8429,14 @@ void App::object_menu() {
                                              ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         if (edit)
             edit_in_design(std::size_t(selected_));
+    }
+    if (cad_design_ && !o.fastener.empty()) {
+        ImGui::Separator();
+        const bool edit = ImGui::MenuItem(tr(T::EditInFasteners));
+        g_menu_rects["edit_fastener"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                               ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (edit)
+            edit_fastener(std::size_t(selected_));
     }
     ImGui::EndPopup();
 }
@@ -8407,12 +8766,16 @@ void App::plate_tools() {
             open_design(false);
     }
     ImGui::Separator();
-    if (button("##paint", "tool_paint", nullptr, false, tool_ == PlateTool::Paint, true, tr(T::ToolPaintTip), size))
+    const bool paint = button("##paint", "tool_paint", nullptr, false, tool_ == PlateTool::Paint, true, tr(T::ToolPaintTip), size);
+    g_menu_rects["tool_paint"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                        ImGui::GetItemRectMax().y);
+    if (paint)
         tool_ = tool_ == PlateTool::Paint ? PlateTool::Select : PlateTool::Paint;
     if (button("##material", "tool_material", nullptr, false, tool_ == PlateTool::Material, true, tr(T::ToolMaterialTip),
                size))
         tool_ = tool_ == PlateTool::Material ? PlateTool::Select : PlateTool::Material;
     const ImVec2 strip_min = ImGui::GetWindowPos(), strip_size = ImGui::GetWindowSize();
+    g_menu_rects["plate_tools"] = ImVec4(strip_min.x, strip_min.y, strip_min.x + strip_size.x, strip_min.y + strip_size.y);
     anchor_rect("plate_tools", strip_min, ImVec2(strip_min.x + strip_size.x, strip_min.y + strip_size.y));
     ImGui::End();
     ImGui::PopStyleColor();
@@ -8452,8 +8815,12 @@ void App::plate_tools() {
             plate_changed();
         }
     }
+    // The tool's card, next to the column; under the folded panel's card.
+    const float card_top = panel_folded_now() && tab_ == Tab::Prepare && compact_bottom_ > strip_min.y
+                               ? compact_bottom_ + 8.0f * scale_
+                               : strip_min.y;
     if (tool_ == PlateTool::Paint) {
-        paint_card(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, strip_min.y));
+        paint_card(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, card_top));
         return;
     }
     if (tool_ == PlateTool::Select || !chosen)
@@ -8461,7 +8828,7 @@ void App::plate_tools() {
 
     // The chosen tool's card.
     PlateObject& o = objects_[std::size_t(selected_)];
-    ImGui::SetNextWindowPos(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, strip_min.y));
+    ImGui::SetNextWindowPos(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, card_top));
     ImGui::SetNextWindowBgAlpha(0.92f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * scale_, 12.0f * scale_));
@@ -8469,6 +8836,9 @@ void App::plate_tools() {
     ImGui::Begin("##plate_tool", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    g_menu_rects["tool_card"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                       ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                       ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
     loc::TextColored(rgb(theme_.accent_hover), "%s", o.name.c_str());
     const float field = 110.0f * scale_;
     bool changed = false;
@@ -8476,7 +8846,12 @@ void App::plate_tools() {
     bool cut = false, split = false;
     const auto number = [&](const char* label, double& v, double speed, double lo, double hi, const char* fmt) {
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(label);
+        // X, Y and Z in the handles' colours (the testers' UI34).
+        const std::string_view name(label);
+        if (name == "X" || name == "Y" || name == "Z")
+            loc::TextColored(rgb(name == "X" ? 0xE5484D : name == "Y" ? 0x3FBF7F : 0x3B82F6), "%s", label);
+        else
+            ImGui::TextUnformatted(label);
         ImGui::SameLine(70.0f * scale_);
         ImGui::SetNextItemWidth(field);
         const bool edited = ImGui::DragScalar((std::string("##") + label).c_str(), ImGuiDataType_Double, &v, float(speed), &lo,
@@ -8730,28 +9105,7 @@ void App::plate_tools() {
     if (tool_ == PlateTool::Measure)
         measure_overlay();
     if (changed) {
-        // A large model while its field is dragged: its old mesh drawn moved,
-        // turned and scaled to where the new one goes; the plate made again
-        // once the field is let go (frame()).
-        constexpr std::size_t kLiveTriangles = 200000;
-        const std::size_t i = std::size_t(selected_);
-        if (ImGui::IsAnyItemActive() && o.mesh.triangle_count() >= kLiveTriangles && i < built_places_.size()) {
-            if (!live_pending_) {
-                PlateObject before = o;
-                before.place = built_places_[i];
-                live_from_ = placement_map(before);
-                live_pending_ = true;
-            }
-            const Affine step = between(live_from_, placement_map(o));
-            live_model_ = identity();
-            for (int r = 0; r < 3; ++r) {
-                for (int c = 0; c < 3; ++c)
-                    live_model_[std::size_t(4 * c + r)] = float(step.a[std::size_t(3 * r + c)]);
-                live_model_[std::size_t(12 + r)] = float(step.b[std::size_t(r)]);
-            }
-        } else {
-            plate_changed();
-        }
+        selected_changed_live();
     }
     if (mirror_axis >= 0)
         mirror_selected(mirror_axis);
@@ -9210,9 +9564,28 @@ void App::paint_card(ImVec2 at) {
     ImGui::PopStyleVar(2);
 }
 
-// Paints the face under the mouse, on this model only; Shift erases.
-void App::brush_stroke(std::size_t object) {
-    const Vec3 d = mouse_ray(), e = camera_.eye();
+// The stroke from the last dab to the mouse: dabs half a brush apart along
+// the way, so a fast mouse leaves a line and not separate dots (the testers'
+// UI37, the owner's video of 31-10-2026).
+void App::brush_drag(std::size_t object) {
+    const ImVec2 to = ImGui::GetIO().MousePos;
+    const float dx = to.x - last_stroke_.x, dy = to.y - last_stroke_.y;
+    const float distance = std::sqrt(dx * dx + dy * dy);
+    // The brush's radius on the screen, at the depth of the face under it.
+    float pixels = 4.0f;
+    if (brush_depth_ && view_size_.y > 0.0f)
+        pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.lens_fov())) * 0.5f * view_size_.y;
+    const int steps = std::clamp(int(std::ceil(distance / std::max(pixels * 0.5f, 1.0f))), 1, 64);
+    for (int k = 1; k <= steps; ++k) {
+        const float t = float(k) / float(steps);
+        brush_stroke(object, ImVec2(last_stroke_.x + dx * t, last_stroke_.y + dy * t));
+    }
+    last_stroke_ = to;
+}
+
+// Paints the face under a point of the view, on this model only; Shift erases.
+void App::brush_stroke(std::size_t object, ImVec2 at) {
+    const Vec3 d = ray_at(at), e = camera_.eye();
     const auto hit = pick(placed_meshes_, plate_indexes(), e, d);
     if (!hit || hit->object != object)
         return;
@@ -9310,6 +9683,23 @@ void App::help_windows() {
         tips_seen_.insert(tip_);
         tip_.clear();
     }
+    // A tool's tip goes when the tool closes, a tab's when the tab is left
+    // (the testers' UI38: Paint's stayed on screen after the tool).
+    {
+        static const std::map<std::string, PlateTool> tool_of = {{"move", PlateTool::Move}, {"rotate", PlateTool::Rotate},
+                                                                 {"scale", PlateTool::Scale}, {"lay", PlateTool::LayFlat},
+                                                                 {"paint", PlateTool::Paint}};
+        static const std::map<std::string, Tab> tab_of = {{"preview", Tab::Preview}, {"analysis", Tab::Analysis},
+                                                          {"design", Tab::Design}, {"calibration", Tab::Calibration},
+                                                          {"device", Tab::Device}};
+        const auto tool = tool_of.find(tip_);
+        const auto tab = tab_of.find(tip_);
+        if ((tool != tool_of.end() && (tool_ != tool->second || tab_ != Tab::Prepare)) ||
+            (tab != tab_of.end() && tab_ != tab->second)) {
+            tips_seen_.insert(tip_);
+            tip_.clear();
+        }
+    }
     const bool tour = tour_step_ >= 0 && tour_step_ < int(kTour.size());
     if (!tour && tip_.empty())
         return;
@@ -9331,6 +9721,10 @@ void App::help_windows() {
     ImGui::Begin("##help", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    // Named for the scripted tests: tour_card, tip_paint...
+    g_menu_rects[tour ? std::string("tour_card") : "tip_" + tip_] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                             ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                                                         ImGui::GetWindowPos().y + std::max(ImGui::GetWindowSize().y, 1.0f));
     const T title = tour ? kTour[std::size_t(tour_step_)].title : tip_texts().at(tip_).title;
     const T text = tour ? kTour[std::size_t(tour_step_)].text : tip_texts().at(tip_).text;
     ImGui::PushFont(nullptr, kTitleSize);
@@ -10224,11 +10618,16 @@ void App::design_built(cad::BuildResult built) {
 // The design's bodies in the view, in the plate's place (rule 3: the same
 // view and bed).
 void App::show_design() {
-    const std::vector<float> model = design_mesh_.empty() ? std::vector<float>{} : mesh_vertices(design_mesh_, Vec3{});
+    show_in_view(design_mesh_);
+    frame_all();
+}
+
+// A part of the Ingeniería section in the view, in the plate's place.
+void App::show_in_view(const TriangleMesh& mesh) {
+    const std::vector<float> model = mesh.empty() ? std::vector<float>{} : mesh_vertices(mesh, Vec3{});
     renderer_.set_model(model);
     renderer_.set_model_coarse({});
     vk_view_.set_model(model);
-    frame_all();
 }
 
 // «Mandar a la placa» (rule 21): a new design is added as an object; one
@@ -10382,6 +10781,22 @@ void App::design_panel() {
                 add_primitive(kind, cad::default_sizes(kind));
             ++k;
         }
+    }
+    // Fasteners: made by the engine, so open with or without the tool (the
+    // owner's request, 2026-11-02: inside Design).
+    {
+        const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+        if (ImGui::Button(tr(T::TabFasteners), ImVec2(half, 0)))
+            open_page(DesignPage::Fasteners);
+        rect_of("design_fasteners");
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::DesignFastenersTip));
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::GearsTitle), ImVec2(half, 0)))
+            open_page(DesignPage::Gears);
+        rect_of("design_gears");
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::DesignGearsTip));
     }
     ImGui::BeginDisabled(true);
     ImGui::Button(tr(T::DesignOpenStep));
@@ -10577,6 +10992,1374 @@ void App::design_panel() {
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
+}
+
+std::string App::fastener_name(const cad::FastenerSpec& spec) const {
+    const bool custom = cad::metric_size(spec.size) == nullptr;
+    const cad::FastenerDims dims = cad::fastener_dims(spec);
+    std::string size = custom ? "Ø" + number(dims.d, 1) + " × " + number(dims.pitch, 2) : spec.size;
+    if (!custom && spec.pitch > 0.0)
+        size += " × " + number(spec.pitch, 2); // a fine pitch is said
+    const T kind = spec.kind == cad::FastenerKind::HexBolt      ? T::FastenerHexBolt
+                   : spec.kind == cad::FastenerKind::SocketBolt ? T::FastenerSocketBolt
+                   : spec.kind == cad::FastenerKind::ThumbScrew ? T::FastenerThumbScrew
+                   : spec.kind == cad::FastenerKind::HexNut     ? T::FastenerHexNut
+                   : spec.kind == cad::FastenerKind::ThumbNut   ? T::FastenerThumbNut
+                   : spec.kind == cad::FastenerKind::Washer     ? T::FastenerWasher
+                   : spec.kind == cad::FastenerKind::Standoff   ? T::FastenerStandoff
+                   : spec.kind == cad::FastenerKind::Spacer     ? T::FastenerSpacer
+                                                                : T::FastenerRod;
+    std::string name = std::string(tr(kind)) + " " + size;
+    if (cad::has_length(spec.kind))
+        name += " × " + number(spec.length, 0);
+    return name;
+}
+
+// The part made again from its spec (in the engine, at once: a few hundred
+// thousand triangles at most).
+void App::rebuild_fastener() {
+    fastener_dirty_ = false;
+    fastener_error_ = cad::check_fastener(fastener_);
+    if (fastener_error_.empty()) {
+        fastener_mesh_ = cad::make_fastener(fastener_);
+        fastener_box_ = fastener_mesh_.bounding_box();
+    } else {
+        fastener_mesh_ = {};
+        fastener_box_ = {};
+    }
+    if (tab_ == Tab::Design && design_page_ == DesignPage::Fasteners)
+        show_in_view(fastener_mesh_);
+}
+
+// A page of the Design panel opened; the view shows its part, or the design.
+void App::open_page(DesignPage page) {
+    design_page_ = page;
+    if (tab_ != Tab::Design)
+        set_tab(Tab::Design); // shows the page
+    else
+        show_page();
+}
+
+void App::show_page() {
+    switch (design_page_) {
+    case DesignPage::Fasteners:
+        if (fastener_dirty_)
+            rebuild_fastener();
+        show_in_view(fastener_mesh_);
+        frame_all();
+        break;
+    case DesignPage::Gears:
+        if (gear_dirty_)
+            rebuild_gear();
+        show_in_view(gear_mesh_);
+        frame_all();
+        break;
+    case DesignPage::Design:
+        show_design();
+        break;
+    }
+}
+
+// A part of a page sent to the plate: a new object, or the one it was opened
+// from, replaced in its place with its painting carried over.
+void App::send_part(const TriangleMesh& mesh, const std::string& name, const std::string& json, bool replace) {
+    PlateObject* target = nullptr;
+    if (replace && fastener_target_ != 0)
+        for (PlateObject& o : objects_)
+            if (o.design_id == fastener_target_ && !o.fastener.empty())
+                target = &o;
+    if (target) {
+        Painting carried = carried_painting(target->painting, target->mesh, mesh);
+        target->mesh = mesh;
+        target->painting = std::move(carried);
+        target->fastener = json;
+        target->name = name;
+        plate_changed();
+        return;
+    }
+    add_mesh(mesh, from_utf8(name));
+    objects_.back().fastener = json;
+    objects_.back().design_id = next_design_id_++;
+}
+
+// «Mandar a la placa», as in Design: a new part is added as an object, one
+// opened with «Editar en Tornillería» replaces its object in its place. With
+// `with_nut`, a bolt or a rod brings its nut along.
+void App::send_fastener_to_plate(bool with_nut) {
+    if (fastener_dirty_)
+        rebuild_fastener();
+    if (fastener_mesh_.empty())
+        return;
+    const TriangleMesh mesh = fastener_mesh_;
+    const cad::FastenerSpec spec = fastener_;
+    const bool replaced = fastener_target_ != 0;
+    set_tab(Tab::Prepare);
+    send_part(mesh, fastener_name(spec), cad::fastener_json(spec), true);
+    if (with_nut && cad::has_thread(spec.kind) && !cad::is_nut(spec.kind)) {
+        cad::FastenerSpec nut = spec;
+        nut.kind = spec.kind == cad::FastenerKind::ThumbScrew ? cad::FastenerKind::ThumbNut : cad::FastenerKind::HexNut;
+        send_part(cad::make_fastener(nut), fastener_name(nut), cad::fastener_json(nut), false);
+    }
+    notify(tr(replaced ? T::DesignReplaced : T::DesignSent));
+}
+
+void App::edit_fastener(std::size_t object) {
+    if (object >= objects_.size())
+        return;
+    const std::string& json = objects_[object].fastener;
+    const bool gear = json.find("tisma-gear-1") != std::string::npos;
+    try {
+        if (gear)
+            gear_ = cad::parse_gear(json);
+        else
+            fastener_ = cad::parse_fastener(json);
+    } catch (const std::exception& e) {
+        notify(e.what(), true);
+        return;
+    }
+    fastener_target_ = objects_[object].design_id;
+    (gear ? gear_dirty_ : fastener_dirty_) = true;
+    open_page(gear ? DesignPage::Gears : DesignPage::Fasteners);
+}
+
+// The Fasteners tab's panel, in the left column like Design's: the part,
+// its size, its play for printing, what it measures, and the way to the plate.
+void App::fasteners_panel() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##fasteners", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    const auto rect_of = [](const std::string& name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    const auto section = [&](T title) {
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::Separator();
+    };
+    constexpr std::uint32_t kViolet = 0x8B5CF6;
+    const float footer = 3.0f * ImGui::GetFrameHeightWithSpacing() + 10.0f * scale_;
+    ImGui::BeginChild("##fasteners_scroll", ImVec2(0, -footer));
+    // A page of Design: the way back to the design's sections.
+    if (ImGui::SmallButton(tr(T::FastenersBack)))
+        open_page(DesignPage::Design);
+    rect_of("fasteners_back");
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::TabFasteners));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    loc::TextColored(rgb(kViolet), "%s", tr(T::FastenersSubtitle));
+    bool changed = false;
+    if (fastener_target_ != 0) {
+        loc::TextDisabled("%s", tr(T::FastenersEditing));
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::FastenersNew)))
+            fastener_target_ = 0;
+        rect_of("fasteners_new");
+    }
+
+    // The part.
+    section(T::FastenersSecPart);
+    {
+        const T labels[] = {T::FastenerHexBolt, T::FastenerSocketBolt, T::FastenerThumbScrew,
+                            T::FastenerHexNut,  T::FastenerThumbNut,   T::FastenerWasher,
+                            T::FastenerRod,     T::FastenerStandoff,   T::FastenerSpacer};
+        const float width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+        int k = 0;
+        for (const cad::FastenerKind kind : cad::kFastenerKinds) {
+            if (k % 2 != 0)
+                ImGui::SameLine();
+            const bool on = fastener_.kind == kind;
+            if (on) { // the part chosen, in the accent
+                ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+            }
+            if (ImGui::Button(tr(labels[k]), ImVec2(width, 0)) && !on) {
+                fastener_.kind = kind;
+                changed = true;
+            }
+            if (on)
+                ImGui::PopStyleColor(3);
+            rect_of(std::string("fasteners_kind_") + cad::fastener_id(kind));
+            ++k;
+        }
+    }
+
+    // The size: a row of the ISO table or one of its own, the pitch, the
+    // length and the play.
+    section(T::FastenersSecSize);
+    const bool custom = cad::metric_size(fastener_.size) == nullptr;
+    ImGui::SetNextItemWidth(130.0f * scale_);
+    if (ImGui::BeginCombo("##size", custom ? tr(T::FastenerCustom) : fastener_.size.c_str())) {
+        for (const cad::MetricSize& row : cad::metric_sizes()) {
+            if (ImGui::Selectable(row.name, fastener_.size == row.name)) {
+                fastener_.size = row.name;
+                fastener_.pitch = 0.0; // its own coarse pitch
+                changed = true;
+            }
+            rect_of(std::string("fasteners_size_") + row.name);
+        }
+        if (ImGui::Selectable(tr(T::FastenerCustom), custom)) {
+            fastener_.diameter = cad::fastener_dims(fastener_).d;
+            fastener_.size = "custom";
+            changed = true;
+        }
+        rect_of("fasteners_size_custom");
+        ImGui::EndCombo();
+    }
+    rect_of("fasteners_size");
+    ImGui::SameLine();
+    ImGui::TextUnformatted(tr(T::FastenerMetric));
+    const auto field = [&](const char* key, T label, double* value, const char* fmt, double step) {
+        const float width = 130.0f * scale_;
+        ImGui::SetNextItemWidth(width);
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        const ImVec4 rect(at.x, at.y, at.x + width - 2.0f * (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x),
+                          at.y + ImGui::GetFrameHeight());
+        if (loc::InputNumber(tr(label), value, fmt, step))
+            fastener_edited_ = true;
+        if (rect.y >= ImGui::GetWindowPos().y && rect.w <= ImGui::GetWindowPos().y + ImGui::GetWindowSize().y)
+            g_field_rects[key] = rect;
+    };
+    if (custom)
+        field("fasteners.diameter", T::FastenerDiameter, &fastener_.diameter, "%.2f", 1.0);
+    field("fasteners.pitch", T::FastenerPitch, &fastener_.pitch, "%.2f", 0.05);
+    loc::TextDisabled(tr(T::FastenerPitchHint), number(cad::fastener_dims({fastener_.kind, fastener_.size, fastener_.diameter, 0.0}).pitch, 2).c_str());
+    if (cad::has_length(fastener_.kind))
+        field("fasteners.length", T::FastenerLength, &fastener_.length, "%.1f", 1.0);
+    if (cad::has_thread(fastener_.kind)) {
+        field("fasteners.play", T::FastenerPlay, &fastener_.clearance, "%.2f", 0.05);
+        loc::TextDisabled("%s", tr(T::FastenerPlayHint));
+    }
+    if (fastener_edited_ && !ImGui::IsAnyItemActive()) {
+        fastener_edited_ = false;
+        changed = true;
+    }
+    if (changed)
+        rebuild_fastener();
+
+    // What it measures.
+    section(T::DesignSecMeasures);
+    if (!fastener_error_.empty()) {
+        loc::TextColored(rgb(0xE5484D), "%s", tr(T::FastenerBad));
+        rect_of("fasteners_bad");
+        loc::TextDisabled("%s", fastener_error_.c_str());
+    } else if (ImGui::BeginTable("##fastener_measures", 2)) {
+        const cad::FastenerDims dims = cad::fastener_dims(fastener_);
+        const auto line = [](const char* name, const std::string& value) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            loc::TextDisabled("%s", name);
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(value.c_str());
+        };
+        if (cad::has_thread(fastener_.kind)) {
+            line(tr(T::FastenerThread), "Ø" + number(dims.d, 2) + " × " + number(dims.pitch, 2) + " mm");
+            line(tr(T::FastenerTapDrill), number(dims.d - dims.pitch, 2) + " mm");
+        }
+        line(tr(T::FastenerClearanceHole), number(dims.clearance_hole, 1) + " mm");
+        if (fastener_.kind == cad::FastenerKind::HexBolt || fastener_.kind == cad::FastenerKind::HexNut ||
+            fastener_.kind == cad::FastenerKind::Standoff)
+            line(tr(T::FastenerKey), number(dims.nut_width, 1) + " mm");
+        if (fastener_.kind == cad::FastenerKind::SocketBolt)
+            line(tr(T::FastenerKey), number(dims.socket_key, 1) + " mm");
+        line(tr(T::DesignVolume), format("%.1f mm³", fastener_mesh_.signed_volume()));
+        line(tr(T::DesignBox), format("%.1f × %.1f × %.1f mm", double(fastener_box_.max.x - fastener_box_.min.x),
+                                      double(fastener_box_.max.y - fastener_box_.min.y),
+                                      double(fastener_box_.max.z - fastener_box_.min.z)));
+        ImGui::EndTable();
+    }
+    ImGui::Spacing();
+    loc::TextDisabled("%s", tr(T::FastenerPrintHint));
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+
+    // The footer: to the plate, and a bolt or a rod with its nut.
+    ImGui::Separator();
+    const bool can_send = !fastener_mesh_.empty();
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(kViolet));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(0x7C3AED));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, rgb(0x6D28D9));
+    ImGui::BeginDisabled(!can_send);
+    const bool send = ImGui::Button(tr(T::DesignSend), ImVec2(-FLT_MIN, ImGui::GetFrameHeight() * 1.3f));
+    ImGui::EndDisabled();
+    ImGui::PopStyleColor(3);
+    rect_of("fasteners_send");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(T::DesignSendTip));
+    bool pair = false;
+    if (cad::has_thread(fastener_.kind) && !cad::is_nut(fastener_.kind)) {
+        ImGui::BeginDisabled(!can_send);
+        pair = ImGui::Button(tr(T::FastenerSendPair), ImVec2(-FLT_MIN, 0));
+        ImGui::EndDisabled();
+        rect_of("fasteners_send_pair");
+    }
+    if (send || pair)
+        send_fastener_to_plate(pair);
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+std::string App::gear_name(const cad::GearSpec& g) const {
+    std::string name = format(tr(g.rack ? T::RackName : T::GearName), g.teeth, number(g.module, 2).c_str());
+    if (!g.rack && g.helix_angle > 0.0)
+        name += " " + std::string(tr(g.herringbone ? T::GearHerringbone : T::GearHelical));
+    return name;
+}
+
+void App::rebuild_gear() {
+    gear_dirty_ = false;
+    gear_error_ = cad::check_gear(gear_);
+    if (gear_error_.empty()) {
+        gear_mesh_ = cad::make_gear(gear_);
+        gear_box_ = gear_mesh_.bounding_box();
+    } else {
+        gear_mesh_ = {};
+        gear_box_ = {};
+    }
+    if (tab_ == Tab::Design && design_page_ == DesignPage::Gears)
+        show_in_view(gear_mesh_);
+}
+
+// The gear to the plate; with `with_mate`, the one it meshes with too: the
+// same module, pressure angle, width and backlash, the teeth asked for, and a
+// helix of the other hand.
+void App::send_gear_to_plate(bool with_mate) {
+    if (gear_dirty_)
+        rebuild_gear();
+    if (gear_mesh_.empty())
+        return;
+    const TriangleMesh mesh = gear_mesh_;
+    const cad::GearSpec spec = gear_;
+    const bool replaced = fastener_target_ != 0;
+    set_tab(Tab::Prepare);
+    send_part(mesh, gear_name(spec), cad::gear_json(spec), true);
+    if (with_mate) {
+        cad::GearSpec mate = spec;
+        mate.teeth = gear_mate_teeth_;
+        mate.left_hand = !spec.left_hand;
+        if (spec.rack) { // a rack's mate: a spur gear of the same module
+            mate.rack = false;
+            mate.helix_angle = 0.0;
+            mate.herringbone = false;
+            mate.bore = 5.0;
+        }
+        const double rf = mate.module * mate.teeth / 2.0 - 1.25 * mate.module;
+        mate.bore = std::min(mate.bore, std::max(0.0, 2.0 * (rf - std::max(1.0, mate.module))));
+        if (cad::check_gear(mate).empty())
+            send_part(cad::make_gear(mate), gear_name(mate), cad::gear_json(mate), false);
+    }
+    notify(tr(replaced ? T::DesignReplaced : T::DesignSent));
+}
+
+// The Gears page of the Design panel: the kind, the sizes, the gear it
+// meshes with, what it measures, and the way to the plate.
+void App::gears_panel() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##gears", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    const auto rect_of = [](const std::string& name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    const auto section = [&](T title) {
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::Separator();
+    };
+    constexpr std::uint32_t kViolet = 0x8B5CF6;
+    const float footer = 3.0f * ImGui::GetFrameHeightWithSpacing() + 10.0f * scale_;
+    ImGui::BeginChild("##gears_scroll", ImVec2(0, -footer));
+    if (ImGui::SmallButton(tr(T::FastenersBack)))
+        open_page(DesignPage::Design);
+    rect_of("gears_back");
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::GearsTitle));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    loc::TextColored(rgb(kViolet), "%s", tr(T::GearsSubtitle));
+    bool changed = false;
+    if (fastener_target_ != 0) {
+        loc::TextDisabled("%s", tr(T::FastenersEditing));
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::FastenersNew)))
+            fastener_target_ = 0;
+        rect_of("gears_new");
+    }
+
+    // The kind: spur, helical, herringbone.
+    section(T::FastenersSecPart);
+    {
+        const float width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+        const int kind = gear_.rack ? 3 : gear_.helix_angle <= 0.0 ? 0 : gear_.herringbone ? 2 : 1;
+        const struct {
+            T label;
+            const char* id;
+        } kinds[] = {{T::GearSpur, "gears_kind_spur"}, {T::GearHelical, "gears_kind_helical"},
+                     {T::GearHerringbone, "gears_kind_herringbone"}, {T::GearRack, "gears_kind_rack"}};
+        for (int k = 0; k < 4; ++k) {
+            if (k % 2 != 0)
+                ImGui::SameLine();
+            const bool on = kind == k;
+            if (on) {
+                ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+            }
+            if (ImGui::Button(tr(kinds[k].label), ImVec2(width, 0)) && !on) {
+                gear_.rack = k == 3;
+                gear_.helix_angle = k == 0 || k == 3 ? 0.0 : gear_.helix_angle > 0.0 ? gear_.helix_angle : 20.0;
+                gear_.herringbone = k == 2;
+                changed = true;
+            }
+            if (on)
+                ImGui::PopStyleColor(3);
+            rect_of(kinds[k].id);
+        }
+    }
+
+    // The sizes.
+    section(T::FastenersSecSize);
+    const auto field = [&](const char* key, T label, double* value, const char* fmt, double step) {
+        const float width = 130.0f * scale_;
+        ImGui::SetNextItemWidth(width);
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        const ImVec4 rect(at.x, at.y, at.x + width - 2.0f * (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x),
+                          at.y + ImGui::GetFrameHeight());
+        if (loc::InputNumber(tr(label), value, fmt, step))
+            gear_edited_ = true;
+        if (rect.y >= ImGui::GetWindowPos().y && rect.w <= ImGui::GetWindowPos().y + ImGui::GetWindowSize().y)
+            g_field_rects[key] = rect;
+    };
+    {
+        double teeth = gear_.teeth;
+        field("gears.teeth", T::GearTeeth, &teeth, "%.0f", 1.0);
+        gear_.teeth = int(std::lround(std::clamp(teeth, 1.0, 1000.0)));
+    }
+    field("gears.module", T::GearModule, &gear_.module, "%.2f", 0.25);
+    field("gears.width", T::GearWidth, &gear_.width, "%.1f", 1.0);
+    if (gear_.rack)
+        field("gears.base", T::RackBase, &gear_.rack_base, "%.1f", 0.5);
+    else
+        field("gears.bore", T::GearBore, &gear_.bore, "%.2f", 0.1);
+    field("gears.pressure", T::GearPressureAngle, &gear_.pressure_angle, "%.1f", 0.5);
+    if (gear_.helix_angle > 0.0) {
+        field("gears.helix", T::GearHelixAngle, &gear_.helix_angle, "%.1f", 1.0);
+        if (ImGui::Checkbox(tr(T::GearLeftHand), &gear_.left_hand))
+            changed = true;
+    }
+    field("gears.backlash", T::GearBacklash, &gear_.backlash, "%.2f", 0.05);
+    loc::TextDisabled("%s", tr(T::GearBacklashHint));
+    if (gear_edited_ && !ImGui::IsAnyItemActive()) {
+        gear_edited_ = false;
+        changed = true;
+    }
+    if (changed)
+        rebuild_gear();
+
+    // The gear it meshes with.
+    section(T::GearMate);
+    {
+        double mate = gear_mate_teeth_;
+        const float width = 130.0f * scale_;
+        ImGui::SetNextItemWidth(width);
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        loc::InputNumber(tr(T::GearMateTeeth), &mate, "%.0f", 1.0);
+        g_field_rects["gears.mate"] = ImVec4(at.x, at.y, at.x + width - 2.0f * (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x),
+                                             at.y + ImGui::GetFrameHeight());
+        gear_mate_teeth_ = int(std::lround(std::clamp(mate, 6.0, 400.0)));
+        if (gear_error_.empty() && gear_.rack) {
+            const double axis = cad::center_distance(gear_, gear_mate_teeth_);
+            loc::Text(tr(T::RackAxis), number(axis, 3).c_str(), number(cad::rack_pitch_height(gear_) + axis, 3).c_str());
+            loc::TextDisabled(tr(T::RackTravel), number(cad::gear_dims(gear_).circular_pitch * gear_mate_teeth_, 3).c_str());
+        } else if (gear_error_.empty()) {
+            loc::Text(tr(T::GearCenterDistance), number(cad::center_distance(gear_, gear_mate_teeth_), 3).c_str());
+            const double ratio = double(gear_mate_teeth_) / gear_.teeth;
+            loc::TextDisabled(tr(T::GearRatio), number(ratio, 3).c_str());
+        }
+    }
+
+    // What it measures.
+    section(T::DesignSecMeasures);
+    if (!gear_error_.empty()) {
+        loc::TextColored(rgb(0xE5484D), "%s", tr(T::FastenerBad));
+        rect_of("gears_bad");
+        loc::TextDisabled("%s", gear_error_.c_str());
+    } else if (ImGui::BeginTable("##gear_measures", 2)) {
+        const cad::GearDims d = cad::gear_dims(gear_);
+        const auto line = [](const char* name, const std::string& value) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            loc::TextDisabled("%s", name);
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(value.c_str());
+        };
+        if (gear_.rack) {
+            line(tr(T::RackLength), number(d.circular_pitch * gear_.teeth, 3) + " mm");
+            line(tr(T::RackPitchLine), number(cad::rack_pitch_height(gear_), 3) + " mm");
+        } else {
+            line(tr(T::GearPitchDiameter), number(d.pitch_diameter, 3) + " mm");
+            line(tr(T::GearOutsideDiameter), number(d.outside_diameter, 3) + " mm");
+            line(tr(T::GearRootDiameter), number(d.root_diameter, 3) + " mm");
+        }
+        line(tr(T::GearCircularPitch), number(d.circular_pitch, 3) + " mm");
+        line(tr(T::DesignVolume), format("%.1f mm³", gear_mesh_.signed_volume()));
+        line(tr(T::DesignBox), format("%.1f × %.1f × %.1f mm", double(gear_box_.max.x - gear_box_.min.x),
+                                      double(gear_box_.max.y - gear_box_.min.y), double(gear_box_.max.z - gear_box_.min.z)));
+        ImGui::EndTable();
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+
+    // The footer: to the plate, and with its mate.
+    ImGui::Separator();
+    const bool can_send = !gear_mesh_.empty();
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(kViolet));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(0x7C3AED));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, rgb(0x6D28D9));
+    ImGui::BeginDisabled(!can_send);
+    const bool send = ImGui::Button(tr(T::DesignSend), ImVec2(-FLT_MIN, ImGui::GetFrameHeight() * 1.3f));
+    ImGui::EndDisabled();
+    ImGui::PopStyleColor(3);
+    rect_of("gears_send");
+    ImGui::BeginDisabled(!can_send);
+    const bool pair = ImGui::Button(tr(T::GearSendPair), ImVec2(-FLT_MIN, 0));
+    ImGui::EndDisabled();
+    rect_of("gears_send_pair");
+    if (send || pair)
+        send_gear_to_plate(pair);
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+// The chosen model changed while a field or a handle is dragged: a large
+// one keeps its old mesh drawn moved, turned and scaled to where the new one
+// goes, and the plate is made again once the drag ends (frame()); a small one
+// is made again now, so the change shows as it happens.
+void App::selected_changed_live() {
+    if (selected_ < 0 || std::size_t(selected_) >= objects_.size())
+        return;
+    PlateObject& o = objects_[std::size_t(selected_)];
+    constexpr std::size_t kLiveTriangles = 200000;
+    const std::size_t i = std::size_t(selected_);
+    if (ImGui::IsAnyItemActive() && o.mesh.triangle_count() >= kLiveTriangles && i < built_places_.size()) {
+        if (!live_pending_) {
+            PlateObject before = o;
+            before.place = built_places_[i];
+            live_from_ = placement_map(before);
+            live_pending_ = true;
+        }
+        const Affine step = between(live_from_, placement_map(o));
+        live_model_ = identity();
+        for (int r = 0; r < 3; ++r) {
+            for (int c = 0; c < 3; ++c)
+                live_model_[std::size_t(4 * c + r)] = float(step.a[std::size_t(3 * r + c)]);
+            live_model_[std::size_t(12 + r)] = float(step.b[std::size_t(r)]);
+        }
+    } else {
+        plate_changed();
+    }
+}
+
+// The handles of the Move, Rotate and Scale tools on the chosen model, drawn
+// over the view at a fixed size on the screen, and their drags. True while a
+// handle has the mouse (the view does not turn or pick then).
+bool App::gizmo(bool editing) {
+    const ImGuiIO& io = ImGui::GetIO();
+    const bool tool = tool_ == PlateTool::Move || tool_ == PlateTool::Rotate || tool_ == PlateTool::Scale;
+    if (!editing || !tool || selected_ < 0 || std::size_t(selected_) >= placed_meshes_.size() || viewer_ ||
+        !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f)) {
+        gizmo_drag_.reset();
+        return false;
+    }
+    PlateObject& o = objects_[std::size_t(selected_)];
+    const BoundingBox box = placed_meshes_[std::size_t(selected_)].bounding_box();
+    if (box.empty)
+        return false;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](Vec3 p, ImVec2& out) {
+        const float cx = vp[0] * p.x + vp[4] * p.y + vp[8] * p.z + vp[12];
+        const float cy = vp[1] * p.x + vp[5] * p.y + vp[9] * p.z + vp[13];
+        const float w = vp[3] * p.x + vp[7] * p.y + vp[11] * p.z + vp[15];
+        if (!(w > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        return true;
+    };
+    const Vec3 c{(box.min.x + box.max.x) * 0.5f + drag_offset_.x, (box.min.y + box.max.y) * 0.5f + drag_offset_.y,
+                 (box.min.z + box.max.z) * 0.5f};
+    ImVec2 c2, r2;
+    if (!project(c, c2) || !project(c + camera_.right(), r2))
+        return false;
+    const float px_per_mm = std::max(std::hypot(r2.x - c2.x, r2.y - c2.y), 1e-4f);
+    const float reach = 90.0f * scale_;          // the handles' length on the screen
+    const float world = reach / px_per_mm;       // in mm at the model
+    const Vec3 axes[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    const ImU32 colours[3] = {IM_COL32(229, 72, 77, 255), IM_COL32(63, 191, 127, 255), IM_COL32(59, 130, 246, 255)};
+    const auto bright = [](ImU32 colour) {
+        const int r = int(colour & 0xFF), g = int((colour >> 8) & 0xFF), b = int((colour >> 16) & 0xFF);
+        return IM_COL32(std::min(255, r + 70), std::min(255, g + 70), std::min(255, b + 70), 255);
+    };
+    const auto segment_distance = [](ImVec2 p, ImVec2 a, ImVec2 b) {
+        const float dx = b.x - a.x, dy = b.y - a.y, l = dx * dx + dy * dy;
+        const float t = l > 0.0f ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l, 0.0f, 1.0f) : 0.0f;
+        return std::hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    };
+    const int kind = tool_ == PlateTool::Move ? 0 : tool_ == PlateTool::Rotate ? 1 : 2;
+    // Where each handle is on the screen.
+    ImVec2 ends[3];
+    bool seen[3] = {};
+    for (int k = 0; k < 3; ++k)
+        seen[k] = project(c + axes[k] * world, ends[k]);
+    std::vector<ImVec2> rings[3];
+    if (kind == 1)
+        for (int k = 0; k < 3; ++k) {
+            const Vec3 u = axes[(k + 1) % 3], v = axes[(k + 2) % 3];
+            for (int i = 0; i <= 72; ++i) {
+                const float t = 6.2831853f * float(i) / 72.0f;
+                ImVec2 q;
+                if (project(c + (u * std::cos(t) + v * std::sin(t)) * world, q))
+                    rings[k].push_back(q);
+            }
+        }
+    // The handle under the mouse: kind and axis (axis 3: the centre's).
+    const float near = 8.0f * scale_;
+    int hover_kind = -1, hover_axis = -1;
+    const ImVec2 m = io.MousePos;
+    // The view's canvas is the last item drawn: over it, or pressed on it
+    // this frame (it takes the press before the handles see it).
+    const bool in_view = (ImGui::IsItemHovered() || ImGui::IsItemActive()) && m.x >= view_pos_.x &&
+                         m.y >= view_pos_.y && m.x <= view_pos_.x + view_size_.x && m.y <= view_pos_.y + view_size_.y;
+    if (!gizmo_drag_ && in_view) {
+        float best = near;
+        for (int k = 0; k < 3; ++k) {
+            if (kind == 0 && k < 2 && seen[k] && segment_distance(m, c2, ends[k]) < best)
+                best = segment_distance(m, c2, ends[k]), hover_kind = 0, hover_axis = k;
+            if (kind == 2 && seen[k] && std::hypot(m.x - ends[k].x, m.y - ends[k].y) < best + 2.0f)
+                best = std::hypot(m.x - ends[k].x, m.y - ends[k].y), hover_kind = 2, hover_axis = k;
+            if (kind == 1)
+                for (std::size_t i = 0; i + 1 < rings[k].size(); ++i)
+                    if (const float d = segment_distance(m, rings[k][i], rings[k][i + 1]); d < best)
+                        best = d, hover_kind = 1, hover_axis = k;
+        }
+        if (kind == 2 && std::hypot(m.x - c2.x, m.y - c2.y) < near + 2.0f)
+            hover_kind = 3, hover_axis = 3;
+    }
+    // A press on a handle starts its drag.
+    if (hover_kind >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        gizmo_drag_ = GizmoDrag{hover_kind, hover_axis, m, m, o.place};
+    }
+    if (gizmo_drag_) {
+        GizmoDrag& g = *gizmo_drag_;
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            if (g.moved)
+                plate_changed();
+            gizmo_drag_.reset();
+            return true;
+        }
+        if (m.x != g.last.x || m.y != g.last.y) {
+            g.moved = true;
+            const int k = std::min(g.axis, 2);
+            if (g.kind == 0) { // along the axis: the mouse's move along the arrow, in mm
+                const float ax = ends[k].x - c2.x, ay = ends[k].y - c2.y, len = std::max(std::hypot(ax, ay), 1.0f);
+                const double mm = double(((m.x - g.last.x) * ax + (m.y - g.last.y) * ay) / len) * world / len;
+                (k == 0 ? o.place.x : o.place.y) += mm;
+                g.total += mm;
+            } else if (g.kind == 1) { // about the axis: the angle swept around the centre, as seen
+                const double a0 = std::atan2(double(g.last.y - c2.y), double(g.last.x - c2.x));
+                const double a1 = std::atan2(double(m.y - c2.y), double(m.x - c2.x));
+                double d = a1 - a0;
+                while (d > std::numbers::pi)
+                    d -= 2.0 * std::numbers::pi;
+                while (d < -std::numbers::pi)
+                    d += 2.0 * std::numbers::pi;
+                // The screen's y grows down: a turn that looks counter-clockwise
+                // has d < 0; it is positive about an axis pointing at the eye.
+                const double facing = dot(axes[k], camera_.eye() - c) > 0.0f ? 1.0 : -1.0;
+                g.total += -d * facing * 180.0 / std::numbers::pi;
+                const double target = io.KeyShift ? std::round(g.total / 15.0) * 15.0 : g.total;
+                if (target != g.applied) {
+                    o.place.rotation = rotated(o.place.rotation, k, target - g.applied);
+                    g.applied = target;
+                }
+            } else { // scale: along the handle's arrow, or from the centre for all
+                double factor = 1.0;
+                if (g.kind == 2) {
+                    const float ax = ends[k].x - c2.x, ay = ends[k].y - c2.y, len = std::max(std::hypot(ax, ay), 1.0f);
+                    factor = 1.0 + double(((m.x - g.start.x) * ax + (m.y - g.start.y) * ay) / len) / double(len);
+                } else {
+                    const double from = std::max(double(std::hypot(g.start.x - c2.x, g.start.y - c2.y)), 4.0);
+                    factor = double(std::hypot(m.x - c2.x, m.y - c2.y)) / from;
+                }
+                factor = std::clamp(factor, 0.02, 50.0);
+                g.total = factor;
+                o.place.scale = g.place0.scale;
+                if (g.kind == 3 || keep_scale_) {
+                    for (double& sc : o.place.scale)
+                        sc = std::max(sc * factor, 1e-3);
+                } else {
+                    // The model's own axis nearest to the bed's (its scale is along its own axes).
+                    const Rotation& r = o.place.rotation;
+                    int own = 0;
+                    for (int j = 1; j < 3; ++j)
+                        if (std::abs(r[std::size_t(3 * k + j)]) > std::abs(r[std::size_t(3 * k + own)]))
+                            own = j;
+                    o.place.scale[std::size_t(own)] = std::max(o.place.scale[std::size_t(own)] * factor, 1e-3);
+                }
+            }
+            g.last = m;
+            selected_changed_live();
+        }
+    }
+    // Drawn over the model.
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    const int active_kind = gizmo_drag_ ? gizmo_drag_->kind : hover_kind;
+    const int active_axis = gizmo_drag_ ? gizmo_drag_->axis : hover_axis;
+    const float thin = 2.5f * scale_, thick = 4.5f * scale_;
+    const auto name_rect = [&](const std::string& name, ImVec2 at) {
+        g_menu_rects[name] = ImVec4(at.x - 3.0f, at.y - 3.0f, at.x + 3.0f, at.y + 3.0f);
+    };
+    for (int k = 0; k < 3; ++k) {
+        const bool lit = active_axis == k && active_kind >= 0;
+        const ImU32 col = lit ? bright(colours[k]) : colours[k];
+        if (kind == 0 && k < 2 && seen[k]) {
+            dl->AddLine(c2, ends[k], col, lit ? thick : thin);
+            const float ax = ends[k].x - c2.x, ay = ends[k].y - c2.y, len = std::max(std::hypot(ax, ay), 1.0f);
+            const ImVec2 u(ax / len, ay / len), n(-u.y, u.x);
+            const float head = 12.0f * scale_;
+            dl->AddTriangleFilled(ImVec2(ends[k].x + u.x * head, ends[k].y + u.y * head),
+                                  ImVec2(ends[k].x + n.x * head * 0.5f, ends[k].y + n.y * head * 0.5f),
+                                  ImVec2(ends[k].x - n.x * head * 0.5f, ends[k].y - n.y * head * 0.5f), col);
+            name_rect(std::string("gizmo_move_") + "xy"[k], ImVec2(c2.x + ax * 0.75f, c2.y + ay * 0.75f));
+        } else if (kind == 1 && rings[k].size() > 1) {
+            for (std::size_t i = 0; i + 1 < rings[k].size(); ++i)
+                dl->AddLine(rings[k][i], rings[k][i + 1], col, lit ? thick : thin);
+            name_rect(std::string("gizmo_turn_") + "xyz"[k], rings[k][rings[k].size() / 8]);
+        } else if (kind == 2 && seen[k]) {
+            dl->AddLine(c2, ends[k], col, thin);
+            const float h = (lit ? 7.0f : 5.5f) * scale_;
+            dl->AddRectFilled(ImVec2(ends[k].x - h, ends[k].y - h), ImVec2(ends[k].x + h, ends[k].y + h), col);
+            name_rect(std::string("gizmo_scale_") + "xyz"[k], ends[k]);
+        }
+    }
+    if (kind == 2) {
+        const bool lit = active_kind == 3;
+        dl->AddCircleFilled(c2, (lit ? 8.0f : 6.5f) * scale_, lit ? IM_COL32(255, 255, 255, 255) : IM_COL32(230, 230, 236, 230));
+        name_rect("gizmo_scale_all", c2);
+    } else if (kind == 0) {
+        dl->AddCircleFilled(c2, 4.0f * scale_, IM_COL32(230, 230, 236, 230));
+    }
+    // What the drag does so far, next to the mouse.
+    if (gizmo_drag_ && gizmo_drag_->moved) {
+        const GizmoDrag& g = *gizmo_drag_;
+        static constexpr const char* axis_names[3] = {"X", "Y", "Z"};
+        const char* axis = g.axis < 3 ? axis_names[g.axis] : "XYZ";
+        const std::string text = g.kind == 0   ? format("%s %+.2f mm", axis, g.total)
+                                 : g.kind == 1 ? format("%s %+.1f°", axis, g.applied)
+                                               : format("%s %.0f %%", axis, g.total * 100.0);
+        const ImVec2 at(m.x + 16.0f * scale_, m.y + 12.0f * scale_), size = ImGui::CalcTextSize(text.c_str());
+        dl->AddRectFilled(ImVec2(at.x - 6.0f * scale_, at.y - 3.0f * scale_), ImVec2(at.x + size.x + 6.0f * scale_, at.y + size.y + 3.0f * scale_),
+                          ImGui::GetColorU32(rgb(theme_.panel, 0.92f)), 5.0f * scale_);
+        dl->AddText(at, ImGui::GetColorU32(rgb(theme_.text)), text.c_str());
+    }
+    dl->PopClipRect();
+    return gizmo_drag_.has_value() || hover_kind >= 0;
+}
+
+// The print panel folds in Prepare and Preview; the other tabs need theirs.
+bool App::panel_folded_now() const {
+    return panel_folded_ && !printer_page_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview);
+}
+
+// The folded panel's card in Prepare: the printer with its nozzle, the
+// filament and the print profile, at the top left of the view under its
+// buttons, for those who set things once and only slice.
+// What the view lowers while something moves (view_auto_quality.md, rules 5
+// and 6). Painting holds the occlusion of the last still frame from the first
+// dab, always (rule 6). Dragging a model holds it too, and turning the camera
+// draws none, a held screen-space occlusion would slide over the picture: for
+// the balanced quality always, for the automatic and the custom ones once a
+// frame passes 70 % of the frame's budget, until the motion stops; never for
+// the high one, or with ui.lower_while_moving off. The first still frame has
+// the whole picture again.
+void App::update_view_hold() {
+    const Mat4 view = camera_.view();
+    const bool camera_moves = view != last_view_;
+    last_view_ = view;
+    const bool painting = painting_object_ >= 0;
+    const bool model_moves = dragged_ || (gizmo_drag_ && gizmo_drag_->moved);
+    const int before = ao_hold_;
+    ao_hold_ = 0;
+    if (render_mode_ != RenderMode::Ambient) {
+        lowered_ = false;
+    } else if (painting) {
+        ao_hold_ = 1;
+    } else if ((camera_moves || model_moves) && lower_while_moving_ && view_quality_ != "high") {
+        const double cap = frame_cap() > 0.0 ? frame_cap() : 60.0;
+        if (view_quality_ == "balanced" || view_ms_ > 0.7 * 1000.0 / cap)
+            lowered_ = true;
+        if (lowered_)
+            ao_hold_ = camera_moves ? 2 : 1;
+    } else if (!camera_moves && !model_moves) {
+        lowered_ = false;
+    }
+    ao_hold_seen_ = std::max(ao_hold_seen_, ao_hold_);
+    if (ao_hold_ != before)
+        frame_pending_ = true; // the still frame draws the whole picture
+    // The first time the automatic quality lowers something, a short notice (rule 8).
+    if (ao_hold_ != 0 && !painting && view_quality_ == "automatic" && !lowered_notice_shown_) {
+        lowered_notice_shown_ = true;
+        notify(tr(T::ViewLoweredNotice));
+        save_preferences();
+    }
+}
+
+void App::compact_panel() {
+    // At the top left, the selection only (the owner's request, 2026-11-02:
+    // no printer picture, no buttons): printer, filament and profile, each a
+    // list; right of the plate's tools, the tool's card under it.
+    const float margin = 12.0f * scale_, left = 62.0f * scale_; // the tools' column: 12 + 42 + 8
+    const float width = std::min(250.0f * scale_, view_size_.x - left - margin);
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + left, view_pos_.y + 60.0f * scale_));
+    ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.94f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * scale_, 6.0f * scale_));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale_, 4.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##compact_panel", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    const ImVec2 pos = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
+    g_menu_rects["compact_panel"] = ImVec4(pos.x, pos.y, pos.x + size.x, pos.y + size.y);
+    compact_bottom_ = pos.y + size.y;
+    refresh_profiles();
+    const float line = ImGui::GetFrameHeight();
+    ImGui::PushItemWidth(-FLT_MIN);
+    // The printer's list, and the way back to the whole panel at its end.
+    ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - line - ImGui::GetStyle().ItemSpacing.x);
+    ImGui::BeginGroup();
+    profile_row(ProfileKind::Printer, true);
+    ImGui::EndGroup();
+    ImGui::PopItemWidth();
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::Printer));
+    ImGui::SameLine();
+    if (ImGui::Button("»##unfold_card", ImVec2(line, line))) {
+        panel_folded_ = false;
+        frame_pending_ = true;
+    }
+    g_menu_rects["panel_unfold"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                          ImGui::GetItemRectMax().y);
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::PanelUnfoldTip));
+    profile_row(ProfileKind::Filament, true);
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::Material));
+    profile_row(ProfileKind::Print, true);
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::Print));
+    ImGui::PopItemWidth();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(3);
+}
+
+// The way back to the whole panel: a tab at the left edge of the view.
+void App::unfold_button() {
+    const float w = 22.0f * scale_, h = 64.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x, view_pos_.y + view_size_.y * 0.5f - h * 0.5f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::Begin("##unfold", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoFocusOnAppearing);
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+    if (ImGui::Button("»##unfold", ImVec2(w, h))) {
+        panel_folded_ = false;
+        frame_pending_ = true;
+    }
+    ImGui::PopStyleColor(3);
+    g_menu_rects["panel_unfold"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                          ImGui::GetItemRectMax().y);
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::PanelUnfoldTip));
+    ImGui::End();
+    ImGui::PopStyleVar(2);
+}
+
+// What draws the view and on what machine (view_auto_quality.md, rule 1):
+// the graphics card from the window's graphics, the screen from GLFW, the
+// processor, memory and power from the system.
+void App::read_graphics_info() {
+    system_ = system_info();
+    system_read_ = glfwGetTime();
+    if (vulkan_) {
+        gpu_renderer_ = vk_.device_name();
+        gpu_vendor_.clear();
+        gpu_version_ = "Vulkan " + vk_.api_version();
+        gpu_kind_ = vk_.device_kind();
+    } else if (gl_loaded_) {
+        const auto text = [](GLenum name) {
+            const GLubyte* t = glGetString(name);
+            return t ? std::string(reinterpret_cast<const char*>(t)) : std::string();
+        };
+        gpu_vendor_ = text(GL_VENDOR);
+        gpu_renderer_ = text(GL_RENDERER);
+        gpu_version_ = "OpenGL " + text(GL_VERSION);
+        gpu_kind_.clear();
+    }
+    if (GLFWmonitor* monitor = glfwGetPrimaryMonitor())
+        if (const GLFWvidmode* mode = glfwGetVideoMode(monitor))
+            screen_width_ = mode->width, screen_height_ = mode->height, screen_hz_ = mode->refreshRate;
+}
+
+// The quality this machine gets when it chooses by itself. Until the first
+// run's measurement (rule 2) lands, by the kind of card: one drawn by the
+// processor (llvmpipe, SwiftShader, Microsoft's basic driver) gets the light
+// quality, an integrated one the balanced, the rest the high.
+std::string App::recommended_quality() const {
+    std::string name = gpu_renderer_ + " " + gpu_vendor_;
+    for (char& c : name)
+        c = char(std::tolower(static_cast<unsigned char>(c)));
+    const auto has = [&](const char* word) { return name.find(word) != std::string::npos; };
+    if (has("llvmpipe") || has("softpipe") || has("swiftshader") || has("software") || has("basic render") ||
+        gpu_kind_ == "cpu")
+        return "light";
+    if (gpu_kind_ == "integrated" || has("intel") || has("uhd") || has("iris") || has("vega 8") ||
+        has("radeon(tm) graphics") || has("mali") || has("adreno"))
+        return "balanced";
+    return "high";
+}
+
+// The fixed qualities (view_auto_quality.md, rule 4); automatic takes the
+// recommended one; custom leaves the options as they are.
+void App::apply_quality(const std::string& quality) {
+    view_quality_ = quality;
+    std::string q = quality == "automatic" ? recommended_quality() : quality;
+    // On battery with the saver on, the light one (rule 7).
+    if (quality == "automatic" && battery_saver_ && system_.power == PowerSource::Battery)
+        q = "light";
+    const int most = vulkan_ ? 8 : std::max(renderer_.max_samples(), 1);
+    if (q == "high")
+        render_mode_ = RenderMode::Ambient, msaa_ = std::min(8, most), fxaa_ = true;
+    else if (q == "balanced")
+        render_mode_ = RenderMode::Ambient, msaa_ = std::min(4, most), fxaa_ = true;
+    else if (q == "light")
+        render_mode_ = RenderMode::Fast, msaa_ = std::min(2, most), fxaa_ = true;
+}
+
+// A drawing option changed by hand: the quality is the person's now (rule 4).
+void App::video_set_by_hand() {
+    view_quality_ = "custom";
+}
+
+// The cap of frames a second (rule 3): the chosen one, the screen's rate for
+// 0, none for -1; 30 on battery with the saver on (rule 7).
+double App::frame_cap() const {
+    double cap = max_fps_ < 0 ? 0.0 : max_fps_ == 0 ? double(std::max(screen_hz_, 30)) : double(max_fps_);
+    if (battery_saver_ && system_.power == PowerSource::Battery)
+        cap = cap > 0.0 ? std::min(cap, 30.0) : 30.0;
+    return cap;
+}
+
+App::ConfigState App::config_state() const {
+    ConfigState c;
+    c.english = language() == Language::English;
+    c.dark = theme_.dark;
+    c.render = render_mode_, c.msaa = msaa_, c.fxaa = fxaa_, c.moire = moire_, c.ao_strength = ao_strength_;
+    c.tips = tips_, c.tutorials = assistant_tutorials_, c.glossary = assistant_glossary_, c.material = assistant_material_;
+    c.cad_design = cad_design_, c.orthographic = camera_.orthographic, c.level = view_level_, c.gpu = settings_.gpu;
+    c.graphics_api = graphics_api_, c.view_quality = view_quality_, c.max_fps = max_fps_, c.vsync = vsync_;
+    c.lower_while_moving = lower_while_moving_, c.battery_saver = battery_saver_, c.show_frame_time = show_frame_time_;
+    c.panel_folded = panel_folded_;
+    return c;
+}
+
+void App::restore_config(const ConfigState& c) {
+    if ((language() == Language::English) != c.english)
+        set_language(c.english ? Language::English : Language::Spanish);
+    if (theme_.dark != c.dark) {
+        theme_ = c.dark ? dark_theme() : light_theme();
+        apply_theme();
+    }
+    render_mode_ = c.render, msaa_ = c.msaa, fxaa_ = c.fxaa, moire_ = c.moire, ao_strength_ = c.ao_strength;
+    tips_ = c.tips, assistant_tutorials_ = c.tutorials, g_glossary_tips = assistant_glossary_ = c.glossary;
+    assistant_material_ = c.material;
+    cad_design_ = c.cad_design, camera_.orthographic = c.orthographic;
+    if (view_level_ != c.level)
+        choose_level(c.level);
+    settings_.gpu = c.gpu;
+    graphics_api_ = c.graphics_api, view_quality_ = c.view_quality, max_fps_ = c.max_fps;
+    if (vsync_ != c.vsync) {
+        vsync_ = c.vsync;
+        if (vulkan_)
+            vk_.set_vsync(vsync_);
+        else
+            glfwSwapInterval(vsync_ ? 1 : 0);
+    }
+    lower_while_moving_ = c.lower_while_moving, battery_saver_ = c.battery_saver, show_frame_time_ = c.show_frame_time;
+    panel_folded_ = c.panel_folded;
+}
+
+// Configuración (preferences.md): pages on the left, the options on the
+// right, a search over all of them, Cancelar and Aceptar at the foot. The
+// view stays visible behind it, so the Video page's changes show at once.
+void App::config_window() {
+    if (!config_open_) {
+        config_before_.reset();
+        return;
+    }
+    if (!config_before_) {
+        config_before_ = config_state();
+        system_ = system_info(); // the memory and power as they are now
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const ImVec2 size(std::min(760.0f * scale_, vp->Size.x - 40.0f * scale_), std::min(560.0f * scale_, vp->Size.y - 40.0f * scale_));
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing,
+                            ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(size, ImGuiCond_Appearing);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    bool open = true;
+    if (!ImGui::Begin(tr(T::ConfigTitle), &open, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::End();
+        ImGui::PopStyleColor();
+        return;
+    }
+    g_menu_rects["config_window"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                           ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                           ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    const auto rect_of = [](const std::string& name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    // The search (rule 3), over every page.
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    char query[128] = {};
+    config_query_.copy(query, sizeof query - 1);
+    if (ImGui::InputTextWithHint("##config_search", tr(T::ConfigSearch), query, sizeof query))
+        config_query_ = query;
+    std::string wanted = config_query_;
+    for (char& c : wanted)
+        c = char(std::tolower(static_cast<unsigned char>(c)));
+
+    static constexpr T kPages[] = {T::ConfigGeneral, T::ConfigInterface, T::ConfigVideo, T::ConfigCamera,
+                                   T::ConfigAssistant, T::ConfigPlugins, T::ConfigOther};
+    static constexpr const char* kPageIds[] = {"general", "interface", "video", "camera", "assistant", "plugins", "other"};
+    const float foot = ImGui::GetFrameHeightWithSpacing() * 1.6f;
+    ImGui::BeginChild("##config_pages", ImVec2(150.0f * scale_, -foot));
+    for (int i = 0; i < int(std::size(kPages)); ++i) {
+        if (ImGui::Selectable(tr(kPages[i]), config_page_ == i && wanted.empty()))
+            config_page_ = i, config_query_.clear(), wanted.clear();
+        rect_of(std::string("config_page_") + kPageIds[i]);
+    }
+    ImGui::EndChild();
+    ImGui::SameLine();
+    ImGui::BeginChild("##config_options", ImVec2(0, -foot));
+    ImGui::PushTextWrapPos(0.0f);
+    const float control_x = 250.0f * scale_;
+    const float control_w = std::max(ImGui::GetContentRegionAvail().x - control_x, 160.0f * scale_);
+    int shown_page = -1;
+    // One option: its name on the left, its control on the right. Drawn when
+    // its page is chosen, or when the search finds its name.
+    const auto row = [&](int page, T label, const std::string& key, const std::function<void()>& control,
+                         const char* note = nullptr) {
+        std::string name = tr(label);
+        for (char& c : name)
+            c = char(std::tolower(static_cast<unsigned char>(c)));
+        if (wanted.empty() ? page != config_page_ : name.find(wanted) == std::string::npos)
+            return;
+        if (!wanted.empty() && shown_page != page) { // the page's name above its hits
+            shown_page = page;
+            ImGui::Spacing();
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(kPages[page]));
+            ImGui::Separator();
+        }
+        ImGui::PushID(key.c_str());
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(tr(label));
+        ImGui::SameLine(control_x);
+        ImGui::SetNextItemWidth(control_w);
+        control();
+        rect_of("pref." + key);
+        config_keys_seen_.insert(key);
+        if (note) {
+            ImGui::SetCursorPosX(control_x);
+            loc::TextDisabled("%s", note);
+        }
+        ImGui::PopID();
+    };
+    const auto toggle = [&](bool& v) {
+        return [&v] { ImGui::Checkbox("##v", &v); };
+    };
+    const auto soon = [&] {
+        ImGui::BeginDisabled(true);
+        ImGui::TextUnformatted(tr(T::ComingSoon));
+        ImGui::EndDisabled();
+    };
+
+    // General.
+    row(0, T::Language, "language", [&] {
+        const bool english = language() == Language::English;
+        if (ImGui::BeginCombo("##v", english ? "English" : "Español")) {
+            if (ImGui::Selectable("Español", !english))
+                set_language(Language::Spanish);
+            if (ImGui::Selectable("English", english))
+                set_language(Language::English);
+            ImGui::EndCombo();
+        }
+    });
+    row(0, T::ConfigComputeGpu, "compute.gpu", [&] {
+        int v = settings_.gpu == GpuMode::Auto ? 0 : 1;
+        if (ImGui::Combo("##v", &v, (std::string(tr(T::ConfigAutomatic)) + '\0' + tr(T::ConfigNo) + '\0' + '\0').c_str()))
+            settings_.gpu = v == 0 ? GpuMode::Auto : GpuMode::Off, ++revision_.settings;
+    }, tr(T::ConfigComputeGpuNote));
+
+    // Interfaz.
+    row(1, T::Theme, "theme", [&] {
+        if (ImGui::BeginCombo("##v", tr(theme_.dark ? T::Dark : T::Light))) {
+            if (ImGui::Selectable(tr(T::Dark), theme_.dark) && !theme_.dark)
+                theme_ = dark_theme(), apply_theme();
+            if (ImGui::Selectable(tr(T::Light), !theme_.dark) && theme_.dark)
+                theme_ = light_theme(), apply_theme();
+            ImGui::EndCombo();
+        }
+    });
+    row(1, T::ConfigLevel, "ui.level", [&] {
+        const T names[] = {T::LevelBasic, T::LevelNormal, T::LevelAdvanced, T::LevelCustom};
+        const ViewLevel levels[] = {ViewLevel::Basic, ViewLevel::Normal, ViewLevel::Advanced, ViewLevel::Custom};
+        int at = 1;
+        for (int k = 0; k < 4; ++k)
+            if (levels[k] == view_level_)
+                at = k;
+        if (ImGui::BeginCombo("##v", tr(names[at]))) {
+            for (int k = 0; k < 4; ++k)
+                if (ImGui::Selectable(tr(names[k]), k == at))
+                    choose_level(levels[k]);
+            ImGui::EndCombo();
+        }
+    });
+    row(1, T::PanelFolded, "ui.panel_folded", toggle(panel_folded_), tr(T::PanelFoldedNote));
+    row(1, T::DesignPref, "ui.cad_design", [&] {
+        if (ImGui::Checkbox("##v", &cad_design_) && !cad_design_ && engineering_tab(tab_))
+            set_tab(Tab::Prepare);
+    });
+
+    // Video (rule 8): the machine, then the options in the spec's order.
+    if (wanted.empty() && config_page_ == 2) {
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ConfigMachine));
+        ImGui::Separator();
+        const std::string cpu = system_.cpu.empty() ? std::string("?") : system_.cpu;
+        loc::TextDisabled(tr(T::ConfigMachineCpu), cpu.c_str(), system_.physical_cores, system_.logical_cores);
+        loc::TextDisabled(tr(T::ConfigMachineRam), bytes_text(system_.ram_total).c_str(), bytes_text(system_.ram_free).c_str());
+        loc::TextDisabled(tr(T::ConfigMachineGpu), (gpu_vendor_.empty() ? gpu_renderer_ : gpu_vendor_ + " · " + gpu_renderer_).c_str(),
+                          gpu_version_.c_str());
+        if (screen_width_ > 0 && screen_hz_ > 0)
+            loc::TextDisabled(tr(T::ConfigMachineScreen), screen_width_, screen_height_, screen_hz_, double(scale_));
+        else if (screen_width_ > 0) // a screen that does not say its rate (a virtual one)
+            loc::TextDisabled(tr(T::ConfigMachineScreenNoRate), screen_width_, screen_height_, double(scale_));
+        loc::TextDisabled("%s", tr(system_.power == PowerSource::Battery  ? T::ConfigOnBattery
+                                   : system_.power == PowerSource::Mains ? T::ConfigOnMains
+                                                                         : T::ConfigPowerUnknown));
+        if (ImGui::Button(tr(T::ConfigRecommended)))
+            apply_quality("automatic");
+        rect_of("config_recommended");
+        ImGui::SameLine();
+        ImGui::BeginDisabled(true);
+        ImGui::Button(tr(T::ConfigMeasureAgain));
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            loc::SetTooltip("%s", tr(T::ComingSoon));
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ConfigVideoOptions));
+        ImGui::Separator();
+    }
+    row(2, T::ConfigGraphicsApi, "ui.graphics_api", [&] {
+        const char* names[] = {tr(T::ConfigAutomatic), "Vulkan", "OpenGL"};
+        const char* ids[] = {"auto", "vulkan", "opengl"};
+        int at = graphics_api_ == "vulkan" ? 1 : graphics_api_ == "opengl" ? 2 : 0;
+        if (ImGui::BeginCombo("##v", names[at])) {
+            for (int k = 0; k < 3; ++k) {
+                const bool can = k != 1 || VulkanWindow::built();
+                if (ImGui::Selectable(names[k], k == at, can ? 0 : ImGuiSelectableFlags_Disabled))
+                    graphics_api_ = ids[k];
+                if (!can && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    loc::SetTooltip("%s", tr(T::ConfigNoVulkan));
+            }
+            ImGui::EndCombo();
+        }
+    }, (std::string(tr(T::ConfigNowDrawing)) + (vulkan_ ? "Vulkan" : "OpenGL") + ". " + tr(T::ConfigAppliesOnStart)).c_str());
+    row(2, T::ConfigGpuDevice, "ui.gpu_device", [&] {
+        ImGui::TextUnformatted(gpu_renderer_.empty() ? tr(T::ConfigAutomatic) : gpu_renderer_.c_str());
+    }, tr(T::ConfigGpuDeviceNote));
+    row(2, T::ConfigRenderLevel, "ui.render_level", soon);
+    row(2, T::ConfigQuality, "ui.view_quality", [&] {
+        const char* ids[] = {"automatic", "high", "balanced", "light", "custom"};
+        const T names[] = {T::ConfigAutomatic, T::ViewQualityHigh, T::ViewQualityBalanced, T::ViewQualityLight, T::ViewQualityCustom};
+        int at = 0;
+        for (int k = 0; k < 5; ++k)
+            if (view_quality_ == ids[k])
+                at = k;
+        if (ImGui::BeginCombo("##v", tr(names[at]))) {
+            for (int k = 0; k < 5; ++k)
+                if (ImGui::Selectable(tr(names[k]), k == at))
+                    apply_quality(ids[k]);
+            ImGui::EndCombo();
+        }
+    }, view_quality_ == "automatic" ? format(tr(T::ConfigQualityChosen), tr(recommended_quality() == "high"      ? T::ViewQualityHigh
+                                                                              : recommended_quality() == "balanced" ? T::ViewQualityBalanced
+                                                                                                                    : T::ViewQualityLight))
+                                         .c_str()
+                                    : nullptr);
+    row(2, T::Render, "render", [&] {
+        const T modes[] = {T::RenderFast, T::RenderAmbient, T::RenderRay};
+        if (ImGui::BeginCombo("##v", tr(modes[int(render_mode_)]))) {
+            for (int m = 0; m < 3; ++m)
+                if (ImGui::Selectable(tr(modes[m]), int(render_mode_) == m) && int(render_mode_) != m)
+                    render_mode_ = static_cast<RenderMode>(m), video_set_by_hand();
+            ImGui::EndCombo();
+        }
+    });
+    row(2, T::AoStrength, "ao_strength", [&] {
+        if (ImGui::SliderFloat("##v", &ao_strength_, 0.0f, 1.5f, "%.2f"))
+            video_set_by_hand();
+    });
+    row(2, T::ConfigBedShadow, "ui.bed_shadow", soon);
+    row(2, T::Antialiasing, "msaa", [&] {
+        std::vector<int> choices = {1};
+        const int most = vulkan_ ? 8 : std::min(renderer_.max_samples(), 8);
+        for (int n = 2; n <= most; n *= 2)
+            choices.push_back(n);
+        const auto name = [](int n) { return n == 1 ? std::string(tr(T::MsaaOff)) : "MSAA " + std::to_string(n) + "×"; };
+        if (ImGui::BeginCombo("##v", name(std::min(msaa_, choices.back())).c_str())) {
+            for (int n : choices)
+                if (ImGui::Selectable(name(n).c_str(), n == msaa_) && n != msaa_)
+                    msaa_ = n, video_set_by_hand();
+            ImGui::EndCombo();
+        }
+    });
+    row(2, T::Fxaa, "fxaa", [&] {
+        if (ImGui::Checkbox("##v", &fxaa_))
+            video_set_by_hand();
+    });
+    row(2, T::MoireFilter, "moire_filter", toggle(moire_));
+    row(2, T::ConfigRenderScale, "ui.render_scale", soon);
+    row(2, T::ConfigLowerWhileMoving, "ui.lower_while_moving", toggle(lower_while_moving_), tr(T::ConfigLowerWhileMovingNote));
+    row(2, T::ConfigMaxFps, "ui.max_fps", [&] {
+        const int values[] = {30, 60, 75, 120, 144, 0, -1};
+        const auto name = [&](int v) {
+            return v > 0 ? std::to_string(v) : std::string(tr(v == 0 ? T::ConfigFpsScreen : T::ConfigFpsNone));
+        };
+        if (ImGui::BeginCombo("##v", name(max_fps_).c_str())) {
+            for (const int v : values)
+                if (ImGui::Selectable(name(v).c_str(), v == max_fps_))
+                    max_fps_ = v;
+            ImGui::EndCombo();
+        }
+    });
+    row(2, T::ConfigVsync, "ui.vsync", [&] {
+        if (ImGui::Checkbox("##v", &vsync_)) {
+            if (vulkan_)
+                vk_.set_vsync(vsync_);
+            else
+                glfwSwapInterval(vsync_ ? 1 : 0);
+        }
+    });
+    row(2, T::ConfigBatterySaver, "ui.battery_saver", toggle(battery_saver_));
+    row(2, T::ConfigComputeGpu, "compute.gpu#video", [&] {
+        int v = settings_.gpu == GpuMode::Auto ? 0 : 1;
+        if (ImGui::Combo("##v", &v, (std::string(tr(T::ConfigAutomatic)) + '\0' + tr(T::ConfigNo) + '\0' + '\0').c_str()))
+            settings_.gpu = v == 0 ? GpuMode::Auto : GpuMode::Off, ++revision_.settings;
+    });
+    row(2, T::ConfigShowFrameTime, "ui.show_frame_time", toggle(show_frame_time_));
+
+    // Cámara.
+    row(3, T::ConfigPerspective, "ui.orthographic", [&] {
+        int v = camera_.orthographic ? 1 : 0;
+        if (ImGui::Combo("##v", &v, (std::string(tr(T::ConfigPerspectiveOn)) + '\0' + tr(T::ConfigOrthographic) + '\0' + '\0').c_str()))
+            camera_.orthographic = v == 1;
+    });
+
+    // Asistente.
+    row(4, T::TipsOn, "tips", toggle(tips_));
+    row(4, T::AssistantTutorials, "assistant.tutorials", toggle(assistant_tutorials_));
+    row(4, T::AssistantGlossary, "assistant.glossary_tips", [&] {
+        if (ImGui::Checkbox("##v", &assistant_glossary_))
+            g_glossary_tips = assistant_glossary_;
+    });
+    row(4, T::AssistantMaterial, "assistant.material_tips", toggle(assistant_material_));
+    row(4, T::TipsAgain, "tips_seen", [&] {
+        if (ImGui::Button(tr(T::ConfigShowAgain)))
+            tips_seen_.clear(), tips_ = true;
+    });
+
+    // Complementos.
+    row(5, T::ConfigRunPlugins, "plugins.run", soon);
+
+    // Otros: back to the factory values (rule 5), with a confirmation.
+    row(6, T::ConfigFactory, "factory", [&] {
+        if (ImGui::Button(tr(T::ConfigFactoryButton)))
+            ImGui::OpenPopup("##config_factory");
+        if (ImGui::BeginPopup("##config_factory")) {
+            ImGui::TextUnformatted(tr(T::ConfigFactoryAsk));
+            if (ImGui::Button(tr(T::ConfigFactoryYes))) {
+                ConfigState factory;
+                factory.english = false, factory.graphics_api = "auto", factory.view_quality = "automatic";
+                restore_config(factory);
+                apply_quality("automatic");
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button(tr(T::Cancel)))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+    }, tr(T::ConfigFactoryNote));
+    row(6, T::ConfigExport, "export", soon);
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+
+    // Cancelar puts back what was there; Aceptar keeps it and saves.
+    ImGui::Separator();
+    const float button_w = 120.0f * scale_;
+    ImGui::SetCursorPosX(ImGui::GetWindowWidth() - 2.0f * button_w - ImGui::GetStyle().ItemSpacing.x - ImGui::GetStyle().WindowPadding.x);
+    bool cancel = ImGui::Button(tr(T::Cancel), ImVec2(button_w, 0));
+    rect_of("config_cancel");
+    ImGui::SameLine();
+    const bool ok = ImGui::Button(tr(T::ConfigOk), ImVec2(button_w, 0));
+    rect_of("config_ok");
+    if (!open || (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
+        cancel = true;
+    ImGui::End();
+    ImGui::PopStyleColor();
+    if (cancel && config_before_)
+        restore_config(*config_before_);
+    if (ok)
+        save_preferences();
+    if (ok || cancel) {
+        config_open_ = false;
+        config_before_.reset();
+    }
 }
 
 // The command line under the view (rule 12): a tool by its name, then its
@@ -10778,6 +12561,36 @@ void App::run_command(std::string text) {
     if (word == "mandar" || word == "send" || word == "enviar") {
         last_command_ = word;
         send_design_to_plate();
+        return;
+    }
+    // The fasteners by name: the Fasteners page with that part.
+    static const std::pair<const char*, cad::FastenerKind> kFastenerWords[] = {
+        {"tornillo", cad::FastenerKind::HexBolt},   {"bolt", cad::FastenerKind::HexBolt},
+        {"allen", cad::FastenerKind::SocketBolt},   {"tuerca", cad::FastenerKind::HexNut},
+        {"nut", cad::FastenerKind::HexNut},         {"arandela", cad::FastenerKind::Washer},
+        {"washer", cad::FastenerKind::Washer},      {"varilla", cad::FastenerKind::ThreadedRod},
+        {"rod", cad::FastenerKind::ThreadedRod},    {"tornilleria", cad::FastenerKind::HexBolt},
+        {"fasteners", cad::FastenerKind::HexBolt},  {"mariposa", cad::FastenerKind::ThumbScrew},
+        {"moleteado", cad::FastenerKind::ThumbScrew}, {"thumbscrew", cad::FastenerKind::ThumbScrew},
+        {"separador", cad::FastenerKind::Standoff}, {"standoff", cad::FastenerKind::Standoff},
+        {"espaciador", cad::FastenerKind::Spacer},  {"spacer", cad::FastenerKind::Spacer}};
+    for (const auto& [name, kind] : kFastenerWords)
+        if (word == name) {
+            if (fastener_.kind != kind && word != "tornilleria" && word != "fasteners") {
+                fastener_.kind = kind;
+                fastener_dirty_ = true;
+            }
+            open_page(DesignPage::Fasteners);
+            return;
+        }
+    if (word == "engranaje" || word == "gear" || word == "engranajes" || word == "gears") {
+        open_page(DesignPage::Gears);
+        return;
+    }
+    if (word == "cremallera" || word == "rack") {
+        if (!gear_.rack)
+            gear_.rack = true, gear_.helix_angle = 0.0, gear_dirty_ = true;
+        open_page(DesignPage::Gears);
         return;
     }
     if (const std::optional<cad::Primitive> kind = primitive_named(word)) {
@@ -12251,6 +14064,7 @@ void App::layout() {
     }
     g_row_ids.clear();
     viewport();
+    update_view_hold();
     anchor_rect("plate", view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
     top_bar();
     // The printer's page covers the panel and the view (settings_panel.md,
@@ -12261,7 +14075,16 @@ void App::layout() {
     } else {
         // In Design, the panel takes the print settings' column (the owner's
         // request, 2026-11-02: the view stays clear).
-        if (tab_ == Tab::Design)
+        if (panel_folded_now()) {
+            if (tab_ == Tab::Prepare)
+                compact_panel(); // with its own way back
+            else
+                unfold_button();
+        } else if (tab_ == Tab::Design && design_page_ == DesignPage::Fasteners)
+            fasteners_panel(); // a page of the Design panel, in its place
+        else if (tab_ == Tab::Design && design_page_ == DesignPage::Gears)
+            gears_panel();
+        else if (tab_ == Tab::Design)
             design_panel();
         else
             settings_panel();
@@ -12275,7 +14098,7 @@ void App::layout() {
             object_settings_window();
         }
         mixing_dialog();
-        if (!has_plate_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device && tab_ != Tab::Design) // those panels have their own buttons
+        if (!has_plate_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device && !engineering_tab(tab_)) // those panels have their own buttons
             empty_hint();
         if (tab_ == Tab::Preview)
             preview_panels();
@@ -12286,7 +14109,7 @@ void App::layout() {
             part_labels();
         if (tab_ == Tab::Analysis)
             analysis_panel();
-        if (tab_ == Tab::Design) {
+        if (tab_ == Tab::Design && design_page_ == DesignPage::Design) {
             design_command_line();
             if (sketch_edit_) {
                 sketch_strip();
@@ -12325,6 +14148,7 @@ void App::layout() {
         tip("slice");
     }
     help_windows();
+    config_window();
     guide_overlay();
     if (!g_clamped.empty()) {
         notify(std::move(g_clamped));
@@ -12334,9 +14158,19 @@ void App::layout() {
     dialogs();
 
     // Shortcuts.
-    if (no_popup() && cad_design_ && tab_ == Tab::Design &&
-        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, ImGuiInputFlags_RouteGlobal))
-        send_design_to_plate(); // cad_design.md, rule 21
+    if (no_popup() && cad_design_ && engineering_tab(tab_) &&
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, ImGuiInputFlags_RouteGlobal)) {
+        if (design_page_ == DesignPage::Fasteners)
+            send_fastener_to_plate(false);
+        else if (design_page_ == DesignPage::Gears)
+            send_gear_to_plate(false);
+        else
+            send_design_to_plate(); // cad_design.md, rule 21
+    }
+    // Configuración: Ctrl+, and Ctrl+P (preferences.md).
+    if (no_popup() && (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma, ImGuiInputFlags_RouteGlobal) ||
+                       ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, ImGuiInputFlags_RouteGlobal)))
+        config_open_ = true;
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
@@ -12521,6 +14355,7 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.fxaa = fxaa_;
     f.moire_filter = moire_;
     f.ao_strength = ao_strength_;
+    f.ao_hold = ao_hold_;
     static const bool debug = [] {
         const char* v = std::getenv("TISMA_DEBUG_VISIBILITY");
         return v && *v == '1';
@@ -13162,6 +14997,8 @@ void App::script_input() {
                 design_scroll_to_ = key;
                 return;
             }
+            if (key.starts_with("fasteners.") || key.starts_with("gears.")) // a field of a Design page, in view
+                return;
             if (!setting_place(key))
                 return fail_step("no such setting");
             go_to_setting(key);
@@ -13417,8 +15254,10 @@ void App::script_input() {
     } else if (step.verb == "pref") { // a preference set as its checkbox would: cad_design 0|1
         if (step.key == "cad_design") {
             cad_design_ = step.value != "0";
-            if (!cad_design_ && tab_ == Tab::Design)
+            if (!cad_design_ && engineering_tab(tab_))
                 set_tab(Tab::Prepare);
+        } else if (step.key == "view_quality") { // as chosen in Configuración › Video
+            apply_quality(step.value);
         } else {
             return fail_step("unknown preference");
         }
@@ -13498,6 +15337,117 @@ void App::script_input() {
         if (!ok)
             return fail_step("the design's volume is " + std::to_string(design_volume_) + " (" + design_error_ + ")");
         next();
+    } else if (step.verb == "expect-fastener") { // the Fasteners tab's part: KIND (hex_nut...) and its volume in mm3 within 1 %
+        const double want = std::atof(step.value.c_str());
+        const double got = fastener_mesh_.signed_volume();
+        const bool ok = step.key == cad::fastener_id(fastener_.kind) && !fastener_mesh_.empty() &&
+                        std::abs(got - want) <= 0.01 * want;
+        std::printf("ui-script: expect-fastener %s %s: %s%s %.1f\n", step.key.c_str(), step.value.c_str(),
+                    ok ? "ok, " : "got ", cad::fastener_id(fastener_.kind), got);
+        if (!ok)
+            return fail_step("the part is " + std::string(cad::fastener_id(fastener_.kind)) + " of " + std::to_string(got) +
+                             " mm3 (" + fastener_error_ + ")");
+        next();
+    } else if (step.verb == "expect-gear") { // the Gears page's gear: TEETH and its volume in mm3 within 1 %
+        const double want = std::atof(step.value.c_str());
+        const double got = gear_mesh_.signed_volume();
+        const bool ok = std::atoi(step.key.c_str()) == gear_.teeth && !gear_mesh_.empty() && std::abs(got - want) <= 0.01 * want;
+        std::printf("ui-script: expect-gear %s %s: %s%d %.1f\n", step.key.c_str(), step.value.c_str(), ok ? "ok, " : "got ",
+                    gear_.teeth, got);
+        if (!ok)
+            return fail_step("the gear has " + std::to_string(gear_.teeth) + " teeth and " + std::to_string(got) + " mm3 (" +
+                             gear_error_ + ")");
+        next();
+    } else if (step.verb == "expect-held") { // the view held its occlusion (1) or drew none (2) since the last ask
+        const int want = std::atoi(step.key.c_str()), seen = ao_hold_seen_;
+        std::printf("ui-script: expect-held %d: %s%d\n", want, seen == want ? "ok, " : "got ", seen);
+        ao_hold_seen_ = 0;
+        if (seen != want)
+            return fail_step("it was " + std::to_string(seen));
+        next();
+    } else if (step.verb == "expect-occlusion-passes") { // at most N occlusions computed since the last ask (OpenGL)
+        const long passes = renderer_.occlusion_passes() - ao_passes_mark_;
+        ao_passes_mark_ = renderer_.occlusion_passes();
+        const long most = std::atol(step.key.c_str());
+        std::printf("ui-script: expect-occlusion-passes %ld: %s%ld\n", most, passes <= most ? "ok, " : "got ", passes);
+        if (passes > most)
+            return fail_step(std::to_string(passes) + " were computed");
+        next();
+    } else if (step.verb == "paint-drag") { // the mouse down at "x0 y0", in one frame to "x1 y1", up (the Paint tool on)
+        float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+        if (std::sscanf((step.key + " " + step.value).c_str(), "%f %f %f %f", &x0, &y0, &x1, &y1) != 4)
+            return fail_step("paint-drag takes x0 y0 x1 y1");
+        if (f == 0)
+            io.AddMousePosEvent(x0, y0);
+        else if (f == 2)
+            io.AddMouseButtonEvent(0, true);
+        else if (f == 4)
+            io.AddMousePosEvent(x1, y1);
+        else if (f == 6)
+            io.AddMouseButtonEvent(0, false);
+        else if (f >= 8)
+            next();
+    } else if (step.verb == "expect-paint-area") { // the painted pieces of the channel in use cover at least VALUE mm2
+        double area = 0.0;
+        for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+            const IndexedMesh m = weld_exact(placed_meshes_[i]);
+            for (const auto& piece : painted_pieces(m, objects_[i].painting, paint_channel_, paint_mark_)) {
+                const Vec3f u{piece[1].x - piece[0].x, piece[1].y - piece[0].y, piece[1].z - piece[0].z};
+                const Vec3f v{piece[2].x - piece[0].x, piece[2].y - piece[0].y, piece[2].z - piece[0].z};
+                const double cx = double(u.y) * v.z - double(u.z) * v.y, cy = double(u.z) * v.x - double(u.x) * v.z,
+                             cz = double(u.x) * v.y - double(u.y) * v.x;
+                area += 0.5 * std::sqrt(cx * cx + cy * cy + cz * cz);
+            }
+        }
+        const double want = std::atof(step.key.c_str());
+        std::printf("ui-script: expect-paint-area %s: %s%.2f\n", step.key.c_str(), area >= want ? "ok, " : "got ", area);
+        if (area < want)
+            return fail_step("the paint covers " + std::to_string(area) + " mm2");
+        next();
+    } else if (step.verb == "expect-config-covers") { // every option the preferences keep has a control (PF7)
+        static const char* const kOptionKeys[] = {
+            "language", "theme", "render", "msaa", "fxaa", "moire_filter", "ao_strength", "tips", "assistant.tutorials",
+            "assistant.glossary_tips", "assistant.material_tips", "ui.level", "ui.orthographic", "ui.cad_design",
+            "ui.graphics_api", "ui.view_quality", "ui.max_fps", "ui.vsync", "ui.lower_while_moving", "ui.battery_saver",
+            "ui.show_frame_time", "compute.gpu", "ui.panel_folded"};
+        std::string missing;
+        for (const char* key : kOptionKeys)
+            if (!config_keys_seen_.contains(key))
+                missing += std::string(missing.empty() ? "" : ", ") + key;
+        std::printf("ui-script: expect-config-covers: %s\n", missing.empty() ? "ok" : ("missing " + missing).c_str());
+        if (!missing.empty())
+            return fail_step("no control for " + missing);
+        next();
+    } else if (step.verb == "expect-quality") { // the Video page's quality and the drawing it set: "QUALITY RENDER MSAA"
+        std::istringstream want(step.key + " " + step.value);
+        std::string quality, render;
+        int msaa = 0;
+        want >> quality >> render >> msaa;
+        const char* modes[] = {"fast", "ao", "rt"};
+        const bool ok = view_quality_ == quality && render == modes[int(render_mode_)] && (msaa == 0 || msaa == msaa_);
+        std::printf("ui-script: expect-quality %s %s: %s%s %s %d\n", step.key.c_str(), step.value.c_str(), ok ? "ok, " : "got ",
+                    view_quality_.c_str(), modes[int(render_mode_)], msaa_);
+        if (!ok)
+            return fail_step("the quality is " + view_quality_);
+        next();
+    } else if (step.verb == "drag-control") { // press on a named control's middle, move by "dx dy" over 8 frames, release
+        const auto it = g_menu_rects.find(step.key);
+        if (f == 0 && it == g_menu_rects.end())
+            return fail_step("it is not on the screen");
+        float dx = 0, dy = 0;
+        std::sscanf(step.value.c_str(), "%f %f", &dx, &dy);
+        if (f == 0)
+            drag_from_ = ImVec2(0.5f * (it->second.x + it->second.z), 0.5f * (it->second.y + it->second.w));
+        if (f == 0)
+            io.AddMousePosEvent(drag_from_.x, drag_from_.y);
+        else if (f == 2)
+            io.AddMouseButtonEvent(0, true);
+        else if (f >= 3 && f <= 11)
+            io.AddMousePosEvent(drag_from_.x + dx * float(f - 3) / 8.0f, drag_from_.y + dy * float(f - 3) / 8.0f);
+        else if (f == 13)
+            io.AddMouseButtonEvent(0, false);
+        else if (f >= 15)
+            next();
     } else if (step.verb == "expect-apart") { // two named controls drawn, neither over the other
         const auto a = g_menu_rects.find(step.key), b = g_menu_rects.find(step.value);
         if (a == g_menu_rects.end() || b == g_menu_rects.end())
@@ -13546,6 +15496,14 @@ void App::frame() {
                       (render_mode_ == RenderMode::RayTraced && renderer_.has_ray_scene() &&
                        renderer_.ray_samples() < 256);
     const bool printer = printer_ && printer_->status().state != device::PrinterState::Disconnected;
+    // Never faster than the cap (view_auto_quality.md, rule 3): what is left
+    // of the frame's time is spent waiting for events, so the machine rests.
+    if (const double cap = frame_cap(); cap > 0.0 && options_.screenshot.empty()) {
+        const double left = frame_started_ + 1.0 / cap - glfwGetTime();
+        if (left > 0.0005)
+            glfwWaitEventsTimeout(left);
+    }
+    frame_started_ = glfwGetTime();
     if (busy)
         glfwPollEvents();
     else

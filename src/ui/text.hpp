@@ -10,6 +10,149 @@
     X(TabPreview, "Vista previa", "Preview")                                                                          \
     X(TabAnalysis, "Análisis", "Analysis")                                                                            \
     X(TabDesign, "Diseño", "Design")                                                                                  \
+    X(TabFasteners, "Tornillería", "Fasteners") \
+    X(ConfigMenu, "Configuración…", "Settings…") \
+    X(PanelFolded, "Panel de ajustes plegado", "Settings panel folded") \
+    X(CompactTitle, "Impresora, filamento y perfil", "Printer, filament and profile") \
+    X(PanelFoldedNote, "Deja solo la impresora, el filamento y el perfil de impresión en un recuadro, y la vista a todo el ancho.", "Keeps only the printer, the filament and the print profile in a small card, and the view at full width.") \
+    X(PanelFoldTip, "Plegar el panel: queda la impresora, el filamento y el perfil arriba de la vista", "Fold the panel: the printer, the filament and the profile stay on top of the view") \
+    X(PanelUnfoldTip, "Abrir el panel de ajustes", "Open the settings panel") \
+    X(ConfigTitle, "Configuración", "Settings") \
+    X(ConfigSearch, "Buscar una opción", "Search an option") \
+    X(ConfigGeneral, "General", "General") \
+    X(ConfigInterface, "Interfaz", "Interface") \
+    X(ConfigVideo, "Video", "Video") \
+    X(ConfigCamera, "Cámara", "Camera") \
+    X(ConfigAssistant, "Asistente", "Assistant") \
+    X(ConfigPlugins, "Complementos", "Plug-ins") \
+    X(ConfigOther, "Otros", "Other") \
+    X(ConfigComputeGpu, "Cálculo en la placa de video", "Computing on the graphics card") \
+    X(ConfigComputeGpuNote, "El laminado y el análisis usan la placa si hay; No los deja en el procesador.", "Slicing and the analysis use the card when there is one; No keeps them on the processor.") \
+    X(ConfigAutomatic, "Automática", "Automatic") \
+    X(ConfigNo, "No", "No") \
+    X(ConfigLevel, "Nivel de ajustes", "Settings level") \
+    X(ConfigMachine, "Este equipo", "This machine") \
+    X(ConfigMachineCpu, "Procesador: %s (%d núcleos, %d hilos)", "Processor: %s (%d cores, %d threads)") \
+    X(ConfigMachineRam, "Memoria: %s, %s libres", "Memory: %s, %s free") \
+    X(ConfigMachineGpu, "Placa de video: %s · %s", "Graphics card: %s · %s") \
+    X(ConfigMachineScreen, "Pantalla: %d × %d a %d Hz, escala %.2f", "Screen: %d × %d at %d Hz, scale %.2f") \
+    X(ConfigMachineScreenNoRate, "Pantalla: %d × %d, escala %.2f", "Screen: %d × %d, scale %.2f") \
+    X(ConfigOnBattery, "A batería", "On battery") \
+    X(ConfigOnBatteryShort, "a batería", "on battery") \
+    X(ConfigOnMains, "Enchufado", "Plugged in") \
+    X(ConfigPowerUnknown, "Sin batería", "No battery") \
+    X(ConfigRecommended, "Volver a lo recomendado", "Back to the recommended") \
+    X(ConfigMeasureAgain, "Medir de nuevo", "Measure again") \
+    X(ConfigVideoOptions, "Opciones", "Options") \
+    X(ConfigGraphicsApi, "API gráfica", "Graphics API") \
+    X(ConfigNoVulkan, "No hay Vulkan en este equipo", "There is no Vulkan on this machine") \
+    X(ConfigNowDrawing, "Ahora dibuja con ", "Drawing now with ") \
+    X(ConfigAppliesOnStart, "Un cambio se aplica al volver a abrir el programa.", "A change applies when the program opens again.") \
+    X(ConfigGpuDevice, "Placa de video", "Graphics card") \
+    X(ConfigGpuDeviceNote, "Automática pide la de alto rendimiento. Con OpenGL en Windows la elige Windows (Configuración de gráficos).", "Automatic asks for the high-performance one. With OpenGL on Windows, Windows picks it (Graphics settings).") \
+    X(ConfigRenderLevel, "Nivel de OpenGL", "OpenGL level") \
+    X(ConfigQuality, "Calidad", "Quality") \
+    X(ConfigQualityChosen, "Para este equipo: %s", "For this machine: %s") \
+    X(ViewQualityHigh, "Alta", "High") \
+    X(ViewQualityBalanced, "Equilibrada", "Balanced") \
+    X(ViewQualityLight, "Liviana", "Light") \
+    X(ViewQualityCustom, "Personalizada", "Custom") \
+    X(QualityAutomaticShort, "Calidad automática", "Automatic quality") \
+    X(QualityStatus, "%s · %d FPS", "%s · %d FPS") \
+    X(ViewHeldOcclusion, "oclusión congelada al mover", "occlusion held while moving") \
+    X(ViewNoOcclusionMoving, "sin oclusión al mover", "no occlusion while moving") \
+    X(ViewLoweredNotice, "Bajamos la calidad mientras se mueve para que la vista siga fluida. Podés cambiarlo en Configuración › Video.", "The quality goes down while something moves so the view stays smooth. You can change it in Settings › Video.") \
+    X(ConfigBedShadow, "Sombra sobre la cama", "Shadow on the bed") \
+    X(ConfigRenderScale, "Resolución de la vista", "View resolution") \
+    X(ConfigLowerWhileMoving, "Bajar la calidad al mover", "Lower the quality while moving") \
+    X(ConfigLowerWhileMovingNote, "Mientras algo se mueve la vista baja lo que haga falta y al soltar vuelve a la imagen completa.", "While something moves the view lowers what it must, and back to the full picture when released.") \
+    X(ConfigMaxFps, "Tope de cuadros por segundo", "Frame rate cap") \
+    X(ConfigFpsScreen, "La pantalla", "The screen's") \
+    X(ConfigFpsNone, "Sin tope", "No cap") \
+    X(ConfigVsync, "Sincronización vertical", "Vertical sync") \
+    X(ConfigBatterySaver, "Ahorro a batería", "Battery saver") \
+    X(ConfigShowFrameTime, "Mostrar el tiempo de la vista", "Show the view's time") \
+    X(ConfigPerspective, "Cámara", "Camera") \
+    X(ConfigPerspectiveOn, "Perspectiva", "Perspective") \
+    X(ConfigOrthographic, "Ortogonal", "Orthographic") \
+    X(ConfigShowAgain, "Mostrar de nuevo", "Show again") \
+    X(ConfigRunPlugins, "Correr complementos al laminar", "Run plug-ins when slicing") \
+    X(ConfigFactory, "Valores de fábrica", "Factory values") \
+    X(ConfigFactoryButton, "Volver a los valores de fábrica", "Back to the factory values") \
+    X(ConfigFactoryAsk, "¿Volver todas las opciones a los valores de fábrica? Los perfiles y los proyectos no cambian.", "Put every option back to its factory value? Profiles and projects do not change.") \
+    X(ConfigFactoryYes, "Sí, volver", "Yes, put them back") \
+    X(ConfigFactoryNote, "No toca perfiles ni proyectos.", "Leaves profiles and projects alone.") \
+    X(ConfigExport, "Exportar e importar las preferencias", "Export and import the preferences") \
+    X(ConfigOk, "Aceptar", "OK") \
+    X(FastenerThumbScrew, "Tornillo de mano", "Thumb screw") \
+    X(FastenerThumbNut, "Tuerca de mano", "Thumb nut") \
+    X(FastenerStandoff, "Separador roscado", "Threaded standoff") \
+    X(FastenerSpacer, "Espaciador", "Spacer") \
+    X(GearsTitle, "Engranajes", "Gears") \
+    X(GearsSubtitle, "Perfil de evolvente, con holgura para imprimir", "Involute profile, with backlash for printing") \
+    X(DesignGearsTip, "Engranajes rectos, helicoidales y en espina de pescado, y cremalleras, con su pareja (también `engranaje` o `cremallera` en la línea de comandos)", "Spur, helical and herringbone gears, and racks, with their mate (also `gear` or `rack` on the command line)") \
+    X(GearSpur, "Recto", "Spur") \
+    X(GearHelical, "Helicoidal", "Helical") \
+    X(GearHerringbone, "Espina de pescado", "Herringbone") \
+    X(GearTeeth, "Dientes", "Teeth") \
+    X(GearModule, "Módulo (mm)", "Module (mm)") \
+    X(GearWidth, "Ancho (mm)", "Width (mm)") \
+    X(GearBore, "Agujero (mm)", "Bore (mm)") \
+    X(GearPressureAngle, "Ángulo de presión (°)", "Pressure angle (°)") \
+    X(GearHelixAngle, "Ángulo de hélice (°)", "Helix angle (°)") \
+    X(GearLeftHand, "Hélice a la izquierda", "Left-hand helix") \
+    X(GearBacklash, "Holgura (mm)", "Backlash (mm)") \
+    X(GearBacklashHint, "Cuánto más fino sale cada diente sobre el círculo primitivo, para que dos engranajes impresos giren sin trabarse. El agujero sale de la medida escrita: sumale 0,2 mm al eje.", "How much thinner each tooth comes out on the pitch circle, so two printed gears turn without binding. The bore comes out as typed: add 0.2 mm to the shaft.") \
+    X(GearMate, "Pareja", "Mate") \
+    X(GearMateTeeth, "Dientes del otro", "Mate's teeth") \
+    X(GearCenterDistance, "Distancia entre ejes: %s mm", "Centre distance: %s mm") \
+    X(GearRatio, "Relación: %s a 1", "Ratio: %s to 1") \
+    X(GearPitchDiameter, "Diámetro primitivo", "Pitch diameter") \
+    X(GearOutsideDiameter, "Diámetro exterior", "Outside diameter") \
+    X(GearRootDiameter, "Diámetro de fondo", "Root diameter") \
+    X(GearCircularPitch, "Paso circular", "Circular pitch") \
+    X(GearSendPair, "Mandar con su pareja", "Send with its mate") \
+    X(GearName, "Engranaje de %d dientes, m %s", "Gear, %d teeth, m %s") \
+    X(RackName, "Cremallera de %d dientes, m %s", "Rack, %d teeth, m %s") \
+    X(GearRack, "Cremallera", "Rack") \
+    X(RackBase, "Base (mm)", "Base (mm)") \
+    X(RackAxis, "Eje del engranaje: %s mm sobre la línea primitiva, %s mm sobre el pie de la cremallera", "The gear's axis: %s mm over the pitch line, %s mm over the rack's bottom") \
+    X(RackTravel, "Una vuelta del engranaje la mueve %s mm", "One turn of the gear moves it %s mm") \
+    X(RackLength, "Largo", "Length") \
+    X(RackPitchLine, "Línea primitiva sobre el pie", "Pitch line over the bottom") \
+    X(FastenersBack, "‹ Diseño", "‹ Design") \
+    X(DesignFastenersTip, "Tornillos, tuercas, arandelas y varillas con rosca métrica, listos para imprimir (también `tornillo`, `tuerca`, `arandela` o `varilla` en la línea de comandos)", "Bolts, nuts, washers and rods with a metric thread, ready to print (also `bolt`, `nut`, `washer` or `rod` on the command line)") \
+    X(UnitSwitchTip, "Cambiar entre milímetros y porcentaje (también se puede escribir la unidad con el número, como «0,3 mm»)", "Switch between millimetres and percent (you can also type the unit with the number, as \"0.3 mm\")") \
+    X(ModePrint, "Impresión 3D", "3D printing") \
+    X(ModePrintTip, "Preparar, laminar, analizar, calibrar e imprimir", "Prepare, slice, analyse, calibrate and print") \
+    X(ModeEngineering, "Ingeniería", "Engineering") \
+    X(ModeEngineeringTip, "Diseñar piezas, con su tornillería, para imprimir", "Design parts, with their fasteners, to print") \
+    X(FastenersSubtitle, "Rosca métrica ISO, con holgura para imprimir", "ISO metric thread, with play for printing") \
+    X(FastenersEditing, "Editando una pieza de la placa.", "Editing a part of the plate.") \
+    X(FastenersNew, "Pieza nueva", "New part") \
+    X(FastenersSecPart, "Pieza", "Part") \
+    X(FastenersSecSize, "Medida", "Size") \
+    X(FastenerHexBolt, "Tornillo hexagonal", "Hex bolt") \
+    X(FastenerSocketBolt, "Tornillo Allen", "Socket head bolt") \
+    X(FastenerHexNut, "Tuerca", "Nut") \
+    X(FastenerWasher, "Arandela", "Washer") \
+    X(FastenerRod, "Varilla roscada", "Threaded rod") \
+    X(FastenerMetric, "Métrica", "Metric size") \
+    X(FastenerCustom, "A medida", "Custom") \
+    X(FastenerDiameter, "Diámetro (mm)", "Diameter (mm)") \
+    X(FastenerPitch, "Paso (mm)", "Pitch (mm)") \
+    X(FastenerPitchHint, "0: el paso normal, %s mm", "0: the coarse pitch, %s mm") \
+    X(FastenerLength, "Largo (mm)", "Length (mm)") \
+    X(FastenerPlay, "Holgura (mm)", "Play (mm)") \
+    X(FastenerPlayHint, "La rosca del tornillo sale así de más fina y la de la tuerca así de más ancha. 0,2 mm anda en la mayoría de las impresoras; si quedan duras, subila.", "The bolt's thread comes out this much thinner and the nut's this much wider. 0.2 mm works on most printers; if they are tight, raise it.") \
+    X(FastenerThread, "Rosca", "Thread") \
+    X(FastenerTapDrill, "Broca para roscar", "Tap drill") \
+    X(FastenerClearanceHole, "Agujero de paso (ISO 273)", "Clearance hole (ISO 273)") \
+    X(FastenerKey, "Llave", "Wrench") \
+    X(FastenerBad, "Esas medidas no se pueden hacer.", "Those sizes cannot be made.") \
+    X(FastenerPrintHint, "Los tornillos salen parados sobre la cabeza y las tuercas acostadas: así la rosca se imprime capa por capa, sin soportes.", "Bolts stand on their heads and nuts lie flat: so the thread prints layer by layer, with no supports.") \
+    X(FastenerSendPair, "Mandar con su tuerca", "Send with its nut") \
+    X(EditInFasteners, "Editar en Tornillería", "Edit in Fasteners") \
     X(Open, "Abrir", "Open")                                                                                          \
     X(OpenTip, "Abrir un modelo STL, un proyecto, un G-code o ajustes (Ctrl+O)", "Open an STL model, a project, a G-code file or settings (Ctrl+O)") \
     X(Slice, "Laminar", "Slice")                                                                                      \
@@ -192,8 +335,8 @@
       "Text from docs/CONFIG.md, in Spanish")\
     X(InfoTemperatures, "La temperatura que el G-code de inicio pide para la boquilla o la cama: es la variable [temperature] o [bed_temperature] de machine.variables.",\
       "The temperature the start G-code asks for the nozzle or the bed: the [temperature] or [bed_temperature] variable of machine.variables.")\
-    X(Tutorial, "Tutorial",\
-      "Tutorial")\
+    X(Tutorial, "Volver al tutorial",\
+      "Show the tutorial again")\
     X(TipsAgain, "Ver los consejos de nuevo",\
       "Show the tips again")\
     X(TipsOn, "Consejos al usar cada función",\

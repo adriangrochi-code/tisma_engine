@@ -83,6 +83,8 @@ add_executable(tisma_tests
   test_catalog.cpp
   test_device.cpp
   test_cad.cpp
+  test_fasteners.cpp
+  test_gears.cpp
 )
 # The stand-in for the bundled solidcraft-cli (cad_design.md, rule 1): the
 # tests drive it instead of the real tool.
@@ -96,7 +98,8 @@ target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)
-  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp test_plate.cpp test_help.cpp test_credits.cpp test_assistant.cpp)
+  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp test_plate.cpp test_help.cpp test_credits.cpp test_assistant.cpp
+    test_system_info.cpp)
   target_link_libraries(tisma_tests PRIVATE tisma_ui)
   target_compile_definitions(tisma_tests PRIVATE TISMA_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets"
                                                  TISMA_DOCS_DIR="${PROJECT_SOURCE_DIR}/docs"
@@ -202,10 +205,53 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/modal_keys.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_modal_keys.png)
     set_tests_properties(ui_script_modal_keys PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # A tool's tip closes with the tool (UI38).
+    add_test(NAME ui_script_tip_closes
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tips
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/tip_closes.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_tip_closes.png)
+    set_tests_properties(ui_script_tip_closes PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    add_test(NAME ui_script_tutorial_again
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/tutorial_again.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_tutorial_again.png)
+    set_tests_properties(ui_script_tutorial_again PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    add_test(NAME ui_script_paint_drag
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/paint_drag.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_paint_drag.png)
+    set_tests_properties(ui_script_paint_drag PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    add_test(NAME ui_script_paint_holds_occlusion
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --graphics opengl --render ao
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/paint_holds_occlusion.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_paint_holds_occlusion.png)
+    set_tests_properties(ui_script_paint_holds_occlusion PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    add_test(NAME ui_script_top_bar_narrow
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 900x600
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/top_bar_narrow.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_top_bar_narrow.png)
+    set_tests_properties(ui_script_top_bar_narrow PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    add_test(NAME ui_script_config
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/config.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_config.png)
+    set_tests_properties(ui_script_config PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    add_test(NAME ui_script_panel_fold
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tool move
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/panel_fold.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_panel_fold.png)
+    set_tests_properties(ui_script_panel_fold PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The Design tab (cad_design.md, stage D1) driven through the stand-in
     # solidcraft-cli: the tab, the primitives, the command line, sending to the
     # plate and editing again; without the component (CD21); hidden (CD1).
-    foreach(script design_tab design_command design_hidden design_sketch)
+    foreach(script design_tab design_command design_hidden design_sketch fasteners gears)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
@@ -255,6 +301,16 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${tool}_sliders.txt
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${tool}_sliders.png)
       set_tests_properties(ui_script_${tool}_sliders PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
+    # The handles drawn on the model (move arrows, rotation rings, scale
+    # boxes), dragged in the view.
+    foreach(tool move rotate scale)
+      add_test(NAME ui_script_${tool}_gizmo
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tool ${tool}
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${tool}_gizmo.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${tool}_gizmo.png)
+      set_tests_properties(ui_script_${tool}_gizmo PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     endforeach()
     # The moiré filter: the preview from far away, its layers finer than a
     # pixel, gets smoother with the filter where the filter acts.

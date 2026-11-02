@@ -74,6 +74,7 @@ struct PlateObject {
     // Diseño» and a second «Mandar a la placa» find it by (0: none).
     std::string design{};
     std::string design_file{};
+    std::string fastener{}; // a part of the Fasteners tab: its spec (cad::fastener_json)
     int design_id = 0;
 };
 

@@ -66,6 +66,8 @@ struct VulkanWindow::Impl {
     VkPhysicalDevice physical = VK_NULL_HANDLE;
     VkPhysicalDeviceMemoryProperties memory{};
     std::string name;
+    std::string kind, api, driver; // for the Video page
+    bool remake = false;            // the swapchain to make again (vsync changed)
     VkDevice device = VK_NULL_HANDLE;
     std::uint32_t family = 0;
     VkQueue queue = VK_NULL_HANDLE;
@@ -326,6 +328,15 @@ struct VulkanWindow::Impl {
                     physical = d;
                     family = f;
                     name = props.deviceName;
+                    kind = props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? "integrated"
+                           : props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? "discrete"
+                           : props.deviceType == VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU  ? "virtual"
+                           : props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU          ? "cpu"
+                                                                                       : "other";
+                    api = std::to_string(VK_API_VERSION_MAJOR(props.apiVersion)) + "." +
+                          std::to_string(VK_API_VERSION_MINOR(props.apiVersion)) + "." +
+                          std::to_string(VK_API_VERSION_PATCH(props.apiVersion));
+                    driver = std::to_string(props.driverVersion);
                 }
                 break;
             }
@@ -588,9 +599,11 @@ void VulkanWindow::frame(ImDrawData* draw, const float clear[3], bool keep,
     glfwGetFramebufferSize(v.window, &w, &h);
     if (w <= 0 || h <= 0)
         return; // minimized: nothing to show
-    if (!v.swapchain || std::uint32_t(w) != v.extent.width || std::uint32_t(h) != v.extent.height)
+    if (!v.swapchain || v.remake || std::uint32_t(w) != v.extent.width || std::uint32_t(h) != v.extent.height) {
+        v.remake = false;
         if (!v.make_swapchain())
             return;
+    }
     Impl::Frame& f = v.frames[std::size_t(v.current)];
     vkWaitForFences(v.device, 1, &f.done, VK_TRUE, UINT64_MAX);
     std::uint32_t index = 0;
@@ -709,6 +722,13 @@ std::vector<std::uint8_t> VulkanWindow::read_back(int& width, int& height) {
 }
 
 std::string VulkanWindow::device_name() const { return impl_->name; }
+std::string VulkanWindow::device_kind() const { return impl_->kind; }
+std::string VulkanWindow::api_version() const { return impl_->api; }
+std::string VulkanWindow::driver_version() const { return impl_->driver; }
+void VulkanWindow::set_vsync(bool vsync) {
+    if (impl_->vsync != vsync)
+        impl_->vsync = vsync, impl_->remake = true;
+}
 
 } // namespace tisma::ui
 
@@ -737,6 +757,10 @@ std::vector<std::uint8_t> VulkanWindow::read_back(int& width, int& height) {
     return {};
 }
 std::string VulkanWindow::device_name() const { return {}; }
+std::string VulkanWindow::device_kind() const { return {}; }
+std::string VulkanWindow::api_version() const { return {}; }
+std::string VulkanWindow::driver_version() const { return {}; }
+void VulkanWindow::set_vsync(bool) {}
 
 } // namespace tisma::ui
 

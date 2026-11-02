@@ -8581,3 +8581,114 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
 **Sigue:** D3 (restricciones y cotas con los grados de libertad, parámetros, línea de tiempo editable), o las reglas
 3 a 5 de `orca_2_5.md`, según diga el dueño.
 
+## 2026-11-02 (tarde): apartados Impresión 3D e Ingeniería, y Tornillería (pedidos del dueño)
+
+- **Barra de arriba en dos apartados:** Impresión 3D (Preparar, Vista previa, Análisis, Calibración, Impresora) e
+  Ingeniería (Diseño), con un selector junto al logo. Cada apartado muestra solo sus pestañas y su panel propio en la
+  columna izquierda; vuelve a la última pestaña usada en él. Tornillería empezó como pestaña y, por un segundo pedido
+  del dueño el mismo día («tiene que venir en la parte de diseño»), quedó como página del panel de Diseño: el botón
+  «Tornillería» de Nuevo, o `tornillo`, `tuerca`, `arandela`, `varilla` en la línea de comandos, y «‹ Diseño» vuelve. Esto cambia lo que la ficha `cad_design.md` dice de la pestaña Diseño («entre Vista previa y
+  Análisis», CD1): queda avisado al equipo de fichas.
+- **Tornillería** (`src/cad/fasteners.*`): tornillos hexagonales y Allen, tuercas, arandelas y varillas roscadas con
+  la rosca métrica ISO 68-1, de M3 a M24 (tablas ISO 261, 4032, 4017, 4762, 7089 y 273) o a medida, paso normal o
+  fino, largo y holgura para plástico (0,2 mm de fábrica). La malla la arma el motor, cerrada y hacia afuera por
+  construcción, así que anda sin `solidcraft-cli`. Los tornillos quedan parados sobre la cabeza y las tuercas
+  acostadas. «Mandar con su tuerca» manda el par; «Editar en Tornillería» reemplaza la pieza en su lugar.
+- **Pruebas:** `[fasteners]` (el perfil ISO: cresta, fondo, diámetro de flancos y flancos a 60°; cada pieza cerrada
+  y orientada en M3, M8 y M24 y una tuerca de 40 mm a medida; cada vértice de la rosca del tornillo sobre el perfil
+  menos la holgura y el de la tuerca sobre el perfil más la holgura, o sea 2 × holgura entre ellos; volúmenes de la
+  varilla y la arandela; las comprobaciones y la ida y vuelta en JSON; una tuerca y un tornillo M8 laminados con el
+  G-code verificado) y el guion de interfaz `fasteners`. Los guiones de Diseño pasan por el selector de apartado.
+- **Medido:** una tuerca M8 tiene 661 mm³ y un tornillo M5 × 12, 352 mm³ (el guion los verifica).
+- **No probado:** que las piezas impresas enrosquen de verdad; la holgura de 0,2 mm es un punto de partida.
+
+- **UI32 (probadores):** los ajustes de mm o % tienen al lado un botón con la unidad que la cambia y convierte el
+  valor (la separación XY del soporte en % del ancho de pared, los anchos y la costura en % de la boquilla, la primera
+  capa en % de su alto, la velocidad de la pared externa en % de la de paredes).
+
+- **Más piezas (tercer pedido del dueño del día: «una solución de AutoCAD bastante completa» para piezas de
+  impresión 3D):** tornillo y tuerca de mano moleteados, separador roscado y espaciador en Tornillería; y una página
+  **Engranajes** (`src/cad/gears.*`): perfil de evolvente, rectos, helicoidales y en espina de pescado, holgura por
+  diente, pareja de mano contraria, distancia entre ejes. El armado por anillos pasó a `src/cad/lathe.*`, con
+  ángulos libres (las esquinas de cada diente) y un giro por anillo (la hélice).
+- **Pruebas:** `[gears]` (diámetros primitivo, exterior, de fondo y base; el contorno cruza el círculo primitivo a
+  un cuarto de paso, menos la holgura; la distancia entre ejes; rectos, helicoidales y espina de pescado de 8, 20 y
+  61 dientes cerrados y entre los cilindros de fondo y de punta; el giro de la hélice y el de la pareja; un engranaje
+  laminado con el G-code verificado) y las piezas nuevas en `[fasteners]`; guion de interfaz `gears`.
+- **Medido:** un engranaje recto de 20 dientes, módulo 1,5, 8 mm de ancho y agujero de 5 mm tiene 5 279 mm³; el
+  helicoidal de 30 dientes, 12 271 mm³ (el guion los verifica).
+- **No probado:** que dos engranajes impresos engranen bien con 0,15 mm de holgura; es un punto de partida.
+
+- **Cremallera** en Engranajes: dientes de flanco recto al ángulo de presión, cabeza m y pie 1,25 m sobre una base;
+  la pareja es un engranaje recto del mismo módulo con su eje a m z / 2 de la línea primitiva. Prueba `[gears]` (área
+  exacta de base y dientes, largo de diez pasos) y el guion `gears` (5 290 mm³ con 30 dientes, módulo 1,5).
+- **UI36 (probadores):** las capas de interfaz de abajo, el patrón y la separación de la interfaz pasan de Avanzado a
+  Normal (Soportes › Interfaz, visibles con los soportes prendidos).
+- **UI33 (probadores):** «Volver al tutorial», con ese nombre en Más y arriba del panel de Ayuda; guion
+  `tutorial_again`.
+- **UI37 (probadores, video del dueño):** al pintar rápido quedaban puntos sueltos, un toque por cuadro donde estaba
+  el mouse. Ahora el pincel pinta a lo largo del camino entre el toque anterior y el mouse, cada medio pincel en
+  pantalla (hasta 64 por cuadro). Guion `paint_drag`: un salto de 50 px en un cuadro pinta 42,8 mm² (un toque solo,
+  10,8 mm²).
+- **UI37, la otra mitad (cuadros por segundo al pintar):** con Vulkan, cada cuadro de un trazo subía la pintura con
+  `vkDeviceWaitIdle`, un búfer nuevo, una copia y `vkQueueWaitIdle`: dos esperas completas de la GPU por cuadro. Ahora
+  la pintura queda en la CPU y cada cuadro la copia a su propio búfer mapeado (el cuadro anterior que lo usó ya
+  terminó: su cerca se esperó), sin esperar a la GPU. No medido en Windows; la vista de Preparar pintada sigue
+  igual que la de OpenGL (`ui_view_prepare_vulkan_same_as_opengl`).
+- **Barra de arriba angosta:** a 900 px, con el selector nuevo, Calibración se encimaba con Abrir. Si no entran, las
+  pestañas (y después los apartados) muestran solo el ícono; guion `top_bar_narrow`.
+- **UI39 (laminar lento con pintura):** medido con una pieza de dos paredes de 100 × 90 × 65 mm, 400 toques de
+  costura y 200 de soporte: pintar 76 ms, laminar 116 ms (43 ms sin pintura). La pintura sola no explica el minuto
+  del video; hace falta la pieza del dueño para reproducirlo.
+- **UI38 (probadores):** el consejo de una herramienta se va al cerrarla y el de una pestaña al dejarla; guion
+  `tip_closes`.
+
+**Sigue:** más piezas para Ingeniería (cremallera, polea dentada GT2, inserto térmico, bisagra), con lo que pida el
+dueño; después D3 de `cad_design.md`.
+
+## 2026-11-02 (noche): Configuración y la página Video, etapa A (`preferences.md`, `view_auto_quality.md`)
+
+Prioridad del dueño (por el equipo de fichas): primero Configuración con la página Video y la calidad automática.
+- **Configuración:** Más › «Configuración…» (la primera entrada), Ctrl+, y Ctrl+P, y un engranaje en la barra de
+  estado. Siete páginas, buscador, Cancelar vuelve todo como estaba, Aceptar guarda. Valores de fábrica con
+  confirmación. La vista se ve detrás y los cambios de Video se aplican al momento.
+- **Video:** el equipo (`src/ui/system_info.*`: procesador, núcleos, memoria, batería; la placa desde OpenGL o
+  Vulkan, con su tipo y versiones; la pantalla desde GLFW), «Volver a lo recomendado», y las opciones de la regla 8.
+  Calidades fijas de la regla 4; la automática elige por ahora según la placa (por software: Liviana; integrada:
+  Equilibrada; el resto: Alta) hasta la medición de la regla 2. Tope de cuadros por segundo (60; la pantalla; sin
+  tope) que espera eventos en lo que sobra del cuadro; sincronización vertical en vivo con OpenGL y con Vulkan (la
+  cadena de imágenes se rehace). Ahorro a batería: tope 30 y Liviana.
+- **Pruebas:** `[system]` y el guion `config` (PF7: cada opción que guardan las preferencias tiene control; PF8: Más y
+  el engranaje la abren; «Volver a lo recomendado» elige Liviana con llvmpipe; Cancelar deshace).
+- **Falta (etapa B y lo marcado «Próximamente»):** la medición del primer arranque y «Medir de nuevo», bajar la
+  calidad al mover y congelar la oclusión al pintar, la resolución de la vista, la sombra sobre la cama, el nivel de
+  OpenGL (`legacy_windows.md`), elegir la placa en equipos con dos, exportar e importar las preferencias, y cambiar la
+  API gráfica sin cerrar el programa (hoy se aplica al volver a abrirlo).
+- **Panel plegable (pedido del dueño, durante el bloque):** «« pliega el panel de ajustes en Preparar y Vista previa;
+  la vista toma todo el ancho; en Preparar un recuadro arriba a la derecha deja la impresora con su boquilla, el
+  filamento y el perfil de impresión, con » para volver; en Vista previa, una pestaña violeta en el borde izquierdo.
+  Guion `panel_fold`.
+
+- **Manijas sobre la pieza (pedido del dueño con una imagen; UI30 y UI34):** con Mover, flechas X e Y; con Girar,
+  tres anillos; con Escalar, una manija por eje y el centro para todo parejo (o todo parejo si «mantener
+  proporción» está prendido). X rojo, Y verde, Z azul, también en las letras de la tarjeta. Se dibujan en la pantalla
+  con la proyección de la cámara y se tocan en 2D (8 px); el clic sobre una manija no elige otra pieza ni gira la
+  cámara. Al lado del mouse, cuánto va. Guiones `move_gizmo`, `rotate_gizmo` y `scale_gizmo` (nuevo paso
+  `drag-control`: apretar en un control con nombre, mover y soltar).
+- **Recuadro plegado más chico (pedido del dueño, durante el bloque):** a la izquierda, al lado de la columna de
+  herramientas, solo las tres listas, sin el dibujo de la impresora ni los botones de guardar y menú; la tarjeta de
+  la herramienta elegida baja debajo de él. El guion `panel_fold` comprueba que no tapa las herramientas ni la
+  tarjeta.
+
+- **Calidad automática, etapa B, primer paso (reglas 5, 6 y 8 de `view_auto_quality.md`):** la vista (OpenGL) puede
+  sostener la oclusión del último cuadro quieto o no dibujarla (`ViewFrame::ao_hold`); la firma de la oclusión no se
+  guarda mientras está sostenida, así el primer cuadro quieto la recalcula. Al pintar se sostiene siempre (regla 6).
+  Arrastrar una pieza la sostiene y girar la cámara la apaga (una oclusión de pantalla sostenida se correría sobre
+  la imagen; decisión propia), con Equilibrada siempre y con Automática o Personalizada cuando el tiempo de la vista
+  pasa el 70 % del presupuesto, hasta que el movimiento termina (sin parpadeo). La barra de estado dice el motivo
+  y, la primera vez con la Automática, un aviso (`ui.lowered_notice_shown`). Guion `paint_holds_occlusion` (AQ4: tres
+  trazos, tres oclusiones, una por cada vez que se suelta; antes, una por cada toque). La vista con Vulkan todavía no
+  tiene oclusión (V3), así que no cambia.
+
+**Sigue:** el resto de la etapa B (medición del primer arranque y «Medir de nuevo», bajar el suavizado y la
+resolución de la vista paso a paso, el tope de 30 al laminar); después, el resto de UI27–UI41.

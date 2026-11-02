@@ -1,0 +1,5 @@
+# «Volver al tutorial» from the help button too (the testers' UI33).
+expect-no-control tour_card
+menu help
+menu help_tutorial
+expect-control tour_card
