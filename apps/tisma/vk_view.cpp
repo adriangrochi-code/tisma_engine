@@ -136,6 +136,14 @@ struct VulkanView::Impl {
     float grid_step = 10.0f;
     int grid_major_every = 5;
     std::vector<Renderer::PaintGroup> paint_groups;
+    // The paint changes every frame of a stroke: kept on the CPU and copied
+    // into a mapped buffer of the frame being recorded, whose last use is over
+    // (its fence waited), with no wait for the device (the testers' UI37:
+    // 300 frames a second fell to 28 while painting).
+    std::vector<float> paint_cpu;
+    std::uint64_t paint_version = 0;
+    std::vector<Buffer> paint_slots;
+    std::vector<std::uint64_t> paint_slot_version;
     // The extrusions in drawing order, and as seen from far (docs/LARGE_MODELS.md); their instances on the GPU.
     PreviewOrders orders;
     Vec3 preview_lo{0, 0, 0}, preview_hi{0, 0, 0}; // the extrusions' box
@@ -886,7 +894,24 @@ struct VulkanView::Impl {
                 vkCmdDraw(c, chosen, 1, first, 0);
             }
             if (f.show_paint && paint_count > 0) {
-                bind(Paint, &paint_v);
+                if (paint_slots.size() < uniforms.size()) {
+                    paint_slots.resize(uniforms.size());
+                    paint_slot_version.resize(uniforms.size(), ~std::uint64_t(0));
+                }
+                Buffer& paint_buffer = paint_slots[slot];
+                if (paint_slot_version[slot] != paint_version) {
+                    const VkDeviceSize bytes = paint_cpu.size() * sizeof(float);
+                    if (paint_buffer.size < bytes) { // grown by half again, so a stroke seldom reallocates
+                        free_buffer(paint_buffer);
+                        paint_buffer = make_buffer(bytes + bytes / 2, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+                        check(vkMapMemory(d.device, paint_buffer.memory, 0, paint_buffer.size, 0, &paint_buffer.mapped),
+                              "vkMapMemory");
+                    }
+                    std::memcpy(paint_buffer.mapped, paint_cpu.data(), bytes);
+                    paint_slot_version[slot] = paint_version;
+                }
+                bind(Paint, &paint_buffer);
                 for (const Renderer::PaintGroup& g : paint_groups) {
                     if (g.first + g.count > paint_count)
                         continue;
@@ -972,6 +997,10 @@ struct VulkanView::Impl {
         picture_set = VK_NULL_HANDLE;
         for (Buffer* b : {&plate_v, &grid_v, &model_v, &model_coarse_v, &paint_v, &extrusions_v, &travels_v})
             free_buffer(*b);
+        for (Buffer& b : paint_slots)
+            free_buffer(b);
+        paint_slots.clear();
+        paint_slot_version.clear();
         for (Buffer& u : uniforms)
             free_buffer(u);
         uniforms.clear();
@@ -1067,12 +1096,10 @@ void VulkanView::set_paint(const std::vector<float>& vertices, const std::vector
     v.shown.clear();
     if (!v.ready)
         return;
-    v.paint_count = 0;
-    v.guard([&] {
-        v.upload(v.paint_v, vertices.data(), vertices.size() * sizeof(float));
-        v.paint_count = std::uint32_t(vertices.size() / 6);
-        v.paint_groups = groups;
-    });
+    v.paint_cpu = vertices;
+    ++v.paint_version;
+    v.paint_count = std::uint32_t(vertices.size() / 6);
+    v.paint_groups = groups;
 }
 
 void VulkanView::set_preview(const PreviewBuffers& p) {

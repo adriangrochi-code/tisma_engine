@@ -72,6 +72,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   probadores).
 - Un trazo rápido de Pintar deja una franja continua y no puntos sueltos: el pincel pinta a lo largo del camino del
   mouse entre un cuadro y el siguiente (reporte UI37 de los probadores y video del dueño del 31-10-2026).
+- Pintar con la vista Vulkan ya no frena la GPU en cada cuadro del trazo: la pintura se copia a un búfer de ese
+  cuadro, sin esperar a que la GPU quede ociosa (reporte UI37: de 300 a 28 cuadros por segundo al pintar).
+- En una ventana angosta las pestañas de la barra de arriba muestran solo el ícono, con el nombre al pasar el mouse,
+  y no pisan Abrir ni la ayuda.
 - El consejo de una herramienta se va al cerrarla, y el de una pestaña al dejarla (reporte UI38 de los probadores: el de
   Pintar quedaba en pantalla).
 

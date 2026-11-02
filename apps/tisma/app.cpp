@@ -4666,6 +4666,42 @@ void App::top_bar() {
     // the plate, the preview, the analysis, the calibrations and the printer,
     // and Ingeniería with Design and Fasteners. Each opens on its last tab.
     const bool engineering = engineering_tab(tab_);
+    // The tabs of the section.
+    struct TabButton {
+        Tab tab;
+        const char* icon;
+        T label;
+    };
+    const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
+                              {Tab::Preview, "tisma_view", T::TabPreview},
+                              {Tab::Design, "tisma_design", T::TabDesign},
+                              {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
+                              {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
+                              {Tab::Device, "tisma_printer", T::TabDevice}};
+    // A narrow window: the tabs, then the sections too, keep only their icons
+    // (their names in the tooltip), so nothing runs under Open (2026-11-02:
+    // at 900 px Calibration ran into it).
+    const auto width_of = [&](const char* label) {
+        const float pad = std::round(button_h * 0.32f), icon_size = std::round(button_h * 0.5f);
+        return pad * 2.0f + icon_size + (label ? ImGui::GetStyle().ItemInnerSpacing.x + 2.0f + ImGui::CalcTextSize(label).x : 0.0f);
+    };
+    bool compact_tabs = false, compact_sections = false;
+    {
+        const float right = width_of(tr(T::Open)) + button_h + 8.0f * scale_ + 12.0f * scale_ + button_h + 16.0f * scale_;
+        const float room = ImGui::GetWindowWidth() - right - ImGui::GetCursorPosX();
+        const auto needed = [&](bool tabs_short, bool sections_short) {
+            float w = 0.0f;
+            if (cad_design_)
+                w += width_of(sections_short ? nullptr : tr(T::ModePrint)) +
+                     width_of(sections_short ? nullptr : tr(T::ModeEngineering)) + 20.0f * scale_;
+            for (const TabButton& t : tabs)
+                if (engineering_tab(t.tab) == engineering)
+                    w += width_of(tabs_short ? nullptr : tr(t.label)) + 4.0f * scale_;
+            return w;
+        };
+        compact_tabs = needed(false, false) > room;
+        compact_sections = compact_tabs && needed(true, false) > room;
+    }
     if (cad_design_) {
         // A pill behind the two, drawn under them once their width is known.
         const float pad = 3.0f * scale_;
@@ -4674,7 +4710,8 @@ void App::top_bar() {
         const auto section_button = [&](const char* id, const char* icon_name, T label, T tip_text, bool on, Tab to,
                                         const char* name) {
             ImGui::SetCursorPosY(top);
-            if (button(id, icon_name, tr(label), false, on, true, tr(tip_text), button_h) && !on)
+            const std::string tip = compact_sections ? std::string(tr(label)) + ": " + tr(tip_text) : std::string(tr(tip_text));
+            if (button(id, icon_name, compact_sections ? nullptr : tr(label), false, on, true, tip.c_str(), button_h) && !on)
                 set_tab(to == Tab::Preview && !result_.has_value() ? Tab::Prepare : to);
             g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
                                         ImGui::GetItemRectMax().y);
@@ -4694,24 +4731,13 @@ void App::top_bar() {
         ImGui::SameLine(0, 18.0f * scale_);
     }
 
-    // The tabs of the section.
-    struct TabButton {
-        Tab tab;
-        const char* icon;
-        T label;
-    };
-    const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
-                              {Tab::Preview, "tisma_view", T::TabPreview},
-                              {Tab::Design, "tisma_design", T::TabDesign},
-                              {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
-                              {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
-                              {Tab::Device, "tisma_printer", T::TabDevice}};
     for (const TabButton& t : tabs) {
         if (engineering_tab(t.tab) != engineering) // the other section's
             continue;
         ImGui::SetCursorPosY(top);
         const bool enabled = t.tab != Tab::Preview || result_.has_value();
-        if (button(tr(t.label), t.icon, tr(t.label), false, tab_ == t.tab, enabled, nullptr, button_h))
+        if (button(tr(t.label), t.icon, compact_tabs ? nullptr : tr(t.label), false, tab_ == t.tab, enabled,
+                   compact_tabs ? tr(t.label) : nullptr, button_h))
             set_tab(t.tab);
         // Named for the scripted tests: tab_prepare, tab_design...
         g_menu_rects[std::string("tab_") + (t.tab == Tab::Prepare       ? "prepare"
@@ -4733,10 +4759,6 @@ void App::top_bar() {
     // The actions, on the right.
     const float more_w = button_h;
     const float gap = 8.0f * scale_;
-    auto width_of = [&](const char* label) {
-        return std::round(button_h * 0.32f) * 2.0f + std::round(button_h * 0.5f) + ImGui::GetStyle().ItemInnerSpacing.x +
-               2.0f + ImGui::CalcTextSize(label).x;
-    };
     const float right = width_of(tr(T::Open)) + more_w + gap;
     // The help (assistant.md, rule 1), between the tabs and the actions, when
     // there is room; F1 and More open it anyway. The search for a setting is
