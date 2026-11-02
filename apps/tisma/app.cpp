@@ -8544,7 +8544,10 @@ void App::plate_tools() {
             open_design(false);
     }
     ImGui::Separator();
-    if (button("##paint", "tool_paint", nullptr, false, tool_ == PlateTool::Paint, true, tr(T::ToolPaintTip), size))
+    const bool paint = button("##paint", "tool_paint", nullptr, false, tool_ == PlateTool::Paint, true, tr(T::ToolPaintTip), size);
+    g_menu_rects["tool_paint"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                        ImGui::GetItemRectMax().y);
+    if (paint)
         tool_ = tool_ == PlateTool::Paint ? PlateTool::Select : PlateTool::Paint;
     if (button("##material", "tool_material", nullptr, false, tool_ == PlateTool::Material, true, tr(T::ToolMaterialTip),
                size))
@@ -9447,6 +9450,23 @@ void App::help_windows() {
         tips_seen_.insert(tip_);
         tip_.clear();
     }
+    // A tool's tip goes when the tool closes, a tab's when the tab is left
+    // (the testers' UI38: Paint's stayed on screen after the tool).
+    {
+        static const std::map<std::string, PlateTool> tool_of = {{"move", PlateTool::Move}, {"rotate", PlateTool::Rotate},
+                                                                 {"scale", PlateTool::Scale}, {"lay", PlateTool::LayFlat},
+                                                                 {"paint", PlateTool::Paint}};
+        static const std::map<std::string, Tab> tab_of = {{"preview", Tab::Preview}, {"analysis", Tab::Analysis},
+                                                          {"design", Tab::Design}, {"calibration", Tab::Calibration},
+                                                          {"device", Tab::Device}};
+        const auto tool = tool_of.find(tip_);
+        const auto tab = tab_of.find(tip_);
+        if ((tool != tool_of.end() && (tool_ != tool->second || tab_ != Tab::Prepare)) ||
+            (tab != tab_of.end() && tab_ != tab->second)) {
+            tips_seen_.insert(tip_);
+            tip_.clear();
+        }
+    }
     const bool tour = tour_step_ >= 0 && tour_step_ < int(kTour.size());
     if (!tour && tip_.empty())
         return;
@@ -9468,6 +9488,10 @@ void App::help_windows() {
     ImGui::Begin("##help", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    if (!tour) // named for the scripted tests: tip_paint...
+        g_menu_rects["tip_" + tip_] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                             ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                             ImGui::GetWindowPos().y + std::max(ImGui::GetWindowSize().y, 1.0f));
     const T title = tour ? kTour[std::size_t(tour_step_)].title : tip_texts().at(tip_).title;
     const T text = tour ? kTour[std::size_t(tour_step_)].text : tip_texts().at(tip_).text;
     ImGui::PushFont(nullptr, kTitleSize);

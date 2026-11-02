@@ -204,6 +204,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/modal_keys.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_modal_keys.png)
     set_tests_properties(ui_script_modal_keys PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # A tool's tip closes with the tool (UI38).
+    add_test(NAME ui_script_tip_closes
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tips
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/tip_closes.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_tip_closes.png)
+    set_tests_properties(ui_script_tip_closes PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The Design tab (cad_design.md, stage D1) driven through the stand-in
     # solidcraft-cli: the tab, the primitives, the command line, sending to the
     # plate and editing again; without the component (CD21); hidden (CD1).

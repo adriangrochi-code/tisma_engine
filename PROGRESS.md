@@ -8619,5 +8619,8 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
   helicoidal de 30 dientes, 12 271 mm³ (el guion los verifica).
 - **No probado:** que dos engranajes impresos engranen bien con 0,15 mm de holgura; es un punto de partida.
 
+- **UI38 (probadores):** el consejo de una herramienta se va al cerrarla y el de una pestaña al dejarla; guion
+  `tip_closes`.
+
 **Sigue:** más piezas para Ingeniería (cremallera, polea dentada GT2, inserto térmico, bisagra), con lo que pida el
 dueño; después D3 de `cad_design.md`.
