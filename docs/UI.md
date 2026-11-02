@@ -221,7 +221,8 @@ de estado pide laminar de nuevo.
 ### Diseño
 
 La pestaña Diseño (ficha `docs/spec/features/cad_design.md`, etapa D1) va entre Vista previa y Análisis y usa la misma
-vista y la misma cama que Preparar. A la izquierda, el panel «Diseño»: **Nuevo** (Boceto y Abrir STEP, marcados
+vista y la misma cama que Preparar. El panel «Diseño» ocupa la columna izquierda en lugar del panel de ajustes de
+impresión (pedido del dueño, 2026-11-02: que la interfaz no se llene): **Nuevo** (Boceto y Abrir STEP, marcados
 «Próximamente»; las primitivas caja, cilindro, esfera, cono, tubo y toro), **Boceto**, **Operaciones** y
 **Parámetros** (próximamente), **Historial** (un renglón por pieza: el ojo la suprime, sus medidas se editan, × la
 borra) y **Medidas** (cuerpos, volumen y caja). Al pie, «Mandar a la placa» (Ctrl+Mayús+P), apagado con «Hacé un

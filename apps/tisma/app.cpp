@@ -4502,7 +4502,7 @@ void App::frame_now() {
 void App::set_tab(Tab tab) {
     // The part moves aside for the calibration panel, and back when it closes
     // (a pending framing does it itself).
-    const auto aside = [](Tab t) { return t == Tab::Calibration || t == Tab::Device || t == Tab::Design; };
+    const auto aside = [](Tab t) { return t == Tab::Calibration || t == Tab::Device; };
     if (aside(tab) != aside(tab_) && !frame_pending_ && view_size_.y > 10.0f)
         camera_.pan((aside(tab) ? 225.0f : -225.0f) * scale_, 0.0f, view_size_.y);
     const Tab was = tab_;
@@ -10288,16 +10288,17 @@ void App::edit_in_design(std::size_t object) {
 }
 
 void App::design_panel() {
-    const float margin = 12.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
-    ImGui::SetNextWindowSize(ImVec2(380.0f * scale_, view_size_.y - 72.0f * scale_));
-    ImGui::SetNextWindowBgAlpha(0.95f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    // The left column, where the print settings go in the other tabs.
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
     ImGui::Begin("##design", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
     const auto rect_of = [](const char* name) {
         g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
                                     ImGui::GetItemRectMax().y);
@@ -10583,7 +10584,7 @@ void App::design_panel() {
 // confirm, Enter on an empty line repeats the last tool, Esc cancels.
 void App::design_command_line() {
     const float margin = 12.0f * scale_, height = 36.0f * scale_;
-    const float left = view_pos_.x + margin + 380.0f * scale_ + margin;
+    const float left = view_pos_.x + margin;
     ImGui::SetNextWindowPos(ImVec2(left, view_pos_.y + view_size_.y - height - margin));
     ImGui::SetNextWindowSize(ImVec2(std::max(view_pos_.x + view_size_.x - margin - left, 200.0f * scale_), height));
     ImGui::SetNextWindowBgAlpha(0.95f);
@@ -11332,7 +11333,7 @@ void App::sketch_strip() {
         return;
     SketchEdit& e = *sketch_edit_;
     const float h = 30.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 12.0f * scale_ + 380.0f * scale_ + 12.0f * scale_, view_pos_.y + 56.0f * scale_), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 12.0f * scale_, view_pos_.y + 56.0f * scale_), ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(0.9f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f * scale_, 4.0f * scale_));
@@ -12258,7 +12259,12 @@ void App::layout() {
         printer_page();
         status_bar();
     } else {
-        settings_panel();
+        // In Design, the panel takes the print settings' column (the owner's
+        // request, 2026-11-02: the view stays clear).
+        if (tab_ == Tab::Design)
+            design_panel();
+        else
+            settings_panel();
         if (help_open_)
             help_panel();
         status_bar();
@@ -12281,7 +12287,6 @@ void App::layout() {
         if (tab_ == Tab::Analysis)
             analysis_panel();
         if (tab_ == Tab::Design) {
-            design_panel();
             design_command_line();
             if (sketch_edit_) {
                 sketch_strip();

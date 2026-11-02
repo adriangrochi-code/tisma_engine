@@ -8569,6 +8569,9 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
   la herramienta), los clics en la vista con la marca de cada referencia, la entrada junto al cursor (largo y ángulo,
   Tab entre ellos), Esc sale de la herramienta y después del boceto sin borrar nada. En Historial, cada boceto muestra
   su operación (extruir con la distancia, revolucionar con el eje y el ángulo) y «Editar boceto».
+- **Pedido del dueño (2026-11-02):** al abrir Diseño, el panel «Diseño» reemplaza al panel de ajustes de impresión
+  de la izquierda, en vez de flotar sobre la vista, para que la interfaz no se llene. La tira del boceto y la línea
+  de comandos quedan sobre la vista, a la derecha del panel.
 - **Pruebas:** `[cad]` (puntos tipeados, CD13 y CD14; ortogonal y polar, CD16; referencias y la restricción de punto
   medio, CD15; el guion y sus ids; la ida y vuelta; el rectángulo extruido y los perfiles revolucionados por el
   sustituto, CD2) y el guion de interfaz `design_sketch` (CD13, CD14, CD15, CD16, CD10 y CD2 por la pantalla).

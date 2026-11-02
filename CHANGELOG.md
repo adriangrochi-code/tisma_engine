@@ -13,7 +13,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Agregado
 
 - **Pestaña Diseño** (ficha `cad_design.md`, etapa D1): entre Vista previa y Análisis, con la misma vista y la misma
-  cama que Preparar. Su panel tiene Nuevo (Boceto y Abrir STEP marcados «Próximamente», y las primitivas: caja,
+  cama que Preparar. Su panel ocupa la columna izquierda en lugar del de ajustes de impresión y tiene Nuevo (Boceto y Abrir STEP marcados «Próximamente», y las primitivas: caja,
   cilindro, esfera, cono, tubo y toro), Boceto, Operaciones y Parámetros (próximamente), Historial (un renglón por
   pieza, con el ojo para suprimirla, sus medidas editables y borrar) y Medidas (cuerpos, volumen y caja). Abajo de la
   vista, la línea de comandos: `caja`, `cilindro`, `esfera`, `cono`, `tubo`, `toro` o `mandar` (también en inglés),
