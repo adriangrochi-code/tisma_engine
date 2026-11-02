@@ -546,6 +546,8 @@ private:
     // filament and the print profile.
     bool panel_folded_now() const;
     void update_view_hold();
+    void remember_place(int object, const Placement& before);
+    void undo_place(bool redo);
     void compact_panel();
     void unfold_button();
     void apply_quality(const std::string& quality);
@@ -954,6 +956,16 @@ private:
     bool show_frame_time_ = true;
     bool panel_folded_ = false;     // ui.panel_folded
     float compact_bottom_ = 0.0f;   // the folded panel's card: where it ends on the screen, this frame
+    // Undo and redo of where the models are (Ctrl+Z, Ctrl+Y; the spec team's
+    // UI45): each step is a model's placement before a drag or an edit, kept
+    // while the plate has the same models.
+    struct PlaceStep {
+        std::size_t object = 0, count = 0; // which model, of how many on the plate
+        Placement place;
+    };
+    std::vector<PlaceStep> place_undo_, place_redo_;
+    Placement press_place_;    // the pressed model's placement when the bed drag began
+    bool card_editing_ = false; // the tool card's edit already has its undo step
     // What the view lowers while something moves (view_auto_quality.md, rules 5, 6, 8).
     int ao_hold_ = 0;                  // ViewFrame::ao_hold for this frame
     int ao_hold_seen_ = 0;             // the most since the script last asked (expect-held)
@@ -8077,6 +8089,7 @@ void App::viewport() {
                 plate_changed();
             } else if (const auto p = bed_point(e.z + d.z * float(hit->distance))) {
                 pressed_object_ = int(hit->object);
+                press_place_ = objects_[hit->object].place;
                 drag_anchor_ = *p;
             }
         }
@@ -8106,8 +8119,10 @@ void App::viewport() {
         }
     }
     if (ImGui::IsItemDeactivated() && editing) {
-        if (dragged_)
+        if (dragged_) {
+            remember_place(pressed_object_, press_place_);
             plate_changed(); // the move is over: now the slice is out of date
+        }
         else if (pressed_object_ < 0 && !on_gizmo && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint &&
                  ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
                  std::abs(io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left]) < 9.0f)
@@ -8853,6 +8868,7 @@ void App::plate_tools() {
 
     // The chosen tool's card.
     PlateObject& o = objects_[std::size_t(selected_)];
+    const Placement card_before = o.place;
     ImGui::SetNextWindowPos(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, card_top));
     ImGui::SetNextWindowBgAlpha(0.92f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
@@ -9130,8 +9146,14 @@ void App::plate_tools() {
     if (tool_ == PlateTool::Measure)
         measure_overlay();
     if (changed) {
+        // One undo step per edit: a drag of a slider or a field, or a click.
+        if (!card_editing_)
+            remember_place(selected_, card_before);
+        card_editing_ = true;
         selected_changed_live();
     }
+    if (!ImGui::IsAnyItemActive())
+        card_editing_ = false;
     if (mirror_axis >= 0)
         mirror_selected(mirror_axis);
     if (cut)
@@ -11712,8 +11734,10 @@ bool App::gizmo(bool editing) {
     if (gizmo_drag_) {
         GizmoDrag& g = *gizmo_drag_;
         if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            if (g.moved)
+            if (g.moved) {
+                remember_place(selected_, g.place0);
                 plate_changed();
+            }
             gizmo_drag_.reset();
             return true;
         }
@@ -11874,6 +11898,40 @@ void App::update_view_hold() {
         notify(tr(T::ViewLoweredNotice));
         save_preferences();
     }
+}
+
+// A model's placement before a drag or an edit, for Ctrl+Z (UI45). Nothing
+// when it did not change; a new step forgets what was undone.
+void App::remember_place(int object, const Placement& before) {
+    if (object < 0 || std::size_t(object) >= objects_.size())
+        return;
+    const Placement& now = objects_[std::size_t(object)].place;
+    if (now.x == before.x && now.y == before.y && now.rotation == before.rotation && now.scale == before.scale)
+        return;
+    place_undo_.push_back({std::size_t(object), objects_.size(), before});
+    if (place_undo_.size() > 100)
+        place_undo_.erase(place_undo_.begin());
+    place_redo_.clear();
+}
+
+// Ctrl+Z puts the last moved model back where it was; Ctrl+Y (or
+// Ctrl+Shift+Z) moves it again. Steps from a plate with other models are
+// dropped: their numbers no longer name the same models.
+void App::undo_place(bool redo) {
+    std::vector<PlaceStep>& from = redo ? place_redo_ : place_undo_;
+    std::vector<PlaceStep>& to = redo ? place_undo_ : place_redo_;
+    while (!from.empty() && (from.back().count != objects_.size() || from.back().object >= objects_.size()))
+        from.pop_back();
+    if (from.empty())
+        return;
+    const PlaceStep step = from.back();
+    from.pop_back();
+    PlateObject& o = objects_[step.object];
+    to.push_back({step.object, step.count, o.place});
+    o.place = step.place;
+    selected_ = int(step.object);
+    gizmo_drag_.reset();
+    plate_changed();
 }
 
 void App::compact_panel() {
@@ -14261,8 +14319,9 @@ void App::layout() {
             }
         if (ImGui::IsKeyPressed(ImGuiKey_K, false))
             camera_.orthographic = !camera_.orthographic;
-        if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
-            // The chosen part, or everything.
+        if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && !ImGui::IsKeyDown(ImGuiKey_LeftCtrl) &&
+            !ImGui::IsKeyDown(ImGuiKey_RightCtrl)) {
+            // The chosen part, or everything (not with Ctrl: that is undo, UI45).
             if (tab_ == Tab::Prepare && selected_ >= 0 && std::size_t(selected_) < placed_meshes_.size() &&
                 !placed_meshes_[std::size_t(selected_)].empty()) {
                 Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
@@ -14282,6 +14341,15 @@ void App::layout() {
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(false);
+    // The plate's undo and redo (UI45), not while a text field takes the keys
+    // (it undoes its own typing).
+    if (tab_ == Tab::Prepare && !ImGui::GetIO().WantTextInput && !printer_page_) {
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z, ImGuiInputFlags_RouteGlobal))
+            undo_place(false);
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y, ImGuiInputFlags_RouteGlobal) ||
+            ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, ImGuiInputFlags_RouteGlobal))
+            undo_place(true);
+    }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(true);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_R, ImGuiInputFlags_RouteGlobal))
@@ -15036,6 +15104,8 @@ void App::script_input() {
                : name == "f8"                                      ? ImGuiKey_F8
                : name == "f9"                                      ? ImGuiKey_F9
                : name == "f10"                                     ? ImGuiKey_F10
+               : name == "z"                                       ? ImGuiKey_Z
+               : name == "y"                                       ? ImGuiKey_Y
                                                                    : ImGuiKey_None;
     };
     if (step.verb == "click") {
@@ -15068,16 +15138,33 @@ void App::script_input() {
     } else if (step.verb == "type") {
         io.AddInputCharactersUTF8(step.value.c_str());
         next();
-    } else if (step.verb == "key") {
-        const ImGuiKey key = key_named(step.key);
+    } else if (step.verb == "key") { // a key, with ctrl+ and shift+ before it as they are held
+        std::string_view name = step.key;
+        std::vector<ImGuiKey> mods;
+        for (bool more = true; more;) {
+            more = false;
+            for (const auto& [prefix, mod] : {std::pair{std::string_view("ctrl+"), ImGuiMod_Ctrl},
+                                              std::pair{std::string_view("shift+"), ImGuiMod_Shift}})
+                if (name.starts_with(prefix)) {
+                    mods.push_back(mod);
+                    name.remove_prefix(prefix.size());
+                    more = true;
+                }
+        }
+        const ImGuiKey key = key_named(name);
         if (key == ImGuiKey_None)
             return fail_step("unknown key");
-        if (f == 0)
+        if (f == 0) {
+            for (const ImGuiKey m : mods)
+                io.AddKeyEvent(m, true);
             io.AddKeyEvent(key, true);
-        else if (f == 1)
+        } else if (f == 1) {
             io.AddKeyEvent(key, false);
-        else
+            for (const ImGuiKey m : mods)
+                io.AddKeyEvent(m, false);
+        } else {
             next();
+        }
     } else if (step.verb == "select-all") {
         if (f == 0) {
             io.AddKeyEvent(ImGuiMod_Ctrl, true);

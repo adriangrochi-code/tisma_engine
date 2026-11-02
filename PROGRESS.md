@@ -8732,3 +8732,15 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   con GLFW. El paquete trae además `tisma-engine.exe`, el programa de línea de comandos, que no tenía ícono: ahora lleva
   el mismo. **No probado en Windows** (lo compila la CI de Windows). Si el probador lo ve en un acceso directo hecho
   antes, puede ser la caché de íconos de Windows: pregunto al equipo de fichas en qué archivo o acceso lo vio.
+
+### UI45: deshacer después de arrastrar una manija
+
+- **Encontrado:** la placa no tenía deshacer. Con Ctrl+Z la tecla Z (encuadrar la pieza) podía dispararse, y la pieza
+  parecía tres veces más grande y en otro lugar; la tarjeta, la malla y el laminado seguían de acuerdo entre sí (guion
+  con arrastre, laminado y vuelta a Preparar: 136,92 en los tres).
+- **Hecho:** pila de deshacer de la ubicación de las piezas (hasta 100 pasos): uno por arrastre de manija, por arrastre
+  sobre la cama y por cambio en la tarjeta (un arrastre de deslizador es un paso). Ctrl+Z, y Ctrl+Y o Ctrl+Mayús+Z, en
+  Preparar, salvo mientras un campo de texto tiene el teclado (ahí deshace lo escrito). Los pasos de una placa con
+  otras piezas se descartan. Z ya no encuadra con Ctrl apretado. El paso de guion `key` acepta `ctrl+` y `shift+`.
+  Guion `place_undo`.
+- **Falta:** deshacer agregar, quitar, cortar y pintar (no son de ubicación).

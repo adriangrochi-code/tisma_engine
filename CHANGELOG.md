@@ -92,6 +92,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Deshacer en la placa** (reporte UI45 del equipo de fichas): Ctrl+Z vuelve a poner donde estaba la pieza que se
+  movió, giró o escaló (con las manijas, arrastrándola sobre la cama o desde la tarjeta) y Ctrl+Y (o Ctrl+Mayús+Z) lo
+  rehace; un paso por arrastre o por cambio. Antes no había deshacer, y con Ctrl+Z la tecla Z encuadraba la pieza, que
+  parecía agrandarse.
 - La pintura se ve sobre la pieza (reporte UI35 de los probadores): mientras se pinta, la pieza se dibuja gris claro y
   las marcas en verde y rojo oscuros, con un contraste medido en pantalla de 5,0 en una cara iluminada y 3,0 en una
   en sombra con oclusión ambiental (antes 1,2 y 1,0). Cada marca muestra su color al lado de su nombre.
