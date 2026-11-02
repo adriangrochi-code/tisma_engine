@@ -81,8 +81,9 @@ build/tisma-engine slice proyecto.3mf -o placa.gcode --summary resumen.json --sa
 ```
 
 Por la salida estándar va solo una línea `progress N` (0 a 100) cada vez que avanza; los avisos van a la salida de
-errores. El resumen lleva `print_time` («1h 2m 3s»), `print_time_s`, `filament_mm`, `filament_g` y `layers`, o
-`error` si falló. `--sandbox` no corre los scripts de posproceso de los ajustes; `--no-gpu` lamina con la CPU.
+errores. El resumen lleva `print_time` («1h 2m 3s»), `print_time_s`, `filament_mm`, `filament_g` (solo si se conoce
+la densidad del filamento) y `layers`, o `error` si falló. `--sandbox` no corre los scripts de posproceso de los
+ajustes; `--no-gpu` lamina con la CPU. En cualquier orden, `--threads <n>` usa como mucho `n` hilos de cálculo.
 
 Códigos de salida: 0 bien; 1 línea de comandos mal escrita; 2 un archivo de entrada falta, está mal o no se puede
 escribir la salida; 3 orden todavía sin hacer; 4 el modelo no se puede imprimir (sin triángulos, ninguna capa cerrada,

@@ -214,3 +214,25 @@ TEST_CASE("slice of a project: the same G-code from the engine's own file and fr
     std::filesystem::remove_all(dir);
 }
 
+TEST_CASE("CC19: --threads 1 gives the same G-code; an unknown density gives no grams", "[cli][cloud]") {
+    const auto dir = fresh_dir("tisma_test_node_threads");
+    Project p = box_project(100.0, 100.0);
+    p.settings.filament_density = 0.0; // not known
+    save_project(dir / "plate.3mf", p);
+    const Run all = run({"slice", (dir / "plate.3mf").string(), "-o", (dir / "all.gcode").string(), "--summary",
+                         (dir / "all.json").string(), "--sandbox"});
+    const Run one = run({"slice", (dir / "plate.3mf").string(), "-o", (dir / "one.gcode").string(), "--summary",
+                         (dir / "one.json").string(), "--sandbox", "--threads", "1"});
+    INFO(all.err << one.err);
+    REQUIRE(all.code == kExitOk);
+    REQUIRE(one.code == kExitOk);
+    CHECK(read_text(dir / "all.gcode") == read_text(dir / "one.gcode"));
+    const nlohmann::json j = nlohmann::json::parse(read_text(dir / "one.json"));
+    CHECK_FALSE(j.contains("filament_g"));
+    CHECK(j["filament_mm"].get<double>() > 100.0);
+    CHECK(run({"slice", (dir / "plate.3mf").string(), "--threads", "0"}).code == kExitUsage);
+    CHECK(run({"slice", (dir / "plate.3mf").string(), "--threads"}).code == kExitUsage);
+    CHECK_THAT(run({"--help"}).out, ContainsSubstring("--threads <n>"));
+    std::filesystem::remove_all(dir);
+}
+

@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`--threads <n>`** en todas las órdenes de la línea de comandos (ficha `cloud.md`, regla 19d): como mucho `n`
+  hilos de cálculo, para que un nodo de la nube reparta sus núcleos. Sale en `--help`, y los nodos lo pasan solos al
+  verlo ahí. El resumen de un laminado deja afuera los gramos si no se conoce la densidad del filamento.
 - **Servidor de Tisma Cloud por defecto**: `https://tismaservidores.net` (ficha `cloud.md`, regla 1). Una dirección
   guardada gana, y `--cloud-server` cambia la de una ejecución.
 - **Proyecto como 3MF** (ficha `formats.md`, reglas 6 a 11): guardar el proyecto con nombre `.3mf` hace un 3MF

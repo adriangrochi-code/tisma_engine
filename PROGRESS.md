@@ -8965,3 +8965,15 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - **Prueba:** el guion `cloud_default` (sin dirección guardada, el campo trae el servidor de Tisma Cloud). No le pide
   nada al servidor real.
 
+### Prueba de punta a punta con la nube real, y `--threads`
+
+- El equipo de fichas probó e6b5bf6 contra el servidor y un nodo reales. El proyecto `.3mf` pasó los controles; el
+  nodo corrió `tisma-engine slice … --summary … --sandbox --no-gpu`, el trabajo terminó y el G-code bajó igual que
+  uno local.
+- `--threads <n>` (`cloud.md`, regla 19d), en cualquier orden y con cualquier orden: limita los hilos de TBB con
+  `tbb::global_control`. Sale en `--help`; los nodos leen la ayuda y lo pasan solos al verlo.
+- El resumen deja afuera `filament_g` cuando no se conoce la densidad del filamento: mejor nada que un 0 g falso.
+- **Pruebas:** CC19 (el mismo G-code con `--threads 1`), valores inválidos, la ayuda, sin gramos sin densidad.
+- **No medido:** que el proceso no pase de un núcleo. TBB lo garantiza para su trabajo; los hilos propios del
+  motor, si los hay, no están limitados.
+

@@ -263,11 +263,14 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
 
     const std::optional<GcodeTotals> totals = read_gcode_totals(target);
     const double seconds = totals ? totals->print_seconds : 0.0;
-    const nlohmann::json summary{{"print_time", duration_text(seconds)},
-                                 {"print_time_s", std::llround(seconds)},
-                                 {"filament_mm", std::round(r.check.stats.filament * 100.0) / 100.0},
-                                 {"filament_g", std::round((totals ? totals->grams : 0.0) * 100.0) / 100.0},
-                                 {"layers", r.model ? r.model->layers.size() : r.check.stats.layers}};
+    nlohmann::json summary{{"print_time", duration_text(seconds)},
+                           {"print_time_s", std::llround(seconds)},
+                           {"filament_mm", std::round(r.check.stats.filament * 100.0) / 100.0},
+                           {"layers", r.model ? r.model->layers.size() : r.check.stats.layers}};
+    // The grams only with the filament's density: an unknown one (0) gives
+    // no weight rather than a wrong 0 g (the spec team's note, 2026-11-02).
+    if (settings.filament_density > 0.0)
+        summary["filament_g"] = std::round((totals ? totals->grams : 0.0) * 100.0) / 100.0;
     if (!write_summary(summary))
         return kExitInput;
     progress(100);

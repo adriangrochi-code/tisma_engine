@@ -30,7 +30,10 @@
 #include "resin/goo.hpp"
 #include "resin/resin.hpp"
 
+#include <oneapi/tbb/global_control.h>
+
 #include <algorithm>
+#include <charconv>
 #include <cctype>
 #include <cstdlib>
 #include <chrono>
@@ -41,6 +44,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 #include <ostream>
 #include <string>
 
@@ -89,6 +93,7 @@ constexpr std::string_view kUsage =
     "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
     "  tisma-engine info <model>\n"
+    "  --threads <n> on any command: at most n threads of work (cloud.md, rule 19d); without it, all\n"
     "  tisma-engine --help | --version\n"
     "A model is an STL, OBJ or 3MF file.\n";
 
@@ -768,13 +773,33 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
         out << "tisma-engine " << TISMA_VERSION << "\n";
         return kExitOk;
     }
+    // --threads <n> on any command (cloud.md, rule 19d): at most n threads of
+    // work, so a node shares its cores between jobs; without it, all.
+    std::vector<std::string_view> kept;
+    std::optional<tbb::global_control> threads;
+    for (std::size_t i = 0; i < rest.size(); ++i) {
+        if (rest[i] != "--threads") {
+            kept.push_back(rest[i]);
+            continue;
+        }
+        int n = 0;
+        const std::string_view value = i + 1 < rest.size() ? rest[i + 1] : std::string_view();
+        const auto [end, ec] = std::from_chars(value.data(), value.data() + value.size(), n);
+        if (value.empty() || ec != std::errc() || end != value.data() + value.size() || n < 1 || n > 4096) {
+            err << "error: --threads needs a whole number from 1\n" << kUsage;
+            return kExitUsage;
+        }
+        threads.emplace(tbb::global_control::max_allowed_parallelism, std::size_t(n));
+        ++i;
+    }
+    const std::span<const std::string_view> args_left(kept);
     try {
         if (command == "slice")
-            return node_slice_wanted(rest) ? cmd_slice_project(rest, out, err) : cmd_slice(rest, out, err);
+            return node_slice_wanted(args_left) ? cmd_slice_project(args_left, out, err) : cmd_slice(args_left, out, err);
         if (command == "info")
-            return cmd_info(rest, out, err);
+            return cmd_info(args_left, out, err);
         if (command == "analyze")
-            return cmd_analyze(rest, out, err);
+            return cmd_analyze(args_left, out, err);
     } catch (const std::exception& e) {
         // What the commands do not catch is the engine's own fault: said, not a crash.
         err << "error: internal: " << e.what() << "\n";

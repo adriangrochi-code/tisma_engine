@@ -24,9 +24,10 @@ bool node_slice_wanted(std::span<const std::string_view> args);
 // - on the output, one line `progress <0 to 100>` each time the progress
 //   changes, and nothing else; warnings go to the error output;
 // - the summary: print_time ("1h 2m 3s"), print_time_s, filament_mm,
-//   filament_g and layers; on a failure, `error` with the text for the
-//   person and an exit code other than 0 (the summary that cannot be
-//   written: the error goes to the error output);
+//   filament_g (only when the filament's density is known) and layers; on
+//   a failure, `error` with the text for the person and an exit code other
+//   than 0 (the summary that cannot be written: the error goes to the error
+//   output);
 // - --sandbox: the settings' post-processing scripts do not run; without it
 //   they run once confirmed (--yes, or Y on the input), as `slice` asks.
 int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err);
