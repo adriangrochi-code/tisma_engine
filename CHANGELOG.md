@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Informar un problema** (Más › «Informar un problema…»; ficha `problem_reports.md`): qué pasó, en pocas palabras,
+  los pasos y qué se esperaba; con permiso, la versión, el sistema, la impresora con sus perfiles y el registro de la
+  sesión, que se puede ver antes de mandar. Se manda con o sin cuenta; el aviso dice cuántas veces se informó antes el
+  mismo problema.
 - **Diálogo de Tisma Cloud** (Más › «Tisma Cloud…»; fichas `cloud.md` e `interface.md`): servidor, correo y
   contraseña; con la sesión abierta, el plan, si está pagado, las horas del mes tal como las manda el servidor y los
   trabajos a la vez; siempre, los planes públicos con el tuyo marcado y «Pagar o cambiar de plan…», que abre la página

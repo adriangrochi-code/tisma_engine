@@ -14,6 +14,7 @@
 #include "cad/fasteners.hpp"
 #include "cad/gears.hpp"
 #include "cloud/client.hpp"
+#include "cloud/report.hpp"
 #include "cloud/secret_store.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/painted.hpp"
@@ -553,6 +554,13 @@ private:
     void cloud_window();
     void cloud_start(CloudReply::Kind kind);
     void cloud_finished(CloudReply reply);
+    void report_window();
+    void log_line(const std::string& line);
+    struct ReportReply {
+        bool ok = false;
+        int similar = 0;
+        cloud::Failure error;
+    };
     // The handles on the chosen model (the owner's request, 2026-11-02, with a
     // picture): arrows to move, rings to turn, boxes to scale, by axis in the
     // bed's colours (X red, Y green, Z blue), dragged in the view.
@@ -952,6 +960,12 @@ private:
     std::string cloud_status_;
     bool cloud_status_error_ = false;
     std::future<CloudReply> cloud_job_;
+    // Report a problem (problem_reports.md): the dialog's fields and its call.
+    bool report_open_ = false, report_attach_ = true, report_focus_title_ = false;
+    int report_kind_ = 0; // bug, crash, suggestion
+    std::string report_title_, report_description_, report_steps_, report_expected_, report_status_;
+    std::future<ReportReply> report_job_;
+    std::string session_log_; // what this session said: notices, errors, steps (the report's log)
     int config_page_ = 0;
     std::string config_query_;
     struct ConfigState {
@@ -3479,6 +3493,7 @@ void App::save_preferences() {
 }
 
 void App::notify(std::string text, bool error) {
+    log_line(std::string(error ? "error: " : "") + text);
     toasts_.push_back({std::move(text), error, ImGui::GetTime() + kToastSeconds, {}});
 }
 
@@ -3491,6 +3506,7 @@ void App::fail(T title, std::string message, std::vector<std::string> details) {
     // The engine's words in the language (TR21).
     error_title_ = tr(title);
     error_message_ = translated_error(message);
+    log_line("error: " + error_title_ + ": " + error_message_);
     for (std::string& d : details)
         d = translated_error(d);
     error_details_ = std::move(details);
@@ -4989,6 +5005,11 @@ void App::top_bar() {
                                        ImGui::GetItemRectMax().y);
         if (cloud)
             cloud_open_ = true;
+        const bool report = ImGui::MenuItem(tr(T::ReportMenu));
+        g_menu_rects["report"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                        ImGui::GetItemRectMax().y);
+        if (report)
+            report_open_ = true;
         ImGui::Separator();
         if (ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S"))
             begin_save_project(false);
@@ -12438,6 +12459,214 @@ void App::cloud_window() {
     ImGui::PopStyleColor();
 }
 
+// A line of this session's log, with the time since the program started
+// (the report's log, problem_reports.md rule 3); its last 400 000 bytes.
+void App::log_line(const std::string& line) {
+    session_log_ += format("[%8.1f] ", ImGui::GetCurrentContext() ? ImGui::GetTime() : 0.0) + line + "\n";
+    if (session_log_.size() > 400000)
+        session_log_.erase(0, session_log_.size() - 300000);
+}
+
+// Report a problem (problem_reports.md, rules 1 to 9; cloud.md, rule 11).
+void App::report_window() {
+    if (report_job_.valid() && report_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const ReportReply r = report_job_.get();
+        if (r.ok) {
+            std::string text = tr(T::ReportSent);
+            if (r.similar > 0)
+                text += " " + format(tr(T::ReportSimilar), r.similar);
+            notify(text);
+            report_title_.clear(), report_description_.clear(), report_steps_.clear(), report_expected_.clear();
+            report_status_.clear();
+            save_preferences(); // the server typed here (rule 7)
+            ImGui::OpenPopup("###report");
+            report_open_ = false;
+            report_status_ = "\x01close"; // closes below, after the popup is current
+        } else {
+            report_status_ = r.error.status == 429 ? std::string(tr(T::ReportTooMany))
+                                                   : format(tr(T::ReportFailed), r.error.message.c_str());
+        }
+    }
+    if (report_job_.valid())
+        frame_pending_ = true;
+    if (report_open_) {
+        ImGui::OpenPopup("###report");
+        report_open_ = false;
+        report_focus_title_ = true;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing,
+                            ImVec2(0.5f, 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, rgb(theme_.panel));
+    if (!ImGui::BeginPopupModal((std::string(tr(T::ReportTitle)) + "###report").c_str(), nullptr,
+                                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::PopStyleColor();
+        return;
+    }
+    if (report_status_ == "\x01close") {
+        report_status_.clear();
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        ImGui::PopStyleColor();
+        return;
+    }
+    const auto rect_of = [](const std::string& name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    g_menu_rects["report_window"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                           ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                           ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    const float width = std::min(560.0f * scale_, vp->Size.x - 80.0f * scale_);
+    const bool busy = report_job_.valid();
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ReportTitle));
+    ImGui::PopFont();
+    loc::TextDisabled("%s", tr(T::ReportWhat));
+    loc::TextDisabled("%s", tr(T::ReportPrivacy));
+    ImGui::Spacing();
+    // The kind: three buttons (rule 2).
+    static constexpr T kKinds[] = {T::ReportKindBug, T::ReportKindCrash, T::ReportKindSuggestion};
+    static constexpr const char* kKindIds[] = {"report_bug", "report_crash", "report_suggestion"};
+    for (int k = 0; k < 3; ++k) {
+        if (k > 0)
+            ImGui::SameLine();
+        if (ImGui::RadioButton(tr(kKinds[k]), report_kind_ == k))
+            report_kind_ = k;
+        rect_of(kKindIds[k]);
+    }
+    ImGui::BeginDisabled(busy);
+    loc::Text("%s", tr(T::ReportFewWords));
+    ImGui::SetNextItemWidth(width);
+    if (report_focus_title_) {
+        ImGui::SetKeyboardFocusHere();
+        report_focus_title_ = false;
+    }
+    ImGui::InputTextWithHint("##report.title", tr(T::ReportFewWordsHint), &report_title_);
+    rect_of("report.title");
+    const auto multiline = [&](T label, const char* id, std::string& value, float lines) {
+        loc::Text("%s", tr(label));
+        ImGui::InputTextMultiline(id, &value, ImVec2(width, ImGui::GetTextLineHeight() * lines + 8.0f * scale_));
+        if (value.size() > cloud::kReportTextMax)
+            value.resize(cloud::kReportTextMax);
+        rect_of(id + 2);
+    };
+    multiline(T::ReportHappened, "##report.description", report_description_, 4.0f);
+    multiline(T::ReportSteps, "##report.steps", report_steps_, 3.0f);
+    loc::Text("%s", tr(T::ReportExpected));
+    ImGui::SetNextItemWidth(width);
+    ImGui::InputText("##report.expected", &report_expected_);
+    // The server, only when Configuración has none (rule 2).
+    const bool ask_server = cloud_address(cloud_server_).empty();
+    if (ask_server) {
+        loc::Text("%s", tr(T::CloudServer));
+        ImGui::SetNextItemWidth(width);
+        ImGui::InputText("##report.server", &cloud_server_);
+        rect_of("report.server");
+    }
+    ImGui::Checkbox(tr(T::ReportAttach), &report_attach_);
+    rect_of("report_attach");
+    ImGui::EndDisabled();
+    // What is attached: exactly the log that goes (IP5).
+    cloud::ReportInput input;
+    static constexpr const char* kKindNames[] = {"bug", "crash", "suggestion"};
+    input.kind = kKindNames[report_kind_];
+    input.title = report_title_, input.description = report_description_, input.steps = report_steps_;
+    input.expected = report_expected_, input.attach = report_attach_;
+    input.app_version = TISMA_VERSION;
+#if defined(_WIN32)
+    input.os = "Windows";
+#elif defined(__APPLE__)
+    input.os = "macOS";
+#else
+    input.os = "Linux";
+#endif
+    if (!system_.cpu.empty())
+        input.os += ", " + system_.cpu;
+    if (!gpu_renderer_.empty())
+        input.os += ", " + gpu_renderer_;
+    input.printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
+    input.print_profile = chosen_profile_[std::size_t(ProfileKind::Print)];
+    input.material_profile = chosen_profile_[std::size_t(ProfileKind::Filament)];
+    input.session_log = session_log_;
+    if (report_attach_) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::ReportSeeAttached)))
+            ImGui::OpenPopup("###report_attached");
+        rect_of("report_see_attached");
+    }
+    // What is attached, in its own window over the dialog: exactly what goes (IP5).
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing,
+                            ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal((std::string(tr(T::ReportSeeAttached)) + "###report_attached").c_str(), nullptr,
+                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+        std::string attached = cloud::report_log(input);
+        ImGui::InputTextMultiline("##report.attached", &attached,
+                                  ImVec2(std::min(640.0f * scale_, vp->Size.x - 80.0f * scale_),
+                                         std::min(360.0f * scale_, vp->Size.y - 160.0f * scale_)),
+                                  ImGuiInputTextFlags_ReadOnly);
+        rect_of("report.attached");
+        if (ImGui::Button(tr(T::Close), ImVec2(110.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            ImGui::CloseCurrentPopup();
+        rect_of("report_attached_close");
+        ImGui::EndPopup();
+    }
+    // The account it goes with, and the state.
+    loc::TextDisabled("%s", cloud_account_ ? format(tr(T::ReportWithAccount), cloud_account_->email.c_str()).c_str()
+                                           : tr(T::ReportWithoutAccount));
+    if (busy)
+        loc::TextDisabled("%s", tr(T::CloudWorking));
+    else if (!report_status_.empty())
+        loc::TextColored(rgb(0xE5484D), "%s", report_status_.c_str());
+    rect_of("report_status");
+    ImGui::PopTextWrapPos();
+
+    // Send and Cancel, at the bottom right.
+    ImGui::Separator();
+    const float bw = 110.0f * scale_;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, width - 2.0f * bw - ImGui::GetStyle().ItemSpacing.x));
+    if (ImGui::Button(tr(T::Cancel), ImVec2(bw, 0)) || (!busy && ImGui::IsKeyPressed(ImGuiKey_Escape))) {
+        report_status_.clear();
+        ImGui::CloseCurrentPopup();
+    }
+    rect_of("report_cancel");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(busy);
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+    const bool send = ImGui::Button(tr(T::ReportSend), ImVec2(bw, 0));
+    ImGui::PopStyleColor(3);
+    ImGui::EndDisabled();
+    rect_of("report_send");
+    if (send) {
+        // Before sending (rule 5): a few words, and a server.
+        std::string title = report_title_;
+        while (!title.empty() && std::isspace(static_cast<unsigned char>(title.back())))
+            title.pop_back();
+        if (title.size() < 3) {
+            report_status_ = tr(T::ReportNeedTitle);
+            report_focus_title_ = true;
+        } else if (cloud_address(cloud_server_).empty()) {
+            report_status_ = tr(T::CloudNeedServer);
+        } else {
+            cloud_server_ = cloud_address(cloud_server_);
+            report_status_.clear();
+            input.title = title;
+            report_job_ = std::async(std::launch::async, [server = cloud_server_, token = cloud_token_,
+                                                          fields = cloud::report_fields(input)] {
+                ReportReply r;
+                cloud::Client client(server, token);
+                r.ok = client.report(fields, r.similar, r.error);
+                return r;
+            });
+        }
+    }
+    ImGui::EndPopup();
+    ImGui::PopStyleColor();
+}
+
 void App::config_window() {
     if (!config_open_) {
         config_before_.reset();
@@ -14565,6 +14794,7 @@ void App::layout() {
     help_windows();
     config_window();
     cloud_window();
+    report_window();
     guide_overlay();
     if (!g_clamped.empty()) {
         notify(std::move(g_clamped));
@@ -15697,6 +15927,13 @@ void App::script_input() {
             return fail_step("no such field");
         field = step.value;
         next();
+    } else if (step.verb == "report-wait") { // until the problem report is answered (up to 20 s)
+        if (!report_job_.valid() && f >= 2) {
+            std::printf("ui-script: report-wait: %s (title \"%s\")\n", report_status_.c_str(), report_title_.c_str());
+            next();
+        }
+        else if (f > 1200)
+            fail_step("no answer");
     } else if (step.verb == "cloud-wait") { // until the call to Tisma Cloud is answered (up to 20 s)
         if (!cloud_job_.valid() && f >= 2) {
             std::printf("ui-script: cloud-wait: %s\n", cloud_status_.c_str());
@@ -15716,9 +15953,12 @@ void App::script_input() {
             got = cloud_account_ ? format("%g", cloud_account_->hours_left) : "";
         else if (step.key == "status")
             got = cloud_status_;
+        else if (step.key == "report")
+            got = report_status_;
         else
             return fail_step("unknown key");
-        const bool ok = step.key == "status" ? got.find(step.value) != std::string::npos : got == step.value;
+        const bool ok = step.key == "status" || step.key == "report" ? got.find(step.value) != std::string::npos
+                                                                     : got == step.value;
         std::printf("ui-script: expect-cloud %s %s: %s%s\n", step.key.c_str(), step.value.c_str(), ok ? "ok" : "got ",
                     ok ? "" : got.c_str());
         if (!ok)

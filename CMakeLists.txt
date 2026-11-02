@@ -320,7 +320,7 @@ if(NOT WIN32)
     message(STATUS "OpenSSL 3 not found: the cloud client talks only http://")
   endif()
 endif()
-add_library(tisma_net STATIC src/net/http.cpp src/cloud/client.cpp src/cloud/secret_store.cpp)
+add_library(tisma_net STATIC src/net/http.cpp src/cloud/client.cpp src/cloud/secret_store.cpp src/cloud/report.cpp)
 target_include_directories(tisma_net PUBLIC src)
 # tisma_core: running secret-tool or security (cad/process).
 target_link_libraries(tisma_net PRIVATE tisma_core nlohmann_json::nlohmann_json tisma_warnings)

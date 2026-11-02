@@ -61,6 +61,11 @@ public:
                                 "application/json");
                 return;
             }
+            if (body.value("title", "").rfind("flood", 0) == 0) {
+                res.status = 429;
+                res.set_content(R"({"detail": "Too many reports"})", "application/json");
+                return;
+            }
             std::lock_guard lock(mutex_);
             last_report_ = body;
             report_token_ = req.get_header_value("Authorization");

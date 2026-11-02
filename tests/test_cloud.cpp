@@ -3,6 +3,7 @@
 // client goes), on 127.0.0.1 with cpp-httplib's server.
 
 #include "cloud/client.hpp"
+#include "cloud/report.hpp"
 #include "cloud/secret_store.hpp"
 #include "net/http.hpp"
 #include "mock_cloud.hpp"
@@ -282,4 +283,42 @@ TEST_CASE("cloud: the session's token is kept in the system's store, not in a fi
     unsetenv("TISMA_FAKE_SECRETS");
     std::filesystem::remove(store);
 #endif
+}
+
+TEST_CASE("cloud: a problem report sends what was accepted and the log's end (IP3, IP4, IP8)", "[cloud]") {
+    cloud::ReportInput in;
+    in.title = "The supports are missing";
+    in.description = "Under the overhang";
+    in.app_version = "0.11.0";
+    in.os = "Windows 11 Pro 24H2 (x64), a description far longer than eighty characters so it gets cut";
+    in.printer = "Creality CR-5 Pro H";
+    in.print_profile = "0,20 mm";
+    in.material_profile = "PLA";
+    in.session_log = "line 1\nline 2\n";
+    std::map<std::string, std::string> f = cloud::report_fields(in);
+    CHECK(f.at("app") == "pc");
+    CHECK(f.at("kind") == "bug");
+    CHECK(f.at("os").size() == cloud::kReportOsMax);
+    // IP3: the log starts with the program, the system and the printer.
+    CHECK(f.at("log").rfind("Tisma 0.11.0\nSystem: Windows 11", 0) == 0);
+    CHECK(f.at("log").find("Printer: Creality CR-5 Pro H\n") != std::string::npos);
+    CHECK(f.at("log").find("line 2\n") != std::string::npos);
+    CHECK(f.at("log") == cloud::report_log(in)); // IP5: what is shown is what goes
+    // IP4: without the box, none of them.
+    in.attach = false;
+    f = cloud::report_fields(in);
+    CHECK_FALSE(f.contains("app_version"));
+    CHECK_FALSE(f.contains("os"));
+    CHECK_FALSE(f.contains("log"));
+    // IP8: a long log sends its end, the total within the limit, whole characters.
+    in.attach = true;
+    in.session_log = "START" + std::string(300000, 'x') + "ñ" + "THE END";
+    f = cloud::report_fields(in);
+    CHECK(f.at("log").size() <= cloud::kReportLogMax);
+    CHECK(f.at("log").find("START") == std::string::npos);
+    CHECK(f.at("log").ends_with("ñTHE END"));
+    // The texts within their limits, cut between characters.
+    in.description = std::string(9999, 'a') + "ñ";
+    f = cloud::report_fields(in);
+    CHECK(f.at("description") == std::string(9999, 'a'));
 }

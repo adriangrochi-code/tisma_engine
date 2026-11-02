@@ -8793,3 +8793,18 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   por `billing_url`.
 - **Sigue en C2:** el chip de la barra superior, informar un problema (`problem_reports.md`) y laminar o analizar en la
   nube desde la interfaz con el avance en la barra de estado.
+
+### Tisma Cloud, C2: informar un problema
+
+- `src/cloud/report.*`: los campos de `POST /v1/reports` (reglas 2 y 3 de `problem_reports.md`): `app` `pc`, el tipo,
+  los textos hasta 10 000 caracteres; con la casilla, `app_version`, `os` (80) y `log` con el programa, el sistema, la
+  impresora y los perfiles arriba y el final del registro (190 000 en total, sin cortar caracteres).
+- El registro de la sesión: cada aviso y cada error con su segundo (`log_line`), los últimos 400 kB.
+- El diálogo (reglas 1 a 9): tipo, pocas palabras, qué pasó, pasos, qué esperabas, el servidor solo si falta, la
+  casilla de adjuntar y «Ver lo que se adjunta» en su propia ventana (el texto exacto: IP5), la línea de la cuenta,
+  Cancelar y Mandar. Sin pocas palabras, el aviso y el cursor al campo (IP2). Bien: aviso de gracias con «se informó N
+  veces antes» (IP6). Mal: queda abierto con el motivo; 429 con su texto (IP7).
+- **Encontrado al probar:** con lo adjunto adentro del diálogo, este crecía hasta sacar «Mandar» de la pantalla a
+  760 px; ahora es una ventana aparte, como dice la ficha.
+- **Pruebas:** `[cloud]` (IP3, IP4, IP8, IP5) y el guion `report` contra el servidor simulado (IP2, IP5, IP6, IP7, CC6).
+- **Falta de esta ficha:** ofrecer informar después de un cierre inesperado (IP9) y «Mis informes» (IP10).

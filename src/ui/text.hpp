@@ -59,6 +59,28 @@
     X(ViewQualityCustom, "Personalizada", "Custom") \
     X(QualityAutomaticShort, "Calidad automática", "Automatic quality") \
     X(QualityStatus, "%s · %d FPS", "%s · %d FPS") \
+    X(ReportMenu, "Informar un problema…", "Report a problem…") \
+    X(ReportTitle, "Informar un problema", "Report a problem") \
+    X(ReportWhat, "Contá qué falló, o qué te gustaría que Tisma haga. Le llega al equipo de Tisma, que junta los informes del mismo problema para arreglar primero los más frecuentes.", "Tell what went wrong, or what you would like Tisma to do. It goes to the Tisma team, which groups the reports of the same problem to fix the most frequent ones first.") \
+    X(ReportPrivacy, "Los correos, las direcciones, el nombre de usuario en las rutas, las claves y los números de serie se quitan antes de guardarlo.", "E-mails, addresses, the user name in the paths, keys and serial numbers are removed before it is kept.") \
+    X(ReportKindBug, "Algo no funciona", "Something does not work") \
+    X(ReportKindCrash, "Tisma se cerró", "Tisma closed") \
+    X(ReportKindSuggestion, "Sugerencia", "Suggestion") \
+    X(ReportFewWords, "En pocas palabras", "In a few words") \
+    X(ReportFewWordsHint, "p. ej. Faltan los soportes debajo del voladizo", "e.g. The supports are missing under the overhang") \
+    X(ReportHappened, "Qué pasó", "What happened") \
+    X(ReportSteps, "Pasos para que vuelva a pasar", "Steps to make it happen again") \
+    X(ReportExpected, "Qué esperabas", "What you expected") \
+    X(ReportAttach, "Adjuntar la versión, el sistema, la impresora en uso y el registro de esta sesión", "Attach the version, the system, the printer in use and the log of this session") \
+    X(ReportSeeAttached, "Ver lo que se adjunta", "See what is attached") \
+    X(ReportWithAccount, "Se manda con la cuenta %s: sus informes y su estado están en la copia de sus datos.", "Sent with the account %s: its reports and their state are in the copy of its data.") \
+    X(ReportWithoutAccount, "Se manda sin cuenta.", "Sent without an account.") \
+    X(ReportSend, "Mandar", "Send") \
+    X(ReportNeedTitle, "Escribí en pocas palabras qué pasó.", "Write in a few words what happened.") \
+    X(ReportSent, "Gracias: el informe le llegó al equipo de Tisma.", "Thank you: the report was sent to the Tisma team.") \
+    X(ReportSimilar, "El mismo problema se informó %d veces antes: está entre los que se van a arreglar.", "The same problem was reported %d times before: it is among the ones to fix.") \
+    X(ReportFailed, "No se pudo mandar el informe: %s", "The report could not be sent: %s") \
+    X(ReportTooMany, "Se mandaron demasiados informes: probá de nuevo en una hora.", "Too many reports were sent: try again in an hour.") \
     X(CloudMenu, "Tisma Cloud…", "Tisma Cloud…") \
     X(CloudTitle, "Tisma Cloud", "Tisma Cloud") \
     X(CloudWhat, "Laminá y corré los análisis estructurales en los servidores de Tisma Cloud. La cuenta y el plan se manejan en el sitio web.", "Slice and run the structural analyses on the Tisma Cloud servers. The account and the plan are managed on the web site.") \
