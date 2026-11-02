@@ -91,10 +91,12 @@ ejecutó aquí):
 3. **La pestaña Diseño** (como Análisis):
    - **secciones de la barra de arriba** (pedido del dueño del 02-11-2026, que reemplaza el lugar anterior «entre
      Vista previa y Análisis»): un selector con forma de píldora al lado del logo cambia entre «Impresión 3D»
-     (Preparar, Vista previa, Análisis, Calibración, Impresora) e «Ingeniería» (Diseño y Tornillería). Cada sección
+     (Preparar, Vista previa, Análisis, Calibración, Impresora) e «Ingeniería» (Diseño). Cada sección
      muestra solo sus pestañas y su propio panel izquierdo, y vuelve a la última pestaña usada en ella. Diseño va en
      Ingeniería, con el ícono de una escuadra y lápiz y el nombre «Diseño» («Design» en inglés); con
      `ui.cad_design` apagado no hay sección Ingeniería;
+   - la biblioteca de piezas (tornillería, engranajes y las que siguen) va adentro de Diseño, no en otra pestaña
+     (pedido del dueño del 02-11-2026): sus páginas se abren desde «Nuevo» en la misma columna (`design_parts.md`);
    - se arma como Análisis: a la izquierda, en la columna del panel y no flotando sobre la vista, un **panel** con el
      título «Diseño», el nombre del diseño en violeta y sus
      secciones; en el medio, la misma vista 3D con la misma cama; abajo, la **línea de comandos** (regla 12); arriba
@@ -214,7 +216,7 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
 
 | # | Caso | Resultado |
 |---|---|---|
-| CD1 | Abrir el programa y tocar «Ingeniería» en el selector junto al logo | La barra muestra solo Diseño y Tornillería; el panel de Diseño ocupa la columna izquierda; volver a «Impresión 3D» abre la última pestaña usada allí; con `ui.cad_design` apagado no hay sección Ingeniería, ni Boceto y Primitiva en Organizar |
+| CD1 | Abrir el programa y tocar «Ingeniería» en el selector junto al logo | La barra muestra solo Diseño; en el panel, «Nuevo» tiene «Tornillería» y «Engranajes», que abren su página en la misma columna con «< Diseño» para volver (`design_parts.md`); el panel de Diseño ocupa la columna izquierda; volver a «Impresión 3D» abre la última pestaña usada allí; con `ui.cad_design` apagado no hay sección Ingeniería, ni Boceto y Primitiva en Organizar |
 | CD1b | Pestaña Diseño, sin nada hecho | Panel «Diseño» a la izquierda con Nuevo, Boceto, Operaciones, Parámetros, Historial y Medidas; «Mandar a la placa» apagado con «Hacé un sólido primero.»; la línea de comandos abajo |
 | CD2 | Boceto de un rectángulo de 40 × 30 mm en XY, extruir 20 mm | Un cuerpo de 24 000 mm³ y caja 40 × 30 × 20 |
 | CD3 | CD2 con una cota del ancho, sin restricciones de posición | La barra dice 2 grados de libertad; con «fijo» en una esquina, 0, y el boceto en negro |

@@ -5,7 +5,11 @@
 - como **puente**: deja usar desde afuera las impresoras de la red local;
 - como **programa de los nodos**: los servidores de la nube corren el motor para laminar y calcular.
 
-**Fase:** después de la primera versión.
+**Fase** (decisión del dueño, 02-11-2026: el laminado en la nube entra en la versión 1.0 de enero):
+- **en la 1.0:** la cuenta (reglas 1 a 5) con los planes públicos a la vista, laminar y calcular en la nube (reglas 6
+  a 10) desde el escritorio y desde la app de Android, informar un problema (regla 11) y el motor en los nodos (la línea
+  de comandos que llaman los servidores);
+- **después de la 1.0:** el puente de impresoras, la biblioteca de modelos y Thingiverse por el servidor.
 
 **Por qué es un contrato y no una ficha de funciones:** el servidor de Tisma Cloud es un programa aparte, del dueño,
 con licencia propietaria, y no tiene código de PrusaSlicer ni de Tisma Slicer: corre los programas como procesos
@@ -46,6 +50,12 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
 
 5. **El cobro no pasa por el motor:** pagar y cambiar de plan se hace en la página de la cuenta, en el navegador. El
    motor abre esa página; no maneja datos de pago.
+
+5a. **Planes a la vista:** el panel de la cuenta muestra los planes de `GET /v1/plans` (no hace falta sesión): `name`,
+    `monthly_hours`, `max_concurrent`, `price_cents` y `currency`, tal como los manda el servidor, con el plan actual
+    marcado. El motor no guarda ni inventa planes: la administración los cambia en el servidor y la lista se pide de nuevo al abrir el
+    panel. Las horas del mes (`GET /v1/me`) ya incluyen las que la administración dio o quitó a la cuenta; el motor
+    muestra el número que recibe, sin sumar nada.
 
 ## Laminar y calcular en la nube
 
@@ -171,3 +181,6 @@ Contra un servidor de prueba que el equipo del motor arma desde esta ficha.
 | CC10 | `tisma-engine slice` de un 3MF con `--sandbox` | Líneas `progress`, G-code y resumen JSON con las cinco claves; código 0 |
 | CC11 | El mismo proyecto con un script de posproceso en sus ajustes | El script no corre |
 | CC12 | Proyecto con una pieza fuera de la cama | Código distinto de 0 y `error` en el resumen |
+| CC13 | Abrir el panel de la cuenta sin sesión | Se ven los planes públicos que manda el servidor; un plan oculto no aparece |
+| CC14 | La administración da 3 horas a una cuenta de un plan de 5 | El panel muestra 8 horas del mes al volver a pedir `/v1/me` |
+| CC15 | La administración deshabilita la cuenta con la sesión abierta | El próximo pedido da 401; la interfaz pide entrar de nuevo |
