@@ -533,6 +533,7 @@ private:
     // takes the whole width; in Prepare a small card keeps the printer, the
     // filament and the print profile.
     bool panel_folded_now() const;
+    void update_view_hold();
     void compact_panel();
     void unfold_button();
     void apply_quality(const std::string& quality);
@@ -940,7 +941,14 @@ private:
     bool battery_saver_ = true;
     bool show_frame_time_ = true;
     bool panel_folded_ = false;     // ui.panel_folded
-    float compact_bottom_ = 0.0f;   // the folded panel's card: where it ends on the screen, this frame
+    float compact_bottom_ = 0.0f;
+    // What the view lowers while something moves (view_auto_quality.md, rules 5, 6, 8).
+    int ao_hold_ = 0;                  // ViewFrame::ao_hold for this frame
+    int ao_hold_seen_ = 0;             // the most since the script last asked (expect-held)
+    long ao_passes_mark_ = 0;          // the renderer's occlusions when the script last asked
+    bool lowered_ = false;             // lowered since the motion started, until it stops
+    bool lowered_notice_shown_ = false; // ui.lowered_notice_shown: the first time's toast
+    Mat4 last_view_{};                 // the camera of the last frame, to see it move   // the folded panel's card: where it ends on the screen, this frame
     struct GizmoDrag {
         int kind = 0; // 0 move along an axis, 1 turn about one, 2 scale along one, 3 scale all
         int axis = 0;
@@ -3285,6 +3293,7 @@ void App::load_preferences() {
             battery_saver_ = ui->value("battery_saver", true);
             show_frame_time_ = ui->value("show_frame_time", true);
             panel_folded_ = ui->value("panel_folded", false);
+            lowered_notice_shown_ = ui->value("lowered_notice_shown", false);
         }
         if (j.contains("settings")) {
             try {
@@ -3388,6 +3397,7 @@ void App::save_preferences() {
         j["ui"]["battery_saver"] = battery_saver_;
         j["ui"]["show_frame_time"] = show_frame_time_;
         j["ui"]["panel_folded"] = panel_folded_;
+        j["ui"]["lowered_notice_shown"] = lowered_notice_shown_;
         for (const auto& [printer, notes] : printer_notes_)
             if (!notes.empty())
                 j["printers"][printer]["notes"] = notes;
@@ -7917,6 +7927,10 @@ void App::status_bar() {
         std::string q = cap > 0.0 ? format(tr(T::QualityStatus), quality.c_str(), int(cap)) : quality;
         if (battery_saver_ && system_.power == PowerSource::Battery)
             q += std::string(" · ") + tr(T::ConfigOnBatteryShort);
+        if (ao_hold_ == 1)
+            q += std::string(" · ") + tr(T::ViewHeldOcclusion);
+        else if (ao_hold_ == 2)
+            q += std::string(" · ") + tr(T::ViewNoOcclusionMoving);
         right = q + (right.empty() ? "" : "  ·  ") + right;
     }
     if (result_ && !viewer_)
@@ -11778,6 +11792,46 @@ bool App::panel_folded_now() const {
 // The folded panel's card in Prepare: the printer with its nozzle, the
 // filament and the print profile, at the top left of the view under its
 // buttons, for those who set things once and only slice.
+// What the view lowers while something moves (view_auto_quality.md, rules 5
+// and 6). Painting holds the occlusion of the last still frame from the first
+// dab, always (rule 6). Dragging a model holds it too, and turning the camera
+// draws none, a held screen-space occlusion would slide over the picture: for
+// the balanced quality always, for the automatic and the custom ones once a
+// frame passes 70 % of the frame's budget, until the motion stops; never for
+// the high one, or with ui.lower_while_moving off. The first still frame has
+// the whole picture again.
+void App::update_view_hold() {
+    const Mat4 view = camera_.view();
+    const bool camera_moves = view != last_view_;
+    last_view_ = view;
+    const bool painting = painting_object_ >= 0;
+    const bool model_moves = dragged_ || (gizmo_drag_ && gizmo_drag_->moved);
+    const int before = ao_hold_;
+    ao_hold_ = 0;
+    if (render_mode_ != RenderMode::Ambient) {
+        lowered_ = false;
+    } else if (painting) {
+        ao_hold_ = 1;
+    } else if ((camera_moves || model_moves) && lower_while_moving_ && view_quality_ != "high") {
+        const double cap = frame_cap() > 0.0 ? frame_cap() : 60.0;
+        if (view_quality_ == "balanced" || view_ms_ > 0.7 * 1000.0 / cap)
+            lowered_ = true;
+        if (lowered_)
+            ao_hold_ = camera_moves ? 2 : 1;
+    } else if (!camera_moves && !model_moves) {
+        lowered_ = false;
+    }
+    ao_hold_seen_ = std::max(ao_hold_seen_, ao_hold_);
+    if (ao_hold_ != before)
+        frame_pending_ = true; // the still frame draws the whole picture
+    // The first time the automatic quality lowers something, a short notice (rule 8).
+    if (ao_hold_ != 0 && !painting && view_quality_ == "automatic" && !lowered_notice_shown_) {
+        lowered_notice_shown_ = true;
+        notify(tr(T::ViewLoweredNotice));
+        save_preferences();
+    }
+}
+
 void App::compact_panel() {
     // At the top left, the selection only (the owner's request, 2026-11-02:
     // no printer picture, no buttons): printer, filament and profile, each a
@@ -14010,6 +14064,7 @@ void App::layout() {
     }
     g_row_ids.clear();
     viewport();
+    update_view_hold();
     anchor_rect("plate", view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
     top_bar();
     // The printer's page covers the panel and the view (settings_panel.md,
@@ -14300,6 +14355,7 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.fxaa = fxaa_;
     f.moire_filter = moire_;
     f.ao_strength = ao_strength_;
+    f.ao_hold = ao_hold_;
     static const bool debug = [] {
         const char* v = std::getenv("TISMA_DEBUG_VISIBILITY");
         return v && *v == '1';
@@ -15200,6 +15256,8 @@ void App::script_input() {
             cad_design_ = step.value != "0";
             if (!cad_design_ && engineering_tab(tab_))
                 set_tab(Tab::Prepare);
+        } else if (step.key == "view_quality") { // as chosen in Configuración › Video
+            apply_quality(step.value);
         } else {
             return fail_step("unknown preference");
         }
@@ -15299,6 +15357,21 @@ void App::script_input() {
         if (!ok)
             return fail_step("the gear has " + std::to_string(gear_.teeth) + " teeth and " + std::to_string(got) + " mm3 (" +
                              gear_error_ + ")");
+        next();
+    } else if (step.verb == "expect-held") { // the view held its occlusion (1) or drew none (2) since the last ask
+        const int want = std::atoi(step.key.c_str()), seen = ao_hold_seen_;
+        std::printf("ui-script: expect-held %d: %s%d\n", want, seen == want ? "ok, " : "got ", seen);
+        ao_hold_seen_ = 0;
+        if (seen != want)
+            return fail_step("it was " + std::to_string(seen));
+        next();
+    } else if (step.verb == "expect-occlusion-passes") { // at most N occlusions computed since the last ask (OpenGL)
+        const long passes = renderer_.occlusion_passes() - ao_passes_mark_;
+        ao_passes_mark_ = renderer_.occlusion_passes();
+        const long most = std::atol(step.key.c_str());
+        std::printf("ui-script: expect-occlusion-passes %ld: %s%ld\n", most, passes <= most ? "ok, " : "got ", passes);
+        if (passes > most)
+            return fail_step(std::to_string(passes) + " were computed");
         next();
     } else if (step.verb == "paint-drag") { // the mouse down at "x0 y0", in one frame to "x1 y1", up (the Paint tool on)
         float x0 = 0, y0 = 0, x1 = 0, y1 = 0;

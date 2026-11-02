@@ -8680,5 +8680,15 @@ Prioridad del dueño (por el equipo de fichas): primero Configuración con la p�
   la herramienta elegida baja debajo de él. El guion `panel_fold` comprueba que no tapa las herramientas ni la
   tarjeta.
 
-**Sigue:** la etapa B de la calidad automática (medición, bajar al mover, oclusión congelada al pintar); después, el
-resto de UI27–UI41.
+- **Calidad automática, etapa B, primer paso (reglas 5, 6 y 8 de `view_auto_quality.md`):** la vista (OpenGL) puede
+  sostener la oclusión del último cuadro quieto o no dibujarla (`ViewFrame::ao_hold`); la firma de la oclusión no se
+  guarda mientras está sostenida, así el primer cuadro quieto la recalcula. Al pintar se sostiene siempre (regla 6).
+  Arrastrar una pieza la sostiene y girar la cámara la apaga (una oclusión de pantalla sostenida se correría sobre
+  la imagen; decisión propia), con Equilibrada siempre y con Automática o Personalizada cuando el tiempo de la vista
+  pasa el 70 % del presupuesto, hasta que el movimiento termina (sin parpadeo). La barra de estado dice el motivo
+  y, la primera vez con la Automática, un aviso (`ui.lowered_notice_shown`). Guion `paint_holds_occlusion` (AQ4: tres
+  trazos, tres oclusiones, una por cada vez que se suelta; antes, una por cada toque). La vista con Vulkan todavía no
+  tiene oclusión (V3), así que no cambia.
+
+**Sigue:** el resto de la etapa B (medición del primer arranque y «Medir de nuevo», bajar el suavizado y la
+resolución de la vista paso a paso, el tope de 30 al laminar); después, el resto de UI27–UI41.

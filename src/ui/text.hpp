@@ -59,6 +59,9 @@
     X(ViewQualityCustom, "Personalizada", "Custom") \
     X(QualityAutomaticShort, "Calidad automática", "Automatic quality") \
     X(QualityStatus, "%s · %d FPS", "%s · %d FPS") \
+    X(ViewHeldOcclusion, "oclusión congelada al mover", "occlusion held while moving") \
+    X(ViewNoOcclusionMoving, "sin oclusión al mover", "no occlusion while moving") \
+    X(ViewLoweredNotice, "Bajamos la calidad mientras se mueve para que la vista siga fluida. Podés cambiarlo en Configuración › Video.", "The quality goes down while something moves so the view stays smooth. You can change it in Settings › Video.") \
     X(ConfigBedShadow, "Sombra sobre la cama", "Shadow on the bed") \
     X(ConfigRenderScale, "Resolución de la vista", "View resolution") \
     X(ConfigLowerWhileMoving, "Bajar la calidad al mover", "Lower the quality while moving") \

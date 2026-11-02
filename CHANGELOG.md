@@ -16,6 +16,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   todo el ancho; en Preparar queda arriba a la izquierda, al lado de las herramientas de la placa, un recuadro mínimo
   con tres listas (impresora, filamento y perfil de impresión, sin dibujo ni botones), y su » lo vuelve a abrir. Se
   recuerda (`ui.panel_folded`, también en Configuración › Interfaz).
+- **La vista baja al mover** (ficha `view_auto_quality.md`, reglas 5, 6 y 8; UI37): al pintar, la oclusión ambiental
+  queda congelada desde el primer toque y se recalcula una sola vez al soltar, así el pincel no espera. Con la calidad
+  Equilibrada, o con la Automática o la Personalizada cuando un cuadro pasa el 70 % del presupuesto, mientras se
+  arrastra una pieza la oclusión queda congelada y mientras gira la cámara no se dibuja; el primer cuadro quieto
+  vuelve a la imagen completa. La Alta no baja nada. La barra de estado dice el motivo y, la primera vez que la
+  Automática baja algo, un aviso lo explica.
 - **Manijas sobre la pieza** (pedido del dueño con una imagen, 2026-11-02; cubre UI30 y UI34): con Mover, flechas
   por eje sobre la pieza; con Girar, tres anillos; con Escalar, una manija por eje y el centro para escalar parejo.
   X rojo, Y verde, Z azul, como en las letras de las tarjetas. Se arrastran en la vista: mover sigue al mouse a lo
