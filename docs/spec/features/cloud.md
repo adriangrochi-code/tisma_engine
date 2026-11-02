@@ -5,7 +5,10 @@
 - como **puente**: deja usar desde afuera las impresoras de la red local;
 - como **programa de los nodos**: los servidores de la nube corren el motor para laminar y calcular.
 
-**Fase:** después de la primera versión.
+**Fase** (decisión del dueño, 02-11-2026: el laminado en la nube entra en la versión 1.0 de enero):
+- **en la 1.0:** la cuenta (reglas 1 a 5), laminar y calcular en la nube (reglas 6 a 10) desde el escritorio y desde
+  la app de Android, y el motor en los nodos (la línea de comandos que llaman los servidores);
+- **después de la 1.0:** el puente de impresoras, la biblioteca de modelos y Thingiverse por el servidor.
 
 **Por qué es un contrato y no una ficha de funciones:** el servidor de Tisma Cloud es un programa aparte, del dueño,
 con licencia propietaria, y no tiene código de PrusaSlicer ni de Tisma Slicer: corre los programas como procesos
