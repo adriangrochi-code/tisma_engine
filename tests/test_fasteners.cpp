@@ -227,3 +227,30 @@ TEST_CASE("fasteners: an M8 nut and bolt slice and pass the G-code check", "[fas
         CHECK(check.ok());
     }
 }
+
+TEST_CASE("fasteners: thumb screws and nuts, standoffs and spacers", "[fasteners]") {
+    for (const FastenerKind kind :
+         {FastenerKind::ThumbScrew, FastenerKind::ThumbNut, FastenerKind::Standoff, FastenerKind::Spacer})
+        for (const char* size : {"M3", "M8"}) {
+            INFO(fastener_id(kind) << " " << size);
+            const TriangleMesh m = make_fastener(spec_of(kind, size, 15.0));
+            CHECK(closed_and_oriented(m));
+            CHECK(m.signed_volume() > 0.0);
+        }
+    const FastenerDims m3 = fastener_dims(spec_of(FastenerKind::Spacer, "M3"));
+    // The spacer: a tube from the clearance hole out, as long as asked.
+    const TriangleMesh spacer = make_fastener(spec_of(FastenerKind::Spacer, "M3", 10.0));
+    const double ring = 72.0 / 2.0 * std::sin(2.0 * pi / 72.0);
+    CHECK_THAT(spacer.signed_volume(),
+               WithinRel(ring * (m3.spacer_outer * m3.spacer_outer - m3.clearance_hole * m3.clearance_hole) / 4.0 * 10.0, 1e-5));
+    // The standoff is a nut as long as asked; the thumb nut's knurl reaches
+    // its diameter.
+    CHECK_THAT(make_fastener(spec_of(FastenerKind::Standoff, "M3", 15.0)).bounding_box().max.z, WithinAbs(15.0, 1e-4));
+    const BoundingBox thumb = make_fastener(spec_of(FastenerKind::ThumbNut, "M8")).bounding_box();
+    const double knurl = fastener_dims(spec_of(FastenerKind::ThumbNut, "M8")).knurl_diameter;
+    CHECK(thumb.max.x - thumb.min.x <= knurl + 1e-3);
+    CHECK(thumb.max.x - thumb.min.x > knurl - 1.0);
+    CHECK(is_nut(FastenerKind::Standoff));
+    CHECK_FALSE(has_thread(FastenerKind::Spacer));
+    CHECK(parse_fastener(fastener_json(spec_of(FastenerKind::ThumbScrew, "M6"))).kind == FastenerKind::ThumbScrew);
+}

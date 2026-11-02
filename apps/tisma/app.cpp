@@ -12,6 +12,7 @@
 
 #include "cad/design.hpp"
 #include "cad/fasteners.hpp"
+#include "cad/gears.hpp"
 #include "cad/process.hpp"
 #include "cad/solidcraft.hpp"
 #include "calibration/calibration.hpp"
@@ -516,7 +517,15 @@ private:
     // Fasteners (the owner's request, 2026-11-02): bolts, nuts, washers and
     // threaded rods with the ISO metric thread, made by the engine.
     void fasteners_panel();
-    void open_fasteners(bool open);
+    // The Design panel's pages: the design, Fasteners, Gears.
+    enum class DesignPage { Design, Fasteners, Gears };
+    void open_page(DesignPage page);
+    void show_page();
+    void gears_panel();
+    void rebuild_gear();
+    void send_gear_to_plate(bool with_mate);
+    std::string gear_name(const cad::GearSpec& spec) const;
+    void send_part(const TriangleMesh& mesh, const std::string& name, const std::string& json, bool replace);
     void rebuild_fastener();
     void send_fastener_to_plate(bool with_nut);
     void edit_fastener(std::size_t object);
@@ -863,7 +872,15 @@ private:
     bool fastener_dirty_ = true;
     bool fastener_edited_ = false; // a field typed, made again once it is left
     int fastener_target_ = 0;
-    bool design_fasteners_ = false; // the Design panel on its Fasteners page
+    DesignPage design_page_ = DesignPage::Design;
+    // The Gears page: the gear, its mesh, and the teeth of the one it meshes with.
+    cad::GearSpec gear_;
+    TriangleMesh gear_mesh_;
+    BoundingBox gear_box_;
+    std::string gear_error_;
+    bool gear_dirty_ = true;
+    bool gear_edited_ = false;
+    int gear_mate_teeth_ = 20;
     // The tab each section opens on: the last one used there.
     Tab last_print_tab_ = Tab::Prepare;
     Tab last_engineering_tab_ = Tab::Design;
@@ -4524,13 +4541,12 @@ void App::frame_now() {
     if (result_ && viewer_) {
         const auto& p = result_->preview;
         part = {{p.min[0], p.min[1], 0.0f}, {p.max[0], p.max[1], p.max[2]}};
-    } else if (tab_ == Tab::Design && !design_fasteners_) {
-        if (!design_box_.empty)
-            part = {{design_box_.min.x, design_box_.min.y, 0.0f}, {design_box_.max.x, design_box_.max.y, design_box_.max.z}};
     } else if (tab_ == Tab::Design) {
-        if (!fastener_box_.empty)
-            part = {{fastener_box_.min.x, fastener_box_.min.y, 0.0f},
-                    {fastener_box_.max.x, fastener_box_.max.y, fastener_box_.max.z}};
+        const BoundingBox& box = design_page_ == DesignPage::Fasteners ? fastener_box_
+                                 : design_page_ == DesignPage::Gears   ? gear_box_
+                                                                       : design_box_;
+        if (!box.empty)
+            part = {{box.min.x, box.min.y, 0.0f}, {box.max.x, box.max.y, box.max.z}};
     } else if (has_plate_ && !placed_.empty) {
         part = {{placed_.min.x, placed_.min.y, 0.0f}, {placed_.max.x, placed_.max.y, placed_.max.z}};
     }
@@ -4592,14 +4608,7 @@ void App::set_tab(Tab tab) {
         last_print_tab_ = tab;
     if (tab == Tab::Design && was != Tab::Design) {
         command_focus_ = true;
-        if (design_fasteners_) {
-            if (fastener_dirty_)
-                rebuild_fastener();
-            show_in_view(fastener_mesh_);
-            frame_all();
-        } else {
-            show_design();
-        }
+        show_page();
     } else if (engineering_tab(was) && !engineering_tab(tab)) {
         rebuild_plate();
         frame_all();
@@ -10518,11 +10527,20 @@ void App::design_panel() {
     }
     // Fasteners: made by the engine, so open with or without the tool (the
     // owner's request, 2026-11-02: inside Design).
-    if (ImGui::Button(tr(T::TabFasteners), ImVec2(-FLT_MIN, 0)))
-        open_fasteners(true);
-    rect_of("design_fasteners");
-    if (ImGui::IsItemHovered())
-        loc::SetTooltip("%s", tr(T::DesignFastenersTip));
+    {
+        const float half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+        if (ImGui::Button(tr(T::TabFasteners), ImVec2(half, 0)))
+            open_page(DesignPage::Fasteners);
+        rect_of("design_fasteners");
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::DesignFastenersTip));
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::GearsTitle), ImVec2(half, 0)))
+            open_page(DesignPage::Gears);
+        rect_of("design_gears");
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::DesignGearsTip));
+    }
     ImGui::BeginDisabled(true);
     ImGui::Button(tr(T::DesignOpenStep));
     ImGui::SameLine();
@@ -10727,8 +10745,12 @@ std::string App::fastener_name(const cad::FastenerSpec& spec) const {
         size += " × " + number(spec.pitch, 2); // a fine pitch is said
     const T kind = spec.kind == cad::FastenerKind::HexBolt      ? T::FastenerHexBolt
                    : spec.kind == cad::FastenerKind::SocketBolt ? T::FastenerSocketBolt
+                   : spec.kind == cad::FastenerKind::ThumbScrew ? T::FastenerThumbScrew
                    : spec.kind == cad::FastenerKind::HexNut     ? T::FastenerHexNut
+                   : spec.kind == cad::FastenerKind::ThumbNut   ? T::FastenerThumbNut
                    : spec.kind == cad::FastenerKind::Washer     ? T::FastenerWasher
+                   : spec.kind == cad::FastenerKind::Standoff   ? T::FastenerStandoff
+                   : spec.kind == cad::FastenerKind::Spacer     ? T::FastenerSpacer
                                                                 : T::FastenerRod;
     std::string name = std::string(tr(kind)) + " " + size;
     if (cad::has_length(spec.kind))
@@ -10748,26 +10770,59 @@ void App::rebuild_fastener() {
         fastener_mesh_ = {};
         fastener_box_ = {};
     }
-    if (tab_ == Tab::Design && design_fasteners_)
+    if (tab_ == Tab::Design && design_page_ == DesignPage::Fasteners)
         show_in_view(fastener_mesh_);
 }
 
-// The Fasteners page of the Design panel opened or closed; the view shows
-// the page's part or the design.
-void App::open_fasteners(bool open) {
-    design_fasteners_ = open;
-    if (tab_ != Tab::Design) {
-        set_tab(Tab::Design);
-        return;
-    }
-    if (open) {
+// A page of the Design panel opened; the view shows its part, or the design.
+void App::open_page(DesignPage page) {
+    design_page_ = page;
+    if (tab_ != Tab::Design)
+        set_tab(Tab::Design); // shows the page
+    else
+        show_page();
+}
+
+void App::show_page() {
+    switch (design_page_) {
+    case DesignPage::Fasteners:
         if (fastener_dirty_)
             rebuild_fastener();
         show_in_view(fastener_mesh_);
         frame_all();
-    } else {
+        break;
+    case DesignPage::Gears:
+        if (gear_dirty_)
+            rebuild_gear();
+        show_in_view(gear_mesh_);
+        frame_all();
+        break;
+    case DesignPage::Design:
         show_design();
+        break;
     }
+}
+
+// A part of a page sent to the plate: a new object, or the one it was opened
+// from, replaced in its place with its painting carried over.
+void App::send_part(const TriangleMesh& mesh, const std::string& name, const std::string& json, bool replace) {
+    PlateObject* target = nullptr;
+    if (replace && fastener_target_ != 0)
+        for (PlateObject& o : objects_)
+            if (o.design_id == fastener_target_ && !o.fastener.empty())
+                target = &o;
+    if (target) {
+        Painting carried = carried_painting(target->painting, target->mesh, mesh);
+        target->mesh = mesh;
+        target->painting = std::move(carried);
+        target->fastener = json;
+        target->name = name;
+        plate_changed();
+        return;
+    }
+    add_mesh(mesh, from_utf8(name));
+    objects_.back().fastener = json;
+    objects_.back().design_id = next_design_id_++;
 }
 
 // «Mandar a la placa», as in Design: a new part is added as an object, one
@@ -10778,49 +10833,36 @@ void App::send_fastener_to_plate(bool with_nut) {
         rebuild_fastener();
     if (fastener_mesh_.empty())
         return;
-    const std::string json = cad::fastener_json(fastener_);
-    PlateObject* target = nullptr;
-    if (fastener_target_ != 0)
-        for (PlateObject& o : objects_)
-            if (o.design_id == fastener_target_ && !o.fastener.empty())
-                target = &o;
     const TriangleMesh mesh = fastener_mesh_;
     const cad::FastenerSpec spec = fastener_;
+    const bool replaced = fastener_target_ != 0;
     set_tab(Tab::Prepare);
-    if (target) {
-        Painting carried = carried_painting(target->painting, target->mesh, mesh);
-        target->mesh = mesh;
-        target->painting = std::move(carried);
-        target->fastener = json;
-        target->name = fastener_name(spec);
-        plate_changed();
-    } else {
-        add_mesh(mesh, from_utf8(fastener_name(spec)));
-        objects_.back().fastener = json;
-        objects_.back().design_id = next_design_id_++;
-    }
-    if (with_nut && cad::has_length(spec.kind)) {
+    send_part(mesh, fastener_name(spec), cad::fastener_json(spec), true);
+    if (with_nut && cad::has_thread(spec.kind) && !cad::is_nut(spec.kind)) {
         cad::FastenerSpec nut = spec;
-        nut.kind = cad::FastenerKind::HexNut;
-        add_mesh(cad::make_fastener(nut), from_utf8(fastener_name(nut)));
-        objects_.back().fastener = cad::fastener_json(nut);
-        objects_.back().design_id = next_design_id_++;
+        nut.kind = spec.kind == cad::FastenerKind::ThumbScrew ? cad::FastenerKind::ThumbNut : cad::FastenerKind::HexNut;
+        send_part(cad::make_fastener(nut), fastener_name(nut), cad::fastener_json(nut), false);
     }
-    notify(tr(target ? T::DesignReplaced : T::DesignSent));
+    notify(tr(replaced ? T::DesignReplaced : T::DesignSent));
 }
 
 void App::edit_fastener(std::size_t object) {
     if (object >= objects_.size())
         return;
+    const std::string& json = objects_[object].fastener;
+    const bool gear = json.find("tisma-gear-1") != std::string::npos;
     try {
-        fastener_ = cad::parse_fastener(objects_[object].fastener);
+        if (gear)
+            gear_ = cad::parse_gear(json);
+        else
+            fastener_ = cad::parse_fastener(json);
     } catch (const std::exception& e) {
         notify(e.what(), true);
         return;
     }
     fastener_target_ = objects_[object].design_id;
-    fastener_dirty_ = true;
-    open_fasteners(true);
+    (gear ? gear_dirty_ : fastener_dirty_) = true;
+    open_page(gear ? DesignPage::Gears : DesignPage::Fasteners);
 }
 
 // The Fasteners tab's panel, in the left column like Design's: the part,
@@ -10850,7 +10892,7 @@ void App::fasteners_panel() {
     ImGui::BeginChild("##fasteners_scroll", ImVec2(0, -footer));
     // A page of Design: the way back to the design's sections.
     if (ImGui::SmallButton(tr(T::FastenersBack)))
-        open_fasteners(false);
+        open_page(DesignPage::Design);
     rect_of("fasteners_back");
     ImGui::PushFont(nullptr, kTitleSize * 0.9f);
     ImGui::TextUnformatted(tr(T::TabFasteners));
@@ -10869,7 +10911,9 @@ void App::fasteners_panel() {
     // The part.
     section(T::FastenersSecPart);
     {
-        const T labels[] = {T::FastenerHexBolt, T::FastenerSocketBolt, T::FastenerHexNut, T::FastenerWasher, T::FastenerRod};
+        const T labels[] = {T::FastenerHexBolt, T::FastenerSocketBolt, T::FastenerThumbScrew,
+                            T::FastenerHexNut,  T::FastenerThumbNut,   T::FastenerWasher,
+                            T::FastenerRod,     T::FastenerStandoff,   T::FastenerSpacer};
         const float width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
         int k = 0;
         for (const cad::FastenerKind kind : cad::kFastenerKinds) {
@@ -10965,7 +11009,8 @@ void App::fasteners_panel() {
             line(tr(T::FastenerTapDrill), number(dims.d - dims.pitch, 2) + " mm");
         }
         line(tr(T::FastenerClearanceHole), number(dims.clearance_hole, 1) + " mm");
-        if (fastener_.kind == cad::FastenerKind::HexBolt || fastener_.kind == cad::FastenerKind::HexNut)
+        if (fastener_.kind == cad::FastenerKind::HexBolt || fastener_.kind == cad::FastenerKind::HexNut ||
+            fastener_.kind == cad::FastenerKind::Standoff)
             line(tr(T::FastenerKey), number(dims.nut_width, 1) + " mm");
         if (fastener_.kind == cad::FastenerKind::SocketBolt)
             line(tr(T::FastenerKey), number(dims.socket_key, 1) + " mm");
@@ -10994,7 +11039,7 @@ void App::fasteners_panel() {
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         loc::SetTooltip("%s", tr(T::DesignSendTip));
     bool pair = false;
-    if (cad::has_length(fastener_.kind)) {
+    if (cad::has_thread(fastener_.kind) && !cad::is_nut(fastener_.kind)) {
         ImGui::BeginDisabled(!can_send);
         pair = ImGui::Button(tr(T::FastenerSendPair), ImVec2(-FLT_MIN, 0));
         ImGui::EndDisabled();
@@ -11002,6 +11047,226 @@ void App::fasteners_panel() {
     }
     if (send || pair)
         send_fastener_to_plate(pair);
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+std::string App::gear_name(const cad::GearSpec& g) const {
+    std::string name = format(tr(T::GearName), g.teeth, number(g.module, 2).c_str());
+    if (g.helix_angle > 0.0)
+        name += " " + std::string(tr(g.herringbone ? T::GearHerringbone : T::GearHelical));
+    return name;
+}
+
+void App::rebuild_gear() {
+    gear_dirty_ = false;
+    gear_error_ = cad::check_gear(gear_);
+    if (gear_error_.empty()) {
+        gear_mesh_ = cad::make_gear(gear_);
+        gear_box_ = gear_mesh_.bounding_box();
+    } else {
+        gear_mesh_ = {};
+        gear_box_ = {};
+    }
+    if (tab_ == Tab::Design && design_page_ == DesignPage::Gears)
+        show_in_view(gear_mesh_);
+}
+
+// The gear to the plate; with `with_mate`, the one it meshes with too: the
+// same module, pressure angle, width and backlash, the teeth asked for, and a
+// helix of the other hand.
+void App::send_gear_to_plate(bool with_mate) {
+    if (gear_dirty_)
+        rebuild_gear();
+    if (gear_mesh_.empty())
+        return;
+    const TriangleMesh mesh = gear_mesh_;
+    const cad::GearSpec spec = gear_;
+    const bool replaced = fastener_target_ != 0;
+    set_tab(Tab::Prepare);
+    send_part(mesh, gear_name(spec), cad::gear_json(spec), true);
+    if (with_mate) {
+        cad::GearSpec mate = spec;
+        mate.teeth = gear_mate_teeth_;
+        mate.left_hand = !spec.left_hand;
+        const double rf = mate.module * mate.teeth / 2.0 - 1.25 * mate.module;
+        mate.bore = std::min(mate.bore, std::max(0.0, 2.0 * (rf - std::max(1.0, mate.module))));
+        if (cad::check_gear(mate).empty())
+            send_part(cad::make_gear(mate), gear_name(mate), cad::gear_json(mate), false);
+    }
+    notify(tr(replaced ? T::DesignReplaced : T::DesignSent));
+}
+
+// The Gears page of the Design panel: the kind, the sizes, the gear it
+// meshes with, what it measures, and the way to the plate.
+void App::gears_panel() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##gears", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    const auto rect_of = [](const std::string& name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    const auto section = [&](T title) {
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::Separator();
+    };
+    constexpr std::uint32_t kViolet = 0x8B5CF6;
+    const float footer = 3.0f * ImGui::GetFrameHeightWithSpacing() + 10.0f * scale_;
+    ImGui::BeginChild("##gears_scroll", ImVec2(0, -footer));
+    if (ImGui::SmallButton(tr(T::FastenersBack)))
+        open_page(DesignPage::Design);
+    rect_of("gears_back");
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::GearsTitle));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    loc::TextColored(rgb(kViolet), "%s", tr(T::GearsSubtitle));
+    bool changed = false;
+    if (fastener_target_ != 0) {
+        loc::TextDisabled("%s", tr(T::FastenersEditing));
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::FastenersNew)))
+            fastener_target_ = 0;
+        rect_of("gears_new");
+    }
+
+    // The kind: spur, helical, herringbone.
+    section(T::FastenersSecPart);
+    {
+        const float width = (ImGui::GetContentRegionAvail().x - 2.0f * ImGui::GetStyle().ItemSpacing.x) / 3.0f;
+        const int kind = gear_.helix_angle <= 0.0 ? 0 : gear_.herringbone ? 2 : 1;
+        const struct {
+            T label;
+            const char* id;
+        } kinds[] = {{T::GearSpur, "gears_kind_spur"}, {T::GearHelical, "gears_kind_helical"}, {T::GearHerringbone, "gears_kind_herringbone"}};
+        for (int k = 0; k < 3; ++k) {
+            if (k > 0)
+                ImGui::SameLine();
+            const bool on = kind == k;
+            if (on) {
+                ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+            }
+            if (ImGui::Button(tr(kinds[k].label), ImVec2(width, 0)) && !on) {
+                gear_.helix_angle = k == 0 ? 0.0 : gear_.helix_angle > 0.0 ? gear_.helix_angle : 20.0;
+                gear_.herringbone = k == 2;
+                changed = true;
+            }
+            if (on)
+                ImGui::PopStyleColor(3);
+            rect_of(kinds[k].id);
+        }
+    }
+
+    // The sizes.
+    section(T::FastenersSecSize);
+    const auto field = [&](const char* key, T label, double* value, const char* fmt, double step) {
+        const float width = 130.0f * scale_;
+        ImGui::SetNextItemWidth(width);
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        const ImVec4 rect(at.x, at.y, at.x + width - 2.0f * (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x),
+                          at.y + ImGui::GetFrameHeight());
+        if (loc::InputNumber(tr(label), value, fmt, step))
+            gear_edited_ = true;
+        if (rect.y >= ImGui::GetWindowPos().y && rect.w <= ImGui::GetWindowPos().y + ImGui::GetWindowSize().y)
+            g_field_rects[key] = rect;
+    };
+    {
+        double teeth = gear_.teeth;
+        field("gears.teeth", T::GearTeeth, &teeth, "%.0f", 1.0);
+        gear_.teeth = int(std::lround(std::clamp(teeth, 1.0, 1000.0)));
+    }
+    field("gears.module", T::GearModule, &gear_.module, "%.2f", 0.25);
+    field("gears.width", T::GearWidth, &gear_.width, "%.1f", 1.0);
+    field("gears.bore", T::GearBore, &gear_.bore, "%.2f", 0.1);
+    field("gears.pressure", T::GearPressureAngle, &gear_.pressure_angle, "%.1f", 0.5);
+    if (gear_.helix_angle > 0.0) {
+        field("gears.helix", T::GearHelixAngle, &gear_.helix_angle, "%.1f", 1.0);
+        if (ImGui::Checkbox(tr(T::GearLeftHand), &gear_.left_hand))
+            changed = true;
+    }
+    field("gears.backlash", T::GearBacklash, &gear_.backlash, "%.2f", 0.05);
+    loc::TextDisabled("%s", tr(T::GearBacklashHint));
+    if (gear_edited_ && !ImGui::IsAnyItemActive()) {
+        gear_edited_ = false;
+        changed = true;
+    }
+    if (changed)
+        rebuild_gear();
+
+    // The gear it meshes with.
+    section(T::GearMate);
+    {
+        double mate = gear_mate_teeth_;
+        const float width = 130.0f * scale_;
+        ImGui::SetNextItemWidth(width);
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        loc::InputNumber(tr(T::GearMateTeeth), &mate, "%.0f", 1.0);
+        g_field_rects["gears.mate"] = ImVec4(at.x, at.y, at.x + width - 2.0f * (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x),
+                                             at.y + ImGui::GetFrameHeight());
+        gear_mate_teeth_ = int(std::lround(std::clamp(mate, 6.0, 400.0)));
+        if (gear_error_.empty()) {
+            loc::Text(tr(T::GearCenterDistance), number(cad::center_distance(gear_, gear_mate_teeth_), 3).c_str());
+            const double ratio = double(gear_mate_teeth_) / gear_.teeth;
+            loc::TextDisabled(tr(T::GearRatio), number(ratio, 3).c_str());
+        }
+    }
+
+    // What it measures.
+    section(T::DesignSecMeasures);
+    if (!gear_error_.empty()) {
+        loc::TextColored(rgb(0xE5484D), "%s", tr(T::FastenerBad));
+        rect_of("gears_bad");
+        loc::TextDisabled("%s", gear_error_.c_str());
+    } else if (ImGui::BeginTable("##gear_measures", 2)) {
+        const cad::GearDims d = cad::gear_dims(gear_);
+        const auto line = [](const char* name, const std::string& value) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            loc::TextDisabled("%s", name);
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(value.c_str());
+        };
+        line(tr(T::GearPitchDiameter), number(d.pitch_diameter, 3) + " mm");
+        line(tr(T::GearOutsideDiameter), number(d.outside_diameter, 3) + " mm");
+        line(tr(T::GearRootDiameter), number(d.root_diameter, 3) + " mm");
+        line(tr(T::GearCircularPitch), number(d.circular_pitch, 3) + " mm");
+        line(tr(T::DesignVolume), format("%.1f mm³", gear_mesh_.signed_volume()));
+        line(tr(T::DesignBox), format("%.1f × %.1f × %.1f mm", double(gear_box_.max.x - gear_box_.min.x),
+                                      double(gear_box_.max.y - gear_box_.min.y), double(gear_box_.max.z - gear_box_.min.z)));
+        ImGui::EndTable();
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+
+    // The footer: to the plate, and with its mate.
+    ImGui::Separator();
+    const bool can_send = !gear_mesh_.empty();
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(kViolet));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(0x7C3AED));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, rgb(0x6D28D9));
+    ImGui::BeginDisabled(!can_send);
+    const bool send = ImGui::Button(tr(T::DesignSend), ImVec2(-FLT_MIN, ImGui::GetFrameHeight() * 1.3f));
+    ImGui::EndDisabled();
+    ImGui::PopStyleColor(3);
+    rect_of("gears_send");
+    ImGui::BeginDisabled(!can_send);
+    const bool pair = ImGui::Button(tr(T::GearSendPair), ImVec2(-FLT_MIN, 0));
+    ImGui::EndDisabled();
+    rect_of("gears_send_pair");
+    if (send || pair)
+        send_gear_to_plate(pair);
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
@@ -11215,16 +11480,23 @@ void App::run_command(std::string text) {
         {"nut", cad::FastenerKind::HexNut},         {"arandela", cad::FastenerKind::Washer},
         {"washer", cad::FastenerKind::Washer},      {"varilla", cad::FastenerKind::ThreadedRod},
         {"rod", cad::FastenerKind::ThreadedRod},    {"tornilleria", cad::FastenerKind::HexBolt},
-        {"fasteners", cad::FastenerKind::HexBolt}};
+        {"fasteners", cad::FastenerKind::HexBolt},  {"mariposa", cad::FastenerKind::ThumbScrew},
+        {"moleteado", cad::FastenerKind::ThumbScrew}, {"thumbscrew", cad::FastenerKind::ThumbScrew},
+        {"separador", cad::FastenerKind::Standoff}, {"standoff", cad::FastenerKind::Standoff},
+        {"espaciador", cad::FastenerKind::Spacer},  {"spacer", cad::FastenerKind::Spacer}};
     for (const auto& [name, kind] : kFastenerWords)
         if (word == name) {
             if (fastener_.kind != kind && word != "tornilleria" && word != "fasteners") {
                 fastener_.kind = kind;
                 fastener_dirty_ = true;
             }
-            open_fasteners(true);
+            open_page(DesignPage::Fasteners);
             return;
         }
+    if (word == "engranaje" || word == "gear" || word == "engranajes" || word == "gears") {
+        open_page(DesignPage::Gears);
+        return;
+    }
     if (const std::optional<cad::Primitive> kind = primitive_named(word)) {
         last_command_ = word;
         command_prompt_ = CommandPrompt{*kind, cad::default_sizes(*kind), 0};
@@ -12706,8 +12978,10 @@ void App::layout() {
     } else {
         // In Design, the panel takes the print settings' column (the owner's
         // request, 2026-11-02: the view stays clear).
-        if (tab_ == Tab::Design && design_fasteners_)
+        if (tab_ == Tab::Design && design_page_ == DesignPage::Fasteners)
             fasteners_panel(); // a page of the Design panel, in its place
+        else if (tab_ == Tab::Design && design_page_ == DesignPage::Gears)
+            gears_panel();
         else if (tab_ == Tab::Design)
             design_panel();
         else
@@ -12733,7 +13007,7 @@ void App::layout() {
             part_labels();
         if (tab_ == Tab::Analysis)
             analysis_panel();
-        if (tab_ == Tab::Design && !design_fasteners_) {
+        if (tab_ == Tab::Design && design_page_ == DesignPage::Design) {
             design_command_line();
             if (sketch_edit_) {
                 sketch_strip();
@@ -12783,8 +13057,10 @@ void App::layout() {
     // Shortcuts.
     if (no_popup() && cad_design_ && engineering_tab(tab_) &&
         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, ImGuiInputFlags_RouteGlobal)) {
-        if (design_fasteners_)
+        if (design_page_ == DesignPage::Fasteners)
             send_fastener_to_plate(false);
+        else if (design_page_ == DesignPage::Gears)
+            send_gear_to_plate(false);
         else
             send_design_to_plate(); // cad_design.md, rule 21
     }
@@ -13613,7 +13889,7 @@ void App::script_input() {
                 design_scroll_to_ = key;
                 return;
             }
-            if (key.starts_with("fasteners.")) // a field of the Fasteners panel, in view
+            if (key.starts_with("fasteners.") || key.starts_with("gears.")) // a field of a Design page, in view
                 return;
             if (!setting_place(key))
                 return fail_step("no such setting");
@@ -13961,6 +14237,16 @@ void App::script_input() {
         if (!ok)
             return fail_step("the part is " + std::string(cad::fastener_id(fastener_.kind)) + " of " + std::to_string(got) +
                              " mm3 (" + fastener_error_ + ")");
+        next();
+    } else if (step.verb == "expect-gear") { // the Gears page's gear: TEETH and its volume in mm3 within 1 %
+        const double want = std::atof(step.value.c_str());
+        const double got = gear_mesh_.signed_volume();
+        const bool ok = std::atoi(step.key.c_str()) == gear_.teeth && !gear_mesh_.empty() && std::abs(got - want) <= 0.01 * want;
+        std::printf("ui-script: expect-gear %s %s: %s%d %.1f\n", step.key.c_str(), step.value.c_str(), ok ? "ok, " : "got ",
+                    gear_.teeth, got);
+        if (!ok)
+            return fail_step("the gear has " + std::to_string(gear_.teeth) + " teeth and " + std::to_string(got) + " mm3 (" +
+                             gear_error_ + ")");
         next();
     } else if (step.verb == "expect-apart") { // two named controls drawn, neither over the other
         const auto a = g_menu_rects.find(step.key), b = g_menu_rects.find(step.value);

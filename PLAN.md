@@ -1195,7 +1195,8 @@ previa, Análisis, Calibración, Impresora) de Ingeniería (Diseño y Torniller�
 izquierda. **Tornillería** (hecha el 2026-11-02, como página del panel de Diseño): tornillos, tuercas, arandelas y varillas con rosca métrica ISO y
 holgura para plástico, hechos por el motor (`src/cad/fasteners.*`) sin el componente de diseño. Lo que sigue en
 Ingeniería (el dueño pide «una solución de AutoCAD bastante completa» para piezas de impresión 3D): tornillos y
-tuercas de mano, separadores, engranajes rectos y helicoidales, después cremalleras, poleas, insertos y bisagras; y
+tuercas de mano, separadores, engranajes rectos y helicoidales (hechos el 2026-11-02), después cremalleras, poleas,
+insertos y bisagras; y
 roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tablas).
 
 ## Avance

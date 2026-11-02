@@ -263,7 +263,19 @@ M24 o «A medida» con su diámetro; el paso, 0 para el normal de la tabla; el l
 enrosque) y **Medidas** (rosca, broca para roscar, agujero de paso de ISO 273, llave, volumen y caja). Al pie,
 **Mandar a la placa** (Ctrl+Mayús+P) y, en tornillos y varillas, **Mandar con su tuerca**. En la placa, «Editar en
 Tornillería» en el menú de la pieza la vuelve a abrir; mandarla otra vez la reemplaza en su lugar. Las piezas las hace
-el motor (`src/cad/fasteners.*`), así que andan aunque falte el componente de diseño.
+el motor (`src/cad/fasteners.*`), así que andan aunque falte el componente de diseño. Las piezas: tornillo
+hexagonal, tornillo Allen, tornillo de mano (cabeza moleteada), tuerca, tuerca de mano, arandela, varilla roscada,
+separador roscado (hexagonal, roscado de punta a punta) y espaciador (un tubo para el tornillo).
+
+### Engranajes
+
+Otra página del panel de Diseño (botón **Engranajes** de Nuevo, o `engranaje` en la línea de comandos; **‹ Diseño**
+vuelve). **Pieza**: recto, helicoidal o espina de pescado. **Medida**: dientes, módulo, ancho, agujero, ángulo de
+presión (20° de fábrica), ángulo de hélice y «Hélice a la izquierda» en los helicoidales, y la **holgura** (0,15 mm
+de fábrica, lo que se le quita a cada diente sobre el círculo primitivo). **Pareja**: los dientes del otro, con la
+distancia entre ejes y la relación. **Medidas**: diámetros primitivo, exterior y de fondo, paso circular, volumen y
+caja. Al pie, **Mandar a la placa** y **Mandar con su pareja** (el otro con los dientes elegidos y, si es helicoidal,
+la hélice al revés para que engranen). Los hace el motor (`src/cad/gears.*`).
 ### Análisis
 
 Muestra cuántos vóxeles tendría el análisis estructural de la pieza (`docs/ANALYSIS.md`), en calidad normal y alta:

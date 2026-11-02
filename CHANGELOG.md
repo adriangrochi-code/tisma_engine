@@ -24,6 +24,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   caja. «Mandar a la placa» o «Mandar con su tuerca»; «Editar en Tornillería» en el menú de la pieza la abre otra vez
   y la reemplaza en su lugar. Las piezas las hace el motor, sin el componente de diseño: los tornillos quedan parados
   sobre la cabeza y las tuercas acostadas, para imprimir la rosca sin soportes.
+- **Más piezas en Tornillería** (pedido del dueño, 2026-11-02): tornillo y tuerca de mano (cabeza moleteada para
+  girar con los dedos), separador roscado (hexagonal, roscado por dentro de punta a punta) y espaciador (tubo para que
+  pase un tornillo). «Mandar con su tuerca» manda la tuerca de mano con el tornillo de mano.
+- **Engranajes** (pedido del dueño, 2026-11-02), otra página de Diseño (botón «Engranajes» en Nuevo, o `engranaje`):
+  rectos, helicoidales y en espina de pescado, con perfil de evolvente; dientes, módulo, ancho, agujero, ángulo de
+  presión, ángulo y mano de la hélice, y una holgura por diente para que los impresos giren sin trabarse. Muestra los
+  diámetros primitivo, exterior y de fondo, el paso, y la distancia entre ejes y la relación con otro de los dientes
+  que se elijan; «Mandar con su pareja» manda los dos (la pareja de un helicoidal, con la hélice al revés).
 - **Botón de unidad en los ajustes de mm o %** (reporte UI32 de los probadores): al lado del valor, un botón «mm» o
   «%» cambia la unidad y convierte el número (la separación XY del soporte, el ancho de la primera capa, la costura y
   los demás que aceptan las dos).

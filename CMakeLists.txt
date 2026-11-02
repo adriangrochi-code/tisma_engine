@@ -256,6 +256,8 @@ add_library(tisma_core
   src/cad/design.cpp
   src/cad/sketch.cpp
   src/cad/fasteners.cpp
+  src/cad/lathe.cpp
+  src/cad/gears.cpp
   src/cad/process.cpp
   src/cad/solidcraft.cpp
   src/calibration/calibration.cpp

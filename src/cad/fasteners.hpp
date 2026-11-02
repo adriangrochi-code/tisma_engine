@@ -36,12 +36,20 @@ std::span<const MetricSize> metric_sizes();
 // The row named `name` ("M8", case-insensitive); nullptr when unknown.
 const MetricSize* metric_size(std::string_view name);
 
-enum class FastenerKind { HexBolt, SocketBolt, HexNut, Washer, ThreadedRod };
-inline constexpr FastenerKind kFastenerKinds[] = {FastenerKind::HexBolt, FastenerKind::SocketBolt, FastenerKind::HexNut,
-                                                  FastenerKind::Washer, FastenerKind::ThreadedRod};
-const char* fastener_id(FastenerKind kind); // "hex_bolt", "socket_bolt", "hex_nut", "washer", "threaded_rod"
-bool has_length(FastenerKind kind);          // bolts and rods
-bool has_thread(FastenerKind kind);          // all but the washer
+// The thumb screw and the thumb nut have a knurled head to turn by hand;
+// the standoff is a hexagonal bar threaded inside from end to end; the
+// spacer a plain tube for a bolt to go through.
+enum class FastenerKind { HexBolt, SocketBolt, ThumbScrew, HexNut, ThumbNut, Washer, ThreadedRod, Standoff, Spacer };
+inline constexpr FastenerKind kFastenerKinds[] = {
+    FastenerKind::HexBolt,  FastenerKind::SocketBolt, FastenerKind::ThumbScrew,
+    FastenerKind::HexNut,   FastenerKind::ThumbNut,   FastenerKind::Washer,
+    FastenerKind::ThreadedRod, FastenerKind::Standoff, FastenerKind::Spacer};
+// "hex_bolt", "socket_bolt", "thumb_screw", "hex_nut", "thumb_nut", "washer",
+// "threaded_rod", "standoff", "spacer"
+const char* fastener_id(FastenerKind kind);
+bool has_length(FastenerKind kind); // bolts, rods, standoffs and spacers
+bool has_thread(FastenerKind kind); // all but the washer and the spacer
+bool is_nut(FastenerKind kind);     // threaded inside: nuts and standoffs
 
 struct FastenerSpec {
     FastenerKind kind = FastenerKind::HexBolt;
@@ -58,6 +66,9 @@ struct FastenerSpec {
 struct FastenerDims {
     double d = 0, pitch = 0, nut_width = 0, nut_height = 0, head_height = 0, socket_head = 0, socket_key = 0;
     double washer_inner = 0, washer_outer = 0, washer_height = 0, clearance_hole = 0;
+    // Own proportions (no standard): the knurled head or nut's diameter and
+    // height, the thumb nut's height, a spacer's outside.
+    double knurl_diameter = 0, knurl_height = 0, thumb_nut_height = 0, spacer_outer = 0;
 };
 FastenerDims fastener_dims(const FastenerSpec& spec);
 

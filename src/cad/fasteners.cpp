@@ -1,12 +1,10 @@
 // Metric fasteners for printing. Own design; see PROVENANCE.md.
 //
-// Every part is a solid of rings: a ring is a loop of points at one height,
-// one per angle of a fixed set, so neighbouring rings join in quads and the
-// mesh closes by construction. A ring's radius may change with the angle (a
-// hexagon, a thread); the rings follow the part's outline in the (radius,
-// height) half plane with the material on their left, so every face looks out.
+// Every part is a solid of rings around its axis (cad/lathe.hpp); a ring's
+// radius may change with the angle (a hexagon, a thread, a knurl).
 
 #include "cad/fasteners.hpp"
+#include "cad/lathe.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -38,78 +36,18 @@ constexpr MetricSize kSizes[] = {
 constexpr double kPi = std::numbers::pi;
 const double kSqrt3 = std::sqrt(3.0);
 
-struct Ring {
-    double z = 0;
-    std::vector<double> r; // one radius per angle
-};
-
-class Lathe {
-public:
-    explicit Lathe(int segments) : n_(segments) {
-        for (int i = 0; i < n_; ++i) {
-            const double a = 2.0 * kPi * i / n_;
-            cos_.push_back(std::cos(a));
-            sin_.push_back(std::sin(a));
-        }
-    }
-    int size() const { return n_; }
-    double angle(int i) const { return 2.0 * kPi * i / n_; }
-
-    // A ring from a radius function of the angle.
-    template <class F> Ring ring(double z, F&& radius) const {
-        Ring out{z, std::vector<double>(std::size_t(n_))};
-        for (int i = 0; i < n_; ++i)
-            out.r[std::size_t(i)] = radius(angle(i));
-        return out;
-    }
-
-    // The rings joined in order; `loop` joins the last to the first, else
-    // the first and the last are closed by a fan to the axis.
-    TriangleMesh mesh(const std::vector<Ring>& rings, bool loop) const {
-        TriangleMesh m;
-        const std::size_t count = rings.size();
-        m.reserve(count * std::size_t(n_) * 2 + std::size_t(2 * n_));
-        const auto point = [&](const Ring& g, int i) {
-            const std::size_t k = std::size_t(i % n_);
-            return Vec3f{float(g.r[k] * cos_[k]), float(g.r[k] * sin_[k]), float(g.z)};
-        };
-        const auto add = [&](const Vec3f& a, const Vec3f& b, const Vec3f& c) {
-            if (a == b || b == c || a == c)
-                return; // a ring that touches its neighbour there
-            m.add_triangle(a, b, c);
-        };
-        const std::size_t joins = loop ? count : count - 1;
-        for (std::size_t g = 0; g < joins; ++g) {
-            const Ring& a = rings[g];
-            const Ring& b = rings[(g + 1) % count];
-            for (int i = 0; i < n_; ++i) {
-                const Vec3f a0 = point(a, i), a1 = point(a, i + 1), b0 = point(b, i), b1 = point(b, i + 1);
-                add(a0, a1, b1);
-                add(a0, b1, b0);
-            }
-        }
-        if (!loop) {
-            const Ring& first = rings.front();
-            const Ring& last = rings.back();
-            const Vec3f c0{0, 0, float(first.z)}, c1{0, 0, float(last.z)};
-            for (int i = 0; i < n_; ++i) {
-                add(c0, point(first, i + 1), point(first, i));
-                add(c1, point(last, i), point(last, i + 1));
-            }
-        }
-        return m;
-    }
-
-private:
-    int n_;
-    std::vector<double> cos_, sin_;
-};
-
 // A hexagon of `width` across flats, its corners at multiples of 60°.
 double hexagon(double width, double angle) {
     const double sixty = kPi / 3.0;
     const double phi = std::fmod(angle, sixty) - sixty / 2.0;
     return width / 2.0 / std::cos(phi);
+}
+
+// A knurled edge of radius r: `count` V grooves `depth` deep around it.
+double knurl(double r, double depth, int count, double angle) {
+    double u = angle * count / (2.0 * kPi);
+    u -= std::floor(u);
+    return r - depth * (1.0 - std::abs(2.0 * u - 1.0));
 }
 
 // The thread's surface at height z and angle a (right-hand: it climbs
@@ -186,15 +124,6 @@ void outer_thread(const Lathe& lathe, std::vector<Ring>& rings, double d, double
         }));
 }
 
-TriangleMesh outward(TriangleMesh m) {
-    if (m.signed_volume() >= 0.0)
-        return m;
-    std::vector<Vec3f> corners = m.corners();
-    for (std::size_t i = 0; i + 2 < corners.size(); i += 3)
-        std::swap(corners[i + 1], corners[i + 2]);
-    return TriangleMesh(std::move(corners));
-}
-
 std::string lower(std::string_view s) {
     std::string out(s);
     for (char& c : out)
@@ -223,16 +152,25 @@ const char* fastener_id(FastenerKind kind) {
     case FastenerKind::HexNut: return "hex_nut";
     case FastenerKind::Washer: return "washer";
     case FastenerKind::ThreadedRod: return "threaded_rod";
+    case FastenerKind::ThumbScrew: return "thumb_screw";
+    case FastenerKind::ThumbNut: return "thumb_nut";
+    case FastenerKind::Standoff: return "standoff";
+    case FastenerKind::Spacer: return "spacer";
     }
     return "hex_bolt";
 }
 
 bool has_length(FastenerKind kind) {
-    return kind == FastenerKind::HexBolt || kind == FastenerKind::SocketBolt || kind == FastenerKind::ThreadedRod;
+    return kind == FastenerKind::HexBolt || kind == FastenerKind::SocketBolt || kind == FastenerKind::ThumbScrew ||
+           kind == FastenerKind::ThreadedRod || kind == FastenerKind::Standoff || kind == FastenerKind::Spacer;
 }
 
 bool has_thread(FastenerKind kind) {
-    return kind != FastenerKind::Washer;
+    return kind != FastenerKind::Washer && kind != FastenerKind::Spacer;
+}
+
+bool is_nut(FastenerKind kind) {
+    return kind == FastenerKind::HexNut || kind == FastenerKind::ThumbNut || kind == FastenerKind::Standoff;
 }
 
 FastenerDims fastener_dims(const FastenerSpec& spec) {
@@ -259,6 +197,10 @@ FastenerDims fastener_dims(const FastenerSpec& spec) {
     }
     if (spec.pitch > 0.0)
         out.pitch = spec.pitch;
+    out.knurl_diameter = 2.5 * out.d + 4.0;
+    out.knurl_height = out.d + 2.0;
+    out.thumb_nut_height = std::max(1.5 * out.nut_height, out.d);
+    out.spacer_outer = std::max(2.0 * out.d, out.clearance_hole + 2.4);
     return out;
 }
 
@@ -299,9 +241,23 @@ TriangleMesh make_fastener(const FastenerSpec& spec) {
     if (const std::string why = check_fastener(spec); !why.empty())
         throw std::invalid_argument(why);
     const FastenerDims dims = fastener_dims(spec);
-    const Lathe lathe(std::max(12, spec.segments / 6 * 6));
     const double d = dims.d, p = dims.pitch, play = spec.clearance;
+    // A knurl about every 1.5 mm, four angles to each.
+    const int knurls = std::max(12, int(std::round(kPi * dims.knurl_diameter / 1.5)));
+    const bool knurled = spec.kind == FastenerKind::ThumbScrew || spec.kind == FastenerKind::ThumbNut;
+    const int around = knurled ? std::max(spec.segments, knurls * 4) : spec.segments;
+    const Lathe lathe(std::max(12, (around + 5) / 6 * 6));
+    const double knurl_depth = std::min(0.5, 0.04 * dims.knurl_diameter);
     std::vector<Ring> rings;
+    const auto inner_thread = [&](double height) { // down the thread, its ends countersunk
+        const double entry = d / 2.0 + play;
+        std::vector<double> zs = steps(0.0, height, p);
+        std::reverse(zs.begin(), zs.end());
+        for (const double z : zs)
+            rings.push_back(lathe.ring(z, [&](double a) {
+                return std::max(thread_at(d, p, z, a, play), entry - std::min(z, height - z));
+            }));
+    };
     switch (spec.kind) {
     case FastenerKind::HexBolt: {
         // On its head: the head from 0 to k (chamfered on the bed side), the
@@ -330,17 +286,43 @@ TriangleMesh make_fastener(const FastenerSpec& spec) {
         // bottom; the thread's ends widened to a 45° countersink.
         const double m = dims.nut_height;
         hex_side(lathe, rings, dims.nut_width, 0.0, m, true, true, true);
-        const double entry = d / 2.0 + play;
-        for (const double z : [&] {
-                 std::vector<double> zs = steps(0.0, m, p);
-                 std::reverse(zs.begin(), zs.end());
-                 return zs;
-             }())
-            rings.push_back(lathe.ring(z, [&](double a) {
-                const double r = thread_at(d, p, z, a, play);
-                return std::max(r, entry - std::min(z, m - z));
-            }));
+        inner_thread(m);
         return outward(lathe.mesh(rings, true));
+    }
+    case FastenerKind::Standoff: { // a long nut: the hexagon threaded through
+        hex_side(lathe, rings, dims.nut_width, 0.0, spec.length, true, true, true);
+        inner_thread(spec.length);
+        return outward(lathe.mesh(rings, true));
+    }
+    case FastenerKind::ThumbNut: { // the knurl outside, chamfered at both ends
+        const double m = dims.thumb_nut_height, r = dims.knurl_diameter / 2.0, edge = std::min(0.6, m / 6.0);
+        const auto side = [&](double z, double cut) {
+            rings.push_back(lathe.ring(z, [&](double a) { return knurl(r, knurl_depth, knurls, a) - cut; }));
+        };
+        side(0.0, edge);
+        side(edge, 0.0);
+        side(m - edge, 0.0);
+        side(m, edge);
+        inner_thread(m);
+        return outward(lathe.mesh(rings, true));
+    }
+    case FastenerKind::Spacer: {
+        const double out = dims.spacer_outer / 2.0, in = dims.clearance_hole / 2.0;
+        rings.push_back(lathe.ring(0.0, [&](double) { return out; }));
+        rings.push_back(lathe.ring(spec.length, [&](double) { return out; }));
+        rings.push_back(lathe.ring(spec.length, [&](double) { return in; }));
+        rings.push_back(lathe.ring(0.0, [&](double) { return in; }));
+        return outward(lathe.mesh(rings, true));
+    }
+    case FastenerKind::ThumbScrew: {
+        // On its knurled head, the thread above it.
+        const double k = dims.knurl_height, r = dims.knurl_diameter / 2.0, edge = std::min(0.6, k / 6.0);
+        rings.push_back(lathe.ring(0.0, [&](double a) { return knurl(r, knurl_depth, knurls, a) - edge; }));
+        rings.push_back(lathe.ring(edge, [&](double a) { return knurl(r, knurl_depth, knurls, a); }));
+        rings.push_back(lathe.ring(k - edge, [&](double a) { return knurl(r, knurl_depth, knurls, a); }));
+        rings.push_back(lathe.ring(k, [&](double a) { return knurl(r, knurl_depth, knurls, a) - edge; }));
+        outer_thread(lathe, rings, d, p, play, k, k + spec.length, false, true);
+        return outward(lathe.mesh(rings, false));
     }
     case FastenerKind::Washer: {
         const double h = dims.washer_height, in = dims.washer_inner / 2.0, out = dims.washer_outer / 2.0;

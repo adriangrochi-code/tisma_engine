@@ -8606,5 +8606,18 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
   valor (la separación XY del soporte en % del ancho de pared, los anchos y la costura en % de la boquilla, la primera
   capa en % de su alto, la velocidad de la pared externa en % de la de paredes).
 
-**Sigue (pedido del dueño):** más piezas mecánicas en Diseño, un CAD bastante completo para piezas de impresión 3D:
-tornillos y tuercas de mano (moleteados), separadores, engranajes; después D3 de `cad_design.md`.
+- **Más piezas (tercer pedido del dueño del día: «una solución de AutoCAD bastante completa» para piezas de
+  impresión 3D):** tornillo y tuerca de mano moleteados, separador roscado y espaciador en Tornillería; y una página
+  **Engranajes** (`src/cad/gears.*`): perfil de evolvente, rectos, helicoidales y en espina de pescado, holgura por
+  diente, pareja de mano contraria, distancia entre ejes. El armado por anillos pasó a `src/cad/lathe.*`, con
+  ángulos libres (las esquinas de cada diente) y un giro por anillo (la hélice).
+- **Pruebas:** `[gears]` (diámetros primitivo, exterior, de fondo y base; el contorno cruza el círculo primitivo a
+  un cuarto de paso, menos la holgura; la distancia entre ejes; rectos, helicoidales y espina de pescado de 8, 20 y
+  61 dientes cerrados y entre los cilindros de fondo y de punta; el giro de la hélice y el de la pareja; un engranaje
+  laminado con el G-code verificado) y las piezas nuevas en `[fasteners]`; guion de interfaz `gears`.
+- **Medido:** un engranaje recto de 20 dientes, módulo 1,5, 8 mm de ancho y agujero de 5 mm tiene 5 279 mm³; el
+  helicoidal de 30 dientes, 12 271 mm³ (el guion los verifica).
+- **No probado:** que dos engranajes impresos engranen bien con 0,15 mm de holgura; es un punto de partida.
+
+**Sigue:** más piezas para Ingeniería (cremallera, polea dentada GT2, inserto térmico, bisagra), con lo que pida el
+dueño; después D3 de `cad_design.md`.

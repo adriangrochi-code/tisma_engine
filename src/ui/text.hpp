@@ -11,6 +11,35 @@
     X(TabAnalysis, "Análisis", "Analysis")                                                                            \
     X(TabDesign, "Diseño", "Design")                                                                                  \
     X(TabFasteners, "Tornillería", "Fasteners") \
+    X(FastenerThumbScrew, "Tornillo de mano", "Thumb screw") \
+    X(FastenerThumbNut, "Tuerca de mano", "Thumb nut") \
+    X(FastenerStandoff, "Separador roscado", "Threaded standoff") \
+    X(FastenerSpacer, "Espaciador", "Spacer") \
+    X(GearsTitle, "Engranajes", "Gears") \
+    X(GearsSubtitle, "Perfil de evolvente, con holgura para imprimir", "Involute profile, with backlash for printing") \
+    X(DesignGearsTip, "Engranajes rectos, helicoidales y en espina de pescado, con su pareja (también `engranaje` en la línea de comandos)", "Spur, helical and herringbone gears, with their mate (also `gear` on the command line)") \
+    X(GearSpur, "Recto", "Spur") \
+    X(GearHelical, "Helicoidal", "Helical") \
+    X(GearHerringbone, "Espina de pescado", "Herringbone") \
+    X(GearTeeth, "Dientes", "Teeth") \
+    X(GearModule, "Módulo (mm)", "Module (mm)") \
+    X(GearWidth, "Ancho (mm)", "Width (mm)") \
+    X(GearBore, "Agujero (mm)", "Bore (mm)") \
+    X(GearPressureAngle, "Ángulo de presión (°)", "Pressure angle (°)") \
+    X(GearHelixAngle, "Ángulo de hélice (°)", "Helix angle (°)") \
+    X(GearLeftHand, "Hélice a la izquierda", "Left-hand helix") \
+    X(GearBacklash, "Holgura (mm)", "Backlash (mm)") \
+    X(GearBacklashHint, "Cuánto más fino sale cada diente sobre el círculo primitivo, para que dos engranajes impresos giren sin trabarse. El agujero sale de la medida escrita: sumale 0,2 mm al eje.", "How much thinner each tooth comes out on the pitch circle, so two printed gears turn without binding. The bore comes out as typed: add 0.2 mm to the shaft.") \
+    X(GearMate, "Pareja", "Mate") \
+    X(GearMateTeeth, "Dientes del otro", "Mate's teeth") \
+    X(GearCenterDistance, "Distancia entre ejes: %s mm", "Centre distance: %s mm") \
+    X(GearRatio, "Relación: %s a 1", "Ratio: %s to 1") \
+    X(GearPitchDiameter, "Diámetro primitivo", "Pitch diameter") \
+    X(GearOutsideDiameter, "Diámetro exterior", "Outside diameter") \
+    X(GearRootDiameter, "Diámetro de fondo", "Root diameter") \
+    X(GearCircularPitch, "Paso circular", "Circular pitch") \
+    X(GearSendPair, "Mandar con su pareja", "Send with its mate") \
+    X(GearName, "Engranaje de %d dientes, m %s", "Gear, %d teeth, m %s") \
     X(FastenersBack, "‹ Diseño", "‹ Design") \
     X(DesignFastenersTip, "Tornillos, tuercas, arandelas y varillas con rosca métrica, listos para imprimir (también `tornillo`, `tuerca`, `arandela` o `varilla` en la línea de comandos)", "Bolts, nuts, washers and rods with a metric thread, ready to print (also `bolt`, `nut`, `washer` or `rod` on the command line)") \
     X(UnitSwitchTip, "Cambiar entre milímetros y porcentaje (también se puede escribir la unidad con el número, como «0,3 mm»)", "Switch between millimetres and percent (you can also type the unit with the number, as \"0.3 mm\")") \
