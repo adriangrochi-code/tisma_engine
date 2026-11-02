@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Servidor de Tisma Cloud por defecto**: `https://tismaservidores.net` (ficha `cloud.md`, regla 1). Una dirección
+  guardada gana, y `--cloud-server` cambia la de una ejecución.
 - **Proyecto como 3MF** (ficha `formats.md`, reglas 6 a 11): guardar el proyecto con nombre `.3mf` hace un 3MF
   estándar, con cada pieza en su lugar, que cualquier programa abre, más los datos del motor en
   `Metadata/tisma_project.json`. Abrir un `.3mf` así lo abre como proyecto. «Laminar en la nube» manda este paquete:

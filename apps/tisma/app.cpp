@@ -3062,6 +3062,8 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    if (cloud_server_.empty()) // none saved: Tisma Cloud's own (cloud.md, rule 1)
+        cloud_server_ = cloud::kDefaultServer;
     if (!options_.cloud_server.empty()) // the server for this run (tests: the mock one)
         cloud_server_ = options_.cloud_server;
     // A session that closed unexpectedly is offered as a report, once; this
@@ -16286,6 +16288,8 @@ void App::script_input() {
             got = std::to_string(cloud_plans_.size());
         else if (step.key == "jobs")
             got = std::to_string(cloud_jobs_.size());
+        else if (step.key == "server")
+            got = cloud_server_;
         else if (step.key == "reports") // the account's own, newest first: "N TITLE-OF-THE-FIRST"
             got = std::to_string(cloud_reports_.size()) + (cloud_reports_.empty() ? "" : " " + cloud_reports_.front().title);
         else if (step.key == "plan")

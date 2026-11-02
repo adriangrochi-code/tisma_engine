@@ -8956,3 +8956,12 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   `3D/3dmodel.model`. También pasó lo que revisa el servidor: rutas, cifrado, 10 000 entradas, nada que parezca un
   programa y nada de DOCTYPE.
 
+### El servidor por defecto
+
+- El dueño confirmó el servidor de producción: `https://tismaservidores.net` (`cloud.md`, regla 1; spec/next
+  3c9a5b8). Está en una sola constante, `cloud::kDefaultServer`.
+- Lo que manda, de mayor a menor: `--cloud-server` para una ejecución, la dirección que la persona guardó, y el valor
+  por defecto.
+- **Prueba:** el guion `cloud_default` (sin dirección guardada, el campo trae el servidor de Tisma Cloud). No le pide
+  nada al servidor real.
+

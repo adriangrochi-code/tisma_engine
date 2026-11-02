@@ -64,6 +64,11 @@ struct Job {
 // What a failed call tells: the server's text (its "detail") or the
 // connection's, and the HTTP status (0 without an answer). The interface has
 // its own notice for 401, 413, 422 and 429 (cloud.md, rules 2 and 4).
+// Tisma Cloud's own server (cloud.md, rule 1; the owner confirmed it on
+// 2026-11-02): the default of the server field. The address a person saved
+// wins over it, and --cloud-server over both for one run.
+inline constexpr const char* kDefaultServer = "https://tismaservidores.net";
+
 struct Failure {
     int status = 0;
     std::string message;
