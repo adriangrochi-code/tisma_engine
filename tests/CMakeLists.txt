@@ -202,6 +202,25 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/modal_keys.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_modal_keys.png)
     set_tests_properties(ui_script_modal_keys PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The Design tab (cad_design.md, stage D1) driven through the stand-in
+    # solidcraft-cli: the tab, the primitives, the command line, sending to the
+    # plate and editing again; without the component (CD21); hidden (CD1).
+    foreach(script design_tab design_command design_hidden)
+      add_test(NAME ui_script_${script}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+                --solidcraft $<TARGET_FILE:tisma_fake_solidcraft>
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${script}.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${script}.png)
+      set_tests_properties(ui_script_${script} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
+    add_test(NAME ui_script_design_missing
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --solidcraft ${CMAKE_CURRENT_BINARY_DIR}/no-such-solidcraft-cli
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/design_missing.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_design_missing.png)
+    set_tests_properties(ui_script_design_missing PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The plate's right-click menu adds a cube and a sphere as models.
     add_test(NAME ui_script_plate_menu
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

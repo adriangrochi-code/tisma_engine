@@ -286,6 +286,8 @@ int main(int argc, char** argv) {
             options.draw_stats = true;
         } else if (arg == "--ui-script") {
             options.ui_script = value();
+        } else if (arg == "--solidcraft") {
+            options.solidcraft = value();
         } else if (arg == "--pick-catalog-printer") {
             options.pick_catalog_printer = value();
         } else if (arg == "--no-view-check") {

@@ -196,6 +196,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"infill.wave_length", A}}}}},
         {"other", T::SecOther, "section_other.svg",
          {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}, {"sequential.enabled", N}}},
+          {"design", T::SubDesign, {{"cad.chord_tolerance", A}, {"cad.angle_tolerance", A}}},
           {"multi_material", T::SubMultiMaterial,
            {{"extruders.walls", N},
             {"extruders.infill", N},
@@ -695,6 +696,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.raft_layers > 0 ? format(T::SumRaft, s.raft_layers) : tr(T::SumOff);
     if (id == "brim")
         return s.brim_width > 0.0 ? format(T::SumMm, number(s.brim_width).c_str()) : tr(T::SumNoBrim);
+    if (id == "design")
+        return number(s.cad_chord_tolerance, 3) + " mm · " + number(s.cad_angle_tolerance, 0) + "°";
     if (id == "special_modes")
         return s.vase && s.sequential ? std::string(tr(T::VaseMode)) + " · " + tr(T::SequentialRow)
                : s.vase               ? std::string(tr(T::VaseMode))

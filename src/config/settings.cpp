@@ -829,7 +829,7 @@ Settings parse_checked(std::string_view text) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
             group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
-            group == "fuzzy" || group == "vase" || group == "placement" || group == "transform" || group == "arcs" ||
+            group == "fuzzy" || group == "vase" || group == "cad" || group == "placement" || group == "transform" || group == "arcs" ||
             group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
             group == "interlocking" || group == "painting" || group == "multi" || group == "curved" || group == "head" ||
@@ -1538,6 +1538,18 @@ Settings parse_checked(std::string_view text) {
         if (!g.at(n).is_boolean())
             fail(k, "must be true or false");
         s.vase = g.at(n).get<bool>();
+    });
+    read_group(root, "cad", {"chord_tolerance", "angle_tolerance"}, [&](const json& g, const std::string& n, const std::string& k) {
+        const double v = number(g, n, k);
+        if (n == "chord_tolerance") {
+            if (!(v >= 0.001 && v <= 1.0))
+                fail(k, "must be from 0.001 to 1 mm");
+            s.cad_chord_tolerance = v;
+        } else {
+            if (!(v >= 1.0 && v <= 30.0))
+                fail(k, "must be from 1 to 30 degrees");
+            s.cad_angle_tolerance = v;
+        }
     });
     read_group(root, "surfaces", {"top_layers", "bottom_layers", "top_pattern", "top_min_thickness",
                                   "bottom_min_thickness", "interface_shells", "top_width", "solid_width",
@@ -3045,6 +3057,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
                                                                      : num(s.wall_transition_margin.value)},
         {"walls.min_detail", s.wall_min_detail.percent ? num(s.wall_min_detail.value) + "%" : num(s.wall_min_detail.value)},
         {"vase.enabled", flag(s.vase)},
+        {"cad.chord_tolerance", num(s.cad_chord_tolerance)},
+        {"cad.angle_tolerance", num(s.cad_angle_tolerance)},
         {"sequential.enabled", flag(s.sequential)},
         {"sequential.clearance_radius", num(s.clearance_radius)},
         {"sequential.clearance_height", num(s.clearance_height)},
@@ -3587,6 +3601,7 @@ std::string settings_json(const Settings& s) {
           {"min_detail", s.wall_min_detail.percent ? ordered_json(json(s.wall_min_detail.value).dump() + "%")
                                                    : ordered_json(s.wall_min_detail.value)}}},
         {"vase", {{"enabled", s.vase}}},
+        {"cad", {{"chord_tolerance", s.cad_chord_tolerance}, {"angle_tolerance", s.cad_angle_tolerance}}},
         {"object",
          {{"extruder", s.object_extruder},
           {"wipe_into_infill", s.object_wipe_into_infill},

@@ -184,6 +184,61 @@ TriangleMesh plate_mesh(const std::vector<TriangleMesh>& placed) {
     return TriangleMesh(std::move(corners));
 }
 
+Painting carried_painting(const Painting& painting, const TriangleMesh& from, const TriangleMesh& to) {
+    Painting out;
+    if (painting.empty() || from.empty() || to.empty() || from.triangle_count() * to.triangle_count() > 40000000)
+        return out;
+    struct Face {
+        Vec3f centre, normal;
+    };
+    const auto face_of = [](const TriangleMesh& m, std::size_t t) {
+        const Vec3f& a = m.corner(t, 0);
+        const Vec3f& b = m.corner(t, 1);
+        const Vec3f& c = m.corner(t, 2);
+        Face f;
+        f.centre = {(a.x + b.x + c.x) / 3.0f, (a.y + b.y + c.y) / 3.0f, (a.z + b.z + c.z) / 3.0f};
+        const Vec3f u{b.x - a.x, b.y - a.y, b.z - a.z}, v{c.x - a.x, c.y - a.y, c.z - a.z};
+        Vec3f n{u.y * v.z - u.z * v.y, u.z * v.x - u.x * v.z, u.x * v.y - u.y * v.x};
+        const float len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+        if (len > 0.0f)
+            n = {n.x / len, n.y / len, n.z / len};
+        f.normal = n;
+        return f;
+    };
+    std::vector<Face> targets;
+    targets.reserve(to.triangle_count());
+    for (std::size_t t = 0; t < to.triangle_count(); ++t)
+        targets.push_back(face_of(to, t));
+    for (std::size_t c = 0; c < kPaintChannels; ++c) {
+        const PaintChannel channel = static_cast<PaintChannel>(c);
+        const std::size_t count = std::min(painting.size(channel), from.triangle_count());
+        for (std::size_t t = 0; t < count; ++t) {
+            const Painting::Tree& tree = painting.tree(channel, t);
+            if (tree.empty())
+                continue;
+            const Face f = face_of(from, t);
+            std::size_t best = targets.size();
+            float best_distance = 0.0f;
+            bool best_faces = false;
+            for (std::size_t j = 0; j < targets.size(); ++j) {
+                const Face& g = targets[j];
+                const float dx = g.centre.x - f.centre.x, dy = g.centre.y - f.centre.y, dz = g.centre.z - f.centre.z;
+                const float distance = dx * dx + dy * dy + dz * dz;
+                const bool faces = g.normal.x * f.normal.x + g.normal.y * f.normal.y + g.normal.z * f.normal.z >= 0.5f;
+                // One facing the same way wins over a nearer one that does not.
+                if (best == targets.size() || (faces && !best_faces) || (faces == best_faces && distance < best_distance)) {
+                    best = j;
+                    best_distance = distance;
+                    best_faces = faces;
+                }
+            }
+            if (best < targets.size())
+                out.set_tree(channel, best, tree);
+        }
+    }
+    return out;
+}
+
 Painting plate_painting(const std::vector<PlateObject>& objects) {
     Painting out;
     std::size_t triangles = 0;

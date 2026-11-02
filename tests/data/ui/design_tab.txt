@@ -1,0 +1,36 @@
+# The Design tab (cad_design.md, CD1, CD1b, CD19, CD20): between Preview and
+# Analysis in the top bar; its panel with the primitives, the greyed stages,
+# «Mandar a la placa» off until a body exists, and the command line under the
+# same view. A box built through the stand-in tool, sent twice, gives two
+# objects next to the cube opened at start; edited and sent again, still two.
+expect-control tab_design
+expect-apart tab_preview tab_design
+expect-apart tab_design tab_analysis
+menu tab_design
+expect-control design_box
+expect-control design_torus
+expect-control design_sketch
+expect-control design_open_step
+expect-control design_send
+expect-control design_needs_solid
+expect-control design_command
+expect-design none
+menu design_box
+expect-design 8000
+expect-no-control design_needs_solid
+menu design_send
+expect-objects 2 Caja
+menu tab_design
+expect-design 8000
+menu design_send
+expect-objects 3 Caja
+right-click-model
+menu edit_design
+expect-control design_command
+click design.1.3
+select-all
+type 25
+key enter
+expect-design 10000
+menu design_send
+expect-objects 3 Caja

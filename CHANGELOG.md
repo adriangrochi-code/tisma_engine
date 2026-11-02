@@ -12,6 +12,19 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Pestaña Diseño** (ficha `cad_design.md`, etapa D1): entre Vista previa y Análisis, con la misma vista y la misma
+  cama que Preparar. Su panel tiene Nuevo (Boceto y Abrir STEP marcados «Próximamente», y las primitivas: caja,
+  cilindro, esfera, cono, tubo y toro), Boceto, Operaciones y Parámetros (próximamente), Historial (un renglón por
+  pieza, con el ojo para suprimirla, sus medidas editables y borrar) y Medidas (cuerpos, volumen y caja). Abajo de la
+  vista, la línea de comandos: `caja`, `cilindro`, `esfera`, `cono`, `tubo`, `toro` o `mandar` (también en inglés),
+  las medidas una por una con el valor de fábrica entre corchetes, Enter en vacío repite la última herramienta, Esc
+  cancela. «Mandar a la placa» (Ctrl+Mayús+P) agrega la pieza como objeto; «Editar en Diseño» en el menú de un
+  objeto que salió de ahí lo vuelve a abrir, y al mandarlo de nuevo conserva su lugar, sus ajustes, sus modificadores
+  y lo pintado. En Preparar, Boceto y Primitiva (en la tira de herramientas y en el menú de la placa) abren Diseño.
+  La preferencia «Pestaña Diseño» la oculta. Las piezas las construye el componente de diseño, `solidcraft-cli` de
+  SolidCraft 0.30.0 (MIT o Apache-2.0, «Basado en SolidCraft» en Créditos), que el paquete de Windows lleva en la
+  carpeta `solidcraft/`; si falta, la pestaña lo dice y todo lo demás sigue andando.
+- **Ajustes `cad.chord_tolerance` y `cad.angle_tolerance`**: la malla de la pieza diseñada (tarjeta «Diseño» de Otros).
 - **Barrer hacia adentro** (`retraction.wipe_inward` y `retraction.wipe_inward_distance`, ficha `orca_2_5.md`,
   regla 1): el barrido que sigue a la pared externa se corre hacia la pared interna de al lado, donde la marca de la
   costura no se ve, en mm o en % del ancho de la pared externa (50 % de fábrica). Solo con el barrido, más de una

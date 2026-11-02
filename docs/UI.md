@@ -218,6 +218,25 @@ Si la verificación falla, el archivo queda como `<archivo>.rejected` y un cuadr
 línea. Exportar se habilita solo con un laminado al día y verificado. Si el modelo o los ajustes cambiaron, la barra
 de estado pide laminar de nuevo.
 
+### Diseño
+
+La pestaña Diseño (ficha `docs/spec/features/cad_design.md`, etapa D1) va entre Vista previa y Análisis y usa la misma
+vista y la misma cama que Preparar. A la izquierda, el panel «Diseño»: **Nuevo** (Boceto y Abrir STEP, marcados
+«Próximamente»; las primitivas caja, cilindro, esfera, cono, tubo y toro), **Boceto**, **Operaciones** y
+**Parámetros** (próximamente), **Historial** (un renglón por pieza: el ojo la suprime, sus medidas se editan, × la
+borra) y **Medidas** (cuerpos, volumen y caja). Al pie, «Mandar a la placa» (Ctrl+Mayús+P), apagado con «Hacé un
+sólido primero.» hasta que haya un cuerpo. Abajo de la vista, la línea de comandos: una herramienta por su nombre
+(`caja`, `cilindro`, `esfera`, `cono`, `tubo`, `toro`, `mandar`, o en inglés), después cada medida con el valor de
+fábrica entre corchetes (Enter lo acepta), Enter en vacío repite la última herramienta y Esc cancela; los alias de
+boceto (`L`, `C`, `REC`…) contestan «Próximamente» hasta la etapa D2.
+
+Las piezas las construye el componente de diseño, `solidcraft-cli` (SolidCraft 0.30.0), que el paquete lleva en la
+carpeta `solidcraft/` junto al programa (`--solidcraft <ruta>` usa otro; las pruebas usan un sustituto). Si falta o
+no responde, la pestaña dice «Falta el componente de diseño» y el resto del programa sigue igual. Un objeto que
+salió de Diseño tiene «Editar en Diseño» en su menú: al mandarlo de nuevo reemplaza su malla y conserva el lugar, los
+ajustes, los modificadores y lo pintado. En Preparar, Boceto y Primitiva (tira de herramientas y menú de la placa)
+abren Diseño. La preferencia «Pestaña Diseño» (`ui.cad_design`) la oculta.
+
 ### Análisis
 
 Muestra cuántos vóxeles tendría el análisis estructural de la pieza (`docs/ANALYSIS.md`), en calidad normal y alta:

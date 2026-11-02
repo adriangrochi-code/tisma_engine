@@ -94,6 +94,16 @@ costura.
 |---|---|---|---|---|
 | `enabled` | booleano | `false` | — | Activa el modo vaso: una sola pared, sin relleno ni capas de arriba (se ignoran esos ajustes). Las primeras `surfaces.bottom_layers` capas son planas, con relleno sólido, y la última de ellas es la superficie de arriba; desde ahí cada capa es una vuelta de la pared externa que empieza donde terminó la de abajo, sin viaje ni retracción, y sube la altura de una capa a lo largo de la vuelta, con el caudal de siempre. Sin capas de abajo, la primera capa es una vuelta plana. No se puede con soportes. Una capa con más de un contorno (dos islas, un agujero) se imprime plana |
 
+### `cad`
+
+La pestaña Diseño, ficha `docs/spec/features/cad_design.md`: cómo se hace malla la pieza diseñada al mandarla a la
+placa (regla 21).
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `chord_tolerance` | número | 0,01 | 0,001 a 1 | Cuánto se aparta como máximo la malla de la superficie exacta, en mm. El componente de diseño (SolidCraft) ofrece tres calidades de malla, `standard`, `fine` y `finest`, con una tolerancia de 2·10⁻⁴, 5·10⁻⁵ y 10⁻⁵ del tamaño del cuerpo: se elige la más gruesa que cumple este valor para el tamaño del diseño |
+| `angle_tolerance` | número | 5 | 1 a 30 | Ángulo máximo entre facetas vecinas de la malla, en grados. El componente de diseño no lo toma por ahora; queda para el mallador propio |
+
 ### `fuzzy`
 
 Piel difusa, ficha `docs/spec/features/fuzzy_skin.md`: la pared externa pasa por puntos nuevos, a distancias al azar

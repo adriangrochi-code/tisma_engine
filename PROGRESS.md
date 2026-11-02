@@ -8512,3 +8512,35 @@ fábrica). Después de la pared externa, el barrido no vuelve sobre ella sino co
 
 **Sigue:** O1, reglas 3 a 5 (paredes sin apoyo al final, modificadores de costura precisa, polyholes).
 
+## 2026-11-02: pestaña Diseño, etapa D1 (`cad_design.md`, pedido del dueño por el equipo de fichas)
+
+El equipo de fichas mandó `cad_design.md` (en `spec/next`, pasa `tools/check_spec.py`) con el pedido del dueño del
+29-10: «una pestaña como es la de ingeniería pero con cosas para diseñar». Se hizo la etapa D1.
+- **Motor** (`src/cad/`): un diseño es una lista de piezas (caja, cilindro, esfera, cono, tubo, toro, con sus
+  medidas y el ojo que las suprime) que se vuelve el guion JSON que corre `solidcraft-cli` (`solid.box`,
+  `solid.cylinder`…, el tubo como cilindro con un cilindro cortado, `file.export_3mf` con la calidad que sale de
+  `cad.chord_tolerance`). La herramienta se sondea al arrancar (`--version`, `commands`) y se corre con límite de
+  tiempo, sin ventana (`posix_spawn` y `CreateProcessW`); el 3MF vuelve por el lector propio. Nuevo escritor de ZIP
+  sin comprimir y de 3MF; cono, tubo y toro en `src/mesh/shapes.cpp`.
+- **Sustituto para las pruebas** (`tests/fake_solidcraft_cli.cpp`): responde la misma línea de comandos y arma las
+  primitivas con las formas del motor; `TISMA_FAKE_SOLIDCRAFT_HANG` y `_BROKEN` prueban la regla 22 bis.
+- **Interfaz:** la pestaña entre Vista previa y Análisis, el panel (Nuevo, Boceto, Operaciones, Parámetros,
+  Historial, Medidas, «Mandar a la placa» con «Hacé un sólido primero.»), la línea de comandos con las primitivas en
+  los dos idiomas y los alias de boceto que contestan «Próximamente», «Editar en Diseño» en el menú del objeto, Boceto
+  y Primitiva en la tira de Preparar y en el menú de la placa, la preferencia `ui.cad_design`, Ctrl+Mayús+P. Lo
+  pintado se lleva a la pieza rehecha por el triángulo más cercano que mira para el mismo lado (`carried_painting`).
+- **Paquete:** `release.yml` baja el zip portátil de SolidCraft 0.30.0 (SHA-256 fija), y copia `solidcraft-cli.exe`
+  y sus licencias a `solidcraft/` junto al programa; en Linux, el `.tar.gz`. `THIRD_PARTY.md` y Créditos lo anotan.
+- **Medido:** `solidcraft-cli.exe` 110 MB (43 MB en zip); el zip del motor pasa de 4,8 MB a unos 48 MB.
+- **Pruebas:** `[cad]` (guion por primitiva, calidad, ida y vuelta del diseño, formas y 3MF, el sustituto sondeado y
+  una caja de 40 × 30 × 20 construida: 24 000 mm³; faltante, dañado y colgado), `[plate]` (lo pintado llevado), y
+  los guiones de interfaz `design_tab` (CD1, CD1b, CD19, CD20 y el volver a editar de CD7), `design_command`
+  (regla 12), `design_hidden` (CD1 con la preferencia apagada) y `design_missing` (CD21).
+- **No probado:** el `solidcraft-cli` real no se pudo ejecutar en esta sesión; los nombres de comandos y parámetros
+  vienen de su documentación pública. Hay que probarlo en Windows con la build: si un comando difiere, el mensaje de
+  Medidas lo dice («el componente de diseño rechazó el diseño: …»).
+
+**Sigue:** D2 (bocetos en un plano, coordenadas tipeadas, referencias a objetos, ortogonal y rastreo polar, extruir
+y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el guardado del diseño en el proyecto
+(D5) queda anotado en `PlateObject::design`.
+

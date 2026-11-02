@@ -27,6 +27,22 @@ extern char** environ;
 
 namespace tisma::cad {
 
+std::filesystem::path executable_dir() {
+    std::error_code ec;
+#ifdef _WIN32
+    wchar_t buffer[MAX_PATH];
+    const DWORD n = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
+    if (n > 0 && n < MAX_PATH)
+        return std::filesystem::path(buffer).parent_path();
+#else
+    const std::filesystem::path self = std::filesystem::read_symlink("/proc/self/exe", ec);
+    if (!ec)
+        return self.parent_path();
+#endif
+    const std::filesystem::path here = std::filesystem::current_path(ec);
+    return ec ? std::filesystem::path() : here;
+}
+
 #ifdef _WIN32
 
 namespace {

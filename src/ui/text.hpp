@@ -9,6 +9,7 @@
     X(TabPrepare, "Preparar", "Prepare")                                                                              \
     X(TabPreview, "Vista previa", "Preview")                                                                          \
     X(TabAnalysis, "Análisis", "Analysis")                                                                            \
+    X(TabDesign, "Diseño", "Design")                                                                                  \
     X(Open, "Abrir", "Open")                                                                                          \
     X(OpenTip, "Abrir un modelo STL, un proyecto, un G-code o ajustes (Ctrl+O)", "Open an STL model, a project, a G-code file or settings (Ctrl+O)") \
     X(Slice, "Laminar", "Slice")                                                                                      \
@@ -893,6 +894,65 @@
     X(SubSkirt, "Falda", "Skirt") \
     X(SubBrim, "Borde", "Brim") \
     X(SubSpecialModes, "Modos especiales", "Special modes") \
+    X(SubDesign, "Diseño", "Design") \
+    X(ChordTolerance, "Tolerancia de la malla", "Mesh tolerance") \
+    X(AngleTolerance, "Ángulo entre facetas", "Angle between facets") \
+    X(TipDesignTitle, "Diseño", "Design") \
+    X(TipDesign, "Dibujá y modelá una pieza acá adentro y mandala a la placa sin pasar por otro programa. Por ahora: primitivas con sus medidas; los bocetos y las operaciones vienen después.", \
+      "Draw and model a part right here and send it to the plate without another program. For now: primitives with their sizes; sketches and operations come later.") \
+    X(DesignTitle, "Diseño", "Design") \
+    X(DesignSecNew, "Nuevo", "New") \
+    X(DesignSecSketch, "Boceto", "Sketch") \
+    X(DesignSecOperations, "Operaciones", "Operations") \
+    X(DesignSecParameters, "Parámetros", "Parameters") \
+    X(DesignSecHistory, "Historial", "History") \
+    X(DesignSecMeasures, "Medidas", "Measures") \
+    X(DesignSketch, "Boceto", "Sketch") \
+    X(DesignPrimitive, "Primitiva", "Primitive") \
+    X(DesignOpenStep, "Abrir STEP", "Open STEP") \
+    X(ComingSoon, "Próximamente", "Coming soon") \
+    X(PrimBox, "Caja", "Box") \
+    X(PrimCylinder, "Cilindro", "Cylinder") \
+    X(PrimSphere, "Esfera", "Sphere") \
+    X(PrimCone, "Cono", "Cone") \
+    X(PrimTube, "Tubo", "Tube") \
+    X(PrimTorus, "Toro", "Torus") \
+    X(SizeLength, "Largo", "Length") \
+    X(SizeWidth, "Ancho", "Width") \
+    X(SizeHeight, "Alto", "Height") \
+    X(SizeDiameter, "Diámetro", "Diameter") \
+    X(SizeTopDiameter, "Diámetro de arriba", "Top diameter") \
+    X(SizeInnerDiameter, "Diámetro interior", "Inner diameter") \
+    X(SizeRingDiameter, "Diámetro del anillo", "Ring diameter") \
+    X(SizeSectionDiameter, "Diámetro de la sección", "Section diameter") \
+    X(DesignSend, "Mandar a la placa", "Send to the plate") \
+    X(DesignSendTip, "Ctrl+Mayús+P: la pieza pasa a Preparar como un objeto; si vino de ahí, lo reemplaza y conserva su lugar, sus ajustes y lo pintado", \
+      "Ctrl+Shift+P: the part goes to Prepare as an object; if it came from there, it replaces it and keeps its place, settings and painting") \
+    X(DesignNeedsSolid, "Hacé un sólido primero.", "Make a solid first.") \
+    X(DesignMissing, "Falta el componente de diseño: reinstalá Tisma para usar Diseño.", "The design component is missing: reinstall Tisma to use Design.") \
+    X(DesignChecking, "Comprobando el componente de diseño…", "Checking the design component…") \
+    X(DesignBuilding, "Construyendo…", "Building…") \
+    X(DesignVolume, "Volumen", "Volume") \
+    X(DesignBox, "Caja", "Box") \
+    X(DesignBodies, "Cuerpos", "Bodies") \
+    X(DesignNoBodies, "Todavía no hay cuerpos", "No bodies yet") \
+    X(DesignSuppress, "Suprimir (el ojo)", "Suppress (the eye)") \
+    X(DesignDeleteFeature, "Borrar", "Delete") \
+    X(DesignSent, "Mandado a la placa", "Sent to the plate") \
+    X(DesignReplaced, "El objeto se rehizo en la placa", "The object was remade on the plate") \
+    X(EditInDesign, "Editar en Diseño", "Edit in Design") \
+    X(DesignPref, "Pestaña Diseño", "Design tab") \
+    X(DesignBasedOn, "Basado en SolidCraft (MIT o Apache-2.0)", "Based on SolidCraft (MIT or Apache-2.0)") \
+    X(CommandLineHint, "Escribí una herramienta: caja, cilindro, esfera, cono, tubo, toro (Enter en vacío repite la última)", \
+      "Type a tool: box, cylinder, sphere, cone, tube, torus (Enter on an empty line repeats the last one)") \
+    X(CommandUnknown, "No conozco «%s». Herramientas: caja, cilindro, esfera, cono, tubo, toro, mandar", \
+      "Unknown tool \"%s\". Tools: box, cylinder, sphere, cone, tube, torus, send") \
+    X(CommandSoon, "«%s» viene en la próxima etapa (bocetos)", "\"%s\" comes in the next stage (sketches)") \
+    X(CommandBadNumber, "Hace falta un número mayor que 0", "A number above 0 is needed") \
+    X(CommandAdded, "%s agregado", "%s added") \
+    X(CommandCancelled, "Cancelado", "Cancelled") \
+    X(ToolSketchTip, "Boceto: abre Diseño para dibujar (próximamente)", "Sketch: opens Design to draw (coming soon)") \
+    X(ToolPrimitiveTip, "Primitiva: abre Diseño con una caja, un cilindro, una esfera…", "Primitive: opens Design with a box, a cylinder, a sphere…") \
     X(SubFuzzy, "Piel difusa", "Fuzzy skin") \
     X(SubGcodeOut, "Salida G-code", "G-code output") \
     X(SubSlicing, "Corte", "Slicing") \

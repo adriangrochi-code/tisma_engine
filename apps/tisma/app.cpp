@@ -10,6 +10,9 @@
 #include "vk_view.hpp"
 #include "vk_window.hpp"
 
+#include "cad/design.hpp"
+#include "cad/process.hpp"
+#include "cad/solidcraft.hpp"
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
 #include "illustrations.hpp"
@@ -111,6 +114,7 @@ constexpr const char* kIcons[] = {
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
     "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
     "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",   "tool_cut",   "tool_measure",
+    "tool_sketch",      "tool_primitive",   "tisma_design",
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_nonplanar",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
@@ -391,7 +395,7 @@ void keep_unreadable(const std::filesystem::path& path) {
     std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ec);
 }
 
-enum class Tab { Prepare, Preview, Analysis, Calibration, Device };
+enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device };
 // The preview's views (preview.md, rule 1), in its order: what colours the
 // lines, the shader's way to colour them, and the number the instances carry.
 enum class PreviewView {
@@ -474,6 +478,19 @@ private:
     void view_tools();
     void preview_panels();
     void analysis_panel();
+    // The Design tab (cad_design.md, stage D1): the panel, the command line
+    // under the view, the design built through the bundled tool.
+    void design_panel();
+    void design_command_line();
+    void run_command(std::string text);
+    void add_primitive(cad::Primitive kind, const std::array<double, cad::kMaxSizes>& sizes);
+    void rebuild_design();
+    void design_built(cad::BuildResult built);
+    void show_design();
+    void send_design_to_plate();
+    void edit_in_design(std::size_t object);
+    void open_design(bool sketch);
+    void start_solidcraft_probe();
     void calibration_panel();
     void use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab);
     void add_model(const std::filesystem::path& path);
@@ -791,6 +808,38 @@ private:
     Background<VoxelEstimate> voxel_job_;
     std::optional<VoxelEstimate> voxels_;
     bool voxels_stale_ = true;
+
+    // The Design tab (cad_design.md): the design, its last build and the
+    // bundled tool (rule 1, first step).
+    bool cad_design_ = true; // ui.cad_design: the tab and the Prepare tools shown
+    cad::Design design_;
+    TriangleMesh design_mesh_;      // the bodies as last built
+    BoundingBox design_box_;
+    double design_volume_ = 0.0;    // mm3
+    std::string design_file_;       // SolidCraft's design file of that build
+    std::string design_error_;      // what the last build said, or empty
+    bool design_dirty_ = false;     // changed since the build that runs
+    Background<cad::BuildResult> design_job_;
+    Background<cad::SolidCraftInfo> solidcraft_job_;
+    cad::SolidCraftInfo solidcraft_;
+    bool solidcraft_probed_ = false;
+    int design_target_ = 0;      // the plate object being edited (its design_id); 0: a new design
+    int next_design_id_ = 1;
+    bool design_pick_primitive_ = false; // the Primitiva tool from Prepare: the chooser opens
+    // The command line (rule 12): the text, the tool asking for its sizes.
+    std::string command_text_;
+    std::string command_message_;
+    std::string last_command_;
+    struct CommandPrompt {
+        cad::Primitive kind;
+        std::array<double, cad::kMaxSizes> sizes;
+        std::size_t step = 0;
+    };
+    std::optional<CommandPrompt> command_prompt_;
+    bool command_focus_ = false;
+    bool command_clear_ = false;  // the field's text taken: emptied in its callback
+    bool design_edited_ = false;  // a measure changed in Historial, not built yet
+    std::string design_scroll_to_; // the Historial scrolled to this feature ("3") or field ("design.3.1") once
 
     // The preview's controls.
     int top_layer_ = 0; // 0-based
@@ -1246,6 +1295,7 @@ const std::map<T, const char*>& row_keys() {
         {T::MaxNozzleTemp, "machine.max_nozzle_temp"}, {T::MaxBedTemp, "machine.max_bed_temp"},
         {T::VariablesRow, "machine.variables"}, {T::StartGcode, "machine.start_gcode"},
         {T::EndGcode, "machine.end_gcode"}, {T::VaseMode, "vase.enabled"}, {T::SequentialRow, "sequential.enabled"},
+        {T::ChordTolerance, "cad.chord_tolerance"}, {T::AngleTolerance, "cad.angle_tolerance"},
         {T::ClearanceRadius, "sequential.clearance_radius"}, {T::ClearanceHeight, "sequential.clearance_height"},
         {T::BetweenObjectsGcode, "gcode.between_objects"}, {T::ObjectLabelsRow, "gcode.object_labels"},
         {T::ExtrudersRow, "machine.extruders"}, {T::ExtruderOffsetRow, "machine.extruder_offset"},
@@ -2650,6 +2700,7 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    start_solidcraft_probe();
     // The list opens where it was left, at the section in view then
     // (settings_panel.md, rule 3).
     if (jump_section_.empty())
@@ -3012,6 +3063,7 @@ void App::load_preferences() {
         // The settings panel: level, section by tab and the cards open or folded.
         if (j.contains("ui") && j.at("ui").is_object()) {
             const nlohmann::json& ui = j.at("ui");
+            cad_design_ = ui.value("cad_design", true);
             view_level_ = view_level_from(ui.value("level", std::string("normal")));
             // The Custom view: its keys, the level it started from, and the
             // keys there were then (settings_panel.md, rules 15 to 18).
@@ -3092,6 +3144,7 @@ void App::save_preferences() {
         j["ui"]["custom_known"] = custom_view_.known;
         j["ui"]["bed_type"] = bed_type_;
         j["ui"]["orthographic"] = camera_.orthographic;
+        j["ui"]["cad_design"] = cad_design_;
         for (const auto& [printer, notes] : printer_notes_)
             if (!notes.empty())
                 j["printers"][printer]["notes"] = notes;
@@ -4268,6 +4321,7 @@ void App::poll_jobs() {
             top_layer_ = std::clamp(options_.layer - 1, 0, top_layer_);
         // A screenshot keeps the tab it asked for.
         const Tab asked = options_.view == "analysis"      ? Tab::Analysis
+                          : options_.view == "design"      ? Tab::Design
                           : options_.view == "calibration" ? Tab::Calibration
                           : options_.view == "device"      ? Tab::Device
                           : options_.view == "prepare"     ? Tab::Prepare
@@ -4292,6 +4346,14 @@ void App::poll_jobs() {
             voxels_stale_ = true;
         }
     }
+    if (std::optional<cad::SolidCraftInfo> info = solidcraft_job_.take()) {
+        solidcraft_ = std::move(*info);
+        solidcraft_probed_ = true;
+        if (design_dirty_)
+            rebuild_design();
+    }
+    if (std::optional<cad::BuildResult> built = design_job_.take())
+        design_built(std::move(*built));
     // The Analysis tab keeps its estimate up to date.
     if (tab_ == Tab::Analysis)
         estimate_voxels_if_stale();
@@ -4352,6 +4414,9 @@ void App::frame_now() {
     if (result_ && viewer_) {
         const auto& p = result_->preview;
         part = {{p.min[0], p.min[1], 0.0f}, {p.max[0], p.max[1], p.max[2]}};
+    } else if (tab_ == Tab::Design) {
+        if (!design_box_.empty)
+            part = {{design_box_.min.x, design_box_.min.y, 0.0f}, {design_box_.max.x, design_box_.max.y, design_box_.max.z}};
     } else if (has_plate_ && !placed_.empty) {
         part = {{placed_.min.x, placed_.min.y, 0.0f}, {placed_.max.x, placed_.max.y, placed_.max.z}};
     }
@@ -4389,9 +4454,10 @@ void App::frame_now() {
 void App::set_tab(Tab tab) {
     // The part moves aside for the calibration panel, and back when it closes
     // (a pending framing does it itself).
-    const auto aside = [](Tab t) { return t == Tab::Calibration || t == Tab::Device; };
+    const auto aside = [](Tab t) { return t == Tab::Calibration || t == Tab::Device || t == Tab::Design; };
     if (aside(tab) != aside(tab_) && !frame_pending_ && view_size_.y > 10.0f)
         camera_.pan((aside(tab) ? 225.0f : -225.0f) * scale_, 0.0f, view_size_.y);
+    const Tab was = tab_;
     // Between Prepare and Preview a camera left as framed frames again: the
     // preview's legend covers the left of the view (framing leaves it out).
     const auto shown = [](Tab t) { return t == Tab::Prepare || t == Tab::Preview; };
@@ -4404,6 +4470,15 @@ void App::set_tab(Tab tab) {
     tab_ = tab;
     if (tab == Tab::Analysis)
         estimate_voxels_if_stale();
+    // The Design tab shows the design in the same view, over the same bed;
+    // leaving it brings the plate back (cad_design.md, rules 3 and 19).
+    if (tab == Tab::Design && was != Tab::Design) {
+        command_focus_ = true;
+        show_design();
+    } else if (was == Tab::Design && tab != Tab::Design) {
+        rebuild_plate();
+        frame_all();
+    }
 }
 
 void App::estimate_voxels_if_stale() {
@@ -4453,14 +4528,25 @@ void App::top_bar() {
     };
     const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
                               {Tab::Preview, "tisma_view", T::TabPreview},
+                              {Tab::Design, "tisma_design", T::TabDesign},
                               {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
                               {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
                               {Tab::Device, "tisma_printer", T::TabDevice}};
     for (const TabButton& t : tabs) {
+        if (t.tab == Tab::Design && !cad_design_) // hidden by ui.cad_design (cad_design.md, CD1)
+            continue;
         ImGui::SetCursorPosY(top);
         const bool enabled = t.tab != Tab::Preview || result_.has_value();
         if (button(tr(t.label), t.icon, tr(t.label), false, tab_ == t.tab, enabled, nullptr, button_h))
             set_tab(t.tab);
+        // Named for the scripted tests: tab_prepare, tab_design...
+        g_menu_rects[std::string("tab_") + (t.tab == Tab::Prepare       ? "prepare"
+                                            : t.tab == Tab::Preview     ? "preview"
+                                            : t.tab == Tab::Design      ? "design"
+                                            : t.tab == Tab::Analysis    ? "analysis"
+                                            : t.tab == Tab::Calibration ? "calibration"
+                                                                        : "device")] =
+            ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         if (t.tab == Tab::Preview)
             anchor("preview");
         else if (t.tab == Tab::Calibration)
@@ -6711,6 +6797,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
     else if (id == "special_modes") {
         flag(T::VaseMode, "vase.enabled", s.vase, tr(T::VaseModeTip));
         flag(T::SequentialRow, "sequential.enabled", s.sequential, tr(T::SequentialTip));
+    } else if (id == "design") { // the Design tab's mesh (cad_design.md)
+        mm(T::ChordTolerance, "cad.chord_tolerance", s.cad_chord_tolerance, 0.001, 1.0, "%.3f mm", 0.001f);
+        mm(T::AngleTolerance, "cad.angle_tolerance", s.cad_angle_tolerance, 1.0, 30.0, "%.0f°", 0.1f);
     } else if (id == "multi_material") {
         // Which extruder prints what (multi_extruder.md, rules 2, 4, 7 and 16); 0: the object's.
         whole(T::WallsExtruder, "extruders.walls", s.extruder_walls, 0, kMaxExtruders);
@@ -7721,6 +7810,9 @@ void App::view_tools() {
         ImGui::Checkbox(tr(T::MoireFilter), &moire_);
         if (ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(T::MoireFilterTip));
+        // The Design tab and the Prepare tools that open it (cad_design.md, rule 3).
+        if (ImGui::Checkbox(tr(T::DesignPref), &cad_design_) && !cad_design_ && tab_ == Tab::Design)
+            set_tab(Tab::Prepare);
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar(2);
@@ -7832,6 +7924,16 @@ void App::plate_menu() {
         }
         ImGui::EndMenu();
     }
+    if (cad_design_) { // the Design tab's tools, also with an empty plate (cad_design.md, rule 3)
+        const bool sketch = ImGui::MenuItem(tr(T::DesignSketch));
+        placed("design_sketch");
+        if (sketch)
+            open_design(true);
+        const bool primitive = ImGui::MenuItem(tr(T::DesignPrimitive));
+        placed("design_primitive");
+        if (primitive)
+            open_design(false);
+    }
     const bool arrange = ImGui::MenuItem(tr(T::TipArrangeTitle), "A", false, !objects_.empty());
     placed("arrange");
     if (arrange) {
@@ -7905,6 +8007,15 @@ void App::object_menu() {
     }
     if ((!o.settings.empty() || !o.volumes.empty() || !o.ranges.empty()) && ImGui::MenuItem(tr(T::ObjectSettingsOpen)))
         object_settings_ = selected_;
+    // An object that came from Design opens there again (cad_design.md, rule 21).
+    if (cad_design_ && !o.design.empty()) {
+        ImGui::Separator();
+        const bool edit = ImGui::MenuItem(tr(T::EditInDesign));
+        g_menu_rects["edit_design"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                             ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (edit)
+            edit_in_design(std::size_t(selected_));
+    }
     ImGui::EndPopup();
 }
 
@@ -8218,6 +8329,19 @@ void App::plate_tools() {
     if (button("##arrange", "tool_arrange", nullptr, false, false, true, tr(T::ToolArrangeTip), size)) {
         arrange_plate();
         tip("arrange");
+    }
+    // Organizar's Boceto and Primitiva open the Design tab (cad_design.md, rule 3).
+    if (cad_design_) {
+        const bool sketch = button("##sketch", "tool_sketch", nullptr, false, false, true, tr(T::ToolSketchTip), size);
+        g_menu_rects["tool_sketch"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                             ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (sketch)
+            open_design(true);
+        const bool primitive = button("##primitive", "tool_primitive", nullptr, false, false, true, tr(T::ToolPrimitiveTip), size);
+        g_menu_rects["tool_primitive"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                                ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (primitive)
+            open_design(false);
     }
     ImGui::Separator();
     if (button("##paint", "tool_paint", nullptr, false, tool_ == PlateTool::Paint, true, tr(T::ToolPaintTip), size))
@@ -9077,6 +9201,7 @@ const std::map<std::string, TipText>& tip_texts() {
         {"slice", {T::TipSliceTitle, T::TipSlice}},
         {"preview", {T::TipPreviewTitle, T::TipPreview}},
         {"analysis", {T::TipAnalysisTitle, T::TipAnalysis}},
+        {"design", {T::TipDesignTitle, T::TipDesign}},
         {"calibration", {T::TipCalibrationTitle, T::TipCalibration}},
         {"device", {T::TipDeviceTitle, T::TipDevice}}};
     return tips;
@@ -9889,6 +10014,566 @@ void App::analysis_panel() {
     ImGui::PopStyleVar(2);
 }
 
+// The Design tab (docs/spec/features/cad_design.md, stage D1): the panel on
+// the left as Analysis has it, the design in the same view over the same bed,
+// the command line under the view, and the bundled SolidCraft tool building
+// the design from its script (rule 1, first step).
+namespace {
+
+const char* primitive_label(cad::Primitive kind) {
+    switch (kind) {
+    case cad::Primitive::Box: return tr(T::PrimBox);
+    case cad::Primitive::Cylinder: return tr(T::PrimCylinder);
+    case cad::Primitive::Sphere: return tr(T::PrimSphere);
+    case cad::Primitive::Cone: return tr(T::PrimCone);
+    case cad::Primitive::Tube: return tr(T::PrimTube);
+    case cad::Primitive::Torus: return tr(T::PrimTorus);
+    }
+    return "";
+}
+
+const char* primitive_id(cad::Primitive kind) {
+    switch (kind) {
+    case cad::Primitive::Box: return "box";
+    case cad::Primitive::Cylinder: return "cylinder";
+    case cad::Primitive::Sphere: return "sphere";
+    case cad::Primitive::Cone: return "cone";
+    case cad::Primitive::Tube: return "tube";
+    case cad::Primitive::Torus: return "torus";
+    }
+    return "";
+}
+
+// What each size of a primitive is called (cad::Feature::sizes).
+T size_label(cad::Primitive kind, std::size_t i) {
+    switch (kind) {
+    case cad::Primitive::Box: return i == 0 ? T::SizeLength : i == 1 ? T::SizeWidth : T::SizeHeight;
+    case cad::Primitive::Cylinder: return i == 0 ? T::SizeDiameter : T::SizeHeight;
+    case cad::Primitive::Sphere: return T::SizeDiameter;
+    case cad::Primitive::Cone: return i == 0 ? T::SizeDiameter : i == 1 ? T::SizeTopDiameter : T::SizeHeight;
+    case cad::Primitive::Tube: return i == 0 ? T::SizeDiameter : i == 1 ? T::SizeInnerDiameter : T::SizeHeight;
+    case cad::Primitive::Torus: return i == 0 ? T::SizeRingDiameter : T::SizeSectionDiameter;
+    }
+    return T::SizeLength;
+}
+
+constexpr cad::Primitive kPrimitives[] = {cad::Primitive::Box,  cad::Primitive::Cylinder, cad::Primitive::Sphere,
+                                          cad::Primitive::Cone, cad::Primitive::Tube,     cad::Primitive::Torus};
+
+// The tool a word of the command line names (rule 12): the primitives in
+// both languages; the sketch tools' aliases are known and answered with
+// «Próximamente» until stage D2.
+std::optional<cad::Primitive> primitive_named(const std::string& word) {
+    static const std::pair<const char*, cad::Primitive> names[] = {
+        {"caja", cad::Primitive::Box},         {"box", cad::Primitive::Box},
+        {"cilindro", cad::Primitive::Cylinder}, {"cylinder", cad::Primitive::Cylinder},
+        {"esfera", cad::Primitive::Sphere},    {"sphere", cad::Primitive::Sphere},
+        {"cono", cad::Primitive::Cone},        {"cone", cad::Primitive::Cone},
+        {"tubo", cad::Primitive::Tube},        {"tube", cad::Primitive::Tube},
+        {"toro", cad::Primitive::Torus},       {"torus", cad::Primitive::Torus}};
+    for (const auto& [name, kind] : names)
+        if (word == name)
+            return kind;
+    return std::nullopt;
+}
+
+bool sketch_alias(const std::string& word) {
+    static const char* aliases[] = {"l",     "c",     "a",      "rec",   "tr",    "ex",     "o",       "f",       "cha",
+                                    "mi",    "ar",    "m",      "co",    "ro",    "sc",     "di",      "area",    "e",
+                                    "rev",   "linea", "línea",  "line",  "circulo", "círculo", "circle", "arco",  "arc",
+                                    "rectangulo", "rectángulo", "rectangle", "boceto", "sketch", "extruir", "extrude"};
+    for (const char* a : aliases)
+        if (word == a)
+            return true;
+    return false;
+}
+
+std::string lower_ascii(std::string s) {
+    for (char& c : s)
+        c = char(std::tolower(static_cast<unsigned char>(c)));
+    return s;
+}
+
+} // namespace
+
+void App::start_solidcraft_probe() {
+    const std::filesystem::path exe = !options_.solidcraft.empty()
+                                          ? std::filesystem::path(from_utf8(options_.solidcraft))
+                                          : cad::bundled_solidcraft(cad::executable_dir());
+    solidcraft_probed_ = false;
+    solidcraft_job_.start([exe] { return cad::probe_solidcraft(exe); });
+}
+
+void App::open_design(bool sketch) {
+    set_tab(Tab::Design);
+    if (sketch)
+        command_message_ = format(tr(T::CommandSoon), tr(T::DesignSketch));
+    else
+        design_pick_primitive_ = true;
+    tip("design");
+}
+
+void App::add_primitive(cad::Primitive kind, const std::array<double, cad::kMaxSizes>& sizes) {
+    cad::Feature f;
+    f.kind = kind;
+    f.sizes = sizes;
+    f.name = design_.free_name(primitive_label(kind));
+    design_.features.push_back(std::move(f));
+    design_scroll_to_ = std::to_string(design_.features.size()); // the new row in view
+    rebuild_design();
+}
+
+// The design built again by the bundled tool, in the background; while a
+// build runs, the next waits for it (one at a time, the last design wins).
+void App::rebuild_design() {
+    design_dirty_ = true;
+    if (!solidcraft_probed_ || design_job_.running())
+        return;
+    design_dirty_ = false;
+    if (!solidcraft_.available) {
+        design_error_ = tr(T::DesignMissing);
+        return;
+    }
+    const cad::Design copy = design_;
+    const std::filesystem::path exe = solidcraft_.exe;
+    const cad::MeshQuality quality = cad::quality_for(settings_.cad_chord_tolerance, cad::nominal_size(copy));
+    design_job_.start([exe, copy, quality] { return cad::build_design(exe, copy, quality); });
+}
+
+void App::design_built(cad::BuildResult built) {
+    if (built.ok) {
+        design_error_.clear();
+        design_mesh_ = std::move(built.mesh);
+        design_file_ = std::move(built.design_file);
+        design_volume_ = built.volume_mm3;
+        design_box_ = design_mesh_.bounding_box();
+        if (tab_ == Tab::Design)
+            show_design();
+    } else {
+        design_error_ = built.error;
+    }
+    if (design_dirty_)
+        rebuild_design();
+}
+
+// The design's bodies in the view, in the plate's place (rule 3: the same
+// view and bed).
+void App::show_design() {
+    const std::vector<float> model = design_mesh_.empty() ? std::vector<float>{} : mesh_vertices(design_mesh_, Vec3{});
+    renderer_.set_model(model);
+    renderer_.set_model_coarse({});
+    vk_view_.set_model(model);
+    frame_all();
+}
+
+// «Mandar a la placa» (rule 21): a new design is added as an object; one
+// opened with «Editar en Diseño» replaces its object and keeps its place,
+// settings, modifiers and painting (carried onto the new faces). CD20: a new
+// design sent twice gives two objects.
+void App::send_design_to_plate() {
+    if (design_mesh_.empty() || design_job_.running())
+        return;
+    const std::string json = cad::design_json(design_);
+    PlateObject* target = nullptr;
+    if (design_target_ != 0)
+        for (PlateObject& o : objects_)
+            if (o.design_id == design_target_)
+                target = &o;
+    if (target) {
+        Painting carried = carried_painting(target->painting, target->mesh, design_mesh_);
+        target->mesh = design_mesh_;
+        target->painting = std::move(carried);
+        target->design = json;
+        target->design_file = design_file_;
+        set_tab(Tab::Prepare);
+        plate_changed();
+        notify(tr(T::DesignReplaced));
+        return;
+    }
+    const std::string name = design_.features.size() == 1 ? design_.features.front().name : std::string(tr(T::DesignTitle));
+    set_tab(Tab::Prepare);
+    add_mesh(design_mesh_, from_utf8(name));
+    PlateObject& o = objects_.back();
+    o.design = json;
+    o.design_file = design_file_;
+    o.design_id = next_design_id_++;
+    notify(tr(T::DesignSent));
+}
+
+void App::edit_in_design(std::size_t object) {
+    if (object >= objects_.size())
+        return;
+    const PlateObject& o = objects_[object];
+    try {
+        design_ = cad::parse_design(o.design);
+    } catch (const std::exception& e) {
+        notify(e.what(), true);
+        return;
+    }
+    design_target_ = o.design_id;
+    design_file_ = o.design_file;
+    design_mesh_ = o.mesh; // shown as it is until the tool builds it again
+    design_box_ = design_mesh_.bounding_box();
+    design_volume_ = design_mesh_.signed_volume();
+    design_error_.clear();
+    set_tab(Tab::Design);
+    rebuild_design();
+}
+
+void App::design_panel() {
+    const float margin = 12.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
+    ImGui::SetNextWindowSize(ImVec2(380.0f * scale_, view_size_.y - 72.0f * scale_));
+    ImGui::SetNextWindowBgAlpha(0.95f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##design", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    const auto rect_of = [](const char* name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    const auto section = [&](T title) {
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::Separator();
+    };
+    constexpr std::uint32_t kViolet = 0x8B5CF6;
+    // The footer stays put; the sections scroll above it.
+    const float footer = 3.0f * ImGui::GetFrameHeightWithSpacing() + 10.0f * scale_;
+    ImGui::BeginChild("##design_scroll", ImVec2(0, -footer));
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::DesignTitle));
+    ImGui::PopFont();
+    loc::TextColored(rgb(kViolet), "%s", design_.name.c_str());
+    ImGui::PushTextWrapPos(0.0f);
+    if (!solidcraft_probed_) {
+        loc::TextDisabled("%s", tr(T::DesignChecking));
+    } else if (!solidcraft_.available) { // rule 22 bis
+        loc::TextColored(rgb(0xE5484D), "%s", tr(T::DesignMissing));
+        rect_of("design_missing");
+        loc::TextDisabled("%s", solidcraft_.error.c_str());
+    }
+    const bool ready = solidcraft_probed_ && solidcraft_.available;
+
+    // Nuevo: a sketch (stage D2), the primitives, a STEP file (stage D5).
+    section(T::DesignSecNew);
+    ImGui::BeginDisabled(true);
+    ImGui::Button(tr(T::DesignSketch));
+    ImGui::SameLine();
+    loc::TextDisabled("%s", tr(T::ComingSoon));
+    ImGui::EndDisabled();
+    rect_of("design_sketch");
+    loc::TextDisabled("%s", tr(T::DesignPrimitive));
+    if (design_pick_primitive_) {
+        ImGui::OpenPopup("##pick_primitive");
+        design_pick_primitive_ = false;
+    }
+    if (ImGui::BeginPopup("##pick_primitive")) {
+        for (const cad::Primitive kind : kPrimitives)
+            if (ImGui::Selectable(primitive_label(kind), false, ready && solidcraft_.has(cad::command_of(kind)) ? 0 : ImGuiSelectableFlags_Disabled)) {
+                add_primitive(kind, cad::default_sizes(kind));
+                command_focus_ = true;
+            }
+        ImGui::EndPopup();
+    }
+    {
+        const float width = (ImGui::GetContentRegionAvail().x - 2.0f * ImGui::GetStyle().ItemSpacing.x) / 3.0f;
+        int k = 0;
+        for (const cad::Primitive kind : kPrimitives) {
+            // Each one the tool has; «Próximamente» otherwise (rule 1).
+            const bool known = ready && solidcraft_.has(cad::command_of(kind));
+            if (k % 3 != 0)
+                ImGui::SameLine();
+            ImGui::BeginDisabled(!known);
+            const bool clicked = ImGui::Button(primitive_label(kind), ImVec2(width, 0));
+            ImGui::EndDisabled();
+            rect_of((std::string("design_") + primitive_id(kind)).c_str());
+            if (ready && !known && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                loc::SetTooltip("%s", tr(T::ComingSoon));
+            if (clicked)
+                add_primitive(kind, cad::default_sizes(kind));
+            ++k;
+        }
+    }
+    ImGui::BeginDisabled(true);
+    ImGui::Button(tr(T::DesignOpenStep));
+    ImGui::SameLine();
+    loc::TextDisabled("%s", tr(T::ComingSoon));
+    ImGui::EndDisabled();
+    rect_of("design_open_step");
+
+    // The stages to come, greyed out (rule 3), one line each.
+    for (const T title : {T::DesignSecSketch, T::DesignSecOperations, T::DesignSecParameters}) {
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::SameLine();
+        loc::TextDisabled("· %s", tr(T::ComingSoon));
+        ImGui::Separator();
+    }
+
+    // Historial: one row per feature, its eye, its name and its sizes.
+    section(T::DesignSecHistory);
+    if (design_.features.empty())
+        loc::TextDisabled("%s", tr(T::DesignNoBodies));
+    std::optional<std::size_t> removed;
+    bool changed = false;
+    for (std::size_t i = 0; i < design_.features.size(); ++i) {
+        cad::Feature& f = design_.features[i];
+        ImGui::PushID(int(i));
+        if (design_scroll_to_ == std::to_string(i + 1)) {
+            ImGui::SetScrollHereY(0.0f);
+            design_scroll_to_.clear();
+        }
+        bool shown = !f.suppressed;
+        if (ImGui::Checkbox("##eye", &shown)) {
+            f.suppressed = !shown;
+            changed = true;
+        }
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::DesignSuppress));
+        rect_of(("design_eye_" + std::to_string(i + 1)).c_str());
+        ImGui::SameLine();
+        ImGui::TextUnformatted(f.name.c_str());
+        ImGui::SameLine();
+        loc::TextDisabled("(%s)", primitive_label(f.kind));
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 24.0f * scale_);
+        if (ImGui::SmallButton("×"))
+            removed = i;
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::DesignDeleteFeature));
+        rect_of(("design_delete_" + std::to_string(i + 1)).c_str());
+        ImGui::Indent();
+        for (std::size_t k = 0; k < cad::size_count(f.kind); ++k) {
+            ImGui::PushID(int(k));
+            const float field = 110.0f * scale_;
+            ImGui::SetNextItemWidth(field);
+            // The text field's own place (its '-' and '+' and its label follow it).
+            const std::string field_key = "design." + std::to_string(i + 1) + "." + std::to_string(k + 1);
+            if (design_scroll_to_ == field_key) {
+                ImGui::SetScrollHereY(0.5f);
+                design_scroll_to_.clear();
+            }
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            const ImVec4 rect(at.x, at.y, at.x + field - 2.0f * (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x),
+                              at.y + ImGui::GetFrameHeight());
+            if (loc::InputNumber(tr(size_label(f.kind, k)), &f.sizes[k], "%.2f", 0.5))
+                design_edited_ = true;
+            // For the scripted tests, when it is in view (the list scrolls).
+            if (rect.y >= ImGui::GetWindowPos().y && rect.w <= ImGui::GetWindowPos().y + ImGui::GetWindowSize().y)
+                g_field_rects[field_key] = rect;
+            ImGui::PopID();
+        }
+        if (!cad::sizes_ok(f.kind, f.sizes))
+            loc::TextColored(rgb(0xE8A33D), "%s", tr(T::CommandBadNumber));
+        ImGui::Unindent();
+        ImGui::PopID();
+    }
+    if (removed) {
+        design_.features.erase(design_.features.begin() + std::ptrdiff_t(*removed));
+        changed = true;
+    }
+    // A measure typed: the design is built again once the field is left.
+    if (design_edited_ && !ImGui::IsAnyItemActive()) {
+        design_edited_ = false;
+        changed = true;
+    }
+    if (changed)
+        rebuild_design();
+
+    // Medidas: what the last build measures.
+    section(T::DesignSecMeasures);
+    if (design_job_.running() || (design_dirty_ && ready)) {
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::DesignBuilding));
+    } else if (!design_error_.empty()) {
+        loc::TextColored(rgb(0xE5484D), "%s", design_error_.c_str());
+    } else if (design_mesh_.empty()) {
+        loc::TextDisabled("%s", tr(T::DesignNoBodies));
+    } else {
+        int bodies = 0;
+        for (const cad::Feature& f : design_.features)
+            bodies += !f.suppressed && cad::sizes_ok(f.kind, f.sizes) ? 1 : 0;
+        if (ImGui::BeginTable("##measures", 2)) {
+            const auto line = [](const char* name, const std::string& value) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                loc::TextDisabled("%s", name);
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(value.c_str());
+            };
+            line(tr(T::DesignBodies), std::to_string(bodies));
+            line(tr(T::DesignVolume), format("%.1f mm³", design_volume_));
+            line(tr(T::DesignBox), format("%.1f × %.1f × %.1f mm", double(design_box_.max.x - design_box_.min.x),
+                                          double(design_box_.max.y - design_box_.min.y), double(design_box_.max.z - design_box_.min.z)));
+            ImGui::EndTable();
+        }
+    }
+    ImGui::Spacing();
+    loc::TextDisabled("%s", tr(T::DesignBasedOn));
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+
+    // The footer: «Mandar a la placa», off until a body exists (rule 3).
+    ImGui::Separator();
+    const bool can_send = !design_mesh_.empty() && !design_job_.running() && !design_dirty_;
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(kViolet));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(0x7C3AED));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, rgb(0x6D28D9));
+    ImGui::BeginDisabled(!can_send);
+    const bool send = ImGui::Button(tr(T::DesignSend), ImVec2(-FLT_MIN, ImGui::GetFrameHeight() * 1.3f));
+    ImGui::EndDisabled();
+    ImGui::PopStyleColor(3);
+    rect_of("design_send");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(T::DesignSendTip));
+    if (send)
+        send_design_to_plate();
+    if (!can_send && !design_job_.running()) {
+        loc::TextDisabled("%s", tr(T::DesignNeedsSolid));
+        rect_of("design_needs_solid");
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+// The command line under the view (rule 12): a tool by its name, then its
+// sizes one by one with the default between brackets; Enter or Space
+// confirm, Enter on an empty line repeats the last tool, Esc cancels.
+void App::design_command_line() {
+    const float margin = 12.0f * scale_, height = 36.0f * scale_;
+    const float left = view_pos_.x + margin + 380.0f * scale_ + margin;
+    ImGui::SetNextWindowPos(ImVec2(left, view_pos_.y + view_size_.y - height - margin));
+    ImGui::SetNextWindowSize(ImVec2(std::max(view_pos_.x + view_size_.x - margin - left, 200.0f * scale_), height));
+    ImGui::SetNextWindowBgAlpha(0.95f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f * scale_, 6.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##design_command", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
+    std::string prompt;
+    if (command_prompt_) {
+        const CommandPrompt& c = *command_prompt_;
+        prompt = format("%s · %s [%s]:", primitive_label(c.kind), tr(size_label(c.kind, c.step)),
+                        format("%g", c.sizes[c.step]).c_str());
+    } else {
+        prompt = ">";
+    }
+    ImGui::AlignTextToFramePadding();
+    loc::TextColored(rgb(theme_.accent_hover), "%s", prompt.c_str());
+    ImGui::SameLine();
+    const float message_w = command_message_.empty() ? 0.0f : std::min(ImGui::CalcTextSize(command_message_.c_str()).x + 16.0f * scale_,
+                                                                       ImGui::GetContentRegionAvail().x * 0.5f);
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - message_w);
+    if (command_focus_) {
+        ImGui::SetKeyboardFocusHere();
+        command_focus_ = false;
+    }
+    // Enter keeps the field active for the next word (a command line, not a
+    // form); the text just taken is emptied from inside the field.
+    ImGuiIO& io = ImGui::GetIO();
+    const bool keep = io.ConfigInputTextEnterKeepActive;
+    io.ConfigInputTextEnterKeepActive = true;
+    const auto clear_taken = [](ImGuiInputTextCallbackData* data) {
+        bool* clear = static_cast<bool*>(data->UserData);
+        if (*clear) {
+            data->DeleteChars(0, data->BufTextLen);
+            *clear = false;
+        }
+        return 0;
+    };
+    const bool entered = ImGui::InputTextWithHint("##command", command_prompt_ ? "" : tr(T::CommandLineHint), &command_text_,
+                                                  ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_CallbackAlways,
+                                                  clear_taken, &command_clear_);
+    io.ConfigInputTextEnterKeepActive = keep;
+    g_menu_rects["design_command"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                            ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+    const bool active = ImGui::IsItemActive();
+    const auto take = [&](std::string text) {
+        run_command(std::move(text));
+        command_text_.clear();
+        command_clear_ = true;
+    };
+    if (entered) {
+        take(command_text_);
+    } else if (active && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        command_prompt_.reset();
+        command_message_ = tr(T::CommandCancelled);
+        command_text_.clear();
+        command_clear_ = true;
+        command_focus_ = true;
+    } else if (active && ImGui::IsKeyPressed(ImGuiKey_Space, false) && command_prompt_) {
+        // The space bar confirms as Enter does (rule 12).
+        std::string text = command_text_;
+        while (!text.empty() && text.back() == ' ')
+            text.pop_back();
+        take(text);
+    }
+    if (!command_message_.empty()) {
+        ImGui::SameLine();
+        loc::TextDisabled("%s", command_message_.c_str());
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+void App::run_command(std::string text) {
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\t'))
+        text.pop_back();
+    while (!text.empty() && (text.front() == ' ' || text.front() == '\t'))
+        text.erase(text.begin());
+    command_message_.clear();
+    if (command_prompt_) {
+        CommandPrompt& c = *command_prompt_;
+        if (!text.empty()) {
+            const std::optional<double> v = typed_number(text);
+            const bool top = c.kind == cad::Primitive::Cone && c.step == 1; // a cone's top may be 0
+            if (!v || !std::isfinite(*v) || (top ? *v < 0.0 : !(*v > 0.0))) {
+                command_message_ = tr(T::CommandBadNumber);
+                return;
+            }
+            c.sizes[c.step] = *v;
+        }
+        ++c.step;
+        if (c.step < cad::size_count(c.kind))
+            return;
+        if (!cad::sizes_ok(c.kind, c.sizes)) {
+            command_message_ = tr(T::CommandBadNumber);
+            c.step = 0;
+            return;
+        }
+        add_primitive(c.kind, c.sizes);
+        command_message_ = format(tr(T::CommandAdded), design_.features.back().name.c_str());
+        command_prompt_.reset();
+        return;
+    }
+    std::string word = lower_ascii(text);
+    if (word.empty()) {
+        if (last_command_.empty())
+            return;
+        word = last_command_; // Enter on an empty line repeats the last tool
+    }
+    if (word == "mandar" || word == "send" || word == "enviar") {
+        last_command_ = word;
+        send_design_to_plate();
+        return;
+    }
+    if (const std::optional<cad::Primitive> kind = primitive_named(word)) {
+        last_command_ = word;
+        command_prompt_ = CommandPrompt{*kind, cad::default_sizes(*kind), 0};
+        return;
+    }
+    if (sketch_alias(word)) {
+        command_message_ = format(tr(T::CommandSoon), text.c_str());
+        return;
+    }
+    command_message_ = format(tr(T::CommandUnknown), text.c_str());
+}
+
 // The guided calibration: create (the part is built with ranges from the
 // settings and sliced), print, then pick the segment that came out best or
 // enter the measures.
@@ -10681,7 +11366,7 @@ void App::layout() {
             object_settings_window();
         }
         mixing_dialog();
-        if (!has_plate_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device) // those panels have their own buttons
+        if (!has_plate_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device && tab_ != Tab::Design) // those panels have their own buttons
             empty_hint();
         if (tab_ == Tab::Preview)
             preview_panels();
@@ -10692,6 +11377,10 @@ void App::layout() {
             part_labels();
         if (tab_ == Tab::Analysis)
             analysis_panel();
+        if (tab_ == Tab::Design) {
+            design_panel();
+            design_command_line();
+        }
         if (tab_ == Tab::Calibration)
             calibration_panel();
         if (tab_ == Tab::Device)
@@ -10709,6 +11398,7 @@ void App::layout() {
     if (tab_ != last_tab_) {
         last_tab_ = tab_;
         static const std::map<Tab, const char*> tab_tips = {{Tab::Preview, "preview"}, {Tab::Analysis, "analysis"},
+                                                            {Tab::Design, "design"},
                                                             {Tab::Calibration, "calibration"}, {Tab::Device, "device"}};
         if (const auto it = tab_tips.find(tab_); it != tab_tips.end())
             tip(it->second);
@@ -10731,6 +11421,9 @@ void App::layout() {
     dialogs();
 
     // Shortcuts.
+    if (no_popup() && cad_design_ && tab_ == Tab::Design &&
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, ImGuiInputFlags_RouteGlobal))
+        send_design_to_plate(); // cad_design.md, rule 21
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
@@ -11527,6 +12220,10 @@ void App::script_input() {
     if (step.verb == "click") {
         const std::string key = step.key.substr(0, step.key.find('#'));
         if (f == 0) {
+            if (key.starts_with("design.")) { // a field of the Design panel: scrolled into view
+                design_scroll_to_ = key;
+                return;
+            }
             if (!setting_place(key))
                 return fail_step("no such setting");
             go_to_setting(key);
@@ -11658,6 +12355,19 @@ void App::script_input() {
             io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
         else if (f >= 4)
             next();
+    } else if (step.verb == "right-click-model") { // a right click in the middle of the view, on a model: its menu
+        const ImVec2 at(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + 0.5f * view_size_.y);
+        if (f == 0) {
+            io.AddMousePosEvent(at.x, at.y);
+        } else if (f == 1) {
+            if (!pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray()))
+                return fail_step("no model under the point");
+            io.AddMouseButtonEvent(ImGuiMouseButton_Right, true);
+        } else if (f == 2) {
+            io.AddMouseButtonEvent(ImGuiMouseButton_Right, false);
+        } else if (f >= 4) {
+            next();
+        }
     } else if (step.verb == "click-model") { // a left click in the middle of the view, on a model
         const ImVec2 at(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + 0.5f * view_size_.y);
         if (f == 0) {
@@ -11759,6 +12469,32 @@ void App::script_input() {
         }
         if (f >= 30)
             fail_step("it is not on the screen");
+    } else if (step.verb == "expect-no-control") { // a named control is not on the screen, for 10 frames
+        if (g_menu_rects.contains(step.key))
+            return fail_step("it is on the screen");
+        if (f >= 10) {
+            std::printf("ui-script: expect-no-control %s: ok\n", step.key.c_str());
+            next();
+        }
+    } else if (step.verb == "pref") { // a preference set as its checkbox would: cad_design 0|1
+        if (step.key == "cad_design") {
+            cad_design_ = step.value != "0";
+            if (!cad_design_ && tab_ == Tab::Design)
+                set_tab(Tab::Prepare);
+        } else {
+            return fail_step("unknown preference");
+        }
+        next();
+    } else if (step.verb == "expect-design") { // the design's bodies built: VALUE "none" or a volume in mm3 within 1 %
+        if (design_job_.running() || !solidcraft_probed_ || design_dirty_)
+            return f >= 600 ? fail_step("the design is still building") : void();
+        const bool none = step.key == "none";
+        const double want = std::atof(step.key.c_str());
+        const bool ok = none ? design_mesh_.empty() : std::abs(design_volume_ - want) <= 0.01 * want;
+        std::printf("ui-script: expect-design %s: %s%.1f\n", step.key.c_str(), ok ? "ok, " : "got ", design_volume_);
+        if (!ok)
+            return fail_step("the design's volume is " + std::to_string(design_volume_) + " (" + design_error_ + ")");
+        next();
     } else if (step.verb == "expect-apart") { // two named controls drawn, neither over the other
         const auto a = g_menu_rects.find(step.key), b = g_menu_rects.find(step.value);
         if (a == g_menu_rects.end() || b == g_menu_rects.end())
@@ -11983,7 +12719,8 @@ void App::frame() {
         }
         const bool device_pending =
             options_.device_print && !device_print_done_ && (printer_ != nullptr || !options_.device.empty());
-        const bool waiting = slice_job_.running() || voxel_job_.running() || slice_pending || rays_pending ||
+        const bool waiting = slice_job_.running() || voxel_job_.running() || design_job_.running() ||
+                             solidcraft_job_.running() || slice_pending || rays_pending ||
                              (options_.coarse && (coarse_job_.running() || coarse_version_ != scene_version_)) ||
                              script_at_ < script_.size() ||
                              (options_.moire_check && !moire_checked_) || device_pending ||
@@ -11991,6 +12728,8 @@ void App::frame() {
         if (frames_ == 2) {
             if (options_.view == "analysis")
                 set_tab(Tab::Analysis);
+            else if (options_.view == "design")
+                set_tab(Tab::Design);
             else if (options_.view == "preview" && result_)
                 set_tab(Tab::Preview);
             else if (options_.view == "prepare")

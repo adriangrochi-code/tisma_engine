@@ -1161,21 +1161,32 @@ de ningún laminador):
   - importa STEP e IGES como sólidos, y 3MF, STL y OBJ solo como mallas;
   - para Windows hay un MSI de 80 MB y un zip portátil de 101 MB, sin firmar todavía.
 
-**Propuesta (falta que el dueño la confirme):**
-1. **Ahora, (a), un programa aparte:**
-   - un botón «Diseñar» abre SolidCraft, instalado por la persona; la ruta se configura o se busca;
-   - «Pasar a la placa» trae su 3MF o STL, que el motor ya lee;
-   - el motor no compila nada de SolidCraft ni lo distribuye, así que no hay acoplamiento ni riesgo de licencia;
-   - si más adelante el instalador lo incluye, `THIRD_PARTY.md` anota su lista de licencias, las fuentes OFL y los
-     recursos CC0;
-   - créditos: «Basado en SolidCraft».
-2. **Después, (b), guiones JSON:**
-   - un panel propio de diseño en la interfaz arma los comandos y llama a `solidcraft-cli run guion.json --out
-     pieza.3mf`;
-   - la versión queda fija y los comandos se validan con `commands`, porque cambian casi a diario;
-   - así el diseño queda dentro del laminador.
-3. **No por ahora, (c), enlazar sus cajas de Rust con una interfaz en C:** pide Rust dentro de la compilación con
-   MSVC y una capa propia sobre una API sin estabilidad prometida, con el núcleo cambiando.
+**Camino elegido (ficha `cad_design.md`, regla 1, por el equipo de fichas con el pedido del dueño, 2026-10-29):**
+Diseño es una pestaña más de la misma ventana; nunca otro programa.
+1. **Primer paso (D1 a D3), hecho desde el 2026-11-02:** el programa lleva adentro `solidcraft-cli` en una versión
+   fija (`cad::kSolidCraftVersion`, hoy **0.30.0**, release `v0.30.0` del 2026-11-02), en la carpeta `solidcraft/`
+   junto al ejecutable, con sus licencias. La pestaña Diseño le manda guiones JSON de comandos (`run guion.json
+   --save diseño.sc`, con `file.export_3mf` al final del guion) y lee el 3MF con el lector propio. Al arrancar le
+   pregunta `commands` en segundo plano y apaga, con «Próximamente», lo que esa versión no tiene; si falta, está
+   dañado o no responde (30 s para sondear, 120 s para construir), la pestaña lo dice y el resto del programa sigue
+   (regla 22 bis).
+   - **Tamaño medido** (2026-11-02): `solidcraft-cli.exe` de Windows x64 pesa **110 MB** sin comprimir y **43 MB**
+     dentro del zip; el zip del motor pasa de 4,8 MB a unos 48 MB. No es «mucho más chico» que la aplicación de
+     escritorio (172 MB): el CLI lleva el mismo núcleo. Decisión pendiente del dueño: si el tamaño molesta, se puede
+     descargar en la primera apertura de Diseño en vez de ir en el zip.
+   - En Linux va `solidcraft-cli` del `.tar.gz` (96 MB); las pruebas usan un sustituto propio
+     (`tests/fake_solidcraft_cli.cpp`) que arma las mismas primitivas, así la CI no descarga nada.
+   - **No probado con el binario real en esta sesión** (la sesión no puede ejecutar programas descargados): la
+     interfaz de comandos se tomó de la documentación pública de SolidCraft; el dueño lo prueba en Windows.
+2. **Después:** una crate propia en Rust que dependa de las crates de SolidCraft (`geom`, `sketch`, `kernel`, `doc`,
+   `io`, `engine`) y exporte una interfaz en C (SolidCraft prohíbe `unsafe`, así que la capa es nuestra), para
+   resolver el boceto en vivo al arrastrar sin otro proceso. Pide Rust en la compilación con MSVC.
+3. **Descartado:** SolidCraft como programa aparte instalado por la persona (iba contra el pedido del dueño).
+
+Etapas (regla 24): D1 (hecha el 2026-11-02: pestaña, panel, línea de comandos, primitivas, mandar a la placa y
+volver a editar; CD1, CD1b, CD7, CD19, CD20, CD21), D2 (bocetos, coordenadas tipeadas, referencias, ortogonal,
+extruir y revolucionar), D3 (restricciones, parámetros, línea de tiempo), D4 (redondeos, agujeros, roscas,
+patrones, booleanas), D5 (STEP e IGES, mallas, texto, proyecto, medidas).
 
 La ficha de comportamiento (`cad_design.md`) la escribe el equipo de fichas.
 

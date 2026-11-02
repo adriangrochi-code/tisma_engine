@@ -227,6 +227,10 @@ struct Settings {
     // Vase mode (docs/spec/features/vase_mode.md): one wall that rises in a
     // spiral, a layer each turn, over flat bottom layers.
     bool vase = false;
+    // The Design tab's mesh of a design sent to the plate (cad_design.md):
+    // how far it may stray from the exact surface, mm, and the largest angle
+    // between neighbouring facets, degrees.
+    double cad_chord_tolerance = 0.01, cad_angle_tolerance = 5.0;
     // Fuzzy skin (docs/spec/features/fuzzy_skin.md): the outer wall made rough.
     FuzzyMode fuzzy_mode = FuzzyMode::None;
     double fuzzy_thickness = 0.3;      // mm off the line, either way
