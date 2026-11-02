@@ -56,6 +56,10 @@ struct ViewFrame {
     bool moire_filter = true; // fades detail finer than a pixel: the preview's lines and the bed's grid
     float ao_radius = 2.0f;   // mm: how far ambient occlusion looks
     float ao_strength = 1.0f; // 0: none
+    // While something moves (view_auto_quality.md, rules 5 and 6): 1 keeps the
+    // occlusion of the last still frame (painting, dragging a model), 2 draws
+    // none (the camera turns: a held screen-space occlusion would slide).
+    int ao_hold = 0;
     float sun_radius = 0.05f; // radians: the key light's size, for soft ray traced shadows
     int max_ray_samples = 256;
     bool debug_visibility = false; // paint the visibility instead of the light (TISMA_DEBUG_VISIBILITY=1)
@@ -112,6 +116,7 @@ public:
     bool set_ray_scene(const std::vector<float>& node_texels, const std::vector<float>& primitive_texels);
     void clear_ray_scene();
     bool has_ray_scene() const { return ray_nodes_ != 0; }
+    long occlusion_passes() const { return ao_passes_; } // ambient occlusions computed so far
     int ray_samples() const { return ray_samples_; }
     int max_samples() const { return max_samples_; }
 
@@ -181,6 +186,8 @@ private:
     int width_ = 0, height_ = 0, samples_ = 0;
     unsigned g_fbo_ = 0, g_normal_ = 0, g_depth_ = 0;          // normals and depth
     unsigned ao_fbo_[3] = {}, ao_tex_[3] = {};                  // raw occlusion, blurred once, final
+    bool ao_ready_ = false; // ao_tex_[2] holds an occlusion of this size
+    long ao_passes_ = 0;    // occlusions computed, for the tests
     unsigned ray_fbo_[2] = {}, ray_tex_[2] = {};                // ray traced visibility, ping-pong
     unsigned msaa_fbo_ = 0, msaa_colour_ = 0, msaa_depth_ = 0;  // the lit scene, multisampled
     unsigned colour_fbo_ = 0, colour_ = 0, colour_depth_ = 0;   // the lit scene, resolved

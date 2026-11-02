@@ -1,0 +1,6 @@
+# A tool's first-use tip goes when the tool closes (the testers' UI38: Paint's
+# stayed on screen after leaving the tool).
+menu tool_paint
+expect-control tip_paint
+menu tool_paint
+expect-no-control tip_paint

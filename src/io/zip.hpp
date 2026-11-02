@@ -51,4 +51,12 @@ private:
     std::vector<Entry> entries_;
 };
 
+// A ZIP archive with these entries stored as they are (no compression), in
+// this order: a 3MF package or a project a reader of any kind opens.
+struct ZipEntryToWrite {
+    std::string name; // the path in the archive, '/' between folders
+    std::string data;
+};
+std::string write_zip_stored(const std::vector<ZipEntryToWrite>& entries);
+
 } // namespace tisma

@@ -521,6 +521,24 @@
      "rises a little on each turn.\n\nIt is fast, smooth and free of marks, but the part is hollow with a thin wall, "
      "so it is fragile. It cannot use supports, it prints one object at a time, and a layer with two outlines (a hole, "
      "two pieces) comes out flat.\n\nExample: a flower vase, a plant pot or a lampshade."},
+    {"cad.chord_tolerance",
+     "Cuando una pieza diseñada en la pestaña Diseño pasa a la placa, sus superficies curvas se convierten en "
+     "triángulos. Este valor es cuánto puede apartarse esa malla de la superficie exacta, en milímetros.\n\nMás "
+     "chico, la malla sigue mejor las curvas y pesa más; más grande, se nota el faceteado en los cilindros y las "
+     "esferas.\n\nEjemplo: 0,01 mm para lo normal; 0,003 mm para una pieza grande con curvas que se tienen que ver "
+     "lisas.",
+     "When a part designed in the Design tab goes to the plate, its curved surfaces become triangles. This value is "
+     "how far that mesh may stray from the exact surface, in millimetres.\n\nSmaller, the mesh follows the curves "
+     "better and weighs more; larger, the facets show on cylinders and spheres.\n\nExample: 0.01 mm for most "
+     "parts; 0.003 mm for a large part whose curves must look smooth."},
+    {"cad.angle_tolerance",
+     "El ángulo más grande que puede haber entre dos triángulos vecinos de la malla de una pieza diseñada, en "
+     "grados. Junto con la tolerancia de cuerda, decide cuántos triángulos lleva una curva.\n\nMás chico, más "
+     "triángulos y curvas más suaves. El componente de diseño de esta versión no lo usa todavía.\n\nEjemplo: 5° "
+     "para lo normal.",
+     "The largest angle there may be between two neighbouring triangles of a designed part's mesh, in degrees. With "
+     "the chord tolerance, it decides how many triangles a curve takes.\n\nSmaller, more triangles and smoother "
+     "curves. This version's design component does not use it yet.\n\nExample: 5° for most parts."},
     {"fuzzy.mode",
      "La piel difusa hace que la pared de afuera tiemble un poco hacia adentro y hacia afuera, al azar, mientras se "
      "imprime. La superficie queda áspera, como de felpa o piedra.\n\nEsconde las líneas de las capas y pequeñas "

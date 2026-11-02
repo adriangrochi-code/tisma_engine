@@ -99,6 +99,26 @@ jobs:
           cp ${{ matrix.programs }} "$package/"
           cp LICENSE README.md CHANGELOG.md THIRD_PARTY.md VERSION "$package/"
           cp docs/CONFIG.md docs/ANALYSIS.md docs/MATERIALS.md docs/GCODE_CHECK.md docs/VERSIONING.md docs/UI.md "$package/docs/"
+          # The design component (cad_design.md, rule 1): SolidCraft's command-line
+          # tool at the pinned version, with its licenses (THIRD_PARTY.md).
+          sc_version=0.30.0
+          mkdir -p "$package/solidcraft" sc
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            asset="solidcraft-$sc_version-windows-x64-portable.zip"
+            sha=ae5f502bc0062656965bff31f50739504e24c219baf520526fbd9208dfc261ba
+            curl -sSL --retry 3 -o "$asset" "https://github.com/tangency-labs/solidcraft/releases/download/v$sc_version/$asset"
+            echo "$sha  $asset" | sha256sum -c -
+            (cd sc && cmake -E tar xf "../$asset")
+            cp sc/*/solidcraft-cli.exe sc/*/LICENSE-MIT sc/*/LICENSE-APACHE sc/*/NOTICE sc/*/THIRD-PARTY-LICENSES.txt "$package/solidcraft/"
+          else
+            asset="solidcraft-$sc_version-linux-x86_64.tar.gz"
+            sha=5cd95727352b9a343fc8ff4bfb688671a5901a1b601a71c46e94c7b20750c9a0
+            curl -sSL --retry 3 -o "$asset" "https://github.com/tangency-labs/solidcraft/releases/download/v$sc_version/$asset"
+            echo "$sha  $asset" | sha256sum -c -
+            (cd sc && tar xzf "../$asset")
+            cp sc/*/bin/solidcraft-cli sc/*/share/doc/solidcraft/LICENSE-MIT sc/*/share/doc/solidcraft/LICENSE-APACHE \
+               sc/*/share/doc/solidcraft/NOTICE sc/*/share/doc/solidcraft/THIRD-PARTY-LICENSES.txt "$package/solidcraft/"
+          fi
           cmake -E tar cf "$package.zip" --format=zip "$package"
       - uses: actions/upload-artifact@v4
         with:

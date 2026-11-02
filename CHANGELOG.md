@@ -10,6 +10,98 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Panel de ajustes plegable** (pedido del dueño, 2026-11-02): «« al lado del buscador lo pliega y la vista toma
+  todo el ancho; en Preparar queda arriba a la izquierda, al lado de las herramientas de la placa, un recuadro mínimo
+  con tres listas (impresora, filamento y perfil de impresión, sin dibujo ni botones), y su » lo vuelve a abrir. Se
+  recuerda (`ui.panel_folded`, también en Configuración › Interfaz).
+- **La vista baja al mover** (ficha `view_auto_quality.md`, reglas 5, 6 y 8; UI37): al pintar, la oclusión ambiental
+  queda congelada desde el primer toque y se recalcula una sola vez al soltar, así el pincel no espera. Con la calidad
+  Equilibrada, o con la Automática o la Personalizada cuando un cuadro pasa el 70 % del presupuesto, mientras se
+  arrastra una pieza la oclusión queda congelada y mientras gira la cámara no se dibuja; el primer cuadro quieto
+  vuelve a la imagen completa. La Alta no baja nada. La barra de estado dice el motivo y, la primera vez que la
+  Automática baja algo, un aviso lo explica.
+- **Manijas sobre la pieza** (pedido del dueño con una imagen, 2026-11-02; cubre UI30 y UI34): con Mover, flechas
+  por eje sobre la pieza; con Girar, tres anillos; con Escalar, una manija por eje y el centro para escalar parejo.
+  X rojo, Y verde, Z azul, como en las letras de las tarjetas. Se arrastran en la vista: mover sigue al mouse a lo
+  largo de la flecha, girar sigue el ángulo alrededor del centro (Mayús: de a 15°) y escalar sigue la distancia; al
+  lado del mouse se ve cuánto va. La pieza se mueve en vivo y el plato se rehace al soltar.
+- **Configuración** (ficha `preferences.md`, prioridad del dueño del 2026-11-02): la primera entrada de Más, Ctrl+, o
+  Ctrl+P, o el engranaje de la barra de estado. Páginas General, Interfaz, **Video**, Cámara, Asistente, Complementos y
+  Otros, un buscador sobre todas, Cancelar (deshace) y Aceptar (guarda). La página Video muestra el equipo (procesador,
+  memoria, placa de video, pantalla, batería) y reúne lo que antes solo se cambiaba desde la línea de comandos: API
+  gráfica, calidad (Automática, Alta, Equilibrada, Liviana, Personalizada), modo de imagen, intensidad de la oclusión,
+  suavizado, FXAA, filtro de moiré, tope de cuadros por segundo (60 de fábrica), sincronización vertical, ahorro a
+  batería (tope de 30 y calidad liviana a batería), cálculo en la placa y el tiempo de la vista. La vista nunca dibuja
+  más rápido que el tope. Cambiar el modo de imagen o el suavizado a mano pasa la calidad a Personalizada.
+- **Dos apartados en la barra de arriba** (pedido del dueño, 2026-11-02): **Impresión 3D** (Preparar, Vista previa,
+  Análisis, Calibración, Impresora) e **Ingeniería** (Diseño). Cada apartado muestra solo sus pestañas
+  y su propio panel a la izquierda, así la interfaz no se llena; al volver a un apartado, abre en la última pestaña
+  usada ahí. Con la preferencia «Pestaña Diseño» apagada no hay apartado Ingeniería.
+- **Tornillería** (pedido del dueño, 2026-11-02), adentro de Diseño (botón «Tornillería» en Nuevo, o `tornillo`,
+  `tuerca`, `arandela` y `varilla` en la línea de comandos; «‹ Diseño» vuelve): tornillos hexagonales y Allen, tuercas, arandelas y
+  varillas roscadas con rosca métrica ISO, de M3 a M24 o a medida, con paso normal o fino, largo y una **holgura**
+  para que las piezas de plástico enrosquen (0,2 mm de fábrica: la rosca del tornillo sale así de más fina y la de la
+  tuerca así de más ancha). Muestra la broca para roscar, el agujero de paso (ISO 273), la llave, el volumen y la
+  caja. «Mandar a la placa» o «Mandar con su tuerca»; «Editar en Tornillería» en el menú de la pieza la abre otra vez
+  y la reemplaza en su lugar. Las piezas las hace el motor, sin el componente de diseño: los tornillos quedan parados
+  sobre la cabeza y las tuercas acostadas, para imprimir la rosca sin soportes.
+- **Más piezas en Tornillería** (pedido del dueño, 2026-11-02): tornillo y tuerca de mano (cabeza moleteada para
+  girar con los dedos), separador roscado (hexagonal, roscado por dentro de punta a punta) y espaciador (tubo para que
+  pase un tornillo). «Mandar con su tuerca» manda la tuerca de mano con el tornillo de mano.
+- **Engranajes** (pedido del dueño, 2026-11-02), otra página de Diseño (botón «Engranajes» en Nuevo, o `engranaje`):
+  rectos, helicoidales y en espina de pescado, con perfil de evolvente; dientes, módulo, ancho, agujero, ángulo de
+  presión, ángulo y mano de la hélice, y una holgura por diente para que los impresos giren sin trabarse. Muestra los
+  diámetros primitivo, exterior y de fondo, el paso, y la distancia entre ejes y la relación con otro de los dientes
+  que se elijan; «Mandar con su pareja» manda los dos (la pareja de un helicoidal, con la hélice al revés).
+  También **cremalleras** (`cremallera` en la línea de comandos): dientes de flanco recto del mismo módulo sobre una
+  base, con la altura del eje del engranaje que la mueve y cuánto avanza por vuelta.
+- **Botón de unidad en los ajustes de mm o %** (reporte UI32 de los probadores): al lado del valor, un botón «mm» o
+  «%» cambia la unidad y convierte el número (la separación XY del soporte, el ancho de la primera capa, la costura y
+  los demás que aceptan las dos).
+- **Pestaña Diseño** (ficha `cad_design.md`, etapa D1): entre Vista previa y Análisis, con la misma vista y la misma
+  cama que Preparar. Su panel ocupa la columna izquierda en lugar del de ajustes de impresión y tiene Nuevo (Boceto y Abrir STEP marcados «Próximamente», y las primitivas: caja,
+  cilindro, esfera, cono, tubo y toro), Boceto, Operaciones y Parámetros (próximamente), Historial (un renglón por
+  pieza, con el ojo para suprimirla, sus medidas editables y borrar) y Medidas (cuerpos, volumen y caja). Abajo de la
+  vista, la línea de comandos: `caja`, `cilindro`, `esfera`, `cono`, `tubo`, `toro` o `mandar` (también en inglés),
+  las medidas una por una con el valor de fábrica entre corchetes, Enter en vacío repite la última herramienta, Esc
+  cancela. «Mandar a la placa» (Ctrl+Mayús+P) agrega la pieza como objeto; «Editar en Diseño» en el menú de un
+  objeto que salió de ahí lo vuelve a abrir, y al mandarlo de nuevo conserva su lugar, sus ajustes, sus modificadores
+  y lo pintado. En Preparar, Boceto y Primitiva (en la tira de herramientas y en el menú de la placa) abren Diseño.
+  La preferencia «Pestaña Diseño» la oculta. Las piezas las construye el componente de diseño, `solidcraft-cli` de
+  SolidCraft 0.30.0 (MIT o Apache-2.0, «Basado en SolidCraft» en Créditos), que el paquete de Windows lleva en la
+  carpeta `solidcraft/`; si falta, la pestaña lo dice y todo lo demás sigue andando.
+- **Ajustes `cad.chord_tolerance` y `cad.angle_tolerance`**: la malla de la pieza diseñada (tarjeta «Diseño» de Otros).
+- **Bocetos en Diseño** (ficha `cad_design.md`, etapa D2): Boceto en Nuevo pide el plano (XY, XZ o YZ) y abre el modo
+  boceto: línea, rectángulo, círculo y arco con la tira de herramientas, la línea de comandos (`L`, `REC`, `C`, `A`;
+  `C` cierra la cadena; `E` extruye y `REV` revoluciona; Enter en vacío repite) o clics en la vista; puntos tipeados
+  `x,y`, `@dx,dy` y `@largo<ángulo`; largo y ángulo junto al cursor (Tab entre ellos); referencias a objetos con su
+  marca (F3), ortogonal (F8), cuadrícula (F9) y rastreo polar (F10); Esc sale de la herramienta y después del boceto.
+  Cada boceto se extruye (distancia) o revoluciona (eje y ángulo) desde Historial, donde «Editar boceto» lo reabre.
+- **Barrer hacia adentro** (`retraction.wipe_inward` y `retraction.wipe_inward_distance`, ficha `orca_2_5.md`,
+  regla 1): el barrido que sigue a la pared externa se corre hacia la pared interna de al lado, donde la marca de la
+  costura no se ve, en mm o en % del ancho de la pared externa (50 % de fábrica). Solo con el barrido, más de una
+  pared y el orden de adentro hacia afuera; en las calibraciones de retracción y de avance de presión se apaga solo.
+- **Retracción después del barrido** (`retraction.after_wipe`, ficha `orca_2_5.md`, regla 2): la parte de la
+  retracción, en %, que se hace quieta después del barrido; se recorta a 100 − `before_wipe`. En el panel, el barrido
+  y sus dos partes van en su propia tarjeta, «Barrido».
+
+### Corregido
+
+- Los ajustes de la interfaz del soporte (capas de abajo, patrón y separación) se ven en el nivel Normal, no solo en
+  Avanzado (reporte UI36 de los probadores: no se encontraban). Están en Soportes › Interfaz, con los soportes prendidos.
+- «Volver al tutorial» (antes «Tutorial» en Más) también está arriba del panel de Ayuda (reporte UI33 de los
+  probadores).
+- Un trazo rápido de Pintar deja una franja continua y no puntos sueltos: el pincel pinta a lo largo del camino del
+  mouse entre un cuadro y el siguiente (reporte UI37 de los probadores y video del dueño del 31-10-2026).
+- Pintar con la vista Vulkan ya no frena la GPU en cada cuadro del trazo: la pintura se copia a un búfer de ese
+  cuadro, sin esperar a que la GPU quede ociosa (reporte UI37: de 300 a 28 cuadros por segundo al pintar).
+- En una ventana angosta las pestañas de la barra de arriba muestran solo el ícono, con el nombre al pasar el mouse,
+  y no pisan Abrir ni la ayuda.
+- El consejo de una herramienta se va al cerrarla, y el de una pestaña al dejarla (reporte UI38 de los probadores: el de
+  Pintar quedaba en pantalla).
+
 ## [0.10.0-alpha.3] - 2026-10-29
 
 ### Agregado

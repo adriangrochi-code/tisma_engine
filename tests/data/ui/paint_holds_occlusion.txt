@@ -1,0 +1,25 @@
+# Painting never waits for the occlusion (view_auto_quality.md, rule 6; the
+# testers' UI37): from the first dab the view keeps the occlusion of the last
+# still frame and computes it again once, on release (AQ4).
+pref view_quality high
+wait 3
+expect-occlusion-passes 1000
+expect-held 0
+menu tool_paint
+paint-drag 772 400 818 420
+paint-drag 790 380 840 430
+paint-drag 760 420 800 380
+expect-held 1
+expect-paint-area 35
+expect-occlusion-passes 4
+# Turning the camera: the high quality lowers nothing; the balanced one draws
+# no occlusion while it turns (rule 4).
+orbit 30 10
+wait 3
+expect-held 0
+pref view_quality balanced
+wait 3
+expect-held 0
+orbit 30 10
+wait 3
+expect-held 2

@@ -8460,3 +8460,235 @@ tutorial con lo básico, las correcciones y las dos vueltas de rendimiento en mo
 `release.yml` compila en Windows y en Linux y publica `tisma-engine-0.10.0-alpha.3-windows-x64.zip`, con
 `tisma.exe` (la interfaz) y `tisma-engine.exe`, al fusionar la PR `dev` → `alpha`.
 
+## 2026-10-29 (noche): OrcaSlicer 2.5, etapa O4 (mismo G-code en cualquier cantidad de núcleos)
+
+El equipo de fichas mandó `orca_2_5.md` (pasa `tools/check_spec.py`). La ficha sale de las notas y la wiki públicas de
+OrcaSlicer, sin código. Empieza por O4, la regla 19: la misma pieza con los mismos ajustes da el mismo G-code byte por
+byte, con cualquier cantidad de núcleos y en cada exportación.
+
+Ya se cumplía. Quedan dos pruebas en `tests/test_determinism.cpp` (`[determinism]`), cada una laminada con 1, 2 y 8
+hilos (`tbb::global_control` y un `task_arena` de ese tamaño) y dos veces con 8:
+- una T con soportes en árbol y relleno lightning;
+- dos T, cada una un objeto en su extrusor, con etiquetas M486 (Marlin), piel difusa externa y arcos sobre los
+  voladizos.
+
+Las dos comprueban que el caso de verdad tiene lo que dice: soporte, `T1` y `M486`.
+
+Se mezclaron en `dev` las fichas de la PR #45 (`spec/next`) y `main`, donde el dueño ya fusionó `alpha` (PR #47, con
+la 0.10.0-alpha.3).
+
+**Sigue:** O1 (reglas 1 a 5) y la propuesta de cómo integrar SolidCraft para el espacio de diseño CAD (pedido del
+dueño, por el equipo de fichas). Se está revisando su licencia y la de sus dependencias antes de proponer nada.
+
+## 2026-10-29 (noche): OrcaSlicer 2.5, regla 2 (retracción después del barrido)
+
+`retraction.after_wipe`: la parte de la retracción, en %, que se hace con la boquilla quieta después del barrido. Se
+recorta a 100 − `before_wipe`, y lo que queda se hace durante el barrido.
+- **Motor:** en el escritor, `retract`.
+- **Ajustes:** la clave, el filamento la puede pisar como las otras de retracción, y está en `CONFIG.md`.
+- **Panel:** el barrido y sus dos partes pasan a su propia tarjeta, «Barrido», porque la de retracción llegaba a 9
+  ajustes y el máximo es 8. La ficha del ajuste va en español y en inglés.
+- **Pruebas** (`[retraction]`):
+  - con 2 mm, 20 % antes y 30 % después: 0,4 quieta, 1 barriendo y 0,6 quieta, por los mismos 2,73 mm;
+  - OR2, 90 % después: se recorta a 80 %, 0,4 y 1,6 quietas, sin barrido.
+
+## 2026-11-02: OrcaSlicer 2.5, regla 1 (barrer hacia adentro)
+
+`retraction.wipe_inward` y `retraction.wipe_inward_distance` (mm o % del ancho real de la pared externa; 50 % de
+fábrica). Después de la pared externa, el barrido no vuelve sobre ella sino corrido hacia la pared interna de al lado.
+- **Motor:** en el escritor, al terminar un perímetro externo cerrado con `wipe_inward` prendido, se decide de qué
+  lado está la pieza sondeando un punto a medio ancho a la izquierda del último tramo contra las regiones de la capa
+  (`PointInPolygon` de Clipper2, paridad), y se le pasa al emisor la distancia (recortada a un ancho de pared) y el
+  lado. El barrido recorre una copia del camino recordado, corrida en cada punto por la media de las normales de sus
+  dos tramos, con el inglete recortado a dos veces la distancia. Solo con el barrido, más de una pared y el orden de
+  adentro hacia afuera; nunca en una calibración de retracción, de velocidad de retracción o de avance de presión
+  (los cambios por altura con esos valores lo apagan).
+- **Ajustes:** las dos claves, en el JSON (`"50%"` o un número en mm) y en `CONFIG.md`.
+- **Panel:** en la tarjeta «Barrido», una casilla y un campo de mm o %, con sus fichas en español y en inglés.
+- **Pruebas** (`[retraction]`, OR1): cubo de 20 mm, 3 paredes; con 50 % cada punto del barrido queda a medio ancho de
+  pared (0,2 mm) de la pared externa; con 0,3 mm, a 0,3; con 300 %, a un ancho; con 0 %, con `walls.outer_first`,
+  con una sola pared o con cambios de retracción por altura, el barrido de siempre sobre la pared. Y la ida y vuelta
+  de las dos formas de dar la distancia.
+
+**Sigue:** O1, reglas 3 a 5 (paredes sin apoyo al final, modificadores de costura precisa, polyholes).
+
+## 2026-11-02: pestaña Diseño, etapa D1 (`cad_design.md`, pedido del dueño por el equipo de fichas)
+
+El equipo de fichas mandó `cad_design.md` (en `spec/next`, pasa `tools/check_spec.py`) con el pedido del dueño del
+29-10: «una pestaña como es la de ingeniería pero con cosas para diseñar». Se hizo la etapa D1.
+- **Motor** (`src/cad/`): un diseño es una lista de piezas (caja, cilindro, esfera, cono, tubo, toro, con sus
+  medidas y el ojo que las suprime) que se vuelve el guion JSON que corre `solidcraft-cli` (`solid.box`,
+  `solid.cylinder`…, el tubo como cilindro con un cilindro cortado, `file.export_3mf` con la calidad que sale de
+  `cad.chord_tolerance`). La herramienta se sondea al arrancar (`--version`, `commands`) y se corre con límite de
+  tiempo, sin ventana (`posix_spawn` y `CreateProcessW`); el 3MF vuelve por el lector propio. Nuevo escritor de ZIP
+  sin comprimir y de 3MF; cono, tubo y toro en `src/mesh/shapes.cpp`.
+- **Sustituto para las pruebas** (`tests/fake_solidcraft_cli.cpp`): responde la misma línea de comandos y arma las
+  primitivas con las formas del motor; `TISMA_FAKE_SOLIDCRAFT_HANG` y `_BROKEN` prueban la regla 22 bis.
+- **Interfaz:** la pestaña entre Vista previa y Análisis, el panel (Nuevo, Boceto, Operaciones, Parámetros,
+  Historial, Medidas, «Mandar a la placa» con «Hacé un sólido primero.»), la línea de comandos con las primitivas en
+  los dos idiomas y los alias de boceto que contestan «Próximamente», «Editar en Diseño» en el menú del objeto, Boceto
+  y Primitiva en la tira de Preparar y en el menú de la placa, la preferencia `ui.cad_design`, Ctrl+Mayús+P. Lo
+  pintado se lleva a la pieza rehecha por el triángulo más cercano que mira para el mismo lado (`carried_painting`).
+- **Paquete:** `release.yml` baja el zip portátil de SolidCraft 0.30.0 (SHA-256 fija), y copia `solidcraft-cli.exe`
+  y sus licencias a `solidcraft/` junto al programa; en Linux, el `.tar.gz`. `THIRD_PARTY.md` y Créditos lo anotan.
+- **Medido:** `solidcraft-cli.exe` 110 MB (43 MB en zip); el zip del motor pasa de 4,8 MB a unos 48 MB.
+- **Pruebas:** `[cad]` (guion por primitiva, calidad, ida y vuelta del diseño, formas y 3MF, el sustituto sondeado y
+  una caja de 40 × 30 × 20 construida: 24 000 mm³; faltante, dañado y colgado), `[plate]` (lo pintado llevado), y
+  los guiones de interfaz `design_tab` (CD1, CD1b, CD19, CD20 y el volver a editar de CD7), `design_command`
+  (regla 12), `design_hidden` (CD1 con la preferencia apagada) y `design_missing` (CD21).
+- **No probado:** el `solidcraft-cli` real no se pudo ejecutar en esta sesión; los nombres de comandos y parámetros
+  vienen de su documentación pública. Hay que probarlo en Windows con la build: si un comando difiere, el mensaje de
+  Medidas lo dice («el componente de diseño rechazó el diseño: …»).
+
+**Sigue:** D2 (bocetos en un plano, coordenadas tipeadas, referencias a objetos, ortogonal y rastreo polar, extruir
+y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el guardado del diseño en el proyecto
+(D5) queda anotado en `PlateObject::design`.
+
+## 2026-11-02: mantenimiento (bloque de las 08:40; los de los días 30, 31 y 1 no corrieron: la sesión estaba parada)
+
+- **Comprobado:** `tools/ci_linux.sh` en verde con la regla 1 de `orca_2_5.md` (819 pruebas); `tisma_fuzz_gcode 2000`
+  con la semilla 20261102: 2000 corridas, 20 rechazadas por no imprimibles, 0 fallos.
+- **Encontrado y corregido:** nada del motor; en la pestaña Diseño nueva, dos cosas que las pruebas de guion
+  sacaron a la luz antes de publicar (la línea de comandos se desactivaba con Enter, y el campo de una medida
+  quedaba fuera de la zona visible del panel: ahora Enter deja el campo activo y el historial se desplaza hasta la
+  pieza nueva).
+- **Medido:** nada nuevo del laminado; el tamaño de `solidcraft-cli` (arriba).
+
+## 2026-11-02 (tarde): pestaña Diseño, etapa D2 (bocetos)
+
+- **Motor** (`src/cad/sketch.cpp`): el boceto sobre XY, XZ o YZ con cadenas de líneas, rectángulos, círculos y arcos;
+  los puntos tipeados como en los programas de dibujo técnico (`x,y`, `@dx,dy`, `@largo<ángulo`); las referencias a
+  objetos en su orden (extremo, punto medio, centro, cuadrante, intersección, perpendicular, tangente, más cercano,
+  cuadrícula); ortogonal y rastreo polar; y el guion de SolidCraft con sus ids (`l1`, `c1`, `a1`, `l3.start`…): las
+  referencias dejan `sketch.constraint.coincident` o `midpoint`, los largos tipeados `sketch.dimension`, y al final
+  `sketch.finish` y `solid.extrude` o `solid.revolve`. El sustituto extruye y revoluciona los contornos cerrados
+  (triangulación por recorte de orejas).
+- **Interfaz:** Boceto en Nuevo pide el plano y abre el modo boceto: la cámara mira el plano sin perspectiva, la tira
+  de herramientas sobre la vista (Línea, Rectángulo, Círculo, Arco, F3, F8, F9, F10, Extruir, Revolucionar, Terminar),
+  la línea de comandos con los alias (`L`, `REC`, `C`, `A`, `E`, `REV`; `C` cierra la cadena; Enter en vacío repite
+  la herramienta), los clics en la vista con la marca de cada referencia, la entrada junto al cursor (largo y ángulo,
+  Tab entre ellos), Esc sale de la herramienta y después del boceto sin borrar nada. En Historial, cada boceto muestra
+  su operación (extruir con la distancia, revolucionar con el eje y el ángulo) y «Editar boceto».
+- **Pedido del dueño (2026-11-02):** al abrir Diseño, el panel «Diseño» reemplaza al panel de ajustes de impresión
+  de la izquierda, en vez de flotar sobre la vista, para que la interfaz no se llene. La tira del boceto y la línea
+  de comandos quedan sobre la vista, a la derecha del panel.
+- **Pruebas:** `[cad]` (puntos tipeados, CD13 y CD14; ortogonal y polar, CD16; referencias y la restricción de punto
+  medio, CD15; el guion y sus ids; la ida y vuelta; el rectángulo extruido y los perfiles revolucionados por el
+  sustituto, CD2) y el guion de interfaz `design_sketch` (CD13, CD14, CD15, CD16, CD10 y CD2 por la pantalla).
+- **No probado:** el `solidcraft-cli` real, como en D1; los nombres de los puntos de un rectángulo (`l5.end` para la
+  esquina de abajo a la derecha) se dedujeron del orden de lados que documenta SolidCraft (bottom, right, top, left).
+
+**Sigue:** D3 (restricciones y cotas con los grados de libertad, parámetros, línea de tiempo editable), o las reglas
+3 a 5 de `orca_2_5.md`, según diga el dueño.
+
+## 2026-11-02 (tarde): apartados Impresión 3D e Ingeniería, y Tornillería (pedidos del dueño)
+
+- **Barra de arriba en dos apartados:** Impresión 3D (Preparar, Vista previa, Análisis, Calibración, Impresora) e
+  Ingeniería (Diseño), con un selector junto al logo. Cada apartado muestra solo sus pestañas y su panel propio en la
+  columna izquierda; vuelve a la última pestaña usada en él. Tornillería empezó como pestaña y, por un segundo pedido
+  del dueño el mismo día («tiene que venir en la parte de diseño»), quedó como página del panel de Diseño: el botón
+  «Tornillería» de Nuevo, o `tornillo`, `tuerca`, `arandela`, `varilla` en la línea de comandos, y «‹ Diseño» vuelve. Esto cambia lo que la ficha `cad_design.md` dice de la pestaña Diseño («entre Vista previa y
+  Análisis», CD1): queda avisado al equipo de fichas.
+- **Tornillería** (`src/cad/fasteners.*`): tornillos hexagonales y Allen, tuercas, arandelas y varillas roscadas con
+  la rosca métrica ISO 68-1, de M3 a M24 (tablas ISO 261, 4032, 4017, 4762, 7089 y 273) o a medida, paso normal o
+  fino, largo y holgura para plástico (0,2 mm de fábrica). La malla la arma el motor, cerrada y hacia afuera por
+  construcción, así que anda sin `solidcraft-cli`. Los tornillos quedan parados sobre la cabeza y las tuercas
+  acostadas. «Mandar con su tuerca» manda el par; «Editar en Tornillería» reemplaza la pieza en su lugar.
+- **Pruebas:** `[fasteners]` (el perfil ISO: cresta, fondo, diámetro de flancos y flancos a 60°; cada pieza cerrada
+  y orientada en M3, M8 y M24 y una tuerca de 40 mm a medida; cada vértice de la rosca del tornillo sobre el perfil
+  menos la holgura y el de la tuerca sobre el perfil más la holgura, o sea 2 × holgura entre ellos; volúmenes de la
+  varilla y la arandela; las comprobaciones y la ida y vuelta en JSON; una tuerca y un tornillo M8 laminados con el
+  G-code verificado) y el guion de interfaz `fasteners`. Los guiones de Diseño pasan por el selector de apartado.
+- **Medido:** una tuerca M8 tiene 661 mm³ y un tornillo M5 × 12, 352 mm³ (el guion los verifica).
+- **No probado:** que las piezas impresas enrosquen de verdad; la holgura de 0,2 mm es un punto de partida.
+
+- **UI32 (probadores):** los ajustes de mm o % tienen al lado un botón con la unidad que la cambia y convierte el
+  valor (la separación XY del soporte en % del ancho de pared, los anchos y la costura en % de la boquilla, la primera
+  capa en % de su alto, la velocidad de la pared externa en % de la de paredes).
+
+- **Más piezas (tercer pedido del dueño del día: «una solución de AutoCAD bastante completa» para piezas de
+  impresión 3D):** tornillo y tuerca de mano moleteados, separador roscado y espaciador en Tornillería; y una página
+  **Engranajes** (`src/cad/gears.*`): perfil de evolvente, rectos, helicoidales y en espina de pescado, holgura por
+  diente, pareja de mano contraria, distancia entre ejes. El armado por anillos pasó a `src/cad/lathe.*`, con
+  ángulos libres (las esquinas de cada diente) y un giro por anillo (la hélice).
+- **Pruebas:** `[gears]` (diámetros primitivo, exterior, de fondo y base; el contorno cruza el círculo primitivo a
+  un cuarto de paso, menos la holgura; la distancia entre ejes; rectos, helicoidales y espina de pescado de 8, 20 y
+  61 dientes cerrados y entre los cilindros de fondo y de punta; el giro de la hélice y el de la pareja; un engranaje
+  laminado con el G-code verificado) y las piezas nuevas en `[fasteners]`; guion de interfaz `gears`.
+- **Medido:** un engranaje recto de 20 dientes, módulo 1,5, 8 mm de ancho y agujero de 5 mm tiene 5 279 mm³; el
+  helicoidal de 30 dientes, 12 271 mm³ (el guion los verifica).
+- **No probado:** que dos engranajes impresos engranen bien con 0,15 mm de holgura; es un punto de partida.
+
+- **Cremallera** en Engranajes: dientes de flanco recto al ángulo de presión, cabeza m y pie 1,25 m sobre una base;
+  la pareja es un engranaje recto del mismo módulo con su eje a m z / 2 de la línea primitiva. Prueba `[gears]` (área
+  exacta de base y dientes, largo de diez pasos) y el guion `gears` (5 290 mm³ con 30 dientes, módulo 1,5).
+- **UI36 (probadores):** las capas de interfaz de abajo, el patrón y la separación de la interfaz pasan de Avanzado a
+  Normal (Soportes › Interfaz, visibles con los soportes prendidos).
+- **UI33 (probadores):** «Volver al tutorial», con ese nombre en Más y arriba del panel de Ayuda; guion
+  `tutorial_again`.
+- **UI37 (probadores, video del dueño):** al pintar rápido quedaban puntos sueltos, un toque por cuadro donde estaba
+  el mouse. Ahora el pincel pinta a lo largo del camino entre el toque anterior y el mouse, cada medio pincel en
+  pantalla (hasta 64 por cuadro). Guion `paint_drag`: un salto de 50 px en un cuadro pinta 42,8 mm² (un toque solo,
+  10,8 mm²).
+- **UI37, la otra mitad (cuadros por segundo al pintar):** con Vulkan, cada cuadro de un trazo subía la pintura con
+  `vkDeviceWaitIdle`, un búfer nuevo, una copia y `vkQueueWaitIdle`: dos esperas completas de la GPU por cuadro. Ahora
+  la pintura queda en la CPU y cada cuadro la copia a su propio búfer mapeado (el cuadro anterior que lo usó ya
+  terminó: su cerca se esperó), sin esperar a la GPU. No medido en Windows; la vista de Preparar pintada sigue
+  igual que la de OpenGL (`ui_view_prepare_vulkan_same_as_opengl`).
+- **Barra de arriba angosta:** a 900 px, con el selector nuevo, Calibración se encimaba con Abrir. Si no entran, las
+  pestañas (y después los apartados) muestran solo el ícono; guion `top_bar_narrow`.
+- **UI39 (laminar lento con pintura):** medido con una pieza de dos paredes de 100 × 90 × 65 mm, 400 toques de
+  costura y 200 de soporte: pintar 76 ms, laminar 116 ms (43 ms sin pintura). La pintura sola no explica el minuto
+  del video; hace falta la pieza del dueño para reproducirlo.
+- **UI38 (probadores):** el consejo de una herramienta se va al cerrarla y el de una pestaña al dejarla; guion
+  `tip_closes`.
+
+**Sigue:** más piezas para Ingeniería (cremallera, polea dentada GT2, inserto térmico, bisagra), con lo que pida el
+dueño; después D3 de `cad_design.md`.
+
+## 2026-11-02 (noche): Configuración y la página Video, etapa A (`preferences.md`, `view_auto_quality.md`)
+
+Prioridad del dueño (por el equipo de fichas): primero Configuración con la página Video y la calidad automática.
+- **Configuración:** Más › «Configuración…» (la primera entrada), Ctrl+, y Ctrl+P, y un engranaje en la barra de
+  estado. Siete páginas, buscador, Cancelar vuelve todo como estaba, Aceptar guarda. Valores de fábrica con
+  confirmación. La vista se ve detrás y los cambios de Video se aplican al momento.
+- **Video:** el equipo (`src/ui/system_info.*`: procesador, núcleos, memoria, batería; la placa desde OpenGL o
+  Vulkan, con su tipo y versiones; la pantalla desde GLFW), «Volver a lo recomendado», y las opciones de la regla 8.
+  Calidades fijas de la regla 4; la automática elige por ahora según la placa (por software: Liviana; integrada:
+  Equilibrada; el resto: Alta) hasta la medición de la regla 2. Tope de cuadros por segundo (60; la pantalla; sin
+  tope) que espera eventos en lo que sobra del cuadro; sincronización vertical en vivo con OpenGL y con Vulkan (la
+  cadena de imágenes se rehace). Ahorro a batería: tope 30 y Liviana.
+- **Pruebas:** `[system]` y el guion `config` (PF7: cada opción que guardan las preferencias tiene control; PF8: Más y
+  el engranaje la abren; «Volver a lo recomendado» elige Liviana con llvmpipe; Cancelar deshace).
+- **Falta (etapa B y lo marcado «Próximamente»):** la medición del primer arranque y «Medir de nuevo», bajar la
+  calidad al mover y congelar la oclusión al pintar, la resolución de la vista, la sombra sobre la cama, el nivel de
+  OpenGL (`legacy_windows.md`), elegir la placa en equipos con dos, exportar e importar las preferencias, y cambiar la
+  API gráfica sin cerrar el programa (hoy se aplica al volver a abrirlo).
+- **Panel plegable (pedido del dueño, durante el bloque):** «« pliega el panel de ajustes en Preparar y Vista previa;
+  la vista toma todo el ancho; en Preparar un recuadro arriba a la derecha deja la impresora con su boquilla, el
+  filamento y el perfil de impresión, con » para volver; en Vista previa, una pestaña violeta en el borde izquierdo.
+  Guion `panel_fold`.
+
+- **Manijas sobre la pieza (pedido del dueño con una imagen; UI30 y UI34):** con Mover, flechas X e Y; con Girar,
+  tres anillos; con Escalar, una manija por eje y el centro para todo parejo (o todo parejo si «mantener
+  proporción» está prendido). X rojo, Y verde, Z azul, también en las letras de la tarjeta. Se dibujan en la pantalla
+  con la proyección de la cámara y se tocan en 2D (8 px); el clic sobre una manija no elige otra pieza ni gira la
+  cámara. Al lado del mouse, cuánto va. Guiones `move_gizmo`, `rotate_gizmo` y `scale_gizmo` (nuevo paso
+  `drag-control`: apretar en un control con nombre, mover y soltar).
+- **Recuadro plegado más chico (pedido del dueño, durante el bloque):** a la izquierda, al lado de la columna de
+  herramientas, solo las tres listas, sin el dibujo de la impresora ni los botones de guardar y menú; la tarjeta de
+  la herramienta elegida baja debajo de él. El guion `panel_fold` comprueba que no tapa las herramientas ni la
+  tarjeta.
+
+- **Calidad automática, etapa B, primer paso (reglas 5, 6 y 8 de `view_auto_quality.md`):** la vista (OpenGL) puede
+  sostener la oclusión del último cuadro quieto o no dibujarla (`ViewFrame::ao_hold`); la firma de la oclusión no se
+  guarda mientras está sostenida, así el primer cuadro quieto la recalcula. Al pintar se sostiene siempre (regla 6).
+  Arrastrar una pieza la sostiene y girar la cámara la apaga (una oclusión de pantalla sostenida se correría sobre
+  la imagen; decisión propia), con Equilibrada siempre y con Automática o Personalizada cuando el tiempo de la vista
+  pasa el 70 % del presupuesto, hasta que el movimiento termina (sin parpadeo). La barra de estado dice el motivo
+  y, la primera vez con la Automática, un aviso (`ui.lowered_notice_shown`). Guion `paint_holds_occlusion` (AQ4: tres
+  trazos, tres oclusiones, una por cada vez que se suelta; antes, una por cada toque). La vista con Vulkan todavía no
+  tiene oclusión (V3), así que no cambia.
+
+**Sigue:** el resto de la etapa B (medición del primer arranque y «Medir de nuevo», bajar el suavizado y la
+resolución de la vista paso a paso, el tope de 30 al laminar); después, el resto de UI27–UI41.

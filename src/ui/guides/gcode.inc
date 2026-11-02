@@ -256,6 +256,39 @@
      "still before the wipe starts; the rest is done while wiping.\n\nHigher cuts the pressure right away before "
      "moving; lower leaves more filament to retract during the wipe, which cleans the tip better.\n\nExample: 0 % "
      "does the whole retraction while wiping; 50 % does half standing still and half while wiping."},
+    {"retraction.after_wipe",
+     "Solo cuenta con el barrido encendido. Es qué parte de la retracción, en porcentaje, se hace con la boquilla "
+     "quieta después de barrer. Con la de antes del barrido y esta, lo que queda se hace barriendo; las dos juntas "
+     "nunca pasan de 100 %: si se pide más, esta se recorta.\n\nSirve para terminar de tirar del filamento ya lejos "
+     "de la marca, sin que la retracción alargue el barrido.\n\nEjemplo: 0 % para empezar; con 20 % antes y 30 % "
+     "después, de 2 mm se retraen 0,4 quieta, 1 barriendo y 0,6 quieta al final.",
+     "It only matters with wipe on. It is how much of the retraction, in percent, is done with the nozzle standing "
+     "still after the wipe. With the part before the wipe and this one, what is left is done while wiping; the two "
+     "together never pass 100 %: asked for more, this one is cut.\n\nIt finishes pulling the filament away from "
+     "the mark, without the retraction making the wipe longer.\n\nExample: 0 % to start; with 20 % before and 30 % "
+     "after, of 2 mm 0.4 are pulled standing, 1 while wiping and 0.6 standing at the end."},
+    {"retraction.wipe_inward",
+     "Solo cuenta con el barrido encendido y más de una pared, impresas de adentro hacia afuera. Después de la pared "
+     "de afuera, el barrido no vuelve sobre esa pared sino un poco más adentro, sobre la pared interna de al lado, "
+     "donde la marca que deja no se ve.\n\nSirve para esconder la marca de la costura. Con la pared externa "
+     "primero, o con una sola pared, no hay pared interna adonde correrse y el barrido queda como siempre; en las "
+     "calibraciones de retracción y de avance de presión se apaga solo.\n\nEjemplo: apagado para empezar; "
+     "encendido si la costura deja una marca o una bolita en la superficie.",
+     "It only matters with wipe on and more than one wall, printed from the inside out. After the outer wall, the "
+     "wipe does not go back over that wall but a little further in, over the inner wall next to it, where the mark "
+     "it leaves cannot be seen.\n\nIt hides the seam's mark. With the outer wall first, or with one wall, there is "
+     "no inner wall to move onto and the wipe stays as usual; in the retraction and pressure advance calibrations "
+     "it turns itself off.\n\nExample: off to start; on if the seam leaves a mark or a blob on the surface."},
+    {"retraction.wipe_inward_distance",
+     "Solo cuenta con el barrido hacia adentro encendido. Es cuánto se corre el camino del barrido hacia adentro, "
+     "en mm o en porcentaje del ancho de la pared externa.\n\n50 % lo corre medio ancho de pared, justo al borde "
+     "entre la pared externa y la interna; 100 % lo pone sobre el medio de la pared interna; más de 100 % no cambia "
+     "nada más. 0 deja el barrido de siempre.\n\nEjemplo: 50 % para la mayoría; 100 % si la marca sigue "
+     "asomando.",
+     "It only matters with wipe inward on. It is how far the wipe's path moves inward, in mm or in percent of the "
+     "outer wall's width.\n\n50 % moves it half a wall width, right to the edge between the outer and the inner "
+     "wall; 100 % puts it over the middle of the inner wall; more than 100 % changes nothing else. 0 keeps the "
+     "usual wipe.\n\nExample: 50 % for most; 100 % if the mark still shows."},
     {"retraction.firmware",
      "El firmware es el programa que corre dentro de la impresora. Con este ajuste, el G-code no dice cuánto ni a qué "
      "velocidad retraer: solo dice retraé (G10) y volvé (G11), y la impresora usa los valores que tiene "

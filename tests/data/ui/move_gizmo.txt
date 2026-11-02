@@ -1,0 +1,11 @@
+# The Move tool's arrows on the model (the owner's request, 2026-11-02):
+# dragging the red arrow moves the model along X only, the green one along Y
+# (up the screen is +Y from the default view).
+expect-control gizmo_move_x
+expect-control gizmo_move_y
+expect-place x 128
+drag-control gizmo_move_x 60 0
+expect-place x 133..200
+expect-place y 128
+drag-control gizmo_move_y 0 -60
+expect-place y 133..200

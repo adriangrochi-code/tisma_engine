@@ -139,11 +139,11 @@ const std::vector<SectionLayout>& print_layout() {
             {"support.tree_double_wall_diameter", A}}},
           {"gap", T::SubSupportGap, {{"support.z_gap", N}, {"support.bottom_z_gap", A}, {"support.xy_gap", N}}},
           {"interface", T::SubSupportInterface,
-           {{"support.interface_layers", N},
-            {"support.bottom_interface_layers", A},
+           {{"support.interface_layers", N}, // the testers' UI36: the interface was not found at Normal
+            {"support.bottom_interface_layers", N},
             {"support.synchronize_layers", A},
-            {"support.interface_pattern", A},
-            {"support.interface_spacing", A},
+            {"support.interface_pattern", N},
+            {"support.interface_spacing", N},
             {"support.interface_contact_loops", A}}},
           {"pattern", T::SubSupportPattern,
            {{"support.spacing", N},
@@ -196,6 +196,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"infill.wave_length", A}}}}},
         {"other", T::SecOther, "section_other.svg",
          {{"special_modes", T::SubSpecialModes, {{"vase.enabled", N}, {"sequential.enabled", N}}},
+          {"design", T::SubDesign, {{"cad.chord_tolerance", A}, {"cad.angle_tolerance", A}}},
           {"multi_material", T::SubMultiMaterial,
            {{"extruders.walls", N},
             {"extruders.infill", N},
@@ -311,9 +312,13 @@ const std::vector<SectionLayout>& material_layout() {
             {"retraction.unretract_speed", A},
             {"retraction.restart_extra", A},
             {"retraction.on_layer_change", N},
-            {"retraction.wipe", N},
-            {"retraction.before_wipe", A},
             {"retraction.firmware", A}}},
+          {"wipe", T::SubWipe,
+           {{"retraction.wipe", N},
+            {"retraction.before_wipe", A},
+            {"retraction.after_wipe", A},
+            {"retraction.wipe_inward", A},
+            {"retraction.wipe_inward_distance", A}}},
           {"retract_travel", T::SubRetractTravel,
            {{"retraction.lift", B},
             {"retraction.min_travel", N},
@@ -691,6 +696,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return s.raft_layers > 0 ? format(T::SumRaft, s.raft_layers) : tr(T::SumOff);
     if (id == "brim")
         return s.brim_width > 0.0 ? format(T::SumMm, number(s.brim_width).c_str()) : tr(T::SumNoBrim);
+    if (id == "design")
+        return number(s.cad_chord_tolerance, 3) + " mm · " + number(s.cad_angle_tolerance, 0) + "°";
     if (id == "special_modes")
         return s.vase && s.sequential ? std::string(tr(T::VaseMode)) + " · " + tr(T::SequentialRow)
                : s.vase               ? std::string(tr(T::VaseMode))
@@ -759,6 +766,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
                    : tr(T::SumNoRetract);
     if (id == "retract_travel")
         return s.retract_lift > 0.0 ? format(T::SumHop, number(s.retract_lift).c_str()) : tr(T::SumNoHop);
+    if (id == "wipe")
+        return s.wipe ? tr(T::SumOn) : tr(T::SumOff);
     if (id == "coast")
         return s.coast > 0.0 ? number(s.coast) + " mm" : tr(T::SumOff);
     if (id == "material_retraction")

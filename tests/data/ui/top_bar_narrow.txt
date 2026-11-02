@@ -1,0 +1,6 @@
+# At 900 px the top bar's tabs keep only their icons and stay clear of the
+# help and Open on the right (2026-11-02: Calibration ran into Open).
+expect-control tab_device
+expect-control help
+expect-apart tab_device help
+expect-apart mode_engineering tab_prepare

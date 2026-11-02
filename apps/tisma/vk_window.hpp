@@ -59,6 +59,14 @@ public:
 
     // The device's name, for the status bar.
     std::string device_name() const;
+    // The device for the Video page (view_auto_quality.md, rule 1): its kind
+    // ("integrated", "discrete", "virtual", "cpu"), Vulkan's version and the
+    // driver's, as the driver reports them; empty before init.
+    std::string device_kind() const;
+    std::string api_version() const;
+    std::string driver_version() const;
+    // Waiting for the screen or not; the swapchain is made again next frame.
+    void set_vsync(bool vsync);
 
 private:
     struct Impl;

@@ -1059,7 +1059,7 @@ std::vector<double> frame_key(const ViewFrame& f) {
          double(f.show_preview), double(f.show_travels), double(f.first_layer), double(f.last_layer),
          double(f.top_shown), double(f.top_hidden), double(f.kind_mask), double(f.color_mode), double(f.mode),
          double(f.samples), double(f.fxaa), double(f.moire_filter), f.ao_radius, f.ao_strength, f.sun_radius,
-         double(f.max_ray_samples), double(f.debug_visibility)});
+         double(f.max_ray_samples), double(f.debug_visibility), double(f.ao_hold)});
     return k;
 }
 
@@ -1142,6 +1142,7 @@ void Renderer::resize(int width, int height, int samples) {
     if (width == width_ && height == height_ && samples == samples_)
         return;
     release_targets();
+    ao_ready_ = false;
     width_ = width, height_ = height, samples_ = samples;
     g_normal_ = make_texture(GL_RGBA8, width, height, GL_RGBA, GL_UNSIGNED_BYTE, GL_NEAREST);
     g_depth_ = make_texture(GL_DEPTH_COMPONENT24, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, GL_NEAREST);
@@ -1660,15 +1661,18 @@ void Renderer::draw(const ViewFrame& f) {
                           float(f.show_preview), float(width_), float(height_), float(has_ray_scene()),
                           float(f.moire_filter)});
         const bool changed = signature != ray_signature_;
-        if (changed) {
+        const bool ray = f.mode == RenderMode::RayTraced && has_ray_scene();
+        const bool ambient = f.mode == RenderMode::Ambient || (f.mode == RenderMode::RayTraced && !ray);
+        // A held occlusion is not computed now: the signature stays as it was,
+        // so the first still frame computes it again.
+        const bool held = ambient && (f.ao_hold == 2 || (f.ao_hold == 1 && ao_ready_));
+        if (changed && !held) {
             ray_signature_ = signature;
             ray_samples_ = 0;
         }
 
         unsigned visibility = white_;
-        const bool ray = f.mode == RenderMode::RayTraced && has_ray_scene();
-        const bool ambient = f.mode == RenderMode::Ambient || (f.mode == RenderMode::RayTraced && !ray);
-        const bool refresh = ray ? ray_samples_ < f.max_ray_samples : ambient && changed;
+        const bool refresh = ray ? ray_samples_ < f.max_ray_samples : ambient && changed && !held;
         if (refresh) {
             glBindFramebuffer(GL_FRAMEBUFFER, g_fbo_);
             glClearColor(0.5f, 0.5f, 1.0f, 1.0f);
@@ -1680,7 +1684,13 @@ void Renderer::draw(const ViewFrame& f) {
         } else if (ambient) {
             if (refresh)
                 shadow_pass(f);
-            visibility = refresh ? ambient_pass(f) : ao_tex_[2];
+            if (refresh) {
+                visibility = ambient_pass(f);
+                ao_ready_ = true;
+                ++ao_passes_;
+            } else {
+                visibility = f.ao_hold == 2 ? white_ : ao_tex_[2];
+            }
         }
 
         // The lit scene.

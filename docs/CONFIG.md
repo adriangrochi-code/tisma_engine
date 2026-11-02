@@ -94,6 +94,16 @@ costura.
 |---|---|---|---|---|
 | `enabled` | booleano | `false` | — | Activa el modo vaso: una sola pared, sin relleno ni capas de arriba (se ignoran esos ajustes). Las primeras `surfaces.bottom_layers` capas son planas, con relleno sólido, y la última de ellas es la superficie de arriba; desde ahí cada capa es una vuelta de la pared externa que empieza donde terminó la de abajo, sin viaje ni retracción, y sube la altura de una capa a lo largo de la vuelta, con el caudal de siempre. Sin capas de abajo, la primera capa es una vuelta plana. No se puede con soportes. Una capa con más de un contorno (dos islas, un agujero) se imprime plana |
 
+### `cad`
+
+La pestaña Diseño, ficha `docs/spec/features/cad_design.md`: cómo se hace malla la pieza diseñada al mandarla a la
+placa (regla 21).
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `chord_tolerance` | número | 0,01 | 0,001 a 1 | Cuánto se aparta como máximo la malla de la superficie exacta, en mm. El componente de diseño (SolidCraft) ofrece tres calidades de malla, `standard`, `fine` y `finest`, con una tolerancia de 2·10⁻⁴, 5·10⁻⁵ y 10⁻⁵ del tamaño del cuerpo: se elige la más gruesa que cumple este valor para el tamaño del diseño |
+| `angle_tolerance` | número | 5 | 1 a 30 | Ángulo máximo entre facetas vecinas de la malla, en grados. El componente de diseño no lo toma por ahora; queda para el mallador propio |
+
 ### `fuzzy`
 
 Piel difusa, ficha `docs/spec/features/fuzzy_skin.md`: la pared externa pasa por puntos nuevos, a distancias al azar
@@ -338,6 +348,9 @@ de siempre). Las partes más angostas que dos líneas no se planchan.
 | `on_layer_change` | booleano | `false` | | Todo cambio de capa retrae antes de subir, aunque el viaje al primer punto de la capa sea más corto que `min_travel`; la vuelta, al empezar a extruir (regla 2, prueba R2) |
 | `wipe` | booleano | `false` | | En vez de retraer quieta, la boquilla vuelve sobre el camino recién impreso mientras retrae, al 80 % de `speed.travel`, a lo largo de lo que queda por retraer × esa velocidad / (0,95 × `speed`); después siguen el viaje, el salto y la vuelta de siempre. Si el camino desde el último viaje es más corto, lo que no alcanzó se retrae quieto al final (regla 3, prueba R3). No va con `firmware` |
 | `before_wipe` | número | 0 | 0 a 100 | Parte de la retracción, en %, que se hace quieta antes del barrido (regla 3) |
+| `after_wipe` | número | 0 | 0 a 100 | Parte de la retracción, en %, que se hace quieta después del barrido (ficha `orca_2_5.md`, regla 2); se recorta a 100 − `before_wipe`, y lo que queda se hace durante el barrido |
+| `wipe_inward` | booleano | `false` | | Barrer hacia adentro (ficha `orca_2_5.md`, regla 1, prueba OR1): el barrido que sigue a una pared externa se corre de la superficie hacia la pared interna de al lado, donde la marca no se ve. Solo con `wipe`, más de una pared y el orden de adentro hacia afuera (sin `walls.outer_first`); en las calibraciones de retracción, velocidad de retracción y avance de presión se apaga solo |
+| `wipe_inward_distance` | número o `"N%"` | `"50%"` | 0 a 10 mm, o 0 a 1000 % | Cuánto se corre el camino del barrido hacia adentro, en mm o en % del ancho real de la pared externa; 50 % lo corre medio ancho de pared; se recorta a un ancho de pared (100 %); 0 deja el barrido de siempre |
 | `coast` | número | 0 | 0 a 20 | Coasting (ficha `coasting.md`), en mm: el final de cada perímetro (también el externo) y de cada relleno se recorre a su velocidad sin extruir (`G1` con X e Y, sin E); la presión que queda en la boquilla lo termina. No en un trazo de menos de 3 veces este largo, ni en un tramo de pared que sigue en el siguiente (los voladizos), ni en modo vaso o en los cordones no planares. 0: apagado |
 | `lift_above`, `lift_below` | número | 0 | ≥ 0 | El salto en Z (`lift`, o la rampa de `travel`) solo en las capas cuya Z está por encima de `lift_above` y por debajo de `lift_below`, en mm; 0: sin límite (regla 4, prueba R4) |
 | `firmware` | booleano | `false` | | Cada retracción es un `G10` y cada vuelta un `G11`, sin movimientos de E: el largo y la velocidad los pone el firmware (`M207`, `M208`); `length` sigue diciendo si se retrae (0: no) y el salto en Z sigue en el G-code. `restart_extra` no se escribe (regla 7, prueba R6) |
@@ -772,7 +785,7 @@ ajustes, cada uno con un comentario `; calibration`; al escribir los ajustes que
 | `spool_weight` | número | 0 | ≥ 0 | Peso del carrete vacío, en g (para que la interfaz compare con el carrete pesado) |
 | `shrinkage_xy`, `shrinkage_z` | número | 0 | 0 a 20 | Cuánto se contrae el filamento al enfriarse, en %, a lo ancho de las capas y en Z: la pieza se lamina 100 / (100 − p) veces más grande, alrededor del centro de su base como `compensation`, para que al contraerse quede de la medida pedida (ficha `gcode_extras.md`, regla 4; con 1 %, un cubo de 99 mm se lamina de 100). Se suma a la escala de `compensation` |
 | `start_gcode`, `end_gcode` | texto | `""` | | G-code de inicio y de fin del filamento (ficha `gcode_templates.md`, reglas 9 y 12): el inicio va después del de la impresora y de la espera de la boquilla, el fin antes del de la impresora. Mismo lenguaje de plantillas |
-| `retraction`, `travel` | objeto | `{}` | | Los valores propios del filamento para la retracción y los viajes (ficha `retraction_travel.md`, regla 10, pruebas R9 a R11): `{"retraction": {"length": 0.8, "lift": 0}, "travel": {"slope": 5}}`. Se pueden dar `length`, `speed`, `unretract_speed`, `restart_extra`, `lift`, `lift_above`, `lift_below`, `min_travel`, `on_layer_change`, `wipe` y `before_wipe` de `retraction`, y `ramping_lift`, `slope` y `max_lift` de `travel`. Un valor puesto reemplaza al de la impresora para todo lo que imprime este filamento, aunque sea 0 (un salto de 0 anula el de la impresora); `null` o sin la clave, vale el de la impresora. Una `speed` de 0 deja la de la impresora |
+| `retraction`, `travel` | objeto | `{}` | | Los valores propios del filamento para la retracción y los viajes (ficha `retraction_travel.md`, regla 10, pruebas R9 a R11): `{"retraction": {"length": 0.8, "lift": 0}, "travel": {"slope": 5}}`. Se pueden dar `length`, `speed`, `unretract_speed`, `restart_extra`, `lift`, `lift_above`, `lift_below`, `min_travel`, `on_layer_change`, `wipe`, `before_wipe` y `after_wipe` de `retraction`, y `ramping_lift`, `slope` y `max_lift` de `travel`. Un valor puesto reemplaza al de la impresora para todo lo que imprime este filamento, aunque sea 0 (un salto de 0 anula el de la impresora); `null` o sin la clave, vale el de la impresora. Una `speed` de 0 deja la de la impresora |
 | `abrasive` | booleano | false | | El filamento gasta una boquilla de latón (con fibra de carbono o de vidrio). Sin `machine.hardened_nozzle`, hay un aviso |
 | `needs_enclosure` | booleano | false | | El filamento pide impresora cerrada. Sin `machine.enclosed`, hay un aviso |
 | `type` | texto | `""` | | El material del filamento (`PLA`, `PETG`…), para la ficha del asistente (`assistant.md`, regla 13). Vacío: se busca por el nombre del perfil. No cambia el G-code |

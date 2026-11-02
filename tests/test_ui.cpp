@@ -537,7 +537,7 @@ TEST_CASE("ui: SVG icons rasterize and take the theme's colour", "[ui]") {
         CHECK(covered > 48);
         ++count;
     }
-    CHECK(count == 21);
+    CHECK(count == 23); // tisma_design and tisma_fasteners joined on 2026-11-02
 }
 
 TEST_CASE("ui: every text has both languages with the same fields", "[ui]") {

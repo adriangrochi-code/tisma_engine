@@ -1,0 +1,74 @@
+# A sketch drawn from the command line and the view (cad_design.md, stage
+# D2): CD13 (L, 0,0, @40,0, @0,30, @-40,0, C: a closed 40 x 30 rectangle;
+# Enter on an empty line starts L again), CD14 (@50<30 ends at 43.301, 25),
+# CD15 (a line from the midpoint of another, with the midpoint snap and
+# its constraint), CD16 (F8: a segment 10 degrees off comes out horizontal),
+# CD10 (Esc leaves the tool, then the sketch, and nothing is lost), then the
+# sketch extruded 20 mm (CD2: 24 000 mm3) and sent to the plate.
+menu mode_engineering
+menu tab_design
+menu design_sketch
+menu design_plane_xy
+expect-control sketch_line
+expect-control sketch_finish
+menu design_command
+type L
+key enter
+type 0,0
+key enter
+type @40,0
+key enter
+type @0,30
+key enter
+type @-40,0
+key enter
+type C
+key enter
+expect-sketch-entities 1
+expect-sketch-point 1 closed
+expect-sketch-point 1 2 40 30
+key enter
+type 0,0
+key enter
+type @50<30
+key enter
+key enter
+expect-sketch-entities 2
+expect-sketch-point 2 1 43.301 25
+type L
+key enter
+sketch-point 20.3 0.4
+type @0,20
+key enter
+key enter
+expect-sketch-entities 3
+expect-sketch-point 3 0 20 0
+expect-sketch-constraints 1
+key f8
+type L
+key enter
+sketch-point 60 0
+sketch-point 90 5.3
+key enter
+expect-sketch-entities 4
+expect-sketch-point 4 1 90 0
+key f8
+type L
+key enter
+type 100,100
+key enter
+key escape
+expect-control sketch_line
+key escape
+expect-no-control sketch_line
+expect-sketch-entities 4
+menu design_edit_sketch_1
+expect-control sketch_line
+menu design_command
+type E
+key enter
+type 20
+key enter
+expect-design 24000
+menu design_send
+expect-objects 2 Boceto

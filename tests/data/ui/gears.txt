@@ -1,0 +1,26 @@
+# Gears (the owner's request, 2026-11-02): a page of the Design panel; a spur
+# gear, then helical with more teeth, sent with its mate; a rack; back to the
+# design.
+menu mode_engineering
+menu design_gears
+expect-control gears_back
+expect-control gears_kind_spur
+expect-control gears_send_pair
+expect-no-control design_command
+expect-gear 20 5279.3
+menu gears_kind_helical
+click gears.teeth
+select-all
+type 30
+key enter
+expect-gear 30 12271.4
+menu gears_send_pair
+expect-objects 3 Engranaje de 20 dientes
+menu mode_engineering
+expect-control gears_back
+menu gears_kind_rack
+expect-control gears_kind_rack
+expect-gear 30 5290.5
+menu gears_back
+expect-control design_box
+expect-control design_command

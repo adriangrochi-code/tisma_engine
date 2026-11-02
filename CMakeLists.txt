@@ -253,6 +253,13 @@ add_library(tisma_core
   src/io/model.cpp
   src/io/threemf.cpp
   src/io/paths.cpp
+  src/cad/design.cpp
+  src/cad/sketch.cpp
+  src/cad/fasteners.cpp
+  src/cad/lathe.cpp
+  src/cad/gears.cpp
+  src/cad/process.cpp
+  src/cad/solidcraft.cpp
   src/calibration/calibration.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp
@@ -305,6 +312,7 @@ if(TISMA_BUILD_UI)
     src/ui/plate.cpp
     src/ui/measure.cpp
     src/ui/help.cpp
+    src/ui/system_info.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
   target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
