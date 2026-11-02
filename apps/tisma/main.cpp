@@ -288,6 +288,8 @@ int main(int argc, char** argv) {
             options.ui_script = value();
         } else if (arg == "--solidcraft") {
             options.solidcraft = value();
+        } else if (arg == "--crash-check") {
+            options.crash_check = true;
         } else if (arg == "--cloud-server") {
             options.cloud_server = value();
         } else if (arg == "--pick-catalog-printer") {

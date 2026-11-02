@@ -9,6 +9,7 @@
 #include "ui/presets.hpp"
 #include "ui/plate.hpp"
 #include "ui/scene.hpp"
+#include "ui/session_marks.hpp"
 #include "ui/slicing.hpp"
 #include "ui/setting_guide.hpp"
 #include "ui/settings_layout.hpp"
@@ -1092,4 +1093,34 @@ TEST_CASE("preview: the far-away order stands for every layer uncut when nothing
     CHECK(preview_far(order, 0, 3, some));
     CHECK_FALSE(preview_far(order, 0, 2, some));    // a cut from the top
     CHECK_FALSE(preview_far(order, 0, 3, some, 0)); // the move slider
+}
+
+TEST_CASE("session marks: a session whose process is gone is found once, with its log (problem_reports.md, rule 10)",
+          "[ui]") {
+    const auto dir = test_temp_dir() / "tisma_test_session_marks";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    // This process's own mark is never a closed session.
+    const ui::SessionMark own = ui::mark_session(dir);
+    REQUIRE(std::filesystem::exists(own.lock));
+    REQUIRE(std::filesystem::exists(own.log));
+    CHECK(ui::process_running(ui::current_process_id()));
+    CHECK_FALSE(ui::closed_session_log(dir));
+    // One of a process that is gone: its log, its last bytes from a line's start.
+    CHECK_FALSE(ui::process_running(2147483000));
+    std::ofstream(dir / "session-2147483000.lock");
+    std::ofstream(dir / "session-2147483000.log") << "first line\nsecond line\nthird line\n";
+    std::ofstream(dir / "session-other.lock"); // not a mark: left alone
+    const std::optional<std::string> log = ui::closed_session_log(dir, 16);
+    REQUIRE(log);
+    CHECK(*log == "third line\n");
+    CHECK_FALSE(std::filesystem::exists(dir / "session-2147483000.lock"));
+    CHECK_FALSE(std::filesystem::exists(dir / "session-2147483000.log"));
+    CHECK(std::filesystem::exists(dir / "session-other.lock"));
+    CHECK_FALSE(ui::closed_session_log(dir)); // asked once
+    // A normal exit leaves nothing.
+    ui::end_session(own);
+    CHECK_FALSE(std::filesystem::exists(own.lock));
+    CHECK_FALSE(std::filesystem::exists(own.log));
+    std::filesystem::remove_all(dir);
 }

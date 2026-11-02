@@ -23,6 +23,9 @@ struct AppOptions {
     std::string catalog_query;      // what to search in it
     std::string solidcraft;         // the solidcraft-cli to use instead of the bundled one (tests)
     std::string cloud_server;       // the Tisma Cloud server for this run (tests: the mock server)
+    // With screenshot: look for a session that closed unexpectedly and mark this
+    // one, as every start without --screenshot does (problem_reports.md, rule 10).
+    bool crash_check = false;
     bool light = false;             // light theme
     int render = -1;                // RenderMode (0 fast, 1 ambient occlusion, 2 ray tracing); -1: the preference
     int msaa = -1;                  // multisampling samples; -1: the preference

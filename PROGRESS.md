@@ -8879,3 +8879,22 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   trabajo después de entrar). El servidor simulado tiene `GET /v1/jobs`.
 - **Falta:** abrir desde la lista el resultado de un trabajo terminado.
 
+### Informar un problema: después de un cierre inesperado (IP9)
+
+- `src/ui/session_marks.*` (`problem_reports.md`, regla 10). Mientras corre, la interfaz deja en la carpeta de las
+  preferencias `session-<id>.lock` y su registro `session-<id>.log`, escrito línea por línea (pasado 1 MB vuelve a
+  empezar desde lo guardado). La salida normal los borra.
+- Al arrancar, una marca cuyo proceso ya no existe es un cierre inesperado:
+  - se abre «Informar un problema» con «Tisma se cerró» elegido y el registro de esa sesión (los últimos 190 000
+    bytes, desde el principio de una línea);
+  - las marcas viejas se borran al leerlas, así que no se pregunta dos veces;
+  - si se cancela, un informe posterior lleva el registro de la sesión actual.
+- Si corren dos ventanas a la vez, la marca de la otra no cuenta porque su proceso existe.
+- Las capturas y las pruebas no dejan marcas, salvo con `--crash-check`.
+- **Pruebas:**
+  - `[ui]`: la marca propia no cuenta; la de un proceso que no existe se encuentra una vez con su registro; la salida
+    normal no deja nada;
+  - el guion `crash_report` (IP9), con una marca plantada en una carpeta de configuración propia.
+- **No probado:** un cierre real del programa en Windows. Los procesos de Windows se prueban solo en la prueba
+  `[ui]`.
+

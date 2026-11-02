@@ -1,0 +1,16 @@
+# After an unexpected closing (problem_reports.md, rule 10; IP9): the start
+# finds the mark of a session whose process is gone and offers the report
+# with «Tisma closed» chosen and that session's log; cancelled, it is not
+# asked again, and a report made later carries this session's log.
+wait 5
+expect-control report_window
+expect-cloud report_kind crash
+expect-cloud crashed yes
+expect-cloud report_log The plate was sliced before the closing
+menu report_cancel
+expect-no-control report_window
+menu more
+menu report
+expect-control report_window
+expect-cloud crashed no
+menu report_cancel

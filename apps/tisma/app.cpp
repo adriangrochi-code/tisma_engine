@@ -48,6 +48,7 @@
 #include "ui/links.hpp"
 #include "ui/plate.hpp"
 #include "ui/project_slice.hpp"
+#include "ui/session_marks.hpp"
 #include "ui/png.hpp"
 #include "ui/presets.hpp"
 #include "ui/raytrace.hpp"
@@ -987,6 +988,13 @@ private:
     std::string report_title_, report_description_, report_steps_, report_expected_, report_status_;
     std::future<ReportReply> report_job_;
     std::string session_log_; // what this session said: notices, errors, steps (the report's log)
+    // This session's mark and its log on disk, and the log of one that closed
+    // unexpectedly, offered in a report at start (problem_reports.md, rule 10).
+    ui::SessionMark session_mark_;
+    std::ofstream session_file_;
+    std::size_t session_file_bytes_ = 0;
+    std::string crashed_log_;
+    bool offer_crash_report_ = false;
     // Slicing in the cloud (cloud.md, rules 6 to 9): the job in flight and its state.
     std::future<CloudSliceReply> cloud_slice_;
     std::shared_ptr<CloudSliceState> cloud_slice_state_;
@@ -3015,6 +3023,19 @@ bool App::init(std::string& error) {
         load_preferences();
     if (!options_.cloud_server.empty()) // the server for this run (tests: the mock one)
         cloud_server_ = options_.cloud_server;
+    // A session that closed unexpectedly is offered as a report, once; this
+    // one leaves its mark (problem_reports.md, rule 10). Screenshots and the
+    // tests leave none, unless --crash-check.
+    if ((options_.screenshot.empty() || options_.crash_check) && !preferences_path().empty()) {
+        const std::filesystem::path folder = preferences_path().parent_path();
+        if (std::optional<std::string> log = ui::closed_session_log(folder)) {
+            crashed_log_ = log->empty() ? std::string("(the session wrote no log)\n") : std::move(*log);
+            offer_crash_report_ = true;
+        }
+        session_mark_ = ui::mark_session(folder);
+        if (!session_mark_.log.empty())
+            session_file_.open(session_mark_.log, std::ios::binary | std::ios::app);
+    }
     read_graphics_info();
     if (view_quality_ != "custom" && options_.render < 0 && options_.msaa < 0 && options_.fxaa < 0 && options_.screenshot.empty())
         apply_quality(view_quality_);
@@ -3294,6 +3315,9 @@ void App::shutdown() {
     slice_job_.wait();
     voxel_job_.wait();
     device_disconnect();
+    // A normal exit: no mark left for the next start (problem_reports.md, rule 10).
+    session_file_.close();
+    ui::end_session(session_mark_);
     if (options_.screenshot.empty() && (gl_loaded_ || vulkan_))
         save_preferences();
     if (gl_loaded_) {
@@ -12629,9 +12653,24 @@ void App::cloud_window() {
 // A line of this session's log, with the time since the program started
 // (the report's log, problem_reports.md rule 3); its last 400 000 bytes.
 void App::log_line(const std::string& line) {
-    session_log_ += format("[%8.1f] ", ImGui::GetCurrentContext() ? ImGui::GetTime() : 0.0) + line + "\n";
+    const std::string text = format("[%8.1f] ", ImGui::GetCurrentContext() ? ImGui::GetTime() : 0.0) + line + "\n";
+    session_log_ += text;
     if (session_log_.size() > 400000)
         session_log_.erase(0, session_log_.size() - 300000);
+    // On disk too, line by line: what the next start offers if this one
+    // closes unexpectedly. Past 1 MB it starts again from the kept part.
+    if (session_file_.is_open()) {
+        if (session_file_bytes_ + text.size() > 1000000) {
+            session_file_.close();
+            session_file_.open(session_mark_.log, std::ios::binary | std::ios::trunc);
+            session_file_ << session_log_;
+            session_file_bytes_ = session_log_.size();
+        } else {
+            session_file_ << text;
+            session_file_bytes_ += text.size();
+        }
+        session_file_.flush();
+    }
 }
 
 // Report a problem (problem_reports.md, rules 1 to 9; cloud.md, rule 11).
@@ -12645,6 +12684,7 @@ void App::report_window() {
             notify(text);
             report_title_.clear(), report_description_.clear(), report_steps_.clear(), report_expected_.clear();
             report_status_.clear();
+            crashed_log_.clear();
             save_preferences(); // the server typed here (rule 7)
             ImGui::OpenPopup("###report");
             report_open_ = false;
@@ -12656,6 +12696,13 @@ void App::report_window() {
     }
     if (report_job_.valid())
         frame_pending_ = true;
+    // After an unexpected closing: the dialog with «Tisma closed» chosen and
+    // that session's log (rule 10), once the window is up.
+    if (offer_crash_report_ && ImGui::GetFrameCount() > 2) {
+        offer_crash_report_ = false;
+        report_kind_ = 1;
+        report_open_ = true;
+    }
     if (report_open_) {
         ImGui::OpenPopup("###report");
         report_open_ = false;
@@ -12756,7 +12803,7 @@ void App::report_window() {
     input.printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
     input.print_profile = chosen_profile_[std::size_t(ProfileKind::Print)];
     input.material_profile = chosen_profile_[std::size_t(ProfileKind::Filament)];
-    input.session_log = session_log_;
+    input.session_log = crashed_log_.empty() ? session_log_ : crashed_log_;
     if (report_attach_) {
         ImGui::SameLine();
         if (ImGui::SmallButton(tr(T::ReportSeeAttached)))
@@ -12795,6 +12842,7 @@ void App::report_window() {
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, width - 2.0f * bw - ImGui::GetStyle().ItemSpacing.x));
     if (ImGui::Button(tr(T::Cancel), ImVec2(bw, 0)) || (!busy && ImGui::IsKeyPressed(ImGuiKey_Escape))) {
         report_status_.clear();
+        crashed_log_.clear(); // not asked again about that closing
         ImGui::CloseCurrentPopup();
     }
     rect_of("report_cancel");
@@ -16129,13 +16177,19 @@ void App::script_input() {
             got = cloud_status_;
         else if (step.key == "report")
             got = report_status_;
+        else if (step.key == "crashed") // a closed session's log goes with the report
+            got = crashed_log_.empty() ? "no" : "yes";
+        else if (step.key == "report_kind")
+            got = report_kind_ == 1 ? "crash" : report_kind_ == 2 ? "suggestion" : "bug";
+        else if (step.key == "report_log")
+            got = crashed_log_.empty() ? session_log_ : crashed_log_;
         else if (step.key == "viewer")
             got = viewer_ ? "yes" : "no";
         else if (step.key == "slicing")
             got = cloud_slice_.valid() ? "yes" : "no";
         else
             return fail_step("unknown key");
-        const bool ok = step.key == "status" || step.key == "report" ? got.find(step.value) != std::string::npos
+        const bool ok = step.key == "status" || step.key == "report" || step.key == "report_log" ? got.find(step.value) != std::string::npos
                                                                      : got == step.value;
         std::printf("ui-script: expect-cloud %s %s: %s%s\n", step.key.c_str(), step.value.c_str(), ok ? "ok" : "got ",
                     ok ? "" : got.c_str());

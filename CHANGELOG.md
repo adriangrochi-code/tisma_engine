@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Informar un cierre inesperado** (ficha `problem_reports.md`, regla 10): si el programa se cerró sin su salida
+  normal, al abrirlo de nuevo ofrece informarlo, con «Tisma se cerró» elegido y el registro de la sesión que se cerró.
+  Si se cancela, no se pregunta de nuevo por ese cierre. Nada se manda sin tocar «Mandar».
 - **Tus trabajos en la nube** (ficha `cloud.md`, regla 10): con la sesión iniciada, el diálogo de Tisma Cloud lista
   los trabajos de la cuenta (`GET /v1/jobs`) con la fecha, si es laminado o análisis, el estado (con el avance si
   corre y el motivo al pasar el mouse si falló) y los minutos usados.

@@ -339,6 +339,20 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_slice.png)
     set_tests_properties(ui_script_cloud_slice PROPERTIES TIMEOUT 300 ENVIRONMENT
       "ASAN_OPTIONS=detect_leaks=0;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_slice_secrets.txt")
+    # After an unexpected closing (problem_reports.md, rule 10; IP9): a mark
+    # of a process that is gone, planted in a configuration folder of its own.
+    add_test(NAME ui_crash_report_setup
+      COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/crash_config
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_crash_config)
+    set_tests_properties(ui_crash_report_setup PROPERTIES FIXTURES_SETUP ui_crash_config)
+    add_test(NAME ui_script_crash_report
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --crash-check
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/crash_report.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_crash_report.png)
+    set_tests_properties(ui_script_crash_report PROPERTIES TIMEOUT 300 FIXTURES_REQUIRED ui_crash_config
+      RESOURCE_LOCK ui_crash_config
+      ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_crash_config")
     add_test(NAME ui_script_report
       COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
