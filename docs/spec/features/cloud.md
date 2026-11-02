@@ -61,7 +61,8 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
 
 6. **Mandar un trabajo:** `POST /v1/jobs`, multipart, con:
    - `kind`: `slice`, `fea`, `aero` u `orient`;
-   - `file`: el proyecto 3MF (`formats.md`);
+   - `file`: el proyecto como paquete 3MF (un ZIP con `3D/*.model`, `formats.md` regla 11); otro archivo da 422 «The
+     project is not a 3MF file»;
    - `params`: JSON.
      - `slice`: vacío.
      - `fea`: `mode` (`analyze`, `lightest-infill`, `resin-structure`), `quality` (`fast`, `normal`, `high`,
@@ -84,7 +85,8 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
 9. **Bajar el resultado:** `GET /v1/jobs/{id}/result` devuelve el archivo:
    - un laminado da G-code de texto o binario, que se abre en la vista previa como un laminado local;
    - un análisis da su resultado, que se abre en Ingeniería (`structural_analysis.md`).
-10. **Lista:** `GET /v1/jobs` lista los trabajos de la cuenta.
+10. **Lista:** `GET /v1/jobs?limit=N` (50 por defecto, hasta 200) devuelve `{"jobs": [...]}`, del más nuevo al más
+    viejo; cada trabajo es el mismo objeto de la regla 7.
 10b. **Lo pesado, en la nube y cobrado por plan** (decisión del dueño, 02-11-2026):
     - cada cálculo pesado tiene, al lado de su botón, la opción **«En la nube»**: laminar, análisis estructural,
       relleno mínimo, análisis aerodinámico y orientación automática. Con sesión iniciada y el cálculo incluido en el
@@ -108,8 +110,10 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
     - `title` (3 caracteres o más), `description`, `steps`, `expected` y `actual`.
 
     Si la persona lo acepta, también la versión, el sistema, la impresora y las últimas 500 líneas del registro
-    (`interface.md`, «Report a problem»). Se puede mandar sin cuenta. `GET /v1/me/reports` lista los propios con su
-    estado (`new`, `confirmed`, `fixed`, `wontfix`, `duplicate`). La pantalla va en `problem_reports.md`.
+    (`interface.md`, «Report a problem»). Se puede mandar sin cuenta. `GET /v1/me/reports` devuelve `{"reports": [...]}`,
+    los propios del más nuevo al más viejo (hasta 100), con `id`, `kind`, `title`, `status` (`new`, `confirmed`, `fixed`,
+    `wontfix`, `duplicate`), `category_name`, `created_at`, `updated_at` y `rewarded_at`; no trae la versión que lo
+    arregló. La pantalla va en `problem_reports.md`.
 
 ## El motor como puente de impresoras
 
