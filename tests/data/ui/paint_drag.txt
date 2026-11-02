@@ -1,0 +1,6 @@
+# A fast stroke paints a band, not dots (the testers' UI37, the owner's video
+# of 31-10-2026): the mouse jumps 50 px across the cube's face in one frame;
+# one dab covers about 11 mm2, the band over 40.
+menu tool_paint
+paint-drag 772 400 818 420
+expect-paint-area 35

@@ -70,6 +70,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   Avanzado (reporte UI36 de los probadores: no se encontraban). Están en Soportes › Interfaz, con los soportes prendidos.
 - «Volver al tutorial» (antes «Tutorial» en Más) también está arriba del panel de Ayuda (reporte UI33 de los
   probadores).
+- Un trazo rápido de Pintar deja una franja continua y no puntos sueltos: el pincel pinta a lo largo del camino del
+  mouse entre un cuadro y el siguiente (reporte UI37 de los probadores y video del dueño del 31-10-2026).
 - El consejo de una herramienta se va al cerrarla, y el de una pestaña al dejarla (reporte UI38 de los probadores: el de
   Pintar quedaba en pantalla).
 

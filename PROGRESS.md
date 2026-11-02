@@ -8626,6 +8626,13 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
   Normal (Soportes › Interfaz, visibles con los soportes prendidos).
 - **UI33 (probadores):** «Volver al tutorial», con ese nombre en Más y arriba del panel de Ayuda; guion
   `tutorial_again`.
+- **UI37 (probadores, video del dueño):** al pintar rápido quedaban puntos sueltos, un toque por cuadro donde estaba
+  el mouse. Ahora el pincel pinta a lo largo del camino entre el toque anterior y el mouse, cada medio pincel en
+  pantalla (hasta 64 por cuadro). Guion `paint_drag`: un salto de 50 px en un cuadro pinta 42,8 mm² (un toque solo,
+  10,8 mm²).
+- **UI39 (laminar lento con pintura):** medido con una pieza de dos paredes de 100 × 90 × 65 mm, 400 toques de
+  costura y 200 de soporte: pintar 76 ms, laminar 116 ms (43 ms sin pintura). La pintura sola no explica el minuto
+  del video; hace falta la pieza del dueño para reproducirlo.
 - **UI38 (probadores):** el consejo de una herramienta se va al cerrarla y el de una pestaña al dejarla; guion
   `tip_closes`.
 

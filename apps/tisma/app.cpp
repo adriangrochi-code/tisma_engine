@@ -13,6 +13,8 @@
 #include "cad/design.hpp"
 #include "cad/fasteners.hpp"
 #include "cad/gears.hpp"
+#include "mesh/indexed_mesh.hpp"
+#include "slice/painted.hpp"
 #include "cad/process.hpp"
 #include "cad/solidcraft.hpp"
 #include "calibration/calibration.hpp"
@@ -548,9 +550,11 @@ private:
     void mixing_dialog();
     std::string filament_color(int extruder) const;
     void objects_material_changed();
-    void brush_stroke(std::size_t object);
+    void brush_stroke(std::size_t object, ImVec2 at);
+    void brush_drag(std::size_t object);
     void update_paint_view();
     Vec3 mouse_ray() const;
+    Vec3 ray_at(ImVec2 at) const;
     void load_calibration(CalibrationPrint print);
     void create_calibration(CalibrationKind kind, bool custom);
     void begin_export();
@@ -823,6 +827,7 @@ private:
     bool painted_ = false;     // the stroke changed something
     bool paint_dirty_ = true;  // the view's copy of the paint is out of date
     std::optional<float> brush_depth_; // how far ahead of the eye the face under the mouse is
+    ImVec2 last_stroke_{0.0f, 0.0f};   // where the stroke's last dab went, on the screen
     bool has_plate_ = false;          // there is a model on the plate
     std::size_t plate_triangles_ = 0; // all of the plate's
     TriangleMesh plate_now() const;
@@ -3576,7 +3581,10 @@ std::shared_ptr<const std::vector<TriangleMesh>> App::placed_copy() {
 
 // The ray from the eye through the mouse, in the view.
 Vec3 App::mouse_ray() const {
-    const ImVec2 m = ImGui::GetIO().MousePos;
+    return ray_at(ImGui::GetIO().MousePos);
+}
+
+Vec3 App::ray_at(ImVec2 m) const {
     const float nx = (m.x - view_pos_.x) / view_size_.x * 2.0f - 1.0f;
     const float ny = 1.0f - (m.y - view_pos_.y) / view_size_.y * 2.0f;
     const float half = std::tan(0.5f * camera_.lens_fov()), aspect = view_size_.x / std::max(view_size_.y, 1.0f);
@@ -7808,11 +7816,12 @@ void App::viewport() {
         if (const auto hit = pick(placed_meshes_, plate_indexes(), camera_.eye(), mouse_ray())) {
             selected_ = int(hit->object);
             painting_object_ = int(hit->object);
-            brush_stroke(hit->object);
+            last_stroke_ = io.MousePos;
+            brush_stroke(hit->object, io.MousePos);
         }
     } else if (painting && painting_object_ >= 0 && ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
                (io.MouseDelta.x != 0.0f || io.MouseDelta.y != 0.0f)) {
-        brush_stroke(std::size_t(painting_object_));
+        brush_drag(std::size_t(painting_object_));
     }
     if (painting && ImGui::IsItemDeactivated()) {
         if (painted_) { // the slice no longer matches the paint
@@ -9360,9 +9369,28 @@ void App::paint_card(ImVec2 at) {
     ImGui::PopStyleVar(2);
 }
 
-// Paints the face under the mouse, on this model only; Shift erases.
-void App::brush_stroke(std::size_t object) {
-    const Vec3 d = mouse_ray(), e = camera_.eye();
+// The stroke from the last dab to the mouse: dabs half a brush apart along
+// the way, so a fast mouse leaves a line and not separate dots (the testers'
+// UI37, the owner's video of 31-10-2026).
+void App::brush_drag(std::size_t object) {
+    const ImVec2 to = ImGui::GetIO().MousePos;
+    const float dx = to.x - last_stroke_.x, dy = to.y - last_stroke_.y;
+    const float distance = std::sqrt(dx * dx + dy * dy);
+    // The brush's radius on the screen, at the depth of the face under it.
+    float pixels = 4.0f;
+    if (brush_depth_ && view_size_.y > 0.0f)
+        pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.lens_fov())) * 0.5f * view_size_.y;
+    const int steps = std::clamp(int(std::ceil(distance / std::max(pixels * 0.5f, 1.0f))), 1, 64);
+    for (int k = 1; k <= steps; ++k) {
+        const float t = float(k) / float(steps);
+        brush_stroke(object, ImVec2(last_stroke_.x + dx * t, last_stroke_.y + dy * t));
+    }
+    last_stroke_ = to;
+}
+
+// Paints the face under a point of the view, on this model only; Shift erases.
+void App::brush_stroke(std::size_t object, ImVec2 at) {
+    const Vec3 d = ray_at(at), e = camera_.eye();
     const auto hit = pick(placed_meshes_, plate_indexes(), e, d);
     if (!hit || hit->object != object)
         return;
@@ -14307,6 +14335,37 @@ void App::script_input() {
         if (!ok)
             return fail_step("the gear has " + std::to_string(gear_.teeth) + " teeth and " + std::to_string(got) + " mm3 (" +
                              gear_error_ + ")");
+        next();
+    } else if (step.verb == "paint-drag") { // the mouse down at "x0 y0", in one frame to "x1 y1", up (the Paint tool on)
+        float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+        if (std::sscanf((step.key + " " + step.value).c_str(), "%f %f %f %f", &x0, &y0, &x1, &y1) != 4)
+            return fail_step("paint-drag takes x0 y0 x1 y1");
+        if (f == 0)
+            io.AddMousePosEvent(x0, y0);
+        else if (f == 2)
+            io.AddMouseButtonEvent(0, true);
+        else if (f == 4)
+            io.AddMousePosEvent(x1, y1);
+        else if (f == 6)
+            io.AddMouseButtonEvent(0, false);
+        else if (f >= 8)
+            next();
+    } else if (step.verb == "expect-paint-area") { // the painted pieces of the channel in use cover at least VALUE mm2
+        double area = 0.0;
+        for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+            const IndexedMesh m = weld_exact(placed_meshes_[i]);
+            for (const auto& piece : painted_pieces(m, objects_[i].painting, paint_channel_, paint_mark_)) {
+                const Vec3f u{piece[1].x - piece[0].x, piece[1].y - piece[0].y, piece[1].z - piece[0].z};
+                const Vec3f v{piece[2].x - piece[0].x, piece[2].y - piece[0].y, piece[2].z - piece[0].z};
+                const double cx = double(u.y) * v.z - double(u.z) * v.y, cy = double(u.z) * v.x - double(u.x) * v.z,
+                             cz = double(u.x) * v.y - double(u.y) * v.x;
+                area += 0.5 * std::sqrt(cx * cx + cy * cy + cz * cz);
+            }
+        }
+        const double want = std::atof(step.key.c_str());
+        std::printf("ui-script: expect-paint-area %s: %s%.2f\n", step.key.c_str(), area >= want ? "ok, " : "got ", area);
+        if (area < want)
+            return fail_step("the paint covers " + std::to_string(area) + " mm2");
         next();
     } else if (step.verb == "expect-apart") { // two named controls drawn, neither over the other
         const auto a = g_menu_rects.find(step.key), b = g_menu_rects.find(step.value);
