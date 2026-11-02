@@ -73,6 +73,17 @@ Los ajustes están en `docs/CONFIG.md`. `--warnings` es opcional y escribe los a
   cada serie de capas seguidas;
 - `gpu_fallback`: la GPU falló y se laminó con la CPU (sin capa: `layer` y `z` son `null`).
 
+Un proyecto guardado por la interfaz se lamina entero, como lo hacen los nodos de Tisma Cloud (ficha `cloud.md`,
+regla 18):
+
+```sh
+build/tisma-engine slice proyecto.3mf -o placa.gcode --summary resumen.json --sandbox
+```
+
+Por la salida estándar va solo una línea `progress N` (0 a 100) cada vez que avanza; los avisos van a la salida de
+errores. El resumen lleva `print_time` («1h 2m 3s»), `print_time_s`, `filament_mm`, `filament_g` y `layers`, o
+`error` si falló. `--sandbox` no corre los scripts de posproceso de los ajustes; `--no-gpu` lamina con la CPU.
+
 Códigos de salida: 0 bien; 1 línea de comandos mal escrita; 2 un archivo de entrada falta, está mal o no se puede
 escribir la salida; 3 orden todavía sin hacer; 4 el modelo no se puede imprimir (sin triángulos, ninguna capa cerrada,
 fuera de `machine.bed`, más alto que `machine.max_height`, falda o borde fuera de la cama, o nada que extruir); 5 el

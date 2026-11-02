@@ -388,6 +388,8 @@ void save_project(const std::filesystem::path& path, const Project& project) {
     }
 }
 
+bool looks_like_project(std::string_view data) { return data.starts_with(kMagic); }
+
 Project load_project(const std::filesystem::path& path) { return read_project(read_file(path)); }
 
 } // namespace tisma

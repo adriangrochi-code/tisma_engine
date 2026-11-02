@@ -12,6 +12,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **El motor en los nodos de la nube** (ficha `cloud.md`, reglas 18 y 20): `tisma-engine slice <proyecto> -o
+  <salida.gcode> --summary <resumen.json> --sandbox [--no-gpu]` lamina un proyecto guardado por la interfaz (piezas,
+  ubicación, ajustes propios, volúmenes, rangos, pintura y mezclas) sin leer la carpeta de datos del usuario; da
+  líneas `progress N` y un resumen con el tiempo, el filamento en mm y en gramos y las capas, o `error`. El G-code sale
+  de texto o binario según el perfil. Con `--sandbox` no corren los scripts de posproceso.
 - **Laminar en la nube** (Más › «Laminar en la nube»; ficha `cloud.md`, reglas 6 a 9): la placa va como proyecto a
   Tisma Cloud con la sesión; la barra de estado dice si está en cola o cuánto lleva, con una × para cancelarlo
   (también en el servidor); el G-code que vuelve se abre en la vista previa como un laminado propio. Sin sesión, abre

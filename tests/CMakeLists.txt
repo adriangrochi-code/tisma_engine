@@ -13,6 +13,7 @@ add_executable(tisma_tests
   test_stl.cpp
   test_mesh.cpp
   test_cli.cpp
+  test_node.cpp
   test_indexed_mesh.cpp
   test_level_set.cpp
   test_contours.cpp

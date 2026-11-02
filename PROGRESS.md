@@ -8823,3 +8823,33 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - **Falta en C2:** el chip de la barra superior, analizar (FEA) en la nube desde Ingeniería (la llamada es la misma,
   `kind` `fea` y sus parámetros), la lista de trabajos (`GET /v1/jobs`), ofrecer informar después de un cierre (IP9) y
   «Mis informes» (IP10). Después, C3 (la línea de comandos de los nodos).
+
+### Tisma Cloud, C3: el motor en los nodos
+
+- `tisma-engine slice <proyecto> -o <salida.gcode> --summary <resumen.json> [--sandbox] [--no-gpu] [--yes]`
+  (`src/cli/node.*`; ficha `cloud.md`, reglas 18 y 20). Se elige solo con `--summary`, `--sandbox` o `--no-gpu`, o
+  con un proyecto sin `--config`; el `slice` de un modelo con `--config` sigue igual.
+- Lee el proyecto y nada más de la máquina. Arma la placa con las mismas funciones que la interfaz:
+  - `project_objects` (abrir un proyecto) y `plate_slice` (lo que va al laminador) están en `src/ui/project_slice.*`;
+  - `apps/tisma/app.cpp` las usa en vez de su propia copia;
+  - `plate.cpp` y `slicing.cpp` pasaron a `tisma_core` porque no usan OpenGL.
+- Salidas:
+  - por la salida estándar, solo `progress N`;
+  - los avisos van a la salida de errores;
+  - el G-code sale de texto o binario según `gcode.binary`;
+  - el resumen lleva `print_time` («1h 2m 3s»), `print_time_s`, `filament_mm`, `filament_g` y `layers`, o `error`
+    con un código distinto de 0.
+- `--sandbox` no corre los scripts de posproceso. Sin él, corren una vez confirmados, como en `slice`.
+- **Pruebas** (`tests/test_node.cpp`, `[cloud]`):
+  - CC10: avance, G-code y las cinco claves;
+  - el binario;
+  - CC11: el script no corre con `--sandbox` y sí sin él;
+  - CC12: una pieza fuera de la cama da un código distinto de 0 y `error`;
+  - lo que no es un proyecto, argumentos de más y no escribir sobre el proyecto.
+- **No medido:** cuánto tarda en un nodo real; solo se probó con el cubo de 20 mm.
+- **Falta en C3:**
+  - `analyze` (los apoyos, las cargas y el material todavía no van en el proyecto);
+  - el proyecto como paquete 3MF (`formats.md`, reglas 6 a 11). Hoy el motor guarda su propio formato, también el
+    que manda «Laminar en la nube» con el nombre `.3mf`;
+  - los proyectos de otros laminadores;
+  - un avance más fino mientras corta (hoy salta de 10 a 85).

@@ -84,6 +84,9 @@ std::string write_project(const Project& project);
 // Throws ProjectError on a damaged or newer file, naming what is wrong.
 Project read_project(std::string_view data);
 
+// Whether these bytes start like a project file (its first eight bytes).
+bool looks_like_project(std::string_view data);
+
 // Writes the file aside and moves it over, so a failed save keeps the old one.
 void save_project(const std::filesystem::path& path, const Project& project);
 Project load_project(const std::filesystem::path& path);

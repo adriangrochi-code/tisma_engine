@@ -269,7 +269,13 @@ add_library(tisma_core
   src/device/simulator.cpp
   src/device/stream.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/catalog_files.cpp
+  # The plate and the slicing job behind the interface's buttons, without
+  # OpenGL: the command line slices a project with them too (cloud.md, rule 18).
+  src/ui/plate.cpp
+  src/ui/slicing.cpp
+  src/ui/project_slice.cpp
   src/cli/cli.cpp
+  src/cli/node.cpp
 )
 if(TISMA_GPU)
   target_sources(tisma_core PRIVATE src/gpu/compute_vulkan.cpp)
@@ -343,7 +349,6 @@ if(TISMA_BUILD_UI)
     src/ui/text.cpp
     src/ui/setting_guide.cpp
     src/ui/files.cpp
-    src/ui/slicing.cpp
     src/ui/presets.cpp
     src/ui/settings_layout.cpp
     src/ui/settings_view.cpp
@@ -353,7 +358,6 @@ if(TISMA_BUILD_UI)
     src/ui/knowledge.cpp
     src/ui/guide.cpp
     src/ui/raytrace.cpp
-    src/ui/plate.cpp
     src/ui/measure.cpp
     src/ui/help.cpp
     src/ui/system_info.cpp

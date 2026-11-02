@@ -47,6 +47,7 @@
 #include "ui/help.hpp"
 #include "ui/links.hpp"
 #include "ui/plate.hpp"
+#include "ui/project_slice.hpp"
 #include "ui/png.hpp"
 #include "ui/presets.hpp"
 #include "ui/raytrace.hpp"
@@ -3897,25 +3898,7 @@ void App::open_project(const std::filesystem::path& path) {
     settings_changed();
     if (!p.models.empty()) {
         // Each model as the project placed it (its mesh moved by its offset).
-        std::vector<PlateObject> objects;
-        for (ProjectModel& m : p.models) {
-            PlateObject o{m.name, translated(m.mesh, {float(m.offset[0]), float(m.offset[1]), float(m.offset[2])}), {},
-                          std::move(m.painting)};
-            o.extruder = m.extruder;
-            o.wipe_into_infill = m.wipe_into_infill;
-            o.wipe_into_object = m.wipe_into_object;
-            o.settings = m.settings;
-            for (const ProjectVolume& v : m.volumes)
-                o.volumes.push_back({v.negative ? PlateVolume::Kind::Negative : PlateVolume::Kind::Modifier,
-                                     v.cylinder ? PlateVolume::Shape::Cylinder : PlateVolume::Shape::Box, v.offset, v.size,
-                                     v.settings, v.turn});
-            for (const ProjectRange& r : m.ranges)
-                o.ranges.push_back({r.from, r.to, r.settings});
-            const BoundingBox box = o.mesh.bounding_box();
-            o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
-            o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
-            objects.push_back(std::move(o));
-        }
+        std::vector<PlateObject> objects = project_objects(p.models);
         ProjectModel& model = p.models.front();
         if (p.calibration) {
             CalibrationPrint print;
@@ -4619,37 +4602,11 @@ void App::start_slice() {
     // hollowing (calibration_models.md, "Resina").
     if (calibration_ && is_resin_calibration(calibration_kind_))
         settings.resin_supports = settings.resin_pad = settings.resin_pad_around_object = settings.resin_hollow = false;
-    Painting painting = plate_painting(objects_);
-    // Each model's triangles in the plate's mesh, as plate_mesh joins them.
-    std::vector<MeshObject> objects;
-    for (std::size_t i = 0, first = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
-        objects.push_back({objects_[i].name, first, placed_meshes_[i].triangle_count(), i, 0, objects_[i].extruder,
-                           objects_[i].wipe_into_infill, objects_[i].wipe_into_object, objects_[i].settings});
-        for (const PlateRange& r : objects_[i].ranges)
-            objects.back().ranges.push_back({r.from, r.to, r.settings});
-        first += placed_meshes_[i].triangle_count();
-    }
-    // Its modifiers and negative volumes, where the objects stand (model_tools.md, rules 2 and 3).
-    SliceVolumes volumes;
-    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
-        for (std::size_t k = 0; k < objects_[i].volumes.size(); ++k) {
-            const PlateVolume& v = objects_[i].volumes[k];
-            TriangleMesh shape = volume_mesh(v, objects_[i], placed_meshes_[i]);
-            if (v.kind == PlateVolume::Kind::Negative) {
-                for (std::size_t t = 0; t < shape.triangle_count(); ++t)
-                    volumes.negative.add_triangle(shape.corner(t, 0), shape.corner(t, 1), shape.corner(t, 2));
-            } else {
-                volumes.modifiers.push_back(
-                    {objects_[i].name + " modifier " + std::to_string(k + 1), i, std::move(shape), v.settings});
-            }
-        }
-    }
-    // The objects go to the slicer when there are several, or when each may
-    // print with its own extruder or a mixed colour.
-    const bool by_object = objects.size() > 1 || settings.extruders > 1 || !volumes.empty() ||
-                           std::any_of(objects_.begin(), objects_.end(), [](const PlateObject& o) {
-                               return !o.settings.empty() || !o.ranges.empty();
-                           });
+    PlateSlice plate = plate_slice(objects_, placed_meshes_, settings);
+    Painting painting = std::move(plate.painting);
+    std::vector<MeshObject> objects = std::move(plate.objects);
+    SliceVolumes volumes = std::move(plate.volumes);
+    const bool by_object = plate.by_object;
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
     slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_,

@@ -972,7 +972,11 @@ Con el PR #23 (2026-10-26):
     informar un problema, el token en el almacén de claves del sistema (regla 3), laminar y analizar en la nube desde
     la interfaz con su avance en la barra de estado;
   - [ ] C3: la línea de comandos de los nodos (reglas 18 a 21: `slice` y `analyze` con `--summary`, `--sandbox`,
-    líneas `progress`; CC10 a CC12);
+    líneas `progress`; CC10 a CC12). Hecho (2026-11-02): `slice` de un proyecto guardado por el motor (CC10 a CC12),
+    con el mismo armado de la placa que la interfaz. Falta: `analyze` (los apoyos, las cargas y el material tienen
+    que ir en el proyecto primero), el proyecto como paquete 3MF (`formats.md`, reglas 6 a 11; hoy el motor guarda su
+    propio formato, también con el nombre `.3mf`), los proyectos de otros laminadores (`formats.md`, regla 18) y un
+    avance más fino durante el corte;
   - [ ] después: el puente de impresoras (reglas 12 a 17), la biblioteca de modelos y Thingiverse
 - [ ] `printer_connections.md` (F9), `mobile_app.md` (la API de C) e `INTEGRATION.md`
 - [ ] **Ajustes de las fichas que el motor no lee** (medición del equipo de fichas, 2026-10-28, `dev` 32d74be;

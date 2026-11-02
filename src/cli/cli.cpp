@@ -1,4 +1,5 @@
 #include "cli/cli.hpp"
+#include "cli/node.hpp"
 
 #include "io/model.hpp"
 #include "io/paths.hpp"
@@ -44,24 +45,8 @@
 #include <string>
 
 namespace tisma {
-namespace {
 
-constexpr std::string_view kUsage =
-    "usage:\n"
-    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode | out.goo | folder> [--warnings <out.json>]\n"
-    "                     (a .goo file: for a resin printer, docs/spec/features/resin.md)\n"
-    "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
-    "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
-    "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
-    "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
-    "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
-    "  tisma-engine info <model>\n"
-    "  tisma-engine --help | --version\n"
-    "A model is an STL, OBJ or 3MF file.\n";
-
-// Writes a file in one piece: into "<path>.part" first, renamed over the
-// path once complete, so a process stopped half way never leaves a partial
-// file under the real name. False (and no temporary left) on failure.
+// Declared in cli/node.hpp.
 bool write_file(const std::string& path, const std::function<void(std::ostream&)>& write) {
     // A link's file, next to it (BH16); never over a device or a folder.
     const std::filesystem::path target = write_target(path);
@@ -89,6 +74,23 @@ bool write_file(const std::string& path, const std::function<void(std::ostream&)
     }
     return true;
 }
+
+namespace {
+
+constexpr std::string_view kUsage =
+    "usage:\n"
+    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode | out.goo | folder> [--warnings <out.json>]\n"
+    "                     (a .goo file: for a resin printer, docs/spec/features/resin.md)\n"
+    "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
+    "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
+    "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
+    "  tisma-engine slice <project> -o <out.gcode> --summary <summary.json> [--sandbox] [--no-gpu] [--yes]\n"
+    "                     (a project saved by the interface, as the cloud's nodes run it: docs/spec/features/cloud.md)\n"
+    "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
+    "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
+    "  tisma-engine info <model>\n"
+    "  tisma-engine --help | --version\n"
+    "A model is an STL, OBJ or 3MF file.\n";
 
 struct SliceArgs {
     std::string model;
@@ -768,7 +770,7 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
     }
     try {
         if (command == "slice")
-            return cmd_slice(rest, out, err);
+            return node_slice_wanted(rest) ? cmd_slice_project(rest, out, err) : cmd_slice(rest, out, err);
         if (command == "info")
             return cmd_info(rest, out, err);
         if (command == "analyze")
