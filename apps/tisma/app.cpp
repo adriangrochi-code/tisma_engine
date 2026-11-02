@@ -289,6 +289,11 @@ const char* field_text(const char* label, const char* fmt, double v) {
     return out.c_str();
 }
 
+// The texts drawn this frame through loc, kept only while a script runs
+// (expect-no-text: no untranslated line on the screen, TR22).
+bool g_keep_texts = false;
+std::vector<std::string> g_texts;
+
 // ImGui's printf-like texts, each number with the language's decimal point (TR1).
 namespace loc {
 #define TISMA_LOC_TEXT(call)                                                                                           \
@@ -296,6 +301,8 @@ namespace loc {
     va_start(args, fmt);                                                                                               \
     const std::string text = vformat(fmt, args);                                                                       \
     va_end(args);                                                                                                      \
+    if (g_keep_texts)                                                                                                  \
+        g_texts.push_back(text);                                                                                       \
     call
 void Text(const char* fmt, ...) IM_FMTARGS(1);
 void Text(const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::TextUnformatted(text.c_str())); }
@@ -941,14 +948,13 @@ private:
     bool battery_saver_ = true;
     bool show_frame_time_ = true;
     bool panel_folded_ = false;     // ui.panel_folded
-    float compact_bottom_ = 0.0f;
+    float compact_bottom_ = 0.0f;   // the folded panel's card: where it ends on the screen, this frame
     // What the view lowers while something moves (view_auto_quality.md, rules 5, 6, 8).
     int ao_hold_ = 0;                  // ViewFrame::ao_hold for this frame
     int ao_hold_seen_ = 0;             // the most since the script last asked (expect-held)
     long ao_passes_mark_ = 0;          // the renderer's occlusions when the script last asked
     bool lowered_ = false;             // lowered since the motion started, until it stops
     bool lowered_notice_shown_ = false; // ui.lowered_notice_shown: the first time's toast
-    Mat4 last_view_{};                 // the camera of the last frame, to see it move   // the folded panel's card: where it ends on the screen, this frame
     struct GizmoDrag {
         int kind = 0; // 0 move along an axis, 1 turn about one, 2 scale along one, 3 scale all
         int axis = 0;
@@ -8183,8 +8189,19 @@ void App::view_tools() {
     ImGui::SameLine(0, 10.0f * scale_);
     const T modes[] = {T::RenderFast, T::RenderAmbient, T::RenderRay};
     const T mode_tips[] = {T::RenderFastTip, T::RenderAmbientTip, T::RenderRayTip};
-    if (button("##render", nullptr, tr(modes[int(render_mode_)]), false, false, true, tr(T::RenderTip), size))
+    // A narrow view (the spec team's UI42): the mode's name would run past the
+    // view's edge, so the button keeps only its icon and names the mode in its
+    // tooltip, as the top bar's tabs do.
+    const float label_w = ImGui::CalcTextSize(tr(modes[int(render_mode_)])).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+    const float bar_w = float(std::size(tools)) * (size + 4.0f * scale_) + 20.0f * scale_ + 12.0f * scale_;
+    const bool narrow = bar_w + label_w > view_size_.x - 24.0f * scale_;
+    const std::string render_tip = narrow ? std::string(tr(modes[int(render_mode_)])) + ": " + tr(T::RenderTip)
+                                          : std::string(tr(T::RenderTip));
+    if (button("##render", narrow ? "tisma_view" : nullptr, narrow ? nullptr : tr(modes[int(render_mode_)]), false, false,
+               true, render_tip.c_str(), size))
         ImGui::OpenPopup("##render_menu");
+    g_menu_rects["view_render"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                         ImGui::GetItemRectMax().y);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * scale_, 7.0f * scale_));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * scale_, 12.0f * scale_));
     if (ImGui::BeginPopup("##render_menu")) {
@@ -8230,6 +8247,9 @@ void App::view_tools() {
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar(2);
+    g_menu_rects["view_tools"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                        ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                        ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(3);
@@ -10714,14 +10734,20 @@ void App::design_panel() {
     ImGui::PushFont(nullptr, kTitleSize * 0.9f);
     ImGui::TextUnformatted(tr(T::DesignTitle));
     ImGui::PopFont();
-    loc::TextColored(rgb(kViolet), "%s", design_.name.c_str());
+    // The design's own name; an untitled one has none (it would only repeat
+    // the title, and in English: TR22).
+    if (!design_.name.empty() && design_.name != cad::Design{}.name)
+        loc::TextColored(rgb(kViolet), "%s", design_.name.c_str());
     ImGui::PushTextWrapPos(0.0f);
     if (!solidcraft_probed_) {
         loc::TextDisabled("%s", tr(T::DesignChecking));
     } else if (!solidcraft_.available) { // rule 22 bis
         loc::TextColored(rgb(0xE5484D), "%s", tr(T::DesignMissing));
         rect_of("design_missing");
-        loc::TextDisabled("%s", solidcraft_.error.c_str());
+        // The component's own words (in English, for a problem report) only
+        // on the line's tooltip: one line in the chosen language (TR22).
+        if (!solidcraft_.error.empty() && ImGui::IsItemHovered())
+            loc::SetTooltip("%s", solidcraft_.error.c_str());
     }
     const bool ready = solidcraft_probed_ && solidcraft_.available;
 
@@ -11801,9 +11827,10 @@ bool App::panel_folded_now() const {
 // the high one, or with ui.lower_while_moving off. The first still frame has
 // the whole picture again.
 void App::update_view_hold() {
-    const Mat4 view = camera_.view();
-    const bool camera_moves = view != last_view_;
-    last_view_ = view;
+    // Only the camera the person moves (orbit, pan, zoom): the program's own
+    // framing keeps the picture, and so do the command line's screenshots
+    // (rule 9).
+    const bool camera_moves = moved_frame_ >= ImGui::GetFrameCount() - 1;
     const bool painting = painting_object_ >= 0;
     const bool model_moves = dragged_ || (gizmo_drag_ && gizmo_drag_->moved);
     const int before = ao_hold_;
@@ -14063,6 +14090,8 @@ void App::layout() {
         plate_changed();
     }
     g_row_ids.clear();
+    g_texts.clear();
+    g_keep_texts = !script_.empty();
     viewport();
     update_view_hold();
     anchor_rect("plate", view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
@@ -15244,6 +15273,27 @@ void App::script_input() {
         }
         if (f >= 30)
             fail_step("it is not on the screen");
+    } else if (step.verb == "expect-in-view") { // a named control drawn whole inside the 3D view
+        const auto it = g_menu_rects.find(step.key);
+        if (it == g_menu_rects.end())
+            return f >= 30 ? fail_step("it is not on the screen") : void();
+        const ImVec4 r = it->second;
+        const bool inside = r.x >= view_pos_.x - 0.5f && r.y >= view_pos_.y - 0.5f &&
+                            r.z <= view_pos_.x + view_size_.x + 0.5f && r.w <= view_pos_.y + view_size_.y + 0.5f;
+        std::printf("ui-script: expect-in-view %s: %s\n", step.key.c_str(), inside ? "ok" : "it runs past the view");
+        if (!inside)
+            return fail_step(format("it spans x %.0f..%.0f, the view %.0f..%.0f", r.x, r.z, view_pos_.x,
+                                    view_pos_.x + view_size_.x));
+        next();
+    } else if (step.verb == "expect-no-text") { // no text drawn contains VALUE (the whole line), for 10 frames
+        const std::string what = step.key + (step.value.empty() ? "" : " " + step.value);
+        for (const std::string& t : g_texts)
+            if (t.find(what) != std::string::npos)
+                return fail_step("\"" + t + "\" is on the screen");
+        if (f >= 10) {
+            std::printf("ui-script: expect-no-text %s: ok\n", what.c_str());
+            next();
+        }
     } else if (step.verb == "expect-no-control") { // a named control is not on the screen, for 10 frames
         if (g_menu_rects.contains(step.key))
             return fail_step("it is on the screen");

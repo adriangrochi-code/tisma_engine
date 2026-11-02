@@ -224,6 +224,14 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/paint_drag.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_paint_drag.png)
     set_tests_properties(ui_script_paint_drag PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    foreach(lang es en)
+      add_test(NAME ui_script_view_bar_narrow_${lang}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang ${lang} --size 900x700
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/view_bar_narrow.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_view_bar_narrow_${lang}.png)
+      set_tests_properties(ui_script_view_bar_narrow_${lang} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
     add_test(NAME ui_script_paint_holds_occlusion
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --graphics opengl --render ao

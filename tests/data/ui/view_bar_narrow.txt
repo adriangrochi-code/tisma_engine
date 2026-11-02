@@ -1,0 +1,4 @@
+# A narrow window (900 px, the spec team's UI42): the view's toolbar stays
+# inside the view; the image mode's button keeps only its icon.
+expect-in-view view_tools
+expect-in-view view_render

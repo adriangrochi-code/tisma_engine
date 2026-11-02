@@ -89,6 +89,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- En una ventana angosta la barra de la vista ya no se sale por la derecha: el botón del modo de imagen queda solo con
+  su ícono y dice el modo en su ayuda (reporte UI42 del equipo de fichas).
+- Diseño sin el componente: una sola línea de error, traducida, y sin el subtítulo «Design» de un diseño sin nombre
+  (reporte TR22 del equipo de fichas).
 - Los ajustes de la interfaz del soporte (capas de abajo, patrón y separación) se ven en el nivel Normal, no solo en
   Avanzado (reporte UI36 de los probadores: no se encontraban). Están en Soportes › Interfaz, con los soportes prendidos.
 - «Volver al tutorial» (antes «Tutorial» en Más) también está arriba del panel de Ayuda (reporte UI33 de los

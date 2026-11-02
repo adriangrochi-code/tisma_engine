@@ -8692,3 +8692,25 @@ Prioridad del dueño (por el equipo de fichas): primero Configuración con la p�
 
 **Sigue:** el resto de la etapa B (medición del primer arranque y «Medir de nuevo», bajar el suavizado y la
 resolución de la vista paso a paso, el tope de 30 al laminar); después, el resto de UI27–UI41.
+
+## 2026-11-02 (noche): mantenimiento (bloque de las 16:40)
+
+- **Comprobado:** `tools/ci_linux.sh` en verde con Configuración (854 pruebas, subido cccc0a2); `tisma_fuzz_gcode 2000`
+  con la semilla 202611021: 2000 corridas, 21 rechazadas por no imprimibles, ninguna falla. Las pruebas de interfaz
+  (157) pasan.
+- **Encontrado y corregido:**
+  - la calidad automática tomaba como «mover la cámara» el encuadre del programa al arrancar: en una captura de la
+    línea de comandos con una placa lenta (llvmpipe) la vista salía sin oclusión y la barra decía «sin oclusión al
+    mover». Ahora solo cuenta la cámara que mueve la persona (girar, desplazar, acercar); las capturas usan la calidad
+    pedida (regla 9);
+  - TR22 (equipo de fichas): en Diseño sin el componente, el subtítulo «Design» (el nombre de un diseño sin título) y
+    la segunda línea de error en inglés. Ahora una sola línea traducida; el texto del componente queda en la ayuda de
+    esa línea. Paso de guion nuevo `expect-no-text` (los textos dibujados se guardan solo mientras corre un guion);
+  - UI42 (equipo de fichas): a 900 px la barra de la vista se salía por la derecha y «Oclusión ambiental» quedaba
+    cortado. Si no entra, el botón del modo queda con su ícono. Guiones `view_bar_narrow_es` y `_en` con el paso
+    nuevo `expect-in-view`.
+- **Medido (equipo de fichas, llvmpipe):** vista previa de s200 de 3165 a 2031 ms por cuadro y de 12,2 M a 7,69 M
+  vértices, pero las llamadas de dibujo subieron de 1061 a 1717 (el nivel de detalle por saltos de capa parte los
+  lotes). Queda para el próximo bloque de rendimiento de la vista previa: juntar esos lotes, porque en placas viejas
+  (HD 4000) las llamadas pesan.
+- **No probado:** las capturas en una placa real con la calidad automática; el aviso de la primera vez en Windows.
