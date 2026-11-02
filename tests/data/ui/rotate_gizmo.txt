@@ -1,0 +1,9 @@
+# The Rotate tool's rings on the model: dragging round the blue ring turns the
+# model about Z only.
+expect-control gizmo_turn_z
+expect-control gizmo_turn_x
+expect-place turn_z 0
+drag-control gizmo_turn_z -60 -60
+expect-place turn_x 0
+expect-place turn_y 0
+expect-place turn_z 10..170

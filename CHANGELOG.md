@@ -13,8 +13,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Agregado
 
 - **Panel de ajustes plegable** (pedido del dueño, 2026-11-02): «« al lado del buscador lo pliega y la vista toma
-  todo el ancho; en Preparar queda arriba a la derecha un recuadro con la impresora y la boquilla, el filamento y el
-  perfil de impresión, y su » lo vuelve a abrir. Se recuerda (`ui.panel_folded`, también en Configuración › Interfaz).
+  todo el ancho; en Preparar queda arriba a la izquierda, al lado de las herramientas de la placa, un recuadro mínimo
+  con tres listas (impresora, filamento y perfil de impresión, sin dibujo ni botones), y su » lo vuelve a abrir. Se
+  recuerda (`ui.panel_folded`, también en Configuración › Interfaz).
+- **Manijas sobre la pieza** (pedido del dueño con una imagen, 2026-11-02; cubre UI30 y UI34): con Mover, flechas
+  por eje sobre la pieza; con Girar, tres anillos; con Escalar, una manija por eje y el centro para escalar parejo.
+  X rojo, Y verde, Z azul, como en las letras de las tarjetas. Se arrastran en la vista: mover sigue al mouse a lo
+  largo de la flecha, girar sigue el ángulo alrededor del centro (Mayús: de a 15°) y escalar sigue la distancia; al
+  lado del mouse se ve cuánto va. La pieza se mueve en vivo y el plato se rehace al soltar.
 - **Configuración** (ficha `preferences.md`, prioridad del dueño del 2026-11-02): la primera entrada de Más, Ctrl+, o
   Ctrl+P, o el engranaje de la barra de estado. Páginas General, Interfaz, **Video**, Cámara, Asistente, Complementos y
   Otros, un buscador sobre todas, Cancelar (deshace) y Aceptar (guarda). La página Video muestra el equipo (procesador,

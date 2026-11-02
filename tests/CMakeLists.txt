@@ -238,7 +238,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_script_config PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     add_test(NAME ui_script_panel_fold
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
-              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tool move
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/panel_fold.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_panel_fold.png)
     set_tests_properties(ui_script_panel_fold PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
@@ -295,6 +295,16 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${tool}_sliders.txt
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${tool}_sliders.png)
       set_tests_properties(ui_script_${tool}_sliders PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
+    # The handles drawn on the model (move arrows, rotation rings, scale
+    # boxes), dragged in the view.
+    foreach(tool move rotate scale)
+      add_test(NAME ui_script_${tool}_gizmo
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tool ${tool}
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${tool}_gizmo.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${tool}_gizmo.png)
+      set_tests_properties(ui_script_${tool}_gizmo PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     endforeach()
     # The moiré filter: the preview from far away, its layers finer than a
     # pixel, gets smoother with the filter where the filter acts.

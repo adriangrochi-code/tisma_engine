@@ -80,6 +80,7 @@
 #include <fstream>
 #include <functional>
 #include <map>
+#include <numbers>
 #include <memory>
 #include <csignal>
 #include <optional>
@@ -523,6 +524,11 @@ private:
     // Configuración (preferences.md): the dialog, the Video page's qualities
     // (view_auto_quality.md, rules 3 and 4) and the machine it runs on.
     void config_window();
+    // The handles on the chosen model (the owner's request, 2026-11-02, with a
+    // picture): arrows to move, rings to turn, boxes to scale, by axis in the
+    // bed's colours (X red, Y green, Z blue), dragged in the view.
+    bool gizmo(bool editing);
+    void selected_changed_live();
     // The print panel folded away (the owner's request, 2026-11-02): the view
     // takes the whole width; in Prepare a small card keeps the printer, the
     // filament and the print profile.
@@ -627,7 +633,7 @@ private:
     // Profiles (docs/PROFILES.md).
     std::filesystem::path profiles_root() const;
     void load_profile_lists();
-    void profile_row(ProfileKind kind);
+    void profile_row(ProfileKind kind, bool compact = false);
     std::vector<double> printer_diameters() const;
     void choose_profile(ProfileKind kind, const Profile& profile);
     // Speeds the settings lack: a stock Ender-3's, and a word about it.
@@ -934,6 +940,18 @@ private:
     bool battery_saver_ = true;
     bool show_frame_time_ = true;
     bool panel_folded_ = false;     // ui.panel_folded
+    float compact_bottom_ = 0.0f;   // the folded panel's card: where it ends on the screen, this frame
+    struct GizmoDrag {
+        int kind = 0; // 0 move along an axis, 1 turn about one, 2 scale along one, 3 scale all
+        int axis = 0;
+        ImVec2 start, last;
+        Placement place0;
+        double total = 0.0;   // mm, degrees or the factor so far
+        double applied = 0.0; // degrees applied (the turn snaps with Shift)
+        bool moved = false;
+    };
+    std::optional<GizmoDrag> gizmo_drag_;
+    ImVec2 drag_from_{0.0f, 0.0f}; // the scripted drag's start
     SystemInfo system_;
     double system_read_ = 0.0; // when the memory and the power were last read
     std::string gpu_vendor_, gpu_renderer_, gpu_version_, gpu_kind_;
@@ -4039,7 +4057,8 @@ std::vector<double> App::printer_diameters() const {
     return out;
 }
 
-void App::profile_row(ProfileKind kind) {
+// compact: the list only, the whole width (the folded panel's card).
+void App::profile_row(ProfileKind kind, bool compact) {
     const std::size_t k = std::size_t(kind);
     ImGui::PushID(int(k));
     const float size = ImGui::GetFrameHeight();
@@ -4049,7 +4068,7 @@ void App::profile_row(ProfileKind kind) {
     std::string preview = chosen ? shown_name(chosen->name) : std::string(tr(T::NoProfile));
     if (chosen && profile_modified_[k])
         preview += " *";
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 2.0f * (size + gap));
+    ImGui::SetNextItemWidth(compact ? ImGui::CalcItemWidth() : ImGui::GetContentRegionAvail().x - 2.0f * (size + gap));
     const Profile* picked = nullptr;
     if (ImGui::BeginCombo("##profile", preview.c_str())) {
         // Only the materials the printer takes (pellets.md, rule 1; profiles.md,
@@ -4077,6 +4096,15 @@ void App::profile_row(ProfileKind kind) {
     }
     if (chosen && profile_modified_[k] && ImGui::IsItemHovered())
         loc::SetTooltip("%s", tr(T::ProfileModifiedTip));
+    if (compact) {
+        ImGui::PopID();
+        if (picked) {
+            choose_profile(kind, *picked);
+            if (kind == ProfileKind::Printer)
+                bed_type_.clear();
+        }
+        return;
+    }
     auto save_as = [&] {
         save_profile_kind_ = kind;
         save_profile_open_ = true;
@@ -7995,7 +8023,8 @@ void App::viewport() {
         const float pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.lens_fov())) * 0.5f * view_size_.y;
         ImGui::GetWindowDrawList()->AddCircle(io.MousePos, pixels, IM_COL32(255, 255, 255, 200), 48, 1.5f * scale_);
     }
-    if (editing && !painting && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    const bool on_gizmo = gizmo(editing && !painting);
+    if (editing && !painting && !on_gizmo && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         pressed_object_ = -1;
         dragged_ = false;
         const Vec3 d = mouse_ray(), e = camera_.eye();
@@ -8040,7 +8069,7 @@ void App::viewport() {
                 drag_anchor_ = *p;
                 dragged_ = true;
             }
-        } else if (pressed_object_ < 0 && painting_object_ < 0 && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
             moved_frame_ = ImGui::GetFrameCount();
             camera_framed_ = false;
@@ -8054,7 +8083,7 @@ void App::viewport() {
     if (ImGui::IsItemDeactivated() && editing) {
         if (dragged_)
             plate_changed(); // the move is over: now the slice is out of date
-        else if (pressed_object_ < 0 && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint &&
+        else if (pressed_object_ < 0 && !on_gizmo && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint &&
                  ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
                  std::abs(io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left]) < 9.0f)
             selected_ = -1; // a click on the empty bed
@@ -8732,6 +8761,7 @@ void App::plate_tools() {
                size))
         tool_ = tool_ == PlateTool::Material ? PlateTool::Select : PlateTool::Material;
     const ImVec2 strip_min = ImGui::GetWindowPos(), strip_size = ImGui::GetWindowSize();
+    g_menu_rects["plate_tools"] = ImVec4(strip_min.x, strip_min.y, strip_min.x + strip_size.x, strip_min.y + strip_size.y);
     anchor_rect("plate_tools", strip_min, ImVec2(strip_min.x + strip_size.x, strip_min.y + strip_size.y));
     ImGui::End();
     ImGui::PopStyleColor();
@@ -8771,8 +8801,12 @@ void App::plate_tools() {
             plate_changed();
         }
     }
+    // The tool's card, next to the column; under the folded panel's card.
+    const float card_top = panel_folded_now() && tab_ == Tab::Prepare && compact_bottom_ > strip_min.y
+                               ? compact_bottom_ + 8.0f * scale_
+                               : strip_min.y;
     if (tool_ == PlateTool::Paint) {
-        paint_card(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, strip_min.y));
+        paint_card(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, card_top));
         return;
     }
     if (tool_ == PlateTool::Select || !chosen)
@@ -8780,7 +8814,7 @@ void App::plate_tools() {
 
     // The chosen tool's card.
     PlateObject& o = objects_[std::size_t(selected_)];
-    ImGui::SetNextWindowPos(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, strip_min.y));
+    ImGui::SetNextWindowPos(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, card_top));
     ImGui::SetNextWindowBgAlpha(0.92f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * scale_, 12.0f * scale_));
@@ -8788,6 +8822,9 @@ void App::plate_tools() {
     ImGui::Begin("##plate_tool", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    g_menu_rects["tool_card"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                       ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                       ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
     loc::TextColored(rgb(theme_.accent_hover), "%s", o.name.c_str());
     const float field = 110.0f * scale_;
     bool changed = false;
@@ -8795,7 +8832,12 @@ void App::plate_tools() {
     bool cut = false, split = false;
     const auto number = [&](const char* label, double& v, double speed, double lo, double hi, const char* fmt) {
         ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted(label);
+        // X, Y and Z in the handles' colours (the testers' UI34).
+        const std::string_view name(label);
+        if (name == "X" || name == "Y" || name == "Z")
+            loc::TextColored(rgb(name == "X" ? 0xE5484D : name == "Y" ? 0x3FBF7F : 0x3B82F6), "%s", label);
+        else
+            ImGui::TextUnformatted(label);
         ImGui::SameLine(70.0f * scale_);
         ImGui::SetNextItemWidth(field);
         const bool edited = ImGui::DragScalar((std::string("##") + label).c_str(), ImGuiDataType_Double, &v, float(speed), &lo,
@@ -9049,28 +9091,7 @@ void App::plate_tools() {
     if (tool_ == PlateTool::Measure)
         measure_overlay();
     if (changed) {
-        // A large model while its field is dragged: its old mesh drawn moved,
-        // turned and scaled to where the new one goes; the plate made again
-        // once the field is let go (frame()).
-        constexpr std::size_t kLiveTriangles = 200000;
-        const std::size_t i = std::size_t(selected_);
-        if (ImGui::IsAnyItemActive() && o.mesh.triangle_count() >= kLiveTriangles && i < built_places_.size()) {
-            if (!live_pending_) {
-                PlateObject before = o;
-                before.place = built_places_[i];
-                live_from_ = placement_map(before);
-                live_pending_ = true;
-            }
-            const Affine step = between(live_from_, placement_map(o));
-            live_model_ = identity();
-            for (int r = 0; r < 3; ++r) {
-                for (int c = 0; c < 3; ++c)
-                    live_model_[std::size_t(4 * c + r)] = float(step.a[std::size_t(3 * r + c)]);
-                live_model_[std::size_t(12 + r)] = float(step.b[std::size_t(r)]);
-            }
-        } else {
-            plate_changed();
-        }
+        selected_changed_live();
     }
     if (mirror_axis >= 0)
         mirror_selected(mirror_axis);
@@ -11514,6 +11535,241 @@ void App::gears_panel() {
     ImGui::PopStyleVar(2);
 }
 
+// The chosen model changed while a field or a handle is dragged: a large
+// one keeps its old mesh drawn moved, turned and scaled to where the new one
+// goes, and the plate is made again once the drag ends (frame()); a small one
+// is made again now, so the change shows as it happens.
+void App::selected_changed_live() {
+    if (selected_ < 0 || std::size_t(selected_) >= objects_.size())
+        return;
+    PlateObject& o = objects_[std::size_t(selected_)];
+    constexpr std::size_t kLiveTriangles = 200000;
+    const std::size_t i = std::size_t(selected_);
+    if (ImGui::IsAnyItemActive() && o.mesh.triangle_count() >= kLiveTriangles && i < built_places_.size()) {
+        if (!live_pending_) {
+            PlateObject before = o;
+            before.place = built_places_[i];
+            live_from_ = placement_map(before);
+            live_pending_ = true;
+        }
+        const Affine step = between(live_from_, placement_map(o));
+        live_model_ = identity();
+        for (int r = 0; r < 3; ++r) {
+            for (int c = 0; c < 3; ++c)
+                live_model_[std::size_t(4 * c + r)] = float(step.a[std::size_t(3 * r + c)]);
+            live_model_[std::size_t(12 + r)] = float(step.b[std::size_t(r)]);
+        }
+    } else {
+        plate_changed();
+    }
+}
+
+// The handles of the Move, Rotate and Scale tools on the chosen model, drawn
+// over the view at a fixed size on the screen, and their drags. True while a
+// handle has the mouse (the view does not turn or pick then).
+bool App::gizmo(bool editing) {
+    const ImGuiIO& io = ImGui::GetIO();
+    const bool tool = tool_ == PlateTool::Move || tool_ == PlateTool::Rotate || tool_ == PlateTool::Scale;
+    if (!editing || !tool || selected_ < 0 || std::size_t(selected_) >= placed_meshes_.size() || viewer_ ||
+        !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f)) {
+        gizmo_drag_.reset();
+        return false;
+    }
+    PlateObject& o = objects_[std::size_t(selected_)];
+    const BoundingBox box = placed_meshes_[std::size_t(selected_)].bounding_box();
+    if (box.empty)
+        return false;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](Vec3 p, ImVec2& out) {
+        const float cx = vp[0] * p.x + vp[4] * p.y + vp[8] * p.z + vp[12];
+        const float cy = vp[1] * p.x + vp[5] * p.y + vp[9] * p.z + vp[13];
+        const float w = vp[3] * p.x + vp[7] * p.y + vp[11] * p.z + vp[15];
+        if (!(w > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        return true;
+    };
+    const Vec3 c{(box.min.x + box.max.x) * 0.5f + drag_offset_.x, (box.min.y + box.max.y) * 0.5f + drag_offset_.y,
+                 (box.min.z + box.max.z) * 0.5f};
+    ImVec2 c2, r2;
+    if (!project(c, c2) || !project(c + camera_.right(), r2))
+        return false;
+    const float px_per_mm = std::max(std::hypot(r2.x - c2.x, r2.y - c2.y), 1e-4f);
+    const float reach = 90.0f * scale_;          // the handles' length on the screen
+    const float world = reach / px_per_mm;       // in mm at the model
+    const Vec3 axes[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    const ImU32 colours[3] = {IM_COL32(229, 72, 77, 255), IM_COL32(63, 191, 127, 255), IM_COL32(59, 130, 246, 255)};
+    const auto bright = [](ImU32 colour) {
+        const int r = int(colour & 0xFF), g = int((colour >> 8) & 0xFF), b = int((colour >> 16) & 0xFF);
+        return IM_COL32(std::min(255, r + 70), std::min(255, g + 70), std::min(255, b + 70), 255);
+    };
+    const auto segment_distance = [](ImVec2 p, ImVec2 a, ImVec2 b) {
+        const float dx = b.x - a.x, dy = b.y - a.y, l = dx * dx + dy * dy;
+        const float t = l > 0.0f ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l, 0.0f, 1.0f) : 0.0f;
+        return std::hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+    };
+    const int kind = tool_ == PlateTool::Move ? 0 : tool_ == PlateTool::Rotate ? 1 : 2;
+    // Where each handle is on the screen.
+    ImVec2 ends[3];
+    bool seen[3] = {};
+    for (int k = 0; k < 3; ++k)
+        seen[k] = project(c + axes[k] * world, ends[k]);
+    std::vector<ImVec2> rings[3];
+    if (kind == 1)
+        for (int k = 0; k < 3; ++k) {
+            const Vec3 u = axes[(k + 1) % 3], v = axes[(k + 2) % 3];
+            for (int i = 0; i <= 72; ++i) {
+                const float t = 6.2831853f * float(i) / 72.0f;
+                ImVec2 q;
+                if (project(c + (u * std::cos(t) + v * std::sin(t)) * world, q))
+                    rings[k].push_back(q);
+            }
+        }
+    // The handle under the mouse: kind and axis (axis 3: the centre's).
+    const float near = 8.0f * scale_;
+    int hover_kind = -1, hover_axis = -1;
+    const ImVec2 m = io.MousePos;
+    // The view's canvas is the last item drawn: over it, or pressed on it
+    // this frame (it takes the press before the handles see it).
+    const bool in_view = (ImGui::IsItemHovered() || ImGui::IsItemActive()) && m.x >= view_pos_.x &&
+                         m.y >= view_pos_.y && m.x <= view_pos_.x + view_size_.x && m.y <= view_pos_.y + view_size_.y;
+    if (!gizmo_drag_ && in_view) {
+        float best = near;
+        for (int k = 0; k < 3; ++k) {
+            if (kind == 0 && k < 2 && seen[k] && segment_distance(m, c2, ends[k]) < best)
+                best = segment_distance(m, c2, ends[k]), hover_kind = 0, hover_axis = k;
+            if (kind == 2 && seen[k] && std::hypot(m.x - ends[k].x, m.y - ends[k].y) < best + 2.0f)
+                best = std::hypot(m.x - ends[k].x, m.y - ends[k].y), hover_kind = 2, hover_axis = k;
+            if (kind == 1)
+                for (std::size_t i = 0; i + 1 < rings[k].size(); ++i)
+                    if (const float d = segment_distance(m, rings[k][i], rings[k][i + 1]); d < best)
+                        best = d, hover_kind = 1, hover_axis = k;
+        }
+        if (kind == 2 && std::hypot(m.x - c2.x, m.y - c2.y) < near + 2.0f)
+            hover_kind = 3, hover_axis = 3;
+    }
+    // A press on a handle starts its drag.
+    if (hover_kind >= 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        gizmo_drag_ = GizmoDrag{hover_kind, hover_axis, m, m, o.place};
+    }
+    if (gizmo_drag_) {
+        GizmoDrag& g = *gizmo_drag_;
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+            if (g.moved)
+                plate_changed();
+            gizmo_drag_.reset();
+            return true;
+        }
+        if (m.x != g.last.x || m.y != g.last.y) {
+            g.moved = true;
+            const int k = std::min(g.axis, 2);
+            if (g.kind == 0) { // along the axis: the mouse's move along the arrow, in mm
+                const float ax = ends[k].x - c2.x, ay = ends[k].y - c2.y, len = std::max(std::hypot(ax, ay), 1.0f);
+                const double mm = double(((m.x - g.last.x) * ax + (m.y - g.last.y) * ay) / len) * world / len;
+                (k == 0 ? o.place.x : o.place.y) += mm;
+                g.total += mm;
+            } else if (g.kind == 1) { // about the axis: the angle swept around the centre, as seen
+                const double a0 = std::atan2(double(g.last.y - c2.y), double(g.last.x - c2.x));
+                const double a1 = std::atan2(double(m.y - c2.y), double(m.x - c2.x));
+                double d = a1 - a0;
+                while (d > std::numbers::pi)
+                    d -= 2.0 * std::numbers::pi;
+                while (d < -std::numbers::pi)
+                    d += 2.0 * std::numbers::pi;
+                // The screen's y grows down: a turn that looks counter-clockwise
+                // has d < 0; it is positive about an axis pointing at the eye.
+                const double facing = dot(axes[k], camera_.eye() - c) > 0.0f ? 1.0 : -1.0;
+                g.total += -d * facing * 180.0 / std::numbers::pi;
+                const double target = io.KeyShift ? std::round(g.total / 15.0) * 15.0 : g.total;
+                if (target != g.applied) {
+                    o.place.rotation = rotated(o.place.rotation, k, target - g.applied);
+                    g.applied = target;
+                }
+            } else { // scale: along the handle's arrow, or from the centre for all
+                double factor = 1.0;
+                if (g.kind == 2) {
+                    const float ax = ends[k].x - c2.x, ay = ends[k].y - c2.y, len = std::max(std::hypot(ax, ay), 1.0f);
+                    factor = 1.0 + double(((m.x - g.start.x) * ax + (m.y - g.start.y) * ay) / len) / double(len);
+                } else {
+                    const double from = std::max(double(std::hypot(g.start.x - c2.x, g.start.y - c2.y)), 4.0);
+                    factor = double(std::hypot(m.x - c2.x, m.y - c2.y)) / from;
+                }
+                factor = std::clamp(factor, 0.02, 50.0);
+                g.total = factor;
+                o.place.scale = g.place0.scale;
+                if (g.kind == 3 || keep_scale_) {
+                    for (double& sc : o.place.scale)
+                        sc = std::max(sc * factor, 1e-3);
+                } else {
+                    // The model's own axis nearest to the bed's (its scale is along its own axes).
+                    const Rotation& r = o.place.rotation;
+                    int own = 0;
+                    for (int j = 1; j < 3; ++j)
+                        if (std::abs(r[std::size_t(3 * k + j)]) > std::abs(r[std::size_t(3 * k + own)]))
+                            own = j;
+                    o.place.scale[std::size_t(own)] = std::max(o.place.scale[std::size_t(own)] * factor, 1e-3);
+                }
+            }
+            g.last = m;
+            selected_changed_live();
+        }
+    }
+    // Drawn over the model.
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    const int active_kind = gizmo_drag_ ? gizmo_drag_->kind : hover_kind;
+    const int active_axis = gizmo_drag_ ? gizmo_drag_->axis : hover_axis;
+    const float thin = 2.5f * scale_, thick = 4.5f * scale_;
+    const auto name_rect = [&](const std::string& name, ImVec2 at) {
+        g_menu_rects[name] = ImVec4(at.x - 3.0f, at.y - 3.0f, at.x + 3.0f, at.y + 3.0f);
+    };
+    for (int k = 0; k < 3; ++k) {
+        const bool lit = active_axis == k && active_kind >= 0;
+        const ImU32 col = lit ? bright(colours[k]) : colours[k];
+        if (kind == 0 && k < 2 && seen[k]) {
+            dl->AddLine(c2, ends[k], col, lit ? thick : thin);
+            const float ax = ends[k].x - c2.x, ay = ends[k].y - c2.y, len = std::max(std::hypot(ax, ay), 1.0f);
+            const ImVec2 u(ax / len, ay / len), n(-u.y, u.x);
+            const float head = 12.0f * scale_;
+            dl->AddTriangleFilled(ImVec2(ends[k].x + u.x * head, ends[k].y + u.y * head),
+                                  ImVec2(ends[k].x + n.x * head * 0.5f, ends[k].y + n.y * head * 0.5f),
+                                  ImVec2(ends[k].x - n.x * head * 0.5f, ends[k].y - n.y * head * 0.5f), col);
+            name_rect(std::string("gizmo_move_") + "xy"[k], ImVec2(c2.x + ax * 0.75f, c2.y + ay * 0.75f));
+        } else if (kind == 1 && rings[k].size() > 1) {
+            for (std::size_t i = 0; i + 1 < rings[k].size(); ++i)
+                dl->AddLine(rings[k][i], rings[k][i + 1], col, lit ? thick : thin);
+            name_rect(std::string("gizmo_turn_") + "xyz"[k], rings[k][rings[k].size() / 8]);
+        } else if (kind == 2 && seen[k]) {
+            dl->AddLine(c2, ends[k], col, thin);
+            const float h = (lit ? 7.0f : 5.5f) * scale_;
+            dl->AddRectFilled(ImVec2(ends[k].x - h, ends[k].y - h), ImVec2(ends[k].x + h, ends[k].y + h), col);
+            name_rect(std::string("gizmo_scale_") + "xyz"[k], ends[k]);
+        }
+    }
+    if (kind == 2) {
+        const bool lit = active_kind == 3;
+        dl->AddCircleFilled(c2, (lit ? 8.0f : 6.5f) * scale_, lit ? IM_COL32(255, 255, 255, 255) : IM_COL32(230, 230, 236, 230));
+        name_rect("gizmo_scale_all", c2);
+    } else if (kind == 0) {
+        dl->AddCircleFilled(c2, 4.0f * scale_, IM_COL32(230, 230, 236, 230));
+    }
+    // What the drag does so far, next to the mouse.
+    if (gizmo_drag_ && gizmo_drag_->moved) {
+        const GizmoDrag& g = *gizmo_drag_;
+        static constexpr const char* axis_names[3] = {"X", "Y", "Z"};
+        const char* axis = g.axis < 3 ? axis_names[g.axis] : "XYZ";
+        const std::string text = g.kind == 0   ? format("%s %+.2f mm", axis, g.total)
+                                 : g.kind == 1 ? format("%s %+.1f°", axis, g.applied)
+                                               : format("%s %.0f %%", axis, g.total * 100.0);
+        const ImVec2 at(m.x + 16.0f * scale_, m.y + 12.0f * scale_), size = ImGui::CalcTextSize(text.c_str());
+        dl->AddRectFilled(ImVec2(at.x - 6.0f * scale_, at.y - 3.0f * scale_), ImVec2(at.x + size.x + 6.0f * scale_, at.y + size.y + 3.0f * scale_),
+                          ImGui::GetColorU32(rgb(theme_.panel, 0.92f)), 5.0f * scale_);
+        dl->AddText(at, ImGui::GetColorU32(rgb(theme_.text)), text.c_str());
+    }
+    dl->PopClipRect();
+    return gizmo_drag_.has_value() || hover_kind >= 0;
+}
+
 // The print panel folds in Prepare and Preview; the other tabs need theirs.
 bool App::panel_folded_now() const {
     return panel_folded_ && !printer_page_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview);
@@ -11523,25 +11779,37 @@ bool App::panel_folded_now() const {
 // filament and the print profile, at the top left of the view under its
 // buttons, for those who set things once and only slice.
 void App::compact_panel() {
-    // At the top right, under the view's buttons: the plate's tools keep the left.
-    const float margin = 12.0f * scale_, width = std::min(360.0f * scale_, view_size_.x - 2.0f * margin);
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - margin - width, view_pos_.y + 60.0f * scale_));
+    // At the top left, the selection only (the owner's request, 2026-11-02:
+    // no printer picture, no buttons): printer, filament and profile, each a
+    // list; right of the plate's tools, the tool's card under it.
+    const float margin = 12.0f * scale_, left = 62.0f * scale_; // the tools' column: 12 + 42 + 8
+    const float width = std::min(250.0f * scale_, view_size_.x - left - margin);
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + left, view_pos_.y + 60.0f * scale_));
     ImGui::SetNextWindowSize(ImVec2(width, 0.0f));
     ImGui::SetNextWindowBgAlpha(0.94f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.0f * scale_, 10.0f * scale_));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * scale_, 6.0f * scale_));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f * scale_, 4.0f * scale_));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
     ImGui::Begin("##compact_panel", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
-    g_menu_rects["compact_panel"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
-                                           ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
-                                           ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+                     ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    const ImVec2 pos = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
+    g_menu_rects["compact_panel"] = ImVec4(pos.x, pos.y, pos.x + size.x, pos.y + size.y);
+    compact_bottom_ = pos.y + size.y;
     refresh_profiles();
-    // The way back to the whole panel, on the card's title line.
-    loc::TextDisabled("%s", tr(T::CompactTitle));
-    ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - ImGui::GetFrameHeight() * 1.6f);
-    if (ImGui::SmallButton("»##unfold_card")) {
+    const float line = ImGui::GetFrameHeight();
+    ImGui::PushItemWidth(-FLT_MIN);
+    // The printer's list, and the way back to the whole panel at its end.
+    ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x - line - ImGui::GetStyle().ItemSpacing.x);
+    ImGui::BeginGroup();
+    profile_row(ProfileKind::Printer, true);
+    ImGui::EndGroup();
+    ImGui::PopItemWidth();
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::Printer));
+    ImGui::SameLine();
+    if (ImGui::Button("»##unfold_card", ImVec2(line, line))) {
         panel_folded_ = false;
         frame_pending_ = true;
     }
@@ -11549,16 +11817,16 @@ void App::compact_panel() {
                                           ImGui::GetItemRectMax().y);
     if (ImGui::IsItemHovered())
         loc::SetTooltip("%s", tr(T::PanelUnfoldTip));
-    ImGui::BeginGroup();
-    printer_card();
-    ImGui::EndGroup();
-    loc::TextDisabled("%s", tr(T::Material));
-    profile_row(ProfileKind::Filament);
-    loc::TextDisabled("%s", tr(T::Print));
-    profile_row(ProfileKind::Print);
+    profile_row(ProfileKind::Filament, true);
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::Material));
+    profile_row(ProfileKind::Print, true);
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::Print));
+    ImGui::PopItemWidth();
     ImGui::End();
     ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
 }
 
 // The way back to the whole panel: a tab at the left edge of the view.
@@ -15089,6 +15357,24 @@ void App::script_input() {
         if (!ok)
             return fail_step("the quality is " + view_quality_);
         next();
+    } else if (step.verb == "drag-control") { // press on a named control's middle, move by "dx dy" over 8 frames, release
+        const auto it = g_menu_rects.find(step.key);
+        if (f == 0 && it == g_menu_rects.end())
+            return fail_step("it is not on the screen");
+        float dx = 0, dy = 0;
+        std::sscanf(step.value.c_str(), "%f %f", &dx, &dy);
+        if (f == 0)
+            drag_from_ = ImVec2(0.5f * (it->second.x + it->second.z), 0.5f * (it->second.y + it->second.w));
+        if (f == 0)
+            io.AddMousePosEvent(drag_from_.x, drag_from_.y);
+        else if (f == 2)
+            io.AddMouseButtonEvent(0, true);
+        else if (f >= 3 && f <= 11)
+            io.AddMousePosEvent(drag_from_.x + dx * float(f - 3) / 8.0f, drag_from_.y + dy * float(f - 3) / 8.0f);
+        else if (f == 13)
+            io.AddMouseButtonEvent(0, false);
+        else if (f >= 15)
+            next();
     } else if (step.verb == "expect-apart") { // two named controls drawn, neither over the other
         const auto a = g_menu_rects.find(step.key), b = g_menu_rects.find(step.value);
         if (a == g_menu_rects.end() || b == g_menu_rects.end())

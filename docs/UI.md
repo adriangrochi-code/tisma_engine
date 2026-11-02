@@ -94,9 +94,9 @@ izquierda de la vista 3D, una columna con:
 |---|---|
 | **Agregar** | Suma un modelo (STL, OBJ o 3MF) a la placa y la ordena. Soltar uno sobre una placa con modelos también lo suma; **Abrir** empieza una placa nueva |
 | **Quitar**, **Duplicar** | El modelo elegido |
-| **Mover** (M) | Su posición en X e Y (el centro de su caja). Arrastrar un modelo lo mueve con cualquier herramienta |
-| **Rotar** (R) | Ángulos en X, Y y Z (R = Rz·Ry·Rx), ±90° por eje, **Sin giro** |
-| **Escalar** (S) | En % o en mm por eje, los tres juntos o cada uno, **Tamaño original**, y **Espejar** en X, Y o Z alrededor del centro de su caja (un modelo girado toma su giro y su tamaño en la malla antes) |
+| **Mover** (M) | Su posición en X e Y (el centro de su caja). Arrastrar un modelo lo mueve con cualquier herramienta; sobre el modelo, una flecha roja (X) y una verde (Y) lo mueven solo por ese eje |
+| **Rotar** (R) | Ángulos en X, Y y Z (R = Rz·Ry·Rx), ±90° por eje, **Sin giro**; sobre el modelo, tres anillos (X rojo, Y verde, Z azul) que se arrastran para girarlo (Mayús: de a 15°) |
+| **Escalar** (S) | Sobre el modelo, una manija por eje y el círculo del centro (los tres juntos) que se arrastran. En % o en mm por eje, los tres juntos o cada uno, **Tamaño original**, y **Espejar** en X, Y o Z alrededor del centro de su caja (un modelo girado toma su giro y su tamaño en la malla antes) |
 | **Apoyar en una cara** (F) | Un clic en una cara del modelo la deja contra la cama |
 | **Medir** (U) | Un clic en una cara toma su plano; en una superficie curva reconoce un agujero o un cilindro (su diámetro, con «Debería medir» para escalar a ese diámetro) o un cono (su ángulo y los diámetros de sus dos extremos); Shift + clic, el vértice más cercano. Entre dos elementos del mismo modelo, la distancia (puntos, punto y cara, caras paralelas) o el ángulo entre caras; con una distancia, **Debería medir** y **Escalar** agrandan o achican el modelo parejo en los tres ejes (ficha `model_tools.md`, regla 20). `--measure T1,T2` elige dos triángulos del primer modelo como caras |
 | **Cortar** (C) | Un plano horizontal a la altura que se escribe, dibujado sobre la vista; **Cortar** deja dos piezas cerradas, una al lado de la otra, con el extrusor del modelo (la pintura no pasa a las mitades). «Dar vuelta la parte de abajo» la apoya sobre la cara del corte (ficha `model_tools.md`, reglas 13 y 18). `--cut Z` corta el primer modelo al abrirse. **Separar en piezas** deja cada pedazo suelto del modelo como una pieza, con los huecos que tiene adentro (regla 14) |

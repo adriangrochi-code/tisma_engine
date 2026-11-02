@@ -1,0 +1,7 @@
+# The Scale tool's handles: dragging the centre outward makes the model bigger
+# on every axis at once.
+expect-control gizmo_scale_all
+expect-control gizmo_scale_x
+expect-place scale 100
+drag-control gizmo_scale_x 60 0
+expect-place scale 110..400

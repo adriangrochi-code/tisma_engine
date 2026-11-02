@@ -8669,6 +8669,16 @@ Prioridad del dueño (por el equipo de fichas): primero Configuración con la p�
   filamento y el perfil de impresión, con » para volver; en Vista previa, una pestaña violeta en el borde izquierdo.
   Guion `panel_fold`.
 
-**Sigue (pedido del dueño con una imagen):** manijas en la vista para mover, girar y escalar la pieza arrastrando
-(flechas por eje, anillos de giro y manijas de escala, X rojo, Y verde, Z azul), como en los otros laminadores; cubre
-también UI30 y UI34. Después, la etapa B de la calidad automática.
+- **Manijas sobre la pieza (pedido del dueño con una imagen; UI30 y UI34):** con Mover, flechas X e Y; con Girar,
+  tres anillos; con Escalar, una manija por eje y el centro para todo parejo (o todo parejo si «mantener
+  proporción» está prendido). X rojo, Y verde, Z azul, también en las letras de la tarjeta. Se dibujan en la pantalla
+  con la proyección de la cámara y se tocan en 2D (8 px); el clic sobre una manija no elige otra pieza ni gira la
+  cámara. Al lado del mouse, cuánto va. Guiones `move_gizmo`, `rotate_gizmo` y `scale_gizmo` (nuevo paso
+  `drag-control`: apretar en un control con nombre, mover y soltar).
+- **Recuadro plegado más chico (pedido del dueño, durante el bloque):** a la izquierda, al lado de la columna de
+  herramientas, solo las tres listas, sin el dibujo de la impresora ni los botones de guardar y menú; la tarjeta de
+  la herramienta elegida baja debajo de él. El guion `panel_fold` comprueba que no tapa las herramientas ni la
+  tarjeta.
+
+**Sigue:** la etapa B de la calidad automática (medición, bajar al mover, oclusión congelada al pintar); después, el
+resto de UI27–UI41.
