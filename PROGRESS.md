@@ -8544,3 +8544,13 @@ El equipo de fichas mandó `cad_design.md` (en `spec/next`, pasa `tools/check_sp
 y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el guardado del diseño en el proyecto
 (D5) queda anotado en `PlateObject::design`.
 
+## 2026-11-02: mantenimiento (bloque de las 08:40; los de los días 30, 31 y 1 no corrieron: la sesión estaba parada)
+
+- **Comprobado:** `tools/ci_linux.sh` en verde con la regla 1 de `orca_2_5.md` (819 pruebas); `tisma_fuzz_gcode 2000`
+  con la semilla 20261102: 2000 corridas, 20 rechazadas por no imprimibles, 0 fallos.
+- **Encontrado y corregido:** nada del motor; en la pestaña Diseño nueva, dos cosas que las pruebas de guion
+  sacaron a la luz antes de publicar (la línea de comandos se desactivaba con Enter, y el campo de una medida
+  quedaba fuera de la zona visible del panel: ahora Enter deja el campo activo y el historial se desplaza hasta la
+  pieza nueva).
+- **Medido:** nada nuevo del laminado; el tamaño de `solidcraft-cli` (arriba).
+
