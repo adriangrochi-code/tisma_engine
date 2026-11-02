@@ -10465,9 +10465,10 @@ void App::design_command_line() {
     ImGui::AlignTextToFramePadding();
     loc::TextColored(rgb(theme_.accent_hover), "%s", prompt.c_str());
     ImGui::SameLine();
+    // The last answer to the right of the field, in its own clipped space.
     const float message_w = command_message_.empty() ? 0.0f : std::min(ImGui::CalcTextSize(command_message_.c_str()).x + 16.0f * scale_,
-                                                                       ImGui::GetContentRegionAvail().x * 0.5f);
-    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - message_w);
+                                                                       ImGui::GetContentRegionAvail().x * 0.45f);
+    ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - message_w - ImGui::GetStyle().ItemSpacing.x);
     if (command_focus_) {
         ImGui::SetKeyboardFocusHere();
         command_focus_ = false;
@@ -10514,7 +10515,13 @@ void App::design_command_line() {
     }
     if (!command_message_.empty()) {
         ImGui::SameLine();
+        ImGui::BeginChild("##command_message", ImVec2(message_w, ImGui::GetFrameHeight()), ImGuiChildFlags_None,
+                          ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::AlignTextToFramePadding();
         loc::TextDisabled("%s", command_message_.c_str());
+        ImGui::EndChild();
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", command_message_.c_str());
     }
     ImGui::End();
     ImGui::PopStyleColor();
