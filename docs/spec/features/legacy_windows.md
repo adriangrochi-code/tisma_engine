@@ -121,7 +121,7 @@ para que funcionen la mayor cantidad de equipos posibles».
    programa, y el proyecto abierto queda como estaba. La línea de comandos acepta `--render-level` para las pruebas.
 9. **Fluidez:** en cada nivel la vista mantiene al menos 20 cuadros por segundo al girar con el modelo de prueba de
    ese nivel (prueba LW5); si no llega, baja el detalle (menos triángulos del modelo, menos capas de la vista previa)
-   antes de bajar la velocidad.
+   antes de bajar la velocidad. Dentro de cada nivel, la calidad la elige `view_auto_quality.md`.
 
 ## Casos límite
 
