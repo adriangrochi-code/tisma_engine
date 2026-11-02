@@ -104,6 +104,10 @@ Complementos, Otros) y, a la derecha, cada opción con un interruptor violeta, u
    | Modo de imagen | `ui.render_mode` | Rápida, Oclusión ambiental, Ray tracing | según la calidad | Los modos de `docs/UI.md`, «Imagen» |
    | Intensidad de la oclusión | `ui.ao_strength` | 0 a 1,5 | 1 | Cuánto oscurece la oclusión ambiental |
    | Sombra sobre la cama | `ui.bed_shadow` | sí / no | sí | La sombra de la pieza sobre la cama |
+   | Luz de sol | `ui.sun` | sí / no | sí | Una sola luz desde una dirección, como el sol, con sus sombras sobre la pieza y la cama (regla 8 bis) |
+   | Sol: dirección | `ui.sun_azimuth` | 0° a 359° | 135° | Desde dónde viene, alrededor de la cama (0° = desde +X, antihorario mirando desde arriba) |
+   | Sol: altura | `ui.sun_elevation` | 5° a 90° | 50° | Cuán alto está sobre la cama (90° = justo arriba) |
+   | Sol: sigue a la cámara | `ui.sun_follows_camera` | sí / no | no | Sí: el sol gira con la vista y la pieza se ve siempre iluminada igual; no: queda fijo respecto de la cama |
    | Suavizado (multimuestreo) | `ui.msaa` | No, 2×, 4×, 8× | según la calidad | Solo los que la placa admite |
    | Suavizado FXAA | `ui.fxaa` | sí / no | sí | |
    | Filtro de moiré | `ui.moire_filter` | sí / no | sí | `docs/UI.md`, «Filtro de moiré» |
@@ -115,6 +119,14 @@ Complementos, Otros) y, a la derecha, cada opción con un interruptor violeta, u
    | Cálculo en la placa de video | `gpu` y `compute.gpu` | Automático, No | Automático | El laminado y el análisis usan la GPU si hay; No los deja en el procesador |
    | Mostrar el tiempo de la vista | `ui.show_frame_time` | sí / no | sí | «Vista 8,3 ms · 60 FPS» en la barra de estado |
 
+   - **Luz de sol (regla 8 bis, pedido del dueño, 02-11-2026: «la oclusión ambiental que salga de un solo punto que
+     rote, como si fuera el sol»):** la luz principal viene de un solo punto lejano, como el sol: las caras que lo
+     miran se aclaran, las de atrás quedan en penumbra y la pieza tira una sombra nítida sobre sí misma y sobre la cama
+     en esa dirección. La oclusión ambiental sigue, más suave, oscureciendo los rincones donde el aire no llega, y se
+     tiñe hacia el lado contrario al sol. En la tira de la vista hay un ícono de sol: arrastrarlo de costado gira el
+     sol alrededor de la cama, y arriba o abajo lo sube o lo baja; mientras se arrastra, una flecha amarilla en la
+     vista muestra de dónde viene la luz, y el cambio se ve en vivo. Doble clic vuelve a 135° y 50°. Con «Rápida» o
+     «Liviana» queda solo la luz del sol, sin sombras (la sombra cuesta un dibujo más de la escena);
    - **Costo a la vista:** al lado de cada opción que cambia el dibujo, lo que cuesta en esta máquina según la última
      medición («+3,2 ms»), así se ve qué conviene apagar (el caso de la oclusión ambiental que reportó el dueño);
    - **Vista previa en vivo:** el diálogo deja ver la vista 3D detrás; los cambios se ven al momento y el tiempo de
@@ -143,3 +155,6 @@ Complementos, Otros) y, a la derecha, cada opción con un interruptor violeta, u
 | PF10 | Video: elegir OpenGL 1.1 en una máquina con 3.3 y no contestar | Se ve el nivel simple; a los 15 s vuelve a 3.3 sin cerrar el programa |
 | PF11 | Video: «Volver a lo recomendado» | Calidad Automática y el resto de Video como lo elige `view_auto_quality.md` para esta máquina |
 | PF12 | Video en una máquina sin Vulkan | API gráfica muestra Vulkan apagado con «No hay Vulkan en este equipo» |
+| PF13 | Cubo en la cama, Oclusión ambiental, sol a 90° de dirección y 30° de altura | Sombra larga del cubo sobre la cama hacia −Y; la cara que mira a +Y, clara; la de −Y, en penumbra |
+| PF14 | Arrastrar el ícono de sol de costado | La sombra gira alrededor del cubo en vivo; al soltar, `ui.sun_azimuth` guarda la nueva dirección |
+| PF15 | «Sigue a la cámara» prendido y girar la vista | La pieza se ve iluminada igual desde cualquier lado; apagado, la sombra queda fija en la cama mientras gira la vista |
