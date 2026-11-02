@@ -963,8 +963,18 @@ Con el PR #23 (2026-10-26):
     corte, y la vista previa de la interfaz muestra la pieza sobre la cinta. Falta que el visor dibuje el alto del
     cordón perpendicular a la capa inclinada (hoy va vertical, y la cara lateral se ve con huecos)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
-- [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
-  (la API de C) e `INTEGRATION.md`
+- [ ] **Tisma Cloud en la 1.0** (decisión del dueño, 02-11-2026: «lo antes posible», antes que el resto de
+  UI27–UI41), ficha `cloud.md`:
+  - [x] C1 (2026-11-02): la capa HTTP propia (`src/net/`: WinHTTP en Windows, cpp-httplib y OpenSSL 3 en Linux y
+    macOS) y el cliente (`src/cloud/client.*`, código del dueño sin la capa HTTP de PrusaSlicer, más `/v1/plans`),
+    probados contra un servidor simulado (CC1 a CC6, CC13 a CC15 del lado del cliente);
+  - [ ] C2: el panel de la cuenta (entrar, horas, planes con el actual marcado, el enlace a la página de pago),
+    informar un problema, el token en el almacén de claves del sistema (regla 3), laminar y analizar en la nube desde
+    la interfaz con su avance en la barra de estado;
+  - [ ] C3: la línea de comandos de los nodos (reglas 18 a 21: `slice` y `analyze` con `--summary`, `--sandbox`,
+    líneas `progress`; CC10 a CC12);
+  - [ ] después: el puente de impresoras (reglas 12 a 17), la biblioteca de modelos y Thingiverse
+- [ ] `printer_connections.md` (F9), `mobile_app.md` (la API de C) e `INTEGRATION.md`
 - [ ] **Ajustes de las fichas que el motor no lee** (medición del equipo de fichas, 2026-10-28, `dev` 32d74be;
   `docs/spec/qa/2026-10-28-ajustes.md` en `spec/next` cc8d580, `tools/check_spec.py` limpio): lee 368 de 479 claves
   del laminado. Faltan, por grupo: `fins` 20, `support` 13, `waam` 10 (después de la primera versión), `walls` 9,

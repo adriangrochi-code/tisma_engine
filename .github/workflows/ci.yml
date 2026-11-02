@@ -38,7 +38,7 @@ jobs:
       - name: Install Ninja, lavapipe, glslang and X11 (for the interface)
         # lavapipe is Mesa's software Vulkan device: the GPU tests run without a GPU.
         run: >-
-          sudo apt-get update && sudo apt-get install -y ninja-build mesa-vulkan-drivers glslang-tools
+          sudo apt-get update && sudo apt-get install -y ninja-build mesa-vulkan-drivers glslang-tools libssl-dev
           libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev xvfb
       - name: Check the generated SPIR-V
         run: python3 tools/compile_shaders.py --check
@@ -58,7 +58,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Ninja, lavapipe and X11 (for the interface)
-        run: sudo apt-get update && sudo apt-get install -y ninja-build mesa-vulkan-drivers libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev xvfb
+        run: sudo apt-get update && sudo apt-get install -y ninja-build mesa-vulkan-drivers libssl-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev xvfb
       - name: Configure
         run: >
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug

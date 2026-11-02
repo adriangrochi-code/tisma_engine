@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Cliente de Tisma Cloud, primera parte** (ficha `cloud.md`, prioridad del dueño): la conexión propia con el servidor
+  (HTTPS con los certificados del sistema; WinHTTP en Windows, OpenSSL 3 en Linux) y el cliente: entrar y salir, la
+  cuenta y sus horas, los planes públicos, informar un problema y laminar o analizar en la nube (mandar, seguir,
+  cancelar y bajar el resultado). Todavía sin pantallas: llegan con la segunda parte.
 - **Compilaciones diarias** (pedido del dueño, 2026-11-02): `dev` compilado y probado en Windows y Linux una vez por
   día, publicado como la pre-release `nightly`, que se reemplaza cada vez (`docs/VERSIONING.md`, «Las compilaciones
   diarias»).

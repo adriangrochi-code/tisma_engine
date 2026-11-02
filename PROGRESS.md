@@ -8744,3 +8744,25 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   otras piezas se descartan. Z ya no encuadra con Ctrl apretado. El paso de guion `key` acepta `ctrl+` y `shift+`.
   Guion `place_undo`.
 - **Falta:** deshacer agregar, quitar, cortar y pintar (no son de ubicación).
+
+## 2026-11-02 (noche): Tisma Cloud, C1 (decisión del dueño: la nube primero)
+
+- **Capa HTTP propia** (`src/net/`): un pedido y una respuesta, una llamada que bloquea. Windows: WinHTTP (proxy y
+  certificados del sistema). Linux y macOS: cpp-httplib 0.62.0 (MIT, solo la cabecera) sobre OpenSSL 3 del sistema
+  (Apache-2.0), con la verificación del certificado prendida; sin OpenSSL 3, solo `http://`. libcurl quedó afuera: su
+  licencia («curl») no está en la lista permitida de `CLAUDE.md`, y sumarla es decisión del dueño. Multipart y
+  direcciones, escritos a mano.
+- **Cliente** (`src/cloud/client.*`): el código del dueño (excepción de `CLEANROOM.md`, entregado por el equipo de
+  fichas) con la capa nueva en lugar de la `Http` de PrusaSlicer, más `GET /v1/plans` (regla 5a); los errores llevan
+  su código HTTP (401, 413, 422, 429); `run()` pregunta cada 2 s (regla 8) y no reintenta una sesión cerrada.
+- **Pruebas** `[cloud]` (8 casos, 91 comprobaciones) contra un servidor simulado escrito desde la ficha con el servidor
+  de cpp-httplib: entrar, cuenta con horas dadas por el administrador, planes sin sesión, sesión vencida y cuenta
+  apagada (401), 429, informe con y sin cuenta y su 422, un trabajo de `queued` a `done` con el resultado, cancelar
+  también en el servidor, 413 y sin servidor.
+- **Encontrado al probar:** las definiciones de cpp-httplib (con o sin OpenSSL) cambian sus clases; la prueba y la
+  biblioteca las veían distintas y el programa se caía (violación de la regla de una definición). Ahora van en el
+  objetivo de la cabecera, iguales para todos.
+- **Probado a mano:** HTTPS real contra example.com (200). **No probado:** un certificado vencido (el proxy de la
+  sesión contesta 503 antes), la parte de WinHTTP (se compila en la CI de Windows; no hay compilador de Windows acá).
+- **Sigue:** C2 (panel de la cuenta, planes, informar un problema, el token en el almacén de claves, la nube desde
+  la interfaz) y C3 (la línea de comandos de los nodos).

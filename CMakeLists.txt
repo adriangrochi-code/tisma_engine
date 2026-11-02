@@ -294,6 +294,43 @@ if(WIN32)
   target_sources(tisma-engine PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/tisma-engine.rc)
 endif()
 
+# The cloud client (cloud.md) and its HTTP layer: WinHTTP on Windows; on
+# Linux and macOS cpp-httplib (MIT, only its header) over the system's
+# OpenSSL 3 (Apache-2.0) for HTTPS. See THIRD_PARTY.md. The tests' mock
+# server uses cpp-httplib's server on every system.
+FetchContent_Declare(
+  cpphttplib
+  GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+  GIT_TAG 74ef3c42188acd6391f027c4337fb0e1a68c0024 # v0.62.0
+  SOURCE_SUBDIR no-cmake
+)
+FetchContent_MakeAvailable(cpphttplib)
+# Every user of the header sees the same definitions (its classes change with
+# OpenSSL): they go on this target, never on one user alone.
+add_library(tisma_httplib INTERFACE)
+target_include_directories(tisma_httplib SYSTEM INTERFACE ${cpphttplib_SOURCE_DIR})
+find_package(Threads REQUIRED)
+target_link_libraries(tisma_httplib INTERFACE Threads::Threads)
+if(NOT WIN32)
+  find_package(OpenSSL 3 QUIET)
+  if(OpenSSL_FOUND)
+    target_compile_definitions(tisma_httplib INTERFACE CPPHTTPLIB_OPENSSL_SUPPORT)
+    target_link_libraries(tisma_httplib INTERFACE OpenSSL::SSL OpenSSL::Crypto)
+  else()
+    message(STATUS "OpenSSL 3 not found: the cloud client talks only http://")
+  endif()
+endif()
+add_library(tisma_net STATIC src/net/http.cpp src/cloud/client.cpp)
+target_include_directories(tisma_net PUBLIC src)
+target_link_libraries(tisma_net PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
+if(WIN32)
+  target_sources(tisma_net PRIVATE src/net/http_winhttp.cpp)
+  target_link_libraries(tisma_net PRIVATE winhttp)
+else()
+  target_sources(tisma_net PRIVATE src/net/http_httplib.cpp)
+  target_link_libraries(tisma_net PRIVATE tisma_httplib)
+endif()
+
 if(TISMA_BUILD_UI)
   # What the interface does without OpenGL (camera, draw data, icons, texts,
   # files, the slicing job): tested with the engine.

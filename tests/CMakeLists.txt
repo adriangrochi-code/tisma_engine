@@ -85,6 +85,7 @@ add_executable(tisma_tests
   test_cad.cpp
   test_fasteners.cpp
   test_gears.cpp
+  test_cloud.cpp
 )
 # The stand-in for the bundled solidcraft-cli (cad_design.md, rule 1): the
 # tests drive it instead of the real tool.
@@ -95,6 +96,8 @@ target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SOLIDCRAFT="$<TARGET_F
 # Boost.Polygon is the oracle the own Voronoi diagram is tested against.
 # nlohmann/json reads the analysis report back.
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
+# The cloud client, and cpp-httplib's server for its mock server (test_cloud.cpp).
+target_link_libraries(tisma_tests PRIVATE tisma_net tisma_httplib)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)
