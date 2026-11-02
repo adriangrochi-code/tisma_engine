@@ -89,6 +89,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`design_parts.md`](design_parts.md): biblioteca de piezas dentro de Diseño: tornillería y engranajes normalizados (ISO), juego para imprimir por material, editar después; siguen agujeros normalizados y alojamientos de tuerca, insertos, bisagras, poleas GT2 y cremalleras | con Diseño | Para revisar |
 | [`legacy_windows.md`](legacy_windows.md): Windows Vista en adelante, 32 y 64 bits, paquetes clásicos, memoria en 32 bits, y la vista 3D en niveles según la placa de video (OpenGL 3.3, 3.0, 2.1 y 1.1) con elección automática y vuelta atrás si falla | cuando el dueño lo ordene | Para revisar |
 | [`view_auto_quality.md`](view_auto_quality.md): reconoce el equipo, mide lo que cuesta dibujar y elige la calidad de la vista; tope de cuadros por segundo para no cargar la máquina, calidad más baja solo mientras algo se mueve, pintar sin esperar a la oclusión, equipo cargado y batería | P1 | Para revisar |
+| [`app_updates.md`](app_updates.md): actualizador integrado como Steam: busca, baja en segundo plano, comprueba firma y resumen, instala al cerrar, vuelve atrás si falla, canales estable y de prueba | 1.0 | Para revisar |
 
 **Pendientes:**
 - Interfaz: Dispositivos, preferencias y la app de teléfono, en detalle.
