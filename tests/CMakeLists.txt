@@ -82,7 +82,14 @@ add_executable(tisma_tests
   test_project.cpp
   test_catalog.cpp
   test_device.cpp
+  test_cad.cpp
 )
+# The stand-in for the bundled solidcraft-cli (cad_design.md, rule 1): the
+# tests drive it instead of the real tool.
+add_executable(tisma_fake_solidcraft fake_solidcraft_cli.cpp)
+target_link_libraries(tisma_fake_solidcraft PRIVATE tisma_core tisma_warnings nlohmann_json::nlohmann_json)
+add_dependencies(tisma_tests tisma_fake_solidcraft)
+target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SOLIDCRAFT="$<TARGET_FILE:tisma_fake_solidcraft>")
 # Boost.Polygon is the oracle the own Voronoi diagram is tested against.
 # nlohmann/json reads the analysis report back.
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
