@@ -95,8 +95,14 @@ GearDims gear_dims(const GearSpec& g) {
 }
 
 double center_distance(const GearSpec& a, int other_teeth) {
+    if (a.rack)
+        return a.module * other_teeth / 2.0;
     // Helical gears mesh at the transverse module m / cos(beta).
     return a.module * (a.teeth + other_teeth) / 2.0 / std::cos(radians(a.helix_angle));
+}
+
+double rack_pitch_height(const GearSpec& r) {
+    return r.rack_base + 1.25 * r.module;
 }
 
 std::string check_gear(const GearSpec& g) {
@@ -112,6 +118,8 @@ std::string check_gear(const GearSpec& g) {
         return "the helix angle must be between 0 and 45 degrees";
     if (!(g.backlash >= 0.0 && g.backlash < kPi * g.module / 4.0))
         return "the backlash must be between 0 and a quarter of the circular pitch";
+    if (g.rack)
+        return g.rack_base >= 0.5 && g.rack_base <= 200.0 ? std::string() : "the rack's base must be between 0.5 and 200 mm";
     const double rf = g.module * g.teeth / 2.0 - 1.25 * g.module;
     if (!(g.bore >= 0.0 && g.bore / 2.0 <= rf - std::max(1.0, g.module)))
         return "the bore must leave at least a module (and 1 mm) of material under the teeth";
@@ -130,9 +138,57 @@ double gear_outline_radius(const GearSpec& g, double angle) {
     return t.rf; // the root, and the straight flank under the base circle
 }
 
+namespace {
+
+// A rack: the top outline along X, from x = 0 to the length, extruded along Z.
+TriangleMesh make_rack(const GearSpec& g) {
+    const double p = kPi * g.module, alpha = radians(g.pressure_angle);
+    const double root = g.rack_base, pitch = root + 1.25 * g.module, tip = pitch + g.module;
+    const double half = (p / 2.0 - g.backlash) / 2.0; // half the tooth on the pitch line
+    const auto half_at = [&](double y) { return std::clamp(half - (y - pitch) * std::tan(alpha), 0.0, p / 2.0); };
+    std::vector<std::pair<double, double>> top; // (x, y), x increasing
+    for (int k = 0; k < g.teeth; ++k) {
+        const double c = p * (k + 0.5);
+        if (k == 0)
+            top.push_back({0.0, root});
+        const double hr = half_at(root), ht = std::max(half_at(tip), 0.01);
+        if (c - hr > top.back().first + 1e-9)
+            top.push_back({c - hr, root});
+        top.push_back({c - ht, tip});
+        top.push_back({c + ht, tip});
+        top.push_back({std::min(c + hr, p * (k + 1)), root});
+    }
+    if (top.back().first < p * g.teeth - 1e-9)
+        top.push_back({p * g.teeth, root});
+    TriangleMesh m;
+    const float w = float(g.width);
+    const auto v = [](double x, double y, float z) { return Vec3f{float(x), float(y), z}; };
+    const auto quad = [&](const Vec3f& a, const Vec3f& b, const Vec3f& c, const Vec3f& d) {
+        m.add_triangle(a, b, c);
+        m.add_triangle(a, c, d);
+    };
+    for (std::size_t i = 0; i + 1 < top.size(); ++i) {
+        const auto [x0, y0] = top[i];
+        const auto [x1, y1] = top[i + 1];
+        quad(v(x0, 0, 0), v(x0, y0, 0), v(x1, y1, 0), v(x1, 0, 0));    // the front face
+        quad(v(x0, 0, w), v(x1, 0, w), v(x1, y1, w), v(x0, y0, w));    // the back face
+        quad(v(x0, y0, 0), v(x0, y0, w), v(x1, y1, w), v(x1, y1, 0));  // the teeth
+        quad(v(x0, 0, 0), v(x1, 0, 0), v(x1, 0, w), v(x0, 0, w));      // the bottom
+    }
+    const auto [xa, ya] = top.front();
+    const auto [xb, yb] = top.back();
+    quad(v(xa, 0, 0), v(xa, 0, w), v(xa, ya, w), v(xa, ya, 0)); // the two ends
+    quad(v(xb, 0, 0), v(xb, yb, 0), v(xb, yb, w), v(xb, 0, w));
+    return outward(std::move(m));
+}
+
+} // namespace
+
 TriangleMesh make_gear(const GearSpec& g) {
     if (const std::string why = check_gear(g); !why.empty())
         throw std::invalid_argument(why);
+    if (g.rack)
+        return make_rack(g);
     const Tooth t = tooth_of(g);
     // The angles of one tooth pitch, from the middle of a tooth: the tip,
     // each flank sampled by radius, the straight flank and the root.
@@ -212,6 +268,8 @@ std::string gear_json(const GearSpec& g) {
     j["herringbone"] = g.herringbone;
     j["backlash"] = g.backlash;
     j["left_hand"] = g.left_hand;
+    j["rack"] = g.rack;
+    j["rack_base"] = g.rack_base;
     return j.dump();
 }
 
@@ -230,6 +288,8 @@ GearSpec parse_gear(std::string_view text) {
         g.herringbone = j.value("herringbone", g.herringbone);
         g.backlash = j.value("backlash", g.backlash);
         g.left_hand = j.value("left_hand", g.left_hand);
+        g.rack = j.value("rack", g.rack);
+        g.rack_base = j.value("rack_base", g.rack_base);
         if (const std::string why = check_gear(g); !why.empty())
             throw std::runtime_error(why);
         return g;

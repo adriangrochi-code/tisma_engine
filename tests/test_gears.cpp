@@ -157,3 +157,30 @@ TEST_CASE("gears: the checks, the saved spec, and a gear that slices", "[gears]"
     INFO((check.problems.empty() ? std::string() : check.problems.front().message));
     CHECK(check.ok());
 }
+
+TEST_CASE("gears: a rack is a closed prism with straight teeth on the module's pitch", "[gears]") {
+    GearSpec r;
+    r.rack = true;
+    r.teeth = 10;
+    r.module = 2.0;
+    r.width = 6.0;
+    r.backlash = 0.0;
+    r.rack_base = 3.0;
+    CHECK(check_gear(r).empty());
+    const TriangleMesh m = make_gear(r);
+    CHECK(closed_and_oriented(m));
+    const BoundingBox box = m.bounding_box();
+    CHECK_THAT(box.max.x, WithinAbs(10 * pi * 2.0, 1e-4));            // ten pitches long
+    CHECK_THAT(box.max.y, WithinAbs(3.0 + 2.25 * 2.0, 1e-5));          // base, dedendum, addendum
+    CHECK_THAT(rack_pitch_height(r), WithinAbs(3.0 + 2.5, 1e-12));
+    // The area: the base and tooth strip up to the roots, and ten trapezoid
+    // teeth of mean width p/2 over the whole depth 2.25 m.
+    const double p = pi * 2.0, depth = 2.25 * 2.0;
+    const double top_half = (p / 4.0) - 2.0 * std::tan(20.0 * pi / 180.0);   // at the tip
+    const double root_half = (p / 4.0) + 2.5 * std::tan(20.0 * pi / 180.0);  // at the root
+    const double tooth = (top_half + root_half) * depth;                    // trapezoid area
+    CHECK_THAT(m.signed_volume(), WithinRel((10 * p * 3.0 + 10 * tooth) * 6.0, 1e-5));
+    // A gear of 20 teeth meshes with its axis m z / 2 over the pitch line.
+    CHECK_THAT(center_distance(r, 20), WithinAbs(20.0, 1e-12));
+    CHECK(parse_gear(gear_json(r)).rack);
+}

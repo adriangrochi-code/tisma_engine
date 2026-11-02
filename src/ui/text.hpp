@@ -17,7 +17,7 @@
     X(FastenerSpacer, "Espaciador", "Spacer") \
     X(GearsTitle, "Engranajes", "Gears") \
     X(GearsSubtitle, "Perfil de evolvente, con holgura para imprimir", "Involute profile, with backlash for printing") \
-    X(DesignGearsTip, "Engranajes rectos, helicoidales y en espina de pescado, con su pareja (también `engranaje` en la línea de comandos)", "Spur, helical and herringbone gears, with their mate (also `gear` on the command line)") \
+    X(DesignGearsTip, "Engranajes rectos, helicoidales y en espina de pescado, y cremalleras, con su pareja (también `engranaje` o `cremallera` en la línea de comandos)", "Spur, helical and herringbone gears, and racks, with their mate (also `gear` or `rack` on the command line)") \
     X(GearSpur, "Recto", "Spur") \
     X(GearHelical, "Helicoidal", "Helical") \
     X(GearHerringbone, "Espina de pescado", "Herringbone") \
@@ -40,6 +40,13 @@
     X(GearCircularPitch, "Paso circular", "Circular pitch") \
     X(GearSendPair, "Mandar con su pareja", "Send with its mate") \
     X(GearName, "Engranaje de %d dientes, m %s", "Gear, %d teeth, m %s") \
+    X(RackName, "Cremallera de %d dientes, m %s", "Rack, %d teeth, m %s") \
+    X(GearRack, "Cremallera", "Rack") \
+    X(RackBase, "Base (mm)", "Base (mm)") \
+    X(RackAxis, "Eje del engranaje: %s mm sobre la línea primitiva, %s mm sobre el pie de la cremallera", "The gear's axis: %s mm over the pitch line, %s mm over the rack's bottom") \
+    X(RackTravel, "Una vuelta del engranaje la mueve %s mm", "One turn of the gear moves it %s mm") \
+    X(RackLength, "Largo", "Length") \
+    X(RackPitchLine, "Línea primitiva sobre el pie", "Pitch line over the bottom") \
     X(FastenersBack, "‹ Diseño", "‹ Design") \
     X(DesignFastenersTip, "Tornillos, tuercas, arandelas y varillas con rosca métrica, listos para imprimir (también `tornillo`, `tuerca`, `arandela` o `varilla` en la línea de comandos)", "Bolts, nuts, washers and rods with a metric thread, ready to print (also `bolt`, `nut`, `washer` or `rod` on the command line)") \
     X(UnitSwitchTip, "Cambiar entre milímetros y porcentaje (también se puede escribir la unidad con el número, como «0,3 mm»)", "Switch between millimetres and percent (you can also type the unit with the number, as \"0.3 mm\")") \

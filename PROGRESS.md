@@ -8619,6 +8619,9 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
   helicoidal de 30 dientes, 12 271 mm³ (el guion los verifica).
 - **No probado:** que dos engranajes impresos engranen bien con 0,15 mm de holgura; es un punto de partida.
 
+- **Cremallera** en Engranajes: dientes de flanco recto al ángulo de presión, cabeza m y pie 1,25 m sobre una base;
+  la pareja es un engranaje recto del mismo módulo con su eje a m z / 2 de la línea primitiva. Prueba `[gears]` (área
+  exacta de base y dientes, largo de diez pasos) y el guion `gears` (5 290 mm³ con 30 dientes, módulo 1,5).
 - **UI36 (probadores):** las capas de interfaz de abajo, el patrón y la separación de la interfaz pasan de Avanzado a
   Normal (Soportes › Interfaz, visibles con los soportes prendidos).
 - **UI33 (probadores):** «Volver al tutorial», con ese nombre en Más y arriba del panel de Ayuda; guion

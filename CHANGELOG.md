@@ -32,6 +32,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   presión, ángulo y mano de la hélice, y una holgura por diente para que los impresos giren sin trabarse. Muestra los
   diámetros primitivo, exterior y de fondo, el paso, y la distancia entre ejes y la relación con otro de los dientes
   que se elijan; «Mandar con su pareja» manda los dos (la pareja de un helicoidal, con la hélice al revés).
+  También **cremalleras** (`cremallera` en la línea de comandos): dientes de flanco recto del mismo módulo sobre una
+  base, con la altura del eje del engranaje que la mueve y cuánto avanza por vuelta.
 - **Botón de unidad en los ajustes de mm o %** (reporte UI32 de los probadores): al lado del valor, un botón «mm» o
   «%» cambia la unidad y convierte el número (la separación XY del soporte, el ancho de la primera capa, la costura y
   los demás que aceptan las dos).

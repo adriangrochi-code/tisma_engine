@@ -11087,8 +11087,8 @@ void App::fasteners_panel() {
 }
 
 std::string App::gear_name(const cad::GearSpec& g) const {
-    std::string name = format(tr(T::GearName), g.teeth, number(g.module, 2).c_str());
-    if (g.helix_angle > 0.0)
+    std::string name = format(tr(g.rack ? T::RackName : T::GearName), g.teeth, number(g.module, 2).c_str());
+    if (!g.rack && g.helix_angle > 0.0)
         name += " " + std::string(tr(g.herringbone ? T::GearHerringbone : T::GearHelical));
     return name;
 }
@@ -11124,6 +11124,12 @@ void App::send_gear_to_plate(bool with_mate) {
         cad::GearSpec mate = spec;
         mate.teeth = gear_mate_teeth_;
         mate.left_hand = !spec.left_hand;
+        if (spec.rack) { // a rack's mate: a spur gear of the same module
+            mate.rack = false;
+            mate.helix_angle = 0.0;
+            mate.herringbone = false;
+            mate.bore = 5.0;
+        }
         const double rf = mate.module * mate.teeth / 2.0 - 1.25 * mate.module;
         mate.bore = std::min(mate.bore, std::max(0.0, 2.0 * (rf - std::max(1.0, mate.module))));
         if (cad::check_gear(mate).empty())
@@ -11177,14 +11183,15 @@ void App::gears_panel() {
     // The kind: spur, helical, herringbone.
     section(T::FastenersSecPart);
     {
-        const float width = (ImGui::GetContentRegionAvail().x - 2.0f * ImGui::GetStyle().ItemSpacing.x) / 3.0f;
-        const int kind = gear_.helix_angle <= 0.0 ? 0 : gear_.herringbone ? 2 : 1;
+        const float width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+        const int kind = gear_.rack ? 3 : gear_.helix_angle <= 0.0 ? 0 : gear_.herringbone ? 2 : 1;
         const struct {
             T label;
             const char* id;
-        } kinds[] = {{T::GearSpur, "gears_kind_spur"}, {T::GearHelical, "gears_kind_helical"}, {T::GearHerringbone, "gears_kind_herringbone"}};
-        for (int k = 0; k < 3; ++k) {
-            if (k > 0)
+        } kinds[] = {{T::GearSpur, "gears_kind_spur"}, {T::GearHelical, "gears_kind_helical"},
+                     {T::GearHerringbone, "gears_kind_herringbone"}, {T::GearRack, "gears_kind_rack"}};
+        for (int k = 0; k < 4; ++k) {
+            if (k % 2 != 0)
                 ImGui::SameLine();
             const bool on = kind == k;
             if (on) {
@@ -11193,7 +11200,8 @@ void App::gears_panel() {
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
             }
             if (ImGui::Button(tr(kinds[k].label), ImVec2(width, 0)) && !on) {
-                gear_.helix_angle = k == 0 ? 0.0 : gear_.helix_angle > 0.0 ? gear_.helix_angle : 20.0;
+                gear_.rack = k == 3;
+                gear_.helix_angle = k == 0 || k == 3 ? 0.0 : gear_.helix_angle > 0.0 ? gear_.helix_angle : 20.0;
                 gear_.herringbone = k == 2;
                 changed = true;
             }
@@ -11223,7 +11231,10 @@ void App::gears_panel() {
     }
     field("gears.module", T::GearModule, &gear_.module, "%.2f", 0.25);
     field("gears.width", T::GearWidth, &gear_.width, "%.1f", 1.0);
-    field("gears.bore", T::GearBore, &gear_.bore, "%.2f", 0.1);
+    if (gear_.rack)
+        field("gears.base", T::RackBase, &gear_.rack_base, "%.1f", 0.5);
+    else
+        field("gears.bore", T::GearBore, &gear_.bore, "%.2f", 0.1);
     field("gears.pressure", T::GearPressureAngle, &gear_.pressure_angle, "%.1f", 0.5);
     if (gear_.helix_angle > 0.0) {
         field("gears.helix", T::GearHelixAngle, &gear_.helix_angle, "%.1f", 1.0);
@@ -11250,7 +11261,11 @@ void App::gears_panel() {
         g_field_rects["gears.mate"] = ImVec4(at.x, at.y, at.x + width - 2.0f * (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x),
                                              at.y + ImGui::GetFrameHeight());
         gear_mate_teeth_ = int(std::lround(std::clamp(mate, 6.0, 400.0)));
-        if (gear_error_.empty()) {
+        if (gear_error_.empty() && gear_.rack) {
+            const double axis = cad::center_distance(gear_, gear_mate_teeth_);
+            loc::Text(tr(T::RackAxis), number(axis, 3).c_str(), number(cad::rack_pitch_height(gear_) + axis, 3).c_str());
+            loc::TextDisabled(tr(T::RackTravel), number(cad::gear_dims(gear_).circular_pitch * gear_mate_teeth_, 3).c_str());
+        } else if (gear_error_.empty()) {
             loc::Text(tr(T::GearCenterDistance), number(cad::center_distance(gear_, gear_mate_teeth_), 3).c_str());
             const double ratio = double(gear_mate_teeth_) / gear_.teeth;
             loc::TextDisabled(tr(T::GearRatio), number(ratio, 3).c_str());
@@ -11272,9 +11287,14 @@ void App::gears_panel() {
             ImGui::TableNextColumn();
             ImGui::TextUnformatted(value.c_str());
         };
-        line(tr(T::GearPitchDiameter), number(d.pitch_diameter, 3) + " mm");
-        line(tr(T::GearOutsideDiameter), number(d.outside_diameter, 3) + " mm");
-        line(tr(T::GearRootDiameter), number(d.root_diameter, 3) + " mm");
+        if (gear_.rack) {
+            line(tr(T::RackLength), number(d.circular_pitch * gear_.teeth, 3) + " mm");
+            line(tr(T::RackPitchLine), number(cad::rack_pitch_height(gear_), 3) + " mm");
+        } else {
+            line(tr(T::GearPitchDiameter), number(d.pitch_diameter, 3) + " mm");
+            line(tr(T::GearOutsideDiameter), number(d.outside_diameter, 3) + " mm");
+            line(tr(T::GearRootDiameter), number(d.root_diameter, 3) + " mm");
+        }
         line(tr(T::GearCircularPitch), number(d.circular_pitch, 3) + " mm");
         line(tr(T::DesignVolume), format("%.1f mm³", gear_mesh_.signed_volume()));
         line(tr(T::DesignBox), format("%.1f × %.1f × %.1f mm", double(gear_box_.max.x - gear_box_.min.x),
@@ -11528,6 +11548,12 @@ void App::run_command(std::string text) {
             return;
         }
     if (word == "engranaje" || word == "gear" || word == "engranajes" || word == "gears") {
+        open_page(DesignPage::Gears);
+        return;
+    }
+    if (word == "cremallera" || word == "rack") {
+        if (!gear_.rack)
+            gear_.rack = true, gear_.helix_angle = 0.0, gear_dirty_ = true;
         open_page(DesignPage::Gears);
         return;
     }

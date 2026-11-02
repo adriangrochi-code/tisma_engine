@@ -269,8 +269,10 @@ separador roscado (hexagonal, roscado de punta a punta) y espaciador (un tubo pa
 
 ### Engranajes
 
-Otra página del panel de Diseño (botón **Engranajes** de Nuevo, o `engranaje` en la línea de comandos; **‹ Diseño**
-vuelve). **Pieza**: recto, helicoidal o espina de pescado. **Medida**: dientes, módulo, ancho, agujero, ángulo de
+Otra página del panel de Diseño (botón **Engranajes** de Nuevo, o `engranaje` o `cremallera` en la línea de comandos;
+**‹ Diseño** vuelve). **Pieza**: recto, helicoidal, espina de pescado o cremallera (en la cremallera, la base en vez
+del agujero, y en Pareja la altura del eje del engranaje sobre la línea primitiva y sobre el pie, y lo que avanza por
+vuelta). **Medida**: dientes, módulo, ancho, agujero, ángulo de
 presión (20° de fábrica), ángulo de hélice y «Hélice a la izquierda» en los helicoidales, y la **holgura** (0,15 mm
 de fábrica, lo que se le quita a cada diente sobre el círculo primitivo). **Pareja**: los dientes del otro, con la
 distancia entre ejes y la relación. **Medidas**: diámetros primitivo, exterior y de fondo, paso circular, volumen y
