@@ -45,6 +45,21 @@ adentro (su núcleo B-rep es la biblioteca `truck`; la importación de FreeCAD y
 
 Los dos valores de tolerancia los elige la ficha (la calidad de STEP que ya usa la placa, `step_reader.md`).
 
+Verificado en la fuente de SolidCraft v0.30.0 (02-11-2026, comandos y sus contratos de parámetros; el programa no se
+ejecutó aquí):
+- su exportación a 3MF, STL y OBJ toma solo `quality` = `standard`, `fine` o `finest`, una tolerancia de cuerda de
+  2e-4, 5e-5 o 1e-5 del tamaño de cada cuerpo; no toma una tolerancia angular. En el primer paso (regla 1) el motor
+  elige la calidad más gruesa que cumple `cad.chord_tolerance` y deja `cad.angle_tolerance` para cuando enlace las
+  bibliotecas; la ficha de ajustes lo dice así;
+- las primitivas que trae son caja (`length`, `width`, `height`, esquina o centro), cilindro (radio o diámetro, altura,
+  base, eje), esfera (radio o diámetro, centro), cono (radio o diámetro, altura, radio de arriba, base, eje) y toro
+  (radio mayor y menor, centro); todas con `operation` = `new`, `join`, `cut`, `intersect` o `auto`, `targets`,
+  `name` y `body_name`. No hay tubo: su «pipe» sigue el recorrido de un boceto. El tubo de la regla 2 se hace como un
+  cilindro menos otro cilindro (`cut` sobre el primero);
+- la línea de comandos trae `run <guion.json> [--out ARCHIVO]... [--save DISEÑO.sc] [--param-check off|warn|strict]`
+  (`strict` corta la corrida si un parámetro no cumple su contrato: útil para las pruebas CD) y `eval` para medir un
+  diseño como JSON sin exportarlo (cuerpos, volumen, caja envolvente), que puede alimentar la sección Medidas.
+
 ## Reglas
 
 ### Cómo se integra
@@ -58,6 +73,11 @@ Los dos valores de tolerancia los elige la ficha (la calidad de STEP que ya usa 
      recibe la pieza (3MF para verla y mandarla a la placa, STEP para guardarla) y la dibuja en su propia vista. Al
      arrancar, el programa pregunta `commands` y apaga, con «Próximamente», los comandos que esa versión no tiene.
      La persona no instala nada aparte y nunca ve otra ventana.
+     Tamaño medido por el motor (02-11-2026, SolidCraft v0.30.0 para Windows x64): `solidcraft-cli.exe` pesa
+     110 MB suelto y 43 MB dentro del zip, casi lo mismo que la aplicación completa (172 MB) porque lleva el mismo
+     núcleo; el zip del programa pasa de 4,8 MB a unos 48 MB. **Pendiente del dueño:** traerlo adentro del zip (lo
+     que hace el flujo de publicación hoy, con su suma SHA-256 fija y sus licencias al lado) o descargarlo la primera
+     vez que se abre Diseño, con aviso del tamaño.
    - **Después:** las bibliotecas de SolidCraft enlazadas al motor por una crate propia en Rust que exporta una
      interfaz en C (SolidCraft no la trae y no permite código `unsafe`, así que la capa la escribe el motor), para
      que el boceto se resuelva en vivo al arrastrar sin llamar a otro proceso.
