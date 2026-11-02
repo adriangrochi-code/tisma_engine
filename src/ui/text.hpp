@@ -951,7 +951,45 @@
     X(CommandBadNumber, "Hace falta un número mayor que 0", "A number above 0 is needed") \
     X(CommandAdded, "%s agregado", "%s added") \
     X(CommandCancelled, "Cancelado", "Cancelled") \
-    X(ToolSketchTip, "Boceto: abre Diseño para dibujar (próximamente)", "Sketch: opens Design to draw (coming soon)") \
+    X(ToolSketchTip, "Boceto: abre Diseño y empieza un boceto", "Sketch: opens Design and starts a sketch") \
+    X(SketchPlane, "Plano del boceto", "Sketch plane") \
+    X(SketchPlaneXY, "XY (planta)", "XY (top)") \
+    X(SketchPlaneXZ, "XZ (frente)", "XZ (front)") \
+    X(SketchPlaneYZ, "YZ (lado)", "YZ (side)") \
+    X(SketchToolLine, "Línea (L)", "Line (L)") \
+    X(SketchToolRect, "Rectángulo (REC)", "Rectangle (REC)") \
+    X(SketchToolCircle, "Círculo (C)", "Circle (C)") \
+    X(SketchToolArc, "Arco (A)", "Arc (A)") \
+    X(SketchExtrude, "Extruir (E)", "Extrude (E)") \
+    X(SketchRevolve, "Revolucionar (REV)", "Revolve (REV)") \
+    X(SketchFinish, "Terminar boceto", "Finish sketch") \
+    X(SketchSnaps, "Referencias (F3)", "Snaps (F3)") \
+    X(SketchOrtho, "Ortogonal (F8)", "Ortho (F8)") \
+    X(SketchGrid, "Cuadrícula (F9)", "Grid (F9)") \
+    X(SketchPolar, "Polar (F10)", "Polar (F10)") \
+    X(SketchLength, "Largo", "Length") \
+    X(SketchAngle, "Ángulo", "Angle") \
+    X(SketchDistance, "Distancia", "Distance") \
+    X(SketchAxis, "Eje (x/y)", "Axis (x/y)") \
+    X(SketchHint, "Hacé clic en la vista o escribí un punto: x,y · @dx,dy · @largo<ángulo", "Click in the view or type a point: x,y · @dx,dy · @length<angle") \
+    X(SketchStarted, "Boceto en %s. Herramientas: L, REC, C, A; E extruye, REV revoluciona, Esc sale", "Sketch on %s. Tools: L, REC, C, A; E extrudes, REV revolves, Esc leaves") \
+    X(SketchClosed, "Contorno cerrado", "Outline closed") \
+    X(SketchNeedsThree, "Hacen falta tres puntos para cerrar", "Three points are needed to close") \
+    X(SketchNoRegion, "El boceto no tiene un contorno cerrado", "The sketch has no closed outline") \
+    X(EditSketch, "Editar boceto", "Edit sketch") \
+    X(OpExtrude, "Extruir", "Extrude") \
+    X(OpRevolve, "Revolucionar", "Revolve") \
+    X(SketchLeft, "Boceto guardado; se construye la pieza", "Sketch kept; the part is being built") \
+    X(SketchToolLeft, "Herramienta cerrada", "Tool closed") \
+    X(SnapEndpoint, "Extremo", "Endpoint") \
+    X(SnapMidpoint, "Punto medio", "Midpoint") \
+    X(SnapCenter, "Centro", "Centre") \
+    X(SnapQuadrant, "Cuadrante", "Quadrant") \
+    X(SnapIntersection, "Intersección", "Intersection") \
+    X(SnapPerpendicular, "Perpendicular", "Perpendicular") \
+    X(SnapTangent, "Tangente", "Tangent") \
+    X(SnapNearest, "Más cercano", "Nearest") \
+    X(SnapGrid, "Cuadrícula", "Grid") \
     X(ToolPrimitiveTip, "Primitiva: abre Diseño con una caja, un cilindro, una esfera…", "Primitive: opens Design with a box, a cylinder, a sphere…") \
     X(SubFuzzy, "Piel difusa", "Fuzzy skin") \
     X(SubGcodeOut, "Salida G-code", "G-code output") \

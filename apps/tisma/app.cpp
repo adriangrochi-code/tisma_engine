@@ -826,6 +826,7 @@ private:
     int design_target_ = 0;      // the plate object being edited (its design_id); 0: a new design
     int next_design_id_ = 1;
     bool design_pick_primitive_ = false; // the Primitiva tool from Prepare: the chooser opens
+    bool design_pick_sketch_ = false;    // the Boceto tool from Prepare: the plane is asked
     // The command line (rule 12): the text, the tool asking for its sizes.
     std::string command_text_;
     std::string command_message_;
@@ -840,6 +841,53 @@ private:
     bool command_clear_ = false;  // the field's text taken: emptied in its callback
     bool design_edited_ = false;  // a measure changed in Historial, not built yet
     std::string design_scroll_to_; // the Historial scrolled to this feature ("3") or field ("design.3.1") once
+    // A sketch being drawn (cad_design.md, stage D2): which feature, the
+    // tool and its points so far, the cursor on the plane after the snaps
+    // and the tracking, and the toggles F3, F8, F9, F10.
+    struct SketchEdit {
+        std::size_t feature = 0;
+        enum class Tool { None, Line, Rectangle, Circle, Arc } tool = Tool::None;
+        std::vector<cad::Pt> points;
+        std::optional<cad::Pt> last; // the last point placed, for @ coordinates
+        std::optional<cad::Pt> raw;  // the mouse on the plane
+        std::optional<cad::Pt> cursor;
+        cad::Snap snap;
+        bool snaps = true, ortho = false, grid = false, polar = false;
+        double polar_step = 45.0;
+        // What each point of the tool snapped to, and the segments typed as lengths.
+        struct PointSnap {
+            std::size_t index;
+            cad::Snap snap;
+        };
+        std::vector<PointSnap> point_snaps;
+        std::vector<std::pair<std::size_t, double>> typed_lengths;
+        // The input next to the cursor (rule 14).
+        std::string length_text, angle_text;
+        bool focus_length = false, focus_angle = false;
+    };
+    std::optional<SketchEdit> sketch_edit_;
+    bool sketch_prev_ortho_ = false;
+    // E or REV typed: the distance, or the axis and the angle, asked for.
+    struct OperationPrompt {
+        std::size_t feature = 0;
+        int step = 0;
+    };
+    std::optional<OperationPrompt> operation_prompt_;
+    int esc_frame_ = -1; // the frame the command line took an Esc in
+    void start_sketch(cad::SketchPlane plane);
+    void edit_sketch(std::size_t feature);
+    void finish_sketch();
+    void sketch_tool(SketchEdit::Tool tool);
+    void sketch_end_tool(bool close);
+    void sketch_place(const cad::Pt& p, const cad::Snap* snap, std::optional<double> typed_length);
+    bool sketch_command(const std::string& word, const std::string& text);
+    std::optional<cad::Pt> sketch_plane_point() const;
+    void sketch_update_cursor();
+    void sketch_resolve_cursor();
+    void sketch_overlay();
+    void sketch_strip();
+    void sketch_cursor_input();
+    cad::Sketch* editing_sketch();
 
     // The preview's controls.
     int top_layer_ = 0; // 0-based
@@ -7593,6 +7641,21 @@ void App::viewport() {
             return std::nullopt;
         return e + d * t;
     };
+    // A sketch being drawn (cad_design.md, stage D2): the cursor on its plane
+    // and a click, not a drag, places a point.
+    if (tab_ == Tab::Design && sketch_edit_) {
+        if (ImGui::IsItemHovered()) {
+            sketch_update_cursor();
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] < 9.0f &&
+                sketch_edit_->cursor) {
+                const cad::Snap snap = sketch_edit_->snap;
+                sketch_place(*sketch_edit_->cursor, &snap, std::nullopt);
+            }
+        } else {
+            sketch_edit_->raw.reset();
+            sketch_edit_->cursor.reset();
+        }
+    }
     // The Paint tool: the brush follows the face under the mouse, and a
     // stroke paints the model it started on.
     const bool painting = editing && tool_ == PlateTool::Paint;
@@ -10032,6 +10095,8 @@ const char* primitive_label(cad::Primitive kind) {
     return "";
 }
 
+const char* plane_label(cad::SketchPlane plane); // below, with the sketch mode
+
 const char* primitive_id(cad::Primitive kind) {
     switch (kind) {
     case cad::Primitive::Box: return "box";
@@ -10107,7 +10172,7 @@ void App::start_solidcraft_probe() {
 void App::open_design(bool sketch) {
     set_tab(Tab::Design);
     if (sketch)
-        command_message_ = format(tr(T::CommandSoon), tr(T::DesignSketch));
+        design_pick_sketch_ = true;
     else
         design_pick_primitive_ = true;
     tip("design");
@@ -10210,6 +10275,8 @@ void App::edit_in_design(std::size_t object) {
         notify(e.what(), true);
         return;
     }
+    sketch_edit_.reset();
+    operation_prompt_.reset();
     design_target_ = o.design_id;
     design_file_ = o.design_file;
     design_mesh_ = o.mesh; // shown as it is until the tool builds it again
@@ -10260,12 +10327,29 @@ void App::design_panel() {
 
     // Nuevo: a sketch (stage D2), the primitives, a STEP file (stage D5).
     section(T::DesignSecNew);
-    ImGui::BeginDisabled(true);
-    ImGui::Button(tr(T::DesignSketch));
-    ImGui::SameLine();
-    loc::TextDisabled("%s", tr(T::ComingSoon));
+    const bool can_sketch = ready && solidcraft_.has("sketch.create") && solidcraft_.has("solid.extrude");
+    ImGui::BeginDisabled(!can_sketch);
+    const bool sketch_clicked = ImGui::Button(tr(T::DesignSketch));
     ImGui::EndDisabled();
     rect_of("design_sketch");
+    if (sketch_clicked || design_pick_sketch_) {
+        ImGui::OpenPopup("##sketch_plane");
+        design_pick_sketch_ = false;
+    }
+    if (ImGui::BeginPopup("##sketch_plane")) {
+        loc::TextDisabled("%s", tr(T::SketchPlane));
+        const struct {
+            const char* id;
+            cad::SketchPlane plane;
+        } planes[] = {{"design_plane_xy", cad::SketchPlane::XY}, {"design_plane_xz", cad::SketchPlane::XZ}, {"design_plane_yz", cad::SketchPlane::YZ}};
+        for (const auto& pl : planes) {
+            const bool chosen = ImGui::Selectable(plane_label(pl.plane), false, can_sketch ? 0 : ImGuiSelectableFlags_Disabled);
+            rect_of(pl.id);
+            if (chosen)
+                start_sketch(pl.plane);
+        }
+        ImGui::EndPopup();
+    }
     loc::TextDisabled("%s", tr(T::DesignPrimitive));
     if (design_pick_primitive_) {
         ImGui::OpenPopup("##pick_primitive");
@@ -10305,8 +10389,26 @@ void App::design_panel() {
     ImGui::EndDisabled();
     rect_of("design_open_step");
 
+    // Boceto: the tools and the toggles while a sketch is being drawn.
+    section(T::DesignSecSketch);
+    if (sketch_edit_ && editing_sketch()) {
+        SketchEdit& e = *sketch_edit_;
+        loc::TextDisabled("%s", plane_label(editing_sketch()->plane));
+        ImGui::Checkbox(tr(T::SketchSnaps), &e.snaps);
+        ImGui::SameLine();
+        ImGui::Checkbox(tr(T::SketchOrtho), &e.ortho);
+        ImGui::Checkbox(tr(T::SketchGrid), &e.grid);
+        ImGui::SameLine();
+        ImGui::Checkbox(tr(T::SketchPolar), &e.polar);
+        loc::TextDisabled("%s", tr(T::SketchHint));
+        if (ImGui::Button(tr(T::SketchFinish)))
+            finish_sketch();
+        rect_of("design_sketch_finish");
+    } else {
+        loc::TextDisabled("%s", tr(T::DesignSketch));
+    }
     // The stages to come, greyed out (rule 3), one line each.
-    for (const T title : {T::DesignSecSketch, T::DesignSecOperations, T::DesignSecParameters}) {
+    for (const T title : {T::DesignSecOperations, T::DesignSecParameters}) {
         ImGui::Spacing();
         loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
         ImGui::SameLine();
@@ -10338,7 +10440,7 @@ void App::design_panel() {
         ImGui::SameLine();
         ImGui::TextUnformatted(f.name.c_str());
         ImGui::SameLine();
-        loc::TextDisabled("(%s)", primitive_label(f.kind));
+        loc::TextDisabled("(%s)", f.type == cad::Feature::Type::Sketch ? tr(T::DesignSketch) : primitive_label(f.kind));
         ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 24.0f * scale_);
         if (ImGui::SmallButton("×"))
             removed = i;
@@ -10346,6 +10448,43 @@ void App::design_panel() {
             loc::SetTooltip("%s", tr(T::DesignDeleteFeature));
         rect_of(("design_delete_" + std::to_string(i + 1)).c_str());
         ImGui::Indent();
+        if (f.type == cad::Feature::Type::Sketch) {
+            // Its operation and that operation's measures (rule 7), and the way back in.
+            const bool extrude = f.operation.kind == cad::SketchOperation::Kind::Extrude;
+            ImGui::SetNextItemWidth(130.0f * scale_);
+            if (ImGui::BeginCombo("##op", tr(extrude ? T::OpExtrude : T::OpRevolve))) {
+                if (ImGui::Selectable(tr(T::OpExtrude), extrude))
+                    f.operation.kind = cad::SketchOperation::Kind::Extrude, changed = true;
+                if (ImGui::Selectable(tr(T::OpRevolve), !extrude))
+                    f.operation.kind = cad::SketchOperation::Kind::Revolve, changed = true;
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            const bool edit = ImGui::SmallButton(tr(T::EditSketch));
+            rect_of(("design_edit_sketch_" + std::to_string(i + 1)).c_str());
+            if (edit)
+                edit_sketch(i);
+            if (extrude) {
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (loc::InputNumber(tr(T::SketchDistance), &f.operation.distance, "%.2f", 0.5))
+                    design_edited_ = true;
+            } else {
+                int axis = f.operation.axis == 'x' ? 0 : 1;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo("##axis", &axis, "x\0y\0"))
+                    f.operation.axis = axis == 0 ? 'x' : 'y', changed = true;
+                ImGui::SameLine();
+                ImGui::TextUnformatted(tr(T::SketchAxis));
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (loc::InputNumber(tr(T::SketchAngle), &f.operation.angle, "%.1f", 5.0))
+                    design_edited_ = true;
+            }
+            if (!f.sketch.has_region())
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(T::SketchNoRegion));
+            ImGui::Unindent();
+            ImGui::PopID();
+            continue;
+        }
         for (std::size_t k = 0; k < cad::size_count(f.kind); ++k) {
             ImGui::PushID(int(k));
             const float field = 110.0f * scale_;
@@ -10366,7 +10505,7 @@ void App::design_panel() {
                 g_field_rects[field_key] = rect;
             ImGui::PopID();
         }
-        if (!cad::sizes_ok(f.kind, f.sizes))
+        if (!f.buildable())
             loc::TextColored(rgb(0xE8A33D), "%s", tr(T::CommandBadNumber));
         ImGui::Unindent();
         ImGui::PopID();
@@ -10394,7 +10533,7 @@ void App::design_panel() {
     } else {
         int bodies = 0;
         for (const cad::Feature& f : design_.features)
-            bodies += !f.suppressed && cad::sizes_ok(f.kind, f.sizes) ? 1 : 0;
+            bodies += !f.suppressed && f.buildable() ? 1 : 0;
         if (ImGui::BeginTable("##measures", 2)) {
             const auto line = [](const char* name, const std::string& value) {
                 ImGui::TableNextRow();
@@ -10455,10 +10594,25 @@ void App::design_command_line() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoScrollbar);
     std::string prompt;
-    if (command_prompt_) {
+    if (operation_prompt_ && operation_prompt_->feature < design_.features.size()) {
+        const cad::SketchOperation& op = design_.features[operation_prompt_->feature].operation;
+        prompt = op.kind == cad::SketchOperation::Kind::Extrude
+                     ? format("%s · %s [%s]:", tr(T::OpExtrude), tr(T::SketchDistance), format("%g", op.distance).c_str())
+                 : operation_prompt_->step == 0
+                     ? format("%s · %s [%c]:", tr(T::OpRevolve), tr(T::SketchAxis), op.axis)
+                     : format("%s · %s [%s]:", tr(T::OpRevolve), tr(T::SketchAngle), format("%g", op.angle).c_str());
+    } else if (command_prompt_) {
         const CommandPrompt& c = *command_prompt_;
         prompt = format("%s · %s [%s]:", primitive_label(c.kind), tr(size_label(c.kind, c.step)),
                         format("%g", c.sizes[c.step]).c_str());
+    } else if (sketch_edit_) {
+        const SketchEdit::Tool tool = sketch_edit_->tool;
+        prompt = tool == SketchEdit::Tool::Line        ? tr(T::SketchToolLine)
+                 : tool == SketchEdit::Tool::Rectangle ? tr(T::SketchToolRect)
+                 : tool == SketchEdit::Tool::Circle    ? tr(T::SketchToolCircle)
+                 : tool == SketchEdit::Tool::Arc       ? tr(T::SketchToolArc)
+                                                       : tr(T::DesignSketch);
+        prompt += " >";
     } else {
         prompt = ">";
     }
@@ -10500,9 +10654,19 @@ void App::design_command_line() {
     };
     if (entered) {
         take(command_text_);
-    } else if (active && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
-        command_prompt_.reset();
-        command_message_ = tr(T::CommandCancelled);
+    } else if ((active || ImGui::IsItemDeactivated()) && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        // ImGui's field lets go on Esc; the sketch's two levels still count here, once.
+        esc_frame_ = ImGui::GetFrameCount();
+        if (command_prompt_ || operation_prompt_ || !command_text_.empty()) {
+            command_prompt_.reset();
+            operation_prompt_.reset();
+            command_message_ = tr(T::CommandCancelled);
+        } else if (sketch_edit_ && sketch_edit_->tool != SketchEdit::Tool::None) {
+            sketch_end_tool(false); // the first Esc leaves the tool (CD10)
+            command_message_ = tr(T::SketchToolLeft);
+        } else if (sketch_edit_) {
+            finish_sketch(); // the second leaves the sketch, keeping it
+        }
         command_text_.clear();
         command_clear_ = true;
         command_focus_ = true;
@@ -10534,6 +10698,52 @@ void App::run_command(std::string text) {
     while (!text.empty() && (text.front() == ' ' || text.front() == '\t'))
         text.erase(text.begin());
     command_message_.clear();
+    // E or REV asked for the distance, or the axis and the angle.
+    if (operation_prompt_) {
+        OperationPrompt& o = *operation_prompt_;
+        if (o.feature >= design_.features.size()) {
+            operation_prompt_.reset();
+            return;
+        }
+        cad::SketchOperation& op = design_.features[o.feature].operation;
+        if (op.kind == cad::SketchOperation::Kind::Extrude) {
+            if (!text.empty()) {
+                const std::optional<double> v = cad::parse_typed_value(text);
+                if (!v || !(*v > 0.0)) {
+                    command_message_ = tr(T::CommandBadNumber);
+                    return;
+                }
+                op.distance = *v;
+            }
+            operation_prompt_.reset();
+            finish_sketch();
+            return;
+        }
+        if (o.step == 0) {
+            const std::string axis = lower_ascii(text);
+            if (!axis.empty() && axis != "x" && axis != "y") {
+                command_message_ = tr(T::SketchAxis);
+                return;
+            }
+            if (!axis.empty())
+                op.axis = axis[0];
+            o.step = 1;
+            return;
+        }
+        if (!text.empty()) {
+            const std::optional<double> v = cad::parse_typed_value(text);
+            if (!v || !(*v > 0.0) || *v > 360.0) {
+                command_message_ = tr(T::CommandBadNumber);
+                return;
+            }
+            op.angle = *v;
+        }
+        operation_prompt_.reset();
+        finish_sketch();
+        return;
+    }
+    if (sketch_edit_ && sketch_command(lower_ascii(text), text))
+        return;
     if (command_prompt_) {
         CommandPrompt& c = *command_prompt_;
         if (!text.empty()) {
@@ -10579,6 +10789,679 @@ void App::run_command(std::string text) {
         return;
     }
     command_message_ = format(tr(T::CommandUnknown), text.c_str());
+}
+
+// The sketch mode of the Design tab (cad_design.md, stage D2): a sketch on a
+// plane drawn with the mouse and the command line, with snaps, ortho and
+// polar tracking, extruded or revolved by the bundled tool.
+namespace {
+
+// Sketch (x, y, z along the normal) to world, as SolidCraft lays the planes.
+Vec3 sketch_to_world(cad::SketchPlane plane, double x, double y, double z = 0.0) {
+    switch (plane) {
+    case cad::SketchPlane::XZ: return {float(x), float(z), float(-y)};
+    case cad::SketchPlane::YZ: return {float(z), float(x), float(y)};
+    default: return {float(x), float(y), float(z)};
+    }
+}
+
+const char* plane_label(cad::SketchPlane plane) {
+    return plane == cad::SketchPlane::XZ ? tr(T::SketchPlaneXZ) : plane == cad::SketchPlane::YZ ? tr(T::SketchPlaneYZ) : tr(T::SketchPlaneXY);
+}
+
+T snap_label(cad::SnapKind kind) {
+    switch (kind) {
+    case cad::SnapKind::Endpoint: return T::SnapEndpoint;
+    case cad::SnapKind::Midpoint: return T::SnapMidpoint;
+    case cad::SnapKind::Center: return T::SnapCenter;
+    case cad::SnapKind::Quadrant: return T::SnapQuadrant;
+    case cad::SnapKind::Intersection: return T::SnapIntersection;
+    case cad::SnapKind::Perpendicular: return T::SnapPerpendicular;
+    case cad::SnapKind::Tangent: return T::SnapTangent;
+    case cad::SnapKind::Nearest: return T::SnapNearest;
+    case cad::SnapKind::Grid: return T::SnapGrid;
+    default: return T::SnapEndpoint;
+    }
+}
+
+// The constraint a snapped point leaves (rule 15), for `point` of the entity
+// just made.
+std::optional<cad::Constraint> constraint_of(const cad::Snap& snap, const cad::EntityPoint& point) {
+    cad::Constraint c;
+    c.point = point;
+    c.target = snap.entity;
+    c.target_index = snap.index;
+    switch (snap.kind) {
+    case cad::SnapKind::Endpoint:
+    case cad::SnapKind::Center: c.kind = cad::Constraint::Kind::Coincident; break;
+    case cad::SnapKind::Midpoint: c.kind = cad::Constraint::Kind::Midpoint; break;
+    case cad::SnapKind::Quadrant:
+    case cad::SnapKind::Intersection:
+    case cad::SnapKind::Perpendicular:
+    case cad::SnapKind::Tangent:
+    case cad::SnapKind::Nearest:
+        c.kind = cad::Constraint::Kind::OnCurve;
+        if (snap.kind == cad::SnapKind::Quadrant)
+            c.target_index = 0;
+        break;
+    default: return std::nullopt;
+    }
+    return c;
+}
+
+} // namespace
+
+cad::Sketch* App::editing_sketch() {
+    if (!sketch_edit_ || sketch_edit_->feature >= design_.features.size() ||
+        design_.features[sketch_edit_->feature].type != cad::Feature::Type::Sketch)
+        return nullptr;
+    return &design_.features[sketch_edit_->feature].sketch;
+}
+
+void App::start_sketch(cad::SketchPlane plane) {
+    cad::Feature f;
+    f.type = cad::Feature::Type::Sketch;
+    f.name = design_.free_name(tr(T::DesignSketch));
+    f.sketch.plane = plane;
+    design_.features.push_back(std::move(f));
+    design_scroll_to_ = std::to_string(design_.features.size());
+    edit_sketch(design_.features.size() - 1);
+}
+
+void App::edit_sketch(std::size_t feature) {
+    if (feature >= design_.features.size() || design_.features[feature].type != cad::Feature::Type::Sketch)
+        return;
+    sketch_edit_ = SketchEdit{};
+    sketch_edit_->feature = feature;
+    const cad::SketchPlane plane = design_.features[feature].sketch.plane;
+    // Looking straight at the plane, without perspective (rule 4).
+    sketch_prev_ortho_ = camera_.orthographic;
+    camera_.orthographic = true;
+    camera_.set_view(plane == cad::SketchPlane::XZ ? StandardView::Front : plane == cad::SketchPlane::YZ ? StandardView::Right : StandardView::Top);
+    frame_all();
+    set_tab(Tab::Design);
+    command_message_ = format(tr(T::SketchStarted), plane_label(plane));
+    command_focus_ = true;
+}
+
+void App::finish_sketch() {
+    if (!sketch_edit_)
+        return;
+    sketch_end_tool(false);
+    sketch_edit_.reset();
+    camera_.orthographic = sketch_prev_ortho_;
+    camera_.set_view(StandardView::Iso);
+    frame_all();
+    command_message_ = tr(T::SketchLeft);
+    rebuild_design();
+}
+
+void App::sketch_tool(SketchEdit::Tool tool) {
+    if (!sketch_edit_)
+        return;
+    sketch_end_tool(false);
+    sketch_edit_->tool = tool;
+    command_message_ = tr(T::SketchHint);
+}
+
+// The tool's points become an entity: a chain of two points or more (closed
+// when asked), a rectangle, circle or arc only when complete. Their snaps
+// become constraints and their typed lengths dimensions.
+void App::sketch_end_tool(bool close) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    std::optional<cad::Entity> entity;
+    switch (e.tool) {
+    case SketchEdit::Tool::Line:
+        if (e.points.size() >= 2) {
+            entity = cad::Entity{cad::Entity::Kind::Chain, e.points, 0.0, close && e.points.size() >= 3};
+            // A chain closed back onto its first point by a click there.
+            if (!close && e.points.size() >= 4 && e.points.front() == e.points.back()) {
+                entity->points.pop_back();
+                entity->closed = true;
+            }
+        }
+        break;
+    case SketchEdit::Tool::Rectangle:
+        if (e.points.size() >= 2 && e.points[0].x != e.points[1].x && e.points[0].y != e.points[1].y)
+            entity = cad::Entity{cad::Entity::Kind::Rectangle, {e.points[0], e.points[1]}};
+        break;
+    case SketchEdit::Tool::Circle:
+        if (e.points.size() >= 2) {
+            const double r = std::hypot(e.points[1].x - e.points[0].x, e.points[1].y - e.points[0].y);
+            if (r > 0.0)
+                entity = cad::Entity{cad::Entity::Kind::Circle, {e.points[0]}, r};
+        }
+        break;
+    case SketchEdit::Tool::Arc:
+        if (e.points.size() >= 3)
+            entity = cad::Entity{cad::Entity::Kind::Arc, {e.points[0], e.points[1], e.points[2]}};
+        break;
+    case SketchEdit::Tool::None: break;
+    }
+    if (entity) {
+        const std::size_t index = sketch->entities.size();
+        sketch->entities.push_back(*entity);
+        for (const SketchEdit::PointSnap& ps : e.point_snaps) {
+            if (ps.snap.entity >= index)
+                continue;
+            std::size_t point_index = ps.index;
+            if (entity->kind == cad::Entity::Kind::Rectangle) {
+                // The snapped corner, whichever of the four it became.
+                const cad::Pt at = e.points[std::min<std::size_t>(ps.index, 1)];
+                point_index = 0;
+                for (std::size_t k = 0; k < 4; ++k)
+                    if (cad::point_of(*entity, k) == at)
+                        point_index = k;
+            } else if (entity->kind == cad::Entity::Kind::Circle && ps.index != 0) {
+                continue; // the point on the circle sets its radius only
+            }
+            if (point_index >= (entity->kind == cad::Entity::Kind::Rectangle ? 4 : entity->points.size()))
+                continue;
+            if (const auto c = constraint_of(ps.snap, {index, point_index}))
+                sketch->constraints.push_back(*c);
+        }
+        if (entity->kind == cad::Entity::Kind::Chain)
+            for (const auto& [segment, length] : e.typed_lengths)
+                if (segment < cad::segments_of(*entity).size())
+                    sketch->dimensions.push_back({index, segment, length});
+        design_dirty_ = true;
+    }
+    e.tool = SketchEdit::Tool::None;
+    e.points.clear();
+    e.point_snaps.clear();
+    e.typed_lengths.clear();
+    e.length_text.clear();
+    e.angle_text.clear();
+}
+
+// A point placed by a click, a typed point or the cursor input.
+void App::sketch_place(const cad::Pt& p, const cad::Snap* snap, std::optional<double> typed_length) {
+    if (!sketch_edit_ || !editing_sketch())
+        return;
+    SketchEdit& e = *sketch_edit_;
+    if (e.tool == SketchEdit::Tool::None)
+        e.tool = SketchEdit::Tool::Line;
+    if (snap && snap->kind != cad::SnapKind::None && snap->kind != cad::SnapKind::Grid)
+        e.point_snaps.push_back({e.points.size(), *snap});
+    if (typed_length && e.tool == SketchEdit::Tool::Line && !e.points.empty())
+        e.typed_lengths.emplace_back(e.points.size() - 1, *typed_length);
+    e.points.push_back(p);
+    e.last = p;
+    e.length_text.clear();
+    e.angle_text.clear();
+    const bool done = (e.tool == SketchEdit::Tool::Rectangle && e.points.size() >= 2) ||
+                      (e.tool == SketchEdit::Tool::Circle && e.points.size() >= 2) ||
+                      (e.tool == SketchEdit::Tool::Arc && e.points.size() >= 3) ||
+                      (e.tool == SketchEdit::Tool::Line && e.points.size() >= 4 && e.points.front() == e.points.back());
+    if (done) {
+        const SketchEdit::Tool tool = e.tool;
+        sketch_end_tool(false);
+        if (tool != SketchEdit::Tool::Line)
+            command_message_ = tr(T::CommandAdded) ? format(tr(T::CommandAdded), tr(tool == SketchEdit::Tool::Rectangle ? T::SketchToolRect
+                                                                                        : tool == SketchEdit::Tool::Circle ? T::SketchToolCircle
+                                                                                                                             : T::SketchToolArc))
+                                                   : std::string();
+        else
+            command_message_ = tr(T::SketchClosed);
+    }
+}
+
+// The command line in a sketch (rule 12): the tools by their aliases, a
+// typed point for the tool, a number for a circle's radius or a segment's
+// length, E and REV to make the body, C to close the chain.
+bool App::sketch_command(const std::string& word, const std::string& text) {
+    if (!sketch_edit_ || !editing_sketch())
+        return false;
+    SketchEdit& e = *sketch_edit_;
+    const auto is = [&](std::initializer_list<const char*> names) {
+        for (const char* n : names)
+            if (word == n)
+                return true;
+        return false;
+    };
+    if (word.empty()) {
+        // Enter on an empty line ends the chain, or repeats the last tool.
+        if (e.tool == SketchEdit::Tool::Line && !e.points.empty()) {
+            sketch_end_tool(false);
+            command_message_ = tr(T::SketchToolLeft);
+            return true;
+        }
+        if (e.tool != SketchEdit::Tool::None)
+            return true;
+        if (last_command_.empty())
+            return true;
+        return sketch_command(last_command_, last_command_);
+    }
+    if (is({"l", "linea", "línea", "line"})) {
+        last_command_ = "l";
+        sketch_tool(SketchEdit::Tool::Line);
+        return true;
+    }
+    if (is({"rec", "rectangulo", "rectángulo", "rectangle"})) {
+        last_command_ = "rec";
+        sketch_tool(SketchEdit::Tool::Rectangle);
+        return true;
+    }
+    if (is({"c", "cerrar", "close"}) && e.tool == SketchEdit::Tool::Line) {
+        if (e.points.size() < 3) {
+            command_message_ = tr(T::SketchNeedsThree);
+            return true;
+        }
+        sketch_end_tool(true);
+        command_message_ = tr(T::SketchClosed);
+        return true;
+    }
+    if (is({"c", "circulo", "círculo", "circle"})) {
+        last_command_ = "c";
+        sketch_tool(SketchEdit::Tool::Circle);
+        return true;
+    }
+    if (is({"a", "arco", "arc"})) {
+        last_command_ = "a";
+        sketch_tool(SketchEdit::Tool::Arc);
+        return true;
+    }
+    if (is({"fin", "terminar", "finish", "done"})) {
+        finish_sketch();
+        return true;
+    }
+    if (is({"e", "extruir", "extrude", "rev", "revolucionar", "revolve"})) {
+        sketch_end_tool(false);
+        cad::Feature& f = design_.features[e.feature];
+        if (!f.sketch.has_region()) {
+            command_message_ = tr(T::SketchNoRegion);
+            return true;
+        }
+        f.operation.kind = is({"e", "extruir", "extrude"}) ? cad::SketchOperation::Kind::Extrude : cad::SketchOperation::Kind::Revolve;
+        command_prompt_.reset();
+        operation_prompt_ = OperationPrompt{e.feature, 0};
+        return true;
+    }
+    // A point, as the drafting programs take it.
+    if (const std::optional<cad::Pt> p = cad::parse_typed_point(text, e.last.value_or(cad::Pt{}))) {
+        std::optional<double> length;
+        if (!text.empty() && text.front() == '@' && e.last)
+            length = std::hypot(p->x - e.last->x, p->y - e.last->y);
+        sketch_place(*p, nullptr, length);
+        return true;
+    }
+    // A number: a circle's radius, or a segment's length along the cursor.
+    if (const std::optional<double> v = cad::parse_typed_value(text); v && *v > 0.0) {
+        if (e.tool == SketchEdit::Tool::Circle && e.points.size() == 1) {
+            sketch_place({e.points[0].x + *v, e.points[0].y}, nullptr, std::nullopt);
+            return true;
+        }
+        if (e.tool == SketchEdit::Tool::Line && e.last) {
+            const cad::Pt dir = e.cursor.value_or(cad::Pt{e.last->x + 1.0, e.last->y});
+            const double len = std::hypot(dir.x - e.last->x, dir.y - e.last->y);
+            const cad::Pt p = len > 1e-9 ? cad::Pt{e.last->x + (dir.x - e.last->x) / len * *v, e.last->y + (dir.y - e.last->y) / len * *v}
+                                         : cad::Pt{e.last->x + *v, e.last->y};
+            sketch_place(p, nullptr, *v);
+            return true;
+        }
+    }
+    return false;
+}
+
+std::optional<cad::Pt> App::sketch_plane_point() const {
+    if (!sketch_edit_ || sketch_edit_->feature >= design_.features.size())
+        return std::nullopt;
+    const cad::SketchPlane plane = design_.features[sketch_edit_->feature].sketch.plane;
+    const Vec3 d = mouse_ray(), eye = camera_.eye();
+    // The plane's normal and its axes in the world.
+    const Vec3 n = plane == cad::SketchPlane::XZ ? Vec3{0, 1, 0} : plane == cad::SketchPlane::YZ ? Vec3{1, 0, 0} : Vec3{0, 0, 1};
+    const float denominator = dot(d, n);
+    if (std::abs(denominator) < 1e-6f)
+        return std::nullopt;
+    const float s = -dot(eye, n) / denominator;
+    if (!(s > 0.0f))
+        return std::nullopt;
+    const Vec3 w = eye + d * s;
+    switch (plane) {
+    case cad::SketchPlane::XZ: return cad::Pt{double(w.x), double(-w.z)};
+    case cad::SketchPlane::YZ: return cad::Pt{double(w.y), double(w.z)};
+    default: return cad::Pt{double(w.x), double(w.y)};
+    }
+}
+
+void App::sketch_update_cursor() {
+    if (!sketch_edit_)
+        return;
+    sketch_edit_->raw = sketch_plane_point();
+    sketch_resolve_cursor();
+}
+
+void App::sketch_resolve_cursor() {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    e.cursor.reset();
+    e.snap = {};
+    if (!e.raw)
+        return;
+    // The snap radius: about 10 pixels, in the plane's millimetres.
+    const float pixels_per_mm = view_size_.y / std::max(2.0f * camera_.lens_distance() * std::tan(0.5f * camera_.lens_fov()), 1e-3f);
+    cad::SnapOptions options;
+    options.enabled = e.snaps;
+    options.radius = 10.0 / std::max(double(pixels_per_mm), 1e-3);
+    options.grid = e.grid;
+    options.grid_step = 1.0;
+    if (!e.points.empty() && (e.tool == SketchEdit::Tool::Line || e.tool == SketchEdit::Tool::Arc))
+        options.from = e.points.back();
+    e.snap = cad::snap_point(*sketch, *e.raw, options);
+    if (e.snap.kind != cad::SnapKind::None) {
+        e.cursor = e.snap.at;
+        return;
+    }
+    const std::optional<cad::Pt> from = e.tool == SketchEdit::Tool::Line && !e.points.empty() ? std::optional(e.points.back())
+                                        : e.tool == SketchEdit::Tool::Rectangle && !e.points.empty() ? std::optional(e.points[0])
+                                                                                                        : std::nullopt;
+    e.cursor = from ? cad::tracked_point(*from, *e.raw, e.ortho, e.polar ? e.polar_step : 0.0) : *e.raw;
+}
+
+// The sketch over the view: its axes, its entities, the tool's rubber band,
+// the snap's marker and the polar guides.
+void App::sketch_overlay() {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch || !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    SketchEdit& e = *sketch_edit_;
+    const cad::SketchPlane plane = sketch->plane;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](const cad::Pt& p, ImVec2& out) {
+        const Vec3 w = sketch_to_world(plane, p.x, p.y);
+        const float cx = vp[0] * w.x + vp[4] * w.y + vp[8] * w.z + vp[12];
+        const float cy = vp[1] * w.x + vp[5] * w.y + vp[9] * w.z + vp[13];
+        const float ww = vp[3] * w.x + vp[7] * w.y + vp[11] * w.z + vp[15];
+        if (!(ww > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / ww * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / ww * 0.5f) * view_size_.y);
+        return true;
+    };
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    const ImU32 ink = ImGui::GetColorU32(rgb(theme_.dark ? 0xF5F5F7 : 0x1A1A2E, 0.95f));
+    const ImU32 axis = ImGui::GetColorU32(rgb(theme_.accent, 0.55f));
+    const ImU32 ghost = ImGui::GetColorU32(rgb(theme_.accent_hover, 0.9f));
+    const ImU32 mark = ImGui::GetColorU32(rgb(0x3FBF7F, 1.0f));
+    const float thick = 2.0f * scale_;
+    const auto line = [&](const cad::Pt& a, const cad::Pt& b, ImU32 colour, float width) {
+        ImVec2 pa, pb;
+        if (project(a, pa) && project(b, pb))
+            dl->AddLine(pa, pb, colour, width);
+    };
+    const auto circle = [&](const cad::Pt& c, double r, ImU32 colour, float width, double from_deg = 0.0, double to_deg = 360.0) {
+        std::vector<ImVec2> pts;
+        const int n = 96;
+        for (int i = 0; i <= n; ++i) {
+            const double a = (from_deg + (to_deg - from_deg) * i / n) * std::numbers::pi / 180.0;
+            ImVec2 q;
+            if (project({c.x + r * std::cos(a), c.y + r * std::sin(a)}, q))
+                pts.push_back(q);
+        }
+        for (std::size_t i = 1; i < pts.size(); ++i)
+            dl->AddLine(pts[i - 1], pts[i], colour, width);
+    };
+    // The axes of the sketch.
+    line({-1000.0, 0.0}, {1000.0, 0.0}, axis, 1.0f * scale_);
+    line({0.0, -1000.0}, {0.0, 1000.0}, axis, 1.0f * scale_);
+    const auto draw_entity = [&](const cad::Entity& en, ImU32 colour) {
+        const float w = en.construction ? 1.0f * scale_ : thick;
+        for (const auto& [a, b] : cad::segments_of(en))
+            line(a, b, colour, w);
+        if (en.kind == cad::Entity::Kind::Circle && !en.points.empty())
+            circle(en.points[0], en.radius, colour, w);
+        if (en.kind == cad::Entity::Kind::Arc && en.points.size() >= 3) {
+            const cad::Pt& c = en.points[0];
+            const double r = std::hypot(en.points[1].x - c.x, en.points[1].y - c.y);
+            double a0 = std::atan2(en.points[1].y - c.y, en.points[1].x - c.x) * 180.0 / std::numbers::pi;
+            double a1 = std::atan2(en.points[2].y - c.y, en.points[2].x - c.x) * 180.0 / std::numbers::pi;
+            if (en.clockwise)
+                std::swap(a0, a1);
+            while (a1 <= a0)
+                a1 += 360.0;
+            circle(c, r, colour, w, a0, a1);
+        }
+    };
+    for (const cad::Entity& en : sketch->entities)
+        draw_entity(en, ink);
+    // The tool's rubber band to the cursor.
+    if (e.cursor) {
+        const cad::Pt c = *e.cursor;
+        switch (e.tool) {
+        case SketchEdit::Tool::Line:
+            for (std::size_t i = 0; i + 1 < e.points.size(); ++i)
+                line(e.points[i], e.points[i + 1], ghost, thick);
+            if (!e.points.empty())
+                line(e.points.back(), c, ghost, thick);
+            break;
+        case SketchEdit::Tool::Rectangle:
+            if (!e.points.empty()) {
+                cad::Entity r{cad::Entity::Kind::Rectangle, {e.points[0], c}};
+                draw_entity(r, ghost);
+            }
+            break;
+        case SketchEdit::Tool::Circle:
+            if (!e.points.empty())
+                circle(e.points[0], std::hypot(c.x - e.points[0].x, c.y - e.points[0].y), ghost, thick);
+            break;
+        case SketchEdit::Tool::Arc:
+            if (e.points.size() == 1)
+                line(e.points[0], c, ghost, 1.0f * scale_);
+            else if (e.points.size() == 2) {
+                cad::Entity a{cad::Entity::Kind::Arc, {e.points[0], e.points[1], c}};
+                draw_entity(a, ghost);
+            }
+            break;
+        case SketchEdit::Tool::None: break;
+        }
+        // The polar guide through the start, when tracking took the angle.
+        if (e.polar && !e.ortho && e.snap.kind == cad::SnapKind::None && !e.points.empty() &&
+            (e.tool == SketchEdit::Tool::Line || e.tool == SketchEdit::Tool::Rectangle) && e.raw && !(c == *e.raw)) {
+            const cad::Pt& from = e.tool == SketchEdit::Tool::Line ? e.points.back() : e.points[0];
+            const double len = std::hypot(c.x - from.x, c.y - from.y);
+            if (len > 1e-9) {
+                const cad::Pt dir{(c.x - from.x) / len, (c.y - from.y) / len};
+                line({from.x - dir.x * 1000.0, from.y - dir.y * 1000.0}, {from.x + dir.x * 1000.0, from.y + dir.y * 1000.0},
+                     ImGui::GetColorU32(rgb(theme_.accent, 0.35f)), 1.0f * scale_);
+            }
+        }
+        // The snap's marker (rule 15: one of its own for each kind).
+        ImVec2 m;
+        if (e.snap.kind != cad::SnapKind::None && project(c, m)) {
+            const float s = 6.0f * scale_;
+            switch (e.snap.kind) {
+            case cad::SnapKind::Endpoint: dl->AddRect(ImVec2(m.x - s, m.y - s), ImVec2(m.x + s, m.y + s), mark, 0.0f, thick); break;
+            case cad::SnapKind::Midpoint:
+                dl->AddTriangle(ImVec2(m.x, m.y - s), ImVec2(m.x - s, m.y + s), ImVec2(m.x + s, m.y + s), mark, thick);
+                break;
+            case cad::SnapKind::Center: dl->AddCircle(m, s, mark, 24, thick); break;
+            case cad::SnapKind::Quadrant:
+                dl->AddQuad(ImVec2(m.x, m.y - s), ImVec2(m.x + s, m.y), ImVec2(m.x, m.y + s), ImVec2(m.x - s, m.y), mark, thick);
+                break;
+            case cad::SnapKind::Intersection:
+                dl->AddLine(ImVec2(m.x - s, m.y - s), ImVec2(m.x + s, m.y + s), mark, thick);
+                dl->AddLine(ImVec2(m.x - s, m.y + s), ImVec2(m.x + s, m.y - s), mark, thick);
+                break;
+            case cad::SnapKind::Perpendicular:
+                dl->AddLine(ImVec2(m.x - s, m.y - s), ImVec2(m.x - s, m.y + s), mark, thick);
+                dl->AddLine(ImVec2(m.x - s, m.y + s), ImVec2(m.x + s, m.y + s), mark, thick);
+                break;
+            case cad::SnapKind::Tangent:
+                dl->AddCircle(m, s, mark, 24, thick);
+                dl->AddLine(ImVec2(m.x - s, m.y - s), ImVec2(m.x + s, m.y - s), mark, thick);
+                break;
+            case cad::SnapKind::Nearest:
+                dl->AddLine(ImVec2(m.x - s, m.y - s), ImVec2(m.x + s, m.y + s), mark, thick);
+                dl->AddLine(ImVec2(m.x - s, m.y - s), ImVec2(m.x + s, m.y - s), mark, thick);
+                dl->AddLine(ImVec2(m.x - s, m.y + s), ImVec2(m.x + s, m.y + s), mark, thick);
+                break;
+            case cad::SnapKind::Grid:
+                dl->AddLine(ImVec2(m.x - s, m.y), ImVec2(m.x + s, m.y), mark, thick);
+                dl->AddLine(ImVec2(m.x, m.y - s), ImVec2(m.x, m.y + s), mark, thick);
+                break;
+            default: break;
+            }
+            dl->AddText(ImVec2(m.x + s + 4.0f * scale_, m.y + s), mark, tr(snap_label(e.snap.kind)));
+        }
+    }
+    dl->PopClipRect();
+}
+
+// The strip of the sketch's tools above the view (rule 3).
+void App::sketch_strip() {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    const float h = 30.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + 52.0f * scale_), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.9f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f * scale_, 4.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##sketch_strip", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
+    const auto named = [](const char* name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    loc::TextColored(rgb(theme_.accent_hover), "%s", plane_label(sketch->plane));
+    ImGui::SameLine(0, 10.0f * scale_);
+    const struct {
+        const char* id;
+        T label;
+        SketchEdit::Tool tool;
+    } tools[] = {{"sketch_line", T::SketchToolLine, SketchEdit::Tool::Line},
+                 {"sketch_rect", T::SketchToolRect, SketchEdit::Tool::Rectangle},
+                 {"sketch_circle", T::SketchToolCircle, SketchEdit::Tool::Circle},
+                 {"sketch_arc", T::SketchToolArc, SketchEdit::Tool::Arc}};
+    for (const auto& tl : tools) {
+        if (button(tl.id, nullptr, tr(tl.label), false, e.tool == tl.tool, true, nullptr, h))
+            sketch_tool(tl.tool);
+        named(tl.id);
+        ImGui::SameLine();
+    }
+    ImGui::SameLine(0, 10.0f * scale_);
+    const struct {
+        const char* id;
+        T label;
+        bool* flag;
+    } toggles[] = {{"sketch_snaps", T::SketchSnaps, &e.snaps},
+                   {"sketch_ortho", T::SketchOrtho, &e.ortho},
+                   {"sketch_grid", T::SketchGrid, &e.grid},
+                   {"sketch_polar", T::SketchPolar, &e.polar}};
+    for (const auto& tg : toggles) {
+        if (button(tg.id, nullptr, tr(tg.label), false, *tg.flag, true, nullptr, h))
+            *tg.flag = !*tg.flag;
+        named(tg.id);
+        ImGui::SameLine();
+    }
+    ImGui::SameLine(0, 10.0f * scale_);
+    if (button("sketch_extrude", nullptr, tr(T::SketchExtrude), false, false, sketch->has_region(), nullptr, h))
+        sketch_command("e", "e");
+    named("sketch_extrude");
+    ImGui::SameLine();
+    if (button("sketch_revolve", nullptr, tr(T::SketchRevolve), false, false, sketch->has_region(), nullptr, h))
+        sketch_command("rev", "rev");
+    named("sketch_revolve");
+    ImGui::SameLine();
+    if (button("sketch_finish", nullptr, tr(T::SketchFinish), true, false, true, nullptr, h))
+        finish_sketch();
+    named("sketch_finish");
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+// The input next to the cursor (rule 14): the segment's length and angle,
+// typed; Tab passes from one to the other; Enter places the point.
+void App::sketch_cursor_input() {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    const bool waiting = (e.tool == SketchEdit::Tool::Line && !e.points.empty()) ||
+                         (e.tool == SketchEdit::Tool::Rectangle && !e.points.empty()) ||
+                         (e.tool == SketchEdit::Tool::Circle && !e.points.empty());
+    if (!waiting || !e.cursor)
+        return;
+    const cad::Pt& from = e.tool == SketchEdit::Tool::Line ? e.points.back() : e.points[0];
+    const double dx = e.cursor->x - from.x, dy = e.cursor->y - from.y;
+    const double length = std::hypot(dx, dy), angle = std::atan2(dy, dx) * 180.0 / std::numbers::pi;
+    const ImVec2 mouse = ImGui::GetIO().MousePos;
+    const bool over_view = mouse.x >= view_pos_.x && mouse.x <= view_pos_.x + view_size_.x && mouse.y >= view_pos_.y &&
+                           mouse.y <= view_pos_.y + view_size_.y;
+    static ImVec2 last_at;
+    if (over_view && !ImGui::IsAnyItemActive())
+        last_at = ImVec2(mouse.x + 18.0f * scale_, mouse.y + 18.0f * scale_);
+    // A digit typed with nothing active goes to the length field.
+    ImGuiIO& io = ImGui::GetIO();
+    if (!ImGui::IsAnyItemActive() && !e.focus_length && !e.focus_angle)
+        for (int i = 0; i < io.InputQueueCharacters.Size; ++i) {
+            const ImWchar c = io.InputQueueCharacters[i];
+            if ((c >= '0' && c <= '9') || c == '.' || c == ',' || c == '-') {
+                e.focus_length = true;
+                break;
+            }
+        }
+    ImGui::SetNextWindowPos(last_at);
+    ImGui::SetNextWindowBgAlpha(0.9f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 6.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f * scale_, 4.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##sketch_cursor", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing);
+    const float field = 64.0f * scale_;
+    bool commit = false;
+    ImGui::AlignTextToFramePadding();
+    loc::TextDisabled("%s", tr(e.tool == SketchEdit::Tool::Circle ? T::SizeDiameter : T::SketchLength));
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(field);
+    if (e.focus_length) {
+        ImGui::SetKeyboardFocusHere();
+        e.focus_length = false;
+    }
+    const std::string length_hint = format("%.2f", e.tool == SketchEdit::Tool::Circle ? 2.0 * length : length);
+    commit |= ImGui::InputTextWithHint("##length", length_hint.c_str(), &e.length_text, ImGuiInputTextFlags_EnterReturnsTrue);
+    g_menu_rects["sketch_length"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+    if (e.tool != SketchEdit::Tool::Circle) {
+        ImGui::SameLine();
+        loc::TextDisabled("%s", tr(T::SketchAngle));
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(field);
+        if (e.focus_angle) {
+            ImGui::SetKeyboardFocusHere();
+            e.focus_angle = false;
+        }
+        const std::string angle_hint = format("%.1f°", angle);
+        commit |= ImGui::InputTextWithHint("##angle", angle_hint.c_str(), &e.angle_text, ImGuiInputTextFlags_EnterReturnsTrue);
+        g_menu_rects["sketch_angle"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+    if (commit) {
+        const std::optional<double> typed_length = cad::parse_typed_value(e.length_text);
+        const std::optional<double> typed_angle = cad::parse_typed_value(e.angle_text);
+        if (e.tool == SketchEdit::Tool::Circle) {
+            const double d = typed_length.value_or(2.0 * length);
+            if (d > 0.0)
+                sketch_place({from.x + d / 2.0, from.y}, nullptr, std::nullopt);
+        } else {
+            const double len = typed_length.value_or(length), ang = typed_angle.value_or(angle) * std::numbers::pi / 180.0;
+            if (len > 0.0)
+                sketch_place({from.x + len * std::cos(ang), from.y + len * std::sin(ang)}, nullptr,
+                             typed_length ? typed_length : std::nullopt);
+        }
+        command_focus_ = true;
+    }
 }
 
 // The guided calibration: create (the part is built with ranges from the
@@ -11387,6 +12270,11 @@ void App::layout() {
         if (tab_ == Tab::Design) {
             design_panel();
             design_command_line();
+            if (sketch_edit_) {
+                sketch_strip();
+                sketch_cursor_input();
+                sketch_overlay();
+            }
         }
         if (tab_ == Tab::Calibration)
             calibration_panel();
@@ -11439,6 +12327,26 @@ void App::layout() {
         search_focus_ = true, printer_page_ = false; // the field is in the settings panel
     if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
         help_open_ = !help_open_;
+    // The sketch's toggles (cad_design.md, rules 15 and 16) and its two
+    // levels of Esc (rule 11, CD10), while no field has the keyboard.
+    if (tab_ == Tab::Design && sketch_edit_ && no_popup()) {
+        if (ImGui::Shortcut(ImGuiKey_F3, ImGuiInputFlags_RouteGlobal))
+            sketch_edit_->snaps = !sketch_edit_->snaps;
+        if (ImGui::Shortcut(ImGuiKey_F8, ImGuiInputFlags_RouteGlobal))
+            sketch_edit_->ortho = !sketch_edit_->ortho;
+        if (ImGui::Shortcut(ImGuiKey_F9, ImGuiInputFlags_RouteGlobal))
+            sketch_edit_->grid = !sketch_edit_->grid;
+        if (ImGui::Shortcut(ImGuiKey_F10, ImGuiInputFlags_RouteGlobal))
+            sketch_edit_->polar = !sketch_edit_->polar;
+        if (!ImGui::IsAnyItemActive() && esc_frame_ != ImGui::GetFrameCount() && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            if (sketch_edit_->tool != SketchEdit::Tool::None) {
+                sketch_end_tool(false);
+                command_message_ = tr(T::SketchToolLeft);
+            } else {
+                finish_sketch();
+            }
+        }
+    }
     // The view's keys (preview.md, rule 10) while no text field has the keyboard.
     const ImGuiIO& keys = ImGui::GetIO();
     if (plate_keys() && !keys.KeyCtrl && !keys.KeyAlt && !keys.KeySuper && !printer_page_ &&
@@ -12222,6 +13130,11 @@ void App::script_input() {
         return name == "enter" ? ImGuiKey_Enter : name == "escape" ? ImGuiKey_Escape : name == "tab" ? ImGuiKey_Tab
                : name == "backspace"                               ? ImGuiKey_Backspace
                : name == "delete"                                  ? ImGuiKey_Delete
+               : name == "space"                                   ? ImGuiKey_Space
+               : name == "f3"                                      ? ImGuiKey_F3
+               : name == "f8"                                      ? ImGuiKey_F8
+               : name == "f9"                                      ? ImGuiKey_F9
+               : name == "f10"                                     ? ImGuiKey_F10
                                                                    : ImGuiKey_None;
     };
     if (step.verb == "click") {
@@ -12491,6 +13404,71 @@ void App::script_input() {
         } else {
             return fail_step("unknown preference");
         }
+        next();
+    } else if (step.verb == "sketch-point") { // a click on the sketch's plane at x y (mm), through the snaps and the tracking
+        if (!sketch_edit_ || !editing_sketch())
+            return fail_step("no sketch is being drawn");
+        sketch_edit_->raw = cad::Pt{std::atof(step.key.c_str()), std::atof(step.value.c_str())};
+        sketch_resolve_cursor();
+        if (!sketch_edit_->cursor)
+            return fail_step("no point on the plane");
+        const cad::Snap snap = sketch_edit_->snap;
+        std::printf("ui-script: sketch-point %s %s: at %.3f %.3f (%s)\n", step.key.c_str(), step.value.c_str(),
+                    sketch_edit_->cursor->x, sketch_edit_->cursor->y, cad::snap_name(snap.kind));
+        sketch_place(*sketch_edit_->cursor, &snap, std::nullopt);
+        next();
+    } else if (step.verb == "expect-sketch-entities") { // the sketch being drawn (or the last sketch feature) has N entities
+        const cad::Sketch* s = editing_sketch();
+        if (!s)
+            for (const cad::Feature& feat : design_.features)
+                if (feat.type == cad::Feature::Type::Sketch)
+                    s = &feat.sketch;
+        if (!s)
+            return fail_step("no sketch");
+        const std::size_t want = std::size_t(std::atoll(step.key.c_str()));
+        std::printf("ui-script: expect-sketch-entities %zu: got %zu\n", want, s->entities.size());
+        if (s->entities.size() != want)
+            return fail_step("the sketch has " + std::to_string(s->entities.size()) + " entities");
+        next();
+    } else if (step.verb == "expect-sketch-constraints") { // the sketch has N constraints from its snaps
+        const cad::Sketch* s = editing_sketch();
+        if (!s)
+            for (const cad::Feature& feat : design_.features)
+                if (feat.type == cad::Feature::Type::Sketch)
+                    s = &feat.sketch;
+        if (!s)
+            return fail_step("no sketch");
+        const std::size_t want = std::size_t(std::atoll(step.key.c_str()));
+        std::printf("ui-script: expect-sketch-constraints %zu: got %zu\n", want, s->constraints.size());
+        if (s->constraints.size() != want)
+            return fail_step("the sketch has " + std::to_string(s->constraints.size()) + " constraints");
+        next();
+    } else if (step.verb == "expect-sketch-point") { // entity E (from 1), point I (from 0) at "x y" within 0.01; "closed" as I checks the chain is closed
+        const cad::Sketch* s = editing_sketch();
+        if (!s)
+            for (const cad::Feature& feat : design_.features)
+                if (feat.type == cad::Feature::Type::Sketch)
+                    s = &feat.sketch;
+        const std::size_t entity = std::size_t(std::atoll(step.key.c_str()));
+        if (!s || entity == 0 || entity > s->entities.size())
+            return fail_step("no such entity");
+        const cad::Entity& en = s->entities[entity - 1];
+        std::istringstream in(step.value);
+        std::string which;
+        in >> which;
+        if (which == "closed") {
+            std::printf("ui-script: expect-sketch-point %zu closed: %s\n", entity, en.closed ? "ok" : "open");
+            if (!en.closed)
+                return fail_step("the chain is open");
+            return next();
+        }
+        double x = 0.0, y = 0.0;
+        in >> x >> y;
+        const cad::Pt got = cad::point_of(en, std::size_t(std::atoll(which.c_str())));
+        const bool ok = std::abs(got.x - x) <= 0.01 && std::abs(got.y - y) <= 0.01;
+        std::printf("ui-script: expect-sketch-point %zu %s: %s%.3f %.3f\n", entity, step.value.c_str(), ok ? "ok, " : "got ", got.x, got.y);
+        if (!ok)
+            return fail_step("the point is at " + std::to_string(got.x) + ", " + std::to_string(got.y));
         next();
     } else if (step.verb == "expect-design") { // the design's bodies built: VALUE "none" or a volume in mm3 within 1 %
         if (design_job_.running() || !solidcraft_probed_ || design_dirty_)
