@@ -8554,3 +8554,27 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
   pieza nueva).
 - **Medido:** nada nuevo del laminado; el tamaño de `solidcraft-cli` (arriba).
 
+## 2026-11-02 (tarde): pestaña Diseño, etapa D2 (bocetos)
+
+- **Motor** (`src/cad/sketch.cpp`): el boceto sobre XY, XZ o YZ con cadenas de líneas, rectángulos, círculos y arcos;
+  los puntos tipeados como en los programas de dibujo técnico (`x,y`, `@dx,dy`, `@largo<ángulo`); las referencias a
+  objetos en su orden (extremo, punto medio, centro, cuadrante, intersección, perpendicular, tangente, más cercano,
+  cuadrícula); ortogonal y rastreo polar; y el guion de SolidCraft con sus ids (`l1`, `c1`, `a1`, `l3.start`…): las
+  referencias dejan `sketch.constraint.coincident` o `midpoint`, los largos tipeados `sketch.dimension`, y al final
+  `sketch.finish` y `solid.extrude` o `solid.revolve`. El sustituto extruye y revoluciona los contornos cerrados
+  (triangulación por recorte de orejas).
+- **Interfaz:** Boceto en Nuevo pide el plano y abre el modo boceto: la cámara mira el plano sin perspectiva, la tira
+  de herramientas sobre la vista (Línea, Rectángulo, Círculo, Arco, F3, F8, F9, F10, Extruir, Revolucionar, Terminar),
+  la línea de comandos con los alias (`L`, `REC`, `C`, `A`, `E`, `REV`; `C` cierra la cadena; Enter en vacío repite
+  la herramienta), los clics en la vista con la marca de cada referencia, la entrada junto al cursor (largo y ángulo,
+  Tab entre ellos), Esc sale de la herramienta y después del boceto sin borrar nada. En Historial, cada boceto muestra
+  su operación (extruir con la distancia, revolucionar con el eje y el ángulo) y «Editar boceto».
+- **Pruebas:** `[cad]` (puntos tipeados, CD13 y CD14; ortogonal y polar, CD16; referencias y la restricción de punto
+  medio, CD15; el guion y sus ids; la ida y vuelta; el rectángulo extruido y los perfiles revolucionados por el
+  sustituto, CD2) y el guion de interfaz `design_sketch` (CD13, CD14, CD15, CD16, CD10 y CD2 por la pantalla).
+- **No probado:** el `solidcraft-cli` real, como en D1; los nombres de los puntos de un rectángulo (`l5.end` para la
+  esquina de abajo a la derecha) se dedujeron del orden de lados que documenta SolidCraft (bottom, right, top, left).
+
+**Sigue:** D3 (restricciones y cotas con los grados de libertad, parámetros, línea de tiempo editable), o las reglas
+3 a 5 de `orca_2_5.md`, según diga el dueño.
+

@@ -25,6 +25,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   SolidCraft 0.30.0 (MIT o Apache-2.0, «Basado en SolidCraft» en Créditos), que el paquete de Windows lleva en la
   carpeta `solidcraft/`; si falta, la pestaña lo dice y todo lo demás sigue andando.
 - **Ajustes `cad.chord_tolerance` y `cad.angle_tolerance`**: la malla de la pieza diseñada (tarjeta «Diseño» de Otros).
+- **Bocetos en Diseño** (ficha `cad_design.md`, etapa D2): Boceto en Nuevo pide el plano (XY, XZ o YZ) y abre el modo
+  boceto: línea, rectángulo, círculo y arco con la tira de herramientas, la línea de comandos (`L`, `REC`, `C`, `A`;
+  `C` cierra la cadena; `E` extruye y `REV` revoluciona; Enter en vacío repite) o clics en la vista; puntos tipeados
+  `x,y`, `@dx,dy` y `@largo<ángulo`; largo y ángulo junto al cursor (Tab entre ellos); referencias a objetos con su
+  marca (F3), ortogonal (F8), cuadrícula (F9) y rastreo polar (F10); Esc sale de la herramienta y después del boceto.
+  Cada boceto se extruye (distancia) o revoluciona (eje y ángulo) desde Historial, donde «Editar boceto» lo reabre.
 - **Barrer hacia adentro** (`retraction.wipe_inward` y `retraction.wipe_inward_distance`, ficha `orca_2_5.md`,
   regla 1): el barrido que sigue a la pared externa se corre hacia la pared interna de al lado, donde la marca de la
   costura no se ve, en mm o en % del ancho de la pared externa (50 % de fábrica). Solo con el barrido, más de una

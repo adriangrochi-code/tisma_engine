@@ -237,6 +237,19 @@ salió de Diseño tiene «Editar en Diseño» en su menú: al mandarlo de nuevo 
 ajustes, los modificadores y lo pintado. En Preparar, Boceto y Primitiva (tira de herramientas y menú de la placa)
 abren Diseño. La preferencia «Pestaña Diseño» (`ui.cad_design`) la oculta.
 
+**Bocetos** (etapa D2): Boceto, en Nuevo, pide el plano (XY, XZ o YZ) y abre el modo boceto: la cámara mira el plano
+sin perspectiva y sobre la vista aparece la tira de herramientas (Línea, Rectángulo, Círculo, Arco; Referencias F3,
+Ortogonal F8, Cuadrícula F9, Polar F10; Extruir, Revolucionar, Terminar). Se dibuja con clics en la vista o desde la
+línea de comandos: `L`, `REC`, `C`, `A` eligen la herramienta; un punto se escribe `x,y` (absoluto), `@dx,dy`
+(desde el último) o `@largo<ángulo` (grados desde +X); `C` cierra la cadena de líneas; un número solo es el radio de
+un círculo o el largo del tramo hacia el cursor; Enter en vacío repite la última herramienta; `E` extruye y `REV`
+revoluciona (piden la distancia, o el eje x/y y el ángulo); Esc sale de la herramienta y, otra vez, del boceto, sin
+borrar nada. Junto al cursor se ven el largo y el ángulo del tramo: se tipea el número, Tab pasa al otro y Enter pone
+el punto; lo tipeado queda como cota. Las referencias enganchan el puntero en extremos, puntos medios, centros,
+cuadrantes, intersecciones, perpendiculares, tangentes y el punto más cercano, cada una con su marca, y dejan la
+restricción que corresponde. En Historial, cada boceto muestra su operación con la distancia o el eje y el ángulo, y
+«Editar boceto» lo reabre.
+
 ### Análisis
 
 Muestra cuántos vóxeles tendría el análisis estructural de la pieza (`docs/ANALYSIS.md`), en calidad normal y alta:

@@ -10878,8 +10878,22 @@ void App::edit_sketch(std::size_t feature) {
     sketch_prev_ortho_ = camera_.orthographic;
     camera_.orthographic = true;
     camera_.set_view(plane == cad::SketchPlane::XZ ? StandardView::Front : plane == cad::SketchPlane::YZ ? StandardView::Right : StandardView::Top);
-    frame_all();
     set_tab(Tab::Design);
+    // Framed on what is drawn, at least 80 mm across, around the origin.
+    const cad::Sketch& sketch = design_.features[feature].sketch;
+    double lo_x = -40.0, hi_x = 40.0, lo_y = -40.0, hi_y = 40.0;
+    for (const cad::Entity& en : sketch.entities)
+        for (std::size_t k = 0; k < (en.kind == cad::Entity::Kind::Rectangle ? 4 : en.points.size()); ++k) {
+            const cad::Pt pt = cad::point_of(en, k);
+            const double r = en.kind == cad::Entity::Kind::Circle ? en.radius : 0.0;
+            lo_x = std::min(lo_x, pt.x - r - 10.0), hi_x = std::max(hi_x, pt.x + r + 10.0);
+            lo_y = std::min(lo_y, pt.y - r - 10.0), hi_y = std::max(hi_y, pt.y + r + 10.0);
+        }
+    const Vec3 a = sketch_to_world(plane, lo_x, lo_y), b = sketch_to_world(plane, hi_x, hi_y);
+    frame_pending_ = false;
+    camera_.fit({std::min(a.x, b.x), std::min(a.y, b.y), std::min(a.z, b.z)}, {std::max(a.x, b.x), std::max(a.y, b.y), std::max(a.z, b.z)},
+                view_size_.x / std::max(view_size_.y, 1.0f));
+    camera_framed_ = false;
     command_message_ = format(tr(T::SketchStarted), plane_label(plane));
     command_focus_ = true;
 }
@@ -10967,7 +10981,6 @@ void App::sketch_end_tool(bool close) {
             for (const auto& [segment, length] : e.typed_lengths)
                 if (segment < cad::segments_of(*entity).size())
                     sketch->dimensions.push_back({index, segment, length});
-        design_dirty_ = true;
     }
     e.tool = SketchEdit::Tool::None;
     e.points.clear();
@@ -11319,7 +11332,7 @@ void App::sketch_strip() {
         return;
     SketchEdit& e = *sketch_edit_;
     const float h = 30.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + 52.0f * scale_), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 12.0f * scale_ + 380.0f * scale_ + 12.0f * scale_, view_pos_.y + 56.0f * scale_), ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(0.9f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f * scale_, 4.0f * scale_));

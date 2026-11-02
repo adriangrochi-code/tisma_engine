@@ -1184,8 +1184,8 @@ Diseño es una pestaña más de la misma ventana; nunca otro programa.
 3. **Descartado:** SolidCraft como programa aparte instalado por la persona (iba contra el pedido del dueño).
 
 Etapas (regla 24): D1 (hecha el 2026-11-02: pestaña, panel, línea de comandos, primitivas, mandar a la placa y
-volver a editar; CD1, CD1b, CD7, CD19, CD20, CD21), D2 (bocetos, coordenadas tipeadas, referencias, ortogonal,
-extruir y revolucionar), D3 (restricciones, parámetros, línea de tiempo), D4 (redondeos, agujeros, roscas,
+volver a editar; CD1, CD1b, CD7, CD19, CD20, CD21), D2 (hecha el 2026-11-02: bocetos en un plano, coordenadas
+tipeadas, entrada junto al cursor, referencias, ortogonal y polar, extruir y revolucionar; CD2, CD10, CD13 a CD16), D3 (restricciones, parámetros, línea de tiempo), D4 (redondeos, agujeros, roscas,
 patrones, booleanas), D5 (STEP e IGES, mallas, texto, proyecto, medidas).
 
 La ficha de comportamiento (`cad_design.md`) la escribe el equipo de fichas.
