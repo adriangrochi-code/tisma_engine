@@ -86,6 +86,18 @@ Las sesiones de trabajo solo pueden enviar a `dev`, ni etiquetas ni otras ramas:
 etiqueta, y `alpha` avanza fusionando la PR desde GitHub. Si la
 etiqueta enviada no coincide con `VERSION`, o el CHANGELOG no tiene la sección, el flujo falla antes de compilar.
 
+## Las compilaciones diarias (pedido del dueño, 2026-11-02)
+
+Para probar lo último sin esperar una release, `.github/workflows/nightly.yml` compila `dev` una vez por día:
+- compila y prueba en Windows x64 y en Linux x64, y empaqueta igual que una release;
+- publica los dos paquetes como una sola pre-release con la etiqueta `nightly`, que se reemplaza cada vez; sus notas
+  dicen el commit y la fecha;
+- solo si `dev` cambió desde la última (a mano, desde Actions, compila igual).
+
+Corre todos los días a las 05:23 UTC (el horario lee la copia del flujo que está en `main`, así que empieza cuando el
+dueño fusiona) y con cada envío a `dev`, como mucho una vez cada 20 horas. No es una release: no tiene número ni
+sección en el CHANGELOG.
+
 ## Los formatos tienen su propia versión
 
 El motor cambia más seguido que sus formatos. Los formatos que leen otros programas llevan su propio número, que sube

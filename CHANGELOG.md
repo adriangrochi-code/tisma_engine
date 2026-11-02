@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Compilaciones diarias** (pedido del dueño, 2026-11-02): `dev` compilado y probado en Windows y Linux una vez por
+  día, publicado como la pre-release `nightly`, que se reemplaza cada vez (`docs/VERSIONING.md`, «Las compilaciones
+  diarias»).
 - **Panel de ajustes plegable** (pedido del dueño, 2026-11-02): «« al lado del buscador lo pliega y la vista toma
   todo el ancho; en Preparar queda arriba a la izquierda, al lado de las herramientas de la placa, un recuadro mínimo
   con tres listas (impresora, filamento y perfil de impresión, sin dibujo ni botones), y su » lo vuelve a abrir. Se
