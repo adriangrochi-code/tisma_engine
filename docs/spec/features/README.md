@@ -27,6 +27,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`structural_analysis.md`](structural_analysis.md): análisis estructural por vóxeles, material con capas más débiles, criterio de rotura, temperatura, paredes y relleno, tabla de materiales, validación con teoría y CalculiX | F7 | Para revisar |
 | [`structural_optimization.md`](structural_optimization.md): relleno mínimo uniforme y por zonas, nervios a lo largo de las tensiones, refuerzos, lattice, orientación recomendada | F7 | Para revisar |
 | [`aerodynamics.md`](aerodynamics.md): arrastre por presión (lattice Boltzmann) y rozamiento con la rugosidad de las capas | F7 | Para revisar |
+| [`engineering_panel.md`](engineering_panel.md): la sección Ingeniería con las pestañas Estructural (FEA) y Aerodinámica (CFD): punto y zona fija, punto y zona de fuerza, límites, material, temperaturas, altura de capa y ancho tomados solos de los perfiles, resultados | 1.0 | Para revisar |
 | [`nonplanar.md`](nonplanar.md): capas curvas (onda, crestas, cono), rampa, ajuste a la cabeza, material según el espesor local | F7 | Para revisar |
 | [`nonplanar_modes.md`](nonplanar_modes.md): capas curvas según la pieza: cono según los voladizos, solo bajo los voladizos, paralelas a las caras de arriba, automático y según las tensiones | F7 | Para revisar |
 | [`z_antialiasing.md`](z_antialiasing.md): las extrusiones de arriba bajan hasta la superficie inclinada del modelo | después de F4 | Para revisar |

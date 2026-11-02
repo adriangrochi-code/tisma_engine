@@ -94,8 +94,8 @@ ejecutó aquí):
      (Preparar, Vista previa, Calibración, Impresora) e «Ingeniería» (Estructural, Aerodinámica, Diseño). Cada
      sección muestra solo sus pestañas y su propio panel izquierdo, y vuelve a la última pestaña usada en ella;
    - **Ingeniería tiene los tres trabajos de ingeniería** (corrección del dueño, 02-11-2026: «en Ingeniería se perdió
-     el CFD y el FEA»): **Estructural** (el análisis por elementos finitos y la optimización: el panel de Ingeniería de
-     `interface.md` con su pestaña Structural, `structural_analysis.md` y `structural_optimization.md`), **Aerodinámica**
+     el CFD y el FEA»): **Estructural** (el análisis por elementos finitos y la optimización: `engineering_panel.md`, a partir del panel de
+     Ingeniería de `interface.md`, `structural_analysis.md` y `structural_optimization.md`), **Aerodinámica**
      (el CFD de `aerodynamics.md`, la pestaña Aerodynamics de ese mismo panel) y **Diseño**. La pestaña «Análisis» de
      Impresión 3D se va: su contenido pasa a Estructural, completo y no solo la estimación de vóxeles (apoyos, cargas y
      límites marcados en la pieza con el mouse, material, temperatura, factor de seguridad, resolución, «Calcular en la
