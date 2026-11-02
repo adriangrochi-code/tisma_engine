@@ -83,6 +83,7 @@ add_executable(tisma_tests
   test_catalog.cpp
   test_device.cpp
   test_cad.cpp
+  test_fasteners.cpp
 )
 # The stand-in for the bundled solidcraft-cli (cad_design.md, rule 1): the
 # tests drive it instead of the real tool.
@@ -205,7 +206,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     # The Design tab (cad_design.md, stage D1) driven through the stand-in
     # solidcraft-cli: the tab, the primitives, the command line, sending to the
     # plate and editing again; without the component (CD21); hidden (CD1).
-    foreach(script design_tab design_command design_hidden design_sketch)
+    foreach(script design_tab design_command design_hidden design_sketch fasteners)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760

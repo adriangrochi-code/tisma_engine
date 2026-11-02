@@ -33,6 +33,7 @@ light or dark theme.
 | `tisma_send` | Send to a printer (a paper plane). |
 | `tisma_engineering` | Engineering, structural analysis. |
 | `tisma_design` | Design (a square with a pencil), drawn for the engine on 2026-11-02. |
+| `tisma_fasteners` | Fasteners (a bolt with its thread), drawn for the engine on 2026-11-02. |
 | `tisma_calibrate` | Calibrations (a calibration tower). |
 | `tisma_vibration` | Vibration (input shaping) calibration. |
 | `tisma_view` | Views (a cube). |

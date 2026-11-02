@@ -5,6 +5,7 @@
 # its constraint), CD16 (F8: a segment 10 degrees off comes out horizontal),
 # CD10 (Esc leaves the tool, then the sketch, and nothing is lost), then the
 # sketch extruded 20 mm (CD2: 24 000 mm3) and sent to the plate.
+menu mode_engineering
 menu tab_design
 menu design_sketch
 menu design_plane_xy

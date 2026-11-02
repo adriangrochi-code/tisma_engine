@@ -1190,6 +1190,13 @@ patrones, booleanas), D5 (STEP e IGES, mallas, texto, proyecto, medidas).
 
 La ficha de comportamiento (`cad_design.md`) la escribe el equipo de fichas.
 
+**Apartado Ingeniería (pedido del dueño, 2026-11-02):** la barra de arriba separa Impresión 3D (Preparar, Vista
+previa, Análisis, Calibración, Impresora) de Ingeniería (Diseño y Tornillería), cada apartado con su panel a la
+izquierda. **Tornillería** (hecha el 2026-11-02): tornillos, tuercas, arandelas y varillas con rosca métrica ISO y
+holgura para plástico, hechos por el motor (`src/cad/fasteners.*`) sin el componente de diseño. Lo que sigue en
+Ingeniería: roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tablas), y otras herramientas
+que pida el dueño (engranajes, insertos, bisagras).
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:

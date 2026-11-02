@@ -10,6 +10,37 @@
     X(TabPreview, "Vista previa", "Preview")                                                                          \
     X(TabAnalysis, "Análisis", "Analysis")                                                                            \
     X(TabDesign, "Diseño", "Design")                                                                                  \
+    X(TabFasteners, "Tornillería", "Fasteners") \
+    X(ModePrint, "Impresión 3D", "3D printing") \
+    X(ModePrintTip, "Preparar, laminar, analizar, calibrar e imprimir", "Prepare, slice, analyse, calibrate and print") \
+    X(ModeEngineering, "Ingeniería", "Engineering") \
+    X(ModeEngineeringTip, "Diseñar piezas y hacer tornillería para imprimir", "Design parts and make fasteners to print") \
+    X(FastenersSubtitle, "Rosca métrica ISO, con holgura para imprimir", "ISO metric thread, with play for printing") \
+    X(FastenersEditing, "Editando una pieza de la placa.", "Editing a part of the plate.") \
+    X(FastenersNew, "Pieza nueva", "New part") \
+    X(FastenersSecPart, "Pieza", "Part") \
+    X(FastenersSecSize, "Medida", "Size") \
+    X(FastenerHexBolt, "Tornillo hexagonal", "Hex bolt") \
+    X(FastenerSocketBolt, "Tornillo Allen", "Socket head bolt") \
+    X(FastenerHexNut, "Tuerca", "Nut") \
+    X(FastenerWasher, "Arandela", "Washer") \
+    X(FastenerRod, "Varilla roscada", "Threaded rod") \
+    X(FastenerMetric, "Métrica", "Metric size") \
+    X(FastenerCustom, "A medida", "Custom") \
+    X(FastenerDiameter, "Diámetro (mm)", "Diameter (mm)") \
+    X(FastenerPitch, "Paso (mm)", "Pitch (mm)") \
+    X(FastenerPitchHint, "0: el paso normal, %s mm", "0: the coarse pitch, %s mm") \
+    X(FastenerLength, "Largo (mm)", "Length (mm)") \
+    X(FastenerPlay, "Holgura (mm)", "Play (mm)") \
+    X(FastenerPlayHint, "La rosca del tornillo sale así de más fina y la de la tuerca así de más ancha. 0,2 mm anda en la mayoría de las impresoras; si quedan duras, subila.", "The bolt's thread comes out this much thinner and the nut's this much wider. 0.2 mm works on most printers; if they are tight, raise it.") \
+    X(FastenerThread, "Rosca", "Thread") \
+    X(FastenerTapDrill, "Broca para roscar", "Tap drill") \
+    X(FastenerClearanceHole, "Agujero de paso (ISO 273)", "Clearance hole (ISO 273)") \
+    X(FastenerKey, "Llave", "Wrench") \
+    X(FastenerBad, "Esas medidas no se pueden hacer.", "Those sizes cannot be made.") \
+    X(FastenerPrintHint, "Los tornillos salen parados sobre la cabeza y las tuercas acostadas: así la rosca se imprime capa por capa, sin soportes.", "Bolts stand on their heads and nuts lie flat: so the thread prints layer by layer, with no supports.") \
+    X(FastenerSendPair, "Mandar con su tuerca", "Send with its nut") \
+    X(EditInFasteners, "Editar en Tornillería", "Edit in Fasteners") \
     X(Open, "Abrir", "Open")                                                                                          \
     X(OpenTip, "Abrir un modelo STL, un proyecto, un G-code o ajustes (Ctrl+O)", "Open an STL model, a project, a G-code file or settings (Ctrl+O)") \
     X(Slice, "Laminar", "Slice")                                                                                      \

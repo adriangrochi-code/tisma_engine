@@ -8581,3 +8581,24 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
 **Sigue:** D3 (restricciones y cotas con los grados de libertad, parámetros, línea de tiempo editable), o las reglas
 3 a 5 de `orca_2_5.md`, según diga el dueño.
 
+## 2026-11-02 (tarde): apartados Impresión 3D e Ingeniería, y Tornillería (pedidos del dueño)
+
+- **Barra de arriba en dos apartados:** Impresión 3D (Preparar, Vista previa, Análisis, Calibración, Impresora) e
+  Ingeniería (Diseño, Tornillería), con un selector junto al logo. Cada apartado muestra solo sus pestañas y su panel
+  propio en la columna izquierda (el de ajustes de impresión, el de Diseño o el de Tornillería); vuelve a la última
+  pestaña usada en él. Esto cambia lo que la ficha `cad_design.md` dice de la pestaña Diseño («entre Vista previa y
+  Análisis», CD1): queda avisado al equipo de fichas.
+- **Tornillería** (`src/cad/fasteners.*`): tornillos hexagonales y Allen, tuercas, arandelas y varillas roscadas con
+  la rosca métrica ISO 68-1, de M3 a M24 (tablas ISO 261, 4032, 4017, 4762, 7089 y 273) o a medida, paso normal o
+  fino, largo y holgura para plástico (0,2 mm de fábrica). La malla la arma el motor, cerrada y hacia afuera por
+  construcción, así que anda sin `solidcraft-cli`. Los tornillos quedan parados sobre la cabeza y las tuercas
+  acostadas. «Mandar con su tuerca» manda el par; «Editar en Tornillería» reemplaza la pieza en su lugar.
+- **Pruebas:** `[fasteners]` (el perfil ISO: cresta, fondo, diámetro de flancos y flancos a 60°; cada pieza cerrada
+  y orientada en M3, M8 y M24 y una tuerca de 40 mm a medida; cada vértice de la rosca del tornillo sobre el perfil
+  menos la holgura y el de la tuerca sobre el perfil más la holgura, o sea 2 × holgura entre ellos; volúmenes de la
+  varilla y la arandela; las comprobaciones y la ida y vuelta en JSON; una tuerca y un tornillo M8 laminados con el
+  G-code verificado) y el guion de interfaz `fasteners`. Los guiones de Diseño pasan por el selector de apartado.
+- **Medido:** una tuerca M8 tiene 661 mm³ y un tornillo M5 × 12, 352 mm³ (el guion los verifica).
+- **No probado:** que las piezas impresas enrosquen de verdad; la holgura de 0,2 mm es un punto de partida.
+
+**Sigue:** D3 de `cad_design.md`; las roscas sobre piezas de Diseño (D4) usarán la misma tabla.

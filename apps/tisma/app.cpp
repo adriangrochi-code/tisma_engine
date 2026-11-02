@@ -11,6 +11,7 @@
 #include "vk_window.hpp"
 
 #include "cad/design.hpp"
+#include "cad/fasteners.hpp"
 #include "cad/process.hpp"
 #include "cad/solidcraft.hpp"
 #include "calibration/calibration.hpp"
@@ -114,7 +115,7 @@ constexpr const char* kIcons[] = {
     "tisma_zoom_fit",   "tisma_zoom_in",   "tisma_zoom_out",
     "tool_add",         "tool_remove",     "tool_duplicate", "tool_move",         "tool_rotate",     "tool_scale",
     "tool_lay_flat",    "tool_arrange",     "tool_paint",     "tool_material",   "tool_cut",   "tool_measure",
-    "tool_sketch",      "tool_primitive",   "tisma_design",
+    "tool_sketch",      "tool_primitive",   "tisma_design",   "tisma_fasteners",
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_nonplanar",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
@@ -395,7 +396,26 @@ void keep_unreadable(const std::filesystem::path& path) {
     std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ec);
 }
 
-enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device };
+enum class Tab { Prepare, Preview, Design, Fasteners, Analysis, Calibration, Device };
+// The tabs of the Ingeniería section; the rest are Impresión 3D's (the
+// owner's request, 2026-11-02: each section with its tabs and its own panel).
+bool engineering_tab(Tab t) {
+    return t == Tab::Design || t == Tab::Fasteners;
+}
+
+// A measure as the interface writes it: up to `decimals` places, no trailing
+// zeros, the language's decimal point.
+std::string number(double v, int decimals) {
+    std::string out = format("%.*f", decimals, v);
+    const char point = out.find(',') != std::string::npos ? ',' : '.';
+    if (out.find(point) != std::string::npos) {
+        while (out.back() == '0')
+            out.pop_back();
+        if (out.back() == point)
+            out.pop_back();
+    }
+    return out == "-0" ? "0" : out;
+}
 // The preview's views (preview.md, rule 1), in its order: what colours the
 // lines, the shader's way to colour them, and the number the instances carry.
 enum class PreviewView {
@@ -491,6 +511,14 @@ private:
     void edit_in_design(std::size_t object);
     void open_design(bool sketch);
     void start_solidcraft_probe();
+    void show_in_view(const TriangleMesh& mesh);
+    // Fasteners (the owner's request, 2026-11-02): bolts, nuts, washers and
+    // threaded rods with the ISO metric thread, made by the engine.
+    void fasteners_panel();
+    void rebuild_fastener();
+    void send_fastener_to_plate(bool with_nut);
+    void edit_fastener(std::size_t object);
+    std::string fastener_name(const cad::FastenerSpec& spec) const;
     void calibration_panel();
     void use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab);
     void add_model(const std::filesystem::path& path);
@@ -824,6 +852,18 @@ private:
     cad::SolidCraftInfo solidcraft_;
     bool solidcraft_probed_ = false;
     int design_target_ = 0;      // the plate object being edited (its design_id); 0: a new design
+    // The Fasteners tab: the part being set up, its mesh, and the plate
+    // object it came from when edited again (its design_id; 0: a new part).
+    cad::FastenerSpec fastener_;
+    TriangleMesh fastener_mesh_;
+    BoundingBox fastener_box_;
+    std::string fastener_error_;
+    bool fastener_dirty_ = true;
+    bool fastener_edited_ = false; // a field typed, made again once it is left
+    int fastener_target_ = 0;
+    // The tab each section opens on: the last one used there.
+    Tab last_print_tab_ = Tab::Prepare;
+    Tab last_engineering_tab_ = Tab::Design;
     int next_design_id_ = 1;
     bool design_pick_primitive_ = false; // the Primitiva tool from Prepare: the chooser opens
     bool design_pick_sketch_ = false;    // the Boceto tool from Prepare: the plane is asked
@@ -4370,6 +4410,7 @@ void App::poll_jobs() {
         // A screenshot keeps the tab it asked for.
         const Tab asked = options_.view == "analysis"      ? Tab::Analysis
                           : options_.view == "design"      ? Tab::Design
+                          : options_.view == "fasteners"   ? Tab::Fasteners
                           : options_.view == "calibration" ? Tab::Calibration
                           : options_.view == "device"      ? Tab::Device
                           : options_.view == "prepare"     ? Tab::Prepare
@@ -4465,6 +4506,10 @@ void App::frame_now() {
     } else if (tab_ == Tab::Design) {
         if (!design_box_.empty)
             part = {{design_box_.min.x, design_box_.min.y, 0.0f}, {design_box_.max.x, design_box_.max.y, design_box_.max.z}};
+    } else if (tab_ == Tab::Fasteners) {
+        if (!fastener_box_.empty)
+            part = {{fastener_box_.min.x, fastener_box_.min.y, 0.0f},
+                    {fastener_box_.max.x, fastener_box_.max.y, fastener_box_.max.z}};
     } else if (has_plate_ && !placed_.empty) {
         part = {{placed_.min.x, placed_.min.y, 0.0f}, {placed_.max.x, placed_.max.y, placed_.max.z}};
     }
@@ -4520,10 +4565,19 @@ void App::set_tab(Tab tab) {
         estimate_voxels_if_stale();
     // The Design tab shows the design in the same view, over the same bed;
     // leaving it brings the plate back (cad_design.md, rules 3 and 19).
+    if (engineering_tab(tab))
+        last_engineering_tab_ = tab;
+    else
+        last_print_tab_ = tab;
     if (tab == Tab::Design && was != Tab::Design) {
         command_focus_ = true;
         show_design();
-    } else if (was == Tab::Design && tab != Tab::Design) {
+    } else if (tab == Tab::Fasteners && was != Tab::Fasteners) {
+        if (fastener_dirty_)
+            rebuild_fastener();
+        show_in_view(fastener_mesh_);
+        frame_all();
+    } else if (engineering_tab(was) && !engineering_tab(tab)) {
         rebuild_plate();
         frame_all();
     }
@@ -4568,7 +4622,39 @@ void App::top_bar() {
     ImGui::PopFont();
     ImGui::SameLine(0, 22.0f * scale_);
 
-    // The tabs.
+    // The two sections (the owner's request, 2026-11-02): Impresión 3D with
+    // the plate, the preview, the analysis, the calibrations and the printer,
+    // and Ingeniería with Design and Fasteners. Each opens on its last tab.
+    const bool engineering = engineering_tab(tab_);
+    if (cad_design_) {
+        // A pill behind the two, drawn under them once their width is known.
+        const float pad = 3.0f * scale_;
+        ImGui::SetCursorPosY(top);
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        const auto section_button = [&](const char* id, const char* icon_name, T label, T tip_text, bool on, Tab to,
+                                        const char* name) {
+            ImGui::SetCursorPosY(top);
+            if (button(id, icon_name, tr(label), false, on, true, tr(tip_text), button_h) && !on)
+                set_tab(to == Tab::Preview && !result_.has_value() ? Tab::Prepare : to);
+            g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                        ImGui::GetItemRectMax().y);
+        };
+        dl->ChannelsSplit(2);
+        dl->ChannelsSetCurrent(1);
+        section_button("##mode_print", "tisma_print", T::ModePrint, T::ModePrintTip, !engineering, last_print_tab_,
+                       "mode_print");
+        ImGui::SameLine(0, 2.0f * scale_);
+        section_button("##mode_engineering", "tisma_design", T::ModeEngineering, T::ModeEngineeringTip, engineering,
+                       last_engineering_tab_, "mode_engineering");
+        const ImVec2 end = ImGui::GetItemRectMax();
+        dl->ChannelsSetCurrent(0);
+        dl->AddRectFilled(ImVec2(start.x - pad, origin.y + top - pad), ImVec2(end.x + pad, end.y + pad),
+                          ImGui::GetColorU32(rgb(theme_.frame)), ImGui::GetStyle().FrameRounding * 1.8f);
+        dl->ChannelsMerge();
+        ImGui::SameLine(0, 18.0f * scale_);
+    }
+
+    // The tabs of the section.
     struct TabButton {
         Tab tab;
         const char* icon;
@@ -4577,11 +4663,12 @@ void App::top_bar() {
     const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
                               {Tab::Preview, "tisma_view", T::TabPreview},
                               {Tab::Design, "tisma_design", T::TabDesign},
+                              {Tab::Fasteners, "tisma_fasteners", T::TabFasteners},
                               {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
                               {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
                               {Tab::Device, "tisma_printer", T::TabDevice}};
     for (const TabButton& t : tabs) {
-        if (t.tab == Tab::Design && !cad_design_) // hidden by ui.cad_design (cad_design.md, CD1)
+        if (engineering_tab(t.tab) != engineering) // the other section's
             continue;
         ImGui::SetCursorPosY(top);
         const bool enabled = t.tab != Tab::Preview || result_.has_value();
@@ -4591,6 +4678,7 @@ void App::top_bar() {
         g_menu_rects[std::string("tab_") + (t.tab == Tab::Prepare       ? "prepare"
                                             : t.tab == Tab::Preview     ? "preview"
                                             : t.tab == Tab::Design      ? "design"
+                                            : t.tab == Tab::Fasteners   ? "fasteners"
                                             : t.tab == Tab::Analysis    ? "analysis"
                                             : t.tab == Tab::Calibration ? "calibration"
                                                                         : "device")] =
@@ -7874,7 +7962,7 @@ void App::view_tools() {
         if (ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(T::MoireFilterTip));
         // The Design tab and the Prepare tools that open it (cad_design.md, rule 3).
-        if (ImGui::Checkbox(tr(T::DesignPref), &cad_design_) && !cad_design_ && tab_ == Tab::Design)
+        if (ImGui::Checkbox(tr(T::DesignPref), &cad_design_) && !cad_design_ && engineering_tab(tab_))
             set_tab(Tab::Prepare);
         ImGui::EndPopup();
     }
@@ -8078,6 +8166,14 @@ void App::object_menu() {
                                              ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         if (edit)
             edit_in_design(std::size_t(selected_));
+    }
+    if (cad_design_ && !o.fastener.empty()) {
+        ImGui::Separator();
+        const bool edit = ImGui::MenuItem(tr(T::EditInFasteners));
+        g_menu_rects["edit_fastener"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                               ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (edit)
+            edit_fastener(std::size_t(selected_));
     }
     ImGui::EndPopup();
 }
@@ -10224,11 +10320,16 @@ void App::design_built(cad::BuildResult built) {
 // The design's bodies in the view, in the plate's place (rule 3: the same
 // view and bed).
 void App::show_design() {
-    const std::vector<float> model = design_mesh_.empty() ? std::vector<float>{} : mesh_vertices(design_mesh_, Vec3{});
+    show_in_view(design_mesh_);
+    frame_all();
+}
+
+// A part of the Ingeniería section in the view, in the plate's place.
+void App::show_in_view(const TriangleMesh& mesh) {
+    const std::vector<float> model = mesh.empty() ? std::vector<float>{} : mesh_vertices(mesh, Vec3{});
     renderer_.set_model(model);
     renderer_.set_model_coarse({});
     vk_view_.set_model(model);
-    frame_all();
 }
 
 // «Mandar a la placa» (rule 21): a new design is added as an object; one
@@ -10574,6 +10675,272 @@ void App::design_panel() {
         loc::TextDisabled("%s", tr(T::DesignNeedsSolid));
         rect_of("design_needs_solid");
     }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+std::string App::fastener_name(const cad::FastenerSpec& spec) const {
+    const bool custom = cad::metric_size(spec.size) == nullptr;
+    const cad::FastenerDims dims = cad::fastener_dims(spec);
+    std::string size = custom ? "Ø" + number(dims.d, 1) + " × " + number(dims.pitch, 2) : spec.size;
+    if (!custom && spec.pitch > 0.0)
+        size += " × " + number(spec.pitch, 2); // a fine pitch is said
+    const T kind = spec.kind == cad::FastenerKind::HexBolt      ? T::FastenerHexBolt
+                   : spec.kind == cad::FastenerKind::SocketBolt ? T::FastenerSocketBolt
+                   : spec.kind == cad::FastenerKind::HexNut     ? T::FastenerHexNut
+                   : spec.kind == cad::FastenerKind::Washer     ? T::FastenerWasher
+                                                                : T::FastenerRod;
+    std::string name = std::string(tr(kind)) + " " + size;
+    if (cad::has_length(spec.kind))
+        name += " × " + number(spec.length, 0);
+    return name;
+}
+
+// The part made again from its spec (in the engine, at once: a few hundred
+// thousand triangles at most).
+void App::rebuild_fastener() {
+    fastener_dirty_ = false;
+    fastener_error_ = cad::check_fastener(fastener_);
+    if (fastener_error_.empty()) {
+        fastener_mesh_ = cad::make_fastener(fastener_);
+        fastener_box_ = fastener_mesh_.bounding_box();
+    } else {
+        fastener_mesh_ = {};
+        fastener_box_ = {};
+    }
+    if (tab_ == Tab::Fasteners)
+        show_in_view(fastener_mesh_);
+}
+
+// «Mandar a la placa», as in Design: a new part is added as an object, one
+// opened with «Editar en Tornillería» replaces its object in its place. With
+// `with_nut`, a bolt or a rod brings its nut along.
+void App::send_fastener_to_plate(bool with_nut) {
+    if (fastener_dirty_)
+        rebuild_fastener();
+    if (fastener_mesh_.empty())
+        return;
+    const std::string json = cad::fastener_json(fastener_);
+    PlateObject* target = nullptr;
+    if (fastener_target_ != 0)
+        for (PlateObject& o : objects_)
+            if (o.design_id == fastener_target_ && !o.fastener.empty())
+                target = &o;
+    const TriangleMesh mesh = fastener_mesh_;
+    const cad::FastenerSpec spec = fastener_;
+    set_tab(Tab::Prepare);
+    if (target) {
+        Painting carried = carried_painting(target->painting, target->mesh, mesh);
+        target->mesh = mesh;
+        target->painting = std::move(carried);
+        target->fastener = json;
+        target->name = fastener_name(spec);
+        plate_changed();
+    } else {
+        add_mesh(mesh, from_utf8(fastener_name(spec)));
+        objects_.back().fastener = json;
+        objects_.back().design_id = next_design_id_++;
+    }
+    if (with_nut && cad::has_length(spec.kind)) {
+        cad::FastenerSpec nut = spec;
+        nut.kind = cad::FastenerKind::HexNut;
+        add_mesh(cad::make_fastener(nut), from_utf8(fastener_name(nut)));
+        objects_.back().fastener = cad::fastener_json(nut);
+        objects_.back().design_id = next_design_id_++;
+    }
+    notify(tr(target ? T::DesignReplaced : T::DesignSent));
+}
+
+void App::edit_fastener(std::size_t object) {
+    if (object >= objects_.size())
+        return;
+    try {
+        fastener_ = cad::parse_fastener(objects_[object].fastener);
+    } catch (const std::exception& e) {
+        notify(e.what(), true);
+        return;
+    }
+    fastener_target_ = objects_[object].design_id;
+    fastener_dirty_ = true;
+    set_tab(Tab::Fasteners);
+}
+
+// The Fasteners tab's panel, in the left column like Design's: the part,
+// its size, its play for printing, what it measures, and the way to the plate.
+void App::fasteners_panel() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##fasteners", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    const auto rect_of = [](const std::string& name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    const auto section = [&](T title) {
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::Separator();
+    };
+    constexpr std::uint32_t kViolet = 0x8B5CF6;
+    const float footer = 3.0f * ImGui::GetFrameHeightWithSpacing() + 10.0f * scale_;
+    ImGui::BeginChild("##fasteners_scroll", ImVec2(0, -footer));
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::TabFasteners));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    loc::TextColored(rgb(kViolet), "%s", tr(T::FastenersSubtitle));
+    bool changed = false;
+    if (fastener_target_ != 0) {
+        loc::TextDisabled("%s", tr(T::FastenersEditing));
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::FastenersNew)))
+            fastener_target_ = 0;
+        rect_of("fasteners_new");
+    }
+
+    // The part.
+    section(T::FastenersSecPart);
+    {
+        const T labels[] = {T::FastenerHexBolt, T::FastenerSocketBolt, T::FastenerHexNut, T::FastenerWasher, T::FastenerRod};
+        const float width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+        int k = 0;
+        for (const cad::FastenerKind kind : cad::kFastenerKinds) {
+            if (k % 2 != 0)
+                ImGui::SameLine();
+            const bool on = fastener_.kind == kind;
+            if (on) { // the part chosen, in the accent
+                ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+            }
+            if (ImGui::Button(tr(labels[k]), ImVec2(width, 0)) && !on) {
+                fastener_.kind = kind;
+                changed = true;
+            }
+            if (on)
+                ImGui::PopStyleColor(3);
+            rect_of(std::string("fasteners_kind_") + cad::fastener_id(kind));
+            ++k;
+        }
+    }
+
+    // The size: a row of the ISO table or one of its own, the pitch, the
+    // length and the play.
+    section(T::FastenersSecSize);
+    const bool custom = cad::metric_size(fastener_.size) == nullptr;
+    ImGui::SetNextItemWidth(130.0f * scale_);
+    if (ImGui::BeginCombo("##size", custom ? tr(T::FastenerCustom) : fastener_.size.c_str())) {
+        for (const cad::MetricSize& row : cad::metric_sizes()) {
+            if (ImGui::Selectable(row.name, fastener_.size == row.name)) {
+                fastener_.size = row.name;
+                fastener_.pitch = 0.0; // its own coarse pitch
+                changed = true;
+            }
+            rect_of(std::string("fasteners_size_") + row.name);
+        }
+        if (ImGui::Selectable(tr(T::FastenerCustom), custom)) {
+            fastener_.diameter = cad::fastener_dims(fastener_).d;
+            fastener_.size = "custom";
+            changed = true;
+        }
+        rect_of("fasteners_size_custom");
+        ImGui::EndCombo();
+    }
+    rect_of("fasteners_size");
+    ImGui::SameLine();
+    ImGui::TextUnformatted(tr(T::FastenerMetric));
+    const auto field = [&](const char* key, T label, double* value, const char* fmt, double step) {
+        const float width = 130.0f * scale_;
+        ImGui::SetNextItemWidth(width);
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        const ImVec4 rect(at.x, at.y, at.x + width - 2.0f * (ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x),
+                          at.y + ImGui::GetFrameHeight());
+        if (loc::InputNumber(tr(label), value, fmt, step))
+            fastener_edited_ = true;
+        if (rect.y >= ImGui::GetWindowPos().y && rect.w <= ImGui::GetWindowPos().y + ImGui::GetWindowSize().y)
+            g_field_rects[key] = rect;
+    };
+    if (custom)
+        field("fasteners.diameter", T::FastenerDiameter, &fastener_.diameter, "%.2f", 1.0);
+    field("fasteners.pitch", T::FastenerPitch, &fastener_.pitch, "%.2f", 0.05);
+    loc::TextDisabled(tr(T::FastenerPitchHint), number(cad::fastener_dims({fastener_.kind, fastener_.size, fastener_.diameter, 0.0}).pitch, 2).c_str());
+    if (cad::has_length(fastener_.kind))
+        field("fasteners.length", T::FastenerLength, &fastener_.length, "%.1f", 1.0);
+    if (cad::has_thread(fastener_.kind)) {
+        field("fasteners.play", T::FastenerPlay, &fastener_.clearance, "%.2f", 0.05);
+        loc::TextDisabled("%s", tr(T::FastenerPlayHint));
+    }
+    if (fastener_edited_ && !ImGui::IsAnyItemActive()) {
+        fastener_edited_ = false;
+        changed = true;
+    }
+    if (changed)
+        rebuild_fastener();
+
+    // What it measures.
+    section(T::DesignSecMeasures);
+    if (!fastener_error_.empty()) {
+        loc::TextColored(rgb(0xE5484D), "%s", tr(T::FastenerBad));
+        rect_of("fasteners_bad");
+        loc::TextDisabled("%s", fastener_error_.c_str());
+    } else if (ImGui::BeginTable("##fastener_measures", 2)) {
+        const cad::FastenerDims dims = cad::fastener_dims(fastener_);
+        const auto line = [](const char* name, const std::string& value) {
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            loc::TextDisabled("%s", name);
+            ImGui::TableNextColumn();
+            ImGui::TextUnformatted(value.c_str());
+        };
+        if (cad::has_thread(fastener_.kind)) {
+            line(tr(T::FastenerThread), "Ø" + number(dims.d, 2) + " × " + number(dims.pitch, 2) + " mm");
+            line(tr(T::FastenerTapDrill), number(dims.d - dims.pitch, 2) + " mm");
+        }
+        line(tr(T::FastenerClearanceHole), number(dims.clearance_hole, 1) + " mm");
+        if (fastener_.kind == cad::FastenerKind::HexBolt || fastener_.kind == cad::FastenerKind::HexNut)
+            line(tr(T::FastenerKey), number(dims.nut_width, 1) + " mm");
+        if (fastener_.kind == cad::FastenerKind::SocketBolt)
+            line(tr(T::FastenerKey), number(dims.socket_key, 1) + " mm");
+        line(tr(T::DesignVolume), format("%.1f mm³", fastener_mesh_.signed_volume()));
+        line(tr(T::DesignBox), format("%.1f × %.1f × %.1f mm", double(fastener_box_.max.x - fastener_box_.min.x),
+                                      double(fastener_box_.max.y - fastener_box_.min.y),
+                                      double(fastener_box_.max.z - fastener_box_.min.z)));
+        ImGui::EndTable();
+    }
+    ImGui::Spacing();
+    loc::TextDisabled("%s", tr(T::FastenerPrintHint));
+    ImGui::PopTextWrapPos();
+    ImGui::EndChild();
+
+    // The footer: to the plate, and a bolt or a rod with its nut.
+    ImGui::Separator();
+    const bool can_send = !fastener_mesh_.empty();
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(kViolet));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(0x7C3AED));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, rgb(0x6D28D9));
+    ImGui::BeginDisabled(!can_send);
+    const bool send = ImGui::Button(tr(T::DesignSend), ImVec2(-FLT_MIN, ImGui::GetFrameHeight() * 1.3f));
+    ImGui::EndDisabled();
+    ImGui::PopStyleColor(3);
+    rect_of("fasteners_send");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(T::DesignSendTip));
+    bool pair = false;
+    if (cad::has_length(fastener_.kind)) {
+        ImGui::BeginDisabled(!can_send);
+        pair = ImGui::Button(tr(T::FastenerSendPair), ImVec2(-FLT_MIN, 0));
+        ImGui::EndDisabled();
+        rect_of("fasteners_send_pair");
+    }
+    if (send || pair)
+        send_fastener_to_plate(pair);
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
@@ -12263,6 +12630,8 @@ void App::layout() {
         // request, 2026-11-02: the view stays clear).
         if (tab_ == Tab::Design)
             design_panel();
+        else if (tab_ == Tab::Fasteners)
+            fasteners_panel();
         else
             settings_panel();
         if (help_open_)
@@ -12275,7 +12644,7 @@ void App::layout() {
             object_settings_window();
         }
         mixing_dialog();
-        if (!has_plate_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device && tab_ != Tab::Design) // those panels have their own buttons
+        if (!has_plate_ && !result_ && tab_ != Tab::Calibration && tab_ != Tab::Device && !engineering_tab(tab_)) // those panels have their own buttons
             empty_hint();
         if (tab_ == Tab::Preview)
             preview_panels();
@@ -12334,9 +12703,13 @@ void App::layout() {
     dialogs();
 
     // Shortcuts.
-    if (no_popup() && cad_design_ && tab_ == Tab::Design &&
-        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, ImGuiInputFlags_RouteGlobal))
-        send_design_to_plate(); // cad_design.md, rule 21
+    if (no_popup() && cad_design_ && engineering_tab(tab_) &&
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, ImGuiInputFlags_RouteGlobal)) {
+        if (tab_ == Tab::Design)
+            send_design_to_plate(); // cad_design.md, rule 21
+        else
+            send_fastener_to_plate(false);
+    }
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
@@ -13162,6 +13535,8 @@ void App::script_input() {
                 design_scroll_to_ = key;
                 return;
             }
+            if (key.starts_with("fasteners.")) // a field of the Fasteners panel, in view
+                return;
             if (!setting_place(key))
                 return fail_step("no such setting");
             go_to_setting(key);
@@ -13417,7 +13792,7 @@ void App::script_input() {
     } else if (step.verb == "pref") { // a preference set as its checkbox would: cad_design 0|1
         if (step.key == "cad_design") {
             cad_design_ = step.value != "0";
-            if (!cad_design_ && tab_ == Tab::Design)
+            if (!cad_design_ && engineering_tab(tab_))
                 set_tab(Tab::Prepare);
         } else {
             return fail_step("unknown preference");
@@ -13497,6 +13872,17 @@ void App::script_input() {
         std::printf("ui-script: expect-design %s: %s%.1f\n", step.key.c_str(), ok ? "ok, " : "got ", design_volume_);
         if (!ok)
             return fail_step("the design's volume is " + std::to_string(design_volume_) + " (" + design_error_ + ")");
+        next();
+    } else if (step.verb == "expect-fastener") { // the Fasteners tab's part: KIND (hex_nut...) and its volume in mm3 within 1 %
+        const double want = std::atof(step.value.c_str());
+        const double got = fastener_mesh_.signed_volume();
+        const bool ok = step.key == cad::fastener_id(fastener_.kind) && !fastener_mesh_.empty() &&
+                        std::abs(got - want) <= 0.01 * want;
+        std::printf("ui-script: expect-fastener %s %s: %s%s %.1f\n", step.key.c_str(), step.value.c_str(),
+                    ok ? "ok, " : "got ", cad::fastener_id(fastener_.kind), got);
+        if (!ok)
+            return fail_step("the part is " + std::string(cad::fastener_id(fastener_.kind)) + " of " + std::to_string(got) +
+                             " mm3 (" + fastener_error_ + ")");
         next();
     } else if (step.verb == "expect-apart") { // two named controls drawn, neither over the other
         const auto a = g_menu_rects.find(step.key), b = g_menu_rects.find(step.value);

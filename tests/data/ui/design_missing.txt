@@ -1,7 +1,9 @@
 # Without the design component (cad_design.md, CD21): the Design tab says so,
 # the primitives are off, and the rest of the program works (the cube slices).
+menu mode_engineering
 menu tab_design
 expect-control design_missing
 expect-control design_needs_solid
-menu tab_prepare
+menu mode_print
+expect-control tab_prepare
 slice

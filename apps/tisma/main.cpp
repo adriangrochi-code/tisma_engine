@@ -21,7 +21,7 @@ constexpr const char* kUsage =
     "                            resin_exposure|resin_measure|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
-    "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|analysis|calibration|device]\n"
+    "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|design|fasteners|analysis|calibration|device]\n"
     "                                   [--layer N] [--look X,Y,Z,DISTANCE,YAW,PITCH]\n"
     "                                   [--tool move|rotate|scale|lay|paint|material|mixing]\n"
     "                                   [--paint support|seam|fuzzy,enforce|block,X,Y,Z,RADIUS]...\n"
@@ -105,9 +105,11 @@ int main(int argc, char** argv) {
             }
         } else if (arg == "--view") {
             options.view = value();
-            if (options.view != "prepare" && options.view != "preview" && options.view != "analysis" &&
-                options.view != "calibration" && options.view != "device") {
-                std::fprintf(stderr, "error: --view must be prepare, preview, analysis, calibration or device\n");
+            if (options.view != "prepare" && options.view != "preview" && options.view != "design" &&
+                options.view != "fasteners" && options.view != "analysis" && options.view != "calibration" &&
+                options.view != "device") {
+                std::fprintf(stderr,
+                             "error: --view must be prepare, preview, design, fasteners, analysis, calibration or device\n");
                 return 2;
             }
         } else if (arg == "--layer") {

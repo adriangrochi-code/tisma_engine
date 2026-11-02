@@ -1,0 +1,43 @@
+# Fasteners (the owner's request, 2026-11-02): in the Ingeniería section, its
+# own panel in the left column; an M8 nut, a bolt sent with its nut, the size
+# and the length changed, and a bad length refused.
+menu mode_engineering
+menu tab_fasteners
+expect-control fasteners_kind_hex_bolt
+expect-control fasteners_kind_threaded_rod
+expect-control fasteners_size
+expect-control fasteners_send
+expect-control fasteners_send_pair
+expect-no-control design_send
+expect-no-control tab_prepare
+menu fasteners_kind_hex_nut
+expect-no-control fasteners_send_pair
+expect-fastener hex_nut 661.4
+menu fasteners_send
+expect-objects 2 Tuerca M8
+expect-control tab_prepare
+menu mode_engineering
+expect-control fasteners_kind_hex_bolt
+menu fasteners_kind_hex_bolt
+menu fasteners_size
+menu fasteners_size_M5
+click fasteners.length
+select-all
+type 12
+key enter
+expect-fastener hex_bolt 352.3
+menu fasteners_send_pair
+expect-objects 4 Tuerca M5
+menu mode_engineering
+click fasteners.length
+select-all
+type 1
+key enter
+expect-control fasteners_bad
+click fasteners.length
+select-all
+type 16
+key enter
+expect-no-control fasteners_bad
+menu mode_print
+expect-control tab_prepare
