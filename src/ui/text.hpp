@@ -98,7 +98,6 @@
     X(ReportStateNew, "Nuevo", "New") \
     X(ReportStateConfirmed, "Confirmado", "Confirmed") \
     X(ReportStateFixed, "Arreglado", "Fixed") \
-    X(ReportStateFixedIn, "Arreglado en %s", "Fixed in %s") \
     X(ReportStateWontFix, "No se arregla", "Won't fix") \
     X(ReportStateDuplicate, "Repetido", "Duplicate") \
     X(CloudChipTip, "Tu cuenta de Tisma Cloud: entrar, horas del mes y planes", "Your Tisma Cloud account: log in, the month's hours and the plans") \
@@ -121,7 +120,7 @@
     X(CloudNotLogged, "Sin sesión.", "Not logged in.") \
     X(CloudLoggedAs, "Con la sesión de %s.", "Logged in as %s.") \
     X(CloudLogIn, "Entrar", "Log in") \
-    X(CloudLogOut, "Salir", "Log out") \
+    X(CloudLogOut, "Cerrar sesión", "Log out") \
     X(CloudWorking, "Hablando con el servidor…", "Talking to the server…") \
     X(CloudExpired, "La sesión terminó: entrá de nuevo.", "The session ended: log in again.") \
     X(CloudTooMany, "Demasiados pedidos: probá de nuevo en un rato.", "Too many requests: try again in a while.") \

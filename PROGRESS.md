@@ -8902,11 +8902,32 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 
 - `Client::my_reports` (`GET /v1/me/reports`, `problem_reports.md`, regla 11). Lee una lista, `{"reports": [...]}` o
   `{"items": [...]}`. Los ordena del más nuevo al más viejo por `created_at`. La versión que lo arregla sale de
-  `fixed_in` o `fixed_version`.
+  `fixed_in` o `fixed_version`. (Corregido después con las respuestas del servidor real; ver abajo.)
 - En el diálogo de Tisma Cloud, con sesión, el botón «Mis informes (N)…» abre su propia ventana con la fecha, el
   título y el estado: nuevo, confirmado, arreglado (con «en X» si viene), no se arregla o repetido. Un estado que no
   conoce se muestra tal cual. La tabla toma la altura de sus filas, hasta diez.
 - **Pruebas:** `[cloud]` (dos informes, el más nuevo primero, la versión, 401 sin sesión); el guion `cloud` (IP10).
 - **A confirmar con el equipo de fichas:** la forma de la respuesta y los nombres de los estados y de la versión
   (la ficha no los dice).
+
+### Respuestas del servidor real, UI47 y UI48
+
+- El equipo de fichas leyó el servidor real:
+  - `GET /v1/me/reports` da `{"reports": [...]}`, el más nuevo primero, sin versión que lo arregle. El motor ya no
+    la muestra.
+  - `GET /v1/jobs?limit=N` da `{"jobs": [...]}`. El motor pide `limit=50`.
+  - `POST /v1/jobs` solo acepta un ZIP con `3D/*.model`. «Laminar en la nube» con el proyecto propio falla hoy
+    contra el servidor real: el simulado lo aceptaba. Lo próximo es el proyecto como paquete 3MF (`formats.md`,
+    regla 11). Antes, una pregunta sobre qué conserva `sanitize_project` en el nodo.
+- **UI47:**
+  - «Salir» pasa a «Cerrar sesión»;
+  - el diálogo muestra solo la acción que corresponde: «Entrar» sin sesión, «Cerrar sesión» con sesión;
+  - el guion `cloud` lo comprueba.
+- **UI48:**
+  - Ctrl+Z, Ctrl+Y, Ctrl+Mayús+Z, Ctrl+, y Ctrl+P se deciden con los modificadores que trae cada evento de tecla (el
+    callback de teclas de GLFW, instalado antes que el de ImGui), no con el estado de Ctrl al dibujar;
+  - una Z dentro del medio segundo de un Ctrl+Z no encuadra la pieza;
+  - con XTest (por `ctypes`, en Xvfb) no se reprodujo el fallo, ni con los cuatro eventos juntos ni con 4, 12 o 30 ms
+    entre ellos: el deshacer funcionaba ya, y sigue funcionando por el camino nuevo;
+  - paso de guion nuevo `key-quick` (aprieta y suelta todo en un cuadro), usado en `place_undo`.
 

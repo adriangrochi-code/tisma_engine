@@ -12,9 +12,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Atajos con Ctrl más firmes** (UI48): Ctrl+Z, Ctrl+Y, Ctrl+Mayús+Z, Ctrl+, y Ctrl+P se leen de cada pulsación,
+  así un Ctrl+Z muy rápido no se toma como Z (encuadrar).
+- **Diálogo de Tisma Cloud** (UI47): «Cerrar sesión» en vez de «Salir», y solo la acción que corresponde.
 - **Mis informes** (ficha `problem_reports.md`, regla 11): con la sesión iniciada, el diálogo de Tisma Cloud tiene
-  «Mis informes (N)…», con la fecha, el título y el estado de cada informe propio, el más nuevo primero, y la versión
-  que lo arregla si el servidor la manda.
+  «Mis informes (N)…», con la fecha, el título y el estado de cada informe propio, el más nuevo primero.
 - **Informar un cierre inesperado** (ficha `problem_reports.md`, regla 10): si el programa se cerró sin su salida
   normal, al abrirlo de nuevo ofrece informarlo, con «Tisma se cerró» elegido y el registro de la sesión que se cerró.
   Si se cancela, no se pregunta de nuevo por ese cierre. Nada se manda sin tocar «Mandar».

@@ -5,7 +5,7 @@
 # the session with the account's hours as the server sends them (CC14) and
 # its jobs (rule 10) and its reports, the newest first (problem_reports.md,
 # rule 11; IP10); Log out
-# closes it.
+# closes it. Only the action that applies shows: Log in or Log out (UI47).
 menu cloud_chip
 expect-control cloud_window
 cloud-wait
@@ -24,6 +24,7 @@ expect-cloud logged yes
 expect-cloud plan Maker
 expect-cloud hours 9.25
 expect-control cloud_hours
+expect-no-control cloud_login
 expect-cloud jobs 1
 expect-control cloud_job_list
 expect-cloud reports 2 Tisma closed while slicing
@@ -34,6 +35,8 @@ expect-no-control my_reports_window
 menu cloud_logout
 cloud-wait
 expect-cloud logged no
+expect-no-control cloud_logout
+expect-control cloud_login
 menu cloud_close
 menu more
 menu cloud

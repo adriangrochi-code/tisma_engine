@@ -241,9 +241,7 @@ TEST_CASE("cloud: the account's own reports, the newest first (problem_reports.m
     CHECK(reports[0].id == "9");
     CHECK(reports[0].title == "Tisma closed while slicing");
     CHECK(reports[0].status == "confirmed");
-    CHECK(reports[0].fixed_in.empty());
     CHECK(reports[1].status == "fixed");
-    CHECK(reports[1].fixed_in == "0.10.0-alpha.3");
     cloud::Client stranger(mock.url(), "");
     CHECK_FALSE(stranger.my_reports(reports, error));
     CHECK(error.expired());

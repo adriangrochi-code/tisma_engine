@@ -256,10 +256,8 @@ bool Client::my_reports(std::vector<SentReport>& reports, Failure& error) {
     }
     try {
         const nlohmann::json j = nlohmann::json::parse(r.body);
-        // A list, or {"reports": [...]}, or {"items": [...]}.
-        const nlohmann::json& list = j.is_object() && j.contains("reports") ? j["reports"]
-                                     : j.is_object() && j.contains("items") ? j["items"]
-                                                                             : j;
+        // {"reports": [...]}, newest first, at most 100; a bare list is read too.
+        const nlohmann::json& list = j.is_object() && j.contains("reports") ? j["reports"] : j;
         if (!list.is_array()) {
             error = unexpected();
             return false;
@@ -274,13 +272,10 @@ bool Client::my_reports(std::vector<SentReport>& reports, Failure& error) {
         for (const nlohmann::json& item : list) {
             if (!item.is_object())
                 continue;
-            SentReport report{text(item, "id"), text(item, "created_at"), text(item, "title"), text(item, "status"),
-                              text(item, "fixed_in")};
-            if (report.fixed_in.empty())
-                report.fixed_in = text(item, "fixed_version");
-            reports.push_back(std::move(report));
+            reports.push_back({text(item, "id"), text(item, "created_at"), text(item, "title"), text(item, "status")});
         }
-        // The newest first (rule 11, IP10): ISO dates sort as text.
+        // The newest first (rule 11, IP10), as the server sends them; kept so
+        // if it ever does not (ISO dates sort as text).
         std::stable_sort(reports.begin(), reports.end(),
                          [](const SentReport& a, const SentReport& b) { return a.created_at > b.created_at; });
         return true;
@@ -291,17 +286,16 @@ bool Client::my_reports(std::vector<SentReport>& reports, Failure& error) {
 }
 
 bool Client::jobs(std::vector<Job>& jobs, Failure& error) {
-    const net::Response r = net::perform(api("GET", url_ + "/v1/jobs", token_, 30));
+    // The latest 50 (the server's default; up to 200), newest first.
+    const net::Response r = net::perform(api("GET", url_ + "/v1/jobs?limit=50", token_, 30));
     if (!r.ok()) {
         error = failure(r);
         return false;
     }
     try {
         const nlohmann::json j = nlohmann::json::parse(r.body);
-        // A list, or {"jobs": [...]}, or {"items": [...]}.
-        const nlohmann::json& list = j.is_object() && j.contains("jobs")    ? j["jobs"]
-                                     : j.is_object() && j.contains("items") ? j["items"]
-                                                                             : j;
+        // {"jobs": [...]}; a bare list is read too.
+        const nlohmann::json& list = j.is_object() && j.contains("jobs") ? j["jobs"] : j;
         if (!list.is_array()) {
             error = unexpected();
             return false;

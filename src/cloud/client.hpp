@@ -43,8 +43,7 @@ struct Plan {
 // A report the account sent (GET /v1/me/reports; problem_reports.md, rule 11).
 struct SentReport {
     std::string id, created_at, title;
-    std::string status;   // new, confirmed, fixed, wontfix or duplicate, as the server writes it
-    std::string fixed_in; // the version that fixes it, when the server says
+    std::string status; // new, confirmed, fixed, wontfix or duplicate
 };
 
 struct Job {
@@ -94,15 +93,15 @@ public:
     // when there is one. similar: how many reports of the same problem the
     // server has besides this one.
     bool report(const std::map<std::string, std::string>& fields, int& similar, Failure& error);
-    // GET /v1/me/reports: the account's own reports, the newest first.
+    // GET /v1/me/reports: the account's own reports (up to 100), the newest first.
     bool my_reports(std::vector<SentReport>& reports, Failure& error);
 
     // A job: kind "slice" or "fea", params a JSON object, the project (3MF).
     bool submit(const std::string& kind, const std::string& params_json, const std::string& project_path, Job& job,
                 Failure& error);
     bool status(const std::string& job_id, Job& job, Failure& error);
-    // GET /v1/jobs (cloud.md, rule 10): the account's jobs, as the server
-    // orders them.
+    // GET /v1/jobs?limit=50 (cloud.md, rule 10): the account's latest jobs,
+    // newest first.
     bool jobs(std::vector<Job>& jobs, Failure& error);
     bool cancel(const std::string& job_id, Failure& error);
     bool download(const std::string& job_id, const std::string& path, Failure& error);

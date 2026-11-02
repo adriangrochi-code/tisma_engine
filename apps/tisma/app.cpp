@@ -120,6 +120,42 @@ constexpr std::uint32_t kWarningColour = 0xE5A13A; // a warning in the help (an 
 
 // Set by SIGTERM or SIGINT: the main loop ends as when the window closes.
 volatile std::sig_atomic_t g_stop_signal = 0;
+
+// The Ctrl shortcuts as each key event carried them (the spec team's UI48: a
+// quick Ctrl+Z, all within one frame, could reach the frame as a plain Z).
+// GLFW's key callback gives the modifiers held at that key's press; the
+// frame reads them here instead of Ctrl's state when it is drawn.
+struct KeyChord {
+    char key = 0;        // 'z', 'y', ',' or 'p', by the layout's own letter
+    bool shift = false;
+    double time = 0.0;   // glfwGetTime() at the press
+};
+std::vector<KeyChord> g_chords;
+double g_ctrl_z_time = -1.0; // the last Ctrl+Z or Ctrl+Shift+Z press: a Z then is not "frame the part"
+
+void on_key(GLFWwindow*, int key, int scancode, int action, int mods) {
+    if (action != GLFW_PRESS || !(mods & GLFW_MOD_CONTROL))
+        return;
+    const char* name = glfwGetKeyName(key, scancode);
+    char c = name && name[0] && !name[1] ? char(std::tolower(static_cast<unsigned char>(name[0]))) : 0;
+    if (!c && key == GLFW_KEY_COMMA)
+        c = ',';
+    if (c != 'z' && c != 'y' && c != ',' && c != 'p')
+        return;
+    g_chords.push_back({c, (mods & GLFW_MOD_SHIFT) != 0, glfwGetTime()});
+    if (c == 'z')
+        g_ctrl_z_time = glfwGetTime();
+}
+
+// A chord of this frame, taken (so it acts once).
+bool take_chord(char key, bool shift) {
+    for (auto it = g_chords.begin(); it != g_chords.end(); ++it)
+        if (it->key == key && it->shift == shift) {
+            g_chords.erase(it);
+            return true;
+        }
+    return false;
+}
 void on_stop_signal(int) { g_stop_signal = 1; }
 
 constexpr const char* kIcons[] = {
@@ -2979,6 +3015,8 @@ bool App::init(std::string& error) {
     }
     if (!font_)
         font_ = io.Fonts->AddFontDefault();
+    // Before ImGui's own callbacks, which call it first (UI48).
+    glfwSetKeyCallback(window_, on_key);
     if (vulkan_) {
         ImGui_ImplGlfw_InitForVulkan(window_, true);
         if (!vk_.init_imgui(error))
@@ -12621,13 +12659,10 @@ void App::cloud_window() {
                     const char* state = s == "new"         ? tr(T::ReportStateNew)
                                         : s == "confirmed" ? tr(T::ReportStateConfirmed)
                                         : s == "fixed"     ? tr(T::ReportStateFixed)
-                                        : s == "wontfix" || s == "wont_fix" || s == "won't fix" ? tr(T::ReportStateWontFix)
+                                        : s == "wontfix"   ? tr(T::ReportStateWontFix)
                                         : s == "duplicate" ? tr(T::ReportStateDuplicate)
                                                            : s.c_str();
-                    if (s == "fixed" && !sent.fixed_in.empty())
-                        loc::Text(tr(T::ReportStateFixedIn), sent.fixed_in.c_str());
-                    else
-                        loc::Text("%s", state);
+                    loc::Text("%s", state);
                 }
                 ImGui::EndTable();
             }
@@ -12672,33 +12707,38 @@ void App::cloud_window() {
     }
     ImGui::PopTextWrapPos();
 
-    // The buttons, at the bottom right: Log out, Close, Log in.
+    // The buttons, at the bottom right: the action that applies (Log out
+    // with a session, Log in without one; the spec team's UI47), and Close.
     ImGui::Spacing();
     ImGui::Separator();
-    const float bw = 110.0f * scale_, gap = ImGui::GetStyle().ItemSpacing.x;
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, width - 3.0f * bw - 2.0f * gap));
-    ImGui::BeginDisabled(busy || !signed_in);
-    if (ImGui::Button(tr(T::CloudLogOut), ImVec2(bw, 0)))
-        cloud_start(CloudReply::Kind::Logout);
-    ImGui::EndDisabled();
-    rect_of("cloud_logout");
-    ImGui::SameLine();
+    const float bw = 130.0f * scale_, gap = ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, width - 2.0f * bw - gap));
+    if (signed_in) {
+        ImGui::BeginDisabled(busy);
+        if (ImGui::Button(tr(T::CloudLogOut), ImVec2(bw, 0)))
+            cloud_start(CloudReply::Kind::Logout);
+        ImGui::EndDisabled();
+        rect_of("cloud_logout");
+        ImGui::SameLine();
+    }
     if (ImGui::Button(tr(T::Close), ImVec2(bw, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
         cloud_password_.clear();
         ImGui::CloseCurrentPopup();
     }
     rect_of("cloud_close");
-    ImGui::SameLine();
-    ImGui::BeginDisabled(busy || signed_in);
-    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-    if (ImGui::Button(tr(T::CloudLogIn), ImVec2(bw, 0)) ||
-        (!signed_in && !busy && ImGui::IsKeyPressed(ImGuiKey_Enter) && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)))
-        cloud_start(CloudReply::Kind::Login);
-    ImGui::PopStyleColor(3);
-    ImGui::EndDisabled();
-    rect_of("cloud_login");
+    if (!signed_in) {
+        ImGui::SameLine();
+        ImGui::BeginDisabled(busy);
+        ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+        if (ImGui::Button(tr(T::CloudLogIn), ImVec2(bw, 0)) ||
+            (!busy && ImGui::IsKeyPressed(ImGuiKey_Enter) && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)))
+            cloud_start(CloudReply::Kind::Login);
+        ImGui::PopStyleColor(3);
+        ImGui::EndDisabled();
+        rect_of("cloud_login");
+    }
     ImGui::EndPopup();
     ImGui::PopStyleColor();
 }
@@ -15072,8 +15112,10 @@ void App::layout() {
     dialogs();
 
     // Shortcuts.
-    if (no_popup() && cad_design_ && engineering_tab(tab_) &&
-        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, ImGuiInputFlags_RouteGlobal)) {
+    // Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Ctrl+, and Ctrl+P come from the key
+    // events themselves (UI48, g_chords), and only for this frame: one not
+    // taken here (a text field or a dialog had the keys) is dropped below.
+    if (no_popup() && cad_design_ && engineering_tab(tab_) && take_chord('p', true)) {
         if (design_page_ == DesignPage::Fasteners)
             send_fastener_to_plate(false);
         else if (design_page_ == DesignPage::Gears)
@@ -15082,8 +15124,7 @@ void App::layout() {
             send_design_to_plate(); // cad_design.md, rule 21
     }
     // Configuración: Ctrl+, and Ctrl+P (preferences.md).
-    if (no_popup() && (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma, ImGuiInputFlags_RouteGlobal) ||
-                       ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, ImGuiInputFlags_RouteGlobal)))
+    if (no_popup() && (take_chord(',', false) || take_chord('p', false)))
         config_open_ = true;
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
         purpose_ = Purpose::Open;
@@ -15130,7 +15171,7 @@ void App::layout() {
         if (ImGui::IsKeyPressed(ImGuiKey_K, false))
             camera_.orthographic = !camera_.orthographic;
         if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && !ImGui::IsKeyDown(ImGuiKey_LeftCtrl) &&
-            !ImGui::IsKeyDown(ImGuiKey_RightCtrl)) {
+            !ImGui::IsKeyDown(ImGuiKey_RightCtrl) && glfwGetTime() - g_ctrl_z_time > 0.5) {
             // The chosen part, or everything (not with Ctrl: that is undo, UI45).
             if (tab_ == Tab::Prepare && selected_ >= 0 && std::size_t(selected_) < placed_meshes_.size() &&
                 !placed_meshes_[std::size_t(selected_)].empty()) {
@@ -15154,10 +15195,9 @@ void App::layout() {
     // The plate's undo and redo (UI45), not while a text field takes the keys
     // (it undoes its own typing).
     if (tab_ == Tab::Prepare && !ImGui::GetIO().WantTextInput && !printer_page_) {
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z, ImGuiInputFlags_RouteGlobal))
+        if (take_chord('z', false))
             undo_place(false);
-        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y, ImGuiInputFlags_RouteGlobal) ||
-            ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z, ImGuiInputFlags_RouteGlobal))
+        if (take_chord('y', false) || take_chord('z', true))
             undo_place(true);
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
@@ -15167,6 +15207,7 @@ void App::layout() {
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_E, ImGuiInputFlags_RouteGlobal) && result_ && result_->ok && !viewer_ &&
         !stale_)
         begin_export();
+    g_chords.clear();
 }
 
 // The frame of the 3D view: where it is, the camera, the lights (they follow
@@ -15916,6 +15957,8 @@ void App::script_input() {
                : name == "f10"                                     ? ImGuiKey_F10
                : name == "z"                                       ? ImGuiKey_Z
                : name == "y"                                       ? ImGuiKey_Y
+               : name == "p"                                       ? ImGuiKey_P
+               : name == "comma"                                   ? ImGuiKey_Comma
                                                                    : ImGuiKey_None;
     };
     if (step.verb == "click") {
@@ -15948,7 +15991,9 @@ void App::script_input() {
     } else if (step.verb == "type") {
         io.AddInputCharactersUTF8(step.value.c_str());
         next();
-    } else if (step.verb == "key") { // a key, with ctrl+ and shift+ before it as they are held
+    } else if (step.verb == "key" || step.verb == "key-quick") {
+        // A key, with ctrl+ and shift+ before it as they are held; key-quick
+        // presses and lets go of all of it within one frame (UI48).
         std::string_view name = step.key;
         std::vector<ImGuiKey> mods;
         for (bool more = true; more;) {
@@ -15968,11 +16013,25 @@ void App::script_input() {
             for (const ImGuiKey m : mods)
                 io.AddKeyEvent(m, true);
             io.AddKeyEvent(key, true);
-        } else if (f == 1) {
+            // As a person's key event brings it (UI48, g_chords).
+            const bool ctrl = std::find(mods.begin(), mods.end(), ImGuiMod_Ctrl) != mods.end();
+            const bool shift = std::find(mods.begin(), mods.end(), ImGuiMod_Shift) != mods.end();
+            const char c = key == ImGuiKey_Z ? 'z' : key == ImGuiKey_Y ? 'y' : key == ImGuiKey_Comma ? ',' : key == ImGuiKey_P ? 'p' : 0;
+            if (ctrl && c) {
+                g_chords.push_back({c, shift, glfwGetTime()});
+                if (c == 'z')
+                    g_ctrl_z_time = glfwGetTime();
+            }
+            if (step.verb == "key-quick") {
+                io.AddKeyEvent(key, false);
+                for (const ImGuiKey m : mods)
+                    io.AddKeyEvent(m, false);
+            }
+        } else if (f == 1 && step.verb == "key") {
             io.AddKeyEvent(key, false);
             for (const ImGuiKey m : mods)
                 io.AddKeyEvent(m, false);
-        } else {
+        } else if (f >= 1) {
             next();
         }
     } else if (step.verb == "select-all") {

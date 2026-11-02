@@ -1,6 +1,7 @@
 # Ctrl+Z puts a moved model back and Ctrl+Y moves it again (the spec team's
 # UI45): one step per handle drag and one per edit in the Move card; the
-# model's placement is what the view, the card and the slice use.
+# model's placement is what the view, the card and the slice use. A quick
+# Ctrl+Z, all of it within one frame, is undo, not "frame the part" (UI48).
 drag-control gizmo_move_x 60 0
 expect-place x 133..200
 key ctrl+z
@@ -18,3 +19,12 @@ expect-place x 133..200
 key ctrl+z
 wait 3
 expect-place x 128
+key ctrl+y
+wait 3
+expect-place x 133..200
+key-quick ctrl+z
+wait 3
+expect-place x 128
+key-quick ctrl+shift+z
+wait 3
+expect-place x 133..200
