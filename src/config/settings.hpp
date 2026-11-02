@@ -227,6 +227,10 @@ struct Settings {
     // Vase mode (docs/spec/features/vase_mode.md): one wall that rises in a
     // spiral, a layer each turn, over flat bottom layers.
     bool vase = false;
+    // The Design tab's mesh of a design sent to the plate (cad_design.md):
+    // how far it may stray from the exact surface, mm, and the largest angle
+    // between neighbouring facets, degrees.
+    double cad_chord_tolerance = 0.01, cad_angle_tolerance = 5.0;
     // Fuzzy skin (docs/spec/features/fuzzy_skin.md): the outer wall made rough.
     FuzzyMode fuzzy_mode = FuzzyMode::None;
     double fuzzy_thickness = 0.3;      // mm off the line, either way
@@ -605,6 +609,11 @@ struct Settings {
     bool retract_layer_change = false;
     bool wipe = false;
     double before_wipe = 0.0;        // % of the retraction done standing, before the wipe
+    double after_wipe = 0.0;         // % done standing after it, up to 100 - before_wipe (orca_2_5.md, rule 2)
+    // The wipe after an outer wall moved inward, toward the inner wall next
+    // to it (orca_2_5.md, rule 1): by mm, or % of the outer wall's width.
+    bool wipe_inward = false;
+    Speed wipe_inward_distance{50.0, true};
     double coast = 0.0;              // mm of each wall's and infill's end run without E (coasting.md); 0: off
     double lift_above = 0.0, lift_below = 0.0; // mm: the lift only above / below; 0: no limit
     bool firmware_retraction = false; // G10 and G11
@@ -922,7 +931,7 @@ bool color_mixing_offered(const Settings& settings);
 
 // The settings a filament may give its own value of (retraction_travel.md,
 // rule 10), and the settings with the filament's values in place.
-extern const std::array<const char*, 14> kFilamentRetractionNames;
+extern const std::array<const char*, 15> kFilamentRetractionNames;
 Settings with_filament_retraction(const Settings& settings);
 
 // Parses settings JSON. Throws SettingsError naming the key on bad input.

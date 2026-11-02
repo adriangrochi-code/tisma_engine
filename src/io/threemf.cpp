@@ -9,6 +9,9 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <cstdio>
+#include <string>
+#include <tuple>
 #include <cmath>
 #include <map>
 #include <optional>
@@ -341,6 +344,51 @@ ModelFile parse_3mf(std::string_view data) {
     if (out.mesh.empty())
         throw ModelError("3MF: nothing on the build plate to print");
     return out;
+}
+
+std::string write_3mf(const TriangleMesh& mesh, std::string_view name) {
+    // The corners welded by their exact coordinates into a vertex list.
+    std::vector<Vec3f> vertices;
+    std::vector<std::size_t> index(mesh.corners().size());
+    {
+        std::map<std::tuple<float, float, float>, std::size_t> seen;
+        for (std::size_t i = 0; i < mesh.corners().size(); ++i) {
+            const Vec3f& v = mesh.corners()[i];
+            const auto [it, added] = seen.emplace(std::make_tuple(v.x, v.y, v.z), vertices.size());
+            if (added)
+                vertices.push_back(v);
+            index[i] = it->second;
+        }
+    }
+    std::string escaped;
+    for (const char c : name)
+        escaped += c == '&' ? "&amp;" : c == '<' ? "&lt;" : c == '>' ? "&gt;" : c == '"' ? "&quot;" : std::string(1, c);
+    std::string model = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                        "<model unit=\"millimeter\" xml:lang=\"en-US\" "
+                        "xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\">\n"
+                        " <resources>\n  <object id=\"1\" type=\"model\" name=\"" + escaped + "\">\n   <mesh>\n    <vertices>\n";
+    char line[128];
+    for (const Vec3f& v : vertices) {
+        std::snprintf(line, sizeof line, "     <vertex x=\"%.6g\" y=\"%.6g\" z=\"%.6g\"/>\n", double(v.x), double(v.y), double(v.z));
+        model += line;
+    }
+    model += "    </vertices>\n    <triangles>\n";
+    for (std::size_t i = 0; i + 2 < index.size(); i += 3) {
+        std::snprintf(line, sizeof line, "     <triangle v1=\"%zu\" v2=\"%zu\" v3=\"%zu\"/>\n", index[i], index[i + 1], index[i + 2]);
+        model += line;
+    }
+    model += "    </triangles>\n   </mesh>\n  </object>\n </resources>\n <build>\n  <item objectid=\"1\"/>\n </build>\n</model>\n";
+    const std::string types = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                              "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\n"
+                              " <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\n"
+                              " <Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/>\n"
+                              "</Types>\n";
+    const std::string rels = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                             "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\n"
+                             " <Relationship Target=\"/3D/3dmodel.model\" Id=\"rel0\" "
+                             "Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/>\n"
+                             "</Relationships>\n";
+    return write_zip_stored({{"[Content_Types].xml", types}, {"_rels/.rels", rels}, {"3D/3dmodel.model", model}});
 }
 
 } // namespace tisma

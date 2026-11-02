@@ -1,0 +1,20 @@
+# The command line (cad_design.md, rule 12): a tool by its name in Spanish,
+# its sizes one by one (Enter keeps the default between brackets), Enter on
+# an empty line repeats the last tool, a sketch alias answers «Próximamente».
+menu tab_design
+menu design_command
+type cilindro
+key enter
+type 20
+key enter
+type 10
+key enter
+expect-design 3141.6
+key enter
+type 10
+key enter
+key enter
+expect-design 4712.4
+type L
+key enter
+expect-design 4712.4

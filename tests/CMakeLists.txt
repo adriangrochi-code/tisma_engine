@@ -77,11 +77,19 @@ add_executable(tisma_tests
   test_gcode_check.cpp
   test_gcode_preview.cpp
   test_calibration.cpp
+  test_determinism.cpp
   test_profiles.cpp
   test_project.cpp
   test_catalog.cpp
   test_device.cpp
+  test_cad.cpp
 )
+# The stand-in for the bundled solidcraft-cli (cad_design.md, rule 1): the
+# tests drive it instead of the real tool.
+add_executable(tisma_fake_solidcraft fake_solidcraft_cli.cpp)
+target_link_libraries(tisma_fake_solidcraft PRIVATE tisma_core tisma_warnings nlohmann_json::nlohmann_json)
+add_dependencies(tisma_tests tisma_fake_solidcraft)
+target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SOLIDCRAFT="$<TARGET_FILE:tisma_fake_solidcraft>")
 # Boost.Polygon is the oracle the own Voronoi diagram is tested against.
 # nlohmann/json reads the analysis report back.
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
@@ -194,6 +202,25 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/modal_keys.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_modal_keys.png)
     set_tests_properties(ui_script_modal_keys PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The Design tab (cad_design.md, stage D1) driven through the stand-in
+    # solidcraft-cli: the tab, the primitives, the command line, sending to the
+    # plate and editing again; without the component (CD21); hidden (CD1).
+    foreach(script design_tab design_command design_hidden design_sketch)
+      add_test(NAME ui_script_${script}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+                --solidcraft $<TARGET_FILE:tisma_fake_solidcraft>
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/${script}.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${script}.png)
+      set_tests_properties(ui_script_${script} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
+    add_test(NAME ui_script_design_missing
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --solidcraft ${CMAKE_CURRENT_BINARY_DIR}/no-such-solidcraft-cli
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/design_missing.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_design_missing.png)
+    set_tests_properties(ui_script_design_missing PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The plate's right-click menu adds a cube and a sphere as models.
     add_test(NAME ui_script_plate_menu
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

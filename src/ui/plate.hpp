@@ -68,7 +68,21 @@ struct PlateObject {
     std::string settings{};
     std::vector<PlateVolume> volumes{};
     std::vector<PlateRange> ranges{};
+    // Where it came from, when it came from the Design tab (cad_design.md,
+    // rules 21 and 22): the design as `cad::design_json` writes it, the
+    // SolidCraft design file, and a number of this session that «Editar en
+    // Diseño» and a second «Mandar a la placa» find it by (0: none).
+    std::string design{};
+    std::string design_file{};
+    int design_id = 0;
 };
+
+// The painting of a model carried onto another mesh of the same part (a
+// design built again with a measure changed, cad_design.md, rule 21): each
+// painted triangle's marks go to the triangle of `to` nearest to it that
+// faces the same way. Empty when either mesh is empty or they are too big to
+// match (over 40 million pairs).
+Painting carried_painting(const Painting& painting, const TriangleMesh& from, const TriangleMesh& to);
 
 // A volume's mesh where its object stands (a cylinder of 48 sides, its axis
 // on the model's Z), its faces out: `placed` is placed_mesh(object).

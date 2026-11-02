@@ -218,6 +218,39 @@ Si la verificación falla, el archivo queda como `<archivo>.rejected` y un cuadr
 línea. Exportar se habilita solo con un laminado al día y verificado. Si el modelo o los ajustes cambiaron, la barra
 de estado pide laminar de nuevo.
 
+### Diseño
+
+La pestaña Diseño (ficha `docs/spec/features/cad_design.md`, etapa D1) va entre Vista previa y Análisis y usa la misma
+vista y la misma cama que Preparar. El panel «Diseño» ocupa la columna izquierda en lugar del panel de ajustes de
+impresión (pedido del dueño, 2026-11-02: que la interfaz no se llene): **Nuevo** (Boceto y Abrir STEP, marcados
+«Próximamente»; las primitivas caja, cilindro, esfera, cono, tubo y toro), **Boceto**, **Operaciones** y
+**Parámetros** (próximamente), **Historial** (un renglón por pieza: el ojo la suprime, sus medidas se editan, × la
+borra) y **Medidas** (cuerpos, volumen y caja). Al pie, «Mandar a la placa» (Ctrl+Mayús+P), apagado con «Hacé un
+sólido primero.» hasta que haya un cuerpo. Abajo de la vista, la línea de comandos: una herramienta por su nombre
+(`caja`, `cilindro`, `esfera`, `cono`, `tubo`, `toro`, `mandar`, o en inglés), después cada medida con el valor de
+fábrica entre corchetes (Enter lo acepta), Enter en vacío repite la última herramienta y Esc cancela; los alias de
+boceto (`L`, `C`, `REC`…) contestan «Próximamente» hasta la etapa D2.
+
+Las piezas las construye el componente de diseño, `solidcraft-cli` (SolidCraft 0.30.0), que el paquete lleva en la
+carpeta `solidcraft/` junto al programa (`--solidcraft <ruta>` usa otro; las pruebas usan un sustituto). Si falta o
+no responde, la pestaña dice «Falta el componente de diseño» y el resto del programa sigue igual. Un objeto que
+salió de Diseño tiene «Editar en Diseño» en su menú: al mandarlo de nuevo reemplaza su malla y conserva el lugar, los
+ajustes, los modificadores y lo pintado. En Preparar, Boceto y Primitiva (tira de herramientas y menú de la placa)
+abren Diseño. La preferencia «Pestaña Diseño» (`ui.cad_design`) la oculta.
+
+**Bocetos** (etapa D2): Boceto, en Nuevo, pide el plano (XY, XZ o YZ) y abre el modo boceto: la cámara mira el plano
+sin perspectiva y sobre la vista aparece la tira de herramientas (Línea, Rectángulo, Círculo, Arco; Referencias F3,
+Ortogonal F8, Cuadrícula F9, Polar F10; Extruir, Revolucionar, Terminar). Se dibuja con clics en la vista o desde la
+línea de comandos: `L`, `REC`, `C`, `A` eligen la herramienta; un punto se escribe `x,y` (absoluto), `@dx,dy`
+(desde el último) o `@largo<ángulo` (grados desde +X); `C` cierra la cadena de líneas; un número solo es el radio de
+un círculo o el largo del tramo hacia el cursor; Enter en vacío repite la última herramienta; `E` extruye y `REV`
+revoluciona (piden la distancia, o el eje x/y y el ángulo); Esc sale de la herramienta y, otra vez, del boceto, sin
+borrar nada. Junto al cursor se ven el largo y el ángulo del tramo: se tipea el número, Tab pasa al otro y Enter pone
+el punto; lo tipeado queda como cota. Las referencias enganchan el puntero en extremos, puntos medios, centros,
+cuadrantes, intersecciones, perpendiculares, tangentes y el punto más cercano, cada una con su marca, y dejan la
+restricción que corresponde. En Historial, cada boceto muestra su operación con la distancia o el eje y el ángulo, y
+«Editar boceto» lo reabre.
+
 ### Análisis
 
 Muestra cuántos vóxeles tendría el análisis estructural de la pieza (`docs/ANALYSIS.md`), en calidad normal y alta:

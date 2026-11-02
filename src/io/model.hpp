@@ -46,6 +46,11 @@ ModelFile parse_obj(std::string_view text);
 // to ModelFile::negative. Throws ModelError.
 ModelFile parse_3mf(std::string_view package);
 
+// A 3MF package with one object of this mesh on its build plate, named, in
+// millimetres (3MF Core Specification): the model file, its content types
+// and its relationships, stored without compression.
+std::string write_3mf(const TriangleMesh& mesh, std::string_view name);
+
 // The model in memory: AMF, STEP, SVG and ZIP are not read yet and say so;
 // a ZIP package is a 3MF; otherwise the extension says (".obj"); otherwise it
 // is an STL. Throws ModelError.

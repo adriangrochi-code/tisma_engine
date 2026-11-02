@@ -400,4 +400,68 @@ std::string ZipArchive::read(const Entry& e) const {
     return out;
 }
 
+namespace {
+
+void put16(std::string& out, std::uint32_t v) {
+    out.push_back(char(v & 0xFF));
+    out.push_back(char((v >> 8) & 0xFF));
+}
+void put32(std::string& out, std::uint32_t v) {
+    put16(out, v & 0xFFFF);
+    put16(out, v >> 16);
+}
+
+} // namespace
+
+std::string write_zip_stored(const std::vector<ZipEntryToWrite>& entries) {
+    // Local headers with the data, then the central directory, then its end
+    // record (APPNOTE.TXT, 4.3): method 0, no time (0), the sizes and the
+    // CRC-32 in the headers, no ZIP64 (entries below 4 GB).
+    std::string out, central;
+    for (const ZipEntryToWrite& e : entries) {
+        const std::uint32_t crc = crc32(reinterpret_cast<const std::uint8_t*>(e.data.data()), e.data.size());
+        const std::uint32_t size = std::uint32_t(e.data.size()), at = std::uint32_t(out.size());
+        put32(out, 0x04034b50);
+        put16(out, 20); // version needed
+        put16(out, 0);  // flags
+        put16(out, 0);  // stored
+        put32(out, 0);  // time and date
+        put32(out, crc);
+        put32(out, size);
+        put32(out, size);
+        put16(out, std::uint32_t(e.name.size()));
+        put16(out, 0); // extra
+        out += e.name;
+        out += e.data;
+        put32(central, 0x02014b50);
+        put16(central, 20); // made by
+        put16(central, 20); // needed
+        put16(central, 0);
+        put16(central, 0);
+        put32(central, 0);
+        put32(central, crc);
+        put32(central, size);
+        put32(central, size);
+        put16(central, std::uint32_t(e.name.size()));
+        put16(central, 0); // extra
+        put16(central, 0); // comment
+        put16(central, 0); // disk
+        put16(central, 0); // internal attributes
+        put32(central, 0); // external attributes
+        put32(central, at);
+        central += e.name;
+    }
+    const std::uint32_t start = std::uint32_t(out.size());
+    out += central;
+    put32(out, 0x06054b50);
+    put16(out, 0);
+    put16(out, 0);
+    put16(out, std::uint32_t(entries.size()));
+    put16(out, std::uint32_t(entries.size()));
+    put32(out, std::uint32_t(central.size()));
+    put32(out, start);
+    put16(out, 0); // comment
+    return out;
+}
+
 } // namespace tisma

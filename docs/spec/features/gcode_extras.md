@@ -102,6 +102,8 @@ Las plantillas de G-code, sus variables, el nombre del archivo y los scripts de 
     largos (prueba X10).
 11. **E volumétrica:** con `gcode.volumetric_e`, toda E (extrusión y retracción) va en mm³: la E de siempre por la
     sección del filamento. Tisma Slicer no escribe `M200`; el usuario lo pone en su G-code de inicio (prueba X11).
+    Esto vale para impresoras de filamento. Con `machine.feedstock` `pellet`, el motor escribe el comando del dialecto
+    (`pellets.md`, regla 3).
 12. **Comentarios detallados:** con `gcode.verbose_comments`, cada línea lleva al final `; ` y qué hace: `perimeter`,
     `infill`, `infill (bridge)`, `skirt`, `retract`, `unretract`, `reset extrusion distance`, `travel to first layer
     point`, `move to first perimeter point`, `move to first infill point`, `move inwards before travel`, `simple layer

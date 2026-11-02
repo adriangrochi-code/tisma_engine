@@ -1,0 +1,13 @@
+# ui.cad_design off (cad_design.md, CD1): no Design tab and no Boceto or
+# Primitiva in the plate's menu; on again, the tab is back.
+pref cad_design 0
+expect-no-control tab_design
+right-click-plate
+expect-control shape
+expect-no-control design_primitive
+key escape
+pref cad_design 1
+expect-control tab_design
+right-click-plate
+expect-control design_primitive
+key escape

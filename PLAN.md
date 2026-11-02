@@ -1119,6 +1119,77 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   en paralelo. Gota de 172 080 triángulos: alineada 3,81 → 2,68 s (1,41 → 0,96 veces `nearest`). El G-code es el mismo
   byte a byte. La GPU no rinde acá (ver `PROGRESS.md`)
 
+### Lo nuevo de OrcaSlicer 2.5 (`docs/spec/features/orca_2_5.md`, pedido del dueño, 2026-10-29)
+
+La ficha sale solo de las notas de la versión y de la wiki públicas de OrcaSlicer (nunca de su código). Cada
+ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha:
+
+- [x] O4 (regla 19, OR19): el mismo G-code byte por byte con 1, 2 y 8 núcleos y en dos exportaciones. Ya se cumplía;
+  quedan dos pruebas (`[determinism]`): una T con soportes en árbol y relleno lightning, y dos objetos en dos
+  extrusores con etiquetas M486, piel difusa y arcos.
+- [ ] O1 (reglas 1 a 5): limpiar hacia adentro (hecha, 2026-11-02), retracción después del barrido (hecha), paredes
+  sin apoyo al final, modificadores de costura precisa, polyholes.
+- [ ] O2 (reglas 7 a 13 bis): expansión de la superficie de arriba, orden y ángulo fijo arriba y abajo, gyroid y TPMS
+  adaptativos, relleno suavizado, separado por pieza, de varias líneas, espiral hacia adentro.
+- [ ] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera
+  capa según los filamentos usados.
+- [ ] O6 (reglas 24 a 28): `--strict`, apoyar la pieza, inspeccionar, estadísticas, copias a lo largo de Y.
+- [ ] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
+  puentes; la balsa solo necesita la prueba OR15.
+- O7 y O8 van con sus fichas de interfaz.
+
+### Espacio de diseño CAD con SolidCraft (pedido del dueño, 2026-10-29, por el equipo de fichas)
+
+El dueño quiere diseñar dentro del laminador, como en la pestaña Design experimental de OrcaSlicer 2.5: croquis,
+extruir, revolucionar, barrer, solevar, redondeos, agujeros, roscas, booleanas, variables, STEP y pasar el diseño a la
+placa. La base propuesta es SolidCraft (hoy `github.com/tangency-labs/solidcraft`, antes `bherbruck/solidcraft`).
+
+**Revisado el 2026-10-29** (archivos de licencia, manifiestos, `Cargo.lock` y su lista de licencias; sin abrir código
+de ningún laminador):
+- **Licencia:** «MIT OR Apache-2.0», con `LICENSE-MIT`, `LICENSE-APACHE` y `NOTICE` («SolidCraft contributors»).
+- **Núcleo:** truck (Apache-2.0), sin OCCT ni otro núcleo en C++.
+- **Dependencias:** las 560 cajas que se distribuyen (su `THIRD-PARTY-LICENSES.txt`) tienen licencias permisivas o una
+  opción permisiva; ninguna GPL, LGPL ni AGPL obligatoria. Fuentes bajo OFL 1.1, modelos de prueba CC0 y de dominio
+  público.
+- **Madurez:** es muy nuevo y cambia todos los días. Tiene una semana de historia y 65 versiones; la v0.26.1 es del
+  2026-10-29. Dice «temprano pero usable para piezas simples». El formato de diseño cambia seguido, y su hoja de ruta
+  cambia de núcleo (truck → SMLib).
+- **Formas de entrar:**
+  - no hay biblioteca publicada ni interfaz en C (`unsafe_code = "forbid"`);
+  - `solidcraft-cli` corre guiones JSON (`run`, `commands`) y tiene servidor MCP;
+  - exporta STEP, IGES, 3MF, STL y OBJ;
+  - importa STEP e IGES como sólidos, y 3MF, STL y OBJ solo como mallas;
+  - para Windows hay un MSI de 80 MB y un zip portátil de 101 MB, sin firmar todavía.
+
+**Camino elegido (ficha `cad_design.md`, regla 1, por el equipo de fichas con el pedido del dueño, 2026-10-29):**
+Diseño es una pestaña más de la misma ventana; nunca otro programa.
+1. **Primer paso (D1 a D3), hecho desde el 2026-11-02:** el programa lleva adentro `solidcraft-cli` en una versión
+   fija (`cad::kSolidCraftVersion`, hoy **0.30.0**, release `v0.30.0` del 2026-11-02), en la carpeta `solidcraft/`
+   junto al ejecutable, con sus licencias. La pestaña Diseño le manda guiones JSON de comandos (`run guion.json
+   --save diseño.sc`, con `file.export_3mf` al final del guion) y lee el 3MF con el lector propio. Al arrancar le
+   pregunta `commands` en segundo plano y apaga, con «Próximamente», lo que esa versión no tiene; si falta, está
+   dañado o no responde (30 s para sondear, 120 s para construir), la pestaña lo dice y el resto del programa sigue
+   (regla 22 bis).
+   - **Tamaño medido** (2026-11-02): `solidcraft-cli.exe` de Windows x64 pesa **110 MB** sin comprimir y **43 MB**
+     dentro del zip; el zip del motor pasa de 4,8 MB a unos 48 MB. No es «mucho más chico» que la aplicación de
+     escritorio (172 MB): el CLI lleva el mismo núcleo. Decisión pendiente del dueño: si el tamaño molesta, se puede
+     descargar en la primera apertura de Diseño en vez de ir en el zip.
+   - En Linux va `solidcraft-cli` del `.tar.gz` (96 MB); las pruebas usan un sustituto propio
+     (`tests/fake_solidcraft_cli.cpp`) que arma las mismas primitivas, así la CI no descarga nada.
+   - **No probado con el binario real en esta sesión** (la sesión no puede ejecutar programas descargados): la
+     interfaz de comandos se tomó de la documentación pública de SolidCraft; el dueño lo prueba en Windows.
+2. **Después:** una crate propia en Rust que dependa de las crates de SolidCraft (`geom`, `sketch`, `kernel`, `doc`,
+   `io`, `engine`) y exporte una interfaz en C (SolidCraft prohíbe `unsafe`, así que la capa es nuestra), para
+   resolver el boceto en vivo al arrastrar sin otro proceso. Pide Rust en la compilación con MSVC.
+3. **Descartado:** SolidCraft como programa aparte instalado por la persona (iba contra el pedido del dueño).
+
+Etapas (regla 24): D1 (hecha el 2026-11-02: pestaña, panel, línea de comandos, primitivas, mandar a la placa y
+volver a editar; CD1, CD1b, CD7, CD19, CD20, CD21), D2 (hecha el 2026-11-02: bocetos en un plano, coordenadas
+tipeadas, entrada junto al cursor, referencias, ortogonal y polar, extruir y revolucionar; CD2, CD10, CD13 a CD16), D3 (restricciones, parámetros, línea de tiempo), D4 (redondeos, agujeros, roscas,
+patrones, booleanas), D5 (STEP e IGES, mallas, texto, proyecto, medidas).
+
+La ficha de comportamiento (`cad_design.md`) la escribe el equipo de fichas.
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:

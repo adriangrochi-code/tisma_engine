@@ -8460,3 +8460,124 @@ tutorial con lo básico, las correcciones y las dos vueltas de rendimiento en mo
 `release.yml` compila en Windows y en Linux y publica `tisma-engine-0.10.0-alpha.3-windows-x64.zip`, con
 `tisma.exe` (la interfaz) y `tisma-engine.exe`, al fusionar la PR `dev` → `alpha`.
 
+## 2026-10-29 (noche): OrcaSlicer 2.5, etapa O4 (mismo G-code en cualquier cantidad de núcleos)
+
+El equipo de fichas mandó `orca_2_5.md` (pasa `tools/check_spec.py`). La ficha sale de las notas y la wiki públicas de
+OrcaSlicer, sin código. Empieza por O4, la regla 19: la misma pieza con los mismos ajustes da el mismo G-code byte por
+byte, con cualquier cantidad de núcleos y en cada exportación.
+
+Ya se cumplía. Quedan dos pruebas en `tests/test_determinism.cpp` (`[determinism]`), cada una laminada con 1, 2 y 8
+hilos (`tbb::global_control` y un `task_arena` de ese tamaño) y dos veces con 8:
+- una T con soportes en árbol y relleno lightning;
+- dos T, cada una un objeto en su extrusor, con etiquetas M486 (Marlin), piel difusa externa y arcos sobre los
+  voladizos.
+
+Las dos comprueban que el caso de verdad tiene lo que dice: soporte, `T1` y `M486`.
+
+Se mezclaron en `dev` las fichas de la PR #45 (`spec/next`) y `main`, donde el dueño ya fusionó `alpha` (PR #47, con
+la 0.10.0-alpha.3).
+
+**Sigue:** O1 (reglas 1 a 5) y la propuesta de cómo integrar SolidCraft para el espacio de diseño CAD (pedido del
+dueño, por el equipo de fichas). Se está revisando su licencia y la de sus dependencias antes de proponer nada.
+
+## 2026-10-29 (noche): OrcaSlicer 2.5, regla 2 (retracción después del barrido)
+
+`retraction.after_wipe`: la parte de la retracción, en %, que se hace con la boquilla quieta después del barrido. Se
+recorta a 100 − `before_wipe`, y lo que queda se hace durante el barrido.
+- **Motor:** en el escritor, `retract`.
+- **Ajustes:** la clave, el filamento la puede pisar como las otras de retracción, y está en `CONFIG.md`.
+- **Panel:** el barrido y sus dos partes pasan a su propia tarjeta, «Barrido», porque la de retracción llegaba a 9
+  ajustes y el máximo es 8. La ficha del ajuste va en español y en inglés.
+- **Pruebas** (`[retraction]`):
+  - con 2 mm, 20 % antes y 30 % después: 0,4 quieta, 1 barriendo y 0,6 quieta, por los mismos 2,73 mm;
+  - OR2, 90 % después: se recorta a 80 %, 0,4 y 1,6 quietas, sin barrido.
+
+## 2026-11-02: OrcaSlicer 2.5, regla 1 (barrer hacia adentro)
+
+`retraction.wipe_inward` y `retraction.wipe_inward_distance` (mm o % del ancho real de la pared externa; 50 % de
+fábrica). Después de la pared externa, el barrido no vuelve sobre ella sino corrido hacia la pared interna de al lado.
+- **Motor:** en el escritor, al terminar un perímetro externo cerrado con `wipe_inward` prendido, se decide de qué
+  lado está la pieza sondeando un punto a medio ancho a la izquierda del último tramo contra las regiones de la capa
+  (`PointInPolygon` de Clipper2, paridad), y se le pasa al emisor la distancia (recortada a un ancho de pared) y el
+  lado. El barrido recorre una copia del camino recordado, corrida en cada punto por la media de las normales de sus
+  dos tramos, con el inglete recortado a dos veces la distancia. Solo con el barrido, más de una pared y el orden de
+  adentro hacia afuera; nunca en una calibración de retracción, de velocidad de retracción o de avance de presión
+  (los cambios por altura con esos valores lo apagan).
+- **Ajustes:** las dos claves, en el JSON (`"50%"` o un número en mm) y en `CONFIG.md`.
+- **Panel:** en la tarjeta «Barrido», una casilla y un campo de mm o %, con sus fichas en español y en inglés.
+- **Pruebas** (`[retraction]`, OR1): cubo de 20 mm, 3 paredes; con 50 % cada punto del barrido queda a medio ancho de
+  pared (0,2 mm) de la pared externa; con 0,3 mm, a 0,3; con 300 %, a un ancho; con 0 %, con `walls.outer_first`,
+  con una sola pared o con cambios de retracción por altura, el barrido de siempre sobre la pared. Y la ida y vuelta
+  de las dos formas de dar la distancia.
+
+**Sigue:** O1, reglas 3 a 5 (paredes sin apoyo al final, modificadores de costura precisa, polyholes).
+
+## 2026-11-02: pestaña Diseño, etapa D1 (`cad_design.md`, pedido del dueño por el equipo de fichas)
+
+El equipo de fichas mandó `cad_design.md` (en `spec/next`, pasa `tools/check_spec.py`) con el pedido del dueño del
+29-10: «una pestaña como es la de ingeniería pero con cosas para diseñar». Se hizo la etapa D1.
+- **Motor** (`src/cad/`): un diseño es una lista de piezas (caja, cilindro, esfera, cono, tubo, toro, con sus
+  medidas y el ojo que las suprime) que se vuelve el guion JSON que corre `solidcraft-cli` (`solid.box`,
+  `solid.cylinder`…, el tubo como cilindro con un cilindro cortado, `file.export_3mf` con la calidad que sale de
+  `cad.chord_tolerance`). La herramienta se sondea al arrancar (`--version`, `commands`) y se corre con límite de
+  tiempo, sin ventana (`posix_spawn` y `CreateProcessW`); el 3MF vuelve por el lector propio. Nuevo escritor de ZIP
+  sin comprimir y de 3MF; cono, tubo y toro en `src/mesh/shapes.cpp`.
+- **Sustituto para las pruebas** (`tests/fake_solidcraft_cli.cpp`): responde la misma línea de comandos y arma las
+  primitivas con las formas del motor; `TISMA_FAKE_SOLIDCRAFT_HANG` y `_BROKEN` prueban la regla 22 bis.
+- **Interfaz:** la pestaña entre Vista previa y Análisis, el panel (Nuevo, Boceto, Operaciones, Parámetros,
+  Historial, Medidas, «Mandar a la placa» con «Hacé un sólido primero.»), la línea de comandos con las primitivas en
+  los dos idiomas y los alias de boceto que contestan «Próximamente», «Editar en Diseño» en el menú del objeto, Boceto
+  y Primitiva en la tira de Preparar y en el menú de la placa, la preferencia `ui.cad_design`, Ctrl+Mayús+P. Lo
+  pintado se lleva a la pieza rehecha por el triángulo más cercano que mira para el mismo lado (`carried_painting`).
+- **Paquete:** `release.yml` baja el zip portátil de SolidCraft 0.30.0 (SHA-256 fija), y copia `solidcraft-cli.exe`
+  y sus licencias a `solidcraft/` junto al programa; en Linux, el `.tar.gz`. `THIRD_PARTY.md` y Créditos lo anotan.
+- **Medido:** `solidcraft-cli.exe` 110 MB (43 MB en zip); el zip del motor pasa de 4,8 MB a unos 48 MB.
+- **Pruebas:** `[cad]` (guion por primitiva, calidad, ida y vuelta del diseño, formas y 3MF, el sustituto sondeado y
+  una caja de 40 × 30 × 20 construida: 24 000 mm³; faltante, dañado y colgado), `[plate]` (lo pintado llevado), y
+  los guiones de interfaz `design_tab` (CD1, CD1b, CD19, CD20 y el volver a editar de CD7), `design_command`
+  (regla 12), `design_hidden` (CD1 con la preferencia apagada) y `design_missing` (CD21).
+- **No probado:** el `solidcraft-cli` real no se pudo ejecutar en esta sesión; los nombres de comandos y parámetros
+  vienen de su documentación pública. Hay que probarlo en Windows con la build: si un comando difiere, el mensaje de
+  Medidas lo dice («el componente de diseño rechazó el diseño: …»).
+
+**Sigue:** D2 (bocetos en un plano, coordenadas tipeadas, referencias a objetos, ortogonal y rastreo polar, extruir
+y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el guardado del diseño en el proyecto
+(D5) queda anotado en `PlateObject::design`.
+
+## 2026-11-02: mantenimiento (bloque de las 08:40; los de los días 30, 31 y 1 no corrieron: la sesión estaba parada)
+
+- **Comprobado:** `tools/ci_linux.sh` en verde con la regla 1 de `orca_2_5.md` (819 pruebas); `tisma_fuzz_gcode 2000`
+  con la semilla 20261102: 2000 corridas, 20 rechazadas por no imprimibles, 0 fallos.
+- **Encontrado y corregido:** nada del motor; en la pestaña Diseño nueva, dos cosas que las pruebas de guion
+  sacaron a la luz antes de publicar (la línea de comandos se desactivaba con Enter, y el campo de una medida
+  quedaba fuera de la zona visible del panel: ahora Enter deja el campo activo y el historial se desplaza hasta la
+  pieza nueva).
+- **Medido:** nada nuevo del laminado; el tamaño de `solidcraft-cli` (arriba).
+
+## 2026-11-02 (tarde): pestaña Diseño, etapa D2 (bocetos)
+
+- **Motor** (`src/cad/sketch.cpp`): el boceto sobre XY, XZ o YZ con cadenas de líneas, rectángulos, círculos y arcos;
+  los puntos tipeados como en los programas de dibujo técnico (`x,y`, `@dx,dy`, `@largo<ángulo`); las referencias a
+  objetos en su orden (extremo, punto medio, centro, cuadrante, intersección, perpendicular, tangente, más cercano,
+  cuadrícula); ortogonal y rastreo polar; y el guion de SolidCraft con sus ids (`l1`, `c1`, `a1`, `l3.start`…): las
+  referencias dejan `sketch.constraint.coincident` o `midpoint`, los largos tipeados `sketch.dimension`, y al final
+  `sketch.finish` y `solid.extrude` o `solid.revolve`. El sustituto extruye y revoluciona los contornos cerrados
+  (triangulación por recorte de orejas).
+- **Interfaz:** Boceto en Nuevo pide el plano y abre el modo boceto: la cámara mira el plano sin perspectiva, la tira
+  de herramientas sobre la vista (Línea, Rectángulo, Círculo, Arco, F3, F8, F9, F10, Extruir, Revolucionar, Terminar),
+  la línea de comandos con los alias (`L`, `REC`, `C`, `A`, `E`, `REV`; `C` cierra la cadena; Enter en vacío repite
+  la herramienta), los clics en la vista con la marca de cada referencia, la entrada junto al cursor (largo y ángulo,
+  Tab entre ellos), Esc sale de la herramienta y después del boceto sin borrar nada. En Historial, cada boceto muestra
+  su operación (extruir con la distancia, revolucionar con el eje y el ángulo) y «Editar boceto».
+- **Pedido del dueño (2026-11-02):** al abrir Diseño, el panel «Diseño» reemplaza al panel de ajustes de impresión
+  de la izquierda, en vez de flotar sobre la vista, para que la interfaz no se llene. La tira del boceto y la línea
+  de comandos quedan sobre la vista, a la derecha del panel.
+- **Pruebas:** `[cad]` (puntos tipeados, CD13 y CD14; ortogonal y polar, CD16; referencias y la restricción de punto
+  medio, CD15; el guion y sus ids; la ida y vuelta; el rectángulo extruido y los perfiles revolucionados por el
+  sustituto, CD2) y el guion de interfaz `design_sketch` (CD13, CD14, CD15, CD16, CD10 y CD2 por la pantalla).
+- **No probado:** el `solidcraft-cli` real, como en D1; los nombres de los puntos de un rectángulo (`l5.end` para la
+  esquina de abajo a la derecha) se dedujeron del orden de lados que documenta SolidCraft (bottom, right, top, left).
+
+**Sigue:** D3 (restricciones y cotas con los grados de libertad, parámetros, línea de tiempo editable), o las reglas
+3 a 5 de `orca_2_5.md`, según diga el dueño.
+

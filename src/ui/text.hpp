@@ -9,6 +9,7 @@
     X(TabPrepare, "Preparar", "Prepare")                                                                              \
     X(TabPreview, "Vista previa", "Preview")                                                                          \
     X(TabAnalysis, "Análisis", "Analysis")                                                                            \
+    X(TabDesign, "Diseño", "Design")                                                                                  \
     X(Open, "Abrir", "Open")                                                                                          \
     X(OpenTip, "Abrir un modelo STL, un proyecto, un G-code o ajustes (Ctrl+O)", "Open an STL model, a project, a G-code file or settings (Ctrl+O)") \
     X(Slice, "Laminar", "Slice")                                                                                      \
@@ -893,6 +894,103 @@
     X(SubSkirt, "Falda", "Skirt") \
     X(SubBrim, "Borde", "Brim") \
     X(SubSpecialModes, "Modos especiales", "Special modes") \
+    X(SubDesign, "Diseño", "Design") \
+    X(ChordTolerance, "Tolerancia de la malla", "Mesh tolerance") \
+    X(AngleTolerance, "Ángulo entre facetas", "Angle between facets") \
+    X(TipDesignTitle, "Diseño", "Design") \
+    X(TipDesign, "Dibujá y modelá una pieza acá adentro y mandala a la placa sin pasar por otro programa. Por ahora: primitivas con sus medidas; los bocetos y las operaciones vienen después.", \
+      "Draw and model a part right here and send it to the plate without another program. For now: primitives with their sizes; sketches and operations come later.") \
+    X(DesignTitle, "Diseño", "Design") \
+    X(DesignSecNew, "Nuevo", "New") \
+    X(DesignSecSketch, "Boceto", "Sketch") \
+    X(DesignSecOperations, "Operaciones", "Operations") \
+    X(DesignSecParameters, "Parámetros", "Parameters") \
+    X(DesignSecHistory, "Historial", "History") \
+    X(DesignSecMeasures, "Medidas", "Measures") \
+    X(DesignSketch, "Boceto", "Sketch") \
+    X(DesignPrimitive, "Primitiva", "Primitive") \
+    X(DesignOpenStep, "Abrir STEP", "Open STEP") \
+    X(ComingSoon, "Próximamente", "Coming soon") \
+    X(PrimBox, "Caja", "Box") \
+    X(PrimCylinder, "Cilindro", "Cylinder") \
+    X(PrimSphere, "Esfera", "Sphere") \
+    X(PrimCone, "Cono", "Cone") \
+    X(PrimTube, "Tubo", "Tube") \
+    X(PrimTorus, "Toro", "Torus") \
+    X(SizeLength, "Largo", "Length") \
+    X(SizeWidth, "Ancho", "Width") \
+    X(SizeHeight, "Alto", "Height") \
+    X(SizeDiameter, "Diámetro", "Diameter") \
+    X(SizeTopDiameter, "Diámetro de arriba", "Top diameter") \
+    X(SizeInnerDiameter, "Diámetro interior", "Inner diameter") \
+    X(SizeRingDiameter, "Diámetro del anillo", "Ring diameter") \
+    X(SizeSectionDiameter, "Diámetro de la sección", "Section diameter") \
+    X(DesignSend, "Mandar a la placa", "Send to the plate") \
+    X(DesignSendTip, "Ctrl+Mayús+P: la pieza pasa a Preparar como un objeto; si vino de ahí, lo reemplaza y conserva su lugar, sus ajustes y lo pintado", \
+      "Ctrl+Shift+P: the part goes to Prepare as an object; if it came from there, it replaces it and keeps its place, settings and painting") \
+    X(DesignNeedsSolid, "Hacé un sólido primero.", "Make a solid first.") \
+    X(DesignMissing, "Falta el componente de diseño: reinstalá Tisma para usar Diseño.", "The design component is missing: reinstall Tisma to use Design.") \
+    X(DesignChecking, "Comprobando el componente de diseño…", "Checking the design component…") \
+    X(DesignBuilding, "Construyendo…", "Building…") \
+    X(DesignVolume, "Volumen", "Volume") \
+    X(DesignBox, "Caja", "Box") \
+    X(DesignBodies, "Cuerpos", "Bodies") \
+    X(DesignNoBodies, "Todavía no hay cuerpos", "No bodies yet") \
+    X(DesignSuppress, "Suprimir (el ojo)", "Suppress (the eye)") \
+    X(DesignDeleteFeature, "Borrar", "Delete") \
+    X(DesignSent, "Mandado a la placa", "Sent to the plate") \
+    X(DesignReplaced, "El objeto se rehizo en la placa", "The object was remade on the plate") \
+    X(EditInDesign, "Editar en Diseño", "Edit in Design") \
+    X(DesignPref, "Pestaña Diseño", "Design tab") \
+    X(DesignBasedOn, "Basado en SolidCraft (MIT o Apache-2.0)", "Based on SolidCraft (MIT or Apache-2.0)") \
+    X(CommandLineHint, "Escribí una herramienta: caja, cilindro, esfera, cono, tubo, toro (Enter en vacío repite la última)", \
+      "Type a tool: box, cylinder, sphere, cone, tube, torus (Enter on an empty line repeats the last one)") \
+    X(CommandUnknown, "No conozco «%s». Herramientas: caja, cilindro, esfera, cono, tubo, toro, mandar", \
+      "Unknown tool \"%s\". Tools: box, cylinder, sphere, cone, tube, torus, send") \
+    X(CommandSoon, "«%s» viene en la próxima etapa (bocetos)", "\"%s\" comes in the next stage (sketches)") \
+    X(CommandBadNumber, "Hace falta un número mayor que 0", "A number above 0 is needed") \
+    X(CommandAdded, "%s agregado", "%s added") \
+    X(CommandCancelled, "Cancelado", "Cancelled") \
+    X(ToolSketchTip, "Boceto: abre Diseño y empieza un boceto", "Sketch: opens Design and starts a sketch") \
+    X(SketchPlane, "Plano del boceto", "Sketch plane") \
+    X(SketchPlaneXY, "XY (planta)", "XY (top)") \
+    X(SketchPlaneXZ, "XZ (frente)", "XZ (front)") \
+    X(SketchPlaneYZ, "YZ (lado)", "YZ (side)") \
+    X(SketchToolLine, "Línea (L)", "Line (L)") \
+    X(SketchToolRect, "Rectángulo (REC)", "Rectangle (REC)") \
+    X(SketchToolCircle, "Círculo (C)", "Circle (C)") \
+    X(SketchToolArc, "Arco (A)", "Arc (A)") \
+    X(SketchExtrude, "Extruir (E)", "Extrude (E)") \
+    X(SketchRevolve, "Revolucionar (REV)", "Revolve (REV)") \
+    X(SketchFinish, "Terminar boceto", "Finish sketch") \
+    X(SketchSnaps, "Referencias (F3)", "Snaps (F3)") \
+    X(SketchOrtho, "Ortogonal (F8)", "Ortho (F8)") \
+    X(SketchGrid, "Cuadrícula (F9)", "Grid (F9)") \
+    X(SketchPolar, "Polar (F10)", "Polar (F10)") \
+    X(SketchLength, "Largo", "Length") \
+    X(SketchAngle, "Ángulo", "Angle") \
+    X(SketchDistance, "Distancia", "Distance") \
+    X(SketchAxis, "Eje (x/y)", "Axis (x/y)") \
+    X(SketchHint, "Hacé clic en la vista o escribí un punto: x,y · @dx,dy · @largo<ángulo", "Click in the view or type a point: x,y · @dx,dy · @length<angle") \
+    X(SketchStarted, "Boceto en %s. Herramientas: L, REC, C, A; E extruye, REV revoluciona, Esc sale", "Sketch on %s. Tools: L, REC, C, A; E extrudes, REV revolves, Esc leaves") \
+    X(SketchClosed, "Contorno cerrado", "Outline closed") \
+    X(SketchNeedsThree, "Hacen falta tres puntos para cerrar", "Three points are needed to close") \
+    X(SketchNoRegion, "El boceto no tiene un contorno cerrado", "The sketch has no closed outline") \
+    X(EditSketch, "Editar boceto", "Edit sketch") \
+    X(OpExtrude, "Extruir", "Extrude") \
+    X(OpRevolve, "Revolucionar", "Revolve") \
+    X(SketchLeft, "Boceto guardado; se construye la pieza", "Sketch kept; the part is being built") \
+    X(SketchToolLeft, "Herramienta cerrada", "Tool closed") \
+    X(SnapEndpoint, "Extremo", "Endpoint") \
+    X(SnapMidpoint, "Punto medio", "Midpoint") \
+    X(SnapCenter, "Centro", "Centre") \
+    X(SnapQuadrant, "Cuadrante", "Quadrant") \
+    X(SnapIntersection, "Intersección", "Intersection") \
+    X(SnapPerpendicular, "Perpendicular", "Perpendicular") \
+    X(SnapTangent, "Tangente", "Tangent") \
+    X(SnapNearest, "Más cercano", "Nearest") \
+    X(SnapGrid, "Cuadrícula", "Grid") \
+    X(ToolPrimitiveTip, "Primitiva: abre Diseño con una caja, un cilindro, una esfera…", "Primitive: opens Design with a box, a cylinder, a sphere…") \
     X(SubFuzzy, "Piel difusa", "Fuzzy skin") \
     X(SubGcodeOut, "Salida G-code", "G-code output") \
     X(SubSlicing, "Corte", "Slicing") \
@@ -905,6 +1003,7 @@
     X(SubPressure, "Presión", "Pressure") \
     X(SubMaxFlow, "Flujo máximo", "Maximum flow") \
     X(SubRetract, "Retracción", "Retraction") \
+    X(SubWipe, "Barrido", "Wipe") \
     X(SubRetractTravel, "Viajes", "Travel") \
     X(SubNeeds, "Necesidades", "Requirements") \
     X(SubBedVolume, "Cama y volumen", "Bed and volume") \
@@ -999,6 +1098,7 @@
     X(SumHeightSteps, "%d tramos por Z", "%d steps by Z") \
     X(SumAdaptive, "Según la pendiente", "By the slope") \
     X(SumOff, "Apagado", "Off") \
+    X(SumOn, "Encendido", "On") \
     X(SumMm, "%s mm", "%s mm") \
     X(SumScarf, "%s · en bufanda", "%s · scarf") \
     X(SumNoCorrections, "Sin correcciones", "No corrections") \
@@ -1529,6 +1629,9 @@
     X(RetractLayerChange, "Retraer al cambiar de capa", "Retract on layer change") \
     X(WipeRow, "Barrer al retraer", "Wipe while retracting") \
     X(BeforeWipe, "Retracción antes del barrido", "Retraction before the wipe") \
+    X(AfterWipe, "Retracción después del barrido", "Retraction after the wipe") \
+    X(WipeInward, "Barrer hacia adentro", "Wipe inward") \
+    X(WipeInwardDistance, "Cuánto se corre el barrido", "How far the wipe moves in") \
     X(FirmwareRetraction, "Retracción del firmware (G10/G11)", "Firmware retraction (G10/G11)") \
     X(LiftAbove, "Saltar solo por encima de", "Lift only above") \
     X(LiftBelow, "Saltar solo por debajo de", "Lift only below") \

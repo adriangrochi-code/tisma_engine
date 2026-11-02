@@ -1,4 +1,5 @@
 #include "ui/plate.hpp"
+#include "mesh/shapes.hpp"
 #include "ui/measure.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -465,3 +466,39 @@ TEST_CASE("plate: the placing map without the placed mesh, and from one placemen
         CHECK_THAT(q[2], WithinAbs(placed2.corners()[i].z, 1e-3));
     }
 }
+
+TEST_CASE("plate: the painting carried onto a design built again (cad_design.md, rule 21)", "[ui][plate]") {
+    const TriangleMesh before = make_box(20.0, 20.0, 20.0), after = make_box(20.0, 20.0, 25.0);
+    // The top painted for support, one side blocked.
+    Painting painting;
+    for (std::size_t t = 0; t < before.triangle_count(); ++t) {
+        const bool top = before.corner(t, 0).z == 20.0f && before.corner(t, 1).z == 20.0f && before.corner(t, 2).z == 20.0f;
+        const bool front = before.corner(t, 0).y == -10.0f && before.corner(t, 1).y == -10.0f && before.corner(t, 2).y == -10.0f;
+        if (top)
+            painting.set_tree(PaintChannel::Support, t, {kPaintEnforce});
+        if (front)
+            painting.set_tree(PaintChannel::Seam, t, {kPaintBlock});
+    }
+    const Painting carried = carried_painting(painting, before, after);
+    int tops = 0, fronts = 0, others = 0;
+    for (std::size_t t = 0; t < after.triangle_count(); ++t) {
+        const bool top = after.corner(t, 0).z == 25.0f && after.corner(t, 1).z == 25.0f && after.corner(t, 2).z == 25.0f;
+        const bool front = after.corner(t, 0).y == -10.0f && after.corner(t, 1).y == -10.0f && after.corner(t, 2).y == -10.0f;
+        const bool support = !carried.tree(PaintChannel::Support, t).empty();
+        const bool seam = !carried.tree(PaintChannel::Seam, t).empty();
+        if (top)
+            tops += support ? 1 : 0;
+        else if (front)
+            fronts += seam ? 1 : 0;
+        else
+            others += (support || seam) ? 1 : 0;
+        if (top)
+            CHECK(carried.tree(PaintChannel::Support, t) == Painting::Tree{kPaintEnforce});
+    }
+    CHECK(tops == 2);
+    CHECK(fronts == 2);
+    CHECK(others == 0);
+    CHECK(carried_painting(painting, before, {}).empty());
+    CHECK(carried_painting({}, before, after).empty());
+}
+
