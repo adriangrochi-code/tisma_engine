@@ -606,6 +606,10 @@ struct Settings {
     bool wipe = false;
     double before_wipe = 0.0;        // % of the retraction done standing, before the wipe
     double after_wipe = 0.0;         // % done standing after it, up to 100 - before_wipe (orca_2_5.md, rule 2)
+    // The wipe after an outer wall moved inward, toward the inner wall next
+    // to it (orca_2_5.md, rule 1): by mm, or % of the outer wall's width.
+    bool wipe_inward = false;
+    Speed wipe_inward_distance{50.0, true};
     double coast = 0.0;              // mm of each wall's and infill's end run without E (coasting.md); 0: off
     double lift_above = 0.0, lift_below = 0.0; // mm: the lift only above / below; 0: no limit
     bool firmware_retraction = false; // G10 and G11

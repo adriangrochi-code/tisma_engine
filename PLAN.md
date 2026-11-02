@@ -1127,8 +1127,8 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
 - [x] O4 (regla 19, OR19): el mismo G-code byte por byte con 1, 2 y 8 núcleos y en dos exportaciones. Ya se cumplía;
   quedan dos pruebas (`[determinism]`): una T con soportes en árbol y relleno lightning, y dos objetos en dos
   extrusores con etiquetas M486, piel difusa y arcos.
-- [ ] O1 (reglas 1 a 5): limpiar hacia adentro, retracción después del barrido (hecha), paredes sin apoyo al
-  final, modificadores de costura precisa, polyholes.
+- [ ] O1 (reglas 1 a 5): limpiar hacia adentro (hecha, 2026-11-02), retracción después del barrido (hecha), paredes
+  sin apoyo al final, modificadores de costura precisa, polyholes.
 - [ ] O2 (reglas 7 a 13 bis): expansión de la superficie de arriba, orden y ángulo fijo arriba y abajo, gyroid y TPMS
   adaptativos, relleno suavizado, separado por pieza, de varias líneas, espiral hacia adentro.
 - [ ] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera

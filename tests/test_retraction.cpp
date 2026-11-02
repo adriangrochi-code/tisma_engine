@@ -20,6 +20,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <tuple>
 #include <vector>
 
 using namespace tisma;
@@ -275,6 +276,116 @@ TEST_CASE("retraction: every layer change retracts with retraction.on_layer_chan
     CHECK(retracted_changes == layers - 1);
     CHECK(count(with, standing_retraction) >= layers - 1);
     CHECK(count(with, standing_retraction) > count(without, standing_retraction) + layers / 2);
+}
+
+// The wipes of the fifth layer: for the ones right after the outer wall, how
+// far each move's end is from the line of that wall's last piece, toward the
+// part (the nearest and the farthest); and for every wipe, the farthest any
+// move's end is from the layer's extrusions.
+struct LayerWipes {
+    double near = 1e9, far = -1e9, off_path = 0.0;
+    int after_outer = 0, wipes = 0;
+};
+LayerWipes layer_wipes(const Read& r) {
+    LayerWipes w;
+    std::vector<const Move*> printed;
+    const Move* last_outer = nullptr;
+    bool after_outer = false;
+    for (std::size_t k = r.layer_starts[5]; k < r.layer_starts[6]; ++k) {
+        const Move& m = r.moves[k];
+        if (m.xy && m.e > 1e-9) {
+            printed.push_back(&m);
+            after_outer = m.type == "External perimeter";
+            if (after_outer)
+                last_outer = &m;
+        } else if (wipe(m) && !printed.empty()) { // not the layer's first travel, over the layer below
+            double d = 1e9;
+            for (const Move* o : printed)
+                d = std::min(d, to_segment(m.x, m.y, o->x0, o->y0, o->x, o->y));
+            w.off_path = std::max(w.off_path, d);
+            ++w.wipes;
+            if (after_outer) {
+                const double dx = last_outer->x - last_outer->x0, dy = last_outer->y - last_outer->y0;
+                const double len = std::hypot(dx, dy);
+                double nx = -dy / len, ny = dx / len; // toward the part's centre
+                if ((100.0 - last_outer->x0) * nx + (100.0 - last_outer->y0) * ny < 0.0)
+                    nx = -nx, ny = -ny;
+                const double off = (m.x - last_outer->x0) * nx + (m.y - last_outer->y0) * ny;
+                w.near = std::min(w.near, off);
+                w.far = std::max(w.far, off);
+                ++w.after_outer;
+            }
+        } else if (m.xy) {
+            after_outer = false; // a travel, or the move on to the next wall
+        }
+    }
+    return w;
+}
+
+TEST_CASE("retraction: the wipe after the outer wall moved inward (orca_2_5.md, OR1)", "[retraction]") {
+    Settings s = base();
+    s.wall_count = 3;
+    s.outer_wall_width = 0.4;
+    s.wipe = true;
+    s.wipe_inward = true;
+    s.wipe_inward_distance = {50.0, true};
+    // 50 %: the wipe goes in half a wall width from the wall's end, then back
+    // along the wall at that distance.
+    LayerWipes w = layer_wipes(read(gcode_of(cube(), s)));
+    REQUIRE(w.after_outer > 1);
+    CHECK_THAT(w.near, WithinAbs(0.2, 2e-3));
+    CHECK_THAT(w.far, WithinAbs(0.2, 2e-3));
+    // In mm, and never past one wall width.
+    s.wipe_inward_distance = {0.3, false};
+    w = layer_wipes(read(gcode_of(cube(), s)));
+    REQUIRE(w.after_outer > 1);
+    CHECK_THAT(w.near, WithinAbs(0.3, 2e-3));
+    CHECK_THAT(w.far, WithinAbs(0.3, 2e-3));
+    s.wipe_inward_distance = {300.0, true};
+    w = layer_wipes(read(gcode_of(cube(), s)));
+    REQUIRE(w.after_outer > 1);
+    CHECK_THAT(w.near, WithinAbs(0.4, 2e-3));
+    CHECK_THAT(w.far, WithinAbs(0.4, 2e-3));
+    // 0 %: the usual wipe, over the wall itself.
+    s.wipe_inward_distance = {0.0, true};
+    w = layer_wipes(read(gcode_of(cube(), s)));
+    REQUIRE(w.after_outer > 0);
+    CHECK(std::abs(w.near) < 2e-3);
+    CHECK(std::abs(w.far) < 2e-3);
+    CHECK(w.off_path < 2e-3);
+    // With the outer wall first there is no inner wall next to it: the usual
+    // wipe, after the last wall, over the path.
+    s.wipe_inward_distance = {50.0, true};
+    s.walls_outer_first = true;
+    w = layer_wipes(read(gcode_of(cube(), s)));
+    REQUIRE(w.wipes > 0);
+    CHECK(w.off_path < 2e-3);
+    // With one wall too (the travel to the infill retracts whatever its length).
+    s.walls_outer_first = false;
+    s.wall_count = 1;
+    s.retract_min_travel = 0.0;
+    w = layer_wipes(read(gcode_of(cube(), s)));
+    REQUIRE(w.wipes > 0);
+    CHECK(w.off_path < 2e-3);
+    // In a retraction calibration (a tower's changes of retraction length) it turns itself off.
+    s.wall_count = 3;
+    s.retract_min_travel = 2.0;
+    HeightChange c;
+    c.z = 1.0;
+    c.retract_length = 1.0;
+    s.changes = {c};
+    w = layer_wipes(read(gcode_of(cube(), s)));
+    REQUIRE(w.after_outer > 0);
+    CHECK(w.off_path < 2e-3);
+    s.changes.clear();
+    // The settings round-trip both ways of giving the distance.
+    s.wipe_inward_distance = {50.0, true};
+    CHECK(parse_settings(settings_json(s)).wipe_inward_distance.percent);
+    CHECK_THAT(parse_settings(settings_json(s)).wipe_inward_distance.value, WithinAbs(50.0, 1e-9));
+    s.wipe_inward_distance = {0.3, false};
+    CHECK_FALSE(parse_settings(settings_json(s)).wipe_inward_distance.percent);
+    CHECK_THAT(parse_settings(settings_json(s)).wipe_inward_distance.value, WithinAbs(0.3, 1e-9));
+    CHECK(parse_settings(settings_json(s)).wipe_inward);
 }
 
 TEST_CASE("retraction: a wipe retracts over the path just printed (R3)", "[retraction]") {

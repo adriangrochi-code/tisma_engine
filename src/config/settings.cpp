@@ -2057,7 +2057,7 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "retraction",
                {"length", "speed", "lift", "min_travel", "unretract_speed", "restart_extra", "on_layer_change", "wipe",
-                "before_wipe", "after_wipe", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra",
+                "before_wipe", "after_wipe", "wipe_inward", "wipe_inward_distance", "lift_above", "lift_below", "firmware", "toolchange_length", "toolchange_restart_extra",
                 "coast"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    // A tool change's (multi_extruder.md, rule 5): one value for
@@ -2078,11 +2078,31 @@ Settings parse_checked(std::string_view text) {
                        (n == "toolchange_length" ? s.toolchange_length : s.toolchange_restart_extra) = std::move(list);
                        return;
                    }
-                   if (n == "on_layer_change" || n == "wipe" || n == "firmware") {
+                   if (n == "on_layer_change" || n == "wipe" || n == "firmware" || n == "wipe_inward") {
                        if (!g.at(n).is_boolean())
                            fail(k, "must be true or false");
-                       (n == "wipe" ? s.wipe : n == "firmware" ? s.firmware_retraction : s.retract_layer_change) =
-                           g.at(n).get<bool>();
+                       (n == "wipe"          ? s.wipe
+                        : n == "firmware"    ? s.firmware_retraction
+                        : n == "wipe_inward" ? s.wipe_inward
+                                             : s.retract_layer_change) = g.at(n).get<bool>();
+                       return;
+                   }
+                   if (n == "wipe_inward_distance") { // mm, or % of the outer wall's width
+                       const json& v = g.at(n);
+                       const std::string what = "must be from 0 to 10 mm, or a percentage of the outer wall like \"50%\"";
+                       if (v.is_string()) {
+                           const std::string t = v.get<std::string>();
+                           char* end = nullptr;
+                           const double p = std::strtod(t.c_str(), &end);
+                           if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p >= 0.0) || p > 1000.0)
+                               fail(k, what);
+                           s.wipe_inward_distance = {p, true};
+                       } else {
+                           const double d = number(g, n, k);
+                           if (!(d >= 0.0 && d <= 10.0))
+                               fail(k, what);
+                           s.wipe_inward_distance = {d, false};
+                       }
                        return;
                    }
                    if (n == "unretract_speed" || n == "restart_extra" || n == "before_wipe" || n == "after_wipe" ||
@@ -3319,6 +3339,9 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"retraction.wipe", flag(s.wipe)},
         {"retraction.before_wipe", num(s.before_wipe)},
         {"retraction.after_wipe", num(s.after_wipe)},
+        {"retraction.wipe_inward", flag(s.wipe_inward)},
+        {"retraction.wipe_inward_distance", s.wipe_inward_distance.percent ? num(s.wipe_inward_distance.value) + "%"
+                                                                            : num(s.wipe_inward_distance.value)},
         {"retraction.coast", num(s.coast)},
         {"retraction.lift_above", num(s.lift_above)},
         {"retraction.lift_below", num(s.lift_below)},
@@ -3822,6 +3845,10 @@ std::string settings_json(const Settings& s) {
           {"wipe", s.wipe},
           {"before_wipe", s.before_wipe},
           {"after_wipe", s.after_wipe},
+          {"wipe_inward", s.wipe_inward},
+          {"wipe_inward_distance", s.wipe_inward_distance.percent
+                                       ? ordered_json(json(s.wipe_inward_distance.value).dump() + "%")
+                                       : ordered_json(s.wipe_inward_distance.value)},
           {"coast", s.coast},
           {"lift_above", s.lift_above},
           {"lift_below", s.lift_below},

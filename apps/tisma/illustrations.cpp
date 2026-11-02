@@ -49,6 +49,8 @@ Picture picture_for(std::string_view key) {
         {"retraction.wipe", Picture::Retraction},
         {"retraction.before_wipe", Picture::Retraction},
         {"retraction.after_wipe", Picture::Retraction},
+        {"retraction.wipe_inward", Picture::Retraction},
+        {"retraction.wipe_inward_distance", Picture::Retraction},
         {"retraction.firmware", Picture::Retraction},
         {"retraction.min_travel", Picture::Retraction},
         {"retraction.lift_above", Picture::Lift},

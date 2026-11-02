@@ -1532,6 +1532,8 @@
     X(WipeRow, "Barrer al retraer", "Wipe while retracting") \
     X(BeforeWipe, "Retracción antes del barrido", "Retraction before the wipe") \
     X(AfterWipe, "Retracción después del barrido", "Retraction after the wipe") \
+    X(WipeInward, "Barrer hacia adentro", "Wipe inward") \
+    X(WipeInwardDistance, "Cuánto se corre el barrido", "How far the wipe moves in") \
     X(FirmwareRetraction, "Retracción del firmware (G10/G11)", "Firmware retraction (G10/G11)") \
     X(LiftAbove, "Saltar solo por encima de", "Lift only above") \
     X(LiftBelow, "Saltar solo por debajo de", "Lift only below") \

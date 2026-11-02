@@ -1166,6 +1166,14 @@ public:
     void set_clearance(double clearance) { clearance_ = clearance; }
     double clearance() const { return clearance_; }
 
+    // The next wipe moved toward the part by `distance` mm, on the `side`
+    // of the path just printed the part is on: +1 its left, -1 its right;
+    // 0: the wipe over the path itself (orca_2_5.md, rule 1).
+    void wipe_inward(double distance, int side) {
+        inward_ = distance;
+        inward_side_ = side;
+    }
+
     // A wavy path (docs/NONPLANAR_INFILL.md) between nonplanar(true) and
     // nonplanar(false): each move's ;HEIGHT is the bead's own thickness, the
     // gap from the bead below up to the nozzle, and the layer's comes back after.
@@ -1707,11 +1715,37 @@ private:
         const double first = retract_ * before_wipe_, after = retract_ * after_wipe_,
                      rest = std::max(0.0, retract_ - first - after);
         pull(first);
+        // Wiping inward: the same path, moved toward the part at every point
+        // (along the mean of the normals of its two pieces), so the head goes
+        // in from the wall's end and wipes over the wall inside it.
+        std::vector<Point2d> path = wiped_path_;
+        const bool shifted = inward_side_ != 0 && inward_ > 0.0;
+        if (shifted) {
+            const auto normal = [&](std::size_t a, std::size_t b) {
+                const double dx = wiped_path_[b].x - wiped_path_[a].x, dy = wiped_path_[b].y - wiped_path_[a].y;
+                const double len = std::hypot(dx, dy);
+                return len > 0.0 ? Point2d{-dy / len * inward_side_, dx / len * inward_side_} : Point2d{0.0, 0.0};
+            };
+            for (std::size_t i = 0; i < wiped_path_.size(); ++i) {
+                const Point2d a = i > 0 ? normal(i - 1, i) : Point2d{0.0, 0.0};
+                const Point2d b = i + 1 < wiped_path_.size() ? normal(i, i + 1) : Point2d{0.0, 0.0};
+                Point2d n{a.x + b.x, a.y + b.y};
+                const double len = std::hypot(n.x, n.y);
+                if (!(len > 1e-9))
+                    continue;
+                // As far along the mean normal as keeps the shift from each
+                // piece (a corner's miter), at most twice the distance.
+                const double cosine = std::max(0.5, len / ((i > 0 && i + 1 < wiped_path_.size()) ? 2.0 : 1.0));
+                path[i] = {wiped_path_[i].x + n.x / len * inward_ / cosine, wiped_path_[i].y + n.y / len * inward_ / cosine};
+            }
+        }
         const double length = rest * wipe_feed / (0.95 * retract_feed_);
         double done = 0.0, pulled = 0.0;
         Point2d at{x_value_, y_value_};
-        for (std::size_t i = wiped_path_.size() - 1; i-- > 0 && done < length;) {
-            const Point2d q = wiped_path_[i];
+        // A shifted wipe first goes in from the wall's end to the shifted
+        // path's end, then back along it.
+        for (std::size_t i = path.size() - (shifted ? 0 : 1); i-- > 0 && done < length;) {
+            const Point2d q = path[i];
             const double d = std::hypot(q.x - at.x, q.y - at.y);
             if (!(d > 0.0))
                 continue;
@@ -1728,6 +1762,7 @@ private:
         other_time_ += done / wipe_feed;
         pull(rest - pulled + after);
         wiped_path_.clear();
+        inward_side_ = 0;
     }
 
     // The retraction undone (rule 1): at retraction.unretract_speed, with
@@ -2035,6 +2070,8 @@ private:
     bool layer_change_retract_ = false, wipe_ = false, firmware_ = false;
     double before_wipe_ = 0.0, after_wipe_ = 0.0, lift_above_ = 0.0, lift_below_ = 0.0, ramp_tan_ = 0.0;
     std::vector<Point2d> wiped_path_; // the path printed since the last travel
+    double inward_ = 0.0;             // the next wipe's shift toward the part, mm (wipe_inward)
+    int inward_side_ = 0;
     bool layer_z_pending_ = false;     // the layer's move up waits for its first travel's ramp
     bool descend_ = false;             // a new object: the first travel goes over at safe_z_, then down
     double safe_z_ = 0.0;
@@ -2484,6 +2521,14 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // The dialect of the firmware (gcode_extras.md, rule 6; gcode_firmware.md).
     const Dialect dialect = dialect_of(s.flavor);
     Emitter g(s);
+    // The wipe after an outer wall moved inward over the inner wall next to
+    // it (orca_2_5.md, rule 1): only with the wipe, more than one wall printed
+    // from the inside out, and never in a retraction or pressure advance
+    // calibration, where the wipe must stay where the test reads it.
+    const bool wipe_inward = s.wipe_inward && s.wipe && s.wall_count > 1 && !s.walls_outer_first &&
+                             std::none_of(s.changes.begin(), s.changes.end(), [](const HeightChange& c) {
+                                 return c.retract_length || c.retract_speed || c.pressure_advance;
+                             });
     g.set_flow(s.flow / 100.0);
     g.type("Custom");
     if (s.gcode_progress)
@@ -3893,6 +3938,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 if (g.lost()) // the change's G-code moved the head: back to the tower
                     g.travel(t.points.front().p, s.travel_speed, planner, nullptr, nullptr, false, step.type);
             }
+            g.wipe_inward(0.0, 0); // a wipe inward only after an outer wall
             g.type(step.type);
             g.overhang_fan(step.fan, step.weak_fan);
             // The surface walls, slowed down last (cooling_more.md, rule 5;
@@ -3958,6 +4004,29 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             for (std::size_t i = 1; i < coasted.size(); ++i)
                 g.coast(coasted[i - 1], coasted[i], step.feed);
             g.nonplanar(false);
+            // After an outer wall, its wipe moved inward over the inner wall
+            // next to it (orca_2_5.md, rule 1): only with more than one wall,
+            // printed from the inside out. The part's side of the wall, from
+            // a point just off its last piece tested against the layer's region.
+            if (wipe_inward && std::strcmp(step.type, "External perimeter") == 0 && l < model.regions.size()) {
+                const std::vector<ToolpathPoint>& last = coasted.size() >= 2 ? coasted : points;
+                if (last.size() >= 2) {
+                    const Point2d a = last[last.size() - 2].p, b = last.back().p;
+                    const double dx = b.x - a.x, dy = b.y - a.y, len = std::hypot(dx, dy);
+                    const double width = last.back().width;
+                    const double distance = std::min(width, s.wipe_inward_distance.of(width));
+                    if (len > 0.0 && distance > 0.0) {
+                        const double off = 0.5 * width;
+                        const Clipper2Lib::Point64 probe{to_units((a.x + b.x) / 2.0 - dy / len * off),
+                                                         to_units((a.y + b.y) / 2.0 + dx / len * off)};
+                        int inside = 0;
+                        for (const Polygon& ring : model.regions[l])
+                            if (Clipper2Lib::PointInPolygon(probe, ring) == Clipper2Lib::PointInPolygonResult::IsInside)
+                                ++inside;
+                        g.wipe_inward(distance, inside % 2 == 1 ? 1 : -1);
+                    }
+                }
+            }
             // After each kind, back to acceleration.default (speeds_accels.md,
             // the table): not between paths of the same kind.
             std::size_t next = k + 1;

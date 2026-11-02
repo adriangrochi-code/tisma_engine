@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Barrer hacia adentro** (`retraction.wipe_inward` y `retraction.wipe_inward_distance`, ficha `orca_2_5.md`,
+  regla 1): el barrido que sigue a la pared externa se corre hacia la pared interna de al lado, donde la marca de la
+  costura no se ve, en mm o en % del ancho de la pared externa (50 % de fábrica). Solo con el barrido, más de una
+  pared y el orden de adentro hacia afuera; en las calibraciones de retracción y de avance de presión se apaga solo.
 - **Retracción después del barrido** (`retraction.after_wipe`, ficha `orca_2_5.md`, regla 2): la parte de la
   retracción, en %, que se hace quieta después del barrido; se recorta a 100 − `before_wipe`. En el panel, el barrido
   y sus dos partes van en su propia tarjeta, «Barrido».

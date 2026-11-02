@@ -8492,3 +8492,23 @@ recorta a 100 − `before_wipe`, y lo que queda se hace durante el barrido.
   - con 2 mm, 20 % antes y 30 % después: 0,4 quieta, 1 barriendo y 0,6 quieta, por los mismos 2,73 mm;
   - OR2, 90 % después: se recorta a 80 %, 0,4 y 1,6 quietas, sin barrido.
 
+## 2026-11-02: OrcaSlicer 2.5, regla 1 (barrer hacia adentro)
+
+`retraction.wipe_inward` y `retraction.wipe_inward_distance` (mm o % del ancho real de la pared externa; 50 % de
+fábrica). Después de la pared externa, el barrido no vuelve sobre ella sino corrido hacia la pared interna de al lado.
+- **Motor:** en el escritor, al terminar un perímetro externo cerrado con `wipe_inward` prendido, se decide de qué
+  lado está la pieza sondeando un punto a medio ancho a la izquierda del último tramo contra las regiones de la capa
+  (`PointInPolygon` de Clipper2, paridad), y se le pasa al emisor la distancia (recortada a un ancho de pared) y el
+  lado. El barrido recorre una copia del camino recordado, corrida en cada punto por la media de las normales de sus
+  dos tramos, con el inglete recortado a dos veces la distancia. Solo con el barrido, más de una pared y el orden de
+  adentro hacia afuera; nunca en una calibración de retracción, de velocidad de retracción o de avance de presión
+  (los cambios por altura con esos valores lo apagan).
+- **Ajustes:** las dos claves, en el JSON (`"50%"` o un número en mm) y en `CONFIG.md`.
+- **Panel:** en la tarjeta «Barrido», una casilla y un campo de mm o %, con sus fichas en español y en inglés.
+- **Pruebas** (`[retraction]`, OR1): cubo de 20 mm, 3 paredes; con 50 % cada punto del barrido queda a medio ancho de
+  pared (0,2 mm) de la pared externa; con 0,3 mm, a 0,3; con 300 %, a un ancho; con 0 %, con `walls.outer_first`,
+  con una sola pared o con cambios de retracción por altura, el barrido de siempre sobre la pared. Y la ida y vuelta
+  de las dos formas de dar la distancia.
+
+**Sigue:** O1, reglas 3 a 5 (paredes sin apoyo al final, modificadores de costura precisa, polyholes).
+
