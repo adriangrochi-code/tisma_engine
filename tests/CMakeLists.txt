@@ -98,6 +98,10 @@ target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SOLIDCRAFT="$<TARGET_F
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
 # The cloud client, and cpp-httplib's server for its mock server (test_cloud.cpp).
 target_link_libraries(tisma_tests PRIVATE tisma_net tisma_httplib)
+# A stand-in for libsecret's secret-tool (the token's store on Linux).
+add_executable(tisma_fake_secret_tool fake_secret_tool.cpp)
+add_dependencies(tisma_tests tisma_fake_secret_tool)
+target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SECRET_TOOL="$<TARGET_FILE:tisma_fake_secret_tool>")
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)

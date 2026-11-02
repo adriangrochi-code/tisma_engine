@@ -8766,3 +8766,14 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   sesión contesta 503 antes), la parte de WinHTTP (se compila en la CI de Windows; no hay compilador de Windows acá).
 - **Sigue:** C2 (panel de la cuenta, planes, informar un problema, el token en el almacén de claves, la nube desde
   la interfaz) y C3 (la línea de comandos de los nodos).
+
+### Tisma Cloud, C2: primer paso (el token como contraseña)
+
+- `src/cloud/secret_store.*` (regla 3): Windows, el Administrador de credenciales; macOS, el llavero con `security`;
+  Linux, el Secret Service con `secret-tool` corrido aparte (libsecret es LGPL: no se enlaza). Sin almacén, el token
+  dura lo que dura el programa. `run_process` puede darle un texto por la entrada estándar (el secreto nunca va entre
+  los argumentos; en macOS `security` lo pide como argumento, anotado como limitación).
+- Prueba `[cloud]` con un `secret-tool` de prueba (`tests/fake_secret_tool.cpp`); en Windows usa el Administrador de
+  credenciales de verdad con un nombre único que borra al terminar. **No probado:** macOS (la prueba se salta).
+- **Sigue en C2:** el diálogo de Tisma Cloud (servidor, correo, contraseña, entrar y salir, horas, planes con el actual
+  marcado, el enlace a la página de pago), el chip de la barra superior, informar un problema y laminar en la nube.

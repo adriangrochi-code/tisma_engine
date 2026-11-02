@@ -14,6 +14,7 @@
 #include <thread>
 #else
 #include <poll.h>
+#include <pthread.h>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/wait.h>
@@ -91,7 +92,8 @@ void read_all(HANDLE h, std::string& into) {
 
 } // namespace
 
-ProcessResult run_process(const std::filesystem::path& exe, const std::vector<std::string>& args, double timeout_seconds) {
+ProcessResult run_process(const std::filesystem::path& exe, const std::vector<std::string>& args, double timeout_seconds,
+                          const std::string& input) {
     ProcessResult r;
     SECURITY_ATTRIBUTES inherit{};
     inherit.nLength = sizeof inherit;
@@ -103,13 +105,22 @@ ProcessResult run_process(const std::filesystem::path& exe, const std::vector<st
     }
     SetHandleInformation(out_read, HANDLE_FLAG_INHERIT, 0);
     SetHandleInformation(err_read, HANDLE_FLAG_INHERIT, 0);
+    HANDLE in_read = INVALID_HANDLE_VALUE, in_write = nullptr;
+    if (!input.empty()) {
+        if (!CreatePipe(&in_read, &in_write, &inherit, 0)) {
+            CloseHandle(out_read), CloseHandle(out_write), CloseHandle(err_read), CloseHandle(err_write);
+            r.error = "cannot make the pipes";
+            return r;
+        }
+        SetHandleInformation(in_write, HANDLE_FLAG_INHERIT, 0);
+    }
     std::wstring line = quoted(exe.wstring());
     for (const std::string& a : args)
         line += L" " + quoted(wide(a));
     STARTUPINFOW si{};
     si.cb = sizeof si;
     si.dwFlags = STARTF_USESTDHANDLES;
-    si.hStdInput = INVALID_HANDLE_VALUE;
+    si.hStdInput = in_read;
     si.hStdOutput = out_write;
     si.hStdError = err_write;
     PROCESS_INFORMATION pi{};
@@ -117,13 +128,23 @@ ProcessResult run_process(const std::filesystem::path& exe, const std::vector<st
                                      nullptr, &si, &pi);
     CloseHandle(out_write);
     CloseHandle(err_write);
+    if (!input.empty())
+        CloseHandle(in_read);
     if (!made) {
         r.error = "cannot start " + exe.filename().string() + " (error " + std::to_string(GetLastError()) + ")";
         CloseHandle(out_read);
         CloseHandle(err_read);
+        if (in_write)
+            CloseHandle(in_write);
         return r;
     }
     r.started = true;
+    // The input (small: a secret or a short text) and then the end of it.
+    if (in_write) {
+        DWORD written = 0;
+        WriteFile(in_write, input.data(), DWORD(input.size()), &written, nullptr);
+        CloseHandle(in_write);
+    }
     std::thread out_reader([&] { read_all(out_read, r.out); });
     std::thread err_reader([&] { read_all(err_read, r.err); });
     const DWORD wait = timeout_seconds > 0.0 ? DWORD(timeout_seconds * 1000.0) : INFINITE;
@@ -147,7 +168,8 @@ ProcessResult run_process(const std::filesystem::path& exe, const std::vector<st
 
 #else
 
-ProcessResult run_process(const std::filesystem::path& exe, const std::vector<std::string>& args, double timeout_seconds) {
+ProcessResult run_process(const std::filesystem::path& exe, const std::vector<std::string>& args, double timeout_seconds,
+                          const std::string& input) {
     ProcessResult r;
     int out_pipe[2], err_pipe[2];
     if (pipe(out_pipe) != 0) {
@@ -159,11 +181,21 @@ ProcessResult run_process(const std::filesystem::path& exe, const std::vector<st
         r.error = "cannot make the pipes";
         return r;
     }
-    for (const int fd : {out_pipe[0], out_pipe[1], err_pipe[0], err_pipe[1]})
-        fcntl(fd, F_SETFD, FD_CLOEXEC);
+    int in_pipe[2] = {-1, -1};
+    if (!input.empty() && pipe(in_pipe) != 0) {
+        close(out_pipe[0]), close(out_pipe[1]), close(err_pipe[0]), close(err_pipe[1]);
+        r.error = "cannot make the pipes";
+        return r;
+    }
+    for (const int fd : {out_pipe[0], out_pipe[1], err_pipe[0], err_pipe[1], in_pipe[0], in_pipe[1]})
+        if (fd >= 0)
+            fcntl(fd, F_SETFD, FD_CLOEXEC);
     posix_spawn_file_actions_t actions;
     posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0);
+    if (in_pipe[0] >= 0)
+        posix_spawn_file_actions_adddup2(&actions, in_pipe[0], 0);
+    else
+        posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0);
     posix_spawn_file_actions_adddup2(&actions, out_pipe[1], 1);
     posix_spawn_file_actions_adddup2(&actions, err_pipe[1], 2);
     std::vector<std::string> words;
@@ -178,13 +210,45 @@ ProcessResult run_process(const std::filesystem::path& exe, const std::vector<st
     posix_spawn_file_actions_destroy(&actions);
     close(out_pipe[1]);
     close(err_pipe[1]);
+    if (in_pipe[0] >= 0)
+        close(in_pipe[0]);
     if (spawned != 0) {
         r.error = "cannot start " + exe.filename().string() + ": " + std::strerror(spawned);
         close(out_pipe[0]);
         close(err_pipe[0]);
+        if (in_pipe[1] >= 0)
+            close(in_pipe[1]);
         return r;
     }
     r.started = true;
+    // The input (small: it fits the pipe) and then the end of it. A program
+    // that left early must not end this one with SIGPIPE.
+    if (in_pipe[1] >= 0) {
+        // SIGPIPE blocked in this thread only, and taken back if it came.
+        sigset_t pipe_signal, before;
+        sigemptyset(&pipe_signal);
+        sigaddset(&pipe_signal, SIGPIPE);
+        pthread_sigmask(SIG_BLOCK, &pipe_signal, &before);
+        bool broken = false;
+        for (std::size_t sent = 0; sent < input.size();) {
+            const ssize_t n = write(in_pipe[1], input.data() + sent, input.size() - sent);
+            if (n < 0 && errno == EINTR)
+                continue;
+            if (n <= 0) {
+                broken = n < 0 && errno == EPIPE;
+                break;
+            }
+            sent += std::size_t(n);
+        }
+        close(in_pipe[1]);
+        sigset_t pending;
+        sigemptyset(&pending);
+        if (broken && sigpending(&pending) == 0 && sigismember(&pending, SIGPIPE) == 1) {
+            int taken = 0;
+            sigwait(&pipe_signal, &taken);
+        }
+        pthread_sigmask(SIG_SETMASK, &before, nullptr);
+    }
     // Both pipes read until they close, within the time limit.
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_seconds);
     pollfd fds[2] = {{out_pipe[0], POLLIN, 0}, {err_pipe[0], POLLIN, 0}};

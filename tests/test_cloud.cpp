@@ -3,6 +3,7 @@
 // client goes), on 127.0.0.1 with cpp-httplib's server.
 
 #include "cloud/client.hpp"
+#include "cloud/secret_store.hpp"
 #include "net/http.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -11,11 +12,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <iterator>
 #include <filesystem>
 #include <fstream>
 #include <map>
 #include <mutex>
+#include <random>
 #include <string>
 #include <thread>
 
@@ -384,4 +387,47 @@ TEST_CASE("cloud: a project too large is refused with the server's words (CC5), 
     CHECK_FALSE(nowhere.health(billing, error));
     CHECK(error.status == 0);
     CHECK_FALSE(error.message.empty());
+}
+
+TEST_CASE("cloud: the session's token is kept in the system's store, not in a file of ours (rule 3, CC1)", "[cloud]") {
+#ifndef _WIN32
+    // Linux and macOS in the tests: the stand-in for secret-tool.
+    const std::filesystem::path store = std::filesystem::temp_directory_path() / "tisma_fake_secrets.txt";
+    std::filesystem::remove(store);
+    setenv("TISMA_SECRET_TOOL", TISMA_FAKE_SECRET_TOOL, 1);
+    setenv("TISMA_FAKE_SECRETS", store.string().c_str(), 1);
+#ifdef __APPLE__
+    // macOS uses its keychain through security(1): not touched by the tests.
+    unsetenv("TISMA_SECRET_TOOL");
+    unsetenv("TISMA_FAKE_SECRETS");
+    SKIP("the macOS keychain is not used by the tests");
+#endif
+    CHECK(cloud::secret_store() == cloud::SecretStore::SecretTool);
+#else
+    CHECK(cloud::secret_store() == cloud::SecretStore::WindowsCredentials);
+#endif
+    const std::string server = "http://127.0.0.1:1/tisma-test-" + std::to_string(std::random_device{}());
+    std::string error;
+    CHECK_FALSE(cloud::load_secret(server).has_value());
+    REQUIRE(cloud::store_secret(server, "token with spaces & ñ", error));
+    REQUIRE(cloud::load_secret(server).has_value());
+    CHECK(*cloud::load_secret(server) == "token with spaces & ñ");
+    REQUIRE(cloud::store_secret(server, "T2", error)); // replaces it
+    CHECK(*cloud::load_secret(server) == "T2");
+    CHECK(cloud::forget_secret(server));
+    CHECK_FALSE(cloud::load_secret(server).has_value());
+#ifndef _WIN32
+    // Without a store the client keeps the token only while it runs.
+    const char* old_path = std::getenv("PATH");
+    const std::string path = old_path ? old_path : "";
+    setenv("TISMA_SECRET_TOOL", "", 1);
+    setenv("PATH", "/nonexistent", 1);
+    CHECK(cloud::secret_store() == cloud::SecretStore::None);
+    CHECK_FALSE(cloud::store_secret(server, "T3", error));
+    CHECK_FALSE(error.empty());
+    setenv("PATH", path.c_str(), 1);
+    unsetenv("TISMA_SECRET_TOOL");
+    unsetenv("TISMA_FAKE_SECRETS");
+    std::filesystem::remove(store);
+#endif
 }
