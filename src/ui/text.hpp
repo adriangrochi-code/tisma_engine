@@ -255,8 +255,8 @@
       "Text from docs/CONFIG.md, in Spanish")\
     X(InfoTemperatures, "La temperatura que el G-code de inicio pide para la boquilla o la cama: es la variable [temperature] o [bed_temperature] de machine.variables.",\
       "The temperature the start G-code asks for the nozzle or the bed: the [temperature] or [bed_temperature] variable of machine.variables.")\
-    X(Tutorial, "Tutorial",\
-      "Tutorial")\
+    X(Tutorial, "Volver al tutorial",\
+      "Show the tutorial again")\
     X(TipsAgain, "Ver los consejos de nuevo",\
       "Show the tips again")\
     X(TipsOn, "Consejos al usar cada función",\

@@ -4738,7 +4738,10 @@ void App::top_bar() {
         const float room = ImGui::GetWindowWidth() - right - 12.0f * scale_ - 16.0f * scale_ - from;
         if (room >= button_h) {
             ImGui::SetCursorPos(ImVec2(ImGui::GetWindowWidth() - right - 12.0f * scale_ - gap - button_h, top));
-            if (icon_button("##help", "help", tr(T::HelpTip), button_h))
+            const bool help = icon_button("##help", "help", tr(T::HelpTip), button_h);
+            g_menu_rects["help"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                          ImGui::GetItemRectMax().y);
+            if (help)
                 help_open_ = !help_open_;
         }
     }
@@ -5283,6 +5286,13 @@ void App::help_panel() {
     if (ImGui::Button("×", ImVec2(ImGui::GetFrameHeight(), 0)) ||
         (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
         help_open_ = false;
+    // The welcome tour again, from the help too (the testers' UI33).
+    if (ImGui::SmallButton(tr(T::Tutorial))) {
+        tour_step_ = 0;
+        help_open_ = false;
+    }
+    g_menu_rects["help_tutorial"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                           ImGui::GetItemRectMax().y);
     ImGui::SetNextItemWidth(-FLT_MIN);
     char query[256] = {};
     help_query_.copy(query, sizeof query - 1);
@@ -9488,10 +9498,10 @@ void App::help_windows() {
     ImGui::Begin("##help", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    if (!tour) // named for the scripted tests: tip_paint...
-        g_menu_rects["tip_" + tip_] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+    // Named for the scripted tests: tour_card, tip_paint...
+    g_menu_rects[tour ? std::string("tour_card") : "tip_" + tip_] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
                                              ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
-                                             ImGui::GetWindowPos().y + std::max(ImGui::GetWindowSize().y, 1.0f));
+                                                                         ImGui::GetWindowPos().y + std::max(ImGui::GetWindowSize().y, 1.0f));
     const T title = tour ? kTour[std::size_t(tour_step_)].title : tip_texts().at(tip_).title;
     const T text = tour ? kTour[std::size_t(tour_step_)].text : tip_texts().at(tip_).text;
     ImGui::PushFont(nullptr, kTitleSize);

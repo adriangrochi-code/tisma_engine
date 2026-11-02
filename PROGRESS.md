@@ -8621,6 +8621,8 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
 
 - **UI36 (probadores):** las capas de interfaz de abajo, el patrón y la separación de la interfaz pasan de Avanzado a
   Normal (Soportes › Interfaz, visibles con los soportes prendidos).
+- **UI33 (probadores):** «Volver al tutorial», con ese nombre en Más y arriba del panel de Ayuda; guion
+  `tutorial_again`.
 - **UI38 (probadores):** el consejo de una herramienta se va al cerrarla y el de una pestaña al dejarla; guion
   `tip_closes`.
 
