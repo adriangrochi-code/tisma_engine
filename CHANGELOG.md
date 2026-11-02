@@ -13,16 +13,20 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Agregado
 
 - **Dos apartados en la barra de arriba** (pedido del dueño, 2026-11-02): **Impresión 3D** (Preparar, Vista previa,
-  Análisis, Calibración, Impresora) e **Ingeniería** (Diseño y Tornillería). Cada apartado muestra solo sus pestañas
+  Análisis, Calibración, Impresora) e **Ingeniería** (Diseño). Cada apartado muestra solo sus pestañas
   y su propio panel a la izquierda, así la interfaz no se llena; al volver a un apartado, abre en la última pestaña
   usada ahí. Con la preferencia «Pestaña Diseño» apagada no hay apartado Ingeniería.
-- **Tornillería** (pedido del dueño, 2026-11-02), en Ingeniería: tornillos hexagonales y Allen, tuercas, arandelas y
+- **Tornillería** (pedido del dueño, 2026-11-02), adentro de Diseño (botón «Tornillería» en Nuevo, o `tornillo`,
+  `tuerca`, `arandela` y `varilla` en la línea de comandos; «‹ Diseño» vuelve): tornillos hexagonales y Allen, tuercas, arandelas y
   varillas roscadas con rosca métrica ISO, de M3 a M24 o a medida, con paso normal o fino, largo y una **holgura**
   para que las piezas de plástico enrosquen (0,2 mm de fábrica: la rosca del tornillo sale así de más fina y la de la
   tuerca así de más ancha). Muestra la broca para roscar, el agujero de paso (ISO 273), la llave, el volumen y la
   caja. «Mandar a la placa» o «Mandar con su tuerca»; «Editar en Tornillería» en el menú de la pieza la abre otra vez
   y la reemplaza en su lugar. Las piezas las hace el motor, sin el componente de diseño: los tornillos quedan parados
   sobre la cabeza y las tuercas acostadas, para imprimir la rosca sin soportes.
+- **Botón de unidad en los ajustes de mm o %** (reporte UI32 de los probadores): al lado del valor, un botón «mm» o
+  «%» cambia la unidad y convierte el número (la separación XY del soporte, el ancho de la primera capa, la costura y
+  los demás que aceptan las dos).
 - **Pestaña Diseño** (ficha `cad_design.md`, etapa D1): entre Vista previa y Análisis, con la misma vista y la misma
   cama que Preparar. Su panel ocupa la columna izquierda en lugar del de ajustes de impresión y tiene Nuevo (Boceto y Abrir STEP marcados «Próximamente», y las primitivas: caja,
   cilindro, esfera, cono, tubo y toro), Boceto, Operaciones y Parámetros (próximamente), Historial (un renglón por

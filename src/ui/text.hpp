@@ -11,10 +11,13 @@
     X(TabAnalysis, "Análisis", "Analysis")                                                                            \
     X(TabDesign, "Diseño", "Design")                                                                                  \
     X(TabFasteners, "Tornillería", "Fasteners") \
+    X(FastenersBack, "‹ Diseño", "‹ Design") \
+    X(DesignFastenersTip, "Tornillos, tuercas, arandelas y varillas con rosca métrica, listos para imprimir (también `tornillo`, `tuerca`, `arandela` o `varilla` en la línea de comandos)", "Bolts, nuts, washers and rods with a metric thread, ready to print (also `bolt`, `nut`, `washer` or `rod` on the command line)") \
+    X(UnitSwitchTip, "Cambiar entre milímetros y porcentaje (también se puede escribir la unidad con el número, como «0,3 mm»)", "Switch between millimetres and percent (you can also type the unit with the number, as \"0.3 mm\")") \
     X(ModePrint, "Impresión 3D", "3D printing") \
     X(ModePrintTip, "Preparar, laminar, analizar, calibrar e imprimir", "Prepare, slice, analyse, calibrate and print") \
     X(ModeEngineering, "Ingeniería", "Engineering") \
-    X(ModeEngineeringTip, "Diseñar piezas y hacer tornillería para imprimir", "Design parts and make fasteners to print") \
+    X(ModeEngineeringTip, "Diseñar piezas, con su tornillería, para imprimir", "Design parts, with their fasteners, to print") \
     X(FastenersSubtitle, "Rosca métrica ISO, con holgura para imprimir", "ISO metric thread, with play for printing") \
     X(FastenersEditing, "Editando una pieza de la placa.", "Editing a part of the plate.") \
     X(FastenersNew, "Pieza nueva", "New part") \

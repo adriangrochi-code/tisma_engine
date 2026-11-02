@@ -1,8 +1,11 @@
-# Fasteners (the owner's request, 2026-11-02): in the Ingeniería section, its
-# own panel in the left column; an M8 nut, a bolt sent with its nut, the size
+# Fasteners (the owner's request, 2026-11-02): a page of the Design panel,
+# opened from Nuevo or by name on the command line; an M8 nut, a bolt sent with its nut, the size
 # and the length changed, and a bad length refused.
 menu mode_engineering
-menu tab_fasteners
+expect-no-control fasteners_back
+menu design_fasteners
+expect-control fasteners_back
+expect-no-control design_command
 expect-control fasteners_kind_hex_bolt
 expect-control fasteners_kind_threaded_rod
 expect-control fasteners_size
@@ -39,5 +42,13 @@ select-all
 type 16
 key enter
 expect-no-control fasteners_bad
+menu fasteners_back
+expect-control design_box
+expect-control design_command
+menu design_command
+type tuerca
+key enter
+expect-control fasteners_back
+expect-fastener hex_nut 165.9
 menu mode_print
 expect-control tab_prepare

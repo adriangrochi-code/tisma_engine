@@ -1,5 +1,6 @@
 # The Design tab (cad_design.md, CD1, CD1b, CD19, CD20): in the top bar's
-# Ingeniería section (the owner's request, 2026-11-02), with Fasteners; its panel with the primitives, the greyed stages,
+# Ingeniería section (the owner's request, 2026-11-02); its panel with the
+# primitives, Fasteners, the greyed stages,
 # «Mandar a la placa» off until a body exists, and the command line under the
 # same view. A box built through the stand-in tool, sent twice, gives two
 # objects next to the cube opened at start; edited and sent again, still two.
@@ -9,10 +10,9 @@ expect-control tab_prepare
 expect-no-control tab_design
 menu mode_engineering
 expect-control tab_design
-expect-control tab_fasteners
+expect-control design_fasteners
 expect-no-control tab_prepare
 expect-apart mode_engineering tab_design
-expect-apart tab_design tab_fasteners
 expect-control design_box
 expect-control design_torus
 expect-control design_sketch

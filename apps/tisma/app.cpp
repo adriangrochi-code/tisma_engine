@@ -396,11 +396,12 @@ void keep_unreadable(const std::filesystem::path& path) {
     std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ec);
 }
 
-enum class Tab { Prepare, Preview, Design, Fasteners, Analysis, Calibration, Device };
+enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device };
 // The tabs of the Ingeniería section; the rest are Impresión 3D's (the
 // owner's request, 2026-11-02: each section with its tabs and its own panel).
+// Fasteners live inside Design (the owner, the same day).
 bool engineering_tab(Tab t) {
-    return t == Tab::Design || t == Tab::Fasteners;
+    return t == Tab::Design;
 }
 
 // A measure as the interface writes it: up to `decimals` places, no trailing
@@ -515,6 +516,7 @@ private:
     // Fasteners (the owner's request, 2026-11-02): bolts, nuts, washers and
     // threaded rods with the ISO metric thread, made by the engine.
     void fasteners_panel();
+    void open_fasteners(bool open);
     void rebuild_fastener();
     void send_fastener_to_plate(bool with_nut);
     void edit_fastener(std::size_t object);
@@ -861,6 +863,7 @@ private:
     bool fastener_dirty_ = true;
     bool fastener_edited_ = false; // a field typed, made again once it is left
     int fastener_target_ = 0;
+    bool design_fasteners_ = false; // the Design panel on its Fasteners page
     // The tab each section opens on: the last one used there.
     Tab last_print_tab_ = Tab::Prepare;
     Tab last_engineering_tab_ = Tab::Design;
@@ -2505,15 +2508,24 @@ bool row(T label, int& v, int min, int max, const char* fmt = "%d", const char* 
 // gives it. The field shows its unit; a number typed with "mm" or "%" (the
 // spec team's field sweep: "0,3 mm" was kept as 0.3 %) switches to it, and a
 // bare number keeps the unit shown. `empty`: what 0 shows, if it means "the
-// other's" or "no limit".
+// other's" or "no limit". The button after the field switches the unit (the
+// testers' UI32: the millimetres were not found), converting the value by
+// `base`, what 100 % is; with no base the number stays.
 bool unit_row(T label, Speed& v, double min, double mm_max, double percent_max, const char* mm_fmt, float mm_speed,
-              const char* empty = nullptr) {
+              const char* empty = nullptr, double base = 0.0) {
     label_cell(label);
     const RowId id(label, &v);
     double max = v.percent ? percent_max : mm_max;
     const char* fmt = empty && v.value <= 0.0 ? empty : v.percent ? "%.0f %%" : mm_fmt;
+    const std::string mm_unit = std::string(mm_fmt).find("mm/s") != std::string::npos ? "mm/s" : "mm";
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float unit_w = ImGui::CalcTextSize("mm/s").x + 2.0f * style.FramePadding.x;
+    ImGui::SetNextItemWidth(std::max(ImGui::GetContentRegionAvail().x - unit_w - style.ItemInnerSpacing.x, 40.0f));
     bool changed = ImGui::DragScalar("##v", ImGuiDataType_Double, &v.value, v.percent ? 0.5f : mm_speed, &min, &max,
                                      field_text("##v", fmt, v.value), ImGuiSliderFlags_AlwaysClamp);
+    if (!g_last_field.empty()) // the field without the unit's button
+        g_field_rects[g_last_field] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                             ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
     if (const std::string* typed = typed_text()) {
         if (const std::optional<Typed> t = read_typed(*typed); t && t->unit) {
             v.percent = t->unit == '%';
@@ -2523,6 +2535,16 @@ bool unit_row(T label, Speed& v, double min, double mm_max, double percent_max, 
         }
         note_clamp(typed, min, max, v.percent ? "%.0f %%" : mm_fmt);
     }
+    ImGui::SameLine(0, style.ItemInnerSpacing.x);
+    if (ImGui::Button(v.percent ? "%##unit" : (mm_unit + "##unit").c_str(), ImVec2(unit_w, 0))) {
+        if (base > 0.0 && v.value > 0.0)
+            v.value = v.percent ? v.value * base / 100.0 : v.value / base * 100.0;
+        v.percent = !v.percent;
+        v.value = std::clamp(v.value, min, v.percent ? percent_max : mm_max);
+        changed = true;
+    }
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::UnitSwitchTip));
     return changed;
 }
 
@@ -4410,7 +4432,6 @@ void App::poll_jobs() {
         // A screenshot keeps the tab it asked for.
         const Tab asked = options_.view == "analysis"      ? Tab::Analysis
                           : options_.view == "design"      ? Tab::Design
-                          : options_.view == "fasteners"   ? Tab::Fasteners
                           : options_.view == "calibration" ? Tab::Calibration
                           : options_.view == "device"      ? Tab::Device
                           : options_.view == "prepare"     ? Tab::Prepare
@@ -4503,10 +4524,10 @@ void App::frame_now() {
     if (result_ && viewer_) {
         const auto& p = result_->preview;
         part = {{p.min[0], p.min[1], 0.0f}, {p.max[0], p.max[1], p.max[2]}};
-    } else if (tab_ == Tab::Design) {
+    } else if (tab_ == Tab::Design && !design_fasteners_) {
         if (!design_box_.empty)
             part = {{design_box_.min.x, design_box_.min.y, 0.0f}, {design_box_.max.x, design_box_.max.y, design_box_.max.z}};
-    } else if (tab_ == Tab::Fasteners) {
+    } else if (tab_ == Tab::Design) {
         if (!fastener_box_.empty)
             part = {{fastener_box_.min.x, fastener_box_.min.y, 0.0f},
                     {fastener_box_.max.x, fastener_box_.max.y, fastener_box_.max.z}};
@@ -4571,12 +4592,14 @@ void App::set_tab(Tab tab) {
         last_print_tab_ = tab;
     if (tab == Tab::Design && was != Tab::Design) {
         command_focus_ = true;
-        show_design();
-    } else if (tab == Tab::Fasteners && was != Tab::Fasteners) {
-        if (fastener_dirty_)
-            rebuild_fastener();
-        show_in_view(fastener_mesh_);
-        frame_all();
+        if (design_fasteners_) {
+            if (fastener_dirty_)
+                rebuild_fastener();
+            show_in_view(fastener_mesh_);
+            frame_all();
+        } else {
+            show_design();
+        }
     } else if (engineering_tab(was) && !engineering_tab(tab)) {
         rebuild_plate();
         frame_all();
@@ -4663,7 +4686,6 @@ void App::top_bar() {
     const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
                               {Tab::Preview, "tisma_view", T::TabPreview},
                               {Tab::Design, "tisma_design", T::TabDesign},
-                              {Tab::Fasteners, "tisma_fasteners", T::TabFasteners},
                               {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
                               {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
                               {Tab::Device, "tisma_printer", T::TabDevice}};
@@ -4678,7 +4700,6 @@ void App::top_bar() {
         g_menu_rects[std::string("tab_") + (t.tab == Tab::Prepare       ? "prepare"
                                             : t.tab == Tab::Preview     ? "preview"
                                             : t.tab == Tab::Design      ? "design"
-                                            : t.tab == Tab::Fasteners   ? "fasteners"
                                             : t.tab == Tab::Analysis    ? "analysis"
                                             : t.tab == Tab::Calibration ? "calibration"
                                                                         : "device")] =
@@ -6620,12 +6641,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::OuterWidth, "walls.outer_width", s.outer_wall_width, 0.0, 40.0, s.outer_wall_width > 0.0 ? "%.2f mm" : tr(T::AutoValue),
            0.002f);
         if (shown("layers.first_line_width"))
-            changed |= unit_row(T::FirstLineWidth, s.first_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::FirstLineWidth, s.first_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.first_layer_height);
         mm(T::TopWidth, "surfaces.top_width", s.top_width, 0.0, 10.0, s.top_width > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.002f);
         mm(T::SolidWidth, "surfaces.solid_width", s.solid_width, 0.0, 10.0, s.solid_width > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.002f);
         mm(T::InfillWidth, "infill.width", s.infill_width, 0.0, 10.0, s.infill_width > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.002f);
         if (shown("walls.seam_gap"))
-            changed |= unit_row(T::SeamGap, s.wall_seam_gap, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::SeamGap, s.wall_seam_gap, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.nozzle_diameter);
     } else if (id == "seam") {
         if (shown("walls.seam"))
             changed |= row(T::Seam, s.seam,
@@ -6679,15 +6702,19 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::WallsOuterFirst, "walls.outer_first", s.walls_outer_first);
     } else if (id == "walls_thin") {
         if (shown("walls.min_line_width"))
-            changed |= unit_row(T::MinLineWidth, s.wall_min_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::MinLineWidth, s.wall_min_line_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.nozzle_diameter);
         if (shown("walls.min_detail"))
-            changed |= unit_row(T::MinDetail, s.wall_min_detail, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::MinDetail, s.wall_min_detail, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.nozzle_diameter);
         whole(T::SpreadCount, "walls.spread_count", s.wall_spread_count, 1, 100);
         if (shown("walls.transition_length"))
-            changed |= unit_row(T::TransitionLength, s.wall_transition_length, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::TransitionLength, s.wall_transition_length, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.nozzle_diameter);
         mm(T::TransitionAngle, "walls.transition_angle", s.wall_transition_angle, 0.0, 179.0, "%.0f°", 0.5f);
         if (shown("walls.transition_margin"))
-            changed |= unit_row(T::TransitionMargin, s.wall_transition_margin, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::TransitionMargin, s.wall_transition_margin, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.nozzle_diameter);
     } else if (id == "walls_more") {
         flag(T::StaggeredSeams, "walls.staggered_inner_seams", s.staggered_inner_seams);
         flag(T::WallsStaggered, "walls.staggered", s.walls_staggered);
@@ -6757,7 +6784,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::CombineAuto, "infill.combine_auto", s.infill_combine_auto, tr(T::CombineInfillTip));
         whole(T::CombineInfill, "infill.combine_layers", s.infill_combine_layers, 1, 20, "%d", tr(T::CombineInfillTip));
         if (shown("infill.combine_max_height"))
-            changed |= unit_row(T::CombineMaxHeight, s.infill_combine_max_height, 0.01, 10.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::CombineMaxHeight, s.infill_combine_max_height, 0.01, 10.0, 1000.0, "%.2f mm", 0.01f,
+                                nullptr, s.nozzle_diameter);
     } else if (id == "wavy") {
         flag(T::NonplanarInfill, "infill.nonplanar", s.infill_nonplanar, tr(T::NonplanarInfillTip));
         mm(T::NonplanarAmplitude, "infill.nonplanar_amplitude", s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);
@@ -6780,7 +6808,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
     } else if (id == "walls_surfaces") {
         mm(T::SpeedWalls, "speed.walls", s.wall_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         if (shown("speed.outer_wall"))
-            changed |= unit_row(T::SpeedOuterWall, s.outer_wall_speed, 1.0, 1000.0, 1000.0, "%.0f mm/s", 0.5f);
+            changed |= unit_row(T::SpeedOuterWall, s.outer_wall_speed, 1.0, 1000.0, 1000.0, "%.0f mm/s", 0.5f, nullptr,
+                                s.wall_speed);
         mm(T::SpeedSolid, "speed.solid_infill", s.solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTop, "speed.top_solid_infill", s.top_solid_infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         // 0: the solid infill's.
@@ -6868,7 +6897,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SupportBottomZGap, "support.bottom_z_gap", s.support_bottom_z_gap, 0.0, 5.0,
            s.support_bottom_z_gap > 0.0 ? "%.2f mm" : tr(T::AutoValue), 0.01f);
         if (shown("support.xy_gap"))
-            changed |= unit_row(T::SupportXyGap, s.support_xy_gap, 0.0, 10.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::SupportXyGap, s.support_xy_gap, 0.0, 10.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.wall_width_auto ? 1.125 * s.nozzle_diameter : s.wall_width);
     } else if (id == "interface") {
         whole(T::SupportInterface, "support.interface_layers", s.support_interface_layers, 0, 20);
         whole(T::SupportBottomInterface, "support.bottom_interface_layers", s.support_bottom_interface_layers, -1, 20,
@@ -6892,7 +6922,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::SupportSheath, "support.sheath", s.support_sheath);
         mm(T::SupportLineAngle, "support.line_angle", s.support_line_angle, -360.0, 360.0, "%.0f°", 0.5f);
         if (shown("support.width"))
-            changed |= unit_row(T::SupportWidth, s.support_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::SupportWidth, s.support_width, 0.0, 40.0, 1000.0, "%.2f mm", 0.01f, nullptr,
+                                s.layer_height);
         if (s.support_style == SupportStyle::Snug)
             mm(T::SupportClosingRadius, "support.closing_radius", s.support_closing_radius, 0.0, 100.0, "%.2f mm", 0.01f);
     } else if (id == "arcs") {
@@ -7208,7 +7239,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::AfterWipe, "retraction.after_wipe", s.after_wipe, 0.0, 100.0, "%.0f %%", 0.5f);
         flag(T::WipeInward, "retraction.wipe_inward", s.wipe_inward);
         if (shown("retraction.wipe_inward_distance"))
-            changed |= unit_row(T::WipeInwardDistance, s.wipe_inward_distance, 0.0, 10.0, 1000.0, "%.2f mm", 0.01f);
+            changed |= unit_row(T::WipeInwardDistance, s.wipe_inward_distance, 0.0, 10.0, 1000.0, "%.2f mm", 0.01f,
+                                nullptr, s.wall_width_auto ? 1.125 * s.nozzle_diameter : s.wall_width);
     } else if (id == "retract_travel") {
         mm(T::RetractLift, "retraction.lift", s.retract_lift, 0.0, 10.0, "%.2f mm", 0.01f);
         mm(T::RetractMinTravel, "retraction.min_travel", s.retract_min_travel, 0.0, 50.0, "%.1f mm", 0.05f);
@@ -10484,6 +10516,13 @@ void App::design_panel() {
             ++k;
         }
     }
+    // Fasteners: made by the engine, so open with or without the tool (the
+    // owner's request, 2026-11-02: inside Design).
+    if (ImGui::Button(tr(T::TabFasteners), ImVec2(-FLT_MIN, 0)))
+        open_fasteners(true);
+    rect_of("design_fasteners");
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::DesignFastenersTip));
     ImGui::BeginDisabled(true);
     ImGui::Button(tr(T::DesignOpenStep));
     ImGui::SameLine();
@@ -10709,8 +10748,26 @@ void App::rebuild_fastener() {
         fastener_mesh_ = {};
         fastener_box_ = {};
     }
-    if (tab_ == Tab::Fasteners)
+    if (tab_ == Tab::Design && design_fasteners_)
         show_in_view(fastener_mesh_);
+}
+
+// The Fasteners page of the Design panel opened or closed; the view shows
+// the page's part or the design.
+void App::open_fasteners(bool open) {
+    design_fasteners_ = open;
+    if (tab_ != Tab::Design) {
+        set_tab(Tab::Design);
+        return;
+    }
+    if (open) {
+        if (fastener_dirty_)
+            rebuild_fastener();
+        show_in_view(fastener_mesh_);
+        frame_all();
+    } else {
+        show_design();
+    }
 }
 
 // «Mandar a la placa», as in Design: a new part is added as an object, one
@@ -10763,7 +10820,7 @@ void App::edit_fastener(std::size_t object) {
     }
     fastener_target_ = objects_[object].design_id;
     fastener_dirty_ = true;
-    set_tab(Tab::Fasteners);
+    open_fasteners(true);
 }
 
 // The Fasteners tab's panel, in the left column like Design's: the part,
@@ -10791,6 +10848,10 @@ void App::fasteners_panel() {
     constexpr std::uint32_t kViolet = 0x8B5CF6;
     const float footer = 3.0f * ImGui::GetFrameHeightWithSpacing() + 10.0f * scale_;
     ImGui::BeginChild("##fasteners_scroll", ImVec2(0, -footer));
+    // A page of Design: the way back to the design's sections.
+    if (ImGui::SmallButton(tr(T::FastenersBack)))
+        open_fasteners(false);
+    rect_of("fasteners_back");
     ImGui::PushFont(nullptr, kTitleSize * 0.9f);
     ImGui::TextUnformatted(tr(T::TabFasteners));
     ImGui::PopFont();
@@ -11147,6 +11208,23 @@ void App::run_command(std::string text) {
         send_design_to_plate();
         return;
     }
+    // The fasteners by name: the Fasteners page with that part.
+    static const std::pair<const char*, cad::FastenerKind> kFastenerWords[] = {
+        {"tornillo", cad::FastenerKind::HexBolt},   {"bolt", cad::FastenerKind::HexBolt},
+        {"allen", cad::FastenerKind::SocketBolt},   {"tuerca", cad::FastenerKind::HexNut},
+        {"nut", cad::FastenerKind::HexNut},         {"arandela", cad::FastenerKind::Washer},
+        {"washer", cad::FastenerKind::Washer},      {"varilla", cad::FastenerKind::ThreadedRod},
+        {"rod", cad::FastenerKind::ThreadedRod},    {"tornilleria", cad::FastenerKind::HexBolt},
+        {"fasteners", cad::FastenerKind::HexBolt}};
+    for (const auto& [name, kind] : kFastenerWords)
+        if (word == name) {
+            if (fastener_.kind != kind && word != "tornilleria" && word != "fasteners") {
+                fastener_.kind = kind;
+                fastener_dirty_ = true;
+            }
+            open_fasteners(true);
+            return;
+        }
     if (const std::optional<cad::Primitive> kind = primitive_named(word)) {
         last_command_ = word;
         command_prompt_ = CommandPrompt{*kind, cad::default_sizes(*kind), 0};
@@ -12628,10 +12706,10 @@ void App::layout() {
     } else {
         // In Design, the panel takes the print settings' column (the owner's
         // request, 2026-11-02: the view stays clear).
-        if (tab_ == Tab::Design)
+        if (tab_ == Tab::Design && design_fasteners_)
+            fasteners_panel(); // a page of the Design panel, in its place
+        else if (tab_ == Tab::Design)
             design_panel();
-        else if (tab_ == Tab::Fasteners)
-            fasteners_panel();
         else
             settings_panel();
         if (help_open_)
@@ -12655,7 +12733,7 @@ void App::layout() {
             part_labels();
         if (tab_ == Tab::Analysis)
             analysis_panel();
-        if (tab_ == Tab::Design) {
+        if (tab_ == Tab::Design && !design_fasteners_) {
             design_command_line();
             if (sketch_edit_) {
                 sketch_strip();
@@ -12705,10 +12783,10 @@ void App::layout() {
     // Shortcuts.
     if (no_popup() && cad_design_ && engineering_tab(tab_) &&
         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, ImGuiInputFlags_RouteGlobal)) {
-        if (tab_ == Tab::Design)
-            send_design_to_plate(); // cad_design.md, rule 21
-        else
+        if (design_fasteners_)
             send_fastener_to_plate(false);
+        else
+            send_design_to_plate(); // cad_design.md, rule 21
     }
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
         purpose_ = Purpose::Open;

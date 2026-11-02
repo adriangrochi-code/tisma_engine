@@ -8584,9 +8584,10 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
 ## 2026-11-02 (tarde): apartados Impresión 3D e Ingeniería, y Tornillería (pedidos del dueño)
 
 - **Barra de arriba en dos apartados:** Impresión 3D (Preparar, Vista previa, Análisis, Calibración, Impresora) e
-  Ingeniería (Diseño, Tornillería), con un selector junto al logo. Cada apartado muestra solo sus pestañas y su panel
-  propio en la columna izquierda (el de ajustes de impresión, el de Diseño o el de Tornillería); vuelve a la última
-  pestaña usada en él. Esto cambia lo que la ficha `cad_design.md` dice de la pestaña Diseño («entre Vista previa y
+  Ingeniería (Diseño), con un selector junto al logo. Cada apartado muestra solo sus pestañas y su panel propio en la
+  columna izquierda; vuelve a la última pestaña usada en él. Tornillería empezó como pestaña y, por un segundo pedido
+  del dueño el mismo día («tiene que venir en la parte de diseño»), quedó como página del panel de Diseño: el botón
+  «Tornillería» de Nuevo, o `tornillo`, `tuerca`, `arandela`, `varilla` en la línea de comandos, y «‹ Diseño» vuelve. Esto cambia lo que la ficha `cad_design.md` dice de la pestaña Diseño («entre Vista previa y
   Análisis», CD1): queda avisado al equipo de fichas.
 - **Tornillería** (`src/cad/fasteners.*`): tornillos hexagonales y Allen, tuercas, arandelas y varillas roscadas con
   la rosca métrica ISO 68-1, de M3 a M24 (tablas ISO 261, 4032, 4017, 4762, 7089 y 273) o a medida, paso normal o
@@ -8601,4 +8602,9 @@ y revolucionar) o las reglas 3 a 5 de `orca_2_5.md`, según diga el dueño; el g
 - **Medido:** una tuerca M8 tiene 661 mm³ y un tornillo M5 × 12, 352 mm³ (el guion los verifica).
 - **No probado:** que las piezas impresas enrosquen de verdad; la holgura de 0,2 mm es un punto de partida.
 
-**Sigue:** D3 de `cad_design.md`; las roscas sobre piezas de Diseño (D4) usarán la misma tabla.
+- **UI32 (probadores):** los ajustes de mm o % tienen al lado un botón con la unidad que la cambia y convierte el
+  valor (la separación XY del soporte en % del ancho de pared, los anchos y la costura en % de la boquilla, la primera
+  capa en % de su alto, la velocidad de la pared externa en % de la de paredes).
+
+**Sigue (pedido del dueño):** más piezas mecánicas en Diseño, un CAD bastante completo para piezas de impresión 3D:
+tornillos y tuercas de mano (moleteados), separadores, engranajes; después D3 de `cad_design.md`.
