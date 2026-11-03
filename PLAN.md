@@ -1221,7 +1221,9 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 3. `analyze` sobre el proyecto con esas condiciones (FM25), zonas por triángulos y puntos con radio en el caso:
    **hecho el 2026-11-03** (`tisma-engine analyze proyecto.3mf -o informe.json`); falta guardar el resultado en el
    proyecto, que lo hace la pestaña Estructural;
-4. la pestaña Estructural (marcar, lista, Analizar, mapa, veredicto) y sacar «Análisis» de Impresión 3D;
+4. la pestaña Estructural (marcar, lista, Analizar, mapa, veredicto) y sacar «Análisis» de Impresión 3D: empezado
+   el 2026-11-03 con los valores del panel (`src/project/engineering_values.*`: del perfil o a mano, material por
+   tipo de filamento, qué apaga Analizar); falta la pestaña en la interfaz;
 5. la pestaña Aerodinámica, con A3 (CFD).
 
 ## Avance

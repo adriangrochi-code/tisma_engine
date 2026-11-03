@@ -7,6 +7,7 @@
 
 #include <array>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // A part's Engineering conditions as an analysis case (formats.md, rule 11
@@ -26,11 +27,13 @@ std::vector<std::string> add_conditions(AnalysisCase& c, const ProjectEngineerin
                                         const std::array<double, 3>& shift = {});
 
 // The whole case of a part (formats.md, rule 11 bis; FM25): the material
-// changed by hand or the case's default, the Structural tab's quality ("high"
+// changed by hand, else the filament type's (engineering_panel.md, rule 3),
+// else the case's default, the Structural tab's quality ("high"
 // is high, the rest normal), then add_conditions. Notes, as add_conditions,
 // also name an unknown material (the default is used).
 AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const TriangleMesh& mesh,
-                                       const std::array<double, 3>& shift, std::vector<std::string>& notes);
+                                       const std::array<double, 3>& shift, std::vector<std::string>& notes,
+                                       std::string_view filament_type = {});
 
 // The values changed by hand that the analysis reads: the layer heights and
 // the line width (as walls.width). The extrusion temperature does not change

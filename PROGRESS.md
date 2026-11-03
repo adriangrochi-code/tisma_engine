@@ -9242,3 +9242,17 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - «Basado en ZigZagZ (2021)» se muestra solo con el zigzag elegido; las ondas entrelazadas son diseño propio y no
   muestran crédito.
 - La tarjeta sigue en la sección «No planar» (el equipo de fichas actualiza `settings_panel.md`).
+
+## 2026-11-03 (noche): Ingeniería, paso 4 (pestaña Estructural), primera parte
+
+- **Hecho:** los valores del panel, sin la interfaz todavía (`src/project/engineering_values.*`):
+  - `engineering_values`: material, temperatura de extrusión (la de las capas después de la primera), temperatura
+    de la cama, alturas de capa y ancho de línea del perfil, o el valor cambiado a mano con su marca (el punto
+    violeta); la temperatura de trabajo, 23 °C al empezar;
+  - `material_for_filament`: el registro de la tabla de materiales para cada tipo de filamento (PLA, PLA+, PLA-CF,
+    PETG, PETG-CF, ABS, ASA, PA-CF, PA6-CF, PAHT-CF); otro tipo no tiene material («Elegí un material»);
+  - `analyze_block`: qué apaga Analizar, en orden: material, algo fijo, una fuerza (las ocultas no cuentan);
+  - `analyze <proyecto>` toma ahora el material del tipo de filamento cuando no se cambió a mano.
+- Pruebas: EP1, EP2, EP3, EP5 y EP10 en su parte lógica.
+- **Sigue:** la pestaña Estructural en la interfaz: lista de piezas, herramientas de marcado sobre la vista, lista de
+  condiciones con deshacer, Analizar en segundo plano, mapa y veredicto; y sacar «Análisis» de Impresión 3D.

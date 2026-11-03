@@ -263,6 +263,7 @@ add_library(tisma_core
   src/calibration/calibration.cpp
   src/project/engineering.cpp
   src/project/engineering_case.cpp
+  src/project/engineering_values.cpp
   src/fea/zone.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp

@@ -1,4 +1,5 @@
 #include "project/project.hpp"
+#include "project/engineering_values.hpp"
 
 #include "calibration/calibration.hpp"
 #include "config/profiles.hpp"
@@ -387,4 +388,65 @@ TEST_CASE("FM26 and newer data: conditions that no longer fit are dropped with a
                     EngineeringError);
     const ProjectEngineering back = engineering_from_json(engineering_json(again.models[0].engineering));
     CHECK(back.conditions.size() == 1);
+}
+
+TEST_CASE("EP1, EP3, EP5, EP10: the Structural panel's values come from the profile, by hand when changed", "[project]") {
+    Settings profile;
+    profile.filament_type = "PLA";
+    profile.variables["temperature"] = {"215"};
+    profile.variables["bed_temperature"] = {"60"};
+    profile.layer_height = 0.2;
+    profile.first_layer_height = 0.24;
+    profile.wall_width = 0.45;
+    ProjectEngineering e;
+    // EP1: everything from the profile.
+    EngineeringValues v = engineering_values(profile, e);
+    CHECK(v.material_id == "bambu-pla-basic");
+    CHECK_FALSE(v.material_by_hand);
+    CHECK(v.extrusion_temperature.value == 215.0);
+    CHECK_FALSE(v.extrusion_temperature.by_hand);
+    CHECK(v.bed_temperature == 60.0);
+    CHECK(v.layer_height.value == 0.2);
+    CHECK(v.first_layer_height.value == 0.24);
+    CHECK(v.line_width.value == 0.45);
+    CHECK(v.working_temperature == 23.0);
+    // EP2: another filament profile, nothing touched in the panel.
+    profile.filament_type = "petg";
+    profile.variables["temperature"] = {"240"};
+    v = engineering_values(profile, e);
+    CHECK(v.material_id == "bambu-petg-basic");
+    CHECK(v.extrusion_temperature.value == 240.0);
+    // EP3: 230 C by hand stays over a change of profile, with its dot.
+    e.overrides.extrusion_temperature = 230.0;
+    profile.variables["temperature"] = {"250"};
+    v = engineering_values(profile, e);
+    CHECK(v.extrusion_temperature.value == 230.0);
+    CHECK(v.extrusion_temperature.by_hand);
+    e.overrides.extrusion_temperature.reset(); // «Volver al del perfil»
+    CHECK(engineering_values(profile, e).extrusion_temperature.value == 250.0);
+    // EP5: a fixed point and no force.
+    EngineeringCondition fixed;
+    fixed.kind = ConditionKind::FixedPoint;
+    e.conditions = {fixed};
+    CHECK(analyze_block(e, v) == AnalyzeBlock::Force);
+    EngineeringCondition push;
+    push.kind = ConditionKind::ForcePoint;
+    push.newtons = 50.0;
+    e.conditions.push_back(push);
+    CHECK(analyze_block(e, v) == AnalyzeBlock::None);
+    e.conditions[0].hidden = true; // hidden: not used
+    CHECK(analyze_block(e, v) == AnalyzeBlock::Fixed);
+    e.conditions[0].hidden = false;
+    // EP10: a type the table does not have: no material until one is chosen.
+    profile.filament_type = "Wood Fill";
+    v = engineering_values(profile, e);
+    CHECK(v.material_id.empty());
+    CHECK(analyze_block(e, v) == AnalyzeBlock::Material);
+    e.overrides.material = "bambu-pla-basic";
+    v = engineering_values(profile, e);
+    CHECK(v.material_by_hand);
+    CHECK(analyze_block(e, v) == AnalyzeBlock::None);
+    CHECK(material_for_filament("PA-CF") == "bambu-pa6-cf");
+    CHECK(material_for_filament("pla+") == "esun-pla-plus");
+    CHECK(material_for_filament("") == "");
 }

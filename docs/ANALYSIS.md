@@ -29,7 +29,9 @@ Un proyecto guardado por la interfaz (el archivo propio o el 3MF) ya trae los aj
 el apartado Ingeniería (`formats.md`, regla 11 bis), así que no hace falta `--case`:
 - se analiza la primera pieza que tenga alguna condición visible, en el lugar de la cama donde está;
 - los ajustes son los del proyecto, o los de `--config` si se da;
-- los valores cambiados a mano en el panel reemplazan a los del perfil: material, altura de capa, altura de la
+- el material es el cambiado a mano en el panel, o si no el del tipo de filamento del perfil (PLA, PLA+, PLA-CF,
+  PETG, PETG-CF, ABS, ASA, PA-CF, PA6-CF, PAHT-CF; un tipo que no está en la tabla da un aviso y se usa el PLA);
+- los otros valores cambiados a mano en el panel reemplazan a los del perfil: altura de capa, altura de la
   primera capa y ancho de línea (como `walls.width`). La temperatura de extrusión todavía no cambia el material, y
   un aviso lo dice;
 - la calidad sale de las opciones de la pestaña Estructural («high» es alta; lo demás, normal);

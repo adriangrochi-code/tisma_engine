@@ -4,6 +4,7 @@
 
 #include "fea/materials.hpp"
 #include "fea/zone.hpp"
+#include "project/engineering_values.hpp"
 
 #include <cmath>
 #include <memory>
@@ -116,14 +117,19 @@ std::vector<std::string> add_conditions(AnalysisCase& c, const ProjectEngineerin
 }
 
 AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const TriangleMesh& mesh,
-                                       const std::array<double, 3>& shift, std::vector<std::string>& notes) {
+                                       const std::array<double, 3>& shift, std::vector<std::string>& notes,
+                                       std::string_view filament_type) {
     AnalysisCase c;
-    if (e.overrides.material) {
-        if (find_material(*e.overrides.material))
-            c.material_id = *e.overrides.material;
-        else
-            notes.push_back("unknown material '" + *e.overrides.material + "': " + c.material_id + " is used");
-    }
+    const std::string by_type = material_for_filament(filament_type);
+    if (e.overrides.material && find_material(*e.overrides.material))
+        c.material_id = *e.overrides.material;
+    else if (!by_type.empty())
+        c.material_id = by_type;
+    if (e.overrides.material && !find_material(*e.overrides.material))
+        notes.push_back("unknown material '" + *e.overrides.material + "': " + c.material_id + " is used");
+    else if (!e.overrides.material && by_type.empty())
+        notes.push_back("no material for the filament type '" + std::string(filament_type) + "': " + c.material_id +
+                        " is used");
     c.material = as_printed(*find_material(c.material_id));
     c.quality = e.structural.quality == "high" ? AnalysisQuality::High : AnalysisQuality::Normal;
     for (std::string& note : add_conditions(c, e, mesh, shift))

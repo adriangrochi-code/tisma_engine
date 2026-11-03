@@ -684,7 +684,7 @@ int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analy
     }
     std::vector<std::string> notes;
     apply_engineering_overrides(settings, it->engineering, notes);
-    analysis = engineering_analysis_case(it->engineering, it->mesh, it->offset, notes);
+    analysis = engineering_analysis_case(it->engineering, it->mesh, it->offset, notes, settings.filament_type);
     for (const std::string& note : notes)
         err << "warning: " << note << "\n";
     if (analysis.fixtures.empty() || analysis.loads.empty()) {
