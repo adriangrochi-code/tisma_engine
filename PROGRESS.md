@@ -9488,8 +9488,8 @@ suprimida, se construyen las otras tres; rechazada la primera, nada). Prueba de 
 tres cajas, falla «Caja 2», se ve 8000 mm³; subida al primer lugar falla primero y no hay cuerpo; suprimida, 16 000
 mm³; borrada, 16 000 mm³.
 
-**No probado:** renombrar con doble clic no tiene prueba guionada (el programa de pruebas no hace doble clic); se
-probó a mano solo en la captura. CD6 entero necesita el redondeo (D4).
+**No probado:** renombrar con doble clic (el programa de pruebas no hace doble clic y no se probó con clics reales
+todavía). CD6 entero necesita el redondeo (D4).
 
 **Sigue:** D4 (redondeo, chaflán, vaciado, agujeros por norma, roscas, patrones, simetría, combinar; CD5, CD6
 completo, CD17, CD18) o lo pendiente de Ingeniería (`engineering_panel.md`: fuerzas en N y kg con dirección,
