@@ -9377,3 +9377,11 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   qué toma el clic. La prueba guionada solo comprueba las herramientas y Esc. Sin probar a mano.
 - **Sigue:** arreglar el clic en la vista y volver a poner en la prueba el marcado, deshacer y rehacer (EP5, EP7);
   dibujar las condiciones en la vista (regla 7); correr el análisis desde Analizar.
+- **Pendiente, TR27 del equipo de fichas (caja negra de bc4fcd5):**
+  1. los campos del panel escriben «0.20 mm» con punto en castellano: usar el formato de la interfaz (`field_text`);
+  2. el material dice «(sheet V3.0)» en castellano: sacar la versión de la ficha del nombre o traducirla;
+  3. el origen de cada valor se confunde con el valor («del perfil 0.20 mm» bajo «0.45 mm»): nombrar el tipo de perfil
+     y entrecomillar su nombre («del perfil de impresión «0,20 mm»»);
+  4. paredes y relleno del perfil (regla 3) todavía no se muestran;
+  5. la primera vez, Ingeniería abre en Diseño y tiene que abrir en Estructural;
+  6. Aerodinámica (regla 1) llega con A3.
