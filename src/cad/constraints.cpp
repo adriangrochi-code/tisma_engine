@@ -575,6 +575,16 @@ int equations_of(GeoConstraint::Kind kind) {
     return kind == K::Fixed || kind == K::Coincident || kind == K::Concentric ? 2 : 1;
 }
 
+namespace {
+System build_safe(const Sketch& sketch) {
+    try {
+        return build(sketch);
+    } catch (const Invalid&) {
+        return build(sketch, 0);
+    }
+}
+} // namespace
+
 SketchSolve analyze_sketch(const Sketch& sketch) {
     try {
         const System sys = build(sketch);
@@ -594,9 +604,29 @@ SketchSolve solve_sketch(Sketch& sketch) {
     } catch (const Invalid&) {
         sys = build(sketch, 0);
     }
-    const bool solved = newton(sys);
-    write_back(sys, sketch);
-    return report(sketch, sys, solved);
+    bool solved = newton(sys);
+    // A rectangle keeps its corners where they are (its width and height
+    // never cross zero: the corners' names would change), and a circle or
+    // an arc a radius above zero; a solve that would break that is not one.
+    Sketch after = sketch;
+    write_back(sys, after);
+    for (std::size_t i = 0; i < sketch.entities.size() && solved; ++i) {
+        const Entity& a = sketch.entities[i];
+        const Entity& b = after.entities[i];
+        if (a.kind == Entity::Kind::Rectangle && a.points.size() >= 2) {
+            const double w0 = a.points[1].x - a.points[0].x, h0 = a.points[1].y - a.points[0].y;
+            const double w1 = b.points[1].x - b.points[0].x, h1 = b.points[1].y - b.points[0].y;
+            solved = w0 * w1 > 0.0 && h0 * h1 > 0.0 && std::abs(w1) > 1e-6 && std::abs(h1) > 1e-6;
+        } else if (b.kind == Entity::Kind::Circle) {
+            solved = b.radius > 1e-6;
+        } else if (b.kind == Entity::Kind::Arc && b.points.size() >= 3) {
+            solved = std::hypot(b.points[1].x - b.points[0].x, b.points[1].y - b.points[0].y) > 1e-6;
+        }
+    }
+    if (!solved) // the sketch stays as it was
+        return report(sketch, build_safe(sketch), false);
+    sketch = std::move(after);
+    return report(sketch, sys, true);
 }
 
 AddRule add_rule(Sketch& sketch, const GeoConstraint& rule) {

@@ -9628,3 +9628,40 @@ y el mismo veredicto.
 
 **No probado / falta:** la memoria y el tiempo estimados («284 MB, unos 14 s» de la ficha) no se muestran: el tiempo
 pide laminar. Falta la dirección de impresión y «Calcular en la nube».
+
+## 2026-11-03 (16:40 UTC): mantenimiento
+
+- **Revisado:**
+  - `origin/main` y `origin/dev` sin nada nuevo;
+  - fuzz de G-code con 2000 casos y semilla nueva (20261103170): 0 fallas, 19 rechazados por no imprimibles;
+  - lo nuevo de hoy (parámetros, restricciones, línea de tiempo, Analizar en Estructural) con pruebas al azar
+    nuevas y midiendo lo que corre en cada cuadro;
+  - el CI de Linux de los commits de Estructural corre aparte.
+- **Encontrado y corregido:**
+  1. **Restricciones.** Una prueba al azar nueva (60 bocetos con 8 restricciones al azar cada uno) encontró que
+     resolver podía «dar vuelta» un rectángulo: el ancho o el alto pasaba por cero. Cambiaba entonces qué esquina es
+     cuál, y una restricción que se había cumplido al agregarla dejaba de cumplirse al volver a contar (16 casos).
+     Ahora una solución que da vuelta un rectángulo, o lleva un radio a cero, no cuenta como solución: el boceto queda
+     como estaba y la restricción se rechaza como contradictoria.
+  2. **Estructural con piezas grandes.** El panel volvía a calcular en cada cuadro la huella del resultado (para
+     «Desactualizado»), y la huella recorre toda la malla. Ahora se calcula solo cuando cambia la pieza, la placa,
+     sus datos de Ingeniería o los ajustes.
+- **Medido:**
+
+  | | huella del resultado |
+  |---|---|
+  | 16 000 triángulos | 1,6 ms |
+  | 261 000 | 27 ms |
+  | 1 960 000 | 203 ms (antes en cada cuadro: unos 5 cuadros por segundo; ahora una vez por cambio) |
+
+  El solucionador de restricciones, en una cadena cerrada con horizontales y verticales:
+
+  | puntos | incógnitas | resolver | un paso de arrastre |
+  |---|---|---|---|
+  | 16 | 32 | 0,09 ms | 0,05 ms |
+  | 32 | 64 | 0,24 ms | 0,29 ms |
+  | 64 | 128 | 1,66 ms | 1,53 ms |
+
+- **Pruebas nuevas:**
+  - restricciones al azar (lo agregado se cumple; menos de 60 s);
+  - 20 000 expresiones al azar y 5000 paréntesis anidados: dan un valor o un error, nunca un cuelgue.

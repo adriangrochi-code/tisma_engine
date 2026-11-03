@@ -204,6 +204,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- Estructural ya no se pone lento con piezas grandes: «Desactualizado» se calculaba en cada cuadro recorriendo toda
+  la malla (200 ms con 2 millones de triángulos).
+- Una restricción de boceto que solo se cumplía dando vuelta un rectángulo (ancho o alto por cero) se agregaba y
+  después quedaba sin cumplir; ahora se rechaza como contradictoria.
 - **La vista ya no gira sola al hacer clic** después de mover el puntero de golpe (UI50): el cuadro del clic no cuenta
   como arrastre. Pasaba, a veces, al marcar condiciones en Estructural.
 - **Memoria del análisis con zonas marcadas:** una cara marcada de 200 × 200 mm ocupaba 504 MB; ahora menos de 1 MB,

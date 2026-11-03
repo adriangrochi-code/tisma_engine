@@ -687,6 +687,13 @@ private:
     std::string structural_parsed_for_;
     nlohmann::json structural_parsed_;
     void start_structural();
+    // Whether a part's result is out of date (rule 14): its fingerprint
+    // hashes the whole mesh (200 ms for 2 million triangles), so it is
+    // computed again only when the part, the plate, its Engineering data or
+    // the settings change.
+    bool structural_stale(std::size_t part, const EngineeringResult& r);
+    std::string stale_key_;
+    std::string stale_fingerprint_;
     void structural_done(StructuralRun run);
     void update_structural_view();
     bool structural_map_wanted();
@@ -12158,7 +12165,7 @@ void App::structural_panel() {
                 }
             }
             const nlohmann::json& j = structural_parsed_;
-            const bool stale = result_stale(*res, po.mesh, po.engineering, settings_json(settings_));
+            const bool stale = structural_stale(std::size_t(structural_part_), *res);
             const nlohmann::json verdict = j.value("verdict", nlohmann::json::object());
             const std::string name = verdict.value("name", std::string());
             struct Shown {
@@ -12748,6 +12755,22 @@ void App::structural_done(StructuralRun run) {
     structural_map_ = std::move(run);
 }
 
+bool App::structural_stale(std::size_t part, const EngineeringResult& r) {
+    if (part >= objects_.size())
+        return true;
+    const PlateObject& o = objects_[part];
+    ProjectEngineering inputs = o.engineering;
+    inputs.results.clear();
+    const std::string settings = settings_json(settings_);
+    std::string key = std::to_string(part) + "|" + std::to_string(plate_version_) + "|" + std::to_string(o.mesh.triangle_count()) +
+                      "|" + engineering_json(inputs) + "|" + settings;
+    if (key != stale_key_) {
+        stale_key_ = std::move(key);
+        stale_fingerprint_ = engineering_fingerprint(o.mesh, o.engineering, settings);
+    }
+    return r.fingerprint != stale_fingerprint_;
+}
+
 // The map is in the view while Structural shows a part whose last run of
 // this session is still up to date.
 bool App::structural_map_wanted() {
@@ -12759,7 +12782,7 @@ bool App::structural_map_wanted() {
     const ProjectEngineering& e = objects_[part].engineering;
     const auto it = std::find_if(e.results.begin(), e.results.end(), [](const EngineeringResult& r) { return r.kind == "structural"; });
     return it != e.results.end() && it->fingerprint == structural_map_->fingerprint &&
-           !result_stale(*it, objects_[part].mesh, e, settings_json(settings_));
+           !structural_stale(part, *it);
 }
 
 void App::update_structural_view() {

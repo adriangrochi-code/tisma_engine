@@ -17,7 +17,9 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <chrono>
 #include <cmath>
+#include <random>
 #include <map>
 #include <cstdlib>
 #include <numbers>
@@ -689,4 +691,94 @@ TEST_CASE("cad: the timeline marks the first feature that fails and keeps the on
     built = build_timeline(kFake, d, MeshQuality::Standard);
     CHECK(built.ok);
     CHECK_FALSE(built.failed_feature);
+}
+
+TEST_CASE("cad: random sketches and constraints never hang, and what is added holds (maintenance)", "[cad]") {
+    using K = GeoConstraint::Kind;
+    std::mt19937 rng(20261103);
+    std::uniform_real_distribution<double> coord(-50.0, 50.0), size(1.0, 30.0);
+    std::uniform_int_distribution<int> pick(0, 1000);
+    int added = 0, refused = 0;
+    const auto start = std::chrono::steady_clock::now();
+    for (int round = 0; round < 60; ++round) {
+        Sketch s;
+        const int entities = 1 + pick(rng) % 4;
+        for (int i = 0; i < entities; ++i) {
+            Entity e;
+            switch (pick(rng) % 4) {
+            case 0:
+                e.kind = Entity::Kind::Chain;
+                for (int k = 0, n = 2 + pick(rng) % 4; k < n; ++k)
+                    e.points.push_back({coord(rng), coord(rng)});
+                e.closed = e.points.size() > 2 && pick(rng) % 2;
+                break;
+            case 1: {
+                e.kind = Entity::Kind::Rectangle;
+                const Pt a{coord(rng), coord(rng)};
+                e.points = {a, {a.x + size(rng), a.y + size(rng)}};
+                break;
+            }
+            case 2:
+                e.kind = Entity::Kind::Circle;
+                e.points = {{coord(rng), coord(rng)}};
+                e.radius = size(rng);
+                break;
+            default: {
+                e.kind = Entity::Kind::Arc;
+                const Pt c{coord(rng), coord(rng)};
+                const double r = size(rng);
+                e.points = {c, {c.x + r, c.y}, {c.x, c.y + r}};
+                break;
+            }
+            }
+            s.entities.push_back(e);
+        }
+        for (int t = 0; t < 8; ++t) {
+            GeoConstraint r;
+            r.kind = K(pick(rng) % 16);
+            r.a = {std::size_t(pick(rng) % entities), std::size_t(pick(rng) % 5)};
+            r.b = {std::size_t(pick(rng) % entities), std::size_t(pick(rng) % 5)};
+            r.value = r.kind == K::Angle ? double(pick(rng) % 180) : size(rng);
+            r.at = {coord(rng), coord(rng)};
+            const AddRule result = add_rule(s, r);
+            if (result == AddRule::Added) {
+                ++added;
+                const SketchSolve now = analyze_sketch(s);
+                INFO("round " << round << " rule " << t << " kind " << geo_kind_name(r.kind));
+                CHECK(now.solved);
+                CHECK(now.dof >= 0);
+                CHECK(now.dof <= now.unknowns);
+            } else {
+                ++refused;
+            }
+        }
+    }
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    INFO(added << " added, " << refused << " refused, " << seconds << " s");
+    CHECK(added > 50);
+    CHECK(seconds < 60.0);
+}
+
+TEST_CASE("cad: any text as an expression gives a value or an error, never a hang (maintenance)", "[cad]") {
+    std::mt19937 rng(20261103);
+    const std::string alphabet = "0123456789.+-*/()  mmcinrad°degpabc_,e";
+    std::uniform_int_distribution<std::size_t> letter(0, alphabet.size() - 1), length(0, 40);
+    const std::map<std::string, Quantity> known{{"a", {2.0, Measure::Length}}, {"b", {30.0, Measure::Angle}}};
+    int values = 0;
+    for (int i = 0; i < 20000; ++i) {
+        std::string text;
+        for (std::size_t k = 0, n = length(rng); k < n; ++k)
+            text += alphabet[letter(rng)];
+        const Evaluation e = evaluate(text, known);
+        CHECK((e.value.has_value() != !e.error.empty()));
+        if (e.value) {
+            ++values;
+            CHECK(std::isfinite(e.value->value));
+        }
+    }
+    // Deep nesting is refused or read, not a crash.
+    const Evaluation deep = evaluate(std::string(5000, '(') + "1" + std::string(5000, ')'), known);
+    CHECK((deep.value.has_value() || !deep.error.empty()));
+    INFO(values);
+    CHECK(values > 100);
 }

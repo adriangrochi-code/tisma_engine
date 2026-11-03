@@ -30,8 +30,10 @@ struct SketchSolve {
 SketchSolve analyze_sketch(const Sketch& sketch);
 
 // Moves the sketch's geometry to meet its constraints and dimensions, as
-// little as it can, then counts what is left. The geometry is left as the
-// last step put it when it cannot be met.
+// little as it can, then counts what is left. When they cannot be met, or
+// meeting them would turn a rectangle inside out (its width or height
+// through zero) or take a radius to zero, the sketch stays as it was and the
+// answer says it is not solved.
 SketchSolve solve_sketch(Sketch& sketch);
 
 // Adds a constraint or dimension by hand (rule 5): the sketch solved with it
