@@ -1497,7 +1497,7 @@ const std::map<T, const char*>& row_keys() {
         {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
-        {T::NonplanarInfill, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
+        {T::NonplanarRow, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
         {T::NonplanarWavelength, "infill.nonplanar_wavelength"}, {T::CombineInfill, "infill.combine_layers"},
         {T::CombineAuto, "infill.combine_auto"}, {T::DenseUnderTop, "infill.dense_under_top"},
         {T::DenseDensity, "infill.dense_density"}, {T::StressDensity, "infill.stress_density"},
@@ -5583,7 +5583,11 @@ void App::settings_card(const SubsectionLayout& sub, int changes, bool& reset) {
 // «Basado en Support Fins, de gittrahan» at a card's foot, small and grey,
 // the source's name a link to it (credits.md, rule 3).
 void App::card_credits(std::string_view card, float left, float right) {
-    const std::vector<const FeatureCredit*> from = credits_for_card(credits(), card);
+    std::vector<const FeatureCredit*> from = credits_for_card(credits(), card);
+    // The nonplanar infill card: ZigZagZ is the zigzag's source; the
+    // interlocking waves are the engine's own (zigzag_infill.md, rule 11).
+    if (card == "wavy" && !settings_.infill_nonplanar)
+        from.clear();
     if (from.empty())
         return;
     ImGui::Spacing();

@@ -9232,3 +9232,13 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   diferencia en el desplazamiento máximo (antes 22 %); unos 3,3 s cada análisis.
 - **Sigue:** la pestaña Estructural (EP1 a EP10): marcar, lista, Analizar, mapa, veredicto, y guardar el resultado
   en el proyecto.
+
+### QA del renglón «Relleno no planar» (equipo de fichas, sobre 791bc8e)
+
+- El renglón tiene ⓘ: la ayuda de `infill.nonplanar` ahora explica los dos tipos, qué mejora (la unión entre
+  capas), que lo medido en el artículo fue en paredes y no en relleno, lo que cuesta (tiempo y tamaño del G-code) y
+  con qué dibujos funciona el zigzag. La búsqueda lo encuentra como «Relleno no planar».
+- La tarjeta pasa de «Relleno ondulado» a «Relleno no planar».
+- «Basado en ZigZagZ (2021)» se muestra solo con el zigzag elegido; las ondas entrelazadas son diseño propio y no
+  muestran crédito.
+- La tarjeta sigue en la sección «No planar» (el equipo de fichas actualiza `settings_panel.md`).

@@ -1103,7 +1103,7 @@
     X(SubInfill, "Relleno", "Infill") \
     X(SubInfillMore, "Relleno avanzado", "Advanced infill") \
     X(SubCombine, "Combinar relleno", "Combined infill") \
-    X(SubWavy, "Relleno ondulado", "Wavy infill") \
+    X(SubWavy, "Relleno no planar", "Nonplanar infill") \
     X(SubFirstLayerSpeed, "Primera capa", "First layer") \
     X(SubWallSpeed, "Paredes y superficies", "Walls and surfaces") \
     X(SubInfillSpeed, "Relleno y soporte", "Infill and support") \
