@@ -202,6 +202,20 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --dump-ui ${CMAKE_CURRENT_BINARY_DIR}/ui_dump_rows.json
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_dump_rows.png)
     set_tests_properties(ui_dump_rows PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # TR25: at 1440 x 900, every section, both languages: no label is cut
+    # without its «…» (the dump counts the rows whose label the column hides).
+    foreach(lang es en)
+      foreach(section quality strength speed support adhesion other)
+        add_test(NAME ui_labels_fit_${lang}_${section}
+          COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1500x950x24" $<TARGET_FILE:tisma>
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang ${lang} --size 1440x900 --level advanced
+                  --section print/${section}
+                  --dump-ui ${CMAKE_CURRENT_BINARY_DIR}/ui_labels_${lang}_${section}.json
+                  --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_labels_${lang}_${section}.png)
+        set_tests_properties(ui_labels_fit_${lang}_${section} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+          TIMEOUT 300 PASS_REGULAR_EXPRESSION "dump-ui: [0-9]+ rows, 0 with the label cut")
+      endforeach()
+    endforeach()
     # A still view draws nothing new (idle_view): its draw calls counted.
     add_test(NAME ui_script_idle_view
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

@@ -158,6 +158,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Nombres de ajustes cortados en el panel** (TR25): a 1440 px, 21 nombres quedaban cortados a mitad de palabra y a
+  veces tapaban la ⓘ. Ahora un nombre que no entra termina en «…», se lee entero al pasar el mouse, y la ⓘ siempre se
+  ve; la columna de los nombres es un poco más ancha. «Largo de las transiciones» pasa a «Largo de transición».
 - **Relleno zigzag en Z más rápido de lo que sube la impresora** (BH20, ficha `zigzag_infill.md`, regla 7): el G-code
   pedía hasta 28 mm/s de Z en el zigzag aunque la máquina diera 5. Ahora la F de cada extrusión que sube o baja queda
   dentro de `machine.max_feed_z`, y sin ese dato, dentro de los 5 mm/s de una Ender-3 de fábrica, con aviso. El

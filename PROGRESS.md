@@ -9184,3 +9184,16 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   deja viejo), el punto en el mismo lugar de la pieza también en 3MF, y el archivo del resultado en el 3MF.
 - **Sigue:** paso 3, `analyze` sobre el proyecto con estas condiciones (zonas por triángulos, puntos con radio), FM25.
 
+### TR25: nombres de ajustes cortados (QA del equipo de fichas)
+
+- A 1440 × 900, nivel avanzado: 21 nombres cortados a mitad de palabra sin «…» (el `--dump-ui` ya los marcaba `cut`),
+  y la ⓘ de «Ángulo de las transiciones» tapada a medias (el chequeo no contaba el botón).
+- **Hecho:** `label_cell` reserva el ancho de la ⓘ; un nombre que no entra se acorta por caracteres UTF-8 enteros y
+  termina en «…», con el nombre entero en el globo (junto a la ayuda, si la hay). La columna de nombres pasa de 1,25 a
+  1,5 veces la de valores. El volcado agrega `shortened`; `cut` queda para lo que la columna tapa sin aviso.
+- Medido (1440 × 900, avanzado): ningún nombre cortado; acortados con «…» 28 en castellano y 12 en inglés (con 1,25
+  hubieran sido 47 y 18). Con 1,7 bajan a 19 y 9, pero los valores se cortan más («0,45 mm · Automá»): me quedo en 1,5.
+- Pruebas nuevas `ui_labels_fit_<es|en>_<sección>` (12): fallan si alguna fila tiene `cut`.
+- «Largo de las transiciones» → «Largo de transición», junto a «Margen de transición».
+- **Sigue:** acortar los textos más largos para que entren sin «…» (los 28 en castellano), con el equipo de fichas.
+

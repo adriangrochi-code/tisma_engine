@@ -1885,6 +1885,7 @@ struct DumpRow {
     bool cut = false;
     bool ranged = false; // a number field: its limits
     double min = 0.0, max = 0.0;
+    bool shortened = false; // the label ends in «…», whole on hover (TR25)
 };
 bool g_dump_ui = false;
 std::vector<DumpRow> g_dump_rows;
@@ -2601,12 +2602,31 @@ void label_cell(T label, const char* tip = nullptr) {
     const ImVec2 cell = ImGui::GetCursorScreenPos();
     const float column = ImGui::GetContentRegionAvail().x;
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(tr(label));
-    const bool cut = ImGui::GetItemRectMax().x > cell.x + column; // the column hides its end
+    // A label longer than the column, beside its info button, ends in «…»
+    // and shows whole on hover; the button always stays in sight (TR25).
+    const char* text = tr(label);
+    const float button = row_key(label) ? ImGui::GetFontSize() * 0.95f * 1.35f : 0.0f;
+    const float room = std::max(0.0f, column - button);
+    const bool shortened = ImGui::CalcTextSize(text).x > room;
+    if (shortened) {
+        std::string s = text;
+        while (!s.empty() && ImGui::CalcTextSize((s + "…").c_str()).x > room) {
+            s.pop_back();
+            while (!s.empty() && (static_cast<unsigned char>(s.back()) & 0xC0) == 0x80)
+                s.pop_back(); // a whole UTF-8 character at a time
+        }
+        while (!s.empty() && s.back() == ' ')
+            s.pop_back();
+        ImGui::TextUnformatted((s + "…").c_str());
+    } else {
+        ImGui::TextUnformatted(text);
+    }
+    // Cut: the column hides part of the label with no sign of it.
+    const bool cut = ImGui::GetItemRectMax().x > cell.x + column + 0.5f;
     if (tip && ImGui::IsItemHovered())
-        loc::SetTooltip("%s", tip);
-    else if (ImGui::IsItemHovered() && cut)
-        loc::SetTooltip("%s", tr(label));
+        loc::SetTooltip("%s\n\n%s", text, tip);
+    else if (ImGui::IsItemHovered() && shortened)
+        loc::SetTooltip("%s", text);
     if (const char* info = row_key(label))
         info_button(label, info);
     if (g_row_tag) {
@@ -2642,8 +2662,10 @@ void label_cell(T label, const char* tip = nullptr) {
         const ImVec2 at = ImGui::GetCursorScreenPos();
         g_field_rects[name] = ImVec4(at.x, at.y, at.x + ImGui::GetContentRegionAvail().x, at.y + ImGui::GetFrameHeight());
         g_last_field = name;
-        if (g_dump_ui)
+        if (g_dump_ui) {
             g_dump_rows.push_back({name, tr(label), cut});
+            g_dump_rows.back().shortened = shortened;
+        }
     }
 }
 
@@ -6963,7 +6985,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     if (!ImGui::BeginTable("##rows", 2, ImGuiTableFlags_SizingStretchProp,
                            ImVec2(ImGui::GetContentRegionAvail().x - 9.0f * scale_, 0)))
         return false;
-    ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 1.25f);
+    ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 1.5f);
     ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
     const auto mm = [&](T label, const char* key, double& v, double min, double max, const char* fmt, float speed,
                         const char* tip = nullptr) {
@@ -15963,7 +15985,7 @@ void App::dump_ui() {
     for (const DumpRow& r : g_dump_rows) {
         const std::string key = r.name.substr(0, r.name.find('#'));
         const auto rect = g_field_rects.find(r.name);
-        nlohmann::json row = {{"key", key}, {"label", r.label}, {"cut", r.cut}};
+        nlohmann::json row = {{"key", key}, {"label", r.label}, {"cut", r.cut}, {"shortened", r.shortened}};
         if (r.ranged)
             row["min"] = r.min, row["max"] = r.max;
         if (const auto v = values.find(key); v != values.end())
