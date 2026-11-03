@@ -25,3 +25,18 @@ menu structural_force_unit_1
 wait 20
 expect-no-control structural_show_map
 expect-structural-verdict holds
+# EP8: saved with its conditions and last result, then opened again: the
+# same verdict, still up to date (its map is drawn again on Analizar).
+menu structural_force_unit_1
+wait 20
+expect-control structural_show_map
+save-project structural_ep8.3mf
+open-project structural_ep8.3mf
+wait 30
+menu mode_engineering
+expect-control tab_structural
+menu tab_structural
+expect-control structural_verdict
+expect-no-text Desactualizado: analizá de nuevo
+expect-structural-verdict holds
+expect-control structural_condition_remove_1

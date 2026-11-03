@@ -9565,8 +9565,6 @@ a 12 y 14) y `structural_analysis.md` («Resultados»), las dos pasan `tools/che
 - Falta arrastrar la punta de la flecha.
 - La adherencia entre capas según la temperatura de la boquilla (método, punto 6) no está.
 - El análisis corre en CPU (sin GPU) desde la interfaz.
-- EP8 (guardar y abrir con el último resultado) no tiene prueba guionada nueva: el resultado va en `results`, que
-  ya se guardaba.
 - EP4 con la barra de 100 × 10 × 10 mm por la interfaz no se probó (el programa de pruebas hace clic solo en el
   medio de la vista).
 
@@ -9605,3 +9603,10 @@ por familia sugerida (hasta seis); al apretarlo se elige y se vuelve a analizar.
      verde junto al punto, punto crítico 0,99;
   4. apretar PEI: se analiza solo y da «Aguanta», 74,2, masa 1,2 g de PEI.
 - La flecha roja de la fuerza y el cuadro rayado azul de la zona fija se ven en la vista.
+
+### EP8 guionada
+
+Verbos nuevos de los programas de prueba: `save-project RUTA` y `open-project RUTA`. `ui_script_structural_analyze`
+ahora, después de analizar, guarda el proyecto, lo abre, vuelve a Estructural y encuentra el mismo veredicto
+(«Aguanta»), sin «Desactualizado» y con sus condiciones. Abrir un proyecto olvida el mapa de la sesión (se vuelve a
+dibujar al analizar).

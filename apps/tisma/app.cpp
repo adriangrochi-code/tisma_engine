@@ -4067,6 +4067,12 @@ void App::open_project(const std::filesystem::path& path) {
         return;
     }
     settings_ = std::move(p.settings);
+    // The Structural map belongs to the plate it was made on.
+    structural_map_.reset();
+    if (structural_map_in_view_) {
+        structural_map_in_view_ = false;
+        paint_dirty_ = true;
+    }
     fill_speeds();
     chosen_profile_ = p.profiles;
     profiles_checked_.clear();
@@ -18087,6 +18093,12 @@ void App::script_input() {
         std::printf("ui-script: expect-sketch-constraints %zu: got %zu\n", want, s->constraints.size());
         if (s->constraints.size() != want)
             return fail_step("the sketch has " + std::to_string(s->constraints.size()) + " constraints");
+        next();
+    } else if (step.verb == "save-project") { // writes the plate as a project to KEY (relative to the working folder)
+        save_project_to(step.key);
+        next();
+    } else if (step.verb == "open-project") { // opens the project KEY, as Abrir does
+        open_project(step.key);
         next();
     } else if (step.verb == "expect-structural-verdict") { // the chosen part's last result: holds, low_margin... (waits for a run)
         if (structural_job_.running())
