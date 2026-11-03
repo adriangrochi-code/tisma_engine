@@ -9468,4 +9468,29 @@ nuevas). Arrastrar puntos del boceto resolviendo en cada cuadro (regla 5) todav�
 Faltan las cotas de recta a círculo, entre círculos, de barrido, largo de arco y de ranura, curvatura G2, colineal,
 punto sobre curva a mano, punto medio a mano y simetría.
 
-**Sigue:** D3, la línea de tiempo editable (regla 8, CD6); arrastrar el boceto (regla 5).
+
+### D3 tercera parte: la línea de tiempo editable (regla 8)
+
+**Hecho:**
+- `cad::build_timeline`: si la herramienta rechaza el diseño, busca la primera operación que falla por bisección
+  sobre los prefijos de la línea de tiempo (log₂ n construcciones más), construye las de antes y devuelve cuál falla
+  y por qué. Una herramienta que falta o no contesta sigue siendo un error de todo el diseño.
+- Historial: flechas para subir y bajar cada operación, doble clic en el nombre para renombrarla (Enter o salir del
+  campo la toma, Esc la deja; un nombre repetido se rechaza con aviso), el ojo y × como antes. La que falla se ve en
+  rojo con el motivo de la herramienta; las de después, en gris con «En espera: falla una operación anterior»; al
+  arreglarla, suprimirla, moverla o borrarla, todo se rehace. «Cuerpos» cuenta solo los construidos. Un boceto en
+  edición se termina antes de mover o borrar.
+- El sustituto de pruebas rechaza el cuerpo que nombre `TISMA_FAKE_SOLIDCRAFT_REFUSE`. Programas de prueba:
+  `expect-design-failed N|none`.
+
+**Probado:** prueba del motor (cuatro cajas, se rechaza la tercera: falla la 3, se construyen 1 y 2, 9000 mm³;
+suprimida, se construyen las otras tres; rechazada la primera, nada). Prueba de interfaz `ui_script_design_timeline`:
+tres cajas, falla «Caja 2», se ve 8000 mm³; subida al primer lugar falla primero y no hay cuerpo; suprimida, 16 000
+mm³; borrada, 16 000 mm³.
+
+**No probado:** renombrar con doble clic no tiene prueba guionada (el programa de pruebas no hace doble clic); se
+probó a mano solo en la captura. CD6 entero necesita el redondeo (D4).
+
+**Sigue:** D4 (redondeo, chaflán, vaciado, agujeros por norma, roscas, patrones, simetría, combinar; CD5, CD6
+completo, CD17, CD18) o lo pendiente de Ingeniería (`engineering_panel.md`: fuerzas en N y kg con dirección,
+Analizar que corra con mapa y veredicto, EP1–EP10), según diga el dueño; arrastrar el boceto (regla 5).

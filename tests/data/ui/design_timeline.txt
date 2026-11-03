@@ -1,0 +1,32 @@
+# The editable timeline (cad_design.md, rule 8; CD6's part that needs no
+# fillet): three boxes, the stand-in tool refuses «Caja 2». It is marked as
+# failing, the first box is built and the third waits. Moved first, it fails
+# first and nothing is built; suppressed, the other two are built; deleted,
+# the same two stay.
+menu mode_engineering
+expect-control tab_design
+menu tab_design
+expect-control design_box
+menu design_box
+expect-design 8000
+menu design_box
+expect-control design_name_2
+menu design_command
+type caja
+key enter
+key enter
+key enter
+key enter
+expect-control design_name_3
+expect-design-failed 2
+expect-design 8000
+expect-control design_up_2
+menu design_up_2
+expect-design-failed 1
+expect-design none
+menu design_eye_1
+expect-design-failed none
+expect-design 16000
+menu design_delete_1
+expect-design-failed none
+expect-design 16000

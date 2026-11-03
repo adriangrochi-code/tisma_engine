@@ -9,6 +9,7 @@
 #include "mesh/mesh.hpp"
 
 #include <filesystem>
+#include <optional>
 #include <set>
 #include <string>
 
@@ -46,6 +47,12 @@ struct BuildResult {
     std::string design_file; // the `.sc` bytes
     std::string measure;     // the JSON `run` printed (inspect.measure)
     double volume_mm3 = 0.0; // from the mesh
+    bool refused = false;    // the tool ran and said no (not missing, not late)
+    // The timeline (rule 8): the first feature that fails, its reason in
+    // `failure`; the bodies are those of the features before it, and the
+    // ones after it wait.
+    std::optional<std::size_t> failed_feature;
+    std::string failure;
 };
 
 // Runs the design's script through the tool, exporting its bodies as a 3MF
@@ -53,5 +60,13 @@ struct BuildResult {
 // after. A design with nothing to build gives an empty mesh and ok.
 BuildResult build_design(const std::filesystem::path& exe, const Design& design, MeshQuality quality,
                          double timeout_seconds = 120.0);
+
+// The design built as a timeline (rule 8): when the tool refuses it, the
+// first feature that fails is found (the shortest failing run of features
+// from the start, by halving), and the features before it are built. The
+// result is ok with `failed_feature` and `failure` set; a missing or late
+// tool is an error as in build_design.
+BuildResult build_timeline(const std::filesystem::path& exe, const Design& design, MeshQuality quality,
+                           double timeout_seconds = 120.0);
 
 } // namespace tisma::cad

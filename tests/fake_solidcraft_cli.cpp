@@ -4,7 +4,9 @@
 // tool's documented command line does, builds the D1 primitives with the
 // engine's own shapes, and writes the 3MF with the engine's writer. With
 // TISMA_FAKE_SOLIDCRAFT_HANG set it never answers; with
-// TISMA_FAKE_SOLIDCRAFT_BROKEN it fails at once (rule 22 bis).
+// TISMA_FAKE_SOLIDCRAFT_BROKEN it fails at once (rule 22 bis); with
+// TISMA_FAKE_SOLIDCRAFT_REFUSE=NAME it refuses to make the body NAME, as the
+// real tool refuses an operation it cannot do (rule 8).
 
 #include "io/model.hpp"
 #include "mesh/mesh.hpp"
@@ -264,6 +266,11 @@ int run(const std::vector<std::string>& args) {
         const json p = step.value("params", json::object());
         const std::string name = text(p, "body_name", text(p, "name", "Body" + std::to_string(bodies.size() + 1)));
         const std::string operation = text(p, "operation", "new");
+        if (const char* refuse = std::getenv("TISMA_FAKE_SOLIDCRAFT_REFUSE");
+            refuse && *refuse && cmd.rfind("solid.", 0) == 0 && name == refuse) {
+            std::fprintf(stderr, "%s: the body %s cannot be made\n", cmd.c_str(), name.c_str());
+            return 1;
+        }
         if (cmd == "solid.box") {
             const double l = number(p, "length", "solid.box"), w = number(p, "width", "solid.box"), h = number(p, "height", "solid.box");
             tisma::TriangleMesh m = tisma::make_box(l, w, h);

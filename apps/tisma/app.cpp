@@ -1006,6 +1006,13 @@ private:
     double design_volume_ = 0.0;    // mm3
     std::string design_file_;       // SolidCraft's design file of that build
     std::string design_error_;      // what the last build said, or empty
+    // The timeline (rule 8): the first feature that fails and why; the ones
+    // after it wait. The feature being renamed, and its text.
+    std::optional<std::size_t> design_failed_;
+    std::string design_failure_;
+    int design_rename_ = -1;
+    bool design_rename_focus_ = false;
+    char design_rename_buf_[128] = {};
     bool design_dirty_ = false;     // changed since the build that runs
     Background<cad::BuildResult> design_job_;
     Background<cad::SolidCraftInfo> solidcraft_job_;
@@ -10998,10 +11005,12 @@ void App::rebuild_design() {
     const cad::Design copy = design_;
     const std::filesystem::path exe = solidcraft_.exe;
     const cad::MeshQuality quality = cad::quality_for(settings_.cad_chord_tolerance, cad::nominal_size(copy));
-    design_job_.start([exe, copy, quality] { return cad::build_design(exe, copy, quality); });
+    design_job_.start([exe, copy, quality] { return cad::build_timeline(exe, copy, quality); });
 }
 
 void App::design_built(cad::BuildResult built) {
+    design_failed_ = built.failed_feature;
+    design_failure_ = built.failure;
     if (built.ok) {
         design_error_.clear();
         design_mesh_ = std::move(built.mesh);
@@ -11384,6 +11393,7 @@ void App::design_panel() {
     if (design_.features.empty())
         loc::TextDisabled("%s", tr(T::DesignNoBodies));
     std::optional<std::size_t> removed;
+    std::optional<std::pair<std::size_t, std::size_t>> moved;
     for (std::size_t i = 0; i < design_.features.size(); ++i) {
         cad::Feature& f = design_.features[i];
         ImGui::PushID(int(i));
@@ -11400,15 +11410,95 @@ void App::design_panel() {
             loc::SetTooltip("%s", tr(T::DesignSuppress));
         rect_of(("design_eye_" + std::to_string(i + 1)).c_str());
         ImGui::SameLine();
-        ImGui::TextUnformatted(f.name.c_str());
+        // Its name: red when it fails, grey while it waits (rule 8); a
+        // double click renames it.
+        const bool fails = design_failed_ && *design_failed_ == i && !f.suppressed;
+        const bool waits = design_failed_ && i > *design_failed_ && !f.suppressed;
+        if (design_rename_ == int(i)) {
+            ImGui::SetNextItemWidth(160.0f * scale_);
+            if (design_rename_focus_) {
+                ImGui::SetKeyboardFocusHere();
+                design_rename_focus_ = false;
+            }
+            ImGui::InputText("##rename", design_rename_buf_, sizeof design_rename_buf_);
+            rect_of(("design_rename_" + std::to_string(i + 1)).c_str());
+            if (ImGui::IsItemDeactivated()) {
+                std::string name = design_rename_buf_;
+                while (!name.empty() && std::isspace(static_cast<unsigned char>(name.back())))
+                    name.pop_back();
+                while (!name.empty() && std::isspace(static_cast<unsigned char>(name.front())))
+                    name.erase(name.begin());
+                const bool taken = std::any_of(design_.features.begin(), design_.features.end(),
+                                               [&](const cad::Feature& g) { return &g != &f && g.name == name; });
+                if (!ImGui::IsKeyPressed(ImGuiKey_Escape) && !name.empty() && name != f.name) {
+                    if (taken) {
+                        command_message_ = tr(T::DesignNameTaken);
+                    } else {
+                        f.name = name;
+                        changed = true;
+                    }
+                }
+                design_rename_ = -1;
+            }
+        } else {
+            if (fails)
+                ImGui::PushStyleColor(ImGuiCol_Text, rgb(0xE5484D));
+            else if (waits)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::Selectable(f.name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(ImGui::CalcTextSize(f.name.c_str()).x, 0.0f));
+            if (fails || waits)
+                ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                loc::SetTooltip("%s", tr(T::DesignRenameTip));
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                    design_rename_ = int(i);
+                    design_rename_focus_ = true;
+                    std::snprintf(design_rename_buf_, sizeof design_rename_buf_, "%s", f.name.c_str());
+                }
+            }
+            rect_of(("design_name_" + std::to_string(i + 1)).c_str());
+        }
         ImGui::SameLine();
         loc::TextDisabled("(%s)", f.type == cad::Feature::Type::Sketch ? tr(T::DesignSketch) : primitive_label(f.kind));
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 24.0f * scale_);
+        // Moved earlier or later in the timeline, or deleted.
+        {
+            const ImGuiStyle& st = ImGui::GetStyle();
+            const float buttons = 2.0f * ImGui::GetFrameHeight() + ImGui::CalcTextSize("×").x + 2.0f * st.FramePadding.x +
+                                  2.0f * st.ItemSpacing.x;
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - buttons);
+        }
+        ImGui::BeginDisabled(i == 0);
+        if (ImGui::ArrowButton("##up", ImGuiDir_Up))
+            moved = std::pair{i, i - 1};
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            loc::SetTooltip("%s", tr(T::DesignMoveUp));
+        rect_of(("design_up_" + std::to_string(i + 1)).c_str());
+        ImGui::SameLine();
+        ImGui::BeginDisabled(i + 1 == design_.features.size());
+        if (ImGui::ArrowButton("##down", ImGuiDir_Down))
+            moved = std::pair{i, i + 1};
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            loc::SetTooltip("%s", tr(T::DesignMoveDown));
+        rect_of(("design_down_" + std::to_string(i + 1)).c_str());
+        ImGui::SameLine();
         if (ImGui::SmallButton("×"))
             removed = i;
         if (ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(T::DesignDeleteFeature));
         rect_of(("design_delete_" + std::to_string(i + 1)).c_str());
+        if (fails) {
+            // The tool's own words, without the engine's lead-in.
+            std::string why = design_failure_;
+            if (const std::size_t colon = why.find("refused the design: "); colon != std::string::npos)
+                why = why.substr(colon + std::strlen("refused the design: "));
+            ImGui::PushTextWrapPos(0.0f);
+            loc::TextColored(rgb(0xE5484D), tr(T::DesignFails), why.c_str());
+            ImGui::PopTextWrapPos();
+        }
+        else if (waits)
+            loc::TextDisabled("%s", tr(T::DesignWaiting));
         ImGui::Indent();
         if (f.type == cad::Feature::Type::Sketch) {
             // Its operation and that operation's measures (rule 7), and the way back in.
@@ -11492,8 +11582,19 @@ void App::design_panel() {
         ImGui::Unindent();
         ImGui::PopID();
     }
+    // A sketch being drawn is finished first, so its place stays right.
+    if ((removed || moved) && sketch_edit_)
+        finish_sketch();
     if (removed) {
         design_.features.erase(design_.features.begin() + std::ptrdiff_t(*removed));
+        design_failed_.reset();
+        design_rename_ = -1;
+        changed = true;
+    }
+    if (moved) {
+        std::swap(design_.features[moved->first], design_.features[moved->second]);
+        design_failed_.reset();
+        design_rename_ = -1;
         changed = true;
     }
     // A measure typed: the design is built again once the field is left,
@@ -11516,9 +11617,9 @@ void App::design_panel() {
     } else if (design_mesh_.empty()) {
         loc::TextDisabled("%s", tr(T::DesignNoBodies));
     } else {
-        int bodies = 0;
-        for (const cad::Feature& f : design_.features)
-            bodies += !f.suppressed && f.buildable() ? 1 : 0;
+        int bodies = 0; // built: the ones before a failing feature (rule 8)
+        for (std::size_t i = 0; i < design_.features.size() && !(design_failed_ && i >= *design_failed_); ++i)
+            bodies += !design_.features[i].suppressed && design_.features[i].buildable() ? 1 : 0;
         if (ImGui::BeginTable("##measures", 2)) {
             const auto line = [](const char* name, const std::string& value) {
                 ImGui::TableNextRow();
@@ -17368,6 +17469,14 @@ void App::script_input() {
         std::printf("ui-script: expect-sketch-constraints %zu: got %zu\n", want, s->constraints.size());
         if (s->constraints.size() != want)
             return fail_step("the sketch has " + std::to_string(s->constraints.size()) + " constraints");
+        next();
+    } else if (step.verb == "expect-design-failed") { // the timeline's failing feature: N (from 1) or "none"
+        if (design_job_.running() || !solidcraft_probed_ || design_dirty_)
+            return f >= 600 ? fail_step("the design is still building") : void();
+        const std::string got = design_failed_ ? std::to_string(*design_failed_ + 1) : "none";
+        std::printf("ui-script: expect-design-failed %s: got %s\n", step.key.c_str(), got.c_str());
+        if (got != step.key)
+            return fail_step("the failing feature is " + got);
         next();
     } else if (step.verb == "expect-sketch-dof") { // the sketch being drawn has N degrees of freedom left
         if (!editing_sketch())

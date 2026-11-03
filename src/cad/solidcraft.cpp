@@ -161,6 +161,7 @@ BuildResult build_design(const std::filesystem::path& exe, const Design& design,
         result.error = run.timed_out ? "the design component did not answer in time"
                        : !run.started ? run.error
                                       : "the design component refused the design: " + complaint(run);
+        result.refused = run.started && !run.timed_out;
         return result;
     }
     std::error_code ec;
@@ -180,6 +181,48 @@ BuildResult build_design(const std::filesystem::path& exe, const Design& design,
     result.volume_mm3 = result.mesh.signed_volume();
     result.ok = true;
     return result;
+}
+
+BuildResult build_timeline(const std::filesystem::path& exe, const Design& design, MeshQuality quality,
+                           double timeout_seconds) {
+    BuildResult whole = build_design(exe, design, quality, timeout_seconds);
+    if (whole.ok || !whole.refused)
+        return whole;
+    // The features that take part, in order; the design up to the k-th of
+    // them (the later ones suppressed).
+    std::vector<std::size_t> active;
+    for (std::size_t i = 0; i < design.features.size(); ++i)
+        if (!design.features[i].suppressed && design.features[i].buildable())
+            active.push_back(i);
+    if (active.empty())
+        return whole;
+    const auto upto = [&](std::size_t k) {
+        Design d = design;
+        for (std::size_t j = k; j < active.size(); ++j)
+            d.features[active[j]].suppressed = true;
+        return d;
+    };
+    // Builds of the first lo features pass; of the first hi, fail.
+    std::size_t lo = 0, hi = active.size();
+    std::string why = whole.error;
+    while (hi - lo > 1) {
+        const std::size_t mid = (lo + hi) / 2;
+        BuildResult r = build_design(exe, upto(mid), quality, timeout_seconds);
+        if (r.ok) {
+            lo = mid;
+        } else if (r.refused) {
+            hi = mid;
+            why = r.error;
+        } else {
+            return r; // the tool went missing or late on the way
+        }
+    }
+    BuildResult before = build_design(exe, upto(lo), quality, timeout_seconds);
+    if (!before.ok)
+        return before.refused ? whole : before;
+    before.failed_feature = active[hi - 1];
+    before.failure = why;
+    return before;
 }
 
 } // namespace tisma::cad

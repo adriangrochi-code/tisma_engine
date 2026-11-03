@@ -1210,6 +1210,12 @@
     X(DesignNoBodies, "Todavía no hay cuerpos", "No bodies yet") \
     X(DesignSuppress, "Suprimir (el ojo)", "Suppress (the eye)") \
     X(DesignDeleteFeature, "Borrar", "Delete") \
+    X(DesignMoveUp, "Subir: se hace antes", "Move up: done earlier") \
+    X(DesignMoveDown, "Bajar: se hace después", "Move down: done later") \
+    X(DesignRenameTip, "Doble clic para cambiarle el nombre", "Double-click to rename") \
+    X(DesignNameTaken, "Ya hay una operación que se llama así", "An operation already has that name") \
+    X(DesignFails, "Falla: %s", "Fails: %s") \
+    X(DesignWaiting, "En espera: falla una operación anterior", "Waiting: an earlier operation fails") \
     X(DesignSent, "Mandado a la placa", "Sent to the plate") \
     X(DesignReplaced, "El objeto se rehizo en la placa", "The object was remade on the plate") \
     X(EditInDesign, "Editar en Diseño", "Edit in Design") \

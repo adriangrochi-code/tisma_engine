@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Línea de tiempo editable en Diseño** (`cad_design.md`, regla 8): cada operación del Historial se sube o se
+  baja con sus flechas, se renombra con doble clic, se suprime con el ojo y se borra con ×; la pieza se rehace sola.
+  Una operación que la herramienta de diseño no puede hacer queda en rojo con el motivo; las de antes se construyen
+  y las de después quedan «En espera» hasta que se arregle.
 - **Restricciones y cotas en los bocetos** (`cad_design.md`, regla 5, CD3): Cota (largo de una línea, diámetro de
   un círculo, radio de un arco o distancia entre dos puntos), horizontal, vertical, paralela, perpendicular, igual,
   coincidente, concéntrica, tangente, fijo y ángulo, desde la sección Boceto o la línea de comandos (`cota`, `h`,

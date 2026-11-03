@@ -648,3 +648,45 @@ TEST_CASE("cad: constraints move a chain and a circle as little as they can (rul
     parse_sketch(sketch_json(s, {}), back, op);
     CHECK(back == s);
 }
+
+TEST_CASE("cad: the timeline marks the first feature that fails and keeps the ones before (rule 8)", "[cad]") {
+    if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
+        SKIP("the stand-in solidcraft-cli was not built");
+    set_env("TISMA_FAKE_SOLIDCRAFT_HANG", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_BROKEN", nullptr);
+    // Four boxes of 10, 20, 30 and 40 mm on a side; the tool refuses the third.
+    Design d;
+    for (int k = 1; k <= 4; ++k) {
+        Feature f;
+        f.name = "Caja " + std::to_string(k);
+        f.kind = Primitive::Box;
+        f.sizes = {10.0 * k, 10.0 * k, 10.0 * k};
+        d.features.push_back(f);
+    }
+    set_env("TISMA_FAKE_SOLIDCRAFT_REFUSE", "Caja 3");
+    BuildResult built = build_timeline(kFake, d, MeshQuality::Standard);
+    INFO(built.error);
+    REQUIRE(built.ok);
+    REQUIRE(built.failed_feature);
+    CHECK(*built.failed_feature == 2);
+    CHECK_THAT(built.failure, ContainsSubstring("Caja 3"));
+    CHECK_THAT(built.volume_mm3, WithinRel(1000.0 + 8000.0, 1e-6)); // the two before it; the fourth waits
+    // Suppressed, it no longer fails: the fourth is built again.
+    d.features[2].suppressed = true;
+    built = build_timeline(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    CHECK_FALSE(built.failed_feature);
+    CHECK_THAT(built.volume_mm3, WithinRel(1000.0 + 8000.0 + 64000.0, 1e-6));
+    // The first one refused: nothing before it.
+    d.features[2].suppressed = false;
+    set_env("TISMA_FAKE_SOLIDCRAFT_REFUSE", "Caja 1");
+    built = build_timeline(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    REQUIRE(built.failed_feature);
+    CHECK(*built.failed_feature == 0);
+    CHECK(built.mesh.empty());
+    set_env("TISMA_FAKE_SOLIDCRAFT_REFUSE", nullptr);
+    built = build_timeline(kFake, d, MeshQuality::Standard);
+    CHECK(built.ok);
+    CHECK_FALSE(built.failed_feature);
+}
