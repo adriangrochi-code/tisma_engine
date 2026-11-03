@@ -6,6 +6,7 @@
 // strength), the temperature factor, the verdict, the mass and the materials
 // to try when the part does not hold. Own design; see PROVENANCE.md.
 
+#include "fea/material.hpp"
 #include "fea/voxels.hpp"
 #include "mesh/mesh.hpp"
 
@@ -39,6 +40,15 @@ const MaterialFamily* family_of(std::string_view name);
 // the maximum service temperature, then down to 0.02 over the next 15 °C,
 // and 0.02 above.
 double temperature_factor(const MaterialFamily& family, double celsius);
+
+// A family as a material of its own, with the table's typical values
+// ("Probá con", engineering_panel.md, rule 12): its id "family:PEI", the
+// family an id of that form names (null for other ids), and its constants:
+// E_xy in the layer, E_z across, G = E / 2(1 + nu), the strengths S_xy and
+// S_z in tension and compression, and S / sqrt(3) in shear (von Mises).
+std::string family_material_id(const MaterialFamily& family);
+const MaterialFamily* family_of_material_id(std::string_view id);
+OrthotropicMaterial family_material(const MaterialFamily& family);
 
 enum class Verdict { Holds, LowMargin, Overloaded, TooFlexible, OverTemperature, NotApplicable };
 // "holds", "low_margin", "overloaded", "too_flexible", "over_temperature",

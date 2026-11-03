@@ -9559,7 +9559,6 @@ a 12 y 14) y `structural_analysis.md` («Resultados»), las dos pasan `tools/che
   revisada: veredicto, números con coma, leyenda, punto crítico «49,29».
 
 **No probado / falta:**
-- No hay botón para probar cada material sugerido; solo se nombran las familias.
 - Falta la deformación exagerada, y los mapas de von Mises y desplazamiento.
 - Falta «Más opciones»: resolución con su tamaño, dirección de impresión y nube.
 - Falta Optimizar.
@@ -9589,3 +9588,20 @@ Más opciones (resolución); después Optimizar y Aerodinámica (A3).
 **Probado:** barra de 40 × 8 × 8 mm con 5 N en la punta y un límite en la cara libre: con la mitad de lo que se
 mueve, «Demasiado flexible»; con el doble, «Aguanta»; en %, lo mismo que en mm. Las dos pruebas de interfaz de
 Estructural pasan.
+
+### Probar un material sugerido (regla 12)
+
+**Hecho:** el material de una pieza puede ser también una familia de la tabla de la ficha (`family:PEI`), con sus
+valores típicos (`E_xy`, `E_z`, ν, `S_xy`, `S_z`; cortante `S/√3`, propio) y su `f(T)`. La lista de materiales del
+panel las suma debajo de los registros medidos («PEI (valores típicos)»). En el resultado, «Probá con:» pone un botón
+por familia sugerida (hasta seis); al apretarlo se elige y se vuelve a analizar.
+
+**Probado:**
+- Motor: PEI a 130 °C toma los valores de la tabla por su `f(T)` y aguanta la barra; el informe nombra «PEI».
+- Con eventos reales de X (XTest en Xvfb, 1200 × 760):
+  1. cubo con zona fija y punto de fuerza (por guion);
+  2. bajar el panel con la rueda, doble clic en la temperatura de trabajo, «130», Enter, Analizar;
+  3. «Fuera de temperatura», factor mínimo 0,986, «Probá con: PEEK, PEKK, PEI, PSU, PA-CF», el mapa con amarillo y
+     verde junto al punto, punto crítico 0,99;
+  4. apretar PEI: se analiza solo y da «Aguanta», 74,2, masa 1,2 g de PEI.
+- La flecha roja de la fuerza y el cuadro rayado azul de la zona fija se ven en la vista.

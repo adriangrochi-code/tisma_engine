@@ -4,6 +4,7 @@
 #include "report/analysis_json.hpp"
 
 #include "fea/materials.hpp"
+#include "fea/verdict.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -22,9 +23,12 @@ json safety(double s) { return std::isfinite(s) ? json(s) : json(nullptr); }
 std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, const std::array<double, 12>& to_part) {
     const OrthotropicMaterial& m = c.material;
     const MaterialRecord* record = find_material(c.material_id);
+    const MaterialFamily* family = family_of_material_id(c.material_id);
     json material = {{"id", c.material_id},
-                     {"name", record ? std::string(record->name) : std::string()},
-                     {"source", record ? std::string(record->source) : std::string()},
+                     {"name", record ? std::string(record->name) : family ? std::string(family->name) : std::string()},
+                     {"source", record   ? std::string(record->source)
+                                : family ? std::string("typical values, structural_analysis.md")
+                                         : std::string()},
                      {"constants",
                       {{"e1", m.e1},     {"e2", m.e2},     {"e3", m.e3},     {"g12", m.g12},   {"g13", m.g13},
                        {"g23", m.g23},   {"nu12", m.nu12}, {"nu13", m.nu13}, {"nu23", m.nu23}, {"xt", m.xt},

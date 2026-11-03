@@ -88,6 +88,29 @@ const MaterialFamily* family_of(std::string_view text) {
     return nullptr;
 }
 
+std::string family_material_id(const MaterialFamily& family) { return "family:" + std::string(family.name); }
+
+const MaterialFamily* family_of_material_id(std::string_view id) {
+    constexpr std::string_view prefix = "family:";
+    if (!id.starts_with(prefix))
+        return nullptr;
+    return named(id.substr(prefix.size()));
+}
+
+OrthotropicMaterial family_material(const MaterialFamily& f) {
+    OrthotropicMaterial m;
+    m.e1 = m.e2 = f.e_xy;
+    m.e3 = f.e_z;
+    m.nu12 = m.nu13 = m.nu23 = f.nu;
+    m.g12 = f.e_xy / (2.0 * (1.0 + f.nu));
+    m.g13 = m.g23 = f.e_z / (2.0 * (1.0 + f.nu));
+    m.xt = m.xc = m.yt = m.yc = f.s_xy;
+    m.zt = m.zc = f.s_z;
+    m.s12 = f.s_xy / std::sqrt(3.0);
+    m.s13 = m.s23 = f.s_z / std::sqrt(3.0);
+    return m;
+}
+
 double temperature_factor(const MaterialFamily& family, double t) {
     if (t <= 23.0)
         return 1.0;

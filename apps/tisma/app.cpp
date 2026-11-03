@@ -681,6 +681,7 @@ private:
     std::atomic<int> structural_permille_{0};
     std::optional<StructuralRun> structural_map_; // the last finished run of this session
     bool structural_show_map_ = true;
+    bool try_material_ = false; // a suggested material chosen: analyze again
     bool structural_map_in_view_ = false;
     std::string structural_message_;
     std::string structural_parsed_for_;
@@ -12194,11 +12195,28 @@ void App::structural_panel() {
                 else
                     ImGui::TextUnformatted(line.c_str());
             }
-            std::string names;
-            for (const nlohmann::json& sug : verdict.value("suggestions", nlohmann::json::array()))
-                names += (names.empty() ? "" : ", ") + sug.value("family", std::string());
-            if (!names.empty())
-                loc::TextColored(rgb(theme_.accent_hover), tr(T::StructTry), names.c_str());
+            // What to try (rule 12): a button each; it picks that family's
+            // typical values as the material, and Analizar runs again.
+            const nlohmann::json suggestions = verdict.value("suggestions", nlohmann::json::array());
+            if (!suggestions.empty()) {
+                loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StructTryTitle));
+                int shown_count = 0;
+                for (const nlohmann::json& sug : suggestions) {
+                    const std::string fam = sug.value("family", std::string());
+                    const MaterialFamily* f = family_of_material_id("family:" + fam);
+                    if (!f || shown_count >= 6)
+                        continue;
+                    if (shown_count % 3 != 0)
+                        ImGui::SameLine();
+                    if (ImGui::SmallButton(fam.c_str()) && !structural_job_.running()) {
+                        remember_engineering(std::size_t(structural_part_));
+                        objects_[std::size_t(structural_part_)].engineering.overrides.material = family_material_id(*f);
+                        try_material_ = true;
+                    }
+                    rect_of("structural_try_" + fam);
+                    ++shown_count;
+                }
+            }
             if (!j.value("valid", true)) {
                 loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructNotValid));
                 for (const nlohmann::json& w : j.value("warnings", nlohmann::json::array()))
@@ -12445,11 +12463,26 @@ void App::structural_panel() {
         const std::size_t sheet = name.find(" (sheet");
         return std::string(sheet == std::string_view::npos ? name : name.substr(0, sheet));
     };
-    if (ImGui::BeginCombo("##structural_material", material ? shown_name(material->name).c_str() : tr(T::StructChooseMaterial))) {
+    // Or a family of the spec's table, with its typical values (rule 12's
+    // «probar» a material that has no measured record).
+    const MaterialFamily* chosen_family = family_of_material_id(values.material_id);
+    const std::string family_label = chosen_family ? format(tr(T::StructFamilyTypical), std::string(chosen_family->name).c_str()) : std::string();
+    if (ImGui::BeginCombo("##structural_material", material         ? shown_name(material->name).c_str()
+                                                   : chosen_family ? family_label.c_str()
+                                                                   : tr(T::StructChooseMaterial))) {
         for (const MaterialRecord& r : ::tisma::material_records()) {
             ImGui::PushID(r.id.data(), r.id.data() + r.id.size());
             if (ImGui::Selectable(shown_name(r.name).c_str(), material == &r))
                 e.overrides.material = std::string(r.id);
+            ImGui::PopID();
+        }
+        ImGui::Separator();
+        for (const MaterialFamily& f : material_families()) {
+            if (f.elastomer)
+                continue;
+            ImGui::PushID(f.name.data(), f.name.data() + f.name.size());
+            if (ImGui::Selectable(format(tr(T::StructFamilyTypical), std::string(f.name).c_str()).c_str(), chosen_family == &f))
+                e.overrides.material = family_material_id(f);
             ImGui::PopID();
         }
         ImGui::EndCombo();
@@ -12501,6 +12534,11 @@ void App::structural_panel() {
     ImGui::Separator();
     ImGui::Spacing();
     const AnalyzeBlock block = analyze_block(e, values);
+    if (try_material_ && !structural_job_.running()) {
+        try_material_ = false;
+        if (block == AnalyzeBlock::None)
+            start_structural();
+    }
     if (structural_job_.running()) {
         // While it calculates (rule 11): its progress and Cancelar; the view
         // still turns.

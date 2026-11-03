@@ -1227,7 +1227,8 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
    trabajo y Analizar; marcar en la vista y la lista con deshacer (2026-11-03); fuerzas en N o kg con dirección,
    Analizar en segundo plano con avance y Cancelar, veredicto, masa, sugerencias, mapa del factor de seguridad,
    punto crítico, «Desactualizado» y el resultado guardado con la pieza; límites de desplazamiento y «Demasiado
-   flexible» (2026-11-03). Faltan: botón para probar cada material sugerido, deformación exagerada, otros
+   flexible»; botón para probar cada material sugerido, con las familias de la tabla como material (2026-11-03).
+   Faltan: deformación exagerada, otros
    mapas (von Mises, desplazamiento), Más opciones (resolución con su tamaño, dirección de impresión, nube),
    Optimizar, arrastrar la punta de la flecha, y sacar «Análisis» de Impresión 3D;
 5. la pestaña Aerodinámica, con A3 (CFD).

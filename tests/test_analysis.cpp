@@ -698,4 +698,21 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     e.working_temperature = 50.0;
     const AnalysisCase hot = engineering_analysis_case(e, triangles, {}, notes, "PLA");
     CHECK_THAT(hot.material.e1, WithinRel(c.material.e1 * temperature_factor(*family_of("PLA"), 50.0), 1e-12));
+    // A suggested family tried (rule 12): PEI at 130 °C takes the table's
+    // values times its own f(T), and the report names it.
+    e.working_temperature = 130.0;
+    e.overrides.material = family_material_id(*family_of("PEI"));
+    const AnalysisCase pei = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    CHECK(pei.material_id == "family:PEI");
+    const double f130 = temperature_factor(*family_of("PEI"), 130.0);
+    CHECK_THAT(pei.material.e1, WithinRel(2200.0 * f130, 1e-12));
+    CHECK_THAT(pei.material.e3, WithinRel(2000.0 * f130, 1e-12));
+    CHECK_THAT(pei.material.zt, WithinRel(40.0 * f130, 1e-12));
+    const AnalysisReport rp = run_analysis(bar, beads_04(), pei);
+    REQUIRE(rp.valid);
+    const nlohmann::json jp = nlohmann::json::parse(structural_report_json(rp, pei, e));
+    CHECK(jp["material"]["name"] == "PEI");
+    CHECK(jp["verdict"]["family"] == "PEI");
+    CHECK(jp["verdict"]["name"] == "holds"); // under its 150 °C service maximum
+    CHECK(family_of_material_id("bambu-pla-basic") == nullptr);
 }

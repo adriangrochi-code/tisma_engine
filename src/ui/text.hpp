@@ -58,10 +58,11 @@
     X(StructMinSafety, "Factor de seguridad mínimo: %.3g (pedido %.3g)", "Lowest safety factor: %.3g (asked %.3g)") \
     X(StructMaxDisplacement, "Desplazamiento máximo: %.3g mm", "Largest displacement: %.3g mm") \
     X(StructMass, "Masa: %.1f g de %s", "Mass: %.1f g of %s") \
-    X(StructTry, "Probá con: %s", "Try: %s") \
     X(StructShowMap, "Ver el mapa del factor de seguridad", "Show the safety factor map") \
     X(StructLegend, "Rojo: menos de 1 · amarillo: hasta el pedido · verde claro: hasta el doble · verde: hasta 4 veces · azul: más", "Red: below 1 · yellow: up to the asked · light green: up to twice · green: up to 4 times · blue: more") \
     X(StructLimitLine, "Límite de desplazamiento: se mueve %.3g mm de %.3g", "Displacement limit: moves %.3g mm of %.3g") \
+    X(StructFamilyTypical, "%s (valores típicos)", "%s (typical values)") \
+    X(StructTryTitle, "Probá con:", "Try:") \
     X(StructCritical, "Punto crítico: %.2f", "Critical point: %.2f") \
     X(StructNotValid, "El resultado no sirve:", "The result is not usable:") \
     X(StructSafetyFactor, "Factor de seguridad pedido", "Safety factor asked") \

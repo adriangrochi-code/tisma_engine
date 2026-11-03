@@ -127,16 +127,21 @@ AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const Triang
                                        std::string_view filament_type) {
     AnalysisCase c;
     const std::string by_type = material_for_filament(filament_type);
-    if (e.overrides.material && find_material(*e.overrides.material))
+    const auto known = [](const std::string& id) { return find_material(id) || family_of_material_id(id); };
+    if (e.overrides.material && known(*e.overrides.material))
         c.material_id = *e.overrides.material;
     else if (!by_type.empty())
         c.material_id = by_type;
-    if (e.overrides.material && !find_material(*e.overrides.material))
+    if (e.overrides.material && !known(*e.overrides.material))
         notes.push_back("unknown material '" + *e.overrides.material + "': " + c.material_id + " is used");
     else if (!e.overrides.material && by_type.empty())
         notes.push_back("no material for the filament type '" + std::string(filament_type) + "': " + c.material_id +
                         " is used");
-    c.material = as_printed(*find_material(c.material_id));
+    // A family chosen to try (rule 12): the table's typical values.
+    if (const MaterialFamily* family = family_of_material_id(c.material_id))
+        c.material = family_material(*family);
+    else
+        c.material = as_printed(*find_material(c.material_id));
     // The working temperature (engineering_panel.md, rule 4): stiffness and
     // strength times f(T) of the material's family (structural_analysis.md,
     // method, point 5).
