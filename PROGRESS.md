@@ -9327,3 +9327,10 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   tapas otras dos. Prueba nueva con el cubo y el cilindro.
 - **Sigue:** los botones de las herramientas en el panel, el clic en la vista (la pieza, el triángulo y el punto, en
   las coordenadas de la pieza), la lista de condiciones con ojo, lápiz y cruz, y deshacer.
+- **Pendiente (equipo de fichas, formats.md 8 y 11 bis en spec/next 13ef0a6):** al guardar, la interfaz escribe cada
+  malla ya ubicada en la cama, con desplazamiento 0, así que el marco de la pieza cambia cada vez que se mueve. Tiene
+  que guardar la malla sin ubicar, en el marco de la pieza, con la posición y el giro en la transformación del
+  `<build>` del 3MF (y en el proyecto propio). Hace falta: transformación completa en `ProjectModel` y en el escritor
+  y lector del 3MF, y que `project_objects` y `current_project` la usen. Prueba FM24: mover la barra 30 mm, girarla
+  90°, guardar y abrir; las condiciones quedan en los mismos lugares de la barra. Los proyectos viejos, con mallas
+  ubicadas, se siguen abriendo.
