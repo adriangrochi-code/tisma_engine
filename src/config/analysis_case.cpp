@@ -169,7 +169,8 @@ static AnalysisCase parse_analysis_case_checked(std::string_view text) {
     if (root.contains("quality"))
         c.quality = choice(root.at("quality"), "quality",
                            std::map<std::string, AnalysisQuality>{{"normal", AnalysisQuality::Normal},
-                                                                  {"high", AnalysisQuality::High}});
+                                                                  {"high", AnalysisQuality::High},
+                                                                  {"extreme", AnalysisQuality::Extreme}});
     if (root.contains("voxel"))
         c.voxel = positive(root.at("voxel"), "voxel");
     if (root.contains("rows_per_layer")) {

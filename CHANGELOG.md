@@ -17,6 +17,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   MI, AR, M, CO, RO y SC en la línea de comandos. Líneas y arcos sueltos que se tocan punta con punta cierran una
   región que se puede extruir. Se elige con clic o con una caja: hacia la derecha, ventana (solo lo que queda
   adentro); hacia la izquierda, cruce (todo lo que toca).
+- **Pestaña Aerodinámica**: dirección, velocidad, calidad y altura de capa; Analizar con avance y Cancelar; arrastre,
+  Cd en presión y rozamiento, fuerza transversal, área frontal, Reynolds y rugosidad; la pieza pintada con la presión o
+  la rugosidad, líneas de corriente coloreadas con la presión y una flecha que muestra de dónde viene el aire.
+- **Calidad extrema** en los análisis estructural (6 vóxeles por ancho de línea) y aerodinámico (48 celdas), y un
+  aviso en los dos paneles de que los resultados son aproximaciones.
 - **Análisis aerodinámico** (`aerodynamics.md`): arrastre separado en presión (lattice Boltzmann D3Q19 con
   Smagorinsky) y rozamiento (placa plana, con la rugosidad de las capas), fuerza transversal, Reynolds, rugosidad media
   y mapa por cara. Por ahora desde la línea de comandos: `tisma-engine aero` para los nodos de Tisma Cloud (`cloud.md`,

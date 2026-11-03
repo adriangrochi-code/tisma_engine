@@ -398,7 +398,7 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         err << "warning: the printer's profile gives no speed for " << key << ": a stock Ender-3's is used\n";
     if (a.no_gpu)
         settings.gpu = GpuMode::Off;
-    const std::string fingerprint = engineering_fingerprint(model.mesh, model.engineering, settings_json(settings));
+    const std::string fingerprint = engineering_fingerprint(model.mesh, model.engineering, settings_json(settings), "structural");
     std::vector<std::string> notes;
     apply_engineering_overrides(settings, model.engineering, notes);
     try {
@@ -413,9 +413,7 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
     const PlacedPart part = placed_part(model);
     ProjectEngineering placed = part.engineering;
     if (!quality.empty())
-        placed.structural.quality = quality == "ultra" ? "high" : quality;
-    if (quality == "ultra")
-        notes.push_back("the quality 'ultra' runs as 'high' (the finest the engine has)");
+        placed.structural.quality = quality == "ultra" ? "extreme" : quality;
     AnalysisCase c = engineering_analysis_case(placed, part.mesh, {}, notes, settings.filament_type, settings.layer_height);
     if (solid)
         c.model = AnalysisModel::Solid;
@@ -511,7 +509,7 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
         usage = "error: aero needs the project, -o and --summary";
     aero::AeroQuality q = aero::AeroQuality::Normal;
     if (usage.empty() && !aero::quality_named(quality, q))
-        usage = "error: aero: --quality is friction, fast, normal or high";
+        usage = "error: aero: --quality is friction, fast, normal, high or extreme";
     if (usage.empty() && (!(speed > 0.0) || speed > 100.0))
         usage = "error: aero: --speed is more than 0 and up to 100 m/s";
     // The direction: an axis with its sign, or three numbers.

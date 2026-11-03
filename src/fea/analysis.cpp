@@ -68,7 +68,8 @@ const char* failure_mode_name(FailureMode mode) {
 
 std::pair<double, int> analysis_resolution(const AnalysisCase& c, const Settings& settings) {
     const double voxel =
-        c.voxel > 0.0 ? c.voxel : settings.wall_width / (c.quality == AnalysisQuality::High ? 4.0 : 2.0);
+        c.voxel > 0.0 ? c.voxel
+                      : settings.wall_width / (c.quality == AnalysisQuality::Extreme ? 6.0 : c.quality == AnalysisQuality::High ? 4.0 : 2.0);
     const int rows = c.rows_per_layer > 0 ? c.rows_per_layer
                                           : std::max(1, int(std::lround(settings.layer_height / voxel)));
     return {voxel, rows};

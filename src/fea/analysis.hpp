@@ -32,7 +32,7 @@ class Context;
 // How fine the voxels are: normal, 2 per line width in the layer and one row
 // per layer; high, 4 per line width and rows about as tall as the voxels are
 // wide (2 per 0.2 mm layer with 0.4 mm lines).
-enum class AnalysisQuality : std::uint8_t { Normal, High };
+enum class AnalysisQuality : std::uint8_t { Normal, High, Extreme };
 // As printed: the sliced toolpaths give every voxel its line direction, and
 // the gaps of sparse infill stay empty (with voxels at most half a line
 // wide). Solid: the whole part, every direction unknown (the layer's average

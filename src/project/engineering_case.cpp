@@ -152,7 +152,11 @@ AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const Triang
                           &m.s13, &m.s23})
             *v *= f;
     }
-    c.quality = e.structural.quality == "high" ? AnalysisQuality::High : AnalysisQuality::Normal;
+    // Extrema (the owner's request, 2026-11-03; the cloud's «ultra»): 6
+    // voxels per line width.
+    c.quality = e.structural.quality == "high"                                     ? AnalysisQuality::High
+                : e.structural.quality == "extreme" || e.structural.quality == "ultra" ? AnalysisQuality::Extreme
+                                                                                     : AnalysisQuality::Normal;
     // Rápida (structural_analysis.md, «Resolución»: about 20 000 voxels): the
     // whole part solid, voxels of the size that gives that many over its
     // box, without the resolution check.

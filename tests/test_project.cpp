@@ -310,7 +310,7 @@ TEST_CASE("FM23, FM24: a part's Engineering conditions, values by hand and optio
     e.aerodynamics.speed = 12.5;
     // The last structural result, with what it was computed from (rule 11 bis).
     const std::string settings = settings_json(p.settings);
-    e.results.push_back({"structural", engineering_fingerprint(p.models[0].mesh, e, settings),
+    e.results.push_back({"structural", engineering_fingerprint(p.models[0].mesh, e, settings, "structural"),
                          R"({"verdict": "holds", "max_displacement_mm": 0.31})"});
     CHECK_FALSE(result_stale(e.results[0], p.models[0].mesh, e, settings));
     // The second model has nothing: it opens as before.

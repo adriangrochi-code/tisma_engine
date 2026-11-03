@@ -35,12 +35,13 @@ const char* quality_name(AeroQuality q) {
     case AeroQuality::Fast: return "fast";
     case AeroQuality::Normal: return "normal";
     case AeroQuality::High: return "high";
+    case AeroQuality::Extreme: return "extreme";
     }
     return "normal";
 }
 
 bool quality_named(const std::string& name, AeroQuality& q) {
-    for (const AeroQuality k : {AeroQuality::Friction, AeroQuality::Fast, AeroQuality::Normal, AeroQuality::High})
+    for (const AeroQuality k : {AeroQuality::Friction, AeroQuality::Fast, AeroQuality::Normal, AeroQuality::High, AeroQuality::Extreme})
         if (name == quality_name(k)) {
             q = k;
             return true;
@@ -54,6 +55,7 @@ int quality_cells(AeroQuality q) {
     case AeroQuality::Fast: return 16;
     case AeroQuality::Normal: return 24;
     case AeroQuality::High: return 32;
+    case AeroQuality::Extreme: return 48;
     }
     return 24;
 }
@@ -303,12 +305,91 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
             pressure_z += -cp * normal[t][2] * area[t];
         }
         r.cd_pressure = pressure_x / r.frontal_area_mm2;
+
+        // Streamlines: seeds on a grid across the part's front, a little
+        // wider than it, followed through the mean velocity (Heun's steps
+        // of half a cell) until they leave the domain or meet the part.
+        const auto cell_of = [&](int x, int y, int z) {
+            return (std::size_t(z) * std::size_t(o.ny) + std::size_t(y)) * std::size_t(o.nx) + std::size_t(x);
+        };
+        // Trilinear, in lattice coordinates (cell centres at i + 0.5).
+        const auto sample = [&](double gx, double gy, double gz, double out[4]) {
+            const double fx = gx - 0.5, fy = gy - 0.5, fz = gz - 0.5;
+            const int x0 = int(std::floor(fx)), y0 = int(std::floor(fy)), z0 = int(std::floor(fz));
+            const double tx = fx - x0, ty = fy - y0, tz = fz - z0;
+            for (int k = 0; k < 4; ++k)
+                out[k] = 0.0;
+            double weight = 0.0;
+            for (int dz = 0; dz < 2; ++dz)
+                for (int dy = 0; dy < 2; ++dy)
+                    for (int dxx = 0; dxx < 2; ++dxx) {
+                        const int x = std::clamp(x0 + dxx, 0, o.nx - 1), y = std::clamp(y0 + dy, 0, o.ny - 1), z = std::clamp(z0 + dz, 0, o.nz - 1);
+                        const std::size_t c = cell_of(x, y, z);
+                        if (solid[c])
+                            continue;
+                        const double w = (dxx ? tx : 1 - tx) * (dy ? ty : 1 - ty) * (dz ? tz : 1 - tz);
+                        out[0] += w * flow.mean_velocity[3 * c];
+                        out[1] += w * flow.mean_velocity[3 * c + 1];
+                        out[2] += w * flow.mean_velocity[3 * c + 2];
+                        out[3] += w * ((flow.mean_density[c] - flow.inlet_density) / 3.0) / q_lat;
+                        weight += w;
+                    }
+            if (weight < 1e-9)
+                return false;
+            for (int k = 0; k < 4; ++k)
+                out[k] /= weight;
+            return true;
+        };
+        const auto solid_at = [&](double gx, double gy, double gz) {
+            const int x = int(gx), y = int(gy), z = int(gz);
+            return x >= 0 && y >= 0 && z >= 0 && x < o.nx && y < o.ny && z < o.nz && solid[cell_of(x, y, z)] != 0;
+        };
+        constexpr int kSeeds = 11;
+        const double ylo = (lo[1] - origin[1]) / dx - 0.25 * size_y / dx, yhi = (hi[1] - origin[1]) / dx + 0.25 * size_y / dx;
+        const double zlo = (lo[2] - origin[2]) / dx - 0.25 * size_z / dx, zhi = (hi[2] - origin[2]) / dx + 0.25 * size_z / dx;
+        for (int sj = 0; sj < kSeeds; ++sj)
+            for (int sk = 0; sk < kSeeds; ++sk) {
+                double p[3] = {3.0, ylo + (yhi - ylo) * (sj + 0.5) / kSeeds, zlo + (zhi - zlo) * (sk + 0.5) / kSeeds};
+                if (size_z <= 1e-9)
+                    p[2] = 0.5 * (zlo + zhi);
+                AeroResult::Streamline line;
+                const int max_steps = 4 * (o.nx + o.ny + o.nz);
+                for (int step = 0; step < max_steps; ++step) {
+                    double a[4], b[4];
+                    if (!sample(p[0], p[1], p[2], a))
+                        break;
+                    const double speed_a = std::sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
+                    if (speed_a < 1e-5)
+                        break;
+                    const double h = 0.5 / speed_a; // half a cell along the flow
+                    if (step % 2 == 0) {
+                        // In the input's coordinates: back from the turned frame.
+                        const double tx = origin[0] + p[0] * dx, ty = origin[1] + p[1] * dx, tz = origin[2] + p[2] * dx;
+                        line.points.push_back({float(d[0] * tx + ey[0] * ty + ez[0] * tz), float(d[1] * tx + ey[1] * ty + ez[1] * tz),
+                                               float(d[2] * tx + ey[2] * ty + ez[2] * tz)});
+                        line.cp.push_back(float(a[3]));
+                    }
+                    const double q[3] = {p[0] + h * a[0], p[1] + h * a[1], p[2] + h * a[2]};
+                    if (!sample(q[0], q[1], q[2], b))
+                        break;
+                    for (int k = 0; k < 3; ++k)
+                        p[k] += 0.5 * h * (a[k] + b[k]);
+                    if (p[0] < 0 || p[1] < 0 || p[2] < 0 || p[0] >= o.nx - 1 || p[1] >= o.ny || p[2] >= o.nz || solid_at(p[0], p[1], p[2]))
+                        break;
+                }
+                if (line.points.size() >= 2)
+                    r.streamlines.push_back(std::move(line));
+            }
     } else {
         r.reynolds_simulated = 0.0;
     }
     r.cd = r.cd_pressure + r.cd_friction;
     r.drag_n = r.cd * q_pa * r.frontal_area_mm2 * 1e-6;
     r.side_force_n = std::hypot(pressure_y, pressure_z) * q_pa * 1e-6;
+    // What a symmetric part gives across the air is rounding noise: 0 below
+    // a millionth of the drag.
+    if (r.side_force_n < 1e-6 * std::abs(r.drag_n))
+        r.side_force_n = 0.0;
     r.ok = true;
     r.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     if (progress)
@@ -345,6 +426,17 @@ std::string result_json(const AeroResult& r, const AeroInput& in) {
                      {"steps", r.steps},
                      {"cp", cp},
                      {"ra_um", ra}};
+    nlohmann::json lines = nlohmann::json::array();
+    for (const AeroResult::Streamline& s : r.streamlines) {
+        nlohmann::json pts = nlohmann::json::array(), cps = nlohmann::json::array();
+        for (const auto& p : s.points)
+            for (const float v : p)
+                pts.push_back(std::round(double(v) * 100.0) / 100.0);
+        for (const float v : s.cp)
+            cps.push_back(std::round(double(v) * 1000.0) / 1000.0);
+        lines.push_back({{"points", pts}, {"cp", cps}});
+    }
+    j["streamlines"] = lines;
     return j.dump();
 }
 

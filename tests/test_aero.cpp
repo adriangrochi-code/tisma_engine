@@ -187,6 +187,19 @@ TEST_CASE("aero: the lattice runs, stays stable and pushes on the face the air m
     REQUIRE(nf > 0);
     REQUIRE(nb > 0);
     CHECK(front / nf > back / nb);
+    // Streamlines: from in front of the part, downstream, finite, with a
+    // pressure at each point; those through the middle go round the cube.
+    REQUIRE_FALSE(r.streamlines.empty());
+    float lowest_x = 1e9f;
+    for (const AeroResult::Streamline& s : r.streamlines) {
+        REQUIRE(s.points.size() == s.cp.size());
+        REQUIRE(s.points.size() >= 2);
+        CHECK(s.points.back()[0] > s.points.front()[0]);
+        for (const auto& p : s.points)
+            CHECK((std::isfinite(p[0]) && std::isfinite(p[1]) && std::isfinite(p[2])));
+        lowest_x = std::min(lowest_x, s.points.front()[0]);
+    }
+    CHECK(lowest_x < box.bounding_box().min.x);
     // Stopped: no result.
     AeroInput in;
     in.mesh = make_box(20, 20, 20);

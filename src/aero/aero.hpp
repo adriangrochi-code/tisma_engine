@@ -15,11 +15,12 @@
 
 namespace tisma::aero {
 
-enum class AeroQuality { Friction, Fast, Normal, High };
+enum class AeroQuality { Friction, Fast, Normal, High, Extreme };
 // "friction", "fast", "normal", "high" and back (false when unknown).
 const char* quality_name(AeroQuality q);
 bool quality_named(const std::string& name, AeroQuality& q);
-// Lattice cells across the frontal size: 0 (no simulation), 16, 24, 32.
+// Lattice cells across the frontal size: 0 (no simulation), 16, 24, 32 and
+// 48 (extreme, the owner's request, 2026-11-03).
 int quality_cells(AeroQuality q);
 
 struct AeroInput {
@@ -53,6 +54,15 @@ struct AeroResult {
     // Per triangle of the input mesh: pressure coefficient (−1.5 suction to 1
     // stagnation; 0 when not simulated) and roughness Ra in µm.
     std::vector<float> cp, ra_um;
+    // Streamlines of the mean flow (the owner's request, 2026-11-03): from a
+    // grid of seeds in front of the part, in the input's coordinates (mm),
+    // each point with the pressure coefficient where it passes. Empty when
+    // not simulated.
+    struct Streamline {
+        std::vector<std::array<float, 3>> points;
+        std::vector<float> cp;
+    };
+    std::vector<Streamline> streamlines;
     int cells_x = 0, cells_y = 0, cells_z = 0;
     long steps = 0;
     bool stable = true;

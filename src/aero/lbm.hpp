@@ -30,6 +30,7 @@ struct LbmOptions {
 // and whether the run stayed finite.
 struct LbmResult {
     std::vector<float> mean_density;
+    std::vector<float> mean_velocity; // 3 per cell (x, y, z), lattice units; 0 in solid cells
     long averaged_steps = 0;
     bool stable = true;
     double inlet_density = 1.0; // the averaged density just behind the inlet: the free stream's

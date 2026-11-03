@@ -11,6 +11,34 @@
     X(TabAnalysis, "Análisis", "Analysis")                                                                            \
     X(TabDesign, "Diseño", "Design")                                                                                  \
     X(TabStructural, "Estructural", "Structural")                                                                     \
+    X(TabAerodynamics, "Aerodinámica", "Aerodynamics") \
+    X(AeroTitle, "Análisis aerodinámico", "Aerodynamic analysis") \
+    X(AeroSubtitle, "El aire alrededor de la pieza tal como se imprime: para comparar diseños y orientaciones", "The air around the part as it prints: to compare designs and orientations") \
+    X(AeroDirection, "Dirección del aire", "Air direction") \
+    X(AeroDirectionView, "La de la vista", "The view's") \
+    X(AeroSpeed, "Velocidad (m/s)", "Speed (m/s)") \
+    X(AeroQuality, "Calidad", "Quality") \
+    X(AeroQualityFriction, "Solo rozamiento", "Friction only") \
+    X(AeroQualityFast, "Rápida (16 celdas)", "Fast (16 cells)") \
+    X(AeroQualityNormal, "Media (24 celdas)", "Medium (24 cells)") \
+    X(AeroQualityHigh, "Alta (32 celdas)", "High (32 cells)") \
+    X(AeroQualityExtreme, "Extrema (48 celdas; lenta)", "Extreme (48 cells; slow)") \
+    X(AeroLayer, "Altura de capa (mm, da la rugosidad)", "Layer height (mm, gives the roughness)") \
+    X(AeroCloud, "Calcular en la nube", "Compute in the cloud") \
+    X(AeroDrag, "Arrastre: %.4g N", "Drag: %.4g N") \
+    X(AeroCd, "Cd %.3f (presión %.3f · rozamiento %.4f)", "Cd %.3f (pressure %.3f · friction %.4f)") \
+    X(AeroCdFriction, "Cd de rozamiento %.4f (sin simular la presión)", "Friction Cd %.4f (pressure not simulated)") \
+    X(AeroSide, "Fuerza transversal: %.4g N", "Side force: %.4g N") \
+    X(AeroArea, "Área frontal: %.0f mm²", "Frontal area: %.0f mm²") \
+    X(AeroReynolds, "Reynolds %.3g (simulado %.3g)", "Reynolds %.3g (simulated %.3g)") \
+    X(AeroRoughness, "Rugosidad media %.1f µm · %.0f %% del rozamiento", "Mean roughness %.1f µm · %.0f %% of the friction") \
+    X(AeroMap, "Mapa", "Map") \
+    X(AeroLines, "Líneas de corriente (color: presión)", "Streamlines (colour: pressure)") \
+    X(AeroMapCp, "Coeficiente de presión", "Pressure coefficient") \
+    X(AeroMapRa, "Rugosidad", "Roughness") \
+    X(AeroLegendCp, "−1,5 succión · 1 estancamiento", "−1.5 suction · 1 stagnation") \
+    X(AeroLegendRa, "Azul liso · rojo escalonado (µm)", "Blue smooth · red stepped (µm)") \
+    X(AeroAnalyzing, "Simulando el aire… %d %%", "Simulating the air… %d %%") \
     X(StructTitle, "Análisis estructural", "Structural analysis")                                                     \
     X(StructSubtitle, "Dónde está fija la pieza, dónde la empujan y con qué material", "Where the part is held, where it is pushed and in what material") \
     X(StructPart, "Pieza", "Part")                                                                                    \
@@ -65,8 +93,10 @@
     X(StructTryTitle, "Probá con:", "Try:") \
     X(StructResolution, "Resolución", "Resolution") \
     X(StructQualityFast, "Rápida (pieza maciza, unos 20 000 vóxeles)", "Fast (solid part, about 20 000 voxels)") \
-    X(StructQualityNormal, "Normal (2 vóxeles por ancho de línea)", "Normal (2 voxels per line width)") \
+    X(StructQualityNormal, "Media (2 vóxeles por ancho de línea)", "Medium (2 voxels per line width)") \
     X(StructQualityHigh, "Alta (4 vóxeles por ancho de línea)", "High (4 voxels per line width)") \
+    X(StructQualityExtreme, "Extrema (6 vóxeles por ancho de línea; lenta)", "Extreme (6 voxels per line width; slow)") \
+    X(Approximation, "Es una aproximación: sirve para comparar diseños, materiales y orientaciones, no reemplaza un ensayo ni un cálculo profesional.", "This is an approximation: it compares designs, materials and orientations; it does not replace a test or a professional calculation.") \
     X(StructEstimate, "Unos %zu vóxeles de %.2f mm", "About %zu voxels of %.2f mm") \
     X(StructCritical, "Punto crítico: %.2f", "Critical point: %.2f") \
     X(StructNotValid, "El resultado no sirve:", "The result is not usable:") \

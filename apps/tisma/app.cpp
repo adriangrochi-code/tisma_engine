@@ -24,6 +24,7 @@
 #include "cad/process.hpp"
 #include "cad/solidcraft.hpp"
 #include "cad/sketch_edit.hpp"
+#include "aero/aero.hpp"
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
 #include "illustrations.hpp"
@@ -470,12 +471,12 @@ void keep_unreadable(const std::filesystem::path& path) {
     std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ec);
 }
 
-enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device, Structural };
+enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device, Structural, Aerodynamics };
 // The tabs of the Ingeniería section; the rest are Impresión 3D's (the
 // owner's request, 2026-11-02: each section with its tabs and its own panel).
 // Fasteners live inside Design (the owner, the same day).
 bool engineering_tab(Tab t) {
-    return t == Tab::Design || t == Tab::Structural;
+    return t == Tab::Design || t == Tab::Structural || t == Tab::Aerodynamics;
 }
 
 // A measure as the interface writes it: up to `decimals` places, no trailing
@@ -708,6 +709,34 @@ private:
     std::string stale_fingerprint_;
     void structural_done(StructuralRun run);
     void update_structural_view();
+    // The Aerodynamics tab (engineering_panel.md, rules 15 and 16;
+    // aerodynamics.md): the run in the background, its map in the view.
+    struct AeroRun {
+        bool ok = false, cancelled = false;
+        std::string error;
+        std::size_t part = 0;
+        std::string fingerprint, report;
+        std::vector<float> corners; // the part on the bed: 9 floats a triangle
+        std::vector<float> cp, ra;  // per triangle
+        std::vector<aero::AeroResult::Streamline> streamlines; // on the bed
+    };
+    bool aero_lines_ = true;
+    int aero_test_cells_ = 0; // the scripted tests: a coarser lattice (0: the quality's)
+    Background<AeroRun> aero_job_;
+    std::atomic<bool> aero_cancel_{false};
+    std::atomic<int> aero_permille_{0};
+    std::optional<AeroRun> aero_map_;
+    int aero_map_kind_ = 0; // 0 the pressure coefficient, 1 the roughness
+    int aero_map_shown_ = -1;
+    bool aero_map_in_view_ = false;
+    std::string aero_message_, aero_parsed_for_;
+    nlohmann::json aero_parsed_;
+    void aerodynamics_panel();
+    void start_aerodynamics();
+    void aerodynamics_done(AeroRun run);
+    void update_aero_view();
+    void aero_overlay();
+    std::array<double, 3> aero_direction(const AerodynamicsInputs& a) const;
     bool structural_map_wanted();
     void structural_overlay();
     // Undo and redo of each part's Engineering data (rule 8): the part and
@@ -2000,6 +2029,21 @@ std::string g_last_field; // the last of them, for a field narrower than its cel
 // The entries of a menu drawn this frame, by a name in English, for
 // --ui-script's menu step: min x, min y, max x, max y.
 std::map<std::string, ImVec4> g_menu_rects;
+// The scripted tests: the control a click is about to aim at. The panel that
+// draws it scrolls it into view (a taller panel no longer hides it).
+std::string g_scroll_to;
+void note_rect(const std::string& name) {
+    if (!g_scroll_to.empty() && g_scroll_to == name) {
+        // Wholly inside the window's visible part, or scrolled to.
+        const float top = ImGui::GetWindowPos().y, bottom = top + ImGui::GetWindowSize().y;
+        if (ImGui::GetItemRectMin().y >= top && ImGui::GetItemRectMax().y <= bottom)
+            g_scroll_to.clear();
+        else
+            ImGui::SetScrollHereY(0.5f);
+    }
+    g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                ImGui::GetItemRectMax().y);
+}
 // --dump-ui: each setting row drawn this frame, by its field's name in
 // g_field_rects: its label, and whether the label's column cuts it.
 struct DumpRow {
@@ -4111,6 +4155,11 @@ void App::open_project(const std::filesystem::path& path) {
         structural_map_in_view_ = false;
         paint_dirty_ = true;
     }
+    aero_map_.reset();
+    if (aero_map_in_view_) {
+        aero_map_in_view_ = false;
+        paint_dirty_ = true;
+    }
     fill_speeds();
     chosen_profile_ = p.profiles;
     profiles_checked_.clear();
@@ -4877,6 +4926,7 @@ void App::poll_jobs() {
         const Tab asked = options_.view == "analysis"      ? Tab::Analysis
                           : options_.view == "design"      ? Tab::Design
                           : options_.view == "structural"  ? Tab::Structural
+                          : options_.view == "aerodynamics" ? Tab::Aerodynamics
                           : options_.view == "calibration" ? Tab::Calibration
                           : options_.view == "device"      ? Tab::Device
                           : options_.view == "prepare"     ? Tab::Prepare
@@ -4911,7 +4961,10 @@ void App::poll_jobs() {
         design_built(std::move(*built));
     if (std::optional<StructuralRun> run = structural_job_.take())
         structural_done(std::move(*run));
+    if (std::optional<AeroRun> run = aero_job_.take())
+        aerodynamics_done(std::move(*run));
     update_structural_view();
+    update_aero_view();
     // The Analysis tab keeps its estimate up to date.
     if (tab_ == Tab::Analysis)
         estimate_voxels_if_stale();
@@ -5099,6 +5152,7 @@ void App::top_bar() {
     const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
                               {Tab::Preview, "tisma_view", T::TabPreview},
                               {Tab::Structural, "tisma_engineering", T::TabStructural},
+                              {Tab::Aerodynamics, "tisma_engineering", T::TabAerodynamics},
                               {Tab::Design, "tisma_design", T::TabDesign},
                               {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
                               {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
@@ -5179,6 +5233,7 @@ void App::top_bar() {
                                             : t.tab == Tab::Preview     ? "preview"
                                             : t.tab == Tab::Design      ? "design"
                                             : t.tab == Tab::Structural  ? "structural"
+                                            : t.tab == Tab::Aerodynamics ? "aerodynamics"
                                             : t.tab == Tab::Analysis    ? "analysis"
                                             : t.tab == Tab::Calibration ? "calibration"
                                                                         : "device")] =
@@ -11457,8 +11512,7 @@ void App::design_panel() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
     const auto rect_of = [](const char* name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     const auto section = [&](T title) {
         ImGui::Spacing();
@@ -12414,8 +12468,7 @@ void App::fasteners_panel() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
     const auto rect_of = [](const std::string& name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     const auto section = [&](T title) {
         ImGui::Spacing();
@@ -12653,8 +12706,7 @@ void App::structural_panel() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
     const auto rect_of = [](const std::string& name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     const auto section = [&](T title) {
         ImGui::Spacing();
@@ -12667,6 +12719,8 @@ void App::structural_panel() {
     ImGui::PopFont();
     ImGui::PushTextWrapPos(0.0f);
     loc::TextColored(rgb(kViolet), "%s", tr(T::StructSubtitle));
+    loc::TextDisabled("%s", tr(T::Approximation));
+    rect_of("structural_approximation");
     if (objects_.empty()) {
         ImGui::Spacing();
         loc::TextDisabled("%s", tr(T::StructNoParts));
@@ -13066,15 +13120,15 @@ void App::structural_panel() {
     // box of the part as it is on the bed (cheap: no slicing).
     ImGui::TextUnformatted(tr(T::StructResolution));
     {
-        static constexpr const char* kQualities[] = {"fast", "normal", "high"};
-        static constexpr T kQualityLabels[] = {T::StructQualityFast, T::StructQualityNormal, T::StructQualityHigh};
+        static constexpr const char* kQualities[] = {"fast", "normal", "high", "extreme"};
+        static constexpr T kQualityLabels[] = {T::StructQualityFast, T::StructQualityNormal, T::StructQualityHigh, T::StructQualityExtreme};
         int q = 1;
-        for (int k = 0; k < 3; ++k)
+        for (int k = 0; k < 4; ++k)
             if (e.structural.quality == kQualities[k])
                 q = k;
         ImGui::SetNextItemWidth(-1.0f);
         if (ImGui::BeginCombo("##structural_quality", tr(kQualityLabels[q]))) {
-            for (int k = 0; k < 3; ++k)
+            for (int k = 0; k < 4; ++k)
                 if (ImGui::Selectable(tr(kQualityLabels[k]), k == q) && k != q) {
                     remember_engineering(std::size_t(structural_part_));
                     objects_[std::size_t(structural_part_)].engineering.structural.quality = kQualities[k];
@@ -13178,6 +13232,467 @@ int safety_band(double s, double asked) {
 
 } // namespace
 
+// The Aerodynamics tab (engineering_panel.md, rules 15 and 16): where the
+// air goes, how fast, the quality and the layer height; Analizar in the
+// background; the results of aerodynamics.md and the part painted with the
+// pressure coefficient or the roughness.
+namespace {
+
+constexpr std::uint32_t kCpBands[6] = {0x2B59C3, 0x4C9BFF, 0x8FD3FF, 0xF5C524, 0xF59E0B, 0xE5484D};
+constexpr std::uint32_t kRaBands[4] = {0x4C9BFF, 0x3FBF7F, 0xF5C524, 0xE5484D};
+
+int cp_band(float cp) { return cp < -1.0f ? 0 : cp < -0.5f ? 1 : cp < 0.0f ? 2 : cp < 0.33f ? 3 : cp < 0.66f ? 4 : 5; }
+int ra_band(float ra) { return ra < 12.0f ? 0 : ra < 20.0f ? 1 : ra < 28.0f ? 2 : 3; }
+
+} // namespace
+
+std::array<double, 3> App::aero_direction(const AerodynamicsInputs& a) const {
+    static const std::pair<const char*, std::array<double, 3>> kAxes[] = {
+        {"+x", {1, 0, 0}}, {"-x", {-1, 0, 0}}, {"+y", {0, 1, 0}}, {"-y", {0, -1, 0}}, {"+z", {0, 0, 1}}, {"-z", {0, 0, -1}}};
+    for (const auto& [name, v] : kAxes)
+        if (a.direction == name)
+            return v;
+    if (a.direction == "view") {
+        const Vec3 f = camera_.forward();
+        return {f.x, f.y, f.z};
+    }
+    return {1, 0, 0};
+}
+
+void App::aerodynamics_panel() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##aerodynamics", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    const auto rect_of = [](const std::string& name) {
+        note_rect(name);
+    };
+    const auto section = [&](T title) {
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::Separator();
+    };
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::AeroTitle));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    loc::TextColored(rgb(0x8B5CF6), "%s", tr(T::AeroSubtitle));
+    loc::TextDisabled("%s", tr(T::Approximation));
+    rect_of("aero_approximation");
+    if (objects_.empty()) {
+        ImGui::Spacing();
+        loc::TextDisabled("%s", tr(T::StructNoParts));
+        ImGui::PopTextWrapPos();
+        ImGui::End();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+        return;
+    }
+    structural_part_ = std::clamp(structural_part_, 0, int(objects_.size()) - 1);
+    const std::size_t part = std::size_t(structural_part_);
+    const float footer = ImGui::GetFrameHeight() * 1.4f + ImGui::GetTextLineHeightWithSpacing() + 14.0f * scale_;
+    ImGui::BeginChild("##aero_scroll", ImVec2(0, -footer));
+
+    // The last result (rule 16), grey and «Desactualizado» once an input
+    // changed.
+    {
+        const PlateObject& po = objects_[part];
+        const auto res = std::find_if(po.engineering.results.begin(), po.engineering.results.end(),
+                                      [](const EngineeringResult& r) { return r.kind == "aerodynamics"; });
+        if (res != po.engineering.results.end()) {
+            if (aero_parsed_for_ != res->report) {
+                aero_parsed_for_ = res->report;
+                try {
+                    aero_parsed_ = nlohmann::json::parse(res->report);
+                } catch (const nlohmann::json::exception&) {
+                    aero_parsed_ = nlohmann::json::object();
+                }
+            }
+            const nlohmann::json& j = aero_parsed_;
+            const bool stale = structural_stale(part, *res);
+            const auto num = [&](const char* key) { return j.contains(key) && j[key].is_number() ? j[key].get<double>() : 0.0; };
+            ImGui::PushFont(nullptr, kTitleSize * 1.1f);
+            const std::string drag = format(tr(T::AeroDrag), num("drag_n"));
+            if (stale)
+                loc::TextDisabled("%s", drag.c_str());
+            else
+                ImGui::TextUnformatted(drag.c_str());
+            ImGui::PopFont();
+            rect_of("aero_drag");
+            if (stale)
+                loc::TextDisabled("%s", tr(T::StructStale));
+            if (j.value("simulated", false))
+                ImGui::TextUnformatted(format(tr(T::AeroCd), num("cd"), num("cd_pressure"), num("cd_friction")).c_str());
+            else
+                ImGui::TextUnformatted(format(tr(T::AeroCdFriction), num("cd_friction")).c_str());
+            ImGui::TextUnformatted(format(tr(T::AeroSide), num("side_force_n")).c_str());
+            ImGui::TextUnformatted(format(tr(T::AeroArea), num("frontal_area_mm2")).c_str());
+            ImGui::TextUnformatted(format(tr(T::AeroReynolds), num("reynolds"), num("reynolds_simulated")).c_str());
+            ImGui::TextUnformatted(format(tr(T::AeroRoughness), num("ra_mean_um"), 100.0 * num("roughness_share")).c_str());
+            // The map: the pressure coefficient or the roughness.
+            ImGui::TextUnformatted(tr(T::AeroMap));
+            ImGui::SameLine();
+            if (ImGui::RadioButton(tr(T::AeroMapCp), aero_map_kind_ == 0))
+                aero_map_kind_ = 0;
+            rect_of("aero_map_cp");
+            ImGui::SameLine();
+            if (ImGui::RadioButton(tr(T::AeroMapRa), aero_map_kind_ == 1))
+                aero_map_kind_ = 1;
+            rect_of("aero_map_ra");
+            const auto swatches = [&](const std::uint32_t* colours, int n) {
+                for (int k = 0; k < n; ++k) {
+                    if (k > 0)
+                        ImGui::SameLine(0, 2.0f * scale_);
+                    ImGui::ColorButton("##band", rgb(colours[k]), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f * scale_, 10.0f * scale_));
+                }
+            };
+            if (aero_map_kind_ == 0)
+                swatches(kCpBands, 6);
+            else
+                swatches(kRaBands, 4);
+            loc::TextDisabled("%s", tr(aero_map_kind_ == 0 ? T::AeroLegendCp : T::AeroLegendRa));
+            if (j.value("simulated", false)) {
+                ImGui::Checkbox(tr(T::AeroLines), &aero_lines_);
+                rect_of("aero_lines");
+            }
+        }
+        if (!aero_message_.empty())
+            loc::TextColored(rgb(0xE8A33D), "%s", aero_message_.c_str());
+    }
+
+    section(T::StructPart);
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##aero_part", objects_[part].name.c_str())) {
+        for (int i = 0; i < int(objects_.size()); ++i) {
+            ImGui::PushID(i);
+            if (ImGui::Selectable(objects_[std::size_t(i)].name.c_str(), i == structural_part_))
+                structural_part_ = i;
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    rect_of("aero_part");
+    ProjectEngineering& e = objects_[std::size_t(structural_part_)].engineering;
+    AerodynamicsInputs& a = e.aerodynamics;
+
+    // Inputs (rule 15).
+    section(T::AeroDirection);
+    {
+        static const std::pair<const char*, const char*> kDirections[] = {{"+x", "+X"}, {"-x", "−X"}, {"+y", "+Y"}, {"-y", "−Y"},
+                                                                          {"+z", "+Z"}, {"-z", "−Z"}};
+        int k = 0;
+        for (const auto& [name, label] : kDirections) {
+            if (k++ % 6 != 0)
+                ImGui::SameLine();
+            const bool on = a.direction == name;
+            if (on)
+                ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+            if (ImGui::SmallButton(label) && !on) {
+                remember_engineering(std::size_t(structural_part_));
+                a.direction = name;
+            }
+            if (on)
+                ImGui::PopStyleColor();
+            rect_of(std::string("aero_dir_") + (name[0] == '+' ? "p" : "m") + name[1]);
+        }
+        const bool view = a.direction == "view";
+        if (view)
+            ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+        if (ImGui::SmallButton(tr(T::AeroDirectionView)) && !view) {
+            remember_engineering(std::size_t(structural_part_));
+            a.direction = "view";
+        }
+        if (view)
+            ImGui::PopStyleColor();
+        rect_of("aero_dir_view");
+    }
+    section(T::AeroSpeed);
+    ImGui::SetNextItemWidth(-1.0f);
+    double speed = a.speed;
+    if (loc::InputNumber("##aero_speed", &speed, "%.1f", 1.0) && speed > 0.0 && speed <= 100.0 && speed != a.speed) {
+        remember_engineering(std::size_t(structural_part_));
+        a.speed = speed;
+    }
+    rect_of("aero_speed");
+    section(T::AeroQuality);
+    {
+        static constexpr T kLabels[] = {T::AeroQualityFriction, T::AeroQualityFast, T::AeroQualityNormal, T::AeroQualityHigh,
+                                        T::AeroQualityExtreme};
+        static constexpr const char* kNames[] = {"friction", "fast", "normal", "high", "extreme"};
+        int q = 2;
+        for (int i = 0; i < 5; ++i)
+            if (a.quality == kNames[i])
+                q = i;
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##aero_quality", tr(kLabels[q]))) {
+            for (int i = 0; i < 5; ++i) {
+                if (ImGui::Selectable(tr(kLabels[i]), i == q) && i != q) {
+                    remember_engineering(std::size_t(structural_part_));
+                    a.quality = kNames[i];
+                }
+                rect_of(std::string("aero_quality_") + kNames[i]);
+            }
+            ImGui::EndCombo();
+        }
+        rect_of("aero_quality");
+    }
+    section(T::AeroLayer);
+    {
+        // From the profile, or changed by hand (rule 3).
+        double layer = e.overrides.layer_height.value_or(settings_.layer_height);
+        ImGui::SetNextItemWidth(-1.0f);
+        if (loc::InputNumber("##aero_layer", &layer, "%.2f", 0.02) && layer > 0.0 && layer <= 2.0) {
+            remember_engineering(std::size_t(structural_part_));
+            if (std::abs(layer - settings_.layer_height) < 1e-9)
+                e.overrides.layer_height.reset();
+            else
+                e.overrides.layer_height = layer;
+        }
+        rect_of("aero_layer");
+    }
+    ImGui::BeginDisabled(true);
+    bool cloud = false;
+    ImGui::Checkbox(tr(T::AeroCloud), &cloud);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(T::ComingSoon));
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    ImGui::Spacing();
+    if (aero_job_.running()) {
+        const int permille = aero_permille_.load();
+        ImGui::ProgressBar(float(permille) / 1000.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
+                           format(tr(T::AeroAnalyzing), permille / 10).c_str());
+        rect_of("aero_progress");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            aero_cancel_ = true;
+        rect_of("aero_cancel");
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+        if (ImGui::Button(tr(T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            start_aerodynamics();
+        ImGui::PopStyleColor(3);
+    }
+    rect_of("aero_analyze");
+    ImGui::PopTextWrapPos();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+void App::start_aerodynamics() {
+    if (aero_job_.running() || objects_.empty())
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    TriangleMesh placed = placed_mesh(o);
+    if (placed.empty())
+        return;
+    aero::AeroInput in;
+    in.direction = aero_direction(o.engineering.aerodynamics);
+    in.speed = o.engineering.aerodynamics.speed;
+    if (!aero::quality_named(o.engineering.aerodynamics.quality, in.quality))
+        in.quality = aero::AeroQuality::Normal;
+    in.layer_height = o.engineering.overrides.layer_height.value_or(settings_.layer_height);
+    if (aero_test_cells_ > 0 && in.quality != aero::AeroQuality::Friction) {
+        in.cells = aero_test_cells_;
+        in.flow_throughs = 2.0;
+    }
+    const std::string fingerprint = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), "aerodynamics");
+    aero_cancel_ = false;
+    aero_permille_ = 0;
+    aero_message_.clear();
+    aero_job_.start([this, part, placed = std::move(placed), in, fingerprint]() mutable {
+        AeroRun run;
+        run.part = part;
+        run.fingerprint = fingerprint;
+        in.mesh = std::move(placed);
+        const aero::AeroResult r = aero::analyze(in, [this](double done) {
+            aero_permille_ = int(done * 1000.0);
+            return !aero_cancel_.load();
+        });
+        if (aero_cancel_) {
+            run.cancelled = true;
+            return run;
+        }
+        if (!r.ok) {
+            run.error = r.error;
+            return run;
+        }
+        run.report = aero::result_json(r, in);
+        run.corners.reserve(in.mesh.triangle_count() * 9);
+        for (std::size_t t = 0; t < in.mesh.triangle_count(); ++t)
+            for (int k = 0; k < 3; ++k) {
+                const Vec3f c = in.mesh.corner(t, k);
+                run.corners.insert(run.corners.end(), {c.x, c.y, c.z});
+            }
+        run.cp = r.cp;
+        run.ra = r.ra_um;
+        run.streamlines = r.streamlines;
+        run.ok = true;
+        return run;
+    });
+}
+
+void App::aerodynamics_done(AeroRun run) {
+    if (run.cancelled) {
+        aero_message_ = tr(T::StructCancelled);
+        return;
+    }
+    if (!run.ok) {
+        aero_message_ = format(tr(T::StructFailed), run.error.c_str());
+        return;
+    }
+    if (run.part < objects_.size()) {
+        std::vector<EngineeringResult>& results = objects_[run.part].engineering.results;
+        std::erase_if(results, [](const EngineeringResult& r) { return r.kind == "aerodynamics"; });
+        results.push_back({"aerodynamics", run.fingerprint, run.report});
+    }
+    aero_map_in_view_ = false;
+    aero_map_ = std::move(run);
+}
+
+// The map in the view while the tab shows the part of the last run, still up
+// to date; its colours follow the map chosen.
+void App::update_aero_view() {
+    bool want = false;
+    if (tab_ == Tab::Aerodynamics && aero_map_ && !objects_.empty()) {
+        const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+        if (aero_map_->part == part) {
+            const ProjectEngineering& e = objects_[part].engineering;
+            const auto it = std::find_if(e.results.begin(), e.results.end(), [](const EngineeringResult& r) { return r.kind == "aerodynamics"; });
+            static int frame = 0;
+            static bool fresh = false;
+            if (++frame % 10 == 0 || !aero_map_in_view_)
+                fresh = it != e.results.end() && it->fingerprint == aero_map_->fingerprint && !structural_stale(part, *it);
+            want = fresh;
+        }
+    }
+    if (want && (!aero_map_in_view_ || aero_map_shown_ != aero_map_kind_)) {
+        const AeroRun& m = *aero_map_;
+        const std::size_t tris = m.corners.size() / 9;
+        const int bands = aero_map_kind_ == 0 ? 6 : 4;
+        std::vector<std::vector<float>> by_band(static_cast<std::size_t>(bands));
+        for (std::size_t t = 0; t < tris; ++t) {
+            const float* p = &m.corners[9 * t];
+            const Vec3f a{p[0], p[1], p[2]}, b{p[3], p[4], p[5]}, c{p[6], p[7], p[8]};
+            const Vec3f u{b.x - a.x, b.y - a.y, b.z - a.z}, s{c.x - a.x, c.y - a.y, c.z - a.z};
+            Vec3f n{u.y * s.z - u.z * s.y, u.z * s.x - u.x * s.z, u.x * s.y - u.y * s.x};
+            const float len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+            if (len > 0.0f)
+                n = Vec3f{n.x / len, n.y / len, n.z / len};
+            const int band = aero_map_kind_ == 0 ? cp_band(t < m.cp.size() ? m.cp[t] : 0.0f) : ra_band(t < m.ra.size() ? m.ra[t] : 0.0f);
+            std::vector<float>& out = by_band[std::size_t(band)];
+            for (const Vec3f* q : {&a, &b, &c})
+                out.insert(out.end(), {q->x, q->y, q->z, n.x, n.y, n.z});
+        }
+        std::vector<float> surface;
+        std::vector<Vec3f> corners;
+        std::vector<Renderer::PaintGroup> groups;
+        std::size_t first = 0;
+        for (int k = 0; k < bands; ++k) {
+            const std::size_t count = by_band[std::size_t(k)].size() / 6;
+            if (count > 0)
+                groups.push_back({first, count, vec(aero_map_kind_ == 0 ? kCpBands[k] : kRaBands[k])});
+            first += count;
+            surface.insert(surface.end(), by_band[std::size_t(k)].begin(), by_band[std::size_t(k)].end());
+        }
+        for (std::size_t i = 0; i + 5 < surface.size(); i += 6)
+            corners.push_back(Vec3f{surface[i], surface[i + 1], surface[i + 2]});
+        show_in_view(TriangleMesh(std::move(corners)));
+        renderer_.set_paint(surface, groups);
+        vk_view_.set_paint(surface, groups);
+        aero_map_in_view_ = true;
+        aero_map_shown_ = aero_map_kind_;
+    } else if (!want && aero_map_in_view_) {
+        aero_map_in_view_ = false;
+        aero_map_shown_ = -1;
+        paint_dirty_ = true;
+        if (tab_ != Tab::Design && !structural_map_in_view_)
+            rebuild_plate();
+    }
+}
+
+// Where the air comes from (rule 15): a big blue arrow pointing at the part.
+void App::aero_overlay() {
+    if (tab_ != Tab::Aerodynamics || objects_.empty() || !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    const TriangleMesh placed = placed_mesh(o);
+    if (placed.empty())
+        return;
+    const BoundingBox box = placed.bounding_box();
+    const std::array<double, 3> c{0.5 * (box.min.x + box.max.x), 0.5 * (box.min.y + box.max.y), 0.5 * (box.min.z + box.max.z)};
+    const double size = std::max({double(box.max.x - box.min.x), double(box.max.y - box.min.y), double(box.max.z - box.min.z), 1.0});
+    std::array<double, 3> d = aero_direction(o.engineering.aerodynamics);
+    const double dl = std::hypot(d[0], d[1], d[2]);
+    if (!(dl > 0.0))
+        return;
+    for (double& v : d)
+        v /= dl;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](const std::array<double, 3>& w, ImVec2& out) {
+        const float x = float(w[0]), y = float(w[1]), z = float(w[2]);
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+        const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float ww = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(ww > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / ww * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / ww * 0.5f) * view_size_.y);
+        return true;
+    };
+    // Big whatever the part's size: at least 40 mm long, ending just short
+    // of the part.
+    const double near = 0.6 * size + 4.0, far = near + std::max(1.5 * size, 40.0);
+    const std::array<double, 3> from{c[0] - d[0] * far, c[1] - d[1] * far, c[2] - d[2] * far};
+    const std::array<double, 3> to{c[0] - d[0] * near, c[1] - d[1] * near, c[2] - d[2] * near};
+    ImVec2 a, b;
+    if (!project(from, a) || !project(to, b))
+        return;
+    ImDrawList* dl_ = ImGui::GetBackgroundDrawList();
+    dl_->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    // The streamlines, each piece in the colour of the pressure where it
+    // passes (the map's scale), while the map is up to date.
+    if (aero_lines_ && aero_map_in_view_ && aero_map_ && aero_map_->part == part) {
+        const float width = 1.6f * scale_;
+        for (const aero::AeroResult::Streamline& s : aero_map_->streamlines) {
+            ImVec2 prev;
+            bool have = false;
+            for (std::size_t i = 0; i < s.points.size(); ++i) {
+                ImVec2 q;
+                const bool ok = project({s.points[i][0], s.points[i][1], s.points[i][2]}, q);
+                if (ok && have)
+                    dl_->AddLine(prev, q, ImGui::GetColorU32(rgb(kCpBands[cp_band(s.cp[i])], 0.9f)), width);
+                prev = q;
+                have = ok;
+            }
+        }
+    }
+    const ImU32 blue = ImGui::GetColorU32(rgb(0x4C9BFF, 0.95f));
+    const float len = std::hypot(b.x - a.x, b.y - a.y);
+    if (len > 4.0f) {
+        const ImVec2 u((b.x - a.x) / len, (b.y - a.y) / len), n(-u.y, u.x);
+        const float head = std::min(26.0f * scale_, 0.45f * len), half = 13.0f * scale_;
+        const ImVec2 base(b.x - u.x * head, b.y - u.y * head);
+        dl_->AddLine(a, base, blue, 9.0f * scale_);
+        dl_->AddTriangleFilled(b, ImVec2(base.x + n.x * half, base.y + n.y * half), ImVec2(base.x - n.x * half, base.y - n.y * half), blue);
+    } else {
+        dl_->AddCircleFilled(b, 10.0f * scale_, blue); // straight at the eye
+    }
+    dl_->PopClipRect();
+}
+
 // Analizar (rules 9 and 11): the part as it is on the bed, its conditions
 // moved with it, the values changed by hand, in the background; Cancelar
 // stops it at its next step.
@@ -13211,7 +13726,7 @@ void App::start_structural() {
     Settings settings = settings_;
     std::vector<std::string> notes;
     apply_engineering_overrides(settings, o.engineering, notes);
-    const std::string fingerprint = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_));
+    const std::string fingerprint = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), "structural");
     const std::string filament_type = settings_.filament_type;
     const double asked = o.engineering.structural.safety_factor;
     structural_cancel_ = false;
@@ -13295,11 +13810,11 @@ bool App::structural_stale(std::size_t part, const EngineeringResult& r) {
     ProjectEngineering inputs = o.engineering;
     inputs.results.clear();
     const std::string settings = settings_json(settings_);
-    std::string key = std::to_string(part) + "|" + std::to_string(plate_version_) + "|" + std::to_string(o.mesh.triangle_count()) +
+    std::string key = r.kind + "|" + std::to_string(part) + "|" + std::to_string(plate_version_) + "|" + std::to_string(o.mesh.triangle_count()) +
                       "|" + engineering_json(inputs) + "|" + settings;
     if (key != stale_key_) {
         stale_key_ = std::move(key);
-        stale_fingerprint_ = engineering_fingerprint(o.mesh, o.engineering, settings);
+        stale_fingerprint_ = engineering_fingerprint(o.mesh, o.engineering, settings, r.kind);
     }
     return r.fingerprint != stale_fingerprint_;
 }
@@ -13494,8 +14009,7 @@ void App::gears_panel() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
     const auto rect_of = [](const std::string& name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     const auto section = [&](T title) {
         ImGui::Spacing();
@@ -14454,8 +14968,7 @@ void App::cloud_window() {
         return;
     }
     const auto rect_of = [](const std::string& name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     g_menu_rects["cloud_window"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
                                           ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
@@ -14749,8 +15262,7 @@ void App::report_window() {
         return;
     }
     const auto rect_of = [](const std::string& name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     g_menu_rects["report_window"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
                                            ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
@@ -14931,8 +15443,7 @@ void App::config_window() {
                                            ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
                                            ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
     const auto rect_of = [](const std::string& name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     // The search (rule 3), over every page.
     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -17761,6 +18272,8 @@ void App::layout() {
             design_panel();
         else if (tab_ == Tab::Structural)
             structural_panel();
+        else if (tab_ == Tab::Aerodynamics)
+            aerodynamics_panel();
         else
             settings_panel();
         if (help_open_)
@@ -17796,6 +18309,8 @@ void App::layout() {
         }
         if (tab_ == Tab::Structural)
             structural_overlay();
+        if (tab_ == Tab::Aerodynamics)
+            aero_overlay();
         if (tab_ == Tab::Calibration)
             calibration_panel();
         if (tab_ == Tab::Device)
@@ -18023,6 +18538,8 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
         update_paint_view();
     // The Structural map is drawn as paint over the voxels' outside (rule 12).
     if (structural_map_in_view_ && tab_ == Tab::Structural)
+        f.show_paint = true;
+    if (aero_map_in_view_ && tab_ == Tab::Aerodynamics)
         f.show_paint = true;
     f.show_preview = preview;
     f.show_travels = show_travels_;
@@ -18925,8 +19442,10 @@ void App::script_input() {
             next();
         }
     } else if (step.verb == "menu") { // a click on an open menu's entry, by its name in English
-        if (f == 0)
+        if (f == 0) {
+            g_scroll_to = step.key;
             return;
+        }
         if (f >= 1008) // clicked: the menu has closed
             return next();
         const auto it = g_menu_rects.find(step.key);
@@ -19133,6 +19652,28 @@ void App::script_input() {
         if (!ok)
             return fail_step("the message is \"" + command_message_ + "\"");
         next();
+    } else if (step.verb == "aero-cells") { // the next Aerodynamics runs on a lattice of N cells across (tests only)
+        aero_test_cells_ = std::max(0, std::atoi(step.key.c_str()));
+        next();
+    } else if (step.verb == "expect-aero") { // the Aerodynamics run finished: drag above 0 N, simulated (1) or not (0)
+        if (aero_job_.running())
+            return f >= 120000 ? fail_step("the analysis is still running") : void();
+        if (f < 2)
+            return;
+        const std::size_t part = std::size_t(std::clamp(structural_part_, 0, std::max(0, int(objects_.size()) - 1)));
+        nlohmann::json j;
+        if (part < objects_.size())
+            for (const EngineeringResult& r : objects_[part].engineering.results)
+                if (r.kind == "aerodynamics")
+                    j = nlohmann::json::parse(r.report, nullptr, false);
+        const double drag = j.is_object() ? j.value("drag_n", 0.0) : 0.0;
+        const bool simulated = j.is_object() && j.value("simulated", false);
+        const bool ok = drag > 0.0 && simulated == (step.key == "1");
+        std::printf("ui-script: expect-aero %s: %sdrag %.4g N, simulated %d (%s)\n", step.key.c_str(), ok ? "ok, " : "got ", drag,
+                    int(simulated), aero_message_.c_str());
+        if (!ok)
+            return fail_step("no aerodynamic result as asked: " + aero_message_);
+        next();
     } else if (step.verb == "expect-sketch-entities") { // the sketch being drawn (or the last sketch feature) has N entities
         const cad::Sketch* s = editing_sketch();
         if (!s)
@@ -19167,7 +19708,7 @@ void App::script_input() {
         next();
     } else if (step.verb == "expect-structural-verdict") { // the chosen part's last result: holds, low_margin... (waits for a run)
         if (structural_job_.running())
-            return f >= 6000 ? fail_step("the analysis is still running") : void();
+            return f >= 120000 ? fail_step("the analysis is still running") : void();
         if (objects_.empty())
             return fail_step("no part");
         const ProjectEngineering& pe = objects_[std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1))].engineering;
@@ -19598,6 +20139,8 @@ void App::frame() {
                 set_tab(Tab::Design);
             else if (options_.view == "structural")
                 set_tab(Tab::Structural);
+            else if (options_.view == "aerodynamics")
+                set_tab(Tab::Aerodynamics);
             else if (options_.view == "preview" && result_)
                 set_tab(Tab::Preview);
             else if (options_.view == "prepare")

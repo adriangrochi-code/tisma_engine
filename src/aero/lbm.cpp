@@ -47,6 +47,7 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
         for (int i = 0; i < kQ; ++i)
             a[std::size_t(i) * cells + c] = solid[c] ? 0.0f : inlet[i];
     std::vector<double> sum(cells, 0.0); // double: the pressure is a small part of the density
+    std::vector<float> velocity_sum(3 * cells, 0.0f);
     const double tau0 = 3.0 * o.viscosity + 0.5;
     const double smag = 18.0 * std::sqrt(2.0) * o.smagorinsky * o.smagorinsky;
     std::atomic<bool> finite{true};
@@ -97,8 +98,14 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
                             rho += f[i];
                             jx += f[i] * kE[i][0], jy += f[i] * kE[i][1], jz += f[i] * kE[i][2];
                         }
-                        if (averaging)
+                        if (averaging) {
                             sum[c] += rho;
+                            if (rho > 1e-6) {
+                                velocity_sum[3 * c] += float(jx / rho);
+                                velocity_sum[3 * c + 1] += float(jy / rho);
+                                velocity_sum[3 * c + 2] += float(jz / rho);
+                            }
+                        }
                         double post[kQ];
                         if (x == 0) {
                             // The inlet: the free stream, at rest density.
@@ -180,9 +187,13 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
         }
     }
     result.mean_density.assign(cells, 1.0f);
+    result.mean_velocity.assign(3 * cells, 0.0f);
     if (result.averaged_steps > 0)
-        for (std::size_t c = 0; c < cells; ++c)
+        for (std::size_t c = 0; c < cells; ++c) {
             result.mean_density[c] = solid[c] ? 1.0f : float(sum[c] / double(result.averaged_steps));
+            for (std::size_t k = 0; k < 3; ++k)
+                result.mean_velocity[3 * c + k] = solid[c] ? 0.0f : velocity_sum[3 * c + k] / float(result.averaged_steps);
+        }
     // The free stream's density: the plane just behind the inlet.
     double inlet_sum = 0.0;
     long inlet_cells = 0;

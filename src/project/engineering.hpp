@@ -58,7 +58,7 @@ struct EngineeringOverrides {
 // The Structural tab's options (engineering_panel.md, rule 10).
 struct StructuralOptions {
     double safety_factor = 2.0;
-    std::string quality = "normal";   // as AnalysisQuality: fast, normal, high
+    std::string quality = "normal";   // fast, normal (media), high, extreme
     std::string print_direction = "z"; // z, or the belt printer's
     bool cloud = false;
     bool operator==(const StructuralOptions&) const = default;
@@ -121,8 +121,11 @@ void move_engineering(ProjectEngineering& e, const std::array<double, 9>& a, con
 // What a result depends on, as 16 hexadecimal digits (FNV-1a, 64 bits): the
 // part's mesh, its conditions, values and options (not its results), and the
 // settings' JSON. A result whose fingerprint differs from the current one is
-// stale («Desactualizado», engineering_panel.md, rule 14).
-std::string engineering_fingerprint(const TriangleMesh& mesh, const ProjectEngineering& e, std::string_view settings);
+// stale («Desactualizado», engineering_panel.md, rule 14). With a kind,
+// only what that analysis reads: "structural" leaves out the Aerodynamics
+// tab's inputs, "aerodynamics" the conditions and the Structural options.
+std::string engineering_fingerprint(const TriangleMesh& mesh, const ProjectEngineering& e, std::string_view settings,
+                                    std::string_view kind = {});
 bool result_stale(const EngineeringResult& r, const TriangleMesh& mesh, const ProjectEngineering& e,
                   std::string_view settings);
 

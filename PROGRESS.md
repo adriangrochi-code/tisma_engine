@@ -9830,3 +9830,44 @@ la GPU.
 `.taero`, la versión en GPU, y la medición contra el Benchy.
 
 **Sigue:** la pestaña Aerodinámica.
+
+## 2026-11-03 — Pestaña Aerodinámica, líneas de corriente, calidades extremas e investigación de adherencia
+
+**Hecho:**
+- **Pestaña Aerodinámica** en Ingeniería (`engineering_panel.md`, reglas 15 y 16):
+  - entradas: la pieza, la dirección del aire (±X, ±Y, ±Z o la de la vista), la velocidad, la calidad y la altura
+    de capa (la del perfil, o cambiada a mano);
+  - Analizar corre en segundo plano, con avance y Cancelar;
+  - resultados: arrastre en N, Cd separado en presión y rozamiento, fuerza transversal, área frontal, Reynolds real y
+    simulado, rugosidad media y su parte en el rozamiento;
+  - la pieza pintada con el coeficiente de presión (seis franjas de −1,5 a 1) o con la rugosidad;
+  - una flecha azul grande muestra de dónde viene el aire;
+  - el resultado se guarda con la pieza y queda «Desactualizado» si cambia algo de lo que depende. Cada análisis tiene
+    ahora su propia huella: cambiar la velocidad del aire ya no deja desactualizado el estructural, ni al revés.
+  - «Calcular en la nube» queda apagado («Próximamente»).
+- **Líneas de corriente** (pedido del dueño): la simulación promedia también la velocidad en su último tercio. Desde
+  una grilla de 11 × 11 puntos delante de la pieza se siguen las líneas por ese flujo medio (pasos de Heun de media
+  celda), cada punto con el Cp de donde pasa. Se dibujan sobre la vista con los mismos colores del mapa, se pueden
+  apagar y van en el `.taero`.
+- **Calidades rápida, media, alta y extrema** en los dos análisis (pedido del dueño). Estructural: extrema son
+  6 vóxeles por ancho de línea; el «ultra» de la nube corre como extrema. Aerodinámica: extrema son 48 celdas;
+  «solo rozamiento» sigue.
+- **Aviso de aproximación** arriba de los dos paneles: «Es una aproximación: sirve para comparar diseños, materiales y
+  orientaciones, no reemplaza un ensayo ni un cálculo profesional.»
+- **Investigación** (pedido del dueño, con cuatro agentes en paralelo, solo papers, hojas técnicas y foros): en
+  `docs/research/` quedan cuatro informes con citas y cada número marcado como medido o estimado:
+  - adherencia entre capas: Z/XY por material, curvas con la temperatura, modelos de soldadura y un modelo propuesto
+    para el motor;
+  - adherencia entre cordones: modelo ortotrópico con fracción unida y calidad de la unión;
+  - hojas técnicas de unos 60 productos de Bambu, Prusament, Polymaker, BASF, Kimya, 3DXTech y Victrex, con XY y Z;
+  - optimizaciones de CFD y FEA: TRT, fuerza por intercambio de momento, Bouzidi, Esoteric Pull, distancias críticas,
+    hexaedros de modos incompatibles, multigrid sin matriz y precisión mixta.
+
+**Pruebas de interfaz:** el verbo `menu` ahora hace que el panel lleve el control a la vista antes del clic (el panel de
+Estructural, más alto con el aviso, dejaba un botón fuera de la vista). `aerodynamics`: la dirección −Y, solo rozamiento, Analizar, los resultados y el mapa de
+rugosidad. La simulación, las líneas de corriente y el mapa de presión se miraron en una captura con una grilla de
+10 celdas: el cubo da Cd 1,21. Ninguna prueba automática corre todavía la simulación en la interfaz.
+
+**Sigue:** la adherencia entre capas y entre cordones en el FEA, con el material y la temperatura de extrusión (modelo
+de los informes, constantes de las hojas técnicas); después, las optimizaciones de más impacto del CFD (TRT, fuerza
+por intercambio de momento) y la GPU.

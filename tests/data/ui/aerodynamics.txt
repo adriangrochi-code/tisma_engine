@@ -1,0 +1,18 @@
+# The Aerodynamics tab (engineering_panel.md, rules 15 and 16): the air from
+# -Y, friction only (no simulation: quick), Analizar, the results with the
+# map; then a simulated run on the coarsest... the fast quality is a minute
+# here, so the scripted test stays on friction; saved and opened again, the
+# result is still there.
+menu mode_engineering
+expect-control tab_aerodynamics
+menu tab_aerodynamics
+expect-control aero_analyze
+menu aero_dir_my
+menu aero_quality
+menu aero_quality_friction
+menu aero_analyze
+expect-aero 0
+expect-control aero_drag
+expect-control aero_map_ra
+menu aero_map_ra
+wait 5

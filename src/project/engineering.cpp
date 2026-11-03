@@ -249,7 +249,8 @@ ProjectEngineering engineering_from_json(const std::string& json) {
     return e;
 }
 
-std::string engineering_fingerprint(const TriangleMesh& mesh, const ProjectEngineering& e, std::string_view settings) {
+std::string engineering_fingerprint(const TriangleMesh& mesh, const ProjectEngineering& e, std::string_view settings,
+                                    std::string_view kind) {
     std::uint64_t h = 1469598103934665603ULL;
     const auto add = [&](const void* data, std::size_t size) {
         const auto* bytes = static_cast<const unsigned char*>(data);
@@ -269,6 +270,13 @@ std::string engineering_fingerprint(const TriangleMesh& mesh, const ProjectEngin
     }
     ProjectEngineering inputs = e;
     inputs.results.clear();
+    if (kind == "structural")
+        inputs.aerodynamics = AerodynamicsInputs{};
+    if (kind == "aerodynamics") {
+        inputs.conditions.clear();
+        inputs.structural = StructuralOptions{};
+        inputs.working_temperature = 23.0;
+    }
     for (EngineeringCondition& c : inputs.conditions)
         if (c.is_point())
             for (std::size_t a = 0; a < 3; ++a)
@@ -283,7 +291,7 @@ std::string engineering_fingerprint(const TriangleMesh& mesh, const ProjectEngin
 
 bool result_stale(const EngineeringResult& r, const TriangleMesh& mesh, const ProjectEngineering& e,
                   std::string_view settings) {
-    return r.fingerprint != engineering_fingerprint(mesh, e, settings);
+    return r.fingerprint != engineering_fingerprint(mesh, e, settings, r.kind);
 }
 
 std::size_t drop_conditions_beyond(ProjectEngineering& e, std::size_t triangles) {
