@@ -2580,6 +2580,23 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     }();
     // The height printed: the layers keep the model's own heights.
     const double top_z = model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom;
+    // The zigzag asked and possible with this pattern, but no layer has room
+    // for a wave (zigzag_infill.md, rule 5, ZI8): a small part or a dense
+    // infill. Said like a pattern that cannot have it (rule 2).
+    if (warnings && s.infill_nonplanar && s.infill_density > 0.0 && wave_params(s)) {
+        const bool waved = std::any_of(model.fills.begin(), model.fills.end(), [](const LayerFill& f) {
+            return std::any_of(f.sparse.begin(), f.sparse.end(), [](const Toolpath& t) {
+                return t.wavy && std::any_of(t.points.begin(), t.points.end(),
+                                             [](const ToolpathPoint& q) { return std::abs(q.dz) > 1e-9; });
+            });
+        });
+        if (!waved) {
+            const std::string part = model.objects.size() == 1 ? model.objects.front().name : std::string("the part");
+            warnings->push_back({"nonplanar_ignored", -1, 0.0,
+                                 "the zigzag in Z does not fit in " + part + ": it is too small or its infill too dense",
+                                 0.0, "warning"});
+        }
+    }
     if (strict && s.gcode_binary && warnings)
         warnings->push_back({"strict_parser", -1, 0.0,
                              "The printer reads only plain G-code (machine.strict_parser): the file is not binary",

@@ -144,6 +144,21 @@ TEST_CASE("wavy infill: a cube with grid infill, nested layers and checked G-cod
     CHECK(check.ok());
 }
 
+TEST_CASE("ZI8: a part with no room for a wave says so", "[nonplanar]") {
+    const auto said = [](const Settings& s, float side) {
+        const SlicedModel m = slice_model(cube(side), s);
+        std::ostringstream g;
+        std::vector<Warning> warnings;
+        write_gcode(g, m, s, &warnings);
+        return std::any_of(warnings.begin(), warnings.end(), [](const Warning& w) {
+            return w.kind == "nonplanar_ignored" && w.message.find("does not fit") != std::string::npos;
+        });
+    };
+    const Settings s = wavy(InfillPattern::Grid);
+    CHECK(said(s, 6.0f));        // too small for a wave
+    CHECK_FALSE(said(s, 30.0f)); // waves
+}
+
 TEST_CASE("ZI7: the zigzag's moves ask Z no more than the machine moves it", "[nonplanar]") {
     // The fastest Z of the extrusions between ;NONPLANAR:1 and :0, mm/s.
     const auto fastest_z = [](const std::string& text) {

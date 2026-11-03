@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Un solo renglón para el relleno no planar** (ficha `zigzag_infill.md`, regla 11): «Relleno no planar» con «No»,
+  «Zigzag en Z» y «Ondas entrelazadas», en lugar de dos casillas con nombres parecidos que juntas daban error. Debajo,
+  solo los ajustes de la opción elegida. La ayuda aclara que la mejora medida en el artículo fue en paredes, no en
+  relleno. Y si el zigzag no entra en ninguna capa (pieza chica o relleno denso), el laminado lo avisa (ZI8).
 - **Más dibujos para las superficies de arriba y de abajo** (pedido del dueño; ficha `infill_patterns.md`, reglas 14
   a 17): además de monotónico y rectilíneo, líneas monotónicas, rectilíneo alineado (no gira entre capas),
   concéntrico, Hilbert, espiral de Arquímedes y octograma. Abajo, los que no son líneas cambian solo la capa que toca

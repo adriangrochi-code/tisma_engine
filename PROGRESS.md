@@ -9160,4 +9160,12 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   prueba, 20 tramos largos a 135° (antes 10 y 10). Prueba en `test_infill.cpp` (P10).
 - De la misma QA, sin cambiar: largos 2,3 % menores que en Tisma Slicer, `monotonic` en tramos sueltos (allá uno solo)
   y las curvas con menos tramos (menos viajes). Anotado para un bloque de superficies.
+- **ZI8 (regla 5):** con el zigzag pedido y un patrón que lo admite, si ninguna capa tiene una onda (pieza chica o
+  relleno denso), aviso `nonplanar_ignored`: «the zigzag in Z does not fit in <pieza>: it is too small or its infill
+  too dense». El cubo de 10 mm de ZI8 lo da por la línea de comandos; prueba en `test_nonplanar.cpp` (6 mm avisa,
+  30 mm no).
+- **Regla 11:** en el panel, un renglón «Relleno no planar» (No, Zigzag en Z, Ondas entrelazadas) en lugar de las
+  dos casillas; debajo solo los ajustes de la elegida. La ayuda dice que la mejora del artículo fue en paredes de un
+  cordón, no en relleno (pedido del equipo de fichas hasta imprimir ZI12). Los ajustes siguen siendo
+  `infill.nonplanar` e `infill.waves`.
 

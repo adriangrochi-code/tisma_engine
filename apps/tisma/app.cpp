@@ -7181,18 +7181,31 @@ bool App::card_rows(std::string_view id, bool& bed) {
             changed |= unit_row(T::CombineMaxHeight, s.infill_combine_max_height, 0.01, 10.0, 1000.0, "%.2f mm", 0.01f,
                                 nullptr, s.nozzle_diameter);
     } else if (id == "wavy") {
-        flag(T::NonplanarInfill, "infill.nonplanar", s.infill_nonplanar, tr(T::NonplanarInfillTip));
-        mm(T::NonplanarAmplitude, "infill.nonplanar_amplitude", s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);
-        mm(T::NonplanarWavelength, "infill.nonplanar_wavelength", s.infill_nonplanar_wavelength, 0.5, 20.0, "%.1f mm",
-           0.05f);
-        // The interlocking waves (interlock_infill.md): one kind at a time.
-        if (shown("infill.waves") && row(T::InterlockWaves, s.infill_waves, tr(T::InterlockWavesTip))) {
-            if (s.infill_waves)
-                s.infill_nonplanar = false;
+        // One row for the two kinds of nonplanar infill (zigzag_infill.md,
+        // rule 11): they never go together, and below it only the chosen
+        // one's settings.
+        enum class Nonplanar { No, Zigzag, Waves };
+        Nonplanar kind = s.infill_nonplanar ? Nonplanar::Zigzag : s.infill_waves ? Nonplanar::Waves : Nonplanar::No;
+        if ((shown("infill.nonplanar") || shown("infill.waves")) &&
+            row(T::NonplanarRow, kind,
+                {{Nonplanar::No, tr(T::NonplanarNo)},
+                 {Nonplanar::Zigzag, tr(T::NonplanarInfill)},
+                 {Nonplanar::Waves, tr(T::InterlockWaves)}},
+                tr(T::NonplanarInfillTip))) {
+            s.infill_nonplanar = kind == Nonplanar::Zigzag;
+            s.infill_waves = kind == Nonplanar::Waves;
             changed = true;
         }
-        mm(T::WaveAmplitude, "infill.wave_amplitude", s.infill_wave_amplitude, 0.0, 200.0, "%.0f %%", 1.0f);
-        mm(T::WaveLength, "infill.wave_length", s.infill_wave_length, 1.0, 100.0, "%.1f mm", 0.1f);
+        if (s.infill_nonplanar) {
+            mm(T::NonplanarAmplitude, "infill.nonplanar_amplitude", s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%",
+               1.0f);
+            mm(T::NonplanarWavelength, "infill.nonplanar_wavelength", s.infill_nonplanar_wavelength, 0.5, 20.0, "%.1f mm",
+               0.05f);
+        }
+        if (s.infill_waves) {
+            mm(T::WaveAmplitude, "infill.wave_amplitude", s.infill_wave_amplitude, 0.0, 200.0, "%.0f %%", 1.0f);
+            mm(T::WaveLength, "infill.wave_length", s.infill_wave_length, 1.0, 100.0, "%.1f mm", 0.1f);
+        }
     }
     // Print: Speed (every speed is the printer's, owner's decision, 2026-10-26).
     else if (id == "first_layer") {
