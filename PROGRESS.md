@@ -9287,3 +9287,23 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   marcados (antes 0,3 % de diferencia); el cubo de FM25, 1,8 % (antes 1,2 %).
 - Prueba nueva: `near` contra la distancia a cada triángulo por fuerza bruta, 20 000 puntos al azar sobre una cara de
   200 mm y sobre un abanico de 60 triángulos chicos.
+
+## 2026-11-03 (mañana): Ingeniería, paso 4 (pestaña Estructural), segunda parte
+
+- **Hecho:** la pestaña **Estructural** en la sección Ingeniería, antes de Diseño (regla 1). Su panel, en la columna
+  izquierda (`structural_panel`):
+  - la lista de piezas de la placa (regla 2);
+  - el material (la lista de la tabla de materiales, o el del tipo de filamento), la temperatura de extrusión, la de
+    la cama (solo se muestra), las alturas de capa y el ancho de línea. Cada valor dice de dónde sale («del perfil
+    PLA»), o lleva el punto violeta y «Volver al del perfil» si se cambió a mano (regla 3);
+  - la temperatura de trabajo, 23 °C al empezar (regla 4);
+  - las condiciones de la pieza, por nombre;
+  - Analizar, fijo al pie del panel, apagado con el motivo debajo (regla 9).
+- Un perfil de filamento sin tipo se lee por su nombre: el nombre entero o su primera palabra («PLA Genérico» es PLA).
+  El perfil de fábrica, «PLA», no tiene tipo y antes quedaba en «Elegí un material».
+- `--view structural` para las capturas, y la prueba guionada `ui_script_structural_tab`, con el paso nuevo
+  `expect-structural` (qué apaga Analizar).
+- Cambiar de Diseño a Estructural vuelve a mostrar la placa.
+- **No probado:** en Windows; con más de una pieza en la placa.
+- **Sigue:** las herramientas de marcado sobre la vista (punto y zona, fijo y fuerza, límite), la lista con ojo,
+  lápiz y cruz, y deshacer; después correr el análisis en segundo plano, con el mapa y el veredicto.

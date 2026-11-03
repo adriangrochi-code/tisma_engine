@@ -40,6 +40,9 @@
 #include "io/stl.hpp"
 #include "mesh/shapes.hpp"
 #include "project/project.hpp"
+#include "project/engineering_values.hpp"
+#include "project/engineering_case.hpp"
+#include "fea/materials.hpp"
 #include "ui/camera.hpp"
 #include "ui/credits.hpp"
 #include "ui/files.hpp"
@@ -458,12 +461,12 @@ void keep_unreadable(const std::filesystem::path& path) {
     std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ec);
 }
 
-enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device };
+enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device, Structural };
 // The tabs of the Ingeniería section; the rest are Impresión 3D's (the
 // owner's request, 2026-11-02: each section with its tabs and its own panel).
 // Fasteners live inside Design (the owner, the same day).
 bool engineering_tab(Tab t) {
-    return t == Tab::Design;
+    return t == Tab::Design || t == Tab::Structural;
 }
 
 // A measure as the interface writes it: up to `decimals` places, no trailing
@@ -647,6 +650,10 @@ private:
     void open_page(DesignPage page);
     void show_page();
     void gears_panel();
+    // Ingeniería, Estructural (engineering_panel.md): the part, its values,
+    // its conditions and Analyze, in the left column.
+    void structural_panel();
+    int structural_part_ = 0;
     void rebuild_gear();
     void send_gear_to_plate(bool with_mate);
     std::string gear_name(const cad::GearSpec& spec) const;
@@ -4750,6 +4757,7 @@ void App::poll_jobs() {
         // A screenshot keeps the tab it asked for.
         const Tab asked = options_.view == "analysis"      ? Tab::Analysis
                           : options_.view == "design"      ? Tab::Design
+                          : options_.view == "structural"  ? Tab::Structural
                           : options_.view == "calibration" ? Tab::Calibration
                           : options_.view == "device"      ? Tab::Device
                           : options_.view == "prepare"     ? Tab::Prepare
@@ -4910,7 +4918,8 @@ void App::set_tab(Tab tab) {
     if (tab == Tab::Design && was != Tab::Design) {
         command_focus_ = true;
         show_page();
-    } else if (engineering_tab(was) && !engineering_tab(tab)) {
+    } else if (was == Tab::Design && tab != Tab::Design) {
+        // The plate back in the view: the print tabs and Structural show it.
         rebuild_plate();
         frame_all();
     }
@@ -4967,6 +4976,7 @@ void App::top_bar() {
     };
     const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
                               {Tab::Preview, "tisma_view", T::TabPreview},
+                              {Tab::Structural, "tisma_engineering", T::TabStructural},
                               {Tab::Design, "tisma_design", T::TabDesign},
                               {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
                               {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
@@ -5038,6 +5048,7 @@ void App::top_bar() {
         g_menu_rects[std::string("tab_") + (t.tab == Tab::Prepare       ? "prepare"
                                             : t.tab == Tab::Preview     ? "preview"
                                             : t.tab == Tab::Design      ? "design"
+                                            : t.tab == Tab::Structural  ? "structural"
                                             : t.tab == Tab::Analysis    ? "analysis"
                                             : t.tab == Tab::Calibration ? "calibration"
                                                                         : "device")] =
@@ -11665,6 +11676,167 @@ void App::send_gear_to_plate(bool with_mate) {
 
 // The Gears page of the Design panel: the kind, the sizes, the gear it
 // meshes with, what it measures, and the way to the plate.
+void App::structural_panel() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##structural", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    const auto rect_of = [](const std::string& name) {
+        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                    ImGui::GetItemRectMax().y);
+    };
+    const auto section = [&](T title) {
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::Separator();
+    };
+    constexpr std::uint32_t kViolet = 0x8B5CF6;
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::StructTitle));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    loc::TextColored(rgb(kViolet), "%s", tr(T::StructSubtitle));
+    if (objects_.empty()) {
+        ImGui::Spacing();
+        loc::TextDisabled("%s", tr(T::StructNoParts));
+        ImGui::PopTextWrapPos();
+        ImGui::End();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+        return;
+    }
+
+    // Which part (rule 2): with one, it is chosen. Analyze stays at the
+    // foot of the panel; the rest scrolls above it.
+    structural_part_ = std::clamp(structural_part_, 0, int(objects_.size()) - 1);
+    const float footer = ImGui::GetFrameHeight() * 1.4f + 2.0f * ImGui::GetTextLineHeightWithSpacing() + 14.0f * scale_;
+    ImGui::BeginChild("##structural_scroll", ImVec2(0, -footer));
+    section(T::StructPart);
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##structural_part", objects_[std::size_t(structural_part_)].name.c_str())) {
+        for (int i = 0; i < int(objects_.size()); ++i) {
+            ImGui::PushID(i);
+            if (ImGui::Selectable(objects_[std::size_t(i)].name.c_str(), i == structural_part_))
+                structural_part_ = i;
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    rect_of("structural_part");
+    ProjectEngineering& e = objects_[std::size_t(structural_part_)].engineering;
+    const EngineeringValues values =
+        engineering_values(settings_, e, chosen_profile_[std::size_t(ProfileKind::Filament)]);
+
+    // The values from the profiles, or by hand with a violet dot (rules 3 and 4).
+    section(T::StructValues);
+    const auto source = [&](bool by_hand, ProfileKind kind) {
+        if (by_hand) {
+            loc::TextColored(rgb(kViolet), "● %s", tr(T::StructByHand));
+        } else {
+            const std::string& name = chosen_profile_[std::size_t(kind)];
+            loc::TextDisabled("%s%s%s", tr(T::StructFromProfile), name.empty() ? "" : " ", name.c_str());
+        }
+    };
+    const auto back = [&](const char* id, std::optional<double>& hand) {
+        if (!hand)
+            return;
+        ImGui::SameLine();
+        ImGui::PushID(id);
+        if (ImGui::SmallButton(tr(T::StructBackToProfile)))
+            hand.reset();
+        ImGui::PopID();
+    };
+    // A number of the panel: its field, where it comes from, and the way back.
+    const auto number = [&](T label, const char* id, const PanelValue& v, std::optional<double>& hand, double min,
+                            double max, const char* fmt, float speed, ProfileKind kind) {
+        ImGui::TextUnformatted(tr(label));
+        double value = v.value;
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::DragScalar((std::string("##") + id).c_str(), ImGuiDataType_Double, &value, speed, &min, &max, fmt,
+                              ImGuiSliderFlags_AlwaysClamp) &&
+            value != v.value)
+            hand = value;
+        rect_of(std::string("structural_") + id);
+        source(v.by_hand, kind);
+        back(id, hand);
+    };
+    // The material: the filament type's record, or one chosen here (EP10).
+    ImGui::TextUnformatted(tr(T::StructMaterial));
+    const MaterialRecord* material = values.material_id.empty() ? nullptr : ::tisma::find_material(values.material_id);
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##structural_material", material ? std::string(material->name).c_str() : tr(T::StructChooseMaterial))) {
+        for (const MaterialRecord& r : ::tisma::material_records()) {
+            ImGui::PushID(r.id.data(), r.id.data() + r.id.size());
+            if (ImGui::Selectable(std::string(r.name).c_str(), material == &r))
+                e.overrides.material = std::string(r.id);
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    rect_of("structural_material");
+    source(values.material_by_hand, ProfileKind::Filament);
+    if (values.material_by_hand) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton((std::string(tr(T::StructBackToProfile)) + "##material").c_str()))
+            e.overrides.material.reset();
+    }
+    number(T::StructExtrusionTemp, "extrusion_temperature", values.extrusion_temperature, e.overrides.extrusion_temperature,
+           150.0, 450.0, "%.0f °C", 0.5f, ProfileKind::Filament);
+    loc::TextDisabled("%s: %.0f °C", tr(T::StructBedTemp), values.bed_temperature);
+    number(T::StructLayerHeight, "layer_height", values.layer_height, e.overrides.layer_height, 0.01, 2.0, "%.2f mm",
+           0.005f, ProfileKind::Print);
+    number(T::StructFirstLayer, "first_layer_height", values.first_layer_height, e.overrides.first_layer_height, 0.01, 2.0,
+           "%.2f mm", 0.005f, ProfileKind::Print);
+    number(T::StructLineWidth, "line_width", values.line_width, e.overrides.line_width, 0.05, 3.0, "%.2f mm", 0.005f,
+           ProfileKind::Print);
+    ImGui::TextUnformatted(tr(T::StructWorkingTemp));
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::StructWorkingTempTip));
+    ImGui::SetNextItemWidth(-1.0f);
+    {
+        const double lo = -60.0, hi = 300.0;
+        ImGui::DragScalar("##structural_working_temperature", ImGuiDataType_Double, &e.working_temperature, 0.5f, &lo,
+                          &hi, "%.0f °C", ImGuiSliderFlags_AlwaysClamp);
+        rect_of("structural_working_temperature");
+    }
+
+    // The conditions (rule 8): marking them on the part comes next.
+    section(T::StructConditions);
+    if (e.conditions.empty())
+        loc::TextDisabled("%s", tr(T::StructNoConditions));
+    for (const EngineeringCondition& c : e.conditions)
+        loc::TextDisabled("%s", condition_name(c).c_str());
+
+    ImGui::EndChild();
+    // Analyze (rule 9): off until there is a material, something fixed and a
+    // force, and what is missing said below.
+    ImGui::Separator();
+    ImGui::Spacing();
+    const AnalyzeBlock block = analyze_block(e, values);
+    ImGui::BeginDisabled(block != AnalyzeBlock::None);
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+    ImGui::Button(tr(T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f));
+    ImGui::PopStyleColor(3);
+    ImGui::EndDisabled();
+    rect_of("structural_analyze");
+    if (block != AnalyzeBlock::None)
+        loc::TextDisabled("%s", tr(block == AnalyzeBlock::Material ? T::StructNeedMaterial
+                                   : block == AnalyzeBlock::Fixed  ? T::StructNeedFixed
+                                                                   : T::StructNeedForce));
+    ImGui::PopTextWrapPos();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
 void App::gears_panel() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
@@ -15126,6 +15298,8 @@ void App::layout() {
             gears_panel();
         else if (tab_ == Tab::Design)
             design_panel();
+        else if (tab_ == Tab::Structural)
+            structural_panel();
         else
             settings_panel();
         if (help_open_)
@@ -16145,6 +16319,19 @@ void App::script_input() {
         if (objects_.size() != std::size_t(std::atoi(step.key.c_str())))
             return fail_step("the plate holds " + std::to_string(objects_.size()) + " objects");
         next();
+    } else if (step.verb == "expect-structural") { // what keeps Analyze off: material, fixed, force or none
+        if (objects_.empty())
+            return fail_step("no part on the plate");
+        const ProjectEngineering& e = objects_[std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1))].engineering;
+        const AnalyzeBlock block =
+            analyze_block(e, engineering_values(settings_, e, chosen_profile_[std::size_t(ProfileKind::Filament)]));
+        const char* got = block == AnalyzeBlock::Material ? "material"
+                          : block == AnalyzeBlock::Fixed  ? "fixed"
+                          : block == AnalyzeBlock::Force  ? "force"
+                                                          : "none";
+        if (step.key != got)
+            return fail_step(std::string("Analyze is off for: ") + got);
+        next();
     } else if (step.verb == "expect" || step.verb == "expect-contains") {
         std::string got;
         bool found = false;
@@ -16872,6 +17059,8 @@ void App::frame() {
                 set_tab(Tab::Analysis);
             else if (options_.view == "design")
                 set_tab(Tab::Design);
+            else if (options_.view == "structural")
+                set_tab(Tab::Structural);
             else if (options_.view == "preview" && result_)
                 set_tab(Tab::Preview);
             else if (options_.view == "prepare")

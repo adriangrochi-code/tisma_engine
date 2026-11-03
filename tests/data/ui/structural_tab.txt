@@ -1,0 +1,23 @@
+# The Structural tab (engineering_panel.md, rules 1 to 4 and 9; EP1, EP5): in
+# the Ingeniería section before Design, its panel with the part, the values
+# from the profile, the working temperature and Analizar, off until there are
+# a material, a fixed point or zone and a force. The stock filament profile,
+# «PLA», names no type: its name gives the material, so what is missing first
+# is something fixed (EP5).
+menu mode_engineering
+expect-control tab_structural
+expect-control tab_design
+expect-apart tab_structural tab_design
+menu tab_structural
+expect-control structural_part
+expect-control structural_material
+expect-control structural_extrusion_temperature
+expect-control structural_layer_height
+expect-control structural_line_width
+expect-control structural_working_temperature
+expect-control structural_analyze
+expect-structural fixed
+expect-no-control tab_prepare
+menu mode_print
+expect-control tab_prepare
+expect-no-control tab_structural

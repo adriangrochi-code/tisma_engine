@@ -1223,7 +1223,9 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
    proyecto, que lo hace la pestaña Estructural;
 4. la pestaña Estructural (marcar, lista, Analizar, mapa, veredicto) y sacar «Análisis» de Impresión 3D: empezado
    el 2026-11-03 con los valores del panel (`src/project/engineering_values.*`: del perfil o a mano, material por
-   tipo de filamento, qué apaga Analizar); falta la pestaña en la interfaz;
+   tipo de filamento, qué apaga Analizar) y la pestaña Estructural con la pieza, los valores, la temperatura de
+   trabajo y Analizar; faltan marcar en la vista, la lista de condiciones con deshacer, correr el análisis, el mapa
+   y el veredicto, y sacar «Análisis» de Impresión 3D;
 5. la pestaña Aerodinámica, con A3 (CFD).
 
 ## Avance

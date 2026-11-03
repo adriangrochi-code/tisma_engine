@@ -10,6 +10,30 @@
     X(TabPreview, "Vista previa", "Preview")                                                                          \
     X(TabAnalysis, "Análisis", "Analysis")                                                                            \
     X(TabDesign, "Diseño", "Design")                                                                                  \
+    X(TabStructural, "Estructural", "Structural")                                                                     \
+    X(StructTitle, "Análisis estructural", "Structural analysis")                                                     \
+    X(StructSubtitle, "Dónde está fija la pieza, dónde la empujan y con qué material", "Where the part is held, where it is pushed and in what material") \
+    X(StructPart, "Pieza", "Part")                                                                                    \
+    X(StructNoParts, "Agregá una pieza a la placa para analizarla.", "Add a part to the plate to analyze it.")       \
+    X(StructValues, "Material y cómo se imprime", "Material and how it prints")                                       \
+    X(StructMaterial, "Material", "Material")                                                                         \
+    X(StructChooseMaterial, "Elegí un material", "Choose a material")                                                 \
+    X(StructExtrusionTemp, "Temperatura de extrusión", "Extrusion temperature")                                       \
+    X(StructBedTemp, "Temperatura de la cama", "Bed temperature")                                                     \
+    X(StructLayerHeight, "Altura de capa", "Layer height")                                                            \
+    X(StructFirstLayer, "Altura de la primera capa", "First layer height")                                            \
+    X(StructLineWidth, "Ancho de línea", "Line width")                                                                \
+    X(StructWorkingTemp, "Temperatura de trabajo", "Working temperature")                                             \
+    X(StructWorkingTempTip, "A la que va a estar la pieza en uso. No está en ningún perfil.", "The temperature the part will be at in use. No profile has it.") \
+    X(StructFromProfile, "del perfil", "from the profile")                                                            \
+    X(StructByHand, "cambiado a mano: no cambia el perfil ni el G-code", "changed by hand: the profile and the G-code stay") \
+    X(StructBackToProfile, "Volver al del perfil", "Back to the profile's")                                           \
+    X(StructConditions, "Condiciones", "Conditions")                                                                  \
+    X(StructNoConditions, "Sin condiciones todavía.", "No conditions yet.")                                           \
+    X(StructAnalyze, "Analizar", "Analyze")                                                                           \
+    X(StructNeedMaterial, "Elegí un material.", "Choose a material.")                                                 \
+    X(StructNeedFixed, "Agregá un punto o una zona fija.", "Add a fixed point or zone.")                              \
+    X(StructNeedForce, "Agregá un punto o una zona de fuerza.", "Add a force point or zone.")                         \
     X(TabFasteners, "Tornillería", "Fasteners") \
     X(ConfigMenu, "Configuración…", "Settings…") \
     X(PanelFolded, "Panel de ajustes plegado", "Settings panel folded") \

@@ -57,7 +57,8 @@ std::string material_for_filament(std::string_view filament_type) {
     return {};
 }
 
-EngineeringValues engineering_values(const Settings& profile, const ProjectEngineering& e) {
+EngineeringValues engineering_values(const Settings& profile, const ProjectEngineering& e,
+                                     std::string_view filament_profile) {
     const EngineeringOverrides& o = e.overrides;
     EngineeringValues v;
     v.filament_type = profile.filament_type;
@@ -66,6 +67,11 @@ EngineeringValues engineering_values(const Settings& profile, const ProjectEngin
         v.material_by_hand = true;
     } else {
         v.material_id = material_for_filament(profile.filament_type);
+        if (v.material_id.empty() && profile.filament_type.empty() && !filament_profile.empty()) {
+            v.material_id = material_for_filament(filament_profile);
+            if (v.material_id.empty())
+                v.material_id = material_for_filament(filament_profile.substr(0, filament_profile.find(' ')));
+        }
     }
     const auto pick = [](const std::optional<double>& hand, double from_profile) {
         return hand ? PanelValue{*hand, true} : PanelValue{from_profile, false};

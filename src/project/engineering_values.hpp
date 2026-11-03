@@ -33,8 +33,10 @@ struct EngineeringValues {
 std::string material_for_filament(std::string_view filament_type);
 
 // The panel's values for `profile` (the settings the profiles make) and a
-// part's Engineering data.
-EngineeringValues engineering_values(const Settings& profile, const ProjectEngineering& e);
+// part's Engineering data. A filament profile that names no type is read by
+// its name: the whole name, then its first word («PLA Genérico» is PLA).
+EngineeringValues engineering_values(const Settings& profile, const ProjectEngineering& e,
+                                     std::string_view filament_profile = {});
 
 // What keeps «Analizar» off, in the order the panel says it.
 enum class AnalyzeBlock { None, Material, Fixed, Force };

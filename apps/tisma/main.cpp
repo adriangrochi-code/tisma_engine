@@ -106,8 +106,8 @@ int main(int argc, char** argv) {
         } else if (arg == "--view") {
             options.view = value();
             if (options.view != "prepare" && options.view != "preview" && options.view != "design" &&
-                options.view != "analysis" && options.view != "calibration" && options.view != "device") {
-                std::fprintf(stderr, "error: --view must be prepare, preview, design, analysis, calibration or device\n");
+                options.view != "structural" && options.view != "analysis" && options.view != "calibration" && options.view != "device") {
+                std::fprintf(stderr, "error: --view must be prepare, preview, design, structural, analysis, calibration or device\n");
                 return 2;
             }
         } else if (arg == "--layer") {

@@ -450,6 +450,12 @@ TEST_CASE("EP1, EP3, EP5, EP10: the Structural panel's values come from the prof
     CHECK(material_for_filament("PA-CF") == "bambu-pa6-cf");
     CHECK(material_for_filament("pla+") == "esun-pla-plus");
     CHECK(material_for_filament("") == "");
+    // A filament profile that names no type: its name, or its first word.
+    profile.filament_type.clear();
+    e.overrides.material.reset();
+    CHECK(engineering_values(profile, e, "PLA Genérico").material_id == "bambu-pla-basic");
+    CHECK(engineering_values(profile, e, "PETG").material_id == "bambu-petg-basic");
+    CHECK(engineering_values(profile, e, "Mi filamento").material_id.empty());
 }
 
 TEST_CASE("Engineering conditions follow the part onto the plate, placed and mirrored", "[project]") {
