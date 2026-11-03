@@ -130,6 +130,10 @@ uniform mat4 u_view;
 uniform float u_ao_strength;
 uniform int u_debug;
 out vec4 colour;
+// 0 where the occlusion is not worked out (the infill: inside the part, it
+// would load the GPU for nothing; the owner's request, 2026-11-03), written
+// as the G-buffer's alpha.
+float g_occlusion = 1.0;
 
 vec3 to_linear(vec3 c) { return pow(max(c, vec3(0.0)), vec3(2.2)); }
 
@@ -139,7 +143,7 @@ bool gbuffer(vec3 n) {
     vec3 nv = normalize(mat3(u_view) * n);
     if (nv.z < 0.0)
         nv = -nv;
-    colour = vec4(nv * 0.5 + 0.5, 1.0);
+    colour = vec4(nv * 0.5 + 0.5, g_occlusion);
     return true;
 }
 
@@ -310,6 +314,7 @@ flat out vec3 v_up;
 flat out vec2 v_size;  // the line's width and height
 flat out float v_cap;  // 1 on the end caps, 0 on the sides
 flat out vec2 v_neighbours; // 1 where a bead of the layer above (x) and below (y) touches this one
+flat out float v_infill;    // 1 on sparse and solid infill: no occlusion worked out there
 
 // The kinds that usually have a bead of the layer above on them, and those
 // that lie on one of the layer below (not the top surface, a bridge or an
@@ -333,6 +338,7 @@ vec3 ramp(float t) {
 
 void main() {
     uint kind = a_kind_layer & 0xFFu;
+    v_infill = kind == 4u || kind == 5u ? 1.0 : 0.0; // LineKind::SparseInfill, SolidInfill
     vec3 along = a_p1 - a_p0;
     float len = length(along);
     v_base = vec3(0.0);
@@ -457,6 +463,7 @@ flat in vec3 v_up;
 flat in vec2 v_size;
 flat in float v_cap;
 flat in vec2 v_neighbours;
+flat in float v_infill;
 uniform int u_moire;
 void main() {
     vec3 n = normalize(v_normal);
@@ -500,6 +507,7 @@ void main() {
             }
         }
     }
+    g_occlusion = v_infill > 0.5 ? 0.0 : 1.0;
     if (gbuffer(n))
         return;
     colour = vec4(shade(v_base, n, v_position, shininess, specular, seen), 1.0);
@@ -568,8 +576,13 @@ void main() {
         return;
     }
     vec3 c = view_position(p);
-    vec3 n = normalize(texelFetch(u_normal, p, 0).xyz * 2.0 - 1.0);
+    vec4 g = texelFetch(u_normal, p, 0);
+    vec3 n = normalize(g.xyz * 2.0 - 1.0);
     float key = key_light(c, n);
+    if (g.a < 0.5) { // infill: no occlusion samples (the expensive part)
+        colour = vec4(1.0, key, 0.0, 1.0);
+        return;
+    }
     float pixels = min(u_radius * u_projection.y * 0.5 * u_size.y / -c.z, 80.0);
     if (pixels < 1.5) {
         colour = vec4(1.0, key, 0.0, 1.0);
@@ -829,12 +842,14 @@ void main() {
         light = occluded(o, l, 1e30) ? 0.0 : 1.0;
     }
     float open = 0.0;
-    for (int i = 0; i < u_ambient_rays; ++i) {
+    // Infill: no ambient rays, open sky (as the screen-space occlusion).
+    bool infill = texelFetch(u_normal, p, 0).a < 0.5;
+    for (int i = 0; i < (infill ? 0 : u_ambient_rays); ++i) {
         float r = random(seed);
         vec3 d = around(n, sqrt(1.0 - r), 6.2831853 * random(seed));
         open += occluded(o, d * u_radius, 1.0) ? 0.0 : 1.0;
     }
-    open /= float(max(u_ambient_rays, 1));
+    open = infill ? 1.0 : open / float(max(u_ambient_rays, 1));
     colour = vec4(mix(previous.rg, vec2(light, open), u_blend), 0.0, 1.0);
 }
 )";
@@ -1557,7 +1572,11 @@ void Renderer::shadow_pass(const ViewFrame& f) {
     glClear(GL_DEPTH_BUFFER_BIT);
     const std::array<float, 4> eye = face_eye_;
     face_eye_ = {f.key.x, f.key.y, f.key.z, 0.0f}; // the faces the light sees
-    draw_scene(f, shadow_vp_, true, white_, true);
+    // The infill casts no shadow: it is inside the walls, and drawing it for
+    // the light too loaded the GPU for nothing (the owner, 2026-11-03).
+    ViewFrame casters = f;
+    casters.kind_mask &= ~((1u << unsigned(LineKind::SparseInfill)) | (1u << unsigned(LineKind::SolidInfill)));
+    draw_scene(casters, shadow_vp_, true, white_, true);
     face_eye_ = eye;
     glViewport(0, 0, width_, height_);
     shadowed_ = true;

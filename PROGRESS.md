@@ -8977,3 +8977,35 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - **No medido:** que el proceso no pase de un núcleo. TBB lo garantiza para su trabajo; los hilos propios del
   motor, si los hay, no están limitados.
 
+## 2026-11-03
+
+### Oclusión ambiental sin el relleno (pedido del dueño)
+
+- «El relleno está produciendo lag… que no se calcule en el relleno».
+- Lo que cambió:
+  - el G-buffer marca en su alfa los píxeles del relleno ralo y del sólido interno (`LineKind::SparseInfill` y
+    `SolidInfill`);
+  - la pasada de oclusión en pantalla no toma muestras ahí, que es lo caro; queda solo la luz principal;
+  - el trazado de rayos no tira rayos de ambiente ahí;
+  - el relleno ya no se dibuja en el mapa de sombra de la luz principal, porque está adentro de las paredes.
+- La vista Vulkan todavía no tiene oclusión, así que no cambia.
+- **Medido:**
+  - con el renderizador por software del contenedor (llvmpipe), la esfera de prueba cortada en la capa 60 da lo
+    mismo antes y después: 70 a 72 ms por cuadro, el mínimo de tres corridas. Ahí pesa la geometría, no la
+    oclusión;
+  - con una placa de video real no está medido;
+  - las capturas antes y después se ven iguales.
+- **Pruebas:** las 8 de la vista con oclusión, rayos, moiré y sombra pasan.
+
+### «El relleno no respeta el ajuste» (densidad o patrón): lo que se midió
+
+- Con la línea de comandos, un cubo de 30 mm al 5, 20 y 50 % con cuadrícula, giroide y cúbico: el filamento sube con
+  la densidad (2582, 3888 y 6516 mm con cuadrícula), y cada patrón da otra cantidad de líneas.
+- En la interfaz, cambiar la densidad en el panel y laminar de nuevo: 5 % da 2769 mm y 50 % da 6733 mm; el G-code
+  dice `infill.density = 5.0` y `50.0`.
+- Los 17 patrones al 20 %: largos de relleno parecidos, salvo dos casos:
+  - `honeycomb` pone unas 4/3 partes: los tramos a lo largo de la dirección principal se imprimen dos veces, como
+    mide Tisma Slicer (P8, a propósito);
+  - `zigzag` da exactamente el mismo G-code que `rectilinear`.
+- Falta saber qué caso concreto vio el dueño (pieza, patrón, densidad); ya se le preguntó.
+
