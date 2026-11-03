@@ -12,6 +12,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Impresoras Anycubic que leen el archivo antes de imprimir** (Kobra 3, Kobra S1, Kobra X; ficha
+  `gcode_firmware.md`, regla 7): el ajuste nuevo `machine.strict_parser` = `anycubic` (en la interfaz, «Lector del
+  firmware» en la tarjeta del firmware) ordena el G-code como el programa de Anycubic: el resumen al principio
+  (`HEADER_BLOCK`), las órdenes entre `EXECUTABLE_BLOCK_START` y `_END`, los objetos sin comillas, los totales y el
+  bloque `statistics` al final, sin la lista de ajustes, y siempre en texto. Los nombres salen de un archivo de
+  Anycubic Slicer Next para la Kobra 3 que mandó el dueño. Falta probarlo en la impresora (FW10) y las miniaturas.
 - **Corte de la vista previa sin el relleno de abajo** (pedido del dueño, 2026-11-03): con las paredes a la vista y
   la vista cortada en una capa, solo esa capa dibuja su relleno y sus viajes; las de abajo, que las paredes tapan,
   dibujan el resto. Un cubo de 180 mm al 20 % cortado en la capa 400 pasó de 96 532 a 5101 extrusiones dibujadas y

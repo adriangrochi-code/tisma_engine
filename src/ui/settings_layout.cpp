@@ -457,7 +457,7 @@ const std::vector<SectionLayout>& printer_layout() {
           {"max_temps", T::SubMaxTemps, {{"machine.max_nozzle_temp", N}, {"machine.max_bed_temp", N}}}}},
         {"gcode", T::SecGcode, "section_gcode.svg",
          {{"firmware", T::SubFirmware,
-           {{"machine.flavor", N}, {"machine.limits_usage", N}, {"gcode.progress", N}, {"gcode.object_labels", N}}},
+           {{"machine.flavor", N}, {"machine.strict_parser", N}, {"machine.limits_usage", N}, {"gcode.progress", N}, {"gcode.object_labels", N}}},
           {"start_end", T::SubStartEnd, {{"machine.start_gcode", N}, {"machine.end_gcode", N}}},
           {"variables", T::SubVariables, {{"machine.variables", A}}}}},
     };

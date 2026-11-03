@@ -392,6 +392,13 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(parse_settings(R"({"infill": {"pattern": "gyroid"}})").infill_pattern == InfillPattern::Gyroid);
     CHECK_THROWS_WITH(parse_settings(R"({"infill": {"density": 120}})"), ContainsSubstring("infill.density: must be from 0 to 100"));
     CHECK_THROWS_WITH(parse_settings(R"({"infill": {"pattern": "voronoi"}})"), ContainsSubstring("infill.pattern: must be one of"));
+    // gcode_firmware.md, rule 7: read, written back and read the same.
+    const Settings strict = parse_settings(R"({"machine": {"strict_parser": "anycubic"}})");
+    CHECK(strict.strict_parser == StrictParser::Anycubic);
+    CHECK(parse_settings(settings_json(strict)).strict_parser == StrictParser::Anycubic);
+    CHECK(parse_settings("{}").strict_parser == StrictParser::None);
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"strict_parser": "bambu"}})"),
+                      ContainsSubstring("machine.strict_parser: must be one of"));
     // BH19: 0 is refused, and the message says so (as docs/CONFIG.md does).
     CHECK_THROWS_WITH(parse_settings(R"({"infill": {"dense_density": 0}})"), ContainsSubstring("more than 0"));
     CHECK(parse_settings(R"({"infill": {"dense_density": 0.01}})").infill_dense_density == 0.01);

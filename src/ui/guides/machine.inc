@@ -555,6 +555,19 @@
      "change at some height, asks for more than this, the program warns you: the bed will not get there and the part "
      "may come loose. At 0, it is unknown and not checked.\n\nExample: 100 °C on many ordinary printers; 110 to 120 °C "
      "on those that print ABS or engineering materials."},
+    {"machine.strict_parser",
+     "Algunas impresoras leen el archivo entero antes de empezar y se traban o lo rechazan si encuentran algo que no "
+     "conocen. Las Anycubic Kobra 3, Kobra S1 y Kobra X hacen eso: con «Anycubic» el G-code sale ordenado como lo "
+     "escribe el programa de Anycubic, con el resumen al principio, sin la lista de ajustes al final y siempre en "
+     "texto, nunca binario.\n\nNo cambia cómo se imprime la pieza, solo cómo se ordena el archivo. Las Kobra "
+     "anteriores (Kobra, Kobra 2, Neo, Go) imprimen cualquier G-code y no lo necesitan.\n\nEjemplo: «Anycubic» si la "
+     "Kobra 3 se queda en «parsing» con un archivo de este programa; «Lee cualquier G-code» para el resto.",
+     "Some printers read the whole file before they start and get stuck or refuse it when they find something they "
+     "do not know. The Anycubic Kobra 3, Kobra S1 and Kobra X do this: with \"Anycubic\" the G-code is laid out as "
+     "Anycubic's program writes it, with the summary at the start, without the list of settings at the end and "
+     "always as text, never binary.\n\nIt does not change how the part prints, only how the file is laid out. Older "
+     "Kobras (Kobra, Kobra 2, Neo, Go) print any G-code and do not need it.\n\nExample: \"Anycubic\" if a Kobra 3 "
+     "stays on \"parsing\" with a file from this program; \"Reads any G-code\" for the rest."},
     {"machine.flavor",
      "Es el dialecto del G-code, el idioma de las instrucciones que lee la impresora. Cada firmware (el programa que "
      "corre dentro de la impresora) entiende algunos comandos distintos, por ejemplo para calentar o para el "

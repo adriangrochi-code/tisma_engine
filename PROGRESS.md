@@ -9052,3 +9052,28 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - **No probado:** UI49 contra el proxy real (que responde 502 al CONNECT): la capa HTTP lo da como sin respuesta
   (estado 0) en Linux; en Windows (WinHTTP) no lo comprobé.
 
+### FW10: el G-code para las Kobra que analizan el archivo (archivo del dueño)
+
+- El dueño mandó un G-code de Anycubic Slicer Next 2.0.0.3 para su Kobra 3 (3DBenchy, ABS, 0,16 mm, 1h 15m 4s). Lo
+  comparé como caja negra (solo la salida) para la regla 7 de `gcode_firmware.md`. Lo que trae:
+  - `; HEADER_BLOCK_START` … `END` con `total layer number`, `filament_density`, `filament_diameter` y `max_z_height`;
+  - dos miniaturas PNG (230 × 110 y 512 × 512 «top») en `; THUMBNAIL_BLOCK_START` … `END`;
+  - las órdenes entre `; EXECUTABLE_BLOCK_START` y `; EXECUTABLE_BLOCK_END`; Klipper (`SET_VELOCITY_LIMIT
+    SQUARE_CORNER_VELOCITY`, `M204 S`), `G9111 bedTemp= extruderTemp=` como inicio (calienta solo), `M73 P R` con
+    `QuietR`/`SportR`;
+  - objetos `EXCLUDE_OBJECT_DEFINE NAME=3DBenchy_id_0_copy_0`, sin comillas;
+  - al final los totales, la lista de ajustes (`CONFIG_BLOCK`) y un bloque `; statistics = begin` … `end`.
+- **Hecho:** `machine.strict_parser` (`none` o `anycubic`):
+  - la misma cabecera y el bloque de órdenes; los objetos como `<modelo>_id_<objeto>_copy_<copia>`;
+  - al final `total layers count` y `statistics` (filamento en m, tiempo, tamaño, capas), sin la lista de ajustes
+    (la regla 7 la saca: el analizador se cae con algunos valores);
+  - nunca binario (`binary_output`), con un aviso si el perfil lo pedía;
+  - en la interfaz, «Lector del firmware» en la tarjeta del firmware, con su explicación.
+- Prueba nueva en `test_labels.cpp` (FW10: orden, nombres, sin ajustes, ninguna línea con dos `;`), y la lectura y
+  escritura del ajuste en `test_settings.cpp`.
+- Archivo de prueba para el dueño: cubo de 20 mm en ABS (250/90 °C) con la Kobra 3 y el inicio `G9111`, 35 min.
+- **No probado:** en la impresora (es la prueba FW10). **Falta:** las miniaturas (el motor todavía no las dibuja sin la
+  vista 3D; si la Kobra las exige, es lo primero a revisar) y un perfil de la Kobra 3 en el catálogo.
+- Observación del archivo: con `filament_max_volumetric_speed = 5` mm³/s el perfil ABS de Anycubic limita todo a
+  ~75 mm/s aunque pida 200; el motor hace lo mismo con `extrusion.max_flow` 5 (aviso `flow_limit`).
+

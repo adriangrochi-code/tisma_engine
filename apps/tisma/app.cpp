@@ -1532,7 +1532,7 @@ const std::map<T, const char*>& row_keys() {
         {T::KeepOuterSpeed, "cooling.keep_outer_speed"}, {T::BedWidth, "machine.bed"}, {T::BedDepth, "machine.bed"},
         {T::MaxHeight, "machine.max_height"}, {T::Nozzle, "machine.nozzle_diameter"},
         {T::MinLayerHeight, "machine.min_layer_height"}, {T::MaxLayerHeight, "machine.max_layer_height"},
-        {T::Flavor, "machine.flavor"}, {T::RelativeE, "machine.relative_extrusion"},
+        {T::Flavor, "machine.flavor"}, {T::StrictParserRow, "machine.strict_parser"}, {T::RelativeE, "machine.relative_extrusion"},
         {T::Retraction, "retraction.length"}, {T::RetractSpeed, "retraction.speed"},
         {T::RetractLift, "retraction.lift"}, {T::GcodeResolution, "gcode.resolution"},
         {T::CornerSmoothing, "gcode.corner_smoothing"},
@@ -7898,6 +7898,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {GcodeFlavor::Mach3, "Mach3, LinuxCNC"},
                             {GcodeFlavor::Machinekit, "Machinekit"},
                             {GcodeFlavor::NoExtrusion, tr(T::FlavorNoExtrusion)}});
+        // A firmware that reads the whole file first (gcode_firmware.md, rule 7).
+        if (shown("machine.strict_parser"))
+            changed |= row(T::StrictParserRow, s.strict_parser,
+                           {{StrictParser::None, tr(T::StrictParserNone)},
+                            {StrictParser::Anycubic, tr(T::StrictParserAnycubic)}});
         if (shown("machine.limits_usage"))
             changed |= row(T::LimitsUsageRow, s.limits_usage,
                            {{LimitsUsage::TimeOnly, tr(T::LimitsTimeOnly)},

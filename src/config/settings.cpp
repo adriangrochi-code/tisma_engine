@@ -440,6 +440,8 @@ const char* object_labels_name(ObjectLabels labels) {
     return labels == ObjectLabels::Firmware ? "firmware" : labels == ObjectLabels::OctoPrint ? "octoprint" : "none";
 }
 
+const char* strict_parser_name(StrictParser parser) { return parser == StrictParser::Anycubic ? "anycubic" : "none"; }
+
 const char* top_one_wall_name(TopOneWall where) {
     return where == TopOneWall::Top ? "top" : where == TopOneWall::Topmost ? "topmost" : "none";
 }
@@ -1747,7 +1749,7 @@ Settings parse_checked(std::string_view text) {
                 "custom_parameters",
                 "extruders", "extruder_offset", "single_extruder_mmu", "high_flow_nozzle", "display_pixels_x", "display_pixels_y",
                 "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology", "calibrations",
-                "feedstock"},
+                "feedstock", "strict_parser"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "custom_parameters") {
@@ -1914,6 +1916,9 @@ Settings parse_checked(std::string_view text) {
                                                  : s.max_chamber_temp) = d;
                    } else if (n == "flavor") {
                        s.flavor = choice<GcodeFlavor>(g, n, k, flavors());
+                   } else if (n == "strict_parser") {
+                       s.strict_parser = choice<StrictParser>(
+                           g, n, k, {{"none", StrictParser::None}, {"anycubic", StrictParser::Anycubic}});
                    } else if (n == "start_gcode" || n == "end_gcode") {
                        if (!v.is_string())
                            fail(k, "must be a string");
@@ -3214,6 +3219,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.filament_diameter", num(s.filament_diameter)},
         {"machine.relative_extrusion", flag(s.relative_extrusion)},
         {"machine.flavor", flavor},
+        {"machine.strict_parser", strict_parser_name(s.strict_parser)},
         {"machine.start_gcode", text(s.start_gcode)},
         {"machine.end_gcode", text(s.end_gcode)},
         {"machine.max_feed_x", speed(s.max_feed_x)},
@@ -3771,6 +3777,7 @@ std::string settings_json(const Settings& s) {
           {"filament_diameter", s.filament_diameter},
           {"relative_extrusion", s.relative_extrusion},
           {"flavor", flavor},
+          {"strict_parser", strict_parser_name(s.strict_parser)},
           {"start_gcode", s.start_gcode},
           {"end_gcode", s.end_gcode},
           {"variables", variables},

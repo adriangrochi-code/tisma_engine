@@ -63,6 +63,10 @@ enum class SlowdownLogic { Uniform, ConsistentSurface };
 enum class WallGenerator { Variable, Fixed };
 // How the G-code names each object (gcode_firmware.md, rule 4).
 enum class ObjectLabels { None, OctoPrint, Firmware };
+// A firmware that reads the whole file before printing and refuses what it
+// does not know (gcode_firmware.md, rule 7): the G-code is laid out as its
+// maker's own program writes it.
+enum class StrictParser { None, Anycubic };
 // Where a top surface keeps only its outer wall (walls_extra.md, rule 10).
 enum class TopOneWall { None, Top, Topmost };
 
@@ -819,6 +823,9 @@ struct Settings {
     ObjectLabels object_labels = ObjectLabels::None;
     // The binary G-code format (gcode_extras.md, rule 9; src/gcode/binary.hpp).
     bool gcode_binary = false;
+    // The printer's firmware reads the whole file first (gcode_firmware.md,
+    // rule 7): then the G-code is never binary (binary_output).
+    StrictParser strict_parser = StrictParser::None;
     // The temperatures the start G-code does not set itself, written round it
     // (gcode_templates.md, rule 10; gcode_firmware.md, rule 1).
     bool auto_temperatures = true;
@@ -894,6 +901,10 @@ const char* limits_usage_name(LimitsUsage usage);
 const char* draft_shield_name(DraftShield shield);
 const char* top_one_wall_name(TopOneWall where);
 const char* object_labels_name(ObjectLabels labels);
+const char* strict_parser_name(StrictParser parser);
+// Whether the G-code goes out binary: gcode.binary, unless the printer's
+// firmware reads only plain G-code (machine.strict_parser).
+inline bool binary_output(const Settings& s) { return s.gcode_binary && s.strict_parser == StrictParser::None; }
 const char* brim_type_name(BrimType type);
 
 // The machine's limits by name, as machine.silent names them: max_feed_x to

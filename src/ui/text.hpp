@@ -1549,6 +1549,9 @@
     X(MinTravelFeed, "Avance mínimo al viajar", "Minimum travel feed") \
     X(LimitsUsageRow, "Límites de la máquina", "Machine limits") \
     X(ObjectLabelsRow, "Etiquetas de objetos", "Object labels") \
+    X(StrictParserRow, "Lector del firmware", "Firmware's reader") \
+    X(StrictParserNone, "Lee cualquier G-code", "Reads any G-code") \
+    X(StrictParserAnycubic, "Anycubic (Kobra 3, S1, X)", "Anycubic (Kobra 3, S1, X)") \
     X(LabelsNone, "No", "No") \
     X(LabelsOctoPrint, "Comentarios (OctoPrint)", "Comments (OctoPrint)") \
     X(LabelsFirmware, "Del firmware (cancelar un objeto)", "The firmware's (cancel one object)") \
