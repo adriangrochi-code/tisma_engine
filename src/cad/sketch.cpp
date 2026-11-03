@@ -98,6 +98,47 @@ json command(const char* name, json params) {
 
 } // namespace
 
+namespace {
+constexpr std::pair<GeoConstraint::Kind, const char*> geo_names[] = {
+    {GeoConstraint::Kind::Horizontal, "horizontal"},
+    {GeoConstraint::Kind::Vertical, "vertical"},
+    {GeoConstraint::Kind::Parallel, "parallel"},
+    {GeoConstraint::Kind::Perpendicular, "perpendicular"},
+    {GeoConstraint::Kind::Equal, "equal"},
+    {GeoConstraint::Kind::Concentric, "concentric"},
+    {GeoConstraint::Kind::Tangent, "tangent"},
+    {GeoConstraint::Kind::Coincident, "coincident"},
+    {GeoConstraint::Kind::Fixed, "fixed"},
+    {GeoConstraint::Kind::Length, "length"},
+    {GeoConstraint::Kind::Distance, "distance"},
+    {GeoConstraint::Kind::HorizontalDistance, "horizontal_distance"},
+    {GeoConstraint::Kind::VerticalDistance, "vertical_distance"},
+    {GeoConstraint::Kind::Radius, "radius"},
+    {GeoConstraint::Kind::Diameter, "diameter"},
+    {GeoConstraint::Kind::Angle, "angle"},
+};
+} // namespace
+
+const char* geo_kind_name(GeoConstraint::Kind kind) {
+    for (const auto& [k, name] : geo_names)
+        if (k == kind)
+            return name;
+    return "";
+}
+
+std::optional<GeoConstraint::Kind> geo_kind_named(const std::string& name) {
+    for (const auto& [k, n] : geo_names)
+        if (name == n)
+            return k;
+    return std::nullopt;
+}
+
+bool is_dimension(GeoConstraint::Kind kind) {
+    using K = GeoConstraint::Kind;
+    return kind == K::Length || kind == K::Distance || kind == K::HorizontalDistance || kind == K::VerticalDistance ||
+           kind == K::Radius || kind == K::Diameter || kind == K::Angle;
+}
+
 Pt point_of(const Entity& e, std::size_t index) {
     switch (e.kind) {
     case Entity::Kind::Chain: return e.points.empty() ? Pt{} : e.points[std::min(index, e.points.size() - 1)];
@@ -528,6 +569,16 @@ std::string sketch_json(const Sketch& sketch, const SketchOperation& op) {
     json dimensions = json::array();
     for (const Dimension& d : sketch.dimensions)
         dimensions.push_back({{"entity", d.entity}, {"segment", d.segment}, {"length", d.length}});
+    json rules = json::array();
+    for (const GeoConstraint& r : sketch.rules) {
+        json j{{"kind", geo_kind_name(r.kind)}, {"a", json::array({r.a.entity, r.a.index})},
+               {"b", json::array({r.b.entity, r.b.index})}};
+        if (is_dimension(r.kind))
+            j["value"] = r.value;
+        if (r.kind == GeoConstraint::Kind::Fixed)
+            j["at"] = pt(r.at);
+        rules.push_back(std::move(j));
+    }
     json operation = op.kind == SketchOperation::Kind::Extrude
                          ? json{{"kind", "extrude"}, {"distance", op.distance}}
                          : json{{"kind", "revolve"}, {"axis", std::string(1, op.axis)}, {"angle", op.angle}};
@@ -535,6 +586,7 @@ std::string sketch_json(const Sketch& sketch, const SketchOperation& op) {
                 {"entities", std::move(entities)},
                 {"constraints", std::move(constraints)},
                 {"dimensions", std::move(dimensions)},
+                {"rules", std::move(rules)},
                 {"operation", std::move(operation)}}
         .dump();
 }
@@ -589,6 +641,25 @@ void parse_sketch(const std::string& text, Sketch& sketch, SketchOperation& op) 
     }
     for (const json& d : j.value("dimensions", json::array()))
         s.dimensions.push_back({d.value("entity", std::size_t(0)), d.value("segment", std::size_t(0)), d.value("length", 0.0)});
+    const auto read_ref = [](const json& v) {
+        if (!v.is_array() || v.size() != 2 || !v[0].is_number_unsigned() || !v[1].is_number_unsigned())
+            throw std::runtime_error("a constraint's reference is not [entity, index]");
+        return EntityPoint{v[0].get<std::size_t>(), v[1].get<std::size_t>()};
+    };
+    for (const json& r : j.value("rules", json::array())) {
+        const std::string kind = r.value("kind", std::string());
+        const std::optional<GeoConstraint::Kind> k = geo_kind_named(kind);
+        if (!k)
+            throw std::runtime_error("unknown sketch constraint \"" + kind + "\"");
+        GeoConstraint rule;
+        rule.kind = *k;
+        rule.a = read_ref(r.value("a", json::array({0, 0})));
+        rule.b = read_ref(r.value("b", json::array({0, 0})));
+        rule.value = r.value("value", 0.0);
+        if (r.contains("at"))
+            rule.at = read_pt(r["at"]);
+        s.rules.push_back(rule);
+    }
     const json operation = j.value("operation", json::object());
     const std::string kind = operation.value("kind", std::string("extrude"));
     if (kind == "extrude") {

@@ -4,6 +4,8 @@
 
 #include "cad/design.hpp"
 
+#include "cad/constraints.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -279,19 +281,10 @@ std::vector<std::string> apply_parameters(Design& design) {
             } else if (target.rfind("size", 0) == 0) {
                 f.sizes[std::size_t(target[4] - '0')] = v;
             } else {
+                // A rectangle's second corner moves, the first stays; its
+                // dimensions follow (rule 5).
                 const std::size_t k = std::size_t(std::strtoul(target.c_str() + 1, nullptr, 10));
-                Entity& en = f.sketch.entities[k];
-                const std::string what = target.substr(target.find('.') + 1);
-                if (what == "diameter") {
-                    en.radius = 0.5 * v;
-                } else { // a rectangle: its second corner moves, the first stays
-                    Pt& a = en.points[0];
-                    Pt& b = en.points[1];
-                    if (what == "width")
-                        b.x = a.x + (b.x < a.x ? -v : v);
-                    else
-                        b.y = a.y + (b.y < a.y ? -v : v);
-                }
+                set_entity_size(f.sketch, k, target.substr(target.find('.') + 1), v);
             }
         }
     return problems;
@@ -300,6 +293,10 @@ std::vector<std::string> apply_parameters(Design& design) {
 std::vector<std::string> build_commands(const Design& given) {
     Design design = given;
     apply_parameters(design);
+    // The sketches as their constraints place them (rule 5).
+    for (Feature& f : design.features)
+        if (f.type == Feature::Type::Sketch && !f.sketch.rules.empty())
+            solve_sketch(f.sketch);
     std::vector<json> commands;
     for (const Feature& f : design.features)
         if (!f.suppressed && f.buildable())

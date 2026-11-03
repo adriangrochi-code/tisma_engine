@@ -9432,5 +9432,40 @@ de 20 mm (8000 mm³), «Largo» atado a `p1*3` con `p1 = 10 mm` (12000 mm³), `p
 **No probado:** con el `solidcraft-cli` real (solo con el sustituto). Las operaciones de un boceto (posición de las
 líneas sueltas) todavía no se atan a parámetros.
 
-**Sigue:** D3, restricciones y cotas con grados de libertad (regla 5, CD3); después la línea de tiempo editable
-(regla 8, CD6).
+
+### D3 segunda parte: restricciones y cotas con grados de libertad (CD3)
+
+**Hecho:**
+- `src/cad/constraints.*`: el boceto como sistema de ecuaciones (cadenas: sus puntos; rectángulo: sus dos esquinas;
+  círculo: centro y radio; arco: centro, inicio y fin con radios iguales). Entran las referencias de D2 (coincidente,
+  punto medio, sobre la curva), los largos tipeados y las restricciones nuevas: horizontal, vertical, paralela,
+  perpendicular, igual (largos o radios), concéntrica, tangente (recta y círculo), coincidente, fijo, largo,
+  distancia, distancia horizontal y vertical, radio, diámetro y ángulo. Se resuelve con pasos de Gauss-Newton de
+  norma mínima (la geometría se mueve lo menos posible); los grados de libertad son las coordenadas menos el rango
+  del jacobiano, y cada entidad sabe si quedó totalmente fija. `add_rule` rechaza lo que sobra (no sube el rango) y
+  lo que contradice (no se puede cumplir), sin tocar el boceto. Se guardan en el JSON del boceto (`rules`).
+- Cambiar el ancho o el alto de un rectángulo, o el diámetro de un círculo, desde su campo o desde un parámetro
+  cambia también su cota y resuelve el boceto; antes de construir, cada boceto se resuelve.
+- Modo boceto: sección Boceto con los grados de libertad (texto y barra; «Totalmente definido» en cero) y los
+  botones de restricciones; en la línea de comandos `cota`, `h`, `v`, `par`, `per`, `igual`, `coi`, `con`, `tan`,
+  `fijo`, `ang`. Se elige con un clic o con un punto tipeado; una cota pide su valor (Enter deja el que tiene). Lo
+  fijado se dibuja en blanco (negro en el tema claro), lo que se mueve en azul, lo elegido en verde, y las cotas con
+  su valor.
+- Programas de prueba: `expect-sketch-dof N`.
+
+**Probado:** 2 pruebas nuevas del motor (CD3: rectángulo 4 grados, con ancho y alto 2, con una esquina fija 0 y
+totalmente definido; lo que sobra, lo que contradice y lo inválido no cambian nada; cadena con horizontal,
+perpendicular e igual moviéndose menos de 1 mm; círculo y arco con diámetro, concéntrica y radio; ida y vuelta por
+JSON; el ancho cambiado por su campo mueve la cota). Prueba de interfaz `ui_script_design_constraints`: 4, 3, 2 y 0
+grados, una horizontal que sobra y una cota de 50 que contradice no cambian nada, y extruido da 24 000 mm³.
+
+**Interpretación de CD3 (pregunta al equipo de fichas):** la ficha dice «con una cota del ancho, sin restricciones
+de posición: 2 grados de libertad». Un rectángulo de dos esquinas tiene 4 (posición x, y, ancho y alto); con solo el
+ancho quedan 3. La prueba usa ancho y alto acotados (2) y después una esquina fija (0).
+
+**No probado:** con el `solidcraft-cli` real (a SolidCraft le llega la geometría ya resuelta, sin las restricciones
+nuevas). Arrastrar puntos del boceto resolviendo en cada cuadro (regla 5) todavía no está: el boceto no se arrastra.
+Faltan las cotas de recta a círculo, entre círculos, de barrido, largo de arco y de ranura, curvatura G2, colineal,
+punto sobre curva a mano, punto medio a mano y simetría.
+
+**Sigue:** D3, la línea de tiempo editable (regla 8, CD6); arrastrar el boceto (regla 5).

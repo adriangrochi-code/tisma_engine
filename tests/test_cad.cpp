@@ -2,6 +2,7 @@
 // the design as a SolidCraft script, the bundled tool driven through its
 // stand-in (tests/fake_solidcraft_cli.cpp), and the 3MF written and read.
 
+#include "cad/constraints.hpp"
 #include "cad/design.hpp"
 #include "cad/parameters.hpp"
 #include "cad/process.hpp"
@@ -537,4 +538,113 @@ TEST_CASE("cad: CD4, a parameter changes the part without redoing it by hand", "
     built = build_design(kFake, d, MeshQuality::Standard);
     REQUIRE(built.ok);
     CHECK_THAT(built.volume_mm3, WithinAbs(50.0 * 30.0 * 25.0, 1e-3));
+}
+
+TEST_CASE("cad: CD3, a rectangle's degrees of freedom, its dimensions and a fixed corner (rule 5)", "[cad]") {
+    using K = GeoConstraint::Kind;
+    Sketch s;
+    Entity rect;
+    rect.kind = Entity::Kind::Rectangle;
+    rect.points = {{0.0, 0.0}, {40.0, 30.0}};
+    s.entities.push_back(rect);
+    SketchSolve a = analyze_sketch(s);
+    CHECK(a.solved);
+    CHECK(a.dof == 4); // x, y, width and height
+    CHECK_FALSE(a.entity_fixed[0]);
+
+    // The width and the height: the rectangle can still slide.
+    CHECK(add_rule(s, {K::Length, {0, 0}, {}, 40.0, {}}) == AddRule::Added);
+    CHECK(add_rule(s, {K::Length, {0, 1}, {}, 30.0, {}}) == AddRule::Added);
+    a = analyze_sketch(s);
+    CHECK(a.dof == 2);
+    CHECK_FALSE(a.entity_fixed[0]);
+
+    // Fixed at a corner: nothing left, the sketch is fully fixed.
+    CHECK(add_rule(s, {K::Fixed, {0, 0}, {}, 0.0, {0.0, 0.0}}) == AddRule::Added);
+    a = analyze_sketch(s);
+    CHECK(a.dof == 0);
+    CHECK(a.entity_fixed[0]);
+
+    // A side already horizontal, or the width again: redundant; another
+    // width: contradicts. None is added and the sketch stays.
+    const Sketch before = s;
+    CHECK(add_rule(s, {K::Horizontal, {0, 0}, {}, 0.0, {}}) == AddRule::Redundant);
+    CHECK(add_rule(s, {K::Length, {0, 2}, {}, 40.0, {}}) == AddRule::Redundant);
+    CHECK(add_rule(s, {K::Length, {0, 0}, {}, 50.0, {}}) == AddRule::Conflicting);
+    CHECK(add_rule(s, {K::Length, {3, 0}, {}, 50.0, {}}) == AddRule::Invalid);
+    CHECK(add_rule(s, {K::Length, {0, 0}, {}, -5.0, {}}) == AddRule::Invalid);
+    CHECK(s == before);
+
+    // A width changed by hand: solving moves the far side.
+    s.rules[0].value = 50.0;
+    a = solve_sketch(s);
+    CHECK(a.solved);
+    CHECK_THAT(s.entities[0].points[1].x - s.entities[0].points[0].x, Catch::Matchers::WithinAbs(50.0, 1e-6));
+    CHECK_THAT(s.entities[0].points[0].x, Catch::Matchers::WithinAbs(0.0, 1e-6));
+
+    // The width set from its field or a parameter: the dimension follows, so
+    // the two never disagree, and the fixed corner stays.
+    CHECK(set_entity_size(s, 0, "width", 60.0));
+    CHECK(s.rules[0].value == 60.0);
+    a = analyze_sketch(s);
+    CHECK(a.solved);
+    CHECK(a.dof == 0);
+    CHECK_THAT(s.entities[0].points[1].x, Catch::Matchers::WithinAbs(60.0, 1e-6));
+    CHECK_THAT(s.entities[0].points[0].x, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    CHECK_FALSE(set_entity_size(s, 0, "diameter", 5.0));
+}
+
+TEST_CASE("cad: constraints move a chain and a circle as little as they can (rule 5)", "[cad]") {
+    using K = GeoConstraint::Kind;
+    Sketch s;
+    Entity chain;
+    chain.kind = Entity::Kind::Chain;
+    chain.points = {{0.0, 0.0}, {20.0, 1.0}, {21.0, 15.0}};
+    s.entities.push_back(chain);
+    CHECK(analyze_sketch(s).dof == 6);
+    CHECK(add_rule(s, {K::Horizontal, {0, 0}, {}, 0.0, {}}) == AddRule::Added);
+    CHECK(add_rule(s, {K::Perpendicular, {0, 0}, {0, 1}, 0.0, {}}) == AddRule::Added);
+    const std::vector<Pt>* points = &s.entities[0].points;
+    const auto& p = *points;
+    CHECK_THAT(p[1].y - p[0].y, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    CHECK_THAT(p[2].x - p[1].x, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    // Little moved: the points stay within a mm of where they were drawn.
+    CHECK(std::abs(p[1].x - 20.0) < 1.0);
+    CHECK(std::abs(p[2].y - 15.0) < 1.0);
+    CHECK(analyze_sketch(s).dof == 4);
+    // Vertical on the second segment says nothing new.
+    CHECK(add_rule(s, {K::Vertical, {0, 1}, {}, 0.0, {}}) == AddRule::Redundant);
+    CHECK(add_rule(s, {K::Equal, {0, 0}, {0, 1}, 0.0, {}}) == AddRule::Added);
+    const auto& q = s.entities[0].points; // the sketch was replaced
+    CHECK_THAT(std::hypot(q[1].x - q[0].x, q[1].y - q[0].y),
+               Catch::Matchers::WithinAbs(std::hypot(q[2].x - q[1].x, q[2].y - q[1].y), 1e-6));
+    CHECK(add_rule(s, {K::Angle, {0, 0}, {0, 1}, 90.0, {}}) == AddRule::Redundant);
+
+    // A circle: its diameter, then concentric with an arc.
+    Entity circle;
+    circle.kind = Entity::Kind::Circle;
+    circle.points = {{50.0, 50.0}};
+    circle.radius = 5.0;
+    s.entities.push_back(circle);
+    Entity arc;
+    arc.kind = Entity::Kind::Arc;
+    arc.points = {{52.0, 49.0}, {60.0, 49.0}, {52.0, 57.0}};
+    s.entities.push_back(arc);
+    CHECK(analyze_sketch(s).dof == 3 + 3 + 5); // the chain keeps 3 after equal
+    CHECK(add_rule(s, {K::Diameter, {1, 0}, {}, 12.0, {}}) == AddRule::Added);
+    CHECK_THAT(s.entities[1].radius, Catch::Matchers::WithinAbs(6.0, 1e-6));
+    CHECK(add_rule(s, {K::Concentric, {1, 0}, {2, 0}, 0.0, {}}) == AddRule::Added);
+    CHECK_THAT(s.entities[1].points[0].x, Catch::Matchers::WithinAbs(s.entities[2].points[0].x, 1e-6));
+    CHECK(add_rule(s, {K::Radius, {2, 0}, {}, 10.0, {}}) == AddRule::Added);
+    const Pt c = s.entities[2].points[0];
+    CHECK_THAT(std::hypot(s.entities[2].points[2].x - c.x, s.entities[2].points[2].y - c.y),
+               Catch::Matchers::WithinAbs(10.0, 1e-6));
+    CHECK(add_rule(s, {K::Equal, {1, 0}, {2, 0}, 0.0, {}}) == AddRule::Conflicting);
+    CHECK(analyze_sketch(s).dof == 3 + 4); // circle and arc: 8, less diameter, concentric (2) and radius
+
+    // The rules are kept with the sketch.
+    Sketch back;
+    SketchOperation op;
+    parse_sketch(sketch_json(s, {}), back, op);
+    CHECK(back == s);
 }

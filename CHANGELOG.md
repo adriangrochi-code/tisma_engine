@@ -12,6 +12,13 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Restricciones y cotas en los bocetos** (`cad_design.md`, regla 5, CD3): Cota (largo de una línea, diámetro de
+  un círculo, radio de un arco o distancia entre dos puntos), horizontal, vertical, paralela, perpendicular, igual,
+  coincidente, concéntrica, tangente, fijo y ángulo, desde la sección Boceto o la línea de comandos (`cota`, `h`,
+  `v`, `fijo`...), eligiendo con un clic o un punto tipeado. Una barra dice los grados de libertad que quedan; lo que
+  queda totalmente definido se dibuja en blanco (negro en el tema claro) y lo que todavía se mueve, en azul. Una
+  restricción que sobra o contradice a otras no se agrega y se avisa. Las cotas se ven en el boceto; cambiar el
+  ancho, el alto o un parámetro atado cambia su cota.
 - **Parámetros en Diseño** (`cad_design.md`, regla 9, CD4): una lista de nombres con su expresión (`ancho = 40
   mm`, `alto = ancho / 2 + 5`), con unidades (mm, cm, m, in, grados y rad) y los errores dichos en la fila (nombre
   que no existe, ciclo, largo más ángulo, división por cero). El botón «fx» junto a cada medida la ata a una

@@ -1235,6 +1235,33 @@
     X(SketchExtrude, "Extruir (E)", "Extrude (E)") \
     X(SketchRevolve, "Revolucionar (REV)", "Revolve (REV)") \
     X(SketchFinish, "Terminar boceto", "Finish sketch") \
+    X(SketchDof, "Grados de libertad: %d", "Degrees of freedom: %d") \
+    X(SketchDofNone, "Totalmente definido", "Fully defined") \
+    X(SketchDofUnsolved, "No se puede cumplir todo: revisá las cotas", "Not everything can be met: check the dimensions") \
+    X(SketchRules, "Restricciones", "Constraints") \
+    X(RuleDimension, "Cota", "Dimension") \
+    X(RuleHorizontal, "Horizontal", "Horizontal") \
+    X(RuleVertical, "Vertical", "Vertical") \
+    X(RuleParallel, "Paralela", "Parallel") \
+    X(RulePerpendicular, "Perpendicular", "Perpendicular") \
+    X(RuleEqual, "Igual", "Equal") \
+    X(RuleCoincident, "Coincidente", "Coincident") \
+    X(RuleConcentric, "Concéntrica", "Concentric") \
+    X(RuleTangent, "Tangente", "Tangent") \
+    X(RuleFixed, "Fijo", "Fix") \
+    X(RuleAngle, "Ángulo", "Angle") \
+    X(RulePickSegment, "%s: elegí una línea", "%s: pick a line") \
+    X(RulePickSecondSegment, "%s: elegí la segunda línea", "%s: pick the second line") \
+    X(RulePickPoint, "%s: elegí un punto", "%s: pick a point") \
+    X(RulePickSecondPoint, "%s: elegí el segundo punto", "%s: pick the second point") \
+    X(RulePickRound, "%s: elegí un círculo o arco", "%s: pick a circle or arc") \
+    X(RulePickSecondRound, "%s: elegí el segundo círculo o arco", "%s: pick the second circle or arc") \
+    X(RulePickAny, "Cota: elegí una línea, un círculo o un punto", "Dimension: pick a line, a circle or a point") \
+    X(RuleNothingThere, "Ahí no hay nada que sirva para esta restricción", "Nothing there fits this constraint") \
+    X(RuleValue, "Valor (Enter deja %s):", "Value (Enter keeps %s):") \
+    X(RuleAdded, "Restricción agregada: %s", "Constraint added: %s") \
+    X(RuleRedundant, "Esa restricción sobra: no se agregó", "That constraint is redundant: not added") \
+    X(RuleConflicting, "Esa restricción contradice a otras: no se agregó", "That constraint contradicts others: not added") \
     X(SketchSnaps, "Referencias (F3)", "Snaps (F3)") \
     X(SketchOrtho, "Ortogonal (F8)", "Ortho (F8)") \
     X(SketchGrid, "Cuadrícula (F9)", "Grid (F9)") \

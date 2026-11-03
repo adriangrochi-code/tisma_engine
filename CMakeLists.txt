@@ -257,6 +257,7 @@ add_library(tisma_core
   src/cad/design.cpp
   src/cad/sketch.cpp
   src/cad/parameters.cpp
+  src/cad/constraints.cpp
   src/cad/fasteners.cpp
   src/cad/lathe.cpp
   src/cad/gears.cpp

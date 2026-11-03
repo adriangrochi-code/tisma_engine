@@ -10,6 +10,7 @@
 #include "vk_view.hpp"
 #include "vk_window.hpp"
 
+#include "cad/constraints.hpp"
 #include "cad/design.hpp"
 #include "cad/parameters.hpp"
 #include "cad/fasteners.hpp"
@@ -1148,7 +1149,17 @@ private:
     // and the tracking, and the toggles F3, F8, F9, F10.
     struct SketchEdit {
         std::size_t feature = 0;
-        enum class Tool { None, Line, Rectangle, Circle, Arc } tool = Tool::None;
+        enum class Tool { None, Line, Rectangle, Circle, Arc, Constrain } tool = Tool::None;
+        // The constraint tool (rule 5): what it makes, what was picked, and a
+        // dimension asking for its value on the command line.
+        enum class Rule { Dimension, Horizontal, Vertical, Parallel, Perpendicular, Equal, Coincident, Concentric, Tangent, Fixed, Angle };
+        Rule rule = Rule::Dimension;
+        struct Pick {
+            enum class What { Point, Segment, Round } what = What::Point;
+            cad::EntityPoint ref;
+        };
+        std::vector<Pick> picks;
+        std::optional<cad::GeoConstraint> pending;
         std::vector<cad::Pt> points;
         std::optional<cad::Pt> last; // the last point placed, for @ coordinates
         std::optional<cad::Pt> raw;  // the mouse on the plane
@@ -1190,6 +1201,17 @@ private:
     void sketch_strip();
     void sketch_cursor_input();
     cad::Sketch* editing_sketch();
+    void sketch_rule_tool(SketchEdit::Rule rule);
+    void sketch_pick(const cad::Pt& p);
+    void sketch_rule_prompt();
+    void sketch_apply_rule(const cad::GeoConstraint& rule);
+    double sketch_pick_radius() const;
+    // The degrees of freedom of the sketch being drawn, counted again only
+    // when it changes.
+    const cad::SketchSolve& sketch_dof();
+    cad::Sketch dof_sketch_;
+    cad::SketchSolve dof_;
+    bool dof_valid_ = false;
 
     // The preview's controls.
     int top_layer_ = 0; // 0-based
@@ -11203,6 +11225,54 @@ void App::design_panel() {
         ImGui::SameLine();
         ImGui::Checkbox(tr(T::SketchPolar), &e.polar);
         loc::TextDisabled("%s", tr(T::SketchHint));
+        // The degrees of freedom left (rule 5), and the constraint tools.
+        {
+            const cad::SketchSolve& dof = sketch_dof();
+            if (!dof.solved)
+                loc::TextColored(rgb(0xE5484D), "%s", tr(T::SketchDofUnsolved));
+            else if (dof.dof == 0 && !editing_sketch()->empty())
+                loc::TextColored(rgb(theme_.dark ? 0xF5F5F7 : 0x1A1A2E), "%s", tr(T::SketchDofNone));
+            else
+                loc::TextColored(rgb(0x4C9BFF), tr(T::SketchDof), dof.dof);
+            rect_of("design_sketch_dof");
+            const float full = dof.unknowns > 0 ? 1.0f - float(dof.dof) / float(dof.unknowns) : 0.0f;
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(dof.dof == 0 ? theme_.accent : 0x4C9BFF));
+            ImGui::ProgressBar(full, ImVec2(-1.0f, 4.0f * scale_), "");
+            ImGui::PopStyleColor();
+            loc::TextDisabled("%s", tr(T::SketchRules));
+            using R = SketchEdit::Rule;
+            const std::tuple<R, T, const char*> tools[] = {
+                {R::Dimension, T::RuleDimension, "sketch_rule_dimension"},
+                {R::Horizontal, T::RuleHorizontal, "sketch_rule_horizontal"},
+                {R::Vertical, T::RuleVertical, "sketch_rule_vertical"},
+                {R::Parallel, T::RuleParallel, "sketch_rule_parallel"},
+                {R::Perpendicular, T::RulePerpendicular, "sketch_rule_perpendicular"},
+                {R::Equal, T::RuleEqual, "sketch_rule_equal"},
+                {R::Coincident, T::RuleCoincident, "sketch_rule_coincident"},
+                {R::Concentric, T::RuleConcentric, "sketch_rule_concentric"},
+                {R::Tangent, T::RuleTangent, "sketch_rule_tangent"},
+                {R::Fixed, T::RuleFixed, "sketch_rule_fixed"},
+                {R::Angle, T::RuleAngle, "sketch_rule_angle"},
+            };
+            float x = 0.0f;
+            const float room = ImGui::GetContentRegionAvail().x;
+            for (const auto& [rule, label, id] : tools) {
+                const float w = ImGui::CalcTextSize(tr(label)).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+                if (x > 0.0f && x + w <= room)
+                    ImGui::SameLine();
+                else
+                    x = 0.0f;
+                const bool on = e.tool == SketchEdit::Tool::Constrain && e.rule == rule;
+                if (on)
+                    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+                if (ImGui::SmallButton(tr(label)))
+                    sketch_rule_tool(rule);
+                if (on)
+                    ImGui::PopStyleColor();
+                rect_of(id);
+                x += w + ImGui::GetStyle().ItemSpacing.x;
+            }
+        }
         if (ImGui::Button(tr(T::SketchFinish)))
             finish_sketch();
         rect_of("design_sketch_finish");
@@ -11383,9 +11453,7 @@ void App::design_panel() {
                     double v = std::abs(width ? en.points[1].x - en.points[0].x : en.points[1].y - en.points[0].y);
                     ImGui::SetNextItemWidth(110.0f * scale_);
                     if (loc::InputNumber(tr(width ? T::RectWidth : T::RectHeight), &v, "%.2f", 0.5) && v > 0.0) {
-                        double& b = width ? en.points[1].x : en.points[1].y;
-                        const double a = width ? en.points[0].x : en.points[0].y;
-                        b = a + (b < a ? -v : v);
+                        cad::set_entity_size(f.sketch, e, width ? "width" : "height", v);
                         design_edited_ = true;
                     }
                     bind(f, "e" + std::to_string(e) + (width ? ".width" : ".height"));
@@ -14281,7 +14349,8 @@ void App::sketch_end_tool(bool close) {
         if (e.points.size() >= 3)
             entity = cad::Entity{cad::Entity::Kind::Arc, {e.points[0], e.points[1], e.points[2]}};
         break;
-    case SketchEdit::Tool::None: break;
+    case SketchEdit::Tool::None:
+    case SketchEdit::Tool::Constrain: break;
     }
     if (entity) {
         const std::size_t index = sketch->entities.size();
@@ -14311,6 +14380,8 @@ void App::sketch_end_tool(bool close) {
                     sketch->dimensions.push_back({index, segment, length});
     }
     e.tool = SketchEdit::Tool::None;
+    e.picks.clear();
+    e.pending.reset();
     e.points.clear();
     e.point_snaps.clear();
     e.typed_lengths.clear();
@@ -14323,6 +14394,10 @@ void App::sketch_place(const cad::Pt& p, const cad::Snap* snap, std::optional<do
     if (!sketch_edit_ || !editing_sketch())
         return;
     SketchEdit& e = *sketch_edit_;
+    if (e.tool == SketchEdit::Tool::Constrain) {
+        sketch_pick(p);
+        return;
+    }
     if (e.tool == SketchEdit::Tool::None)
         e.tool = SketchEdit::Tool::Line;
     if (snap && snap->kind != cad::SnapKind::None && snap->kind != cad::SnapKind::Grid)
@@ -14350,6 +14425,222 @@ void App::sketch_place(const cad::Pt& p, const cad::Snap* snap, std::optional<do
     }
 }
 
+// The constraint tool (rule 5): pick what the constraint binds, in the view
+// or by a typed point; a dimension then asks for its value.
+void App::sketch_rule_tool(SketchEdit::Rule rule) {
+    if (!sketch_edit_)
+        return;
+    sketch_end_tool(false);
+    sketch_edit_->tool = SketchEdit::Tool::Constrain;
+    sketch_edit_->rule = rule;
+    sketch_rule_prompt();
+    command_focus_ = true;
+}
+
+namespace {
+T rule_label(int rule) {
+    constexpr T labels[] = {T::RuleDimension, T::RuleHorizontal, T::RuleVertical, T::RuleParallel, T::RulePerpendicular,
+                            T::RuleEqual, T::RuleCoincident, T::RuleConcentric, T::RuleTangent, T::RuleFixed, T::RuleAngle};
+    return labels[std::clamp(rule, 0, int(std::size(labels)) - 1)];
+}
+} // namespace
+
+void App::sketch_rule_prompt() {
+    if (!sketch_edit_)
+        return;
+    using R = SketchEdit::Rule;
+    using W = SketchEdit::Pick::What;
+    const SketchEdit& e = *sketch_edit_;
+    const char* name = tr(rule_label(int(e.rule)));
+    const bool second = !e.picks.empty();
+    switch (e.rule) {
+    case R::Dimension:
+        command_message_ = second ? format(tr(T::RulePickSecondPoint), name) : std::string(tr(T::RulePickAny));
+        break;
+    case R::Horizontal:
+    case R::Vertical: command_message_ = format(tr(T::RulePickSegment), name); break;
+    case R::Parallel:
+    case R::Perpendicular:
+    case R::Angle: command_message_ = format(tr(second ? T::RulePickSecondSegment : T::RulePickSegment), name); break;
+    case R::Equal:
+        command_message_ = !second                                   ? format(tr(T::RulePickSegment), name)
+                           : e.picks[0].what == W::Round ? format(tr(T::RulePickSecondRound), name)
+                                                                     : format(tr(T::RulePickSecondSegment), name);
+        break;
+    case R::Coincident:
+    case R::Fixed: command_message_ = format(tr(second ? T::RulePickSecondPoint : T::RulePickPoint), name); break;
+    case R::Concentric: command_message_ = format(tr(second ? T::RulePickSecondRound : T::RulePickRound), name); break;
+    case R::Tangent: command_message_ = format(tr(second ? T::RulePickRound : T::RulePickSegment), name); break;
+    }
+}
+
+double App::sketch_pick_radius() const {
+    // About 10 pixels, in the plane's millimetres, as the snaps take it.
+    const float pixels_per_mm = view_size_.y / std::max(2.0f * camera_.lens_distance() * std::tan(0.5f * camera_.lens_fov()), 1e-3f);
+    return 10.0 / std::max(double(pixels_per_mm), 1e-3);
+}
+
+void App::sketch_pick(const cad::Pt& p) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    using R = SketchEdit::Rule;
+    using W = SketchEdit::Pick::What;
+    SketchEdit& e = *sketch_edit_;
+    if (e.pending)
+        return; // the value first
+    const double radius = sketch_pick_radius();
+    // The nearest point, line and circle to p.
+    std::optional<SketchEdit::Pick> point, segment, round;
+    double point_d = radius, segment_d = radius, round_d = radius;
+    for (std::size_t i = 0; i < sketch->entities.size(); ++i) {
+        const cad::Entity& en = sketch->entities[i];
+        const std::size_t points = en.kind == cad::Entity::Kind::Rectangle ? 4
+                                   : en.kind == cad::Entity::Kind::Circle  ? 1
+                                                                           : en.points.size();
+        for (std::size_t k = 0; k < points; ++k) {
+            const cad::Pt q = cad::point_of(en, k);
+            if (const double d = std::hypot(q.x - p.x, q.y - p.y); d <= point_d)
+                point_d = d, point = SketchEdit::Pick{W::Point, {i, k}};
+        }
+        const auto segments = cad::segments_of(en);
+        for (std::size_t k = 0; k < segments.size(); ++k) {
+            const auto& [a, b] = segments[k];
+            const double dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+            const double t = l2 > 0.0 ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0.0, 1.0) : 0.0;
+            if (const double d = std::hypot(a.x + t * dx - p.x, a.y + t * dy - p.y); d <= segment_d)
+                segment_d = d, segment = SketchEdit::Pick{W::Segment, {i, k}};
+        }
+        if ((en.kind == cad::Entity::Kind::Circle && !en.points.empty()) || (en.kind == cad::Entity::Kind::Arc && en.points.size() >= 3)) {
+            const cad::Pt c = en.points[0];
+            const double r = en.kind == cad::Entity::Kind::Circle ? en.radius : std::hypot(en.points[1].x - c.x, en.points[1].y - c.y);
+            if (const double d = std::abs(std::hypot(p.x - c.x, p.y - c.y) - r); d <= round_d)
+                round_d = d, round = SketchEdit::Pick{W::Round, {i, 0}};
+        }
+    }
+    // What this step of the tool wants.
+    const bool first = e.picks.empty();
+    std::optional<SketchEdit::Pick> got;
+    switch (e.rule) {
+    case R::Dimension:
+        if (first)
+            got = point ? point : segment && (!round || segment_d <= round_d) ? segment : round;
+        else
+            got = point;
+        break;
+    case R::Horizontal:
+    case R::Vertical:
+    case R::Parallel:
+    case R::Perpendicular:
+    case R::Angle: got = segment; break;
+    case R::Equal:
+        got = first ? (segment && (!round || segment_d <= round_d) ? segment : round) : e.picks[0].what == W::Round ? round : segment;
+        break;
+    case R::Coincident:
+    case R::Fixed: got = point; break;
+    case R::Concentric: got = round; break;
+    case R::Tangent: got = first ? segment : round; break;
+    }
+    if (!got) {
+        command_message_ = tr(T::RuleNothingThere);
+        return;
+    }
+    e.picks.push_back(*got);
+    // Enough picked: the constraint.
+    const std::size_t needed = e.rule == R::Horizontal || e.rule == R::Vertical || e.rule == R::Fixed ? 1
+                               : e.rule == R::Dimension && e.picks[0].what != W::Point             ? 1
+                                                                                                    : 2;
+    if (e.picks.size() < needed) {
+        sketch_rule_prompt();
+        return;
+    }
+    using K = cad::GeoConstraint::Kind;
+    cad::GeoConstraint rule;
+    rule.a = e.picks[0].ref;
+    if (e.picks.size() > 1)
+        rule.b = e.picks[1].ref;
+    const auto segment_of = [&](const cad::EntityPoint& r) { return cad::segments_of(sketch->entities[r.entity])[r.index]; };
+    const auto radius_of = [&](const cad::EntityPoint& r) {
+        const cad::Entity& en = sketch->entities[r.entity];
+        return en.kind == cad::Entity::Kind::Circle ? en.radius
+                                                    : std::hypot(en.points[1].x - en.points[0].x, en.points[1].y - en.points[0].y);
+    };
+    switch (e.rule) {
+    case R::Dimension:
+        if (e.picks[0].what == W::Segment) {
+            const auto [a, b] = segment_of(rule.a);
+            rule.kind = K::Length, rule.value = std::hypot(b.x - a.x, b.y - a.y);
+        } else if (e.picks[0].what == W::Round) {
+            const bool circle = sketch->entities[rule.a.entity].kind == cad::Entity::Kind::Circle;
+            rule.kind = circle ? K::Diameter : K::Radius;
+            rule.value = circle ? 2.0 * radius_of(rule.a) : radius_of(rule.a);
+        } else {
+            const cad::Pt a = cad::point_of(sketch->entities[rule.a.entity], rule.a.index);
+            const cad::Pt b = cad::point_of(sketch->entities[rule.b.entity], rule.b.index);
+            rule.kind = K::Distance, rule.value = std::hypot(b.x - a.x, b.y - a.y);
+        }
+        break;
+    case R::Horizontal: rule.kind = K::Horizontal; break;
+    case R::Vertical: rule.kind = K::Vertical; break;
+    case R::Parallel: rule.kind = K::Parallel; break;
+    case R::Perpendicular: rule.kind = K::Perpendicular; break;
+    case R::Equal: rule.kind = K::Equal; break;
+    case R::Coincident: rule.kind = K::Coincident; break;
+    case R::Concentric: rule.kind = K::Concentric; break;
+    case R::Tangent: rule.kind = K::Tangent; break;
+    case R::Fixed:
+        rule.kind = K::Fixed;
+        rule.at = cad::point_of(sketch->entities[rule.a.entity], rule.a.index);
+        break;
+    case R::Angle: {
+        const auto [a0, a1] = segment_of(rule.a);
+        const auto [b0, b1] = segment_of(rule.b);
+        const double ax = a1.x - a0.x, ay = a1.y - a0.y, bx = b1.x - b0.x, by = b1.y - b0.y;
+        rule.kind = K::Angle;
+        rule.value = std::atan2(ax * by - ay * bx, ax * bx + ay * by) * 180.0 / std::numbers::pi;
+        break;
+    }
+    }
+    if (cad::is_dimension(rule.kind)) {
+        e.pending = rule;
+        command_message_ = format(tr(T::RuleValue), format("%.4g", rule.value).c_str());
+        command_focus_ = true;
+        return;
+    }
+    sketch_apply_rule(rule);
+}
+
+void App::sketch_apply_rule(const cad::GeoConstraint& rule) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    const cad::AddRule result = cad::add_rule(*sketch, rule);
+    e.picks.clear();
+    e.pending.reset();
+    switch (result) {
+    case cad::AddRule::Added: command_message_ = format(tr(T::RuleAdded), tr(rule_label(int(e.rule)))); break;
+    case cad::AddRule::Redundant: command_message_ = tr(T::RuleRedundant); break;
+    case cad::AddRule::Conflicting: command_message_ = tr(T::RuleConflicting); break;
+    case cad::AddRule::Invalid: command_message_ = tr(T::RuleNothingThere); break;
+    }
+}
+
+const cad::SketchSolve& App::sketch_dof() {
+    const cad::Sketch* sketch = editing_sketch();
+    if (!sketch) {
+        dof_ = {};
+        dof_valid_ = false;
+        return dof_;
+    }
+    if (!dof_valid_ || !(dof_sketch_ == *sketch)) {
+        dof_ = cad::analyze_sketch(*sketch);
+        dof_sketch_ = *sketch;
+        dof_valid_ = true;
+    }
+    return dof_;
+}
+
 // The command line in a sketch (rule 12): the tools by their aliases, a
 // typed point for the tool, a number for a circle's radius or a segment's
 // length, E and REV to make the body, C to close the chain.
@@ -14363,6 +14654,47 @@ bool App::sketch_command(const std::string& word, const std::string& text) {
                 return true;
         return false;
     };
+    // A dimension asking for its value: Enter keeps what is drawn.
+    if (e.pending) {
+        if (word.empty()) {
+            sketch_apply_rule(*e.pending);
+            return true;
+        }
+        if (const std::optional<double> v = cad::parse_typed_value(text)) {
+            cad::GeoConstraint rule = *e.pending;
+            rule.value = *v;
+            sketch_apply_rule(rule);
+            return true;
+        }
+    }
+    // The constraint tools by their names (rule 5).
+    {
+        using R = SketchEdit::Rule;
+        struct Names {
+            const char* names[4];
+            R rule;
+        };
+        static constexpr Names rules[] = {
+            {{"cota", "dim", "dimension", "dimensión"}, R::Dimension},
+            {{"h", "horizontal"}, R::Horizontal},
+            {{"v", "vertical"}, R::Vertical},
+            {{"par", "paralela", "parallel"}, R::Parallel},
+            {{"per", "perpendicular"}, R::Perpendicular},
+            {{"igual", "equal", "="}, R::Equal},
+            {{"coi", "coincidente", "coincident"}, R::Coincident},
+            {{"con", "concentrica", "concéntrica", "concentric"}, R::Concentric},
+            {{"tan", "tangente", "tangent"}, R::Tangent},
+            {{"fijo", "fix", "fixed"}, R::Fixed},
+            {{"ang", "angulo", "ángulo", "angle"}, R::Angle},
+        };
+        for (const Names& n : rules)
+            for (const char* name : n.names)
+                if (name && word == name) {
+                    last_command_ = word;
+                    sketch_rule_tool(n.rule);
+                    return true;
+                }
+    }
     if (word.empty()) {
         // Enter on an empty line ends the chain, or repeats the last tool.
         if (e.tool == SketchEdit::Tool::Line && !e.points.empty()) {
@@ -14568,8 +14900,62 @@ void App::sketch_overlay() {
             circle(c, r, colour, w, a0, a1);
         }
     };
-    for (const cad::Entity& en : sketch->entities)
-        draw_entity(en, ink);
+    // Fully fixed in ink (black, white on the dark theme); what can still
+    // move in blue (rule 5); the constraint tool's picks in green.
+    const cad::SketchSolve& dof = sketch_dof();
+    const ImU32 loose = ImGui::GetColorU32(rgb(0x4C9BFF, 0.95f));
+    for (std::size_t i = 0; i < sketch->entities.size(); ++i)
+        draw_entity(sketch->entities[i], i < dof.entity_fixed.size() && dof.entity_fixed[i] ? ink : loose);
+    // Each dimension's value beside what it measures.
+    for (const cad::GeoConstraint& r : sketch->rules) {
+        if (!cad::is_dimension(r.kind) || r.a.entity >= sketch->entities.size())
+            continue;
+        const cad::Entity& en = sketch->entities[r.a.entity];
+        std::optional<cad::Pt> at;
+        std::string text;
+        using K = cad::GeoConstraint::Kind;
+        if (r.kind == K::Length || r.kind == K::Angle) {
+            const auto segments = cad::segments_of(en);
+            if (r.a.index < segments.size())
+                at = cad::Pt{0.5 * (segments[r.a.index].first.x + segments[r.a.index].second.x),
+                             0.5 * (segments[r.a.index].first.y + segments[r.a.index].second.y)};
+            text = r.kind == K::Angle ? format("%.4g°", r.value) : format("%.4g", r.value);
+        } else if (r.kind == K::Radius || r.kind == K::Diameter) {
+            if (!en.points.empty()) {
+                const double rr = r.kind == K::Radius ? r.value : 0.5 * r.value;
+                at = cad::Pt{en.points[0].x + rr * 0.7071, en.points[0].y + rr * 0.7071};
+            }
+            text = format(r.kind == K::Radius ? "R%.4g" : "Ø%.4g", r.value);
+        } else if (r.b.entity < sketch->entities.size()) {
+            const cad::Pt a = cad::point_of(en, r.a.index), b = cad::point_of(sketch->entities[r.b.entity], r.b.index);
+            at = cad::Pt{0.5 * (a.x + b.x), 0.5 * (a.y + b.y)};
+            text = format("%.4g", r.value);
+        }
+        ImVec2 q;
+        if (at && project(*at, q)) {
+            const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+            const ImVec2 lo(q.x - 0.5f * size.x - 3.0f * scale_, q.y - 0.5f * size.y - 1.0f * scale_);
+            const ImVec2 hi(q.x + 0.5f * size.x + 3.0f * scale_, q.y + 0.5f * size.y + 1.0f * scale_);
+            dl->AddRectFilled(lo, hi, ImGui::GetColorU32(rgb(theme_.dark ? 0x1E1E24 : 0xFFFFFF, 0.85f)), 3.0f * scale_);
+            dl->AddText(ImVec2(lo.x + 3.0f * scale_, lo.y + 1.0f * scale_), ink, text.c_str());
+        }
+    }
+    for (const SketchEdit::Pick& pick : e.picks) {
+        if (pick.ref.entity >= sketch->entities.size())
+            continue;
+        const cad::Entity& en = sketch->entities[pick.ref.entity];
+        if (pick.what == SketchEdit::Pick::What::Segment) {
+            const auto segments = cad::segments_of(en);
+            if (pick.ref.index < segments.size())
+                line(segments[pick.ref.index].first, segments[pick.ref.index].second, mark, 2.0f * thick);
+        } else if (pick.what == SketchEdit::Pick::What::Round) {
+            draw_entity(en, mark);
+        } else {
+            ImVec2 q;
+            if (project(cad::point_of(en, pick.ref.index), q))
+                dl->AddCircleFilled(q, 4.0f * scale_, mark);
+        }
+    }
     // The tool's rubber band to the cursor.
     if (e.cursor) {
         const cad::Pt c = *e.cursor;
@@ -14598,7 +14984,8 @@ void App::sketch_overlay() {
                 draw_entity(a, ghost);
             }
             break;
-        case SketchEdit::Tool::None: break;
+        case SketchEdit::Tool::None:
+        case SketchEdit::Tool::Constrain: break;
         }
         // The polar guide through the start, when tracking took the angle.
         if (e.polar && !e.ortho && e.snap.kind == cad::SnapKind::None && !e.points.empty() &&
@@ -16981,6 +17368,15 @@ void App::script_input() {
         std::printf("ui-script: expect-sketch-constraints %zu: got %zu\n", want, s->constraints.size());
         if (s->constraints.size() != want)
             return fail_step("the sketch has " + std::to_string(s->constraints.size()) + " constraints");
+        next();
+    } else if (step.verb == "expect-sketch-dof") { // the sketch being drawn has N degrees of freedom left
+        if (!editing_sketch())
+            return fail_step("no sketch being drawn");
+        const cad::SketchSolve& dof = sketch_dof();
+        const int want = std::atoi(step.key.c_str());
+        std::printf("ui-script: expect-sketch-dof %d: got %d%s\n", want, dof.dof, dof.solved ? "" : " (not solved)");
+        if (dof.dof != want || !dof.solved)
+            return fail_step("the sketch has " + std::to_string(dof.dof) + " degrees of freedom");
         next();
     } else if (step.verb == "expect-sketch-point") { // entity E (from 1), point I (from 0) at "x y" within 0.01; "closed" as I checks the chain is closed
         const cad::Sketch* s = editing_sketch();
