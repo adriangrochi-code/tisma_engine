@@ -628,6 +628,9 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     spread.direction = ForceDirection::Axis;
     spread.axis = -3;
     e.conditions = {fixed, tip};
+    // Fast: the bar solid in a coarse grid (the normal grid took 26 minutes
+    // under the address sanitizer); what is checked does not need more.
+    e.structural.quality = "fast";
     std::vector<std::string> notes;
     const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
     REQUIRE(c.fixtures.size() == 1);

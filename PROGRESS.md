@@ -9735,8 +9735,8 @@ rectángulo de 20 × 10 con las dos esquinas de arriba redondeadas a 5 mm, extru
 con el `solidcraft-cli` real: no se sabe todavía si arma el perfil con piezas sueltas que se tocan sin una restricción
 de coincidencia.
 
-**Medido:** la prueba «EP4 y EP6» de Estructural tarda unos 26 minutos bajo ASan (1,5 minutos sin él). No cambió
-en este bloque; queda para un bloque de mantenimiento.
+**Medido y arreglado:** la prueba «EP4 y EP6» de Estructural tardaba unos 26 minutos bajo ASan (de 70 a 100 s sin
+él). Ahora analiza en calidad rápida, que alcanza para lo que comprueba: 6 s sin ASan.
 
 **Roscas** (regla 7, «roscas modeladas»), también en este bloque:
 - operación **Rosca** sobre una cara cilíndrica elegida con clic: designación (M2 a M24), sentido (derecha, izquierda o
