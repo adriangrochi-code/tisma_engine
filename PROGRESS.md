@@ -9262,3 +9262,28 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   ubicada; al espejar, también. Para eso, `move_engineering`: los puntos con el mapa de la pieza y las normales con
   su cofactor, así un espejo o una escala despareja las deja normales. Los números de triángulo, y el eje y el vector
   de una fuerza (que son del mundo), no cambian. Cortar y dividir hacen piezas nuevas, sin condiciones.
+
+## 2026-11-03 (08:40 UTC): mantenimiento
+
+- **Revisado:** fuzz de G-code con 2000 casos y semilla nueva (20261103084): 0 fallas, 19 rechazados por no
+  imprimibles, 5 min. Además, los cambios de la noche (análisis sobre el proyecto, zonas marcadas, valores del panel,
+  datos de Ingeniería en la placa).
+- **Encontrado y corregido:** una zona marcada guardaba una muestra cada media celda de vóxel sobre cada triángulo.
+  Una sola cara de 200 × 200 mm (dos triángulos) ocupaba 504 MB y tardaba 1,6 s en armarse, y una placa grande con una
+  zona fija y otra de fuerza pasaba el GB. Ahora `SurfaceZone` guarda los triángulos en celdas y mide la distancia
+  exacta a cada uno (`closest_on_triangle`). Las celdas miden al menos el doble del alcance y crecen con el lado medio
+  de los triángulos y con el área (unas 20 000 como mucho).
+- **Medido** (cara de 200 mm, alcance 0,2025 mm, una consulta por nodo de 0,225 mm):
+
+  | | antes | ahora |
+  |---|---|---|
+  | memoria | 504 MB | < 1 MB |
+  | armado | 1631 ms | < 1 ms |
+  | 790 000 consultas | 802 ms | 84 ms |
+  | nodos en la zona | 790 321 | 790 321 |
+
+  Con 50 mm: 31 MB → 0, consultas 45 → 9 ms.
+- Por la distancia exacta, la placa de las pruebas da el mismo desplazamiento por caras del caso que por triángulos
+  marcados (antes 0,3 % de diferencia); el cubo de FM25, 1,8 % (antes 1,2 %).
+- Prueba nueva: `near` contra la distancia a cada triángulo por fuerza bruta, 20 000 puntos al azar sobre una cara de
+  200 mm y sobre un abanico de 60 triángulos chicos.

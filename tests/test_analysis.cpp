@@ -2,6 +2,7 @@
 #include "config/settings.hpp"
 #include "fea/analysis.hpp"
 #include "fea/materials.hpp"
+#include "fea/zone.hpp"
 #include "io/ply.hpp"
 #include "io/vtk.hpp"
 #include "mesh/indexed_mesh.hpp"
@@ -19,6 +20,7 @@
 #include <bit>
 #include <cmath>
 #include <limits>
+#include <random>
 #include <utility>
 #include <vector>
 #include <sstream>
@@ -497,4 +499,35 @@ TEST_CASE("analysis: conditions marked on the model hold and push as the part's 
     REQUIRE(s.valid);
     CHECK(s.result.elasticity.unapplied_loads == 0);
     CHECK(s.result.elasticity.max_displacement < 0.2 * a.result.elasticity.max_displacement);
+}
+
+TEST_CASE("a marked zone is exactly the points within reach of its triangles, at any size", "[analysis]") {
+    // A large face (two triangles of 200 mm) and a fine one (a fan of small
+    // triangles): near() against the distance to each triangle, by brute force.
+    ZoneShape big, fine;
+    big.triangles.push_back({{{0, 0, 0}, {200, 0, 0}, {200, 200, 0}}});
+    big.triangles.push_back({{{0, 0, 0}, {200, 200, 0}, {0, 200, 0}}});
+    for (int i = 0; i < 60; ++i) {
+        const double a0 = 2.0 * 3.14159265358979 * i / 60, a1 = 2.0 * 3.14159265358979 * (i + 1) / 60;
+        fine.triangles.push_back({{{0, 0, 1}, {5 * std::cos(a0), 5 * std::sin(a0), 0}, {5 * std::cos(a1), 5 * std::sin(a1), 0}}});
+    }
+    std::mt19937 rng(7);
+    for (const ZoneShape* shape : {&big, &fine}) {
+        const SurfaceZone zone(*shape, 0.1, 0.2);
+        const double span = shape == &big ? 210.0 : 12.0;
+        std::uniform_real_distribution<double> xy(-5.0, span), z(-0.5, 1.5);
+        int inside = 0;
+        for (int n = 0; n < 20000; ++n) {
+            const std::array<double, 3> p{xy(rng), xy(rng), z(rng)};
+            bool expected = false;
+            for (const Triangle3& t : shape->triangles) {
+                const std::array<double, 3> c = closest_on_triangle(p, t);
+                expected |= (p[0] - c[0]) * (p[0] - c[0]) + (p[1] - c[1]) * (p[1] - c[1]) + (p[2] - c[2]) * (p[2] - c[2]) <=
+                            0.04;
+            }
+            inside += expected;
+            REQUIRE(zone.near(p[0], p[1], p[2]) == expected);
+        }
+        CHECK(inside > 0);
+    }
 }

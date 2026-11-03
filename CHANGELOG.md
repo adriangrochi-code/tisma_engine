@@ -162,6 +162,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Memoria del análisis con zonas marcadas:** una cara marcada de 200 × 200 mm ocupaba 504 MB; ahora menos de 1 MB,
+  y la búsqueda de los nodos de la zona es 10 veces más rápida.
 - **La interfaz conserva las condiciones de Ingeniería de cada pieza** al abrir y volver a guardar un proyecto, y al
   espejar la pieza; antes se perdían.
 - **Nombres de ajustes cortados en el panel** (TR25): a 1440 px, 21 nombres quedaban cortados a mitad de palabra y a

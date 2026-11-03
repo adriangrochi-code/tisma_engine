@@ -21,33 +21,36 @@ struct ZoneShape {
     double radius = 0.0;
 };
 
-// The shape made fast to ask: samples over its triangles a `spacing` apart in
-// a grid of cells; a point is in it when it lies within `reach` of a sample
-// (and, for a disc, within the radius plus `reach` of its centre). The
-// analysis takes reach as about a voxel, so the nodes of the voxels the
-// surface passes through count.
+// The shape made fast to ask: its triangles in a grid of cells; a point is
+// in it when it lies within `reach` of one of them (the exact distance, by
+// closest_on_triangle) and, for a disc, within the radius plus `reach` of its
+// centre. A disc given without triangles is its centre alone. The analysis
+// takes reach as about a voxel, so the nodes of the voxels the surface passes
+// through count. The cells are at least twice the reach and grow with the
+// triangles and the zone's area, so a large flat face takes a few thousand
+// cells, not millions (2026-11-03: 504 MB for a 200 mm face with samples).
 class SurfaceZone {
 public:
+    // `spacing` is kept for the callers; the distance is exact now.
     SurfaceZone(const ZoneShape& shape, double spacing, double reach);
     bool near(double x, double y, double z) const;
     // The same, for a voxel face of outward normal `normal` (a unit axis):
-    // only samples of triangles that face about the same way count (more
-    // than 60 degrees apart, a side of the part next to the marked top does
-    // not take its load). A disc's centre given alone has no direction.
+    // only triangles that face about the same way count (more than 60
+    // degrees apart, a side of the part next to the marked top does not
+    // take its load). A disc's centre given alone has no direction.
     bool near_facing(double x, double y, double z, const std::array<double, 3>& normal) const;
-    bool empty() const { return cells_.empty(); }
-    // Its samples' box, grown by reach: nothing outside it is near.
+    bool empty() const { return triangles_.empty() && !centre_only_; }
+    // Its triangles' box, grown by reach: nothing outside it is near.
     const std::array<double, 6>& bounds() const { return bounds_; }
 
 private:
-    std::int64_t key(long long i, long long j, long long k) const;
-    struct Sample {
-        std::array<double, 3> point, normal; // normal: unit, or zero when unknown
-    };
     bool find(double x, double y, double z, const std::array<double, 3>* normal) const;
-    std::unordered_map<std::int64_t, std::vector<Sample>> cells_;
-    double cell_ = 1.0, reach2_ = 1.0;
-    bool disc_ = false;
+    std::int64_t key(long long i, long long j, long long k) const;
+    std::vector<Triangle3> triangles_;
+    std::vector<std::array<double, 3>> normals_; // unit, or zero for a degenerate triangle
+    std::unordered_map<std::int64_t, std::vector<std::uint32_t>> cells_;
+    double cell_ = 1.0, reach_ = 1.0, reach2_ = 1.0;
+    bool disc_ = false, centre_only_ = false;
     std::array<double, 3> centre_{};
     double disc_reach2_ = 0.0;
     std::array<double, 6> bounds_{};

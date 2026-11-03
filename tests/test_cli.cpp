@@ -375,7 +375,7 @@ TEST_CASE("analyze on a project uses its parts' Engineering conditions (FM25)", 
     const double da = number_after(a.out, "max_displacement_mm: "), db = number_after(b.out, "max_displacement_mm: ");
     INFO(da << " " << db);
     REQUIRE(da > 0.0);
-    CHECK(std::abs(db / da - 1.0) < 0.05); // 1.2 % on 2026-11-03
+    CHECK(std::abs(db / da - 1.0) < 0.05); // 1.8 % on 2026-11-03
 
     // Without conditions, the project says what is missing.
     project.models[0].engineering.conditions.clear();
