@@ -96,6 +96,9 @@ constexpr std::string_view kUsage =
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
     "  tisma-engine analyze <project> -o <report.json> [--config <settings.json>] [...]\n"
     "                       (the first part with Engineering conditions, as the project keeps them)\n"
+    "  tisma-engine analyze <project> -o <result.tea> --summary <summary.json> --sandbox --mode analyze\n"
+    "                       --quality <fast|normal|high|ultra> --object <n> --instance <n> [--solid] [--no-gpu]\n"
+    "                       (the nodes' way: progress lines, the result and a JSON summary)\n"
     "  tisma-engine info <model>\n"
     "  --threads <n> on any command: at most n threads of work (cloud.md, rule 19d); without it, all\n"
     "  tisma-engine --help | --version\n"
@@ -690,36 +693,10 @@ int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analy
     }
     // The part where it is on the bed: its mesh turned and moved by its
     // build transform, and its conditions with it.
-    mesh = TriangleMesh{};
-    const auto& t = it->turn;
-    const auto place = [&](const Vec3f& p) {
-        return Vec3f{float(t[0] * p.x + t[1] * p.y + t[2] * p.z + it->offset[0]),
-                     float(t[3] * p.x + t[4] * p.y + t[5] * p.z + it->offset[1]),
-                     float(t[6] * p.x + t[7] * p.y + t[8] * p.z + it->offset[2])};
-    };
-    const bool mirrored = t[0] * (t[4] * t[8] - t[5] * t[7]) - t[1] * (t[3] * t[8] - t[5] * t[6]) +
-                              t[2] * (t[3] * t[7] - t[4] * t[6]) < 0.0;
-    for (std::size_t k = 0; k < it->mesh.triangle_count(); ++k) // a mirror keeps its faces outward
-        if (mirrored)
-            mesh.add_triangle(place(it->mesh.corner(k, 0)), place(it->mesh.corner(k, 2)), place(it->mesh.corner(k, 1)));
-        else
-            mesh.add_triangle(place(it->mesh.corner(k, 0)), place(it->mesh.corner(k, 1)), place(it->mesh.corner(k, 2)));
-    ProjectEngineering placed = it->engineering;
-    move_engineering(placed, t, it->offset);
-    // And back: the inverse of the build transform, for the report's points.
-    {
-        const double det = t[0] * (t[4] * t[8] - t[5] * t[7]) - t[1] * (t[3] * t[8] - t[5] * t[6]) +
-                           t[2] * (t[3] * t[7] - t[4] * t[6]);
-        const std::array<double, 9> inv{(t[4] * t[8] - t[5] * t[7]) / det, (t[2] * t[7] - t[1] * t[8]) / det,
-                                        (t[1] * t[5] - t[2] * t[4]) / det, (t[5] * t[6] - t[3] * t[8]) / det,
-                                        (t[0] * t[8] - t[2] * t[6]) / det, (t[2] * t[3] - t[0] * t[5]) / det,
-                                        (t[3] * t[7] - t[4] * t[6]) / det, (t[1] * t[6] - t[0] * t[7]) / det,
-                                        (t[0] * t[4] - t[1] * t[3]) / det};
-        for (std::size_t i = 0; i < 9; ++i)
-            to_part[i] = inv[i];
-        for (std::size_t i = 0; i < 3; ++i)
-            to_part[9 + i] = -(inv[3 * i] * it->offset[0] + inv[3 * i + 1] * it->offset[1] + inv[3 * i + 2] * it->offset[2]);
-    }
+    PlacedPart part = placed_part(*it);
+    mesh = std::move(part.mesh);
+    ProjectEngineering placed = std::move(part.engineering);
+    to_part = part.to_part;
     std::vector<std::string> notes;
     apply_engineering_overrides(settings, it->engineering, notes);
     if (a.analysis_case.empty()) {
@@ -919,7 +896,7 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
         if (command == "info")
             return cmd_info(args_left, out, err);
         if (command == "analyze")
-            return cmd_analyze(args_left, out, err);
+            return node_analyze_wanted(args_left) ? cmd_analyze_project(args_left, out, err) : cmd_analyze(args_left, out, err);
     } catch (const std::exception& e) {
         // What the commands do not catch is the engine's own fault: said, not a crash.
         err << "error: internal: " << e.what() << "\n";

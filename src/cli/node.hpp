@@ -1,5 +1,9 @@
 #pragma once
 
+#include "mesh/mesh.hpp"
+#include "project/engineering.hpp"
+
+#include <array>
 #include <functional>
 #include <iosfwd>
 #include <span>
@@ -11,6 +15,18 @@
 // data folder, its progress on the standard output and a summary in JSON.
 // Own design; see PROVENANCE.md.
 namespace tisma {
+
+struct ProjectModel;
+
+// A project's part where it is on the bed: its mesh turned and moved by its
+// build transform, its Engineering conditions moved with it, and the way
+// back (rows of the inverse turn, then the shift) for a report's points.
+struct PlacedPart {
+    TriangleMesh mesh;
+    ProjectEngineering engineering;
+    std::array<double, 12> to_part{1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
+};
+PlacedPart placed_part(const ProjectModel& model);
 
 // Whether `slice` was given the nodes' way: with --summary, --sandbox or
 // --no-gpu, or with a project file and no --config.
@@ -31,6 +47,28 @@ bool node_slice_wanted(std::span<const std::string_view> args);
 // - --sandbox: the settings' post-processing scripts do not run; without it
 //   they run once confirmed (--yes, or Y on the input), as `slice` asks.
 int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err);
+
+// Whether `analyze` was given the nodes' way (cloud.md, rule 19): with
+// --summary, --sandbox, --mode, --object or --instance.
+bool node_analyze_wanted(std::span<const std::string_view> args);
+
+// tisma-engine analyze <project> -o <result.tea> --summary <summary.json>
+//   --sandbox --mode <analyze|lightest-infill|resin-structure>
+//   --quality <fast|normal|high|ultra> --object <n> --instance <n>
+//   [--solid] [--no-zones] [--ribs] [--no-gpu]
+// - the part is the project's object n (counted from 0, as the project
+//   lists them) at its instance n (each object has one placement: 0);
+//   its supports, loads and material come from the project;
+// - the result .tea: a JSON document of the engine, {format
+//   "tisma-engineering-result", version 1, kind "structural", object,
+//   instance, fingerprint, report}, the report as the Structural tab keeps
+//   it, opened in Engineering as a local analysis;
+// - the summary: verdict, min_safety, required_safety,
+//   max_displacement_mm, mass_g, family, voxels; or `error`; progress and
+//   exit codes as for slice;
+// - only mode "analyze" runs yet: the others answer with `error` and exit
+//   code 3 (not implemented).
+int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err);
 
 // Writes a file in one piece: into "<path>.part" first, renamed over the
 // path once complete, so a process stopped half way never leaves a partial

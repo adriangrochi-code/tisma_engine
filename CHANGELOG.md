@@ -17,6 +17,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   MI, AR, M, CO, RO y SC en la línea de comandos. Líneas y arcos sueltos que se tocan punta con punta cierran una
   región que se puede extruir. Se elige con clic o con una caja: hacia la derecha, ventana (solo lo que queda
   adentro); hacia la izquierda, cruce (todo lo que toca).
+- **`analyze` para los nodos de Tisma Cloud** (`cloud.md`, regla 19): analiza un objeto de un proyecto 3MF con
+  `--summary`, `--sandbox`, `--mode`, `--quality`, `--object` e `--instance`; escribe el resultado `.tea` y un resumen
+  con el veredicto.
 - **Mover cuerpo, Partir y Desmoldeo en Diseño:** mover o girar un cuerpo (o una copia), partirlo por un plano y
   dar ángulo de desmolde a caras elegidas con clic.
 - **Medir en el boceto** (regla 18): distancia, ΔX, ΔY y ángulo entre dos puntos (DI), y área y perímetro de la

@@ -9762,3 +9762,31 @@ verdad, comprueba que el plano cruce el cuerpo y que el ángulo esté entre 0 y 
 
 **Sigue:** CFD (A3) y la línea de comandos de la nube (prioridad del equipo de fichas), salvo que el dueño pida más
 de Diseño; en Diseño quedan barrer y recubrir (piden elegir varios bocetos y curvas) y texto (regla 10).
+
+## 2026-11-03 — Nube: `analyze` de los nodos (cloud.md, regla 19)
+
+El dueño decidió, por el equipo de fichas, «Hagamos la 1»: primero el CFD y la nube, después Diseño. Diseño quedó en
+un punto limpio (todo con pruebas y en commits).
+
+**Hecho:**
+- `tisma-engine analyze <proyecto.3mf> -o <resultado.tea> --summary <resumen.json> --sandbox --mode <modo> --quality
+  <calidad> --object <n> --instance <n> [--solid] [--no-zones] [--ribs] [--no-gpu] [--threads <n>]`, como en la
+  regla 19 de `cloud.md` (rama `spec/next`):
+  - la pieza es el objeto `n` del proyecto, contado desde 0 como el proyecto los guarda; cada objeto tiene una sola
+    ubicación, la 0. Los apoyos, las cargas y el material salen del proyecto;
+  - el `.tea` es un JSON del motor: `format` «tisma-engineering-result», `version` 1, `kind` «structural», `object`,
+    `instance`, `part`, `fingerprint` y el `report` como lo guarda la pestaña Estructural;
+  - el resumen: `verdict`, `min_safety`, `required_safety`, `max_displacement_mm`, `mass_g`, `family` y `voxels`, o
+    `error`. Avance `progress N` y códigos de salida como `slice`;
+  - `--quality ultra` corre como `high` (con un aviso) y `--solid` toma la pieza maciza. `--no-zones` y `--ribs`
+    se aceptan; solo cambian los modos que optimizan;
+  - los modos `lightest-infill` y `resin-structure` responden con `error` y código 3 (sin implementar todavía).
+- El cálculo de dónde queda la pieza en la cama (`placed_part`) es uno solo para `analyze` con y sin nodo.
+
+**Pruebas:** el resumen y el `.tea` de un bloque de 20 mm con 50 N encima (aguanta), `--solid`, y los errores: objeto
+o ubicación que no existen, un modo sin implementar, una calidad desconocida y una pieza sin apoyos ni cargas.
+
+**Falta:** abrir el `.tea` en Ingeniería desde la interfaz, y `orient` (regla 19c, que pide la orientación automática
+de `orientation.md`, que el motor todavía no tiene).
+
+**Sigue:** el CFD (A3) y `aero` (regla 19b); `orient` cuando esté la orientación automática.

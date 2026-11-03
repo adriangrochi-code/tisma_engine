@@ -236,3 +236,96 @@ TEST_CASE("CC19: --threads 1 gives the same G-code; an unknown density gives no 
     std::filesystem::remove_all(dir);
 }
 
+
+namespace {
+// box_project with Engineering conditions on its box: held at its bottom,
+// 50 N down on its top, at fast quality.
+Project loaded_box_project() {
+    Project p = box_project(100.0, 100.0);
+    ProjectModel& m = p.models[0];
+    EngineeringCondition fixed, push;
+    fixed.kind = ConditionKind::FixedZone;
+    push.kind = ConditionKind::ForceZone;
+    push.newtons = 50.0;
+    push.direction = ForceDirection::Axis;
+    push.axis = -3;
+    for (std::uint32_t t = 0; t < m.mesh.triangle_count(); ++t) {
+        bool bottom = true, top = true;
+        for (int k = 0; k < 3; ++k)
+            bottom &= m.mesh.corner(t, k).z == 0.0f, top &= m.mesh.corner(t, k).z == 20.0f;
+        if (bottom)
+            fixed.triangles.push_back(t);
+        if (top)
+            push.triangles.push_back(t);
+    }
+    m.engineering.conditions = {fixed, push};
+    return p;
+}
+} // namespace
+
+TEST_CASE("analyze of a project the nodes' way: progress, the .tea result and the verdict (cloud.md, rule 19)",
+          "[cli][cloud]") {
+    const auto dir = fresh_dir("tisma_test_node_analyze");
+    const auto project = dir / "plate.3mf";
+    save_project(project, loaded_box_project());
+    const auto tea = dir / "result.tea", summary = dir / "summary.json";
+    const Run r = run({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox", "--mode",
+                       "analyze", "--quality", "fast", "--object", "0", "--instance", "0", "--no-gpu", "--threads", "2"});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    check_progress(r.out);
+    const nlohmann::json s = nlohmann::json::parse(read_text(summary));
+    CHECK_FALSE(s.contains("error"));
+    CHECK(s["verdict"] == "holds"); // 50 N on a 20 mm PLA block
+    CHECK(s["min_safety"].get<double>() > 2.0);
+    CHECK(s["required_safety"] == 2.0);
+    CHECK(s["max_displacement_mm"].get<double>() > 0.0);
+    CHECK(s["family"] == "PLA");
+    CHECK(s["mass_g"].get<double>() > 0.0);
+    CHECK(s["voxels"].get<long long>() > 100);
+    const nlohmann::json t = nlohmann::json::parse(read_text(tea));
+    CHECK(t["format"] == "tisma-engineering-result");
+    CHECK(t["version"] == 1);
+    CHECK(t["kind"] == "structural");
+    CHECK(t["object"] == 0);
+    CHECK_FALSE(t["fingerprint"].get<std::string>().empty());
+    CHECK(t["report"]["verdict"]["name"] == "holds");
+
+    // --solid: the whole part solid, still held.
+    const Run solid = run({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
+                           "--quality", "fast", "--object", "0", "--instance", "0", "--solid"});
+    REQUIRE(solid.code == kExitOk);
+    // Errors: the summary says them, the exit code is not 0.
+    const auto error_of = [&](std::vector<std::string> args, int code) {
+        const Run e = run(std::move(args));
+        INFO(e.err);
+        CHECK(e.code == code);
+        const nlohmann::json j = nlohmann::json::parse(read_text(summary));
+        REQUIRE(j.contains("error"));
+        return j["error"].get<std::string>();
+    };
+    CHECK_THAT(error_of({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
+                         "--object", "3", "--instance", "0"},
+                        kExitInput),
+               ContainsSubstring("no object 3"));
+    CHECK_THAT(error_of({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
+                         "--object", "0", "--instance", "1"},
+                        kExitInput),
+               ContainsSubstring("no instance 1"));
+    CHECK_THAT(error_of({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
+                         "--mode", "lightest-infill", "--object", "0", "--instance", "0"},
+                        kExitNotImplemented),
+               ContainsSubstring("lightest-infill"));
+    CHECK_THAT(error_of({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
+                         "--quality", "best"},
+                        kExitUsage),
+               ContainsSubstring("--quality"));
+    // A part with no conditions.
+    const auto bare = dir / "bare.3mf";
+    save_project(bare, box_project(100.0, 100.0));
+    CHECK_THAT(error_of({"analyze", bare.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox", "--object",
+                         "0", "--instance", "0"},
+                        kExitInput),
+               ContainsSubstring("fixed point or zone and a force"));
+    std::filesystem::remove_all(dir);
+}
