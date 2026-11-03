@@ -99,6 +99,8 @@ los paquetes de perfiles, en `presets.md`; las mezclas de colores en el proyecto
       paquetes (`cloud.md`, regla 6). Con el resultado, lo que hace falta para saber si quedó viejo: la malla, las
       condiciones y los ajustes que usó (un resumen o una huella).
     Reglas:
+    - las «coordenadas propias de la pieza» son las de su malla guardada, sin su ubicación en la cama: la ubicación va
+      en la transformación de `<build>` (regla 8). Así el marco de la pieza no cambia al moverla y guardar de nuevo;
     - mover, girar o escalar la pieza en la cama no cambia sus condiciones: siguen pegadas a la pieza;
     - si la malla cambia (reparar, cortar, simplificar, reemplazar), las zonas cuyos triángulos ya no existen y los
       puntos que quedaron fuera de la superficie se quitan al abrir o al cambiarla, con un aviso que dice cuántas
