@@ -120,6 +120,8 @@ static ordered_json project_json(const Project& project, bool offsets) {
                 item["settings"] = ordered_json::parse(r.settings);
             models.back()["ranges"].push_back(std::move(item));
         }
+        if (!m.engineering.empty())
+            models.back()["engineering"] = ordered_json::parse(engineering_json(m.engineering));
     }
     ordered_json root = {
         {"format", "tisma-project"},
@@ -320,6 +322,18 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
                         range.settings = r.at("settings").dump();
                     }
                     model.ranges.push_back(std::move(range));
+                }
+            }
+            // Engineering data (rule 11 bis): what this program does not read
+            // is left out with a notice, never the part.
+            if (m.contains("engineering")) {
+                try {
+                    model.engineering = engineering_from_json(m.at("engineering").dump());
+                    if (const std::size_t dropped = drop_conditions_beyond(model.engineering, model.mesh.triangle_count()))
+                        p.notices.push_back(model.name + ": " + std::to_string(dropped) +
+                                            " Engineering condition(s) no longer fit the mesh and were removed");
+                } catch (const EngineeringError& e) {
+                    p.notices.push_back(model.name + ": its Engineering data was not read (" + e.what() + ")");
                 }
             }
             p.models.push_back(std::move(model));

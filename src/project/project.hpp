@@ -4,6 +4,7 @@
 #include "config/settings.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/paint.hpp"
+#include "project/engineering.hpp"
 #include "slice/color_mix.hpp"
 
 #include <array>
@@ -54,6 +55,9 @@ struct ProjectModel {
     std::string settings{};
     std::vector<ProjectVolume> volumes{};
     std::vector<ProjectRange> ranges{};
+    // Its Engineering data (formats.md, rule 11 bis): conditions in its own
+    // coordinates and triangles, values changed by hand, options.
+    ProjectEngineering engineering{};
 };
 
 // The calibration being printed: which one, and the value of each segment.
@@ -72,6 +76,9 @@ struct Project {
     // (color_mixing.md): they travel with the models, not with a profile.
     std::vector<ColorMix> mixes;
     std::vector<std::string> filament_colors;
+    // What opening the file left out, for the person (not saved): Engineering
+    // data this program does not read, conditions that no longer fit their mesh.
+    std::vector<std::string> notices;
 };
 
 // The file: "TISMAPRJ", the format version (32 bits), then chunks, each a

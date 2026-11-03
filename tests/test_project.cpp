@@ -279,3 +279,79 @@ TEST_CASE("a project as a 3MF package: any reader sees the plate, the engine rea
     CHECK_THROWS_WITH(read_project(plain), Catch::Matchers::ContainsSubstring("no Tisma project data"));
 }
 
+
+TEST_CASE("FM23, FM24: a part's Engineering conditions, values by hand and options travel with the project",
+          "[project][engineering]") {
+    Project p = sample();
+    ProjectEngineering& e = p.models[0].engineering;
+    EngineeringCondition fixed;
+    fixed.kind = ConditionKind::FixedZone;
+    fixed.triangles = {0, 1};
+    EngineeringCondition force;
+    force.kind = ConditionKind::ForcePoint;
+    force.point = {9.5, 5.0, 10.0};
+    force.normal = {0.0, 0.0, 1.0};
+    force.newtons = 5.1 * 9.81; // typed as 5.1 kg
+    force.kilograms = 5.1;
+    force.direction = ForceDirection::Axis;
+    force.axis = -3;
+    EngineeringCondition limit;
+    limit.kind = ConditionKind::Limit;
+    limit.triangles = {2};
+    limit.limit = 5.0;
+    limit.limit_percent = true;
+    limit.number = 1;
+    e.conditions = {fixed, force, limit};
+    e.working_temperature = 40.0;
+    e.overrides.extrusion_temperature = 230.0;
+    e.structural.safety_factor = 3.0;
+    e.aerodynamics.speed = 12.5;
+    // The second model has nothing: it opens as before.
+    REQUIRE(p.models[1].engineering.empty());
+    for (const bool package : {false, true}) {
+        INFO((package ? "3MF" : "own file"));
+        // FM24: moved on the bed; the conditions stay on the part.
+        Project moved = p;
+        moved.models[0].offset = {130.0, 100.0, 0.0};
+        const Project again = read_project(package ? write_project_3mf(moved) : write_project(moved));
+        CHECK(again.notices.empty());
+        const ProjectEngineering& r = again.models[0].engineering;
+        REQUIRE(r.conditions.size() == 3);
+        CHECK(r.conditions[0].kind == ConditionKind::FixedZone);
+        CHECK(r.conditions[0].triangles == std::vector<std::uint32_t>{0, 1});
+        CHECK(r.conditions[1].kind == ConditionKind::ForcePoint);
+        CHECK(r.conditions[1].point == force.point);
+        CHECK(r.conditions[1].newtons == force.newtons);
+        CHECK(r.conditions[1].kilograms == 5.1); // shown again as 5.1 kg
+        CHECK(r.conditions[1].direction == ForceDirection::Axis);
+        CHECK(r.conditions[1].axis == -3);
+        CHECK(r.conditions[2].limit_percent);
+        CHECK(r.working_temperature == 40.0);
+        CHECK(r.overrides.extrusion_temperature == 230.0);
+        CHECK_FALSE(r.overrides.material); // from the profile: not copied
+        CHECK(r.structural.safety_factor == 3.0);
+        CHECK(r.aerodynamics.speed == 12.5);
+        CHECK(again.models[1].engineering.empty());
+    }
+}
+
+TEST_CASE("FM26 and newer data: conditions that no longer fit are dropped with a notice, the part kept",
+          "[project][engineering]") {
+    Project p = sample();
+    EngineeringCondition zone;
+    zone.triangles = {0, 999999}; // a triangle the mesh does not have
+    EngineeringCondition point;
+    point.kind = ConditionKind::FixedPoint;
+    p.models[0].engineering.conditions = {zone, point};
+    const Project again = read_project(write_project(p));
+    REQUIRE(again.notices.size() == 1);
+    CHECK_THAT(again.notices[0], ContainsSubstring("1 Engineering condition(s)"));
+    REQUIRE(again.models[0].engineering.conditions.size() == 1);
+    CHECK(again.models[0].engineering.conditions[0].kind == ConditionKind::FixedPoint);
+    // Data from a newer version: the project opens without it, and says so.
+    CHECK_THROWS_AS(engineering_from_json(R"({"version": 99})"), EngineeringError);
+    CHECK_THROWS_AS(engineering_from_json(R"({"version": 1, "conditions": [{"kind": "glue", "number": 1}]})"),
+                    EngineeringError);
+    const ProjectEngineering back = engineering_from_json(engineering_json(again.models[0].engineering));
+    CHECK(back.conditions.size() == 1);
+}

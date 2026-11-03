@@ -1212,6 +1212,16 @@ tuercas de mano, separadores, engranajes rectos y helicoidales (hechos el 2026-1
 insertos y bisagras; y
 roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tablas).
 
+**Ingeniería en el proyecto y pestañas de análisis** (orden del equipo de fichas, 2026-11-02;
+`engineering_panel.md` EP1 a EP10, `formats.md` regla 11 bis, FM23 a FM26):
+1. los datos de Ingeniería por pieza en el proyecto (condiciones, valores a mano, opciones): **hecho el 2026-11-03**
+   (`src/project/engineering.*`);
+2. el último resultado como archivo propio del paquete, con su huella (malla, condiciones, ajustes) para saber si
+   quedó viejo;
+3. `analyze` sobre el proyecto con esas condiciones (FM25), zonas por triángulos y puntos con radio en el caso;
+4. la pestaña Estructural (marcar, lista, Analizar, mapa, veredicto) y sacar «Análisis» de Impresión 3D;
+5. la pestaña Aerodinámica, con A3 (CFD).
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:

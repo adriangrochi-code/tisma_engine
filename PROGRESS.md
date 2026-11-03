@@ -9100,3 +9100,18 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   del archivo, 35m 18s y 1,25 m (el cubo del motor no tiene las letras grabadas). Para el bloque de tiempo
   (`print_time.md`): falta saber cuánto tarda de verdad la impresora.
 
+## 2026-11-03 (noche): Ingeniería en el proyecto, paso 1
+
+- Ficha: `formats.md` regla 11 bis (spec/next e0f6379, `check_spec.py` limpio), FM23 a FM26.
+- **Hecho:** `ProjectEngineering` por pieza (`src/project/engineering.*`), guardado en el JSON del proyecto (archivo
+  propio y 3MF) bajo `engineering` con su versión:
+  - las condiciones con su tipo y número: puntos con posición, normal y radio en las coordenadas de la pieza; zonas y
+    límites con sus triángulos; fuerzas en N con los kg tipeados aparte y la dirección (normal, eje con signo o
+    vector); límites en mm o %;
+  - solo los valores cambiados a mano (material, temperatura de extrusión, alturas, ancho), la temperatura de
+    trabajo siempre, las opciones de Estructural y las entradas de Aerodinámica;
+  - al abrir: las zonas con triángulos que la malla ya no tiene se quitan con un aviso (`Project::notices`); datos de
+    una versión más nueva o que no se entienden se dejan afuera con un aviso, sin perder la pieza.
+- Pruebas: FM23 y FM24 (sin el resultado todavía) en el archivo propio y en el 3MF, y FM26 con la parte de quitar.
+- **Sigue:** el último resultado como archivo del paquete con su huella; `analyze` sobre el proyecto (FM25).
+
