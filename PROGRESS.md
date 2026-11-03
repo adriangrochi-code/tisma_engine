@@ -9134,4 +9134,9 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   `tisma_fuzz_gcode 300` con los dibujos al azar: ninguna falla.
 - **No medido contra P10:** en Tisma Slicer `monotonic` sale en un solo tramo y `monotonic_lines` en 71; el motor da
   tramos sueltos en los dos. Queda anotado para revisar el `monotonic` de arriba.
+- **QA del modo Anycubic (equipo de fichas, sobre 177eae6), dos notas tomadas:**
+  - sin `extrusion.type`, el bloque de ajustes no traía `filament_type`; ahora lleva el mismo que `paint_info` (PLA si
+    no se sabe) y hay un aviso `strict_parser` que dice que la impresora puede tomarlo como PLA;
+  - `M73` lleva además `QuietR` y `SportR` como los archivos de Anycubic (los minutos del modo silencioso si lo hay;
+    si no, los normales); el verificador del motor los acepta en `M73`.
 

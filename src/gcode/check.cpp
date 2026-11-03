@@ -114,6 +114,11 @@ void parse_line(std::string_view raw, ParsedLine& out, std::vector<Parameter>& p
     out.first = std::uint32_t(parameters.size());
     for (std::size_t k = 1; k < count; ++k) {
         const std::string_view w = words[k];
+        // M73's minutes left in the quiet and sport modes, as the Anycubic
+        // Kobra files write them (gcode_firmware.md, rule 7).
+        if (out.kind == 'M' && out.code == 73 &&
+            ((w.starts_with("QuietR") && number(w.substr(6))) || (w.starts_with("SportR") && number(w.substr(6)))))
+            continue;
         const char letter = w.front();
         const std::optional<double> v = letter >= 'A' && letter <= 'Z' ? number(w.substr(1)) : std::nullopt;
         if (!v) {

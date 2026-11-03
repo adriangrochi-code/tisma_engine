@@ -2527,13 +2527,20 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // The material as those files name it in paint_info: the filament's type
     // (PLA when not known, as that firmware takes a missing one) and its
     // colour from the variable filament_colour ("#RRGGBB"; white when not given).
-    const std::string paint_info = [&] {
+    const std::string material_type = [&] {
         std::string type;
         for (const char c : s.filament_type)
             if (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '+' || c == '_')
                 type += c;
-        if (type.empty())
-            type = "PLA";
+        return type.empty() ? std::string("PLA") : type;
+    }();
+    if (strict && material_type != s.filament_type && warnings)
+        warnings->push_back({"strict_parser", -1, 0.0,
+                             "The filament's type (extrusion.type) is not set: the file names it PLA, and the "
+                             "printer may take the material as PLA",
+                             0.0, "warning"});
+    const std::string paint_info = [&] {
+        const std::string& type = material_type;
         int rgb[3] = {255, 255, 255};
         if (const auto it = s.variables.find("filament_colour"); it != s.variables.end() && !it->second.empty()) {
             const std::string& c = it->second.front();
@@ -4519,8 +4526,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             if (!value.empty())
                 out << "; " << name << " = " << value << "\n";
         };
-        if (s.filament_type.find_first_of(";\n\r") == std::string::npos)
-            line("filament_type", s.filament_type);
+        line("filament_type", material_type); // as paint_info names it
+
         if (s.filament_density > 0.0)
             line("filament_density", trimmed(s.filament_density, 4));
         line("filament_diameter", trimmed(s.filament_diameter, 4));
@@ -4569,7 +4576,14 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         const long now[4] = {share(g.time_at(id), g.print_time()), minutes(g.time_at(id), g.print_time()),
                              share(g.silent_time_at(id), g.silent_time()), minutes(g.silent_time_at(id), g.silent_time())};
         if (now[0] != shown[0] || now[1] != shown[1])
-            target << "M73 P" << now[0] << " R" << now[1] << note;
+            target << "M73 P" << now[0] << " R" << now[1]
+                   // As the maker's files write it for those printers: the
+                   // minutes left in the quiet and the sport modes too (the
+                   // silent mode's when there is one; else the normal's).
+                   << (s.strict_parser == StrictParser::Anycubic
+                           ? " QuietR" + std::to_string(s.silent_mode ? now[3] : now[1]) + " SportR" + std::to_string(now[1])
+                           : std::string())
+                   << note;
         if (silent && (now[2] != shown[2] || now[3] != shown[3]))
             target << "M73 Q" << now[2] << " S" << now[3] << note;
         std::copy(now, now + 4, shown);
