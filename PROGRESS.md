@@ -9748,5 +9748,10 @@ de coincidencia.
   grueso de ISO 261) y una rosca con una designación que no conoce queda marcada en rojo sin perder el cilindro.
   **No probado:** la rosca modelada de verdad (el sustituto no corta el filete) y el `solidcraft-cli` real.
 
+**Medir** (regla 18), también en este bloque: «Medir distancia» (DI: dos puntos; la distancia, ΔX, ΔY y el ángulo) y
+«Medir área» (AREA: un clic dentro de una región; el área y el perímetro, sin los agujeros que tiene adentro y con sus
+bordes). No agrega cotas. Los arcos de los perfiles sueltos se toman ahora en tramos de medio grado (antes 3,75°), así
+el área sale bien a 0,001 mm². Prueba en `design_sketch_fillet` con un verbo nuevo, `expect-command-message`.
+
 **Sigue:** CFD (A3) y la línea de comandos de la nube (prioridad del equipo de fichas), salvo que el dueño pida más
-de Diseño; en Diseño quedan barrer, recubrir, desmolde, partir, mover cuerpos, texto (regla 10) y medir (regla 18).
+de Diseño; en Diseño quedan barrer, recubrir, desmolde, partir, mover cuerpos y texto (regla 10).

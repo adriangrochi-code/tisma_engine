@@ -201,7 +201,7 @@ std::vector<std::vector<Pt>> joined_loops(const Sketch& sketch) {
                 while (sweep <= 0.0)
                     sweep += 2.0 * std::numbers::pi;
             }
-            const int n = std::max(4, int(std::ceil(std::abs(sweep) / (2.0 * std::numbers::pi) * 96.0)));
+            const int n = std::max(4, int(std::ceil(std::abs(sweep) / (2.0 * std::numbers::pi) * 720.0)));
             std::vector<Pt> q;
             for (int k = 0; k <= n; ++k) {
                 const double a = a0 + sweep * k / n;

@@ -1362,6 +1362,15 @@
     X(PromptSecond, "Segundo punto (o @dx,dy)", "Second point (or @dx,dy)") \
     X(PromptAngle, "Ángulo de giro <%.4g>", "Rotation angle <%.4g>") \
     X(PromptFactor, "Factor de escala <%.4g>", "Scale factor <%.4g>") \
+    X(EditDistance, "Medir distancia", "Measure distance") \
+    X(EditArea, "Medir área", "Measure area") \
+    X(PromptDistance1, "Distancia: primer punto (Enter termina)", "Distance: first point (Enter ends)") \
+    X(PromptDistance2, "Distancia: segundo punto", "Distance: second point") \
+    X(PromptArea, "Área: hacé clic dentro de una región (Enter termina)", "Area: click inside a region (Enter ends)") \
+    X(SketchMeasureDistance, "Distancia %.4g mm · ΔX %.4g · ΔY %.4g · ángulo %.4g°", "Distance %.4g mm · ΔX %.4g · ΔY %.4g · angle %.4g°") \
+    X(SketchMeasureArea, "Área %.2f mm² · perímetro %.2f mm", "Area %.2f mm² · perimeter %.2f mm") \
+    X(SketchMeasureHoles, " · %d agujeros", " · %d holes") \
+    X(EditNoRegion, "Ahí no hay una región cerrada", "No closed region there") \
     X(EditNothing, "Ahí no hay nada para eso", "Nothing there for that") \
     X(EditNoSelection, "No hay nada elegido", "Nothing is picked") \
     X(EditDone, "Hecho", "Done") \

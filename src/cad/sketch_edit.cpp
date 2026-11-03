@@ -228,6 +228,92 @@ std::vector<Pt> crossings_on(const Sketch& sketch, std::size_t entity) {
     return out;
 }
 
+std::vector<std::vector<Pt>> sketch_outlines(const Sketch& s) {
+    std::vector<std::vector<Pt>> out;
+    for (const Entity& e : s.entities) {
+        if (e.construction)
+            continue;
+        if (e.kind == Entity::Kind::Chain && e.closed && e.points.size() >= 3) {
+            out.push_back(e.points);
+        } else if (e.kind == Entity::Kind::Rectangle && e.points.size() >= 2) {
+            std::vector<Pt> q;
+            for (std::size_t k = 0; k < 4; ++k)
+                q.push_back(point_of(e, k));
+            out.push_back(std::move(q));
+        } else if (e.kind == Entity::Kind::Circle && !e.points.empty() && e.radius > 0.0) {
+            std::vector<Pt> q;
+            for (int k = 0; k < 720; ++k) {
+                const double a = kTwoPi * k / 720.0;
+                q.push_back({e.points[0].x + e.radius * std::cos(a), e.points[0].y + e.radius * std::sin(a)});
+            }
+            out.push_back(std::move(q));
+        }
+    }
+    for (std::vector<Pt>& loop : joined_loops(s))
+        out.push_back(std::move(loop));
+    return out;
+}
+
+namespace {
+
+double polygon_area(const std::vector<Pt>& q) {
+    double a = 0.0;
+    for (std::size_t i = 0; i < q.size(); ++i)
+        a += cross(q[i], q[(i + 1) % q.size()]);
+    return std::abs(a) / 2.0;
+}
+
+double polygon_perimeter(const std::vector<Pt>& q) {
+    double l = 0.0;
+    for (std::size_t i = 0; i < q.size(); ++i)
+        l += dist(q[i], q[(i + 1) % q.size()]);
+    return l;
+}
+
+// Even-odd ray test.
+bool inside(const std::vector<Pt>& q, const Pt& p) {
+    bool in = false;
+    for (std::size_t i = 0, j = q.size() - 1; i < q.size(); j = i++)
+        if ((q[i].y > p.y) != (q[j].y > p.y) && p.x < (q[j].x - q[i].x) * (p.y - q[i].y) / (q[j].y - q[i].y) + q[i].x)
+            in = !in;
+    return in;
+}
+
+} // namespace
+
+std::optional<RegionMeasure> measure_region_at(const Sketch& s, const Pt& at) {
+    const std::vector<std::vector<Pt>> outlines = sketch_outlines(s);
+    std::optional<std::size_t> outer;
+    for (std::size_t i = 0; i < outlines.size(); ++i)
+        if (inside(outlines[i], at) && (!outer || polygon_area(outlines[i]) < polygon_area(outlines[*outer])))
+            outer = i;
+    if (!outer)
+        return std::nullopt;
+    const std::vector<Pt>& o = outlines[*outer];
+    RegionMeasure m;
+    m.area = polygon_area(o);
+    m.perimeter = polygon_perimeter(o);
+    // Its holes: the outlines wholly inside it, not inside another hole.
+    std::vector<std::size_t> holes;
+    for (std::size_t i = 0; i < outlines.size(); ++i) {
+        if (i == *outer || polygon_area(outlines[i]) >= m.area)
+            continue;
+        if (std::all_of(outlines[i].begin(), outlines[i].end(), [&](const Pt& p) { return inside(o, p); }))
+            holes.push_back(i);
+    }
+    for (const std::size_t h : holes) {
+        const bool nested = std::any_of(holes.begin(), holes.end(), [&](std::size_t g) {
+            return g != h && polygon_area(outlines[g]) > polygon_area(outlines[h]) && inside(outlines[g], outlines[h][0]);
+        });
+        if (nested)
+            continue;
+        m.area -= polygon_area(outlines[h]);
+        m.perimeter += polygon_perimeter(outlines[h]);
+        ++m.holes;
+    }
+    return m;
+}
+
 void erase_entity(Sketch& s, std::size_t e) {
     if (e >= s.entities.size())
         return;

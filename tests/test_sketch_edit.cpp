@@ -12,6 +12,7 @@
 
 using namespace tisma::cad;
 using Catch::Matchers::WithinAbs;
+using Catch::Matchers::WithinRel;
 
 namespace {
 
@@ -355,6 +356,27 @@ TEST_CASE("sketch edit: F rounds a corner and the outline stays a region (rule 6
     REQUIRE(fillet_corner(cw, 0, 1, 1));
     CHECK(cw.entities[0].clockwise);
     CHECK(cw.has_region());
+}
+
+TEST_CASE("sketch edit: rule 18, the area and perimeter of the region under a point", "[cad][sketch_edit]") {
+    Sketch s;
+    s.entities = {rectangle({0, 0}, {40, 30}), circle({10, 10}, 5), rectangle({25, 5}, {35, 15})};
+    const auto plate = measure_region_at(s, {20, 25});
+    REQUIRE(plate);
+    CHECK(plate->holes == 2);
+    CHECK_THAT(plate->area, WithinRel(1200 - 25 * std::numbers::pi - 100, 1e-4));
+    CHECK_THAT(plate->perimeter, WithinRel(140 + 10 * std::numbers::pi + 40, 1e-4));
+    const auto hole = measure_region_at(s, {10, 10});
+    REQUIRE(hole);
+    CHECK(hole->holes == 0);
+    CHECK_THAT(hole->area, WithinRel(25 * std::numbers::pi, 1e-4));
+    CHECK_FALSE(measure_region_at(s, {50, 50}));
+    // A filleted outline measures with its arc.
+    Sketch f;
+    f.entities = {rectangle({0, 0}, {20, 10})};
+    REQUIRE(fillet_corner(f, 0, 2, 3));
+    REQUIRE(measure_region_at(f, {5, 5}));
+    CHECK_THAT(measure_region_at(f, {5, 5})->area, WithinAbs(200 - 9 * (1 - std::numbers::pi / 4), 0.01));
 }
 
 TEST_CASE("sketch edit: open pieces drawn end to end close a region", "[cad][sketch_edit]") {

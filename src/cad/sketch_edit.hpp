@@ -83,6 +83,18 @@ std::vector<std::size_t> pattern_polar(Sketch& sketch, const std::vector<std::si
 // window, only what lies inside; to the left, a crossing, all it touches.
 std::vector<std::size_t> select_box(const Sketch& sketch, const Pt& from, const Pt& to);
 
+// Medir (rule 18): the region under a point, without adding dimensions: the
+// smallest outline round it (a closed chain, a rectangle, a circle, a loop
+// of loose pieces) less the outlines inside it (its holes); its area in mm²
+// and its perimeter, the holes' edges counted. None outside every region.
+struct RegionMeasure {
+    double area = 0.0, perimeter = 0.0;
+    int holes = 0;
+};
+std::optional<RegionMeasure> measure_region_at(const Sketch& sketch, const Pt& at);
+// Every closed outline of the sketch as a polygon (circles in 720 sides).
+std::vector<std::vector<Pt>> sketch_outlines(const Sketch& sketch);
+
 // The entity removed, and the rules on it with it; later indices shift.
 void erase_entity(Sketch& sketch, std::size_t entity);
 

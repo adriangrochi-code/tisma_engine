@@ -1210,7 +1210,7 @@ private:
         enum class Tool { None, Line, Rectangle, Circle, Arc, Constrain, Edit } tool = Tool::None;
         // The editing tools (rule 17), each a few steps: picks, points and
         // numbers asked for on the command line.
-        enum class EditKind { Trim, Extend, Offset, Fillet, Chamfer, Mirror, Array, Move, Copy, Rotate, Scale };
+        enum class EditKind { Trim, Extend, Offset, Fillet, Chamfer, Mirror, Array, Move, Copy, Rotate, Scale, Distance, Area };
         EditKind edit = EditKind::Trim;
         int edit_step = 0;
         std::vector<std::size_t> selected;
@@ -11632,6 +11632,7 @@ void App::design_panel() {
                 {K::Mirror, T::EditMirror, "sketch_edit_mirror"}, {K::Array, T::EditArray, "sketch_edit_array"},
                 {K::Move, T::EditMove, "sketch_edit_move"},       {K::Copy, T::EditCopy, "sketch_edit_copy"},
                 {K::Rotate, T::EditRotate, "sketch_edit_rotate"}, {K::Scale, T::EditScale, "sketch_edit_scale"},
+                {K::Distance, T::EditDistance, "sketch_measure_distance"}, {K::Area, T::EditArea, "sketch_measure_area"},
             };
             float x = 0.0f;
             const float room = ImGui::GetContentRegionAvail().x;
@@ -15705,7 +15706,8 @@ void App::sketch_place(const cad::Pt& p, const cad::Snap* snap, std::optional<do
         // a typed or snapped base point is taken as it is.
         const bool picking = sketch_edit_selecting() || e.edit == SketchEdit::EditKind::Trim ||
                              e.edit == SketchEdit::EditKind::Extend || e.edit == SketchEdit::EditKind::Offset ||
-                             e.edit == SketchEdit::EditKind::Chamfer || e.edit == SketchEdit::EditKind::Fillet;
+                             e.edit == SketchEdit::EditKind::Chamfer || e.edit == SketchEdit::EditKind::Fillet ||
+                             e.edit == SketchEdit::EditKind::Area;
         sketch_edit_point(p, snap && picking ? e.raw.value_or(p) : p);
         return;
     }
@@ -15799,7 +15801,8 @@ bool App::sketch_edit_selecting() const {
         return false;
     using K = SketchEdit::EditKind;
     const K k = sketch_edit_->edit;
-    return sketch_edit_->edit_step == 0 && k != K::Trim && k != K::Extend && k != K::Offset && k != K::Chamfer && k != K::Fillet;
+    return sketch_edit_->edit_step == 0 && k != K::Trim && k != K::Extend && k != K::Offset && k != K::Chamfer && k != K::Fillet &&
+           k != K::Distance && k != K::Area;
 }
 
 void App::sketch_edit_tool(SketchEdit::EditKind kind) {
@@ -15839,6 +15842,8 @@ void App::sketch_edit_prompt() {
     case K::Chamfer:
         command_message_ = st == 0 ? format(tr(T::PromptChamferDistance), chamfer_distance_) : std::string(tr(T::PromptChamferPick));
         break;
+    case K::Distance: command_message_ = tr(e.edit_points.empty() ? T::PromptDistance1 : T::PromptDistance2); break;
+    case K::Area: command_message_ = tr(T::PromptArea); break;
     case K::Fillet:
         command_message_ = st == 0 ? format(tr(T::PromptFilletRadius), fillet_radius_) : std::string(tr(T::PromptFilletPick));
         break;
@@ -15913,6 +15918,28 @@ void App::sketch_edit_point(const cad::Pt& p, const cad::Pt& raw) {
     }
     e.last = p;
     switch (e.edit) {
+    case K::Distance:
+        // Two points: the distance, its parts along x and y and its angle;
+        // then again from the start (rule 18: nothing is added).
+        e.edit_points.push_back(p);
+        if (e.edit_points.size() == 2) {
+            const cad::Pt a = e.edit_points[0], b = e.edit_points[1];
+            command_message_ = format(tr(T::SketchMeasureDistance), std::hypot(b.x - a.x, b.y - a.y), b.x - a.x, b.y - a.y,
+                                      std::atan2(b.y - a.y, b.x - a.x) * 180.0 / std::numbers::pi);
+            e.edit_points.clear();
+        } else {
+            sketch_edit_prompt();
+        }
+        return;
+    case K::Area:
+        if (const auto m = cad::measure_region_at(*sketch, raw)) {
+            command_message_ = format(tr(T::SketchMeasureArea), m->area, m->perimeter);
+            if (m->holes > 0)
+                command_message_ += format(tr(T::SketchMeasureHoles), m->holes);
+        } else {
+            command_message_ = tr(T::EditNoRegion);
+        }
+        return;
     case K::Trim: sketch_edit_finish(cad::trim_at(*sketch, raw, radius)); return;
     case K::Extend: sketch_edit_finish(cad::extend_at(*sketch, raw, radius)); return;
     case K::Offset:
@@ -16009,6 +16036,8 @@ bool App::sketch_edit_text(const std::string& word, const std::string& text) {
         {"mirror", K::Mirror}, {"ar", K::Array},          {"matriz", K::Array},      {"array", K::Array},
         {"m", K::Move},        {"mover", K::Move},        {"move", K::Move},         {"co", K::Copy},
         {"copiar", K::Copy},   {"copy", K::Copy},         {"ro", K::Rotate},         {"girar", K::Rotate},
+        {"di", K::Distance},   {"distancia", K::Distance}, {"distance", K::Distance}, {"dist", K::Distance},
+        {"area", K::Area},     {"área", K::Area},
         {"rotate", K::Rotate}, {"sc", K::Scale},          {"escalar", K::Scale},     {"scale", K::Scale}};
     for (const auto& [name, kind] : kNames)
         if (word == name) {
@@ -19057,6 +19086,13 @@ void App::script_input() {
         std::printf("ui-script: sketch-point %s %s: at %.3f %.3f (%s)\n", step.key.c_str(), step.value.c_str(),
                     sketch_edit_->cursor->x, sketch_edit_->cursor->y, cad::snap_name(snap.kind));
         sketch_place(*sketch_edit_->cursor, &snap, std::nullopt);
+        next();
+    } else if (step.verb == "expect-command-message") { // the command line's message contains TEXT
+        const std::string want = step.value.empty() ? step.key : step.key + " " + step.value;
+        const bool ok = command_message_.find(want) != std::string::npos;
+        std::printf("ui-script: expect-command-message %s: %s%s\n", want.c_str(), ok ? "ok, " : "got ", command_message_.c_str());
+        if (!ok)
+            return fail_step("the message is \"" + command_message_ + "\"");
         next();
     } else if (step.verb == "expect-sketch-entities") { // the sketch being drawn (or the last sketch feature) has N entities
         const cad::Sketch* s = editing_sketch();

@@ -116,7 +116,7 @@ struct Sketch {
 
 // The loops that open chains and arcs (not construction) close by meeting
 // end to end, within 1e-6 mm (rule 6: a profile drawn piece by piece, a
-// rounded corner): each as a polygon, the arcs in short segments.
+// rounded corner): each as a polygon, the arcs in segments of half a degree.
 std::vector<std::vector<Pt>> joined_loops(const Sketch& sketch);
 
 // The point an entity's EntityPoint names.

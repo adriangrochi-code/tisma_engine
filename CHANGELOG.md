@@ -17,6 +17,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   MI, AR, M, CO, RO y SC en la línea de comandos. Líneas y arcos sueltos que se tocan punta con punta cierran una
   región que se puede extruir. Se elige con clic o con una caja: hacia la derecha, ventana (solo lo que queda
   adentro); hacia la izquierda, cruce (todo lo que toca).
+- **Medir en el boceto** (regla 18): distancia, ΔX, ΔY y ángulo entre dos puntos (DI), y área y perímetro de la
+  región bajo un clic, sin sus agujeros (AREA). No agrega cotas.
 - **Roscas en Diseño:** la operación Rosca sobre una cara cilíndrica (M2 a M24, derecha, izquierda o las dos,
   dibujada o modelada) y el agujero roscado, con la broca de macho de su norma.
 - **Operaciones en Diseño** (`cad_design.md`, regla 7, etapa D4): redondeo, chaflán, vaciado, agujero por norma
