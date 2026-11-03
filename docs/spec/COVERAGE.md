@@ -75,6 +75,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Solape del relleno con las paredes | `surfaces_infill.md` | ✔ |
 | Relleno denso bajo las superficies de arriba (Tisma) | `dense_infill.md` | ✔ |
 | Relleno ondulado entrelazado (Tisma) | `interlock_infill.md` | ✔ |
+| Relleno en zigzag en Z (propio del motor, ZigZagZ) | `zigzag_infill.md` | ✔ |
 | Planchado: arriba, solo la de más arriba o todas las sólidas; flujo, separación, velocidad | `ironing.md` | ✔ |
 | Proporción de flujo de los puentes | `speeds_accels.md` | ✔ |
 

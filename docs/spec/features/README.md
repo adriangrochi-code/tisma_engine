@@ -20,6 +20,7 @@ Los ajustes usan los nombres del motor (`docs/CONFIG.md`) o propuestas con su mi
 | [`arc_overhangs.md`](arc_overhangs.md): voladizos sin soporte con arcos concéntricos | después de F5 | Para revisar |
 | [`staggered_perimeters.md`](staggered_perimeters.md): perímetros internos alternados media capa más arriba, con la nota de la patente | después de F2 | Para revisar |
 | [`interlock_infill.md`](interlock_infill.md): relleno sobre ondas en Z que se encajan entre capas | después de F3 | Para revisar |
+| [`zigzag_infill.md`](zigzag_infill.md): relleno en zigzag en Z (ZigZagZ), anidado capa sobre capa, y un solo renglón «Relleno no planar» en la interfaz | después de F3 | Para revisar |
 | [`dense_infill.md`](dense_infill.md): relleno más denso solo bajo las superficies de arriba | después de F3 | Para revisar |
 | [`pressure_advance_gcode.md`](pressure_advance_gcode.md): estudio: el adelanto del extrusor escrito en el G-code para firmwares sin pressure advance, con los límites en las uniones y la simulación | después de F4, opcional | Para revisar |
 | [`multimaterial.md`](multimaterial.md): boquillas de distinto diámetro por extrusor (paredes finas, relleno grueso) y mezcla de colores por capas, con su costo de purga | después de la primera versión | Para revisar |
