@@ -72,7 +72,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"surfaces.top_min_thickness", B},
             {"surfaces.bottom_min_thickness", B},
             {"surfaces.top_pattern", B},
-            {"surfaces.bottom_pattern", B},
+            {"surfaces.bottom_pattern", A},
             {"surfaces.bridge_angle", A},
             {"surfaces.interface_shells", A}}},
           {"infill", T::SubInfill, {{"infill.density", B}, {"infill.pattern", B}, {"infill.angle", N}}},

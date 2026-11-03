@@ -9127,7 +9127,7 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   - las curvas: las mismas funciones del relleno, densas (separación de un cordón menos el solape);
   - abajo, los que no son líneas solo en `bottom_exposed` (lo que no tiene nada de la pieza debajo, nuevo en
     `LayerSurfaces`); las capas sólidas de encima siguen en zigzag (regla 17).
-- En el panel, el patrón de abajo pasa a básico junto al de arriba, con los ocho dibujos; la explicación lo dice.
+- En el panel, los dos con los ocho dibujos; el de abajo queda en el nivel avanzado (la lista básica de la ficha no lo tiene). Por error lo había pasado a básico y subí c033143 con esa prueba fallando; corregido en el commit siguiente.
 - Pruebas: P10 en `test_infill.cpp` (cada dibujo cubre entre 0,9 y 1,15 veces lo que cubren las líneas, el alineado
   no gira, el concéntrico hace lazos, abajo solo la capa expuesta cambia, los ocho nombres se leen y se escriben).
   El cubo de prueba se lamina con los ocho dibujos arriba y abajo y su G-code pasa la verificación;
