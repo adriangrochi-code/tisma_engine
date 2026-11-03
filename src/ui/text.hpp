@@ -367,7 +367,7 @@
     X(InterlockWavesTip, "El relleno sube y baja como un cartón de huevos, igual en cada capa, así las capas encajan en vez de apoyarse en planos lisos.", "The infill rises and falls like an egg crate, the same in every layer, so the layers nest instead of lying on flat planes.") \
     X(WaveAmplitude, "Altura de las ondas", "Wave height") \
     X(WaveLength, "Largo de las ondas", "Wave length") \
-    X(TopPattern, "Superficie superior", "Top surface")                                                               \
+    X(TopPattern, "Patrón de arriba", "Top pattern")                                                                  \
     X(Monotonic, "Monotónica", "Monotonic")                                                                           \
     X(MonotonicLines, "Líneas monotónicas", "Monotonic lines")                                                       \
     X(Rectilinear, "Rectilínea", "Rectilinear")                                                                       \

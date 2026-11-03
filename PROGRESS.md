@@ -9354,3 +9354,8 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   y el mismo lugar, y la punta en la cama donde estaba. La prueba del paquete 3MF ahora espera la malla en sus
   coordenadas propias.
 - Medido: 865 pruebas en paralelo; falló una vez `ui_script_cloud_slice` (pasa sola: tiempos bajo carga, a vigilar).
+
+### TR26 (equipo de fichas): los dos patrones de Arriba y abajo como par
+
+- «Superficie superior» / «Patrón de abajo» → «Patrón de arriba» / «Patrón de abajo» (en inglés «Top pattern» /
+  «Bottom pattern»), como «Espesor mínimo arriba» / «abajo» justo encima.
