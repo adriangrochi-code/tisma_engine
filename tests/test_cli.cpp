@@ -7,6 +7,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <nlohmann/json.hpp>
+
 #include <cctype>
 #include <cmath>
 #include <filesystem>
@@ -384,7 +386,24 @@ TEST_CASE("analyze on a project uses its parts' Engineering conditions (FM25)", 
         text << in.rdbuf();
         return text.str();
     };
-    CHECK_THAT(read_text(by_project), ContainsSubstring("\"frame\": \"bed\""));
+    // The critical point in the part's own coordinates (structural_analysis.md),
+    // the same for the loose STL and the project's part moved on the bed; on
+    // the bed apart, as weakest_on_bed.
+    const auto weakest = [&](const std::filesystem::path& path, const char* key) {
+        const nlohmann::json j = nlohmann::json::parse(read_text(path));
+        const nlohmann::json& w = j.at("result").at(key);
+        return std::array<double, 3>{w.at("x").get<double>(), w.at("y").get<double>(), w.at("z").get<double>()};
+    };
+    const std::array<double, 3> wa = weakest(by_case, "weakest"), wb = weakest(by_project, "weakest");
+    for (std::size_t k = 0; k < 3; ++k) {
+        INFO(k << ": " << wa[k] << " " << wb[k]);
+        CHECK(wb[k] >= -0.5);
+        CHECK(wb[k] <= 10.5); // inside the 10 mm cube's own box
+    }
+    const std::array<double, 3> bed = weakest(by_project, "weakest_on_bed");
+    CHECK(std::abs(bed[0] - wb[0] - 60.0) < 1e-6);
+    CHECK(std::abs(bed[1] - wb[1] - 70.0) < 1e-6);
+    CHECK_THAT(read_text(by_project), ContainsSubstring("\"frame\": \"part\""));
 
     // Without conditions, the project says what is missing.
     project.models[0].engineering.conditions.clear();

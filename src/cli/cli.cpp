@@ -655,7 +655,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
 // conditions as the case (FM25), or --case's. The part is the first with
 // Engineering conditions; with --case and none, the first part.
 int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analysis, TriangleMesh& mesh,
-                     std::ostream& out, std::ostream& err) {
+                     std::array<double, 3>& part_min, std::ostream& out, std::ostream& err) {
     Project project;
     try {
         project = load_project(a.model);
@@ -708,6 +708,10 @@ int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analy
     }
     mesh = it->mesh;
     mesh.translate(float(it->offset[0]), float(it->offset[1]), float(it->offset[2]));
+    // The part's own box corner: the mesh's, less what a 3MF's reading moved.
+    const BoundingBox own = it->mesh.bounding_box();
+    part_min = {double(own.min.x) - it->placed_by[0], double(own.min.y) - it->placed_by[1],
+                double(own.min.z) - it->placed_by[2]};
     out << "part: " << it->name << ", " << mesh.triangle_count() << " triangles, " << analysis.fixtures.size()
         << " fixtures, " << analysis.loads.size() << " loads\n";
     return kExitOk;
@@ -724,14 +728,13 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
     Settings settings;
     AnalysisCase analysis;
     ModelFile stl;
-    // Where the report's points are: on the bed (a project's part, or a
-    // model placement.arrange moved) or in the model file's own coordinates.
-    std::string frame = "model";
+    // The part's own box corner (the model file's, or a project's part's),
+    // to give the report's points in the part's coordinates.
+    std::array<double, 3> part_min{};
     if (parsed->project) {
         // A project: its settings (or --config's), and the first part with
         // Engineering conditions, where it is on the bed.
-        frame = "bed";
-        if (int rc = project_analysis(*parsed, settings, analysis, stl.mesh, out, err); rc != kExitOk)
+        if (int rc = project_analysis(*parsed, settings, analysis, stl.mesh, part_min, out, err); rc != kExitOk)
             return rc;
     } else {
         try {
@@ -750,11 +753,15 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
         if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
             return rc;
         out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
-        const BoundingBox before = stl.mesh.bounding_box();
+        const BoundingBox own = stl.mesh.bounding_box();
+        part_min = {double(own.min.x), double(own.min.y), double(own.min.z)};
         place_on_bed(stl.mesh, settings);
-        const BoundingBox after = stl.mesh.bounding_box();
-        if (after.min.x != before.min.x || after.min.y != before.min.y || after.min.z != before.min.z)
-            frame = "bed";
+    }
+    // Where that corner is in the analysis: on the bed, its lowest point at 0.
+    std::array<double, 3> part_shift{};
+    {
+        const BoundingBox placed = stl.mesh.bounding_box();
+        part_shift = {double(placed.min.x) - part_min[0], double(placed.min.y) - part_min[1], -part_min[2]};
     }
     const IndexedMesh mesh = weld_exact(stl.mesh);
     if (const std::string reason = unprintable_reason(mesh, settings); !reason.empty()) {
@@ -823,7 +830,7 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
     for (const AnalysisWarning& w : report.warnings)
         err << "warning: " << w.message << "\n";
 
-    if (!write_file(parsed->output, [&](std::ostream& json) { json << analysis_json(report, analysis, frame); })) {
+    if (!write_file(parsed->output, [&](std::ostream& json) { json << analysis_json(report, analysis, part_shift); })) {
         err << "error: cannot write '" << parsed->output << "'\n";
         return kExitInput;
     }

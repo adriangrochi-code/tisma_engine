@@ -31,7 +31,7 @@ el apartado Ingeniería (`formats.md`, regla 11 bis), así que no hace falta `--
 - los ajustes son los del proyecto, o los de `--config` si se da;
 - con `--case`, las condiciones son las del caso y no las marcadas (la pieza es la primera con condiciones, o la
   primera de la placa si ninguna tiene); sigue sin hacer falta `--config`;
-- el informe dice dónde están sus puntos (`"frame"`): `"bed"` para un proyecto, donde está la pieza en la cama;
+- los puntos del informe van en las coordenadas propias de la pieza, como en el STL suelto (ver «El informe»);
 - el material es el cambiado a mano en el panel, o si no el del tipo de filamento del perfil (PLA, PLA+, PLA-CF,
   PETG, PETG-CF, ABS, ASA, PA-CF, PA6-CF, PAHT-CF; un tipo que no está en la tabla da un aviso y se usa el PLA);
 - los otros valores cambiados a mano en el panel reemplazan a los del perfil: altura de capa, altura de la
@@ -90,8 +90,10 @@ cálculo: su desplazamiento no está determinado. El informe dice cuántos vóxe
 
 ## El informe (`-o informe.json`)
 
-`"frame"` dice dónde están los puntos del informe (el punto más débil y los demás): `"model"`, en las coordenadas
-del archivo del modelo; `"bed"`, en la cama, cuando la pieza es de un proyecto o `placement.arrange` la movió.
+Los puntos del informe van en las coordenadas propias de la pieza (`"frame": "part"`, `structural_analysis.md`): las
+del archivo del modelo, o en las que un proyecto guarda sus condiciones. Así la misma pieza da el mismo punto crítico
+suelta, en un proyecto, en el escritorio o en la nube, aunque se mueva en la cama. `result.weakest_on_bed` da además
+ese punto donde está en la cama, para marcarlo en la vista.
 
 El cubo de prueba de 10 mm en PLA Basic de Bambu Lab, calidad `high`, base fija y 100 N de corte en la cara de arriba
 (recortado; el análisis tardó 29,2 s y el chequeo de resolución unos 4 s más):

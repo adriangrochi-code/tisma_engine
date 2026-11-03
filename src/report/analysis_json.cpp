@@ -19,7 +19,7 @@ json safety(double s) { return std::isfinite(s) ? json(s) : json(nullptr); }
 
 } // namespace
 
-std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, std::string_view frame) {
+std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, const std::array<double, 3>& part_shift) {
     const OrthotropicMaterial& m = c.material;
     const MaterialRecord* record = find_material(c.material_id);
     json material = {{"id", c.material_id},
@@ -39,12 +39,14 @@ std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, std::s
                    {"voxels_below_1", r.below[0]},
                    {"voxels_below_1_5", r.below[1]},
                    {"voxels_below_2", r.below[2]}};
-    if (r.weakest_layer >= 0)
-        result["weakest"] = {{"x", r.weakest[0]},
-                             {"y", r.weakest[1]},
-                             {"z", r.weakest[2]},
+    if (r.weakest_layer >= 0) {
+        result["weakest"] = {{"x", r.weakest[0] - part_shift[0]},
+                             {"y", r.weakest[1] - part_shift[1]},
+                             {"z", r.weakest[2] - part_shift[2]},
                              {"layer", r.weakest_layer},
                              {"mode", failure_mode_name(r.result.mode[r.result.weakest])}};
+        result["weakest_on_bed"] = {{"x", r.weakest[0]}, {"y", r.weakest[1]}, {"z", r.weakest[2]}};
+    }
     json layers = json::array();
     for (std::size_t l = 0; l < r.layer_safety.size(); ++l) {
         const LayerSafety& s = r.layer_safety[l];
@@ -72,7 +74,7 @@ std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, std::s
         {"version", 1},
         {"valid", r.valid},
         {"model", c.model == AnalysisModel::AsPrinted ? "as_printed" : "solid"},
-        {"frame", std::string(frame)},
+        {"frame", "part"},
         {"material", material},
         {"voxels",
          {{"size", r.grid.hx},

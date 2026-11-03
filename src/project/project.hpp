@@ -58,6 +58,10 @@ struct ProjectModel {
     // Its Engineering data (formats.md, rule 11 bis): conditions in its own
     // coordinates and triangles, values changed by hand, options.
     ProjectEngineering engineering{};
+    // How far a 3MF's reading moved the mesh from the part's own coordinates
+    // to where it stood on the bed (its build item): not saved; zero for the
+    // engine's own file, whose mesh stays in the part's coordinates.
+    std::array<double, 3> placed_by{};
 };
 
 // The calibration being printed: which one, and the value of each segment.

@@ -354,6 +354,8 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
                             if (c.is_point())
                                 for (std::size_t a = 0; a < 3; ++a)
                                     c.point[a] += by[a].get<double>();
+                        for (std::size_t a = 0; a < 3; ++a)
+                            model.placed_by[a] = by[a].get<double>();
                     }
                     if (const std::size_t dropped = drop_conditions_beyond(model.engineering, model.mesh.triangle_count()))
                         p.notices.push_back(model.name + ": " + std::to_string(dropped) +

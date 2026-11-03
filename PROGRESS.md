@@ -9314,5 +9314,7 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   pieza es la primera con condiciones, o la primera de la placa). El mismo cubo, caso y ajustes dan el mismo
   desplazamiento que el STL, con 0,01 % de diferencia (la grilla de vóxeles cae distinta en la cama: 95 779 vóxeles
   contra 95 780).
-- El informe tiene `"frame"`: `"bed"` para un proyecto o una pieza movida por `placement.arrange`, `"model"` si sus
-  puntos están en las coordenadas del archivo. Así el resumen de la nube y el del escritorio no se confunden.
+- El punto crítico va en las coordenadas propias de la pieza (`structural_analysis.md`, spec/next 5783d58): las del
+  archivo, o en las que el proyecto guarda sus condiciones (para un 3MF, lo que su lectura movió la malla queda en
+  `ProjectModel::placed_by`). La misma pieza da el mismo punto suelta o en un proyecto movido en la cama; la posición
+  en la cama va aparte, en `weakest_on_bed`. El informe dice `"frame": "part"`.
