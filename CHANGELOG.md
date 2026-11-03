@@ -154,6 +154,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Relleno zigzag en Z más rápido de lo que sube la impresora** (BH20, ficha `zigzag_infill.md`, regla 7): el G-code
+  pedía hasta 28 mm/s de Z en el zigzag aunque la máquina diera 5. Ahora la F de cada extrusión que sube o baja queda
+  dentro de `machine.max_feed_z`, y sin ese dato, dentro de los 5 mm/s de una Ender-3 de fábrica, con aviso. El
+  tiempo estimado y el G-code coinciden.
 - **Tisma Cloud sin conexión** (UI49): sin respuesta del servidor, la lista de planes dice «No se pudo conectar con
   el servidor.» en lugar de «El servidor no mandó planes.», que queda para una lista vacía. Un error del servidor dice
   su número.

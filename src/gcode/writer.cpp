@@ -57,6 +57,9 @@ namespace {
 // than 0.001 away from one half rounds the same way as the exact value; the
 // rest (near a half, huge, or more than 9 decimals) go to std::to_chars.
 constexpr std::size_t kNumberCapacity = 400; // any finite double with a few decimals
+// A stock Ender-3's Z speed, mm/s (Marlin's example configuration for it), for Z moves
+// when the profile gives no machine.max_feed_z (zigzag_infill.md, rule 7).
+constexpr double kStockZFeed = 5.0;
 std::size_t format_fixed(char* buffer, double v, int decimals) {
     static constexpr double kScale[] = {1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9};
     static constexpr std::uint64_t kDivisor[] = {1,         10,         100,         1000,         10000,
@@ -840,6 +843,9 @@ public:
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
         verbose_ = s.verbose_comments;
+        // How fast Z may move while extruding (zigzag_infill.md, rule 7): the
+        // machine's limit, or a stock Ender-3's 5 mm/s when the profile gives none.
+        z_limit_ = s.max_feed_z > 0.0 ? s.max_feed_z : kStockZFeed;
         // A silent mode: a second estimate with its limits (gcode_extras.md, rule 7).
         if (s.silent_mode)
             silent_.emplace(kinematics_of(silent_settings(s)));
@@ -1504,6 +1510,7 @@ public:
         const double section = !(height_ > 0.0) ? extruded_section(section_, width, height)
                                                 : extruded_section(section_, width, height_) * height / height_;
         feed = melt_feed(feed, width, height);
+        feed = z_limited(feed, length, z_to - z_from);
         const double e = section * length / filament_area_ * flow_ * speed_flow(feed);
         if (bridge_ || tail_)
             other_time_ += length / feed;
@@ -1534,6 +1541,16 @@ public:
         z_now_ = z_to;
     }
 
+    // The feed of a move `length` mm in XY and `dz` in Z, slowed so that Z
+    // goes no faster than z_limit_ (zigzag_infill.md, rule 7, ZI7): the
+    // G-code then asks what the machine does, and the estimate agrees.
+    double z_limited(double feed, double length, double dz) const {
+        const double up = std::abs(dz);
+        if (!(up > 1e-9))
+            return feed;
+        return std::min(feed, z_limit_ * std::hypot(length, up) / up);
+    }
+
     // Coasting (coasting.md, rule 1): a path's end run at its feed with no E;
     // the pressure left in the nozzle lays it. As an extrusion for the
     // layer's time, the slowdown and the wipe that may follow.
@@ -1542,6 +1559,7 @@ public:
         walk(length);
         const double z_to = written(z_value_ - drop_ + to.dz);
         feed = melt_feed(feed, (from.width + to.width) / 2.0, height_);
+        feed = z_limited(feed, length, z_to - z_now_);
         if (bridge_ || tail_)
             other_time_ += length / feed;
         else
@@ -2055,6 +2073,7 @@ private:
     double overhang_ = -1.0;         // the current paths' own fan
     bool weak_ = false;
     double filament_area_ = 1.0;
+    double z_limit_ = 5.0; // mm/s Z may move while extruding
     double e_scale_ = 1.0; // the E written per mm of filament
     double retract_, retract_feed_, lift_, min_travel_;
     double z_feed_; // mm/s of the moves in Z (speeds_accels.md, rule 4); 0: the travel's
@@ -2275,6 +2294,13 @@ std::vector<Warning> capability_warnings(const Settings& s) {
     }
     // Wavy infill asked, with an infill whose lines move from layer to layer
     // or sit too close: it stays flat, and says so.
+    // The zigzag's moves in Z slowed to a stock Z when the profile gives no
+    // limit (zigzag_infill.md, rule 7), said like the other speeds taken.
+    if (s.infill_nonplanar && s.infill_density > 0.0 && wave_params(s) && !(s.max_feed_z > 0.0))
+        add("speed_fallback",
+            "the printer's profile gives no speed for machine.max_feed_z: a stock Ender-3's 5 mm/s limits the zigzag "
+            "infill's moves in Z",
+            kStockZFeed);
     if (s.infill_nonplanar && s.infill_density > 0.0 && !wave_params(s))
         add("nonplanar_ignored",
             std::string("wavy infill needs an infill that repeats layer to layer (aligned_rectilinear, grid, "
@@ -4534,19 +4560,19 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         line("layer_height", trimmed(s.layer_height, 4));
         line("initial_layer_print_height", trimmed(s.first_layer_height, 4));
         line("nozzle_diameter", trimmed(s.nozzle_diameter, 4));
-        const std::string nozzle = first_variable("temperature"), bed = first_variable("bed_temperature");
+        const std::string nozzle_temp = first_variable("temperature"), bed_temp = first_variable("bed_temperature");
         const std::string first_nozzle = first_variable("first_layer_temperature").empty()
-                                             ? nozzle
+                                             ? nozzle_temp
                                              : first_variable("first_layer_temperature");
         const std::string first_bed = first_variable("first_layer_bed_temperature").empty()
-                                          ? bed
+                                          ? bed_temp
                                           : first_variable("first_layer_bed_temperature");
-        line("nozzle_temperature", nozzle);
+        line("nozzle_temperature", nozzle_temp);
         line("nozzle_temperature_initial_layer", first_nozzle);
         line("first_layer_height", fixed(s.first_layer_height, 3));
         line("first_layer_temperature", first_nozzle);
         line("first_layer_bed_temperature", first_bed);
-        line("bed_temperature", bed);
+        line("bed_temperature", bed_temp);
         out << "; CONFIG_BLOCK_END = end\n";
     } else {
         for (const auto& [key, value] : describe(s))

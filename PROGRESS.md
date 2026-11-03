@@ -9140,3 +9140,18 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   - `M73` lleva además `QuietR` y `SportR` como los archivos de Anycubic (los minutos del modo silencioso si lo hay;
     si no, los normales); el verificador del motor los acepta en `M73`.
 
+## 2026-11-03 (noche): BH20, la Z del zigzag (QA del equipo de fichas)
+
+- Ficha: `zigzag_infill.md` regla 7, ZI7 (spec/next 97470fd). Medido por QA en un cubo de 80 mm con `grid` y
+  `nonplanar`: la Z de las extrusiones del zigzag llegaba a 28,3 mm/s, y con `max_feed_z` 5 la estimación pasaba a
+  1 d 10 h pero el G-code seguía pidiendo 28,3.
+- **Hecho:** cada extrusión (y cada tramo de `coast`) que cambia de Z baja su F a `max_feed_z · largo / |dz|`
+  (`Emitter::z_limited`); sin `max_feed_z`, 5 mm/s (la Ender-3 de fábrica, como las otras velocidades que faltan) y
+  un aviso `speed_fallback` que lo dice cuando hay zigzag.
+- Prueba ZI7 en `test_nonplanar.cpp`: el cubo de 30 mm con `grid` ondulado, sin límite, con 2 y con 12 mm/s: la Z
+  más rápida del zigzag queda dentro del límite (con 2 % por el redondeo de las coordenadas) y el aviso sale solo
+  sin límite.
+- De paso: dos `-Wshadow` del bloque de ajustes del modo Anycubic (`nozzle`, `bed`).
+- **Sigue:** ZI8 (aviso cuando no entra ninguna onda), la fila única «Relleno no planar» (regla 11), y después el
+  resultado de Ingeniería en el proyecto.
+

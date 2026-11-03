@@ -144,6 +144,60 @@ TEST_CASE("wavy infill: a cube with grid infill, nested layers and checked G-cod
     CHECK(check.ok());
 }
 
+TEST_CASE("ZI7: the zigzag's moves ask Z no more than the machine moves it", "[nonplanar]") {
+    // The fastest Z of the extrusions between ;NONPLANAR:1 and :0, mm/s.
+    const auto fastest_z = [](const std::string& text) {
+        std::istringstream lines(text);
+        double x = 0.0, y = 0.0, z = 0.0, f = 0.0, most = 0.0;
+        bool in = false;
+        for (std::string line; std::getline(lines, line);) {
+            if (line == ";NONPLANAR:1" || line == ";NONPLANAR:0") {
+                in = line.back() == '1';
+                continue;
+            }
+            if (!line.starts_with("G1 "))
+                continue;
+            double nx = x, ny = y, nz = z;
+            bool extrudes = false;
+            std::istringstream words(line.substr(3));
+            for (std::string w; words >> w && w[0] != ';';) {
+                const double v = std::stod(w.substr(1));
+                switch (w[0]) {
+                case 'X': nx = v; break;
+                case 'Y': ny = v; break;
+                case 'Z': nz = v; break;
+                case 'F': f = v; break;
+                case 'E': extrudes = v > 0.0; break;
+                default: break;
+                }
+            }
+            const double length = std::hypot(nx - x, ny - y, nz - z);
+            if (in && extrudes && length > 0.0)
+                most = std::max(most, std::abs(nz - z) / length * f / 60.0);
+            x = nx, y = ny, z = nz;
+        }
+        return most;
+    };
+    Settings s = wavy(InfillPattern::Grid);
+    const SlicedModel m = slice_model(cube(30.0f), s);
+    for (const double limit : {0.0, 2.0, 12.0}) {
+        INFO(limit);
+        s.max_feed_z = limit;
+        std::ostringstream g;
+        std::vector<Warning> warnings;
+        write_gcode(g, m, s, &warnings);
+        const double z = fastest_z(g.str());
+        CHECK(z > 0.5); // there are waves
+        // The profile's limit, or a stock Ender-3's 5 mm/s; within the rounding
+        // of the coordinates (3 decimals) and of F on short moves.
+        CHECK(z <= 1.02 * (limit > 0.0 ? limit : 5.0));
+        const bool said = std::any_of(warnings.begin(), warnings.end(), [](const Warning& w) {
+            return w.kind == "speed_fallback" && w.message.find("max_feed_z") != std::string::npos;
+        });
+        CHECK(said == (limit == 0.0));
+    }
+}
+
 TEST_CASE("wavy infill: the check wants each wavy bead as thick as its ;HEIGHT", "[nonplanar]") {
     const Settings s = wavy(InfillPattern::Grid);
     const SlicedModel m = slice_model(cube(30.0f), s);
