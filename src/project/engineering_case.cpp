@@ -124,7 +124,8 @@ std::vector<std::string> add_conditions(AnalysisCase& c, const ProjectEngineerin
 
 AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const TriangleMesh& mesh,
                                        const std::array<double, 3>& shift, std::vector<std::string>& notes,
-                                       std::string_view filament_type, double layer_height) {
+                                       std::string_view filament_type, double layer_height,
+                                       const PrintConditions& print) {
     AnalysisCase c;
     const std::string by_type = material_for_filament(filament_type);
     const auto known = [](const std::string& id) { return find_material(id) || family_of_material_id(id); };
@@ -142,6 +143,11 @@ AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const Triang
         c.material = family_material(*family);
     else
         c.material = as_printed(*find_material(c.material_id));
+    // How the lines stick together as this part prints (the owner's request,
+    // 2026-11-03): the materials' constants are measured at their sources'
+    // settings; the factors move them to the part's.
+    c.adhesion = adhesion(family_of(c.material_id), print);
+    apply_adhesion(c.material, c.adhesion);
     // The working temperature (engineering_panel.md, rule 4): stiffness and
     // strength times f(T) of the material's family (structural_analysis.md,
     // method, point 5).
@@ -226,6 +232,11 @@ std::vector<LimitCheck> check_limits(const ProjectEngineering& e, const Triangle
     return out;
 }
 
+FailureMode weakest_mode(const AnalysisReport& report) {
+    const std::vector<FailureMode>& mode = report.result.mode;
+    return report.result.weakest < mode.size() ? mode[report.result.weakest] : FailureMode::None;
+}
+
 std::string structural_report_json(const AnalysisReport& report, const AnalysisCase& c, const ProjectEngineering& e,
                                    const std::array<double, 12>& to_part, const TriangleMesh* mesh) {
     nlohmann::json j = nlohmann::json::parse(analysis_json(report, c, to_part));
@@ -257,10 +268,46 @@ std::string structural_report_json(const AnalysisReport& report, const AnalysisC
                     {"limits_checked", mesh != nullptr},
                     {"limits", limits},
                     {"suggestions", suggestions}};
+    // The adhesion the material was given and what its uncertainty makes of
+    // the smallest safety factor (an approximation; the owner's request,
+    // 2026-11-03).
+    const FailureMode mode = weakest_mode(report);
+    const SafetyBand band = safety_band(report.result.min_safety, mode, c.adhesion);
+    const auto finite_or_null = [](double v) { return std::isfinite(v) ? nlohmann::json(v) : nlohmann::json(nullptr); };
+    j["adhesion"] = {{"modelled", c.adhesion.modelled},
+                     {"nozzle_temperature", c.adhesion.temperature},
+                     {"reference_temperature", c.adhesion.reference_temperature},
+                     {"z_strength_factor", c.adhesion.z_strength},
+                     {"z_stiffness_factor", c.adhesion.z_stiffness},
+                     {"across_strength_factor", c.adhesion.across_strength},
+                     {"z_ratio", c.adhesion.z_ratio},
+                     {"z_uncertainty", c.adhesion.z_uncertainty},
+                     {"across_uncertainty", c.adhesion.across_uncertainty},
+                     {"too_cold", c.adhesion.too_cold},
+                     {"too_hot", c.adhesion.too_hot},
+                     {"weakest_mode", failure_mode_name(mode)},
+                     {"min_safety_low", finite_or_null(band.low)},
+                     {"min_safety_high", finite_or_null(band.high)}};
     return j.dump();
 }
 
-void apply_engineering_overrides(Settings& settings, const ProjectEngineering& e, std::vector<std::string>& notes) {
+PrintConditions print_conditions(const Settings& settings, const ProjectEngineering& e) {
+    PrintConditions p;
+    const EngineeringValues v = engineering_values(settings, e);
+    if (v.extrusion_temperature.value > 0.0)
+        p.nozzle_temperature = v.extrusion_temperature.value;
+    if (v.layer_height.value > 0.0)
+        p.layer_height = v.layer_height.value;
+    if (v.line_width.value > 0.0)
+        p.line_width = v.line_width.value;
+    p.fan = std::clamp(settings.fan_max / 100.0, 0.0, 1.0);
+    // A chamber only where the printer heats one.
+    if (settings.max_chamber_temp > 0.0 && settings.chamber_temperature > 0.0)
+        p.chamber = std::min(settings.chamber_temperature, settings.max_chamber_temp);
+    return p;
+}
+
+void apply_engineering_overrides(Settings& settings, const ProjectEngineering& e, std::vector<std::string>& /*notes*/) {
     const EngineeringOverrides& o = e.overrides;
     if (o.layer_height && *o.layer_height > 0.0)
         settings.layer_height = *o.layer_height;
@@ -270,8 +317,6 @@ void apply_engineering_overrides(Settings& settings, const ProjectEngineering& e
         settings.wall_width = *o.line_width;
         settings.wall_width_auto = false;
     }
-    if (o.extrusion_temperature)
-        notes.push_back("the extrusion temperature changed by hand does not change the material yet");
 }
 
 } // namespace tisma

@@ -9871,3 +9871,36 @@ rugosidad. La simulación, las líneas de corriente y el mapa de presión se mir
 **Sigue:** la adherencia entre capas y entre cordones en el FEA, con el material y la temperatura de extrusión (modelo
 de los informes, constantes de las hojas técnicas); después, las optimizaciones de más impacto del CFD (TRT, fuerza
 por intercambio de momento) y la GPU.
+
+## 2026-11-03 — Adherencia entre capas y entre líneas en el FEA
+
+**Hecho** (pedido del dueño: «tener en cuenta para el FEA la adherencia entre capas y entre paredes junto con el
+material y temperatura de extrusión basada en datos medidos junto con hoja de especificaciones de fabricantes»):
+- `src/fea/adhesion.*`: el modelo de nivel A de `docs/research/interlayer_adhesion.md` §5. Para cada familia con datos
+  (PLA, PETG, ABS, ASA, PC, PA, PA-CF, PC-CF, PEI, PEEK, TPU) da factores sobre las constantes del material, relativos
+  a las condiciones de sus fuentes (capa de 0,2 mm, línea de 0,42 mm, temperatura en el medio del rango de la familia):
+  - entre capas, resistencia por la curva de curado con la temperatura (subida a la potencia p hasta T_opt, pérdida
+    por degradación sobre T_hot), el tiempo de capa con el ventilador, la cámara (amorfos) y la altura de capa sobre el
+    ancho de línea; acotada entre r_min y r_max del material; la rigidez E3, G13, G23 baja menos (85 % sin curado);
+  - entre líneas, la calidad de unión de `bead_adhesion.md` §5.2: −1,5 %/°C por debajo de la referencia (mínimo 0,6),
+    plana 20 °C por encima, después −1 %/°C;
+  - la incertidumbre 1σ: ±25 % entre capas en los amorfos comunes, ±50 % en PEI, PEEK y PC-CF; ±30 a 50 % entre
+    líneas; ±50 % cuando la temperatura está fuera de rango o el material no tiene datos.
+- El caso de análisis toma la temperatura de extrusión (la cambiada a mano o la del perfil), la altura de capa y el
+  ancho de línea (los del panel), el ventilador máximo y la cámara cuando la impresora calienta una. Ya no sale la nota
+  «la temperatura cambiada a mano todavía no cambia el material».
+- El informe (`.tea` incluido) lleva `adhesion`: factores, temperatura usada y de referencia, qué falla en el vóxel más
+  débil y el rango del factor de seguridad. El panel Estructural lo muestra debajo del factor de seguridad, en gris, y
+  en ámbar si la temperatura es baja o alta para el material.
+- Corregida una prueba que esperaba la lista de calidades sin «extreme».
+
+**Pruebas:** `[adhesion]` (5 casos: sin cambios en la referencia; las curvas de temperatura contra Rivera-López y
+CNC Kitchen; altura de capa, paredes simples, tiempo de capa, cámara, PEEK caliente; el material y la banda; el caso
+leído del perfil y de lo cambiado a mano) y el informe de PEI en `[analysis]`.
+
+**No medido:** no hay ensayo propio; las constantes son las estimaciones de los informes. El tiempo de capa todavía
+no llega al análisis (sale del laminado) y las paredes simples no se distinguen por zona.
+
+**Sigue:** las optimizaciones de más impacto del CFD (TRT, fuerza por intercambio de momento) y la GPU; después
+`orient` (regla 19c).
+

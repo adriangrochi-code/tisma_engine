@@ -414,7 +414,8 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
     ProjectEngineering placed = part.engineering;
     if (!quality.empty())
         placed.structural.quality = quality == "ultra" ? "extreme" : quality;
-    AnalysisCase c = engineering_analysis_case(placed, part.mesh, {}, notes, settings.filament_type, settings.layer_height);
+    AnalysisCase c = engineering_analysis_case(placed, part.mesh, {}, notes, settings.filament_type, settings.layer_height,
+                                               print_conditions(settings, placed));
     if (solid)
         c.model = AnalysisModel::Solid;
     if (no_zones || ribs)

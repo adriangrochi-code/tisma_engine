@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/settings.hpp"
+#include "fea/adhesion.hpp"
 #include "fea/analysis.hpp"
 #include "mesh/mesh.hpp"
 #include "project/engineering.hpp"
@@ -28,18 +29,30 @@ std::vector<std::string> add_conditions(AnalysisCase& c, const ProjectEngineerin
 
 // The whole case of a part (formats.md, rule 11 bis; FM25): the material
 // changed by hand, else the filament type's (engineering_panel.md, rule 3),
-// else the case's default, the Structural tab's quality ("high"
+// else the case's default, with the adhesion between layers and lines of
+// `print` applied (fea/adhesion.hpp; kept in the case), the Structural tab's quality ("high"
 // is high; "fast" the whole part solid in about 20 000 voxels a row per
 // layer of `layer_height`, without the resolution check; the rest normal), then add_conditions. Notes, as add_conditions,
 // also name an unknown material (the default is used).
 AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const TriangleMesh& mesh,
                                        const std::array<double, 3>& shift, std::vector<std::string>& notes,
-                                       std::string_view filament_type = {}, double layer_height = 0.2);
+                                       std::string_view filament_type = {}, double layer_height = 0.2,
+                                       const PrintConditions& print = {});
+
+// How the part prints, for the adhesion between layers and lines
+// (fea/adhesion.hpp): the extrusion temperature (changed by hand, else the
+// profile's), the layer height and line width (changed by hand, else the
+// profile's), the fan at its maximum and the chamber's temperature when the
+// profile heats one. The layer time is not known before slicing.
+PrintConditions print_conditions(const Settings& settings, const ProjectEngineering& e);
 
 // The values changed by hand that the analysis reads: the layer heights and
-// the line width (as walls.width). The extrusion temperature does not change
-// the material's constants yet; a note says so.
+// the line width (as walls.width). The extrusion temperature reaches the
+// material through print_conditions.
 void apply_engineering_overrides(Settings& settings, const ProjectEngineering& e, std::vector<std::string>& notes);
+
+// What gives way at the weakest voxel (None when unknown).
+FailureMode weakest_mode(const AnalysisReport& report);
 
 // The report of a Structural analysis (engineering_panel.md, rule 12):
 // analysis_json with a "verdict" object added: the verdict

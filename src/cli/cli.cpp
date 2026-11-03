@@ -702,7 +702,8 @@ int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analy
     std::vector<std::string> notes;
     apply_engineering_overrides(settings, it->engineering, notes);
     if (a.analysis_case.empty()) {
-        analysis = engineering_analysis_case(placed, mesh, {}, notes, settings.filament_type, settings.layer_height);
+        analysis = engineering_analysis_case(placed, mesh, {}, notes, settings.filament_type, settings.layer_height,
+                                             print_conditions(settings, placed));
     } else {
         try {
             analysis = load_analysis_case(a.analysis_case);

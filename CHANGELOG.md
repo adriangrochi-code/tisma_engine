@@ -12,6 +12,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Adherencia entre capas y entre líneas en el análisis estructural**: la resistencia entre capas (y su rigidez) y la
+  resistencia entre líneas siguen ahora la temperatura de extrusión, la altura de capa frente al ancho de línea, el
+  ventilador y la cámara, con constantes por material ajustadas a ensayos publicados y hojas técnicas. El resultado
+  muestra el rango probable del factor de seguridad según la incertidumbre de la adherencia, qué falla (entre capas,
+  entre líneas o la línea misma) y un aviso si la temperatura es baja o alta para el material. Cambiar la temperatura
+  de extrusión a mano ahora cambia el resultado.
 - **Editar el boceto** (`cad_design.md`, regla 17): recortar, alargar, desfasar, redondear y achaflanar una esquina,
   simetría, matriz rectangular y polar, mover, copiar, girar y escalar, desde el grupo Editar o con TR, EX, O, F, CHA,
   MI, AR, M, CO, RO y SC en la línea de comandos. Líneas y arcos sueltos que se tocan punta con punta cierran una

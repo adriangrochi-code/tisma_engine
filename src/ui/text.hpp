@@ -96,6 +96,14 @@
     X(StructQualityNormal, "Media (2 vóxeles por ancho de línea)", "Medium (2 voxels per line width)") \
     X(StructQualityHigh, "Alta (4 vóxeles por ancho de línea)", "High (4 voxels per line width)") \
     X(StructQualityExtreme, "Extrema (6 vóxeles por ancho de línea; lenta)", "Extreme (6 voxels per line width; slow)") \
+    X(StructSafetyBand, "Rango probable: %.3g a %.3g (±1σ de la adherencia; falla %s)", "Likely range: %.3g to %.3g (±1σ of the adhesion; fails %s)") \
+    X(StructFailsBetweenLayers, "entre capas", "between layers") \
+    X(StructFailsBetweenLines, "entre líneas", "between lines") \
+    X(StructFailsLine, "en la línea", "along the line") \
+    X(StructAdhesion, "Adherencia a %.0f °C (referencia %.0f °C): entre capas %.0f %%, entre líneas %.0f %% de los datos del material", "Adhesion at %.0f °C (reference %.0f °C): between layers %.0f %%, between lines %.0f %% of the material's data") \
+    X(StructAdhesionNone, "Sin datos de adherencia para este material: se usan sus valores tal cual (±50 %%)", "No adhesion data for this material: its values are used as they are (±50 %%)") \
+    X(StructTooCold, "Temperatura baja para este material: las capas pegan poco", "Temperature low for this material: the layers bond poorly") \
+    X(StructTooHot, "Temperatura alta para este material: el polímero se degrada", "Temperature high for this material: the polymer degrades") \
     X(Approximation, "Es una aproximación: sirve para comparar diseños, materiales y orientaciones, no reemplaza un ensayo ni un cálculo profesional.", "This is an approximation: it compares designs, materials and orientations; it does not replace a test or a professional calculation.") \
     X(StructEstimate, "Unos %zu vóxeles de %.2f mm", "About %zu voxels of %.2f mm") \
     X(StructCritical, "Punto crítico: %.2f", "Critical point: %.2f") \

@@ -400,6 +400,11 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
   en cada uno; la dirección de cada vóxel tomada del laminado real (`src/fea/as_printed.*`); el solver con una matriz
   por dirección (pasos de 5°); criterio de Tsai–Wu, mapa del factor de seguridad y modo de falla (cordón, unión entre
   cordones, unión entre capas); la pieza con los huecos del relleno ralo cuando hay 4 vóxeles por ancho de línea
+- [x] **Adherencia según cómo se imprime** (pedido del dueño, 2026-11-03; `src/fea/adhesion.*`): la resistencia y la
+  rigidez entre capas y la resistencia entre líneas cambian con el material, la temperatura de extrusión, la altura de
+  capa sobre el ancho de línea, el ventilador y la cámara (modelo de `docs/research/`); el resultado muestra el rango
+  probable del factor de seguridad (±1σ) y avisa cuando la temperatura es baja o alta para el material
+  - [ ] el tiempo de capa real (sale del laminado) y paredes simples por zona; nivel B con la historia térmica
 - [x] Base de materiales (pedido del dueño): literatura (Song 2017, Casavola 2016, Cantrell 2017, Ahn 2002), hojas
   técnicas de Bambu Lab (11 materiales) y eSUN (2), y ensayos de CNC Kitchen (6); cada número con su fuente y reglas
   escritas para lo que falta (`src/fea/materials.*`, `docs/MATERIALS.md`)

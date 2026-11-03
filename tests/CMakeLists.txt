@@ -75,6 +75,7 @@ add_executable(tisma_tests
   test_voronoi.cpp
   test_fea.cpp
   test_analysis.cpp
+  test_adhesion.cpp
   test_gcode_check.cpp
   test_gcode_preview.cpp
   test_calibration.cpp

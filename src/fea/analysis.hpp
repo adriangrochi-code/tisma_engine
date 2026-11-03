@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fea/adhesion.hpp"
 #include "fea/elasticity.hpp"
 #include "fea/material.hpp"
 #include "fea/voxels.hpp"
@@ -65,6 +66,7 @@ struct CaseLoad {
 struct AnalysisCase {
     std::string material_id = "bambu-pla-basic"; // a record of fea/materials.hpp
     OrthotropicMaterial material;                 // the record's constants with the case's changes
+    Adhesion adhesion;                            // the factors applied to them (fea/adhesion.hpp), if any
     AnalysisModel model = AnalysisModel::AsPrinted;
     AnalysisQuality quality = AnalysisQuality::Normal;
     double voxel = 0.0;      // mm across x and y; 0: from the quality and the line width

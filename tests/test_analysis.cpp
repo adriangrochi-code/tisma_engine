@@ -124,7 +124,7 @@ TEST_CASE("analysis case: errors name the key", "[analysis]") {
     CHECK_THAT(error_of("{\"material\": \"steel\"}"), ContainsSubstring("unknown material 'steel'; known: song2017-pla"));
     CHECK_THAT(error_of("{\"material\": {\"zt\": -1}}"), ContainsSubstring("material.zt: must be greater than 0"));
     CHECK_THAT(error_of("{\"material\": {\"nu12\": 0.9, \"nu13\": 0.9, \"nu23\": 0.9}}"), ContainsSubstring("not a valid material"));
-    CHECK_THAT(error_of("{\"quality\": \"ultra\"}"), ContainsSubstring("quality: must be one of high, normal"));
+    CHECK_THAT(error_of("{\"quality\": \"ultra\"}"), ContainsSubstring("quality: must be one of extreme, high, normal"));
     CHECK_THAT(error_of("{\"rows_per_layer\": 0}"), ContainsSubstring("rows_per_layer"));
     CHECK_THAT(error_of("{\"fixtures\": [{\"face\": \"bottom\", \"box\": {}}]}"), ContainsSubstring("fixtures[0]: needs either"));
     CHECK_THAT(error_of("{\"fixtures\": [{\"face\": \"side\"}]}"), ContainsSubstring("fixtures[0].face: must be one of"));
@@ -717,6 +717,13 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     CHECK(jp["material"]["name"] == "PEI");
     CHECK(jp["verdict"]["family"] == "PEI");
     CHECK(jp["verdict"]["name"] == "holds"); // under its 150 °C service maximum
+    // The adhesion it was given (at the reference: nothing changed) and the
+    // band its uncertainty makes of the safety factor (±50 % for PEI).
+    CHECK(jp["adhesion"]["modelled"] == true);
+    CHECK(jp["adhesion"]["z_strength_factor"].get<double>() == 1.0);
+    CHECK(jp["adhesion"]["weakest_mode"].is_string());
+    if (jp["adhesion"]["weakest_mode"] == "between_layers")
+        CHECK_THAT(jp["adhesion"]["min_safety_low"].get<double>(), WithinRel(0.5 * rp.result.min_safety, 1e-9));
     CHECK(family_of_material_id("bambu-pla-basic") == nullptr);
     // Rápida: the whole bar solid in about 20 000 voxels, and still the same
     // verdict at 23 °C.

@@ -12782,6 +12782,33 @@ void App::structural_panel() {
             const nlohmann::json result = j.value("result", nlohmann::json::object());
             if (result.contains("min_safety") && result["min_safety"].is_number())
                 ImGui::TextUnformatted(format(tr(T::StructMinSafety), result["min_safety"].get<double>(), verdict.value("required_safety", 2.0)).c_str());
+            // The adhesion between layers and lines and the band its
+            // uncertainty gives the safety factor (the owner's request,
+            // 2026-11-03: the results are approximations).
+            if (const nlohmann::json ad = j.value("adhesion", nlohmann::json::object()); !ad.empty()) {
+                const std::string mode = ad.value("weakest_mode", std::string("none"));
+                const T fails = mode == "between_layers" ? T::StructFailsBetweenLayers
+                                : mode == "between_lines" ? T::StructFailsBetweenLines
+                                                          : T::StructFailsLine;
+                const auto number = [&](const char* key) {
+                    const auto it = ad.find(key);
+                    return it != ad.end() && it->is_number() ? it->get<double>() : std::nan("");
+                };
+                const double low = number("min_safety_low"), high = number("min_safety_high");
+                if (mode != "none" && std::isfinite(low) && std::isfinite(high))
+                    loc::TextDisabled("%s", format(tr(T::StructSafetyBand), low, high, tr(fails)).c_str());
+                if (ad.value("modelled", false))
+                    loc::TextDisabled("%s", format(tr(T::StructAdhesion), ad.value("nozzle_temperature", 0.0),
+                                                   ad.value("reference_temperature", 0.0), 100.0 * ad.value("z_strength_factor", 1.0),
+                                                   100.0 * ad.value("across_strength_factor", 1.0))
+                                                .c_str());
+                else
+                    loc::TextDisabled("%s", tr(T::StructAdhesionNone));
+                if (ad.value("too_cold", false))
+                    loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructTooCold));
+                if (ad.value("too_hot", false))
+                    loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructTooHot));
+            }
             if (result.contains("max_displacement_mm") && result["max_displacement_mm"].is_number())
                 ImGui::TextUnformatted(format(tr(T::StructMaxDisplacement), result["max_displacement_mm"].get<double>()).c_str());
             if (verdict.value("mass_g", 0.0) > 0.0)
@@ -13150,7 +13177,8 @@ void App::structural_panel() {
             ProjectEngineering bare = e;
             bare.conditions.clear(); // the size does not depend on them
             const AnalysisCase c =
-                engineering_analysis_case(bare, placed_meshes_[part], {}, notes, settings_.filament_type, settings.layer_height);
+                engineering_analysis_case(bare, placed_meshes_[part], {}, notes, settings_.filament_type, settings.layer_height,
+                                          print_conditions(settings, bare));
             const IndexedMesh mesh = weld_exact(placed_meshes_[part]);
             estimate = {analysis_grid_voxels(mesh, settings, c), analysis_resolution(c, settings).first};
         }
@@ -13740,7 +13768,8 @@ void App::start_structural() {
         struct Cancelled {};
         try {
             std::vector<std::string> case_notes;
-            const AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height);
+            const AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height,
+                                                             print_conditions(settings, moved));
             const IndexedMesh mesh = weld_exact(placed);
             const AnalysisReport r = run_analysis(mesh, settings, c, nullptr, [this](std::string_view, double done) {
                 structural_permille_ = int(done * 1000.0);
