@@ -9790,3 +9790,43 @@ o ubicación que no existen, un modo sin implementar, una calidad desconocida y 
 de `orientation.md`, que el motor todavía no tiene).
 
 **Sigue:** el CFD (A3) y `aero` (regla 19b); `orient` cuando esté la orientación automática.
+
+## 2026-11-03 — A3, CFD: motor del análisis aerodinámico y `aero` de los nodos (cloud.md, regla 19b)
+
+**Hecho** (`aerodynamics.md`):
+- `src/aero/lbm.*`: lattice Boltzmann D3Q19 con colisión BGK (Qian, d'Humières y Lallemand, 1992) y la viscosidad de
+  submalla de Smagorinsky (1963) en el tiempo de relajación (forma de Hou, Sterling, Chen y Doolen, 1996). El aire en
+  +x: velocidad fija en la entrada, gradiente nulo en la salida, laterales periódicos y rebote a mitad de camino en las
+  celdas sólidas. Paralelo por capas con oneTBB; las celdas del interior sin vecinos sólidos van por un camino rápido.
+- `src/aero/aero.*`: la pieza girada para que el aire vaya en +x y pasada a vóxeles del tamaño de la celda; dominio de
+  1,5 tamaños frontales adelante y a los lados y 3 atrás; Reynolds simulado limitado a 40 × las celdas; la presión media
+  del último tercio integrada sobre las caras (Cp por cara); rozamiento por correlaciones de placa plana (Blasius,
+  turbulento liso y totalmente rugoso de Schlichting, con la media exacta de cada tramo desde el borde de ataque) en
+  pedazos de unos 2 mm, sin las caras que miran aguas abajo; rugosidad por cara de la altura de capa y la normal en Z
+  (Ra = máx(0,05 h, h |n_z| / 4), ks = 4 Ra); área frontal por la sombra en un raster de 400 × 400. Calidades:
+  «solo rozamiento» (no simula), rápida 16, normal 24 y alta 32 celdas.
+- `tisma-engine aero <proyecto.3mf> -o <resultado.taero> --summary <resumen.json> --sandbox --object <n> --instance
+  <n> --quality <calidad> --speed <m/s> --direction <eje | x,y,z> [--threads <n>] [--no-gpu]`, como la regla 19b: el
+  resumen con `drag_n`, `cd`, `cd_pressure`, `cd_friction`, `reynolds` y `reynolds_simulated`, o `error`; el `.taero`
+  es el JSON del resultado (Cp y Ra por cara incluidos) con el objeto, la ubicación y la pieza.
+
+**Medido** (a 12 celdas, la prueba `aero_drag_coefficients`, que corre en los builds optimizados; 4 núcleos compartidos
+con el CI):
+
+| Caso | Cd del motor | Tisma | Referencia |
+|---|---|---|---|
+| AE1, placa cuadrada de frente | 1,00 | 1,16 | 1,17 a 1,2 (Hoerner) |
+| AE2, cubo de frente | 1,07 | 1,13 | 1,05 (Hoerner) |
+| AE3, el cubo con el aire en −Y | 1,07 | igual | simetría |
+| AE4, prisma 3:1 romo | 1,04 | 1,06 | — |
+| AE4, con nariz piramidal | 0,25 | 0,34 | la nariz baja el arrastre |
+
+AE5 (rozamiento laminar de un prisma 6:1) da a menos de 5 % de Blasius; AE6 (prisma a 45°) da Ra medio entre 15 y 35 µm
+y más rozamiento que el mismo prisma derecho. Velocidad del cálculo: unos 6 millones de celdas por paso y segundo con
+la máquina compartida, lenta para el Benchy de referencia (5 minutos en calidad normal); queda optimizarla y llevarla a
+la GPU.
+
+**No hecho todavía:** la pestaña Aerodinámica de la interfaz (reglas 15 y 16 de `engineering_panel.md`), abrir el
+`.taero`, la versión en GPU, y la medición contra el Benchy.
+
+**Sigue:** la pestaña Aerodinámica.

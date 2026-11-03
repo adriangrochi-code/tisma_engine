@@ -4,6 +4,7 @@
 
 #include "cli/cli.hpp"
 #include "calibration/calibration.hpp"
+#include "aero/aero.hpp"
 #include "config/settings.hpp"
 #include "fea/analysis.hpp"
 #include "fea/verdict.hpp"
@@ -457,6 +458,177 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
                            {"mass_g", std::round(v.value("mass_g", 0.0) * 100.0) / 100.0},
                            {"family", v.value("family", "")},
                            {"voxels", report.grid.count()}};
+    if (!write_summary(summary))
+        return kExitInput;
+    progress(100);
+    return kExitOk;
+}
+
+int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
+    NodeArgs a;
+    std::string usage, quality = "normal", direction_text = "x";
+    long object = -1, instance = -1;
+    double speed = 10.0;
+    bool speed_given = false;
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        const std::string_view arg = args[i];
+        const bool has_value = i + 1 < args.size();
+        if ((arg == "-o" || arg == "--output") && has_value) {
+            a.output = std::string(args[++i]);
+        } else if (arg == "--summary" && has_value) {
+            a.summary = std::string(args[++i]);
+        } else if (arg == "--quality" && has_value) {
+            quality = std::string(args[++i]);
+        } else if (arg == "--direction" && has_value) {
+            direction_text = std::string(args[++i]);
+        } else if (arg == "--speed" && has_value) {
+            const std::string_view v = args[++i];
+            const auto [end, ec] = std::from_chars(v.data(), v.data() + v.size(), speed);
+            speed_given = ec == std::errc() && end == v.data() + v.size();
+            if (!speed_given && usage.empty())
+                usage = "error: aero: --speed needs a number of m/s";
+        } else if ((arg == "--object" || arg == "--instance") && has_value) {
+            const std::string_view v = args[++i];
+            long n = -1;
+            const auto [end, ec] = std::from_chars(v.data(), v.data() + v.size(), n);
+            if (ec != std::errc() || end != v.data() + v.size() || n < 0) {
+                if (usage.empty())
+                    usage = "error: aero: " + std::string(arg) + " needs a whole number from 0";
+            } else {
+                (arg == "--object" ? object : instance) = n;
+            }
+        } else if (arg == "--sandbox") {
+            a.sandbox = true;
+        } else if (arg == "--no-gpu") {
+            a.no_gpu = true;
+        } else if (!arg.starts_with("-") && a.project.empty()) {
+            a.project = std::string(arg);
+        } else if (usage.empty()) {
+            usage = "error: aero: unexpected argument '" + std::string(arg) + "'";
+        }
+    }
+    if (usage.empty() && (a.project.empty() || a.output.empty() || a.summary.empty()))
+        usage = "error: aero needs the project, -o and --summary";
+    aero::AeroQuality q = aero::AeroQuality::Normal;
+    if (usage.empty() && !aero::quality_named(quality, q))
+        usage = "error: aero: --quality is friction, fast, normal or high";
+    if (usage.empty() && (!(speed > 0.0) || speed > 100.0))
+        usage = "error: aero: --speed is more than 0 and up to 100 m/s";
+    // The direction: an axis with its sign, or three numbers.
+    std::array<double, 3> direction{1, 0, 0};
+    if (usage.empty()) {
+        static const std::pair<const char*, std::array<double, 3>> axes[] = {
+            {"x", {1, 0, 0}}, {"+x", {1, 0, 0}}, {"-x", {-1, 0, 0}}, {"y", {0, 1, 0}},  {"+y", {0, 1, 0}},
+            {"-y", {0, -1, 0}}, {"z", {0, 0, 1}}, {"+z", {0, 0, 1}}, {"-z", {0, 0, -1}}};
+        bool found = false;
+        for (const auto& [name, v] : axes)
+            if (direction_text == name)
+                direction = v, found = true;
+        if (!found) {
+            double v[3];
+            const char* p = direction_text.c_str();
+            const char* end = p + direction_text.size();
+            int k = 0;
+            for (; k < 3; ++k) {
+                const auto [next, ec] = std::from_chars(p, end, v[k]);
+                if (ec != std::errc())
+                    break;
+                p = next;
+                if (k < 2) {
+                    if (p == end || *p != ',')
+                        break;
+                    ++p;
+                }
+            }
+            if (k == 3 && p == end && std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]) &&
+                std::hypot(v[0], v[1], v[2]) > 0.0)
+                direction = {v[0], v[1], v[2]};
+            else
+                usage = "error: aero: --direction is x, -x, y, -y, z, -z or three numbers x,y,z";
+        }
+    }
+
+    const auto write_summary = [&](const nlohmann::json& j) {
+        if (a.summary.empty())
+            return false;
+        if (!write_file(a.summary, [&](std::ostream& f) { f << j.dump(2) << "\n"; })) {
+            err << "error: cannot write the summary '" << a.summary << "'\n";
+            return false;
+        }
+        return true;
+    };
+    const auto fail = [&](int code, const std::string& message) {
+        err << "error: " << message << "\n";
+        write_summary(nlohmann::json{{"error", message}});
+        return code;
+    };
+    if (!usage.empty()) {
+        err << usage << "\n";
+        write_summary(nlohmann::json{{"error", usage.substr(7)}});
+        return kExitUsage;
+    }
+    if (same_file(a.output, a.project) || same_file(a.summary, a.project))
+        return fail(kExitInput, "an output would overwrite the project");
+    if (a.output == a.summary || same_file(a.output, a.summary))
+        return fail(kExitInput, "-o and --summary name the same file");
+    for (const std::string* path : {&a.output, &a.summary})
+        if (std::string problem = output_problem(write_target(*path)); !problem.empty())
+            return fail(kExitInput, problem);
+
+    Progress progress(out);
+    progress(0);
+    const std::optional<std::string> data = read_whole(a.project);
+    if (!data)
+        return fail(kExitInput, "cannot read the project '" + a.project + "'");
+    if (!looks_like_project(*data))
+        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma");
+    Project project;
+    try {
+        project = read_project(*data);
+    } catch (const std::exception& e) {
+        return fail(kExitInput, a.project + ": " + e.what());
+    }
+    if (project.models.empty())
+        return fail(kExitModel, "the project has no models");
+    const std::size_t index = object < 0 ? 0 : std::size_t(object);
+    if (index >= project.models.size())
+        return fail(kExitInput, "the project has no object " + std::to_string(index) + " (it has " +
+                                    std::to_string(project.models.size()) + ", counted from 0)");
+    if (instance > 0)
+        return fail(kExitInput, "object " + std::to_string(index) + " has no instance " + std::to_string(instance) +
+                                    " (each object has one, 0)");
+    const ProjectModel& model = project.models[index];
+    Settings settings = std::move(project.settings);
+    std::vector<std::string> notes;
+    apply_engineering_overrides(settings, model.engineering, notes);
+    progress(5);
+
+    aero::AeroInput in;
+    in.mesh = placed_part(model).mesh;
+    in.direction = direction;
+    in.speed = speed;
+    in.quality = q;
+    in.layer_height = settings.layer_height > 0.0 ? settings.layer_height : 0.2;
+    const aero::AeroResult r = aero::analyze(in, [&progress](double done) {
+        progress(5 + int(std::clamp(done, 0.0, 1.0) * 85.0));
+        return true;
+    });
+    if (!r.ok)
+        return fail(kExitAnalysis, r.error);
+    progress(92);
+    nlohmann::json result = nlohmann::json::parse(aero::result_json(r, in));
+    result["object"] = index;
+    result["instance"] = 0;
+    result["part"] = model.name;
+    if (!write_file(a.output, [&](std::ostream& f) { f << result.dump() << "\n"; }))
+        return fail(kExitInput, "cannot write the result '" + a.output + "'");
+    const auto finite = [](double x) { return std::isfinite(x) ? nlohmann::json(x) : nlohmann::json(nullptr); };
+    const nlohmann::json summary{{"drag_n", finite(r.drag_n)},
+                                 {"cd", finite(r.cd)},
+                                 {"cd_pressure", finite(r.cd_pressure)},
+                                 {"cd_friction", finite(r.cd_friction)},
+                                 {"reynolds", finite(r.reynolds)},
+                                 {"reynolds_simulated", finite(r.reynolds_simulated)}};
     if (!write_summary(summary))
         return kExitInput;
     progress(100);

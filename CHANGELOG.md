@@ -17,6 +17,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   MI, AR, M, CO, RO y SC en la línea de comandos. Líneas y arcos sueltos que se tocan punta con punta cierran una
   región que se puede extruir. Se elige con clic o con una caja: hacia la derecha, ventana (solo lo que queda
   adentro); hacia la izquierda, cruce (todo lo que toca).
+- **Análisis aerodinámico** (`aerodynamics.md`): arrastre separado en presión (lattice Boltzmann D3Q19 con
+  Smagorinsky) y rozamiento (placa plana, con la rugosidad de las capas), fuerza transversal, Reynolds, rugosidad media
+  y mapa por cara. Por ahora desde la línea de comandos: `tisma-engine aero` para los nodos de Tisma Cloud (`cloud.md`,
+  regla 19b).
 - **`analyze` para los nodos de Tisma Cloud** (`cloud.md`, regla 19): analiza un objeto de un proyecto 3MF con
   `--summary`, `--sandbox`, `--mode`, `--quality`, `--object` e `--instance`; escribe el resultado `.tea` y un resumen
   con el veredicto.

@@ -85,6 +85,7 @@ add_executable(tisma_tests
   test_device.cpp
   test_cad.cpp
   test_sketch_edit.cpp
+  test_aero.cpp
   test_fasteners.cpp
   test_gears.cpp
   test_cloud.cpp
@@ -122,6 +123,12 @@ list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
 # Exit code 4 is Catch2's "all tests skipped" (for example GPU tests without a device).
 catch_discover_tests(tisma_tests PROPERTIES SKIP_RETURN_CODE 4)
+# The aerodynamic drag coefficients (aerodynamics.md, AE1 to AE4) run the
+# lattice at a useful size: too slow for the debug build with the sanitizers.
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_test(NAME aero_drag_coefficients COMMAND tisma_tests "[aero-full]")
+  set_tests_properties(aero_drag_coefficients PROPERTIES TIMEOUT 1800)
+endif()
 
 # The random search for G-code the checker rejects (tests/fuzz_gcode.cpp); a
 # short run here, long runs with new seeds in the maintenance blocks.

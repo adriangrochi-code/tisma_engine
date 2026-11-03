@@ -70,6 +70,16 @@ bool node_analyze_wanted(std::span<const std::string_view> args);
 //   code 3 (not implemented).
 int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err);
 
+// tisma-engine aero <project> -o <result.taero> --summary <summary.json>
+//   --sandbox --object <n> --instance <n> --quality <friction|fast|normal|high>
+//   --speed <m/s> --direction <x|-x|y|-y|z|-z|x,y,z> [--no-gpu]
+// (cloud.md, rule 19b; aerodynamics.md): the part where it is on the bed,
+// the layer height from the project; the result .taero is the analysis'
+// JSON (aero::result_json) with the object, instance and part; the summary
+// drag_n, cd, cd_pressure, cd_friction, reynolds and reynolds_simulated, or
+// `error`. Progress and exit codes as for slice.
+int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err);
+
 // Writes a file in one piece: into "<path>.part" first, renamed over the
 // path once complete, so a process stopped half way never leaves a partial
 // file under the real name. False (and no temporary left) on failure.

@@ -258,6 +258,8 @@ add_library(tisma_core
   src/cad/design.cpp
   src/cad/sketch.cpp
   src/cad/sketch_edit.cpp
+  src/aero/lbm.cpp
+  src/aero/aero.cpp
   src/cad/parameters.cpp
   src/cad/constraints.cpp
   src/cad/fasteners.cpp

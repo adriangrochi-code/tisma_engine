@@ -329,3 +329,53 @@ TEST_CASE("analyze of a project the nodes' way: progress, the .tea result and th
                ContainsSubstring("fixed point or zone and a force"));
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("aero of a project the nodes' way: progress, the .taero result and the summary (cloud.md, rule 19b)",
+          "[cli][cloud]") {
+    const auto dir = fresh_dir("tisma_test_node_aero");
+    const auto project = dir / "plate.3mf";
+    save_project(project, box_project(100.0, 100.0));
+    const auto taero = dir / "result.taero", summary = dir / "summary.json";
+    const Run r = run({"aero", project.string(), "-o", taero.string(), "--summary", summary.string(), "--sandbox", "--object", "0",
+                       "--instance", "0", "--quality", "friction", "--speed", "20", "--direction", "-y", "--threads", "2"});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    check_progress(r.out);
+    const nlohmann::json s = nlohmann::json::parse(read_text(summary));
+    CHECK_FALSE(s.contains("error"));
+    for (const char* key : {"drag_n", "cd", "cd_pressure", "cd_friction", "reynolds", "reynolds_simulated"})
+        CHECK(s.contains(key));
+    CHECK(s["drag_n"].get<double>() > 0.0);
+    CHECK(s["cd_pressure"].get<double>() == 0.0); // friction only: nothing simulated
+    CHECK(s["reynolds_simulated"].get<double>() == 0.0);
+    // 20 m/s across 20 mm: Re = 26 000.
+    CHECK(std::abs(s["reynolds"].get<double>() / 26385.0 - 1.0) < 0.01);
+    const nlohmann::json t = nlohmann::json::parse(read_text(taero));
+    CHECK(t["format"] == "tisma-aero-result");
+    CHECK(t["object"] == 0);
+    CHECK(t["part"] == "box.stl");
+    CHECK(t["inputs"]["direction"] == nlohmann::json::array({0.0, -1.0, 0.0}));
+    CHECK(t["cp"].size() == 12);
+    // Three numbers as the direction.
+    CHECK(run({"aero", project.string(), "-o", taero.string(), "--summary", summary.string(), "--sandbox", "--quality", "friction",
+               "--direction", "1,1,0"})
+              .code == kExitOk);
+    const auto error_of = [&](std::vector<std::string> args, int code) {
+        const Run e = run(std::move(args));
+        INFO(e.err);
+        CHECK(e.code == code);
+        const nlohmann::json j = nlohmann::json::parse(read_text(summary));
+        REQUIRE(j.contains("error"));
+        return j["error"].get<std::string>();
+    };
+    using Catch::Matchers::ContainsSubstring;
+    CHECK_THAT(error_of({"aero", project.string(), "-o", taero.string(), "--summary", summary.string(), "--speed", "150"}, kExitUsage),
+               ContainsSubstring("--speed"));
+    CHECK_THAT(error_of({"aero", project.string(), "-o", taero.string(), "--summary", summary.string(), "--direction", "up"}, kExitUsage),
+               ContainsSubstring("--direction"));
+    CHECK_THAT(error_of({"aero", project.string(), "-o", taero.string(), "--summary", summary.string(), "--quality", "ultra"}, kExitUsage),
+               ContainsSubstring("--quality"));
+    CHECK_THAT(error_of({"aero", project.string(), "-o", taero.string(), "--summary", summary.string(), "--object", "2"}, kExitInput),
+               ContainsSubstring("no object 2"));
+    std::filesystem::remove_all(dir);
+}
