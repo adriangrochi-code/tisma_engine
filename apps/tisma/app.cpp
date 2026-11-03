@@ -11789,79 +11789,6 @@ void App::structural_panel() {
     const EngineeringValues values =
         engineering_values(settings_, e, chosen_profile_[std::size_t(ProfileKind::Filament)]);
 
-    // The values from the profiles, or by hand with a violet dot (rules 3 and 4).
-    section(T::StructValues);
-    const auto source = [&](bool by_hand, ProfileKind kind) {
-        if (by_hand) {
-            loc::TextColored(rgb(kViolet), "● %s", tr(T::StructByHand));
-        } else {
-            const std::string& name = chosen_profile_[std::size_t(kind)];
-            loc::TextDisabled("%s%s%s", tr(T::StructFromProfile), name.empty() ? "" : " ", name.c_str());
-        }
-    };
-    const auto back = [&](const char* id, std::optional<double>& hand) {
-        if (!hand)
-            return;
-        ImGui::SameLine();
-        ImGui::PushID(id);
-        if (ImGui::SmallButton(tr(T::StructBackToProfile)))
-            hand.reset();
-        ImGui::PopID();
-    };
-    // A number of the panel: its field, where it comes from, and the way back.
-    const auto number = [&](T label, const char* id, const PanelValue& v, std::optional<double>& hand, double min,
-                            double max, const char* fmt, float speed, ProfileKind kind) {
-        ImGui::TextUnformatted(tr(label));
-        double value = v.value;
-        ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::DragScalar((std::string("##") + id).c_str(), ImGuiDataType_Double, &value, speed, &min, &max, fmt,
-                              ImGuiSliderFlags_AlwaysClamp) &&
-            value != v.value)
-            hand = value;
-        rect_of(std::string("structural_") + id);
-        source(v.by_hand, kind);
-        back(id, hand);
-    };
-    // The material: the filament type's record, or one chosen here (EP10).
-    ImGui::TextUnformatted(tr(T::StructMaterial));
-    const MaterialRecord* material = values.material_id.empty() ? nullptr : ::tisma::find_material(values.material_id);
-    ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::BeginCombo("##structural_material", material ? std::string(material->name).c_str() : tr(T::StructChooseMaterial))) {
-        for (const MaterialRecord& r : ::tisma::material_records()) {
-            ImGui::PushID(r.id.data(), r.id.data() + r.id.size());
-            if (ImGui::Selectable(std::string(r.name).c_str(), material == &r))
-                e.overrides.material = std::string(r.id);
-            ImGui::PopID();
-        }
-        ImGui::EndCombo();
-    }
-    rect_of("structural_material");
-    source(values.material_by_hand, ProfileKind::Filament);
-    if (values.material_by_hand) {
-        ImGui::SameLine();
-        if (ImGui::SmallButton((std::string(tr(T::StructBackToProfile)) + "##material").c_str()))
-            e.overrides.material.reset();
-    }
-    number(T::StructExtrusionTemp, "extrusion_temperature", values.extrusion_temperature, e.overrides.extrusion_temperature,
-           150.0, 450.0, "%.0f °C", 0.5f, ProfileKind::Filament);
-    loc::TextDisabled("%s: %.0f °C", tr(T::StructBedTemp), values.bed_temperature);
-    number(T::StructLayerHeight, "layer_height", values.layer_height, e.overrides.layer_height, 0.01, 2.0, "%.2f mm",
-           0.005f, ProfileKind::Print);
-    number(T::StructFirstLayer, "first_layer_height", values.first_layer_height, e.overrides.first_layer_height, 0.01, 2.0,
-           "%.2f mm", 0.005f, ProfileKind::Print);
-    number(T::StructLineWidth, "line_width", values.line_width, e.overrides.line_width, 0.05, 3.0, "%.2f mm", 0.005f,
-           ProfileKind::Print);
-    ImGui::TextUnformatted(tr(T::StructWorkingTemp));
-    if (ImGui::IsItemHovered())
-        loc::SetTooltip("%s", tr(T::StructWorkingTempTip));
-    ImGui::SetNextItemWidth(-1.0f);
-    {
-        const double lo = -60.0, hi = 300.0;
-        ImGui::DragScalar("##structural_working_temperature", ImGuiDataType_Double, &e.working_temperature, 0.5f, &lo,
-                          &hi, "%.0f °C", ImGuiSliderFlags_AlwaysClamp);
-        rect_of("structural_working_temperature");
-    }
-
     // The marking tools (rule 5), the chosen one in violet; Esc is Rotar.
     section(T::StructConditions);
     {
@@ -11939,6 +11866,79 @@ void App::structural_panel() {
     if (erase) {
         remember_engineering(std::size_t(structural_part_));
         e.conditions.erase(e.conditions.begin() + std::ptrdiff_t(*erase));
+    }
+
+    // The values from the profiles, or by hand with a violet dot (rules 3 and 4).
+    section(T::StructValues);
+    const auto source = [&](bool by_hand, ProfileKind kind) {
+        if (by_hand) {
+            loc::TextColored(rgb(kViolet), "● %s", tr(T::StructByHand));
+        } else {
+            const std::string& name = chosen_profile_[std::size_t(kind)];
+            loc::TextDisabled("%s%s%s", tr(T::StructFromProfile), name.empty() ? "" : " ", name.c_str());
+        }
+    };
+    const auto back = [&](const char* id, std::optional<double>& hand) {
+        if (!hand)
+            return;
+        ImGui::SameLine();
+        ImGui::PushID(id);
+        if (ImGui::SmallButton(tr(T::StructBackToProfile)))
+            hand.reset();
+        ImGui::PopID();
+    };
+    // A number of the panel: its field, where it comes from, and the way back.
+    const auto number = [&](T label, const char* id, const PanelValue& v, std::optional<double>& hand, double min,
+                            double max, const char* fmt, float speed, ProfileKind kind) {
+        ImGui::TextUnformatted(tr(label));
+        double value = v.value;
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::DragScalar((std::string("##") + id).c_str(), ImGuiDataType_Double, &value, speed, &min, &max, fmt,
+                              ImGuiSliderFlags_AlwaysClamp) &&
+            value != v.value)
+            hand = value;
+        rect_of(std::string("structural_") + id);
+        source(v.by_hand, kind);
+        back(id, hand);
+    };
+    // The material: the filament type's record, or one chosen here (EP10).
+    ImGui::TextUnformatted(tr(T::StructMaterial));
+    const MaterialRecord* material = values.material_id.empty() ? nullptr : ::tisma::find_material(values.material_id);
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##structural_material", material ? std::string(material->name).c_str() : tr(T::StructChooseMaterial))) {
+        for (const MaterialRecord& r : ::tisma::material_records()) {
+            ImGui::PushID(r.id.data(), r.id.data() + r.id.size());
+            if (ImGui::Selectable(std::string(r.name).c_str(), material == &r))
+                e.overrides.material = std::string(r.id);
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    rect_of("structural_material");
+    source(values.material_by_hand, ProfileKind::Filament);
+    if (values.material_by_hand) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton((std::string(tr(T::StructBackToProfile)) + "##material").c_str()))
+            e.overrides.material.reset();
+    }
+    number(T::StructExtrusionTemp, "extrusion_temperature", values.extrusion_temperature, e.overrides.extrusion_temperature,
+           150.0, 450.0, "%.0f °C", 0.5f, ProfileKind::Filament);
+    loc::TextDisabled("%s: %.0f °C", tr(T::StructBedTemp), values.bed_temperature);
+    number(T::StructLayerHeight, "layer_height", values.layer_height, e.overrides.layer_height, 0.01, 2.0, "%.2f mm",
+           0.005f, ProfileKind::Print);
+    number(T::StructFirstLayer, "first_layer_height", values.first_layer_height, e.overrides.first_layer_height, 0.01, 2.0,
+           "%.2f mm", 0.005f, ProfileKind::Print);
+    number(T::StructLineWidth, "line_width", values.line_width, e.overrides.line_width, 0.05, 3.0, "%.2f mm", 0.005f,
+           ProfileKind::Print);
+    ImGui::TextUnformatted(tr(T::StructWorkingTemp));
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::StructWorkingTempTip));
+    ImGui::SetNextItemWidth(-1.0f);
+    {
+        const double lo = -60.0, hi = 300.0;
+        ImGui::DragScalar("##structural_working_temperature", ImGuiDataType_Double, &e.working_temperature, 0.5f, &lo,
+                          &hi, "%.0f °C", ImGuiSliderFlags_AlwaysClamp);
+        rect_of("structural_working_temperature");
     }
 
     ImGui::EndChild();

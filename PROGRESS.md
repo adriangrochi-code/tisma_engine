@@ -9372,9 +9372,11 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   - Deshacer y rehacer de las condiciones con Ctrl+Z y Ctrl+Y.
   - El clic en la vista con una herramienta: el punto y la normal en las coordenadas de la pieza; una zona, la cara
     entera (`face_region`); con Mayús, la cara se suma a la última zona de su tipo.
-- **No funciona todavía:** en la prueba guionada, el clic en la vista (`click-model`) no llega a la vista en esta
-  pestaña. El código del clic no se ejecuta, aunque la pieza está bajo el punto. Falta encontrar qué tapa la vista o
-  qué toma el clic. La prueba guionada solo comprueba las herramientas y Esc. Sin probar a mano.
+- **Encontrado y corregido (2026-11-03, mañana):** el clic sí llegaba a la vista. Lo que fallaba era la herramienta,
+  que nunca se elegía: los botones estaban debajo de los valores, fuera de la parte visible del panel a 760 px de
+  alto, y el clic caía fuera de la ventana. Ahora el panel va en este orden: pieza, herramientas, lista de
+  condiciones, material y valores. La prueba guionada marca una zona fija y un punto de fuerza haciendo clic en el
+  cubo, deshace y rehace, y con Rotar (Esc) un clic ya no marca nada (EP5, EP7).
 - **Sigue:** arreglar el clic en la vista y volver a poner en la prueba el marcado, deshacer y rehacer (EP5, EP7);
   dibujar las condiciones en la vista (regla 7); correr el análisis desde Analizar.
 - **Pendiente, TR27 del equipo de fichas (caja negra de bc4fcd5):**

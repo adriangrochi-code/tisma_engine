@@ -21,13 +21,25 @@ expect-no-control tab_prepare
 menu mode_print
 expect-control tab_prepare
 expect-no-control tab_structural
-# The marking tools are on the panel (rule 5); marking by a click on the view
-# is checked once the scripted click reaches the view in this tab.
+# Marking (rules 5 and 8; EP5, EP7): a fixed zone clicked on the cube, then
+# a force point; Ctrl+Z takes the force back, Ctrl+Y puts it again; with
+# Rotar (Esc) a click marks nothing.
 menu mode_engineering
+expect-control tab_structural
 menu tab_structural
-expect-control structural_tool_rotate
 expect-control structural_tool_fixed_zone
-expect-control structural_tool_force_point
 menu structural_tool_fixed_zone
+click-model
+expect-structural force
+menu structural_tool_force_point
+click-model
+expect-structural none
+expect-control structural_condition_remove_1
+key ctrl+z
+expect-structural force
+key ctrl+y
+expect-structural none
 key escape
-expect-structural fixed
+click-model
+expect-structural none
+expect-no-control structural_condition_remove_2
