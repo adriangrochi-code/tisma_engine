@@ -10,6 +10,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 
@@ -306,6 +307,11 @@ TEST_CASE("FM23, FM24: a part's Engineering conditions, values by hand and optio
     e.overrides.extrusion_temperature = 230.0;
     e.structural.safety_factor = 3.0;
     e.aerodynamics.speed = 12.5;
+    // The last structural result, with what it was computed from (rule 11 bis).
+    const std::string settings = settings_json(p.settings);
+    e.results.push_back({"structural", engineering_fingerprint(p.models[0].mesh, e, settings),
+                         R"({"verdict": "holds", "max_displacement_mm": 0.31})"});
+    CHECK_FALSE(result_stale(e.results[0], p.models[0].mesh, e, settings));
     // The second model has nothing: it opens as before.
     REQUIRE(p.models[1].engineering.empty());
     for (const bool package : {false, true}) {
@@ -320,7 +326,11 @@ TEST_CASE("FM23, FM24: a part's Engineering conditions, values by hand and optio
         CHECK(r.conditions[0].kind == ConditionKind::FixedZone);
         CHECK(r.conditions[0].triangles == std::vector<std::uint32_t>{0, 1});
         CHECK(r.conditions[1].kind == ConditionKind::ForcePoint);
-        CHECK(r.conditions[1].point == force.point);
+        // On the same place of the part (a 3MF comes back with the mesh placed).
+        const BoundingBox before = p.models[0].mesh.bounding_box(), after = again.models[0].mesh.bounding_box();
+        CHECK(std::abs((r.conditions[1].point[0] - after.min.x) - (force.point[0] - before.min.x)) < 1e-4);
+        CHECK(std::abs((r.conditions[1].point[1] - after.min.y) - (force.point[1] - before.min.y)) < 1e-4);
+        CHECK(std::abs((r.conditions[1].point[2] - after.min.z) - (force.point[2] - before.min.z)) < 1e-4);
         CHECK(r.conditions[1].newtons == force.newtons);
         CHECK(r.conditions[1].kilograms == 5.1); // shown again as 5.1 kg
         CHECK(r.conditions[1].direction == ForceDirection::Axis);
@@ -332,7 +342,30 @@ TEST_CASE("FM23, FM24: a part's Engineering conditions, values by hand and optio
         CHECK(r.structural.safety_factor == 3.0);
         CHECK(r.aerodynamics.speed == 12.5);
         CHECK(again.models[1].engineering.empty());
+        // The result comes back the same and not stale (FM23).
+        REQUIRE(r.results.size() == 1);
+        CHECK(r.results[0] == e.results[0]);
+        CHECK_FALSE(result_stale(r.results[0], again.models[0].mesh, r, settings_json(again.settings)));
+        // A changed condition makes it stale («Desactualizado»).
+        ProjectEngineering changed = r;
+        changed.conditions[1].newtons = 60.0;
+        CHECK(result_stale(r.results[0], again.models[0].mesh, changed, settings_json(again.settings)));
     }
+}
+
+TEST_CASE("an Engineering result is its own entry of the 3MF, never starting with a program's bytes",
+          "[project][engineering]") {
+    Project p = sample();
+    p.models[1].engineering.results.push_back({"aerodynamics", "0123456789abcdef", R"({"cd": 1.05})"});
+    const std::string package = write_project_3mf(p);
+    const ZipArchive zip(package);
+    const ZipArchive::Entry* entry = zip.find("Metadata/tisma_result_0.json");
+    REQUIRE(entry);
+    const std::string bytes = zip.read(*entry);
+    CHECK(bytes == R"({"cd": 1.05})");
+    for (const char* magic : {"MZ", "\x7f" "ELF", "#!"})
+        CHECK_FALSE(bytes.starts_with(magic));
+    CHECK(read_project(package).models[1].engineering.results.size() == 1);
 }
 
 TEST_CASE("FM26 and newer data: conditions that no longer fit are dropped with a notice, the part kept",

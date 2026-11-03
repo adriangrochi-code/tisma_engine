@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <map>
 
 namespace tisma {
@@ -72,7 +73,7 @@ const char* condition_kind_name(ConditionKind kind) {
 }
 
 bool ProjectEngineering::empty() const {
-    return conditions.empty() && overrides == EngineeringOverrides{} && working_temperature == 23.0 &&
+    return conditions.empty() && results.empty() && overrides == EngineeringOverrides{} && working_temperature == 23.0 &&
            structural == StructuralOptions{} && aerodynamics == AerodynamicsInputs{};
 }
 
@@ -246,6 +247,43 @@ ProjectEngineering engineering_from_json(const std::string& json) {
         e.aerodynamics.cloud = flag(a, "cloud", "aerodynamics");
     }
     return e;
+}
+
+std::string engineering_fingerprint(const TriangleMesh& mesh, const ProjectEngineering& e, std::string_view settings) {
+    std::uint64_t h = 1469598103934665603ULL;
+    const auto add = [&](const void* data, std::size_t size) {
+        const auto* bytes = static_cast<const unsigned char*>(data);
+        for (std::size_t i = 0; i < size; ++i) {
+            h ^= bytes[i];
+            h *= 1099511628211ULL;
+        }
+    };
+    // Where the part stands does not count (moving it keeps its result,
+    // FM24): its corners and points from its box's corner, in micrometres.
+    const BoundingBox box = mesh.bounding_box();
+    const double origin[3] = {box.min.x, box.min.y, box.min.z};
+    const auto micrometres = [](double v) { return static_cast<long long>(std::llround(v * 1000.0)); };
+    for (const Vec3f& q : mesh.corners()) {
+        const long long c[3] = {micrometres(q.x - origin[0]), micrometres(q.y - origin[1]), micrometres(q.z - origin[2])};
+        add(c, sizeof c);
+    }
+    ProjectEngineering inputs = e;
+    inputs.results.clear();
+    for (EngineeringCondition& c : inputs.conditions)
+        if (c.is_point())
+            for (std::size_t a = 0; a < 3; ++a)
+                c.point[a] = double(micrometres(c.point[a] - origin[a])) / 1000.0;
+    const std::string json = engineering_json(inputs);
+    add(json.data(), json.size());
+    add(settings.data(), settings.size());
+    char text[17];
+    std::snprintf(text, sizeof text, "%016llx", static_cast<unsigned long long>(h));
+    return text;
+}
+
+bool result_stale(const EngineeringResult& r, const TriangleMesh& mesh, const ProjectEngineering& e,
+                  std::string_view settings) {
+    return r.fingerprint != engineering_fingerprint(mesh, e, settings);
 }
 
 std::size_t drop_conditions_beyond(ProjectEngineering& e, std::size_t triangles) {

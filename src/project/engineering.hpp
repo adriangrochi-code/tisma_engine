@@ -1,10 +1,13 @@
 #pragma once
 
+#include "mesh/mesh.hpp"
+
 #include <array>
 #include <cstdint>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // What a part keeps of the Engineering section in the project
@@ -70,12 +73,25 @@ struct AerodynamicsInputs {
     bool operator==(const AerodynamicsInputs&) const = default;
 };
 
+// The last result of an analysis (rule 11 bis): the report as the engine
+// writes it (JSON text, which starts with '{', so never with a program's
+// magic bytes), and the fingerprint of what it was computed from.
+struct EngineeringResult {
+    std::string kind;        // "structural" or "aerodynamics"
+    std::string fingerprint; // engineering_fingerprint when it was computed
+    std::string report;      // the report's JSON
+    bool operator==(const EngineeringResult&) const = default;
+};
+
 struct ProjectEngineering {
     std::vector<EngineeringCondition> conditions;
     EngineeringOverrides overrides;
     double working_temperature = 23.0; // °C, always kept (rule 4)
     StructuralOptions structural;
     AerodynamicsInputs aerodynamics;
+    // The last result of each analysis; kept apart in the package, like the
+    // painting (engineering_json leaves them out).
+    std::vector<EngineeringResult> results;
 
     // Nothing to keep: a project without Engineering data opens as before.
     bool empty() const;
@@ -95,5 +111,13 @@ ProjectEngineering engineering_from_json(const std::string& json);
 std::size_t drop_conditions_beyond(ProjectEngineering& e, std::size_t triangles);
 
 const char* condition_kind_name(ConditionKind kind);
+
+// What a result depends on, as 16 hexadecimal digits (FNV-1a, 64 bits): the
+// part's mesh, its conditions, values and options (not its results), and the
+// settings' JSON. A result whose fingerprint differs from the current one is
+// stale («Desactualizado», engineering_panel.md, rule 14).
+std::string engineering_fingerprint(const TriangleMesh& mesh, const ProjectEngineering& e, std::string_view settings);
+bool result_stale(const EngineeringResult& r, const TriangleMesh& mesh, const ProjectEngineering& e,
+                  std::string_view settings);
 
 } // namespace tisma

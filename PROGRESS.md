@@ -9169,3 +9169,18 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   cordón, no en relleno (pedido del equipo de fichas hasta imprimir ZI12). Los ajustes siguen siendo
   `infill.nonplanar` e `infill.waves`.
 
+## 2026-11-03 (noche): Ingeniería en el proyecto, paso 2
+
+- **Hecho:** `EngineeringResult` (tipo, huella, informe en JSON) en `ProjectEngineering::results`, guardado aparte
+  como la pintura: un trozo `RSLT` en el archivo propio y `Metadata/tisma_result_<k>.json` en el 3MF (empieza con `{`,
+  nunca con los bytes de un programa); el JSON del proyecto dice tipo, huella y número de archivo.
+- **Huella** (`engineering_fingerprint`, FNV-1a de 64 bits): la malla y los puntos desde la esquina de su caja, en
+  micrómetros (moverla no la cambia, FM24), las condiciones, valores y opciones, y el JSON de los ajustes.
+  `result_stale` dice si quedó «Desactualizado».
+- **Encontrado y corregido:** en el 3MF la malla vuelve ya ubicada en la cama y los puntos de las condiciones quedaban
+  en las coordenadas viejas, fuera de la pieza. Ahora el 3MF guarda cuánto se movió (`engineering_moved`) y al abrir
+  los puntos se mueven igual.
+- Pruebas: FM23 completo (el resultado vuelve igual y sin «Desactualizado» en los dos formatos; cambiar una fuerza lo
+  deja viejo), el punto en el mismo lugar de la pieza también en 3MF, y el archivo del resultado en el 3MF.
+- **Sigue:** paso 3, `analyze` sobre el proyecto con estas condiciones (zonas por triángulos, puntos con radio), FM25.
+

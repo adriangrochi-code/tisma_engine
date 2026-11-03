@@ -74,6 +74,8 @@ constexpr std::string_view kPaintMagic = "TPNT";
 constexpr std::uint32_t kPaintVersion = 1;
 
 std::string paint_entry(std::size_t k) { return "Metadata/tisma_paint_" + std::to_string(k) + ".bin"; }
+// An Engineering result in a 3MF (formats.md, rule 11 bis): its report's JSON.
+std::string result_entry(std::size_t k) { return "Metadata/tisma_result_" + std::to_string(k) + ".json"; }
 
 constexpr std::string_view kProjectEntry = "Metadata/tisma_project.json";
 
@@ -89,7 +91,7 @@ static ordered_json project_json(const Project& project, bool offsets) {
         if (const std::string& name = project.profiles[std::size_t(kind)]; !name.empty())
             profiles[std::string(profile_kind_name(kind))] = name;
     ordered_json models = ordered_json::array();
-    std::size_t paintings = 0;
+    std::size_t paintings = 0, results = 0;
     for (std::size_t i = 0; i < project.models.size(); ++i) {
         const ProjectModel& m = project.models[i];
         models.push_back({{"name", m.name}, {"mesh", i}, {"offset", offsets ? m.offset : std::array<double, 3>{}}});
@@ -120,8 +122,18 @@ static ordered_json project_json(const Project& project, bool offsets) {
                 item["settings"] = ordered_json::parse(r.settings);
             models.back()["ranges"].push_back(std::move(item));
         }
-        if (!m.engineering.empty())
+        if (!m.engineering.empty()) {
             models.back()["engineering"] = ordered_json::parse(engineering_json(m.engineering));
+            // In a 3MF the mesh goes out placed: the conditions' points, in
+            // the part's own coordinates, move with it when read (FM24).
+            if (!offsets && m.offset != std::array<double, 3>{})
+                models.back()["engineering_moved"] = m.offset;
+        }
+        // Each last result in its own part of the package, in order: an RSLT
+        // chunk, or Metadata/tisma_result_<k>.json.
+        for (const EngineeringResult& r : m.engineering.results)
+            models.back()["engineering_results"].push_back(
+                {{"kind", r.kind}, {"fingerprint", r.fingerprint}, {"file", results++}});
     }
     ordered_json root = {
         {"format", "tisma-project"},
@@ -153,15 +165,19 @@ std::string write_project(const Project& project) {
     for (const ProjectModel& m : project.models)
         if (!m.painting.empty())
             put_chunk(out, "PNT ", painting_to_bytes(m.painting));
+    for (const ProjectModel& m : project.models)
+        for (const EngineeringResult& r : m.engineering.results)
+            put_chunk(out, "RSLT", r.report);
     return out;
 }
 
 // Where a project's meshes and paintings are: the MESH and PNT chunks of the
 // engine's own file, or the build items and the paint files of a 3MF.
 struct ProjectParts {
-    std::size_t meshes = 0, paintings = 0;
+    std::size_t meshes = 0, paintings = 0, results = 0;
     std::function<TriangleMesh(std::size_t)> mesh;    // throws StlError or ModelError
     std::function<std::string(std::size_t)> painting; // its bytes (painting_to_bytes)
+    std::function<std::string(std::size_t)> result;   // an Engineering result's report
 };
 
 static Project project_from_json(std::string_view json_text, const ProjectParts& source) {
@@ -329,12 +345,40 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
             if (m.contains("engineering")) {
                 try {
                     model.engineering = engineering_from_json(m.at("engineering").dump());
+                    if (m.contains("engineering_moved")) {
+                        const ordered_json& by = m.at("engineering_moved");
+                        if (!by.is_array() || by.size() != 3 || !by[0].is_number() || !by[1].is_number() ||
+                            !by[2].is_number())
+                            throw EngineeringError("engineering_moved: must be [x, y, z]");
+                        for (EngineeringCondition& c : model.engineering.conditions)
+                            if (c.is_point())
+                                for (std::size_t a = 0; a < 3; ++a)
+                                    c.point[a] += by[a].get<double>();
+                    }
                     if (const std::size_t dropped = drop_conditions_beyond(model.engineering, model.mesh.triangle_count()))
                         p.notices.push_back(model.name + ": " + std::to_string(dropped) +
                                             " Engineering condition(s) no longer fit the mesh and were removed");
                 } catch (const EngineeringError& e) {
                     p.notices.push_back(model.name + ": its Engineering data was not read (" + e.what() + ")");
                 }
+            }
+            if (m.contains("engineering_results")) {
+                const ordered_json& list = m.at("engineering_results");
+                bool ok = list.is_array();
+                std::vector<EngineeringResult> results;
+                for (std::size_t k = 0; ok && k < list.size(); ++k) {
+                    const ordered_json& r = list[k];
+                    ok = r.is_object() && r.contains("kind") && r.at("kind").is_string() && r.contains("fingerprint") &&
+                         r.at("fingerprint").is_string() && r.contains("file") && r.at("file").is_number_unsigned() &&
+                         r.at("file").get<std::size_t>() < source.results;
+                    if (ok)
+                        results.push_back({r.at("kind").get<std::string>(), r.at("fingerprint").get<std::string>(),
+                                           source.result(r.at("file").get<std::size_t>())});
+                }
+                if (ok)
+                    model.engineering.results = std::move(results);
+                else
+                    p.notices.push_back(model.name + ": its last analysis results were not read");
             }
             p.models.push_back(std::move(model));
         }
@@ -379,7 +423,7 @@ static Project read_project_checked(std::string_view data) {
 
     std::string_view json_text;
     bool has_json = false;
-    std::vector<std::string_view> meshes, paintings;
+    std::vector<std::string_view> meshes, paintings, results;
     for (std::size_t at = kMagic.size() + 4; at < data.size();) {
         if (data.size() - at < 12)
             fail("cut short in a chunk header");
@@ -401,6 +445,8 @@ static Project read_project_checked(std::string_view data) {
             meshes.push_back(bytes);
         } else if (tag == "PNT ") {
             paintings.push_back(bytes);
+        } else if (tag == "RSLT") {
+            results.push_back(bytes);
         }
     }
     if (!has_json)
@@ -411,6 +457,8 @@ static Project read_project_checked(std::string_view data) {
     source.paintings = paintings.size();
     source.mesh = [&](std::size_t i) { return parse_stl(meshes[i]).mesh; };
     source.painting = [&](std::size_t i) { return std::string(paintings[i]); };
+    source.results = results.size();
+    source.result = [&](std::size_t i) { return std::string(results[i]); };
     return project_from_json(json_text, source);
 }
 
@@ -427,6 +475,10 @@ std::string write_project_3mf(const Project& project) {
             extra.push_back({paint_entry(extra.size() - 1), std::move(bytes)});
         }
     }
+    std::size_t results = 0;
+    for (const ProjectModel& m : project.models)
+        for (const EngineeringResult& r : m.engineering.results)
+            extra.push_back({result_entry(results++), r.report});
     return write_3mf_objects(objects, std::move(extra));
 }
 
@@ -436,6 +488,7 @@ static Project read_project_3mf(std::string_view data) {
     std::optional<std::string> json_text;
     std::vector<ThreeMfItem> items;
     std::vector<std::string> paintings; // Metadata/tisma_paint_0.bin, 1, ... while they are there
+    std::vector<std::string> results;   // Metadata/tisma_result_0.json, 1, ... likewise
     try {
         items = read_3mf_items(data, &json_text, kProjectEntry);
         const ZipArchive zip(data);
@@ -448,6 +501,8 @@ static Project read_project_3mf(std::string_view data) {
                 fail(what + ": newer than this program reads");
             paintings.push_back(bytes.substr(8));
         }
+        for (const ZipArchive::Entry* e; (e = zip.find(result_entry(results.size())));)
+            results.push_back(zip.read(*e));
     } catch (const ModelError& e) {
         fail(e.what());
     } catch (const ZipError& e) {
@@ -461,6 +516,8 @@ static Project read_project_3mf(std::string_view data) {
     source.paintings = paintings.size();
     source.mesh = [&](std::size_t i) { return std::move(items[i].mesh); };
     source.painting = [&](std::size_t i) { return paintings[i]; };
+    source.results = results.size();
+    source.result = [&](std::size_t i) { return results[i]; };
     return project_from_json(*json_text, source);
 }
 
