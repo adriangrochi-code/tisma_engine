@@ -89,8 +89,8 @@ Medidas en el motor (dev 45607f0, 03-11-2026) como caja negra, con el perfil de 
 | ZI3 | Cubo de 80 | `grid` al 80 %, `infill.nonplanar` sí | dz de −0,20 a +0,20 mm: el tope de la regla 3 achica el diente de 0,5 a 0,4 mm |
 | ZI4 | Cubo de 80 | `triangles`, `stars`, `honeycomb`, `aligned_rectilinear` o `concentric` al 20 %, `infill.nonplanar` sí | Hay bloques con zigzag en los cinco |
 | ZI5 | Cubo de 80 | `rectilinear`, `gyroid`, `cubic` o `lightning`, `infill.nonplanar` sí | Ningún bloque con zigzag; aviso `nonplanar_ignored` |
-| ZI6 | Cubo de 80 | `grid` al 20 % sin y con zigzag | Tiempo estimado 10 h 39 min sin zigzag y 12 h 42 min con zigzag (+19 %); el G-code pasa de unas 98 000 a unos 2,6 millones de líneas |
-| ZI7 | Cubo de 80 | ZI1 sin `machine.max_feed_z` en el perfil, y después con 5 mm/s | Medido en 45607f0/177eae6: los tramos con zigzag piden Z a 28,3 mm/s en los dos casos; el tiempo estimado pasa de 12 h 42 min a 1 d 10 h 11 min con 5 mm/s. Esperado: con 5 mm/s ningún tramo pide Z a más de 5 mm/s en su `F`, y sin el dato se usa 5 mm/s con aviso (regla 7) |
+| ZI6 | Cubo de 80 | `grid` al 20 % sin y con zigzag, `machine.max_feed_z` 12 mm/s | Tiempo estimado 10 h 39 min sin zigzag y 18 h 40 min con zigzag (+75 %); el G-code pasa de unas 98 000 a unos 2,6 millones de líneas (dev b6f67fe) |
+| ZI7 | Cubo de 80 | ZI1 sin `machine.max_feed_z` en el perfil, y después con 12 mm/s | Medido en dev b6f67fe: sin el dato, Z llega a 5,02 mm/s como mucho (el tope de 5 mm/s, con el aviso que lo nombra) y el tiempo estimado es 1 d 9 h 42 min; con 12 mm/s, Z llega a 12,05 mm/s y el tiempo es 18 h 40 min. Lo que pasa del tope es redondeo de la `F` |
 | ZI8 | Cubo de 10 mm | `grid` al 20 %, `infill.nonplanar` sí | Ningún bloque con zigzag (no hay lugar, regla 5). Esperado: el aviso de la regla 5. Hoy no hay aviso |
 | ZI9 | Cubo de 10 mm | `infill.nonplanar` y `infill.waves` sí | Código 2: «infill.nonplanar: not with the interlocking waves (infill.waves)» |
 | ZI10 | Cubo de 10 mm | `infill.nonplanar` sí y `curved.mode` = `wave` (E relativa) | Código 2: «infill.nonplanar: not with curved layers (curved.mode)» |
