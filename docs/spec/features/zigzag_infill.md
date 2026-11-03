@@ -59,8 +59,8 @@ Los nombres son los del motor (`docs/CONFIG.md`).
 7. **Velocidad:** el eje Z sube y baja junto con el avance, así que la velocidad escrita en el G-code (`F`) de cada
    tramo se baja para que Z no pase `machine.max_feed_z`, y el tiempo estimado sale de esa misma velocidad. Si el
    perfil de la impresora no dice `machine.max_feed_z`, se toma 5 mm/s, el máximo de Z del Ender-3 de fábrica en la configuración
-   de ejemplo de Marlin ([Creality Ender-3, `Configuration.h`](https://github.com/MarlinFirmware/Configurations/blob/release-2.1.2.1/config/examples/Creality/Ender-3/CrealityV1/Configuration.h),
-   `{ 500, 500, 5, 25 }` mm/s), igual que el motor ya toma una Ender-3 de fábrica para las velocidades que faltan, y
+   de ejemplo de Marlin ([ejemplo de Marlin para la Creality Ender-3](https://github.com/MarlinFirmware/Configurations/tree/release-2.1.2.1/config/examples/Creality/Ender-3/CrealityV1):
+   máximos de 500, 500, 5 y 25 mm/s en X, Y, Z y E), igual que el motor ya toma una Ender-3 de fábrica para las velocidades que faltan, y
    se nombra en el mismo aviso. Con un eje Z lento el zigzag puede
    triplicar el tiempo (prueba ZI7), y el aviso de la regla 12 lo dice.
 8. **Viajes:** van por encima de las crestas de la capa.
