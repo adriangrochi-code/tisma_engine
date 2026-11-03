@@ -113,7 +113,6 @@ El motor toma de los dos:
 | Resistencia | Arriba y abajo | `surfaces.*` | «3 arriba · 3 abajo» |
 | Resistencia | Relleno | `infill.density`, `infill.pattern`, `infill.angle` | «20 % · rectilíneo» |
 | Resistencia | Relleno avanzado | `infill.wall_overlap`, `infill.solid_every`, `infill.solid_below_area`, `infill.combine_*`, `infill.dense_*`, `infill.stress_density` | «Sin cambios» |
-| Resistencia | Relleno no planar | Un solo renglón con «No», «Zigzag en Z» (`infill.nonplanar*`, `zigzag_infill.md`) y «Ondas entrelazadas» (`infill.waves`, `infill.wave_*`, `interlock_infill.md`), regla 11 de `zigzag_infill.md` | «No» |
 | Velocidad | Primera capa | `speed.first_layer` | «30 mm/s» |
 | Velocidad | Paredes y superficies | `speed.walls`, `speed.outer_wall`, `speed.solid_infill`, `speed.top_solid_infill` | «60 · externa 50 %» |
 | Velocidad | Relleno y soporte | `speed.infill`, `speed.support` | «80 · 80 mm/s» |
@@ -128,7 +127,8 @@ El motor toma de los dos:
 | Adhesión | Falda | `adhesion.skirt_*` | «1 vuelta a 3 mm» |
 | Adhesión | Borde | `adhesion.brim_*` | «Sin borde» |
 | Adhesión | Balsa | (`skirt_brim_raft.md`) | «Sin balsa» |
-| Capas no planares | según `nonplanar.md` y `nonplanar_modes.md` | — | «Planas» |
+| No planar | Capas curvas | según `nonplanar.md` y `nonplanar_modes.md` | «Planas» |
+| No planar | Relleno no planar | Un solo renglón con «No», «Zigzag en Z» (`infill.nonplanar*`, `zigzag_infill.md`) y «Ondas entrelazadas» (`infill.waves`, `infill.wave_*`, `interlock_infill.md`), regla 11 de `zigzag_infill.md` | «No» |
 | Varios materiales | Torre de purga, Goteo, Purga | (`multi_extruder.md`, `multimaterial.md`) | «1 extrusor» |
 | Otros | Modos especiales | (`vase_mode.md`, `sequential.md`) | «Normal» |
 | Otros | Piel difusa | (`fuzzy_skin.md`) | «Apagada» |
