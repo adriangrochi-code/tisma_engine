@@ -162,13 +162,22 @@ Los nodos corren el motor como programa aparte para cada trabajo. El contrato es
 
     ```text
     tisma-engine analyze <proyecto.3mf> -o <resultado.tea> --summary <resumen.json> --sandbox --mode <modo>
-      --quality <calidad> --object <n> --instance <n> [--solid] [--no-zones] [--ribs] [--no-gpu]
+      [--quality <calidad>] --object <n> --instance <n> [--solid] [--no-zones] [--ribs] [--no-gpu] [--threads <n>]
     ```
 
     - los apoyos, las cargas y el material van en el proyecto (`formats.md`); los parámetros son los de la regla 6;
+    - sin `--quality`, la calidad es la que guardó el proyecto: así la nube calcula lo mismo que la computadora
+      (`formats.md`, prueba FM25). El servidor pasa `--quality` solo si la persona eligió otra al mandar el trabajo;
+      `fast`, `normal`, `high` y `extreme` (`ultra` es el nombre viejo de `extreme`);
     - el resultado `.tea` es un archivo del motor, que el motor sabe abrir en Ingeniería;
     - el resumen lleva el veredicto del análisis (`structural_analysis.md`) o `error`. Avance y códigos de salida, como
       en la regla 18.
+19a. **Errores que ve la persona:** cuando un cálculo falla, el resumen trae, además de `error` (en inglés), un `code`
+    estable (`bad_mode`, `bad_quality`, `not_in_cloud`, `needs_conditions`, `no_valid_result`, `usage`, `error`) y,
+    para los errores que puede encontrar una persona, `error_es` con el texto en español. El servidor los guarda en el
+    `summary` del trabajo fallido (`GET /v1/jobs/<id>`). La interfaz muestra `error_es` si está en español y existe;
+    si no, traduce por `code`; si no, el texto de `error`. Vale para `analyze`; `slice`, `aero` y `orient` van a usar los
+    mismos campos.
 19b. **Análisis aerodinámico:**
 
     ```text
@@ -233,3 +242,4 @@ Contra un servidor de prueba que el equipo del motor arma desde esta ficha.
 | CC17 | `tisma-engine aero` de un cubo de 20 mm, `--quality fast --speed 10 --direction x --sandbox` | Archivo `.taero`, resumen con `cd` entre 0,8 y 1,3 (un cubo de cara al aire, Hoerner) y código 0 |
 | CC18 | `tisma-engine orient` de una pieza en L apoyada de canto | JSON con `rotation`; `cost` no mayor que `cost_before` (regla 1 de `orientation.md`) |
 | CC19 | `tisma-engine slice … --threads 1` en una máquina de 4 núcleos | El proceso no pasa de un núcleo ocupado; el G-code es el mismo que sin la opción |
+| CC20 | Un trabajo `fea` con modo `lightest-infill` (que todavía no corre en la nube) | Falla; `GET /v1/jobs/<id>` da `error` en inglés y en `summary` `code` = `not_in_cloud` y `error_es`; la interfaz en español muestra `error_es` |
