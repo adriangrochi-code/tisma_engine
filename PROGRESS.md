@@ -9904,3 +9904,13 @@ no llega al análisis (sale del laminado) y las paredes simples no se distinguen
 **Sigue:** las optimizaciones de más impacto del CFD (TRT, fuerza por intercambio de momento) y la GPU; después
 `orient` (regla 19c).
 
+**Nube (informe del equipo de especificaciones, 2026-11-03):**
+- BH23: `analyze --quality extreme` se acepta; `ultra` sigue como su nombre anterior.
+- TR29: el resumen de un error lleva, además de `error` en inglés, un `code` estable (`bad_mode`, `bad_quality`,
+  `not_in_cloud`, `needs_conditions`, `no_valid_result`, `usage`, `error`) y `error_es` con el texto en castellano
+  para los errores que puede ver un usuario.
+- BH22, revisado: sin `--quality`, `analyze` sobre el proyecto guardado por la interfaz da lo mismo que Analizar
+  (cubo de 10 mm: seguridad 49,55, 1,2 g, 0,000419 mm). Con `--quality fast` la pieza se analiza entera sólida, como
+  pide la calidad Rápida (`structural_analysis.md`, «Resolución»): 1,24 g. La diferencia del informe venía de pedir
+  `fast` a un proyecto que la interfaz analizó en media.
+

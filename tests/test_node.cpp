@@ -320,6 +320,21 @@ TEST_CASE("analyze of a project the nodes' way: progress, the .tea result and th
                          "--quality", "best"},
                         kExitUsage),
                ContainsSubstring("--quality"));
+    // TR29: a stable code and the Spanish text for the cloud to show; BH23:
+    // extreme (and ultra, its earlier name) accepted, so the mode is what fails.
+    for (const char* q : {"extreme", "ultra"}) {
+        CHECK_THAT(error_of({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
+                             "--mode", "lightest-infill", "--quality", q},
+                            kExitNotImplemented),
+                   ContainsSubstring("does not run in the cloud"));
+        const nlohmann::json j = nlohmann::json::parse(read_text(summary));
+        CHECK(j["code"] == "not_in_cloud");
+        CHECK_THAT(j["error_es"].get<std::string>(), ContainsSubstring("todavía no corre en la nube"));
+    }
+    error_of({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox", "--quality", "best"},
+             kExitUsage);
+    CHECK(nlohmann::json::parse(read_text(summary))["code"] == "bad_quality");
+    CHECK_THAT(nlohmann::json::parse(read_text(summary))["error_es"].get<std::string>(), ContainsSubstring("extrema"));
     // A part with no conditions.
     const auto bare = dir / "bare.3mf";
     save_project(bare, box_project(100.0, 100.0));
@@ -327,6 +342,7 @@ TEST_CASE("analyze of a project the nodes' way: progress, the .tea result and th
                          "0", "--instance", "0"},
                         kExitInput),
                ContainsSubstring("fixed point or zone and a force"));
+    CHECK(nlohmann::json::parse(read_text(summary))["code"] == "needs_conditions");
     std::filesystem::remove_all(dir);
 }
 

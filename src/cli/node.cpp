@@ -336,10 +336,21 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
     }
     if (usage.empty() && (a.project.empty() || a.output.empty() || a.summary.empty()))
         usage = "error: analyze of a project needs the project, -o and --summary";
-    if (usage.empty() && mode != "analyze" && mode != "lightest-infill" && mode != "resin-structure")
+    // The summary's error for the cloud to show (TR29): "error" in English,
+    // a stable "code" and, for the errors a user can meet, "error_es".
+    std::string usage_code = "usage", usage_es;
+    if (usage.empty() && mode != "analyze" && mode != "lightest-infill" && mode != "resin-structure") {
         usage = "error: analyze: --mode is analyze, lightest-infill or resin-structure";
-    if (usage.empty() && !quality.empty() && quality != "fast" && quality != "normal" && quality != "high" && quality != "ultra")
-        usage = "error: analyze: --quality is fast, normal, high or ultra";
+        usage_code = "bad_mode";
+        usage_es = "análisis: el modo es analyze, lightest-infill o resin-structure";
+    }
+    // Extreme, and the cloud's earlier name for it, ultra (BH23).
+    if (usage.empty() && !quality.empty() && quality != "fast" && quality != "normal" && quality != "high" &&
+        quality != "extreme" && quality != "ultra") {
+        usage = "error: analyze: --quality is fast, normal, high or extreme";
+        usage_code = "bad_quality";
+        usage_es = "análisis: la calidad es rápida (fast), media (normal), alta (high) o extrema (extreme)";
+    }
 
     const auto write_summary = [&](const nlohmann::json& j) {
         if (a.summary.empty())
@@ -350,14 +361,21 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         }
         return true;
     };
-    const auto fail = [&](int code, const std::string& message) {
-        err << "error: " << message << "\n";
-        write_summary(nlohmann::json{{"error", message}});
-        return code;
+    const auto error_summary = [](const std::string& message, const std::string& code, const std::string& spanish) {
+        nlohmann::json j{{"error", message}, {"code", code}};
+        if (!spanish.empty())
+            j["error_es"] = spanish;
+        return j;
     };
+    const auto fail_coded = [&](int exit_code, const std::string& message, const std::string& code, const std::string& spanish) {
+        err << "error: " << message << "\n";
+        write_summary(error_summary(message, code, spanish));
+        return exit_code;
+    };
+    const auto fail = [&](int exit_code, const std::string& message) { return fail_coded(exit_code, message, "error", ""); };
     if (!usage.empty()) {
         err << usage << "\n";
-        write_summary(nlohmann::json{{"error", usage.substr(7)}});
+        write_summary(error_summary(usage.substr(7), usage_code, usage_es));
         return kExitUsage;
     }
     if (same_file(a.output, a.project) || same_file(a.summary, a.project))
@@ -368,7 +386,9 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         if (std::string problem = output_problem(write_target(*path)); !problem.empty())
             return fail(kExitInput, problem);
     if (mode != "analyze")
-        return fail(kExitNotImplemented, "this analysis (" + mode + ") does not run in the cloud yet");
+        return fail_coded(kExitNotImplemented, "this analysis (" + mode + ") does not run in the cloud yet", "not_in_cloud",
+                          "este análisis (" + std::string(mode == "lightest-infill" ? "relleno más liviano" : "estructura de resina") +
+                              ") todavía no corre en la nube");
 
     Progress progress(out);
     progress(0);
@@ -423,7 +443,8 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
     for (const std::string& note : notes)
         err << "warning: " << note << "\n";
     if (c.fixtures.empty() || c.loads.empty())
-        return fail(kExitInput, model.name + ": the analysis needs a fixed point or zone and a force (mark them in Engineering)");
+        return fail_coded(kExitInput, model.name + ": the analysis needs a fixed point or zone and a force (mark them in Engineering)",
+                          "needs_conditions", model.name + ": el análisis necesita un punto o zona fija y una fuerza (marcalos en Ingeniería)");
     const IndexedMesh mesh = weld_exact(part.mesh);
     progress(10);
     AnalysisReport report;
@@ -435,7 +456,8 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         return fail(kExitAnalysis, e.what());
     }
     if (!report.valid)
-        return fail(kExitAnalysis, "the analysis gave no valid result");
+        return fail_coded(kExitAnalysis, "the analysis gave no valid result", "no_valid_result",
+                          "el análisis no dio un resultado válido (¿la pieza está bien sujeta y la fuerza la toca?)");
     progress(92);
     const std::string report_json = structural_report_json(report, c, placed, part.to_part, &part.mesh);
     const nlohmann::json result{{"format", "tisma-engineering-result"},
