@@ -778,8 +778,15 @@ TEST_CASE("cad: any text as an expression gives a value or an error, never a han
         }
     }
     // Deep nesting is refused or read, not a crash.
+    // Deep nesting is refused, not a crash (it ran the stack out under the
+    // address sanitizer).
     const Evaluation deep = evaluate(std::string(5000, '(') + "1" + std::string(5000, ')'), known);
-    CHECK((deep.value.has_value() || !deep.error.empty()));
+    CHECK_FALSE(deep.value);
+    CHECK_FALSE(deep.error.empty());
+    CHECK_FALSE(evaluate(std::string(5000, '-') + "1", known).value);
+    const Evaluation fine = evaluate(std::string(50, '(') + "1 mm" + std::string(50, ')'), known);
+    REQUIRE(fine.value);
+    CHECK(fine.value->value == 1.0);
     INFO(values);
     CHECK(values > 100);
 }

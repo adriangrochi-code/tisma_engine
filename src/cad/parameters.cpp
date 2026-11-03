@@ -106,7 +106,21 @@ private:
             }
         }
     }
+    // Nesting (brackets and signs) deeper than any measure needs is
+    // refused before it runs the stack out.
+    static constexpr int kMaxDepth = 200;
+    struct Deeper {
+        explicit Deeper(int& depth) : depth_(depth) {
+            if (++depth_ > kMaxDepth)
+                throw Failure("too deeply nested");
+        }
+        ~Deeper() { --depth_; }
+        Deeper(const Deeper&) = delete;
+        Deeper& operator=(const Deeper&) = delete;
+        int& depth_;
+    };
     Quantity factor() {
+        const Deeper deeper(depth_);
         if (take('-')) {
             Quantity q = factor();
             q.value = -q.value;
@@ -173,6 +187,7 @@ private:
 
     const std::string& s_;
     const std::map<std::string, Quantity>& values_;
+    int depth_ = 0;
     std::size_t i_ = 0;
 };
 
