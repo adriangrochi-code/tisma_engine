@@ -1241,6 +1241,47 @@
     X(DesignNoBodies, "Todavía no hay cuerpos", "No bodies yet") \
     X(DesignSuppress, "Suprimir (el ojo)", "Suppress (the eye)") \
     X(DesignDeleteFeature, "Borrar", "Delete") \
+    X(OpFillet, "Redondeo", "Fillet") \
+    X(OpChamfer, "Chaflán", "Chamfer") \
+    X(OpShell, "Vaciado", "Shell") \
+    X(OpHole, "Agujero", "Hole") \
+    X(OpMirror, "Simetría", "Mirror") \
+    X(OpPatternCircular, "Patrón circular", "Circular pattern") \
+    X(OpPatternRectangular, "Patrón en fila", "Row pattern") \
+    X(OpCombine, "Combinar", "Combine") \
+    X(OpPickEdges, "Hacé clic en las aristas a redondear o achaflanar; Enter termina", "Click the edges to round or chamfer; Enter finishes") \
+    X(OpPickFaces, "Hacé clic en las caras que quedan abiertas (ninguna: hueco cerrado); Enter termina", "Click the faces left open (none: closed hollow); Enter finishes") \
+    X(OpPickHoles, "Hacé clic donde va cada agujero, sobre una cara; Enter termina", "Click where each hole goes, on a face; Enter finishes") \
+    X(OpNoEdge, "Ahí no hay una arista", "There is no edge there") \
+    X(OpPointAdded, "Punto %d agregado", "Point %d added") \
+    X(OpBody, "Cuerpo", "Body") \
+    X(OpRadius, "Radio", "Radius") \
+    X(OpDistance, "Distancia", "Distance") \
+    X(OpThickness, "Espesor", "Thickness") \
+    X(OpDiameter, "Diámetro", "Diameter") \
+    X(OpStandard, "Norma", "Standard") \
+    X(OpDiameterFree, "Diámetro libre", "Free diameter") \
+    X(OpFitClose, "Justo", "Close") \
+    X(OpFitNormal, "Normal", "Normal") \
+    X(OpFitLoose, "Holgado", "Loose") \
+    X(OpDepth, "Profundidad (0: pasante)", "Depth (0: through)") \
+    X(OpCount, "Cantidad", "Count") \
+    X(OpAngle, "Ángulo", "Angle") \
+    X(OpAxis, "Eje", "Axis") \
+    X(OpSpacing, "Separación", "Spacing") \
+    X(OpDirection, "Dirección", "Direction") \
+    X(OpPlane, "Plano", "Plane") \
+    X(OpTools, "Con", "With") \
+    X(OpJoin, "Unir", "Join") \
+    X(OpCut, "Restar", "Cut") \
+    X(OpIntersect, "Intersecar", "Intersect") \
+    X(OpPoints, "%d puntos", "%d points") \
+    X(OpOnePoint, "1 punto", "1 point") \
+    X(OpPickAgain, "Elegir en la vista", "Pick in the view") \
+    X(OpPicking, "Eligiendo… (Enter termina)", "Picking… (Enter finishes)") \
+    X(OpClearPoints, "Borrar puntos", "Clear points") \
+    X(OpNeedBody, "Hacé un sólido primero.", "Make a solid first.") \
+    X(DesignDone, "Listo", "Done") \
     X(DesignMoveUp, "Subir: se hace antes", "Move up: done earlier") \
     X(DesignMoveDown, "Bajar: se hace después", "Move down: done later") \
     X(DesignRenameTip, "Doble clic para cambiarle el nombre", "Double-click to rename") \

@@ -9665,3 +9665,34 @@ pide laminar. Falta la dirección de impresión y «Calcular en la nube».
 - **Pruebas nuevas:**
   - restricciones al azar (lo agregado se cumple; menos de 60 s);
   - 20 000 expresiones al azar y 5000 paréntesis anidados: dan un valor o un error, nunca un cuelgue.
+
+## 2026-11-03 — Diseño, D4 primera parte: operaciones sobre los cuerpos (CD5, CD6)
+
+**Hecho** (`cad_design.md`, regla 7, etapa D4; pedido del dueño: «lo más similar a SolidCraft en funcionalidades»):
+- Ocho operaciones nuevas en la sección **Operaciones** del panel y en la línea de comandos: Redondeo, Chaflán,
+  Vaciado, Agujero, Simetría, Patrón circular, Patrón en fila y Combinar (unir, restar, intersecar). Cada una es un
+  paso más del historial, sobre un cuerpo hecho antes, y sale como el comando de SolidCraft de su referencia pública
+  (`solid.fillet`, `solid.chamfer`, `solid.shell`, `solid.hole`, `solid.mirror`, `solid.pattern.circular`,
+  `solid.pattern.rectangular`, `solid.combine`). Un botón queda en gris con «Próximamente» si el SolidCraft
+  instalado no tiene ese comando, y con «Hacé un sólido primero» si no hay cuerpos.
+- Las aristas, las caras y los lugares de los agujeros se eligen con clic en la vista: el rayo del mouse contra la
+  pieza (Möller y Trumbore); para redondeo y chaflán el clic se pega a la arista viva más cercana (normales a más de
+  30°) a menos de 3 mm. Los puntos se marcan en verde; Enter en la línea de comandos vacía, Esc o «Listo» terminan.
+  «Elegir en la vista» vuelve a elegir y «Borrar puntos» los quita.
+- Cada fila del historial muestra el cuerpo, la medida con su «fx» (radio, distancia, espesor, diámetro, ángulo,
+  separación), la norma del agujero (M2 a M16 con ajuste justo, normal u holgado, o diámetro libre) y su
+  profundidad, la cantidad, el eje, la dirección, el plano o los cuerpos con los que combina.
+- Las restricciones del boceto ahora se aplican también al construir de verdad (antes el guion usaba la geometría sin
+  resolver).
+- «Cuerpos» en Medidas ya no cuenta las operaciones.
+
+**Pruebas:** casos del motor «D4 operations as SolidCraft commands» y «CD5 and CD6» (19 casos de CAD pasan); prueba de
+interfaz `design_operations`: caja de 20 mm, vaciado cerrado (3904 mm³), agujero M5 normal pasante elegido en la cara
+de arriba (7525,6 mm³), redondeo de 2 mm tipeado y elegido en una arista (7508,3 mm³) y una fila de tres (22 524
+mm³). La prueba `design_timeline` hace la segunda caja desde la línea de comandos (el panel ahora es más alto).
+
+**No probado:** con el `solidcraft-cli` real (las pruebas usan el sustituto); la elección con el mouse real (la
+prueba elige los puntos por coordenadas, con el mismo código que el clic).
+
+**Sigue:** la edición del boceto (regla 17: recortar, desfasar, simetría y patrones del boceto; CD17, CD18), roscas;
+después CFD (A3) y la línea de comandos de la nube.

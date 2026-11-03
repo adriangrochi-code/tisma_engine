@@ -578,6 +578,17 @@ private:
     void design_command_line();
     void run_command(std::string text);
     void add_primitive(cad::Primitive kind, const std::array<double, cad::kMaxSizes>& sizes);
+    // Stage D4 (rule 7): an operation on a body, and the points it takes in
+    // the view (edges, faces, hole places) while design_pick_ is it.
+    void add_operation(cad::OperationKind kind);
+    bool design_hit(std::array<double, 3>& at) const;
+    void update_design_edges();
+    void design_pick_at(const std::array<double, 3>& p);
+    void design_pick_overlay();
+    std::optional<std::size_t> design_pick_;
+    std::vector<std::array<std::array<float, 3>, 2>> design_edges_;
+    std::size_t design_edges_tris_ = std::size_t(-1);
+    double design_edges_volume_ = -1.0;
     void rebuild_design();
     void design_built(cad::BuildResult built);
     void show_design();
@@ -8443,6 +8454,13 @@ void App::viewport() {
             sketch_edit_->cursor.reset();
         }
     }
+    // An operation's points (stage D4): a click, not a drag, on a body.
+    if (tab_ == Tab::Design && design_pick_ && !sketch_edit_ && ImGui::IsItemHovered() &&
+        ImGui::IsMouseReleased(ImGuiMouseButton_Left) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] < 9.0f) {
+        std::array<double, 3> at{};
+        if (design_hit(at))
+            design_pick_at(at);
+    }
     // The Paint tool: the brush follows the face under the mouse, and a
     // stroke paints the model it started on.
     const bool painting = editing && tool_ == PlateTool::Paint;
@@ -11066,6 +11084,215 @@ void App::add_primitive(cad::Primitive kind, const std::array<double, cad::kMaxS
     rebuild_design();
 }
 
+namespace {
+
+T op_label(cad::OperationKind kind) {
+    switch (kind) {
+    case cad::OperationKind::Fillet: return T::OpFillet;
+    case cad::OperationKind::Chamfer: return T::OpChamfer;
+    case cad::OperationKind::Shell: return T::OpShell;
+    case cad::OperationKind::Hole: return T::OpHole;
+    case cad::OperationKind::Mirror: return T::OpMirror;
+    case cad::OperationKind::PatternCircular: return T::OpPatternCircular;
+    case cad::OperationKind::PatternRectangular: return T::OpPatternRectangular;
+    case cad::OperationKind::Combine: return T::OpCombine;
+    }
+    return T::OpFillet;
+}
+
+// The operations that take points in the view (edges, faces, hole places).
+bool takes_points(cad::OperationKind kind) {
+    return kind == cad::OperationKind::Fillet || kind == cad::OperationKind::Chamfer || kind == cad::OperationKind::Shell ||
+           kind == cad::OperationKind::Hole;
+}
+
+T pick_hint(cad::OperationKind kind) {
+    return kind == cad::OperationKind::Shell ? T::OpPickFaces : kind == cad::OperationKind::Hole ? T::OpPickHoles : T::OpPickEdges;
+}
+
+constexpr cad::OperationKind kOperations[] = {
+    cad::OperationKind::Fillet,  cad::OperationKind::Chamfer,         cad::OperationKind::Shell,
+    cad::OperationKind::Hole,    cad::OperationKind::Mirror,          cad::OperationKind::PatternCircular,
+    cad::OperationKind::PatternRectangular, cad::OperationKind::Combine};
+
+} // namespace
+
+// An operation on the last body made (rule 7, stage D4): with points to
+// pick, the view takes them until Enter.
+void App::add_operation(cad::OperationKind kind) {
+    std::vector<std::string> bodies;
+    for (const cad::Feature& g : design_.features)
+        if (g.type != cad::Feature::Type::Operation && !g.suppressed)
+            bodies.push_back(g.name);
+    if (bodies.empty()) {
+        command_message_ = tr(T::OpNeedBody);
+        return;
+    }
+    cad::Feature f;
+    f.type = cad::Feature::Type::Operation;
+    f.op.kind = kind;
+    f.op.target = bodies.back();
+    f.name = design_.free_name(tr(op_label(kind)));
+    switch (kind) {
+    case cad::OperationKind::Fillet: f.op.value = 2.0; break;
+    case cad::OperationKind::Chamfer: f.op.value = 1.0; break;
+    case cad::OperationKind::Shell: f.op.value = 2.0; break;
+    case cad::OperationKind::Hole: f.op.standard = "M5"; f.op.value = 5.0; break;
+    case cad::OperationKind::PatternRectangular: f.op.count = 3; break;
+    case cad::OperationKind::Combine:
+        if (bodies.size() >= 2) // the body before it, cut from the last
+            f.op.target = bodies[bodies.size() - 2], f.op.tools = {bodies.back()};
+        break;
+    default: break;
+    }
+    design_.features.push_back(std::move(f));
+    design_scroll_to_ = std::to_string(design_.features.size());
+    if (takes_points(kind)) {
+        design_pick_ = design_.features.size() - 1;
+        command_message_ = tr(pick_hint(kind));
+        command_focus_ = true;
+    } else {
+        design_pick_.reset();
+        rebuild_design();
+    }
+}
+
+// Where the mouse's ray meets the design's bodies, nearest first (Möller and
+// Trumbore's ray-triangle test, every triangle: designs are small).
+bool App::design_hit(std::array<double, 3>& at) const {
+    const Vec3 e = camera_.eye(), d = mouse_ray();
+    double best = std::numeric_limits<double>::infinity();
+    for (std::size_t t = 0; t < design_mesh_.triangle_count(); ++t) {
+        const Vec3f a = design_mesh_.corner(t, 0), b = design_mesh_.corner(t, 1), c = design_mesh_.corner(t, 2);
+        const double e1[3] = {double(b.x) - a.x, double(b.y) - a.y, double(b.z) - a.z};
+        const double e2[3] = {double(c.x) - a.x, double(c.y) - a.y, double(c.z) - a.z};
+        const double p[3] = {d.y * e2[2] - d.z * e2[1], d.z * e2[0] - d.x * e2[2], d.x * e2[1] - d.y * e2[0]};
+        const double det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+        if (std::abs(det) < 1e-12)
+            continue;
+        const double inv = 1.0 / det;
+        const double s[3] = {double(e.x) - a.x, double(e.y) - a.y, double(e.z) - a.z};
+        const double u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) * inv;
+        if (u < 0.0 || u > 1.0)
+            continue;
+        const double q[3] = {s[1] * e1[2] - s[2] * e1[1], s[2] * e1[0] - s[0] * e1[2], s[0] * e1[1] - s[1] * e1[0]};
+        const double v = (d.x * q[0] + d.y * q[1] + d.z * q[2]) * inv;
+        if (v < 0.0 || u + v > 1.0)
+            continue;
+        const double dist = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) * inv;
+        if (dist > 1e-9 && dist < best) {
+            best = dist;
+            at = {e.x + d.x * dist, e.y + d.y * dist, e.z + d.z * dist};
+        }
+    }
+    return std::isfinite(best);
+}
+
+// The design's sharp edges (faces meeting at more than 30 degrees, or an
+// open edge), where a fillet or a chamfer can go.
+void App::update_design_edges() {
+    if (design_edges_tris_ == design_mesh_.triangle_count() && design_edges_volume_ == design_volume_)
+        return;
+    design_edges_tris_ = design_mesh_.triangle_count();
+    design_edges_volume_ = design_volume_;
+    design_edges_.clear();
+    using Key = std::array<long long, 3>;
+    const auto key = [](const Vec3f& v) {
+        return Key{std::llround(double(v.x) * 1e4), std::llround(double(v.y) * 1e4), std::llround(double(v.z) * 1e4)};
+    };
+    std::map<std::pair<Key, Key>, std::vector<std::array<double, 3>>> edges;
+    std::map<std::pair<Key, Key>, std::pair<Vec3f, Vec3f>> ends;
+    for (std::size_t t = 0; t < design_mesh_.triangle_count(); ++t) {
+        const Vec3f c[3] = {design_mesh_.corner(t, 0), design_mesh_.corner(t, 1), design_mesh_.corner(t, 2)};
+        const double u[3] = {double(c[1].x) - c[0].x, double(c[1].y) - c[0].y, double(c[1].z) - c[0].z};
+        const double v[3] = {double(c[2].x) - c[0].x, double(c[2].y) - c[0].y, double(c[2].z) - c[0].z};
+        std::array<double, 3> n{u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]};
+        const double len = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+        if (!(len > 0.0))
+            continue;
+        for (double& x : n)
+            x /= len;
+        for (int k = 0; k < 3; ++k) {
+            Key a = key(c[k]), b = key(c[(k + 1) % 3]);
+            const bool swap = b < a;
+            if (swap)
+                std::swap(a, b);
+            edges[{a, b}].push_back(n);
+            ends[{a, b}] = swap ? std::pair{c[(k + 1) % 3], c[k]} : std::pair{c[k], c[(k + 1) % 3]};
+        }
+    }
+    for (const auto& [k, normals] : edges) {
+        const bool sharp = normals.size() != 2 || normals[0][0] * normals[1][0] + normals[0][1] * normals[1][1] +
+                                                          normals[0][2] * normals[1][2] < std::cos(30.0 * std::numbers::pi / 180.0);
+        if (sharp) {
+            const auto& [p, q] = ends[k];
+            design_edges_.push_back({std::array<float, 3>{p.x, p.y, p.z}, std::array<float, 3>{q.x, q.y, q.z}});
+        }
+    }
+}
+
+// A point picked for the operation being edited: for a fillet or a chamfer
+// the nearest point of the nearest sharp edge (within a few millimetres),
+// away from its ends so it names one edge; for a face, the point itself.
+void App::design_pick_at(const std::array<double, 3>& p) {
+    if (!design_pick_ || *design_pick_ >= design_.features.size() ||
+        design_.features[*design_pick_].type != cad::Feature::Type::Operation) {
+        design_pick_.reset();
+        return;
+    }
+    cad::Feature& f = design_.features[*design_pick_];
+    std::array<double, 3> at = p;
+    if (f.op.kind == cad::OperationKind::Fillet || f.op.kind == cad::OperationKind::Chamfer) {
+        update_design_edges();
+        double best = 3.0;
+        bool found = false;
+        for (const auto& [a, b] : design_edges_) {
+            const double d[3] = {double(b[0]) - a[0], double(b[1]) - a[1], double(b[2]) - a[2]};
+            const double l2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+            if (!(l2 > 0.0))
+                continue;
+            const double t = std::clamp(((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1] + (p[2] - a[2]) * d[2]) / l2, 0.1, 0.9);
+            const std::array<double, 3> q{a[0] + t * d[0], a[1] + t * d[1], a[2] + t * d[2]};
+            const double dist = std::hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+            if (dist < best)
+                best = dist, at = q, found = true;
+        }
+        if (!found) {
+            command_message_ = tr(T::OpNoEdge);
+            return;
+        }
+    }
+    f.op.refs.push_back(at);
+    command_message_ = format(tr(T::OpPointAdded), int(f.op.refs.size()));
+    rebuild_design();
+}
+
+// The points of the operation being picked, over the view.
+void App::design_pick_overlay() {
+    if (!design_pick_ || *design_pick_ >= design_.features.size() || !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const cad::Feature& f = design_.features[*design_pick_];
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    const ImU32 mark = ImGui::GetColorU32(rgb(0x3FBF7F));
+    for (const auto& r : f.op.refs) {
+        const float x = float(r[0]), y = float(r[1]), z = float(r[2]);
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12], cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(w > 1e-6f))
+            continue;
+        const ImVec2 q(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        dl->AddCircleFilled(q, 5.0f * scale_, mark);
+    }
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + 60.0f * scale_), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.85f);
+    ImGui::Begin("##design_pick_hint", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+    ImGui::TextUnformatted(tr(pick_hint(f.op.kind)));
+    ImGui::End();
+}
+
 // The design built again by the bundled tool, in the background; while a
 // build runs, the next waits for it (one at a time, the last design wins).
 void App::rebuild_design() {
@@ -11363,13 +11590,38 @@ void App::design_panel() {
     } else {
         loc::TextDisabled("%s", tr(T::DesignSketch));
     }
-    // The stages to come, greyed out (rule 3), one line each.
-    for (const T title : {T::DesignSecOperations}) {
-        ImGui::Spacing();
-        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
-        ImGui::SameLine();
-        loc::TextDisabled("· %s", tr(T::ComingSoon));
-        ImGui::Separator();
+    // Operaciones (rule 7, stage D4): on the bodies made; each one known to
+    // the installed SolidCraft, the rest «Próximamente».
+    section(T::DesignSecOperations);
+    {
+        const bool any_body = std::any_of(design_.features.begin(), design_.features.end(), [](const cad::Feature& g) {
+            return g.type != cad::Feature::Type::Operation && !g.suppressed;
+        });
+        float x = 0.0f;
+        const float room = ImGui::GetContentRegionAvail().x;
+        for (const cad::OperationKind kind : kOperations) {
+            const char* label = tr(op_label(kind));
+            const float w = ImGui::CalcTextSize(label).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+            if (x > 0.0f && x + w <= room)
+                ImGui::SameLine();
+            else
+                x = 0.0f;
+            const bool known = ready && solidcraft_.has(cad::operation_command(kind));
+            ImGui::BeginDisabled(!known || !any_body);
+            if (ImGui::Button(label))
+                add_operation(kind);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && (!known || !any_body))
+                loc::SetTooltip("%s", tr(!known ? T::ComingSoon : T::OpNeedBody));
+            rect_of((std::string("design_op_") + cad::operation_name(kind)).c_str());
+            x += w + ImGui::GetStyle().ItemSpacing.x;
+        }
+        if (design_pick_ && *design_pick_ < design_.features.size()) {
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(pick_hint(design_.features[*design_pick_].op.kind)));
+            if (ImGui::SmallButton(tr(T::DesignDone)))
+                design_pick_.reset(), rebuild_design();
+            rect_of("design_pick_done");
+        }
     }
 
     // Parámetros (rule 9): a name and an expression each, its value or why
@@ -11534,7 +11786,9 @@ void App::design_panel() {
             rect_of(("design_name_" + std::to_string(i + 1)).c_str());
         }
         ImGui::SameLine();
-        loc::TextDisabled("(%s)", f.type == cad::Feature::Type::Sketch ? tr(T::DesignSketch) : primitive_label(f.kind));
+        loc::TextDisabled("(%s)", f.type == cad::Feature::Type::Sketch      ? tr(T::DesignSketch)
+                                  : f.type == cad::Feature::Type::Operation ? tr(op_label(f.op.kind))
+                                                                            : primitive_label(f.kind));
         // Moved earlier or later in the timeline, or deleted.
         {
             const ImGuiStyle& st = ImGui::GetStyle();
@@ -11575,6 +11829,142 @@ void App::design_panel() {
         else if (waits)
             loc::TextDisabled("%s", tr(T::DesignWaiting));
         ImGui::Indent();
+        if (f.type == cad::Feature::Type::Operation) {
+            // Its body, its measures and its points (rule 7, stage D4).
+            cad::BodyOperation& o = f.op;
+            const std::string row = std::to_string(i + 1);
+            std::vector<std::string> bodies;
+            for (std::size_t j = 0; j < i; ++j)
+                if (design_.features[j].type != cad::Feature::Type::Operation)
+                    bodies.push_back(design_.features[j].name);
+            ImGui::SetNextItemWidth(130.0f * scale_);
+            if (ImGui::BeginCombo(tr(T::OpBody), o.target.c_str())) {
+                for (const std::string& b : bodies)
+                    if (ImGui::Selectable(b.c_str(), b == o.target))
+                        o.target = b, changed = true;
+                ImGui::EndCombo();
+            }
+            rect_of(("design_op_body_" + row).c_str());
+            const auto number = [&](T label, double& v, const char* fmt, double step, const char* key) {
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (loc::InputNumber(tr(label), &v, fmt, step))
+                    design_edited_ = true;
+                rect_of(("design_op_" + std::string(key) + "_" + row).c_str());
+                bind(f, key);
+            };
+            switch (o.kind) {
+            case cad::OperationKind::Fillet: number(T::OpRadius, o.value, "%.2f", 0.5, "value"); break;
+            case cad::OperationKind::Chamfer: number(T::OpDistance, o.value, "%.2f", 0.5, "value"); break;
+            case cad::OperationKind::Shell: number(T::OpThickness, o.value, "%.2f", 0.5, "value"); break;
+            case cad::OperationKind::Hole: {
+                static const char* kStandards[] = {"M2", "M2.5", "M3", "M4", "M5", "M6", "M8", "M10", "M12", "M16"};
+                ImGui::SetNextItemWidth(130.0f * scale_);
+                if (ImGui::BeginCombo(tr(T::OpStandard), o.standard.empty() ? tr(T::OpDiameterFree) : o.standard.c_str())) {
+                    if (ImGui::Selectable(tr(T::OpDiameterFree), o.standard.empty()))
+                        o.standard.clear(), changed = true;
+                    for (const char* m : kStandards)
+                        if (ImGui::Selectable(m, o.standard == m))
+                            o.standard = m, changed = true;
+                    ImGui::EndCombo();
+                }
+                rect_of(("design_op_standard_" + row).c_str());
+                if (o.standard.empty()) {
+                    number(T::OpDiameter, o.value, "%.2f", 0.5, "value");
+                } else {
+                    int fit = o.fit == "close" ? 0 : o.fit == "loose" ? 2 : 1;
+                    const char* fits[] = {tr(T::OpFitClose), tr(T::OpFitNormal), tr(T::OpFitLoose)};
+                    ImGui::SetNextItemWidth(110.0f * scale_);
+                    if (ImGui::Combo("##fit", &fit, fits, 3))
+                        o.fit = fit == 0 ? "close" : fit == 2 ? "loose" : "normal", changed = true;
+                }
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (loc::InputNumber(tr(T::OpDepth), &o.depth, "%.2f", 1.0))
+                    design_edited_ = true;
+                break;
+            }
+            case cad::OperationKind::Mirror: {
+                int plane = o.plane == "XY" ? 0 : o.plane == "XZ" ? 1 : 2;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo(tr(T::OpPlane), &plane, "XY\0XZ\0YZ\0"))
+                    o.plane = plane == 0 ? "XY" : plane == 1 ? "XZ" : "YZ", changed = true;
+                break;
+            }
+            case cad::OperationKind::PatternCircular: {
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::InputInt(tr(T::OpCount), &o.count))
+                    o.count = std::clamp(o.count, 1, 500), design_edited_ = true;
+                rect_of(("design_op_count_" + row).c_str());
+                number(T::OpAngle, o.angle, "%.1f", 15.0, "angle");
+                int axis = o.axis == 'X' ? 0 : o.axis == 'Y' ? 1 : 2;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo(tr(T::OpAxis), &axis, "X\0Y\0Z\0"))
+                    o.axis = "XYZ"[axis], changed = true;
+                break;
+            }
+            case cad::OperationKind::PatternRectangular: {
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::InputInt(tr(T::OpCount), &o.count))
+                    o.count = std::clamp(o.count, 1, 500), design_edited_ = true;
+                rect_of(("design_op_count_" + row).c_str());
+                number(T::OpSpacing, o.spacing, "%.2f", 1.0, "spacing");
+                int dir = o.direction[1] != 0.0 ? 1 : o.direction[2] != 0.0 ? 2 : 0;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo(tr(T::OpDirection), &dir, "X\0Y\0Z\0")) {
+                    o.direction = {dir == 0 ? 1.0 : 0.0, dir == 1 ? 1.0 : 0.0, dir == 2 ? 1.0 : 0.0};
+                    changed = true;
+                }
+                break;
+            }
+            case cad::OperationKind::Combine: {
+                int how = o.boolean == "join" ? 0 : o.boolean == "intersect" ? 2 : 1;
+                const char* hows[] = {tr(T::OpJoin), tr(T::OpCut), tr(T::OpIntersect)};
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo("##boolean", &how, hows, 3))
+                    o.boolean = how == 0 ? "join" : how == 2 ? "intersect" : "cut", changed = true;
+                ImGui::SameLine();
+                ImGui::TextUnformatted(tr(T::OpTools));
+                for (const std::string& b : bodies) {
+                    if (b == o.target)
+                        continue;
+                    bool with = std::find(o.tools.begin(), o.tools.end(), b) != o.tools.end();
+                    if (ImGui::Checkbox(b.c_str(), &with)) {
+                        if (with)
+                            o.tools.push_back(b);
+                        else
+                            std::erase(o.tools, b);
+                        changed = true;
+                    }
+                }
+                break;
+            }
+            }
+            if (takes_points(o.kind)) {
+                if (o.refs.size() == 1)
+                    loc::TextDisabled("%s", tr(T::OpOnePoint));
+                else
+                    loc::TextDisabled(tr(T::OpPoints), int(o.refs.size()));
+                ImGui::SameLine();
+                const bool picking = design_pick_ && *design_pick_ == i;
+                if (picking) {
+                    loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::OpPicking));
+                } else if (ImGui::SmallButton(tr(T::OpPickAgain))) {
+                    design_pick_ = i;
+                    command_message_ = tr(pick_hint(o.kind));
+                }
+                rect_of(("design_op_pick_" + row).c_str());
+                if (!o.refs.empty()) {
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(tr(T::OpClearPoints)))
+                        o.refs.clear(), changed = true;
+                    rect_of(("design_op_clear_" + row).c_str());
+                }
+            }
+            if (!f.buildable())
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(T::CommandBadNumber));
+            ImGui::Unindent();
+            ImGui::PopID();
+            continue;
+        }
         if (f.type == cad::Feature::Type::Sketch) {
             // Its operation and that operation's measures (rule 7), and the way back in.
             const bool extrude = f.operation.kind == cad::SketchOperation::Kind::Extrude;
@@ -11660,6 +12050,8 @@ void App::design_panel() {
     // A sketch being drawn is finished first, so its place stays right.
     if ((removed || moved) && sketch_edit_)
         finish_sketch();
+    if (removed || moved)
+        design_pick_.reset();
     if (removed) {
         design_.features.erase(design_.features.begin() + std::ptrdiff_t(*removed));
         design_failed_.reset();
@@ -11694,7 +12086,10 @@ void App::design_panel() {
     } else {
         int bodies = 0; // built: the ones before a failing feature (rule 8)
         for (std::size_t i = 0; i < design_.features.size() && !(design_failed_ && i >= *design_failed_); ++i)
-            bodies += !design_.features[i].suppressed && design_.features[i].buildable() ? 1 : 0;
+            bodies += !design_.features[i].suppressed && design_.features[i].buildable() &&
+                              design_.features[i].type != cad::Feature::Type::Operation
+                          ? 1
+                          : 0;
         if (ImGui::BeginTable("##measures", 2)) {
             const auto line = [](const char* name, const std::string& value) {
                 ImGui::TableNextRow();
@@ -14876,6 +15271,12 @@ void App::run_command(std::string text) {
     }
     if (sketch_edit_ && sketch_command(lower_ascii(text), text))
         return;
+    // Points being picked for an operation: Enter on an empty line ends it.
+    if (design_pick_ && !sketch_edit_ && text.empty()) {
+        design_pick_.reset();
+        rebuild_design();
+        return;
+    }
     if (command_prompt_) {
         CommandPrompt& c = *command_prompt_;
         if (!text.empty()) {
@@ -14941,6 +15342,32 @@ void App::run_command(std::string text) {
         open_page(DesignPage::Gears);
         return;
     }
+    // The operations of stage D4 (rule 7), in both languages.
+    static const std::pair<const char*, cad::OperationKind> kOperationWords[] = {
+        {"redondeo", cad::OperationKind::Fillet},           {"redondear", cad::OperationKind::Fillet},
+        {"fillet", cad::OperationKind::Fillet},             {"chaflan", cad::OperationKind::Chamfer},
+        {"chaflán", cad::OperationKind::Chamfer},           {"chamfer", cad::OperationKind::Chamfer},
+        {"vaciado", cad::OperationKind::Shell},             {"vaciar", cad::OperationKind::Shell},
+        {"shell", cad::OperationKind::Shell},               {"agujero", cad::OperationKind::Hole},
+        {"hole", cad::OperationKind::Hole},                 {"simetria", cad::OperationKind::Mirror},
+        {"simetría", cad::OperationKind::Mirror},           {"espejo", cad::OperationKind::Mirror},
+        {"mirror", cad::OperationKind::Mirror},             {"patron", cad::OperationKind::PatternCircular},
+        {"patrón", cad::OperationKind::PatternCircular},    {"polar", cad::OperationKind::PatternCircular},
+        {"fila", cad::OperationKind::PatternRectangular},   {"pattern", cad::OperationKind::PatternRectangular},
+        {"combinar", cad::OperationKind::Combine},          {"combine", cad::OperationKind::Combine},
+        {"restar", cad::OperationKind::Combine},            {"unir", cad::OperationKind::Combine}};
+    for (const auto& [name, kind] : kOperationWords)
+        if (word == name) {
+            if (!solidcraft_probed_ || !solidcraft_.available || !solidcraft_.has(cad::operation_command(kind))) {
+                command_message_ = format(tr(T::CommandSoon), text.c_str());
+                return;
+            }
+            add_operation(kind);
+            if (kind == cad::OperationKind::Combine && !design_.features.empty() &&
+                design_.features.back().type == cad::Feature::Type::Operation && word == "unir")
+                design_.features.back().op.boolean = "join", rebuild_design();
+            return;
+        }
     if (const std::optional<cad::Primitive> kind = primitive_named(word)) {
         last_command_ = word;
         command_prompt_ = CommandPrompt{*kind, cad::default_sizes(*kind), 0};
@@ -16804,6 +17231,8 @@ void App::layout() {
                 sketch_strip();
                 sketch_cursor_input();
                 sketch_overlay();
+            } else {
+                design_pick_overlay();
             }
         }
         if (tab_ == Tab::Structural)
@@ -16875,6 +17304,12 @@ void App::layout() {
         help_open_ = !help_open_;
     // The sketch's toggles (cad_design.md, rules 15 and 16) and its two
     // levels of Esc (rule 11, CD10), while no field has the keyboard.
+    // Esc ends picking an operation's points.
+    if (tab_ == Tab::Design && design_pick_ && !sketch_edit_ && no_popup() && !ImGui::IsAnyItemActive() &&
+        esc_frame_ != ImGui::GetFrameCount() && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        design_pick_.reset();
+        rebuild_design();
+    }
     if (tab_ == Tab::Design && sketch_edit_ && no_popup()) {
         if (ImGui::Shortcut(ImGuiKey_F3, ImGuiInputFlags_RouteGlobal))
             sketch_edit_->snaps = !sketch_edit_->snaps;
@@ -18222,6 +18657,14 @@ void App::script_input() {
         std::printf("ui-script: expect-sketch-point %zu %s: %s%.3f %.3f\n", entity, step.value.c_str(), ok ? "ok, " : "got ", got.x, got.y);
         if (!ok)
             return fail_step("the point is at " + std::to_string(got.x) + ", " + std::to_string(got.y));
+        next();
+    } else if (step.verb == "design-pick") { // a point "X Y Z" picked in the view for the operation taking points
+        double x = 0, y = 0, z = 0;
+        const std::string text = step.key + " " + step.value;
+        if (!design_pick_ || std::sscanf(text.c_str(), "%lf %lf %lf", &x, &y, &z) != 3)
+            return fail_step("no operation is taking points, or the point is not X Y Z");
+        design_pick_at({x, y, z});
+        std::printf("ui-script: design-pick %g %g %g\n", x, y, z);
         next();
     } else if (step.verb == "expect-design") { // the design's bodies built: VALUE "none" or a volume in mm3 within 1 %
         if (design_job_.running() || !solidcraft_probed_ || design_dirty_)

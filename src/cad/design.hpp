@@ -11,6 +11,7 @@
 
 #include <array>
 #include <map>
+#include <optional>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -38,24 +39,62 @@ bool sizes_ok(Primitive kind, const std::array<double, kMaxSizes>& sizes);
 // The SolidCraft command a primitive is (rule 1): "solid.box" and the like.
 const char* command_of(Primitive kind);
 
+// The operations of stage D4 on a body made before them (rule 7), as
+// SolidCraft's commands take them (its public command reference): edges and
+// faces named by a point on them.
+enum class OperationKind { Fillet, Chamfer, Shell, Hole, Mirror, PatternCircular, PatternRectangular, Combine };
+// "fillet", "chamfer"... and back; and the SolidCraft command it is.
+const char* operation_name(OperationKind kind);
+std::optional<OperationKind> operation_named(const std::string& name);
+const char* operation_command(OperationKind kind);
+
+struct BodyOperation {
+    OperationKind kind = OperationKind::Fillet;
+    std::string target; // the body it works on: a feature's name
+    // Points on the edges (fillet, chamfer), on the faces left open (shell;
+    // none: a closed hollow body) or where the holes go, on a face.
+    std::vector<std::array<double, 3>> refs;
+    double value = 2.0; // fillet radius, chamfer distance, shell thickness, hole diameter (mm)
+    // A hole by ISO 273 ("M5", with fit close, normal or loose); empty: the
+    // diameter is `value`. Depth 0: through all.
+    std::string standard;
+    std::string fit = "normal";
+    double depth = 0.0;
+    // Patterns: how many in all; circular about an axis (X, Y or Z through
+    // the origin) over an angle; rectangular along a direction at a spacing.
+    int count = 6;
+    char axis = 'Z';
+    double angle = 360.0;
+    std::array<double, 3> direction{1.0, 0.0, 0.0};
+    double spacing = 30.0;
+    std::string plane = "YZ"; // mirror: XY, XZ or YZ through the origin, joined to the body
+    // Combine: the other bodies, and join, cut or intersect.
+    std::vector<std::string> tools;
+    std::string boolean = "cut";
+    friend bool operator==(const BodyOperation&, const BodyOperation&) = default;
+};
+
 struct Feature {
     std::string name; // unique in the design: the body's name too
-    // A primitive with its sizes (stage D1), or a sketch with the operation
-    // that makes a body of it (stage D2).
-    enum class Type { Primitive, Sketch } type = Type::Primitive;
+    // A primitive with its sizes (stage D1), a sketch with the operation that
+    // makes a body of it (stage D2), or an operation on a body (stage D4).
+    enum class Type { Primitive, Sketch, Operation } type = Type::Primitive;
     Primitive kind = Primitive::Box;
     std::array<double, kMaxSizes> sizes{20.0, 20.0, 20.0};
     Sketch sketch;
     SketchOperation operation;
+    BodyOperation op; // Type::Operation
     bool suppressed = false; // the eye in Historial (rule 3): left out of the build
     // Sizes tied to the design's parameters (rule 9): what they set, and the
     // expression. Targets: "size0" to "size2" (a primitive's sizes),
     // "distance" and "angle" (the sketch's extrusion or revolution),
     // "e<k>.width", "e<k>.height" (a rectangle) and "e<k>.diameter" (a
-    // circle) for the sketch's entity k.
+    // circle) for the sketch's entity k; "value", "spacing" and "angle" (an
+    // operation's size, a pattern's spacing and angle).
     std::map<std::string, std::string> bindings;
-    // Whether it would make a body: a primitive's sizes make a solid, a
-    // sketch has a closed region.
+    // Whether it would make a body, or change one: a primitive's sizes make a
+    // solid, a sketch has a closed region, an operation has a body and what
+    // it needs (edges, a positive size, two or more copies, tools).
     bool buildable() const;
 };
 

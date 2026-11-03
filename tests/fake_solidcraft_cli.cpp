@@ -38,7 +38,9 @@ constexpr const char* kCommands[] = {"solid.box",       "solid.cylinder",  "soli
                                      "sketch.arc.center_point", "sketch.finish", "sketch.constraint.coincident",
                                      "sketch.constraint.midpoint", "sketch.dimension",
                                      "file.export",     "file.export_3mf", "file.save_as",     "inspect.measure",
-                                     "engine.commands"};
+                                     "engine.commands", "solid.fillet",    "solid.chamfer",    "solid.shell",
+                                     "solid.hole",      "solid.mirror",    "solid.pattern.circular",
+                                     "solid.pattern.rectangular", "solid.combine"};
 
 // The sketch being drawn: its plane and its closed loops as polygons (a chain
 // closed, a rectangle, a circle as 64 sides), in sketch coordinates.
@@ -161,7 +163,98 @@ struct Body {
     tisma::TriangleMesh mesh;
     // What made it, for a cut: an upright cylinder's radius and height.
     double cylinder_r = 0.0, cylinder_h = 0.0;
+    // An axis-aligned box (a box, or a rectangle extruded), for the stage D4
+    // operations the stand-in knows: its corners.
+    bool box = false;
+    std::array<double, 3> lo{}, hi{};
 };
+
+// The stage D4 operations, enough for the tests' volumes: what an operation
+// takes away is added as a mesh turned inside out (its volume counts
+// negative), what it adds as copies. The real tool makes true solids.
+void append(tisma::TriangleMesh& to, const tisma::TriangleMesh& m, bool inside_out = false) {
+    for (std::size_t t = 0; t < m.triangle_count(); ++t)
+        if (inside_out)
+            to.add_triangle(m.corner(t, 0), m.corner(t, 2), m.corner(t, 1));
+        else
+            to.add_triangle(m.corner(t, 0), m.corner(t, 1), m.corner(t, 2));
+}
+// A solid with outward faces, whatever order its triangles came in.
+tisma::TriangleMesh outward(const tisma::TriangleMesh& m) {
+    tisma::TriangleMesh out;
+    append(out, m, m.signed_volume() < 0.0);
+    return out;
+}
+// A prism: a polygon in the two axes other than `axis` (in their order: for
+// z, x then y; for x, y then z; for y, z then x), from lo to hi along it.
+tisma::TriangleMesh prism(const std::vector<std::array<double, 2>>& poly, int axis, double lo, double hi) {
+    const auto at = [&](const std::array<double, 2>& q, double t) {
+        double v[3];
+        v[axis] = t;
+        v[(axis + 1) % 3] = q[0];
+        v[(axis + 2) % 3] = q[1];
+        return tisma::Vec3f{float(v[0]), float(v[1]), float(v[2])};
+    };
+    std::vector<std::array<double, 2>> p = poly;
+    double area = 0.0;
+    for (std::size_t i = 0; i < p.size(); ++i)
+        area += p[i][0] * p[(i + 1) % p.size()][1] - p[(i + 1) % p.size()][0] * p[i][1];
+    if (area < 0.0)
+        std::reverse(p.begin(), p.end());
+    tisma::TriangleMesh m;
+    for (std::size_t i = 1; i + 1 < p.size(); ++i) { // a fan: the polygons here are convex
+        m.add_triangle(at(p[0], lo), at(p[i + 1], lo), at(p[i], lo));
+        m.add_triangle(at(p[0], hi), at(p[i], hi), at(p[i + 1], hi));
+    }
+    for (std::size_t i = 0; i < p.size(); ++i) {
+        const auto& a = p[i];
+        const auto& b = p[(i + 1) % p.size()];
+        m.add_triangle(at(a, lo), at(b, lo), at(b, hi));
+        m.add_triangle(at(a, lo), at(b, hi), at(a, hi));
+    }
+    return outward(m);
+}
+// The box's edge through a point: the axis it runs along, and its corner in
+// the other two (with the directions into the box); false when the point is
+// on no edge.
+bool box_edge(const Body& b, const std::array<double, 3>& p, int& axis, std::array<double, 2>& corner, std::array<double, 2>& into) {
+    constexpr double eps = 1e-3;
+    int on = 0, free_axis = -1;
+    std::array<double, 3> c{}, d{};
+    for (int a = 0; a < 3; ++a) {
+        if (std::abs(p[std::size_t(a)] - b.lo[std::size_t(a)]) < eps)
+            c[std::size_t(a)] = b.lo[std::size_t(a)], d[std::size_t(a)] = 1.0, ++on;
+        else if (std::abs(p[std::size_t(a)] - b.hi[std::size_t(a)]) < eps)
+            c[std::size_t(a)] = b.hi[std::size_t(a)], d[std::size_t(a)] = -1.0, ++on;
+        else
+            free_axis = a;
+    }
+    if (on != 2 || free_axis < 0)
+        return false;
+    axis = free_axis;
+    corner = {c[std::size_t((axis + 1) % 3)], c[std::size_t((axis + 2) % 3)]};
+    into = {d[std::size_t((axis + 1) % 3)], d[std::size_t((axis + 2) % 3)]};
+    return true;
+}
+// ISO 273 clearance holes, fine, medium and coarse series (mm).
+double clearance_hole(const std::string& thread, const std::string& fit) {
+    static const std::map<std::string, std::array<double, 3>> table{
+        {"M2", {2.2, 2.4, 2.6}},  {"M2.5", {2.7, 2.9, 3.1}}, {"M3", {3.2, 3.4, 3.6}}, {"M4", {4.3, 4.5, 4.8}},
+        {"M5", {5.3, 5.5, 5.8}},  {"M6", {6.4, 6.6, 7.0}},   {"M8", {8.4, 9.0, 10.0}}, {"M10", {10.5, 11.0, 12.0}},
+        {"M12", {13.0, 13.5, 14.5}}};
+    const auto it = table.find(thread);
+    if (it == table.end())
+        return 0.0;
+    return it->second[fit == "close" ? 0 : fit == "loose" ? 2 : 1];
+}
+tisma::Vec3f turned(const tisma::Vec3f& v, char axis, double a) {
+    const double c = std::cos(a), s = std::sin(a);
+    if (axis == 'X')
+        return {v.x, float(c * v.y - s * v.z), float(s * v.y + c * v.z)};
+    if (axis == 'Y')
+        return {float(c * v.x + s * v.z), v.y, float(-s * v.x + c * v.z)};
+    return {float(c * v.x - s * v.y), float(s * v.x + c * v.y), v.z};
+}
 
 double number(const json& p, const char* key, const char* cmd, bool required = true, double fallback = 0.0) {
     if (!p.contains(key)) {
@@ -276,7 +369,11 @@ int run(const std::vector<std::string>& args) {
             tisma::TriangleMesh m = tisma::make_box(l, w, h);
             const std::vector<double> c = point(p, "corner");
             m.translate(float(c[0] + l / 2.0), float(c[1] + w / 2.0), float(c[2]));
-            bodies.push_back({name, std::move(m)});
+            Body b{name, std::move(m)};
+            b.box = true;
+            b.lo = {c[0], c[1], c[2]};
+            b.hi = {c[0] + l, c[1] + w, c[2] + h};
+            bodies.push_back(std::move(b));
         } else if (cmd == "solid.cylinder") {
             const double r = p.contains("diameter") ? number(p, "diameter", "solid.cylinder") / 2.0 : number(p, "radius", "solid.cylinder");
             const double h = number(p, "height", "solid.cylinder");
@@ -396,7 +493,179 @@ int run(const std::vector<std::string>& args) {
                 for (std::size_t t = 0; t < m.triangle_count(); ++t)
                     all.add_triangle(m.corner(t, 0), m.corner(t, 1), m.corner(t, 2));
             }
-            bodies.push_back({name, std::move(all)});
+            Body b{name, std::move(all)};
+            // A rectangle extruded on XY is a box the D4 operations know.
+            if (cmd == "solid.extrude" && last_sketch->plane == "XY" && last_sketch->loops.size() == 1 &&
+                last_sketch->loops[0].points.size() == 4) {
+                const auto& q = last_sketch->loops[0].points;
+                const bool aligned = (q[0][0] == q[3][0] && q[1][0] == q[2][0] && q[0][1] == q[1][1] && q[2][1] == q[3][1]) ||
+                                     (q[0][1] == q[3][1] && q[1][1] == q[2][1] && q[0][0] == q[1][0] && q[2][0] == q[3][0]);
+                if (aligned) {
+                    const tisma::BoundingBox bb = b.mesh.bounding_box();
+                    b.box = true;
+                    b.lo = {bb.min.x, bb.min.y, bb.min.z};
+                    b.hi = {bb.max.x, bb.max.y, bb.max.z};
+                }
+            }
+            bodies.push_back(std::move(b));
+        } else if (cmd == "solid.fillet" || cmd == "solid.chamfer") {
+            Body* b = body_named(text(p, "body", ""));
+            if (!b || !b->box) {
+                std::fprintf(stderr, "%s: the stand-in rounds only the edges of a box body\n", cmd.c_str());
+                return 1;
+            }
+            const bool fillet = cmd == "solid.fillet";
+            const double r = number(p, fillet ? "radius" : "distance", cmd.c_str());
+            for (const json& e : p.value("edges", json::array())) {
+                const std::vector<double> at = e.get<std::vector<double>>();
+                int axis = 0;
+                std::array<double, 2> c{}, d{};
+                if (at.size() != 3 || !box_edge(*b, {at[0], at[1], at[2]}, axis, c, d)) {
+                    std::fprintf(stderr, "%s: no edge at the point given\n", cmd.c_str());
+                    return 1;
+                }
+                // What goes: the corner of the section beyond the round (or the cut).
+                std::vector<std::array<double, 2>> region{{c[0], c[1]}};
+                if (fillet) {
+                    const double cx = c[0] + d[0] * r, cy = c[1] + d[1] * r;
+                    for (int k = 0; k <= 16; ++k) {
+                        const double t = std::numbers::pi / 2.0 * k / 16.0;
+                        region.push_back({cx - d[0] * r * std::sin(t), cy - d[1] * r * std::cos(t)});
+                    }
+                } else {
+                    region.push_back({c[0] + d[0] * r, c[1]});
+                    region.push_back({c[0], c[1] + d[1] * r});
+                }
+                append(b->mesh, prism(region, axis, b->lo[std::size_t(axis)], b->hi[std::size_t(axis)]), true);
+            }
+        } else if (cmd == "solid.shell") {
+            Body* b = body_named(text(p, "body", ""));
+            if (!b || !b->box) {
+                std::fprintf(stderr, "solid.shell: the stand-in hollows only a box body\n");
+                return 1;
+            }
+            const double t = number(p, "thickness", "solid.shell");
+            std::array<double, 3> lo = b->lo, hi = b->hi;
+            for (int a = 0; a < 3; ++a)
+                lo[std::size_t(a)] += t, hi[std::size_t(a)] -= t;
+            if (p.contains("faces") && p.at("faces").is_array())
+                for (const json& f : p.at("faces")) {
+                    const std::vector<double> at = f.get<std::vector<double>>();
+                    for (int a = 0; a < 3; ++a) { // the open face: the hollow reaches it
+                        if (std::abs(at[std::size_t(a)] - b->lo[std::size_t(a)]) < 1e-3)
+                            lo[std::size_t(a)] = b->lo[std::size_t(a)];
+                        if (std::abs(at[std::size_t(a)] - b->hi[std::size_t(a)]) < 1e-3)
+                            hi[std::size_t(a)] = b->hi[std::size_t(a)];
+                    }
+                }
+            if (!(hi[0] > lo[0] && hi[1] > lo[1] && hi[2] > lo[2])) {
+                std::fprintf(stderr, "solid.shell: the wall is thicker than the body\n");
+                return 1;
+            }
+            append(b->mesh, prism({{lo[0], lo[1]}, {hi[0], lo[1]}, {hi[0], hi[1]}, {lo[0], hi[1]}}, 2, lo[2], hi[2]), true);
+        } else if (cmd == "solid.hole") {
+            const json targets = p.value("targets", json::array());
+            Body* b = targets.empty() ? nullptr : body_named(targets[0].get<std::string>());
+            if (!b) {
+                std::fprintf(stderr, "solid.hole: `targets` names no body\n");
+                return 1;
+            }
+            const double d = p.contains("clearance") ? clearance_hole(text(p, "clearance", ""), text(p, "fit", "normal"))
+                                                     : number(p, "diameter", "solid.hole", false, 0.0);
+            if (!(d > 0.0)) {
+                std::fprintf(stderr, "solid.hole: no diameter (or an unknown clearance)\n");
+                return 1;
+            }
+            const std::vector<double> at = point(p, "position");
+            const tisma::BoundingBox bb = b->mesh.bounding_box();
+            const double lo[3] = {bb.min.x, bb.min.y, bb.min.z}, hi[3] = {bb.max.x, bb.max.y, bb.max.z};
+            int axis = -1;
+            for (int a = 0; a < 3 && axis < 0; ++a)
+                if (std::abs(at[std::size_t(a)] - lo[a]) < 1e-3 || std::abs(at[std::size_t(a)] - hi[a]) < 1e-3)
+                    axis = a;
+            if (axis < 0) {
+                std::fprintf(stderr, "solid.hole: the position is on no outer face the stand-in knows\n");
+                return 1;
+            }
+            const double depth = p.contains("depth") ? number(p, "depth", "solid.hole") : hi[axis] - lo[axis];
+            const bool from_top = std::abs(at[std::size_t(axis)] - hi[axis]) < 1e-3;
+            const double t0 = from_top ? at[std::size_t(axis)] - depth : at[std::size_t(axis)], t1 = t0 + depth;
+            const double u = at[std::size_t((axis + 1) % 3)], v = at[std::size_t((axis + 2) % 3)];
+            std::vector<std::array<double, 2>> circle;
+            for (int k = 0; k < 64; ++k) {
+                const double a = 2.0 * std::numbers::pi * k / 64.0;
+                circle.push_back({u + d / 2.0 * std::cos(a), v + d / 2.0 * std::sin(a)});
+            }
+            append(b->mesh, prism(circle, axis, t0, t1), true);
+        } else if (cmd == "solid.mirror") {
+            const json list = p.value("bodies", json::array());
+            Body* b = list.empty() ? nullptr : body_named(list[0].get<std::string>());
+            const std::string plane = text(p, "plane", "");
+            if (!b || (plane != "XY" && plane != "XZ" && plane != "YZ")) {
+                std::fprintf(stderr, "solid.mirror: needs `bodies` and a `plane` (XY, XZ, YZ)\n");
+                return 1;
+            }
+            const int flip = plane == "YZ" ? 0 : plane == "XZ" ? 1 : 2;
+            tisma::TriangleMesh copy;
+            for (std::size_t t = 0; t < b->mesh.triangle_count(); ++t) {
+                tisma::Vec3f c[3] = {b->mesh.corner(t, 0), b->mesh.corner(t, 1), b->mesh.corner(t, 2)};
+                for (tisma::Vec3f& q : c)
+                    (&q.x)[flip] = -(&q.x)[flip];
+                copy.add_triangle(c[0], c[2], c[1]); // a mirror turns the faces around
+            }
+            append(b->mesh, copy);
+            b->box = false;
+        } else if (cmd == "solid.pattern.circular" || cmd == "solid.pattern.rectangular") {
+            const json list = p.value("bodies", json::array());
+            Body* b = list.empty() ? nullptr : body_named(list[0].get<std::string>());
+            const bool circular = cmd == "solid.pattern.circular";
+            const int count = int(number(p, circular ? "count" : "count1", cmd.c_str()));
+            if (!b || count < 2) {
+                std::fprintf(stderr, "%s: needs `bodies` and two copies or more\n", cmd.c_str());
+                return 1;
+            }
+            const tisma::TriangleMesh one = b->mesh;
+            if (circular) {
+                const std::string axis = text(p, "axis", "Z");
+                const double angle = number(p, "angle", cmd.c_str(), false, 360.0) * std::numbers::pi / 180.0;
+                const double turn_step = std::abs(angle - 2.0 * std::numbers::pi) < 1e-9 ? angle / count : angle / (count - 1);
+                for (int k = 1; k < count; ++k) {
+                    tisma::TriangleMesh copy;
+                    for (std::size_t t = 0; t < one.triangle_count(); ++t)
+                        copy.add_triangle(turned(one.corner(t, 0), axis[0], k * turn_step), turned(one.corner(t, 1), axis[0], k * turn_step),
+                                          turned(one.corner(t, 2), axis[0], k * turn_step));
+                    append(b->mesh, copy);
+                }
+            } else {
+                const std::vector<double> dir = point(p, "dir1");
+                const double spacing = number(p, "spacing1", cmd.c_str());
+                const double len = std::hypot(dir[0], dir[1], dir[2]);
+                for (int k = 1; k < count; ++k) {
+                    tisma::TriangleMesh copy = one;
+                    copy.translate(float(dir[0] / len * spacing * k), float(dir[1] / len * spacing * k), float(dir[2] / len * spacing * k));
+                    append(b->mesh, copy);
+                }
+            }
+            b->box = false;
+        } else if (cmd == "solid.combine") {
+            Body* target = body_named(text(p, "target", ""));
+            const std::string op = text(p, "operation", "join");
+            if (!target || op == "intersect") {
+                std::fprintf(stderr, "solid.combine: needs a `target` body (intersect is not in the stand-in)\n");
+                return 1;
+            }
+            for (const json& t : p.value("tools", json::array())) {
+                const std::string tool_name = t.get<std::string>();
+                Body* tool = body_named(tool_name);
+                if (!tool || tool == target) {
+                    std::fprintf(stderr, "solid.combine: no tool body %s\n", tool_name.c_str());
+                    return 1;
+                }
+                append(target->mesh, tool->mesh, op == "cut");
+                bodies.erase(bodies.begin() + (tool - bodies.data()));
+                target = body_named(text(p, "target", ""));
+            }
+            target->box = false;
         } else if (cmd == "file.export_3mf" || cmd == "file.export") {
             const std::string path = text(p, "path", "");
             if (path.empty()) {

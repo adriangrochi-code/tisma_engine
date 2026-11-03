@@ -1,0 +1,35 @@
+# The operations of stage D4 (cad_design.md, rule 7; CD5): a box hollowed
+# with no face open (Enter on the command line ends the picking), deleted;
+# then a hole by ISO 273 picked on the top face (M5, normal: 5.5 mm through
+# 20 mm), a fillet typed on the command line on an edge picked in the view,
+# and a row of three, typed too.
+menu mode_engineering
+expect-control tab_design
+menu tab_design
+expect-control design_box
+menu design_box
+expect-design 8000
+expect-control design_op_shell
+menu design_op_shell
+expect-control design_pick_done
+menu design_command
+key enter
+expect-design 3904
+menu design_delete_2
+expect-design 8000
+menu design_op_hole
+design-pick 0 0 20
+menu design_pick_done
+expect-design 7525
+menu design_command
+type redondeo
+key enter
+design-pick 10 0 20
+menu design_command
+key enter
+expect-control design_op_value_3
+expect-design 7508
+menu design_command
+type fila
+key enter
+expect-design 22524

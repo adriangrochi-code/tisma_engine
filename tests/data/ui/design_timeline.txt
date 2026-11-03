@@ -9,7 +9,12 @@ menu tab_design
 expect-control design_box
 menu design_box
 expect-design 8000
-menu design_box
+menu design_command
+type caja
+key enter
+key enter
+key enter
+key enter
 expect-control design_name_2
 menu design_command
 type caja

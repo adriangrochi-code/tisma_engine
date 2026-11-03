@@ -66,12 +66,72 @@ const char* command_of(Primitive kind) {
     return "";
 }
 
+namespace {
+constexpr std::pair<OperationKind, const char*> kOperationNames[] = {
+    {OperationKind::Fillet, "fillet"},
+    {OperationKind::Chamfer, "chamfer"},
+    {OperationKind::Shell, "shell"},
+    {OperationKind::Hole, "hole"},
+    {OperationKind::Mirror, "mirror"},
+    {OperationKind::PatternCircular, "pattern_circular"},
+    {OperationKind::PatternRectangular, "pattern_rectangular"},
+    {OperationKind::Combine, "combine"},
+};
+} // namespace
+
+const char* operation_name(OperationKind kind) {
+    for (const auto& [k, n] : kOperationNames)
+        if (k == kind)
+            return n;
+    return "";
+}
+
+std::optional<OperationKind> operation_named(const std::string& name) {
+    for (const auto& [k, n] : kOperationNames)
+        if (name == n)
+            return k;
+    return std::nullopt;
+}
+
+const char* operation_command(OperationKind kind) {
+    switch (kind) {
+    case OperationKind::Fillet: return "solid.fillet";
+    case OperationKind::Chamfer: return "solid.chamfer";
+    case OperationKind::Shell: return "solid.shell";
+    case OperationKind::Hole: return "solid.hole";
+    case OperationKind::Mirror: return "solid.mirror";
+    case OperationKind::PatternCircular: return "solid.pattern.circular";
+    case OperationKind::PatternRectangular: return "solid.pattern.rectangular";
+    case OperationKind::Combine: return "solid.combine";
+    }
+    return "";
+}
+
 bool Feature::buildable() const {
+    if (type == Type::Operation) {
+        if (op.target.empty())
+            return false;
+        switch (op.kind) {
+        case OperationKind::Fillet:
+        case OperationKind::Chamfer: return !op.refs.empty() && op.value > 0.0;
+        case OperationKind::Shell: return op.value > 0.0;
+        case OperationKind::Hole: return !op.refs.empty() && (!op.standard.empty() || op.value > 0.0) && op.depth >= 0.0;
+        case OperationKind::Mirror: return op.plane == "XY" || op.plane == "XZ" || op.plane == "YZ";
+        case OperationKind::PatternCircular: return op.count >= 2 && op.angle > 0.0;
+        case OperationKind::PatternRectangular:
+            return op.count >= 2 && op.spacing > 0.0 &&
+                   std::hypot(op.direction[0], op.direction[1], op.direction[2]) > 0.0;
+        case OperationKind::Combine: return !op.tools.empty();
+        }
+        return false;
+    }
     return type == Type::Sketch ? sketch.has_region() : sizes_ok(kind, sizes);
 }
 
 bool Design::has_body() const {
-    return std::any_of(features.begin(), features.end(), [](const Feature& f) { return !f.suppressed && f.buildable(); });
+    return std::any_of(features.begin(), features.end(), [](const Feature& f) {
+        return !f.suppressed && f.buildable() && f.type != Feature::Type::Operation;
+    });
 }
 
 std::string Design::free_name(const std::string& base) const {
@@ -102,7 +162,7 @@ MeshQuality quality_for(double chord_tolerance, double size) {
 double nominal_size(const Design& design) {
     double size = 0.0;
     for (const Feature& f : design.features) {
-        if (f.suppressed || !f.buildable())
+        if (f.suppressed || !f.buildable() || f.type == Feature::Type::Operation)
             continue;
         if (f.type == Feature::Type::Sketch) {
             double lo_x = 0.0, hi_x = 0.0, lo_y = 0.0, hi_y = 0.0;
@@ -132,7 +192,68 @@ json command(const char* name, json params) {
 }
 
 // The commands of one feature: the body stands on z = 0, centred in X and Y.
+json point3(const std::array<double, 3>& p) { return json::array({p[0], p[1], p[2]}); }
+
+// An operation on a body (stage D4), as SolidCraft's command reference
+// names its parameters.
+void operation_commands(const Feature& f, std::vector<json>& out) {
+    const BodyOperation& o = f.op;
+    json refs = json::array();
+    for (const auto& r : o.refs)
+        refs.push_back(point3(r));
+    const char* name = operation_command(o.kind);
+    switch (o.kind) {
+    case OperationKind::Fillet:
+        out.push_back(command(name, {{"edges", refs}, {"radius", o.value}, {"body", o.target}, {"name", f.name}}));
+        break;
+    case OperationKind::Chamfer:
+        out.push_back(command(name, {{"edges", refs}, {"distance", o.value}, {"body", o.target}, {"name", f.name}}));
+        break;
+    case OperationKind::Shell:
+        out.push_back(command(name, {{"faces", refs.empty() ? json("none") : refs}, {"thickness", o.value}, {"body", o.target},
+                                     {"name", f.name}}));
+        break;
+    case OperationKind::Hole:
+        // One hole at each point, through all unless a depth is given.
+        for (const json& at : refs) {
+            json p{{"position", at}, {"targets", json::array({o.target})}, {"name", f.name}};
+            if (!o.standard.empty())
+                p["clearance"] = o.standard, p["fit"] = o.fit;
+            else
+                p["diameter"] = o.value;
+            if (o.depth > 0.0)
+                p["depth"] = o.depth;
+            out.push_back(command(name, std::move(p)));
+        }
+        break;
+    case OperationKind::Mirror:
+        out.push_back(command(name, {{"bodies", json::array({o.target})}, {"plane", o.plane}, {"combine", true}, {"name", f.name}}));
+        break;
+    case OperationKind::PatternCircular:
+        out.push_back(command(name, {{"bodies", json::array({o.target})},
+                                     {"axis", std::string(1, o.axis)},
+                                     {"count", o.count},
+                                     {"angle", o.angle},
+                                     {"name", f.name}}));
+        break;
+    case OperationKind::PatternRectangular:
+        out.push_back(command(name, {{"bodies", json::array({o.target})},
+                                     {"dir1", point3(o.direction)},
+                                     {"count1", o.count},
+                                     {"spacing1", o.spacing},
+                                     {"name", f.name}}));
+        break;
+    case OperationKind::Combine:
+        out.push_back(command(name, {{"target", o.target}, {"tools", o.tools}, {"operation", o.boolean}, {"name", f.name}}));
+        break;
+    }
+}
+
 void feature_commands(const Feature& f, std::vector<json>& out) {
+    if (f.type == Feature::Type::Operation) {
+        operation_commands(f, out);
+        return;
+    }
     if (f.type == Feature::Type::Sketch) {
         for (const std::string& c : sketch_commands(f.sketch, f.operation, f.name))
             out.push_back(json::parse(c));
@@ -219,6 +340,8 @@ const char* kind_name(Primitive kind) {
 } // namespace
 
 Measure target_measure(const Feature& f, const std::string& target) {
+    if (f.type == Feature::Type::Operation)
+        return target == "value" || target == "spacing" ? Measure::Length : target == "angle" ? Measure::Angle : Measure::None;
     if (f.type == Feature::Type::Primitive) {
         for (std::size_t i = 0; i < size_count(f.kind); ++i)
             if (target == "size" + std::to_string(i))
@@ -274,7 +397,9 @@ std::vector<std::string> apply_parameters(Design& design) {
                 fail("not above 0");
                 continue;
             }
-            if (target == "distance") {
+            if (f.type == Feature::Type::Operation) {
+                (target == "value" ? f.op.value : target == "spacing" ? f.op.spacing : f.op.angle) = v;
+            } else if (target == "distance") {
                 f.operation.distance = v;
             } else if (target == "angle") {
                 f.operation.angle = v;
@@ -309,16 +434,11 @@ std::vector<std::string> build_commands(const Design& given) {
 }
 
 std::string script_json(const Design& given, const std::string& export_3mf, MeshQuality quality) {
-    Design design = given;
-    apply_parameters(design);
+    // The same commands as build_commands: parameters applied and sketches
+    // solved (the constraints reach the part).
     json commands = json::array();
-    for (const Feature& f : design.features)
-        if (!f.suppressed && f.buildable()) {
-            std::vector<json> own;
-            feature_commands(f, own);
-            for (json& c : own)
-                commands.push_back(std::move(c));
-        }
+    for (const std::string& c : build_commands(given))
+        commands.push_back(json::parse(c));
     if (!export_3mf.empty())
         commands.push_back(command("file.export_3mf", {{"path", export_3mf}, {"quality", quality_name(quality)}}));
     return json{{"commands", std::move(commands)}}.dump(1);
@@ -327,6 +447,34 @@ std::string script_json(const Design& given, const std::string& export_3mf, Mesh
 std::string design_json(const Design& design) {
     json features = json::array();
     for (const Feature& f : design.features) {
+        if (f.type == Feature::Type::Operation) {
+            const BodyOperation& o = f.op;
+            json refs = json::array();
+            for (const auto& r : o.refs)
+                refs.push_back(point3(r));
+            features.push_back({{"name", f.name},
+                                {"kind", "operation"},
+                                {"operation",
+                                 {{"kind", operation_name(o.kind)},
+                                  {"target", o.target},
+                                  {"refs", refs},
+                                  {"value", o.value},
+                                  {"standard", o.standard},
+                                  {"fit", o.fit},
+                                  {"depth", o.depth},
+                                  {"count", o.count},
+                                  {"axis", std::string(1, o.axis)},
+                                  {"angle", o.angle},
+                                  {"direction", point3(o.direction)},
+                                  {"spacing", o.spacing},
+                                  {"plane", o.plane},
+                                  {"tools", o.tools},
+                                  {"boolean", o.boolean}}},
+                                {"suppressed", f.suppressed}});
+            if (!f.bindings.empty())
+                features.back()["bindings"] = f.bindings;
+            continue;
+        }
         if (f.type == Feature::Type::Sketch) {
             features.push_back({{"name", f.name},
                                 {"kind", "sketch"},
@@ -387,6 +535,43 @@ Design parse_design(const std::string& text) {
         Feature feature;
         feature.name = f.value("name", std::string());
         const std::string kind = f.value("kind", std::string());
+        if (kind == "operation") {
+            feature.type = Feature::Type::Operation;
+            const json o = f.value("operation", json::object());
+            const std::optional<OperationKind> k = operation_named(o.value("kind", std::string()));
+            if (!k)
+                throw std::runtime_error("feature \"" + feature.name + "\": unknown operation");
+            BodyOperation& op = feature.op;
+            op.kind = *k;
+            op.target = o.value("target", std::string());
+            const auto read3 = [&](const json& v) {
+                if (!v.is_array() || v.size() != 3 || !v[0].is_number() || !v[1].is_number() || !v[2].is_number())
+                    throw std::runtime_error("feature \"" + feature.name + "\": a point is not [x, y, z]");
+                return std::array<double, 3>{v[0].get<double>(), v[1].get<double>(), v[2].get<double>()};
+            };
+            for (const json& r : o.value("refs", json::array()))
+                op.refs.push_back(read3(r));
+            op.value = o.value("value", op.value);
+            op.standard = o.value("standard", std::string());
+            op.fit = o.value("fit", op.fit);
+            op.depth = o.value("depth", 0.0);
+            op.count = o.value("count", op.count);
+            const std::string axis = o.value("axis", std::string("Z"));
+            op.axis = axis.empty() ? 'Z' : axis[0];
+            op.angle = o.value("angle", op.angle);
+            if (o.contains("direction"))
+                op.direction = read3(o.at("direction"));
+            op.spacing = o.value("spacing", op.spacing);
+            op.plane = o.value("plane", op.plane);
+            for (const json& t : o.value("tools", json::array()))
+                if (t.is_string())
+                    op.tools.push_back(t.get<std::string>());
+            op.boolean = o.value("boolean", op.boolean);
+            feature.suppressed = f.value("suppressed", false);
+            read_bindings(f, feature);
+            d.features.push_back(std::move(feature));
+            continue;
+        }
         if (kind == "sketch") {
             feature.type = Feature::Type::Sketch;
             parse_sketch(f.value("sketch", json::object()).dump(), feature.sketch, feature.operation);

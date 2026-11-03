@@ -170,7 +170,8 @@ TEST_CASE("cad: the bundled tool probed and a design built through it (CD2's box
     CHECK_THAT(info.version, ContainsSubstring(kSolidCraftVersion));
     CHECK(info.has("solid.box"));
     CHECK(info.has("solid.torus"));
-    CHECK_FALSE(info.has("solid.fillet")); // «Próximamente»
+    CHECK(info.has("solid.fillet"));
+    CHECK_FALSE(info.has("solid.loft")); // «Próximamente»
     // A 40 x 30 x 20 box: 24 000 mm3 and that box, standing on the bed.
     const BuildResult built = build_design(kFake, box_design(), MeshQuality::Standard);
     INFO(built.error);
@@ -781,4 +782,166 @@ TEST_CASE("cad: any text as an expression gives a value or an error, never a han
     CHECK((deep.value.has_value() || !deep.error.empty()));
     INFO(values);
     CHECK(values > 100);
+}
+
+namespace {
+Feature operation(const std::string& name, OperationKind kind, const std::string& target) {
+    Feature f;
+    f.name = name;
+    f.type = Feature::Type::Operation;
+    f.op.kind = kind;
+    f.op.target = target;
+    return f;
+}
+Feature box_feature(const std::string& name, double side) {
+    Feature f;
+    f.name = name;
+    f.kind = Primitive::Box;
+    f.sizes = {side, side, side};
+    return f;
+}
+} // namespace
+
+TEST_CASE("cad: D4 operations as SolidCraft commands, kept with the design (rule 7)", "[cad]") {
+    Design d;
+    d.features.push_back(box_feature("Caja", 20.0));
+    Feature fillet = operation("Redondeo", OperationKind::Fillet, "Caja");
+    fillet.op.refs = {{10.0, 10.0, 5.0}};
+    fillet.op.value = 3.0;
+    d.features.push_back(fillet);
+    Feature hole = operation("Agujero", OperationKind::Hole, "Caja");
+    hole.op.refs = {{0.0, 0.0, 20.0}, {5.0, 5.0, 20.0}};
+    hole.op.standard = "M5";
+    d.features.push_back(hole);
+    const std::vector<std::string> cmds = build_commands(d);
+    REQUIRE(cmds.size() == 4); // the box, the fillet, a hole at each point
+    const nlohmann::json f = nlohmann::json::parse(cmds[1]);
+    CHECK(f["command"] == "solid.fillet");
+    CHECK(f["params"]["radius"] == 3.0);
+    CHECK(f["params"]["body"] == "Caja");
+    CHECK(f["params"]["edges"][0] == nlohmann::json::array({10.0, 10.0, 5.0}));
+    const nlohmann::json h = nlohmann::json::parse(cmds[3]);
+    CHECK(h["command"] == "solid.hole");
+    CHECK(h["params"]["clearance"] == "M5");
+    CHECK(h["params"]["fit"] == "normal");
+    CHECK(h["params"]["targets"][0] == "Caja");
+    CHECK_FALSE(h["params"].contains("depth")); // through all
+    // Not buildable without what it needs: no edges, no tools, one copy.
+    Feature bare = operation("Chaflán", OperationKind::Chamfer, "Caja");
+    CHECK_FALSE(bare.buildable());
+    Feature combine = operation("Combinar", OperationKind::Combine, "Caja");
+    CHECK_FALSE(combine.buildable());
+    Feature pattern = operation("Patrón", OperationKind::PatternCircular, "Caja");
+    pattern.op.count = 1;
+    CHECK_FALSE(pattern.buildable());
+    // An operation alone makes no body.
+    Design only;
+    only.features.push_back(fillet);
+    CHECK_FALSE(only.has_body());
+    // Its size tied to a parameter.
+    d.parameters = {{"r", "4 mm"}};
+    d.features[1].bindings = {{"value", "r"}};
+    CHECK(target_measure(d.features[1], "value") == Measure::Length);
+    CHECK(apply_parameters(d).empty());
+    CHECK(d.features[1].op.value == 4.0);
+    // Kept and read back the same.
+    const Design back = parse_design(design_json(d));
+    REQUIRE(back.features.size() == 3);
+    CHECK(back.features[1].type == Feature::Type::Operation);
+    CHECK(back.features[1].op == d.features[1].op);
+    CHECK(back.features[2].op == d.features[2].op);
+    CHECK(back.features[1].bindings == d.features[1].bindings);
+}
+
+TEST_CASE("cad: CD5 and CD6, a standard hole and a fillet through the tool (rule 7)", "[cad]") {
+    if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
+        SKIP("the stand-in solidcraft-cli was not built");
+    set_env("TISMA_FAKE_SOLIDCRAFT_HANG", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_BROKEN", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_REFUSE", nullptr);
+    const auto volume = [&](const Design& d) {
+        const BuildResult b = build_timeline(kFake, d, MeshQuality::Standard);
+        INFO(b.error << " " << b.failure);
+        REQUIRE(b.ok);
+        REQUIRE_FALSE(b.failed_feature);
+        return b.volume_mm3;
+    };
+    // CD5: a cylinder 20 across and 10 high, an M5 clearance hole through it
+    // from the top: 5.5 mm (ISO 273, medium).
+    Design cd5;
+    Feature cyl;
+    cyl.name = "Cilindro";
+    cyl.kind = Primitive::Cylinder;
+    cyl.sizes = {20.0, 10.0, 0.0};
+    cd5.features.push_back(cyl);
+    const double solid = volume(cd5);
+    Feature hole = operation("Agujero", OperationKind::Hole, "Cilindro");
+    hole.op.refs = {{0.0, 0.0, 10.0}};
+    hole.op.standard = "M5";
+    cd5.features.push_back(hole);
+    const double holed = volume(cd5);
+    CHECK_THAT(solid - holed, WithinRel(std::numbers::pi * 2.75 * 2.75 * 10.0, 0.01));
+
+    // CD6: CD2's 40 x 30 x 20 block, a 3 mm fillet on one edge; deleted, it
+    // is 24 000 mm3 again.
+    Design cd6;
+    Feature plate;
+    plate.name = "Bloque";
+    plate.type = Feature::Type::Sketch;
+    plate.sketch.entities.push_back({Entity::Kind::Rectangle, {{0.0, 0.0}, {40.0, 30.0}}});
+    plate.operation.distance = 20.0;
+    cd6.features.push_back(plate);
+    CHECK_THAT(volume(cd6), WithinAbs(24000.0, 1e-3));
+    Feature round = operation("Redondeo", OperationKind::Fillet, "Bloque");
+    round.op.refs = {{40.0, 30.0, 10.0}};
+    round.op.value = 3.0;
+    cd6.features.push_back(round);
+    CHECK_THAT(24000.0 - volume(cd6), WithinRel((1.0 - std::numbers::pi / 4.0) * 9.0 * 20.0, 0.01));
+    cd6.features.pop_back();
+    CHECK_THAT(volume(cd6), WithinAbs(24000.0, 1e-3));
+    // A 2 mm chamfer there takes 2 x 2 / 2 x 20.
+    Feature cut = operation("Chaflán", OperationKind::Chamfer, "Bloque");
+    cut.op.refs = {{40.0, 30.0, 10.0}};
+    cut.op.value = 2.0;
+    cd6.features.push_back(cut);
+    CHECK_THAT(volume(cd6), WithinAbs(24000.0 - 40.0, 1e-3));
+
+    // Shell, mirror, patterns and combine on a 20 mm box (8000 mm3).
+    const auto with = [&](Feature op) {
+        Design d;
+        d.features.push_back(box_feature("Caja", 20.0));
+        d.features.push_back(std::move(op));
+        return volume(d);
+    };
+    Feature shell = operation("Vaciado", OperationKind::Shell, "Caja");
+    shell.op.value = 2.0;
+    shell.op.refs = {{0.0, 0.0, 20.0}}; // the top left open
+    CHECK_THAT(with(shell), WithinAbs(8000.0 - 16.0 * 16.0 * 18.0, 1e-3));
+    Feature mirror = operation("Simetría", OperationKind::Mirror, "Caja");
+    CHECK_THAT(with(mirror), WithinAbs(16000.0, 1e-3));
+    Feature ring = operation("Patrón", OperationKind::PatternCircular, "Caja");
+    ring.op.count = 6;
+    CHECK_THAT(with(ring), WithinRel(48000.0, 1e-4)); // float corners turned
+    Feature row = operation("Fila", OperationKind::PatternRectangular, "Caja");
+    row.op.count = 3;
+    row.op.spacing = 30.0;
+    CHECK_THAT(with(row), WithinAbs(24000.0, 1e-3));
+    Design cut_box;
+    cut_box.features.push_back(box_feature("Caja", 20.0));
+    cut_box.features.push_back(box_feature("Cubo", 10.0));
+    Feature combine = operation("Combinar", OperationKind::Combine, "Caja");
+    combine.op.tools = {"Cubo"};
+    cut_box.features.push_back(combine);
+    CHECK_THAT(volume(cut_box), WithinAbs(7000.0, 1e-3));
+    // An edge that is not there: the operation fails, the box is built.
+    Design wrong;
+    wrong.features.push_back(box_feature("Caja", 20.0));
+    Feature miss = operation("Redondeo", OperationKind::Fillet, "Caja");
+    miss.op.refs = {{3.0, 3.0, 3.0}};
+    wrong.features.push_back(miss);
+    const BuildResult b = build_timeline(kFake, wrong, MeshQuality::Standard);
+    REQUIRE(b.ok);
+    REQUIRE(b.failed_feature);
+    CHECK(*b.failed_feature == 1);
+    CHECK_THAT(b.volume_mm3, WithinAbs(8000.0, 1e-3));
 }

@@ -12,6 +12,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Operaciones en Diseño** (`cad_design.md`, regla 7, etapa D4): redondeo, chaflán, vaciado, agujero por norma
+  ISO 273 (M2 a M16, ajuste justo, normal u holgado) o diámetro libre, simetría, patrón circular, patrón en fila y
+  combinar (unir, restar, intersecar), desde el panel o la línea de comandos (`redondeo`, `chaflán`, `vaciado`,
+  `agujero`, `simetría`, `patrón`, `fila`, `combinar`). Las aristas, las caras y los lugares de los agujeros se
+  eligen con clic en la pieza; Enter termina. Cada operación es un paso del historial, con sus medidas y su «fx».
 - **Analizar en Estructural** (`engineering_panel.md`, reglas 6, 9 a 12 y 14; `structural_analysis.md`,
   «Resultados»): cada fuerza en N o en kg (g = 9,81 m/s²) con su dirección (perpendicular hacia adentro, ±X, ±Y,
   ±Z o tres números). Analizar corre en segundo plano con su avance y «Cancelar». Al terminar: el veredicto grande
