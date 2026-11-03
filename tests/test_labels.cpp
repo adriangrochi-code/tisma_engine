@@ -205,6 +205,12 @@ TEST_CASE("strict parser: the layout of Anycubic's program for the Kobra (gcode_
     CHECK_THAT(text, ContainsSubstring("; model_size = "));
     CHECK_THAT(text, ContainsSubstring("; total_layers = 50\n; statistics = end\n"));
     CHECK(text.find("; machine.flavor = ") == std::string::npos);
+    // Only what the firmware reads, one value each, under the maker's names.
+    CHECK_THAT(text, ContainsSubstring("; CONFIG_BLOCK_START = begin\n"));
+    CHECK_THAT(text, ContainsSubstring("; filament_density = 1.05\n"));
+    CHECK_THAT(text, ContainsSubstring("; layer_height = 0.2\n"));
+    CHECK_THAT(text, ContainsSubstring("; first_layer_height = 0.200\n"));
+    CHECK(text.ends_with("; CONFIG_BLOCK_END = end\n"));
     // No comment with a second ';' (the reader stops at those values).
     std::istringstream lines(text);
     for (std::string line; std::getline(lines, line);) {

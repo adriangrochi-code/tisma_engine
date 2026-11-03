@@ -9076,4 +9076,15 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   vista 3D; si la Kobra las exige, es lo primero a revisar) y un perfil de la Kobra 3 en el catálogo.
 - Observación del archivo: con `filament_max_volumetric_speed = 5` mm³/s el perfil ABS de Anycubic limita todo a
   ~75 mm/s aunque pida 200; el motor hace lo mismo con `extrusion.max_flow` 5 (aviso `flow_limit`).
+- **Qué hace la Kobra 3 con los archivos (pedido del dueño, búsqueda pública):** su firmware (derivado de Klipper)
+  analiza el archivo entero antes de imprimir («parsing») para sacar el resumen, las miniaturas y los datos del
+  material: según los reportes del seguimiento de OrcaSlicer (#16336) lee el tipo de filamento y las temperaturas de
+  los comentarios de ajustes (`; nozzle_temperature =`, `; first_layer_temperature =`), separando los valores por `=`
+  y quedándose con el último; si el material no le cierra, apaga «Imprimir». Se traba en «parsing» con
+  `; filament_colour_type = 1;1;1;1` (#12444) y, con el ACE Pro, con archivos de un solo filamento de OrcaSlicer 2.3.2
+  (#12952; arreglado en la Kobra S1 con el firmware 2.7.0.9, no en la Kobra 3). El archivo de Anycubic cierra su lista
+  de ajustes con `first_layer_height`, `first_layer_temperature`, `first_layer_bed_temperature` y `bed_temperature`.
+  Por eso el modo estricto ya no saca toda la lista: escribe una corta con eso (material, alturas, boquilla y
+  temperaturas), un valor por línea. **Esto se aparta de la regla 7** («no escribe el bloque de configuración»):
+  se lo paso al equipo de fichas.
 

@@ -4473,7 +4473,45 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << "; print_time = " << format_duration(g.print_time()) << "\n";
         out << "; model_size = " << fixed(size[0], 2) << "," << fixed(size[1], 2) << "," << fixed(top_z, 2) << "\n";
         out << "; total_layers = " << model.layers.size() << "\n";
-        out << "; statistics = end\n";
+        out << "; statistics = end\n\n";
+        // The few settings that firmware reads for its screen and its
+        // filament check (the material and the temperatures; reports in
+        // OrcaSlicer's issue tracker, #16336), one value each, under the
+        // names of the maker's file. A value that is not known is left out.
+        out << "; CONFIG_BLOCK_START = begin\n";
+        const auto first_variable = [&](const char* name) -> std::string {
+            const auto it = s.variables.find(name);
+            if (it == s.variables.end() || it->second.empty())
+                return {};
+            std::string v = it->second.front();
+            return v.find_first_of(";\n\r") == std::string::npos ? v : std::string();
+        };
+        const auto line = [&](const char* name, const std::string& value) {
+            if (!value.empty())
+                out << "; " << name << " = " << value << "\n";
+        };
+        if (s.filament_type.find_first_of(";\n\r") == std::string::npos)
+            line("filament_type", s.filament_type);
+        if (s.filament_density > 0.0)
+            line("filament_density", trimmed(s.filament_density, 4));
+        line("filament_diameter", trimmed(s.filament_diameter, 4));
+        line("layer_height", trimmed(s.layer_height, 4));
+        line("initial_layer_print_height", trimmed(s.first_layer_height, 4));
+        line("nozzle_diameter", trimmed(s.nozzle_diameter, 4));
+        const std::string nozzle = first_variable("temperature"), bed = first_variable("bed_temperature");
+        const std::string first_nozzle = first_variable("first_layer_temperature").empty()
+                                             ? nozzle
+                                             : first_variable("first_layer_temperature");
+        const std::string first_bed = first_variable("first_layer_bed_temperature").empty()
+                                          ? bed
+                                          : first_variable("first_layer_bed_temperature");
+        line("nozzle_temperature", nozzle);
+        line("nozzle_temperature_initial_layer", first_nozzle);
+        line("first_layer_height", fixed(s.first_layer_height, 3));
+        line("first_layer_temperature", first_nozzle);
+        line("first_layer_bed_temperature", first_bed);
+        line("bed_temperature", bed);
+        out << "; CONFIG_BLOCK_END = end\n";
     } else {
         for (const auto& [key, value] : describe(s))
             out << "; " << one_line(key) << " = " << one_line(value) << "\n";
