@@ -9307,3 +9307,12 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - **No probado:** en Windows; con más de una pieza en la placa.
 - **Sigue:** las herramientas de marcado sobre la vista (punto y zona, fijo y fuerza, límite), la lista con ojo,
   lápiz y cruz, y deshacer; después correr el análisis en segundo plano, con el mapa y el veredicto.
+
+### `analyze <proyecto>`: notas del equipo de fichas (caja negra sobre af7c61e)
+
+- Un proyecto con `--case` y sin `--config` daba el error de uso. Ahora usa el caso y los ajustes del proyecto (la
+  pieza es la primera con condiciones, o la primera de la placa). El mismo cubo, caso y ajustes dan el mismo
+  desplazamiento que el STL, con 0,01 % de diferencia (la grilla de vóxeles cae distinta en la cama: 95 779 vóxeles
+  contra 95 780).
+- El informe tiene `"frame"`: `"bed"` para un proyecto o una pieza movida por `placement.arrange`, `"model"` si sus
+  puntos están en las coordenadas del archivo. Así el resumen de la nube y el del escritorio no se confunden.

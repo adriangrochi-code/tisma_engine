@@ -19,7 +19,7 @@ json safety(double s) { return std::isfinite(s) ? json(s) : json(nullptr); }
 
 } // namespace
 
-std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c) {
+std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, std::string_view frame) {
     const OrthotropicMaterial& m = c.material;
     const MaterialRecord* record = find_material(c.material_id);
     json material = {{"id", c.material_id},
@@ -72,6 +72,7 @@ std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c) {
         {"version", 1},
         {"valid", r.valid},
         {"model", c.model == AnalysisModel::AsPrinted ? "as_printed" : "solid"},
+        {"frame", std::string(frame)},
         {"material", material},
         {"voxels",
          {{"size", r.grid.hx},

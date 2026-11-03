@@ -377,12 +377,30 @@ TEST_CASE("analyze on a project uses its parts' Engineering conditions (FM25)", 
     REQUIRE(da > 0.0);
     CHECK(std::abs(db / da - 1.0) < 0.05); // 1.8 % on 2026-11-03
 
+    // The report says where its points are: on the bed for a project.
+    const auto read_text = [](const std::filesystem::path& path) {
+        std::ifstream in(path);
+        std::stringstream text;
+        text << in.rdbuf();
+        return text.str();
+    };
+    CHECK_THAT(read_text(by_project), ContainsSubstring("\"frame\": \"bed\""));
+
     // Without conditions, the project says what is missing.
     project.models[0].engineering.conditions.clear();
     save_project(file, project);
     const Run none = run({"analyze", file.string(), "-o", by_project.string()});
     CHECK(none.code == kExitInput);
     CHECK_THAT(none.err, ContainsSubstring("no part of the project has Engineering conditions"));
+    // ...and with --case, the case's conditions and the project's own
+    // settings, no --config needed (the spec team, 2026-11-03).
+    const Run with_case = run({"analyze", file.string(), "--case", case_file.string(), "-o", by_project.string()});
+    INFO(with_case.err);
+    REQUIRE(with_case.code == kExitOk);
+    const double dc = number_after(with_case.out, "max_displacement_mm: ");
+    // The same part, case and settings as the STL's run; only the voxel grid
+    // falls a little apart on the bed (95 779 voxels against 95 780).
+    CHECK(std::abs(dc / da - 1.0) < 0.005);
 }
 
 TEST_CASE("analyze estimates, reports progress and writes the voxel mesh", "[cli]") {

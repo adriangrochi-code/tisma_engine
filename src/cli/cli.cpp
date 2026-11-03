@@ -113,6 +113,7 @@ struct SliceArgs {
     bool estimate = false;     // analyze only: the voxels, memory and time, without solving
     bool yes = false;          // slice only: run the settings' post-processing scripts without asking
     std::size_t copies = 1;    // slice only: copies of the model on the bed
+    bool project = false;      // analyze only: the model is a project, with its settings and conditions
 };
 
 // Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
@@ -175,8 +176,10 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
         }
     }
     // A project carries its settings and its parts' conditions (formats.md,
-    // rule 11 bis): analyze needs only it and -o.
-    const bool project = analyze && !out.model.empty() && out.analysis_case.empty() && is_project_file(out.model);
+    // rule 11 bis): analyze needs only it and -o; --case replaces the
+    // conditions, --config the settings.
+    const bool project = analyze && !out.model.empty() && is_project_file(out.model);
+    out.project = project;
     if (analyze && !project &&
         (out.model.empty() || out.config.empty() || out.analysis_case.empty() || out.output.empty())) {
         err << "error: analyze needs a model, --config, --case and -o (or a project and -o)\n";
@@ -649,7 +652,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
 
 // The settings, case and placed mesh of `analyze <project>`: the project's
 // settings (or --config's) with the part's values changed by hand, and its
-// conditions as the case (FM25).
+// conditions as the case (FM25), or --case's. The part is the first with
+// Engineering conditions; with --case and none, the first part.
 int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analysis, TriangleMesh& mesh,
                      std::ostream& out, std::ostream& err) {
     Project project;
@@ -661,10 +665,12 @@ int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analy
     }
     for (const std::string& notice : project.notices)
         err << "warning: " << notice << "\n";
-    const auto it = std::find_if(project.models.begin(), project.models.end(), [](const ProjectModel& m) {
+    auto it = std::find_if(project.models.begin(), project.models.end(), [](const ProjectModel& m) {
         return std::any_of(m.engineering.conditions.begin(), m.engineering.conditions.end(),
                            [](const EngineeringCondition& c) { return !c.hidden; });
     });
+    if (it == project.models.end() && !a.analysis_case.empty() && !project.models.empty())
+        it = project.models.begin();
     if (it == project.models.end()) {
         err << "error: no part of the project has Engineering conditions (mark them in the Engineering mode, or "
                "give --case)\n";
@@ -684,10 +690,19 @@ int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analy
     }
     std::vector<std::string> notes;
     apply_engineering_overrides(settings, it->engineering, notes);
-    analysis = engineering_analysis_case(it->engineering, it->mesh, it->offset, notes, settings.filament_type);
+    if (a.analysis_case.empty()) {
+        analysis = engineering_analysis_case(it->engineering, it->mesh, it->offset, notes, settings.filament_type);
+    } else {
+        try {
+            analysis = load_analysis_case(a.analysis_case);
+        } catch (const SettingsError& e) {
+            err << "error: " << a.analysis_case << ": " << e.what() << "\n";
+            return kExitInput;
+        }
+    }
     for (const std::string& note : notes)
         err << "warning: " << note << "\n";
-    if (analysis.fixtures.empty() || analysis.loads.empty()) {
+    if (a.analysis_case.empty() && (analysis.fixtures.empty() || analysis.loads.empty())) {
         err << "error: " << it->name << ": the analysis needs a fixed point or zone and a force\n";
         return kExitInput;
     }
@@ -709,9 +724,13 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
     Settings settings;
     AnalysisCase analysis;
     ModelFile stl;
-    if (parsed->analysis_case.empty()) {
+    // Where the report's points are: on the bed (a project's part, or a
+    // model placement.arrange moved) or in the model file's own coordinates.
+    std::string frame = "model";
+    if (parsed->project) {
         // A project: its settings (or --config's), and the first part with
         // Engineering conditions, where it is on the bed.
+        frame = "bed";
         if (int rc = project_analysis(*parsed, settings, analysis, stl.mesh, out, err); rc != kExitOk)
             return rc;
     } else {
@@ -731,7 +750,11 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
         if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
             return rc;
         out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+        const BoundingBox before = stl.mesh.bounding_box();
         place_on_bed(stl.mesh, settings);
+        const BoundingBox after = stl.mesh.bounding_box();
+        if (after.min.x != before.min.x || after.min.y != before.min.y || after.min.z != before.min.z)
+            frame = "bed";
     }
     const IndexedMesh mesh = weld_exact(stl.mesh);
     if (const std::string reason = unprintable_reason(mesh, settings); !reason.empty()) {
@@ -800,7 +823,7 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
     for (const AnalysisWarning& w : report.warnings)
         err << "warning: " << w.message << "\n";
 
-    if (!write_file(parsed->output, [&](std::ostream& json) { json << analysis_json(report, analysis); })) {
+    if (!write_file(parsed->output, [&](std::ostream& json) { json << analysis_json(report, analysis, frame); })) {
         err << "error: cannot write '" << parsed->output << "'\n";
         return kExitInput;
     }
