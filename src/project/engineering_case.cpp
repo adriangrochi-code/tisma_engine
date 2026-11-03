@@ -2,6 +2,11 @@
 
 #include "project/engineering_case.hpp"
 
+#include "fea/verdict.hpp"
+#include "report/analysis_json.hpp"
+
+#include <nlohmann/json.hpp>
+
 #include "fea/materials.hpp"
 #include "fea/zone.hpp"
 #include "project/engineering_values.hpp"
@@ -131,10 +136,45 @@ AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const Triang
         notes.push_back("no material for the filament type '" + std::string(filament_type) + "': " + c.material_id +
                         " is used");
     c.material = as_printed(*find_material(c.material_id));
+    // The working temperature (engineering_panel.md, rule 4): stiffness and
+    // strength times f(T) of the material's family (structural_analysis.md,
+    // method, point 5).
+    if (const MaterialFamily* family = family_of(c.material_id); family && e.working_temperature > 23.0) {
+        const double f = temperature_factor(*family, e.working_temperature);
+        OrthotropicMaterial& m = c.material;
+        for (double* v : {&m.e1, &m.e2, &m.e3, &m.g12, &m.g13, &m.g23, &m.xt, &m.xc, &m.yt, &m.yc, &m.zt, &m.zc, &m.s12,
+                          &m.s13, &m.s23})
+            *v *= f;
+    }
     c.quality = e.structural.quality == "high" ? AnalysisQuality::High : AnalysisQuality::Normal;
     for (std::string& note : add_conditions(c, e, mesh, shift))
         notes.push_back(std::move(note));
     return c;
+}
+
+std::string structural_report_json(const AnalysisReport& report, const AnalysisCase& c, const ProjectEngineering& e,
+                                   const std::array<double, 12>& to_part) {
+    nlohmann::json j = nlohmann::json::parse(analysis_json(report, c, to_part));
+    VerdictInput in;
+    in.family = family_of(c.material_id);
+    in.required_safety = e.structural.safety_factor;
+    in.working_temperature = e.working_temperature;
+    in.min_safety = report.result.min_safety;
+    const Verdict v = structural_verdict(in);
+    nlohmann::json suggestions = nlohmann::json::array();
+    if (v != Verdict::Holds && v != Verdict::NotApplicable)
+        for (const MaterialSuggestion& s : suggest_materials(in))
+            suggestions.push_back({{"family", std::string(s.family->name)},
+                                   {"min_safety", std::isfinite(s.safety) ? nlohmann::json(s.safety) : nlohmann::json(nullptr)}});
+    j["verdict"] = {{"name", verdict_name(v)},
+                    {"valid", report.valid},
+                    {"required_safety", in.required_safety},
+                    {"working_temperature", in.working_temperature},
+                    {"family", in.family ? std::string(in.family->name) : std::string()},
+                    {"mass_g", in.family ? voxel_mass_grams(report.grid, in.family->density) : 0.0},
+                    {"limits_checked", false},
+                    {"suggestions", suggestions}};
+    return j.dump();
 }
 
 void apply_engineering_overrides(Settings& settings, const ProjectEngineering& e, std::vector<std::string>& notes) {

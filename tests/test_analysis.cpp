@@ -1,5 +1,6 @@
 #include "config/analysis_case.hpp"
 #include "config/settings.hpp"
+#include "fea/verdict.hpp"
 #include "fea/analysis.hpp"
 #include "fea/materials.hpp"
 #include "fea/zone.hpp"
@@ -16,6 +17,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
@@ -530,4 +532,140 @@ TEST_CASE("a marked zone is exactly the points within reach of its triangles, at
         }
         CHECK(inside > 0);
     }
+}
+
+TEST_CASE("verdict: material families, the temperature factor, the verdict and what to try (E10)", "[analysis]") {
+    REQUIRE(family_of("bambu-pla-basic"));
+    CHECK(family_of("bambu-pla-basic")->name == "PLA");
+    CHECK(family_of("PLA+")->name == "PLA");
+    CHECK(family_of("bambu-pla-cf")->name == "PLA");
+    CHECK(family_of("PETG-CF")->name == "PETG");
+    CHECK(family_of("bambu-pa6-cf")->name == "PA-CF");
+    CHECK(family_of("bambu-paht-cf")->name == "PA-CF");
+    CHECK(family_of("PA12")->name == "PA");
+    CHECK(family_of("PC")->name == "PC");
+    CHECK(family_of("TPU 95A")->elastomer);
+    CHECK(family_of("cnckitchen-abs-open")->name == "ABS");
+    CHECK(family_of("wood") == nullptr);
+
+    // f(T): 1 up to 23 °C, 0.5 at the service maximum, 0.02 fifteen degrees above.
+    const MaterialFamily& pla = *family_of("PLA");
+    CHECK(temperature_factor(pla, 20.0) == 1.0);
+    CHECK_THAT(temperature_factor(pla, 55.0), Catch::Matchers::WithinAbs(0.5, 1e-12));
+    CHECK_THAT(temperature_factor(pla, 39.0), Catch::Matchers::WithinAbs(0.75, 1e-12));
+    CHECK_THAT(temperature_factor(pla, 70.0), Catch::Matchers::WithinAbs(0.02, 1e-12));
+    CHECK(temperature_factor(pla, 130.0) == 0.02);
+
+    VerdictInput in;
+    in.family = &pla;
+    in.required_safety = 2.0;
+    in.min_safety = 3.0;
+    CHECK(structural_verdict(in) == Verdict::Holds);
+    in.min_safety = 1.5;
+    CHECK(structural_verdict(in) == Verdict::LowMargin);
+    in.min_safety = 0.8;
+    CHECK(structural_verdict(in) == Verdict::Overloaded);
+    in.min_safety = 3.0;
+    in.limit_exceeded = true;
+    CHECK(structural_verdict(in) == Verdict::TooFlexible);
+    in.limit_exceeded = false;
+    in.family = family_of("TPU");
+    CHECK(structural_verdict(in) == Verdict::NotApplicable);
+    CHECK(suggest_materials(in).empty());
+
+    // E10: PLA at 130 °C is over temperature, and PEI is among what to try;
+    // nothing suggested serves below 130 °C.
+    in.family = &pla;
+    in.working_temperature = 130.0;
+    in.min_safety = 0.1; // 5 at 23 °C: f(130) is 0.02
+    CHECK(structural_verdict(in) == Verdict::OverTemperature);
+    const std::vector<MaterialSuggestion> try_these = suggest_materials(in);
+    REQUIRE_FALSE(try_these.empty());
+    CHECK(std::any_of(try_these.begin(), try_these.end(), [](const MaterialSuggestion& s) { return s.family->name == "PEI"; }));
+    for (const MaterialSuggestion& s : try_these) {
+        CHECK(s.family->max_service >= 130.0);
+        CHECK(s.safety >= 2.0);
+    }
+
+    // The mass: a 10 mm cube of PLA, 1.24 g.
+    VoxelGrid grid;
+    grid.nx = grid.ny = grid.nz = 10;
+    grid.z.resize(11);
+    for (int k = 0; k <= 10; ++k)
+        grid.z[std::size_t(k)] = double(k);
+    grid.solid.assign(1000, 1);
+    CHECK_THAT(voxel_mass_grams(grid, pla.density), Catch::Matchers::WithinRel(1.24, 1e-12));
+}
+
+TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, the mass and the map", "[analysis][engineering]") {
+    // A bar of 40 x 8 x 8 mm (EP4 scaled down to keep the test quick), PLA.
+    const IndexedMesh bar = box_mesh(40.0f, 8.0f, 8.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip, spread;
+    fixed.kind = ConditionKind::FixedZone;
+    spread.kind = ConditionKind::ForceZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true, top = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f, top &= triangles.corner(t, k).z == 8.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+        if (top)
+            spread.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {40.0, 4.0, 4.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 3.0;
+    tip.kilograms = 5.0 / 9.81; // typed in kg: 5 N
+    tip.newtons = 5.0;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    spread.newtons = 5.0;
+    spread.direction = ForceDirection::Axis;
+    spread.axis = -3;
+    e.conditions = {fixed, tip};
+    std::vector<std::string> notes;
+    const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    REQUIRE(c.fixtures.size() == 1);
+    REQUIRE(c.loads.size() == 1);
+    const AnalysisReport r = run_analysis(bar, beads_04(), c);
+    REQUIRE(r.valid);
+    const nlohmann::json j = nlohmann::json::parse(structural_report_json(r, c, e));
+    REQUIRE(j.contains("verdict"));
+    CHECK(j["verdict"]["family"] == "PLA");
+    CHECK(j["verdict"]["name"] == "holds"); // 5 N on a 8 mm PLA bar
+    CHECK(j["verdict"]["required_safety"] == 2.0);
+    // Mass: no more than the solid bar, 40 x 8 x 8 mm of PLA = 3.17 g.
+    const double mass = j["verdict"]["mass_g"].get<double>();
+    CHECK(mass > 0.5);
+    CHECK(mass <= 40.0 * 8.0 * 8.0 * 1.24 / 1000.0 * 1.001);
+    // The map: the voxels' outside, two triangles per open face, each with its
+    // voxel's factor; the smallest on the outside is the part's smallest (a
+    // bent bar is weakest at its surface).
+    const VoxelSurface map = voxel_surface(r.grid, r.result.safety);
+    REQUIRE_FALSE(map.value.empty());
+    CHECK(map.corners.size() == 3 * map.value.size());
+    const double lowest = *std::min_element(map.value.begin(), map.value.end());
+    CHECK_THAT(lowest, WithinRel(r.result.min_safety, 1e-9));
+    // Two voxels side by side: ten open faces.
+    VoxelGrid two;
+    two.nx = 2, two.ny = 1, two.nz = 1;
+    two.z = {0.0, 1.0};
+    two.solid = {1, 1};
+    CHECK(voxel_surface(two, {1.0, 2.0}).value.size() == 20);
+    // EP6: the same force spread on the top face bends the bar less.
+    e.conditions = {fixed, spread};
+    const AnalysisCase c6 = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    const AnalysisReport r6 = run_analysis(bar, beads_04(), c6);
+    REQUIRE(r6.valid);
+    CHECK(r6.result.elasticity.max_displacement < r.result.elasticity.max_displacement);
+    // Hot: at 50 °C the same bar is less stiff (f(50) = 0.58 for PLA).
+    e.conditions = {fixed, tip};
+    e.working_temperature = 50.0;
+    const AnalysisCase hot = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    CHECK_THAT(hot.material.e1, WithinRel(c.material.e1 * temperature_factor(*family_of("PLA"), 50.0), 1e-12));
 }

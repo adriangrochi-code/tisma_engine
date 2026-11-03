@@ -242,6 +242,7 @@ add_library(tisma_core
   src/fea/material.cpp
   src/fea/as_printed.cpp
   src/fea/materials.cpp
+  src/fea/verdict.cpp
   src/fea/analysis.cpp
   src/config/analysis_case.cpp
   src/report/analysis_json.cpp

@@ -12,6 +12,17 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Analizar en Estructural** (`engineering_panel.md`, reglas 6, 9 a 12 y 14; `structural_analysis.md`,
+  «Resultados»): cada fuerza en N o en kg (g = 9,81 m/s²) con su dirección (perpendicular hacia adentro, ±X, ±Y,
+  ±Z o tres números). Analizar corre en segundo plano con su avance y «Cancelar». Al terminar: el veredicto grande
+  (Aguanta, Margen bajo, Fuera de carga, Fuera de temperatura, No aplicable), el factor de seguridad mínimo frente
+  al pedido, el desplazamiento máximo, la masa con su material y los materiales para probar si no aguanta; la pieza
+  pintada con el mapa del factor de seguridad en cinco franjas y el punto crítico marcado. Cambiar una condición,
+  el material o el perfil lo deja en gris con «Desactualizado: analizá de nuevo». El resultado se guarda con la
+  pieza. Las fuerzas se ven como flechas rojas y los puntos y zonas fijas en azul.
+- **La temperatura de trabajo cuenta en el análisis**: la rigidez y la resistencia bajan con `f(T)` de la familia
+  del material (1 hasta 23 °C, 0,5 en la máxima de servicio). Pasada esa máxima, el veredicto es «Fuera de
+  temperatura».
 - **Línea de tiempo editable en Diseño** (`cad_design.md`, regla 8): cada operación del Historial se sube o se
   baja con sus flechas, se renombra con doble clic, se suprime con el ojo y se borra con ×; la pieza se rehace sola.
   Una operación que la herramienta de diseño no puede hacer queda en rojo con el motivo; las de antes se construyen

@@ -1224,8 +1224,12 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 4. la pestaña Estructural (marcar, lista, Analizar, mapa, veredicto) y sacar «Análisis» de Impresión 3D: empezado
    el 2026-11-03 con los valores del panel (`src/project/engineering_values.*`: del perfil o a mano, material por
    tipo de filamento, qué apaga Analizar) y la pestaña Estructural con la pieza, los valores, la temperatura de
-   trabajo y Analizar; faltan marcar en la vista, la lista de condiciones con deshacer, correr el análisis, el mapa
-   y el veredicto, y sacar «Análisis» de Impresión 3D;
+   trabajo y Analizar; marcar en la vista y la lista con deshacer (2026-11-03); fuerzas en N o kg con dirección,
+   Analizar en segundo plano con avance y Cancelar, veredicto, masa, sugerencias, mapa del factor de seguridad,
+   punto crítico, «Desactualizado» y el resultado guardado con la pieza (2026-11-03). Faltan: límites de
+   desplazamiento («Demasiado flexible»), botón para probar cada material sugerido, deformación exagerada, otros
+   mapas (von Mises, desplazamiento), Más opciones (resolución con su tamaño, dirección de impresión, nube),
+   Optimizar, arrastrar la punta de la flecha, y sacar «Análisis» de Impresión 3D;
 5. la pestaña Aerodinámica, con A3 (CFD).
 
 ## Avance

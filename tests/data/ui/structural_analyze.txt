@@ -1,0 +1,27 @@
+# Analizar in Structural (engineering_panel.md, rules 6, 9, 11, 12 and 14;
+# EP4, EP7): the cube held by its top face and pushed down on it (10 N, the
+# default, along the face's normal, into the part). Analizar runs in the
+# background and gives the verdict, the map and the critical point; the
+# force in kg keeps its newtons; changing the force leaves the result out of
+# date, and the map goes.
+menu mode_engineering
+expect-control tab_structural
+menu tab_structural
+expect-control structural_tool_fixed_zone
+menu structural_tool_fixed_zone
+click-model
+menu structural_tool_force_point
+click-model
+expect-structural none
+key escape
+expect-control structural_force_unit_1
+menu structural_force_unit_1
+expect-control structural_force_direction_1
+menu structural_analyze
+expect-structural-verdict holds
+expect-control structural_verdict
+expect-control structural_show_map
+menu structural_force_unit_1
+wait 20
+expect-no-control structural_show_map
+expect-structural-verdict holds

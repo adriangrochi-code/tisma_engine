@@ -9509,3 +9509,68 @@ hacia arriba: el rectángulo entero se corre, sigue de 40 × 30 con sus cotas, y
 **Sigue:** D4 (redondeo, chaflán, vaciado, agujeros por norma, roscas, patrones, simetría, combinar; CD5, CD6
 completo, CD17, CD18) o lo pendiente de Ingeniería (`engineering_panel.md`: fuerzas en N y kg con dirección,
 Analizar que corra con mapa y veredicto, EP1–EP10), según diga el dueño; arrastrar el boceto (regla 5).
+
+## 2026-11-03 — Estructural: Analizar corre, con veredicto, mapa y punto crítico
+
+**Pedido del dueño:** «Sigamos con Estructural» (después de D3 de Diseño). Ficha `engineering_panel.md` (reglas 6, 9
+a 12 y 14) y `structural_analysis.md` («Resultados»), las dos pasan `tools/check_spec.py`.
+
+**Hecho:**
+- Motor, `src/fea/verdict.*`:
+  - la tabla de familias de la ficha (PLA, PETG, ABS, ASA, HIPS, PC, PA, PA-CF, PC-CF, PP, POM, PEI, PEEK, PEKK, PSU,
+    PVDF, TPU): temperatura máxima de servicio, densidad, resistencias; la familia sale de las palabras del nombre
+    del registro o del tipo de filamento;
+  - `f(T)` del punto 5 del método;
+  - el veredicto (elastómero, temperatura, < 1, < pedido, límite) y las sugerencias;
+  - la masa de los vóxeles impresos;
+  - la superficie de vóxeles para el mapa.
+- `engineering_analysis_case` multiplica rigidez y resistencias por `f(T)` con la temperatura de trabajo; con 23 °C
+  no cambia nada. `structural_report_json` agrega al informe el objeto `verdict` (nombre, factor pedido,
+  temperatura, familia, masa, sugerencias, `limits_checked: false`).
+- Panel Estructural:
+  - cada fuerza en N o kg (botón al lado; g = 9,81, con el valor en N debajo) y su dirección (perpendicular hacia
+    adentro, ±X, ±Y, ±Z, tres números);
+  - el factor de seguridad pedido;
+  - Analizar corre en segundo plano con la pieza como está en la cama (sus condiciones movidas con ella y los
+    valores cambiados a mano), barra de avance y «Cancelar» (corta en el próximo aviso de avance);
+  - el resultado arriba: el veredicto grande y en color, el factor mínimo frente al pedido, el desplazamiento
+    máximo, la masa con su familia, «Probá con: …», los avisos si el resultado no sirve;
+  - «Desactualizado: analizá de nuevo» en gris cuando cambia lo que entra en la huella (condiciones, valores,
+    material, perfil, malla). El resultado se guarda en la pieza (`results`), así que se guarda con el proyecto.
+- Vista:
+  - el mapa del factor de seguridad sobre la superficie de vóxeles, en cinco franjas (rojo < 1, amarillo hasta el
+    pedido, verde claro hasta el doble, verde hasta cuatro veces, azul más), con leyenda en el panel;
+  - el punto crítico marcado con su valor;
+  - sin mapa, las fuerzas como flechas rojas del largo de su valor, los puntos como discos (azul fijo, rojo
+    fuerza) y las zonas fijas como un cuadro rayado azul (límites en amarillo).
+- Programas de prueba: `expect-structural-verdict NOMBRE`.
+
+**Probado:**
+- Motor: familias, `f(T)` (0,75 a 39 °C y 0,5 a 55 °C para PLA), los seis veredictos, E10 (PLA a 130 °C: «Fuera de
+  temperatura», sugiere PEI entre otros, todo con servicio ≥ 130 °C), masa de un cubo de 10 mm de PLA = 1,24 g.
+- EP4/EP6 en el motor, con una barra de 40 × 8 × 8 mm de PLA fija en una punta:
+  - 5 N en un punto de la otra punta, hacia −Z (escrito en kg): «Aguanta»;
+  - la masa no pasa la de la barra maciza;
+  - el mínimo del mapa es el mínimo de la pieza;
+  - la misma fuerza repartida en la cara de arriba deja menos desplazamiento;
+  - a 50 °C el módulo es `f(50)` veces el de 23 °C.
+- Prueba de interfaz `ui_script_structural_analyze`: marcar zona fija y punto de fuerza en el cubo, pasar la fuerza
+  a kg, Analizar → «Aguanta», con el mapa; cambiar la unidad de la fuerza → el mapa se va (desactualizado). Captura
+  revisada: veredicto, números con coma, leyenda, punto crítico «49,29».
+
+**No probado / falta:**
+- Los límites de desplazamiento no se comprueban todavía («Demasiado flexible» nunca sale).
+- No hay botón para probar cada material sugerido; solo se nombran las familias.
+- Falta la deformación exagerada, y los mapas de von Mises y desplazamiento.
+- Falta «Más opciones»: resolución con su tamaño, dirección de impresión y nube.
+- Falta Optimizar.
+- Falta arrastrar la punta de la flecha.
+- La adherencia entre capas según la temperatura de la boquilla (método, punto 6) no está.
+- El análisis corre en CPU (sin GPU) desde la interfaz.
+- EP8 (guardar y abrir con el último resultado) no tiene prueba guionada nueva: el resultado va en `results`, que
+  ya se guardaba.
+- EP4 con la barra de 100 × 10 × 10 mm por la interfaz no se probó (el programa de pruebas hace clic solo en el
+  medio de la vista).
+
+**Sigue:** límites de desplazamiento y «Demasiado flexible»; probar un material sugerido con un botón; EP8 guionada;
+Más opciones (resolución); después Optimizar y Aerodinámica (A3).

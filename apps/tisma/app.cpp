@@ -46,6 +46,7 @@
 #include "mesh/face_region.hpp"
 #include "project/engineering_case.hpp"
 #include "fea/materials.hpp"
+#include "fea/verdict.hpp"
 #include "ui/camera.hpp"
 #include "ui/credits.hpp"
 #include "ui/files.hpp"
@@ -189,6 +190,10 @@ bool is_model(const std::filesystem::path& path) {
 ImVec4 rgb(std::uint32_t c, float alpha = 1.0f) {
     return ImVec4(float((c >> 16) & 0xFF) / 255.0f, float((c >> 8) & 0xFF) / 255.0f, float(c & 0xFF) / 255.0f, alpha);
 }
+// The map's colour bands (rule 12): below 1, up to the asked factor, up to
+// twice, up to four times, more.
+constexpr std::uint32_t kSafetyBands[5] = {0xE5484D, 0xF5C524, 0xB8D94B, 0x3FBF7F, 0x4C9BFF};
+
 Vec3 vec(std::uint32_t c) {
     return Vec3{float((c >> 16) & 0xFF) / 255.0f, float((c >> 8) & 0xFF) / 255.0f, float(c & 0xFF) / 255.0f};
 }
@@ -659,6 +664,32 @@ private:
     int structural_part_ = 0;
     // The marking tool (rule 5): 0 Rotar, then the kinds of ConditionKind + 1.
     int structural_tool_ = 0;
+    // Analizar (rules 9, 11 and 12): the run in the background, its progress
+    // and cancel, and the map of its last result shown in the view.
+    struct StructuralRun {
+        bool ok = false, cancelled = false;
+        std::string error;
+        std::size_t part = 0;
+        std::string fingerprint, report;
+        std::vector<float> surface;     // the voxels' outside, 6 floats a corner (mesh_vertices' layout)
+        std::vector<std::uint8_t> band; // per triangle of `surface`: the map's colour band, 0 to 4
+        std::optional<std::array<double, 3>> weakest; // on the bed
+        double weakest_safety = 0.0;
+    };
+    Background<StructuralRun> structural_job_;
+    std::atomic<bool> structural_cancel_{false};
+    std::atomic<int> structural_permille_{0};
+    std::optional<StructuralRun> structural_map_; // the last finished run of this session
+    bool structural_show_map_ = true;
+    bool structural_map_in_view_ = false;
+    std::string structural_message_;
+    std::string structural_parsed_for_;
+    nlohmann::json structural_parsed_;
+    void start_structural();
+    void structural_done(StructuralRun run);
+    void update_structural_view();
+    bool structural_map_wanted();
+    void structural_overlay();
     // Undo and redo of each part's Engineering data (rule 8): the part and
     // its data before the change.
     struct EngineeringStep {
@@ -4833,6 +4864,9 @@ void App::poll_jobs() {
     }
     if (std::optional<cad::BuildResult> built = design_job_.take())
         design_built(std::move(*built));
+    if (std::optional<StructuralRun> run = structural_job_.take())
+        structural_done(std::move(*run));
+    update_structural_view();
     // The Analysis tab keeps its estimate up to date.
     if (tab_ == Tab::Analysis)
         estimate_voxels_if_stale();
@@ -12101,6 +12135,90 @@ void App::structural_panel() {
     structural_part_ = std::clamp(structural_part_, 0, int(objects_.size()) - 1);
     const float footer = ImGui::GetFrameHeight() * 1.4f + 2.0f * ImGui::GetTextLineHeightWithSpacing() + 14.0f * scale_;
     ImGui::BeginChild("##structural_scroll", ImVec2(0, -footer));
+    // The last result (rule 12), big at the top; grey and «Desactualizado»
+    // once something it depends on changed (rule 14).
+    {
+        const PlateObject& po = objects_[std::size_t(structural_part_)];
+        const auto res = std::find_if(po.engineering.results.begin(), po.engineering.results.end(),
+                                      [](const EngineeringResult& r) { return r.kind == "structural"; });
+        if (res != po.engineering.results.end()) {
+            if (structural_parsed_for_ != res->report) {
+                structural_parsed_for_ = res->report;
+                try {
+                    structural_parsed_ = nlohmann::json::parse(res->report);
+                } catch (const nlohmann::json::exception&) {
+                    structural_parsed_ = nlohmann::json::object();
+                }
+            }
+            const nlohmann::json& j = structural_parsed_;
+            const bool stale = result_stale(*res, po.mesh, po.engineering, settings_json(settings_));
+            const nlohmann::json verdict = j.value("verdict", nlohmann::json::object());
+            const std::string name = verdict.value("name", std::string());
+            struct Shown {
+                const char* name;
+                T label;
+                std::uint32_t colour;
+            };
+            static constexpr Shown kShown[] = {{"holds", T::VerdictHolds, 0x3FBF7F},
+                                               {"low_margin", T::VerdictLowMargin, 0xF5C524},
+                                               {"overloaded", T::VerdictOverloaded, 0xE5484D},
+                                               {"too_flexible", T::VerdictTooFlexible, 0xF59E0B},
+                                               {"over_temperature", T::VerdictOverTemp, 0xE5484D},
+                                               {"not_applicable", T::VerdictNotApplicable, 0x9CA3AF}};
+            for (const Shown& sh : kShown) {
+                if (name != sh.name)
+                    continue;
+                ImGui::PushFont(nullptr, kTitleSize * 1.1f);
+                if (stale)
+                    loc::TextDisabled("%s", tr(sh.label));
+                else
+                    loc::TextColored(rgb(sh.colour), "%s", tr(sh.label));
+                ImGui::PopFont();
+                rect_of("structural_verdict");
+            }
+            if (stale)
+                loc::TextDisabled("%s", tr(T::StructStale));
+            const nlohmann::json result = j.value("result", nlohmann::json::object());
+            if (result.contains("min_safety") && result["min_safety"].is_number())
+                ImGui::TextUnformatted(format(tr(T::StructMinSafety), result["min_safety"].get<double>(), verdict.value("required_safety", 2.0)).c_str());
+            if (result.contains("max_displacement_mm") && result["max_displacement_mm"].is_number())
+                ImGui::TextUnformatted(format(tr(T::StructMaxDisplacement), result["max_displacement_mm"].get<double>()).c_str());
+            if (verdict.value("mass_g", 0.0) > 0.0)
+                ImGui::TextUnformatted(
+                    format(tr(T::StructMass), verdict.value("mass_g", 0.0), verdict.value("family", std::string()).c_str()).c_str());
+            std::string names;
+            for (const nlohmann::json& sug : verdict.value("suggestions", nlohmann::json::array()))
+                names += (names.empty() ? "" : ", ") + sug.value("family", std::string());
+            if (!names.empty())
+                loc::TextColored(rgb(theme_.accent_hover), tr(T::StructTry), names.c_str());
+            if (!j.value("valid", true)) {
+                loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructNotValid));
+                for (const nlohmann::json& w : j.value("warnings", nlohmann::json::array()))
+                    loc::TextDisabled("· %s", w.value("message", std::string()).c_str());
+            }
+            if (structural_map_ && structural_map_->part == std::size_t(structural_part_) && !stale) {
+                ImGui::Checkbox(tr(T::StructShowMap), &structural_show_map_);
+                rect_of("structural_show_map");
+                if (structural_show_map_) {
+                    const float w = (ImGui::GetContentRegionAvail().x - 8.0f * scale_) / 5.0f;
+                    for (int k = 0; k < 5; ++k) {
+                        if (k > 0)
+                            ImGui::SameLine(0.0f, 2.0f * scale_);
+                        const ImVec2 at = ImGui::GetCursorScreenPos();
+                        ImGui::GetWindowDrawList()->AddRectFilled(at, ImVec2(at.x + std::max(w, 8.0f), at.y + 8.0f * scale_),
+                                                                  ImGui::GetColorU32(rgb(kSafetyBands[k])));
+                        ImGui::Dummy(ImVec2(std::max(w, 8.0f), 8.0f * scale_));
+                    }
+                    ImGui::PushTextWrapPos(0.0f);
+                    loc::TextDisabled("%s", tr(T::StructLegend));
+                    ImGui::PopTextWrapPos();
+                }
+            }
+            ImGui::Separator();
+        }
+        if (!structural_message_.empty())
+            loc::TextColored(rgb(0xF59E0B), "%s", structural_message_.c_str());
+    }
     section(T::StructPart);
     ImGui::SetNextItemWidth(-1.0f);
     if (ImGui::BeginCombo("##structural_part", objects_[std::size_t(structural_part_)].name.c_str())) {
@@ -12170,15 +12288,70 @@ void App::structural_panel() {
             erase = i;
         rect_of("structural_condition_remove_" + std::to_string(i));
         if (c.is_force()) {
-            double n = c.newtons;
+            // Its value in N or in kg (rule 6: g = 9.81 m/s²), and its direction.
+            const bool kg = c.kilograms.has_value();
+            double v = kg ? *c.kilograms : c.newtons;
             const double lo = 0.0, hi = 1e6;
-            ImGui::SetNextItemWidth(-1.0f);
-            if (ImGui::DragScalar("##newtons", ImGuiDataType_Double, &n, 0.5f, &lo, &hi,
-                                  field_text("##newtons", "%.1f N", n), ImGuiSliderFlags_AlwaysClamp) &&
-                n != c.newtons) {
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 44.0f * scale_);
+            const char* fmt = kg ? "%.2f kg" : "%.1f N";
+            if (ImGui::DragScalar("##newtons", ImGuiDataType_Double, &v, kg ? 0.05f : 0.5f, &lo, &hi, field_text("##newtons", fmt, v),
+                                  ImGuiSliderFlags_AlwaysClamp) &&
+                v != (kg ? *c.kilograms : c.newtons)) {
                 if (ImGui::IsItemActivated() || !ImGui::IsMouseDragging(ImGuiMouseButton_Left))
                     remember_engineering(std::size_t(structural_part_));
-                e.conditions[i].newtons = n;
+                EngineeringCondition& d = e.conditions[i];
+                if (kg)
+                    d.kilograms = v, d.newtons = v * 9.81;
+                else
+                    d.newtons = v;
+            }
+            rect_of("structural_force_" + std::to_string(i));
+            ImGui::SameLine();
+            if (ImGui::Button(kg ? "kg" : "N", ImVec2(36.0f * scale_, 0.0f))) {
+                remember_engineering(std::size_t(structural_part_));
+                EngineeringCondition& d = e.conditions[i];
+                if (kg)
+                    d.kilograms.reset();
+                else
+                    d.kilograms = d.newtons / 9.81;
+            }
+            if (ImGui::IsItemHovered())
+                loc::SetTooltip("%s", tr(T::StructForceUnitTip));
+            rect_of("structural_force_unit_" + std::to_string(i));
+            if (e.conditions[i].kilograms)
+                loc::TextDisabled(tr(T::StructKgIs), e.conditions[i].newtons);
+            static constexpr const char* kAxes[] = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
+            static constexpr int kAxisOf[] = {1, -1, 2, -2, 3, -3};
+            const EngineeringCondition& d = e.conditions[i];
+            int now = 0;
+            if (d.direction == ForceDirection::Vector)
+                now = 7;
+            else if (d.direction == ForceDirection::Axis)
+                for (int k = 0; k < 6; ++k)
+                    if (kAxisOf[k] == d.axis)
+                        now = k + 1;
+            const auto label = [&](int k) { return k == 0 ? tr(T::StructDirNormal) : k == 7 ? tr(T::StructDirVector) : kAxes[k - 1]; };
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::BeginCombo("##direction", label(now))) {
+                for (int k = 0; k < 8; ++k)
+                    if (ImGui::Selectable(label(k), k == now) && k != now) {
+                        remember_engineering(std::size_t(structural_part_));
+                        EngineeringCondition& w = e.conditions[i];
+                        w.direction = k == 0 ? ForceDirection::Normal : k == 7 ? ForceDirection::Vector : ForceDirection::Axis;
+                        if (k >= 1 && k <= 6)
+                            w.axis = kAxisOf[k - 1];
+                    }
+                ImGui::EndCombo();
+            }
+            rect_of("structural_force_direction_" + std::to_string(i));
+            if (e.conditions[i].direction == ForceDirection::Vector) {
+                double vec[3] = {e.conditions[i].vector[0], e.conditions[i].vector[1], e.conditions[i].vector[2]};
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::InputScalarN("##vector", ImGuiDataType_Double, vec, 3, nullptr, nullptr, "%.2f")) {
+                    if (ImGui::IsItemActivated())
+                        remember_engineering(std::size_t(structural_part_));
+                    e.conditions[i].vector = {vec[0], vec[1], vec[2]};
+                }
             }
         } else if (c.is_point()) {
             double r = c.radius;
@@ -12275,6 +12448,15 @@ void App::structural_panel() {
     loc::TextDisabled(tr(T::StructWallsInfill), settings_.wall_count, settings_.top_layers, settings_.bottom_layers,
                       settings_.infill_density, infill_pattern_name(settings_.infill_pattern));
     source(false, ProfileKind::Print);
+    // The safety factor asked for (rule 10), 2 to begin with.
+    ImGui::TextUnformatted(tr(T::StructSafetyFactor));
+    ImGui::SetNextItemWidth(-1.0f);
+    {
+        const double lo = 1.0, hi = 10.0;
+        ImGui::DragScalar("##structural_safety_factor", ImGuiDataType_Double, &e.structural.safety_factor, 0.05f, &lo, &hi,
+                          field_text("##structural_safety_factor", "%.1f", e.structural.safety_factor), ImGuiSliderFlags_AlwaysClamp);
+        rect_of("structural_safety_factor");
+    }
     ImGui::TextUnformatted(tr(T::StructWorkingTemp));
     if (ImGui::IsItemHovered())
         loc::SetTooltip("%s", tr(T::StructWorkingTempTip));
@@ -12293,13 +12475,27 @@ void App::structural_panel() {
     ImGui::Separator();
     ImGui::Spacing();
     const AnalyzeBlock block = analyze_block(e, values);
-    ImGui::BeginDisabled(block != AnalyzeBlock::None);
-    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-    ImGui::Button(tr(T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f));
-    ImGui::PopStyleColor(3);
-    ImGui::EndDisabled();
+    if (structural_job_.running()) {
+        // While it calculates (rule 11): its progress and Cancelar; the view
+        // still turns.
+        const int permille = structural_permille_.load();
+        ImGui::ProgressBar(float(permille) / 1000.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
+                           format(tr(T::StructAnalyzing), permille / 10).c_str());
+        rect_of("structural_progress");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            structural_cancel_ = true;
+        rect_of("structural_cancel");
+    } else {
+        ImGui::BeginDisabled(block != AnalyzeBlock::None);
+        ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+        if (ImGui::Button(tr(T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            start_structural();
+        ImGui::PopStyleColor(3);
+        ImGui::EndDisabled();
+    }
     rect_of("structural_analyze");
     if (block != AnalyzeBlock::None)
         loc::TextDisabled("%s", tr(block == AnalyzeBlock::Material ? T::StructNeedMaterial
@@ -12309,6 +12505,314 @@ void App::structural_panel() {
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(2);
+}
+
+namespace {
+
+// How a part's own mesh becomes the one on the bed: p -> a p + b (a by rows),
+// the turn and scale of its placement and the shift that set it down.
+void own_to_placed(const PlateObject& o, const TriangleMesh& placed, std::array<double, 9>& a, std::array<double, 3>& b) {
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c)
+            a[std::size_t(3 * r + c)] = o.place.rotation[std::size_t(3 * r + c)] * o.place.scale[std::size_t(c)];
+    const Vec3f p = o.mesh.corner(0, 0), q = placed.corner(0, 0);
+    for (int r = 0; r < 3; ++r)
+        b[std::size_t(r)] = double((&q.x)[r]) -
+                            (a[std::size_t(3 * r)] * p.x + a[std::size_t(3 * r + 1)] * p.y + a[std::size_t(3 * r + 2)] * p.z);
+}
+
+int safety_band(double s, double asked) {
+    return s < 1.0 ? 0 : s < asked ? 1 : s < 2.0 * asked ? 2 : s < 4.0 * asked ? 3 : 4;
+}
+
+} // namespace
+
+// Analizar (rules 9 and 11): the part as it is on the bed, its conditions
+// moved with it, the values changed by hand, in the background; Cancelar
+// stops it at its next step.
+void App::start_structural() {
+    if (structural_job_.running() || objects_.empty())
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    TriangleMesh placed = placed_mesh(o);
+    if (placed.empty() || o.mesh.empty())
+        return;
+    std::array<double, 9> a{};
+    std::array<double, 3> b{};
+    own_to_placed(o, placed, a, b);
+    ProjectEngineering moved = o.engineering;
+    move_engineering(moved, a, b);
+    // And back, for the report's points (in the part's own frame).
+    std::array<double, 12> to_part{1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
+    const double det = a[0] * (a[4] * a[8] - a[5] * a[7]) - a[1] * (a[3] * a[8] - a[5] * a[6]) + a[2] * (a[3] * a[7] - a[4] * a[6]);
+    if (std::abs(det) > 1e-12) {
+        const std::array<double, 9> inv{(a[4] * a[8] - a[5] * a[7]) / det, (a[2] * a[7] - a[1] * a[8]) / det,
+                                        (a[1] * a[5] - a[2] * a[4]) / det, (a[5] * a[6] - a[3] * a[8]) / det,
+                                        (a[0] * a[8] - a[2] * a[6]) / det, (a[2] * a[3] - a[0] * a[5]) / det,
+                                        (a[3] * a[7] - a[4] * a[6]) / det, (a[1] * a[6] - a[0] * a[7]) / det,
+                                        (a[0] * a[4] - a[1] * a[3]) / det};
+        for (std::size_t i = 0; i < 9; ++i)
+            to_part[i] = inv[i];
+        for (std::size_t i = 0; i < 3; ++i)
+            to_part[9 + i] = -(inv[3 * i] * b[0] + inv[3 * i + 1] * b[1] + inv[3 * i + 2] * b[2]);
+    }
+    Settings settings = settings_;
+    std::vector<std::string> notes;
+    apply_engineering_overrides(settings, o.engineering, notes);
+    const std::string fingerprint = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_));
+    const std::string filament_type = settings_.filament_type;
+    const double asked = o.engineering.structural.safety_factor;
+    structural_cancel_ = false;
+    structural_permille_ = 0;
+    structural_message_.clear();
+    structural_job_.start([this, part, placed = std::move(placed), moved, settings, fingerprint, filament_type, to_part,
+                           asked]() {
+        StructuralRun run;
+        run.part = part;
+        run.fingerprint = fingerprint;
+        struct Cancelled {};
+        try {
+            std::vector<std::string> case_notes;
+            const AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type);
+            const IndexedMesh mesh = weld_exact(placed);
+            const AnalysisReport r = run_analysis(mesh, settings, c, nullptr, [this](std::string_view, double done) {
+                structural_permille_ = int(done * 1000.0);
+                if (structural_cancel_)
+                    throw Cancelled{};
+            });
+            run.report = structural_report_json(r, c, moved, to_part);
+            // The map: the voxels' outside, in its colour bands one after
+            // the other (each band one group of the view's paint).
+            const VoxelSurface v = voxel_surface(r.grid, r.result.safety);
+            std::array<std::vector<float>, 5> bands;
+            for (std::size_t t = 0; t < v.value.size(); ++t) {
+                const Vec3f& p = v.corners[3 * t];
+                const Vec3f& q = v.corners[3 * t + 1];
+                const Vec3f& w = v.corners[3 * t + 2];
+                const Vec3f u{q.x - p.x, q.y - p.y, q.z - p.z}, s{w.x - p.x, w.y - p.y, w.z - p.z};
+                Vec3f n{u.y * s.z - u.z * s.y, u.z * s.x - u.x * s.z, u.x * s.y - u.y * s.x};
+                const float len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+                if (len > 0.0f)
+                    n = Vec3f{n.x / len, n.y / len, n.z / len};
+                std::vector<float>& out = bands[std::size_t(safety_band(v.value[t], asked))];
+                for (const Vec3f* c3 : {&p, &q, &w})
+                    out.insert(out.end(), {c3->x, c3->y, c3->z, n.x, n.y, n.z});
+            }
+            for (std::size_t k = 0; k < bands.size(); ++k) {
+                run.band.insert(run.band.end(), bands[k].size() / 18, std::uint8_t(k));
+                run.surface.insert(run.surface.end(), bands[k].begin(), bands[k].end());
+            }
+            if (r.valid && std::isfinite(r.result.min_safety)) {
+                run.weakest = r.weakest;
+                run.weakest_safety = r.result.min_safety;
+            }
+            run.ok = true;
+        } catch (const Cancelled&) {
+            run.cancelled = true;
+        } catch (const std::exception& e) {
+            run.error = e.what();
+        }
+        return run;
+    });
+}
+
+// A finished run: its report kept with the part (saved with the project,
+// rule 11 bis, EP8), its map shown.
+void App::structural_done(StructuralRun run) {
+    if (run.cancelled) {
+        structural_message_ = tr(T::StructCancelled);
+        return;
+    }
+    if (!run.ok) {
+        structural_message_ = format(tr(T::StructFailed), run.error.c_str());
+        return;
+    }
+    if (run.part < objects_.size()) {
+        std::vector<EngineeringResult>& results = objects_[run.part].engineering.results;
+        std::erase_if(results, [](const EngineeringResult& r) { return r.kind == "structural"; });
+        results.push_back({"structural", run.fingerprint, run.report});
+    }
+    structural_map_in_view_ = false;
+    structural_map_ = std::move(run);
+}
+
+// The map is in the view while Structural shows a part whose last run of
+// this session is still up to date.
+bool App::structural_map_wanted() {
+    if (tab_ != Tab::Structural || !structural_show_map_ || !structural_map_ || objects_.empty())
+        return false;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    if (structural_map_->part != part)
+        return false;
+    const ProjectEngineering& e = objects_[part].engineering;
+    const auto it = std::find_if(e.results.begin(), e.results.end(), [](const EngineeringResult& r) { return r.kind == "structural"; });
+    return it != e.results.end() && it->fingerprint == structural_map_->fingerprint &&
+           !result_stale(*it, objects_[part].mesh, e, settings_json(settings_));
+}
+
+void App::update_structural_view() {
+    // Checked a few times a second: the fingerprint hashes the part's mesh.
+    static int frame = 0;
+    if (++frame % 10 != 0 && structural_map_in_view_ == (tab_ == Tab::Structural && structural_show_map_ && structural_map_.has_value()))
+        return;
+    const bool want = structural_map_wanted();
+    if (want && !structural_map_in_view_) {
+        const StructuralRun& m = *structural_map_;
+        std::vector<Vec3f> corners;
+        corners.reserve(m.surface.size() / 6);
+        for (std::size_t i = 0; i + 5 < m.surface.size(); i += 6)
+            corners.push_back(Vec3f{m.surface[i], m.surface[i + 1], m.surface[i + 2]});
+        show_in_view(TriangleMesh(std::move(corners)));
+        std::vector<Renderer::PaintGroup> groups;
+        std::size_t first = 0;
+        for (std::size_t k = 0; k < 5; ++k) {
+            const std::size_t count = 3 * std::size_t(std::count(m.band.begin(), m.band.end(), std::uint8_t(k)));
+            if (count > 0)
+                groups.push_back({first, count, vec(kSafetyBands[k])});
+            first += count;
+        }
+        renderer_.set_paint(m.surface, groups);
+        vk_view_.set_paint(m.surface, groups);
+        structural_map_in_view_ = true;
+    } else if (!want && structural_map_in_view_) {
+        structural_map_in_view_ = false;
+        paint_dirty_ = true; // the painting tool's view, when it comes back
+        if (tab_ != Tab::Design)
+            rebuild_plate();
+    }
+}
+
+// Over the view in Structural (rules 6, 7 and 12): each force as a red arrow
+// as long as its value says, each point as a disc (blue fixed, red force),
+// and with the map, the critical point and its factor.
+void App::structural_overlay() {
+    if (tab_ != Tab::Structural || objects_.empty() || !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](const std::array<double, 3>& w, ImVec2& out) {
+        const float x = float(w[0]), y = float(w[1]), z = float(w[2]);
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+        const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float ww = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(ww > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / ww * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / ww * 0.5f) * view_size_.y);
+        return true;
+    };
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    const float thick = 2.5f * scale_;
+    if (structural_map_in_view_ && structural_map_ && structural_map_->weakest) {
+        ImVec2 q;
+        if (project(*structural_map_->weakest, q)) {
+            const ImU32 white = ImGui::GetColorU32(ImVec4(1, 1, 1, 1));
+            dl->AddCircle(q, 9.0f * scale_, white, 24, thick);
+            dl->AddCircle(q, 3.0f * scale_, white, 12, thick);
+            const std::string text = format(tr(T::StructCritical), structural_map_->weakest_safety);
+            dl->AddRectFilled(ImVec2(q.x + 12.0f * scale_, q.y - 10.0f * scale_),
+                              ImVec2(q.x + 18.0f * scale_ + ImGui::CalcTextSize(text.c_str()).x, q.y + 10.0f * scale_),
+                              ImGui::GetColorU32(rgb(0x1E1E24, 0.85f)), 4.0f * scale_);
+            dl->AddText(ImVec2(q.x + 15.0f * scale_, q.y - 0.5f * ImGui::GetTextLineHeight()), white, text.c_str());
+        }
+    }
+    if (!structural_map_in_view_) {
+        const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+        const PlateObject& o = objects_[part];
+        if (part < placed_meshes_.size() && !placed_meshes_[part].empty() && !o.mesh.empty()) {
+            const TriangleMesh& placed = placed_meshes_[part];
+            std::array<double, 9> a{};
+            std::array<double, 3> b{};
+            own_to_placed(o, placed, a, b);
+            const auto move = [&](const std::array<double, 3>& p) {
+                return std::array<double, 3>{a[0] * p[0] + a[1] * p[1] + a[2] * p[2] + b[0], a[3] * p[0] + a[4] * p[1] + a[5] * p[2] + b[1],
+                                             a[6] * p[0] + a[7] * p[1] + a[8] * p[2] + b[2]};
+            };
+            const auto turn = [&](const std::array<double, 3>& n) {
+                std::array<double, 3> t{a[0] * n[0] + a[1] * n[1] + a[2] * n[2], a[3] * n[0] + a[4] * n[1] + a[5] * n[2],
+                                        a[6] * n[0] + a[7] * n[1] + a[8] * n[2]};
+                const double l = std::sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
+                return l > 0.0 ? std::array<double, 3>{t[0] / l, t[1] / l, t[2] / l} : n;
+            };
+            const ImU32 red = ImGui::GetColorU32(rgb(0xE5484D)), blue = ImGui::GetColorU32(rgb(0x4C9BFF)),
+                        yellow = ImGui::GetColorU32(rgb(0xF5C524));
+            for (const EngineeringCondition& c : o.engineering.conditions) {
+                if (c.hidden)
+                    continue;
+                // Where it acts: a point, or the area-weighted middle of its
+                // zone with the zone's mean normal.
+                std::array<double, 3> at{}, normal{};
+                if (c.is_point()) {
+                    at = move(c.point);
+                    normal = turn(c.normal);
+                } else {
+                    double area = 0.0;
+                    for (const std::uint32_t t : c.triangles) {
+                        if (t >= placed.triangle_count())
+                            continue;
+                        const Vec3f p = placed.corner(t, 0), q = placed.corner(t, 1), w = placed.corner(t, 2);
+                        const double ux = q.x - p.x, uy = q.y - p.y, uz = q.z - p.z, vx = w.x - p.x, vy = w.y - p.y, vz = w.z - p.z;
+                        const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+                        const double s = 0.5 * std::sqrt(nx * nx + ny * ny + nz * nz);
+                        area += s;
+                        at[0] += s * (p.x + q.x + w.x) / 3.0, at[1] += s * (p.y + q.y + w.y) / 3.0, at[2] += s * (p.z + q.z + w.z) / 3.0;
+                        normal[0] += 0.5 * nx, normal[1] += 0.5 * ny, normal[2] += 0.5 * nz;
+                    }
+                    if (!(area > 0.0))
+                        continue;
+                    for (double& v : at)
+                        v /= area;
+                    const double l = std::sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+                    if (l > 0.0)
+                        for (double& v : normal)
+                            v /= l;
+                }
+                ImVec2 q;
+                if (!project(at, q))
+                    continue;
+                const ImU32 colour = c.is_force() ? red : c.kind == ConditionKind::Limit ? yellow : blue;
+                if (c.is_point()) {
+                    dl->AddCircle(q, 7.0f * scale_, colour, 20, thick);
+                } else if (!c.is_force()) {
+                    // A zone: a hatched mark at its middle.
+                    const float r = 8.0f * scale_;
+                    const ImVec2 box[4] = {ImVec2(q.x - r, q.y - r), ImVec2(q.x + r, q.y - r), ImVec2(q.x + r, q.y + r), ImVec2(q.x - r, q.y + r)};
+                    dl->AddPolyline(box, 4, colour, thick, ImDrawFlags_Closed);
+                    for (int k = 0; k < 3; ++k) { // three slanted lines inside it
+                        const float t = (float(k) + 1.0f) / 4.0f * 2.0f * r;
+                        dl->AddLine(ImVec2(q.x - r, q.y - r + t), ImVec2(q.x - r + t, q.y - r), colour, 1.5f * scale_);
+                        dl->AddLine(ImVec2(q.x + r - t, q.y + r), ImVec2(q.x + r, q.y + r - t), colour, 1.5f * scale_);
+                    }
+                }
+                if (!c.is_force())
+                    continue;
+                // The force's direction: into the part along the normal, an
+                // axis or its vector; its length grows with its value.
+                std::array<double, 3> d{-normal[0], -normal[1], -normal[2]};
+                if (c.direction == ForceDirection::Axis) {
+                    d = {0.0, 0.0, 0.0};
+                    d[std::size_t(std::clamp(std::abs(c.axis), 1, 3) - 1)] = c.axis < 0 ? -1.0 : 1.0;
+                } else if (c.direction == ForceDirection::Vector) {
+                    const double l = std::sqrt(c.vector[0] * c.vector[0] + c.vector[1] * c.vector[1] + c.vector[2] * c.vector[2]);
+                    if (l > 0.0)
+                        d = {c.vector[0] / l, c.vector[1] / l, c.vector[2] / l};
+                }
+                const double length = std::clamp(5.0 + 3.0 * std::sqrt(std::max(c.newtons, 0.0)), 5.0, 40.0);
+                const std::array<double, 3> tail{at[0] - d[0] * length, at[1] - d[1] * length, at[2] - d[2] * length};
+                ImVec2 from;
+                if (!project(tail, from))
+                    continue;
+                dl->AddLine(from, q, red, thick);
+                const float dx = q.x - from.x, dy = q.y - from.y, l = std::sqrt(dx * dx + dy * dy);
+                if (l > 1.0f) {
+                    const float ux = dx / l, uy = dy / l, h = 10.0f * scale_;
+                    dl->AddTriangleFilled(q, ImVec2(q.x - ux * h - uy * h * 0.5f, q.y - uy * h + ux * h * 0.5f),
+                                          ImVec2(q.x - ux * h + uy * h * 0.5f, q.y - uy * h - ux * h * 0.5f), red);
+                }
+            }
+        }
+    }
+    dl->PopClipRect();
 }
 
 void App::gears_panel() {
@@ -16168,6 +16672,8 @@ void App::layout() {
                 sketch_overlay();
             }
         }
+        if (tab_ == Tab::Structural)
+            structural_overlay();
         if (tab_ == Tab::Calibration)
             calibration_panel();
         if (tab_ == Tab::Device)
@@ -16387,6 +16893,9 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.show_paint = f.show_model && tab_ == Tab::Prepare && tool_ == PlateTool::Paint;
     if (f.show_paint)
         update_paint_view();
+    // The Structural map is drawn as paint over the voxels' outside (rule 12).
+    if (structural_map_in_view_ && tab_ == Tab::Structural)
+        f.show_paint = true;
     f.show_preview = preview;
     f.show_travels = show_travels_;
     f.first_layer = std::size_t(bottom_layer_);
@@ -17514,6 +18023,21 @@ void App::script_input() {
         std::printf("ui-script: expect-sketch-constraints %zu: got %zu\n", want, s->constraints.size());
         if (s->constraints.size() != want)
             return fail_step("the sketch has " + std::to_string(s->constraints.size()) + " constraints");
+        next();
+    } else if (step.verb == "expect-structural-verdict") { // the chosen part's last result: holds, low_margin... (waits for a run)
+        if (structural_job_.running())
+            return f >= 6000 ? fail_step("the analysis is still running") : void();
+        if (objects_.empty())
+            return fail_step("no part");
+        const ProjectEngineering& pe = objects_[std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1))].engineering;
+        std::string got = "none";
+        for (const EngineeringResult& r : pe.results)
+            if (r.kind == "structural")
+                got = nlohmann::json::parse(r.report).value("verdict", nlohmann::json::object()).value("name", std::string("?"));
+        std::printf("ui-script: expect-structural-verdict %s: got %s%s\n", step.key.c_str(), got.c_str(),
+                    structural_message_.empty() ? "" : (" (" + structural_message_ + ")").c_str());
+        if (got != step.key)
+            return fail_step("the verdict is " + got);
         next();
     } else if (step.verb == "expect-design-failed") { // the timeline's failing feature: N (from 1) or "none"
         if (design_job_.running() || !solidcraft_probed_ || design_dirty_)

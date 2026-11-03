@@ -40,6 +40,15 @@ AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const Triang
 // the material's constants yet; a note says so.
 void apply_engineering_overrides(Settings& settings, const ProjectEngineering& e, std::vector<std::string>& notes);
 
+// The report of a Structural analysis (engineering_panel.md, rule 12):
+// analysis_json with a "verdict" object added: the verdict
+// (structural_analysis.md, «Resultados»), the safety factor asked for, the
+// working temperature, the material's family, the mass in grams and the
+// families to try when the part does not hold. Displacement limits are not
+// checked yet ("limits_checked": false).
+std::string structural_report_json(const AnalysisReport& report, const AnalysisCase& c, const ProjectEngineering& e,
+                                   const std::array<double, 12>& to_part = {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0});
+
 // "fixed_zone 1", "force_point 2"...: a condition's name in the case.
 std::string condition_name(const EngineeringCondition& condition);
 

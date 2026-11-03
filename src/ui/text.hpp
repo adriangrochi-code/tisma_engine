@@ -44,6 +44,30 @@
     X(StructNeedMaterial, "Elegí un material.", "Choose a material.")                                                 \
     X(StructNeedFixed, "Agregá un punto o una zona fija.", "Add a fixed point or zone.")                              \
     X(StructNeedForce, "Agregá un punto o una zona de fuerza.", "Add a force point or zone.")                         \
+    X(StructAnalyzing, "Calculando… %d %%", "Calculating… %d %%") \
+    X(StructCancel, "Cancelar", "Cancel") \
+    X(StructCancelled, "Análisis cancelado.", "Analysis cancelled.") \
+    X(StructFailed, "No se pudo analizar: %s", "Could not analyze: %s") \
+    X(VerdictHolds, "Aguanta", "Holds") \
+    X(VerdictLowMargin, "Margen bajo", "Low margin") \
+    X(VerdictOverloaded, "Fuera de carga", "Overloaded") \
+    X(VerdictTooFlexible, "Demasiado flexible", "Too flexible") \
+    X(VerdictOverTemp, "Fuera de temperatura", "Over temperature") \
+    X(VerdictNotApplicable, "No aplicable", "Not applicable") \
+    X(StructStale, "Desactualizado: analizá de nuevo", "Out of date: analyze again") \
+    X(StructMinSafety, "Factor de seguridad mínimo: %.3g (pedido %.3g)", "Lowest safety factor: %.3g (asked %.3g)") \
+    X(StructMaxDisplacement, "Desplazamiento máximo: %.3g mm", "Largest displacement: %.3g mm") \
+    X(StructMass, "Masa: %.1f g de %s", "Mass: %.1f g of %s") \
+    X(StructTry, "Probá con: %s", "Try: %s") \
+    X(StructShowMap, "Ver el mapa del factor de seguridad", "Show the safety factor map") \
+    X(StructLegend, "Rojo: menos de 1 · amarillo: hasta el pedido · verde claro: hasta el doble · verde: hasta 4 veces · azul: más", "Red: below 1 · yellow: up to the asked · light green: up to twice · green: up to 4 times · blue: more") \
+    X(StructCritical, "Punto crítico: %.2f", "Critical point: %.2f") \
+    X(StructNotValid, "El resultado no sirve:", "The result is not usable:") \
+    X(StructSafetyFactor, "Factor de seguridad pedido", "Safety factor asked") \
+    X(StructDirNormal, "Perpendicular, hacia adentro", "Normal, inward") \
+    X(StructDirVector, "Tres números", "Three numbers") \
+    X(StructKgIs, "= %.1f N", "= %.1f N") \
+    X(StructForceUnitTip, "Cambiar entre N y kg (g = 9,81 m/s²)", "Switch between N and kg (g = 9.81 m/s²)") \
     X(TabFasteners, "Tornillería", "Fasteners") \
     X(ConfigMenu, "Configuración…", "Settings…") \
     X(PanelFolded, "Panel de ajustes plegado", "Settings panel folded") \
