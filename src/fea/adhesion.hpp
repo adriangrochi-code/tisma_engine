@@ -65,10 +65,13 @@ void apply_adhesion(OrthotropicMaterial& m, const Adhesion& a);
 // The smallest safety factor's band from the strengths' uncertainty when the
 // part fails at a bond (between layers or between lines): ±1 sigma of the
 // governing strength. For a failure in the line itself the material's own
-// scatter, ±10 %.
+// scatter, ±10 %. `discretization`: the relative change of the smallest
+// safety factor with voxels twice as large (the resolution check), added in
+// quadrature: the voxels' own error, of the same order.
 struct SafetyBand {
     double low = 0.0, high = 0.0;
+    double sigma = 0.0; // the relative half width
 };
-SafetyBand safety_band(double min_safety, FailureMode mode, const Adhesion& a);
+SafetyBand safety_band(double min_safety, FailureMode mode, const Adhesion& a, double discretization = 0.0);
 
 } // namespace tisma

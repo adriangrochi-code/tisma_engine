@@ -96,7 +96,7 @@
     X(StructQualityNormal, "Media (2 vóxeles por ancho de línea)", "Medium (2 voxels per line width)") \
     X(StructQualityHigh, "Alta (4 vóxeles por ancho de línea)", "High (4 voxels per line width)") \
     X(StructQualityExtreme, "Extrema (6 vóxeles por ancho de línea; lenta)", "Extreme (6 voxels per line width; slow)") \
-    X(StructSafetyBand, "Rango probable: %.3g a %.3g (±1σ de la adherencia; falla %s)", "Likely range: %.3g to %.3g (±1σ of the adhesion; fails %s)") \
+    X(StructSafetyBand, "Rango probable: %.3g a %.3g (±1σ de la adherencia y del tamaño de vóxel; falla %s)", "Likely range: %.3g to %.3g (±1σ of the adhesion and the voxel size; fails %s)") \
     X(StructFailsBetweenLayers, "entre capas", "between layers") \
     X(StructFailsBetweenLines, "entre líneas", "between lines") \
     X(StructFailsLine, "en la línea", "along the line") \

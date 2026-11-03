@@ -732,7 +732,7 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     e.structural.quality = "fast";
     const AnalysisCase fast = engineering_analysis_case(e, triangles, {}, notes, "PLA");
     CHECK(fast.model == AnalysisModel::Solid);
-    CHECK_FALSE(fast.resolution_check);
+    CHECK(fast.resolution_check); // the band takes its voxel error
     const std::size_t voxels = analysis_grid_voxels(bar, beads_04(), fast);
     INFO(voxels);
     CHECK(voxels > 10000);
