@@ -141,8 +141,10 @@ ElasticityResult solve(const VoxelGrid& g, const VoxelOperator& op, std::span<co
                         for (const auto& corner : kFace[s])
                             for (int a = 0; a < 3; ++a)
                                 c[a] += corner[a] / 4.0;
-                        if (!load.box.contains(g.x0 + (i + c[0]) * g.hx, g.y0 + (j + c[1]) * g.hy,
-                                               g.z[std::size_t(k)] + c[2] * g.hz(k)))
+                        if (!load.box.contains_face(g.x0 + (i + c[0]) * g.hx, g.y0 + (j + c[1]) * g.hy,
+                                                    g.z[std::size_t(k)] + c[2] * g.hz(k),
+                                                    {double(kNeighbour[s][0]), double(kNeighbour[s][1]),
+                                                     double(kNeighbour[s][2])}))
                             continue;
                         const double area = s < 2 ? g.hy * g.hz(k) : s < 4 ? g.hx * g.hz(k) : g.hx * g.hy;
                         for (const auto& corner : kFace[s])

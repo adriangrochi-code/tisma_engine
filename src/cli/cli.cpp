@@ -10,6 +10,8 @@
 #include "config/analysis_case.hpp"
 #include "config/settings.hpp"
 #include "fea/analysis.hpp"
+#include "project/engineering_case.hpp"
+#include "project/project.hpp"
 #include "report/analysis_json.hpp"
 #include "gcode/export.hpp"
 #include "gcode/output.hpp"
@@ -92,6 +94,8 @@ constexpr std::string_view kUsage =
     "                     (a project saved by the interface, as the cloud's nodes run it: docs/spec/features/cloud.md)\n"
     "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
+    "  tisma-engine analyze <project> -o <report.json> [--config <settings.json>] [...]\n"
+    "                       (the first part with Engineering conditions, as the project keeps them)\n"
     "  tisma-engine info <model>\n"
     "  --threads <n> on any command: at most n threads of work (cloud.md, rule 19d); without it, all\n"
     "  tisma-engine --help | --version\n"
@@ -170,11 +174,15 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
             return std::nullopt;
         }
     }
-    if (analyze && (out.model.empty() || out.config.empty() || out.analysis_case.empty() || out.output.empty())) {
-        err << "error: analyze needs a model, --config, --case and -o\n";
+    // A project carries its settings and its parts' conditions (formats.md,
+    // rule 11 bis): analyze needs only it and -o.
+    const bool project = analyze && !out.model.empty() && out.analysis_case.empty() && is_project_file(out.model);
+    if (analyze && !project &&
+        (out.model.empty() || out.config.empty() || out.analysis_case.empty() || out.output.empty())) {
+        err << "error: analyze needs a model, --config, --case and -o (or a project and -o)\n";
         return std::nullopt;
     }
-    if (out.model.empty() || out.config.empty() || out.output.empty()) {
+    if (out.model.empty() || (out.config.empty() && !project) || out.output.empty()) {
         err << "error: slice needs a model, --config and -o\n";
         return std::nullopt;
     }
@@ -639,6 +647,57 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     return kExitOk;
 }
 
+// The settings, case and placed mesh of `analyze <project>`: the project's
+// settings (or --config's) with the part's values changed by hand, and its
+// conditions as the case (FM25).
+int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analysis, TriangleMesh& mesh,
+                     std::ostream& out, std::ostream& err) {
+    Project project;
+    try {
+        project = load_project(a.model);
+    } catch (const std::exception& e) {
+        err << "error: " << a.model << ": " << e.what() << "\n";
+        return kExitInput;
+    }
+    for (const std::string& notice : project.notices)
+        err << "warning: " << notice << "\n";
+    const auto it = std::find_if(project.models.begin(), project.models.end(), [](const ProjectModel& m) {
+        return std::any_of(m.engineering.conditions.begin(), m.engineering.conditions.end(),
+                           [](const EngineeringCondition& c) { return !c.hidden; });
+    });
+    if (it == project.models.end()) {
+        err << "error: no part of the project has Engineering conditions (mark them in the Engineering mode, or "
+               "give --case)\n";
+        return kExitInput;
+    }
+    if (a.config.empty()) {
+        settings = std::move(project.settings);
+        for (const std::string& key : fill_missing_speeds(settings))
+            err << "warning: the printer's profile gives no speed for " << key << ": a stock Ender-3's is used\n";
+    } else {
+        try {
+            settings = load_settings(a.config);
+        } catch (const SettingsError& e) {
+            err << "error: " << a.config << ": " << e.what() << "\n";
+            return kExitInput;
+        }
+    }
+    std::vector<std::string> notes;
+    apply_engineering_overrides(settings, it->engineering, notes);
+    analysis = engineering_analysis_case(it->engineering, it->mesh, it->offset, notes);
+    for (const std::string& note : notes)
+        err << "warning: " << note << "\n";
+    if (analysis.fixtures.empty() || analysis.loads.empty()) {
+        err << "error: " << it->name << ": the analysis needs a fixed point or zone and a force\n";
+        return kExitInput;
+    }
+    mesh = it->mesh;
+    mesh.translate(float(it->offset[0]), float(it->offset[1]), float(it->offset[2]));
+    out << "part: " << it->name << ", " << mesh.triangle_count() << " triangles, " << analysis.fixtures.size()
+        << " fixtures, " << analysis.loads.size() << " loads\n";
+    return kExitOk;
+}
+
 int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
     const std::optional<SliceArgs> parsed = parse_slice_args(args, err, true);
     if (!parsed) {
@@ -649,24 +708,31 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
         return kExitInput;
     Settings settings;
     AnalysisCase analysis;
-    try {
-        settings = load_settings(parsed->config);
-    } catch (const SettingsError& e) {
-        err << "error: " << parsed->config << ": " << e.what() << "\n";
-        return kExitInput;
-    }
-    try {
-        analysis = load_analysis_case(parsed->analysis_case);
-    } catch (const SettingsError& e) {
-        err << "error: " << parsed->analysis_case << ": " << e.what() << "\n";
-        return kExitInput;
-    }
     ModelFile stl;
-    double seconds = 0.0;
-    if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
-        return rc;
-    out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
-    place_on_bed(stl.mesh, settings);
+    if (parsed->analysis_case.empty()) {
+        // A project: its settings (or --config's), and the first part with
+        // Engineering conditions, where it is on the bed.
+        if (int rc = project_analysis(*parsed, settings, analysis, stl.mesh, out, err); rc != kExitOk)
+            return rc;
+    } else {
+        try {
+            settings = load_settings(parsed->config);
+        } catch (const SettingsError& e) {
+            err << "error: " << parsed->config << ": " << e.what() << "\n";
+            return kExitInput;
+        }
+        try {
+            analysis = load_analysis_case(parsed->analysis_case);
+        } catch (const SettingsError& e) {
+            err << "error: " << parsed->analysis_case << ": " << e.what() << "\n";
+            return kExitInput;
+        }
+        double seconds = 0.0;
+        if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
+            return rc;
+        out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+        place_on_bed(stl.mesh, settings);
+    }
     const IndexedMesh mesh = weld_exact(stl.mesh);
     if (const std::string reason = unprintable_reason(mesh, settings); !reason.empty()) {
         err << "error: " << reason << "\n";

@@ -30,6 +30,12 @@ struct Box {
         return x >= min[0] && x <= max[0] && y >= min[1] && y <= max[1] && z >= min[2] && z <= max[2] &&
                (!zone || zone->near(x, y, z));
     }
+    // A boundary face of the voxels, its centre and outward normal: in the
+    // box, and facing as the marked surface near it does.
+    bool contains_face(double x, double y, double z, const std::array<double, 3>& normal) const {
+        return x >= min[0] && x <= max[0] && y >= min[1] && y <= max[1] && z >= min[2] && z <= max[2] &&
+               (!zone || zone->near_facing(x, y, z, normal));
+    }
 };
 
 // The nodes of the part inside the box do not move along the chosen axes.

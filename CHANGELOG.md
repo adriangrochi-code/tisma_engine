@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Análisis sobre un proyecto** (`formats.md`, regla 11 bis, FM25): `tisma-engine analyze proyecto.3mf -o
+  informe.json` analiza la primera pieza con condiciones de Ingeniería, con los ajustes del proyecto y los valores
+  cambiados a mano en el panel. Las zonas son los triángulos marcados y los puntos, discos de su radio. No hace falta
+  `--case`.
 - **Un solo renglón para el relleno no planar** (ficha `zigzag_infill.md`, regla 11): «Relleno no planar» con «No»,
   «Zigzag en Z» y «Ondas entrelazadas», en lugar de dos casillas con nombres parecidos que juntas daban error. Debajo,
   solo los ajustes de la opción elegida. La ayuda aclara que la mejora medida en el artículo fue en paredes, no en

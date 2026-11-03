@@ -80,33 +80,42 @@ SurfaceZone::SurfaceZone(const ZoneShape& shape, double spacing, double reach) {
     double lo[3] = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max(),
                     std::numeric_limits<double>::max()};
     double hi[3] = {-lo[0], -lo[1], -lo[2]};
-    const auto put = [&](const V& q) {
+    const auto put = [&](const V& q, const V& normal) {
         if (disc_ && dist2(q, centre_) > disc_reach2_)
             return; // a disc: only what is near its centre
         cells_[key(std::llround(std::floor(q[0] / cell_)), std::llround(std::floor(q[1] / cell_)),
                    std::llround(std::floor(q[2] / cell_)))]
-            .push_back(q);
+            .push_back({q, normal});
         for (int a = 0; a < 3; ++a)
             lo[a] = std::min(lo[a], q[std::size_t(a)]), hi[a] = std::max(hi[a], q[std::size_t(a)]);
     };
     // Samples over each triangle: a grid of barycentric steps no more than
     // `spacing` apart along its two sides, its corners included.
     for (const Triangle3& t : shape.triangles) {
+        V normal = cross(sub(t[1], t[0]), sub(t[2], t[0]));
+        const double len = std::sqrt(dot(normal, normal));
+        normal = len > 0.0 ? mul(normal, 1.0 / len) : V{};
         const double a = std::sqrt(dist2(t[0], t[1])), b = std::sqrt(dist2(t[0], t[2]));
         const int n = std::clamp(int(std::ceil(std::max(a, b) / spacing)), 1, 4000);
         for (int i = 0; i <= n; ++i)
             for (int j = 0; i + j <= n; ++j) {
                 const double u = double(i) / n, v = double(j) / n;
-                put(add(t[0], add(mul(sub(t[1], t[0]), u), mul(sub(t[2], t[0]), v))));
+                put(add(t[0], add(mul(sub(t[1], t[0]), u), mul(sub(t[2], t[0]), v))), normal);
             }
     }
     if (shape.disc) // the centre itself, if no triangle was given
-        put(shape.centre);
+        put(shape.centre, V{});
     for (int i = 0; i < 3; ++i)
         bounds_[std::size_t(i)] = lo[i] - reach, bounds_[std::size_t(i) + 3] = hi[i] + reach;
 }
 
-bool SurfaceZone::near(double x, double y, double z) const {
+bool SurfaceZone::near(double x, double y, double z) const { return find(x, y, z, nullptr); }
+
+bool SurfaceZone::near_facing(double x, double y, double z, const std::array<double, 3>& normal) const {
+    return find(x, y, z, &normal);
+}
+
+bool SurfaceZone::find(double x, double y, double z, const std::array<double, 3>* normal) const {
     if (x < bounds_[0] || y < bounds_[1] || z < bounds_[2] || x > bounds_[3] || y > bounds_[4] || z > bounds_[5])
         return false;
     const V p{x, y, z};
@@ -120,8 +129,9 @@ bool SurfaceZone::near(double x, double y, double z) const {
                 const auto it = cells_.find(key(i, j, k));
                 if (it == cells_.end())
                     continue;
-                for (const V& q : it->second)
-                    if (dist2(p, q) <= reach2_)
+                for (const Sample& q : it->second)
+                    if (dist2(p, q.point) <= reach2_ &&
+                        (!normal || dot(q.normal, q.normal) == 0.0 || dot(q.normal, *normal) > 0.5))
                         return true;
             }
     return false;

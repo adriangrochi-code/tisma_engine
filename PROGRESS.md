@@ -9214,3 +9214,21 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - **Sigue:** `tisma-engine analyze <proyecto>` con estas condiciones (material y temperatura del proyecto, el
   resultado guardado de vuelta), FM25.
 
+## 2026-11-03 (noche): Ingeniería en el proyecto, paso 3 (segunda parte)
+
+- **Hecho:** `tisma-engine analyze <proyecto> -o informe.json` (FM25):
+  - toma la primera pieza con alguna condición visible, ubicada donde está en la cama (la malla movida por su
+    posición, y las condiciones con el mismo corrimiento);
+  - usa los ajustes del proyecto (o los de `--config`) y los valores cambiados a mano: material, alturas de capa y
+    ancho de línea (`apply_engineering_overrides`); la temperatura todavía no cambia el material, y un aviso lo dice;
+  - la calidad sale de las opciones de la pestaña Estructural (`engineering_analysis_case`);
+  - sin condiciones, código 2 y el motivo.
+- **Encontrado y corregido:** un cubo empujado arriba por los triángulos marcados se desplazaba 22 % más que con la
+  cara `top` del caso. La zona, de un vóxel de alcance, también tomaba las caras laterales de la última capa (el 8 %
+  del área), y la carga se concentraba en el borde. Ahora cada muestra guarda la normal de su triángulo, y una cara de
+  vóxel recibe carga solo si mira hacia el mismo lado (a menos de 60°: `SurfaceZone::near_facing`,
+  `Box::contains_face`). Las fijaciones siguen tomando nodos, sin filtro.
+- **Medido:** cubo de 10 mm, sujeto abajo y 100 N arriba, vóxeles de 0,225 mm: proyecto contra caso, 1,2 % de
+  diferencia en el desplazamiento máximo (antes 22 %); unos 3,3 s cada análisis.
+- **Sigue:** la pestaña Estructural (EP1 a EP10): marcar, lista, Analizar, mapa, veredicto, y guardar el resultado
+  en el proyecto.

@@ -1218,7 +1218,9 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
    (`src/project/engineering.*`);
 2. el último resultado como archivo propio del paquete, con su huella (malla, condiciones, ajustes) para saber si
    quedó viejo: **hecho el 2026-11-03**;
-3. `analyze` sobre el proyecto con esas condiciones (FM25), zonas por triángulos y puntos con radio en el caso;
+3. `analyze` sobre el proyecto con esas condiciones (FM25), zonas por triángulos y puntos con radio en el caso:
+   **hecho el 2026-11-03** (`tisma-engine analyze proyecto.3mf -o informe.json`); falta guardar el resultado en el
+   proyecto, que lo hace la pestaña Estructural;
 4. la pestaña Estructural (marcar, lista, Analizar, mapa, veredicto) y sacar «Análisis» de Impresión 3D;
 5. la pestaña Aerodinámica, con A3 (CFD).
 

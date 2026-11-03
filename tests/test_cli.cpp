@@ -1,10 +1,14 @@
 #include "cli/cli.hpp"
+#include "config/settings.hpp"
+#include "io/stl.hpp"
+#include "project/project.hpp"
 #include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -311,6 +315,74 @@ TEST_CASE("analyze errors", "[cli]") {
         text << json.rdbuf();
         CHECK_THAT(text.str(), ContainsSubstring("\"valid\": false"));
     }
+}
+
+// The number after `key` on the output ("max_displacement_mm: 0.01").
+static double number_after(const std::string& text, const std::string& key) {
+    const std::size_t at = text.find(key);
+    return at == std::string::npos ? -1.0 : std::stod(text.substr(at + key.size()));
+}
+
+TEST_CASE("analyze on a project uses its parts' Engineering conditions (FM25)", "[cli]") {
+    const auto dir = test_temp_dir();
+    const std::string config = kData + "/settings.json";
+    Project project;
+    project.settings = load_settings(config);
+    ProjectModel model;
+    model.name = "cube_ascii.stl";
+    model.mesh = read_stl(kData + "/cube_ascii.stl").mesh;
+    model.offset = {60.0, 70.0, 0.0};
+    // Held by its bottom, pushed down on its top: the case file's faces, as
+    // triangles marked on the part.
+    float zmin = 1e9f, zmax = -1e9f;
+    for (std::uint32_t t = 0; t < model.mesh.triangle_count(); ++t)
+        for (int k = 0; k < 3; ++k)
+            zmin = std::min(zmin, model.mesh.corner(t, k).z), zmax = std::max(zmax, model.mesh.corner(t, k).z);
+    EngineeringCondition fixed, push;
+    fixed.kind = ConditionKind::FixedZone;
+    push.kind = ConditionKind::ForceZone;
+    push.newtons = 100.0;
+    push.direction = ForceDirection::Axis;
+    push.axis = -3;
+    for (std::uint32_t t = 0; t < model.mesh.triangle_count(); ++t) {
+        bool bottom = true, top = true;
+        for (int k = 0; k < 3; ++k)
+            bottom &= model.mesh.corner(t, k).z == zmin, top &= model.mesh.corner(t, k).z == zmax;
+        if (bottom)
+            fixed.triangles.push_back(t);
+        if (top)
+            push.triangles.push_back(t);
+    }
+    REQUIRE_FALSE(fixed.triangles.empty());
+    REQUIRE_FALSE(push.triangles.empty());
+    model.engineering.conditions = {fixed, push};
+    project.models.push_back(model);
+    const auto file = dir / "tisma_test_engineering.3mf";
+    save_project(file, project);
+
+    const auto case_file = dir / "tisma_test_engineering_case.json";
+    std::ofstream(case_file) << R"({"fixtures": [{"face": "bottom"}], "loads": [{"face": "top", "force": [0, 0, -100]}]})";
+    const auto by_case = dir / "tisma_test_engineering_by_case.json", by_project = dir / "tisma_test_engineering_report.json";
+    const Run a = run({"analyze", kData + "/cube_ascii.stl", "--config", config, "--case", case_file.string(), "-o",
+                       by_case.string()});
+    const Run b = run({"analyze", file.string(), "-o", by_project.string()});
+    REQUIRE(a.code == kExitOk);
+    INFO(b.out << b.err);
+    REQUIRE(b.code == kExitOk);
+    CHECK_THAT(b.out, ContainsSubstring("part: cube_ascii.stl"));
+    CHECK_THAT(b.out, ContainsSubstring("1 fixtures, 1 loads"));
+    CHECK(std::filesystem::exists(by_project));
+    const double da = number_after(a.out, "max_displacement_mm: "), db = number_after(b.out, "max_displacement_mm: ");
+    INFO(da << " " << db);
+    REQUIRE(da > 0.0);
+    CHECK(std::abs(db / da - 1.0) < 0.05); // 1.2 % on 2026-11-03
+
+    // Without conditions, the project says what is missing.
+    project.models[0].engineering.conditions.clear();
+    save_project(file, project);
+    const Run none = run({"analyze", file.string(), "-o", by_project.string()});
+    CHECK(none.code == kExitInput);
+    CHECK_THAT(none.err, ContainsSubstring("no part of the project has Engineering conditions"));
 }
 
 TEST_CASE("analyze estimates, reports progress and writes the voxel mesh", "[cli]") {

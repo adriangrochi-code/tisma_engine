@@ -2,6 +2,7 @@
 
 #include "project/engineering_case.hpp"
 
+#include "fea/materials.hpp"
 #include "fea/zone.hpp"
 
 #include <cmath>
@@ -112,6 +113,36 @@ std::vector<std::string> add_conditions(AnalysisCase& c, const ProjectEngineerin
         c.loads.push_back(std::move(load));
     }
     return notes;
+}
+
+AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const TriangleMesh& mesh,
+                                       const std::array<double, 3>& shift, std::vector<std::string>& notes) {
+    AnalysisCase c;
+    if (e.overrides.material) {
+        if (find_material(*e.overrides.material))
+            c.material_id = *e.overrides.material;
+        else
+            notes.push_back("unknown material '" + *e.overrides.material + "': " + c.material_id + " is used");
+    }
+    c.material = as_printed(*find_material(c.material_id));
+    c.quality = e.structural.quality == "high" ? AnalysisQuality::High : AnalysisQuality::Normal;
+    for (std::string& note : add_conditions(c, e, mesh, shift))
+        notes.push_back(std::move(note));
+    return c;
+}
+
+void apply_engineering_overrides(Settings& settings, const ProjectEngineering& e, std::vector<std::string>& notes) {
+    const EngineeringOverrides& o = e.overrides;
+    if (o.layer_height && *o.layer_height > 0.0)
+        settings.layer_height = *o.layer_height;
+    if (o.first_layer_height && *o.first_layer_height > 0.0)
+        settings.first_layer_height = *o.first_layer_height;
+    if (o.line_width && *o.line_width > 0.0) {
+        settings.wall_width = *o.line_width;
+        settings.wall_width_auto = false;
+    }
+    if (o.extrusion_temperature)
+        notes.push_back("the extrusion temperature changed by hand does not change the material yet");
 }
 
 } // namespace tisma
