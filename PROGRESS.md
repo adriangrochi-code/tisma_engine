@@ -9359,3 +9359,21 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 
 - «Superficie superior» / «Patrón de abajo» → «Patrón de arriba» / «Patrón de abajo» (en inglés «Top pattern» /
   «Bottom pattern»), como «Espesor mínimo arriba» / «abajo» justo encima.
+
+### Marcado en la pestaña Estructural (sin terminar)
+
+- **Hecho:**
+  - `add_condition` numera cada condición nueva por su tipo; `condition_label` da su renglón («Zona fija 1 · 1 cara»,
+    «Punto de fuerza 1 · r 5 mm · 50 N hacia −Z»), en castellano y en inglés. Prueba nueva.
+  - En el panel, las seis herramientas (Rotar, Punto fijo, Zona fija, Punto de fuerza, Zona de fuerza, Límite) con la
+    elegida en violeta y una ayuda corta; Esc vuelve a Rotar.
+  - La lista con una casilla para ocultar cada condición, la cruz para borrarla, y la fuerza en N o el radio de un
+    punto.
+  - Deshacer y rehacer de las condiciones con Ctrl+Z y Ctrl+Y.
+  - El clic en la vista con una herramienta: el punto y la normal en las coordenadas de la pieza; una zona, la cara
+    entera (`face_region`); con Mayús, la cara se suma a la última zona de su tipo.
+- **No funciona todavía:** en la prueba guionada, el clic en la vista (`click-model`) no llega a la vista en esta
+  pestaña. El código del clic no se ejecuta, aunque la pieza está bajo el punto. Falta encontrar qué tapa la vista o
+  qué toma el clic. La prueba guionada solo comprueba las herramientas y Esc. Sin probar a mano.
+- **Sigue:** arreglar el clic en la vista y volver a poner en la prueba el marcado, deshacer y rehacer (EP5, EP7);
+  dibujar las condiciones en la vista (regla 7); correr el análisis desde Analizar.

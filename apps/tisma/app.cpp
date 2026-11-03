@@ -41,6 +41,7 @@
 #include "mesh/shapes.hpp"
 #include "project/project.hpp"
 #include "project/engineering_values.hpp"
+#include "mesh/face_region.hpp"
 #include "project/engineering_case.hpp"
 #include "fea/materials.hpp"
 #include "ui/camera.hpp"
@@ -654,6 +655,17 @@ private:
     // its conditions and Analyze, in the left column.
     void structural_panel();
     int structural_part_ = 0;
+    // The marking tool (rule 5): 0 Rotar, then the kinds of ConditionKind + 1.
+    int structural_tool_ = 0;
+    // Undo and redo of each part's Engineering data (rule 8): the part and
+    // its data before the change.
+    struct EngineeringStep {
+        std::size_t object, count;
+        ProjectEngineering before;
+    };
+    std::vector<EngineeringStep> engineering_undo_, engineering_redo_;
+    void remember_engineering(std::size_t object);
+    void undo_engineering(bool redo);
     void rebuild_gear();
     void send_gear_to_plate(bool with_mate);
     std::string gear_name(const cad::GearSpec& spec) const;
@@ -8248,6 +8260,52 @@ void App::viewport() {
     // chooses one (or lays it on the face clicked, with that tool); dragging a
     // model moves it on the bed, dragging elsewhere turns the view.
     const bool editing = tab_ == Tab::Prepare && !objects_.empty() && !calibration_;
+    // Ingeniería, Estructural: a click with a marking tool marks the part
+    // under the mouse (engineering_panel.md, rule 5): a point where it was
+    // clicked, a zone as the whole face (face_region); with Shift a zone adds
+    // the face to the last zone of its kind.
+    if (tab_ == Tab::Structural && structural_tool_ > 0 && !objects_.empty() && ImGui::IsItemActivated() &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const Vec3 d = mouse_ray(), e = camera_.eye();
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d); hit && hit->object < objects_.size()) {
+            PlateObject& o = objects_[hit->object];
+            structural_part_ = int(hit->object);
+            const ConditionKind kind = ConditionKind(structural_tool_ - 1);
+            // Back to the part's own coordinates.
+            const Affine back = between(placing(o, placed_meshes_[hit->object]), Affine{});
+            const double t = hit->distance;
+            const double q[3] = {e.x + d.x * t, e.y + d.y * t, e.z + d.z * t};
+            std::array<double, 3> point{};
+            for (std::size_t r = 0; r < 3; ++r)
+                point[r] = back.a[3 * r] * q[0] + back.a[3 * r + 1] * q[1] + back.a[3 * r + 2] * q[2] + back.b[r];
+            const Vec3f na = o.mesh.corner(hit->triangle, 0), nb = o.mesh.corner(hit->triangle, 1),
+                        nc = o.mesh.corner(hit->triangle, 2);
+            const double u[3] = {double(nb.x) - na.x, double(nb.y) - na.y, double(nb.z) - na.z};
+            const double v[3] = {double(nc.x) - na.x, double(nc.y) - na.y, double(nc.z) - na.z};
+            std::array<double, 3> normal{u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]};
+            const double len = std::sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+            if (len > 0.0)
+                for (double& x : normal)
+                    x /= len;
+            remember_engineering(hit->object);
+            const bool zone = kind == ConditionKind::FixedZone || kind == ConditionKind::ForceZone || kind == ConditionKind::Limit;
+            const std::vector<std::uint32_t> face =
+                zone ? face_region(o.mesh, std::uint32_t(hit->triangle)) : std::vector<std::uint32_t>{};
+            EngineeringCondition* last = nullptr;
+            for (EngineeringCondition& c : o.engineering.conditions)
+                if (c.kind == kind)
+                    last = &c;
+            if (zone && io.KeyShift && last) {
+                for (const std::uint32_t f : face)
+                    if (std::find(last->triangles.begin(), last->triangles.end(), f) == last->triangles.end())
+                        last->triangles.push_back(f);
+                std::sort(last->triangles.begin(), last->triangles.end());
+            } else {
+                add_condition(o.engineering, kind, point, normal, face);
+            }
+            voxels_stale_ = true;
+        }
+    }
     const auto bed_point = [&](float z) -> std::optional<Vec3> {
         const Vec3 d = mouse_ray(), e = camera_.eye();
         if (std::abs(d.z) < 1e-6f)
@@ -11804,12 +11862,84 @@ void App::structural_panel() {
         rect_of("structural_working_temperature");
     }
 
-    // The conditions (rule 8): marking them on the part comes next.
+    // The marking tools (rule 5), the chosen one in violet; Esc is Rotar.
     section(T::StructConditions);
+    {
+        static constexpr T kTools[] = {T::StructToolRotate, T::StructToolFixedPoint, T::StructToolFixedZone,
+                                       T::StructToolForcePoint, T::StructToolForceZone, T::StructToolLimit};
+        static constexpr const char* kIds[] = {"rotate", "fixed_point", "fixed_zone", "force_point", "force_zone", "limit"};
+        const float width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+        for (int k = 0; k < 6; ++k) {
+            if (k % 2 != 0)
+                ImGui::SameLine();
+            const bool on = structural_tool_ == k;
+            if (on) {
+                ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+            }
+            if (ImGui::Button(tr(kTools[k]), ImVec2(width, 0)))
+                structural_tool_ = k;
+            if (on)
+                ImGui::PopStyleColor(3);
+            rect_of(std::string("structural_tool_") + kIds[k]);
+        }
+        if (structural_tool_ > 0)
+            loc::TextDisabled("%s", tr(structural_tool_ == 2 || structural_tool_ == 4 || structural_tool_ == 5
+                                           ? T::StructZoneHint
+                                           : T::StructPointHint));
+    }
+    // The list (rule 8): a line each, an eye to hide it, its force, a cross.
+    ImGui::Spacing();
     if (e.conditions.empty())
         loc::TextDisabled("%s", tr(T::StructNoConditions));
-    for (const EngineeringCondition& c : e.conditions)
-        loc::TextDisabled("%s", condition_name(c).c_str());
+    const TriangleMesh& part_mesh = objects_[std::size_t(structural_part_)].mesh;
+    const std::string_view lang = language() == Language::English ? "en" : "es";
+    std::optional<std::size_t> erase;
+    for (std::size_t i = 0; i < e.conditions.size(); ++i) {
+        EngineeringCondition& c = e.conditions[i];
+        ImGui::PushID(int(i));
+        bool shown = !c.hidden;
+        if (ImGui::Checkbox("##shown", &shown)) {
+            remember_engineering(std::size_t(structural_part_));
+            e.conditions[i].hidden = !shown;
+        }
+        rect_of("structural_condition_eye_" + std::to_string(i));
+        ImGui::SameLine();
+        if (c.hidden)
+            loc::TextDisabled("%s", condition_label(c, part_mesh, lang).c_str());
+        else
+            ImGui::TextUnformatted(condition_label(c, part_mesh, lang).c_str());
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - ImGui::GetFrameHeight());
+        if (ImGui::SmallButton("x"))
+            erase = i;
+        rect_of("structural_condition_remove_" + std::to_string(i));
+        if (c.is_force()) {
+            double n = c.newtons;
+            const double lo = 0.0, hi = 1e6;
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragScalar("##newtons", ImGuiDataType_Double, &n, 0.5f, &lo, &hi, "%.1f N",
+                                  ImGuiSliderFlags_AlwaysClamp) &&
+                n != c.newtons) {
+                if (ImGui::IsItemActivated() || !ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+                    remember_engineering(std::size_t(structural_part_));
+                e.conditions[i].newtons = n;
+            }
+        } else if (c.is_point()) {
+            double r = c.radius;
+            const double lo = 0.1, hi = 500.0;
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragScalar("##radius", ImGuiDataType_Double, &r, 0.1f, &lo, &hi, "r %.1f mm",
+                                  ImGuiSliderFlags_AlwaysClamp) &&
+                r != c.radius)
+                e.conditions[i].radius = r;
+        }
+        ImGui::PopID();
+    }
+    if (erase) {
+        remember_engineering(std::size_t(structural_part_));
+        e.conditions.erase(e.conditions.begin() + std::ptrdiff_t(*erase));
+    }
 
     ImGui::EndChild();
     // Analyze (rule 9): off until there is a material, something fixed and a
@@ -12319,6 +12449,32 @@ void App::remember_place(int object, const Placement& before) {
     if (place_undo_.size() > 100)
         place_undo_.erase(place_undo_.begin());
     place_redo_.clear();
+}
+
+// A part's Engineering data before a change, for Ctrl+Z in Structural.
+void App::remember_engineering(std::size_t object) {
+    if (object >= objects_.size())
+        return;
+    engineering_undo_.push_back({object, objects_.size(), objects_[object].engineering});
+    if (engineering_undo_.size() > 100)
+        engineering_undo_.erase(engineering_undo_.begin());
+    engineering_redo_.clear();
+}
+
+void App::undo_engineering(bool redo) {
+    std::vector<EngineeringStep>& from = redo ? engineering_redo_ : engineering_undo_;
+    std::vector<EngineeringStep>& to = redo ? engineering_undo_ : engineering_redo_;
+    while (!from.empty() && (from.back().count != objects_.size() || from.back().object >= objects_.size()))
+        from.pop_back();
+    if (from.empty())
+        return;
+    EngineeringStep step = std::move(from.back());
+    from.pop_back();
+    ProjectEngineering& now = objects_[step.object].engineering;
+    to.push_back({step.object, step.count, now});
+    now = std::move(step.before);
+    structural_part_ = int(step.object);
+    voxels_stale_ = true;
 }
 
 // Ctrl+Z puts the last moved model back where it was; Ctrl+Y (or
@@ -15459,6 +15615,15 @@ void App::layout() {
             undo_place(false);
         if (take_chord('y', false) || take_chord('z', true))
             undo_place(true);
+    }
+    // In Structural, the conditions' (rule 8); Esc back to Rotar (rule 5).
+    if (tab_ == Tab::Structural && !ImGui::GetIO().WantTextInput) {
+        if (take_chord('z', false))
+            undo_engineering(false);
+        if (take_chord('y', false) || take_chord('z', true))
+            undo_engineering(true);
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            structural_tool_ = 0;
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(true);

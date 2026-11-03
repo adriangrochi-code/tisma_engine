@@ -3,7 +3,10 @@
 #include "config/settings.hpp"
 #include "project/engineering.hpp"
 
+#include <array>
+#include <cstdint>
 #include <string>
+#include <vector>
 #include <string_view>
 
 // The values the Structural panel shows (engineering_panel.md, rules 3, 4
@@ -37,6 +40,18 @@ std::string material_for_filament(std::string_view filament_type);
 // its name: the whole name, then its first word («PLA Genérico» is PLA).
 EngineeringValues engineering_values(const Settings& profile, const ProjectEngineering& e,
                                      std::string_view filament_profile = {});
+
+// A new condition of this kind, numbered after the others of its kind
+// (rule 8: «Zona fija 1», «Zona fija 2»), added to the list: a point at
+// `point` with its outward `normal`, or a zone of `triangles`. A force
+// starts at 10 N along the normal, into the part; a point's disc at 5 mm.
+EngineeringCondition& add_condition(ProjectEngineering& e, ConditionKind kind, const std::array<double, 3>& point,
+                                    const std::array<double, 3>& normal, std::vector<std::uint32_t> triangles);
+
+// Its line in the list (rule 8), in the interface's language ("es" or
+// "en"): «Zona fija 1 · 3 caras», «Punto de fuerza 1 · 50 N hacia −Z». A
+// zone counts its faces: the groups of its triangles that face alike.
+std::string condition_label(const EngineeringCondition& c, const TriangleMesh& mesh, std::string_view language);
 
 // What keeps «Analizar» off, in the order the panel says it.
 enum class AnalyzeBlock { None, Material, Fixed, Force };

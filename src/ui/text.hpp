@@ -29,6 +29,14 @@
     X(StructByHand, "cambiado a mano: no cambia el perfil ni el G-code", "changed by hand: the profile and the G-code stay") \
     X(StructBackToProfile, "Volver al del perfil", "Back to the profile's")                                           \
     X(StructConditions, "Condiciones", "Conditions")                                                                  \
+    X(StructToolRotate, "Rotar", "Rotate")                                                                            \
+    X(StructToolFixedPoint, "Punto fijo", "Fixed point")                                                              \
+    X(StructToolFixedZone, "Zona fija", "Fixed zone")                                                                 \
+    X(StructToolForcePoint, "Punto de fuerza", "Force point")                                                         \
+    X(StructToolForceZone, "Zona de fuerza", "Force zone")                                                            \
+    X(StructToolLimit, "Límite de desplazamiento", "Displacement limit")                                              \
+    X(StructPointHint, "Clic en la superficie de la pieza. Esc vuelve a Rotar.", "Click on the part's surface. Esc goes back to Rotate.") \
+    X(StructZoneHint, "Clic en una cara: se toma entera. Con Mayús se suman caras. Esc vuelve a Rotar.", "Click on a face: it is taken whole. Shift adds faces. Esc goes back to Rotate.") \
     X(StructNoConditions, "Sin condiciones todavía.", "No conditions yet.")                                           \
     X(StructAnalyze, "Analizar", "Analyze")                                                                           \
     X(StructNeedMaterial, "Elegí un material.", "Choose a material.")                                                 \

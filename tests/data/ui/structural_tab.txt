@@ -21,3 +21,13 @@ expect-no-control tab_prepare
 menu mode_print
 expect-control tab_prepare
 expect-no-control tab_structural
+# The marking tools are on the panel (rule 5); marking by a click on the view
+# is checked once the scripted click reaches the view in this tab.
+menu mode_engineering
+menu tab_structural
+expect-control structural_tool_rotate
+expect-control structural_tool_fixed_zone
+expect-control structural_tool_force_point
+menu structural_tool_fixed_zone
+key escape
+expect-structural fixed

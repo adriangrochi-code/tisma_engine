@@ -578,3 +578,28 @@ TEST_CASE("FM24: a part moved and turned keeps its conditions on the same places
         }
     }
 }
+
+TEST_CASE("rule 8: each new condition is numbered by its kind and listed by its line", "[project]") {
+    TriangleMesh cube = read_stl(std::string(TISMA_TEST_DATA_DIR) + "/cube_ascii.stl").mesh;
+    ProjectEngineering e;
+    add_condition(e, ConditionKind::FixedZone, {}, {0, 0, -1}, face_region(cube, 0));
+    add_condition(e, ConditionKind::FixedZone, {}, {0, 0, 1}, {});
+    EngineeringCondition& push = add_condition(e, ConditionKind::ForcePoint, {5, 5, 10}, {0, 0, 1}, {});
+    CHECK(e.conditions[0].number == 1);
+    CHECK(e.conditions[1].number == 2);
+    CHECK(push.number == 1);
+    CHECK(push.newtons == 10.0);
+    CHECK(push.radius == 5.0);
+    CHECK(condition_label(e.conditions[0], cube, "es") == "Zona fija 1 · 1 cara");
+    CHECK(condition_label(e.conditions[0], cube, "en") == "Fixed zone 1 · 1 face");
+    push.newtons = 50.0;
+    push.direction = ForceDirection::Axis;
+    push.axis = -3;
+    CHECK(condition_label(push, cube, "es") == "Punto de fuerza 1 · r 5 mm · 50 N hacia −Z");
+    // Two sides of the cube in one zone: two faces.
+    std::vector<std::uint32_t> two = face_region(cube, 0);
+    for (const std::uint32_t t : face_region(cube, 2))
+        two.push_back(t);
+    e.conditions[1].triangles = two;
+    CHECK(condition_label(e.conditions[1], cube, "es") == "Zona fija 2 · 2 caras");
+}
