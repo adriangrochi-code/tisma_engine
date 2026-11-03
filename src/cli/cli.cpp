@@ -655,7 +655,7 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
 // conditions as the case (FM25), or --case's. The part is the first with
 // Engineering conditions; with --case and none, the first part.
 int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analysis, TriangleMesh& mesh,
-                     std::array<double, 3>& part_min, std::ostream& out, std::ostream& err) {
+                     std::array<double, 12>& to_part, std::ostream& out, std::ostream& err) {
     Project project;
     try {
         project = load_project(a.model);
@@ -688,10 +688,42 @@ int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analy
             return kExitInput;
         }
     }
+    // The part where it is on the bed: its mesh turned and moved by its
+    // build transform, and its conditions with it.
+    mesh = TriangleMesh{};
+    const auto& t = it->turn;
+    const auto place = [&](const Vec3f& p) {
+        return Vec3f{float(t[0] * p.x + t[1] * p.y + t[2] * p.z + it->offset[0]),
+                     float(t[3] * p.x + t[4] * p.y + t[5] * p.z + it->offset[1]),
+                     float(t[6] * p.x + t[7] * p.y + t[8] * p.z + it->offset[2])};
+    };
+    const bool mirrored = t[0] * (t[4] * t[8] - t[5] * t[7]) - t[1] * (t[3] * t[8] - t[5] * t[6]) +
+                              t[2] * (t[3] * t[7] - t[4] * t[6]) < 0.0;
+    for (std::size_t k = 0; k < it->mesh.triangle_count(); ++k) // a mirror keeps its faces outward
+        if (mirrored)
+            mesh.add_triangle(place(it->mesh.corner(k, 0)), place(it->mesh.corner(k, 2)), place(it->mesh.corner(k, 1)));
+        else
+            mesh.add_triangle(place(it->mesh.corner(k, 0)), place(it->mesh.corner(k, 1)), place(it->mesh.corner(k, 2)));
+    ProjectEngineering placed = it->engineering;
+    move_engineering(placed, t, it->offset);
+    // And back: the inverse of the build transform, for the report's points.
+    {
+        const double det = t[0] * (t[4] * t[8] - t[5] * t[7]) - t[1] * (t[3] * t[8] - t[5] * t[6]) +
+                           t[2] * (t[3] * t[7] - t[4] * t[6]);
+        const std::array<double, 9> inv{(t[4] * t[8] - t[5] * t[7]) / det, (t[2] * t[7] - t[1] * t[8]) / det,
+                                        (t[1] * t[5] - t[2] * t[4]) / det, (t[5] * t[6] - t[3] * t[8]) / det,
+                                        (t[0] * t[8] - t[2] * t[6]) / det, (t[2] * t[3] - t[0] * t[5]) / det,
+                                        (t[3] * t[7] - t[4] * t[6]) / det, (t[1] * t[6] - t[0] * t[7]) / det,
+                                        (t[0] * t[4] - t[1] * t[3]) / det};
+        for (std::size_t i = 0; i < 9; ++i)
+            to_part[i] = inv[i];
+        for (std::size_t i = 0; i < 3; ++i)
+            to_part[9 + i] = -(inv[3 * i] * it->offset[0] + inv[3 * i + 1] * it->offset[1] + inv[3 * i + 2] * it->offset[2]);
+    }
     std::vector<std::string> notes;
     apply_engineering_overrides(settings, it->engineering, notes);
     if (a.analysis_case.empty()) {
-        analysis = engineering_analysis_case(it->engineering, it->mesh, it->offset, notes, settings.filament_type);
+        analysis = engineering_analysis_case(placed, mesh, {}, notes, settings.filament_type);
     } else {
         try {
             analysis = load_analysis_case(a.analysis_case);
@@ -706,12 +738,6 @@ int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analy
         err << "error: " << it->name << ": the analysis needs a fixed point or zone and a force\n";
         return kExitInput;
     }
-    mesh = it->mesh;
-    mesh.translate(float(it->offset[0]), float(it->offset[1]), float(it->offset[2]));
-    // The part's own box corner: the mesh's, less what a 3MF's reading moved.
-    const BoundingBox own = it->mesh.bounding_box();
-    part_min = {double(own.min.x) - it->placed_by[0], double(own.min.y) - it->placed_by[1],
-                double(own.min.z) - it->placed_by[2]};
     out << "part: " << it->name << ", " << mesh.triangle_count() << " triangles, " << analysis.fixtures.size()
         << " fixtures, " << analysis.loads.size() << " loads\n";
     return kExitOk;
@@ -728,13 +754,14 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
     Settings settings;
     AnalysisCase analysis;
     ModelFile stl;
-    // The part's own box corner (the model file's, or a project's part's),
-    // to give the report's points in the part's coordinates.
-    std::array<double, 3> part_min{};
+    // From the analysis (on the bed) back to the part's own coordinates, for
+    // the report's points: a project's build transform undone, or what
+    // placement.arrange moved the model file.
+    std::array<double, 12> to_part{1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
     if (parsed->project) {
         // A project: its settings (or --config's), and the first part with
         // Engineering conditions, where it is on the bed.
-        if (int rc = project_analysis(*parsed, settings, analysis, stl.mesh, part_min, out, err); rc != kExitOk)
+        if (int rc = project_analysis(*parsed, settings, analysis, stl.mesh, to_part, out, err); rc != kExitOk)
             return rc;
     } else {
         try {
@@ -754,14 +781,11 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
             return rc;
         out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
         const BoundingBox own = stl.mesh.bounding_box();
-        part_min = {double(own.min.x), double(own.min.y), double(own.min.z)};
-        place_on_bed(stl.mesh, settings);
-    }
-    // Where that corner is in the analysis: on the bed, its lowest point at 0.
-    std::array<double, 3> part_shift{};
-    {
+        place_on_bed(stl.mesh, settings); // in X and Y only
         const BoundingBox placed = stl.mesh.bounding_box();
-        part_shift = {double(placed.min.x) - part_min[0], double(placed.min.y) - part_min[1], -part_min[2]};
+        to_part[9] = double(own.min.x) - double(placed.min.x);
+        to_part[10] = double(own.min.y) - double(placed.min.y);
+        to_part[11] = double(own.min.z) - double(placed.min.z);
     }
     const IndexedMesh mesh = weld_exact(stl.mesh);
     if (const std::string reason = unprintable_reason(mesh, settings); !reason.empty()) {
@@ -830,7 +854,7 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
     for (const AnalysisWarning& w : report.warnings)
         err << "warning: " << w.message << "\n";
 
-    if (!write_file(parsed->output, [&](std::ostream& json) { json << analysis_json(report, analysis, part_shift); })) {
+    if (!write_file(parsed->output, [&](std::ostream& json) { json << analysis_json(report, analysis, to_part); })) {
         err << "error: cannot write '" << parsed->output << "'\n";
         return kExitInput;
     }

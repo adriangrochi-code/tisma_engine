@@ -95,6 +95,8 @@ static ordered_json project_json(const Project& project, bool offsets) {
     for (std::size_t i = 0; i < project.models.size(); ++i) {
         const ProjectModel& m = project.models[i];
         models.push_back({{"name", m.name}, {"mesh", i}, {"offset", offsets ? m.offset : std::array<double, 3>{}}});
+        if (offsets && m.turn != std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1})
+            models.back()["turn"] = m.turn;
         if (!m.painting.empty())
             models.back()["painting"] = paintings++;
         if (m.extruder != 1)
@@ -126,6 +128,8 @@ static ordered_json project_json(const Project& project, bool offsets) {
             models.back()["engineering"] = ordered_json::parse(engineering_json(m.engineering));
             // In a 3MF the mesh goes out placed: the conditions' points, in
             // the part's own coordinates, move with it when read (FM24).
+            // Read by older versions, which placed a 3MF's mesh and moved
+            // the points with it.
             if (!offsets && m.offset != std::array<double, 3>{})
                 models.back()["engineering_moved"] = m.offset;
         }
@@ -178,6 +182,10 @@ struct ProjectParts {
     std::function<TriangleMesh(std::size_t)> mesh;    // throws StlError or ModelError
     std::function<std::string(std::size_t)> painting; // its bytes (painting_to_bytes)
     std::function<std::string(std::size_t)> result;   // an Engineering result's report
+    // A 3MF's build items: each mesh's turn and offset on the bed, the mesh
+    // left in the part's own coordinates (formats.md, rules 8 and 11 bis).
+    std::vector<std::array<double, 9>> turns;
+    std::vector<std::array<double, 3>> offsets;
 };
 
 static Project project_from_json(std::string_view json_text, const ProjectParts& source) {
@@ -241,6 +249,17 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
                     fail(what + ".offset: must be [x, y, z]");
                 for (std::size_t k = 0; k < 3; ++k)
                     model.offset[k] = number(o[k], what + ".offset");
+            }
+            if (m.contains("turn")) {
+                const ordered_json& t = m.at("turn");
+                if (!t.is_array() || t.size() != 9)
+                    fail(what + ".turn: must be 9 numbers, by rows");
+                for (std::size_t k = 0; k < 9; ++k)
+                    model.turn[k] = number(t[k], what + ".turn");
+            }
+            if (index < source.turns.size()) { // a 3MF: its build item's
+                model.turn = source.turns[index];
+                model.offset = source.offsets[index];
             }
             if (m.contains("painting")) {
                 if (!m.at("painting").is_number_unsigned() || m.at("painting").get<std::size_t>() >= source.paintings)
@@ -345,18 +364,9 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
             if (m.contains("engineering")) {
                 try {
                     model.engineering = engineering_from_json(m.at("engineering").dump());
-                    if (m.contains("engineering_moved")) {
-                        const ordered_json& by = m.at("engineering_moved");
-                        if (!by.is_array() || by.size() != 3 || !by[0].is_number() || !by[1].is_number() ||
-                            !by[2].is_number())
-                            throw EngineeringError("engineering_moved: must be [x, y, z]");
-                        for (EngineeringCondition& c : model.engineering.conditions)
-                            if (c.is_point())
-                                for (std::size_t a = 0; a < 3; ++a)
-                                    c.point[a] += by[a].get<double>();
-                        for (std::size_t a = 0; a < 3; ++a)
-                            model.placed_by[a] = by[a].get<double>();
-                    }
+                    // "engineering_moved" is for older versions, which
+                    // placed a 3MF's mesh; here the mesh and the points stay
+                    // in the part's own coordinates.
                     if (const std::size_t dropped = drop_conditions_beyond(model.engineering, model.mesh.triangle_count()))
                         p.notices.push_back(model.name + ": " + std::to_string(dropped) +
                                             " Engineering condition(s) no longer fit the mesh and were removed");
@@ -469,7 +479,7 @@ std::string write_project_3mf(const Project& project) {
     std::vector<ThreeMfObject> objects;
     std::vector<ZipEntryToWrite> extra{{std::string(kProjectEntry), root.dump(1)}};
     for (const ProjectModel& m : project.models) {
-        objects.push_back({m.name, &m.mesh, m.offset});
+        objects.push_back({m.name, &m.mesh, m.offset, m.turn});
         if (!m.painting.empty()) {
             std::string bytes(kPaintMagic);
             put_le(bytes, kPaintVersion, 4);
@@ -492,7 +502,7 @@ static Project read_project_3mf(std::string_view data) {
     std::vector<std::string> paintings; // Metadata/tisma_paint_0.bin, 1, ... while they are there
     std::vector<std::string> results;   // Metadata/tisma_result_0.json, 1, ... likewise
     try {
-        items = read_3mf_items(data, &json_text, kProjectEntry);
+        items = read_3mf_items(data, &json_text, kProjectEntry, true);
         const ZipArchive zip(data);
         for (const ZipArchive::Entry* e; (e = zip.find(paint_entry(paintings.size())));) {
             const std::string bytes = zip.read(*e);
@@ -518,6 +528,10 @@ static Project read_project_3mf(std::string_view data) {
     source.paintings = paintings.size();
     source.mesh = [&](std::size_t i) { return std::move(items[i].mesh); };
     source.painting = [&](std::size_t i) { return paintings[i]; };
+    for (const ThreeMfItem& item : items) {
+        source.turns.push_back(item.turn);
+        source.offsets.push_back(item.offset);
+    }
     source.results = results.size();
     source.result = [&](std::size_t i) { return results[i]; };
     return project_from_json(*json_text, source);

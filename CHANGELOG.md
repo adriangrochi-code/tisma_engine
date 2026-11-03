@@ -163,6 +163,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   retracción, en %, que se hace quieta después del barrido; se recorta a 100 − `before_wipe`. En el panel, el barrido
   y sus dos partes van en su propia tarjeta, «Barrido».
 
+### Cambiado
+
+- **El proyecto guarda cada pieza en sus coordenadas propias**, con su giro, escala y lugar aparte (en el 3MF, en la
+  transformación de su ítem). Mover o girar una pieza ya no cambia dónde quedan sus condiciones de Ingeniería.
+
 ### Corregido
 
 - **Memoria del análisis con zonas marcadas:** una cara marcada de 200 × 200 mm ocupaba 504 MB; ahora menos de 1 MB,

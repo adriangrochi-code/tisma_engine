@@ -19,7 +19,7 @@ json safety(double s) { return std::isfinite(s) ? json(s) : json(nullptr); }
 
 } // namespace
 
-std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, const std::array<double, 3>& part_shift) {
+std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, const std::array<double, 12>& to_part) {
     const OrthotropicMaterial& m = c.material;
     const MaterialRecord* record = find_material(c.material_id);
     json material = {{"id", c.material_id},
@@ -40,9 +40,13 @@ std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, const 
                    {"voxels_below_1_5", r.below[1]},
                    {"voxels_below_2", r.below[2]}};
     if (r.weakest_layer >= 0) {
-        result["weakest"] = {{"x", r.weakest[0] - part_shift[0]},
-                             {"y", r.weakest[1] - part_shift[1]},
-                             {"z", r.weakest[2] - part_shift[2]},
+        double p[3];
+        for (std::size_t i = 0; i < 3; ++i)
+            p[i] = to_part[3 * i] * r.weakest[0] + to_part[3 * i + 1] * r.weakest[1] + to_part[3 * i + 2] * r.weakest[2] +
+                   to_part[9 + i];
+        result["weakest"] = {{"x", p[0]},
+                             {"y", p[1]},
+                             {"z", p[2]},
                              {"layer", r.weakest_layer},
                              {"mode", failure_mode_name(r.result.mode[r.result.weakest])}};
         result["weakest_on_bed"] = {{"x", r.weakest[0]}, {"y", r.weakest[1]}, {"z", r.weakest[2]}};

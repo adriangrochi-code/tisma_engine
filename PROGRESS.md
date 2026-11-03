@@ -9334,3 +9334,23 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   y lector del 3MF, y que `project_objects` y `current_project` la usen. Prueba FM24: mover la barra 30 mm, girarla
   90°, guardar y abrir; las condiciones quedan en los mismos lugares de la barra. Los proyectos viejos, con mallas
   ubicadas, se siguen abriendo.
+
+### FM24: el proyecto guarda la malla sin ubicar (equipo de fichas, formats.md 8 y 11 bis)
+
+- **Hecho:** la interfaz guarda cada pieza en sus coordenadas propias. Su lugar en la cama (giro, escala y posición)
+  va en `ProjectModel::turn` y `offset`; en el 3MF, en la transformación completa del ítem de `<build>`. El lector
+  del 3MF deja la malla en sus coordenadas propias y devuelve esa transformación (`read_3mf_items(..., own_frame)`).
+  `project_objects` la vuelve giro y escala de la placa. Un espejo o una deformación que la placa no representa se
+  aplican a la malla, y las condiciones se mueven con ella.
+  - Los volúmenes, los rangos y las condiciones quedan en las mismas coordenadas, sin moverlos al guardar.
+  - `engineering_moved` se sigue escribiendo para versiones anteriores, pero ya no se usa al leer.
+  - `ProjectModel::placed_by` (de 056c59c) ya no hace falta y se sacó.
+- **Encontrado y corregido** en 056c59c: el punto crítico en coordenadas de la pieza restaba la z más baja, como si
+  el análisis apoyara la pieza en 0; las capas empiezan en la z de la malla. Ahora `analysis_json` recibe la inversa
+  completa de la ubicación (`to_part`), con el giro incluido.
+- `analyze <proyecto>` gira y mueve la malla y las condiciones con la transformación de la pieza.
+- **Prueba FM24:** una barra de 100 mm con un punto de fuerza en la punta, girada 90° y movida a (130, 100), guardada
+  en 3MF y en el archivo propio y abierta de nuevo. Vuelven la misma malla, el mismo punto en la barra, el mismo giro
+  y el mismo lugar, y la punta en la cama donde estaba. La prueba del paquete 3MF ahora espera la malla en sus
+  coordenadas propias.
+- Medido: 865 pruebas en paralelo; falló una vez `ui_script_cloud_slice` (pasa sola: tiempos bajo carga, a vigilar).

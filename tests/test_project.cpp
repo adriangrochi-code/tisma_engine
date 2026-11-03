@@ -239,7 +239,8 @@ TEST_CASE("a project as a 3MF package: any reader sees the plate, the engine rea
     CHECK(plate.mesh.triangle_count() == 8);
     CHECK(plate.mesh.bounding_box().max.x == 138.0f); // the first tetrahedron moved to 128
 
-    // The engine: everything back, the models placed (offsets applied).
+    // The engine: everything back, each mesh in its own coordinates and its
+    // place on the plate as its offset (formats.md, rules 8 and 11 bis).
     CHECK(looks_like_project(bytes));
     const Project back = read_project(bytes);
     CHECK(settings_json(back.settings) == settings_json(p.settings));
@@ -247,14 +248,11 @@ TEST_CASE("a project as a 3MF package: any reader sees the plate, the engine rea
     REQUIRE(back.models.size() == 2);
     for (std::size_t i = 0; i < 2; ++i) {
         CHECK(back.models[i].name == p.models[i].name);
-        CHECK(back.models[i].offset == std::array<double, 3>{0.0, 0.0, 0.0});
+        CHECK(back.models[i].offset == p.models[i].offset);
+        CHECK(back.models[i].turn == p.models[i].turn);
         REQUIRE(back.models[i].mesh.triangle_count() == p.models[i].mesh.triangle_count());
-        for (std::size_t c = 0; c < p.models[i].mesh.corners().size(); ++c) {
-            const Vec3f a = p.models[i].mesh.corners()[c], b = back.models[i].mesh.corners()[c];
-            CHECK(b.x == float(double(a.x) + p.models[i].offset[0]));
-            CHECK(b.y == float(double(a.y) + p.models[i].offset[1]));
-            CHECK(b.z == float(double(a.z) + p.models[i].offset[2]));
-        }
+        for (std::size_t c = 0; c < p.models[i].mesh.corners().size(); ++c)
+            CHECK(back.models[i].mesh.corners()[c] == p.models[i].mesh.corners()[c]);
     }
     CHECK(back.models[0].painting.empty());
     CHECK(back.models[1].painting == p.models[1].painting);
@@ -520,4 +518,63 @@ TEST_CASE("a click picks the whole face: flat up to the edges, smooth around a c
     CHECK(face_region(cylinder, 5, 45.0).size() == std::size_t(2 * n));
     // Nothing for a triangle the mesh does not have.
     CHECK(face_region(cube, 99).empty());
+}
+
+TEST_CASE("FM24: a part moved and turned keeps its conditions on the same places of it", "[project]") {
+    // A 100 x 10 x 10 mm bar, a force point at its tip, turned 90 degrees
+    // about Z and moved 30 mm on the plate, as the interface saves it: the
+    // mesh in its own coordinates, its place as the build transform.
+    TriangleMesh bar;
+    const auto quad = [&](Vec3f a, Vec3f b, Vec3f c, Vec3f d) {
+        bar.add_triangle(a, b, c);
+        bar.add_triangle(a, c, d);
+    };
+    const float L = 100, W = 10;
+    quad({0, 0, 0}, {0, W, 0}, {L, W, 0}, {L, 0, 0});
+    quad({0, 0, W}, {L, 0, W}, {L, W, W}, {0, W, W});
+    quad({0, 0, 0}, {L, 0, 0}, {L, 0, W}, {0, 0, W});
+    quad({0, W, 0}, {0, W, W}, {L, W, W}, {L, W, 0});
+    quad({0, 0, 0}, {0, 0, W}, {0, W, W}, {0, W, 0});
+    quad({L, 0, 0}, {L, W, 0}, {L, W, W}, {L, 0, W});
+    ui::PlateObject o{"bar.stl", bar, {}, {}};
+    o.place.x = 130.0;
+    o.place.y = 100.0;
+    o.place.rotation = {0, -1, 0, 1, 0, 0, 0, 0, 1};
+    EngineeringCondition tip;
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {100.0, 5.0, 5.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.newtons = 50.0;
+    o.engineering.conditions = {tip};
+    const TriangleMesh placed = ui::placed_mesh(o);
+    const ui::Affine to_bed = ui::placing(o, placed);
+    Project p;
+    p.models.push_back({o.name, o.mesh, to_bed.b, {}});
+    p.models.back().turn = to_bed.a;
+    p.models.back().engineering = o.engineering;
+    for (const bool three_mf : {true, false}) {
+        INFO((three_mf ? "3MF" : "own file"));
+        Project back = read_project(three_mf ? write_project_3mf(p) : write_project(p));
+        REQUIRE(back.models.size() == 1);
+        // The part's own frame: the same mesh, the same point on it.
+        CHECK(back.models[0].mesh.corners() == bar.corners());
+        REQUIRE(back.models[0].engineering.conditions.size() == 1);
+        CHECK(back.models[0].engineering.conditions[0].point == tip.point);
+        // On the plate again: the same turn and place, the tip where it was.
+        const std::vector<ui::PlateObject> objects = ui::project_objects(back.models);
+        REQUIRE(objects.size() == 1);
+        CHECK(objects[0].mesh.corners() == bar.corners());
+        for (std::size_t k = 0; k < 9; ++k)
+            CHECK(std::abs(objects[0].place.rotation[k] - o.place.rotation[k]) < 1e-9);
+        CHECK(std::abs(objects[0].place.x - o.place.x) < 1e-4);
+        CHECK(std::abs(objects[0].place.y - o.place.y) < 1e-4);
+        const ui::Affine again = ui::placing(objects[0], ui::placed_mesh(objects[0]));
+        for (std::size_t r = 0; r < 3; ++r) {
+            const double was = to_bed.a[3 * r] * tip.point[0] + to_bed.a[3 * r + 1] * tip.point[1] +
+                               to_bed.a[3 * r + 2] * tip.point[2] + to_bed.b[r];
+            const auto& q = objects[0].engineering.conditions[0].point;
+            const double now = again.a[3 * r] * q[0] + again.a[3 * r + 1] * q[1] + again.a[3 * r + 2] * q[2] + again.b[r];
+            CHECK(std::abs(now - was) < 1e-4);
+        }
+    }
 }

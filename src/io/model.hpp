@@ -55,20 +55,26 @@ ModelFile parse_3mf(std::string_view package);
 // (its transforms applied, in millimetres), in the build's order, with its
 // object's name; and, with `extra`, the package's file `extra_name` (none if
 // it has no such file). Throws ModelError.
+// With `own_frame`, each mesh is left in its object's own coordinates and
+// its build item's transform is given apart: bed = turn (by rows) · p + offset.
 struct ThreeMfItem {
     std::string name;
     TriangleMesh mesh;
+    std::array<double, 9> turn{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    std::array<double, 3> offset{0.0, 0.0, 0.0};
 };
 std::vector<ThreeMfItem> read_3mf_items(std::string_view package, std::optional<std::string>* extra = nullptr,
-                                        std::string_view extra_name = {});
+                                        std::string_view extra_name = {}, bool own_frame = false);
 
-// A 3MF package with these objects, one build item each, moved by `offset`
-// (mm), its vertices written so they read back to the same floats, and these
-// other files in it (formats.md, rule 11: the engine's own data).
+// A 3MF package with these objects, one build item each, set on the bed by
+// `turn` (by rows: rotation and scale) and moved by `offset` (mm), its
+// vertices written so they read back to the same floats, and these other
+// files in it (formats.md, rules 8 and 11: the engine's own data).
 struct ThreeMfObject {
     std::string name;
     const TriangleMesh* mesh = nullptr;
     std::array<double, 3> offset{0.0, 0.0, 0.0};
+    std::array<double, 9> turn{1, 0, 0, 0, 1, 0, 0, 0, 1};
 };
 std::string write_3mf_objects(const std::vector<ThreeMfObject>& objects, std::vector<ZipEntryToWrite> extra = {});
 

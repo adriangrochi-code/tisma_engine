@@ -348,7 +348,8 @@ ModelFile parse_3mf(std::string_view data) {
     return out;
 }
 
-std::vector<ThreeMfItem> read_3mf_items(std::string_view data, std::optional<std::string>* extra, std::string_view extra_name) {
+std::vector<ThreeMfItem> read_3mf_items(std::string_view data, std::optional<std::string>* extra, std::string_view extra_name,
+                                        bool own_frame) {
     std::vector<ThreeMfItem> items;
     try {
         Package package(data);
@@ -363,10 +364,20 @@ std::vector<ThreeMfItem> read_3mf_items(std::string_view data, std::optional<std
             ModelFile one;
             Builder builder{package, no_volumes, root, model.scale, one};
             const std::string path = item.what.path.empty() ? root : item.what.path;
-            builder.emit(path, item.what.id, item.what.transform, 0);
+            const Transform& t = item.what.transform;
+            builder.emit(path, item.what.id, own_frame ? kIdentity : t, 0);
             const ModelPart& part = package.part(path);
             const auto found = part.objects.find(item.what.id);
-            items.push_back({found != part.objects.end() ? found->second.name : std::string(), std::move(one.mesh)});
+            ThreeMfItem out{found != part.objects.end() ? found->second.name : std::string(), std::move(one.mesh)};
+            if (own_frame) {
+                // 3MF's row vector times the matrix: bed x = x t0 + y t3 + z t6 + t9.
+                for (std::size_t r = 0; r < 3; ++r) {
+                    for (std::size_t c = 0; c < 3; ++c)
+                        out.turn[3 * r + c] = t[3 * c + r];
+                    out.offset[r] = t[9 + r] * model.scale;
+                }
+            }
+            items.push_back(std::move(out));
         }
     } catch (const ZipError& e) {
         throw ModelError(std::string("3MF: ") + e.what());
@@ -425,14 +436,17 @@ std::string write_3mf_objects(const std::vector<ThreeMfObject>& objects, std::ve
         model += "  </object>\n";
     }
     model += " </resources>\n <build>\n";
-    char line[200];
+    char line[512];
     for (std::size_t i = 0; i < objects.size(); ++i) {
         const auto& o = objects[i].offset;
-        if (o == std::array<double, 3>{0.0, 0.0, 0.0})
+        const auto& a = objects[i].turn; // by rows; 3MF wants its transpose (row vectors)
+        if (o == std::array<double, 3>{0.0, 0.0, 0.0} && a == std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1})
             std::snprintf(line, sizeof line, "  <item objectid=\"%zu\"/>\n", i + 1);
         else
-            std::snprintf(line, sizeof line, "  <item objectid=\"%zu\" transform=\"1 0 0 0 1 0 0 0 1 %.9g %.9g %.9g\"/>\n", i + 1,
-                          o[0], o[1], o[2]);
+            std::snprintf(line, sizeof line,
+                          "  <item objectid=\"%zu\" transform=\"%.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g "
+                          "%.9g %.9g %.9g\"/>\n",
+                          i + 1, a[0], a[3], a[6], a[1], a[4], a[7], a[2], a[5], a[8], o[0], o[1], o[2]);
         model += line;
     }
     model += " </build>\n</model>\n";

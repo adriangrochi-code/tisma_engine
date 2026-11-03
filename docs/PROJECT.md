@@ -51,8 +51,13 @@ El JSON:
 - `models[i].mesh` es el número de la parte `MESH` (contando desde 0).
 - `models[i].painting`, solo en una pieza pintada, es el número de su parte `PNT `. Un árbol roto, una marca fuera de
   rango o un triángulo que la malla no tiene se rechazan.
-- `offset` es dónde estaba la pieza en la cama, en mm. Hoy la interfaz siempre centra la pieza; el dato queda para
-  cuando se pueda mover.
+- La malla se guarda en las coordenadas propias de la pieza, sin su lugar en la cama, así las condiciones de
+  Ingeniería no cambian aunque la pieza se mueva (`formats.md`, reglas 8 y 11 bis; FM24). Su lugar va aparte: un
+  punto `p` de la malla está en la cama en `turn · p + offset`.
+  - `offset`, en mm.
+  - `turn`, solo si no es la identidad: nueve números por filas, con el giro y la escala.
+- Los proyectos guardados antes del 2026-11-03 tienen la malla ya ubicada y `offset` en 0; se abren igual, y su marco
+  es aquel lugar de la cama.
 - `calibration` está solo si se guardó una torre. Cada segmento es `[z0, z1, valor]`.
 - `models[i].extruder` (solo si no es 1) es el extrusor de la pieza, desde 1, o el número de una mezcla de colores;
   `models[i].wipe_into_infill` y `wipe_into_object` (solo si son `true`) dejan que un cambio de filamento purgue en su
@@ -90,7 +95,7 @@ servidor solo acepta un ZIP con `3D/*.model` con triángulos.
 | Archivo | Qué tiene |
 |---|---|
 | `[Content_Types].xml`, `_rels/.rels` | Los del estándar |
-| `3D/3dmodel.model` | Cada modelo es un objeto con su malla; su corrimiento va en la transformación de su ítem de `<build>`. Cualquier lector de 3MF ve la placa |
+| `3D/3dmodel.model` | Cada modelo es un objeto con su malla en sus coordenadas propias; su giro, su escala y su corrimiento van en la transformación de su ítem de `<build>`. Cualquier lector de 3MF ve la placa |
 | `Metadata/tisma_project.json` | El mismo JSON que la parte `JSON` del archivo propio, con los corrimientos en 0. `"mesh": n` es el ítem n de `<build>` y `"painting": k` es el archivo `tisma_paint_<k>.bin` |
 | `Metadata/tisma_paint_<k>.bin` | Una pintura: `TPNT`, la versión (32 bits, 1) y la misma pintura que la parte `PNT ` (`painting_to_bytes`). El encabezado evita que empiece como un programa (`MZ`, ELF y otros), que el servidor rechaza |
 

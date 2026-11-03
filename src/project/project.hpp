@@ -43,7 +43,7 @@ struct ProjectRange {
 struct ProjectModel {
     std::string name;                // the file it came from, or the calibration's name
     TriangleMesh mesh;               // as it was loaded, in its own coordinates
-    std::array<double, 3> offset{};  // where it was on the bed, mm
+    std::array<double, 3> offset{};  // where it was on the bed, mm (see `turn`)
     Painting painting;               // its painted faces (docs/PAINTING.md), by triangle of the mesh
     // Its extruder (from 1, or a blend's number), and whether a filament
     // change may purge into its sparse infill or into all of it
@@ -58,10 +58,9 @@ struct ProjectModel {
     // Its Engineering data (formats.md, rule 11 bis): conditions in its own
     // coordinates and triangles, values changed by hand, options.
     ProjectEngineering engineering{};
-    // How far a 3MF's reading moved the mesh from the part's own coordinates
-    // to where it stood on the bed (its build item): not saved; zero for the
-    // engine's own file, whose mesh stays in the part's coordinates.
-    std::array<double, 3> placed_by{};
+    // Its turn and scale on the bed, by rows: a point p of the mesh is at
+    // turn · p + offset (formats.md, rule 8: a 3MF's build item transform).
+    std::array<double, 9> turn{1, 0, 0, 0, 1, 0, 0, 0, 1};
 };
 
 // The calibration being printed: which one, and the value of each segment.
@@ -98,8 +97,8 @@ std::string write_project(const Project& project);
 // (the JSON chunk's data) and each painting in Metadata/tisma_paint_<k>.bin
 // ("TPNT", a 32-bit version, painting_to_bytes).
 std::string write_project_3mf(const Project& project);
-// Either file, told by its first bytes. A 3MF's models come back placed
-// (their offsets applied, offsets 0). Throws ProjectError on a damaged or
+// Either file, told by its first bytes. A 3MF's models come back in their
+// own coordinates, with their build items' turn and offset. Throws ProjectError on a damaged or
 // newer file, or a 3MF without the engine's data, naming what is wrong.
 Project read_project(std::string_view data);
 

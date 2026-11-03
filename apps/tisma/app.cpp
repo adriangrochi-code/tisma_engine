@@ -4055,24 +4055,22 @@ Project App::current_project() const {
     Project p;
     p.settings = settings_;
     p.profiles = chosen_profile_;
-    // Each model as placed on the bed, its turn and scale applied.
+    // Each model in its own coordinates, its place on the bed (turn, scale
+    // and position) as its build transform (formats.md, rules 8 and 11 bis:
+    // the part's frame stays the same however it is moved).
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
-        p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting,
+        const Affine to_bed = placing(objects_[i], placed_meshes_[i]);
+        p.models.push_back({objects_[i].name, objects_[i].mesh, to_bed.b, objects_[i].painting,
                             objects_[i].extruder, objects_[i].wipe_into_infill, objects_[i].wipe_into_object,
                             objects_[i].settings});
-        // The model is saved as placed: its volumes go with it.
-        const Affine to_bed = placing(objects_[i], placed_meshes_[i]);
-        const BoundingBox from = objects_[i].mesh.bounding_box(), to = placed_meshes_[i].bounding_box();
-        for (const PlateVolume& own : objects_[i].volumes) {
-            const PlateVolume v = carried_volume(own, from, to_bed, to);
+        p.models.back().turn = to_bed.a;
+        // Its volumes, ranges and Engineering data, in the same coordinates.
+        for (const PlateVolume& v : objects_[i].volumes)
             p.models.back().volumes.push_back({v.kind == PlateVolume::Kind::Negative, v.shape == PlateVolume::Shape::Cylinder,
                                                v.offset, v.size, v.settings, v.turn});
-        }
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
-        // And its Engineering data, carried to where the mesh is saved.
         p.models.back().engineering = objects_[i].engineering;
-        move_engineering(p.models.back().engineering, to_bed.a, to_bed.b);
     }
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
