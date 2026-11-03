@@ -9409,3 +9409,28 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - **TR28:** el globo de «Ingeniería» decía solo lo de Diseño. Ahora: «Analizar y diseñar piezas: estructura, aire y
   diseño». Los globos de las dos secciones se muestran debajo de la barra de arriba, a la izquierda del botón, sin
   tapar las pestañas.
+
+## 2026-11-03 — Diseño, D3 primera parte: parámetros (CD4)
+
+**Hecho (pedido del dueño: «Sigamos con el cad»):**
+- `src/cad/parameters.*`: parámetros con nombre y expresión. Las expresiones leen números, unidades (mm, cm, m, in,
+  deg, °, rad), los cuatro operadores, paréntesis, signo y otros parámetros. Cada valor lleva su medida (largo,
+  ángulo o número): largo más ángulo, largo por largo y división por cero son errores, y un número suelto sumado a un
+  largo cuenta como mm. Los parámetros se evalúan en el orden en que dependen unos de otros; un ciclo se nombra.
+- `Feature::bindings`: cada medida de una operación (los tres tamaños de una primitiva, distancia y ángulo de
+  extruir o revolucionar, ancho y alto de un rectángulo, diámetro de un círculo) puede atarse a una expresión.
+  `apply_parameters` pone los valores antes de construir; el guion de SolidCraft se arma sobre una copia. Los
+  parámetros y las ataduras se guardan en el JSON del diseño.
+- Panel Diseño: sección Parámetros (nombre = expresión, el valor debajo o «No da un valor», ×, «Agregar
+  parámetro») y un botón «fx» junto a cada medida, que abre la expresión; Enter la toma y cierra el cuadro.
+- Programas de prueba: tecla `a` (para Ctrl+A).
+
+**Probado:** 2 pruebas nuevas del motor (unidades, orden, errores; CD4 con el sustituto de SolidCraft: una caja
+atada a un parámetro pasa de 24000 a 37500 mm³ al cambiarlo). Prueba de interfaz `ui_script_design_parameters`: caja
+de 20 mm (8000 mm³), «Largo» atado a `p1*3` con `p1 = 10 mm` (12000 mm³), `p1` cambiado a 15 mm (18000 mm³).
+
+**No probado:** con el `solidcraft-cli` real (solo con el sustituto). Las operaciones de un boceto (posición de las
+líneas sueltas) todavía no se atan a parámetros.
+
+**Sigue:** D3, restricciones y cotas con grados de libertad (regla 5, CD3); después la línea de tiempo editable
+(regla 8, CD6).

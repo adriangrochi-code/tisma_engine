@@ -3,6 +3,7 @@
 // stand-in (tests/fake_solidcraft_cli.cpp), and the 3MF written and read.
 
 #include "cad/design.hpp"
+#include "cad/parameters.hpp"
 #include "cad/process.hpp"
 #include "cad/sketch.hpp"
 #include "cad/solidcraft.hpp"
@@ -16,6 +17,7 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <cmath>
+#include <map>
 #include <cstdlib>
 #include <numbers>
 
@@ -451,3 +453,88 @@ TEST_CASE("cad: a rectangle extruded and a profile revolved through the tool (CD
     CHECK_THAT(built.volume_mm3, WithinRel(2.0 * std::numbers::pi * std::numbers::pi * 15.0 * 16.0, 0.01));
 }
 
+
+TEST_CASE("cad: parameters with units, their order and their errors (rule 9)", "[cad]") {
+    std::map<std::string, Quantity> v{{"ancho", {40.0, Measure::Length}}, {"angulo", {60.0, Measure::Angle}}};
+    const auto value = [&](const std::string& e) {
+        const Evaluation r = evaluate(e, v);
+        INFO(e << ": " << r.error);
+        REQUIRE(r.value);
+        return *r.value;
+    };
+    CHECK(value("2 * ancho + 5 mm").value == 85.0);
+    CHECK(value("2 * ancho + 5 mm").measure == Measure::Length);
+    CHECK(value("angulo / 2").value == 30.0);
+    CHECK(value("angulo / 2").measure == Measure::Angle);
+    CHECK(value("2,5 cm").value == 25.0);
+    CHECK(value("1 in").value == 25.4);
+    CHECK_THAT(value("1 rad").value, WithinRel(57.29578, 1e-6));
+    CHECK(value("-(ancho - 10) * 2").value == -60.0);
+    CHECK(value("ancho / 4 mm").measure == Measure::None); // a length over a length
+    CHECK(value("30°").measure == Measure::Angle);
+    // What is not a value says why.
+    for (const char* bad : {"ancho + angulo", "ancho * ancho", "2 *", "(1 + 2", "largo + 1", "1 / 0", "5 mm mm"})
+        CHECK_FALSE(evaluate(bad, v).value);
+    // Parameters in any order, each using others; a cycle and a missing name fail.
+    const ParameterValues p = evaluate_parameters({{"total", "2 * ancho + borde"},
+                                                   {"ancho", "40 mm"},
+                                                   {"borde", "5"},
+                                                   {"a", "b + 1"},
+                                                   {"b", "a + 1"},
+                                                   {"c", "nada * 2"},
+                                                   {"mm", "1"}});
+    CHECK(p.values.at("total").value == 85.0);
+    CHECK(p.values.at("total").measure == Measure::Length);
+    CHECK(p.errors.count("a"));
+    CHECK(p.errors.count("b"));
+    CHECK(p.errors.count("c"));
+    CHECK(p.errors.count("mm")); // a unit is not a name
+    CHECK(valid_parameter_name("ancho_2"));
+    CHECK_FALSE(valid_parameter_name("2ancho"));
+}
+
+TEST_CASE("cad: CD4, a parameter changes the part without redoing it by hand", "[cad]") {
+    // CD2's rectangle, its width tied to «ancho», its extrusion to «alto».
+    Design d;
+    d.parameters = {{"ancho", "40 mm"}, {"alto", "ancho / 2"}};
+    Feature f;
+    f.name = "Plate";
+    f.type = Feature::Type::Sketch;
+    f.sketch.entities.push_back({Entity::Kind::Rectangle, {{0.0, 0.0}, {40.0, 30.0}}});
+    f.bindings = {{"e0.width", "ancho"}, {"distance", "alto"}};
+    d.features.push_back(f);
+    CHECK(apply_parameters(d).empty());
+    CHECK(d.features[0].operation.distance == 20.0);
+    d.parameters[0].expression = "50 mm";
+    CHECK(apply_parameters(d).empty());
+    CHECK(d.features[0].sketch.entities[0].points[1].x == 50.0);
+    CHECK(d.features[0].operation.distance == 25.0);
+    // A primitive's size, and a wrong measure or target said, the size kept.
+    Feature box;
+    box.name = "Box";
+    box.bindings = {{"size0", "ancho"}, {"size1", "30 deg"}, {"size7", "1"}};
+    d.features.push_back(box);
+    const std::vector<std::string> problems = apply_parameters(d);
+    CHECK(d.features[1].sizes[0] == 50.0);
+    CHECK(d.features[1].sizes[1] == 20.0);
+    REQUIRE(problems.size() == 2);
+    // Kept with the design.
+    const Design back = parse_design(design_json(d));
+    CHECK(back.parameters == d.parameters);
+    CHECK(back.features[0].bindings == d.features[0].bindings);
+    CHECK(back.features[1].bindings == d.features[1].bindings);
+    // Through the tool: 40 wide gives 24 000 mm3 (20 high), 50 wide 50 x 30 x 25.
+    if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
+        SKIP("the stand-in solidcraft-cli was not built");
+    set_env("TISMA_FAKE_SOLIDCRAFT_HANG", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_BROKEN", nullptr);
+    d.features.pop_back();
+    d.parameters[0].expression = "40 mm";
+    BuildResult built = build_design(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    CHECK_THAT(built.volume_mm3, WithinAbs(24000.0, 1e-3));
+    d.parameters[0].expression = "50 mm";
+    built = build_design(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    CHECK_THAT(built.volume_mm3, WithinAbs(50.0 * 30.0 * 25.0, 1e-3));
+}

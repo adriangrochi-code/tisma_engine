@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <stdexcept>
 
 namespace tisma::cad {
@@ -215,7 +216,90 @@ const char* kind_name(Primitive kind) {
 
 } // namespace
 
-std::vector<std::string> build_commands(const Design& design) {
+Measure target_measure(const Feature& f, const std::string& target) {
+    if (f.type == Feature::Type::Primitive) {
+        for (std::size_t i = 0; i < size_count(f.kind); ++i)
+            if (target == "size" + std::to_string(i))
+                return Measure::Length;
+        return Measure::None;
+    }
+    if (target == "distance")
+        return Measure::Length;
+    if (target == "angle")
+        return Measure::Angle;
+    // "e<k>.width" and the like: entity k of the sketch, of the right kind.
+    if (target.size() > 2 && target[0] == 'e') {
+        const std::size_t dot = target.find('.');
+        if (dot == std::string::npos)
+            return Measure::None;
+        char* end = nullptr;
+        const unsigned long k = std::strtoul(target.c_str() + 1, &end, 10);
+        if (end != target.c_str() + dot || k >= f.sketch.entities.size())
+            return Measure::None;
+        const std::string what = target.substr(dot + 1);
+        const Entity::Kind kind = f.sketch.entities[k].kind;
+        if ((kind == Entity::Kind::Rectangle && (what == "width" || what == "height")) ||
+            (kind == Entity::Kind::Circle && what == "diameter"))
+            return Measure::Length;
+    }
+    return Measure::None;
+}
+
+std::vector<std::string> apply_parameters(Design& design) {
+    std::vector<std::string> problems;
+    const ParameterValues values = evaluate_parameters(design.parameters);
+    for (const auto& [name, error] : values.errors)
+        problems.push_back("parameter " + name + ": " + error);
+    for (Feature& f : design.features)
+        for (const auto& [target, expression] : f.bindings) {
+            const Measure wanted = target_measure(f, target);
+            const auto fail = [&](const std::string& why) { problems.push_back(f.name + ": " + target + ": " + why); };
+            if (wanted == Measure::None) {
+                fail("this feature has no such size");
+                continue;
+            }
+            const Evaluation e = evaluate(expression, values.values);
+            if (!e.value) {
+                fail(e.error);
+                continue;
+            }
+            if (e.value->measure != Measure::None && e.value->measure != wanted) {
+                fail(wanted == Measure::Length ? "an angle where a length goes" : "a length where an angle goes");
+                continue;
+            }
+            const double v = e.value->value;
+            if (!(v > 0.0) && target != "angle") {
+                fail("not above 0");
+                continue;
+            }
+            if (target == "distance") {
+                f.operation.distance = v;
+            } else if (target == "angle") {
+                f.operation.angle = v;
+            } else if (target.rfind("size", 0) == 0) {
+                f.sizes[std::size_t(target[4] - '0')] = v;
+            } else {
+                const std::size_t k = std::size_t(std::strtoul(target.c_str() + 1, nullptr, 10));
+                Entity& en = f.sketch.entities[k];
+                const std::string what = target.substr(target.find('.') + 1);
+                if (what == "diameter") {
+                    en.radius = 0.5 * v;
+                } else { // a rectangle: its second corner moves, the first stays
+                    Pt& a = en.points[0];
+                    Pt& b = en.points[1];
+                    if (what == "width")
+                        b.x = a.x + (b.x < a.x ? -v : v);
+                    else
+                        b.y = a.y + (b.y < a.y ? -v : v);
+                }
+            }
+        }
+    return problems;
+}
+
+std::vector<std::string> build_commands(const Design& given) {
+    Design design = given;
+    apply_parameters(design);
     std::vector<json> commands;
     for (const Feature& f : design.features)
         if (!f.suppressed && f.buildable())
@@ -227,7 +311,9 @@ std::vector<std::string> build_commands(const Design& design) {
     return out;
 }
 
-std::string script_json(const Design& design, const std::string& export_3mf, MeshQuality quality) {
+std::string script_json(const Design& given, const std::string& export_3mf, MeshQuality quality) {
+    Design design = given;
+    apply_parameters(design);
     json commands = json::array();
     for (const Feature& f : design.features)
         if (!f.suppressed && f.buildable()) {
@@ -249,15 +335,43 @@ std::string design_json(const Design& design) {
                                 {"kind", "sketch"},
                                 {"sketch", json::parse(sketch_json(f.sketch, f.operation))},
                                 {"suppressed", f.suppressed}});
+            if (!f.bindings.empty())
+                features.back()["bindings"] = f.bindings;
             continue;
         }
         json sizes = json::array();
         for (std::size_t i = 0; i < size_count(f.kind); ++i)
             sizes.push_back(f.sizes[i]);
         features.push_back({{"name", f.name}, {"kind", kind_name(f.kind)}, {"sizes", sizes}, {"suppressed", f.suppressed}});
+        if (!f.bindings.empty())
+            features.back()["bindings"] = f.bindings;
     }
-    return json{{"format", "tisma-design-1"}, {"name", design.name}, {"features", std::move(features)}}.dump(1);
+    json out{{"format", "tisma-design-1"}, {"name", design.name}, {"features", std::move(features)}};
+    if (!design.parameters.empty()) {
+        json parameters = json::array();
+        for (const Parameter& p : design.parameters)
+            parameters.push_back({{"name", p.name}, {"expression", p.expression}});
+        out["parameters"] = std::move(parameters);
+    }
+    return out.dump(1);
 }
+
+namespace {
+
+void read_bindings(const json& f, Feature& feature) {
+    if (!f.contains("bindings"))
+        return;
+    const json& b = f.at("bindings");
+    if (!b.is_object())
+        throw std::runtime_error("feature \"" + feature.name + "\": bindings must be an object");
+    for (const auto& [target, expression] : b.items()) {
+        if (!expression.is_string())
+            throw std::runtime_error("feature \"" + feature.name + "\": a binding is not text");
+        feature.bindings[target] = expression.get<std::string>();
+    }
+}
+
+} // namespace
 
 Design parse_design(const std::string& text) {
     json j;
@@ -280,6 +394,7 @@ Design parse_design(const std::string& text) {
             feature.type = Feature::Type::Sketch;
             parse_sketch(f.value("sketch", json::object()).dump(), feature.sketch, feature.operation);
             feature.suppressed = f.value("suppressed", false);
+            read_bindings(f, feature);
             d.features.push_back(std::move(feature));
             continue;
         }
@@ -299,7 +414,14 @@ Design parse_design(const std::string& text) {
             feature.sizes[i] = sizes[i].get<double>();
         }
         feature.suppressed = f.value("suppressed", false);
+        read_bindings(f, feature);
         d.features.push_back(std::move(feature));
+    }
+    for (const json& p : j.value("parameters", json::array())) {
+        if (!p.is_object() || !p.contains("name") || !p.at("name").is_string() || !p.contains("expression") ||
+            !p.at("expression").is_string())
+            throw std::runtime_error("a parameter needs a name and an expression");
+        d.parameters.push_back({p.at("name").get<std::string>(), p.at("expression").get<std::string>()});
     }
     return d;
 }

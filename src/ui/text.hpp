@@ -1171,6 +1171,13 @@
     X(DesignSecOperations, "Operaciones", "Operations") \
     X(DesignSecParameters, "Parámetros", "Parameters") \
     X(DesignSecHistory, "Historial", "History") \
+    X(ParamAdd, "Agregar parámetro", "Add parameter") \
+    X(ParamNone, "Sin parámetros. Una medida con fx usa uno: «2 * ancho + 5 mm».", "No parameters. A size with fx uses one: «2 * width + 5 mm».") \
+    X(ParamDelete, "Borrar el parámetro", "Delete the parameter") \
+    X(ParamBind, "Usar un parámetro o una expresión («ancho», «2 * ancho + 5 mm»); vacío: el número", "Use a parameter or an expression («width», «2 * width + 5 mm»); empty: the number") \
+    X(ParamBadValue, "No da un valor", "Gives no value") \
+    X(RectWidth, "Ancho", "Width") \
+    X(RectHeight, "Alto", "Height") \
     X(DesignSecMeasures, "Medidas", "Measures") \
     X(DesignSketch, "Boceto", "Sketch") \
     X(DesignPrimitive, "Primitiva", "Primitive") \

@@ -6,9 +6,11 @@
 // first step) and the project can keep it (rule 22). Own design, over
 // SolidCraft's public command names; see PROVENANCE.md.
 
+#include "cad/parameters.hpp"
 #include "cad/sketch.hpp"
 
 #include <array>
+#include <map>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -46,6 +48,12 @@ struct Feature {
     Sketch sketch;
     SketchOperation operation;
     bool suppressed = false; // the eye in Historial (rule 3): left out of the build
+    // Sizes tied to the design's parameters (rule 9): what they set, and the
+    // expression. Targets: "size0" to "size2" (a primitive's sizes),
+    // "distance" and "angle" (the sketch's extrusion or revolution),
+    // "e<k>.width", "e<k>.height" (a rectangle) and "e<k>.diameter" (a
+    // circle) for the sketch's entity k.
+    std::map<std::string, std::string> bindings;
     // Whether it would make a body: a primitive's sizes make a solid, a
     // sketch has a closed region.
     bool buildable() const;
@@ -54,6 +62,7 @@ struct Feature {
 struct Design {
     std::string name = "Design";
     std::vector<Feature> features;
+    std::vector<Parameter> parameters; // rule 9, in the order they were made
 
     // Whether a build would make a body: a feature not suppressed with sizes
     // that make a solid.
@@ -61,6 +70,15 @@ struct Design {
     // A name no feature has yet: `base`, else `base 2`, `base 3`...
     std::string free_name(const std::string& base) const;
 };
+
+// What a binding target measures: a length, or an angle ("angle"); None for
+// a target the feature does not have.
+Measure target_measure(const Feature& feature, const std::string& target);
+
+// Sets every bound size from the parameters (rule 9): changing a parameter
+// rebuilds the part. Returns what could not be set, one line each
+// ("box 1: size0: unknown name \"ancho\""), the size left as it was.
+std::vector<std::string> apply_parameters(Design& design);
 
 // How finely the bodies are made into a mesh (SolidCraft's export qualities):
 // the chord tolerance as a share of the body's size, 2e-4, 5e-5 or 1e-5.
@@ -76,7 +94,8 @@ double nominal_size(const Design& design);
 
 // The commands that build the design, one JSON object per command, as
 // SolidCraft's `run` takes them: {"command": "solid.box", "params": {...}}.
-// Suppressed features are left out.
+// Suppressed features are left out; bound sizes take their parameters'
+// values first (apply_parameters, on a copy).
 std::vector<std::string> build_commands(const Design& design);
 // The whole script {"commands": [...]}: the design's commands, then, with
 // `export_3mf` not empty, an export of every body to that path at `quality`.

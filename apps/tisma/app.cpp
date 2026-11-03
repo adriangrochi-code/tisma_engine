@@ -11,6 +11,7 @@
 #include "vk_window.hpp"
 
 #include "cad/design.hpp"
+#include "cad/parameters.hpp"
 #include "cad/fasteners.hpp"
 #include "cad/gears.hpp"
 #include "cloud/client.hpp"
@@ -11209,7 +11210,7 @@ void App::design_panel() {
         loc::TextDisabled("%s", tr(T::DesignSketch));
     }
     // The stages to come, greyed out (rule 3), one line each.
-    for (const T title : {T::DesignSecOperations, T::DesignSecParameters}) {
+    for (const T title : {T::DesignSecOperations}) {
         ImGui::Spacing();
         loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
         ImGui::SameLine();
@@ -11217,12 +11218,102 @@ void App::design_panel() {
         ImGui::Separator();
     }
 
+    // Parámetros (rule 9): a name and an expression each, its value or why
+    // it has none; changing one rebuilds the part.
+    bool changed = false;
+    section(T::DesignSecParameters);
+    {
+        const cad::ParameterValues values = cad::evaluate_parameters(design_.parameters);
+        if (design_.parameters.empty())
+            loc::TextDisabled("%s", tr(T::ParamNone));
+        std::optional<std::size_t> gone;
+        for (std::size_t i = 0; i < design_.parameters.size(); ++i) {
+            cad::Parameter& p = design_.parameters[i];
+            ImGui::PushID(int(i) + 10000);
+            char name[64], expression[256];
+            std::snprintf(name, sizeof name, "%s", p.name.c_str());
+            std::snprintf(expression, sizeof expression, "%s", p.expression.c_str());
+            ImGui::SetNextItemWidth(90.0f * scale_);
+            if (ImGui::InputText("##name", name, sizeof name))
+                p.name = name, design_edited_ = true;
+            rect_of(("design_param_name_" + std::to_string(i + 1)).c_str());
+            ImGui::SameLine();
+            ImGui::TextUnformatted("=");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 30.0f * scale_);
+            if (ImGui::InputText("##expression", expression, sizeof expression))
+                p.expression = expression, design_edited_ = true;
+            rect_of(("design_param_expr_" + std::to_string(i + 1)).c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton("×"))
+                gone = i;
+            if (ImGui::IsItemHovered())
+                loc::SetTooltip("%s", tr(T::ParamDelete));
+            if (const auto it = values.values.find(p.name); it != values.values.end())
+                loc::TextDisabled("%s", format(it->second.measure == cad::Measure::Angle ? "%.4g°"
+                                               : it->second.measure == cad::Measure::Length ? "%.4g mm"
+                                                                                            : "%.4g",
+                                               it->second.value)
+                                            .c_str());
+            else
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(T::ParamBadValue));
+            ImGui::PopID();
+        }
+        if (gone) {
+            design_.parameters.erase(design_.parameters.begin() + std::ptrdiff_t(*gone));
+            changed = true;
+        }
+        if (ImGui::SmallButton(tr(T::ParamAdd))) {
+            std::string name = "p1";
+            for (int k = 1; std::any_of(design_.parameters.begin(), design_.parameters.end(),
+                                        [&](const cad::Parameter& q) { return q.name == name; });)
+                name = "p" + std::to_string(++k);
+            design_.parameters.push_back({name, "10 mm"});
+        }
+        rect_of("design_param_add");
+    }
+    // The «fx» beside a size: the expression it takes from the parameters
+    // (rule 9), in a small box; empty, the number again.
+    const auto bind = [&](cad::Feature& f, const std::string& target) {
+        ImGui::SameLine();
+        ImGui::PushID(target.c_str());
+        const auto it = f.bindings.find(target);
+        const bool bound = it != f.bindings.end();
+        if (bound)
+            ImGui::PushStyleColor(ImGuiCol_Text, rgb(theme_.accent_hover));
+        if (ImGui::SmallButton("fx"))
+            ImGui::OpenPopup("##bind");
+        if (bound)
+            ImGui::PopStyleColor();
+        rect_of(("design_fx_" + std::to_string(&f - design_.features.data() + 1) + "_" + target).c_str());
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s%s%s", tr(T::ParamBind), bound ? "\n\n= " : "", bound ? it->second.c_str() : "");
+        if (ImGui::BeginPopup("##bind")) {
+            char text[256];
+            std::snprintf(text, sizeof text, "%s", bound ? it->second.c_str() : "");
+            ImGui::SetNextItemWidth(240.0f * scale_);
+            if (ImGui::IsWindowAppearing())
+                ImGui::SetKeyboardFocusHere();
+            if (ImGui::InputText("##expr", text, sizeof text)) {
+                if (text[0] == '\0')
+                    f.bindings.erase(target);
+                else
+                    f.bindings[target] = text;
+                design_edited_ = true;
+            }
+            // Enter takes the expression and closes the box.
+            if (ImGui::IsItemDeactivated() && ImGui::IsKeyPressed(ImGuiKey_Enter))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+    };
+
     // Historial: one row per feature, its eye, its name and its sizes.
     section(T::DesignSecHistory);
     if (design_.features.empty())
         loc::TextDisabled("%s", tr(T::DesignNoBodies));
     std::optional<std::size_t> removed;
-    bool changed = false;
     for (std::size_t i = 0; i < design_.features.size(); ++i) {
         cad::Feature& f = design_.features[i];
         ImGui::PushID(int(i));
@@ -11269,6 +11360,7 @@ void App::design_panel() {
                 ImGui::SetNextItemWidth(110.0f * scale_);
                 if (loc::InputNumber(tr(T::SketchDistance), &f.operation.distance, "%.2f", 0.5))
                     design_edited_ = true;
+                bind(f, "distance");
             } else {
                 int axis = f.operation.axis == 'x' ? 0 : 1;
                 ImGui::SetNextItemWidth(110.0f * scale_);
@@ -11279,6 +11371,26 @@ void App::design_panel() {
                 ImGui::SetNextItemWidth(110.0f * scale_);
                 if (loc::InputNumber(tr(T::SketchAngle), &f.operation.angle, "%.1f", 5.0))
                     design_edited_ = true;
+                bind(f, "angle");
+            }
+            // A rectangle's width and height, to tie to parameters (CD4).
+            for (std::size_t e = 0; e < f.sketch.entities.size(); ++e) {
+                cad::Entity& en = f.sketch.entities[e];
+                if (en.kind != cad::Entity::Kind::Rectangle || en.points.size() < 2)
+                    continue;
+                ImGui::PushID(int(e) + 20000);
+                for (const bool width : {true, false}) {
+                    double v = std::abs(width ? en.points[1].x - en.points[0].x : en.points[1].y - en.points[0].y);
+                    ImGui::SetNextItemWidth(110.0f * scale_);
+                    if (loc::InputNumber(tr(width ? T::RectWidth : T::RectHeight), &v, "%.2f", 0.5) && v > 0.0) {
+                        double& b = width ? en.points[1].x : en.points[1].y;
+                        const double a = width ? en.points[0].x : en.points[0].y;
+                        b = a + (b < a ? -v : v);
+                        design_edited_ = true;
+                    }
+                    bind(f, "e" + std::to_string(e) + (width ? ".width" : ".height"));
+                }
+                ImGui::PopID();
             }
             if (!f.sketch.has_region())
                 loc::TextColored(rgb(0xE8A33D), "%s", tr(T::SketchNoRegion));
@@ -11301,6 +11413,7 @@ void App::design_panel() {
                               at.y + ImGui::GetFrameHeight());
             if (loc::InputNumber(tr(size_label(f.kind, k)), &f.sizes[k], "%.2f", 0.5))
                 design_edited_ = true;
+            bind(f, "size" + std::to_string(k));
             // For the scripted tests, when it is in view (the list scrolls).
             if (rect.y >= ImGui::GetWindowPos().y && rect.w <= ImGui::GetWindowPos().y + ImGui::GetWindowSize().y)
                 g_field_rects[field_key] = rect;
@@ -11315,11 +11428,14 @@ void App::design_panel() {
         design_.features.erase(design_.features.begin() + std::ptrdiff_t(*removed));
         changed = true;
     }
-    // A measure typed: the design is built again once the field is left.
+    // A measure typed: the design is built again once the field is left,
+    // its bound sizes set from the parameters first (rule 9).
     if (design_edited_ && !ImGui::IsAnyItemActive()) {
         design_edited_ = false;
         changed = true;
     }
+    if (changed)
+        cad::apply_parameters(design_);
     if (changed)
         rebuild_design();
 
@@ -16414,6 +16530,7 @@ void App::script_input() {
                : name == "f8"                                      ? ImGuiKey_F8
                : name == "f9"                                      ? ImGuiKey_F9
                : name == "f10"                                     ? ImGuiKey_F10
+               : name == "a"                                       ? ImGuiKey_A
                : name == "z"                                       ? ImGuiKey_Z
                : name == "y"                                       ? ImGuiKey_Y
                : name == "p"                                       ? ImGuiKey_P

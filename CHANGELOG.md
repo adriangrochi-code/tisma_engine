@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Parámetros en Diseño** (`cad_design.md`, regla 9, CD4): una lista de nombres con su expresión (`ancho = 40
+  mm`, `alto = ancho / 2 + 5`), con unidades (mm, cm, m, in, grados y rad) y los errores dichos en la fila (nombre
+  que no existe, ciclo, largo más ángulo, división por cero). El botón «fx» junto a cada medida la ata a una
+  expresión; al cambiar un parámetro, la pieza se vuelve a construir. Se guardan con el diseño.
 - **Pestaña Estructural en Ingeniería** (`engineering_panel.md`, reglas 1 a 4 y 9): la pieza, el material y los
   valores de impresión que salen del perfil (o cambiados a mano, sin tocar el perfil), la temperatura de trabajo y
   Analizar, que dice qué falta. Ingeniería abre en Estructural. Las condiciones se marcan con un clic en la pieza
