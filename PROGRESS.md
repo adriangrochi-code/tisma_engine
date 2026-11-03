@@ -9738,4 +9738,15 @@ de coincidencia.
 **Medido:** la prueba «EP4 y EP6» de Estructural tarda unos 26 minutos bajo ASan (1,5 minutos sin él). No cambió
 en este bloque; queda para un bloque de mantenimiento.
 
-**Sigue:** roscas modeladas; después CFD (A3) y la línea de comandos de la nube.
+**Roscas** (regla 7, «roscas modeladas»), también en este bloque:
+- operación **Rosca** sobre una cara cilíndrica elegida con clic: designación (M2 a M24), sentido (derecha, izquierda o
+  las dos), largo (0: toda la cara) y «Rosca modelada» (si no, queda dibujada). Sale como `solid.thread` de la
+  referencia pública de SolidCraft (`face`, `designation`, `hand`, `length`, `modeled`); palabras `rosca`, `roscar`;
+- el **Agujero** por norma puede ser **roscado**: va con la broca de macho y su rosca (`solid.hole` con `thread`,
+  `hand`, `modeled`) en lugar de la holgura.
+- Pruebas: los comandos y el guardado; con el sustituto, un M5 roscado quita la broca de 4,2 mm (5 − 0,8, paso
+  grueso de ISO 261) y una rosca con una designación que no conoce queda marcada en rojo sin perder el cilindro.
+  **No probado:** la rosca modelada de verdad (el sustituto no corta el filete) y el `solidcraft-cli` real.
+
+**Sigue:** CFD (A3) y la línea de comandos de la nube (prioridad del equipo de fichas), salvo que el dueño pida más
+de Diseño; en Diseño quedan barrer, recubrir, desmolde, partir, mover cuerpos, texto (regla 10) y medir (regla 18).

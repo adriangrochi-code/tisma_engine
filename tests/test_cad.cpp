@@ -860,6 +860,46 @@ TEST_CASE("cad: D4 operations as SolidCraft commands, kept with the design (rule
     CHECK(back.features[1].bindings == d.features[1].bindings);
 }
 
+TEST_CASE("cad: a thread and a tapped hole as SolidCraft commands", "[cad]") {
+    Design d;
+    Feature box = box_feature("Caja", 20);
+    d.features.push_back(box);
+    Feature thread = operation("Rosca", OperationKind::Thread, "Caja");
+    CHECK_FALSE(thread.buildable()); // no face yet
+    thread.op.refs = {{10.0, 0.0, 5.0}, {-10.0, 0.0, 5.0}};
+    thread.op.standard = "M8";
+    thread.op.hand = "left";
+    thread.op.modeled = true;
+    thread.op.depth = 12;
+    CHECK(thread.buildable());
+    d.features.push_back(thread);
+    Feature hole = operation("Agujero", OperationKind::Hole, "Caja");
+    hole.op.refs = {{0.0, 0.0, 20.0}};
+    hole.op.standard = "M6";
+    hole.op.tapped = true;
+    d.features.push_back(hole);
+    std::vector<nlohmann::json> threads, holes;
+    for (const std::string& c : build_commands(d)) {
+        const nlohmann::json j = nlohmann::json::parse(c);
+        if (j.value("command", "") == "solid.thread")
+            threads.push_back(j.at("params"));
+        if (j.value("command", "") == "solid.hole")
+            holes.push_back(j.at("params"));
+    }
+    REQUIRE(threads.size() == 2);
+    CHECK(threads[0].at("designation") == "M8");
+    CHECK(threads[0].at("hand") == "left");
+    CHECK(threads[0].at("modeled") == true);
+    CHECK(threads[0].at("length") == 12.0);
+    REQUIRE(holes.size() == 1);
+    CHECK(holes[0].at("thread") == "M6");
+    CHECK_FALSE(holes[0].contains("clearance"));
+    // Kept with the design.
+    const Design back = parse_design(design_json(d));
+    CHECK(back.features[1].op == d.features[1].op);
+    CHECK(back.features[2].op == d.features[2].op);
+}
+
 TEST_CASE("cad: CD5 and CD6, a standard hole and a fillet through the tool (rule 7)", "[cad]") {
     if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
         SKIP("the stand-in solidcraft-cli was not built");
@@ -888,6 +928,28 @@ TEST_CASE("cad: CD5 and CD6, a standard hole and a fillet through the tool (rule
     cd5.features.push_back(hole);
     const double holed = volume(cd5);
     CHECK_THAT(solid - holed, WithinRel(std::numbers::pi * 2.75 * 2.75 * 10.0, 0.01));
+    // Tapped instead: the M5 tap drill, 5 - 0.8 = 4.2 mm (ISO 261 coarse pitch).
+    cd5.features.back().op.tapped = true;
+    const double tapped = volume(cd5);
+    CHECK_THAT(solid - tapped, WithinRel(std::numbers::pi * 2.1 * 2.1 * 10.0, 0.01));
+    // A thread on the outside of the cylinder: drawn on its face, the body
+    // as it was (the stand-in does not cut it).
+    cd5.features.pop_back();
+    Feature thread = operation("Rosca", OperationKind::Thread, "Cilindro");
+    thread.op.refs = {{10.0, 0.0, 5.0}};
+    thread.op.standard = "M20";
+    cd5.features.push_back(thread);
+    {
+        const BuildResult b = build_timeline(kFake, cd5, MeshQuality::Standard);
+        // M20 is not in the stand-in's table: the thread is refused and
+        // marked (rule 8), the cylinder before it still built.
+        REQUIRE(b.failed_feature);
+        CHECK(*b.failed_feature == 1);
+        CHECK_THAT(b.volume_mm3, WithinRel(solid, 1e-9));
+    }
+    cd5.features.back().op.standard = "M16";
+    cd5.features.back().op.depth = 6.0;
+    CHECK_THAT(volume(cd5), WithinRel(solid, 1e-9));
 
     // CD6: CD2's 40 x 30 x 20 block, a 3 mm fillet on one edge; deleted, it
     // is 24 000 mm3 again.

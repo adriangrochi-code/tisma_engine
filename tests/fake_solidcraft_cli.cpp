@@ -40,7 +40,7 @@ constexpr const char* kCommands[] = {"solid.box",       "solid.cylinder",  "soli
                                      "file.export",     "file.export_3mf", "file.save_as",     "inspect.measure",
                                      "engine.commands", "solid.fillet",    "solid.chamfer",    "solid.shell",
                                      "solid.hole",      "solid.mirror",    "solid.pattern.circular",
-                                     "solid.pattern.rectangular", "solid.combine"};
+                                     "solid.pattern.rectangular", "solid.combine", "solid.thread"};
 
 // The sketch being drawn: its plane and its closed loops as polygons (a chain
 // closed, a rectangle, a circle as 64 sides), in sketch coordinates.
@@ -287,6 +287,15 @@ double clearance_hole(const std::string& thread, const std::string& fit) {
     if (it == table.end())
         return 0.0;
     return it->second[fit == "close" ? 0 : fit == "loose" ? 2 : 1];
+}
+// The tap drill of an ISO metric coarse thread (ISO 261 pitch): the
+// nominal diameter less the pitch.
+double tap_drill(const std::string& thread) {
+    static const std::map<std::string, std::array<double, 2>> table{
+        {"M2", {2, 0.4}}, {"M2.5", {2.5, 0.45}}, {"M3", {3, 0.5}},   {"M4", {4, 0.7}},   {"M5", {5, 0.8}},
+        {"M6", {6, 1.0}}, {"M8", {8, 1.25}},     {"M10", {10, 1.5}}, {"M12", {12, 1.75}}, {"M16", {16, 2.0}}};
+    const auto it = table.find(thread);
+    return it == table.end() ? 0.0 : it->second[0] - it->second[1];
 }
 tisma::Vec3f turned(const tisma::Vec3f& v, char axis, double a) {
     const double c = std::cos(a), s = std::sin(a);
@@ -633,8 +642,9 @@ int run(const std::vector<std::string>& args) {
                 std::fprintf(stderr, "solid.hole: `targets` names no body\n");
                 return 1;
             }
-            const double d = p.contains("clearance") ? clearance_hole(text(p, "clearance", ""), text(p, "fit", "normal"))
-                                                     : number(p, "diameter", "solid.hole", false, 0.0);
+            const double d = p.contains("thread")      ? tap_drill(text(p, "thread", ""))
+                             : p.contains("clearance") ? clearance_hole(text(p, "clearance", ""), text(p, "fit", "normal"))
+                                                       : number(p, "diameter", "solid.hole", false, 0.0);
             if (!(d > 0.0)) {
                 std::fprintf(stderr, "solid.hole: no diameter (or an unknown clearance)\n");
                 return 1;
@@ -710,6 +720,19 @@ int run(const std::vector<std::string>& args) {
                 }
             }
             b->box = false;
+        } else if (cmd == "solid.thread") {
+            // A thread is drawn on the face (cosmetic) or cut into it; the
+            // stand-in only checks what it is given and leaves the body as is.
+            point(p, "face");
+            if (tap_drill(text(p, "designation", "")) <= 0.0) {
+                std::fprintf(stderr, "solid.thread: unknown `designation`\n");
+                return 1;
+            }
+            const std::string hand = text(p, "hand", "right");
+            if (hand != "right" && hand != "left" && hand != "both") {
+                std::fprintf(stderr, "solid.thread: `hand` must be right, left or both\n");
+                return 1;
+            }
         } else if (cmd == "solid.combine") {
             Body* target = body_named(text(p, "target", ""));
             const std::string op = text(p, "operation", "join");

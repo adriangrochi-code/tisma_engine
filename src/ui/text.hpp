@@ -1249,6 +1249,15 @@
     X(OpPatternCircular, "Patrón circular", "Circular pattern") \
     X(OpPatternRectangular, "Patrón en fila", "Row pattern") \
     X(OpCombine, "Combinar", "Combine") \
+    X(OpThread, "Rosca", "Thread") \
+    X(OpPickThread, "Hacé clic en la cara cilíndrica a roscar; Enter termina", "Click the cylindrical face to thread; Enter finishes") \
+    X(OpTapped, "Roscado (broca de macho)", "Tapped (tap drill)") \
+    X(OpModeled, "Rosca modelada (no solo dibujada)", "Modelled thread (not only drawn)") \
+    X(OpHand, "Sentido", "Hand") \
+    X(OpHandRight, "Derecha", "Right") \
+    X(OpHandLeft, "Izquierda", "Left") \
+    X(OpHandBoth, "Las dos", "Both") \
+    X(OpLength, "Largo (0: toda la cara)", "Length (0: the whole face)") \
     X(OpPickEdges, "Hacé clic en las aristas a redondear o achaflanar; Enter termina", "Click the edges to round or chamfer; Enter finishes") \
     X(OpPickFaces, "Hacé clic en las caras que quedan abiertas (ninguna: hueco cerrado); Enter termina", "Click the faces left open (none: closed hollow); Enter finishes") \
     X(OpPickHoles, "Hacé clic donde va cada agujero, sobre una cara; Enter termina", "Click where each hole goes, on a face; Enter finishes") \

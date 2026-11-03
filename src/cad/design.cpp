@@ -76,6 +76,7 @@ constexpr std::pair<OperationKind, const char*> kOperationNames[] = {
     {OperationKind::PatternCircular, "pattern_circular"},
     {OperationKind::PatternRectangular, "pattern_rectangular"},
     {OperationKind::Combine, "combine"},
+    {OperationKind::Thread, "thread"},
 };
 } // namespace
 
@@ -103,6 +104,7 @@ const char* operation_command(OperationKind kind) {
     case OperationKind::PatternCircular: return "solid.pattern.circular";
     case OperationKind::PatternRectangular: return "solid.pattern.rectangular";
     case OperationKind::Combine: return "solid.combine";
+    case OperationKind::Thread: return "solid.thread";
     }
     return "";
 }
@@ -122,6 +124,7 @@ bool Feature::buildable() const {
             return op.count >= 2 && op.spacing > 0.0 &&
                    std::hypot(op.direction[0], op.direction[1], op.direction[2]) > 0.0;
         case OperationKind::Combine: return !op.tools.empty();
+        case OperationKind::Thread: return !op.refs.empty() && !op.standard.empty() && op.depth >= 0.0;
         }
         return false;
     }
@@ -217,7 +220,12 @@ void operation_commands(const Feature& f, std::vector<json>& out) {
         // One hole at each point, through all unless a depth is given.
         for (const json& at : refs) {
             json p{{"position", at}, {"targets", json::array({o.target})}, {"name", f.name}};
-            if (!o.standard.empty())
+            if (!o.standard.empty() && o.tapped) {
+                p["thread"] = o.standard;
+                p["hand"] = o.hand;
+                if (o.modeled)
+                    p["modeled"] = true;
+            } else if (!o.standard.empty())
                 p["clearance"] = o.standard, p["fit"] = o.fit;
             else
                 p["diameter"] = o.value;
@@ -242,6 +250,15 @@ void operation_commands(const Feature& f, std::vector<json>& out) {
                                      {"count1", o.count},
                                      {"spacing1", o.spacing},
                                      {"name", f.name}}));
+        break;
+    case OperationKind::Thread:
+        // One thread on each cylindrical face picked.
+        for (const json& at : refs) {
+            json p{{"face", at}, {"designation", o.standard}, {"hand", o.hand}, {"modeled", o.modeled}, {"name", f.name}};
+            if (o.depth > 0.0)
+                p["length"] = o.depth;
+            out.push_back(command(name, std::move(p)));
+        }
         break;
     case OperationKind::Combine:
         out.push_back(command(name, {{"target", o.target}, {"tools", o.tools}, {"operation", o.boolean}, {"name", f.name}}));
@@ -462,6 +479,9 @@ std::string design_json(const Design& design) {
                                   {"standard", o.standard},
                                   {"fit", o.fit},
                                   {"depth", o.depth},
+                                  {"tapped", o.tapped},
+                                  {"modeled", o.modeled},
+                                  {"hand", o.hand},
                                   {"count", o.count},
                                   {"axis", std::string(1, o.axis)},
                                   {"angle", o.angle},
@@ -555,6 +575,9 @@ Design parse_design(const std::string& text) {
             op.standard = o.value("standard", std::string());
             op.fit = o.value("fit", op.fit);
             op.depth = o.value("depth", 0.0);
+            op.tapped = o.value("tapped", false);
+            op.modeled = o.value("modeled", false);
+            op.hand = o.value("hand", op.hand);
             op.count = o.value("count", op.count);
             const std::string axis = o.value("axis", std::string("Z"));
             op.axis = axis.empty() ? 'Z' : axis[0];

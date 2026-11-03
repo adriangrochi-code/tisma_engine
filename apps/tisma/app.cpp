@@ -11128,6 +11128,7 @@ T op_label(cad::OperationKind kind) {
     case cad::OperationKind::PatternCircular: return T::OpPatternCircular;
     case cad::OperationKind::PatternRectangular: return T::OpPatternRectangular;
     case cad::OperationKind::Combine: return T::OpCombine;
+    case cad::OperationKind::Thread: return T::OpThread;
     }
     return T::OpFillet;
 }
@@ -11135,17 +11136,20 @@ T op_label(cad::OperationKind kind) {
 // The operations that take points in the view (edges, faces, hole places).
 bool takes_points(cad::OperationKind kind) {
     return kind == cad::OperationKind::Fillet || kind == cad::OperationKind::Chamfer || kind == cad::OperationKind::Shell ||
-           kind == cad::OperationKind::Hole;
+           kind == cad::OperationKind::Hole || kind == cad::OperationKind::Thread;
 }
 
 T pick_hint(cad::OperationKind kind) {
-    return kind == cad::OperationKind::Shell ? T::OpPickFaces : kind == cad::OperationKind::Hole ? T::OpPickHoles : T::OpPickEdges;
+    return kind == cad::OperationKind::Shell    ? T::OpPickFaces
+           : kind == cad::OperationKind::Hole   ? T::OpPickHoles
+           : kind == cad::OperationKind::Thread ? T::OpPickThread
+                                                : T::OpPickEdges;
 }
 
 constexpr cad::OperationKind kOperations[] = {
     cad::OperationKind::Fillet,  cad::OperationKind::Chamfer,         cad::OperationKind::Shell,
     cad::OperationKind::Hole,    cad::OperationKind::Mirror,          cad::OperationKind::PatternCircular,
-    cad::OperationKind::PatternRectangular, cad::OperationKind::Combine};
+    cad::OperationKind::PatternRectangular, cad::OperationKind::Combine, cad::OperationKind::Thread};
 
 } // namespace
 
@@ -11171,6 +11175,7 @@ void App::add_operation(cad::OperationKind kind) {
     case cad::OperationKind::Shell: f.op.value = 2.0; break;
     case cad::OperationKind::Hole: f.op.standard = "M5"; f.op.value = 5.0; break;
     case cad::OperationKind::PatternRectangular: f.op.count = 3; break;
+    case cad::OperationKind::Thread: f.op.standard = "M8"; break;
     case cad::OperationKind::Combine:
         if (bodies.size() >= 2) // the body before it, cut from the last
             f.op.target = bodies[bodies.size() - 2], f.op.tools = {bodies.back()};
@@ -11943,6 +11948,39 @@ void App::design_panel() {
                 ImGui::SetNextItemWidth(110.0f * scale_);
                 if (loc::InputNumber(tr(T::OpDepth), &o.depth, "%.2f", 1.0))
                     design_edited_ = true;
+                if (!o.standard.empty()) {
+                    // Tapped: the tap drill and its thread, drawn or cut.
+                    if (ImGui::Checkbox(tr(T::OpTapped), &o.tapped))
+                        changed = true;
+                    rect_of(("design_op_tapped_" + row).c_str());
+                    if (o.tapped) {
+                        ImGui::SameLine();
+                        if (ImGui::Checkbox(tr(T::OpModeled), &o.modeled))
+                            changed = true;
+                    }
+                }
+                break;
+            }
+            case cad::OperationKind::Thread: {
+                static const char* kThreads[] = {"M2", "M2.5", "M3", "M4", "M5", "M6", "M8", "M10", "M12", "M16", "M20", "M24"};
+                ImGui::SetNextItemWidth(130.0f * scale_);
+                if (ImGui::BeginCombo(tr(T::OpStandard), o.standard.c_str())) {
+                    for (const char* m : kThreads)
+                        if (ImGui::Selectable(m, o.standard == m))
+                            o.standard = m, changed = true;
+                    ImGui::EndCombo();
+                }
+                rect_of(("design_op_standard_" + row).c_str());
+                int hand = o.hand == "left" ? 1 : o.hand == "both" ? 2 : 0;
+                const char* hands[] = {tr(T::OpHandRight), tr(T::OpHandLeft), tr(T::OpHandBoth)};
+                ImGui::SetNextItemWidth(130.0f * scale_);
+                if (ImGui::Combo(tr(T::OpHand), &hand, hands, 3))
+                    o.hand = hand == 1 ? "left" : hand == 2 ? "both" : "right", changed = true;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (loc::InputNumber(tr(T::OpLength), &o.depth, "%.2f", 1.0))
+                    design_edited_ = true;
+                if (ImGui::Checkbox(tr(T::OpModeled), &o.modeled))
+                    changed = true;
                 break;
             }
             case cad::OperationKind::Mirror: {
@@ -15418,7 +15456,9 @@ void App::run_command(std::string text) {
         {"patrón", cad::OperationKind::PatternCircular},    {"polar", cad::OperationKind::PatternCircular},
         {"fila", cad::OperationKind::PatternRectangular},   {"pattern", cad::OperationKind::PatternRectangular},
         {"combinar", cad::OperationKind::Combine},          {"combine", cad::OperationKind::Combine},
-        {"restar", cad::OperationKind::Combine},            {"unir", cad::OperationKind::Combine}};
+        {"restar", cad::OperationKind::Combine},            {"unir", cad::OperationKind::Combine},
+        {"rosca", cad::OperationKind::Thread},              {"roscar", cad::OperationKind::Thread},
+        {"thread", cad::OperationKind::Thread}};
     for (const auto& [name, kind] : kOperationWords)
         if (word == name) {
             if (!solidcraft_probed_ || !solidcraft_.available || !solidcraft_.has(cad::operation_command(kind))) {
