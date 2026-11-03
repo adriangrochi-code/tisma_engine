@@ -9318,3 +9318,12 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   archivo, o en las que el proyecto guarda sus condiciones (para un 3MF, lo que su lectura movió la malla queda en
   `ProjectModel::placed_by`). La misma pieza da el mismo punto suelta o en un proyecto movido en la cama; la posición
   en la cama va aparte, en `weakest_on_bed`. El informe dice `"frame": "part"`.
+
+### Marcado, primera pieza
+
+- `face_region` (`src/mesh/face_region.*`): la cara que toma un clic en «Zona fija» o «Zona de fuerza» (regla 5, «la
+  parte plana o lisa hasta los bordes marcados»). Recorre los triángulos vecinos mientras el ángulo entre sus normales
+  no pase 20°: el lado de un cubo son sus dos triángulos, la pared de un cilindro de 32 lados es una sola cara, y sus
+  tapas otras dos. Prueba nueva con el cubo y el cilindro.
+- **Sigue:** los botones de las herramientas en el panel, el clic en la vista (la pieza, el triángulo y el punto, en
+  las coordenadas de la pieza), la lista de condiciones con ojo, lápiz y cruz, y deshacer.

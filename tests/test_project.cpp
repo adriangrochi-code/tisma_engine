@@ -1,6 +1,7 @@
 #include "project/project.hpp"
 #include "project/engineering_values.hpp"
 #include "ui/project_slice.hpp"
+#include "mesh/face_region.hpp"
 
 #include "calibration/calibration.hpp"
 #include "config/profiles.hpp"
@@ -489,4 +490,34 @@ TEST_CASE("Engineering conditions follow the part onto the plate, placed and mir
     const std::vector<ui::PlateObject> objects = ui::project_objects(models);
     REQUIRE(objects[0].engineering.conditions.size() == 1);
     CHECK(objects[0].engineering.conditions[0].point[0] == 6.0);
+}
+
+TEST_CASE("a click picks the whole face: flat up to the edges, smooth around a cylinder", "[project]") {
+    // A 10 mm cube: each side is its two triangles.
+    TriangleMesh cube = read_stl(std::string(TISMA_TEST_DATA_DIR) + "/cube_ascii.stl").mesh;
+    REQUIRE(cube.triangle_count() == 12);
+    for (std::uint32_t t = 0; t < 12; ++t)
+        CHECK(face_region(cube, t).size() == 2);
+    // A cylinder of 32 sides: the wall (64 triangles, 11.25 degrees from one
+    // side to the next) is one face; each cap is its own.
+    TriangleMesh cylinder;
+    const int n = 32;
+    const auto at = [&](int i, float z) {
+        const double a = 2.0 * 3.14159265358979 * (i % n) / n;
+        return Vec3f{float(10.0 * std::cos(a)), float(10.0 * std::sin(a)), z};
+    };
+    for (int i = 0; i < n; ++i) {
+        cylinder.add_triangle(at(i, 0), at(i + 1, 0), at(i + 1, 20)); // wall: triangles 0..2n-1
+        cylinder.add_triangle(at(i, 0), at(i + 1, 20), at(i, 20));
+    }
+    for (int i = 0; i < n; ++i) {
+        cylinder.add_triangle({0, 0, 0}, at(i + 1, 0), at(i, 0));    // bottom cap
+        cylinder.add_triangle({0, 0, 20}, at(i, 20), at(i + 1, 20)); // top cap
+    }
+    CHECK(face_region(cylinder, 5).size() == std::size_t(2 * n));
+    CHECK(face_region(cylinder, std::uint32_t(2 * n)).size() == std::size_t(n));
+    // A sharper bend allowed: wall and caps stay apart (90 degrees).
+    CHECK(face_region(cylinder, 5, 45.0).size() == std::size_t(2 * n));
+    // Nothing for a triangle the mesh does not have.
+    CHECK(face_region(cube, 99).empty());
 }
