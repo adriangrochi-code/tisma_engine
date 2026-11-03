@@ -9696,3 +9696,40 @@ prueba elige los puntos por coordenadas, con el mismo código que el clic).
 
 **Sigue:** la edición del boceto (regla 17: recortar, desfasar, simetría y patrones del boceto; CD17, CD18), roscas;
 después CFD (A3) y la línea de comandos de la nube.
+
+## 2026-11-03 — Diseño: edición del boceto (regla 17; CD17, CD18) y un arreglo del CI
+
+**Hecho** (`cad_design.md`, regla 17):
+- Motor nuevo `src/cad/sketch_edit.*`, geometría plana propia sobre las entidades del boceto:
+  - **recortar** (TR): se quita el tramo bajo el clic entre los cruces de cada lado; una línea o un círculo que nada
+    cruza se borra entero; un rectángulo recortado pasa a cadena, un círculo a arco y una cadena cortada al medio, a
+    dos;
+  - **alargar** (EX): el extremo de una cadena abierta va hasta la curva más cercana hacia adelante;
+  - **desfasar** (O): una copia a la distancia pedida, del lado del clic (círculo y arco concéntricos, rectángulo más
+    grande o más chico, cadena con cada tramo corrido y las esquinas en inglete);
+  - **chaflán** (CHA) de una esquina de cadena o de rectángulo; la región sigue cerrada;
+  - **simetría** (MI), **matriz** rectangular y polar (AR; una vuelta entera reparte el ángulo, una parte pone la
+    última copia en su final), **mover**, **copiar**, **girar** y **escalar** con punto base;
+  - **selección** por ventana (arrastrando hacia la derecha, solo lo que queda adentro) y por cruce (hacia la
+    izquierda, todo lo que toca), además del clic.
+  - Lo que una edición deja sin cumplir (las restricciones y cotas de una entidad que cambió) se quita; mover deja las
+    que no dependen del lugar.
+- En la interfaz: un grupo **Editar** en la sección Boceto y los alias de la regla 12 en la línea de comandos (TR,
+  EX, O, CHA, MI, AR, M, CO, RO, SC, y sus nombres en los dos idiomas). Cada herramienta pide sus datos paso a paso,
+  con el valor de antes entre `< >` (Enter lo toma). Lo elegido se pinta en violeta; la caja de selección, azul si es
+  ventana y verde si es cruce; al mover o copiar, las entidades siguen al puntero.
+- **Arreglo (CI):** el analizador de expresiones de los parámetros se quedaba sin pila con 5000 paréntesis anidados
+  bajo el sanitizador de direcciones (lo encontró la prueba de mantenimiento). Ahora más de 200 niveles es un error.
+
+**Pruebas:** 9 casos nuevos del motor, entre ellos CD17 y CD18, y 300 secuencias al azar de ediciones: ninguna deja
+una regla sobre una entidad que cambió, ni puntos no finitos. Prueba de interfaz `design_sketch_edit`: CD17 (dos líneas
+cruzadas, TR y clic en un extremo: queda en 10, 10), CD18 (clic en un círculo, AR polar en el origen, 6 en 360°:
+seis círculos a 60°) y un desfase de 2 mm del lado del clic. `design_constraints` elige «Fijo» con la palabra `fijo`
+(el panel ahora es más alto y el botón queda fuera de la vista).
+
+**Falta de la regla 17:** redondear esquinas del boceto (necesita perfiles hechos de tramos y arcos, regla 6).
+
+**Medido:** la prueba «EP4 y EP6» de Estructural tarda unos 26 minutos bajo ASan (1,5 minutos sin él). No cambió
+en este bloque; queda para un bloque de mantenimiento.
+
+**Sigue:** redondear esquinas del boceto con perfiles mixtos, roscas; después CFD (A3) y la línea de comandos de la nube.

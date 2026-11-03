@@ -1199,8 +1199,8 @@ Diseño es una pestaña más de la misma ventana; nunca otro programa.
 Etapas (regla 24): D1 (hecha el 2026-11-02: pestaña, panel, línea de comandos, primitivas, mandar a la placa y
 volver a editar; CD1, CD1b, CD7, CD19, CD20, CD21), D2 (hecha el 2026-11-02: bocetos en un plano, coordenadas
 tipeadas, entrada junto al cursor, referencias, ortogonal y polar, extruir y revolucionar; CD2, CD10, CD13 a CD16), D3 (hecha el 2026-11-03: parámetros, CD4; restricciones y cotas con grados de libertad, CD3; línea de tiempo editable, regla 8, con la parte de CD6 que no necesita redondeo; arrastrar puntos del boceto resolviendo en cada cuadro), D4 (primera parte hecha el 2026-11-03: redondeo, chaflán,
-vaciado, agujeros por ISO 273, simetría, patrón circular y en fila, combinar; CD5 y CD6 completo; falta: roscas y la edición
-del boceto de la regla 17, CD17 y CD18), D5 (STEP e IGES, mallas, texto, proyecto, medidas).
+vaciado, agujeros por ISO 273, simetría, patrón circular y en fila, combinar; CD5 y CD6 completo; edición del boceto de la regla 17, CD17 y CD18,
+hecha el 2026-11-03 salvo el redondeo de esquinas; falta: roscas y redondear esquinas del boceto), D5 (STEP e IGES, mallas, texto, proyecto, medidas).
 
 La ficha de comportamiento (`cad_design.md`) la escribe el equipo de fichas.
 

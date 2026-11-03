@@ -1317,6 +1317,42 @@
     X(SketchDofNone, "Totalmente definido", "Fully defined") \
     X(SketchDofUnsolved, "No se puede cumplir todo: revisá las cotas", "Not everything can be met: check the dimensions") \
     X(SketchRules, "Restricciones", "Constraints") \
+    X(SketchEditTools, "Editar", "Edit") \
+    X(EditTrim, "Recortar", "Trim") \
+    X(EditExtend, "Alargar", "Extend") \
+    X(EditOffset, "Desfasar", "Offset") \
+    X(EditChamfer, "Chaflán", "Chamfer") \
+    X(EditMirror, "Simetría", "Mirror") \
+    X(EditArray, "Matriz", "Array") \
+    X(EditMove, "Mover", "Move") \
+    X(EditCopy, "Copiar", "Copy") \
+    X(EditRotate, "Girar", "Rotate") \
+    X(EditScale, "Escalar", "Scale") \
+    X(PromptTrim, "Recortar: hacé clic en la parte a quitar (Enter termina)", "Trim: click the part to cut away (Enter ends)") \
+    X(PromptExtend, "Alargar: hacé clic cerca del extremo a alargar (Enter termina)", "Extend: click near the end to extend (Enter ends)") \
+    X(PromptOffsetDistance, "Desfasar: distancia <%.4g>", "Offset: distance <%.4g>") \
+    X(PromptOffsetPick, "Desfasar: elegí la curva (Enter termina)", "Offset: pick the curve (Enter ends)") \
+    X(PromptOffsetSide, "Desfasar: hacé clic del lado hacia donde va", "Offset: click the side it goes to") \
+    X(PromptChamferDistance, "Chaflán: distancia <%.4g>", "Chamfer: distance <%.4g>") \
+    X(PromptChamferPick, "Chaflán: hacé clic en la esquina (Enter termina)", "Chamfer: click the corner (Enter ends)") \
+    X(PromptSelect, "Elegí los objetos: clic, o arrastrá (a la derecha, ventana; a la izquierda, cruce). Enter sigue", "Pick the objects: click, or drag (to the right, window; to the left, crossing). Enter goes on") \
+    X(PromptMirror1, "Simetría: primer punto de la recta", "Mirror: first point of the line") \
+    X(PromptMirror2, "Simetría: segundo punto de la recta", "Mirror: second point of the line") \
+    X(PromptArrayKind, "Matriz [Rectangular/Polar] <Polar>", "Array [Rectangular/Polar] <Polar>") \
+    X(PromptArrayCentre, "Matriz polar: centro", "Polar array: centre") \
+    X(PromptArrayCount, "Matriz polar: cantidad en total <%d>", "Polar array: count in all <%d>") \
+    X(PromptArrayAngle, "Matriz polar: ángulo a llenar <%.4g>", "Polar array: angle to fill <%.4g>") \
+    X(PromptArrayColumns, "Matriz: columnas <%d>", "Array: columns <%d>") \
+    X(PromptArrayRows, "Matriz: filas <%d>", "Array: rows <%d>") \
+    X(PromptArrayDx, "Matriz: separación entre columnas <%.4g>", "Array: column spacing <%.4g>") \
+    X(PromptArrayDy, "Matriz: separación entre filas <%.4g>", "Array: row spacing <%.4g>") \
+    X(PromptBase, "Punto base", "Base point") \
+    X(PromptSecond, "Segundo punto (o @dx,dy)", "Second point (or @dx,dy)") \
+    X(PromptAngle, "Ángulo de giro <%.4g>", "Rotation angle <%.4g>") \
+    X(PromptFactor, "Factor de escala <%.4g>", "Scale factor <%.4g>") \
+    X(EditNothing, "Ahí no hay nada para eso", "Nothing there for that") \
+    X(EditNoSelection, "No hay nada elegido", "Nothing is picked") \
+    X(EditDone, "Hecho", "Done") \
     X(RuleDimension, "Cota", "Dimension") \
     X(RuleHorizontal, "Horizontal", "Horizontal") \
     X(RuleVertical, "Vertical", "Vertical") \

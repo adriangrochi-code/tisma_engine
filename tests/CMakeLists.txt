@@ -84,6 +84,7 @@ add_executable(tisma_tests
   test_catalog.cpp
   test_device.cpp
   test_cad.cpp
+  test_sketch_edit.cpp
   test_fasteners.cpp
   test_gears.cpp
   test_cloud.cpp
@@ -284,7 +285,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     # The Design tab (cad_design.md, stage D1) driven through the stand-in
     # solidcraft-cli: the tab, the primitives, the command line, sending to the
     # plate and editing again; without the component (CD21); hidden (CD1).
-    foreach(script design_tab design_parameters design_constraints design_operations design_command design_hidden design_sketch fasteners gears structural_tab structural_analyze)
+    foreach(script design_tab design_parameters design_constraints design_operations design_sketch_edit design_command design_hidden design_sketch fasteners gears structural_tab structural_analyze)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760

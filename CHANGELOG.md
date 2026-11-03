@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Editar el boceto** (`cad_design.md`, regla 17): recortar, alargar, desfasar, chaflán de una esquina, simetría,
+  matriz rectangular y polar, mover, copiar, girar y escalar, desde el grupo Editar o con TR, EX, O, CHA, MI, AR, M,
+  CO, RO y SC en la línea de comandos. Se elige con clic o con una caja: hacia la derecha, ventana (solo lo que queda
+  adentro); hacia la izquierda, cruce (todo lo que toca).
 - **Operaciones en Diseño** (`cad_design.md`, regla 7, etapa D4): redondeo, chaflán, vaciado, agujero por norma
   ISO 273 (M2 a M16, ajuste justo, normal u holgado) o diámetro libre, simetría, patrón circular, patrón en fila y
   combinar (unir, restar, intersecar), desde el panel o la línea de comandos (`redondeo`, `chaflán`, `vaciado`,
@@ -209,6 +213,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- Una expresión de parámetro con miles de paréntesis anidados podía cerrar el programa; ahora es un error.
 - Estructural ya no se pone lento con piezas grandes: «Desactualizado» se calculaba en cada cuadro recorriendo toda
   la malla (200 ms con 2 millones de triángulos).
 - Una restricción de boceto que solo se cumplía dando vuelta un rectángulo (ancho o alto por cero) se agregaba y

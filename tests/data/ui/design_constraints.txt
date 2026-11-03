@@ -31,8 +31,8 @@ type 40,15
 key enter
 key enter
 expect-sketch-dof 2
-menu sketch_rule_fixed
-menu design_command
+type fijo
+key enter
 type 0,0
 key enter
 expect-sketch-dof 0

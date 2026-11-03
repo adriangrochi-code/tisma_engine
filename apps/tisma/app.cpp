@@ -23,6 +23,7 @@
 #include "ui/system_info.hpp"
 #include "cad/process.hpp"
 #include "cad/solidcraft.hpp"
+#include "cad/sketch_edit.hpp"
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
 #include "illustrations.hpp"
@@ -1206,7 +1207,19 @@ private:
     // and the tracking, and the toggles F3, F8, F9, F10.
     struct SketchEdit {
         std::size_t feature = 0;
-        enum class Tool { None, Line, Rectangle, Circle, Arc, Constrain } tool = Tool::None;
+        enum class Tool { None, Line, Rectangle, Circle, Arc, Constrain, Edit } tool = Tool::None;
+        // The editing tools (rule 17), each a few steps: picks, points and
+        // numbers asked for on the command line.
+        enum class EditKind { Trim, Extend, Offset, Chamfer, Mirror, Array, Move, Copy, Rotate, Scale };
+        EditKind edit = EditKind::Trim;
+        int edit_step = 0;
+        std::vector<std::size_t> selected;
+        std::vector<cad::Pt> edit_points;
+        std::optional<std::size_t> edit_entity;
+        bool array_polar = true;
+        int array_count = 6, array_columns = 3, array_rows = 1;
+        double array_angle = 360.0, array_dx = 10.0, array_dy = 10.0;
+        std::optional<cad::Pt> box_from; // a selection box being dragged
         // The constraint tool (rule 5): what it makes, what was picked, and a
         // dimension asking for its value on the command line.
         enum class Rule { Dimension, Horizontal, Vertical, Parallel, Perpendicular, Equal, Coincident, Concentric, Tangent, Fixed, Angle };
@@ -1265,6 +1278,13 @@ private:
     void sketch_rule_prompt();
     void sketch_apply_rule(const cad::GeoConstraint& rule);
     double sketch_pick_radius() const;
+    void sketch_edit_tool(SketchEdit::EditKind kind);
+    void sketch_edit_prompt();
+    void sketch_edit_point(const cad::Pt& p, const cad::Pt& raw);
+    bool sketch_edit_text(const std::string& word, const std::string& text);
+    void sketch_edit_finish(bool changed);
+    bool sketch_edit_selecting() const;
+    double offset_distance_ = 2.0, chamfer_distance_ = 1.0, rotate_angle_ = 90.0, scale_factor_ = 2.0;
     void sketch_drag_to(const cad::Pt& p);
     // The degrees of freedom of the sketch being drawn, counted again only
     // when it changes.
@@ -8444,6 +8464,18 @@ void App::viewport() {
                 sketch_drag_to(*se.raw);
             if (se.drag && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
                 se.drag.reset(); // a release after a drag places no point (it was not a click)
+            // Choosing for an editing tool: a drag is a selection box (rule 17).
+            if (sketch_edit_selecting()) {
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && se.raw)
+                    se.box_from = se.raw;
+                if (se.box_from && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                    if (io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] >= 9.0f && se.raw && editing_sketch())
+                        for (const std::size_t i : cad::select_box(*editing_sketch(), *se.box_from, *se.raw))
+                            if (std::find(se.selected.begin(), se.selected.end(), i) == se.selected.end())
+                                se.selected.push_back(i);
+                    se.box_from.reset();
+                }
+            }
             if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] < 9.0f &&
                 sketch_edit_->cursor) {
                 const cad::Snap snap = sketch_edit_->snap;
@@ -11578,6 +11610,36 @@ void App::design_panel() {
                     ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
                 if (ImGui::SmallButton(tr(label)))
                     sketch_rule_tool(rule);
+                if (on)
+                    ImGui::PopStyleColor();
+                rect_of(id);
+                x += w + ImGui::GetStyle().ItemSpacing.x;
+            }
+        }
+        // Editar (rule 17).
+        {
+            loc::TextDisabled("%s", tr(T::SketchEditTools));
+            using K = SketchEdit::EditKind;
+            const std::tuple<K, T, const char*> edits[] = {
+                {K::Trim, T::EditTrim, "sketch_edit_trim"},       {K::Extend, T::EditExtend, "sketch_edit_extend"},
+                {K::Offset, T::EditOffset, "sketch_edit_offset"}, {K::Chamfer, T::EditChamfer, "sketch_edit_chamfer"},
+                {K::Mirror, T::EditMirror, "sketch_edit_mirror"}, {K::Array, T::EditArray, "sketch_edit_array"},
+                {K::Move, T::EditMove, "sketch_edit_move"},       {K::Copy, T::EditCopy, "sketch_edit_copy"},
+                {K::Rotate, T::EditRotate, "sketch_edit_rotate"}, {K::Scale, T::EditScale, "sketch_edit_scale"},
+            };
+            float x = 0.0f;
+            const float room = ImGui::GetContentRegionAvail().x;
+            for (const auto& [kind, label, id] : edits) {
+                const float w = ImGui::CalcTextSize(tr(label)).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+                if (x > 0.0f && x + w <= room)
+                    ImGui::SameLine();
+                else
+                    x = 0.0f;
+                const bool on = e.tool == SketchEdit::Tool::Edit && e.edit == kind;
+                if (on)
+                    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+                if (ImGui::SmallButton(tr(label)))
+                    sketch_edit_tool(kind);
                 if (on)
                     ImGui::PopStyleColor();
                 rect_of(id);
@@ -15543,7 +15605,8 @@ void App::sketch_end_tool(bool close) {
             entity = cad::Entity{cad::Entity::Kind::Arc, {e.points[0], e.points[1], e.points[2]}};
         break;
     case SketchEdit::Tool::None:
-    case SketchEdit::Tool::Constrain: break;
+    case SketchEdit::Tool::Constrain:
+    case SketchEdit::Tool::Edit: break;
     }
     if (entity) {
         const std::size_t index = sketch->entities.size();
@@ -15573,6 +15636,11 @@ void App::sketch_end_tool(bool close) {
                     sketch->dimensions.push_back({index, segment, length});
     }
     e.tool = SketchEdit::Tool::None;
+    e.edit_step = 0;
+    e.edit_points.clear();
+    e.edit_entity.reset();
+    e.box_from.reset();
+    e.selected.clear();
     e.picks.clear();
     e.pending.reset();
     e.points.clear();
@@ -15589,6 +15657,15 @@ void App::sketch_place(const cad::Pt& p, const cad::Snap* snap, std::optional<do
     SketchEdit& e = *sketch_edit_;
     if (e.tool == SketchEdit::Tool::Constrain) {
         sketch_pick(p);
+        return;
+    }
+    if (e.tool == SketchEdit::Tool::Edit) {
+        // A click picks where the mouse is (a snap would move it onto an end);
+        // a typed or snapped base point is taken as it is.
+        const bool picking = sketch_edit_selecting() || e.edit == SketchEdit::EditKind::Trim ||
+                             e.edit == SketchEdit::EditKind::Extend || e.edit == SketchEdit::EditKind::Offset ||
+                             e.edit == SketchEdit::EditKind::Chamfer;
+        sketch_edit_point(p, snap && picking ? e.raw.value_or(p) : p);
         return;
     }
     if (e.tool == SketchEdit::Tool::None)
@@ -15671,6 +15748,334 @@ double App::sketch_pick_radius() const {
     // About 10 pixels, in the plane's millimetres, as the snaps take it.
     const float pixels_per_mm = view_size_.y / std::max(2.0f * camera_.lens_distance() * std::tan(0.5f * camera_.lens_fov()), 1e-3f);
     return 10.0 / std::max(double(pixels_per_mm), 1e-3);
+}
+
+// The editing tools of the sketch (cad_design.md, rule 17). Each starts at
+// step 0; the tools that work on a selection ask for one first when nothing
+// is picked yet.
+bool App::sketch_edit_selecting() const {
+    if (!sketch_edit_ || sketch_edit_->tool != SketchEdit::Tool::Edit)
+        return false;
+    using K = SketchEdit::EditKind;
+    const K k = sketch_edit_->edit;
+    return sketch_edit_->edit_step == 0 && k != K::Trim && k != K::Extend && k != K::Offset && k != K::Chamfer;
+}
+
+void App::sketch_edit_tool(SketchEdit::EditKind kind) {
+    if (!sketch_edit_ || !editing_sketch())
+        return;
+    // A selection made before the tool is kept for it.
+    std::vector<std::size_t> selected = sketch_edit_->selected;
+    sketch_end_tool(false);
+    SketchEdit& e = *sketch_edit_;
+    e.tool = SketchEdit::Tool::Edit;
+    e.edit = kind;
+    e.edit_step = 0;
+    e.selected = std::move(selected);
+    if (sketch_edit_selecting() && !e.selected.empty())
+        e.edit_step = 1;
+    sketch_edit_prompt();
+}
+
+void App::sketch_edit_prompt() {
+    if (!sketch_edit_ || sketch_edit_->tool != SketchEdit::Tool::Edit)
+        return;
+    const SketchEdit& e = *sketch_edit_;
+    using K = SketchEdit::EditKind;
+    if (sketch_edit_selecting()) {
+        command_message_ = tr(T::PromptSelect);
+        return;
+    }
+    const int st = e.edit_step;
+    switch (e.edit) {
+    case K::Trim: command_message_ = tr(T::PromptTrim); break;
+    case K::Extend: command_message_ = tr(T::PromptExtend); break;
+    case K::Offset:
+        command_message_ = st == 0 ? format(tr(T::PromptOffsetDistance), offset_distance_)
+                           : st == 1 ? std::string(tr(T::PromptOffsetPick))
+                                     : std::string(tr(T::PromptOffsetSide));
+        break;
+    case K::Chamfer:
+        command_message_ = st == 0 ? format(tr(T::PromptChamferDistance), chamfer_distance_) : std::string(tr(T::PromptChamferPick));
+        break;
+    case K::Mirror: command_message_ = tr(st == 1 ? T::PromptMirror1 : T::PromptMirror2); break;
+    case K::Array:
+        if (st == 1)
+            command_message_ = tr(T::PromptArrayKind);
+        else if (e.array_polar)
+            command_message_ = st == 2 ? std::string(tr(T::PromptArrayCentre))
+                               : st == 3 ? format(tr(T::PromptArrayCount), e.array_count)
+                                         : format(tr(T::PromptArrayAngle), e.array_angle);
+        else
+            command_message_ = st == 2 ? format(tr(T::PromptArrayColumns), e.array_columns)
+                               : st == 3 ? format(tr(T::PromptArrayRows), e.array_rows)
+                               : st == 4 ? format(tr(T::PromptArrayDx), e.array_dx)
+                                         : format(tr(T::PromptArrayDy), e.array_dy);
+        break;
+    case K::Move:
+    case K::Copy: command_message_ = tr(st == 1 ? T::PromptBase : T::PromptSecond); break;
+    case K::Rotate: command_message_ = st == 1 ? std::string(tr(T::PromptBase)) : format(tr(T::PromptAngle), rotate_angle_); break;
+    case K::Scale: command_message_ = st == 1 ? std::string(tr(T::PromptBase)) : format(tr(T::PromptFactor), scale_factor_); break;
+    }
+}
+
+// The tool done: the sketch's constraints counted again; the tools that
+// repeat (trim, extend, offset, chamfer) stay on.
+void App::sketch_edit_finish(bool changed) {
+    if (!sketch_edit_)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    using K = SketchEdit::EditKind;
+    if (changed && editing_sketch()) {
+        // Indices may have moved (an entity trimmed away): the selection goes.
+        e.selected.clear();
+        e.drag.reset();
+    }
+    if (e.edit == K::Trim || e.edit == K::Extend || e.edit == K::Chamfer || (e.edit == K::Offset && e.edit_step > 0)) {
+        if (e.edit == K::Offset)
+            e.edit_step = 1, e.edit_entity.reset();
+        sketch_edit_prompt();
+        if (changed)
+            command_message_ = std::string(tr(T::EditDone)) + " · " + command_message_;
+        return;
+    }
+    sketch_end_tool(false);
+    command_message_ = tr(changed ? T::EditDone : T::EditNothing);
+}
+
+void App::sketch_edit_point(const cad::Pt& p, const cad::Pt& raw) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    using K = SketchEdit::EditKind;
+    const double radius = sketch_pick_radius();
+    // The entity under a point: a small crossing box round it.
+    const auto under = [&](const cad::Pt& q) -> std::optional<std::size_t> {
+        const std::vector<std::size_t> hit = cad::select_box(*sketch, {q.x + radius, q.y + radius}, {q.x - radius, q.y - radius});
+        if (hit.empty())
+            return std::nullopt;
+        return hit.back(); // the last drawn, on top
+    };
+    if (sketch_edit_selecting()) {
+        if (const auto i = under(raw)) {
+            const auto it = std::find(e.selected.begin(), e.selected.end(), *i);
+            if (it == e.selected.end())
+                e.selected.push_back(*i);
+            else
+                e.selected.erase(it);
+        }
+        return;
+    }
+    e.last = p;
+    switch (e.edit) {
+    case K::Trim: sketch_edit_finish(cad::trim_at(*sketch, raw, radius)); return;
+    case K::Extend: sketch_edit_finish(cad::extend_at(*sketch, raw, radius)); return;
+    case K::Offset:
+        if (e.edit_step == 0)
+            e.edit_step = 1; // a click takes the distance shown
+        if (e.edit_step == 1) {
+            e.edit_entity = under(raw);
+            if (!e.edit_entity) {
+                command_message_ = tr(T::EditNothing);
+                return;
+            }
+            e.edit_step = 2;
+            sketch_edit_prompt();
+            return;
+        }
+        sketch_edit_finish(cad::offset_entity(*sketch, *e.edit_entity, offset_distance_, raw).has_value());
+        return;
+    case K::Chamfer: {
+        if (e.edit_step == 0)
+            e.edit_step = 1;
+        // The nearest corner within reach.
+        std::optional<std::pair<std::size_t, std::size_t>> corner;
+        double best = radius;
+        for (std::size_t i = 0; i < sketch->entities.size(); ++i) {
+            const cad::Entity& en = sketch->entities[i];
+            const std::size_t n = en.kind == cad::Entity::Kind::Rectangle ? 4 : en.kind == cad::Entity::Kind::Chain ? en.points.size() : 0;
+            for (std::size_t k = 0; k < n; ++k) {
+                const cad::Pt q = cad::point_of(en, k);
+                if (const double d = std::hypot(q.x - raw.x, q.y - raw.y); d <= best)
+                    best = d, corner = std::pair{i, k};
+            }
+        }
+        sketch_edit_finish(corner && cad::chamfer_corner(*sketch, corner->first, corner->second, chamfer_distance_));
+        return;
+    }
+    case K::Mirror:
+        e.edit_points.push_back(p);
+        if (e.edit_points.size() < 2) {
+            e.edit_step = 2;
+            sketch_edit_prompt();
+            return;
+        }
+        sketch_edit_finish(!cad::mirror_entities(*sketch, e.selected, e.edit_points[0], e.edit_points[1]).empty());
+        return;
+    case K::Array:
+        if (e.edit_step == 1) // a click instead of a word: polar about it
+            e.array_polar = true, e.edit_step = 2;
+        if (e.array_polar && e.edit_step == 2) {
+            e.edit_points = {p};
+            e.edit_step = 3;
+            sketch_edit_prompt();
+        }
+        return;
+    case K::Move:
+    case K::Copy:
+        e.edit_points.push_back(p);
+        if (e.edit_points.size() < 2) {
+            e.edit_step = 2;
+            sketch_edit_prompt();
+            return;
+        }
+        sketch_edit_finish(!cad::map_entities(*sketch, e.selected,
+                                              cad::moved(e.edit_points[1].x - e.edit_points[0].x, e.edit_points[1].y - e.edit_points[0].y),
+                                              e.edit == K::Copy)
+                                .empty());
+        return;
+    case K::Rotate:
+    case K::Scale:
+        if (e.edit_step == 1) {
+            e.edit_points = {p};
+            e.edit_step = 2;
+            sketch_edit_prompt();
+        }
+        return;
+    }
+}
+
+// The command line while an editing tool is on, or a tool's name: true when
+// taken.
+bool App::sketch_edit_text(const std::string& word, const std::string& text) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return false;
+    SketchEdit& e = *sketch_edit_;
+    using K = SketchEdit::EditKind;
+    static const std::pair<const char*, K> kNames[] = {
+        {"tr", K::Trim},       {"recortar", K::Trim},     {"trim", K::Trim},         {"ex", K::Extend},
+        {"alargar", K::Extend}, {"extend", K::Extend},    {"o", K::Offset},          {"desfasar", K::Offset},
+        {"offset", K::Offset}, {"cha", K::Chamfer},       {"chaflan", K::Chamfer},   {"chaflán", K::Chamfer},
+        {"chamfer", K::Chamfer}, {"mi", K::Mirror},       {"simetria", K::Mirror},   {"simetría", K::Mirror},
+        {"mirror", K::Mirror}, {"ar", K::Array},          {"matriz", K::Array},      {"array", K::Array},
+        {"m", K::Move},        {"mover", K::Move},        {"move", K::Move},         {"co", K::Copy},
+        {"copiar", K::Copy},   {"copy", K::Copy},         {"ro", K::Rotate},         {"girar", K::Rotate},
+        {"rotate", K::Rotate}, {"sc", K::Scale},          {"escalar", K::Scale},     {"scale", K::Scale}};
+    for (const auto& [name, kind] : kNames)
+        if (word == name) {
+            last_command_ = word;
+            sketch_edit_tool(kind);
+            return true;
+        }
+    if (e.tool != SketchEdit::Tool::Edit)
+        return false;
+    const std::optional<double> number = cad::parse_typed_value(text);
+    // Enter: the selection is done, the number shown is kept, or the tool ends.
+    if (word.empty()) {
+        if (sketch_edit_selecting()) {
+            if (e.selected.empty()) {
+                command_message_ = tr(T::EditNoSelection);
+                return true;
+            }
+            e.edit_step = 1;
+            sketch_edit_prompt();
+            return true;
+        }
+    }
+    const int st = e.edit_step;
+    const bool wants_number =
+        ((e.edit == K::Offset || e.edit == K::Chamfer) && st == 0) || (e.edit == K::Array && st >= 2 && !(e.array_polar && st == 2)) ||
+        ((e.edit == K::Rotate || e.edit == K::Scale) && st == 2);
+    if (wants_number && (word.empty() || number)) {
+        const bool given = !word.empty();
+        const double v = number.value_or(0.0);
+        switch (e.edit) {
+        case K::Offset:
+        case K::Chamfer:
+            if (given && !(v > 0.0)) {
+                command_message_ = tr(T::CommandBadNumber);
+                return true;
+            }
+            if (given)
+                (e.edit == K::Offset ? offset_distance_ : chamfer_distance_) = v;
+            e.edit_step = 1;
+            sketch_edit_prompt();
+            return true;
+        case K::Rotate:
+            if (given)
+                rotate_angle_ = v;
+            sketch_edit_finish(!cad::map_entities(*sketch, e.selected, cad::rotated(e.edit_points.at(0), rotate_angle_), false).empty());
+            return true;
+        case K::Scale:
+            if (given && !(v > 0.0)) {
+                command_message_ = tr(T::CommandBadNumber);
+                return true;
+            }
+            if (given)
+                scale_factor_ = v;
+            sketch_edit_finish(!cad::map_entities(*sketch, e.selected, cad::scaled(e.edit_points.at(0), scale_factor_), false).empty());
+            return true;
+        case K::Array: {
+            const auto whole = [&](int& field) {
+                if (given) {
+                    if (!(v >= 1.0) || v > 1000.0 || v != std::floor(v)) {
+                        command_message_ = tr(T::CommandBadNumber);
+                        return false;
+                    }
+                    field = int(v);
+                }
+                return true;
+            };
+            if (e.array_polar && st == 3) {
+                if (!whole(e.array_count))
+                    return true;
+            } else if (e.array_polar && st == 4) {
+                if (given)
+                    e.array_angle = v;
+                sketch_edit_finish(!cad::pattern_polar(*sketch, e.selected, e.edit_points.at(0), e.array_count, e.array_angle).empty());
+                return true;
+            } else if (st == 2) {
+                if (!whole(e.array_columns))
+                    return true;
+            } else if (st == 3) {
+                if (!whole(e.array_rows))
+                    return true;
+            } else if (st == 4) {
+                if (given)
+                    e.array_dx = v;
+            } else {
+                if (given)
+                    e.array_dy = v;
+                sketch_edit_finish(
+                    !cad::pattern_rectangular(*sketch, e.selected, e.array_columns, e.array_dx, e.array_rows, e.array_dy).empty());
+                return true;
+            }
+            ++e.edit_step;
+            sketch_edit_prompt();
+            return true;
+        }
+        default: break;
+        }
+    }
+    if (e.edit == K::Array && st == 1) {
+        if (word.empty() || word == "p" || word == "polar")
+            e.array_polar = true;
+        else if (word == "r" || word == "rectangular")
+            e.array_polar = false;
+        else
+            return false;
+        e.edit_step = 2;
+        sketch_edit_prompt();
+        return true;
+    }
+    if (word.empty()) { // Enter with nothing asked: the tool ends
+        sketch_end_tool(false);
+        command_message_ = tr(T::SketchToolLeft);
+        return true;
+    }
+    return false;
 }
 
 void App::sketch_pick(const cad::Pt& p) {
@@ -15878,6 +16283,9 @@ bool App::sketch_command(const std::string& word, const std::string& text) {
             return true;
         }
     }
+    // The editing tools (rule 17): their names, and what a step asks for.
+    if (sketch_edit_text(word, text))
+        return true;
     // The constraint tools by their names (rule 5).
     {
         using R = SketchEdit::Rule;
@@ -16117,6 +16525,23 @@ void App::sketch_overlay() {
     const ImU32 loose = ImGui::GetColorU32(rgb(0x4C9BFF, 0.95f));
     for (std::size_t i = 0; i < sketch->entities.size(); ++i)
         draw_entity(sketch->entities[i], i < dof.entity_fixed.size() && dof.entity_fixed[i] ? ink : loose);
+    // What an editing tool has picked, in the accent colour; the selection
+    // box being dragged: a window blue, a crossing green (rule 17).
+    for (const std::size_t i : e.selected)
+        if (i < sketch->entities.size())
+            draw_entity(sketch->entities[i], ImGui::GetColorU32(rgb(theme_.accent_hover, 1.0f)));
+    if (e.box_from && e.raw) {
+        const cad::Pt& a = *e.box_from;
+        const cad::Pt& b = *e.raw;
+        const bool window = b.x >= a.x;
+        const ImU32 edge = ImGui::GetColorU32(rgb(window ? 0x4C9BFF : 0x3FBF7F, 0.9f));
+        const ImU32 fill = ImGui::GetColorU32(rgb(window ? 0x4C9BFF : 0x3FBF7F, 0.15f));
+        ImVec2 q[4];
+        if (project(a, q[0]) && project({b.x, a.y}, q[1]) && project(b, q[2]) && project({a.x, b.y}, q[3])) {
+            dl->AddConvexPolyFilled(q, 4, fill);
+            dl->AddPolyline(q, 4, edge, 1.5f * scale_, ImDrawFlags_Closed);
+        }
+    }
     // Each dimension's value beside what it measures.
     for (const cad::GeoConstraint& r : sketch->rules) {
         if (!cad::is_dimension(r.kind) || r.a.entity >= sketch->entities.size())
@@ -16171,6 +16596,24 @@ void App::sketch_overlay() {
     if (e.cursor) {
         const cad::Pt c = *e.cursor;
         switch (e.tool) {
+        case SketchEdit::Tool::Edit:
+            // Moved or copied: the picked entities follow the cursor; a mirror
+            // line from its first point.
+            if ((e.edit == SketchEdit::EditKind::Move || e.edit == SketchEdit::EditKind::Copy) && e.edit_points.size() == 1) {
+                cad::Sketch ghosts;
+                for (const std::size_t i : e.selected)
+                    if (i < sketch->entities.size())
+                        ghosts.entities.push_back(sketch->entities[i]);
+                std::vector<std::size_t> all(ghosts.entities.size());
+                for (std::size_t i = 0; i < all.size(); ++i)
+                    all[i] = i;
+                cad::map_entities(ghosts, all, cad::moved(c.x - e.edit_points[0].x, c.y - e.edit_points[0].y), false);
+                for (const cad::Entity& g : ghosts.entities)
+                    draw_entity(g, ghost);
+            } else if (e.edit == SketchEdit::EditKind::Mirror && e.edit_points.size() == 1) {
+                line(e.edit_points[0], c, ghost, 1.0f * scale_);
+            }
+            break;
         case SketchEdit::Tool::Line:
             for (std::size_t i = 0; i + 1 < e.points.size(); ++i)
                 line(e.points[i], e.points[i + 1], ghost, thick);
