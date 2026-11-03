@@ -1,5 +1,6 @@
 #include "project/project.hpp"
 #include "project/engineering_values.hpp"
+#include "ui/project_slice.hpp"
 
 #include "calibration/calibration.hpp"
 #include "config/profiles.hpp"
@@ -449,4 +450,37 @@ TEST_CASE("EP1, EP3, EP5, EP10: the Structural panel's values come from the prof
     CHECK(material_for_filament("PA-CF") == "bambu-pa6-cf");
     CHECK(material_for_filament("pla+") == "esun-pla-plus");
     CHECK(material_for_filament("") == "");
+}
+
+TEST_CASE("Engineering conditions follow the part onto the plate, placed and mirrored", "[project]") {
+    ProjectEngineering e;
+    EngineeringCondition dot;
+    dot.kind = ConditionKind::ForcePoint;
+    dot.point = {1.0, 2.0, 3.0};
+    dot.normal = {1.0, 0.0, 0.0};
+    e.conditions = {dot};
+    // Moved by an offset: the point moves, the normal stays.
+    ProjectEngineering moved = e;
+    move_engineering(moved, {1, 0, 0, 0, 1, 0, 0, 0, 1}, {10.0, 20.0, 0.0});
+    CHECK(moved.conditions[0].point == std::array<double, 3>{11.0, 22.0, 3.0});
+    CHECK(moved.conditions[0].normal == std::array<double, 3>{1.0, 0.0, 0.0});
+    // Mirrored in X about 5: the point to 9, the normal still outward (-x).
+    ProjectEngineering mirrored = e;
+    move_engineering(mirrored, {-1, 0, 0, 0, 1, 0, 0, 0, 1}, {10.0, 0.0, 0.0});
+    CHECK(mirrored.conditions[0].point[0] == 9.0);
+    CHECK(mirrored.conditions[0].normal[0] == -1.0);
+    // Stretched twice in X, turned a quarter about Z: a normal along x stays
+    // normal to the turned face (along y).
+    ProjectEngineering turned = e;
+    move_engineering(turned, {0, -1, 0, 2, 0, 0, 0, 0, 1}, {});
+    CHECK(std::abs(turned.conditions[0].normal[1] - 1.0) < 1e-12);
+    CHECK(std::abs(turned.conditions[0].normal[0]) < 1e-12);
+    // project_objects keeps them, moved with the mesh by the model's offset.
+    std::vector<ProjectModel> models(1);
+    models[0].mesh.add_triangle({0, 0, 0}, {1, 0, 0}, {0, 1, 0});
+    models[0].offset = {5.0, 0.0, 0.0};
+    models[0].engineering = e;
+    const std::vector<ui::PlateObject> objects = ui::project_objects(models);
+    REQUIRE(objects[0].engineering.conditions.size() == 1);
+    CHECK(objects[0].engineering.conditions[0].point[0] == 6.0);
 }

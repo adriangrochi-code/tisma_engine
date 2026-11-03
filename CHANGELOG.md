@@ -162,6 +162,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **La interfaz conserva las condiciones de Ingeniería de cada pieza** al abrir y volver a guardar un proyecto, y al
+  espejar la pieza; antes se perdían.
 - **Nombres de ajustes cortados en el panel** (TR25): a 1440 px, 21 nombres quedaban cortados a mitad de palabra y a
   veces tapaban la ⓘ. Ahora un nombre que no entra termina en «…», se lee entero al pasar el mouse, y la ⓘ siempre se
   ve; la columna de los nombres es un poco más ancha. «Largo de las transiciones» pasa a «Largo de transición».

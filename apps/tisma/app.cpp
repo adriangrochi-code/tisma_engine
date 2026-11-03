@@ -4063,6 +4063,9 @@ Project App::current_project() const {
         }
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
+        // And its Engineering data, carried to where the mesh is saved.
+        p.models.back().engineering = objects_[i].engineering;
+        move_engineering(p.models.back().engineering, to_bed.a, to_bed.b);
     }
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
@@ -9447,6 +9450,7 @@ void App::mirror_selected(int axis) {
     map.b[a] = 2.0 * centre - map.b[a];
     for (PlateVolume& v : o.volumes)
         v = carried_volume(v, from, map, to);
+    move_engineering(o.engineering, map.a, map.b);
     plate_changed();
 }
 

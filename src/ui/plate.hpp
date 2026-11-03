@@ -1,5 +1,6 @@
 #pragma once
 
+#include "project/engineering.hpp"
 #include "config/settings.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/paint.hpp"
@@ -76,6 +77,9 @@ struct PlateObject {
     std::string design_file{};
     std::string fastener{}; // a part of the Fasteners tab: its spec (cad::fastener_json)
     int design_id = 0;
+    // Its Engineering data (engineering_panel.md, rule 17): conditions in
+    // the frame and triangles of `mesh`.
+    ProjectEngineering engineering{};
 };
 
 // The painting of a model carried onto another mesh of the same part (a

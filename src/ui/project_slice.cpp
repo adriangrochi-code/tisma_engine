@@ -40,6 +40,9 @@ std::vector<PlateObject> project_objects(std::vector<ProjectModel>& models) {
                                  v.settings, v.turn});
         for (const ProjectRange& r : m.ranges)
             o.ranges.push_back({r.from, r.to, r.settings});
+        // The conditions move with the mesh, by its offset.
+        o.engineering = std::move(m.engineering);
+        move_engineering(o.engineering, {1, 0, 0, 0, 1, 0, 0, 0, 1}, m.offset);
         const BoundingBox box = o.mesh.bounding_box();
         o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
         o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));

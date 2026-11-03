@@ -112,6 +112,12 @@ std::size_t drop_conditions_beyond(ProjectEngineering& e, std::size_t triangles)
 
 const char* condition_kind_name(ConditionKind kind);
 
+// The conditions of a part whose mesh became `a` p + `b` of itself (by rows;
+// placed on the bed, mirrored): points move with it and normals turn with it
+// (by the cofactor of a, so a mirror or an uneven scale keeps them normal).
+// Triangle numbers, forces' axes and vectors stay: they are the world's.
+void move_engineering(ProjectEngineering& e, const std::array<double, 9>& a, const std::array<double, 3>& b);
+
 // What a result depends on, as 16 hexadecimal digits (FNV-1a, 64 bits): the
 // part's mesh, its conditions, values and options (not its results), and the
 // settings' JSON. A result whose fingerprint differs from the current one is

@@ -295,4 +295,23 @@ std::size_t drop_conditions_beyond(ProjectEngineering& e, std::size_t triangles)
     return before - e.conditions.size();
 }
 
+void move_engineering(ProjectEngineering& e, const std::array<double, 9>& a, const std::array<double, 3>& b) {
+    // The cofactor matrix: det(a) times the inverse transpose, by rows.
+    const std::array<double, 9> c{a[4] * a[8] - a[5] * a[7], a[5] * a[6] - a[3] * a[8], a[3] * a[7] - a[4] * a[6],
+                                  a[2] * a[7] - a[1] * a[8], a[0] * a[8] - a[2] * a[6], a[1] * a[6] - a[0] * a[7],
+                                  a[1] * a[5] - a[2] * a[4], a[2] * a[3] - a[0] * a[5], a[0] * a[4] - a[1] * a[3]};
+    const double det = a[0] * c[0] + a[1] * c[1] + a[2] * c[2];
+    for (EngineeringCondition& k : e.conditions) {
+        const std::array<double, 3> p = k.point, n = k.normal;
+        std::array<double, 3> m{};
+        for (std::size_t r = 0; r < 3; ++r) {
+            k.point[r] = a[3 * r] * p[0] + a[3 * r + 1] * p[1] + a[3 * r + 2] * p[2] + b[r];
+            m[r] = (c[3 * r] * n[0] + c[3 * r + 1] * n[1] + c[3 * r + 2] * n[2]) * (det < 0.0 ? -1.0 : 1.0);
+        }
+        const double len = std::sqrt(m[0] * m[0] + m[1] * m[1] + m[2] * m[2]);
+        if (len > 0.0)
+            k.normal = {m[0] / len, m[1] / len, m[2] / len};
+    }
+}
+
 } // namespace tisma

@@ -9256,3 +9256,9 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - Pruebas: EP1, EP2, EP3, EP5 y EP10 en su parte lógica.
 - **Sigue:** la pestaña Estructural en la interfaz: lista de piezas, herramientas de marcado sobre la vista, lista de
   condiciones con deshacer, Analizar en segundo plano, mapa y veredicto; y sacar «Análisis» de Impresión 3D.
+- **Encontrado y corregido:** la interfaz perdía los datos de Ingeniería de cada pieza. `PlateObject` no los tenía,
+  así que abrir un proyecto con condiciones y guardarlo de nuevo desde la interfaz las borraba. Ahora la pieza los
+  lleva (`PlateObject::engineering`): al abrir se mueven con la malla, y al guardar van a donde se guarda la malla
+  ubicada; al espejar, también. Para eso, `move_engineering`: los puntos con el mapa de la pieza y las normales con
+  su cofactor, así un espejo o una escala despareja las deja normales. Los números de triángulo, y el eje y el vector
+  de una fuerza (que son del mundo), no cambian. Cortar y dividir hacen piezas nuevas, sin condiciones.
