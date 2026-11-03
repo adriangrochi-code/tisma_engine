@@ -9399,6 +9399,13 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   reprodujo el salto a la vista de arriba, ni con un clic ni con doble clic, a 1200 × 760. Lo que sí apareció: un
   doble clic marcaba dos condiciones y además volvía a encuadrar la placa. Ahora, con una herramienta de marcado, el
   segundo clic de un doble clic no marca nada y no encuadra. Se pidió al equipo de fichas la secuencia exacta.
+- **UI50, la causa (con la secuencia exacta del equipo de fichas):** reproducido con XTest a 1440 × 900, el puntero
+  saltando de «Punto fijo» al cubo y un clic: 1 de 5 corridas con bbff4fc. La órbita usaba
+  `IsMouseDragging(..., 0)`, que ya es verdadero en el cuadro en que se aprieta el botón; si el salto del puntero
+  llegaba en ese mismo cuadro, todo el salto giraba la vista (casi desde arriba). Ahora el cuadro del clic no gira
+  ni desplaza la vista (izquierdo, derecho y medio). Con el arreglo: 8 de 8 corridas sin salto; 79 pruebas de la
+  interfaz pasan. Afectaba también a Preparar con una herramienta de mouse o un programa de pruebas, no solo a
+  Estructural.
 - **TR28:** el globo de «Ingeniería» decía solo lo de Diseño. Ahora: «Analizar y diseñar piezas: estructura, aire y
   diseño». Los globos de las dos secciones se muestran debajo de la barra de arriba, a la izquierda del botón, sin
   tapar las pestañas.

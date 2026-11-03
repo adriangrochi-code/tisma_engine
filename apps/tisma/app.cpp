@@ -8419,12 +8419,17 @@ void App::viewport() {
                 drag_anchor_ = *p;
                 dragged_ = true;
             }
-        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) &&
+                   !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            // Not on the press itself: its frame's delta is where the pointer
+            // came from, not a drag (UI50: a click right after a jump of the
+            // pointer turned the view to the top, now and then).
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
             moved_frame_ = ImGui::GetFrameCount();
             camera_framed_ = false;
         }
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
+        if ((ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) && !ImGui::IsMouseClicked(ImGuiMouseButton_Right)) ||
+            (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f) && !ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) {
             camera_.pan(io.MouseDelta.x, io.MouseDelta.y, view_size_.y);
             moved_frame_ = ImGui::GetFrameCount();
             camera_framed_ = false;

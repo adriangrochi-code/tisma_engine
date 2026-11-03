@@ -172,6 +172,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **La vista ya no gira sola al hacer clic** después de mover el puntero de golpe (UI50): el cuadro del clic no cuenta
+  como arrastre. Pasaba, a veces, al marcar condiciones en Estructural.
 - **Memoria del análisis con zonas marcadas:** una cara marcada de 200 × 200 mm ocupaba 504 MB; ahora menos de 1 MB,
   y la búsqueda de los nodos de la zona es 10 veces más rápida.
 - **La interfaz conserva las condiciones de Ingeniería de cada pieza** al abrir y volver a guardar un proyecto, y al
