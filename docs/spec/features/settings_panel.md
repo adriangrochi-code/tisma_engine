@@ -113,7 +113,7 @@ El motor toma de los dos:
 | Resistencia | Arriba y abajo | `surfaces.*` | «3 arriba · 3 abajo» |
 | Resistencia | Relleno | `infill.density`, `infill.pattern`, `infill.angle` | «20 % · rectilíneo» |
 | Resistencia | Relleno avanzado | `infill.wall_overlap`, `infill.solid_every`, `infill.solid_below_area`, `infill.combine_*`, `infill.dense_*`, `infill.stress_density` | «Sin cambios» |
-| Resistencia | Relleno ondulado | `infill.nonplanar*` | «Apagado» |
+| Resistencia | Relleno no planar | Un solo renglón con «No», «Zigzag en Z» (`infill.nonplanar*`, `zigzag_infill.md`) y «Ondas entrelazadas» (`infill.waves`, `infill.wave_*`, `interlock_infill.md`), regla 11 de `zigzag_infill.md` | «No» |
 | Velocidad | Primera capa | `speed.first_layer` | «30 mm/s» |
 | Velocidad | Paredes y superficies | `speed.walls`, `speed.outer_wall`, `speed.solid_infill`, `speed.top_solid_infill` | «60 · externa 50 %» |
 | Velocidad | Relleno y soporte | `speed.infill`, `speed.support` | «80 · 80 mm/s» |
@@ -201,7 +201,8 @@ El motor toma de los dos:
 |---|---|
 | `support.enabled` | El resto de la sección Soportes |
 | `zaa.enabled` | El resto de `zaa.*` |
-| `infill.nonplanar` | `infill.nonplanar_amplitude`, `infill.nonplanar_wavelength` |
+| «Relleno no planar» en «Zigzag en Z» | `infill.nonplanar_amplitude`, `infill.nonplanar_wavelength` |
+| «Relleno no planar» en «Ondas entrelazadas» | `infill.wave_amplitude`, `infill.wave_length` |
 | `infill.dense_under_top` | `infill.dense_density` |
 | `infill.combine_auto` encendido | `infill.combine_layers` (lo calcula el motor) |
 
