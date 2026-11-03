@@ -5026,8 +5026,16 @@ void App::top_bar() {
                                         const char* name) {
             ImGui::SetCursorPosY(top);
             const std::string tip = compact_sections ? std::string(tr(label)) + ": " + tr(tip_text) : std::string(tr(tip_text));
-            if (button(id, icon_name, compact_sections ? nullptr : tr(label), false, on, true, tip.c_str(), button_h) && !on)
+            if (button(id, icon_name, compact_sections ? nullptr : tr(label), false, on, true, nullptr, button_h) && !on)
                 set_tab(to == Tab::Preview && !result_.has_value() ? Tab::Prepare : to);
+            // Its tip under the top bar, at the button's left, so it does
+            // not cover the section's tabs beside it (TR28).
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+                ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMin().x, origin.y + kTopBar * scale_ + 4.0f * scale_));
+                ImGui::BeginTooltip();
+                ImGui::TextUnformatted(tip.c_str());
+                ImGui::EndTooltip();
+            }
             g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
                                         ImGui::GetItemRectMax().y);
         };
@@ -8264,8 +8272,9 @@ void App::viewport() {
     // under the mouse (engineering_panel.md, rule 5): a point where it was
     // clicked, a zone as the whole face (face_region); with Shift a zone adds
     // the face to the last zone of its kind.
+    // A double click's second click marks nothing more (UI50).
     if (tab_ == Tab::Structural && structural_tool_ > 0 && !objects_.empty() && ImGui::IsItemActivated() &&
-        ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
         const Vec3 d = mouse_ray(), e = camera_.eye();
         if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d); hit && hit->object < objects_.size()) {
             PlateObject& o = objects_[hit->object];
@@ -8439,7 +8448,9 @@ void App::viewport() {
             moved_frame_ = ImGui::GetFrameCount();
             camera_framed_ = false;
         }
-        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        // A double click frames the plate, but not while marking a part in
+        // Structural: the view stays where it was (UI50).
+        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !(tab_ == Tab::Structural && structural_tool_ > 0))
             frame_all();
     }
     // A right click, not a drag: on a model, its menu (settings_levels.md,

@@ -245,7 +245,7 @@
     X(ModePrint, "Impresión 3D", "3D printing") \
     X(ModePrintTip, "Preparar, laminar, analizar, calibrar e imprimir", "Prepare, slice, analyse, calibrate and print") \
     X(ModeEngineering, "Ingeniería", "Engineering") \
-    X(ModeEngineeringTip, "Diseñar piezas, con su tornillería, para imprimir", "Design parts, with their fasteners, to print") \
+    X(ModeEngineeringTip, "Analizar y diseñar piezas: estructura, aire y diseño", "Analyze and design parts: structure, air and design") \
     X(FastenersSubtitle, "Rosca métrica ISO, con holgura para imprimir", "ISO metric thread, with play for printing") \
     X(FastenersEditing, "Editando una pieza de la placa.", "Editing a part of the plate.") \
     X(FastenersNew, "Pieza nueva", "New part") \

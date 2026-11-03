@@ -9392,3 +9392,13 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   capas sólidas y relleno del perfil de impresión; Ingeniería abre en Estructural la primera vez (las pruebas de
   Diseño, Tornillería y Engranajes ahora pasan a Diseño primero). Aerodinámica sigue para A3.
 - **Ojo:** Analizar ya se enciende con algo fijo y una fuerza, pero todavía no corre el análisis.
+
+### UI50 y TR28 (equipo de fichas, caja negra de 8aab42c con clics reales)
+
+- **UI50, «la cámara salta al marcar»:** con clics reales de X (un programita propio sobre XTest, en Xvfb) no se
+  reprodujo el salto a la vista de arriba, ni con un clic ni con doble clic, a 1200 × 760. Lo que sí apareció: un
+  doble clic marcaba dos condiciones y además volvía a encuadrar la placa. Ahora, con una herramienta de marcado, el
+  segundo clic de un doble clic no marca nada y no encuadra. Se pidió al equipo de fichas la secuencia exacta.
+- **TR28:** el globo de «Ingeniería» decía solo lo de Diseño. Ahora: «Analizar y diseñar piezas: estructura, aire y
+  diseño». Los globos de las dos secciones se muestran debajo de la barra de arriba, a la izquierda del botón, sin
+  tapar las pestañas.
