@@ -72,12 +72,42 @@ los paquetes de perfiles, en `presets.md`; las mezclas de colores en el proyecto
     - pintura (soporte, costura, piel difusa, colores);
     - modificadores;
     - varias camas;
-    - análisis de Ingeniería;
+    - análisis de Ingeniería (lo que el motor guarda está en la regla 11 bis);
     - capas no planares;
     - abrir proyectos de Bambu Studio y OrcaSlicer.
 11. **Compatibilidad (propuesta):** el motor escribe el 3MF del estándar más su propio archivo de datos, y lee
     también los datos de los proyectos de Tisma Slicer (tabla de la regla 6), para no perder los proyectos que la
     persona ya tiene.
+
+11 bis. **Ingeniería en el proyecto** (`engineering_panel.md`, regla 17; `cloud.md`, reglas 19 y 19b). El motor elige
+    los nombres y el formato de sus datos; el proyecto tiene que guardar, por cada pieza (objeto y copia) que tenga
+    algo de Ingeniería:
+    - **las condiciones**, cada una con su tipo (punto fijo, zona fija, punto de fuerza, zona de fuerza, límite) y su
+      número en la lista:
+      - un punto: su posición y su normal en las coordenadas propias de la pieza (no en las de la cama), y su radio
+        en mm;
+      - una zona: los triángulos de la malla de la pieza que la forman;
+      - una fuerza: su valor en N (también si la persona la escribió en kg, que se guarda aparte solo para mostrarla
+        igual), y su dirección: «perpendicular a la cara», un eje con signo o un vector;
+      - un límite: el valor y si es en mm o en % de la mayor medida;
+    - **el material y las temperaturas** solo si se cambiaron a mano, cada uno con su valor; lo que sale del perfil no se
+      copia, se vuelve a tomar del perfil al abrir (`engineering_panel.md`, regla 3). La temperatura de trabajo, siempre;
+    - **las opciones** de Estructural (factor de seguridad, resolución, las demás de la regla 10 de esa ficha) y las
+      entradas de Aerodinámica (dirección, velocidad, calidad);
+    - **el último resultado** de cada análisis, como un archivo propio dentro del paquete (igual que la pintura): no
+      puede empezar con los bytes de un programa (`MZ`, `ELF`, Mach-O, `#!`), porque el servidor de la nube rechaza esos
+      paquetes (`cloud.md`, regla 6). Con el resultado, lo que hace falta para saber si quedó viejo: la malla, las
+      condiciones y los ajustes que usó (un resumen o una huella).
+    Reglas:
+    - mover, girar o escalar la pieza en la cama no cambia sus condiciones: siguen pegadas a la pieza;
+    - si la malla cambia (reparar, cortar, simplificar, reemplazar), las zonas cuyos triángulos ya no existen y los
+      puntos que quedaron fuera de la superficie se quitan al abrir o al cambiarla, con un aviso que dice cuántas
+      condiciones se quitaron y de qué pieza; el resultado queda viejo («Desactualizado», `engineering_panel.md`,
+      regla 14);
+    - un proyecto sin datos de Ingeniería se abre como antes; uno con datos que el motor no entiende (de una versión
+      más nueva) se abre sin ellos y lo avisa, sin perder la pieza;
+    - `tisma-engine analyze` y `aero` sobre el proyecto usan exactamente estas condiciones, así la nube y la
+      computadora calculan lo mismo (prueba FM25).
 
 ## Exportar
 
@@ -144,3 +174,7 @@ Reglas 16 a 19:
 | FM20 | Exportar trayectorias como OBJ del cubo de `gcode_motion.md` | Un tubo por extrusión, con el ancho y el alto del G-code, y un material por tipo |
 | FM21 | Abrir un ZIP con dos STL y un PDF | Dos objetos en la placa; aviso de 1 archivo ignorado |
 | FM22 | Unidad extraíble simulada (una carpeta montada como extraíble) | Aparece «Guardar en la tarjeta»; el G-code queda en la unidad; Expulsar la desmonta |
+| FM23 | Barra de 100 × 10 × 10 mm con una zona fija, un punto de fuerza de 5,1 kg hacia −Z y temperatura de trabajo 40 °C; guardar y abrir | Las mismas condiciones en la lista, la fuerza mostrada como 5,1 kg (50 N guardados), 40 °C, y el último resultado sin «Desactualizado» |
+| FM24 | El proyecto de FM23: mover la barra 30 mm en X y girarla 90° en la cama, guardar y abrir | Las condiciones siguen en los mismos lugares de la barra |
+| FM25 | El proyecto de FM23 por `tisma-engine analyze` (línea de comandos) y por Analizar en la interfaz | El mismo veredicto y desplazamientos máximos que difieren menos del 1 % |
+| FM26 | El proyecto de FM23 después de cortar la barra por la mitad | Aviso con cuántas condiciones se quitaron; el resultado queda «Desactualizado» |
