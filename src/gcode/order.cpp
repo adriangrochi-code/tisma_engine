@@ -584,6 +584,8 @@ std::vector<Toolpath> order_paths(std::vector<Toolpath> paths, Point2d& cursor, 
         // as the two ends of a line across a symmetric island seen from its
         // axis, then go the same way whatever the float noise of the slice.
         const auto consider = [&](std::size_t i, bool back, double d) {
+            if (back && paths[i].one_way)
+                return; // started only from its start
             if (d < nearest - kTie)
                 nearest = d, best = i, reverse = back;
             else if (d <= nearest + kTie && (i < best || (i == best && reverse && !back)))

@@ -258,12 +258,29 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
             return std::nullopt;
         }
     };
-    // The top surface: monotonic lines (each a piece, all the same way, monotonic_lines
-    // too: rule 14), zig-zags, zig-zags that do not turn between layers
-    // (aligned_rectilinear, rule 15), or a curve.
+    // monotonic_lines (rule 14, P10): each line a piece of its own, and all
+    // printed the same way, at the layer's angle: a piece that runs against
+    // it is turned round.
+    const auto one_way = [](std::vector<Toolpath> lines, double degrees) {
+        const double a = degrees * std::numbers::pi / 180.0, ux = std::cos(a), uy = std::sin(a);
+        for (Toolpath& t : lines)
+            if (t.points.size() >= 2 && (t.points.back().p.x - t.points.front().p.x) * ux +
+                                                (t.points.back().p.y - t.points.front().p.y) * uy <
+                                            0.0)
+                std::reverse(t.points.begin(), t.points.end());
+        for (Toolpath& t : lines)
+            t.one_way = true;
+        return lines;
+    };
+    // The top surface: monotonic lines (each a piece, in monotonic order),
+    // the same all one way (monotonic_lines), zig-zags, zig-zags that do not
+    // turn between layers (aligned_rectilinear, rule 15), or a curve.
     if (auto c = curves(params.top_pattern, surface, top))
         out.top = std::move(*c);
-    else if (params.top_pattern == SurfacePattern::Monotonic || params.top_pattern == SurfacePattern::MonotonicLines)
+    else if (params.top_pattern == SurfacePattern::MonotonicLines)
+        out.top = one_way(rectilinear_fill(surface, top - d, angle, top, false, true, true, params.wall_overlap * top + d / 2.0),
+                          angle);
+    else if (params.top_pattern == SurfacePattern::Monotonic)
         out.top = rectilinear_fill(surface, top - d, angle, top, false, true, true, params.wall_overlap * top + d / 2.0);
     else
         out.top = rectilinear_fill(surface, top - d,
@@ -277,6 +294,8 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     const bool lines_bottom = bp == SurfacePattern::Monotonic || bp == SurfacePattern::MonotonicLines;
     if (lines_bottom && !surfaces.bottom.empty()) {
         out.solid = rectilinear_fill(surfaces.bottom, inner - d, angle, inner, false, true, true, d / 2.0);
+        if (bp == SurfacePattern::MonotonicLines)
+            out.solid = one_way(std::move(out.solid), angle);
         for (Toolpath& t : rectilinear_fill(surfaces.top_under, inner - d, angle, inner, true, true, false, d / 2.0))
             out.solid.push_back(std::move(t));
     } else if (bp != SurfacePattern::Rectilinear && !surfaces.bottom.empty()) {

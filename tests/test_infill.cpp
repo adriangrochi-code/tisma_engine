@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <cstdio>
 
 using namespace tisma;
@@ -119,6 +120,19 @@ TEST_CASE("P10: the top and bottom surface patterns (infill_patterns.md, rules 1
     };
     p.top_pattern = SurfacePattern::AlignedRectilinear;
     CHECK(std::abs(std::sin(first_direction(fill_layer(s, 0, p)) - first_direction(fill_layer(s, 1, p)))) < 1e-6);
+    // monotonic_lines (BH21): every line the same way; monotonic goes back and forth.
+    const auto directions = [](const LayerFill& f) {
+        std::set<int> signs;
+        for (const Toolpath& t : f.top)
+            if (t.points.size() >= 2)
+                signs.insert((t.points.back().p.x - t.points.front().p.x) + (t.points.back().p.y - t.points.front().p.y) > 0.0
+                                 ? 1
+                                 : -1);
+        return signs.size();
+    };
+    p.top_pattern = SurfacePattern::MonotonicLines;
+    CHECK(directions(fill_layer(s, 0, p)) == 1);
+    CHECK(directions(fill_layer(s, 1, p)) == 1);
     // concentric: loops, each closed.
     p.top_pattern = SurfacePattern::Concentric;
     const LayerFill loops = fill_layer(s, 0, p);

@@ -9154,4 +9154,10 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - De paso: dos `-Wshadow` del bloque de ajustes del modo Anycubic (`nozzle`, `bed`).
 - **Sigue:** ZI8 (aviso cuando no entra ninguna onda), la fila única «Relleno no planar» (regla 11), y después el
   resultado de Ingeniería en el proyecto.
+- **BH21 (QA de b921288):** `monotonic_lines` daba el mismo G-code que `monotonic`: líneas sueltas pero yendo y
+  viniendo (−45° y 135°), porque el orden de los caminos da vuelta una línea si su otra punta queda más cerca. Ahora
+  sus líneas salen todas hacia el ángulo de la capa y llevan `Toolpath::one_way`, que el orden respeta: en el cubo de
+  prueba, 20 tramos largos a 135° (antes 10 y 10). Prueba en `test_infill.cpp` (P10).
+- De la misma QA, sin cambiar: largos 2,3 % menores que en Tisma Slicer, `monotonic` en tramos sueltos (allá uno solo)
+  y las curvas con menos tramos (menos viajes). Anotado para un bloque de superficies.
 
