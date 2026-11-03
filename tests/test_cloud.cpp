@@ -379,3 +379,23 @@ TEST_CASE("cloud: a problem report sends what was accepted and the log's end (IP
     f = cloud::report_fields(in);
     CHECK(f.at("description") == std::string(9999, 'a'));
 }
+
+TEST_CASE("CC20: a failed job's text for a person (cloud.md, rule 19a)", "[cloud]") {
+    cloud::Job job;
+    job.status = "failed";
+    job.error = "this analysis (lightest-infill) does not run in the cloud yet";
+    // In English, and in Spanish without a summary: the English text.
+    CHECK(cloud::job_error(job, false) == job.error);
+    CHECK(cloud::job_error(job, true) == job.error);
+    // By code, when there is no Spanish text.
+    job.summary["code"] = "not_in_cloud";
+    CHECK(cloud::job_error(job, true) == "este análisis todavía no corre en la nube");
+    CHECK(cloud::job_error(job, false) == job.error);
+    // The engine's own Spanish text first.
+    job.summary["error_es"] = "este análisis (relleno más liviano) todavía no corre en la nube";
+    CHECK(cloud::job_error(job, true) == job.summary["error_es"]);
+    // An unknown code: the English text.
+    job.summary.clear();
+    job.summary["code"] = "usage";
+    CHECK(cloud::job_error(job, true) == job.error);
+}

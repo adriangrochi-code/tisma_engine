@@ -61,6 +61,12 @@ struct Job {
     bool finished() const { return status == "done" || status == "failed" || status == "cancelled"; }
 };
 
+// The text of a failed job for a person (cloud.md, rule 19a): in Spanish,
+// the summary's error_es, else a text by its code (bad_mode, bad_quality,
+// not_in_cloud, needs_conditions, no_valid_result); otherwise, and in
+// English, the job's error.
+std::string job_error(const Job& job, bool spanish);
+
 // What a failed call tells: the server's text (its "detail") or the
 // connection's, and the HTTP status (0 without an answer). The interface has
 // its own notice for 401, 413, 422 and 429 (cloud.md, rules 2 and 4).

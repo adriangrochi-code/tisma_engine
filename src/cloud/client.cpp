@@ -57,6 +57,24 @@ Failure unexpected() { return {0, "Unexpected answer of the server"}; }
 
 } // namespace
 
+std::string job_error(const Job& job, bool spanish) {
+    if (!spanish)
+        return job.error;
+    if (const auto it = job.summary.find("error_es"); it != job.summary.end() && !it->second.empty())
+        return it->second;
+    static const std::pair<const char*, const char*> kByCode[] = {
+        {"bad_mode", "el modo de análisis no es válido"},
+        {"bad_quality", "la calidad no es válida"},
+        {"not_in_cloud", "este análisis todavía no corre en la nube"},
+        {"needs_conditions", "el análisis necesita un punto o zona fija y una fuerza (marcalos en Ingeniería)"},
+        {"no_valid_result", "el análisis no dio un resultado válido"}};
+    if (const auto it = job.summary.find("code"); it != job.summary.end())
+        for (const auto& [code, text] : kByCode)
+            if (it->second == code)
+                return text;
+    return job.error;
+}
+
 std::string api_error(const std::string& body, const std::string& error, int status) {
     try {
         const nlohmann::json j = nlohmann::json::parse(body);

@@ -9912,5 +9912,7 @@ no llega al análisis (sale del laminado) y las paredes simples no se distinguen
 - BH22, revisado: sin `--quality`, `analyze` sobre el proyecto guardado por la interfaz da lo mismo que Analizar
   (cubo de 10 mm: seguridad 49,55, 1,2 g, 0,000419 mm). Con `--quality fast` la pieza se analiza entera sólida, como
   pide la calidad Rápida (`structural_analysis.md`, «Resolución»): 1,24 g. La diferencia del informe venía de pedir
-  `fast` a un proyecto que la interfaz analizó en media.
+  `fast` a un proyecto que la interfaz analizó en media.- Regla 19a (`cloud.md` de spec/next, pasó `check_spec`) y CC20: la lista de trabajos del diálogo de la nube y el
+  aviso de un trabajo fallido muestran, en castellano, el `error_es` del resumen; si no hay, un texto por su `code`;
+  si no, el `error` en inglés (`cloud::job_error`).
 

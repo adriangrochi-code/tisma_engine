@@ -14969,6 +14969,7 @@ void App::cloud_slice_step() {
     const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
                             : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
                             : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
+                            : r.job.status == "failed" ? cloud::job_error(r.job, language() == Language::Spanish)
                                                     : r.error.message;
     notify(format(tr(T::CloudSliceFailed), why.c_str()), true);
 }
@@ -15088,7 +15089,7 @@ void App::cloud_window() {
                     else
                         loc::Text("%s", tr(state));
                     if (!j.error.empty() && ImGui::IsItemHovered())
-                        loc::SetTooltip("%s", j.error.c_str());
+                        loc::SetTooltip("%s", cloud::job_error(j, language() == Language::Spanish).c_str());
                     ImGui::TableNextColumn();
                     loc::TextDisabled(tr(T::CloudJobMinutes), number(j.seconds / 60.0, 1).c_str());
                 }
