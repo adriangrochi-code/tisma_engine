@@ -663,6 +663,36 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     const AnalysisReport r6 = run_analysis(bar, beads_04(), c6);
     REQUIRE(r6.valid);
     CHECK(r6.result.elasticity.max_displacement < r.result.elasticity.max_displacement);
+    // A displacement limit on the free end's face: tighter than what it
+    // moves, «too flexible»; looser, it holds.
+    EngineeringCondition end;
+    end.kind = ConditionKind::Limit;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_max = true;
+        for (int k = 0; k < 3; ++k)
+            at_max &= triangles.corner(t, k).x == 40.0f;
+        if (at_max)
+            end.triangles.push_back(t);
+    }
+    REQUIRE(end.triangles.size() == 2);
+    const double moved = r.result.elasticity.max_displacement;
+    end.limit = 0.5 * moved;
+    e.conditions = {fixed, tip, end};
+    const std::vector<LimitCheck> checks = check_limits(e, triangles, r);
+    REQUIRE(checks.size() == 1);
+    CHECK(checks[0].exceeded);
+    CHECK(checks[0].displacement_mm > 0.5 * moved);
+    CHECK(checks[0].displacement_mm <= moved * 1.0001);
+    nlohmann::json limited = nlohmann::json::parse(structural_report_json(r, c, e, {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0}, &triangles));
+    CHECK(limited["verdict"]["name"] == "too_flexible");
+    CHECK(limited["verdict"]["limits_checked"] == true);
+    e.conditions[2].limit = 2.0 * moved;
+    limited = nlohmann::json::parse(structural_report_json(r, c, e, {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0}, &triangles));
+    CHECK(limited["verdict"]["name"] == "holds");
+    // As a percentage of the largest size (40 mm).
+    e.conditions[2].limit = 100.0 * 0.5 * moved / 40.0;
+    e.conditions[2].limit_percent = true;
+    CHECK(check_limits(e, triangles, r)[0].exceeded);
     // Hot: at 50 °C the same bar is less stiff (f(50) = 0.58 for PLA).
     e.conditions = {fixed, tip};
     e.working_temperature = 50.0;

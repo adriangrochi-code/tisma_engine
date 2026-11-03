@@ -9559,7 +9559,6 @@ a 12 y 14) y `structural_analysis.md` («Resultados»), las dos pasan `tools/che
   revisada: veredicto, números con coma, leyenda, punto crítico «49,29».
 
 **No probado / falta:**
-- Los límites de desplazamiento no se comprueban todavía («Demasiado flexible» nunca sale).
 - No hay botón para probar cada material sugerido; solo se nombran las familias.
 - Falta la deformación exagerada, y los mapas de von Mises y desplazamiento.
 - Falta «Más opciones»: resolución con su tamaño, dirección de impresión y nube.
@@ -9574,3 +9573,19 @@ a 12 y 14) y `structural_analysis.md` («Resultados»), las dos pasan `tools/che
 
 **Sigue:** límites de desplazamiento y «Demasiado flexible»; probar un material sugerido con un botón; EP8 guionada;
 Más opciones (resolución); después Optimizar y Aerodinámica (A3).
+
+### Límites de desplazamiento («Demasiado flexible»)
+
+**Hecho:**
+- `check_limits` toma, para cada límite, el mayor desplazamiento de los nodos de la parte que están junto a su zona
+  (las mismas zonas por triángulos que las condiciones) y lo compara con su valor. El valor va en mm o en % de la
+  mayor medida de la pieza.
+- `structural_report_json` con la malla agrega `limits` (nombre, límite, cuánto se mueve, si se pasa) y
+  `limits_checked: true`; si alguno se pasa y la pieza aguanta, el veredicto es «Demasiado flexible».
+- En el panel: cada límite se edita (valor y botón mm/%); en el resultado, una línea por límite, en rojo si se pasa.
+  Un límite nuevo empieza en 1 mm (la ficha no da valor; 0 fallaría con cualquier movimiento).
+- El CLI `analyze` todavía no comprueba los límites (avisa que los comprueba la pestaña Estructural).
+
+**Probado:** barra de 40 × 8 × 8 mm con 5 N en la punta y un límite en la cara libre: con la mitad de lo que se
+mueve, «Demasiado flexible»; con el doble, «Aguanta»; en %, lo mismo que en mm. Las dos pruebas de interfaz de
+Estructural pasan.

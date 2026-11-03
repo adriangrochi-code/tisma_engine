@@ -46,8 +46,22 @@ void apply_engineering_overrides(Settings& settings, const ProjectEngineering& e
 // working temperature, the material's family, the mass in grams and the
 // families to try when the part does not hold. Displacement limits are not
 // checked yet ("limits_checked": false).
+// With `mesh` (the part as analysed, the conditions in its frame), the
+// displacement limits are checked (check_limits) and "limits" lists them.
 std::string structural_report_json(const AnalysisReport& report, const AnalysisCase& c, const ProjectEngineering& e,
-                                   const std::array<double, 12>& to_part = {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0});
+                                   const std::array<double, 12>& to_part = {1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0},
+                                   const TriangleMesh* mesh = nullptr);
+
+// A displacement limit checked after the solve (engineering_panel.md, rule
+// 5; structural_analysis.md, «Demasiado flexible»): the largest movement of
+// the nodes of its zone against its limit, mm (or % of the part's largest
+// size).
+struct LimitCheck {
+    std::string name;
+    double limit_mm = 0.0, displacement_mm = 0.0;
+    bool exceeded = false;
+};
+std::vector<LimitCheck> check_limits(const ProjectEngineering& e, const TriangleMesh& mesh, const AnalysisReport& report);
 
 // "fixed_zone 1", "force_point 2"...: a condition's name in the case.
 std::string condition_name(const EngineeringCondition& condition);

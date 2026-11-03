@@ -120,6 +120,8 @@ EngineeringCondition& add_condition(ProjectEngineering& e, ConditionKind kind, c
         c.newtons = 10.0;
         c.direction = ForceDirection::Normal;
     }
+    if (kind == ConditionKind::Limit)
+        c.limit = 1.0; // mm, to begin with (the spec gives none; 0 would fail at any movement)
     e.conditions.push_back(std::move(c));
     return e.conditions.back();
 }

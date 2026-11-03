@@ -11,6 +11,7 @@
 #include "fea/zone.hpp"
 #include "project/engineering_values.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 
@@ -66,7 +67,7 @@ std::vector<std::string> add_conditions(AnalysisCase& c, const ProjectEngineerin
             continue;
         const std::string name = condition_name(condition);
         if (condition.kind == ConditionKind::Limit) {
-            notes.push_back(name + ": displacement limits are not checked yet");
+            notes.push_back(name + ": displacement limits are checked after the solve (Structural tab)");
             continue;
         }
         auto shape = std::make_shared<ZoneShape>();
@@ -152,10 +153,68 @@ AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const Triang
     return c;
 }
 
+std::vector<LimitCheck> check_limits(const ProjectEngineering& e, const TriangleMesh& mesh, const AnalysisReport& report) {
+    std::vector<LimitCheck> out;
+    const VoxelGrid& g = report.grid;
+    const std::vector<double>& u = report.result.elasticity.displacement;
+    const std::size_t nodes = std::size_t(g.nx + 1) * std::size_t(g.ny + 1) * std::size_t(g.nz + 1);
+    if (g.nx <= 0 || u.size() != 3 * nodes)
+        return out;
+    const BoundingBox box = mesh.bounding_box();
+    const double largest = std::max({double(box.max.x - box.min.x), double(box.max.y - box.min.y), double(box.max.z - box.min.z)});
+    double reach = std::max(g.hx, g.hy);
+    for (int k = 0; k < g.nz; ++k)
+        reach = std::max(reach, g.hz(k));
+    for (const EngineeringCondition& condition : e.conditions) {
+        if (condition.hidden || condition.kind != ConditionKind::Limit)
+            continue;
+        ZoneShape shape;
+        for (const std::uint32_t t : condition.triangles)
+            if (t < mesh.triangle_count())
+                shape.triangles.push_back(triangle_of(mesh, t, {}));
+        LimitCheck check;
+        check.name = condition_name(condition);
+        check.limit_mm = condition.limit_percent ? condition.limit / 100.0 * largest : condition.limit;
+        if (!shape.triangles.empty()) {
+            const SurfaceZone zone(shape, reach, reach);
+            const std::array<double, 6>& b = zone.bounds();
+            for (int k = 0; k <= g.nz; ++k)
+                for (int j = 0; j <= g.ny; ++j)
+                    for (int i = 0; i <= g.nx; ++i) {
+                        const double x = g.x0 + i * g.hx, y = g.y0 + j * g.hy, z = g.z[std::size_t(k)];
+                        if (x < b[0] || y < b[1] || z < b[2] || x > b[3] || y > b[4] || z > b[5])
+                            continue;
+                        // A node of the part: a corner of a solid voxel.
+                        bool used = false;
+                        for (int dk = -1; dk <= 0 && !used; ++dk)
+                            for (int dj = -1; dj <= 0 && !used; ++dj)
+                                for (int di = -1; di <= 0 && !used; ++di)
+                                    used = g.at(i + di, j + dj, k + dk);
+                        if (!used || !zone.near(x, y, z))
+                            continue;
+                        const std::size_t n = (std::size_t(k) * std::size_t(g.ny + 1) + std::size_t(j)) * std::size_t(g.nx + 1) + std::size_t(i);
+                        check.displacement_mm = std::max(check.displacement_mm,
+                                                         std::sqrt(u[3 * n] * u[3 * n] + u[3 * n + 1] * u[3 * n + 1] + u[3 * n + 2] * u[3 * n + 2]));
+                    }
+        }
+        check.exceeded = check.displacement_mm > check.limit_mm;
+        out.push_back(check);
+    }
+    return out;
+}
+
 std::string structural_report_json(const AnalysisReport& report, const AnalysisCase& c, const ProjectEngineering& e,
-                                   const std::array<double, 12>& to_part) {
+                                   const std::array<double, 12>& to_part, const TriangleMesh* mesh) {
     nlohmann::json j = nlohmann::json::parse(analysis_json(report, c, to_part));
+    nlohmann::json limits = nlohmann::json::array();
+    bool exceeded = false;
+    if (mesh)
+        for (const LimitCheck& l : check_limits(e, *mesh, report)) {
+            limits.push_back({{"name", l.name}, {"limit_mm", l.limit_mm}, {"displacement_mm", l.displacement_mm}, {"exceeded", l.exceeded}});
+            exceeded = exceeded || l.exceeded;
+        }
     VerdictInput in;
+    in.limit_exceeded = exceeded;
     in.family = family_of(c.material_id);
     in.required_safety = e.structural.safety_factor;
     in.working_temperature = e.working_temperature;
@@ -172,7 +231,8 @@ std::string structural_report_json(const AnalysisReport& report, const AnalysisC
                     {"working_temperature", in.working_temperature},
                     {"family", in.family ? std::string(in.family->name) : std::string()},
                     {"mass_g", in.family ? voxel_mass_grams(report.grid, in.family->density) : 0.0},
-                    {"limits_checked", false},
+                    {"limits_checked", mesh != nullptr},
+                    {"limits", limits},
                     {"suggestions", suggestions}};
     return j.dump();
 }

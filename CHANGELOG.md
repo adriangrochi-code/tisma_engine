@@ -19,7 +19,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   al pedido, el desplazamiento máximo, la masa con su material y los materiales para probar si no aguanta; la pieza
   pintada con el mapa del factor de seguridad en cinco franjas y el punto crítico marcado. Cambiar una condición,
   el material o el perfil lo deja en gris con «Desactualizado: analizá de nuevo». El resultado se guarda con la
-  pieza. Las fuerzas se ven como flechas rojas y los puntos y zonas fijas en azul.
+  pieza. Las fuerzas se ven como flechas rojas y los puntos y zonas fijas en azul. Los límites de desplazamiento se editan
+  (mm o % de la mayor medida, 1 mm al empezar) y se comprueban: si una zona se mueve más que su límite, el veredicto
+  es «Demasiado flexible».
 - **La temperatura de trabajo cuenta en el análisis**: la rigidez y la resistencia bajan con `f(T)` de la familia
   del material (1 hasta 23 °C, 0,5 en la máxima de servicio). Pasada esa máxima, el veredicto es «Fuera de
   temperatura».

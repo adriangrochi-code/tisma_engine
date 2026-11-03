@@ -12186,6 +12186,14 @@ void App::structural_panel() {
             if (verdict.value("mass_g", 0.0) > 0.0)
                 ImGui::TextUnformatted(
                     format(tr(T::StructMass), verdict.value("mass_g", 0.0), verdict.value("family", std::string()).c_str()).c_str());
+            // Each displacement limit, red when passed («Demasiado flexible»).
+            for (const nlohmann::json& l : verdict.value("limits", nlohmann::json::array())) {
+                const std::string line = format(tr(T::StructLimitLine), l.value("displacement_mm", 0.0), l.value("limit_mm", 0.0));
+                if (l.value("exceeded", false))
+                    loc::TextColored(rgb(0xE5484D), "%s", line.c_str());
+                else
+                    ImGui::TextUnformatted(line.c_str());
+            }
             std::string names;
             for (const nlohmann::json& sug : verdict.value("suggestions", nlohmann::json::array()))
                 names += (names.empty() ? "" : ", ") + sug.value("family", std::string());
@@ -12361,6 +12369,24 @@ void App::structural_panel() {
                                   field_text("##radius", "r %.1f mm", r), ImGuiSliderFlags_AlwaysClamp) &&
                 r != c.radius)
                 e.conditions[i].radius = r;
+        } else if (c.kind == ConditionKind::Limit) {
+            // How far the zone may move: mm, or % of the part's largest size.
+            double v = c.limit;
+            const double lo = 0.0, hi = c.limit_percent ? 100.0 : 1000.0;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 44.0f * scale_);
+            if (ImGui::DragScalar("##limit", ImGuiDataType_Double, &v, c.limit_percent ? 0.05f : 0.01f, &lo, &hi,
+                                  field_text("##limit", c.limit_percent ? "%.2f %%" : "%.3f mm", v), ImGuiSliderFlags_AlwaysClamp) &&
+                v != c.limit) {
+                if (ImGui::IsItemActivated() || !ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+                    remember_engineering(std::size_t(structural_part_));
+                e.conditions[i].limit = v;
+            }
+            rect_of("structural_limit_" + std::to_string(i));
+            ImGui::SameLine();
+            if (ImGui::Button(c.limit_percent ? "%" : "mm", ImVec2(36.0f * scale_, 0.0f))) {
+                remember_engineering(std::size_t(structural_part_));
+                e.conditions[i].limit_percent = !e.conditions[i].limit_percent;
+            }
         }
         ImGui::PopID();
     }
@@ -12581,7 +12607,7 @@ void App::start_structural() {
                 if (structural_cancel_)
                     throw Cancelled{};
             });
-            run.report = structural_report_json(r, c, moved, to_part);
+            run.report = structural_report_json(r, c, moved, to_part, &placed);
             // The map: the voxels' outside, in its colour bands one after
             // the other (each band one group of the view's paint).
             const VoxelSurface v = voxel_surface(r.grid, r.result.safety);
