@@ -165,6 +165,12 @@ PreviewDrawOrder preview_draw_order(const PreviewBuffers& preview);
 PreviewDrawOrder merged_layers(const PreviewDrawOrder& order, int group);
 // The shown extrusions but the walls, layer by layer.
 PreviewDrawOrder other_than_walls(const PreviewDrawOrder& order);
+// Every extrusion, shown and hidden, but the sparse and the internal solid
+// infill, layer by layer (all of them as shown): what a cut view draws under
+// its top layer, where the walls hide the infill. Drawing it there loaded
+// the GPU for nothing and, seen from far, the stacked layers of infill read
+// as solid (the owner, 2026-11-03).
+PreviewDrawOrder without_infill(const PreviewDrawOrder& order);
 
 // The largest group of layers drawn as one: groups of 8 only paid off with the
 // part metres away, and each group kept costs its walls again on the GPU.
@@ -188,6 +194,7 @@ struct PreviewOrders {
     PreviewDrawOrder full;
     PreviewDrawOrder others;
     std::array<PreviewDrawOrder, 2> far; // groups 2 and 4; empty with too few layers
+    PreviewDrawOrder buried;             // without_infill(full), for the layers under a cut's top
     std::vector<PreviewInstance> instances;
     // The walls to draw, with `others`, instead of the full order: those of
     // `group` when it has them and all of the part is drawn; else none.
@@ -233,6 +240,21 @@ std::array<PreviewRange, 2> preview_ranges(const PreviewDrawOrder& order, std::s
 std::vector<PreviewRange> preview_draws(const PreviewDrawOrder& order, std::size_t lo, std::size_t hi,
                                         std::uint32_t kind_mask, float eye_z, std::size_t top_shown = kWholeLayer,
                                         std::size_t top_hidden = kWholeLayer, const Mat4* clip = nullptr);
+
+// Whether a view of layers lo..hi buries its lower layers under the top
+// one: the walls shown, more than one layer, and not all of the part
+// (preview_whole false). Then only the top layer's infill and travels are
+// drawn.
+bool cut_buries(const PreviewOrders& orders, std::size_t lo, std::size_t hi, std::uint32_t kind_mask,
+                std::size_t top_shown = kWholeLayer, std::size_t top_hidden = kWholeLayer);
+
+// The draws of a view cut below the part's top, or not whole (preview_whole
+// false): with the walls and the infill shown, the layers under the top
+// shown one from `orders.buried` (no infill) and the top one from the full
+// order; else everything from the full order, as preview_draws does.
+std::vector<PreviewRange> cut_preview_draws(const PreviewOrders& orders, std::size_t lo, std::size_t hi,
+                                            std::uint32_t kind_mask, float eye_z, std::size_t top_shown = kWholeLayer,
+                                            std::size_t top_hidden = kWholeLayer, const Mat4* clip = nullptr);
 
 // Whether a box (min x, y, z, max x, y, z) is all outside what `clip` (a
 // view and projection) shows: its eight corners beyond one same plane of the

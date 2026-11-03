@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Corte de la vista previa sin el relleno de abajo** (pedido del dueño, 2026-11-03): con las paredes a la vista y
+  la vista cortada en una capa, solo esa capa dibuja su relleno y sus viajes; las de abajo, que las paredes tapan,
+  dibujan el resto. Un cubo de 180 mm al 20 % cortado en la capa 400 pasó de 96 532 a 5101 extrusiones dibujadas y
+  de 2244 a 322 ms por cuadro (renderizador por software); de lejos el relleno ya no parece sólido.
 - **Oclusión sin el relleno** (pedido del dueño, 2026-11-03): la oclusión ambiental (y los rayos de ambiente del
   trazado de rayos) no se calcula en los píxeles del relleno ralo ni del sólido interno, y el relleno ya no se dibuja
   en el mapa de sombra de la luz principal: está adentro de las paredes y cargaba la placa de video sin mostrar nada.

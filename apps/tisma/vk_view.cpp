@@ -945,8 +945,10 @@ struct VulkanView::Impl {
                 whole ? far_group(layer_pixels(f.projection, f.height, f.eye, preview_lo, preview_hi, layer_height)) : 1;
             const PreviewDrawOrder* walls = orders.far_walls(group, whole);
             drawn_group = walls ? group : 1;
+            // Cut below the top: the infill only on the top layer (cut_preview_draws).
             std::vector<PreviewRange> draws =
-                preview_draws(walls ? *walls : orders.full, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip);
+                walls ? preview_draws(*walls, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip)
+                      : cut_preview_draws(orders, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip);
             if (walls) {
                 const std::vector<PreviewRange> rest =
                     preview_draws(orders.others, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip);
@@ -957,7 +959,9 @@ struct VulkanView::Impl {
                 drawn += r.count;
             }
             if (f.show_travels && travel_count > 0 && layer_travels.size() > hi + 1) {
-                const std::size_t t0 = layer_travels[lo], tn = layer_travels[hi + 1] - t0;
+                // Cut: the top layer's travels only; the others are inside the part.
+                const std::size_t from = cut_buries(orders, lo, hi, f.kind_mask, f.top_shown, f.top_hidden) ? hi : lo;
+                const std::size_t t0 = layer_travels[from], tn = layer_travels[hi + 1] - t0;
                 if (tn > 0) {
                     bind(Travels, &travels_v);
                     push(DrawBlock{});

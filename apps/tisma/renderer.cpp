@@ -1488,8 +1488,10 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
     const PreviewDrawOrder* walls = orders_.far_walls(group, whole);
     if (!gbuffer)
         drawn_group_ = walls ? group : 1;
+    // Cut below the top: the infill only on the top layer (cut_preview_draws).
     std::vector<PreviewRange> draws =
-        preview_draws(walls ? *walls : orders_.full, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
+        walls ? preview_draws(*walls, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp)
+              : cut_preview_draws(orders_, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
     if (walls) {
         const std::vector<PreviewRange> rest =
             preview_draws(orders_.others, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
@@ -1538,7 +1540,9 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
             drawn_extrusions_ += count;
     }
     if (!gbuffer && f.show_travels && travels_.count > 0 && layer_travels_.size() > hi + 1) {
-        const std::size_t t0 = layer_travels_[lo], tn = layer_travels_[hi + 1] - t0;
+        // Cut: the top layer's travels only; the others are inside the part.
+        const std::size_t from = cut_buries(orders_, lo, hi, f.kind_mask, f.top_shown, f.top_hidden) ? hi : lo;
+        const std::size_t t0 = layer_travels_[from], tn = layer_travels_[hi + 1] - t0;
         if (tn > 0) {
             glUseProgram(p_.line);
             uniform(p_.line, "u_view_projection", vp);

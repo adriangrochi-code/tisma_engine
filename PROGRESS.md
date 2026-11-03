@@ -9009,3 +9009,23 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   - `zigzag` da exactamente el mismo G-code que `rectilinear`.
 - Falta saber qué caso concreto vio el dueño (pieza, patrón, densidad); ya se le preguntó.
 
+### El relleno «no respeta el ajuste»: era la vista previa (pedido del dueño)
+
+- El dueño, con la configuración de fábrica y una pieza grande, vio en la vista previa el relleno como si fuera
+  sólido.
+- **El G-code respeta la densidad y el patrón**, en la línea de comandos y en la interfaz (medido con 5, 10, 20 y 40 %
+  en rectilíneo, grilla, panal y concéntrico). Dos casos son así a propósito, como Tisma Slicer:
+  - el panal deposita ~4/3 de lo pedido, porque los tramos horizontales se recorren dos veces;
+  - el zigzag da el mismo G-code que el rectilíneo.
+- **La causa:** con la vista cortada en una capa se dibujaba el relleno de todas las de abajo. De lejos, las capas
+  apiladas al 20 % se ven por los huecos y parecen macizas; además cargaban la placa sin mostrar nada útil.
+- **Lo que cambió:**
+  - `PreviewOrders::buried` = `without_infill(full)`: cada extrusión menos el relleno ralo y el sólido interno;
+  - `cut_preview_draws`: con las paredes y el relleno a la vista y la vista cortada (`cut_buries`), la capa de arriba
+    sale del orden completo y las de abajo de `buried`;
+  - los viajes, con la misma regla, solo de la capa de arriba (si no, de lejos los viajes de 1 px de todas las capas
+    pintaban la pieza de celeste);
+  - igual en OpenGL y en Vulkan. Con la pieza entera (sin corte) no cambia nada: ahí ya se dejaba afuera lo oculto.
+- **Medido** (cubo de 180 mm, 20 % rectilíneo, capa 400, llvmpipe): 96 532 → 5101 extrusiones dibujadas, 2244 →
+  322 ms por cuadro. No medido en una placa de video real.
+- Prueba nueva: «preview: a cut view draws infill only on its top layer».
