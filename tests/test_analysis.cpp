@@ -6,6 +6,7 @@
 #include "io/vtk.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "mesh/mesh.hpp"
+#include "project/engineering_case.hpp"
 #include "report/analysis_json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -431,4 +432,69 @@ TEST_CASE("analysis: the voxels stay in the model's coordinates", "[analysis]") 
     CHECK(hi[1] == -3.0f);
     CHECK(lo[2] == 3.0f);
     CHECK_THAT(hi[2], WithinAbs(4.0, 1e-5));
+}
+
+TEST_CASE("analysis: conditions marked on the model hold and push as the part's faces do (formats.md, rule 11 bis)",
+          "[analysis][engineering]") {
+    const IndexedMesh plate = box_mesh(12.0f, 4.0f, 2.0f);
+    TriangleMesh triangles;
+    for (const auto& t : plate.triangles)
+        triangles.add_triangle(plate.vertices[t[0]], plate.vertices[t[1]], plate.vertices[t[2]]);
+    // The same plate held by its x_min face and pushed down on its x_max face,
+    // once by the case's faces and once by the triangles marked on the mesh.
+    const AnalysisCase by_faces = parse_analysis_case(R"({
+        "fixtures": [{"name": "clamp", "face": "x_min"}],
+        "loads": [{"name": "push", "face": "x_max", "force": [0, 0, -5]}]})");
+    ProjectEngineering e;
+    EngineeringCondition fixed, push;
+    fixed.kind = ConditionKind::FixedZone;
+    push.kind = ConditionKind::ForceZone;
+    push.newtons = 5.0;
+    push.direction = ForceDirection::Axis;
+    push.axis = -3;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true, at_max = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f, at_max &= triangles.corner(t, k).x == 12.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+        if (at_max)
+            push.triangles.push_back(t);
+    }
+    REQUIRE(fixed.triangles.size() == 2);
+    REQUIRE(push.triangles.size() == 2);
+    e.conditions = {fixed, push};
+    AnalysisCase by_marks = by_faces;
+    by_marks.fixtures.clear();
+    by_marks.loads.clear();
+    CHECK(add_conditions(by_marks, e, triangles).empty());
+    REQUIRE(by_marks.fixtures.size() == 1);
+    REQUIRE(by_marks.loads.size() == 1);
+    CHECK(by_marks.loads[0].force[2] == -5.0);
+    const AnalysisReport a = run_analysis(plate, beads_04(), by_faces);
+    const AnalysisReport b = run_analysis(plate, beads_04(), by_marks);
+    REQUIRE(a.valid);
+    REQUIRE(b.valid);
+    INFO(a.result.elasticity.max_displacement << " " << b.result.elasticity.max_displacement);
+    CHECK(b.result.elasticity.unapplied_loads == 0);
+    CHECK(std::abs(b.result.elasticity.max_displacement / a.result.elasticity.max_displacement - 1.0) < 0.15);
+    // A point pushed at the free end's middle, along its normal (into the
+    // part, -x): the plate is squeezed, far less than bent.
+    EngineeringCondition dot;
+    dot.kind = ConditionKind::ForcePoint;
+    dot.point = {12.0, 2.0, 1.0};
+    dot.normal = {1.0, 0.0, 0.0};
+    dot.radius = 1.0;
+    dot.newtons = 5.0;
+    e.conditions = {fixed, dot};
+    AnalysisCase squeeze = by_faces;
+    squeeze.fixtures.clear();
+    squeeze.loads.clear();
+    CHECK(add_conditions(squeeze, e, triangles).empty());
+    REQUIRE(squeeze.loads.size() == 1);
+    CHECK(squeeze.loads[0].force[0] == -5.0);
+    const AnalysisReport s = run_analysis(plate, beads_04(), squeeze);
+    REQUIRE(s.valid);
+    CHECK(s.result.elasticity.unapplied_loads == 0);
+    CHECK(s.result.elasticity.max_displacement < 0.2 * a.result.elasticity.max_displacement);
 }

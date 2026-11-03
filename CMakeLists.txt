@@ -262,6 +262,8 @@ add_library(tisma_core
   src/cad/solidcraft.cpp
   src/calibration/calibration.cpp
   src/project/engineering.cpp
+  src/project/engineering_case.cpp
+  src/fea/zone.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp
   src/device/gcode_host.cpp

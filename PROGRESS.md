@@ -9197,3 +9197,20 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - «Largo de las transiciones» → «Largo de transición», junto a «Margen de transición».
 - **Sigue:** acortar los textos más largos para que entren sin «…» (los 28 en castellano), con el equipo de fichas.
 
+## 2026-11-03 (noche): Ingeniería en el proyecto, paso 3 (primera parte)
+
+- **Hecho:** el análisis acepta condiciones marcadas en la malla:
+  - `SurfaceZone` (`src/fea/zone.*`): muestras sobre los triángulos marcados en una grilla de celdas; un nodo está en
+    la zona si queda a menos de ~un vóxel (0,9 del lado mayor) de una muestra; para un punto, además dentro del radio
+    del disco (los triángulos que se acercan al punto, por el punto más cercano de cada triángulo);
+  - `Box` lleva la zona y `Region` la forma; `resolve_region` arma la zona con el tamaño de los vóxeles y achica la
+    caja a sus bordes;
+  - `add_conditions` (`src/project/engineering_case.*`): fijos y fuerzas de `ProjectEngineering` como fijaciones y
+    cargas del caso; la fuerza en N por la normal hacia adentro (media pesada por área de la zona, o la del punto),
+    un eje con signo o su vector; los límites de desplazamiento todavía no se comprueban (lo dice una nota).
+- **Medido:** la placa de 12 × 4 × 2 mm de las pruebas de análisis, sujeta y empujada con 5 N: por caras del caso y
+  por los triángulos marcados, el desplazamiento máximo difiere 0,3 %; empujada por un punto de 1 mm de radio en la
+  punta hacia adentro (−X), 0,0039 mm contra 0,42 mm al doblarla.
+- **Sigue:** `tisma-engine analyze <proyecto>` con estas condiciones (material y temperatura del proyecto, el
+  resultado guardado de vuelta), FM25.
+

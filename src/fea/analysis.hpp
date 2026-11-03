@@ -45,6 +45,9 @@ enum class PartFace : std::uint8_t { None, Bottom, Top, XMin, XMax, YMin, YMax }
 struct Region {
     Box box;
     PartFace face = PartFace::None;
+    // Triangles marked on the model, or a disc round a point on it: the box
+    // becomes the nodes near them once the voxels are known.
+    std::shared_ptr<const ZoneShape> shape;
 };
 
 struct CaseFixture {

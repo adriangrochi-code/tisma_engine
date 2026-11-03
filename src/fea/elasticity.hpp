@@ -2,11 +2,13 @@
 
 #include "fea/material.hpp"
 #include "fea/voxels.hpp"
+#include "fea/zone.hpp"
 
 #include <array>
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -21,8 +23,12 @@ struct Material {
 struct Box {
     double min[3] = {-1e300, -1e300, -1e300};
     double max[3] = {1e300, 1e300, 1e300};
+    // A part of the surface marked on the model (formats.md, rule 11 bis):
+    // only what is in the box and near it.
+    std::shared_ptr<const SurfaceZone> zone;
     bool contains(double x, double y, double z) const {
-        return x >= min[0] && x <= max[0] && y >= min[1] && y <= max[1] && z >= min[2] && z <= max[2];
+        return x >= min[0] && x <= max[0] && y >= min[1] && y <= max[1] && z >= min[2] && z <= max[2] &&
+               (!zone || zone->near(x, y, z));
     }
 };
 

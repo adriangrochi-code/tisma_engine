@@ -75,6 +75,20 @@ std::pair<double, int> analysis_resolution(const AnalysisCase& c, const Settings
 }
 
 Box resolve_region(const Region& region, const VoxelGrid& g) {
+    if (region.shape) {
+        // The nodes within about a voxel of the marked surface: those of the
+        // voxels it passes through.
+        const double dz = g.z.size() > 1 ? g.z[1] - g.z[0] : g.hx;
+        const double h = std::max({g.hx, g.hy, dz});
+        auto zone = std::make_shared<SurfaceZone>(*region.shape, 0.5 * std::min(g.hx, g.hy), 0.9 * h);
+        Box box = region.box;
+        for (int a = 0; a < 3; ++a) {
+            box.min[a] = std::max(box.min[a], zone->bounds()[std::size_t(a)]);
+            box.max[a] = std::min(box.max[a], zone->bounds()[std::size_t(a) + 3]);
+        }
+        box.zone = std::move(zone);
+        return box;
+    }
     if (region.face == PartFace::None)
         return region.box;
     int lo[3] = {g.nx, g.ny, g.nz}, hi[3] = {-1, -1, -1};
