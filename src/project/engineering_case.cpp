@@ -124,7 +124,7 @@ std::vector<std::string> add_conditions(AnalysisCase& c, const ProjectEngineerin
 
 AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const TriangleMesh& mesh,
                                        const std::array<double, 3>& shift, std::vector<std::string>& notes,
-                                       std::string_view filament_type) {
+                                       std::string_view filament_type, double layer_height) {
     AnalysisCase c;
     const std::string by_type = material_for_filament(filament_type);
     const auto known = [](const std::string& id) { return find_material(id) || family_of_material_id(id); };
@@ -153,6 +153,20 @@ AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const Triang
             *v *= f;
     }
     c.quality = e.structural.quality == "high" ? AnalysisQuality::High : AnalysisQuality::Normal;
+    // Rápida (structural_analysis.md, «Resolución»: about 20 000 voxels): the
+    // whole part solid, voxels of the size that gives that many over its
+    // box, without the resolution check.
+    if (e.structural.quality == "fast" && mesh.triangle_count() > 0) {
+        const BoundingBox b = mesh.bounding_box();
+        const double volume = std::max(double(b.max.x - b.min.x), 0.1) * std::max(double(b.max.y - b.min.y), 0.1) *
+                              std::max(double(b.max.z - b.min.z), 0.1);
+        // A row of voxels per layer: the voxels as wide as gives 20 000.
+        const double layer = layer_height > 0.0 ? layer_height : 0.2;
+        c.model = AnalysisModel::Solid;
+        c.voxel = std::max(std::sqrt(volume / (layer * 20000.0)), layer);
+        c.rows_per_layer = 1;
+        c.resolution_check = false;
+    }
     for (std::string& note : add_conditions(c, e, mesh, shift))
         notes.push_back(std::move(note));
     return c;

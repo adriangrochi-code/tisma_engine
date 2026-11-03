@@ -715,4 +715,19 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     CHECK(jp["verdict"]["family"] == "PEI");
     CHECK(jp["verdict"]["name"] == "holds"); // under its 150 °C service maximum
     CHECK(family_of_material_id("bambu-pla-basic") == nullptr);
+    // Rápida: the whole bar solid in about 20 000 voxels, and still the same
+    // verdict at 23 °C.
+    e.overrides.material.reset();
+    e.working_temperature = 23.0;
+    e.structural.quality = "fast";
+    const AnalysisCase fast = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    CHECK(fast.model == AnalysisModel::Solid);
+    CHECK_FALSE(fast.resolution_check);
+    const std::size_t voxels = analysis_grid_voxels(bar, beads_04(), fast);
+    INFO(voxels);
+    CHECK(voxels > 10000);
+    CHECK(voxels < 40000);
+    const AnalysisReport rf = run_analysis(bar, beads_04(), fast);
+    REQUIRE(rf.valid);
+    CHECK(nlohmann::json::parse(structural_report_json(rf, fast, e))["verdict"]["name"] == "holds");
 }

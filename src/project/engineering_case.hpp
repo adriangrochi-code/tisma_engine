@@ -29,11 +29,12 @@ std::vector<std::string> add_conditions(AnalysisCase& c, const ProjectEngineerin
 // The whole case of a part (formats.md, rule 11 bis; FM25): the material
 // changed by hand, else the filament type's (engineering_panel.md, rule 3),
 // else the case's default, the Structural tab's quality ("high"
-// is high, the rest normal), then add_conditions. Notes, as add_conditions,
+// is high; "fast" the whole part solid in about 20 000 voxels a row per
+// layer of `layer_height`, without the resolution check; the rest normal), then add_conditions. Notes, as add_conditions,
 // also name an unknown material (the default is used).
 AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const TriangleMesh& mesh,
                                        const std::array<double, 3>& shift, std::vector<std::string>& notes,
-                                       std::string_view filament_type = {});
+                                       std::string_view filament_type = {}, double layer_height = 0.2);
 
 // The values changed by hand that the analysis reads: the layer heights and
 // the line width (as walls.width). The extrusion temperature does not change

@@ -12522,6 +12522,47 @@ void App::structural_panel() {
                           field_text("##structural_safety_factor", "%.1f", e.structural.safety_factor), ImGuiSliderFlags_AlwaysClamp);
         rect_of("structural_safety_factor");
     }
+    // The resolution (rule 10) and the size it comes to, counted on the
+    // box of the part as it is on the bed (cheap: no slicing).
+    ImGui::TextUnformatted(tr(T::StructResolution));
+    {
+        static constexpr const char* kQualities[] = {"fast", "normal", "high"};
+        static constexpr T kQualityLabels[] = {T::StructQualityFast, T::StructQualityNormal, T::StructQualityHigh};
+        int q = 1;
+        for (int k = 0; k < 3; ++k)
+            if (e.structural.quality == kQualities[k])
+                q = k;
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##structural_quality", tr(kQualityLabels[q]))) {
+            for (int k = 0; k < 3; ++k)
+                if (ImGui::Selectable(tr(kQualityLabels[k]), k == q) && k != q) {
+                    remember_engineering(std::size_t(structural_part_));
+                    objects_[std::size_t(structural_part_)].engineering.structural.quality = kQualities[k];
+                }
+            ImGui::EndCombo();
+        }
+        rect_of("structural_quality");
+        const std::size_t part = std::size_t(structural_part_);
+        const std::string key = std::to_string(part) + "|" + e.structural.quality + "|" + std::to_string(plate_version_) + "|" +
+                                std::to_string(settings_.wall_width) + "|" + std::to_string(settings_.layer_height) + "|" +
+                                engineering_json(e);
+        static std::string estimated_for;
+        static std::pair<std::size_t, double> estimate{0, 0.0};
+        if (key != estimated_for && part < placed_meshes_.size() && !placed_meshes_[part].empty()) {
+            estimated_for = key;
+            Settings settings = settings_;
+            std::vector<std::string> notes;
+            apply_engineering_overrides(settings, e, notes);
+            ProjectEngineering bare = e;
+            bare.conditions.clear(); // the size does not depend on them
+            const AnalysisCase c =
+                engineering_analysis_case(bare, placed_meshes_[part], {}, notes, settings_.filament_type, settings.layer_height);
+            const IndexedMesh mesh = weld_exact(placed_meshes_[part]);
+            estimate = {analysis_grid_voxels(mesh, settings, c), analysis_resolution(c, settings).first};
+        }
+        if (estimate.first > 0)
+            loc::TextDisabled("%s", format(tr(T::StructEstimate), estimate.first, estimate.second).c_str());
+    }
     ImGui::TextUnformatted(tr(T::StructWorkingTemp));
     if (ImGui::IsItemHovered())
         loc::SetTooltip("%s", tr(T::StructWorkingTempTip));
@@ -12644,7 +12685,7 @@ void App::start_structural() {
         struct Cancelled {};
         try {
             std::vector<std::string> case_notes;
-            const AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type);
+            const AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height);
             const IndexedMesh mesh = weld_exact(placed);
             const AnalysisReport r = run_analysis(mesh, settings, c, nullptr, [this](std::string_view, double done) {
                 structural_permille_ = int(done * 1000.0);

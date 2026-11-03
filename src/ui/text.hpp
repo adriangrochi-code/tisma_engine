@@ -63,6 +63,11 @@
     X(StructLimitLine, "Límite de desplazamiento: se mueve %.3g mm de %.3g", "Displacement limit: moves %.3g mm of %.3g") \
     X(StructFamilyTypical, "%s (valores típicos)", "%s (typical values)") \
     X(StructTryTitle, "Probá con:", "Try:") \
+    X(StructResolution, "Resolución", "Resolution") \
+    X(StructQualityFast, "Rápida (pieza maciza, unos 20 000 vóxeles)", "Fast (solid part, about 20 000 voxels)") \
+    X(StructQualityNormal, "Normal (2 vóxeles por ancho de línea)", "Normal (2 voxels per line width)") \
+    X(StructQualityHigh, "Alta (4 vóxeles por ancho de línea)", "High (4 voxels per line width)") \
+    X(StructEstimate, "Unos %zu vóxeles de %.2f mm", "About %zu voxels of %.2f mm") \
     X(StructCritical, "Punto crítico: %.2f", "Critical point: %.2f") \
     X(StructNotValid, "El resultado no sirve:", "The result is not usable:") \
     X(StructSafetyFactor, "Factor de seguridad pedido", "Safety factor asked") \

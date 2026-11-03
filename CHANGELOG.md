@@ -23,7 +23,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   (mm o % de la mayor medida, 1 mm al empezar) y se comprueban: si una zona se mueve más que su límite, el veredicto
   es «Demasiado flexible». Si la pieza no aguanta, «Probá con» muestra un botón por material que aguantaría; al
   apretarlo, se elige ese material y se analiza de nuevo. La lista de materiales suma las familias de la tabla
-  («PEI (valores típicos)»...), para los que no tienen un registro medido.
+  («PEI (valores típicos)»...), para los que no tienen un registro medido. La resolución se elige (Rápida: la pieza maciza en unos 20 000
+  vóxeles, sin la comprobación de resolución; Normal; Alta) y el panel dice cuántos vóxeles y de qué tamaño.
 - **La temperatura de trabajo cuenta en el análisis**: la rigidez y la resistencia bajan con `f(T)` de la familia
   del material (1 hasta 23 °C, 0,5 en la máxima de servicio). Pasada esa máxima, el veredicto es «Fuera de
   temperatura».

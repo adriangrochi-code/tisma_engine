@@ -9610,3 +9610,21 @@ Verbos nuevos de los programas de prueba: `save-project RUTA` y `open-project RU
 ahora, después de analizar, guarda el proyecto, lo abre, vuelve a Estructural y encuentra el mismo veredicto
 («Aguanta»), sin «Desactualizado» y con sus condiciones. Abrir un proyecto olvida el mapa de la sesión (se vuelve a
 dibujar al analizar).
+
+### Resolución (regla 10, en parte)
+
+**Hecho:**
+- «Resolución» en el panel:
+  - Rápida: la pieza maciza, unos 20 000 vóxeles con una fila por capa (el vóxel sale de la caja de la pieza y la
+    altura de capa), sin la comprobación de resolución;
+  - Normal: 2 vóxeles por ancho de línea, como impresa;
+  - Alta: 4 vóxeles por ancho de línea.
+- Debajo, «Unos N vóxeles de X mm», contados sobre la caja de la pieza como está en la cama (sin laminar). Se recuenta
+  solo cuando cambia algo que lo afecta.
+- `engineering_analysis_case` recibe la altura de capa; el CLI y la interfaz se la pasan.
+
+**Probado:** la barra de 40 × 8 × 8 mm en Rápida: entre 10 000 y 40 000 vóxeles de la caja, maciza, sin comprobación,
+y el mismo veredicto.
+
+**No probado / falta:** la memoria y el tiempo estimados («284 MB, unos 14 s» de la ficha) no se muestran: el tiempo
+pide laminar. Falta la dirección de impresión y «Calcular en la nube».
