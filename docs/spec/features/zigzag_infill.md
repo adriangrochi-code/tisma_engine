@@ -56,8 +56,11 @@ Los nombres son los del motor (`docs/CONFIG.md`).
    Hoy el motor no avisa (prueba ZI8).
 6. **Material:** cada tramo extruye según su espesor real: la distancia hasta el cordón de abajo, no la altura de capa.
    Donde las dos capas tienen el diente completo, el espesor es la altura de capa.
-7. **Velocidad:** el eje Z sube y baja junto con el avance, así que la velocidad de cada tramo se limita para que Z no
-   pase `machine.max_feed_z`. El tiempo estimado lo cuenta.
+7. **Velocidad:** el eje Z sube y baja junto con el avance, así que la velocidad escrita en el G-code (`F`) de cada
+   tramo se baja para que Z no pase `machine.max_feed_z`, y el tiempo estimado sale de esa misma velocidad. Si el
+   perfil de la impresora no dice `machine.max_feed_z`, se toma 5 mm/s, el valor del Ender-3 de fábrica que el motor ya
+   usa para las demás velocidades que faltan, y se nombra en el mismo aviso. Con un eje Z lento el zigzag puede
+   triplicar el tiempo (prueba ZI7), y el aviso de la regla 12 lo dice.
 8. **Viajes:** van por encima de las crestas de la capa.
 9. **No va junto con:** `infill.waves` (ondas entrelazadas), `curved.mode` (capas curvas), el relleno combinado de
    varias capas, la altura por zonas y las bandas del guiado por tensiones. Con cualquiera de ellos el laminado termina
@@ -85,9 +88,9 @@ Medidas en el motor (dev 45607f0, 03-11-2026) como caja negra, con el perfil de 
 | ZI4 | Cubo de 80 | `triangles`, `stars`, `honeycomb`, `aligned_rectilinear` o `concentric` al 20 %, `infill.nonplanar` sí | Hay bloques con zigzag en los cinco |
 | ZI5 | Cubo de 80 | `rectilinear`, `gyroid`, `cubic` o `lightning`, `infill.nonplanar` sí | Ningún bloque con zigzag; aviso `nonplanar_ignored` |
 | ZI6 | Cubo de 80 | `grid` al 20 % sin y con zigzag | Tiempo estimado 10 h 39 min sin zigzag y 12 h 42 min con zigzag (+19 %); el G-code pasa de unas 98 000 a unos 2,6 millones de líneas |
-| ZI7 | Cubo de 80 | ZI1 | Esperado (sin medir todavía): ningún movimiento de Z más rápido que `machine.max_feed_z`; el verificador del G-code da bien |
+| ZI7 | Cubo de 80 | ZI1 sin `machine.max_feed_z` en el perfil, y después con 5 mm/s | Medido en 45607f0/177eae6: los tramos con zigzag piden Z a 28,3 mm/s en los dos casos; el tiempo estimado pasa de 12 h 42 min a 1 d 10 h 11 min con 5 mm/s. Esperado: con 5 mm/s ningún tramo pide Z a más de 5 mm/s en su `F`, y sin el dato se usa 5 mm/s con aviso (regla 7) |
 | ZI8 | Cubo de 10 mm | `grid` al 20 %, `infill.nonplanar` sí | Ningún bloque con zigzag (no hay lugar, regla 5). Esperado: el aviso de la regla 5. Hoy no hay aviso |
 | ZI9 | Cubo de 10 mm | `infill.nonplanar` y `infill.waves` sí | Código 2: «infill.nonplanar: not with the interlocking waves (infill.waves)» |
 | ZI10 | Cubo de 10 mm | `infill.nonplanar` sí y `curved.mode` = `wave` (E relativa) | Código 2: «infill.nonplanar: not with curved layers (curved.mode)» |
-| ZI11 | Cubo de 80 | ZI1 | Esperado (sin medir todavía): en cada cordón de relleno que toca una pared, dz = 0 en su punta (regla 4) |
+| ZI11 | Cubo de 80 | ZI1 | Medido: las puntas de los 21 276 tramos con zigzag, a 1,2 mm del borde de la pieza (junto a la pared interna), quedan a dz = 0 (regla 4) |
 | ZI12 | Probetas de tracción en Z (las de la calibración de resistencia), PLA | Plano y con zigzag, cinco de cada una, impresas por el dueño | Resistencia y deformación a la rotura de cada grupo. Es la prueba de que el zigzag mejora el relleno; hasta tenerla, la ayuda dice que la mejora se midió en paredes |
