@@ -9494,6 +9494,18 @@ hace doble clic).
 
 **No probado:** CD6 entero necesita el redondeo (D4).
 
+### Arrastrar el boceto (regla 5)
+
+**Hecho:** sin herramienta elegida, apretar sobre un punto del boceto (dentro de unos 10 píxeles) y arrastrar lo lleva
+al cursor; en cada cuadro el boceto se resuelve con ese punto clavado donde está el cursor, y si las restricciones no
+lo dejan ir ahí, el boceto queda como estaba. Mientras se arrastra, la vista no gira; al soltar no se agrega ningún
+punto. La pieza se rehace al terminar el boceto, como antes.
+
+**Probado:** con eventos reales de X (XTest en Xvfb, 1200 × 760): rectángulo de 40 × 30 con ancho y alto acotados,
+Esc para soltar la herramienta Cota, apretar en la esquina de arriba a la derecha y arrastrar 60 px a la derecha y 40
+hacia arriba: el rectángulo entero se corre, sigue de 40 × 30 con sus cotas, y la vista no gira. Sin prueba guionada
+(el programa de pruebas no arrastra).
+
 **Sigue:** D4 (redondeo, chaflán, vaciado, agujeros por norma, roscas, patrones, simetría, combinar; CD5, CD6
 completo, CD17, CD18) o lo pendiente de Ingeniería (`engineering_panel.md`: fuerzas en N y kg con dirección,
 Analizar que corra con mapa y veredicto, EP1–EP10), según diga el dueño; arrastrar el boceto (regla 5).

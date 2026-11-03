@@ -1167,6 +1167,8 @@ private:
         };
         std::vector<Pick> picks;
         std::optional<cad::GeoConstraint> pending;
+        // A point dragged with no tool (rule 5): solved every frame.
+        std::optional<cad::EntityPoint> drag;
         std::vector<cad::Pt> points;
         std::optional<cad::Pt> last; // the last point placed, for @ coordinates
         std::optional<cad::Pt> raw;  // the mouse on the plane
@@ -1213,6 +1215,7 @@ private:
     void sketch_rule_prompt();
     void sketch_apply_rule(const cad::GeoConstraint& rule);
     double sketch_pick_radius() const;
+    void sketch_drag_to(const cad::Pt& p);
     // The degrees of freedom of the sketch being drawn, counted again only
     // when it changes.
     const cad::SketchSolve& sketch_dof();
@@ -8359,6 +8362,29 @@ void App::viewport() {
     if (tab_ == Tab::Design && sketch_edit_) {
         if (ImGui::IsItemHovered()) {
             sketch_update_cursor();
+            // With no tool, a press on a point drags it; the sketch is
+            // solved every frame while it moves (rule 5).
+            SketchEdit& se = *sketch_edit_;
+            if (se.tool == SketchEdit::Tool::None && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && se.raw && editing_sketch()) {
+                const cad::Sketch& sk = *editing_sketch();
+                double best = sketch_pick_radius();
+                for (std::size_t i = 0; i < sk.entities.size(); ++i) {
+                    const cad::Entity& en = sk.entities[i];
+                    const std::size_t points = en.kind == cad::Entity::Kind::Rectangle ? 4
+                                               : en.kind == cad::Entity::Kind::Circle  ? 1
+                                                                                       : en.points.size();
+                    for (std::size_t k = 0; k < points; ++k) {
+                        const cad::Pt q = cad::point_of(en, k);
+                        if (const double d = std::hypot(q.x - se.raw->x, q.y - se.raw->y); d <= best)
+                            best = d, se.drag = cad::EntityPoint{i, k};
+                    }
+                }
+            }
+            if (se.drag && ImGui::IsMouseDown(ImGuiMouseButton_Left) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] >= 9.0f &&
+                se.raw)
+                sketch_drag_to(*se.raw);
+            if (se.drag && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+                se.drag.reset(); // a release after a drag places no point (it was not a click)
             if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] < 9.0f &&
                 sketch_edit_->cursor) {
                 const cad::Snap snap = sketch_edit_->snap;
@@ -8449,7 +8475,8 @@ void App::viewport() {
                 drag_anchor_ = *p;
                 dragged_ = true;
             }
-        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) &&
+        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && !(sketch_edit_ && sketch_edit_->drag) &&
+                   ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) &&
                    !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             // Not on the press itself: its frame's delta is where the pointer
             // came from, not a drag (UI50: a click right after a jump of the
@@ -14725,6 +14752,24 @@ void App::sketch_apply_rule(const cad::GeoConstraint& rule) {
     case cad::AddRule::Conflicting: command_message_ = tr(T::RuleConflicting); break;
     case cad::AddRule::Invalid: command_message_ = tr(T::RuleNothingThere); break;
     }
+}
+
+// The dragged point taken to `p` with the sketch solved around it; where the
+// constraints do not let it go, it stays.
+void App::sketch_drag_to(const cad::Pt& p) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch || !sketch_edit_->drag)
+        return;
+    cad::Sketch trial = *sketch;
+    cad::GeoConstraint pin;
+    pin.kind = cad::GeoConstraint::Kind::Fixed;
+    pin.a = *sketch_edit_->drag;
+    pin.at = p;
+    trial.rules.push_back(pin);
+    if (!cad::solve_sketch(trial).solved)
+        return;
+    trial.rules.pop_back();
+    *sketch = std::move(trial);
 }
 
 const cad::SketchSolve& App::sketch_dof() {
