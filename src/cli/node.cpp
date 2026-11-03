@@ -367,7 +367,7 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         if (std::string problem = output_problem(write_target(*path)); !problem.empty())
             return fail(kExitInput, problem);
     if (mode != "analyze")
-        return fail(kExitNotImplemented, "the mode '" + mode + "' does not run on the nodes yet");
+        return fail(kExitNotImplemented, "this analysis (" + mode + ") does not run in the cloud yet");
 
     Progress progress(out);
     progress(0);
