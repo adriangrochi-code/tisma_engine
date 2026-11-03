@@ -12786,6 +12786,7 @@ void App::structural_panel() {
             // uncertainty gives the safety factor (the owner's request,
             // 2026-11-03: the results are approximations).
             if (const nlohmann::json ad = j.value("adhesion", nlohmann::json::object()); !ad.empty()) {
+                ImGui::PushTextWrapPos(0.0f);
                 const std::string mode = ad.value("weakest_mode", std::string("none"));
                 const T fails = mode == "between_layers" ? T::StructFailsBetweenLayers
                                 : mode == "between_lines" ? T::StructFailsBetweenLines
@@ -12808,6 +12809,7 @@ void App::structural_panel() {
                     loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructTooCold));
                 if (ad.value("too_hot", false))
                     loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructTooHot));
+                ImGui::PopTextWrapPos();
             }
             if (result.contains("max_displacement_mm") && result["max_displacement_mm"].is_number())
                 ImGui::TextUnformatted(format(tr(T::StructMaxDisplacement), result["max_displacement_mm"].get<double>()).c_str());
@@ -19635,6 +19637,15 @@ void App::script_input() {
             return fail_step(format("it spans x %.0f..%.0f, the view %.0f..%.0f", r.x, r.z, view_pos_.x,
                                     view_pos_.x + view_size_.x));
         next();
+    } else if (step.verb == "expect-text") { // a text drawn contains VALUE (the whole line), within 60 frames
+        const std::string what = step.key + (step.value.empty() ? "" : " " + step.value);
+        for (const std::string& t : g_texts)
+            if (t.find(what) != std::string::npos) {
+                std::printf("ui-script: expect-text %s: \"%s\"\n", what.c_str(), t.c_str());
+                return next();
+            }
+        if (f >= 60)
+            return fail_step("no text on the screen contains it");
     } else if (step.verb == "expect-no-text") { // no text drawn contains VALUE (the whole line), for 10 frames
         const std::string what = step.key + (step.value.empty() ? "" : " " + step.value);
         for (const std::string& t : g_texts)
