@@ -277,11 +277,11 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(parse_settings(R"({"gcode": {"corner_smoothing": 0.02}})").corner_smoothing == 0.02);
     const Settings sf = parse_settings(R"({"surfaces": {"bottom_pattern": "rectilinear", "bridge_angle": 30},
                                           "infill": {"before_walls": true, "max_link": 20}})");
-    CHECK_FALSE(sf.monotonic_bottom);
+    CHECK(sf.bottom_pattern == SurfacePattern::Rectilinear);
     CHECK(sf.bridge_angle == 30.0);
     CHECK(sf.infill_before_walls);
     CHECK(sf.infill_max_link == 20.0);
-    CHECK(Settings{}.monotonic_bottom);
+    CHECK(Settings{}.bottom_pattern == SurfacePattern::Monotonic);
     CHECK(Settings{}.infill_max_link == 50.0);
     CHECK_THROWS(parse_settings(R"({"gcode": {"corner_smoothing": 0.1}})"));
     const Settings cal = parse_settings(R"({"calibration": {"mode": "temperature", "start": 230, "step": -5, "end": 210,

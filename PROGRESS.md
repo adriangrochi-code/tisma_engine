@@ -9115,3 +9115,23 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - Pruebas: FM23 y FM24 (sin el resultado todavía) en el archivo propio y en el 3MF, y FM26 con la parte de quitar.
 - **Sigue:** el último resultado como archivo del paquete con su huella; `analyze` sobre el proyecto (FM25).
 
+## 2026-11-03 (noche): dibujos de las superficies (pedido del dueño)
+
+- Ficha: `infill_patterns.md` reglas 14 a 17 y P10 (spec/next 6f59edd, `check_spec.py` limpio). El equipo de fichas
+  lo puso delante de la pestaña Estructural.
+- **Hecho:** `surfaces.top_pattern` y `bottom_pattern` aceptan `monotonic`, `rectilinear`, `monotonic_lines`,
+  `aligned_rectilinear`, `concentric`, `hilbert`, `archimedean` y `octagram` (`SurfacePattern`, en lugar de los dos
+  booleanos):
+  - `monotonic_lines` sale como el `monotonic` del motor, que ya eran líneas sueltas en el mismo sentido;
+  - `aligned_rectilinear`: zigzag al ángulo del relleno en todas las capas;
+  - las curvas: las mismas funciones del relleno, densas (separación de un cordón menos el solape);
+  - abajo, los que no son líneas solo en `bottom_exposed` (lo que no tiene nada de la pieza debajo, nuevo en
+    `LayerSurfaces`); las capas sólidas de encima siguen en zigzag (regla 17).
+- En el panel, el patrón de abajo pasa a básico junto al de arriba, con los ocho dibujos; la explicación lo dice.
+- Pruebas: P10 en `test_infill.cpp` (cada dibujo cubre entre 0,9 y 1,15 veces lo que cubren las líneas, el alineado
+  no gira, el concéntrico hace lazos, abajo solo la capa expuesta cambia, los ocho nombres se leen y se escriben).
+  El cubo de prueba se lamina con los ocho dibujos arriba y abajo y su G-code pasa la verificación;
+  `tisma_fuzz_gcode 300` con los dibujos al azar: ninguna falla.
+- **No medido contra P10:** en Tisma Slicer `monotonic` sale en un solo tramo y `monotonic_lines` en 71; el motor da
+  tramos sueltos en los dos. Queda anotado para revisar el `monotonic` de arriba.
+

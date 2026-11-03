@@ -343,6 +343,7 @@
     X(WaveLength, "Largo de las ondas", "Wave length") \
     X(TopPattern, "Superficie superior", "Top surface")                                                               \
     X(Monotonic, "Monotónica", "Monotonic")                                                                           \
+    X(MonotonicLines, "Líneas monotónicas", "Monotonic lines")                                                       \
     X(Rectilinear, "Rectilínea", "Rectilinear")                                                                       \
     X(Grid, "Grilla", "Grid")                                                                                         \
     X(Gyroid, "Giroide", "Gyroid")                                                                                    \

@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Más dibujos para las superficies de arriba y de abajo** (pedido del dueño; ficha `infill_patterns.md`, reglas 14
+  a 17): además de monotónico y rectilíneo, líneas monotónicas, rectilíneo alineado (no gira entre capas),
+  concéntrico, Hilbert, espiral de Arquímedes y octograma. Abajo, los que no son líneas cambian solo la capa que toca
+  la cama. El patrón de abajo pasa al nivel básico del panel, junto al de arriba.
 - **Impresoras Anycubic que leen el archivo antes de imprimir** (Kobra 3, Kobra S1, Kobra X; ficha
   `gcode_firmware.md`, regla 7): el ajuste nuevo `machine.strict_parser` = `anycubic` (en la interfaz, «Lector del
   firmware» en la tarjeta del firmware) ordena el G-code como el programa de Anycubic: el resumen al principio

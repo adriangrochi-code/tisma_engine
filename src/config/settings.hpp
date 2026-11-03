@@ -19,6 +19,9 @@ public:
 
 enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
+// The pattern of the top surface and of the bottom one (surfaces.top_pattern,
+// surfaces.bottom_pattern; infill_patterns.md, rules 14 to 17).
+enum class SurfacePattern { Monotonic, Rectilinear, MonotonicLines, AlignedRectilinear, Concentric, Hilbert, Archimedean, Octagram };
 enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram };
 // The firmware the G-code is for. Past Marlin, Klipper and RepRap, the old
 // dialects of gcode_extras.md (rule 6): Repetier and Smoothie as RepRap, and
@@ -262,8 +265,10 @@ struct Settings {
     int bottom_layers = 3;   // solid layers over each bottom surface
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)
     double bottom_min_thickness = 0.0; // mm: likewise over the bottom surfaces
-    bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
-    bool monotonic_bottom = true; // bottom surfaces too (surfaces.bottom_pattern, surfaces_infill.md)
+    // The top surface's pattern, and the bottom one's (surfaces_infill.md;
+    // infill_patterns.md, rules 14 to 17).
+    SurfacePattern top_pattern = SurfacePattern::Monotonic;
+    SurfacePattern bottom_pattern = SurfacePattern::Monotonic;
     double bridge_angle = 0.0;    // degrees, the bridges' lines (surfaces.bridge_angle); 0: by the bridge
     // Line widths of their own, mm; 0: from the nozzle, not the walls
     // (surfaces_infill.md, I9).
@@ -890,6 +895,7 @@ std::string settings_json(const Settings& settings);
 
 // The name of an infill pattern in the settings ("rectilinear", "grid"...).
 const char* infill_pattern_name(InfillPattern pattern);
+const char* surface_pattern_name(SurfacePattern pattern);
 
 // The name of a flavor in the settings ("marlin", "no_extrusion"...).
 const char* flavor_name(GcodeFlavor flavor);

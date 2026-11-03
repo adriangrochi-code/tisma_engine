@@ -1804,7 +1804,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         combined_region[r] = std::move(common);
     });
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
-                    settings.monotonic_top};
+                    settings.top_pattern};
     fill.bridge_width = bridge_bead(settings);
     fill.sparse_width = nozzles.sparse_width;
     // At 0 from the nozzle, not the walls (surfaces_infill.md, I9): the top
@@ -1813,7 +1813,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     fill.solid_width = settings.solid_width > 0.0 ? settings.solid_width : 1.125 * settings.nozzle_diameter;
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.max_link = settings.infill_max_link;
-    fill.monotonic_bottom = settings.monotonic_bottom;
+    fill.bottom_pattern = settings.bottom_pattern;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     // Lightning (docs/INFILL.md): from the top down, in what the stress

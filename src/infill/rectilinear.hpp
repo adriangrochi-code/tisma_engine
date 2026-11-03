@@ -65,7 +65,7 @@ struct FillParams {
     double density = 0.2; // sparse infill, 0 to 1
     double angle = 45.0;  // degrees; odd layers add 90 (rectilinear)
     InfillPattern pattern = InfillPattern::Rectilinear;
-    bool monotonic_top = true; // top surfaces in monotonic order instead of zig-zags
+    SurfacePattern top_pattern = SurfacePattern::Monotonic; // the top surface (rules 14 to 16)
     bool gap_fill = false;     // fill what the solid lines leave with variable-width beads (gap_fill)
     double wall_overlap = 0.25; // monotonic top lines reach this fraction of a bead into the walls
     double bridge_width = 0.0;  // the bridges' round beads, and how far apart their lines are; 0: width
@@ -76,12 +76,12 @@ struct FillParams {
     double solid_width = 0.0;          // the other solid infill's bead (surfaces.solid_width); 0: width
     double overlap = 0.0; // neighbouring lines' overlap (bead_overlap of the layer's height, perimeters.md rule 1)
     double max_link = 0.0; // mm along the walls the sparse lines may be joined over (infill.max_link); 0: 3 spacings
-    bool monotonic_bottom = false; // bottom surfaces in monotonic order (surfaces.bottom_pattern)
+    SurfacePattern bottom_pattern = SurfacePattern::Rectilinear; // the bottom surfaces (surfaces.bottom_pattern)
 };
 
 // Infill of layer `layer`. Solid surfaces: rectilinear lines one bead apart,
 // fitted to the region, at the layer's angle; top surfaces in monotonic order
-// (with monotonic_top), reaching wall_overlap of a bead into the walls since
+// (top_pattern monotonic), reaching wall_overlap of a bead into the walls since
 // their ends are not joined, the rest connected into zig-zags; with gap_fill, what
 // they leave is filled by gap_fill (off by default: on the sphere it costs
 // 0.5 s for 1 to 2 % of the solid area). Sparse

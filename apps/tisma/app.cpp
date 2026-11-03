@@ -7109,10 +7109,27 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::BottomLayers, "surfaces.bottom_layers", s.bottom_layers, 0, 1000);
         mm(T::TopMinThickness, "surfaces.top_min_thickness", s.top_min_thickness, 0.0, 100.0, "%.2f mm", 0.01f);
         mm(T::BottomMinThickness, "surfaces.bottom_min_thickness", s.bottom_min_thickness, 0.0, 100.0, "%.2f mm", 0.01f);
+        // The surface patterns (infill_patterns.md, rules 14 to 17).
         if (shown("surfaces.top_pattern"))
-            changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+            changed |= row(T::TopPattern, s.top_pattern,
+                           {{SurfacePattern::Monotonic, tr(T::Monotonic)},
+                            {SurfacePattern::MonotonicLines, tr(T::MonotonicLines)},
+                            {SurfacePattern::Rectilinear, tr(T::Rectilinear)},
+                            {SurfacePattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
+                            {SurfacePattern::Concentric, tr(T::ConcentricInfill)},
+                            {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
+                            {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
+                            {SurfacePattern::Octagram, tr(T::OctagramInfill)}});
         if (shown("surfaces.bottom_pattern"))
-            changed |= row(T::BottomPattern, s.monotonic_bottom, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+            changed |= row(T::BottomPattern, s.bottom_pattern,
+                           {{SurfacePattern::Monotonic, tr(T::Monotonic)},
+                            {SurfacePattern::MonotonicLines, tr(T::MonotonicLines)},
+                            {SurfacePattern::Rectilinear, tr(T::Rectilinear)},
+                            {SurfacePattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
+                            {SurfacePattern::Concentric, tr(T::ConcentricInfill)},
+                            {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
+                            {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
+                            {SurfacePattern::Octagram, tr(T::OctagramInfill)}});
         mm(T::BridgeAngle, "surfaces.bridge_angle", s.bridge_angle, -360.0, 360.0, s.bridge_angle != 0.0 ? "%.0f°" : tr(T::AutoValue),
            0.5f);
         flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
