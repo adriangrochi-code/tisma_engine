@@ -13361,6 +13361,15 @@ void App::aerodynamics_panel() {
                 ImGui::TextUnformatted(format(tr(T::AeroCd), num("cd"), num("cd_pressure"), num("cd_friction")).c_str());
             else
                 ImGui::TextUnformatted(format(tr(T::AeroCdFriction), num("cd_friction")).c_str());
+            // The likely range (the owner's request: the most reliable
+            // result each quality gives, and how far it can be off).
+            if (j.contains("cd_low") && j["cd_low"].is_number() && num("uncertainty") > 0.0) {
+                ImGui::PushTextWrapPos(0.0f);
+                loc::TextDisabled("%s", format(tr(j.value("simulated", false) ? T::AeroRange : T::AeroRangeFriction), num("cd_low"),
+                                               num("cd_high"), 100.0 * num("uncertainty"))
+                                            .c_str());
+                ImGui::PopTextWrapPos();
+            }
             ImGui::TextUnformatted(format(tr(T::AeroSide), num("side_force_n")).c_str());
             ImGui::TextUnformatted(format(tr(T::AeroArea), num("frontal_area_mm2")).c_str());
             ImGui::TextUnformatted(format(tr(T::AeroReynolds), num("reynolds"), num("reynolds_simulated")).c_str());

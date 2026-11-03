@@ -9916,3 +9916,44 @@ no llega al análisis (sale del laminado) y las paredes simples no se distinguen
   aviso de un trabajo fallido muestran, en castellano, el `error_es` del resumen; si no hay, un texto por su `code`;
   si no, el `error` en inglés (`cloud::job_error`).
 
+## 2026-11-03 — La fiabilidad más alta que dé cada calidad (CFD y FEA)
+
+**Pedido del dueño:** «Busquemos la fiabilidad sea lo más alta alcanzable en cada preset».
+
+**CFD**, probado con las recetas de `docs/research/cfd_fea_optimizations.md`, medido con AE1 a AE4 a 12 celdas. La
+tabla da el Cd de presión, de la fuerza en las paredes y sin corrección por bloqueo:
+
+| Variante | Placa (Hoerner 1,17) | Cubo (1,05) | Prisma 3:1 (Tisma 1,06) | Prisma con punta (Tisma 0,34) |
+|---|---|---|---|---|
+| BGK, sin esponja (antes) | 1,010 | 1,007 | 0,936 | 0,366 |
+| BGK, con esponja (ahora) | **1,072** | **1,042** | **0,980** | 0,409 |
+| TRT Λ = 3/16, con esponja | 0,638 | 0,441 | 0,665 | 0,418 |
+| Smagorinsky 0,10 | inestable | inestable | inestable | inestable |
+
+- **Fuerza por intercambio de momento:** la presión sale de los enlaces que rebotan. La parte de presión es el
+  equilibrio en reposo de cada enlace. Coincide con la lectura anterior en las caras (placa 1,010 contra 0,986) y es
+  coherente con la pared. El mapa por cara sigue saliendo de la densidad junto a la cara.
+- **Capa absorbente** de medio tamaño de pieza antes de la salida: queda, por la tabla.
+- **TRT**: queda como opción apagada. A la viscosidad del análisis (τ a menos de 0,01 de 1/2) la tasa impar es
+  casi 0, y el cubo cayó a 0,44.
+- **Maskell**: no se aplica. Con un bloqueo de 6,2 % bajaría el cubo a 0,87; el bloqueo y la disipación de
+  Smagorinsky se compensan. La fracción de bloqueo queda en el resultado.
+- **Verificación de resolución:** cada calidad simula también con 2/3 de las celdas, con un quinto más de tiempo.
+- **Rango probable del Cd:** ±1σ, con el error propio del método (12 %, el promedio de las diferencias de la tabla) y
+  el cambio con la resolución, en cuadratura. A calidad «solo rozamiento» es el 15 % de las correlaciones, y avisa
+  que falta la presión.
+- El rango se ve en la pestaña Aerodinámica y va en el `.taero` y en el resumen de `aero` (`cd_low`, `cd_high`).
+
+**FEA:**
+- El rango del factor de seguridad suma en cuadratura la incertidumbre de la adherencia y el cambio con vóxeles del
+  doble de tamaño (la verificación de resolución que ya existía). La calidad rápida ahora también la hace: un octavo
+  más de tiempo.
+- El resumen de `analyze` lleva `min_safety_low` y `min_safety_high`.
+- El promedio sobre la distancia crítica (Taylor 2007) ya estaba en el factor de seguridad.
+
+**Sigue, por impacto según la investigación:**
+- CFD: paredes de Bouzidi (con q desde la malla), el arranque de grueso a fino y la parada temprana cuando el Cd
+  converge;
+- FEA: hexaedros de modos incompatibles, contra el bloqueo por corte en paredes de 2 vóxeles;
+- después, la GPU.
+

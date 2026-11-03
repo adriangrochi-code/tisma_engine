@@ -290,6 +290,12 @@ TEST_CASE("analyze of a project the nodes' way: progress, the .tea result and th
     CHECK(t["object"] == 0);
     CHECK_FALSE(t["fingerprint"].get<std::string>().empty());
     CHECK(t["report"]["verdict"]["name"] == "holds");
+    {
+        const nlohmann::json sum = nlohmann::json::parse(read_text(summary));
+        REQUIRE(sum["min_safety_low"].is_number());
+        CHECK(sum["min_safety_low"].get<double>() <= sum["min_safety"].get<double>());
+        CHECK(sum["min_safety_high"].get<double>() >= sum["min_safety"].get<double>());
+    }
 
     // --solid: the whole part solid, still held.
     const Run solid = run({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",

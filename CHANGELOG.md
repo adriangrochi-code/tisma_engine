@@ -12,6 +12,18 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Rango probable en los análisis** (pedido del dueño: la mayor fiabilidad que dé cada calidad):
+  - Aerodinámica: cada calidad simula también con 2/3 de las celdas, y el resultado da el rango probable del Cd: el
+    error propio del método (12 %, medido) y el cambio con la resolución.
+  - Estructural: el rango del factor de seguridad suma, a la incertidumbre de la adherencia, el cambio con vóxeles del
+    doble de tamaño. La calidad rápida ahora también hace esa verificación.
+  - Los resúmenes para la nube llevan `cd_low` y `cd_high`, y `min_safety_low` y `min_safety_high`.
+
+### Cambiado
+
+- **CFD más fiel**: la presión sobre la pieza sale de la fuerza que el flujo deja en las paredes, en vez de leer la
+  densidad junto a cada cara. Una capa absorbente antes de la salida deja de devolver ondas de presión. Medido a 12
+  celdas: placa de 1,01 a 1,07 (Hoerner 1,17), cubo de 1,007 a 1,042 (Hoerner 1,05).
 - **Adherencia entre capas y entre líneas en el análisis estructural**: la resistencia entre capas (y su rigidez) y la
   resistencia entre líneas siguen ahora la temperatura de extrusión, la altura de capa frente al ancho de línea, el
   ventilador y la cámara, con constantes por material ajustadas a ensayos publicados y hojas técnicas. El resultado

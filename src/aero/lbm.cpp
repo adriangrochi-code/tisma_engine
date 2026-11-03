@@ -49,6 +49,17 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
     std::vector<double> sum(cells, 0.0); // double: the pressure is a small part of the density
     std::vector<float> velocity_sum(3 * cells, 0.0f);
     const double tau0 = 3.0 * o.viscosity + 0.5;
+    constexpr double kMagic = 3.0 / 16.0; // TRT's Λ
+    // The absorbing layer: the relaxation time rises as the square of the
+    // depth into it, by 2 at the outlet.
+    std::vector<double> sponge(std::size_t(nx), 0.0);
+    for (int x = std::max(1, nx - o.sponge); x < nx && o.sponge > 0; ++x) {
+        const double s = double(x - (nx - o.sponge) + 1) / double(o.sponge);
+        sponge[std::size_t(x)] = 2.0 * s * s;
+    }
+    // The force on the solid, per plane of z (each plane is one task's):
+    // all of it and the pressure part, summed over the averaged steps.
+    std::vector<double> plane_force(std::size_t(nz) * 6, 0.0);
     const double smag = 18.0 * std::sqrt(2.0) * o.smagorinsky * o.smagorinsky;
     std::atomic<bool> finite{true};
     // Per cell: which neighbours are solid (bit i for direction i), and
@@ -130,20 +141,48 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
                             }
                             // The subgrid eddies' share of the relaxation time.
                             const double q = std::sqrt(pxx * pxx + pyy * pyy + pzz * pzz + 2.0 * (pxy * pxy + pxz * pxz + pyz * pyz));
-                            const double tau = 0.5 * (tau0 + std::sqrt(tau0 * tau0 + smag * q / rho));
+                            const double tau = 0.5 * (tau0 + std::sqrt(tau0 * tau0 + smag * q / rho)) + sponge[std::size_t(x)];
                             const double omega = 1.0 / tau;
-                            for (int i = 0; i < kQ; ++i)
-                                post[i] = f[i] - omega * (f[i] - feq[i]);
+                            if (!o.trt) {
+                                for (int i = 0; i < kQ; ++i)
+                                    post[i] = f[i] - omega * (f[i] - feq[i]);
+                            } else {
+                                // Each direction with its opposite: the even part
+                                // relaxes at omega, the odd at the rate Λ gives.
+                                const double minus = 1.0 / (0.5 + kMagic / (tau - 0.5));
+                                post[0] = f[0] - omega * (f[0] - feq[0]);
+                                for (int i = 1; i < kQ; i += 2) {
+                                    const int j = i + 1;
+                                    const double even = 0.5 * (f[i] + f[j] - feq[i] - feq[j]);
+                                    const double odd = 0.5 * (f[i] - f[j] - feq[i] + feq[j]);
+                                    post[i] = f[i] - omega * even - minus * odd;
+                                    post[j] = f[j] - omega * even + minus * odd;
+                                }
+                            }
                         }
+                        // The momentum the links into the solid hand over:
+                        // 2 e_i f_i each; at rest its equilibrium part,
+                        // 2 e_i w_i rho, is the pressure's.
+                        const auto exchange = [&](int i) {
+                            if (!averaging)
+                                return;
+                            double* fz = &plane_force[std::size_t(z) * 6];
+                            const double total = 2.0 * post[i], pressure = 2.0 * kW[i] * (rho - 1.0);
+                            for (int k = 0; k < 3; ++k) {
+                                fz[k] += kE[i][k] * total;
+                                fz[3 + k] += kE[i][k] * pressure;
+                            }
+                        };
                         // Pushed to the neighbours; into a solid cell it
                         // bounces back here, halfway. Inside the domain the
                         // neighbours are fixed offsets away.
                         if (!edge[c]) {
                             const std::uint32_t m = walls[c];
                             for (int i = 0; i < kQ; ++i) {
-                                if (m & (1u << i))
+                                if (m & (1u << i)) {
                                     dst[std::size_t(kOpposite[i]) * cells + c] = float(post[i]);
-                                else
+                                    exchange(i);
+                                } else
                                     dst[std::size_t(i) * cells + std::size_t(std::ptrdiff_t(c) + offset[i])] = float(post[i]);
                             }
                             continue;
@@ -156,9 +195,10 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
                             ty = ty < 0 ? ny - 1 : ty >= ny ? 0 : ty;
                             tz = tz < 0 ? nz - 1 : tz >= nz ? 0 : tz;
                             const std::size_t t = index(tx, ty, tz);
-                            if (solid[t])
+                            if (solid[t]) {
                                 dst[std::size_t(kOpposite[i]) * cells + c] = float(post[i]);
-                            else
+                                exchange(i);
+                            } else
                                 dst[std::size_t(i) * cells + t] = float(post[i]);
                         }
                     }
@@ -203,6 +243,19 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
             if (const std::size_t c = index(x_ref, y, z); !solid[c])
                 inlet_sum += result.mean_density[c], ++inlet_cells;
     result.inlet_density = inlet_cells > 0 ? inlet_sum / double(inlet_cells) : 1.0;
+    if (result.averaged_steps > 0) {
+        double total[6] = {0, 0, 0, 0, 0, 0};
+        for (int z = 0; z < nz; ++z)
+            for (int k = 0; k < 6; ++k)
+                total[k] += plane_force[std::size_t(z) * 6 + std::size_t(k)];
+        // The pressure part was taken against rho = 1; a closed solid's links
+        // sum w_i e_i to zero, so moving the reference changes nothing but
+        // the round-off.
+        for (int k = 0; k < 3; ++k) {
+            result.force[k] = total[k] / double(result.averaged_steps);
+            result.pressure_force[k] = total[3 + k] / double(result.averaged_steps);
+        }
+    }
     return result;
 }
 

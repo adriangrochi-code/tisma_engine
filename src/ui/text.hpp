@@ -26,6 +26,8 @@
     X(AeroLayer, "Altura de capa (mm, da la rugosidad)", "Layer height (mm, gives the roughness)") \
     X(AeroCloud, "Calcular en la nube", "Compute in the cloud") \
     X(AeroDrag, "Arrastre: %.4g N", "Drag: %.4g N") \
+    X(AeroRange, "Rango probable del Cd: %.3f a %.3f (±%.0f %%: el método y la resolución)", "Likely Cd range: %.3f to %.3f (±%.0f %%: the method and the resolution)") \
+    X(AeroRangeFriction, "Rango probable del Cd: %.3f a %.3f (±%.0f %% de las correlaciones; sin la presión, que pide simular)", "Likely Cd range: %.3f to %.3f (±%.0f %% of the correlations; without the pressure, which needs a simulation)") \
     X(AeroCd, "Cd %.3f (presión %.3f · rozamiento %.4f)", "Cd %.3f (pressure %.3f · friction %.4f)") \
     X(AeroCdFriction, "Cd de rozamiento %.4f (sin simular la presión)", "Friction Cd %.4f (pressure not simulated)") \
     X(AeroSide, "Fuerza transversal: %.4g N", "Side force: %.4g N") \

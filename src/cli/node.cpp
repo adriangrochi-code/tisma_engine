@@ -479,6 +479,12 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
                            {"mass_g", std::round(v.value("mass_g", 0.0) * 100.0) / 100.0},
                            {"family", v.value("family", "")},
                            {"voxels", report.grid.count()}};
+    // The likely range of the smallest safety factor (adhesion and voxel size).
+    if (const nlohmann::json& rep = result["report"]; rep.contains("adhesion") && rep["adhesion"].is_object()) {
+        const nlohmann::json& ad = rep["adhesion"];
+        summary["min_safety_low"] = ad.contains("min_safety_low") ? ad["min_safety_low"] : nlohmann::json(nullptr);
+        summary["min_safety_high"] = ad.contains("min_safety_high") ? ad["min_safety_high"] : nlohmann::json(nullptr);
+    }
     if (!write_summary(summary))
         return kExitInput;
     progress(100);
@@ -648,6 +654,8 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
                                  {"cd", finite(r.cd)},
                                  {"cd_pressure", finite(r.cd_pressure)},
                                  {"cd_friction", finite(r.cd_friction)},
+                                 {"cd_low", finite(r.cd_low)},
+                                 {"cd_high", finite(r.cd_high)},
                                  {"reynolds", finite(r.reynolds)},
                                  {"reynolds_simulated", finite(r.reynolds_simulated)}};
     if (!write_summary(summary))
