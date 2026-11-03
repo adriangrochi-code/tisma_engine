@@ -40,7 +40,7 @@ constexpr const char* kCommands[] = {"solid.box",       "solid.cylinder",  "soli
                                      "file.export",     "file.export_3mf", "file.save_as",     "inspect.measure",
                                      "engine.commands", "solid.fillet",    "solid.chamfer",    "solid.shell",
                                      "solid.hole",      "solid.mirror",    "solid.pattern.circular",
-                                     "solid.pattern.rectangular", "solid.combine", "solid.thread"};
+                                     "solid.pattern.rectangular", "solid.combine", "solid.thread", "solid.move", "solid.split_body", "solid.draft"};
 
 // The sketch being drawn: its plane and its closed loops as polygons (a chain
 // closed, a rectangle, a circle as 64 sides), in sketch coordinates.
@@ -720,6 +720,70 @@ int run(const std::vector<std::string>& args) {
                 }
             }
             b->box = false;
+        } else if (cmd == "solid.move") {
+            const json list = p.value("bodies", json::array());
+            Body* b = list.empty() ? nullptr : body_named(list[0].get<std::string>());
+            if (!b) {
+                std::fprintf(stderr, "solid.move: `bodies` names no body\n");
+                return 1;
+            }
+            const std::vector<double> t = point(p, "translate");
+            const double angle = number(p, "angle", cmd.c_str(), false, 0.0) * std::numbers::pi / 180.0;
+            const std::vector<double> ax = point(p, "axis");
+            const char axis = ax[0] != 0.0 ? 'X' : ax[1] != 0.0 ? 'Y' : 'Z';
+            tisma::TriangleMesh moved;
+            for (std::size_t k = 0; k < b->mesh.triangle_count(); ++k) {
+                tisma::Vec3f c[3];
+                for (int i = 0; i < 3; ++i) {
+                    c[i] = angle != 0.0 ? turned(b->mesh.corner(k, i), axis, angle) : b->mesh.corner(k, i);
+                    c[i].x += float(t[0]), c[i].y += float(t[1]), c[i].z += float(t[2]);
+                }
+                moved.add_triangle(c[0], c[1], c[2]);
+            }
+            if (p.value("copy", false))
+                append(b->mesh, moved);
+            else
+                b->mesh = std::move(moved);
+            b->box = false;
+        } else if (cmd == "solid.split_body") {
+            // Split in two at the plane: the stand-in keeps both halves as
+            // one mesh (the volume does not change) once it has checked the
+            // plane goes through the body.
+            Body* b = body_named(text(p, "body", ""));
+            if (!b || !p.contains("plane")) {
+                std::fprintf(stderr, "solid.split_body: `body` and `plane` are required\n");
+                return 1;
+            }
+            const json& pl = p.at("plane");
+            std::vector<double> o{0, 0, 0}, n{0, 0, 1};
+            if (pl.is_string()) {
+                const std::string plane_name = pl.get<std::string>();
+                n = plane_name == "XZ" ? std::vector<double>{0, 1, 0} : plane_name == "YZ" ? std::vector<double>{1, 0, 0} : std::vector<double>{0, 0, 1};
+            } else {
+                o = point(pl, "origin"), n = point(pl, "normal");
+            }
+            double lo = 1e300, hi = -1e300;
+            for (std::size_t k = 0; k < b->mesh.triangle_count(); ++k)
+                for (int i = 0; i < 3; ++i) {
+                    const tisma::Vec3f v = b->mesh.corner(k, i);
+                    const double d = (v.x - o[0]) * n[0] + (v.y - o[1]) * n[1] + (v.z - o[2]) * n[2];
+                    lo = std::min(lo, d), hi = std::max(hi, d);
+                }
+            if (!(lo < -1e-6 && hi > 1e-6)) {
+                std::fprintf(stderr, "solid.split_body: the plane does not go through the body\n");
+                return 1;
+            }
+        } else if (cmd == "solid.draft") {
+            // Checked only: the stand-in does not tilt faces.
+            if (!p.contains("faces") || !p.at("faces").is_array() || p.at("faces").empty() || !p.contains("neutral")) {
+                std::fprintf(stderr, "solid.draft: `faces`, `angle` and `neutral` are required\n");
+                return 1;
+            }
+            const double a = number(p, "angle", cmd.c_str());
+            if (!(a > 0.0 && a < 89.0)) {
+                std::fprintf(stderr, "solid.draft: `angle` must be between 0 and 89 degrees\n");
+                return 1;
+            }
         } else if (cmd == "solid.thread") {
             // A thread is drawn on the face (cosmetic) or cut into it; the
             // stand-in only checks what it is given and leaves the body as is.

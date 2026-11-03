@@ -11129,6 +11129,9 @@ T op_label(cad::OperationKind kind) {
     case cad::OperationKind::PatternRectangular: return T::OpPatternRectangular;
     case cad::OperationKind::Combine: return T::OpCombine;
     case cad::OperationKind::Thread: return T::OpThread;
+    case cad::OperationKind::Move: return T::OpMove;
+    case cad::OperationKind::Split: return T::OpSplit;
+    case cad::OperationKind::Draft: return T::OpDraft;
     }
     return T::OpFillet;
 }
@@ -11136,20 +11139,22 @@ T op_label(cad::OperationKind kind) {
 // The operations that take points in the view (edges, faces, hole places).
 bool takes_points(cad::OperationKind kind) {
     return kind == cad::OperationKind::Fillet || kind == cad::OperationKind::Chamfer || kind == cad::OperationKind::Shell ||
-           kind == cad::OperationKind::Hole || kind == cad::OperationKind::Thread;
+           kind == cad::OperationKind::Hole || kind == cad::OperationKind::Thread || kind == cad::OperationKind::Draft;
 }
 
 T pick_hint(cad::OperationKind kind) {
     return kind == cad::OperationKind::Shell    ? T::OpPickFaces
            : kind == cad::OperationKind::Hole   ? T::OpPickHoles
            : kind == cad::OperationKind::Thread ? T::OpPickThread
+           : kind == cad::OperationKind::Draft  ? T::OpPickDraft
                                                 : T::OpPickEdges;
 }
 
 constexpr cad::OperationKind kOperations[] = {
     cad::OperationKind::Fillet,  cad::OperationKind::Chamfer,         cad::OperationKind::Shell,
     cad::OperationKind::Hole,    cad::OperationKind::Mirror,          cad::OperationKind::PatternCircular,
-    cad::OperationKind::PatternRectangular, cad::OperationKind::Combine, cad::OperationKind::Thread};
+    cad::OperationKind::PatternRectangular, cad::OperationKind::Combine, cad::OperationKind::Thread,
+    cad::OperationKind::Move,    cad::OperationKind::Split,           cad::OperationKind::Draft};
 
 } // namespace
 
@@ -11176,6 +11181,9 @@ void App::add_operation(cad::OperationKind kind) {
     case cad::OperationKind::Hole: f.op.standard = "M5"; f.op.value = 5.0; break;
     case cad::OperationKind::PatternRectangular: f.op.count = 3; break;
     case cad::OperationKind::Thread: f.op.standard = "M8"; break;
+    case cad::OperationKind::Move: f.op.angle = 0.0; f.op.offset = {10.0, 0.0, 0.0}; break;
+    case cad::OperationKind::Split: f.op.plane = "XY"; break;
+    case cad::OperationKind::Draft: f.op.value = 3.0; f.op.plane = "XY"; break;
     case cad::OperationKind::Combine:
         if (bodies.size() >= 2) // the body before it, cut from the last
             f.op.target = bodies[bodies.size() - 2], f.op.tools = {bodies.back()};
@@ -11960,6 +11968,34 @@ void App::design_panel() {
                             changed = true;
                     }
                 }
+                break;
+            }
+            case cad::OperationKind::Move: {
+                ImGui::SetNextItemWidth(200.0f * scale_);
+                if (ImGui::InputScalarN(tr(T::OpOffset), ImGuiDataType_Double, o.offset.data(), 3, nullptr, nullptr, "%.2f"))
+                    design_edited_ = true;
+                rect_of(("design_op_offset_" + row).c_str());
+                number(T::OpTurn, o.angle, "%.1f", 15.0, "angle");
+                int axis = o.axis == 'X' ? 0 : o.axis == 'Y' ? 1 : 2;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo(tr(T::OpAxis), &axis, "X\0Y\0Z\0"))
+                    o.axis = "XYZ"[axis], changed = true;
+                if (ImGui::Checkbox(tr(T::OpCopyBody), &o.copy))
+                    changed = true;
+                break;
+            }
+            case cad::OperationKind::Split:
+            case cad::OperationKind::Draft: {
+                if (o.kind == cad::OperationKind::Draft)
+                    number(T::OpDraftAngle, o.value, "%.1f", 1.0, "value");
+                int plane = o.plane == "XY" ? 0 : o.plane == "XZ" ? 1 : 2;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo(tr(o.kind == cad::OperationKind::Draft ? T::OpNeutral : T::OpPlane), &plane, "XY\0XZ\0YZ\0"))
+                    o.plane = plane == 0 ? "XY" : plane == 1 ? "XZ" : "YZ", changed = true;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (loc::InputNumber(tr(T::OpPlaneOffset), &o.plane_offset, "%.2f", 1.0))
+                    design_edited_ = true;
+                rect_of(("design_op_plane_offset_" + row).c_str());
                 break;
             }
             case cad::OperationKind::Thread: {
@@ -15459,7 +15495,10 @@ void App::run_command(std::string text) {
         {"combinar", cad::OperationKind::Combine},          {"combine", cad::OperationKind::Combine},
         {"restar", cad::OperationKind::Combine},            {"unir", cad::OperationKind::Combine},
         {"rosca", cad::OperationKind::Thread},              {"roscar", cad::OperationKind::Thread},
-        {"thread", cad::OperationKind::Thread}};
+        {"thread", cad::OperationKind::Thread},
+        {"mover", cad::OperationKind::Move},                {"move", cad::OperationKind::Move},
+        {"partir", cad::OperationKind::Split},              {"split", cad::OperationKind::Split},
+        {"desmoldeo", cad::OperationKind::Draft},           {"draft", cad::OperationKind::Draft}};
     for (const auto& [name, kind] : kOperationWords)
         if (word == name) {
             if (!solidcraft_probed_ || !solidcraft_.available || !solidcraft_.has(cad::operation_command(kind))) {

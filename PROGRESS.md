@@ -9753,5 +9753,12 @@ de coincidencia.
 bordes). No agrega cotas. Los arcos de los perfiles sueltos se toman ahora en tramos de medio grado (antes 3,75°), así
 el área sale bien a 0,001 mm². Prueba en `design_sketch_fillet` con un verbo nuevo, `expect-command-message`.
 
+**Mover cuerpo, Partir y Desmoldeo** (regla 7), también en este bloque: mover y girar un cuerpo, o una copia
+(`solid.move` con `translate`, `axis`, `angle`, `copy`); partirlo por un plano XY, XZ o YZ corrido una distancia
+(`solid.split_body`; con el plano como `{origin, normal}` cuando está corrido); inclinar caras elegidas con clic
+respecto de un plano neutro (`solid.draft`). Palabras `mover`, `partir`, `desmoldeo`. El sustituto mueve y copia de
+verdad, comprueba que el plano cruce el cuerpo y que el ángulo esté entre 0 y 89°, pero no parte ni inclina.
+**No probado:** con el `solidcraft-cli` real.
+
 **Sigue:** CFD (A3) y la línea de comandos de la nube (prioridad del equipo de fichas), salvo que el dueño pida más
-de Diseño; en Diseño quedan barrer, recubrir, desmolde, partir, mover cuerpos y texto (regla 10).
+de Diseño; en Diseño quedan barrer y recubrir (piden elegir varios bocetos y curvas) y texto (regla 10).

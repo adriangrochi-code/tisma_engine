@@ -900,6 +900,60 @@ TEST_CASE("cad: a thread and a tapped hole as SolidCraft commands", "[cad]") {
     CHECK(back.features[2].op == d.features[2].op);
 }
 
+TEST_CASE("cad: move, copy, split and draft through the tool", "[cad]") {
+    if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
+        SKIP("the stand-in solidcraft-cli was not built");
+    set_env("TISMA_FAKE_SOLIDCRAFT_HANG", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_BROKEN", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_REFUSE", nullptr);
+    Design d;
+    d.features.push_back(box_feature("Caja", 20));
+    Feature move = operation("Mover", OperationKind::Move, "Caja");
+    move.op.angle = 0.0;
+    CHECK_FALSE(move.buildable()); // nothing to do
+    move.op.offset = {30.0, 0.0, 0.0};
+    move.op.copy = true;
+    move.op.angle = 90.0;
+    move.op.axis = 'Z';
+    REQUIRE(move.buildable());
+    d.features.push_back(move);
+    BuildResult b = build_timeline(kFake, d, MeshQuality::Standard);
+    REQUIRE(b.ok);
+    REQUIRE_FALSE(b.failed_feature);
+    CHECK_THAT(b.volume_mm3, WithinRel(16000.0, 1e-6)); // the copy beside it
+    Feature split = operation("Partir", OperationKind::Split, "Caja");
+    split.op.plane = "XY";
+    d.features.push_back(split);
+    b = build_timeline(kFake, d, MeshQuality::Standard);
+    REQUIRE(b.failed_feature); // the XY plane is the box's bottom face: nothing to split
+    CHECK(*b.failed_feature == 2);
+    d.features.back().op.plane_offset = 10.0;
+    b = build_timeline(kFake, d, MeshQuality::Standard);
+    CHECK_FALSE(b.failed_feature);
+    CHECK_THAT(b.volume_mm3, WithinRel(16000.0, 1e-6));
+    Feature draft = operation("Desmoldeo", OperationKind::Draft, "Caja");
+    draft.op.value = 3.0;
+    draft.op.plane = "XY";
+    CHECK_FALSE(draft.buildable()); // no face
+    draft.op.refs = {{10.0, 0.0, 10.0}};
+    d.features.push_back(draft);
+    b = build_timeline(kFake, d, MeshQuality::Standard);
+    CHECK_FALSE(b.failed_feature);
+    // As commands: the plane moved along its normal.
+    bool found = false;
+    for (const std::string& c : build_commands(d)) {
+        const nlohmann::json j = nlohmann::json::parse(c);
+        if (j.value("command", "") == "solid.split_body") {
+            found = true;
+            CHECK(j["params"]["plane"]["origin"] == nlohmann::json::array({0.0, 0.0, 10.0}));
+        }
+    }
+    CHECK(found);
+    const Design back = parse_design(design_json(d));
+    for (std::size_t i = 1; i < d.features.size(); ++i)
+        CHECK(back.features[i].op == d.features[i].op);
+}
+
 TEST_CASE("cad: CD5 and CD6, a standard hole and a fillet through the tool (rule 7)", "[cad]") {
     if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
         SKIP("the stand-in solidcraft-cli was not built");

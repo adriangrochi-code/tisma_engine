@@ -77,6 +77,9 @@ constexpr std::pair<OperationKind, const char*> kOperationNames[] = {
     {OperationKind::PatternRectangular, "pattern_rectangular"},
     {OperationKind::Combine, "combine"},
     {OperationKind::Thread, "thread"},
+    {OperationKind::Move, "move"},
+    {OperationKind::Split, "split"},
+    {OperationKind::Draft, "draft"},
 };
 } // namespace
 
@@ -105,6 +108,9 @@ const char* operation_command(OperationKind kind) {
     case OperationKind::PatternRectangular: return "solid.pattern.rectangular";
     case OperationKind::Combine: return "solid.combine";
     case OperationKind::Thread: return "solid.thread";
+    case OperationKind::Move: return "solid.move";
+    case OperationKind::Split: return "solid.split_body";
+    case OperationKind::Draft: return "solid.draft";
     }
     return "";
 }
@@ -125,6 +131,13 @@ bool Feature::buildable() const {
                    std::hypot(op.direction[0], op.direction[1], op.direction[2]) > 0.0;
         case OperationKind::Combine: return !op.tools.empty();
         case OperationKind::Thread: return !op.refs.empty() && !op.standard.empty() && op.depth >= 0.0;
+        case OperationKind::Move:
+            return std::isfinite(op.angle) && (op.angle != 0.0 || op.offset != std::array<double, 3>{0.0, 0.0, 0.0} || op.copy);
+        case OperationKind::Split:
+        case OperationKind::Draft:
+            if (op.plane != "XY" && op.plane != "XZ" && op.plane != "YZ")
+                return false;
+            return op.kind == OperationKind::Split || (!op.refs.empty() && op.value > 0.0 && op.value < 89.0);
         }
         return false;
     }
@@ -197,6 +210,21 @@ json command(const char* name, json params) {
 // The commands of one feature: the body stands on z = 0, centred in X and Y.
 json point3(const std::array<double, 3>& p) { return json::array({p[0], p[1], p[2]}); }
 
+std::array<double, 3> axis_vector(char axis) {
+    return axis == 'X' ? std::array<double, 3>{1, 0, 0} : axis == 'Y' ? std::array<double, 3>{0, 1, 0} : std::array<double, 3>{0, 0, 1};
+}
+
+// A plane through the origin by its name, or moved along its normal as
+// {origin, normal}.
+json plane_param(const std::string& plane, double offset) {
+    if (offset == 0.0)
+        return plane;
+    const std::array<double, 3> n = plane == "XY" ? std::array<double, 3>{0, 0, 1}
+                                    : plane == "XZ" ? std::array<double, 3>{0, 1, 0}
+                                                    : std::array<double, 3>{1, 0, 0};
+    return json{{"origin", point3({n[0] * offset, n[1] * offset, n[2] * offset})}, {"normal", point3(n)}};
+}
+
 // An operation on a body (stage D4), as SolidCraft's command reference
 // names its parameters.
 void operation_commands(const Feature& f, std::vector<json>& out) {
@@ -259,6 +287,27 @@ void operation_commands(const Feature& f, std::vector<json>& out) {
                 p["length"] = o.depth;
             out.push_back(command(name, std::move(p)));
         }
+        break;
+    case OperationKind::Move: {
+        json p{{"bodies", json::array({o.target})}, {"name", f.name}};
+        if (o.offset != std::array<double, 3>{0.0, 0.0, 0.0})
+            p["translate"] = point3(o.offset);
+        if (o.angle != 0.0)
+            p["axis"] = point3(axis_vector(o.axis)), p["angle"] = o.angle;
+        if (o.copy)
+            p["copy"] = true;
+        out.push_back(command(name, std::move(p)));
+        break;
+    }
+    case OperationKind::Split:
+        out.push_back(command(name, {{"body", o.target}, {"plane", plane_param(o.plane, o.plane_offset)}, {"name", f.name}}));
+        break;
+    case OperationKind::Draft:
+        out.push_back(command(name, {{"faces", refs},
+                                     {"angle", o.value},
+                                     {"neutral", plane_param(o.plane, o.plane_offset)},
+                                     {"body", o.target},
+                                     {"name", f.name}}));
         break;
     case OperationKind::Combine:
         out.push_back(command(name, {{"target", o.target}, {"tools", o.tools}, {"operation", o.boolean}, {"name", f.name}}));
@@ -482,6 +531,9 @@ std::string design_json(const Design& design) {
                                   {"tapped", o.tapped},
                                   {"modeled", o.modeled},
                                   {"hand", o.hand},
+                                  {"offset", point3(o.offset)},
+                                  {"copy", o.copy},
+                                  {"plane_offset", o.plane_offset},
                                   {"count", o.count},
                                   {"axis", std::string(1, o.axis)},
                                   {"angle", o.angle},
@@ -578,6 +630,10 @@ Design parse_design(const std::string& text) {
             op.tapped = o.value("tapped", false);
             op.modeled = o.value("modeled", false);
             op.hand = o.value("hand", op.hand);
+            if (o.contains("offset"))
+                op.offset = read3(o.at("offset"));
+            op.copy = o.value("copy", false);
+            op.plane_offset = o.value("plane_offset", 0.0);
             op.count = o.value("count", op.count);
             const std::string axis = o.value("axis", std::string("Z"));
             op.axis = axis.empty() ? 'Z' : axis[0];

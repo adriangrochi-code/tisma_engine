@@ -1250,6 +1250,16 @@
     X(OpPatternRectangular, "Patrón en fila", "Row pattern") \
     X(OpCombine, "Combinar", "Combine") \
     X(OpThread, "Rosca", "Thread") \
+    X(OpMove, "Mover cuerpo", "Move body") \
+    X(OpSplit, "Partir", "Split") \
+    X(OpDraft, "Desmoldeo", "Draft") \
+    X(OpPickDraft, "Hacé clic en las caras a inclinar; Enter termina", "Click the faces to tilt; Enter finishes") \
+    X(OpOffset, "Desplazar X, Y, Z (mm)", "Offset X, Y, Z (mm)") \
+    X(OpTurn, "Girar (°)", "Turn (°)") \
+    X(OpCopyBody, "Copia (deja el original)", "Copy (keeps the original)") \
+    X(OpPlaneOffset, "Corrido (mm)", "Moved by (mm)") \
+    X(OpDraftAngle, "Ángulo (°)", "Angle (°)") \
+    X(OpNeutral, "Plano neutro", "Neutral plane") \
     X(OpPickThread, "Hacé clic en la cara cilíndrica a roscar; Enter termina", "Click the cylindrical face to thread; Enter finishes") \
     X(OpTapped, "Roscado (broca de macho)", "Tapped (tap drill)") \
     X(OpModeled, "Rosca modelada (no solo dibujada)", "Modelled thread (not only drawn)") \

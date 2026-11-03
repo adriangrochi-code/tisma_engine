@@ -42,7 +42,7 @@ const char* command_of(Primitive kind);
 // The operations of stage D4 on a body made before them (rule 7), as
 // SolidCraft's commands take them (its public command reference): edges and
 // faces named by a point on them.
-enum class OperationKind { Fillet, Chamfer, Shell, Hole, Mirror, PatternCircular, PatternRectangular, Combine, Thread };
+enum class OperationKind { Fillet, Chamfer, Shell, Hole, Mirror, PatternCircular, PatternRectangular, Combine, Thread, Move, Split, Draft };
 // "fillet", "chamfer"... and back; and the SolidCraft command it is.
 const char* operation_name(OperationKind kind);
 std::optional<OperationKind> operation_named(const std::string& name);
@@ -66,6 +66,13 @@ struct BodyOperation {
     bool tapped = false;
     bool modeled = false;
     std::string hand = "right";
+    // Move: the offset, and a turn of `angle` about `axis` (both optional);
+    // a copy keeps the original. Split: at `plane` moved `plane_offset` mm
+    // along its normal. Draft: the faces picked tilted `value` degrees from
+    // the neutral `plane`.
+    std::array<double, 3> offset{0.0, 0.0, 0.0};
+    bool copy = false;
+    double plane_offset = 0.0;
     // Patterns: how many in all; circular about an axis (X, Y or Z through
     // the origin) over an angle; rectangular along a direction at a spacing.
     int count = 6;
