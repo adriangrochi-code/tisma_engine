@@ -392,6 +392,11 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(parse_settings(R"({"infill": {"pattern": "gyroid"}})").infill_pattern == InfillPattern::Gyroid);
     CHECK_THROWS_WITH(parse_settings(R"({"infill": {"density": 120}})"), ContainsSubstring("infill.density: must be from 0 to 100"));
     CHECK_THROWS_WITH(parse_settings(R"({"infill": {"pattern": "voronoi"}})"), ContainsSubstring("infill.pattern: must be one of"));
+    // BH19: 0 is refused, and the message says so (as docs/CONFIG.md does).
+    CHECK_THROWS_WITH(parse_settings(R"({"infill": {"dense_density": 0}})"), ContainsSubstring("more than 0"));
+    CHECK(parse_settings(R"({"infill": {"dense_density": 0.01}})").infill_dense_density == 0.01);
+    CHECK_THROWS_WITH(parse_settings(R"({"infill": {"combine_max_height": 0}})"), ContainsSubstring("more than 0"));
+    CHECK_THROWS_WITH(parse_settings(R"({"infill": {"combine_max_height": "0%"}})"), ContainsSubstring("more than 0"));
 }
 
 TEST_CASE("fill modes on overlapping and nested squares", "[settings]") {

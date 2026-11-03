@@ -143,6 +143,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Tisma Cloud sin conexión** (UI49): sin respuesta del servidor, la lista de planes dice «No se pudo conectar con
+  el servidor.» en lugar de «El servidor no mandó planes.», que queda para una lista vacía. Un error del servidor dice
+  su número.
+- **`infill.dense_density` e `infill.combine_max_height` en 0** (BH19): siguen rechazando 0, que no imprime nada o no
+  combina nada, pero el mensaje y `docs/CONFIG.md` ahora dicen «más de 0». El campo de la densidad en la interfaz
+  empieza en 1 % (antes dejaba poner 0, que el laminado rechazaba).
 - **Deshacer en la placa** (reporte UI45 del equipo de fichas): Ctrl+Z vuelve a poner donde estaba la pieza que se
   movió, giró o escaló (con las manijas, arrastrándola sobre la cama o desde la tarjeta) y Ctrl+Y (o Ctrl+Mayús+Z) lo
   rehace; un paso por arrastre o por cambio. Antes no había deshacer, y con Ctrl+Z la tecla Z encuadraba la pieza, que

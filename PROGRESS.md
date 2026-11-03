@@ -9029,3 +9029,26 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
 - **Medido** (cubo de 180 mm, 20 % rectilíneo, capa 400, llvmpipe): 96 532 → 5101 extrusiones dibujadas, 2244 →
   322 ms por cuadro. No medido en una placa de video real.
 - Prueba nueva: «preview: a cut view draws infill only on its top layer».
+
+## 2026-11-03: mantenimiento (bloque de las 00:40)
+
+- **Comprobado:**
+  - `tools/ci_linux.sh` sobre 4838fa9 (el corte de la vista previa);
+  - `tisma_fuzz_gcode 2000` con la semilla 20261103: 2000 corridas, 24 rechazadas por no imprimibles, ninguna falla
+    (4 min);
+  - `origin/main` no trae nada que `dev` no tenga (solo las uniones de los PR #49, #51 y #52).
+- **Encontrado y corregido** (informe de QA del equipo de fichas sobre 12579b8; UI48 y UI47 sin sesión, verificados
+  por ellos):
+  - BH19: `infill.dense_density` e `infill.combine_max_height` rechazaban 0 diciendo «from 0 to …». 0 no sirve en
+    ninguno de los dos (una capa densa al 0 % no imprime nada; un alto de 0 no combina nada), así que sigue rechazado:
+    el mensaje y `docs/CONFIG.md` dicen ahora «more than 0» / «más de 0», también para `"0%"`. Además el campo de la
+    densidad de la interfaz dejaba poner 0, que el laminado rechazaba: empieza en 1 %. `tools/check_ui_limits.py`: 188
+    rangos, ninguno más angosto;
+  - UI49: sin respuesta del servidor, el diálogo de Tisma Cloud decía «El servidor no mandó planes.». Ahora «No se pudo
+    conectar con el servidor.»; un error HTTP dice su número; la lista vacía conserva el texto anterior. Guion nuevo
+    `ui_script_cloud_unreachable` (servidor en el puerto 9 de la máquina, donde nada escucha) con la clave
+    `expect-cloud plans_failure`.
+- **Nota de QA aceptada:** con `machine.flavor: machinekit` la extrusión va en el eje A (`G92 A0`): es lo buscado.
+- **No probado:** UI49 contra el proxy real (que responde 502 al CONNECT): la capa HTTP lo da como sin respuesta
+  (estado 0) en Linux; en Windows (WinHTTP) no lo comprobé.
+

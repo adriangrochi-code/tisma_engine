@@ -1661,7 +1661,7 @@ Settings parse_checked(std::string_view text) {
         if (n == "dense_density") {
             const double v = number(g, n, k);
             if (!(v > 0.0) || v > 100.0)
-                fail(k, "must be from 0 to 100");
+                fail(k, "must be more than 0 and at most 100");
             s.infill_dense_density = v;
             return;
         }
@@ -1693,13 +1693,13 @@ Settings parse_checked(std::string_view text) {
                 char* end = nullptr;
                 const double p = std::strtod(t.c_str(), &end);
                 if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0) || p > 1000.0)
-                    fail(k, "must be a number of mm or a percentage of the nozzle like \"100%\"");
+                    fail(k, "must be a number of mm or a percentage of the nozzle like \"100%\", more than 0");
                 s.infill_combine_max_height = {p, true};
                 return;
             }
             const double d = number(g, n, k);
             if (!(d > 0.0) || d > 10.0)
-                fail(k, "must be from 0 to 10 mm, or a percentage of the nozzle");
+                fail(k, "must be more than 0 and at most 10 mm, or a percentage of the nozzle");
             s.infill_combine_max_height = {d, false};
             return;
         }

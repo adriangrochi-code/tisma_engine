@@ -140,6 +140,8 @@
     X(CloudPlanYours, "el tuyo", "yours") \
     X(CloudFree, "Gratis", "Free") \
     X(CloudNoPlans, "El servidor no mandó planes.", "The server sent no plans.") \
+    X(CloudNoConnection, "No se pudo conectar con el servidor.", "Could not connect to the server.") \
+    X(CloudPlansFailed, "El servidor no pudo mandar los planes (error %d).", "The server could not send the plans (error %d).") \
     X(CloudBilling, "Pagar o cambiar de plan…", "Pay or change the plan…") \
     X(CloudBillingTip, "Abre la página de la cuenta en el navegador: el pago no pasa por este programa.", "Opens the account page in the browser: payments do not go through this program.") \
     X(ViewHeldOcclusion, "oclusión congelada al mover", "occlusion held while moving") \

@@ -589,6 +589,9 @@ private:
         std::optional<cloud::Account> account;
         std::vector<cloud::Plan> plans;
         bool plans_ok = false;
+        // Why the plans did not come: -1 not asked, 0 no answer (no
+        // connection), else the HTTP status (UI49).
+        int plans_failure = -1;
         std::vector<cloud::Job> jobs; // the account's (rule 10)
         bool jobs_ok = false;
         std::vector<cloud::SentReport> reports; // the account's own (problem_reports.md, rule 11)
@@ -1016,6 +1019,7 @@ private:
     bool cloud_token_read_ = false;
     std::optional<cloud::Account> cloud_account_;
     std::vector<cloud::Plan> cloud_plans_;
+    int cloud_plans_failure_ = -1; // CloudReply::plans_failure of the last answer that asked
     std::vector<cloud::Job> cloud_jobs_;
     std::vector<cloud::SentReport> cloud_reports_;
     std::string cloud_status_;
@@ -7142,7 +7146,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SolidBelowArea, "infill.solid_below_area", s.infill_solid_below_area, 0.0, 10000.0, "%.0f mm²", 1.0f,
            tr(T::SolidBelowAreaTip));
         flag(T::DenseUnderTop, "infill.dense_under_top", s.infill_dense_under_top, tr(T::DenseUnderTopTip));
-        mm(T::DenseDensity, "infill.dense_density", s.infill_dense_density, 0.0, 100.0, "%.0f %%", 0.5f,
+        mm(T::DenseDensity, "infill.dense_density", s.infill_dense_density, 1.0, 100.0, "%.0f %%", 0.5f,
            tr(T::DenseUnderTopTip));
         mm(T::StressDensity, "infill.stress_density", s.infill_stress_density, 0.0, 100.0, "%.0f %%", 0.5f,
            tr(T::StressDensityTip));
@@ -12364,7 +12368,9 @@ void App::cloud_start(CloudReply::Kind kind) {
         r.token = token;
         cloud::Failure quiet;
         client.health(r.billing_url, quiet);
-        r.plans_ok = client.plans(r.plans, quiet);
+        cloud::Failure plans_error;
+        r.plans_ok = client.plans(r.plans, plans_error);
+        r.plans_failure = r.plans_ok ? -1 : plans_error.status;
         if (!token.empty()) {
             cloud::Account account;
             if (client.account(account, r.error))
@@ -12395,6 +12401,8 @@ void App::cloud_finished(CloudReply r) {
         cloud_token_ = r.token;
     if (r.plans_ok)
         cloud_plans_ = std::move(r.plans);
+    if (r.plans_ok || r.plans_failure >= 0)
+        cloud_plans_failure_ = r.plans_failure;
     if (!r.billing_url.empty())
         cloud_billing_ = r.billing_url;
     if (!r.ok) {
@@ -12683,7 +12691,15 @@ void App::cloud_window() {
     // The public plans, the current one marked (rule 5a).
     ImGui::SeparatorText(tr(T::CloudPlans));
     if (cloud_plans_.empty()) {
-        loc::TextDisabled("%s", busy ? tr(T::CloudWorking) : tr(T::CloudNoPlans));
+        // No answer is not an empty list (UI49).
+        if (busy)
+            loc::TextDisabled("%s", tr(T::CloudWorking));
+        else if (cloud_plans_failure_ == 0)
+            loc::TextDisabled("%s", tr(T::CloudNoConnection));
+        else if (cloud_plans_failure_ > 0)
+            loc::TextDisabled(tr(T::CloudPlansFailed), cloud_plans_failure_);
+        else
+            loc::TextDisabled("%s", tr(T::CloudNoPlans));
     } else if (ImGui::BeginTable("##cloud_plans", 4, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
         for (const cloud::Plan& p : cloud_plans_) {
             const bool yours = cloud_account_ && cloud_account_->plan == p.name;
@@ -16286,6 +16302,10 @@ void App::script_input() {
             got = cloud_account_ ? "yes" : "no";
         else if (step.key == "plans")
             got = std::to_string(cloud_plans_.size());
+        else if (step.key == "plans_failure") // none, no_connection or the HTTP status (UI49)
+            got = cloud_plans_failure_ < 0    ? "none"
+                  : cloud_plans_failure_ == 0 ? "no_connection"
+                                              : std::to_string(cloud_plans_failure_);
         else if (step.key == "jobs")
             got = std::to_string(cloud_jobs_.size());
         else if (step.key == "server")

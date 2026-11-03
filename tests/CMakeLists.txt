@@ -338,6 +338,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_default.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_default.png)
     set_tests_properties(ui_script_cloud_default PROPERTIES TIMEOUT 300 ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+    # A server that does not answer (port 9 of this machine, nothing listens there).
+    add_test(NAME ui_script_cloud_unreachable
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server http://127.0.0.1:9
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_unreachable.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_unreachable.png)
+    set_tests_properties(ui_script_cloud_unreachable PROPERTIES TIMEOUT 300 ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
     add_test(NAME ui_script_cloud_slice
       COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
