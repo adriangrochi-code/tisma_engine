@@ -14,7 +14,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - **Pestaña Estructural en Ingeniería** (`engineering_panel.md`, reglas 1 a 4 y 9): la pieza, el material y los
   valores de impresión que salen del perfil (o cambiados a mano, sin tocar el perfil), la temperatura de trabajo y
-  Analizar, que dice qué falta. Marcar las condiciones en la pieza viene en el paso siguiente.
+  Analizar, que dice qué falta. Ingeniería abre en Estructural. Las condiciones se marcan con un clic en la pieza
+  (punto o cara entera; Mayús suma caras), se ocultan o borran desde la lista, con su fuerza en N, y se deshacen con
+  Ctrl+Z.
 - **Análisis sobre un proyecto** (`formats.md`, regla 11 bis, FM25): `tisma-engine analyze proyecto.3mf -o
   informe.json` analiza la primera pieza con condiciones de Ingeniería, con los ajustes del proyecto y los valores
   cambiados a mano en el panel. Las zonas son los triángulos marcados y los puntos, discos de su radio. No hace falta

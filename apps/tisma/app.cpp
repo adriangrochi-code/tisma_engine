@@ -1124,7 +1124,7 @@ private:
     double frame_started_ = 0.0;
     // The tab each section opens on: the last one used there.
     Tab last_print_tab_ = Tab::Prepare;
-    Tab last_engineering_tab_ = Tab::Design;
+    Tab last_engineering_tab_ = Tab::Structural; // the first tab (engineering_panel.md, rule 1; TR27)
     int next_design_id_ = 1;
     bool design_pick_primitive_ = false; // the Primitiva tool from Prepare: the chooser opens
     bool design_pick_sketch_ = false;    // the Boceto tool from Prepare: the plane is asked
@@ -11845,8 +11845,8 @@ void App::structural_panel() {
             double n = c.newtons;
             const double lo = 0.0, hi = 1e6;
             ImGui::SetNextItemWidth(-1.0f);
-            if (ImGui::DragScalar("##newtons", ImGuiDataType_Double, &n, 0.5f, &lo, &hi, "%.1f N",
-                                  ImGuiSliderFlags_AlwaysClamp) &&
+            if (ImGui::DragScalar("##newtons", ImGuiDataType_Double, &n, 0.5f, &lo, &hi,
+                                  field_text("##newtons", "%.1f N", n), ImGuiSliderFlags_AlwaysClamp) &&
                 n != c.newtons) {
                 if (ImGui::IsItemActivated() || !ImGui::IsMouseDragging(ImGuiMouseButton_Left))
                     remember_engineering(std::size_t(structural_part_));
@@ -11856,8 +11856,8 @@ void App::structural_panel() {
             double r = c.radius;
             const double lo = 0.1, hi = 500.0;
             ImGui::SetNextItemWidth(-1.0f);
-            if (ImGui::DragScalar("##radius", ImGuiDataType_Double, &r, 0.1f, &lo, &hi, "r %.1f mm",
-                                  ImGuiSliderFlags_AlwaysClamp) &&
+            if (ImGui::DragScalar("##radius", ImGuiDataType_Double, &r, 0.1f, &lo, &hi,
+                                  field_text("##radius", "r %.1f mm", r), ImGuiSliderFlags_AlwaysClamp) &&
                 r != c.radius)
                 e.conditions[i].radius = r;
         }
@@ -11874,8 +11874,14 @@ void App::structural_panel() {
         if (by_hand) {
             loc::TextColored(rgb(kViolet), "● %s", tr(T::StructByHand));
         } else {
+            // «del perfil de impresión «0,20 mm»»: the kind, and the name
+            // quoted, so it is not read as the value (TR27).
             const std::string& name = chosen_profile_[std::size_t(kind)];
-            loc::TextDisabled("%s%s%s", tr(T::StructFromProfile), name.empty() ? "" : " ", name.c_str());
+            const char* from = tr(kind == ProfileKind::Filament ? T::StructFromFilamentProfile : T::StructFromPrintProfile);
+            if (name.empty())
+                loc::TextDisabled("%s", from);
+            else
+                loc::TextDisabled(language() == Language::Spanish ? "%s «%s»" : "%s “%s”", from, name.c_str());
         }
     };
     const auto back = [&](const char* id, std::optional<double>& hand) {
@@ -11893,8 +11899,9 @@ void App::structural_panel() {
         ImGui::TextUnformatted(tr(label));
         double value = v.value;
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::DragScalar((std::string("##") + id).c_str(), ImGuiDataType_Double, &value, speed, &min, &max, fmt,
-                              ImGuiSliderFlags_AlwaysClamp) &&
+        const std::string field = std::string("##") + id;
+        if (ImGui::DragScalar(field.c_str(), ImGuiDataType_Double, &value, speed, &min, &max,
+                              field_text(field.c_str(), fmt, value), ImGuiSliderFlags_AlwaysClamp) &&
             value != v.value)
             hand = value;
         rect_of(std::string("structural_") + id);
@@ -11905,10 +11912,16 @@ void App::structural_panel() {
     ImGui::TextUnformatted(tr(T::StructMaterial));
     const MaterialRecord* material = values.material_id.empty() ? nullptr : ::tisma::find_material(values.material_id);
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::BeginCombo("##structural_material", material ? std::string(material->name).c_str() : tr(T::StructChooseMaterial))) {
+    // A record's name for the list: without its data sheet's version, which
+    // is English and says nothing to choose by (TR27).
+    const auto shown_name = [](std::string_view name) {
+        const std::size_t sheet = name.find(" (sheet");
+        return std::string(sheet == std::string_view::npos ? name : name.substr(0, sheet));
+    };
+    if (ImGui::BeginCombo("##structural_material", material ? shown_name(material->name).c_str() : tr(T::StructChooseMaterial))) {
         for (const MaterialRecord& r : ::tisma::material_records()) {
             ImGui::PushID(r.id.data(), r.id.data() + r.id.size());
-            if (ImGui::Selectable(std::string(r.name).c_str(), material == &r))
+            if (ImGui::Selectable(shown_name(r.name).c_str(), material == &r))
                 e.overrides.material = std::string(r.id);
             ImGui::PopID();
         }
@@ -11930,6 +11943,10 @@ void App::structural_panel() {
            "%.2f mm", 0.005f, ProfileKind::Print);
     number(T::StructLineWidth, "line_width", values.line_width, e.overrides.line_width, 0.05, 3.0, "%.2f mm", 0.005f,
            ProfileKind::Print);
+    // Walls and infill (rule 3): from the print profile, shown only.
+    loc::TextDisabled(tr(T::StructWallsInfill), settings_.wall_count, settings_.top_layers, settings_.bottom_layers,
+                      settings_.infill_density, infill_pattern_name(settings_.infill_pattern));
+    source(false, ProfileKind::Print);
     ImGui::TextUnformatted(tr(T::StructWorkingTemp));
     if (ImGui::IsItemHovered())
         loc::SetTooltip("%s", tr(T::StructWorkingTempTip));
@@ -11937,7 +11954,8 @@ void App::structural_panel() {
     {
         const double lo = -60.0, hi = 300.0;
         ImGui::DragScalar("##structural_working_temperature", ImGuiDataType_Double, &e.working_temperature, 0.5f, &lo,
-                          &hi, "%.0f °C", ImGuiSliderFlags_AlwaysClamp);
+                          &hi, field_text("##structural_working_temperature", "%.0f °C", e.working_temperature),
+                          ImGuiSliderFlags_AlwaysClamp);
         rect_of("structural_working_temperature");
     }
 

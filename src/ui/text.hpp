@@ -25,7 +25,9 @@
     X(StructLineWidth, "Ancho de línea", "Line width")                                                                \
     X(StructWorkingTemp, "Temperatura de trabajo", "Working temperature")                                             \
     X(StructWorkingTempTip, "A la que va a estar la pieza en uso. No está en ningún perfil.", "The temperature the part will be at in use. No profile has it.") \
-    X(StructFromProfile, "del perfil", "from the profile")                                                            \
+    X(StructFromPrintProfile, "del perfil de impresión", "from the print profile")                                    \
+    X(StructFromFilamentProfile, "del perfil de filamento", "from the filament profile")                              \
+    X(StructWallsInfill, "Paredes: %d · capas sólidas arriba %d y abajo %d · relleno %.0f %% (%s)", "Walls: %d · solid layers %d top and %d bottom · infill %.0f %% (%s)") \
     X(StructByHand, "cambiado a mano: no cambia el perfil ni el G-code", "changed by hand: the profile and the G-code stay") \
     X(StructBackToProfile, "Volver al del perfil", "Back to the profile's")                                           \
     X(StructConditions, "Condiciones", "Conditions")                                                                  \
