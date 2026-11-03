@@ -12,9 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
-- **Editar el boceto** (`cad_design.md`, regla 17): recortar, alargar, desfasar, chaflán de una esquina, simetría,
-  matriz rectangular y polar, mover, copiar, girar y escalar, desde el grupo Editar o con TR, EX, O, CHA, MI, AR, M,
-  CO, RO y SC en la línea de comandos. Se elige con clic o con una caja: hacia la derecha, ventana (solo lo que queda
+- **Editar el boceto** (`cad_design.md`, regla 17): recortar, alargar, desfasar, redondear y achaflanar una esquina,
+  simetría, matriz rectangular y polar, mover, copiar, girar y escalar, desde el grupo Editar o con TR, EX, O, F, CHA,
+  MI, AR, M, CO, RO y SC en la línea de comandos. Líneas y arcos sueltos que se tocan punta con punta cierran una
+  región que se puede extruir. Se elige con clic o con una caja: hacia la derecha, ventana (solo lo que queda
   adentro); hacia la izquierda, cruce (todo lo que toca).
 - **Operaciones en Diseño** (`cad_design.md`, regla 7, etapa D4): redondeo, chaflán, vaciado, agujero por norma
   ISO 273 (M2 a M16, ajuste justo, normal u holgado) o diámetro libre, simetría, patrón circular, patrón en fila y

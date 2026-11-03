@@ -174,7 +174,84 @@ bool Sketch::has_region() const {
         if (e.kind == Entity::Kind::Circle && e.radius > 0.0)
             return true;
     }
-    return false;
+    return !joined_loops(*this).empty();
+}
+
+std::vector<std::vector<Pt>> joined_loops(const Sketch& sketch) {
+    constexpr double kNear = 1e-6;
+    const auto near = [](const Pt& a, const Pt& b) { return std::hypot(a.x - b.x, a.y - b.y) <= kNear; };
+    // The pieces as polylines from one end to the other.
+    std::vector<std::vector<Pt>> pieces;
+    for (const Entity& e : sketch.entities) {
+        if (e.construction)
+            continue;
+        if (e.kind == Entity::Kind::Chain && !e.closed && e.points.size() >= 2) {
+            pieces.push_back(e.points);
+        } else if (e.kind == Entity::Kind::Arc && e.points.size() >= 3) {
+            const Pt& c = e.points[0];
+            const double r = std::hypot(e.points[1].x - c.x, e.points[1].y - c.y);
+            if (!(r > 0.0))
+                continue;
+            const double a0 = std::atan2(e.points[1].y - c.y, e.points[1].x - c.x);
+            double sweep = std::atan2(e.points[2].y - c.y, e.points[2].x - c.x) - a0; // counter-clockwise
+            if (e.clockwise) {
+                while (sweep >= 0.0)
+                    sweep -= 2.0 * std::numbers::pi;
+            } else {
+                while (sweep <= 0.0)
+                    sweep += 2.0 * std::numbers::pi;
+            }
+            const int n = std::max(4, int(std::ceil(std::abs(sweep) / (2.0 * std::numbers::pi) * 96.0)));
+            std::vector<Pt> q;
+            for (int k = 0; k <= n; ++k) {
+                const double a = a0 + sweep * k / n;
+                q.push_back({c.x + r * std::cos(a), c.y + r * std::sin(a)});
+            }
+            q.front() = e.points[1];
+            q.back() = e.points[2];
+            pieces.push_back(std::move(q));
+        }
+    }
+    std::vector<std::vector<Pt>> loops;
+    std::vector<bool> used(pieces.size(), false);
+    for (std::size_t i = 0; i < pieces.size(); ++i) {
+        if (used[i])
+            continue;
+        used[i] = true;
+        std::vector<Pt> loop = pieces[i];
+        std::vector<std::size_t> taken{i};
+        // Walk on from the loose end until back at the start or stuck.
+        for (;;) {
+            if (loop.size() > 2 && near(loop.back(), loop.front())) {
+                loop.pop_back();
+                loops.push_back(std::move(loop));
+                break;
+            }
+            std::optional<std::size_t> next;
+            bool reversed = false;
+            for (std::size_t j = 0; j < pieces.size() && !next; ++j) {
+                if (used[j])
+                    continue;
+                if (near(pieces[j].front(), loop.back()))
+                    next = j;
+                else if (near(pieces[j].back(), loop.back()))
+                    next = j, reversed = true;
+            }
+            if (!next) {
+                // A dead end: its pieces may still close a loop with others.
+                for (const std::size_t t : taken)
+                    used[t] = t == i;
+                break;
+            }
+            used[*next] = true;
+            taken.push_back(*next);
+            std::vector<Pt> add = pieces[*next];
+            if (reversed)
+                std::reverse(add.begin(), add.end());
+            loop.insert(loop.end(), add.begin() + 1, add.end());
+        }
+    }
+    return loops;
 }
 
 namespace {

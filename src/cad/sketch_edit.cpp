@@ -533,6 +533,73 @@ bool chamfer_corner(Sketch& s, std::size_t i, std::size_t corner, double d) {
     return true;
 }
 
+bool fillet_corner(Sketch& s, std::size_t i, std::size_t corner, double r) {
+    if (i >= s.entities.size() || !(r > 0.0))
+        return false;
+    const Entity e = as_chain(s.entities[i]);
+    if (e.kind != Entity::Kind::Chain)
+        return false;
+    const std::vector<Pt>& p = e.points;
+    const std::size_t n = p.size();
+    const bool loop = e.closed && n > 2;
+    if (corner >= n || (!loop && (corner == 0 || corner + 1 == n)))
+        return false;
+    const Pt P = p[corner], A = p[(corner + n - 1) % n], B = p[(corner + 1) % n];
+    const double la = dist(P, A), lb = dist(P, B);
+    if (la < kEps || lb < kEps)
+        return false;
+    const Pt u{(A.x - P.x) / la, (A.y - P.y) / la}, v{(B.x - P.x) / lb, (B.y - P.y) / lb};
+    const double cos_t = std::clamp(u.x * v.x + u.y * v.y, -1.0, 1.0);
+    const double theta = std::acos(cos_t); // the inside angle at the corner
+    if (theta < 1e-6 || theta > std::numbers::pi - 1e-6)
+        return false;
+    const double t = r / std::tan(theta / 2.0); // from the corner to each tangent point
+    if (t > la + 1e-9 || t > lb + 1e-9)
+        return false;
+    const Pt t1{P.x + u.x * t, P.y + u.y * t}, t2{P.x + v.x * t, P.y + v.y * t};
+    const Pt bis{u.x + v.x, u.y + v.y};
+    const double lbis = std::hypot(bis.x, bis.y);
+    const double h = r / std::sin(theta / 2.0);
+    const Pt centre{P.x + bis.x / lbis * h, P.y + bis.y / lbis * h};
+    // Going A, corner, B: a left turn rounds counter-clockwise.
+    const bool left = cross(sub(P, A), sub(B, P)) > 0.0;
+    Entity arc;
+    arc.kind = Entity::Kind::Arc;
+    arc.construction = e.construction;
+    arc.points = {centre, t1, t2};
+    arc.clockwise = !left;
+    const auto chain_of = [&](std::vector<Pt> q) {
+        // Points the tangent points landed on are not repeated.
+        q.erase(std::unique(q.begin(), q.end(), [](const Pt& a, const Pt& b) { return dist(a, b) < 1e-9; }), q.end());
+        Entity c;
+        c.kind = Entity::Kind::Chain;
+        c.construction = e.construction;
+        c.points = std::move(q);
+        return c;
+    };
+    std::vector<Entity> pieces;
+    if (loop) {
+        std::vector<Pt> q{t2};
+        for (std::size_t m = 1; m < n; ++m)
+            q.push_back(p[(corner + m) % n]);
+        q.push_back(t1);
+        pieces.push_back(chain_of(std::move(q)));
+    } else {
+        std::vector<Pt> before(p.begin(), p.begin() + std::ptrdiff_t(corner));
+        before.push_back(t1);
+        std::vector<Pt> after{t2};
+        after.insert(after.end(), p.begin() + std::ptrdiff_t(corner) + 1, p.end());
+        pieces.push_back(chain_of(std::move(before)));
+        pieces.push_back(chain_of(std::move(after)));
+    }
+    std::erase_if(pieces, [](const Entity& c) { return c.points.size() < 2; });
+    drop_rules_on(s, i);
+    s.entities[i] = arc;
+    for (Entity& c : pieces)
+        s.entities.push_back(std::move(c));
+    return true;
+}
+
 Map2 Map2::then(const Map2& n) const {
     Map2 m;
     m.a = n.a * a + n.b * c;

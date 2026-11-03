@@ -1321,6 +1321,7 @@
     X(EditTrim, "Recortar", "Trim") \
     X(EditExtend, "Alargar", "Extend") \
     X(EditOffset, "Desfasar", "Offset") \
+    X(EditFillet, "Redondear", "Fillet") \
     X(EditChamfer, "Chaflán", "Chamfer") \
     X(EditMirror, "Simetría", "Mirror") \
     X(EditArray, "Matriz", "Array") \
@@ -1334,6 +1335,8 @@
     X(PromptOffsetPick, "Desfasar: elegí la curva (Enter termina)", "Offset: pick the curve (Enter ends)") \
     X(PromptOffsetSide, "Desfasar: hacé clic del lado hacia donde va", "Offset: click the side it goes to") \
     X(PromptChamferDistance, "Chaflán: distancia <%.4g>", "Chamfer: distance <%.4g>") \
+    X(PromptFilletRadius, "Redondear: radio <%.4g>", "Fillet: radius <%.4g>") \
+    X(PromptFilletPick, "Redondear: hacé clic en la esquina (Enter termina)", "Fillet: click the corner (Enter ends)") \
     X(PromptChamferPick, "Chaflán: hacé clic en la esquina (Enter termina)", "Chamfer: click the corner (Enter ends)") \
     X(PromptSelect, "Elegí los objetos: clic, o arrastrá (a la derecha, ventana; a la izquierda, cruce). Enter sigue", "Pick the objects: click, or drag (to the right, window; to the left, crossing). Enter goes on") \
     X(PromptMirror1, "Simetría: primer punto de la recta", "Mirror: first point of the line") \

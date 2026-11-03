@@ -50,8 +50,49 @@ struct Loop {
 struct SketchState {
     std::string plane = "XY";
     std::vector<Loop> loops;
+    std::vector<Loop> open; // open lines and arcs, joined into loops at the end
     int constraints = 0, dimensions = 0;
 };
+
+// Open pieces meeting end to end (within 1e-6 mm) closed into loops.
+void join_open(SketchState& s) {
+    const auto near = [](const std::array<double, 2>& a, const std::array<double, 2>& b) {
+        return std::hypot(a[0] - b[0], a[1] - b[1]) <= 1e-6;
+    };
+    std::vector<bool> used(s.open.size(), false);
+    for (std::size_t i = 0; i < s.open.size(); ++i) {
+        if (used[i])
+            continue;
+        std::vector<std::size_t> taken{i};
+        used[i] = true;
+        Loop loop = s.open[i];
+        for (;;) {
+            if (loop.points.size() > 2 && near(loop.points.back(), loop.points.front())) {
+                loop.points.pop_back();
+                s.loops.push_back(std::move(loop));
+                break;
+            }
+            bool found = false;
+            for (std::size_t j = 0; j < s.open.size() && !found; ++j) {
+                if (used[j])
+                    continue;
+                auto add = s.open[j].points;
+                if (near(add.back(), loop.points.back()))
+                    std::reverse(add.begin(), add.end());
+                if (!near(add.front(), loop.points.back()))
+                    continue;
+                used[j] = found = true;
+                taken.push_back(j);
+                loop.points.insert(loop.points.end(), add.begin() + 1, add.end());
+            }
+            if (!found) {
+                for (const std::size_t t : taken)
+                    used[t] = t == i;
+                break;
+            }
+        }
+    }
+}
 
 // Sketch (x, y, z along the normal) to world, as SolidCraft lays the planes.
 tisma::Vec3f to_world(const std::string& plane, double x, double y, double z) {
@@ -431,8 +472,12 @@ int run(const std::vector<std::string>& args) {
             }
             for (const json& v : p.at("points"))
                 loop.points.push_back(point2(v));
-            if (p.value("closed", false) && loop.points.size() >= 3 && !p.value("construction", false))
+            if (p.value("construction", false))
+                ;
+            else if (p.value("closed", false) && loop.points.size() >= 3)
                 sketch->loops.push_back(std::move(loop));
+            else
+                sketch->open.push_back(std::move(loop));
         } else if (cmd == "sketch.rectangle.two_point") {
             in_sketch(cmd);
             if (!p.contains("p0") || !p.contains("p1")) {
@@ -454,10 +499,27 @@ int run(const std::vector<std::string>& args) {
             if (!p.value("construction", false))
                 sketch->loops.push_back(std::move(loop));
         } else if (cmd == "sketch.arc.center_point") {
-            in_sketch(cmd); // drawn, but it closes no region of its own here
-            point2(p.value("center", json::array({0.0, 0.0})));
-            point2(p.value("start", json::array({0.0, 0.0})));
-            point2(p.value("end", json::array({0.0, 0.0})));
+            in_sketch(cmd); // it closes a region with the pieces it meets
+            const auto c = point2(p.value("center", json::array({0.0, 0.0})));
+            const auto a = point2(p.value("start", json::array({0.0, 0.0})));
+            const auto b = point2(p.value("end", json::array({0.0, 0.0})));
+            const double r = std::hypot(a[0] - c[0], a[1] - c[1]);
+            const double a0 = std::atan2(a[1] - c[1], a[0] - c[0]);
+            double sweep = std::atan2(b[1] - c[1], b[0] - c[0]) - a0;
+            if (p.value("clockwise", false))
+                while (sweep >= 0.0)
+                    sweep -= 2.0 * std::numbers::pi;
+            else
+                while (sweep <= 0.0)
+                    sweep += 2.0 * std::numbers::pi;
+            Loop arc;
+            const int n = std::max(4, int(std::ceil(std::abs(sweep) / (2.0 * std::numbers::pi) * 96.0)));
+            for (int k = 0; k <= n; ++k)
+                arc.points.push_back({c[0] + r * std::cos(a0 + sweep * k / n), c[1] + r * std::sin(a0 + sweep * k / n)});
+            arc.points.front() = a;
+            arc.points.back() = b;
+            if (!p.value("construction", false) && r > 0.0)
+                sketch->open.push_back(std::move(arc));
         } else if (cmd == "sketch.constraint.coincident" || cmd == "sketch.constraint.midpoint") {
             in_sketch(cmd);
             ++sketch->constraints;
@@ -470,6 +532,7 @@ int run(const std::vector<std::string>& args) {
             ++sketch->dimensions;
         } else if (cmd == "sketch.finish") {
             in_sketch(cmd);
+            join_open(*sketch);
             last_sketch = std::move(sketch);
             sketch.reset();
         } else if (cmd == "solid.extrude" || cmd == "solid.revolve") {

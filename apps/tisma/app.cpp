@@ -1210,7 +1210,7 @@ private:
         enum class Tool { None, Line, Rectangle, Circle, Arc, Constrain, Edit } tool = Tool::None;
         // The editing tools (rule 17), each a few steps: picks, points and
         // numbers asked for on the command line.
-        enum class EditKind { Trim, Extend, Offset, Chamfer, Mirror, Array, Move, Copy, Rotate, Scale };
+        enum class EditKind { Trim, Extend, Offset, Fillet, Chamfer, Mirror, Array, Move, Copy, Rotate, Scale };
         EditKind edit = EditKind::Trim;
         int edit_step = 0;
         std::vector<std::size_t> selected;
@@ -1284,7 +1284,7 @@ private:
     bool sketch_edit_text(const std::string& word, const std::string& text);
     void sketch_edit_finish(bool changed);
     bool sketch_edit_selecting() const;
-    double offset_distance_ = 2.0, chamfer_distance_ = 1.0, rotate_angle_ = 90.0, scale_factor_ = 2.0;
+    double offset_distance_ = 2.0, fillet_radius_ = 2.0, chamfer_distance_ = 1.0, rotate_angle_ = 90.0, scale_factor_ = 2.0;
     void sketch_drag_to(const cad::Pt& p);
     // The degrees of freedom of the sketch being drawn, counted again only
     // when it changes.
@@ -11622,7 +11622,8 @@ void App::design_panel() {
             using K = SketchEdit::EditKind;
             const std::tuple<K, T, const char*> edits[] = {
                 {K::Trim, T::EditTrim, "sketch_edit_trim"},       {K::Extend, T::EditExtend, "sketch_edit_extend"},
-                {K::Offset, T::EditOffset, "sketch_edit_offset"}, {K::Chamfer, T::EditChamfer, "sketch_edit_chamfer"},
+                {K::Offset, T::EditOffset, "sketch_edit_offset"}, {K::Fillet, T::EditFillet, "sketch_edit_fillet"},
+                {K::Chamfer, T::EditChamfer, "sketch_edit_chamfer"},
                 {K::Mirror, T::EditMirror, "sketch_edit_mirror"}, {K::Array, T::EditArray, "sketch_edit_array"},
                 {K::Move, T::EditMove, "sketch_edit_move"},       {K::Copy, T::EditCopy, "sketch_edit_copy"},
                 {K::Rotate, T::EditRotate, "sketch_edit_rotate"}, {K::Scale, T::EditScale, "sketch_edit_scale"},
@@ -15664,7 +15665,7 @@ void App::sketch_place(const cad::Pt& p, const cad::Snap* snap, std::optional<do
         // a typed or snapped base point is taken as it is.
         const bool picking = sketch_edit_selecting() || e.edit == SketchEdit::EditKind::Trim ||
                              e.edit == SketchEdit::EditKind::Extend || e.edit == SketchEdit::EditKind::Offset ||
-                             e.edit == SketchEdit::EditKind::Chamfer;
+                             e.edit == SketchEdit::EditKind::Chamfer || e.edit == SketchEdit::EditKind::Fillet;
         sketch_edit_point(p, snap && picking ? e.raw.value_or(p) : p);
         return;
     }
@@ -15758,7 +15759,7 @@ bool App::sketch_edit_selecting() const {
         return false;
     using K = SketchEdit::EditKind;
     const K k = sketch_edit_->edit;
-    return sketch_edit_->edit_step == 0 && k != K::Trim && k != K::Extend && k != K::Offset && k != K::Chamfer;
+    return sketch_edit_->edit_step == 0 && k != K::Trim && k != K::Extend && k != K::Offset && k != K::Chamfer && k != K::Fillet;
 }
 
 void App::sketch_edit_tool(SketchEdit::EditKind kind) {
@@ -15798,6 +15799,9 @@ void App::sketch_edit_prompt() {
     case K::Chamfer:
         command_message_ = st == 0 ? format(tr(T::PromptChamferDistance), chamfer_distance_) : std::string(tr(T::PromptChamferPick));
         break;
+    case K::Fillet:
+        command_message_ = st == 0 ? format(tr(T::PromptFilletRadius), fillet_radius_) : std::string(tr(T::PromptFilletPick));
+        break;
     case K::Mirror: command_message_ = tr(st == 1 ? T::PromptMirror1 : T::PromptMirror2); break;
     case K::Array:
         if (st == 1)
@@ -15831,7 +15835,7 @@ void App::sketch_edit_finish(bool changed) {
         e.selected.clear();
         e.drag.reset();
     }
-    if (e.edit == K::Trim || e.edit == K::Extend || e.edit == K::Chamfer || (e.edit == K::Offset && e.edit_step > 0)) {
+    if (e.edit == K::Trim || e.edit == K::Extend || e.edit == K::Chamfer || e.edit == K::Fillet || (e.edit == K::Offset && e.edit_step > 0)) {
         if (e.edit == K::Offset)
             e.edit_step = 1, e.edit_entity.reset();
         sketch_edit_prompt();
@@ -15886,7 +15890,8 @@ void App::sketch_edit_point(const cad::Pt& p, const cad::Pt& raw) {
         }
         sketch_edit_finish(cad::offset_entity(*sketch, *e.edit_entity, offset_distance_, raw).has_value());
         return;
-    case K::Chamfer: {
+    case K::Chamfer:
+    case K::Fillet: {
         if (e.edit_step == 0)
             e.edit_step = 1;
         // The nearest corner within reach.
@@ -15901,7 +15906,8 @@ void App::sketch_edit_point(const cad::Pt& p, const cad::Pt& raw) {
                     best = d, corner = std::pair{i, k};
             }
         }
-        sketch_edit_finish(corner && cad::chamfer_corner(*sketch, corner->first, corner->second, chamfer_distance_));
+        sketch_edit_finish(corner && (e.edit == K::Fillet ? cad::fillet_corner(*sketch, corner->first, corner->second, fillet_radius_)
+                                                           : cad::chamfer_corner(*sketch, corner->first, corner->second, chamfer_distance_)));
         return;
     }
     case K::Mirror:
@@ -15957,7 +15963,8 @@ bool App::sketch_edit_text(const std::string& word, const std::string& text) {
     static const std::pair<const char*, K> kNames[] = {
         {"tr", K::Trim},       {"recortar", K::Trim},     {"trim", K::Trim},         {"ex", K::Extend},
         {"alargar", K::Extend}, {"extend", K::Extend},    {"o", K::Offset},          {"desfasar", K::Offset},
-        {"offset", K::Offset}, {"cha", K::Chamfer},       {"chaflan", K::Chamfer},   {"chaflán", K::Chamfer},
+        {"offset", K::Offset}, {"f", K::Fillet},          {"redondear", K::Fillet},  {"empalme", K::Fillet},
+        {"fillet", K::Fillet}, {"cha", K::Chamfer},       {"chaflan", K::Chamfer},   {"chaflán", K::Chamfer},
         {"chamfer", K::Chamfer}, {"mi", K::Mirror},       {"simetria", K::Mirror},   {"simetría", K::Mirror},
         {"mirror", K::Mirror}, {"ar", K::Array},          {"matriz", K::Array},      {"array", K::Array},
         {"m", K::Move},        {"mover", K::Move},        {"move", K::Move},         {"co", K::Copy},
@@ -15986,7 +15993,7 @@ bool App::sketch_edit_text(const std::string& word, const std::string& text) {
     }
     const int st = e.edit_step;
     const bool wants_number =
-        ((e.edit == K::Offset || e.edit == K::Chamfer) && st == 0) || (e.edit == K::Array && st >= 2 && !(e.array_polar && st == 2)) ||
+        ((e.edit == K::Offset || e.edit == K::Chamfer || e.edit == K::Fillet) && st == 0) || (e.edit == K::Array && st >= 2 && !(e.array_polar && st == 2)) ||
         ((e.edit == K::Rotate || e.edit == K::Scale) && st == 2);
     if (wants_number && (word.empty() || number)) {
         const bool given = !word.empty();
@@ -15994,12 +16001,13 @@ bool App::sketch_edit_text(const std::string& word, const std::string& text) {
         switch (e.edit) {
         case K::Offset:
         case K::Chamfer:
+        case K::Fillet:
             if (given && !(v > 0.0)) {
                 command_message_ = tr(T::CommandBadNumber);
                 return true;
             }
             if (given)
-                (e.edit == K::Offset ? offset_distance_ : chamfer_distance_) = v;
+                (e.edit == K::Offset ? offset_distance_ : e.edit == K::Fillet ? fillet_radius_ : chamfer_distance_) = v;
             e.edit_step = 1;
             sketch_edit_prompt();
             return true;

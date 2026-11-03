@@ -312,3 +312,61 @@ TEST_CASE("sketch edit: random edits never leave a rule on a stale entity", "[ca
         }
     }
 }
+
+namespace {
+double area(const std::vector<Pt>& q) {
+    double a = 0;
+    for (std::size_t i = 0; i < q.size(); ++i)
+        a += q[i].x * q[(i + 1) % q.size()].y - q[(i + 1) % q.size()].x * q[i].y;
+    return std::abs(a) / 2;
+}
+} // namespace
+
+TEST_CASE("sketch edit: F rounds a corner and the outline stays a region (rule 6)", "[cad][sketch_edit]") {
+    Sketch s;
+    s.entities = {rectangle({0, 0}, {20, 10})};
+    REQUIRE(fillet_corner(s, 0, 2, 3)); // the top right corner
+    REQUIRE(s.entities.size() == 2);
+    const Entity& arc = s.entities[0];
+    REQUIRE(arc.kind == Entity::Kind::Arc);
+    CHECK(near(arc.points[0], {17, 7}, 1e-9));
+    CHECK(near(arc.points[1], {20, 7}, 1e-9));
+    CHECK(near(arc.points[2], {17, 10}, 1e-9));
+    CHECK_FALSE(arc.clockwise); // the rectangle runs counter-clockwise
+    CHECK(s.has_region());
+    const auto loops = joined_loops(s);
+    REQUIRE(loops.size() == 1);
+    CHECK_THAT(area(loops[0]), WithinAbs(200 - (9 - 9 * std::numbers::pi / 4), 0.01));
+    // Another corner of what is now an open chain, then the radius too big.
+    const std::size_t chain = 1;
+    REQUIRE(s.entities[chain].kind == Entity::Kind::Chain);
+    REQUIRE(fillet_corner(s, chain, 1, 2));
+    CHECK(joined_loops(s).size() == 1);
+    CHECK_THAT(area(joined_loops(s)[0]), WithinAbs(200 - (9 + 4) * (1 - std::numbers::pi / 4), 0.01));
+    Sketch big;
+    big.entities = {rectangle({0, 0}, {20, 10})};
+    CHECK_FALSE(fillet_corner(big, 0, 0, 11));
+    // A clockwise outline gets a clockwise arc.
+    Sketch cw;
+    Entity tri = line({0, 0}, {0, 10});
+    tri.points.push_back({10, 0});
+    tri.closed = true;
+    cw.entities = {tri};
+    REQUIRE(fillet_corner(cw, 0, 1, 1));
+    CHECK(cw.entities[0].clockwise);
+    CHECK(cw.has_region());
+}
+
+TEST_CASE("sketch edit: open pieces drawn end to end close a region", "[cad][sketch_edit]") {
+    Sketch s;
+    Entity a = line({0, 0}, {10, 0});
+    a.points.push_back({10, 10});
+    s.entities = {a, line({0, 10}, {10, 10})};
+    CHECK_FALSE(s.has_region());
+    s.entities.push_back(line({0, 0}, {0, 10})); // drawn the other way round
+    CHECK(s.has_region());
+    REQUIRE(joined_loops(s).size() == 1);
+    CHECK_THAT(area(joined_loops(s)[0]), WithinAbs(100, 1e-9));
+    s.entities[2].construction = true;
+    CHECK_FALSE(s.has_region());
+}

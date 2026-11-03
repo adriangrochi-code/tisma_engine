@@ -108,10 +108,16 @@ struct Sketch {
     std::vector<GeoConstraint> rules; // rule 5, added by hand
     bool empty() const { return entities.empty(); }
     // Whether any entity closes a region to extrude: a closed chain of three
-    // points or more, a rectangle, a circle.
+    // points or more, a rectangle, a circle, or open chains and arcs joined
+    // end to end into a loop (joined_loops).
     bool has_region() const;
     friend bool operator==(const Sketch&, const Sketch&) = default;
 };
+
+// The loops that open chains and arcs (not construction) close by meeting
+// end to end, within 1e-6 mm (rule 6: a profile drawn piece by piece, a
+// rounded corner): each as a polygon, the arcs in short segments.
+std::vector<std::vector<Pt>> joined_loops(const Sketch& sketch);
 
 // The point an entity's EntityPoint names.
 Pt point_of(const Entity& e, std::size_t index);

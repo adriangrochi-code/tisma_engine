@@ -42,6 +42,12 @@ std::optional<std::size_t> offset_entity(Sketch& sketch, std::size_t entity, dou
 // A rectangle becomes a closed chain. False when a side is too short.
 bool chamfer_corner(Sketch& sketch, std::size_t entity, std::size_t corner, double distance);
 
+// F: the corner rounded with an arc of `radius` tangent to both sides. The
+// chain is opened there: the sides before and after it and the arc meet end
+// to end, so a closed outline stays a region (joined_loops). False when the
+// sides are too short for the radius or the corner is straight.
+bool fillet_corner(Sketch& sketch, std::size_t entity, std::size_t corner, double radius);
+
 // A plane map x' = a x + b y + tx, y' = c x + d y + ty.
 struct Map2 {
     double a = 1.0, b = 0.0, c = 0.0, d = 1.0, tx = 0.0, ty = 0.0;

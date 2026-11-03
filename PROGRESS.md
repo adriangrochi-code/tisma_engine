@@ -9727,9 +9727,15 @@ cruzadas, TR y clic en un extremo: queda en 10, 10), CD18 (clic en un círculo, 
 seis círculos a 60°) y un desfase de 2 mm del lado del clic. `design_constraints` elige «Fijo» con la palabra `fijo`
 (el panel ahora es más alto y el botón queda fuera de la vista).
 
-**Falta de la regla 17:** redondear esquinas del boceto (necesita perfiles hechos de tramos y arcos, regla 6).
+**Después, en el mismo bloque:** **redondear** esquinas del boceto (F, `redondear`): un arco tangente a los dos lados;
+la cadena se abre en la esquina y el arco la une. Para que eso siga siendo una región, los perfiles ahora también se
+arman con **cadenas abiertas y arcos que se tocan punta con punta** (regla 6, `joined_loops`), dibujados en cualquier
+orden y sentido. El sustituto de SolidCraft une las piezas igual. Prueba de interfaz `design_sketch_fillet`: un
+rectángulo de 20 × 10 con las dos esquinas de arriba redondeadas a 5 mm, extruido 20 mm, da 3785,4 mm³. **No probado**
+con el `solidcraft-cli` real: no se sabe todavía si arma el perfil con piezas sueltas que se tocan sin una restricción
+de coincidencia.
 
 **Medido:** la prueba «EP4 y EP6» de Estructural tarda unos 26 minutos bajo ASan (1,5 minutos sin él). No cambió
 en este bloque; queda para un bloque de mantenimiento.
 
-**Sigue:** redondear esquinas del boceto con perfiles mixtos, roscas; después CFD (A3) y la línea de comandos de la nube.
+**Sigue:** roscas modeladas; después CFD (A3) y la línea de comandos de la nube.
