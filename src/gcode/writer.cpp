@@ -2524,6 +2524,27 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // no value with ';' in it. The names are those of the owner's Kobra 3
     // file from Anycubic Slicer Next (FW10, read as a black box).
     const bool strict = s.strict_parser == StrictParser::Anycubic;
+    // The material as those files name it in paint_info: the filament's type
+    // (PLA when not known, as that firmware takes a missing one) and its
+    // colour from the variable filament_colour ("#RRGGBB"; white when not given).
+    const std::string paint_info = [&] {
+        std::string type;
+        for (const char c : s.filament_type)
+            if (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '+' || c == '_')
+                type += c;
+        if (type.empty())
+            type = "PLA";
+        int rgb[3] = {255, 255, 255};
+        if (const auto it = s.variables.find("filament_colour"); it != s.variables.end() && !it->second.empty()) {
+            const std::string& c = it->second.front();
+            if (c.size() == 7 && c[0] == '#' &&
+                std::all_of(c.begin() + 1, c.end(), [](char x) { return std::isxdigit(static_cast<unsigned char>(x)); }))
+                for (int k = 0; k < 3; ++k)
+                    rgb[k] = std::stoi(c.substr(std::size_t(1 + 2 * k), 2), nullptr, 16);
+        }
+        return "[{\"material_type\":\"" + type + "\",\"paint_color\":[" + std::to_string(rgb[0]) + "," +
+               std::to_string(rgb[1]) + "," + std::to_string(rgb[2]) + "],\"paint_index\":0}]";
+    }();
     // The height printed: the layers keep the model's own heights.
     const double top_z = model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom;
     if (strict && s.gcode_binary && warnings)
@@ -2537,6 +2558,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << "; filament_density: " << trimmed(s.filament_density, 4) << "\n";
         out << "; filament_diameter: " << trimmed(s.filament_diameter, 4) << "\n";
         out << "; max_z_height: " << trimmed(top_z, 3) << "\n";
+        out << "; exclude_object: " << (s.object_labels == ObjectLabels::Firmware ? 1 : 0) << "\n";
+        out << "; model_instances: " << std::max<std::size_t>(1, model.objects.size()) << "\n";
+        out << "; paint_info = " << paint_info << "\n";
+        out << "; test_mode: 0\n";
         out << "; HEADER_BLOCK_END\n\n";
         out << "; EXECUTABLE_BLOCK_START\n";
     } else {
@@ -2576,11 +2601,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         const SlicedObject& o = model.objects[k];
         if (strict) {
             // As Anycubic's program names them: "<model>_id_<object>_copy_<copy>",
-            // bare, of letters, digits and '_' only (the model's name without
-            // its extension).
-            std::string name = std::filesystem::path(o.name).stem().string();
+            // bare, the model's name as it is (with its extension) but for
+            // what would end the value: anything but letters, digits, '.',
+            // '-' and '_' becomes '_'.
+            std::string name = o.name;
             for (char& c : name)
-                if (!std::isalnum(static_cast<unsigned char>(c)))
+                if (!std::isalnum(static_cast<unsigned char>(c)) && c != '.' && c != '-' && c != '_')
                     c = '_';
             return (name.empty() ? std::string("object") : name) + "_id_" + std::to_string(o.object) + "_copy_" +
                    std::to_string(o.instance);
@@ -2796,6 +2822,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     }
     if (!start_gcode.empty())
         out << start_gcode << "\n";
+    if (strict) // where the maker's files end the printer's start (FW10)
+        out << "; EXECUTABLE_BLOCK_HEAD\n";
     // E in mm3 on a pellet printer (pellets.md, rule 3, PE4): after the start
     // G-code, the firmware's command for it; Marlin's M200 D S1, and
     // RepRapFirmware's M200 D, whose S came only in 3.5. Not on a filament
@@ -4468,6 +4496,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     take(polygon);
         const double size[2] = {hi[0] >= lo[0] ? hi[0] - lo[0] : 0.0, hi[1] >= lo[1] ? hi[1] - lo[1] : 0.0};
         out << "; total layers count = " << model.layers.size() << "\n\n";
+        out << "; ams_info = begin\n; paint_info = " << paint_info << "\n; ams_info = end\n\n";
         out << "; statistics = begin\n";
         out << "; used_filament = " << fixed(g.total_e() / 1000.0, 2) << "\n";
         out << "; print_time = " << format_duration(g.print_time()) << "\n";

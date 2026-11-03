@@ -9087,4 +9087,16 @@ resolución de la vista paso a paso, el tope de 30 al laminar); después, el res
   Por eso el modo estricto ya no saca toda la lista: escribe una corta con eso (material, alturas, boquilla y
   temperaturas), un valor por línea. **Esto se aparta de la regla 7** («no escribe el bloque de configuración»):
   se lo paso al equipo de fichas.
+- **Tres archivos más del dueño** (cubo XYZ de 20 mm, prueba de tolerancias y cubo Voron, mismos programa, perfil
+  y ABS 0,16): la misma forma en los cuatro y la misma lista de ajustes byte a byte; solo cambian el resumen, el
+  nombre del objeto y los totales. Lo que me había faltado copiar y ahora escribe el modo estricto:
+  - en la cabecera `exclude_object`, `model_instances`, `paint_info` (material y color, en JSON) y `test_mode: 0`;
+  - `; EXECUTABLE_BLOCK_HEAD` después del G-code de inicio;
+  - el bloque `ams_info` al final con el mismo `paint_info`;
+  - el nombre del objeto con su extensión (`XYZ_20mm_Calibration_Cube.stl_id_0_copy_0`): antes la quitaba.
+  - Quedan afuera `project_info` y `flush_multiplier_calculate_by_acnext` (purga entre colores, que el motor no
+    hace en esta impresora).
+- **Tiempo, mismo cubo de 20 mm (125 capas):** Anycubic estima 30m 34s y 1,29 m; el motor, con los valores sacados
+  del archivo, 35m 18s y 1,25 m (el cubo del motor no tiene las letras grabadas). Para el bloque de tiempo
+  (`print_time.md`): falta saber cuánto tarda de verdad la impresora.
 
