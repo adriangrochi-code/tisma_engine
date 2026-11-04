@@ -28,8 +28,9 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
 - **2026-11-04 — «Compartir con Tisma»** (MA5): un STL, OBJ o 3MF compartido o abierto con Tisma desde otra app va a la Placa.
 - **2026-11-04 — la tarjeta de la impresora y el catálogo:** el catálogo del motor (`resources/catalog/`, el mismo
   del escritorio) va en el APK; en Placa, la tarjeta de la impresora abre el selector de impresora, boquilla y
-  filamento. El perfil lo arma el motor con `tisma-engine profile` (pedido al equipo del motor el 04-11-2026); hasta
-  que exista, el laminado usa los valores por defecto del motor y la pantalla lo dice.
+  filamento. El perfil lo arma el motor con `tisma-engine profile` (motor c0f68df); probado de punta a punta con el motor
+  de esta máquina (perfil del catálogo más la calidad elegida: un cubo de 10 mm da 83 capas a 0,12 mm). Si el motor
+  no puede armarlo, el laminado usa sus valores por defecto y la pantalla lo dice.
 
 ## Abierto
 
