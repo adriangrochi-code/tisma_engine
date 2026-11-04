@@ -10002,14 +10002,13 @@ candidata y el detector de ventosas; recordar el método y la precisión por tec
 - `[.aero-full]` (AE1 a AE4, unos 15 min) corre solo en compilaciones optimizadas como `aero_drag_coefficients`;
 - CI completo: `tools/ci_linux.sh` (normal, clang, ASan; más de una hora con 4 núcleos).
 
-**Reglas nuevas del dueño (2026-11-04), que no se pudieron escribir en CLAUDE.md desde esta sesión:**
+**Reglas nuevas del dueño (2026-11-04), ahora en CLAUDE.md:**
 - control rápido por push (compilar y las pruebas que toca el cambio); el CI completo con ASan en segundo plano o cada
   pocas horas, y lo que encuentre se arregla primero;
 - seguir la hoja de ruta sin desvíos; ante una duda, elegir lo que dicen la hoja de ruta y las fichas, anotarlo aquí y
   seguir; las impresiones reales no son condición: «no probado en impresora»;
 - mensajes cortos entre sesiones; bloques programados sin trabajo terminan en una línea;
-- contexto: pasados unos 500 000 tokens, actualizar este traspaso y avisar al equipo de fichas.
-(84857cf agregó a CLAUDE.md la primera tanda, «Working economy».)
+- el dueño decidió no renovar la sesión del motor (2026-11-04); las demás reglas están en CLAUDE.md.
 
 **Hoja de ruta (orden del dueño, 2026-11-04):**
 1. Nube: `orient` (hecho para FDM; falta resina, reglas 7 a 9, OR3 y OR4), BH24 (hecho), verificación de resolución

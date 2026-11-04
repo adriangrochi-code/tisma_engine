@@ -99,6 +99,13 @@ errors, and fix what is still unresolved, to polish the engine and keep it stabl
   screens that changed.
 - Message the owner only for a milestone, a decision, something broken, or the morning summary.
 - Low effort for routine steps (checks, merges, small fixes); high effort for design and hard bugs.
+- Per push, a quick check: the build and the tests the change touches. The full `tools/ci_linux.sh` (with ASan) runs
+  in the background or every few hours; what it finds is fixed first (owner's decision, 2026-11-04).
+- Follow the roadmap order without detours; when unsure, pick what the roadmap and the specs say, write the decision
+  in PROGRESS.md and keep going. Real prints are not gates: write "not tested on hardware".
+- State lives in files (PROGRESS.md, PLAN.md), not in the conversation. Short command output (tails, errors only);
+  big files read in parts; screenshots cropped and small, text dumps preferred.
+- No session renewal for the engine session (owner, 2026-11-04).
 
 ## CI
 
