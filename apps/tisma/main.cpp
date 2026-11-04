@@ -55,6 +55,11 @@ constexpr const char* kUsage =
     "more than a million triangles as while the view moves: its coarse copy.\n"
     "--draw-stats prints each frame's OpenGL draw calls and the vertices they ask\n"
     "for, the 3D view's and the panels' apart.\n"
+    "--settings-layout FILE writes the settings panel as JSON (tabs, cards, groups\n"
+    "with their closed line, and each row's key, level, name, help, type, default,\n"
+    "range and value; - for the standard output) and exits without a window;\n"
+    "--settings-summary SETTINGS.json takes the values and closed lines from\n"
+    "those settings, --lang the language.\n"
     "--dump-ui writes, with --screenshot, every setting row drawn: its key,\n"
     "label, value, rectangle and whether its label is cut.\n"
     "--first-run starts as on the first run: the printer's catalog, then the\n"
@@ -89,6 +94,10 @@ int main(int argc, char** argv) {
         if (arg == "--help" || arg == "-h") {
             std::fputs(kUsage, stdout);
             return 0;
+        } else if (arg == "--settings-layout") {
+            options.settings_layout = value();
+        } else if (arg == "--settings-summary") {
+            options.settings_summary = value();
         } else if (arg == "--version") {
             std::printf("tisma %s\n", TISMA_VERSION);
             return 0;

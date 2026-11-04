@@ -169,6 +169,7 @@ add_library(tisma_core
   src/mesh/indexed_mesh.cpp
   src/mesh/face_region.cpp
   src/mesh/shapes.cpp
+  src/mesh/lattice.cpp
   src/mesh/orient.cpp
   src/mesh/paint.cpp
   src/slice/level_set.cpp
@@ -278,6 +279,7 @@ add_library(tisma_core
   src/fea/zone.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp
+  src/catalog/pack.cpp
   src/device/gcode_host.cpp
   src/device/printer.cpp
   src/device/serial_port.cpp
@@ -341,7 +343,8 @@ if(NOT WIN32)
     message(STATUS "OpenSSL 3 not found: the cloud client talks only http://")
   endif()
 endif()
-add_library(tisma_net STATIC src/net/http.cpp src/cloud/client.cpp src/cloud/secret_store.cpp src/cloud/report.cpp)
+add_library(tisma_net STATIC src/net/http.cpp src/cloud/client.cpp src/cloud/secret_store.cpp src/cloud/report.cpp
+  src/device/print_host.cpp src/net/digest.cpp)
 target_include_directories(tisma_net PUBLIC src)
 # tisma_core: running secret-tool or security (cad/process).
 target_link_libraries(tisma_net PRIVATE tisma_core nlohmann_json::nlohmann_json tisma_warnings)

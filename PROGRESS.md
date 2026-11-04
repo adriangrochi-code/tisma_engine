@@ -10512,3 +10512,170 @@ giran con ella.
 pieza» y su deshacer.
 
 **Sigue:** la retícula (regla 7).
+
+## 2026-11-04 — Optimizar, regla 7 (retícula), paso A: la geometría
+
+**Hecho:** `src/mesh/lattice.*`: `lattice_bars(lo, hi, a)` da las barras de las celdas cúbicas de lado `a` que llenan
+la caja (las 4 aristas verticales y las 2 diagonales de cada cara lateral, cada barra una sola vez entre celdas
+vecinas); `lattice_mesh(barras, diámetro)` las hace prismas cerrados de 6 lados, hacia afuera, que se solapan en los
+nodos; `lattice_density(diámetro, a) = π(1 + 4√2)(r/a)²`.
+
+**Prueba (O6):** una celda: 12 barras, ninguna con menos de 45° de inclinación; cada prisma cerrado (cada arista en
+dos triángulos) con el volumen de un hexágono por su largo; 2 × 2 × 1 celdas: 33 barras compartidas; la densidad.
+
+**Sigue (regla 7):** paso B, las barras que tocan la pieza, recortadas a ella, como zona maciza con el relleno de la
+pieza al 0 %; paso C, el análisis homogéneo por celda (exponente 1,5) y la búsqueda del diámetro (0,9 a 3 mm, después
+por celda); paso D, en el panel.
+
+## 2026-11-04 — Optimizar, regla 7, paso B: la retícula en la pieza
+
+**Hecho:** `inside_mesh` (paridad de los cruces de un rayo vertical, con un corrimiento mínimo para no pasar por
+aristas) y `bars_touching` (una barra se queda si alguno de 5 puntos suyos está dentro de la pieza; el laminado
+recorta lo de afuera, así llegan a las paredes). `lattice_modifier(pieza, celda, diámetro)`: la retícula sobre la caja
+de la pieza, sus barras que la tocan, como zona maciza (modificador al 100 %); la pieza va al 0 %.
+
+**Prueba:** `[lattice]` (punto dentro y fuera; ninguna barra entera más allá de la pieza); barra de 24 × 6 × 6 mm a
+0 % con 20 N: con la retícula de celda 3 mm y barras de 1,2 mm se imprimen 76 585 vóxeles contra 61 244, se deforma
+menos y el factor pasa de 1,50 a 1,65 (5,6 s).
+
+**Sigue (regla 7):** paso C, la búsqueda del diámetro uniforme (0,9 a 3 mm, por bisección, analizando la retícula
+como se imprime) y después por celda; paso D, en el panel. Decisión: el análisis usa la retícula impresa (vóxeles de
+media línea), no el material homogéneo de la ficha (ρ, exponente 1,5), igual que con los nervios: el homogéneo queda
+para vóxeles gruesos.
+
+## 2026-11-04 — Optimizar, regla 7, paso C: el diámetro uniforme
+
+**Hecho:** `lightest_lattice`: la pieza al 0 % con la retícula; prueba 3 mm (si no aguanta, no hay retícula), después
+0,9 mm, y busca por bisección hasta 0,05 mm el diámetro más fino que aguanta (como mucho 8 análisis, con avance). La
+celda es un tercio del lado más chico de la pieza, entre 3 y 10 mm (`lattice_cell_for`; decisión propia, la ficha no
+la fija).
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N: barras de 2,74 mm en celdas de 3 mm, factor 2,00, 1,008 g, 8 análisis
+(28 s). En una barra tan fina la retícula casi la llena: la prueba de la ficha (O7, cubo de 30 mm, 6000 N) daría
+celdas de 10 mm.
+
+**Sigue (regla 7):** el diámetro por celda (sección proporcional a la utilización, escalado en conjunto) y
+«Retícula» en el panel.
+
+## 2026-11-04 — Optimizar, regla 7, paso D: «Retícula» en el panel (sin «Usar»)
+
+**Hecho:** el botón «Retícula» corre `lightest_lattice` en el trabajo de Optimizar, con Cancelar, y muestra el
+diámetro, la celda, el factor y la masa, o que ni con 3 mm aguanta.
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda; `[ui]`.
+
+**Falta:** «Usar la retícula»: los volúmenes de una pieza son cajas o cilindros (`PlateVolume`), y la retícula es una
+malla. Hace falta un volumen con malla propia (guardado en el proyecto 3MF como una malla modificadora más) antes de
+poder aplicarla. También falta el diámetro por celda. Siguiente: el volumen con malla.
+
+## 2026-11-04 — Optimizar, regla 7, paso E: el volumen de retícula y «Usar la retícula»
+
+**Hecho:** un volumen nuevo de la pieza, `PlateVolume::Shape::Lattice` (celda y diámetro): su malla son las barras
+que tocan la pieza **donde está en la cama** (`lattice_in` sobre la pieza colocada), así las barras quedan verticales
+y a 45° aunque la pieza esté girada. El proyecto lo guarda como `"shape": "lattice"` con `"cell"` y `"diameter"` (no
+la malla) y lo lee de vuelta; el laminado del proyecto lo usa como cualquier modificador. «Usar la retícula» pone la
+pieza al 0 % y agrega el volumen al 100 %, con un solo deshacer. En la vista 3D no se dibuja su contorno (miles de
+caras).
+
+**Prueba:** `test_project` (ida y vuelta de la celda y el diámetro), `test_plate` (las barras sobre un cubo girado
+30°, dentro de su caja, con aristas verticales), `[lattice]`, `[ui]`, `ui_script_structural_analyze`. **Sin probar en
+la interfaz:** «Usar la retícula» y su deshacer; la ventana de ajustes del objeto todavía muestra lugar y tamaño para
+este volumen aunque no los usa.
+
+**Pendiente:** el diámetro por celda (regla 7, segunda búsqueda); `bars_touching` recorría todas las caras por cada
+punto: arreglado el mismo día con una grilla de columnas en XY (el rayo vertical solo mira las caras de su casilla;
+prueba: las mismas barras que la prueba simple sobre una esfera de 4608 caras).
+
+## 2026-11-04 — Optimizar, regla 7, paso F: el diámetro por barra (motor)
+
+**Hecho:** `graded_lattice(…, uniforme)`: del análisis con las barras uniformes, la utilización (pedido / factor) peor
+a menos de media celda del medio de cada barra; cada barra `d = k √(u / u_máx)` entre 0,9 y 3 mm, y `k` por
+bisección (6 mitades entre 0,9 y 3) hasta que aguanta. `lighter` solo si pesa menos que la uniforme. `lattice_mesh`
+acepta un diámetro por barra. Como mucho 8 análisis.
+
+**Prueba:** en la barra de 24 × 6 × 6 mm la uniforme ya pide 2,74 mm y ningún reparto aguanta (no se propone); la
+prueba comprueba el contrato (47 s la prueba entera de la retícula). La prueba de la ficha (O8, voladizo de 90 × 20 ×
+20 mm, de 1,0 a 2,5 mm y −30 %) queda para el banco de pruebas: es grande para la prueba unitaria.
+
+**Falta:** guardar y usar el diámetro por barra (el volumen de retícula guarda un solo diámetro) y mostrarlo en el
+panel.
+
+## 2026-11-04 — UI51 y UI52 (prueba de interfaz del equipo de fichas sobre 0f4951d)
+
+**UI51 (arreglado):** en Estructural, Ctrl+Z deshacía solo las condiciones, así que después de «Girar la pieza» el
+primer Ctrl+Z quitaba la fuerza. Ahora los pasos de Ctrl+Z de Ingeniería guardan también el giro, los ajustes y los
+volúmenes de la pieza cuando Optimizar los cambia (`remember_part`: «Girar la pieza», «Usar» de zonas, nervios,
+refuerzos y retícula), y Ctrl+Y los rehace. Prueba en `ui_script_structural_analyze`: la orientación del cubo hasta
+el final, «Girar la pieza» (giro en X 90°) y Ctrl+Z (0°).
+
+**UI52 (arreglado):** la ayuda de los botones de Optimizar tapaba la línea del resultado cuando el mouse quedaba
+sobre el botón; ahora sale con la demora de siempre y no mientras se muestra un resultado de esa pieza.
+
+## 2026-11-04 — el panel de ajustes como datos para el teléfono
+
+**Hecho (pedido de la sesión de Android, `mobile_app.md` regla 7):** `tisma --settings-layout FILE|-` escribe, sin
+abrir ventana, las pestañas (print, material, printer), sus tarjetas (id, título, icono), los grupos (id, título,
+línea cerrada) y cada fila: clave, nivel (basic, normal, advanced), nombre, ayuda, tipo, valor por defecto, rango y
+valor. `--lang` elige el idioma de los títulos y nombres; `--settings-summary ajustes.json` toma de ahí los valores y
+las líneas cerradas. Está en `tisma` y no en `tisma-engine` porque los nombres de las filas viven en la interfaz.
+
+**Prueba:** `ui_settings_layout` (ctest). 3 pestañas (7, 6 y 5 tarjetas), 438 filas. **Falta:** la ayuda y el tipo
+salen de `docs/CONFIG.md`, que está en español, también con `--lang en`; las opciones de las listas van dentro del
+rango como texto (no como lista aparte).
+
+## 2026-11-04 — `analyze --mode lightest-infill` en los nodos (pedido de Android; CC20)
+
+**Hecho:** el nodo de análisis corre el modo `lightest-infill` de `cloud.md` (regla 6, `params.mode`, con `zones` y
+`ribs`): `lightest_infill`, después `zoned_infill` (salvo `--no-zones`) y `ribbed_infill` (con `--ribs`), el avance
+repartido entre las búsquedas. El resumen da `mode`, `solid`, `found`, `density`, `min_safety`, `required_safety`,
+`analyses` y, si corrieron, `zones` (encontrado, más liviano, niveles, masas) y `ribs` (encontrado, más liviano,
+densidad, ángulos); el resultado (`-o`, `kind` = `lightest-infill`) agrega las cajas de zonas y nervios cuando
+convienen (mín., máx. sobre la cama y sus ajustes). `resin-structure` sigue con `not_in_cloud`, así que CC20 queda para
+ese modo.
+
+**Prueba:** `test_node` (con calidad rápida la pieza se analiza maciza: `solid`, sin búsqueda; `resin-structure` da
+`not_in_cloud` con `error_es`). **Sin probar desde la línea de comandos:** la búsqueda completa con calidad normal
+(las funciones del motor tienen sus pruebas). **Falta:** devolver el proyecto con los cambios aplicados (`-o
+proyecto.3mf`), que necesita pasar las cajas a volúmenes de la pieza fuera de la interfaz.
+
+## 2026-11-04 — conexiones de red: OctoPrint (motor)
+
+**Hecho:** `src/device/print_host.*` (en `tisma_net`): `host_version` (prueba la dirección y la clave de API),
+`host_upload` (sube el G-code a `/api/files/local` y, si se pide, lo elige e imprime), `host_status` (estado, archivo,
+avance, tiempo restante y temperaturas; sin impresora conectada al programa, 409, da el estado sin temperaturas),
+`host_pause` (pausa o sigue) y `host_cancel`. Los errores llevan un código estable (`unreachable`, `unauthorized`,
+`not_connected`, `bad_answer`, `failed`); la clave nunca se escribe en mensajes. Desde la documentación pública de la
+API REST de OctoPrint.
+
+**Prueba:** `test_print_host` contra un OctoPrint simulado (servidor de cpp-httplib): clave buena y mala, dirección
+sin respuesta, subida y comienzo (nombre y contenido del archivo), estado con temperaturas, pausa, seguir y cancelar,
+y el 409 sin impresora. **Sin probar:** contra un OctoPrint real.
+
+**Moonraker (Klipper), el mismo día:** `HostKind::Moonraker`: `/server/info`, `/server/files/upload` (raíz `gcodes`,
+`print`), `/printer/objects/query` (print_stats, virtual_sdcard, extruder, heater_bed) y `/printer/print/pause`,
+`resume`, `cancel`; prueba contra un Moonraker simulado.
+
+**PrusaLink, el mismo día:** `HostKind::PrusaLink` con usuario y contraseña por Digest (`src/net/digest.*`: MD5 de la
+RFC 1321 y Digest de la RFC 7616, probados con los ejemplos de las RFC; `net::Response` trae ahora la cabecera
+`WWW-Authenticate`, en cpp-httplib y en WinHTTP): versión, subida con `PUT /api/v1/files/usb/<nombre>` y
+`Print-After-Upload`, estado (`/api/v1/status`, el nombre largo del archivo de `/api/v1/job`), pausar, seguir y
+detener por el id del trabajo (sin trabajo: `conflict`). Prueba contra un PrusaLink simulado que exige Digest.
+**Sin probar:** la cabecera de WinHTTP (solo compila en el CI de Windows) y contra una impresora real.
+
+**Sigue:** Duet con el mismo contrato (la sesión de Android ofreció notas de
+comportamiento de los cuatro); después en la página Dispositivos.
+
+## 2026-11-04 — paquete libre de perfiles, paso 1 (`profile_pack.md`, ficha `profile_pack_format.md`)
+
+**Hecho:** `src/catalog/pack.*` (en `tisma_core`): `parse_pack_index` (formato y versión; una versión mayor no se carga,
+PF1), `pack_plan` (lista de archivos a bajar con URL, ruta, tamaño y SHA-256, solo los que cambiaron o faltan),
+`sha256_hex` (FIPS 180-4), `safe_pack_path` (solo `vendors/<id>/`, `community/`, `knowledge/`; nada absoluto ni con
+`..`, PF3), `pack_printer_profile` (`common.settings` con la variante encima, claves desconocidas descartadas con
+aviso; `original*` nunca se lee, PF4 y PF6), `parse_pack_entry`, `parse_pack_compatible` y `pack_compatible` (PF5).
+Decisión: la descarga la hace quien llama (la app de Android la hace ella misma); el motor da el plan y verifica.
+
+**Prueba:** `tests/test_pack.cpp` con un paquete inventado: ejemplos de FIPS, PF1, plan, rutas, PF4, PF6, PF5.
+
+**Sigue:** descomprimir `.tar.xz` (falta elegir la biblioteca: xz-embedded, 0BSD, a revisar y anotar en
+`THIRD_PARTY.md` antes de usarla) y leer tar; después `pack plan`, `pack install --from`, `pack list` en la línea de
+comandos y `profile --pack`.

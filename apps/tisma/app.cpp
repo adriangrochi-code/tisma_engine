@@ -750,6 +750,8 @@ private:
         ReinforcedInfill reinforced;
         bool orientation = false; // the orientation instead (rule 8)
         OrientationChoice orient;
+        bool lattice = false; // a lattice instead (rule 7)
+        LightestLattice latticed;
         // The part's map to the bed and its mesh's size when searched: the
         // zones go on the model where it was (it may have moved since).
         Affine to_bed;
@@ -759,7 +761,7 @@ private:
     std::atomic<bool> optimize_cancel_{false};
     std::atomic<int> optimize_permille_{0};
     std::optional<OptimizeRun> optimize_result_;
-    enum class OptimizeExtra { None, Zones, Ribs, Reinforce, Orientation };
+    enum class OptimizeExtra { None, Zones, Ribs, Reinforce, Orientation, Lattice };
     void start_optimize(OptimizeExtra extra = OptimizeExtra::None);
     void apply_zones(std::size_t part, const ZonedInfill& zoned);
     void apply_ribs(std::size_t part, const RibbedInfill& ribbed);
@@ -819,9 +821,16 @@ private:
     struct EngineeringStep {
         std::size_t object, count;
         ProjectEngineering before;
+        // Optimizar's changes to the part itself (UI51): its turn, own
+        // settings and volumes, undone with the same Ctrl+Z.
+        bool part = false;
+        Placement place{};
+        std::string settings{};
+        std::vector<PlateVolume> volumes{};
     };
     std::vector<EngineeringStep> engineering_undo_, engineering_redo_;
     void remember_engineering(std::size_t object);
+    void remember_part(std::size_t object);
     void undo_engineering(bool redo);
     void rebuild_gear();
     void send_gear_to_plate(bool with_mate);
@@ -4312,7 +4321,8 @@ Project App::current_project() const {
         // Its volumes, ranges and Engineering data, in the same coordinates.
         for (const PlateVolume& v : objects_[i].volumes)
             p.models.back().volumes.push_back({v.kind == PlateVolume::Kind::Negative, v.shape == PlateVolume::Shape::Cylinder,
-                                               v.offset, v.size, v.settings, v.turn});
+                                               v.offset, v.size, v.settings, v.turn, v.shape == PlateVolume::Shape::Lattice,
+                                               v.lattice_cell, v.lattice_diameter});
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
         p.models.back().engineering = objects_[i].engineering;
@@ -9958,6 +9968,8 @@ void App::volumes_overlay() {
         if (objects_[i].volumes.empty())
             continue;
         for (const PlateVolume& v : objects_[i].volumes) {
+            if (v.shape == PlateVolume::Shape::Lattice) // its bars, thousands of faces, not outlined
+                continue;
             const ImU32 colour = v.kind == PlateVolume::Kind::Negative ? IM_COL32(170, 170, 180, 220) : IM_COL32(240, 150, 40, 230);
             const TriangleMesh shape = volume_mesh(v, objects_[i], placed_meshes_[i]);
             // The outline of every face but the cylinder's caps' spokes.
@@ -13021,28 +13033,33 @@ void App::structural_panel() {
                     if (ImGui::Button(tr(T::StructLightestInfill), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize();
                     rect_of("structural_lightest_infill");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructLightestInfillTip));
                     if (ImGui::Button(tr(T::StructZonedInfill), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize(OptimizeExtra::Zones);
                     rect_of("structural_zoned_infill");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructZonedInfillTip));
                     if (ImGui::Button(tr(T::StructRibs), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize(OptimizeExtra::Ribs);
                     rect_of("structural_ribs");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructRibsTip));
                     if (ImGui::Button(tr(T::StructReinforce), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize(OptimizeExtra::Reinforce);
                     rect_of("structural_reinforce");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructReinforceTip));
                     if (ImGui::Button(tr(T::StructOrientation), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize(OptimizeExtra::Orientation);
                     rect_of("structural_orientation");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructOrientationTip));
+                    if (ImGui::Button(tr(T::StructLattice), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Lattice);
+                    rect_of("structural_lattice");
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
+                        loc::SetTooltip("%s", tr(T::StructLatticeTip));
                 }
                 if (optimize_result_ && optimize_result_->part == part && !optimize_job_.running()) {
                     const OptimizeRun& o = *optimize_result_;
@@ -13051,7 +13068,41 @@ void App::structural_panel() {
                         loc::TextDisabled("%s", tr(T::StructCancelled));
                     else if (!o.error.empty())
                         loc::TextColored(rgb(0xE5484D), "%s", o.error.c_str());
-                    else if (o.orientation) {
+                    else if (o.lattice) {
+                        const LightestLattice& l = o.latticed;
+                        if (!l.found)
+                            loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructLatticeNone));
+                        else {
+                            loc::TextColored(rgb(0x3FBF7F), "%s",
+                                             format(tr(T::StructLatticeFound), l.diameter, l.cell, l.min_safety, l.mass_g).c_str());
+                            if (ImGui::Button(tr(T::StructLatticeApply)) && part < objects_.size()) {
+                                // The part at 0 %, the lattice a solid zone in it, undone together.
+                                remember_part(part);
+                                PlateObject& to = objects_[part];
+                                const std::string settings_before = to.settings;
+                                const std::vector<PlateVolume> volumes_before = to.volumes;
+                                Settings hollow = settings_;
+                                hollow.infill_density = 0.0;
+                                to.settings = with_own_key(to.settings, hollow, "infill.density");
+                                PlateVolume v;
+                                v.shape = PlateVolume::Shape::Lattice;
+                                v.lattice_cell = l.cell;
+                                v.lattice_diameter = l.diameter;
+                                v.settings = "{\"infill\": {\"density\": 100}}";
+                                to.volumes.push_back(v);
+                                plate_changed();
+                                notify_undo(format(tr(T::StructLatticeApplied), l.diameter), [this, part, settings_before, volumes_before] {
+                                    if (part >= objects_.size())
+                                        return;
+                                    objects_[part].settings = settings_before;
+                                    objects_[part].volumes = volumes_before;
+                                    plate_changed();
+                                });
+                            }
+                            rect_of("structural_lattice_apply");
+                        }
+                        rect_of("structural_lattice_found");
+                    } else if (o.orientation) {
                         const OrientationChoice& r = o.orient;
                         loc::TextWrapped("%s", format(tr(T::StructOrientationFactors), r.safety[0], r.safety[1], r.safety[2]).c_str());
                         rect_of("structural_orientation_found");
@@ -13065,6 +13116,7 @@ void App::structural_panel() {
                                                  .c_str());
                             loc::TextDisabled("%s", tr(T::StructOrientationNote));
                             if (ImGui::Button(tr(T::StructOrientationApply)) && part < objects_.size()) {
+                                remember_part(part);
                                 PlateObject& turned = objects_[part];
                                 const Rotation before = turned.place.rotation;
                                 const std::array<double, 9> m = layers_along(r.best);
@@ -14301,6 +14353,7 @@ void App::apply_zones(std::size_t part, const ZonedInfill& zoned) {
         }
         added.push_back(*v);
     }
+    remember_part(part);
     const std::string settings_before = o.settings;
     const std::vector<PlateVolume> volumes_before = o.volumes;
     Settings lowest = settings_;
@@ -14337,6 +14390,7 @@ void App::apply_ribs(std::size_t part, const RibbedInfill& ribbed) {
         }
         added.push_back(*v);
     }
+    remember_part(part);
     const std::string settings_before = o.settings;
     const std::vector<PlateVolume> volumes_before = o.volumes;
     Settings at = settings_;
@@ -14368,6 +14422,7 @@ bool App::apply_boxes(std::size_t part, const std::vector<MeshModifier>& boxes, 
         }
         added.push_back(*v);
     }
+    remember_part(part);
     const std::string settings_before = o.settings;
     const std::vector<PlateVolume> volumes_before = o.volumes;
     Settings at = settings_;
@@ -14405,10 +14460,10 @@ void App::start_optimize(OptimizeExtra extra) {
     optimize_cancel_ = false;
     optimize_permille_ = 0;
     const bool zones = extra == OptimizeExtra::Zones, ribs = extra == OptimizeExtra::Ribs, reinforce = extra == OptimizeExtra::Reinforce,
-               orientation = extra == OptimizeExtra::Orientation;
+               orientation = extra == OptimizeExtra::Orientation, lattice = extra == OptimizeExtra::Lattice;
     const Affine to_bed{a, b};
     const std::size_t triangles = o.mesh.triangle_count();
-    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs, reinforce, orientation, to_bed, triangles]() {
+    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs, reinforce, orientation, lattice, to_bed, triangles]() {
         OptimizeRun run;
         run.part = part;
         run.to_bed = to_bed;
@@ -14417,6 +14472,7 @@ void App::start_optimize(OptimizeExtra extra) {
         run.ribs = ribs;
         run.reinforce = reinforce;
         run.orientation = orientation;
+        run.lattice = lattice;
         struct Cancelled {};
         try {
             std::vector<std::string> case_notes;
@@ -14426,6 +14482,14 @@ void App::start_optimize(OptimizeExtra extra) {
             fit_voxel_limit(c, mesh, settings);
             if (orientation) { // the three orientations alone, no infill search
                 run.orient = recommended_orientation(placed, settings, moved, filament_type, [this](double done) {
+                    optimize_permille_ = int(done * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+                return run;
+            }
+            if (lattice) { // the lattice alone, the part hollow
+                run.latticed = lightest_lattice(mesh, placed, settings, c, moved, [this](double done) {
                     optimize_permille_ = int(done * 1000.0);
                     if (optimize_cancel_)
                         throw Cancelled{};
@@ -15366,6 +15430,17 @@ void App::remember_engineering(std::size_t object) {
     engineering_redo_.clear();
 }
 
+// A part's turn, settings and volumes before Optimizar changes them.
+void App::remember_part(std::size_t object) {
+    if (object >= objects_.size())
+        return;
+    const PlateObject& o = objects_[object];
+    engineering_undo_.push_back({object, objects_.size(), o.engineering, true, o.place, o.settings, o.volumes});
+    if (engineering_undo_.size() > 100)
+        engineering_undo_.erase(engineering_undo_.begin());
+    engineering_redo_.clear();
+}
+
 void App::undo_engineering(bool redo) {
     std::vector<EngineeringStep>& from = redo ? engineering_redo_ : engineering_undo_;
     std::vector<EngineeringStep>& to = redo ? engineering_undo_ : engineering_redo_;
@@ -15375,9 +15450,15 @@ void App::undo_engineering(bool redo) {
         return;
     EngineeringStep step = std::move(from.back());
     from.pop_back();
-    ProjectEngineering& now = objects_[step.object].engineering;
-    to.push_back({step.object, step.count, now});
-    now = std::move(step.before);
+    PlateObject& o = objects_[step.object];
+    to.push_back({step.object, step.count, o.engineering, step.part, o.place, o.settings, o.volumes});
+    o.engineering = std::move(step.before);
+    if (step.part) {
+        o.place = step.place;
+        o.settings = std::move(step.settings);
+        o.volumes = std::move(step.volumes);
+        plate_changed();
+    }
     structural_part_ = int(step.object);
 }
 
@@ -20452,7 +20533,12 @@ void App::script_input() {
         if (optimize_job_.running() || !optimize_result_)
             return f >= 20000 ? fail_step("the search did not end") : void();
         const OptimizeRun& o = *optimize_result_;
-        const std::string got = o.cancelled ? "cancelled" : !o.error.empty() ? "error" : o.best.solid ? "solid" : o.best.found ? "found" : "none";
+        const std::string got = o.cancelled        ? "cancelled"
+                                : !o.error.empty() ? "error"
+                                : o.orientation    ? "orientation"
+                                : o.best.solid     ? "solid"
+                                : o.best.found     ? "found"
+                                                   : "none";
         std::printf("ui-script: expect-optimize %s: got %s (%d %%)\n", step.key.c_str(), got.c_str(), o.best.density);
         if (got != step.key)
             return fail_step("got " + got);
@@ -21172,7 +21258,84 @@ int App::run() {
 
 } // namespace
 
+// The settings panel as data (the phone builds its Print and Material
+// screens from it, mobile_app.md rule 7): tabs, cards (sections), their
+// groups (subsections) with their closed line, and each row's key, level,
+// name, help and CONFIG.md's type, default and range, in the language set.
+int write_settings_layout(const AppOptions& options) {
+    if (options.language_given)
+        set_language(options.language);
+    Settings settings;
+    if (!options.settings_summary.empty()) {
+        try {
+            settings = load_settings(options.settings_summary);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "error: %s\n", e.what());
+            return 2;
+        }
+    }
+    std::map<std::string, std::string> values;
+    for (const auto& [key, value] : describe(settings))
+        values[key] = value;
+    const auto level_name = [](SettingLevel l) {
+        return l == SettingLevel::Basic ? "basic" : l == SettingLevel::Normal ? "normal" : "advanced";
+    };
+    nlohmann::ordered_json root;
+    root["version"] = TISMA_VERSION;
+    root["language"] = language() == Language::English ? "en" : "es";
+    nlohmann::ordered_json tabs = nlohmann::ordered_json::array();
+    for (const auto& [tab, name] : {std::pair{SettingsTab::Print, "print"}, std::pair{SettingsTab::Material, "material"},
+                                    std::pair{SettingsTab::Printer, "printer"}}) {
+        nlohmann::ordered_json t{{"id", name}, {"sections", nlohmann::ordered_json::array()}};
+        for (const SectionLayout& section : settings_layout(tab)) {
+            nlohmann::ordered_json sj{{"id", std::string(section.id)},
+                                      {"title", tr(section.title)},
+                                      {"icon", std::string(section.icon)},
+                                      {"subsections", nlohmann::ordered_json::array()}};
+            for (const SubsectionLayout& sub : section.subsections) {
+                nlohmann::ordered_json bj{{"id", std::string(sub.id)},
+                                          {"title", tr(sub.title)},
+                                          {"summary", subsection_summary(sub.id, settings)},
+                                          {"settings", nlohmann::ordered_json::array()}};
+                for (const SettingEntry& entry : sub.settings) {
+                    const std::string key(entry.key);
+                    nlohmann::ordered_json row{{"key", key}, {"level", level_name(entry.level)}, {"label", key_label(key)}};
+                    const auto doc = setting_docs().find(key);
+                    if (doc != setting_docs().end()) {
+                        row["help"] = doc->second.meaning;
+                        row["type"] = doc->second.type;
+                        row["default"] = doc->second.default_value;
+                        row["range"] = doc->second.range;
+                    }
+                    if (const auto v = values.find(key); v != values.end())
+                        row["value"] = v->second;
+                    bj["settings"].push_back(std::move(row));
+                }
+                sj["subsections"].push_back(std::move(bj));
+            }
+            t["sections"].push_back(std::move(sj));
+        }
+        tabs.push_back(std::move(t));
+    }
+    root["tabs"] = std::move(tabs);
+    const std::string text = root.dump(1);
+    if (options.settings_layout == "-") {
+        std::fwrite(text.data(), 1, text.size(), stdout);
+        std::fputc('\n', stdout);
+        return 0;
+    }
+    std::ofstream out(options.settings_layout, std::ios::binary);
+    out << text << '\n';
+    if (!out) {
+        std::fprintf(stderr, "error: cannot write %s\n", options.settings_layout.c_str());
+        return 2;
+    }
+    return 0;
+}
+
 int run_app(const AppOptions& options) {
+    if (!options.settings_layout.empty())
+        return write_settings_layout(options);
     App app(options);
     return app.run();
 }

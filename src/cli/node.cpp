@@ -414,10 +414,9 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
     for (const std::string* path : {&a.output, &a.summary})
         if (std::string problem = output_problem(write_target(*path)); !problem.empty())
             return fail(kExitInput, problem);
-    if (mode != "analyze")
+    if (mode == "resin-structure")
         return fail_coded(kExitNotImplemented, "this analysis (" + mode + ") does not run in the cloud yet", "not_in_cloud",
-                          "este análisis (" + std::string(mode == "lightest-infill" ? "relleno más liviano" : "estructura de resina") +
-                              ") todavía no corre en la nube");
+                          "este análisis (estructura de resina) todavía no corre en la nube");
 
     Progress progress(out);
     progress(0);
@@ -469,7 +468,7 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
                                                print_conditions(settings, placed));
     if (solid)
         c.model = AnalysisModel::Solid;
-    if (no_zones || ribs)
+    if ((no_zones || ribs) && mode == "analyze")
         notes.push_back("--no-zones and --ribs change the optimizing modes, not 'analyze'");
     for (const std::string& note : notes)
         err << "warning: " << note << "\n";
@@ -483,6 +482,79 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
     if (capped)
         err << "warning: the part needs larger voxels than the quality's to fit max_voxels: " << c.voxel << " mm\n";
     progress(10);
+    if (mode == "lightest-infill") {
+        // structural_optimization.md, rules 2 to 4: the lowest uniform infill
+        // that holds; then by zones (unless --no-zones) and with ribs (--ribs),
+        // each proposed only when lighter. The zones are boxes on the bed,
+        // where the part stands (the desktop turns them into the part's own
+        // volumes; the boxes and their settings are in the result).
+        const double steps = 1.0 + (no_zones ? 0.0 : 1.0) + (ribs ? 1.0 : 0.0);
+        int stage = 0;
+        const auto share = [&](double done) {
+            progress(10 + int((double(stage) + std::clamp(done, 0.0, 1.0)) / steps * 85.0));
+        };
+        LightestInfill best;
+        ZonedInfill zoned;
+        RibbedInfill ribbed;
+        try {
+            best = lightest_infill(mesh, part.mesh, settings, c, placed, share);
+            ++stage;
+            if (best.found && !best.solid && !no_zones) {
+                zoned = zoned_infill(mesh, part.mesh, settings, c, placed, best.density, share);
+                ++stage;
+            }
+            if (best.found && !best.solid && ribs)
+                ribbed = ribbed_infill(mesh, part.mesh, settings, c, placed, best.density, share);
+        } catch (const AnalysisError& e) {
+            return fail_coded(kExitAnalysis, e.what(), "too_large",
+                              "la pieza es demasiado grande para analizarla con esta memoria; probá la calidad rápida");
+        }
+        const auto boxes = [](const std::vector<MeshModifier>& mods) {
+            nlohmann::json list = nlohmann::json::array();
+            for (const MeshModifier& m : mods) {
+                const BoundingBox b = m.mesh.bounding_box();
+                list.push_back({{"name", m.name},
+                                {"min", {b.min.x, b.min.y, b.min.z}},
+                                {"max", {b.max.x, b.max.y, b.max.z}},
+                                {"settings", nlohmann::json::parse(m.settings)}});
+            }
+            return list;
+        };
+        const auto finite = [](double x) { return std::isfinite(x) ? nlohmann::json(x) : nlohmann::json(nullptr); };
+        nlohmann::json summary{{"mode", "lightest-infill"},
+                               {"solid", best.solid},
+                               {"found", best.found},
+                               {"density", best.found ? nlohmann::json(best.density) : nlohmann::json(nullptr)},
+                               {"min_safety", finite(best.min_safety)},
+                               {"required_safety", placed.structural.safety_factor},
+                               {"analyses", best.analyses + zoned.analyses + ribbed.analyses}};
+        nlohmann::json result{{"format", "tisma-engineering-result"}, {"version", 1}, {"kind", "lightest-infill"},
+                              {"object", index}, {"instance", 0}, {"part", model.name}, {"fingerprint", fingerprint}};
+        if (!no_zones && best.found && !best.solid) {
+            summary["zones"] = {{"found", zoned.found},
+                                {"lighter", zoned.lighter},
+                                {"levels", zoned.zones.density},
+                                {"mass_g", zoned.mass_g},
+                                {"uniform_mass_g", zoned.uniform_mass_g}};
+            if (zoned.lighter)
+                result["zones"] = boxes(zoned.zones.modifiers);
+        }
+        if (ribs && best.found && !best.solid) {
+            summary["ribs"] = {{"found", ribbed.found},
+                               {"lighter", ribbed.lighter},
+                               {"density", ribbed.density},
+                               {"angles", ribbed.ribs.angles}};
+            if (ribbed.lighter)
+                result["ribs"] = boxes(ribbed.ribs.modifiers);
+        }
+        result["summary"] = summary;
+        if (!write_file(a.output, [&](std::ostream& f) { f << result.dump() << "\n"; }))
+            return fail(kExitInput, "cannot write the result '" + a.output + "'");
+        if (!write_summary(summary))
+            return kExitInput;
+        progress(100);
+        return kExitOk;
+    }
     AnalysisReport report;
     try {
         report = run_analysis(mesh, settings, c, nullptr, [&progress](std::string_view, double done) {

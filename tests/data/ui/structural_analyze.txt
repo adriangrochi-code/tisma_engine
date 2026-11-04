@@ -73,6 +73,24 @@ expect-control structural_optimize_cancel
 menu structural_optimize_cancel
 expect-optimize cancelled
 expect-control structural_orientation
+# The lattice (rule 7): the same.
+menu structural_lattice
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_lattice
+# UI51: the recommended orientation run to the end turns the part, and
+# Ctrl+Z in Structural turns it back (not the conditions).
+menu structural_orientation
+expect-optimize orientation
+expect-control structural_orientation_apply
+menu structural_orientation_apply
+wait 10
+expect-place turn_x 89..91
+key ctrl+z
+wait 10
+expect-place turn_x -1..1
+expect-control structural_lattice
 menu structural_force_unit_1
 wait 20
 expect-no-control structural_show_map

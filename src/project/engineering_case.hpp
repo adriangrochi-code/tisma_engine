@@ -4,6 +4,7 @@
 #include "fea/adhesion.hpp"
 #include "fea/analysis.hpp"
 #include "fea/verdict.hpp"
+#include "mesh/lattice.hpp"
 #include "mesh/mesh.hpp"
 #include "project/engineering.hpp"
 #include "slice/placement.hpp"
@@ -145,6 +146,41 @@ struct Reinforcement {
 };
 Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCase& c, const Settings& settings,
                                  double radius = 0.0);
+
+// «Lattice» (structural_optimization.md, rule 7): the support-free lattice of
+// cells of side `cell` over the part, its bars of `diameter` that touch the
+// part, as a solid zone (a modifier at 100 % infill); the part itself goes to
+// 0 % infill. Empty when no bar touches it.
+MeshModifier lattice_modifier(const TriangleMesh& part, double cell, double diameter);
+
+// Rule 7's search: the thinnest uniform bars, by bisection between 0.9 mm
+// (the thinnest that prints) and 3 mm, to 0.05 mm, the part at 0 % infill;
+// the cells a third of the part's smallest side, from 3 to 10 mm.
+struct LightestLattice {
+    bool found = false;
+    double cell = 0.0, diameter = 0.0;
+    double min_safety = 0.0, mass_g = 0.0;
+    int analyses = 0;
+    MeshModifier lattice;
+};
+double lattice_cell_for(const TriangleMesh& part);
+// The second search of rule 7: from the analysis with the uniform bars, each
+// bar's section in proportion to the utilization (asked / safety) where it
+// is, d = k sqrt(u) between 0.9 and 3 mm, k scaled together by bisection
+// until the part holds. Used only when lighter than the uniform.
+struct GradedLattice {
+    bool found = false, lighter = false;
+    std::vector<LatticeBar> bars;
+    std::vector<double> diameters; // one per bar, mm
+    double thinnest = 0.0, thickest = 0.0, min_safety = 0.0, mass_g = 0.0;
+    int analyses = 0;
+};
+GradedLattice graded_lattice(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                             const AnalysisCase& c, const ProjectEngineering& e, const LightestLattice& uniform,
+                             const std::function<void(double)>& progress = {});
+LightestLattice lightest_lattice(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                                 const AnalysisCase& c, const ProjectEngineering& e,
+                                 const std::function<void(double)>& progress = {});
 
 // «Orientación recomendada» (structural_optimization.md, rule 8): the part
 // (`placed`, on the bed) analysed with its layers stacked along Z (as it

@@ -38,6 +38,7 @@ struct Response {
     int status = 0;    // the HTTP status; 0 when no answer came
     std::string body;
     std::string error; // why there is no answer (connection, certificate, timeout, too large), in English
+    std::string www_authenticate; // the server's WWW-Authenticate header, if any (a Digest challenge)
     bool ok() const { return error.empty() && status >= 200 && status < 300; }
 };
 

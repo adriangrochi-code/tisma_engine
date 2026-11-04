@@ -34,6 +34,8 @@ struct ProjectVolume {
     std::array<double, 3> offset{0.0, 0.0, 0.0}, size{10.0, 10.0, 10.0};
     std::string settings{};
     std::array<double, 9> turn{1, 0, 0, 0, 1, 0, 0, 0, 1}; // its own turn, by rows
+    bool lattice = false;                               // a lattice (structural_optimization.md, rule 7)
+    double lattice_cell = 0.0, lattice_diameter = 0.0; // mm
 };
 struct ProjectRange {
     double from = 0.0, to = 2.0;

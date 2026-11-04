@@ -4,6 +4,7 @@
 
 #include "ui/plate.hpp"
 
+#include "mesh/lattice.hpp"
 #include "slice/placement.hpp"
 
 #include <nlohmann/json.hpp>
@@ -710,6 +711,8 @@ TriangleMesh volume_mesh(const PlateVolume& v, const PlateObject& object, const 
     TriangleMesh m;
     if (object.mesh.triangle_count() == 0 || placed.triangle_count() != object.mesh.triangle_count())
         return m;
+    if (v.shape == PlateVolume::Shape::Lattice) // on the bed, where the part stands
+        return lattice_in(placed, v.lattice_cell, v.lattice_diameter);
     // In the model's frame, over its box as its file has it, turned about its
     // centre; then set down with the model.
     const BoundingBox box = object.mesh.bounding_box();

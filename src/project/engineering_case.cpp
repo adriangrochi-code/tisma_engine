@@ -10,6 +10,7 @@
 #include "fea/materials.hpp"
 #include "fea/zone.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "mesh/lattice.hpp"
 #include "project/engineering_values.hpp"
 
 #include <algorithm>
@@ -571,6 +572,179 @@ Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCas
                 i = end;
             }
     return out;
+}
+
+MeshModifier lattice_modifier(const TriangleMesh& part, double cell, double diameter) {
+    return {"lattice", 0, lattice_in(part, cell, diameter), "{\"infill\": {\"density\": 100}}"};
+}
+
+double lattice_cell_for(const TriangleMesh& part) {
+    const BoundingBox b = part.bounding_box();
+    const double smallest = std::min({double(b.max.x) - b.min.x, double(b.max.y) - b.min.y, double(b.max.z) - b.min.z});
+    return std::clamp(smallest / 3.0, 3.0, 10.0);
+}
+
+LightestLattice lightest_lattice(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                                 const AnalysisCase& c, const ProjectEngineering& e,
+                                 const std::function<void(double)>& progress) {
+    LightestLattice out;
+    const auto finish = [&]() -> LightestLattice {
+        if (progress)
+            progress(1.0);
+        return out;
+    };
+    if (c.model == AnalysisModel::Solid)
+        return finish();
+    constexpr double kThinnest = 0.9, kThickest = 3.0, kStep = 0.05;
+    constexpr int kMostAnalyses = 8; // 3 mm, 0.9 mm, then halving to 0.05 mm
+    out.cell = lattice_cell_for(placed);
+    const MaterialFamily* family = family_of(c.material_id);
+    const double grams_per_cm3 = family ? family->density : 1.0;
+    Settings hollow = settings;
+    hollow.infill_density = 0.0;
+    const auto holds = [&](double diameter, LightestLattice& at) {
+        const std::vector<MeshModifier> mods{lattice_modifier(placed, out.cell, diameter)};
+        const int step = out.analyses++;
+        const AnalysisReport r = run_analysis(
+            mesh, hollow, c, nullptr,
+            [&](std::string_view, double done) {
+                if (progress)
+                    progress(std::min(1.0, (double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses));
+            },
+            nullptr, &mods);
+        at.min_safety = r.result.min_safety;
+        at.mass_g = voxel_mass_grams(r.grid, grams_per_cm3);
+        at.lattice = mods.front();
+        at.diameter = diameter;
+        return r.valid && report_verdict(r, c, e, placed) == Verdict::Holds;
+    };
+    LightestLattice best = out;
+    if (!holds(kThickest, best)) {
+        out.min_safety = best.min_safety;
+        return finish();
+    }
+    LightestLattice trial = out;
+    if (holds(kThinnest, trial)) {
+        best = trial;
+    } else {
+        double fails = kThinnest, holds_at = kThickest;
+        while (holds_at - fails > kStep + 1e-9) {
+            const double mid = std::round(0.5 * (fails + holds_at) / 0.01) * 0.01;
+            if (holds(mid, trial)) {
+                holds_at = mid;
+                best = trial;
+            } else {
+                fails = mid;
+            }
+        }
+    }
+    best.analyses = out.analyses;
+    best.cell = out.cell;
+    best.found = true;
+    out = best;
+    return finish();
+}
+
+GradedLattice graded_lattice(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                             const AnalysisCase& c, const ProjectEngineering& e, const LightestLattice& uniform,
+                             const std::function<void(double)>& progress) {
+    GradedLattice out;
+    const auto finish = [&]() -> GradedLattice {
+        if (progress)
+            progress(1.0);
+        return out;
+    };
+    if (!uniform.found || c.model == AnalysisModel::Solid)
+        return finish();
+    constexpr double kThinnest = 0.9, kThickest = 3.0;
+    constexpr int kHalvings = 6, kMostAnalyses = 1 + kHalvings + 1;
+    const MaterialFamily* family = family_of(c.material_id);
+    const double grams_per_cm3 = family ? family->density : 1.0;
+    Settings hollow = settings;
+    hollow.infill_density = 0.0;
+    const auto analyse = [&](const std::vector<MeshModifier>& mods) {
+        const int step = out.analyses++;
+        return run_analysis(
+            mesh, hollow, c, nullptr,
+            [&](std::string_view, double done) {
+                if (progress)
+                    progress(std::min(1.0, (double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses));
+            },
+            nullptr, &mods);
+    };
+    // The uniform lattice's analysis: the utilization at each bar's middle.
+    const BoundingBox b = placed.bounding_box();
+    out.bars = bars_touching(lattice_bars({b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, uniform.cell), placed);
+    if (out.bars.empty())
+        return finish();
+    const AnalysisReport base = analyse({uniform.lattice});
+    if (!base.valid)
+        return finish();
+    const double asked = e.structural.safety_factor;
+    const VoxelGrid& g = base.grid;
+    // The worst utilization within half a cell of the bar's middle.
+    std::vector<double> use(out.bars.size(), 0.0);
+    const double reach = 0.5 * uniform.cell;
+    for (std::size_t n = 0; n < out.bars.size(); ++n) {
+        const LatticeBar& bar = out.bars[n];
+        const double mx = 0.5 * (bar.from[0] + bar.to[0]), my = 0.5 * (bar.from[1] + bar.to[1]), mz = 0.5 * (bar.from[2] + bar.to[2]);
+        const int i0 = std::max(0, int(std::floor((mx - reach - g.x0) / g.hx))), i1 = std::min(g.nx - 1, int(std::floor((mx + reach - g.x0) / g.hx)));
+        const int j0 = std::max(0, int(std::floor((my - reach - g.y0) / g.hy))), j1 = std::min(g.ny - 1, int(std::floor((my + reach - g.y0) / g.hy)));
+        for (int k = 0; k < g.nz; ++k) {
+            const double zc = 0.5 * (g.z[std::size_t(k)] + g.z[std::size_t(k) + 1]);
+            if (std::abs(zc - mz) > reach)
+                continue;
+            for (int j = j0; j <= j1; ++j)
+                for (int i = i0; i <= i1; ++i)
+                    if (g.at(i, j, k)) {
+                        const double s = base.result.safety[g.index(i, j, k)];
+                        if (std::isfinite(s) && s > 0.0)
+                            use[n] = std::max(use[n], asked / s);
+                    }
+        }
+    }
+    const double most = *std::max_element(use.begin(), use.end());
+    if (!(most > 0.0))
+        return finish();
+    // d = k sqrt(u / most): k = 3 is every bar at most 3 mm; halve k between
+    // what fails and what holds, starting from the uniform diameter.
+    const auto diameters_for = [&](double k) {
+        std::vector<double> d(use.size());
+        for (std::size_t n = 0; n < use.size(); ++n)
+            d[n] = std::clamp(k * std::sqrt(use[n] / most), kThinnest, kThickest);
+        return d;
+    };
+    const auto holds = [&](double k, GradedLattice& at) {
+        at.diameters = diameters_for(k);
+        const std::vector<MeshModifier> mods{{"lattice", 0, lattice_mesh(out.bars, at.diameters), "{\"infill\": {\"density\": 100}}"}};
+        const AnalysisReport r = analyse(mods);
+        at.min_safety = r.result.min_safety;
+        at.mass_g = voxel_mass_grams(r.grid, grams_per_cm3);
+        return r.valid && report_verdict(r, c, e, placed) == Verdict::Holds;
+    };
+    GradedLattice best, trial;
+    double fails = kThinnest, holds_at = kThickest;
+    bool any = false;
+    for (int h = 0; h < kHalvings; ++h) {
+        const double k = 0.5 * (fails + holds_at);
+        if (holds(k, trial)) {
+            holds_at = k;
+            best = trial;
+            any = true;
+        } else {
+            fails = k;
+        }
+    }
+    if (!any)
+        return finish();
+    out.found = true;
+    out.diameters = best.diameters;
+    out.min_safety = best.min_safety;
+    out.mass_g = best.mass_g;
+    out.thinnest = *std::min_element(out.diameters.begin(), out.diameters.end());
+    out.thickest = *std::max_element(out.diameters.begin(), out.diameters.end());
+    out.lighter = out.mass_g < uniform.mass_g;
+    return finish();
 }
 
 std::array<double, 9> layers_along(int axis) {

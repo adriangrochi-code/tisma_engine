@@ -10,6 +10,11 @@ namespace tisma::ui {
 
 struct AppOptions {
     std::vector<std::string> files; // to open at start: models (.stl), projects (.tisma), G-code or settings (.json)
+    // --settings-layout: the settings panel's tabs, cards and rows as JSON
+    // to this file ("-": standard output), no window; with
+    // settings_summary, each card's closed line for those settings.
+    std::string settings_layout;
+    std::string settings_summary;
     int width = 1440, height = 900; // window size, in screen units
     std::string screenshot;         // when set: draw, write the window to this PNG and quit
     std::string view = "prepare";   // the tab for the screenshot: prepare, preview, analysis or calibration

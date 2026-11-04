@@ -12,6 +12,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- `tisma-engine analyze <proyecto> --mode lightest-infill [--no-zones] [--ribs]` corre en los nodos de la nube y en el
+  teléfono: el relleno uniforme mínimo, por zonas y con nervios, con avance; el resumen da la densidad, el factor, los
+  niveles y las masas, y el resultado las cajas de las zonas con sus ajustes. `resin-structure` sigue sin correr.
+- `tisma --settings-layout FILE [--lang es|en] [--settings-summary ajustes.json]`: el panel de ajustes como JSON
+  (pestañas, tarjetas, grupos con su línea cerrada y cada fila con clave, nivel, nombre, ayuda, tipo, valor por
+  defecto, rango y valor), sin abrir ventana; la aplicación de Android arma con eso sus pantallas.
 - **Estructural: calcular en la nube** (`engineering_panel.md`, regla 10; `cloud.md`, reglas 6 a 10b): con sesión
   en Tisma Cloud, «Calcular en la nube» manda el análisis como trabajo `fea` y el resultado vuelve a la pieza, con
   avance y «Cancelar». Lo mismo en Aerodinámica (trabajo `aero`). Un cálculo que el plan no incluye se ve con
@@ -21,7 +27,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   lo propone si pesa menos que el uniforme; «Nervios» pone relleno en una sola dirección a lo largo de las tensiones y
   busca otra vez el mínimo; «Refuerzos» engrosa la pieza alrededor de los apoyos y las cargas. «Usar» los agrega
   como modificadores de la pieza, con un solo deshacer. «Orientación recomendada» compara las capas en Z, X e Y y
-  ofrece «Girar la pieza».
+  ofrece «Girar la pieza». «Retícula» busca las barras más finas de una retícula imprimible sin soporte y
+  «Usar la retícula» la pone dentro de la pieza (un volumen nuevo, guardado en el proyecto como celda y diámetro).
 - **Estructural: «Optimizar», relleno mínimo** (`structural_optimization.md`, regla 2): debajo de los resultados,
   busca el menor relleno con el que la pieza aguanta y lo deja usar con un botón (se puede deshacer).
 - **Estructural en impresoras de cinta** (`engineering_panel.md`, regla 10): «Dirección de impresión» elige Z o la
@@ -293,6 +300,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- En Estructural, Ctrl+Z deshace también lo que hizo Optimizar en la pieza («Girar la pieza», «Usar …»), no solo
+  las condiciones (UI51); la ayuda de sus botones ya no tapa el resultado (UI52).
 - El control del G-code ya no rechaza las piezas impresas una tras otra cuando una copia termina más alta que la
   última (otra boquilla, otras capas): el tope de Z sale de la capa más alta, no de la última (búsqueda aleatoria,
   semilla 20261104).
