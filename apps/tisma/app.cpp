@@ -5344,10 +5344,20 @@ void App::top_bar() {
                                        ImGui::GetItemRectMax().y);
         if (cloud)
             cloud_open_ = true;
-        const bool cloud_slice = ImGui::MenuItem(tr(T::CloudSliceMenu), nullptr, false, has_plate_ && !cloud_slice_.valid());
+        // A plan without "slice" (cloud.md, rule 10b): the entry shows which
+        // plans have it and opens the account page instead.
+        const bool slice_locked = !cloud_token_.empty() && cloud_account_ &&
+                                  !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "slice");
+        const std::string slice_label =
+            slice_locked ? std::string(tr(T::CloudSliceMenu)) + " — " +
+                               format(tr(T::CloudPlanLock), cloud::plans_with(cloud_plans_, "slice").c_str())
+                         : std::string(tr(T::CloudSliceMenu));
+        const bool cloud_slice = ImGui::MenuItem(slice_label.c_str(), nullptr, false, has_plate_ && !cloud_slice_.valid());
         g_menu_rects["cloud_slice"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
                                              ImGui::GetItemRectMax().y);
-        if (cloud_slice)
+        if (cloud_slice && slice_locked)
+            cloud_open_ = true;
+        else if (cloud_slice)
             start_cloud_slice();
         const bool report = ImGui::MenuItem(tr(T::ReportMenu));
         g_menu_rects["report"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,

@@ -10280,5 +10280,7 @@ tienen; al tocarlo abre la ventana de la cuenta. Un plan sin `classes` (servidor
 cuenta como incluido: el servidor decide (402). Probado en `test_cloud` con el servidor de prueba (Free solo
 `slice`, Maker todo); **sin guion de interfaz** del candado (la cuenta de prueba es Maker).
 
-**Sigue:** el resto de Optimizar (relleno por zonas, regla 3); el mismo candado en Aerodinámica y en el laminado en la
-nube.
+**Laminar en la nube** también lleva el candado: con un plan sin `slice`, la entrada del menú dice «… — Incluido en el
+plan …» y abre la cuenta en vez de mandar. Aerodinámica todavía no tiene «Calcular en la nube».
+
+**Sigue:** el resto de Optimizar (relleno por zonas, regla 3); «Calcular en la nube» en Aerodinámica.
