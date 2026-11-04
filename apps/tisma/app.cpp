@@ -821,9 +821,16 @@ private:
     struct EngineeringStep {
         std::size_t object, count;
         ProjectEngineering before;
+        // Optimizar's changes to the part itself (UI51): its turn, own
+        // settings and volumes, undone with the same Ctrl+Z.
+        bool part = false;
+        Placement place{};
+        std::string settings{};
+        std::vector<PlateVolume> volumes{};
     };
     std::vector<EngineeringStep> engineering_undo_, engineering_redo_;
     void remember_engineering(std::size_t object);
+    void remember_part(std::size_t object);
     void undo_engineering(bool redo);
     void rebuild_gear();
     void send_gear_to_plate(bool with_mate);
@@ -13026,32 +13033,32 @@ void App::structural_panel() {
                     if (ImGui::Button(tr(T::StructLightestInfill), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize();
                     rect_of("structural_lightest_infill");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructLightestInfillTip));
                     if (ImGui::Button(tr(T::StructZonedInfill), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize(OptimizeExtra::Zones);
                     rect_of("structural_zoned_infill");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructZonedInfillTip));
                     if (ImGui::Button(tr(T::StructRibs), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize(OptimizeExtra::Ribs);
                     rect_of("structural_ribs");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructRibsTip));
                     if (ImGui::Button(tr(T::StructReinforce), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize(OptimizeExtra::Reinforce);
                     rect_of("structural_reinforce");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructReinforceTip));
                     if (ImGui::Button(tr(T::StructOrientation), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize(OptimizeExtra::Orientation);
                     rect_of("structural_orientation");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructOrientationTip));
                     if (ImGui::Button(tr(T::StructLattice), ImVec2(-FLT_MIN, 0.0f)))
                         start_optimize(OptimizeExtra::Lattice);
                     rect_of("structural_lattice");
-                    if (ImGui::IsItemHovered())
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
                         loc::SetTooltip("%s", tr(T::StructLatticeTip));
                 }
                 if (optimize_result_ && optimize_result_->part == part && !optimize_job_.running()) {
@@ -13070,6 +13077,7 @@ void App::structural_panel() {
                                              format(tr(T::StructLatticeFound), l.diameter, l.cell, l.min_safety, l.mass_g).c_str());
                             if (ImGui::Button(tr(T::StructLatticeApply)) && part < objects_.size()) {
                                 // The part at 0 %, the lattice a solid zone in it, undone together.
+                                remember_part(part);
                                 PlateObject& to = objects_[part];
                                 const std::string settings_before = to.settings;
                                 const std::vector<PlateVolume> volumes_before = to.volumes;
@@ -13108,6 +13116,7 @@ void App::structural_panel() {
                                                  .c_str());
                             loc::TextDisabled("%s", tr(T::StructOrientationNote));
                             if (ImGui::Button(tr(T::StructOrientationApply)) && part < objects_.size()) {
+                                remember_part(part);
                                 PlateObject& turned = objects_[part];
                                 const Rotation before = turned.place.rotation;
                                 const std::array<double, 9> m = layers_along(r.best);
@@ -14344,6 +14353,7 @@ void App::apply_zones(std::size_t part, const ZonedInfill& zoned) {
         }
         added.push_back(*v);
     }
+    remember_part(part);
     const std::string settings_before = o.settings;
     const std::vector<PlateVolume> volumes_before = o.volumes;
     Settings lowest = settings_;
@@ -14380,6 +14390,7 @@ void App::apply_ribs(std::size_t part, const RibbedInfill& ribbed) {
         }
         added.push_back(*v);
     }
+    remember_part(part);
     const std::string settings_before = o.settings;
     const std::vector<PlateVolume> volumes_before = o.volumes;
     Settings at = settings_;
@@ -14411,6 +14422,7 @@ bool App::apply_boxes(std::size_t part, const std::vector<MeshModifier>& boxes, 
         }
         added.push_back(*v);
     }
+    remember_part(part);
     const std::string settings_before = o.settings;
     const std::vector<PlateVolume> volumes_before = o.volumes;
     Settings at = settings_;
@@ -15418,6 +15430,17 @@ void App::remember_engineering(std::size_t object) {
     engineering_redo_.clear();
 }
 
+// A part's turn, settings and volumes before Optimizar changes them.
+void App::remember_part(std::size_t object) {
+    if (object >= objects_.size())
+        return;
+    const PlateObject& o = objects_[object];
+    engineering_undo_.push_back({object, objects_.size(), o.engineering, true, o.place, o.settings, o.volumes});
+    if (engineering_undo_.size() > 100)
+        engineering_undo_.erase(engineering_undo_.begin());
+    engineering_redo_.clear();
+}
+
 void App::undo_engineering(bool redo) {
     std::vector<EngineeringStep>& from = redo ? engineering_redo_ : engineering_undo_;
     std::vector<EngineeringStep>& to = redo ? engineering_undo_ : engineering_redo_;
@@ -15427,9 +15450,15 @@ void App::undo_engineering(bool redo) {
         return;
     EngineeringStep step = std::move(from.back());
     from.pop_back();
-    ProjectEngineering& now = objects_[step.object].engineering;
-    to.push_back({step.object, step.count, now});
-    now = std::move(step.before);
+    PlateObject& o = objects_[step.object];
+    to.push_back({step.object, step.count, o.engineering, step.part, o.place, o.settings, o.volumes});
+    o.engineering = std::move(step.before);
+    if (step.part) {
+        o.place = step.place;
+        o.settings = std::move(step.settings);
+        o.volumes = std::move(step.volumes);
+        plate_changed();
+    }
     structural_part_ = int(step.object);
 }
 
@@ -20504,7 +20533,12 @@ void App::script_input() {
         if (optimize_job_.running() || !optimize_result_)
             return f >= 20000 ? fail_step("the search did not end") : void();
         const OptimizeRun& o = *optimize_result_;
-        const std::string got = o.cancelled ? "cancelled" : !o.error.empty() ? "error" : o.best.solid ? "solid" : o.best.found ? "found" : "none";
+        const std::string got = o.cancelled        ? "cancelled"
+                                : !o.error.empty() ? "error"
+                                : o.orientation    ? "orientation"
+                                : o.best.solid     ? "solid"
+                                : o.best.found     ? "found"
+                                                   : "none";
         std::printf("ui-script: expect-optimize %s: got %s (%d %%)\n", step.key.c_str(), got.c_str(), o.best.density);
         if (got != step.key)
             return fail_step("got " + got);

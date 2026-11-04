@@ -10599,3 +10599,14 @@ prueba comprueba el contrato (47 s la prueba entera de la retícula). La prueba 
 
 **Falta:** guardar y usar el diámetro por barra (el volumen de retícula guarda un solo diámetro) y mostrarlo en el
 panel.
+
+## 2026-11-04 — UI51 y UI52 (prueba de interfaz del equipo de fichas sobre 0f4951d)
+
+**UI51 (arreglado):** en Estructural, Ctrl+Z deshacía solo las condiciones, así que después de «Girar la pieza» el
+primer Ctrl+Z quitaba la fuerza. Ahora los pasos de Ctrl+Z de Ingeniería guardan también el giro, los ajustes y los
+volúmenes de la pieza cuando Optimizar los cambia (`remember_part`: «Girar la pieza», «Usar» de zonas, nervios,
+refuerzos y retícula), y Ctrl+Y los rehace. Prueba en `ui_script_structural_analyze`: la orientación del cubo hasta
+el final, «Girar la pieza» (giro en X 90°) y Ctrl+Z (0°).
+
+**UI52 (arreglado):** la ayuda de los botones de Optimizar tapaba la línea del resultado cuando el mouse quedaba
+sobre el botón; ahora sale con la demora de siempre y no mientras se muestra un resultado de esa pieza.

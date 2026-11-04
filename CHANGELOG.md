@@ -294,6 +294,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- En Estructural, Ctrl+Z deshace también lo que hizo Optimizar en la pieza («Girar la pieza», «Usar …»), no solo
+  las condiciones (UI51); la ayuda de sus botones ya no tapa el resultado (UI52).
 - El control del G-code ya no rechaza las piezas impresas una tras otra cuando una copia termina más alta que la
   última (otra boquilla, otras capas): el tope de Z sale de la capa más alta, no de la última (búsqueda aleatoria,
   semilla 20261104).
