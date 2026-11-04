@@ -4,6 +4,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <cmath>
+#include <cstdint>
 #include <map>
 #include <numbers>
 #include <utility>
@@ -46,4 +47,23 @@ TEST_CASE("lattice O6: one cell, 12 closed bars, none flatter than 45 degrees (s
     CHECK(four.size() == 9 + 12 + 12);
     // The density: the bars' length per cell is a (1 + 4 √2).
     CHECK_THAT(lattice_density(2.0, 10.0), WithinRel(std::numbers::pi * (1.0 + 4.0 * std::numbers::sqrt2) * 0.01, 1e-12));
+}
+
+TEST_CASE("lattice: only the bars that touch the part (structural_optimization.md, rule 7)", "[lattice]") {
+    // A wedge-free test part: a box of 10 × 10 × 10 inside a lattice over 20 × 10 × 10.
+    TriangleMesh part;
+    const Vec3f v[8] = {{0, 0, 0}, {10, 0, 0}, {10, 10, 0}, {0, 10, 0}, {0, 0, 10}, {10, 0, 10}, {10, 10, 10}, {0, 10, 10}};
+    const int f[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                          {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+    for (const auto& t : f)
+        part.add_triangle(v[t[0]], v[t[1]], v[t[2]]);
+    CHECK(inside_mesh(part, {5, 5, 5}));
+    CHECK_FALSE(inside_mesh(part, {15, 5, 5}));
+    CHECK_FALSE(inside_mesh(part, {5, 5, 11}));
+    const std::vector<LatticeBar> all = lattice_bars({0, 0, 0}, {20, 10, 10}, 5.0);
+    const std::vector<LatticeBar> kept = bars_touching(all, part);
+    CHECK(kept.size() < all.size());
+    CHECK_FALSE(kept.empty());
+    for (const LatticeBar& b : kept) // none wholly beyond x = 10
+        CHECK(std::min(b.from[0], b.to[0]) <= 10.0 + 1e-9);
 }

@@ -10526,3 +10526,19 @@ dos triángulos) con el volumen de un hexágono por su largo; 2 × 2 × 1 celdas
 **Sigue (regla 7):** paso B, las barras que tocan la pieza, recortadas a ella, como zona maciza con el relleno de la
 pieza al 0 %; paso C, el análisis homogéneo por celda (exponente 1,5) y la búsqueda del diámetro (0,9 a 3 mm, después
 por celda); paso D, en el panel.
+
+## 2026-11-04 — Optimizar, regla 7, paso B: la retícula en la pieza
+
+**Hecho:** `inside_mesh` (paridad de los cruces de un rayo vertical, con un corrimiento mínimo para no pasar por
+aristas) y `bars_touching` (una barra se queda si alguno de 5 puntos suyos está dentro de la pieza; el laminado
+recorta lo de afuera, así llegan a las paredes). `lattice_modifier(pieza, celda, diámetro)`: la retícula sobre la caja
+de la pieza, sus barras que la tocan, como zona maciza (modificador al 100 %); la pieza va al 0 %.
+
+**Prueba:** `[lattice]` (punto dentro y fuera; ninguna barra entera más allá de la pieza); barra de 24 × 6 × 6 mm a
+0 % con 20 N: con la retícula de celda 3 mm y barras de 1,2 mm se imprimen 76 585 vóxeles contra 61 244, se deforma
+menos y el factor pasa de 1,50 a 1,65 (5,6 s).
+
+**Sigue (regla 7):** paso C, la búsqueda del diámetro uniforme (0,9 a 3 mm, por bisección, analizando la retícula
+como se imprime) y después por celda; paso D, en el panel. Decisión: el análisis usa la retícula impresa (vóxeles de
+media línea), no el material homogéneo de la ficha (ρ, exponente 1,5), igual que con los nervios: el homogéneo queda
+para vóxeles gruesos.

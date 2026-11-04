@@ -1154,3 +1154,45 @@ TEST_CASE("recommended orientation: layers along Z, X and Y (structural_optimiza
     CHECK(o.safety[std::size_t(o.best)] >= o.safety[0]);
     CHECK(o.recommend == (o.best != 0 && o.safety[std::size_t(o.best)] > 1.05 * o.safety[0]));
 }
+
+TEST_CASE("lattice: printed as a solid zone in a part at 0 % infill (structural_optimization.md, rule 7)",
+          "[analysis][engineering]") {
+    const IndexedMesh bar = box_mesh(24.0f, 6.0f, 6.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {24.0, 3.0, 3.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 3.0;
+    tip.newtons = 20.0;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    e.structural.quality = "normal";
+    std::vector<std::string> notes;
+    const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    Settings s = beads_04();
+    s.infill_density = 0.0;
+    const MeshModifier lattice = lattice_modifier(triangles, 3.0, 1.2);
+    REQUIRE_FALSE(lattice.mesh.empty());
+    const std::vector<MeshModifier> mods{lattice};
+    const AnalysisReport empty = run_analysis(bar, s, c);
+    const AnalysisReport latticed = run_analysis(bar, s, c, nullptr, {}, nullptr, &mods);
+    REQUIRE(empty.valid);
+    REQUIRE(latticed.valid);
+    std::printf("lattice: factor %.3f hollow, %.3f with the lattice; %zu printed voxels against %zu\n", empty.result.min_safety,
+                latticed.result.min_safety, latticed.grid.count(), empty.grid.count());
+    CHECK(latticed.grid.count() > empty.grid.count()); // the bars are printed
+    CHECK(latticed.result.elasticity.max_displacement < empty.result.elasticity.max_displacement);
+}

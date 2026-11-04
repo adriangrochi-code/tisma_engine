@@ -25,6 +25,15 @@ std::vector<LatticeBar> lattice_bars(const std::array<double, 3>& lo, const std:
 // faces out.
 TriangleMesh lattice_mesh(const std::vector<LatticeBar>& bars, double diameter);
 
+// Whether a point is inside a closed mesh: the faces a ray straight up from
+// it crosses, counted (odd: inside). Own design.
+bool inside_mesh(const TriangleMesh& mesh, const std::array<double, 3>& p);
+
+// The bars that touch the part: some of 5 points along each (its ends,
+// quarters and middle) inside it; the slicing keeps of them only what is in
+// the part, so they reach its walls.
+std::vector<LatticeBar> bars_touching(const std::vector<LatticeBar>& bars, const TriangleMesh& part);
+
 // The density of the lattice: the bars' volume over the cell's,
 // pi (1 + 4 sqrt 2) (r / a)^2 for cells of side a and bars of radius r.
 double lattice_density(double diameter, double a);

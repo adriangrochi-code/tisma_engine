@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <map>
 #include <numbers>
 #include <tuple>
@@ -82,6 +83,42 @@ TriangleMesh lattice_mesh(const std::vector<LatticeBar>& bars, double diameter) 
         }
     }
     return m;
+}
+
+bool inside_mesh(const TriangleMesh& mesh, const std::array<double, 3>& p) {
+    // A tiny offset in X and Y keeps the ray off the mesh's edges and corners
+    // (grid points of a lattice often lie in line with a box's edges).
+    const double x = p[0] + 1.234567e-5, y = p[1] + 2.345671e-5;
+    int crossings = 0;
+    for (std::uint32_t t = 0; t < mesh.triangle_count(); ++t) {
+        const Vec3f a = mesh.corner(t, 0), b = mesh.corner(t, 1), c = mesh.corner(t, 2);
+        // Barycentric coordinates of (x, y) in the triangle's shadow on XY.
+        const double d = (double(b.y) - c.y) * (double(a.x) - c.x) + (double(c.x) - b.x) * (double(a.y) - c.y);
+        if (std::abs(d) < 1e-18)
+            continue; // a face standing on its edge: the ray runs along it
+        const double l1 = ((double(b.y) - c.y) * (x - c.x) + (double(c.x) - b.x) * (y - c.y)) / d;
+        const double l2 = ((double(c.y) - a.y) * (x - c.x) + (double(a.x) - c.x) * (y - c.y)) / d;
+        const double l3 = 1.0 - l1 - l2;
+        if (l1 < 0.0 || l2 < 0.0 || l3 < 0.0)
+            continue;
+        if (l1 * a.z + l2 * b.z + l3 * c.z > p[2])
+            ++crossings;
+    }
+    return crossings % 2 == 1;
+}
+
+std::vector<LatticeBar> bars_touching(const std::vector<LatticeBar>& bars, const TriangleMesh& part) {
+    std::vector<LatticeBar> out;
+    for (const LatticeBar& b : bars)
+        for (double t : {0.5, 0.0, 1.0, 0.25, 0.75}) {
+            const std::array<double, 3> q{b.from[0] + t * (b.to[0] - b.from[0]), b.from[1] + t * (b.to[1] - b.from[1]),
+                                          b.from[2] + t * (b.to[2] - b.from[2])};
+            if (inside_mesh(part, q)) {
+                out.push_back(b);
+                break;
+            }
+        }
+    return out;
 }
 
 double lattice_density(double diameter, double a) {

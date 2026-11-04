@@ -10,6 +10,7 @@
 #include "fea/materials.hpp"
 #include "fea/zone.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "mesh/lattice.hpp"
 #include "project/engineering_values.hpp"
 
 #include <algorithm>
@@ -570,6 +571,17 @@ Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCas
                 out.modifiers.push_back({"reinforcement", 0, box_between(lo, hi), own});
                 i = end;
             }
+    return out;
+}
+
+MeshModifier lattice_modifier(const TriangleMesh& part, double cell, double diameter) {
+    MeshModifier out{"lattice", 0, {}, "{\"infill\": {\"density\": 100}}"};
+    if (part.empty() || !(cell > 0.0) || !(diameter > 0.0))
+        return out;
+    const BoundingBox b = part.bounding_box();
+    const std::vector<LatticeBar> bars =
+        bars_touching(lattice_bars({b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, cell), part);
+    out.mesh = lattice_mesh(bars, diameter);
     return out;
 }
 

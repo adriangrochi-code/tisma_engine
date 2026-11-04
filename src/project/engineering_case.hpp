@@ -146,6 +146,12 @@ struct Reinforcement {
 Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCase& c, const Settings& settings,
                                  double radius = 0.0);
 
+// «Lattice» (structural_optimization.md, rule 7): the support-free lattice of
+// cells of side `cell` over the part, its bars of `diameter` that touch the
+// part, as a solid zone (a modifier at 100 % infill); the part itself goes to
+// 0 % infill. Empty when no bar touches it.
+MeshModifier lattice_modifier(const TriangleMesh& part, double cell, double diameter);
+
 // «Orientación recomendada» (structural_optimization.md, rule 8): the part
 // (`placed`, on the bed) analysed with its layers stacked along Z (as it
 // is), X and Y, its conditions turned with it; the best is recommended when
