@@ -301,6 +301,11 @@ class SliceViewModel(
         }
     }
 
+    /** The offline help from the installed pack's `knowledge` (mobile_app.md, rule 16), read once. */
+    private var knowledgeCache: Knowledge? = null
+    fun knowledge(): Knowledge? = knowledgeCache ?: pack?.let { Knowledge.read(java.io.File(it.dataDir, "pack/knowledge")) }
+        ?.takeIf { !it.empty }?.also { knowledgeCache = it }
+
     /** Downloads the pack's index for the wizard (MA1): its printers, before any vendor. */
     fun loadPackIndex() {
         val p = pack ?: return

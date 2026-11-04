@@ -409,4 +409,25 @@
     <string name="pref_updates_beta">Also test versions (beta)</string>
     <string name="summary_von_mises">Highest stress (von Mises)</string>
     <string name="summary_warning">Warning</string>
+    <string name="more_help">Help</string>
+    <string name="help_none">The help comes with the profile pack: choose a printer from the pack first (Printer card › Printers from the profile pack).</string>
+    <string name="help_search">Search the help</string>
+    <string name="help_problems">Problems</string>
+    <string name="help_procedures">Procedures</string>
+    <string name="help_glossary">Glossary</string>
+    <string name="help_materials">Materials</string>
+    <string name="help_calibrations">Calibrations</string>
+    <string name="help_sources">Sources: %1$s</string>
+    <string name="help_symptoms">What you see</string>
+    <string name="help_apply">Use %1$s = %2$s</string>
+    <string name="help_for">For</string>
+    <string name="help_nozzle_temp">Nozzle (°C)</string>
+    <string name="help_bed_temp">Bed (°C)</string>
+    <string name="help_fan">Fan (%)</string>
+    <string name="help_bed_required">Heated bed</string>
+    <string name="help_enclosure">Enclosure</string>
+    <string name="help_nozzle_material">Nozzle</string>
+    <string name="help_surfaces">Bed surfaces</string>
+    <string name="help_why">Why</string>
+    <string name="help_result">Result</string>
 </resources>

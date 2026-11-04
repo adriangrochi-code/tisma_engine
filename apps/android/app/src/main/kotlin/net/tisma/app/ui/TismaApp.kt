@@ -89,6 +89,7 @@ sealed interface Screen {
     data object PrinterSettings : Screen
     data object Messages : Screen
     data object PackWizard : Screen
+    data object Help : Screen
 }
 
 /** Where the person is: a section and the screens opened on it. */
@@ -280,6 +281,9 @@ fun TismaApp(
                     is Screen.SettingsSection -> SettingsSectionScreen(top.tab, top.section, sliceState, slice)
                     is Screen.CustomPicker -> CustomPickerScreen(top.tab, sliceState, slice)
                     Screen.Messages -> MessagesScreen(nav.notices)
+                    Screen.Help -> HelpScreen(slice.knowledge(), { k, v -> slice.setValue(k, v) }) { key ->
+                        sliceState.layout?.rows?.get(key)?.label ?: key
+                    }
                     Screen.PackWizard -> PackWizardScreen(sliceState, slice, nav) { settings.packWizardDone = true }
                     Screen.PrinterSettings -> PrinterSettingsScreen(sliceState, slice, nav, settings.printerNotes(sliceState.profile?.printer)) {
                         settings.setPrinterNotes(sliceState.profile?.printer, it)
@@ -312,6 +316,7 @@ private fun titleOf(s: Screen): Int = when (s) {
     Screen.PrinterSettings -> R.string.printer_settings
     Screen.Messages -> R.string.more_messages
     Screen.PackWizard -> R.string.pack_title
+    Screen.Help -> R.string.more_help
     is Screen.CustomPicker -> R.string.panel_choose
 }
 
@@ -356,6 +361,7 @@ private fun MoreHome(signedIn: Boolean, email: String?, nav: Navigator, updateIt
         MoreItem(R.string.more_report, null, "more_report") { nav.open(Screen.Report()) }
         if (signedIn) MoreItem(R.string.more_my_reports, null, "more_my_reports") { nav.open(Screen.MyReports) }
         MoreItem(R.string.more_preferences, null, "more_preferences") { nav.open(Screen.Preferences) }
+        MoreItem(R.string.more_help, null, "more_help") { nav.open(Screen.Help) }
         MoreItem(R.string.more_messages, null, "more_messages") { nav.open(Screen.Messages) }
         updateItem?.invoke()
         MoreItem(R.string.more_credits, null, "more_credits") { nav.open(Screen.Credits) }

@@ -393,4 +393,25 @@
     <string name="pref_updates_beta">También las versiones de prueba (beta)</string>
     <string name="summary_von_mises">Tensión máxima (von Mises)</string>
     <string name="summary_warning">Aviso</string>
+    <string name="more_help">Ayuda</string>
+    <string name="help_none">La ayuda llega con el paquete de perfiles: primero elegí una impresora del paquete (tarjeta de la impresora › Impresoras del paquete de perfiles).</string>
+    <string name="help_search">Buscar en la ayuda</string>
+    <string name="help_problems">Problemas</string>
+    <string name="help_procedures">Procedimientos</string>
+    <string name="help_glossary">Glosario</string>
+    <string name="help_materials">Materiales</string>
+    <string name="help_calibrations">Calibraciones</string>
+    <string name="help_sources">Fuentes: %1$s</string>
+    <string name="help_symptoms">Qué se ve</string>
+    <string name="help_apply">Usar %1$s = %2$s</string>
+    <string name="help_for">Para</string>
+    <string name="help_nozzle_temp">Boquilla (°C)</string>
+    <string name="help_bed_temp">Cama (°C)</string>
+    <string name="help_fan">Ventilador (%)</string>
+    <string name="help_bed_required">Cama caliente</string>
+    <string name="help_enclosure">Cabina</string>
+    <string name="help_nozzle_material">Boquilla</string>
+    <string name="help_surfaces">Superficies de cama</string>
+    <string name="help_why">Para qué</string>
+    <string name="help_result">Resultado</string>
 </resources>

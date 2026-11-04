@@ -25,6 +25,13 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Ayuda sin conexión (regla 16):** Más › Ayuda lee la carpeta `knowledge` del paquete instalado:
+  problemas, procedimientos, glosario, materiales y guías de calibración. Hay una búsqueda sobre todo y chips por tipo.
+  En un problema, cada causa muestra qué revisar y sus acciones: «Usar <ajuste> = <valor>» lo aplica al laminado, y
+  un procedimiento o un problema relacionado se abre. Al pie se nombran las fuentes. Con el paquete real: 27
+  problemas, 5 procedimientos, 101 términos, 37 materiales, 14 calibraciones. El contenido está en español (el
+  paquete trae `language: es`). Faltan los tutoriales del primer uso (`tutorials.json`).
+
 - **2026-11-04 — AND7 a AND9 (QA, Ingeniería en un modelo suelto):**
   - AND7: los avisos del informe del motor se muestran (por ejemplo, la carga que cayó en la cara fija). Una cara ya
     marcada no se marca dos veces: con el mismo tipo se desmarca y con el otro se reemplaza.

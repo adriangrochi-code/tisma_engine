@@ -88,6 +88,11 @@ class ProfilePackTest {
             println("pack $v")
             val printers = pack.printers()
             assertTrue(printers.any { it.name == "AnkerMake M5" }, printers.toString())
+            // The offline help comes with it (rule 16).
+            val k = net.tisma.app.engine.Knowledge.read(File(data, "pack/knowledge"))
+            println("knowledge ${k.problems.size} problems, ${k.procedures.size} procedures, ${k.glossary.size} terms, " +
+                "${k.materials.size} materials, ${k.calibrations.size} calibrations")
+            assertTrue(k.problems.isNotEmpty() && k.glossary.isNotEmpty() && k.calibrations.all { it.steps.isNotEmpty() })
         } finally {
             s.close()
         }
