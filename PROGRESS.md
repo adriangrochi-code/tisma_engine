@@ -10729,3 +10729,11 @@ la interfaz (PK1, PK2).
   el otro), y sin conexión (PK2: no cambia nada).
 - **Sin probar:** contra GitHub de verdad, y la cabecera `Location` de WinHTTP, que solo compila en el CI de Windows.
 - **Sigue:** el paquete en la interfaz: asistente, lista de impresoras, aviso de versión nueva.
+- **Plan para la interfaz** (decisión según `profile_pack.md`, reglas 1, 2, 9, 13 y 19; próximo bloque):
+  - el catálogo de impresoras suma los modelos del paquete instalado, agrupados por fabricante, con una variante por
+    boquilla en una sola fila (PK15);
+  - al agregar uno, se arman su perfil de impresora y los de `defaults` como perfiles de fábrica, que no se pueden
+    sobrescribir (regla 9, PK11);
+  - las impresoras elegidas del paquete se guardan en las preferencias (`packs.printers`) y se vuelven a armar al abrir;
+  - «Actualizar perfiles» corre `pack_update` en segundo plano, con avance;
+  - al abrir, como mucho una vez por día, `pack_newer` (regla 19).
