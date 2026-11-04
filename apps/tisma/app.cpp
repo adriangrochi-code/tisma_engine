@@ -8355,17 +8355,20 @@ void App::status_bar() {
                     : cloud_slice_state_->status == "queued" ? std::string(tr(T::CloudSliceQueued))
                                                               : std::string(tr(T::CloudSliceSending));
         }
+        // The cancel button first: after the state, whose text changes
+        // width («Enviando», «En cola», «Calculando 40 %»), it moved under
+        // the pointer.
         ImGui::SameLine(0, 24.0f * scale_);
-        loc::TextColored(rgb(theme_.accent_hover), "%s", state.c_str());
-        g_menu_rects["cloud_slice_state"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
-                                                   ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
-        ImGui::SameLine();
         if (ImGui::SmallButton("x##cloud_slice_cancel"))
             cloud_slice_state_->cancel = true;
         g_menu_rects["cloud_slice_cancel"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                                     ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         if (ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(T::CloudSliceCancelTip));
+        ImGui::SameLine();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", state.c_str());
+        g_menu_rects["cloud_slice_state"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                                   ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
     }
     // On the right: the 3D view's time per frame on the GPU, and what sliced.
     std::string right;

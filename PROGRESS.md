@@ -9960,4 +9960,8 @@ tabla da el Cd de presión, de la fuerza en las paredes y sin corrección por bl
   10,7 millones de vóxeles y se negaba. Ahora `fit_voxel_limit` toma los vóxeles más finos que entran en `max_voxels`
   (más anchos y menos filas por capa), en Analizar, en su estimación y en `analyze` de la nube. El resumen dice
   `voxel_mm` y `voxel_capped`. Si igual no entra, el error tiene `code` `too_large` y texto en castellano.
+- `ui_script_cloud_slice` falló una vez en la etapa ASan del CI, con la máquina cargada: no apareció el aviso de
+  «cancelado». Causa: el botón «x» para cancelar quedaba a la derecha del texto de estado, que cambia de ancho
+  («Enviando», «En cola», «Calculando 40 %»), y se movía entre el cuadro que guarda su lugar y el del clic. Ahora va
+  antes del texto y no se mueve; también es mejor para una persona.
 
