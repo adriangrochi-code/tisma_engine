@@ -705,3 +705,30 @@ TEST_CASE("profile: the settings made from the catalog, ready for slice --config
     r = run({"profile", "--nozzle", "0.4"});
     CHECK(r.code == 1);
 }
+
+TEST_CASE("part: a gear and a fastener from their spec, as STL, for the phone", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_cli_part";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    for (const std::string kind : {"gear", "fastener"}) {
+        INFO(kind);
+        const Run d = run({"part", kind, "--defaults"});
+        REQUIRE(d.code == kExitOk);
+        const auto spec = dir / (kind + ".json"), stl = dir / (kind + ".stl");
+        std::ofstream(spec) << d.out;
+        const Run r = run({"part", kind, spec.string(), "-o", stl.string()});
+        INFO(r.err);
+        REQUIRE(r.code == kExitOk);
+        const nlohmann::json sizes = nlohmann::json::parse(r.out);
+        CHECK(sizes["triangles"].get<int>() > 100);
+        CHECK(read_stl(stl).mesh.triangle_count() == sizes["triangles"].get<std::size_t>());
+    }
+    // A spec that cannot be made says why.
+    const auto bad = dir / "bad.json";
+    std::ofstream(bad) << R"({"format": "tisma-gear-1", "teeth": 2, "module": 1.5, "width": 8})";
+    const Run r = run({"part", "gear", bad.string(), "-o", (dir / "bad.stl").string()});
+    CHECK(r.code == kExitInput);
+    CHECK_FALSE(r.err.empty());
+    CHECK(run({"part", "spring", "--defaults"}).code == kExitUsage);
+    std::filesystem::remove_all(dir);
+}

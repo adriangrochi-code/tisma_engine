@@ -1,6 +1,7 @@
 #include "cli/cli.hpp"
 #include "cli/node.hpp"
 #include "cli/pack_cli.hpp"
+#include "cli/part_cli.hpp"
 #include "catalog/catalog.hpp"
 #include "config/profiles.hpp"
 
@@ -114,6 +115,7 @@ constexpr std::string_view kUsage =
     "  tisma-engine profile --pack <folder> --printer \"<model file>#<variant>\" [--filament <path>] [--print <path>] -o <settings.json>\n"
     "                       (a printer of the installed profile pack, with its default filament and print profile)\n"
     "  tisma-engine pack plan|install|list --data <folder> ...   (the profile pack: tisma-engine pack for help)\n"
+    "  tisma-engine part gear|fastener <spec.json> -o <out.stl> | --defaults   (a gear, bolt, nut, washer or rod)\n"
     "  tisma-engine info <model>\n"
     "  --threads <n> on any command: at most n threads of work (cloud.md, rule 19d); without it, all\n"
     "  tisma-engine --help | --version\n"
@@ -1040,6 +1042,8 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
                        : cmd_profile(args_left, out, err);
         if (command == "pack")
             return cmd_pack(args_left, out, err);
+        if (command == "part")
+            return cmd_part(args_left, out, err);
         if (command == "aero")
             return cmd_aero_project(args_left, out, err);
         if (command == "orient")
