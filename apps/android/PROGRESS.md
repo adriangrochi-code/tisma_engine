@@ -61,6 +61,15 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
 
 ## Decidido (por la sesión, a confirmar si una ficha dice otra cosa)
 
+- Trabajo con la sesión de escritorio (pedido del dueño, 04-11-2026): propuestos (1) `tisma-engine settings-layout`
+  para armar Impresión y Material con los mismos datos del panel del escritorio, (2) que el servicio local de
+  `tisma` para las impresoras USB hable un subconjunto compatible con Moonraker (la app ya lo sigue), y (3) pasarle
+  notas de comportamiento de las conexiones de red para su página Device.
+- Bambu Lab en modo LAN se hace (dueño, 04-11-2026: «cuando dudes, decidí por la hoja de ruta y las fichas»;
+  `mobile_app.md` regla 14 lo pide y `printer_connections.md` lo describe desde OpenBambuAPI): MQTT 3.1.1 propio
+  (especificación OASIS), FTPS implícito propio, y la huella del certificado guardada la primera vez que la persona la
+  confirma. Sin bibliotecas nuevas.
+
 - Campos de `GET /v1/me` tomados del cliente de la nube del motor (`src/cloud/client.cpp`).
 - `object` e `instance` como números que escribe la persona, 0 por defecto, hasta que la ficha diga qué son.
 - En inglés, un trabajo fallido muestra el texto por `code` y si no `error`; en español, `error_es` primero (regla 19a).
@@ -73,9 +82,6 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
 
 ## Para que decida el dueño
 
-- Bambu Lab por red local: `docs/MOBILE.md` dice que, sin documentación oficial (modo LAN), decide el dueño. La
-  ficha toma OpenBambuAPI (documentación de la comunidad). Hace falta MQTT con TLS (propio, desde la especificación
-  OASIS MQTT 3.1.1, o una biblioteca permisiva) y FTPS. Pendiente de esa decisión.
 
 - Herramientas de prueba con licencias fuera de la lista (no entran al APK): JUnit 4 (EPL-1.0) y
   `javax.annotation-api` (CDDL o GPL-2.0 con excepción), que Robolectric necesita (`THIRD_PARTY.md`).
