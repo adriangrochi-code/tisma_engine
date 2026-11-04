@@ -10200,3 +10200,16 @@ de la flecha y sacar «Análisis» de Impresión 3D.
 siguientes; sin el mensaje de esa vez. Queda anotado para el CI completo.
 
 **Sigue (Estructural):** dirección de impresión y nube en Más opciones, Optimizar, arrastrar la punta de la flecha.
+
+## 2026-11-04 — Estructural: arrastrar la flecha de una fuerza (regla 7)
+
+**Hecho:** el extremo libre de cada flecha de fuerza lleva un punto que se arrastra. Al soltarlo, la fuerza queda
+como «Tres números», apuntando desde el puntero (en el plano por su punto, de frente a la cámara) hacia su punto.
+Deshacer la vuelve atrás; mientras se arrastra, la vista no gira. **Decisión:** la ficha dice «arrastrar la punta»,
+pero la punta dibujada está sobre la pieza (es donde actúa la fuerza); se arrastra el otro extremo, que es lo que
+cambia la dirección sin mover el punto.
+
+**Pruebas:** `ui_script_structural_tab` arrastra `structural_arrow_2`, ve el campo de tres números y lo ve irse con
+Ctrl+Z. Pasan las pruebas de interfaz de Estructural y Aerodinámica.
+
+**Sigue (Estructural):** Más opciones (dirección de impresión, nube) y Optimizar.

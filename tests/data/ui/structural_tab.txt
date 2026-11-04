@@ -50,3 +50,11 @@ key escape
 click-model
 expect-structural none
 expect-no-control structural_condition_remove_2
+# Rule 7: the force's arrow, its free end dragged, turns the force (its
+# direction becomes three numbers); Ctrl+Z puts it back.
+expect-control structural_arrow_2
+expect-no-control structural_force_vector_1
+drag-control structural_arrow_2 60 -40
+expect-control structural_force_vector_1
+key ctrl+z
+expect-no-control structural_force_vector_1

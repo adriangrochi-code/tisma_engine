@@ -764,6 +764,15 @@ private:
     std::array<double, 3> aero_direction(const AerodynamicsInputs& a) const;
     bool structural_map_wanted();
     void structural_overlay();
+    // A force arrow's free end, dragged to turn the force (rule 7): the
+    // overlay keeps where each is drawn; a press on one starts the drag.
+    struct ArrowHandle {
+        std::size_t part = 0, condition = 0;
+        ImVec2 tail;
+        std::array<double, 3> at{}; // where the force acts, on the bed
+    };
+    std::vector<ArrowHandle> arrow_handles_;
+    std::optional<ArrowHandle> arrow_drag_;
     // Undo and redo of each part's Engineering data (rule 8): the part and
     // its data before the change.
     struct EngineeringStep {
@@ -8441,7 +8450,43 @@ void App::viewport() {
     // clicked, a zone as the whole face (face_region); with Shift a zone adds
     // the face to the last zone of its kind.
     // A double click's second click marks nothing more (UI50).
-    if (tab_ == Tab::Structural && structural_tool_ > 0 && !objects_.empty() && ImGui::IsItemActivated() &&
+    // A press on a force arrow's free end turns the force instead (rule 7).
+    if (tab_ == Tab::Structural && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const ImVec2 m = ImGui::GetMousePos();
+        for (const ArrowHandle& h : arrow_handles_)
+            if (std::hypot(m.x - h.tail.x, m.y - h.tail.y) <= 9.0f * scale_ && h.part < objects_.size() &&
+                h.condition < objects_[h.part].engineering.conditions.size()) {
+                remember_engineering(h.part);
+                arrow_drag_ = h;
+                break;
+            }
+    }
+    if (arrow_drag_) {
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || arrow_drag_->part >= objects_.size() ||
+            arrow_drag_->condition >= objects_[arrow_drag_->part].engineering.conditions.size()) {
+            arrow_drag_.reset();
+        } else if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+            // The pointer on the plane through the force's point facing the
+            // camera: the force points from there to its point.
+            const Vec3 d = mouse_ray(), e = camera_.eye(), f = camera_.forward();
+            const Vec3 at{float(arrow_drag_->at[0]), float(arrow_drag_->at[1]), float(arrow_drag_->at[2])};
+            const float den = d.x * f.x + d.y * f.y + d.z * f.z;
+            if (std::abs(den) > 1e-6f) {
+                const float t = ((at.x - e.x) * f.x + (at.y - e.y) * f.y + (at.z - e.z) * f.z) / den;
+                const Vec3 p{e.x + d.x * t, e.y + d.y * t, e.z + d.z * t};
+                const double vx = double(at.x - p.x), vy = double(at.y - p.y), vz = double(at.z - p.z);
+                const double l = std::sqrt(vx * vx + vy * vy + vz * vz);
+                if (l > 1e-6) {
+                    EngineeringCondition& c = objects_[arrow_drag_->part].engineering.conditions[arrow_drag_->condition];
+                    c.direction = ForceDirection::Vector;
+                    // Rounded to a thousandth, as the field shows it.
+                    c.vector = {std::round(vx / l * 1000.0) / 1000.0, std::round(vy / l * 1000.0) / 1000.0,
+                                std::round(vz / l * 1000.0) / 1000.0};
+                }
+            }
+        }
+    }
+    if (!arrow_drag_ && tab_ == Tab::Structural && structural_tool_ > 0 && !objects_.empty() && ImGui::IsItemActivated() &&
         ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
         const Vec3 d = mouse_ray(), e = camera_.eye();
         if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d); hit && hit->object < objects_.size()) {
@@ -8628,7 +8673,7 @@ void App::viewport() {
                 drag_anchor_ = *p;
                 dragged_ = true;
             }
-        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && !(sketch_edit_ && sketch_edit_->drag) &&
+        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && !(sketch_edit_ && sketch_edit_->drag) && !arrow_drag_ &&
                    ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) &&
                    !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             // Not on the press itself: its frame's delta is where the pointer
@@ -13044,6 +13089,7 @@ void App::structural_panel() {
                         remember_engineering(std::size_t(structural_part_));
                     e.conditions[i].vector = {vec[0], vec[1], vec[2]};
                 }
+                rect_of("structural_force_vector_" + std::to_string(i));
             }
         } else if (c.is_point()) {
             double r = c.radius;
@@ -14023,6 +14069,7 @@ void App::update_structural_view() {
 // as long as its value says, each point as a disc (blue fixed, red force),
 // and with the map, the critical point and its factor.
 void App::structural_overlay() {
+    arrow_handles_.clear();
     if (tab_ != Tab::Structural || objects_.empty() || !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
         return;
     const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
@@ -14145,6 +14192,14 @@ void App::structural_overlay() {
                     dl->AddTriangleFilled(q, ImVec2(q.x - ux * h - uy * h * 0.5f, q.y - uy * h + ux * h * 0.5f),
                                           ImVec2(q.x - ux * h + uy * h * 0.5f, q.y - uy * h - ux * h * 0.5f), red);
                 }
+                // The free end: a handle to drag (rule 7), named for the
+                // scripted tests (structural_arrow_1 is the first condition).
+                const std::size_t index = std::size_t(&c - o.engineering.conditions.data());
+                const bool held = arrow_drag_ && arrow_drag_->part == part && arrow_drag_->condition == index;
+                dl->AddCircleFilled(from, (held ? 6.0f : 5.0f) * scale_, held ? ImGui::GetColorU32(ImVec4(1, 1, 1, 1)) : red, 16);
+                arrow_handles_.push_back({part, index, from, at});
+                const float r = 8.0f * scale_;
+                g_menu_rects["structural_arrow_" + std::to_string(index + 1)] = ImVec4(from.x - r, from.y - r, from.x + r, from.y + r);
             }
         }
     }

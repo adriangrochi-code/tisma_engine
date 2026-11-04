@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Estructural: girar una fuerza arrastrando su flecha** (`engineering_panel.md`, regla 7): el extremo libre de la
+  flecha roja se arrastra en la vista; la fuerza pasa a apuntar desde ahí a su punto (Ctrl+Z la devuelve).
 - **Estructural dice cuánto va a costar el análisis:** junto a la resolución, la memoria y el tiempo aproximados.
   La pestaña «Análisis» de Impresión 3D se fue: todo lo que mostraba está en Ingeniería, Estructural
   (`engineering_panel.md`, regla 1).
