@@ -10843,10 +10843,8 @@ vuelta de perfilado.
   la tabla (`4176d0a`); Windows en verde.
 
 **Sigue (paquete de perfiles, lo que falta en el escritorio):**
-- Regla 14: dibujar `bed_model` (STL) y `bed_texture` (SVG o PNG) del modelo del paquete en la vista 3D, en las
-  coordenadas de la cama, en OpenGL y en Vulkan. El SVG se rasteriza con nanosvg (ya en `THIRD_PARTY.md`). Para PNG
-  no hay lector en el motor: elegir uno permisivo y anotarlo antes de usarlo, o leer solo SVG y dejar PNG anotado.
-  La app de Android ya lo hace.
+- Regla 14, PNG: falta (decisión del dueño, 2026-11-04: SVG por ahora). Para PNG no hay lector en el motor: elegir
+  uno permisivo y anotarlo antes de usarlo.
 - PK1/PK2 en el primer arranque (asistente con el paquete) y la regla 15 (licencia y origen en el panel del perfil,
   no solo en el catálogo): revisar contra la ficha.
 
@@ -10865,3 +10863,58 @@ Pedido del dueño: «tenés que elegir impresora y filamento primero», y que lo
   Android» y arma el APK con `-Ptisma.solidcraft`; sin artefactos, arma sin SolidCraft y lo avisa.
 - Pruebas: `PackWizardTest` (MA1 con el paso de filamento, el filamento de fábrica y la biblioteca), `ProfilePackTest`.
   No probado en un teléfono.
+
+## 2026-11-04 — la cama del paquete en la vista 3D (`profile_pack.md`, regla 14, solo SVG)
+
+**Hecho** (el dueño pidió SVG por ahora):
+- `src/ui/bed_art.*`: `bed_svg_art` lee el SVG con nanosvg. Las curvas se siguen a una décima de milímetro. Los rellenos
+  usan su regla (no nula o par-impar), los trazos se ensanchan con Clipper2 y `triangulate_polygon` llena el resultado.
+  Sale como triángulos de color plano. A cada forma se le quita lo que se pinta después, así los triángulos nunca se
+  superponen y no pelean en profundidad.
+- El dibujo va en el rectángulo más grande de su forma que entra en la caja de la cama, centrado, sin estirar (su
+  borde de arriba hacia y máxima). Así lo dibuja la app de Android. Los degradados y lo transparente no se dibujan; lo
+  semitransparente, sólido.
+- Las dos vistas, OpenGL y Vulkan, dibujan el `bed_model` (STL) en el color de la placa y encima el dibujo, adelantado
+  en profundidad como la pintura sobre una pieza. No hacen sombra.
+- La interfaz lo rehace al cambiar de impresora o de cama.
+- El paquete de prueba trae una cama de 220 × 220 con un STL y un SVG (cuadrado, círculo y un trazo).
+
+**Prueba:** `[bed_art]`: área y color de un rectángulo, la y invertida, agujero par-impar, trazo de 2 mm, círculo,
+formas superpuestas, entradas malas. En pantalla: `ui_pack_printer_picked` (OpenGL) y la misma corrida con
+`--graphics vulkan` (lavapipe) dan el mismo dibujo; capturas mirados a mano.
+
+**Decisión** (igual que la app de Android): el dibujo no escribe profundidad, así que la grilla y los ejes se ven
+encima. En Vulkan es una canalización nueva, `Decal`: la de la pintura sin escribir profundidad.
+
+**Sin probar:** con los SVG del paquete real (no se leen, sala limpia); se puede pedir a la sesión de fichas como caja
+negra.
+
+## 2026-11-04 — BH27: las velocidades del perfil de impresión del paquete se perdían
+
+**Reporte** (sesión de fichas, caja negra con el paquete real): `profile --pack` con la MK4S dejaba todo el grupo
+`speed` en nulo. Al laminar avisaba «no speed for speed.walls … using a stock Ender-3's», y un cubo de 20 mm tardaba
+14 min 54 s. Lo mismo con AnkerMake M5/M5C, MINI y XL.
+
+**Causa:** los perfiles de impresión del paquete son de la versión 1, con las velocidades adentro, como las guardan
+otros programas. Al leer un perfil de impresión de la versión 1, el motor saca `speed`, porque las velocidades son de la
+impresora (decisión del dueño, 2026-10-26).
+
+**Arreglo:** `parse_pack_entry` pasa los ajustes de impresora que trae una entrada de impresión o de filamento (las
+velocidades, `cooling.min_speed`) a `PackEntry::printer_settings`, en lugar de perderlos. `pack_profiles` los pone sobre
+el perfil de la impresora: primero los del filamento, después los del de impresión. Un ajuste de otro tipo se deja
+afuera con un aviso. Sirve para la línea de comandos, la app y el escritorio.
+
+**Prueba:** `[pack]`. El perfil de impresión de prueba trae `speed.walls` 170 y `speed.travel` 300 (versión 1), y el
+filamento `cooling.min_speed` 12; la impresora sale con 170, 300 (sobre los 150 propios) y 12.
+
+**Al cambiar de perfil** (decisión de la sesión de fichas, va a `profile_pack.md`): al elegir otro perfil de
+impresión o filamento del paquete, los ajustes de impresora que trae reemplazan a los actuales, como en la primera
+elección. Los que la persona cambió a mano se quedan, con el aviso «Se mantuvieron tus cambios en …». En la interfaz:
+- los ajustes que trae cada entrada se cuentan como parte de su perfil (`saved_settings`), así que no aparecen como
+  cambios;
+- el escritorio ofrece todos los perfiles de impresión del paquete que sirven para cada impresora del paquete elegida
+  (regla 12, `pack_prints_for`), no solo el de la variante.
+
+Prueba: `ui_pack_print_speeds` (Acme Standard → Acme Fine → velocidad de viaje a mano → Acme Standard) y los verbos de
+guion `choose-profile` y `set`. **Sin probar:** con el paquete real; se pidió a la sesión de fichas.
+

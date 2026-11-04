@@ -33,12 +33,13 @@
     "vendors/acme/filaments/PLA.json"
    ],
    "prints": [
-    "vendors/acme/prints/Standard.json"
+    "vendors/acme/prints/Standard.json",
+    "vendors/acme/prints/Fine.json"
    ],
    "archive": {
     "name": "acme.tar.xz",
-    "size": 680,
-    "sha256": "1a86b63a9600cd88dacd7edb9f82966de502d006f4f147289d029c30fdc65e90"
+    "size": 1080,
+    "sha256": "163a4ad5dd85890aded6a29dbc9f3948d1490b39e37ea43a1bc29a819b469863"
    },
    "models": [
     {
@@ -46,6 +47,10 @@
      "name": "Acme One",
      "technology": "fff",
      "family": "One",
+     "assets": {
+      "bed_model": "vendors/acme/beds/A1.stl",
+      "bed_texture": "vendors/acme/beds/A1.svg"
+     },
      "file": "vendors/acme/models/A1.json",
      "default_variant": "0.4",
      "variants": [

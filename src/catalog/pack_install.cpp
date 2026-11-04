@@ -307,6 +307,7 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
     std::string sets_text;
     if (read_all(pack_dir / "compatible.json", sets_text))
         sets = parse_pack_compatible(sets_text);
+    nlohmann::json printer_over = nlohmann::json::object(); // the printer settings they carry (BH27)
     for (const auto& [path, kind] : {std::pair{out.filament_path, ProfileKind::Filament}, std::pair{out.print_path, ProfileKind::Print}}) {
         if (path.empty())
             continue;
@@ -323,7 +324,23 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
                             out.printer.name + (out.resin ? " is a resin printer" : " is not a resin printer"));
         if (kind == ProfileKind::Filament)
             out.filament_vendor = entry.vendor;
+        (kind == ProfileKind::Filament ? out.filament_printer_settings : out.print_printer_settings) = entry.printer_settings;
+        const nlohmann::json carried = nlohmann::json::parse(entry.printer_settings);
+        for (const auto& [group, keys] : carried.items())
+            for (const auto& [key, value] : keys.items())
+                printer_over[group][key] = value; // the print's after the filament's
         (kind == ProfileKind::Filament ? out.filament : out.print) = std::move(entry.profile);
+    }
+    if (!printer_over.empty()) {
+        nlohmann::json merged = nlohmann::json::parse(profile_file_json(out.printer));
+        for (const auto& [group, keys] : printer_over.items())
+            for (const auto& [key, value] : keys.items())
+                merged["settings"][group][key] = value;
+        try {
+            out.printer = parse_profile(merged.dump());
+        } catch (const SettingsError& e) {
+            throw PackError(out.printer.name + ": " + e.what());
+        }
     }
     return out;
 }
@@ -361,7 +378,11 @@ bool pack_printer_is_resin(const PackIndex& index, int printer) {
     return false;
 }
 
-std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const PackIndex& index, int printer) {
+namespace {
+// The entries of `kind` (filament or print) of the installed vendors offered
+// for printer number `printer`: for a resin printer, the resins and resin
+// print profiles.
+std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const PackIndex& index, int printer, ProfileKind kind) {
     std::vector<std::vector<int>> sets;
     std::string sets_text;
     if (read_all(pack_dir / "compatible.json", sets_text)) {
@@ -375,20 +396,31 @@ std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const 
     for (const PackVendor& v : index.vendors) {
         if (v.archive.sha256.empty())
             continue; // not installed
-        for (const std::string& path : resin ? v.resins : v.filaments) {
+        const std::vector<std::string>& paths =
+            kind == ProfileKind::Filament ? (resin ? v.resins : v.filaments) : (resin ? v.resin_prints : v.prints);
+        for (const std::string& path : paths) {
             std::string text;
             if (!safe_pack_path(path) || !read_all(pack_dir / utf8_path(path), text))
                 continue;
             try {
                 std::vector<std::string> ignored;
                 const PackEntry e = parse_pack_entry(text, ignored);
-                if (e.profile.kind == ProfileKind::Filament && e.resin == resin && pack_compatible(e.compatible, sets, printer))
+                if (e.profile.kind == kind && e.resin == resin && pack_compatible(e.compatible, sets, printer))
                     out.push_back({path, e.profile.name, v.name});
             } catch (const std::exception&) {
             }
         }
     }
     return out;
+}
+} // namespace
+
+std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const PackIndex& index, int printer) {
+    return pack_entries_for(pack_dir, index, printer, ProfileKind::Filament);
+}
+
+std::vector<PackFilamentRef> pack_prints_for(const fs::path& pack_dir, const PackIndex& index, int printer) {
+    return pack_entries_for(pack_dir, index, printer, ProfileKind::Print);
 }
 
 PackEntry read_pack_entry(const fs::path& pack_dir, const std::string& path, std::vector<std::string>& warnings) {

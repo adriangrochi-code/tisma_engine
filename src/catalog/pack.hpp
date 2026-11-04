@@ -102,6 +102,11 @@ struct PackEntry {
     // keeps it as a filament or print profile (the resin's keys are those
     // kinds', docs/PROFILES.md), for a resin printer only.
     bool resin = false;
+    // The printer's settings the entry carries as a JSON object of groups
+    // ("{}" when none): a pack print profile keeps the speeds, and a filament
+    // cooling.min_speed, which the engine keeps in the printer profile.
+    // pack_profiles lays them over the printer's.
+    std::string printer_settings = "{}";
 };
 PackEntry parse_pack_entry(std::string_view json, std::vector<std::string>& warnings);
 
@@ -146,7 +151,12 @@ struct PackProfiles {
     std::optional<Profile> filament, print;
     std::string filament_path, print_path;
     std::string filament_vendor; // the filament entry's maker (community data)
+    // The printer profile has the printer settings its filament and print
+    // profile carry (their speeds), over the variant's (BH27).
     bool resin = false;          // a resin printer: the filament is its resin
+    // The printer settings the filament and the print entry carry
+    // (PackEntry::printer_settings), already laid over `printer`.
+    std::string filament_printer_settings = "{}", print_printer_settings = "{}";
     std::vector<std::string> warnings; // keys left out
 };
 PackProfiles pack_profiles(const std::filesystem::path& pack_dir, const PackIndex& index, const std::string& printer,
@@ -171,6 +181,9 @@ struct PackFilamentRef {
     std::string path, name, vendor;
 };
 std::vector<PackFilamentRef> pack_filaments_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer);
+// The same for the print profiles (for a resin printer, the resin print
+// profiles), rule 12.
+std::vector<PackFilamentRef> pack_prints_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer);
 // One filament or print profile of the pack by its path (rule 10).
 Profile pack_entry_profile(const std::filesystem::path& pack_dir, const std::string& path, std::vector<std::string>& warnings);
 PackEntry read_pack_entry(const std::filesystem::path& pack_dir, const std::string& path, std::vector<std::string>& warnings);

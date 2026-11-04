@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **La cama de la impresora del paquete** en la vista 3D: su modelo (STL) y su dibujo (SVG) en la placa, en OpenGL y
+  en Vulkan. Los dibujos PNG todavía no se muestran.
 - **Resinas del paquete:** una impresora de resina del paquete elige su resina y su perfil de impresión de resina por
   defecto, ofrece solo resinas en el catálogo y muestra los **Datos publicados** de la resina.
 - **Datos publicados** también para el filamento del paquete, plegados bajo su perfil en la pestaña Material.
@@ -326,6 +328,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Corregido
 
 - Una impresora de resina del paquete (`"technology": "sla"`) quedaba como impresora de filamento.
+- Las velocidades del perfil de impresión del paquete se perdían y se laminaba con las de una Ender-3 (BH27). Ahora
+  pasan a la impresora, y cambian al elegir otro perfil de impresión o filamento del paquete; las que cambiaste a mano
+  se mantienen, con un aviso. Se ofrecen todos los perfiles de impresión del paquete para la impresora.
 - `pack plan` con un paquete instalado roto ya no falla: planea todo el paquete otra vez para repararlo.
 - `part gear|fastener` dice qué clave del archivo tiene un valor del tipo equivocado.
 
