@@ -133,6 +133,10 @@ fun PlateScreen(
                         (r.filamentG?.let { g -> String.format(Locale.getDefault(), " · %.1f g", g) } ?: ""))
                 }
                 r.layers?.let { Labeled(R.string.plate_layers, it.toString()) }
+                OutlinedButton(onClick = { nav.open(Screen.Preview(r.gcode.path)) },
+                    modifier = Modifier.fillMaxWidth().height(52.dp).testTag("plate_preview")) {
+                    Text(stringResource(R.string.preview_open))
+                }
                 Button(onClick = { save.launch(r.gcode.name) }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
                     Icon(painterResource(R.drawable.tisma_save), null)
                     Spacer(Modifier.size(8.dp))

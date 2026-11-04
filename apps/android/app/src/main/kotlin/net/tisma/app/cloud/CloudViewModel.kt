@@ -81,6 +81,8 @@ class CloudViewModel(
     private val clientFor: (server: String, token: String?) -> CloudClient = { s, t -> CloudClient(s, t) },
     /** How often a running job is asked for (cloud.md, rule 8). */
     private val pollMs: Long = POLL_MS,
+    /** Where downloaded results go for the preview. */
+    private val cacheDir: java.io.File = java.io.File(System.getProperty("java.io.tmpdir")),
 ) : ViewModel() {
 
     private var client = clientFor(settings.server, secrets.get(TOKEN))
@@ -236,6 +238,17 @@ class CloudViewModel(
         }
         out.use { client.download(id, it) }
         _state.update { it.copy(notice = Notice.Saved(name)) }
+    }
+
+    /** Downloads a slice's G-code to the cache and gives its path, for the preview (rule 9, MA10). */
+    fun previewResult(id: String, onReady: (String) -> Unit) {
+        var path: String? = null
+        launchRequest(onDone = { path?.let(onReady) }) {
+            val dir = java.io.File(cacheDir, "results").apply { mkdirs() }
+            val f = java.io.File(dir, "job-" + id.filter { it.isLetterOrDigit() || it == '-' } + ".gcode")
+            f.outputStream().use { client.download(id, it) }
+            path = f.path
+        }
     }
 
     /** Sends a problem report (rule 11; problem_reports.md, rules 6 to 8). */

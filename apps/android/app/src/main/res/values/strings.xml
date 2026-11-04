@@ -253,4 +253,10 @@
     <string name="printers_found">Found on the network</string>
     <string name="printers_searching">Searching the network for printers… If none appears, check that the phone and the printer are on the same Wi-Fi network.</string>
     <string name="pref_search_network">Search for printers on the network</string>
+
+    <string name="preview_title">Preview</string>
+    <string name="preview_open">See the preview</string>
+    <string name="preview_layer">Layer %1$d of %2$d · Z %3$s mm</string>
+    <string name="preview_empty">This G-code has no extrusions.</string>
+    <string name="preview_binary">This G-code is binary; the preview reads text G-code for now.</string>
 </resources>

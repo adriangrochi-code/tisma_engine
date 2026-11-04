@@ -238,4 +238,10 @@
     <string name="printers_found">Encontradas en la red</string>
     <string name="printers_searching">Buscando impresoras en la red… Si no aparece ninguna, revisá que el teléfono y la impresora estén en la misma red wifi.</string>
     <string name="pref_search_network">Buscar impresoras en la red</string>
+
+    <string name="preview_title">Vista previa</string>
+    <string name="preview_open">Ver la vista previa</string>
+    <string name="preview_layer">Capa %1$d de %2$d · Z %3$s mm</string>
+    <string name="preview_empty">Este G-code no tiene extrusiones.</string>
+    <string name="preview_binary">Este G-code es binario; por ahora la vista previa lee G-code de texto.</string>
 </resources>

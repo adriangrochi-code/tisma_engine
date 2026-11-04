@@ -21,7 +21,7 @@ class MainActivity : ComponentActivity() {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                CloudViewModel(app.settings, app.secrets, app.deviceName) as T
+                CloudViewModel(app.settings, app.secrets, app.deviceName, cacheDir = app.cacheDir) as T
         }
     }
 

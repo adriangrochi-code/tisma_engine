@@ -133,7 +133,7 @@ private fun StatusChip(s: JobStatus) {
 
 /** One job: its state, summary or error (rule 19a), and its actions (cancel, save the result). */
 @Composable
-fun JobDetailScreen(id: String, state: CloudState, cloud: CloudViewModel) {
+fun JobDetailScreen(id: String, state: CloudState, cloud: CloudViewModel, nav: Navigator) {
     val context = ctx()
     LaunchedEffect(id) { cloud.followJob(id) }
     val job = state.jobs.firstOrNull { it.id == id }
@@ -185,6 +185,13 @@ fun JobDetailScreen(id: String, state: CloudState, cloud: CloudViewModel) {
             OutlinedButton(onClick = { cloud.cancel(job.id) }, enabled = !state.busy,
                 modifier = Modifier.fillMaxWidth().height(52.dp).testTag("cancel_job")) {
                 Text(stringResource(R.string.job_cancel))
+            }
+        }
+        if (job.status == JobStatus.DONE && job.kind == "slice") {
+            // MA10: the G-code of a cloud slice opens in the preview like a local one (rule 9).
+            OutlinedButton(onClick = { cloud.previewResult(job.id) { path -> nav.open(Screen.Preview(path)) } },
+                enabled = !state.busy, modifier = Modifier.fillMaxWidth().height(52.dp).testTag("preview_result")) {
+                Text(stringResource(R.string.preview_open))
             }
         }
         if (job.status == JobStatus.DONE) {

@@ -96,6 +96,21 @@ class CloudScreensTest {
     }
 
     @Test
+    fun `MA10 a cloud slice opens in the preview`() {
+        compose.runOnIdle { vm.signIn("ana@example.com", "password1") }
+        waitState { vm.state.value.signedIn }
+        val client = CloudClient(server.url).apply { login("ana@example.com", "password1", "t") }
+        val bytes = cube3mf()
+        val job = client.submit(JobRequest.Slice, "cube.3mf", bytes.size.toLong()) { bytes.inputStream() }
+        repeat(3) { client.job(job.id) }
+        compose.runOnIdle { nav.select(Section.MORE); nav.open(Screen.JobDetail(job.id)) }
+        waitFor("preview_result")
+        compose.onNodeWithTag("preview_result").performScrollTo().performClick()
+        waitFor("preview_layer")
+        waitForText("Layer 3 of 3")
+    }
+
+    @Test
     @Config(qualifiers = "es-w411dp-h891dp-xxhdpi")
     fun `CC20 a failed job shows error_es in Spanish`() {
         val client = CloudClient(server.url)
