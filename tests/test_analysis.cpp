@@ -1195,4 +1195,21 @@ TEST_CASE("lattice: printed as a solid zone in a part at 0 % infill (structural_
                 latticed.result.min_safety, latticed.grid.count(), empty.grid.count());
     CHECK(latticed.grid.count() > empty.grid.count()); // the bars are printed
     CHECK(latticed.result.elasticity.max_displacement < empty.result.elasticity.max_displacement);
+    // The thinnest uniform bars that hold (hollow, it does not: factor below 2).
+    CHECK(lattice_cell_for(triangles) == 3.0); // a third of 6 mm is 2: at least 3
+    double last = -1.0;
+    const LightestLattice best = lightest_lattice(bar, triangles, s, c, e, [&](double done) {
+        CHECK(done >= last);
+        last = done;
+    });
+    CHECK(last == 1.0);
+    CHECK(best.analyses <= 8);
+    std::printf("lattice: bars of %.2f mm in cells of %.0f mm (factor %.2f, %.3f g), %d analyses\n", best.diameter, best.cell,
+                best.min_safety, best.mass_g, best.analyses);
+    if (best.found) {
+        CHECK(best.diameter >= 0.9);
+        CHECK(best.diameter <= 3.0);
+        CHECK(best.min_safety >= 2.0 - 1e-9);
+        CHECK_FALSE(best.lattice.mesh.empty());
+    }
 }

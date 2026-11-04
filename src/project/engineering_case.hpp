@@ -152,6 +152,21 @@ Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCas
 // 0 % infill. Empty when no bar touches it.
 MeshModifier lattice_modifier(const TriangleMesh& part, double cell, double diameter);
 
+// Rule 7's search: the thinnest uniform bars, by bisection between 0.9 mm
+// (the thinnest that prints) and 3 mm, to 0.05 mm, the part at 0 % infill;
+// the cells a third of the part's smallest side, from 3 to 10 mm.
+struct LightestLattice {
+    bool found = false;
+    double cell = 0.0, diameter = 0.0;
+    double min_safety = 0.0, mass_g = 0.0;
+    int analyses = 0;
+    MeshModifier lattice;
+};
+double lattice_cell_for(const TriangleMesh& part);
+LightestLattice lightest_lattice(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                                 const AnalysisCase& c, const ProjectEngineering& e,
+                                 const std::function<void(double)>& progress = {});
+
 // «Orientación recomendada» (structural_optimization.md, rule 8): the part
 // (`placed`, on the bed) analysed with its layers stacked along Z (as it
 // is), X and Y, its conditions turned with it; the best is recommended when

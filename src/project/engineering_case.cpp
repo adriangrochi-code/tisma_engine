@@ -585,6 +585,73 @@ MeshModifier lattice_modifier(const TriangleMesh& part, double cell, double diam
     return out;
 }
 
+double lattice_cell_for(const TriangleMesh& part) {
+    const BoundingBox b = part.bounding_box();
+    const double smallest = std::min({double(b.max.x) - b.min.x, double(b.max.y) - b.min.y, double(b.max.z) - b.min.z});
+    return std::clamp(smallest / 3.0, 3.0, 10.0);
+}
+
+LightestLattice lightest_lattice(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                                 const AnalysisCase& c, const ProjectEngineering& e,
+                                 const std::function<void(double)>& progress) {
+    LightestLattice out;
+    const auto finish = [&]() -> LightestLattice {
+        if (progress)
+            progress(1.0);
+        return out;
+    };
+    if (c.model == AnalysisModel::Solid)
+        return finish();
+    constexpr double kThinnest = 0.9, kThickest = 3.0, kStep = 0.05;
+    constexpr int kMostAnalyses = 8; // 3 mm, 0.9 mm, then halving to 0.05 mm
+    out.cell = lattice_cell_for(placed);
+    const MaterialFamily* family = family_of(c.material_id);
+    const double grams_per_cm3 = family ? family->density : 1.0;
+    Settings hollow = settings;
+    hollow.infill_density = 0.0;
+    const auto holds = [&](double diameter, LightestLattice& at) {
+        const std::vector<MeshModifier> mods{lattice_modifier(placed, out.cell, diameter)};
+        const int step = out.analyses++;
+        const AnalysisReport r = run_analysis(
+            mesh, hollow, c, nullptr,
+            [&](std::string_view, double done) {
+                if (progress)
+                    progress(std::min(1.0, (double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses));
+            },
+            nullptr, &mods);
+        at.min_safety = r.result.min_safety;
+        at.mass_g = voxel_mass_grams(r.grid, grams_per_cm3);
+        at.lattice = mods.front();
+        at.diameter = diameter;
+        return r.valid && report_verdict(r, c, e, placed) == Verdict::Holds;
+    };
+    LightestLattice best = out;
+    if (!holds(kThickest, best)) {
+        out.min_safety = best.min_safety;
+        return finish();
+    }
+    LightestLattice trial = out;
+    if (holds(kThinnest, trial)) {
+        best = trial;
+    } else {
+        double fails = kThinnest, holds_at = kThickest;
+        while (holds_at - fails > kStep + 1e-9) {
+            const double mid = std::round(0.5 * (fails + holds_at) / 0.01) * 0.01;
+            if (holds(mid, trial)) {
+                holds_at = mid;
+                best = trial;
+            } else {
+                fails = mid;
+            }
+        }
+    }
+    best.analyses = out.analyses;
+    best.cell = out.cell;
+    best.found = true;
+    out = best;
+    return finish();
+}
+
 std::array<double, 9> layers_along(int axis) {
     switch (axis) {
     case 1: return {0, 0, -1, 0, 1, 0, 1, 0, 0}; // a quarter turn about Y: X up

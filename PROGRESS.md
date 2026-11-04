@@ -10542,3 +10542,17 @@ menos y el factor pasa de 1,50 a 1,65 (5,6 s).
 como se imprime) y después por celda; paso D, en el panel. Decisión: el análisis usa la retícula impresa (vóxeles de
 media línea), no el material homogéneo de la ficha (ρ, exponente 1,5), igual que con los nervios: el homogéneo queda
 para vóxeles gruesos.
+
+## 2026-11-04 — Optimizar, regla 7, paso C: el diámetro uniforme
+
+**Hecho:** `lightest_lattice`: la pieza al 0 % con la retícula; prueba 3 mm (si no aguanta, no hay retícula), después
+0,9 mm, y busca por bisección hasta 0,05 mm el diámetro más fino que aguanta (como mucho 8 análisis, con avance). La
+celda es un tercio del lado más chico de la pieza, entre 3 y 10 mm (`lattice_cell_for`; decisión propia, la ficha no
+la fija).
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N: barras de 2,74 mm en celdas de 3 mm, factor 2,00, 1,008 g, 8 análisis
+(28 s). En una barra tan fina la retícula casi la llena: la prueba de la ficha (O7, cubo de 30 mm, 6000 N) daría
+celdas de 10 mm.
+
+**Sigue (regla 7):** el diámetro por celda (sección proporcional a la utilización, escalado en conjunto) y
+«Retícula» en el panel.
