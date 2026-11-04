@@ -130,7 +130,8 @@ InfillZones infill_zones(const AnalysisReport& report, double density, double as
 
 LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
                                const AnalysisCase& c, const ProjectEngineering& e,
-                               const std::function<void(double)>& progress = {});
+                               const std::function<void(double)>& progress = {},
+                               const std::vector<MeshModifier>* modifiers = nullptr);
 
 // «Refuerzos» (structural_optimization.md, rule 6): the cells of 2 mm whose
 // centre is within `radius` of a fixed face or a load, as box modifiers (a
@@ -144,6 +145,22 @@ struct Reinforcement {
 };
 Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCase& c, const Settings& settings,
                                  double radius = 0.0);
+
+// Rule 6's search: from the analysis at the lowest uniform `density` that
+// holds, the reinforcement zone; then the lightest uniform infill of the rest
+// with the zone in place, and its mass against the part's at `density`
+// without it. Used only when lighter.
+struct ReinforcedInfill {
+    bool found = false;   // the part holds with the zone at some density
+    bool lighter = false; // and weighs less than at `density` without it
+    Reinforcement zone;
+    LightestInfill best; // the rest's density with the zone
+    double mass_g = 0.0, plain_mass_g = 0.0;
+    int analyses = 0;
+};
+ReinforcedInfill reinforced_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                                   const AnalysisCase& c, const ProjectEngineering& e, int density,
+                                   const std::function<void(double)>& progress = {});
 
 // Ribs (structural_optimization.md, rule 4): from the analysis at the
 // lowest uniform `density` that holds, the ribs; then the lowest density that

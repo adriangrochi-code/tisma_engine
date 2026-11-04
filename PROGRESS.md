@@ -10425,3 +10425,17 @@ semilla nueva (`tisma_fuzz_gcode 2000 20261104`, 5 min 19 s); los cambios recien
   de la búsqueda (`volume_for_bed_box` con el mapa dado) y no hace nada si la malla cambió.
 - CI de Linux: gcc y clang pasan 990/990; la etapa con ASan se cortó por disco lleno (compilaciones viejas en
   `/home/user/tisma_engine/build-*`, 7 GB borrados). Se corre otra vez.
+
+## 2026-11-04 — Optimizar, regla 6, paso B: la búsqueda con el refuerzo
+
+**Hecho:** `lightest_infill` acepta modificadores. `reinforced_infill(…, densidad)` analiza a la densidad uniforme
+mínima, saca la zona de refuerzo, busca el relleno uniforme más liviano del resto con la zona puesta y compara la
+masa (por vóxeles) con la de la pieza sin la zona; `lighter` solo si pesa menos. Como mucho 10 análisis, con avance.
+
+**Prueba:** la barra de 24 × 6 × 6 mm con 20 N: con la zona, el resto aguanta al 0 % (factor 2,15), pero pesa 0,925 g
+contra 0,788 g al 30 % sin ella: no se propone. 9 análisis, 65 s (con el CI de Linux al lado).
+
+**Pendiente:** la búsqueda arranca en el 100 % con la zona al 40 %, que ahí es menos que la pieza (la regla pide
+nunca menos); como la búsqueda baja, el resultado no cambia salvo en piezas que necesitan más del 40 %.
+
+**Sigue (regla 6):** «Refuerzos» en el panel Optimizar.

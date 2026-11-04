@@ -572,6 +572,57 @@ Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCas
     return out;
 }
 
+ReinforcedInfill reinforced_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                                   const AnalysisCase& c, const ProjectEngineering& e, int density,
+                                   const std::function<void(double)>& progress) {
+    ReinforcedInfill out;
+    const auto finish = [&]() -> ReinforcedInfill {
+        if (progress)
+            progress(1.0);
+        return out;
+    };
+    if (c.model == AnalysisModel::Solid)
+        return finish();
+    // The plain analysis (a tenth of the bar), the search (eight tenths),
+    // the mass with the zone (the last tenth).
+    const MaterialFamily* family = family_of(c.material_id);
+    const double grams_per_cm3 = family ? family->density : 1.0;
+    const auto part = [&](double from, double width) {
+        return [&progress, from, width](std::string_view, double done) {
+            if (progress)
+                progress(from + width * std::clamp(done, 0.0, 1.0));
+        };
+    };
+    Settings at = settings;
+    at.infill_density = double(density);
+    const AnalysisReport plain = run_analysis(mesh, at, c, nullptr, part(0.0, 0.1));
+    ++out.analyses;
+    if (!plain.valid)
+        return finish();
+    out.plain_mass_g = voxel_mass_grams(plain.grid, grams_per_cm3);
+    out.zone = reinforcement_zone(plain, c, at);
+    if (out.zone.modifiers.empty())
+        return finish();
+    out.best = lightest_infill(
+        mesh, placed, settings, c, e,
+        [&](double done) {
+            if (progress)
+                progress(0.1 + 0.8 * done);
+        },
+        &out.zone.modifiers);
+    out.analyses += out.best.analyses;
+    if (!out.best.found || out.best.solid)
+        return finish();
+    out.found = true;
+    Settings best = settings;
+    best.infill_density = double(out.best.density);
+    const AnalysisReport r = run_analysis(mesh, best, c, nullptr, part(0.9, 0.1), nullptr, &out.zone.modifiers);
+    ++out.analyses;
+    out.mass_g = voxel_mass_grams(r.grid, grams_per_cm3);
+    out.lighter = out.mass_g < out.plain_mass_g;
+    return finish();
+}
+
 RibbedInfill ribbed_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
                            const AnalysisCase& c, const ProjectEngineering& e, int density,
                            const std::function<void(double)>& progress) {
@@ -713,7 +764,7 @@ ZonedInfill zoned_infill(const IndexedMesh& mesh, const TriangleMesh& placed, co
 
 LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
                                const AnalysisCase& c, const ProjectEngineering& e,
-                               const std::function<void(double)>& progress) {
+                               const std::function<void(double)>& progress, const std::vector<MeshModifier>* modifiers) {
     LightestInfill out;
     if (c.model == AnalysisModel::Solid) {
         out.solid = true;
@@ -726,10 +777,13 @@ LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& plac
         Settings s = settings;
         s.infill_density = double(density);
         const int step = out.analyses++;
-        const AnalysisReport r = run_analysis(mesh, s, c, nullptr, [&](std::string_view, double done) {
-            if (progress)
-                progress((double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses);
-        });
+        const AnalysisReport r = run_analysis(
+            mesh, s, c, nullptr,
+            [&](std::string_view, double done) {
+                if (progress)
+                    progress((double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses);
+            },
+            nullptr, modifiers);
         safety = r.result.min_safety;
         return r.valid && report_verdict(r, c, e, placed) == Verdict::Holds;
     };

@@ -1093,4 +1093,18 @@ TEST_CASE("reinforcement: thicker walls and denser infill round the clamp and th
     std::printf("reinforcement: %zu cells, factor %.3f without, %.3f with\n", r.cells, plain.result.min_safety,
                 stronger.result.min_safety);
     CHECK(stronger.result.min_safety > plain.result.min_safety);
+    // The search with the zone in place, against the part at 30 % without it.
+    double last = -1.0;
+    const ReinforcedInfill best = reinforced_infill(bar, triangles, s, c, e, 30, [&](double done) {
+        CHECK(done >= last);
+        last = done;
+    });
+    CHECK(last == 1.0);
+    CHECK(best.analyses <= 10);
+    REQUIRE(best.found);
+    CHECK(best.plain_mass_g > 0.0);
+    CHECK(best.mass_g > 0.0);
+    CHECK(best.lighter == (best.mass_g < best.plain_mass_g));
+    std::printf("reinforcement: rest at %d %% (factor %.2f), %.3f g against %.3f g at 30 %%, %d analyses\n",
+                best.best.density, best.best.min_safety, best.mass_g, best.plain_mass_g, best.analyses);
 }
