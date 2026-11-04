@@ -132,6 +132,22 @@ LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& plac
                                const AnalysisCase& c, const ProjectEngineering& e,
                                const std::function<void(double)>& progress = {});
 
+// Ribs (structural_optimization.md, rule 4): from the analysis at the
+// lowest uniform `density` that holds, the ribs; then the lowest density that
+// holds with them, searched again (at most that density). Used only when
+// lighter: a lower density.
+struct RibbedInfill {
+    bool found = false;   // there are ribs and the part holds with them at `density` or less
+    bool lighter = false; // below `density`
+    InfillRibs ribs;
+    int density = 100;
+    double min_safety = 0.0;
+    int analyses = 0;
+};
+RibbedInfill ribbed_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                           const AnalysisCase& c, const ProjectEngineering& e, int density,
+                           const std::function<void(double)>& progress = {});
+
 // The zones' three levels scaled together, by bisection, until the part
 // holds (structural_optimization.md, rule 3): from the analysis at the
 // uniform `density` (the lightest that holds), the object at the lowest level

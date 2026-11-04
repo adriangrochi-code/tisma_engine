@@ -10363,3 +10363,22 @@ direccionalidad ≥ 0,5, agrupadas por ángulo en pasos de 15°; cada grupo son 
 **Sigue (regla 4):** paso B, la búsqueda doble del relleno mínimo (sin nervios, después con ellos, solo si queda más
 liviano); necesita la regla 5 (el relleno en una sola dirección en el análisis: E_T y G ∝ ρ², resistencias a lo
 ancho 0,3 · ρ^1,5) para que el análisis vea la ventaja; después, en el panel.
+
+## 2026-11-04 — Optimizar, regla 4 (nervios), paso B: la segunda búsqueda; regla 5
+
+**Decisión (regla 5):** el análisis «como se imprime» con calidad normal o alta modela cada línea del relleno con su
+dirección (vóxeles de media línea, material ortótropo girado a la línea), así que el relleno en una sola dirección ya
+es más rígido y resistente a lo largo que a lo ancho por su geometría. Los factores homogeneizados de la regla 5
+(ρ, ρ², 0,3 · ρ^1,5) solo harían falta con vóxeles más gruesos que los huecos, que hoy se analizan macizos (aviso
+`coarse_voxels`); quedan para cuando exista ese modelo.
+
+**Hecho:** `ribbed_infill(…, densidad)` analiza a la densidad uniforme mínima, saca los nervios, comprueba que con
+ellos aguanta a esa densidad y busca por bisección la menor que aguanta con ellos (como mucho 9 análisis, con
+avance). `lighter` solo si baja la densidad.
+
+**Prueba:** barra de 24 × 6 × 6 mm traccionada a 175 N, PLA, factor pedido 2: al 30 % el factor pasa de 2,26 a 2,36
+con los nervios, y el mínimo con nervios es 26 % (factor 2,12), 7 análisis (la ficha, O4: 31 % → 27 %). La prueba
+tarda ~70 s sola (2 min 20 s con el CI de Linux corriendo al lado).
+
+**Sigue (regla 4):** en el panel Optimizar, «Nervios» después del uniforme; «Usar» pone la densidad y agrega las
+zonas con relleno en una dirección, con deshacer.

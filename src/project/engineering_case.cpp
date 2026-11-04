@@ -460,6 +460,65 @@ InfillRibs infill_ribs(const AnalysisReport& report) {
     return out;
 }
 
+RibbedInfill ribbed_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                           const AnalysisCase& c, const ProjectEngineering& e, int density,
+                           const std::function<void(double)>& progress) {
+    RibbedInfill out;
+    if (c.model == AnalysisModel::Solid || density <= 0) {
+        if (progress)
+            progress(1.0);
+        return out;
+    }
+    // The analysis without ribs, then `density` with them, then halving
+    // below it: at most 2 + 7 analyses.
+    constexpr int kMostAnalyses = 9;
+    const auto analyse = [&](int at, const std::vector<MeshModifier>* modifiers) {
+        Settings s = settings;
+        s.infill_density = double(at);
+        const int step = out.analyses++;
+        return run_analysis(mesh, s, c, nullptr,
+                            [&](std::string_view, double done) {
+                                if (progress)
+                                    progress((double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses);
+                            },
+                            nullptr, modifiers);
+    };
+    const auto finish = [&]() -> RibbedInfill {
+        if (progress)
+            progress(1.0);
+        return out;
+    };
+    const AnalysisReport plain = analyse(density, nullptr);
+    if (!plain.valid)
+        return finish();
+    out.ribs = infill_ribs(plain);
+    if (out.ribs.modifiers.empty())
+        return finish();
+    const auto holds = [&](int at, double& safety) {
+        const AnalysisReport r = analyse(at, &out.ribs.modifiers);
+        safety = r.result.min_safety;
+        return r.valid && report_verdict(r, c, e, placed) == Verdict::Holds;
+    };
+    double safety = 0.0;
+    if (!holds(density, safety))
+        return finish();
+    out.found = true;
+    out.density = density;
+    out.min_safety = safety;
+    int fails = -1;
+    while (out.density - fails > 1) {
+        const int mid = (fails + out.density) / 2;
+        if (holds(mid, safety)) {
+            out.density = mid;
+            out.min_safety = safety;
+        } else {
+            fails = mid;
+        }
+    }
+    out.lighter = out.density < density;
+    return finish();
+}
+
 ZonedInfill zoned_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
                          const AnalysisCase& c, const ProjectEngineering& e, int density,
                          const std::function<void(double)>& progress) {

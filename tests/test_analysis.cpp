@@ -979,7 +979,7 @@ TEST_CASE("infill ribs: lines along the stress (structural_optimization.md, rule
         pull.point = along_y ? std::array<double, 3>{3.0, 24.0, 3.0} : std::array<double, 3>{24.0, 3.0, 3.0};
         pull.normal = along_y ? std::array<double, 3>{0.0, 1.0, 0.0} : std::array<double, 3>{1.0, 0.0, 0.0};
         pull.radius = 3.0;
-        pull.newtons = 50.0;
+        pull.newtons = 175.0; // 30 % holds a factor of 2, the walls alone do not
         pull.direction = ForceDirection::Axis;
         pull.axis = along_y ? 2 : 1;
         e.conditions = {fixed, pull};
@@ -991,7 +991,31 @@ TEST_CASE("infill ribs: lines along the stress (structural_optimization.md, rule
         const AnalysisReport r = run_analysis(bar, s, c);
         REQUIRE(r.valid);
         REQUIRE(r.result.layer_stress.size() == r.grid.solid.size());
-        return infill_ribs(r);
+        InfillRibs ribs = infill_ribs(r);
+        // The same infill along the stress carries more (the as-printed
+        // analysis models each line and its direction: rule 5).
+        if (!along_y) {
+            const AnalysisReport ribbed = run_analysis(bar, s, c, nullptr, {}, nullptr, &ribs.modifiers);
+            REQUIRE(ribbed.valid);
+            std::printf("infill ribs: factor %.3f without, %.3f with\n", r.result.min_safety, ribbed.result.min_safety);
+            CHECK(ribbed.result.min_safety > r.result.min_safety);
+            // The search again with the ribs, from 30 % (which holds with
+            // room to spare): lower, and it holds there.
+            double last = -1.0;
+            const RibbedInfill again = ribbed_infill(bar, triangles, s, c, e, 30, [&](double done) {
+                CHECK(done >= last);
+                last = done;
+            });
+            CHECK(last == 1.0);
+            CHECK(again.analyses <= 9);
+            REQUIRE(again.found);
+            CHECK(again.density <= 30);
+            CHECK(again.lighter == (again.density < 30));
+            CHECK_FALSE(again.ribs.modifiers.empty());
+            std::printf("infill ribs: lowest with ribs %d %% (factor %.2f), %d analyses\n", again.density, again.min_safety,
+                        again.analyses);
+        }
+        return ribs;
     };
     // The angle of the group with the most cells.
     const auto main_angle = [](const InfillRibs& ribs) {
