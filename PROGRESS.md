@@ -10737,3 +10737,9 @@ la interfaz (PK1, PK2).
   - las impresoras elegidas del paquete se guardan en las preferencias (`packs.printers`) y se vuelven a armar al abrir;
   - «Actualizar perfiles» corre `pack_update` en segundo plano, con avance;
   - al abrir, como mucho una vez por día, `pack_newer` (regla 19).
+
+**Fechas del dueño (2026-11-04, por la sesión de fichas):**
+- beta cerrada en diciembre de 2026, con lo que esté listo; sirve para arreglar cada error que aparezca;
+- versión 1.0 en la segunda semana de enero de 2027;
+- las pruebas en hardware corren aparte y no frenan el software.
+El orden del roadmap se planifica con esas fechas.
