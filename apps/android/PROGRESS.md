@@ -2,6 +2,26 @@
 
 Estado de la sesión de Android, para seguir sin depender de la conversación (decisión del dueño, 2026-11-04).
 
+## Plan hasta la beta cerrada (dueño, 04-11-2026)
+
+La hoja de ruta cierra en la segunda semana de enero de 2027; esa semana empieza una beta cerrada para depurar,
+donde cada error visto se arregla. Las pruebas con hardware corren aparte y no frenan el software.
+
+| Cuándo | Qué | Depende de |
+|---|---|---|
+| Noviembre, semanas 1 y 2 | Impresión y Material con los datos del panel del escritorio (`settings-layout`); los niveles y la vista Personalizada (`mobile_app.md`, reglas 7 y 8, MA12) | `settings-layout` del motor (en curso) |
+| Noviembre, semanas 2 y 3 | Paquete de perfiles: primer arranque y asistente (MA1), perfiles del paquete en la tarjeta de la impresora; ayuda sin conexión (regla 16) | `pack plan/install`, `knowledge` del motor |
+| Noviembre, semana 4 | Ingeniería: Optimizar en el teléfono y en la nube; marcar caras fijas y de carga tocando la vista 3D (regla 13, MA6) | modos de `analyze` del motor |
+| Diciembre, semana 1 | Vista previa del G-code binario y por tipo/ancho/velocidad; vista previa en la vista 3D | — |
+| Diciembre, semana 2 | API en C del motor por JNI en lugar del programa aparte, si está lista (avance, cancelar, memoria) | API en C del motor |
+| Diciembre, semana 3 | Accesibilidad y uso táctil (`accessibility_touch.md`), tablets y horizontal, modo oscuro revisado; actualizaciones de la app (`app_updates.md`, regla 11) | — |
+| Diciembre, semana 4 | Rendimiento medido en un teléfono de gama media (regla 18) y lo que haga falta ajustar; APK firmado para la beta | teléfono del dueño |
+| Enero, semana 1 | Congelar funciones; solo errores; notas de la versión | — |
+| Enero, semana 2 | Beta cerrada | — |
+
+Decisiones del dueño que siguen abiertas: inicio de sesión con Google y pagos de Google Play (bibliotecas con
+licencia de Google), el identificador de la app, las herramientas de prueba con licencias fuera de la lista.
+
 ## Hecho
 
 - **2026-11-04 — base y Tisma Cloud** (commit `feat(android): Android app with the Tisma Cloud screens`, PR #55
