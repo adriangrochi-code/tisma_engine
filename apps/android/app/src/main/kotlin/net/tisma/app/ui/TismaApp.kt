@@ -88,6 +88,7 @@ sealed interface Screen {
     data class CustomPicker(val tab: String) : Screen
     data object PrinterSettings : Screen
     data object Messages : Screen
+    data object PackWizard : Screen
 }
 
 /** Where the person is: a section and the screens opened on it. */
@@ -136,6 +137,13 @@ fun TismaApp(
     val snackbar = remember { SnackbarHostState() }
     val context = ctx()
     LaunchedEffect(Unit) { cloud.refreshPublic() }
+    // MA1: the first start with an engine and no printer opens the profile pack's wizard, once.
+    LaunchedEffect(sliceState.packAvailable) {
+        if (sliceState.packAvailable && !settings.packWizardDone && sliceState.profile == null && nav.stack.isEmpty()) {
+            nav.select(Section.PLATE)
+            nav.open(Screen.PackWizard)
+        }
+    }
     // Notices: each is taken off the model and shown in its own coroutine, so clearing it
     // (which changes the state) never cancels the message on screen (QA AND1).
     LaunchedEffect(Unit) {
@@ -262,6 +270,7 @@ fun TismaApp(
                     is Screen.SettingsSection -> SettingsSectionScreen(top.tab, top.section, sliceState, slice)
                     is Screen.CustomPicker -> CustomPickerScreen(top.tab, sliceState, slice)
                     Screen.Messages -> MessagesScreen(nav.notices)
+                    Screen.PackWizard -> PackWizardScreen(sliceState, slice, nav) { settings.packWizardDone = true }
                     Screen.PrinterSettings -> PrinterSettingsScreen(sliceState, slice, nav, settings.printerNotes(sliceState.profile?.printer)) {
                         settings.setPrinterNotes(sliceState.profile?.printer, it)
                     }
@@ -291,6 +300,7 @@ private fun titleOf(s: Screen): Int = when (s) {
     }
     Screen.PrinterSettings -> R.string.printer_settings
     Screen.Messages -> R.string.more_messages
+    Screen.PackWizard -> R.string.pack_title
     is Screen.CustomPicker -> R.string.panel_choose
 }
 

@@ -43,6 +43,12 @@ data class SliceState(
     val layout: SettingsLayout? = null,
     val profileValues: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
     val view: PanelVisibility.View = PanelVisibility.View.BASIC,
+    /** The profile pack for the wizard: its index, a download running, its progress, and what failed. */
+    val packAvailable: Boolean = false,
+    val packIndex: ProfilePack.Index? = null,
+    val packBusy: Boolean = false,
+    val packProgress: Int = 0,
+    val packError: String? = null,
     /** Engineering on a bare model: the marked faces, the material and the safety asked (mobile_app.md, rule 13). */
     val case: EngineeringCase = EngineeringCase(),
     /** What a tap on the 3D view marks now, or null when it only turns the view. */
@@ -92,13 +98,19 @@ class SliceViewModel(
     private val freeMemory: () -> Long = { Long.MAX_VALUE },
     /** Reads the settings panel (from the app's assets, in the phone's language); null when it is not there. */
     private val loadLayout: () -> SettingsLayout? = { null },
+    /** The free profile pack (profile_pack.md), or null when there is no engine to install it. */
+    private val pack: ProfilePack? = null,
+    /** The pack's address; null for the published one (tests give their server). */
+    private val packUrl: String? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SliceState(engineAvailable = runner.available,
-        profile = saved?.profilePrinter?.let { EngineRunner.ProfileChoice(it, saved.profileNozzle, saved.profileFilament) },
+        profile = saved?.profilePrinter?.let {
+            EngineRunner.ProfileChoice(it, saved.profileNozzle, saved.profileFilament, saved.profilePack, saved.profileName)
+        },
         settings = savedSettings(),
         view = saved?.panelView?.let { v -> PanelVisibility.View.entries.firstOrNull { it.name.equals(v, true) } }
             ?: PanelVisibility.View.BASIC,
-        custom = saved?.customVisible ?: emptySet()))
+        custom = saved?.customVisible ?: emptySet(), packAvailable = pack != null))
 
     private fun savedSettings(): EngineRunner.SimpleSettings {
         val o = saved?.panelChanges?.let { runCatching { kotlinx.serialization.json.Json.parseToJsonElement(it) as? kotlinx.serialization.json.JsonObject }.getOrNull() }
@@ -169,7 +181,8 @@ class SliceViewModel(
 
     /** The bed of the chosen printer (catalog), or 220 × 220 mm. */
     private fun bedSize(): FloatArray {
-        val p = _state.value.catalog?.printer(_state.value.profile?.printer)
+        val choice = _state.value.profile
+        val p = _state.value.catalog?.let { c -> c.printer(choice?.printer) ?: c.printer(choice?.name) }
         val v = p?.buildVolume
         return if (v != null && v.size >= 2 && v[0] > 0 && v[1] > 0) floatArrayOf(v[0].toFloat(), v[1].toFloat()) else floatArrayOf(220f, 220f)
     }
@@ -186,6 +199,8 @@ class SliceViewModel(
         saved?.profilePrinter = choice?.printer
         choice?.let { saved?.profileNozzle = it.nozzle }
         saved?.profileFilament = choice?.filament
+        saved?.profilePack = choice?.pack == true
+        saved?.profileName = choice?.name
         _state.update { it.copy(profile = choice, result = null) }
         model?.let { loadMesh(it) }
         loadProfileValues()
@@ -282,6 +297,40 @@ class SliceViewModel(
                 _state.update { it.copy(error = EngineRunner.EngineException("error", e.message ?: "", "", -1)) }
             } finally {
                 _state.update { it.copy(slicing = false) }
+            }
+        }
+    }
+
+    /** Downloads the pack's index for the wizard (MA1): its printers, before any vendor. */
+    fun loadPackIndex() {
+        val p = pack ?: return
+        if (_state.value.packBusy) return
+        _state.update { it.copy(packBusy = true, packError = null, packIndex = it.packIndex ?: p.index()) }
+        viewModelScope.launch {
+            val r = withContext(io) { runCatching { p.fetchIndex(packUrl) } }
+            r.onFailure { AppLog.line("pack: index ${it.message}") }
+            _state.update { s ->
+                s.copy(packBusy = false, packIndex = r.getOrNull() ?: s.packIndex,
+                    packError = r.exceptionOrNull()?.let { it.message ?: "error" }?.takeIf { s.packIndex == null || r.isFailure })
+            }
+        }
+    }
+
+    /** Picks a printer of the pack: downloads its vendor, installs it, and puts it on the printer card. */
+    fun choosePackPrinter(vendor: ProfilePack.Vendor, model: ProfilePack.Model, variant: ProfilePack.Variant, done: () -> Unit) {
+        val p = pack ?: return
+        _state.update { it.copy(packBusy = true, packError = null, packProgress = 0) }
+        viewModelScope.launch {
+            val r = withContext(io) {
+                runCatching {
+                    p.update(listOf(vendor.id), packUrl, { pr -> _state.update { it.copy(packProgress = pr) } }) { false }
+                }
+            }
+            r.onFailure { AppLog.line("pack: install ${it.message}") }
+            _state.update { it.copy(packBusy = false, packError = r.exceptionOrNull()?.let { e -> e.message ?: "error" }) }
+            if (r.isSuccess) {
+                setProfile(EngineRunner.ProfileChoice(model.file + "#" + variant.id, variant.nozzle, null, pack = true, name = model.name))
+                done()
             }
         }
     }

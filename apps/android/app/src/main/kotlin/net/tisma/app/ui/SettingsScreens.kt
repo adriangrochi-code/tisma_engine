@@ -376,7 +376,7 @@ fun PrinterSettingsCard(state: SliceState, nav: Navigator) {
             Spacer(Modifier.size(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(stringResource(R.string.printer_settings), style = MaterialTheme.typography.titleMedium)
-                Text(state.profile?.printer ?: stringResource(R.string.profile_none), style = MaterialTheme.typography.bodySmall,
+                Text(state.profile?.let { it.name ?: it.printer } ?: stringResource(R.string.profile_none), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

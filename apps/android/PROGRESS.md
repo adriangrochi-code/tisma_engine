@@ -25,6 +25,20 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Paquete de perfiles y asistente del primer arranque (regla 11, MA1):**
+  - `ProfilePack` sigue el protocolo real del motor (`docs/CATALOG.md`): `pack plan` sin `--index` (el índice),
+    `plan --index … --vendors <id>` (el resto), descarga con el HTTPS de Android y `pack install`. `pack list` y
+    `profile --pack <datos> --printer "<archivo>#<variante>"` también.
+  - El primer arranque con motor abre «Elegí tu impresora»: baja solo el índice y lista sus impresoras FDM por
+    fabricante (1058 modelos en el paquete de hoy), con búsqueda. Al elegir modelo y boquilla (primero la variante de
+    fábrica), baja ese fabricante, lo instala y pone la impresora en la tarjeta. Sin red, muestra el aviso de la
+    regla 3 y ofrece las impresoras incluidas. El paquete vive en `files/profiles`.
+  - Probado con el motor de la máquina y los archivos reales servidos aquí (Anker: índice, plan, instalación,
+    lista). Encontrado: el perfil de la AnkerMake M5 del paquete no lamina (`{layer_count}` desconocido en el G-code
+    de inicio); avisado al motor.
+  - Falta: filamentos del paquete (`compatible.json`; hoy se usa el filamento por defecto de la variante), la ayuda
+    sin conexión con `knowledge` (regla 16), y las imágenes de la cama.
+
 - **2026-11-04 — Ingeniería en un modelo suelto (regla 13, MA6):**
   - En la Placa, con un STL u OBJ, se elige qué marca un toque (fijas, carga, o solo girar). Al tocar la pieza se marca
     la cara plana bajo el dedo: rayo y Möller–Trumbore, después los triángulos unidos en el mismo plano.
@@ -161,7 +175,7 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
   de escritorio aceptó `settings-layout` (en curso), el servicio local compatible con Moonraker (necesita ficha: la
   lista de pedidos se mandó al equipo de fichas) y las notas de comportamiento (mandadas).
 
-- **Paquete de perfiles y ayuda (MA1, regla 16):** acordado con la sesión de escritorio que vive en el motor
+- **Paquete de perfiles y ayuda (MA1, regla 16), historia:** acordado con la sesión de escritorio que vive en el motor
   (`pack update/list`, `profile --pack`, `knowledge`), después de Optimizar; propuesto `pack plan` + `pack install`
   porque el motor en Android no tiene HTTPS (sin OpenSSL): la app baja los archivos y el motor los verifica e instala. Aceptado por el escritorio; el lado de la app (`ProfilePack`: plan, descarga en staging, install, dos rondas) está hecho y probado con un motor falso, falta conectarlo a una pantalla cuando el motor tenga los comandos.
 

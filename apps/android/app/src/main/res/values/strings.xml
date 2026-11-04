@@ -388,4 +388,12 @@
     <string name="eng_required">Safety factor asked</string>
     <string name="eng_remove">Remove</string>
     <string name="eng_need_both">Mark at least one fixed face and one load.</string>
+    <string name="pack_title">Choose your printer</string>
+    <string name="pack_loading_index">Downloading the list of printers…</string>
+    <string name="pack_installing">Downloading its profiles…</string>
+    <string name="pack_offline">No connection: the built-in printers are shown; the rest downloads when there is network.</string>
+    <string name="pack_retry">Try again</string>
+    <string name="pack_builtin">Built-in printers</string>
+    <string name="pack_use">Use this printer</string>
+    <string name="pack_open">Printers from the profile pack</string>
 </resources>

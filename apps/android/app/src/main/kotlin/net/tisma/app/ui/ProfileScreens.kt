@@ -41,7 +41,7 @@ fun PrinterCard(state: SliceState, onClick: () -> Unit) {
         androidx.compose.foundation.layout.Row(Modifier.padding(16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             androidx.compose.material3.Icon(painterResource(R.drawable.tisma_printer), null, Modifier.padding(end = 12.dp))
             Column(Modifier.weight(1f)) {
-                Text(p?.printer ?: stringResource(R.string.profile_none), style = MaterialTheme.typography.titleMedium)
+                Text(p?.let { it.name ?: it.printer } ?: stringResource(R.string.profile_none), style = MaterialTheme.typography.titleMedium)
                 Text(if (p == null) stringResource(R.string.profile_none_hint)
                     else String.format(Locale.getDefault(), "%.2f mm", p.nozzle) + " · " + (p.filament ?: stringResource(R.string.profile_generic_filament)),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -65,6 +65,12 @@ fun ProfilePickerScreen(state: SliceState, slice: SliceViewModel, nav: Navigator
     }
     val chosen = catalog.printer(printer)
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (chosen == null && state.packAvailable) {
+            // The profile pack's printers, more than the built-in catalog (profile_pack.md, rule 2).
+            androidx.compose.material3.OutlinedButton(onClick = { nav.replace(Screen.PackWizard) }, modifier = Modifier.testTag("profile_pack")) {
+                Text(stringResource(R.string.pack_open))
+            }
+        }
         if (chosen == null) {
             OutlinedTextField(query, { query = it }, singleLine = true, label = { Text(stringResource(R.string.profile_search)) },
                 modifier = Modifier.fillMaxWidth().testTag("profile_search"))
@@ -104,6 +110,78 @@ fun ProfilePickerScreen(state: SliceState, slice: SliceViewModel, nav: Navigator
             Button(onClick = { slice.setProfile(EngineRunner.ProfileChoice(chosen.name, nozzle, filament)); nav.back() },
                 modifier = Modifier.fillMaxWidth().height(56.dp).testTag("profile_save")) {
                 Text(stringResource(R.string.pref_save))
+            }
+        }
+    }
+}
+
+/**
+ * The first-start wizard with the free profile pack (mobile_app.md, rule 11;
+ * profile_pack.md, rules 1 to 3 and 11; MA1): the index's printers by vendor,
+ * searched by name; a model, then its nozzle (the default variant first);
+ * «Use this printer» downloads that vendor, installs it and puts it on the
+ * printer card. Without network: the built-in catalog.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun PackWizardScreen(state: SliceState, slice: SliceViewModel, nav: Navigator, onDone: () -> Unit) {
+    androidx.compose.runtime.LaunchedEffect(Unit) { slice.loadPackIndex() }
+    val index = state.packIndex
+    var query by rememberSaveable { mutableStateOf("") }
+    var chosenFile by rememberSaveable { mutableStateOf<String?>(null) }
+    var variantId by rememberSaveable { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxSize().padding(16.dp).testTag("pack_wizard"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.pack_title), style = MaterialTheme.typography.titleLarge)
+        if (state.packBusy) {
+            androidx.compose.material3.LinearProgressIndicator(progress = { state.packProgress / 100f }, modifier = Modifier.fillMaxWidth())
+            Text(stringResource(if (index == null) R.string.pack_loading_index else R.string.pack_installing),
+                style = MaterialTheme.typography.bodySmall)
+        }
+        if (index == null && !state.packBusy) {
+            // Rule 3: without network, the built-in catalog.
+            Text(stringResource(R.string.pack_offline), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("pack_offline"))
+            Button(onClick = { slice.loadPackIndex() }, modifier = Modifier.testTag("pack_retry")) { Text(stringResource(R.string.pack_retry)) }
+        }
+        state.packError?.takeIf { index != null }?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        androidx.compose.material3.OutlinedButton(onClick = { onDone(); nav.replace(Screen.ProfilePicker) },
+            modifier = Modifier.testTag("pack_builtin")) { Text(stringResource(R.string.pack_builtin)) }
+        if (index == null) return@Column
+        val found = index.vendors.flatMap { v -> v.models.map { v to it } }.firstOrNull { it.second.file == chosenFile }
+        if (found == null) {
+            OutlinedTextField(query, { query = it }, singleLine = true, label = { Text(stringResource(R.string.profile_search)) },
+                modifier = Modifier.fillMaxWidth().testTag("pack_search"))
+            val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+            val list = index.vendors.flatMap { v -> v.models.map { v to it } }
+                .filter { (v, m) -> words.all { w -> m.name.lowercase().contains(w) || v.name.lowercase().contains(w) } }
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(list.take(300), key = { it.second.file }) { (v, m) ->
+                    Card(onClick = { chosenFile = m.file; variantId = m.defaultVariant.ifBlank { m.variants.firstOrNull()?.id } },
+                        modifier = Modifier.fillMaxWidth().testTag("pack_model_" + m.name)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(m.name, style = MaterialTheme.typography.titleMedium)
+                            Text(v.name, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        } else {
+            val (vendor, model) = found
+            Text(model.name, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.profile_nozzle), style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                model.variants.forEach { va ->
+                    FilterChip(selected = variantId == va.id, onClick = { variantId = va.id },
+                        label = { Text(if (va.id == String.format(Locale.ROOT, "%.1f", va.nozzle) || va.nozzle == 0.0) va.id
+                            else "${va.id} (${va.nozzle} mm)") },
+                        modifier = Modifier.testTag("pack_variant_" + va.id))
+                }
+            }
+            AccentTextButton(onClick = { chosenFile = null }) { Text(stringResource(R.string.profile_change_printer)) }
+            val variant = model.variants.firstOrNull { it.id == variantId }
+            Button(onClick = { if (variant != null) slice.choosePackPrinter(vendor, model, variant) { onDone(); nav.back() } },
+                enabled = variant != null && !state.packBusy, modifier = Modifier.fillMaxWidth().testTag("pack_use")) {
+                Text(stringResource(R.string.pack_use))
             }
         }
     }

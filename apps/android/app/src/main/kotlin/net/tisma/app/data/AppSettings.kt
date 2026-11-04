@@ -62,6 +62,19 @@ class AppSettings(context: Context) {
         get() = prefs.getString("ui.color_vision", null) ?: "normal"
         set(v) = prefs.edit().putString("ui.color_vision", v).apply()
 
+    /** The printer card's choice is a printer of the profile pack, and its name to show. */
+    var profilePack: Boolean
+        get() = prefs.getBoolean("profile.pack", false)
+        set(v) = prefs.edit().putBoolean("profile.pack", v).apply()
+    var profileName: String?
+        get() = prefs.getString("profile.name", null)
+        set(v) = prefs.edit().putString("profile.name", v).apply()
+
+    /** The first-start wizard ran (mobile_app.md, rule 11; MA1): it is not opened again by itself. */
+    var packWizardDone: Boolean
+        get() = prefs.getBoolean("pack.wizard_done", false)
+        set(v) = prefs.edit().putBoolean("pack.wizard_done", v).apply()
+
     companion object {
         private const val SEARCH_NETWORK = "printers.search_network"
         const val FILE = "tisma_settings"

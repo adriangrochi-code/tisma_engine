@@ -55,8 +55,12 @@ class MainActivity : ComponentActivity() {
                     val lang = if (java.util.Locale.getDefault().language == "es") "es" else "en"
                     net.tisma.app.engine.SettingsLayout.parse(app.assets.open("settings/layout_$lang.json").bufferedReader().readText())
                 }
-                return SliceViewModel(EngineRunner(exe, work), work, loadCatalog = catalog, saved = app.settings,
-                    freeMemory = free, loadLayout = layout) as T
+                // The profile pack lives with the app's files, apart from the cache (profile_pack.md, rule 8).
+                val packDir = java.io.File(app.filesDir, "profiles")
+                val runner = EngineRunner(exe, work, packDir)
+                return SliceViewModel(runner, work, loadCatalog = catalog, saved = app.settings,
+                    freeMemory = free, loadLayout = layout,
+                    pack = if (runner.available) net.tisma.app.engine.ProfilePack(exe, packDir) else null) as T
             }
         }
     }

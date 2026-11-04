@@ -372,4 +372,12 @@
     <string name="eng_required">Factor de seguridad pedido</string>
     <string name="eng_remove">Quitar</string>
     <string name="eng_need_both">Marcá al menos una cara fija y una carga.</string>
+    <string name="pack_title">Elegí tu impresora</string>
+    <string name="pack_loading_index">Bajando la lista de impresoras…</string>
+    <string name="pack_installing">Bajando sus perfiles…</string>
+    <string name="pack_offline">Sin conexión: se muestran las impresoras incluidas; el resto se descarga cuando haya red.</string>
+    <string name="pack_retry">Probar de nuevo</string>
+    <string name="pack_builtin">Impresoras incluidas</string>
+    <string name="pack_use">Usar esta impresora</string>
+    <string name="pack_open">Impresoras del paquete de perfiles</string>
 </resources>

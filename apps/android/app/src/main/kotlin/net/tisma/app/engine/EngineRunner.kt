@@ -20,7 +20,15 @@ import java.util.concurrent.TimeUnit
  * app down. Own design, until the engine's C API for apps (mobile_app.md,
  * rule 2) takes its place.
  */
-class EngineRunner(private val executable: File, private val workDir: File) {
+class EngineRunner(
+    private val executable: File,
+    private val workDir: File,
+    /** Where the profile pack lives (`<packDir>/pack`), for its printers' profiles. */
+    private val packDir: File? = null,
+) {
+    /** The engine's program, for the profile pack's commands. */
+    val program: File get() = executable
+
 
     val available: Boolean get() = executable.isFile && executable.canExecute()
 
@@ -42,7 +50,14 @@ class EngineRunner(private val executable: File, private val workDir: File) {
     class Cancelled : Exception("Cancelled")
 
     /** The printer and filament from the catalog, by the names the engine finds them by. */
-    data class ProfileChoice(val printer: String, val nozzle: Double, val filament: String?)
+    data class ProfileChoice(
+        val printer: String,
+        val nozzle: Double,
+        val filament: String?,
+        /** A printer of the profile pack, named `<model file>#<variant>`; [name] is what the person reads. */
+        val pack: Boolean = false,
+        val name: String? = null,
+    )
 
     /** The simple settings of MOBILE.md, step 5: a quality (layer height) and supports or not. */
     data class SimpleSettings(
@@ -93,9 +108,11 @@ class EngineRunner(private val executable: File, private val workDir: File) {
      */
     fun profile(choice: ProfileChoice): JsonObject? {
         val out = File(workDir, "profile.json").apply { delete() }
-        val args = mutableListOf(executable.path, "profile", "--printer", choice.printer,
-            "--nozzle", choice.nozzle.toString(), "-o", out.path)
-        choice.filament?.let { args += listOf("--filament", it) }
+        val args = if (choice.pack && packDir != null) {
+            // The pack's variant with its own default filament and print profile (docs/CATALOG.md).
+            mutableListOf(executable.path, "profile", "--pack", packDir.path, "--printer", choice.printer, "-o", out.path)
+        } else mutableListOf(executable.path, "profile", "--printer", choice.printer,
+            "--nozzle", choice.nozzle.toString(), "-o", out.path).also { a -> choice.filament?.let { a += listOf("--filament", it) } }
         return runCatching {
             val p = ProcessBuilder(args).directory(workDir).redirectErrorStream(true).start()
             p.outputStream.close()
