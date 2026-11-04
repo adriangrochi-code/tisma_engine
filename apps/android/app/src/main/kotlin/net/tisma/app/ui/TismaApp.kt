@@ -84,6 +84,8 @@ sealed interface Screen {
     data object Credits : Screen
     data class AddPrinter(val editId: String?, val found: net.tisma.printers.FoundPrinter? = null) : Screen
     data class PrinterDetail(val id: String) : Screen
+    data class SettingsSection(val tab: String, val section: String) : Screen
+    data class CustomPicker(val tab: String) : Screen
 }
 
 /** Where the person is: a section and the screens opened on it. */
@@ -220,6 +222,8 @@ fun TismaApp(
                     null -> when (nav.section) {
                         Section.PRINTER -> PrintersScreen(printerState, printers, nav, settings.searchNetwork)
                         Section.PLATE -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav)
+                        Section.PRINT -> SettingsTabScreen("print", sliceState, slice, nav)
+                        Section.MATERIAL -> SettingsTabScreen("material", sliceState, slice, nav)
                         else -> SectionHome(nav.section, state.signedIn, state.email, nav)
                     }
                     Screen.Account -> AccountScreen(state, cloud, nav)
@@ -236,6 +240,8 @@ fun TismaApp(
                     is Screen.Preview -> PreviewScreen(top.path)
                     Screen.ProfilePicker -> ProfilePickerScreen(sliceState, slice, nav)
                     Screen.Credits -> CreditsScreen()
+                    is Screen.SettingsSection -> SettingsSectionScreen(top.tab, top.section, sliceState, slice)
+                    is Screen.CustomPicker -> CustomPickerScreen(top.tab, sliceState, slice)
                 }
             }
         }
@@ -255,6 +261,8 @@ private fun titleOf(s: Screen): Int = when (s) {
     is Screen.Preview -> R.string.preview_title
     Screen.ProfilePicker -> R.string.section_printer
     Screen.Credits -> R.string.more_credits
+    is Screen.SettingsSection -> if (s.tab == "material") R.string.section_material else R.string.section_print
+    is Screen.CustomPicker -> R.string.panel_choose
 }
 
 @Composable
@@ -266,7 +274,7 @@ private fun SectionHome(section: Section, signedIn: Boolean, email: String?, nav
                 Text(stringResource(R.string.plate_slice_cloud))
             }
         }
-        Section.PRINT, Section.MATERIAL -> Placeholder(R.string.settings_coming)
+        Section.PRINT, Section.MATERIAL -> Unit
         Section.PRINTER -> Placeholder(R.string.printer_coming)
         Section.MORE -> MoreHome(signedIn, email, nav)
     }

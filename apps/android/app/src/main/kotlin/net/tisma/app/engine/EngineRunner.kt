@@ -45,11 +45,16 @@ class EngineRunner(private val executable: File, private val workDir: File) {
     data class ProfileChoice(val printer: String, val nozzle: Double, val filament: String?)
 
     /** The simple settings of MOBILE.md, step 5: a quality (layer height) and supports or not. */
-    data class SimpleSettings(val layerHeight: Double = 0.20, val supports: Boolean = false) {
-        fun toJson(): JsonObject = buildJsonObject {
+    data class SimpleSettings(
+        val layerHeight: Double = 0.20,
+        val supports: Boolean = false,
+        /** The rest of what the person changed in Print and Material, by `layers.height` keys (mobile_app.md, rule 7). */
+        val changes: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
+    ) {
+        fun toJson(): JsonObject = merge(SettingsLayout.nest(changes), buildJsonObject {
             putJsonObject("layers") { put("height", layerHeight) }
             putJsonObject("support") { put("enabled", supports) }
-        }
+        })
     }
 
     /** Slices a 3MF project as the cloud nodes do: its own settings, sandboxed, on the CPU. */

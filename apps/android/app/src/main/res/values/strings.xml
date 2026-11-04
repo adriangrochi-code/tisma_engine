@@ -18,7 +18,6 @@
     <!-- Placeholders until the engine runs on the phone -->
     <string name="plate_coming">Slicing on the phone comes with the engine library. Meanwhile, send a 3MF project to Tisma Cloud.</string>
     <string name="plate_slice_cloud">Slice in the cloud</string>
-    <string name="settings_coming">Print and material settings come with the engine library on the phone.</string>
     <string name="printer_coming">Printers on the network (Klipper, OctoPrint, Bambu Lab…) come in the next step.</string>
 
     <!-- More -->
@@ -335,4 +334,22 @@
     <string name="unit_mm">mm</string>
     <string name="unit_mm_s">mm/s</string>
     <string name="preview_3d" translatable="false">3D</string>
+    <string name="panel_basic">Basic</string>
+    <string name="panel_normal">Normal</string>
+    <string name="panel_advanced">Advanced</string>
+    <string name="panel_custom">Custom</string>
+    <string name="panel_basic_about">What almost every print needs</string>
+    <string name="panel_normal_about">More settings to fine-tune</string>
+    <string name="panel_advanced_about">All the settings</string>
+    <string name="panel_custom_about">The settings you choose</string>
+    <string name="panel_search">Search a setting</string>
+    <string name="panel_nothing_found">No setting has that name.</string>
+    <string name="panel_choose">Choose settings…</string>
+    <string name="panel_reset">Reset</string>
+    <string name="panel_reset_all">Reset all to the profile</string>
+    <string name="panel_on_desktop">%1$s · edited on the desktop</string>
+    <string name="panel_invalid">Not valid (%1$s)</string>
+    <string name="panel_missing">The settings panel is not in this build.</string>
+    <string name="panel_none">No settings at this level.</string>
+    <string name="panel_custom_empty">Choose the settings to show with «Choose settings…».</string>
 </resources>

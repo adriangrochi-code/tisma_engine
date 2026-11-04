@@ -16,6 +16,8 @@ import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 SRC = ROOT / "assets" / "brand" / "icons"
+# The settings panel's section icons (the engine's own, named by `tisma --settings-layout`).
+SECTIONS = ROOT / "assets" / "icons"
 OUT = ROOT / "apps" / "android" / "app" / "src" / "main" / "res" / "drawable"
 SVG = "{http://www.w3.org/2000/svg}"
 CAPS = {"butt", "round", "square"}
@@ -78,7 +80,7 @@ def main():
     check = "--check" in sys.argv
     OUT.mkdir(parents=True, exist_ok=True)
     stale = []
-    for svg in sorted(SRC.glob("tisma_*.svg")):
+    for svg in sorted(SRC.glob("tisma_*.svg")) + sorted(SECTIONS.glob("section_*.svg")):
         target = OUT / (svg.stem + ".xml")
         text = convert(svg)
         if check:

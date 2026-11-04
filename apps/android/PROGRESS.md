@@ -9,7 +9,7 @@ donde cada error visto se arregla. Las pruebas con hardware corren aparte y no f
 
 | Cuándo | Qué | Depende de |
 |---|---|---|
-| Noviembre, semanas 1 y 2 | Impresión y Material con los datos del panel del escritorio (`settings-layout`); los niveles y la vista Personalizada (`mobile_app.md`, reglas 7 y 8, MA12) | `settings-layout` del motor (en curso) |
+| Noviembre, semanas 1 y 2 | ~~Impresión y Material~~ (hecho, 04-11-2026; falta Impresora, regla 8) — Impresión y Material con los datos del panel del escritorio (`settings-layout`); los niveles y la vista Personalizada (`mobile_app.md`, reglas 7 y 8, MA12) | `settings-layout` del motor (en curso) |
 | Noviembre, semanas 2 y 3 | Paquete de perfiles: primer arranque y asistente (MA1), perfiles del paquete en la tarjeta de la impresora; ayuda sin conexión (regla 16) | `pack plan/install`, `knowledge` del motor |
 | Noviembre, semana 4 | Ingeniería: Optimizar en el teléfono y en la nube; marcar caras fijas y de carga tocando la vista 3D (regla 13, MA6) | modos de `analyze` del motor |
 | Diciembre, semana 1 | ~~Vista previa del G-code binario~~ (hecha, 04-11-2026) y ~~por tipo/ancho/velocidad~~ (hecha, 04-11-2026: `;WIDTH:` y la F de cada movimiento, rampa azul a rojo con mínimo y máximo); ~~vista previa en la vista 3D~~ (hecha, 04-11-2026: botón «3D», líneas por capa hasta la elegida, tope de 1,5 millones de tramos desde arriba; el dibujo no se probó en un teléfono) | — |
@@ -23,6 +23,23 @@ Decisiones del dueño que siguen abiertas: inicio de sesión con Google y pagos 
 licencia de Google), el identificador de la app, las herramientas de prueba con licencias fuera de la lista.
 
 ## Hecho
+
+- **2026-11-04 — Impresión y Material (regla 7, MA12):** las pestañas salen del panel del escritorio
+  (`tisma --settings-layout`, motor 63dee4f), guardado como `assets/settings/layout_{en,es}.json` por
+  `tools/settings_layout.sh` (hay que volver a correrlo con un `tisma` de la máquina cuando cambia el panel; el CI no
+  lo comprueba porque necesita X11). Hecho:
+  - el chip de nivel (Básico, Normal, Avanzado, Personalizado, con «Elegir ajustes…»);
+  - la búsqueda, que muestra marcado lo que oculta el nivel;
+  - una sección por pantalla, con cada apartado como tarjeta y su «Restablecer»;
+  - el punto violeta en la sección cambiada;
+  - lo cambiado siempre a la vista, con su nivel en gris y la flecha atrás;
+  - los interruptores de la regla 6 (salvo los del relleno no planar, que dependen de nombres de patrón que la ficha
+    no da).
+  El editor de cada fila sale del tipo y el rango: interruptor, número con tope, número o %, lista, texto; las listas
+  y los objetos se ven pero se editan en el escritorio. Lo cambiado se guarda y va al motor sobre el perfil; la
+  altura de capa y los soportes son los mismos chips de la Placa.
+  - Pedido al escritorio: tipo y rango de `machine.variables.*` (hoy la app supone 0–600 °C), y las temperaturas de
+    la primera capa en Básico.
 
 - **2026-11-04 — base y Tisma Cloud** (commit `feat(android): Android app with the Tisma Cloud screens`, PR #55
   `android` → `dev`): proyecto Gradle (`cloud`, `mockcloud`, `app`), CI aparte (`.github/workflows/android.yml`),

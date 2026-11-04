@@ -39,7 +39,29 @@ data class SliceState(
     val bed: FloatArray = floatArrayOf(220f, 220f),
     /** The printer card: the printer, nozzle and filament the model is sliced for. */
     val profile: EngineRunner.ProfileChoice? = null,
-)
+    /** The settings panel (Print, Material), and the profile's values under it, by `layers.height` keys. */
+    val layout: SettingsLayout? = null,
+    val profileValues: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
+    val view: PanelVisibility.View = PanelVisibility.View.BASIC,
+    val custom: Set<String> = emptySet(),
+) {
+    /** A setting's value now: the person's change, the plate's chips, the profile, or the engine's default. */
+    fun value(key: String): kotlinx.serialization.json.JsonElement? = when (key) {
+        "layers.height" -> kotlinx.serialization.json.JsonPrimitive(settings.layerHeight)
+        "support.enabled" -> kotlinx.serialization.json.JsonPrimitive(settings.supports)
+        else -> settings.changes[key] ?: profileValues[key]
+            ?: layout?.rows?.get(key)?.let { SettingsLayout.toJson(it.editor, it.value) ?: kotlinx.serialization.json.JsonPrimitive(it.value) }
+    }
+
+    /** The setting differs from the profile (or from the engine's default when there is no profile value). */
+    fun changed(key: String): Boolean = when (key) {
+        "layers.height", "support.enabled" -> {
+            val base = profileValues[key] ?: layout?.rows?.get(key)?.let { SettingsLayout.toJson(it.editor, it.value) }
+            base != null && SettingsLayout.show(base) != SettingsLayout.show(value(key))
+        }
+        else -> key in settings.changes
+    }
+}
 
 sealed interface SliceNotice {
     data object Cancelled : SliceNotice
@@ -58,20 +80,86 @@ class SliceViewModel(
     private val saved: net.tisma.app.data.AppSettings? = null,
     /** Free memory for the engine, in bytes (the phone's available memory). */
     private val freeMemory: () -> Long = { Long.MAX_VALUE },
+    /** Reads the settings panel (from the app's assets, in the phone's language); null when it is not there. */
+    private val loadLayout: () -> SettingsLayout? = { null },
 ) : ViewModel() {
     private val _state = MutableStateFlow(SliceState(engineAvailable = runner.available,
-        profile = saved?.profilePrinter?.let { EngineRunner.ProfileChoice(it, saved.profileNozzle, saved.profileFilament) }))
+        profile = saved?.profilePrinter?.let { EngineRunner.ProfileChoice(it, saved.profileNozzle, saved.profileFilament) },
+        settings = savedSettings(),
+        view = saved?.panelView?.let { v -> PanelVisibility.View.entries.firstOrNull { it.name.equals(v, true) } }
+            ?: PanelVisibility.View.BASIC,
+        custom = saved?.customVisible ?: emptySet()))
+
+    private fun savedSettings(): EngineRunner.SimpleSettings {
+        val o = saved?.panelChanges?.let { runCatching { kotlinx.serialization.json.Json.parseToJsonElement(it) as? kotlinx.serialization.json.JsonObject }.getOrNull() }
+            ?: return EngineRunner.SimpleSettings()
+        val h = (o["layers.height"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+        val sup = (o["support.enabled"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull()
+        return EngineRunner.SimpleSettings(h ?: 0.20, sup ?: false, o - setOf("layers.height", "support.enabled"))
+    }
+
+    private fun saveSettings(s: EngineRunner.SimpleSettings) {
+        saved?.panelChanges = kotlinx.serialization.json.JsonObject(s.changes + mapOf(
+            "layers.height" to kotlinx.serialization.json.JsonPrimitive(s.layerHeight),
+            "support.enabled" to kotlinx.serialization.json.JsonPrimitive(s.supports))).toString()
+    }
 
     init {
         viewModelScope.launch {
             val c = withContext(io) { runCatching { loadCatalog() }.getOrNull() }
             _state.update { it.copy(catalog = c) }
         }
+        viewModelScope.launch {
+            val l = withContext(io) { runCatching { loadLayout() }.onFailure { AppLog.line("panel: cannot read the layout ${it.message}") }.getOrNull() }
+            _state.update { it.copy(layout = l) }
+        }
+        loadProfileValues()
+    }
+
+    /** The profile's values for the panel (`tisma-engine profile`), when the engine and a printer are there. */
+    private fun loadProfileValues() {
+        val choice = _state.value.profile
+        if (choice == null || !runner.available) { _state.update { it.copy(profileValues = emptyMap()) }; return }
+        viewModelScope.launch {
+            val v = withContext(io) { runCatching { runner.profile(choice) }.getOrNull() }
+            if (_state.value.profile == choice) _state.update { it.copy(profileValues = v?.let { SettingsLayout.flatten(it) } ?: emptyMap()) }
+        }
+    }
+
+    /** Sets a setting from the panel, or puts it back to the profile's value with null. */
+    fun setValue(key: String, value: kotlinx.serialization.json.JsonElement?) {
+        val s = _state.value.settings
+        val base = _state.value.profileValues[key] ?: _state.value.layout?.rows?.get(key)?.let { SettingsLayout.toJson(it.editor, it.value) }
+        val n = when (key) {
+            "layers.height" -> s.copy(layerHeight = ((value ?: base) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.20)
+            "support.enabled" -> s.copy(supports = ((value ?: base) as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false)
+            else -> s.copy(changes = if (value == null) s.changes - key else s.changes + (key to value))
+        }
+        setSettings(n)
+    }
+
+    /** Puts every setting of the panel back to the profile. */
+    fun resetAll() {
+        setSettings(EngineRunner.SimpleSettings())
+        setValue("layers.height", null)
+        setValue("support.enabled", null)
+    }
+
+    fun setView(v: PanelVisibility.View) {
+        saved?.panelView = v.name.lowercase()
+        _state.update { it.copy(view = v) }
+    }
+
+    /** Custom view: shows or hides a setting (settings_panel.md, «Elegir ajustes…»). */
+    fun toggleCustom(key: String) {
+        val c = _state.value.custom.let { if (key in it) it - key else it + key }
+        saved?.customVisible = c
+        _state.update { it.copy(custom = c) }
     }
 
     /** The bed of the chosen printer (catalog), or 220 × 220 mm. */
     private fun bedSize(): FloatArray {
-        val p = state.value.catalog?.printer(state.value.profile?.printer)
+        val p = _state.value.catalog?.printer(_state.value.profile?.printer)
         val v = p?.buildVolume
         return if (v != null && v.size >= 2 && v[0] > 0 && v[1] > 0) floatArrayOf(v[0].toFloat(), v[1].toFloat()) else floatArrayOf(220f, 220f)
     }
@@ -90,6 +178,7 @@ class SliceViewModel(
         saved?.profileFilament = choice?.filament
         _state.update { it.copy(profile = choice, result = null) }
         model?.let { loadMesh(it) }
+        loadProfileValues()
     }
     val state: StateFlow<SliceState> = _state.asStateFlow()
     private val cancel = AtomicBoolean(false)
@@ -120,7 +209,10 @@ class SliceViewModel(
         }
     }
 
-    fun setSettings(s: EngineRunner.SimpleSettings) = _state.update { it.copy(settings = s, result = null) }
+    fun setSettings(s: EngineRunner.SimpleSettings) {
+        saveSettings(s)
+        _state.update { it.copy(settings = s, result = null) }
+    }
 
     /** Slices even when the estimate says the memory may not be enough (the person chose it). */
     fun sliceAnyway() {

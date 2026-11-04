@@ -14,7 +14,6 @@
 
     <string name="plate_coming">Laminar en el teléfono llega con la biblioteca del motor. Mientras tanto, mandá un proyecto 3MF a Tisma Cloud.</string>
     <string name="plate_slice_cloud">Laminar en la nube</string>
-    <string name="settings_coming">Los ajustes de impresión y de material llegan con la biblioteca del motor en el teléfono.</string>
     <string name="printer_coming">Las impresoras de la red (Klipper, OctoPrint, Bambu Lab…) llegan en el próximo paso.</string>
 
     <string name="more_cloud">Cuenta de Tisma Cloud</string>
@@ -319,4 +318,22 @@
     <string name="preview_by_speed">Por velocidad</string>
     <string name="unit_mm">mm</string>
     <string name="unit_mm_s">mm/s</string>
+    <string name="panel_basic">Básico</string>
+    <string name="panel_normal">Normal</string>
+    <string name="panel_advanced">Avanzado</string>
+    <string name="panel_custom">Personalizado</string>
+    <string name="panel_basic_about">Lo que casi toda impresión necesita</string>
+    <string name="panel_normal_about">Más ajustes para afinar</string>
+    <string name="panel_advanced_about">Todos los ajustes</string>
+    <string name="panel_custom_about">Los ajustes que elegís vos</string>
+    <string name="panel_search">Buscar un ajuste</string>
+    <string name="panel_nothing_found">Ningún ajuste se llama así.</string>
+    <string name="panel_choose">Elegir ajustes…</string>
+    <string name="panel_reset">Restablecer</string>
+    <string name="panel_reset_all">Restablecer todo al perfil</string>
+    <string name="panel_on_desktop">%1$s · se edita en el escritorio</string>
+    <string name="panel_invalid">No vale (%1$s)</string>
+    <string name="panel_missing">El panel de ajustes no está en esta versión.</string>
+    <string name="panel_none">No hay ajustes en este nivel.</string>
+    <string name="panel_custom_empty">Elegí los ajustes que querés ver con «Elegir ajustes…».</string>
 </resources>

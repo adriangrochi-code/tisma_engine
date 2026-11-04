@@ -51,8 +51,12 @@ class MainActivity : ComponentActivity() {
                     val am = app.getSystemService(android.app.ActivityManager::class.java)
                     android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.availMem
                 }
+                val layout = {
+                    val lang = if (java.util.Locale.getDefault().language == "es") "es" else "en"
+                    net.tisma.app.engine.SettingsLayout.parse(app.assets.open("settings/layout_$lang.json").bufferedReader().readText())
+                }
                 return SliceViewModel(EngineRunner(exe, work), work, loadCatalog = catalog, saved = app.settings,
-                    freeMemory = free) as T
+                    freeMemory = free, loadLayout = layout) as T
             }
         }
     }

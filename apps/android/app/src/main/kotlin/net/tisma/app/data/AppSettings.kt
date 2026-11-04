@@ -38,6 +38,21 @@ class AppSettings(context: Context) {
         get() = prefs.getString("profile.filament", null)
         set(v) = prefs.edit().putString("profile.filament", v).apply()
 
+    /** The settings panel's view: basic, normal, advanced or custom (settings_panel.md, rule 9; `ui.level`). */
+    var panelView: String
+        get() = prefs.getString("ui.level", null) ?: "basic"
+        set(v) = prefs.edit().putString("ui.level", v).apply()
+
+    /** `ui.custom_visible`: the keys the Custom view shows. */
+    var customVisible: Set<String>
+        get() = prefs.getStringSet("ui.custom_visible", null)?.toSet() ?: emptySet()
+        set(v) = prefs.edit().putStringSet("ui.custom_visible", v).apply()
+
+    /** The settings the person changed over the profile, as a JSON object of `layers.height` keys. */
+    var panelChanges: String?
+        get() = prefs.getString("panel.changes", null)
+        set(v) = prefs.edit().putString("panel.changes", v).apply()
+
     companion object {
         private const val SEARCH_NETWORK = "printers.search_network"
         const val FILE = "tisma_settings"
