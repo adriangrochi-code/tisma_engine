@@ -63,7 +63,8 @@ struct Job {
 
 // The text of a failed job for a person (cloud.md, rule 19a): in Spanish,
 // the summary's error_es, else a text by its code (bad_mode, bad_quality,
-// not_in_cloud, needs_conditions, no_valid_result); otherwise, and in
+// not_in_cloud, needs_conditions, no_valid_result, and those of slice, aero
+// and orient: no_models, no_object, bad_speed...); otherwise, and in
 // English, the job's error.
 std::string job_error(const Job& job, bool spanish);
 

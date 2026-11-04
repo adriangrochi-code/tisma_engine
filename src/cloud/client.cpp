@@ -67,7 +67,21 @@ std::string job_error(const Job& job, bool spanish) {
         {"bad_quality", "la calidad no es válida"},
         {"not_in_cloud", "este análisis todavía no corre en la nube"},
         {"needs_conditions", "el análisis necesita un punto o zona fija y una fuerza (marcalos en Ingeniería)"},
-        {"no_valid_result", "el análisis no dio un resultado válido"}};
+        {"no_valid_result", "el análisis no dio un resultado válido"},
+        {"cannot_read", "no se puede leer el proyecto"},
+        {"not_a_project", "el archivo no es un proyecto de Tisma"},
+        {"bad_project", "el proyecto está dañado o incompleto"},
+        {"no_models", "el proyecto no tiene modelos"},
+        {"no_object", "el proyecto no tiene ese objeto"},
+        {"no_instance", "ese objeto no tiene esa copia"},
+        {"bad_settings", "un ajuste del proyecto no es válido"},
+        {"bad_speed", "la velocidad no es válida"},
+        {"bad_direction", "la dirección no es válida"},
+        {"empty_part", "la pieza no tiene triángulos"},
+        {"slice_failed", "no se pudo laminar el modelo"},
+        {"gcode_check", "el G-code no pasó su propia verificación"},
+        {"aero_failed", "no se pudo calcular el flujo de aire"},
+        {"vase_objects", "el modo vaso imprime un solo objeto, o varios uno después de otro"}};
     if (const auto it = job.summary.find("code"); it != job.summary.end())
         for (const auto& [code, text] : kByCode)
             if (it->second == code)

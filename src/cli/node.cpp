@@ -97,6 +97,16 @@ private:
 
 } // namespace
 
+// A summary's error for the cloud to show (TR29; cloud.md, rule 19a): the
+// English text, a stable code, and for the errors a person can meet, the
+// Spanish text.
+nlohmann::json coded_error(const std::string& message, const std::string& code, const std::string& spanish) {
+    nlohmann::json j{{"error", message}, {"code", code}};
+    if (!spanish.empty())
+        j["error_es"] = spanish;
+    return j;
+}
+
 bool node_slice_wanted(std::span<const std::string_view> args) {
     bool config = false, node = false;
     for (const std::string_view a : args) {
@@ -140,6 +150,7 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
 
     // The summary: the result, or what went wrong. When it cannot be
     // written, the error output says so and the exit code is not 0.
+    std::string usage_code = "usage", usage_es;
     const auto write_summary = [&](const nlohmann::json& j) {
         if (a.summary.empty())
             return false;
@@ -149,14 +160,15 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
         }
         return true;
     };
-    const auto fail = [&](int code, const std::string& message) {
+    const auto fail = [&](int exit_code, const std::string& message, const std::string& code = "error",
+                          const std::string& spanish = {}) {
         err << "error: " << message << "\n";
-        write_summary(nlohmann::json{{"error", message}});
-        return code;
+        write_summary(coded_error(message, code, spanish));
+        return exit_code;
     };
     if (!usage.empty()) {
         err << usage << "\n";
-        write_summary(nlohmann::json{{"error", usage.substr(7)}});
+        write_summary(coded_error(usage.substr(7), usage_code, usage_es));
         return kExitUsage;
     }
     // Nothing is written over the project, nor the summary over the G-code.
@@ -174,18 +186,19 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     // preferences, no catalog (rule 18).
     const std::optional<std::string> data = read_whole(a.project);
     if (!data)
-        return fail(kExitInput, "cannot read the project '" + a.project + "'");
+        return fail(kExitInput, "cannot read the project '" + a.project + "'", "cannot_read", "no se puede leer el proyecto");
     if (!looks_like_project(*data))
         return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma (its own file, or a 3MF with " +
-                                    "Metadata/tisma_project.json): projects of other slicers are not read yet");
+                                    "Metadata/tisma_project.json): projects of other slicers are not read yet",
+                    "not_a_project", "el archivo no es un proyecto de Tisma");
     Project project;
     try {
         project = read_project(*data);
     } catch (const std::exception& e) {
-        return fail(kExitInput, a.project + ": " + e.what());
+        return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
     }
     if (project.models.empty())
-        return fail(kExitModel, "the project has no models");
+        return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
     progress(5);
 
     Settings settings = std::move(project.settings);
@@ -196,10 +209,11 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     try {
         check_settings(settings);
     } catch (const SettingsError& e) {
-        return fail(kExitInput, e.what());
+        return fail(kExitInput, e.what(), "bad_settings", "un ajuste del proyecto no es válido");
     }
     if (settings.machine_technology == MachineTechnology::Msla)
-        return fail(kExitNotImplemented, "the nodes do not slice for resin printers yet");
+        return fail(kExitNotImplemented, "the nodes do not slice for resin printers yet", "not_in_cloud",
+                    "la nube todavía no lamina para impresoras de resina");
     // A calibration prints its own model alone; the resin tests have no
     // supports, pad or hollowing (calibration_models.md, "Resina").
     if (project.calibration) {
@@ -211,7 +225,8 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     const std::vector<ui::PlateObject> objects = ui::project_objects(project.models);
     project.models.clear();
     if (settings.vase && objects.size() > 1 && !settings.sequential)
-        return fail(kExitModel, "vase mode prints one object, or several one after another (sequential.enabled)");
+        return fail(kExitModel, "vase mode prints one object, or several one after another (sequential.enabled)",
+                    "vase_objects", "el modo vaso imprime un solo objeto, o varios uno después de otro");
     std::vector<TriangleMesh> placed;
     placed.reserve(objects.size());
     for (const ui::PlateObject& o : objects)
@@ -227,12 +242,12 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
                    plate.by_object ? &plate.objects : nullptr, project.mixes.empty() ? nullptr : &project.mixes,
                    plate.volumes.empty() ? nullptr : &plate.volumes);
     if (!r.ok)
-        return fail(kExitModel, r.error);
+        return fail(kExitModel, r.error, "slice_failed", "no se pudo laminar el modelo");
     if (!r.check.ok()) {
         std::string message = "the G-code failed its own check";
         if (!r.check.problems.empty())
             message += ": line " + std::to_string(r.check.problems.front().line) + ": " + r.check.problems.front().message;
-        return fail(kExitGcode, message);
+        return fail(kExitGcode, message, "gcode_check", "el G-code no pasó su propia verificación");
     }
     for (const Warning& w : r.warnings)
         err << "warning: " << w.message << "\n";
@@ -385,7 +400,8 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         write_summary(error_summary(message, code, spanish));
         return exit_code;
     };
-    const auto fail = [&](int exit_code, const std::string& message) { return fail_coded(exit_code, message, "error", ""); };
+    const auto fail = [&](int exit_code, const std::string& message, const std::string& code = "error",
+                          const std::string& spanish = {}) { return fail_coded(exit_code, message, code, spanish); };
     if (!usage.empty()) {
         err << usage << "\n";
         write_summary(error_summary(usage.substr(7), usage_code, usage_es));
@@ -407,24 +423,26 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
     progress(0);
     const std::optional<std::string> data = read_whole(a.project);
     if (!data)
-        return fail(kExitInput, "cannot read the project '" + a.project + "'");
+        return fail(kExitInput, "cannot read the project '" + a.project + "'", "cannot_read", "no se puede leer el proyecto");
     if (!looks_like_project(*data))
-        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma");
+        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma", "not_a_project", "el archivo no es un proyecto de Tisma");
     Project project;
     try {
         project = read_project(*data);
     } catch (const std::exception& e) {
-        return fail(kExitInput, a.project + ": " + e.what());
+        return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
     }
     if (project.models.empty())
-        return fail(kExitModel, "the project has no models");
+        return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
     const std::size_t index = object < 0 ? 0 : std::size_t(object);
     if (index >= project.models.size())
         return fail(kExitInput, "the project has no object " + std::to_string(index) + " (it has " +
-                                    std::to_string(project.models.size()) + ", counted from 0)");
+                                    std::to_string(project.models.size()) + ", counted from 0)",
+                    "no_object", "el proyecto no tiene ese objeto");
     if (instance > 0)
         return fail(kExitInput, "object " + std::to_string(index) + " has no instance " + std::to_string(instance) +
-                                    " (each object has one, 0)");
+                                    " (each object has one, 0)",
+                    "no_instance", "ese objeto no tiene esa copia");
     const ProjectModel& model = project.models[index];
     Settings settings = std::move(project.settings);
     for (const std::string& key : fill_missing_speeds(settings))
@@ -514,6 +532,7 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
 
 int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
     NodeArgs a;
+    std::string usage_code = "usage", usage_es;
     std::string usage, quality = "normal", direction_text = "x";
     long object = -1, instance = -1;
     double speed = 10.0;
@@ -558,10 +577,16 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
     if (usage.empty() && (a.project.empty() || a.output.empty() || a.summary.empty()))
         usage = "error: aero needs the project, -o and --summary";
     aero::AeroQuality q = aero::AeroQuality::Normal;
-    if (usage.empty() && !aero::quality_named(quality, q))
+    if (usage.empty() && !aero::quality_named(quality, q)) {
         usage = "error: aero: --quality is friction, fast, normal, high or extreme";
-    if (usage.empty() && (!(speed > 0.0) || speed > 100.0))
+        usage_code = "bad_quality";
+        usage_es = "aerodinámica: la calidad es friction, fast, normal, high o extreme";
+    }
+    if (usage.empty() && (!(speed > 0.0) || speed > 100.0)) {
         usage = "error: aero: --speed is more than 0 and up to 100 m/s";
+        usage_code = "bad_speed";
+        usage_es = "aerodinámica: la velocidad va de más de 0 a 100 m/s";
+    }
     // The direction: an axis with its sign, or three numbers.
     std::array<double, 3> direction{1, 0, 0};
     if (usage.empty()) {
@@ -591,8 +616,11 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
             if (k == 3 && p == end && std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]) &&
                 std::hypot(v[0], v[1], v[2]) > 0.0)
                 direction = {v[0], v[1], v[2]};
-            else
+            else {
                 usage = "error: aero: --direction is x, -x, y, -y, z, -z or three numbers x,y,z";
+                usage_code = "bad_direction";
+                usage_es = "aerodinámica: la dirección es x, -x, y, -y, z, -z o tres números x,y,z";
+            }
         }
     }
 
@@ -605,14 +633,15 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
         }
         return true;
     };
-    const auto fail = [&](int code, const std::string& message) {
+    const auto fail = [&](int exit_code, const std::string& message, const std::string& code = "error",
+                          const std::string& spanish = {}) {
         err << "error: " << message << "\n";
-        write_summary(nlohmann::json{{"error", message}});
-        return code;
+        write_summary(coded_error(message, code, spanish));
+        return exit_code;
     };
     if (!usage.empty()) {
         err << usage << "\n";
-        write_summary(nlohmann::json{{"error", usage.substr(7)}});
+        write_summary(coded_error(usage.substr(7), usage_code, usage_es));
         return kExitUsage;
     }
     if (same_file(a.output, a.project) || same_file(a.summary, a.project))
@@ -627,24 +656,26 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
     progress(0);
     const std::optional<std::string> data = read_whole(a.project);
     if (!data)
-        return fail(kExitInput, "cannot read the project '" + a.project + "'");
+        return fail(kExitInput, "cannot read the project '" + a.project + "'", "cannot_read", "no se puede leer el proyecto");
     if (!looks_like_project(*data))
-        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma");
+        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma", "not_a_project", "el archivo no es un proyecto de Tisma");
     Project project;
     try {
         project = read_project(*data);
     } catch (const std::exception& e) {
-        return fail(kExitInput, a.project + ": " + e.what());
+        return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
     }
     if (project.models.empty())
-        return fail(kExitModel, "the project has no models");
+        return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
     const std::size_t index = object < 0 ? 0 : std::size_t(object);
     if (index >= project.models.size())
         return fail(kExitInput, "the project has no object " + std::to_string(index) + " (it has " +
-                                    std::to_string(project.models.size()) + ", counted from 0)");
+                                    std::to_string(project.models.size()) + ", counted from 0)",
+                    "no_object", "el proyecto no tiene ese objeto");
     if (instance > 0)
         return fail(kExitInput, "object " + std::to_string(index) + " has no instance " + std::to_string(instance) +
-                                    " (each object has one, 0)");
+                                    " (each object has one, 0)",
+                    "no_instance", "ese objeto no tiene esa copia");
     const ProjectModel& model = project.models[index];
     Settings settings = std::move(project.settings);
     std::vector<std::string> notes;
@@ -662,7 +693,7 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
         return true;
     });
     if (!r.ok)
-        return fail(kExitAnalysis, r.error);
+        return fail(kExitAnalysis, r.error, "aero_failed", "no se pudo calcular el flujo de aire");
     progress(92);
     nlohmann::json result = nlohmann::json::parse(aero::result_json(r, in));
     result["object"] = index;
@@ -755,14 +786,15 @@ int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out
         }
         return true;
     };
-    const auto fail = [&](int code, const std::string& message, const std::string& error_code = "error") {
+    const auto fail = [&](int exit_code, const std::string& message, const std::string& code = "error",
+                          const std::string& spanish = {}) {
         err << "error: " << message << "\n";
-        write_summary(nlohmann::json{{"error", message}, {"code", error_code}});
-        return code;
+        write_summary(coded_error(message, code, spanish));
+        return exit_code;
     };
     if (!usage.empty()) {
         err << usage << "\n";
-        write_summary(nlohmann::json{{"error", usage.substr(7)}, {"code", "usage"}});
+        write_summary(coded_error(usage.substr(7), "usage", ""));
         return kExitUsage;
     }
     if (same_file(a.output, a.project) || same_file(a.summary, a.project))
@@ -777,28 +809,30 @@ int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out
     progress(0);
     const std::optional<std::string> data = read_whole(a.project);
     if (!data)
-        return fail(kExitInput, "cannot read the project '" + a.project + "'");
+        return fail(kExitInput, "cannot read the project '" + a.project + "'", "cannot_read", "no se puede leer el proyecto");
     if (!looks_like_project(*data))
-        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma");
+        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma", "not_a_project", "el archivo no es un proyecto de Tisma");
     Project project;
     try {
         project = read_project(*data);
     } catch (const std::exception& e) {
-        return fail(kExitInput, a.project + ": " + e.what());
+        return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
     }
     if (project.models.empty())
-        return fail(kExitModel, "the project has no models");
+        return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
     const std::size_t index = object < 0 ? 0 : std::size_t(object);
     if (index >= project.models.size())
         return fail(kExitInput, "the project has no object " + std::to_string(index) + " (it has " +
-                                    std::to_string(project.models.size()) + ", counted from 0)");
+                                    std::to_string(project.models.size()) + ", counted from 0)",
+                    "no_object", "el proyecto no tiene ese objeto");
     if (instance > 0)
         return fail(kExitInput, "object " + std::to_string(index) + " has no instance " + std::to_string(instance) +
-                                    " (each object has one, 0)");
+                                    " (each object has one, 0)",
+                    "no_instance", "ese objeto no tiene esa copia");
     const ProjectModel& model = project.models[index];
     const PlacedPart part = placed_part(model);
     if (part.mesh.triangle_count() == 0)
-        return fail(kExitModel, model.name + ": the part has no triangles");
+        return fail(kExitModel, model.name + ": the part has no triangles", "empty_part", "la pieza no tiene triángulos");
     progress(10);
     // The method by the printer (orientation.md, orient.method): least peel
     // for resin, least support for FDM.

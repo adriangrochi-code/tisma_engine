@@ -10025,7 +10025,7 @@ candidata y el detector de ventosas; recordar el método y la precisión por tec
 - FEA: adherencia entre capas y entre líneas (`src/fea/adhesion.*`); rango del factor de seguridad con la
   adherencia y el error de vóxel; `fit_voxel_limit` para calidades finas en piezas grandes. Falta el tiempo de capa
   real en la adherencia y los hexaedros de modos incompatibles.
-- Nube: los errores de `analyze` llevan `code` y `error_es`; `aero`, `slice` y `orient` todavía no tienen `error_es`.
+- Nube: los errores de `analyze`, `slice`, `aero` y `orient` llevan `code` y `error_es`.
 - La sesión de la app Android (session_01QadJfKGJU2WtuAunZW5p9B) va a pedir la API en C del motor
   (`mobile_app.md`, regla 2): acordarla con ella.
 - Equipo de fichas: session_015csYE6YXftDTgfC23i81xG (mensajes por send_message, con el pie de Claude Code).
@@ -10147,3 +10147,19 @@ oculto, sin líneas de facetas) y de costado (siluetas y la mitad delantera de l
 no tiene puntos sueltos, y el texto llega con D5.
 
 **D5b terminado.** **Sigue:** el orden de PLAN.md.
+
+## 2026-11-04 — Nube: códigos de error en slice, aero y orient; `profile` para la app de Android
+
+**Hecho:**
+- `slice`, `aero` y `orient` escriben en el resumen `code` y, para los errores que ve una persona, `error_es`, igual
+  que `analyze`. Códigos: cannot_read, not_a_project, bad_project, no_models, no_object, no_instance, bad_settings,
+  not_in_cloud, vase_objects, slice_failed, gcode_check, aero_failed, empty_part, bad_quality, bad_speed y
+  bad_direction. `cloud::job_error` tiene el texto de cada uno por si falta `error_es`.
+- `tisma-engine profile --printer ... [--nozzle] [--filament] -o ajustes.json`: los ajustes del catálogo para
+  `slice --config` (pedido de la app de Android). Documentado en `docs/CATALOG.md`.
+
+**Pruebas:** TR29 de slice, aero y orient (objeto que no está, velocidad y dirección malas, archivo que no es
+proyecto); `profile` (nombre completo frente a los que lo contienen, nombre ambiguo, impresora, boquilla y filamento
+que no están, y el resultado lamina un cubo con `slice --config`).
+
+**Sigue:** el orden de PLAN.md.

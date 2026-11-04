@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`profile` en la línea de comandos:** escribe los ajustes de una impresora del catálogo con su boquilla y,
+  si se pide, un filamento, listos para `slice --config`.
+- **Errores de la nube con código y texto en español** también en `slice`, `aero` y `orient` (antes solo
+  `analyze`).
 - **Vista como DXF** (`cad_design.md`, regla 20): en Diseño, «Vista como DXF» guarda las aristas de la vista actual
   como líneas DXF, con las ocultas punteadas en su capa o sin ellas.
 - **Diseño más rápido** (`cad_design.md`, regla 20 bis): el componente de diseño queda abierto mientras se diseña y
