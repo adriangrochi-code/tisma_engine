@@ -18,7 +18,8 @@
 
 namespace tisma {
 
-struct StressField; // infill/stress_density.hpp
+struct StressField;  // infill/stress_density.hpp
+struct MeshModifier; // slice/placement.hpp
 
 struct IndexedMesh;
 struct Settings;
@@ -157,10 +158,14 @@ Box resolve_region(const Region& region, const VoxelGrid& grid);
 using AnalysisProgress = std::function<void(std::string_view stage, double done)>;
 
 // Slices (as printed) and voxelizes the part, solves, and summarizes. With
-// infill_stress, the slicing's stress-guided infill (docs/INFILL.md).
+// infill_stress, the slicing's stress-guided infill (docs/INFILL.md). With
+// modifiers (model_tools.md, rule 3), their zones are printed and analysed
+// with their own settings (structural_optimization.md, rule 3: infill by
+// zones); the solid model ignores them.
 AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
                             gpu::Context* gpu = nullptr, const AnalysisProgress& progress = {},
-                            const StressField* infill_stress = nullptr);
+                            const StressField* infill_stress = nullptr,
+                            const std::vector<MeshModifier>* modifiers = nullptr);
 
 // What an analysis would take, without solving: the voxels (slicing as
 // printed to find the gaps), and the memory and time they need.

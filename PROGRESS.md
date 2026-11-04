@@ -10288,3 +10288,16 @@ candado por plan (`aero`) y avance como en Estructural. `ui_script_cloud_structu
 la nube y `expect-aero 1` ve el arrastre del servidor de prueba.
 
 **Sigue:** el resto de Optimizar (relleno por zonas, regla 3).
+
+## 2026-11-04 — Optimizar, regla 3 (relleno por zonas), paso A: el análisis con modificadores
+
+**Hecho:** `run_analysis` recibe modificadores (`MeshModifier`, model_tools.md regla 3) y el laminado del modelo
+como se imprime los usa; así cada zona se analiza con su propio relleno (lo que la regla 3 pide para el análisis de
+las mallas de las zonas). El modelo macizo los ignora.
+
+**Prueba:** barra de 24 × 6 × 6 mm de PLA con 20 N en la punta y relleno 0 %: con un modificador al 100 % en la mitad
+empotrada, el factor sube más del 20 % y el desplazamiento baja (5,8 s).
+
+**Sigue (regla 3):** paso B, las celdas (3 vóxeles, mínimo 3 mm) con su densidad `ρ · utilización^(1/nS)`, en 3
+niveles como cajas modificadoras unidas en filas; paso C, la bisección del factor común y la comparación con el
+uniforme; paso D, en el panel.

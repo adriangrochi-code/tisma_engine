@@ -2,6 +2,7 @@
 #include "config/settings.hpp"
 #include "fea/verdict.hpp"
 #include "fea/analysis.hpp"
+#include "slice/placement.hpp"
 #include "fea/materials.hpp"
 #include "fea/zone.hpp"
 #include "io/ply.hpp"
@@ -838,4 +839,47 @@ TEST_CASE("structural optimization rule 2: the lowest uniform infill that holds,
     CHECK_FALSE(none.found);
     CHECK(none.analyses == 1);
     CHECK(none.min_safety < 2.0);
+}
+
+TEST_CASE("analysis with modifiers: a zone's own infill is printed and analysed (structural_optimization.md, rule 3)",
+          "[analysis][engineering]") {
+    const IndexedMesh bar = box_mesh(24.0f, 6.0f, 6.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {24.0, 3.0, 3.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 3.0;
+    tip.newtons = 20.0;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    e.structural.quality = "normal";
+    std::vector<std::string> notes;
+    const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    Settings s = beads_04();
+    s.infill_density = 0.0;
+    const AnalysisReport empty = run_analysis(bar, s, c);
+    // The fixed half, where the bending is largest, filled by a modifier.
+    const IndexedMesh half = box_mesh(12.0f, 6.0f, 6.0f);
+    TriangleMesh zone;
+    for (const auto& t : half.triangles)
+        zone.add_triangle(half.vertices[t[0]], half.vertices[t[1]], half.vertices[t[2]]);
+    const std::vector<MeshModifier> mods{{"zone", 0, zone, R"({"infill": {"density": 100}})"}};
+    const AnalysisReport filled = run_analysis(bar, s, c, nullptr, {}, nullptr, &mods);
+    REQUIRE(empty.valid);
+    REQUIRE(filled.valid);
+    CHECK(filled.result.min_safety > 1.2 * empty.result.min_safety);
+    CHECK(filled.result.elasticity.max_displacement < empty.result.elasticity.max_displacement);
 }
