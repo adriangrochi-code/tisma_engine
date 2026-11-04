@@ -238,4 +238,10 @@
     <string name="plate_save">Save the G-code</string>
     <string name="plate_send_to">Send to</string>
     <string name="plate_print">Print</string>
+
+    <string name="sessions_title">Signed in on</string>
+    <string name="sessions_this">this phone</string>
+    <string name="sessions_close">Close</string>
+    <string name="sessions_close_others">Close the other sessions</string>
+    <string name="hours_unlimited">%1$s h used · no limit</string>
 </resources>

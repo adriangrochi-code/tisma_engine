@@ -223,4 +223,10 @@
     <string name="plate_save">Guardar el G-code</string>
     <string name="plate_send_to">Mandar a</string>
     <string name="plate_print">Imprimir</string>
+
+    <string name="sessions_title">Sesiones abiertas</string>
+    <string name="sessions_this">este teléfono</string>
+    <string name="sessions_close">Cerrar</string>
+    <string name="sessions_close_others">Cerrar las otras sesiones</string>
+    <string name="hours_unlimited">%1$s h usadas · sin límite</string>
 </resources>

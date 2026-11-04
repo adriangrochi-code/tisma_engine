@@ -47,6 +47,7 @@ fun AccountScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
     LaunchedEffect(state.signedIn) { cloud.refreshAccount() }
     ScreenColumn {
         if (state.signedIn) AccountCard(state, cloud) else LoginCard(state, cloud, nav)
+        if (state.signedIn) SessionsCard(state, cloud)
         PlansCard(state)
     }
 }
@@ -87,9 +88,10 @@ private fun AccountCard(state: CloudState, cloud: CloudViewModel) {
         } else {
             Labeled(R.string.plan, a.plan)
             Labeled(R.string.hours_month,
-                stringResource(R.string.hours_value, hours(a.hoursUsed), hours(a.hoursIncluded), hours(a.hoursLeft)),
+                if (a.unlimited) stringResource(R.string.hours_unlimited, hours(a.hoursUsed))
+                else stringResource(R.string.hours_value, hours(a.hoursUsed), hours(a.hoursIncluded), hours(a.hoursLeft)),
                 Modifier.testTag("hours"))
-            if (a.hoursIncluded > 0) {
+            if (a.hoursIncluded > 0 && !a.unlimited) {
                 LinearProgressIndicator(
                     progress = { (a.hoursUsed / a.hoursIncluded).toFloat().coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
@@ -108,6 +110,33 @@ private fun AccountCard(state: CloudState, cloud: CloudViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         AccentTextButton(onClick = { cloud.signOut() }, modifier = Modifier.testTag("sign_out")) {
             Text(stringResource(R.string.sign_out))
+        }
+    }
+}
+
+/** Where the account is signed in, with this phone marked; the others can be closed. */
+@Composable
+private fun SessionsCard(state: CloudState, cloud: CloudViewModel) {
+    LaunchedEffect(state.email) { cloud.loadSessions() }
+    if (state.sessions.isEmpty()) return
+    TismaCard(Modifier.testTag("sessions")) {
+        Text(stringResource(R.string.sessions_title), style = MaterialTheme.typography.titleMedium)
+        state.sessions.forEach { s ->
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(s.device.ifBlank { "—" } + if (s.current) " · " + stringResource(R.string.sessions_this) else "",
+                        style = MaterialTheme.typography.bodyLarge)
+                    Text(shortDate(s.lastUsed.ifBlank { s.createdAt }), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (!s.current) AccentTextButton(onClick = { cloud.closeSession(s.id) }, enabled = !state.busy) {
+                    Text(stringResource(R.string.sessions_close))
+                }
+            }
+        }
+        if (state.sessions.count { !it.current } > 0) {
+            OutlinedButton(onClick = { cloud.closeOtherSessions() }, enabled = !state.busy,
+                modifier = Modifier.fillMaxWidth().testTag("close_others")) { Text(stringResource(R.string.sessions_close_others)) }
         }
     }
 }

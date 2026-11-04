@@ -88,6 +88,17 @@ class CloudClient(
     /** `GET /v1/me`. */
     fun account(): Account = Account.from(getObject("/v1/me"))
 
+    /** `GET /v1/me/sessions`: where the account is signed in. */
+    fun sessions(): List<AccountSession> = list(get("/v1/me/sessions"), "sessions").map(AccountSession::from)
+
+    /** `DELETE /v1/me/sessions/{id}`. */
+    fun closeSession(id: String) {
+        parse(send(HttpRequest("DELETE", serverUrl + "/v1/me/sessions/" + path(id), headers(true))))
+    }
+
+    /** `POST /v1/me/sessions/close-others`; returns how many were closed. */
+    fun closeOtherSessions(): Int = postObject("/v1/me/sessions/close-others", JsonObject(emptyMap())).number("closed").toInt()
+
     /** `GET /v1/plans`: the public plans; no session needed (rule 5a). */
     fun plans(): List<Plan> = list(get("/v1/plans", auth = token != null), "plans").map(Plan::from)
 

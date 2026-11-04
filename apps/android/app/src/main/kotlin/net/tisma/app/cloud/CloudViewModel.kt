@@ -42,6 +42,7 @@ data class CloudState(
     val jobs: List<Job> = emptyList(),
     val jobsLoaded: Boolean = false,
     val reports: List<SentReport> = emptyList(),
+    val sessions: List<net.tisma.cloud.AccountSession> = emptyList(),
     /** A request is on its way; the buttons that send wait. */
     val busy: Boolean = false,
     /** Sending a project. */
@@ -241,6 +242,24 @@ class CloudViewModel(
     fun sendReport(report: ProblemReport, onSent: () -> Unit) = launchRequest(onDone = onSent) {
         val similar = client.report(report)
         _state.update { it.copy(notice = Notice.ReportSent(similar)) }
+    }
+
+    /** The account's open sessions (cloud.md, «La cuenta»). */
+    fun loadSessions() = launchRequest(quiet = true) {
+        val list = client.sessions()
+        _state.update { it.copy(sessions = list) }
+    }
+
+    fun closeSession(id: String) = launchRequest {
+        client.closeSession(id)
+        val list = client.sessions()
+        _state.update { it.copy(sessions = list) }
+    }
+
+    fun closeOtherSessions() = launchRequest {
+        client.closeOtherSessions()
+        val list = client.sessions()
+        _state.update { it.copy(sessions = list) }
     }
 
     fun loadMyReports() = launchRequest(quiet = true) {

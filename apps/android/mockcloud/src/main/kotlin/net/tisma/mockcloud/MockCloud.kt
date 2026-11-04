@@ -86,6 +86,7 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
         "pro@example.com" to AccountDef("pro@example.com", "password1", "Pro"),
     )
     private val tokens = mutableMapOf<String, String>() // token -> email
+    private val devices = mutableMapOf<String, Pair<String, String>>() // token -> device, created_at
     private val jobs = mutableListOf<JobDef>()
     val reports = mutableListOf<ReportDef>()
     /** Every request: method, path and the Authorization header, for the tests. */
@@ -191,6 +192,26 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
                 val t = bearer(ex); auth(ex); synchronized(lock) { tokens.remove(t) }; ok(buildJsonObject { put("ok", true) })
             }
             method == "GET" && r == listOf("me") -> ok(meJson(auth(ex)))
+            method == "GET" && r == listOf("me", "sessions") -> sessions(ex, auth(ex))
+            method == "DELETE" && r.size == 3 && r[0] == "me" && r[1] == "sessions" -> {
+                val a = auth(ex)
+                synchronized(lock) {
+                    val t = tokens.entries.firstOrNull { it.value == a.email && sessionId(it.key) == r[2] }?.key
+                        ?: throw Stop(404, "No such session")
+                    tokens.remove(t)
+                }
+                ok(buildJsonObject { put("ok", true) })
+            }
+            method == "POST" && r == listOf("me", "sessions", "close-others") -> {
+                val a = auth(ex)
+                val mine = bearer(ex)
+                val closed = synchronized(lock) {
+                    val others = tokens.filter { it.value == a.email && it.key != mine }.keys
+                    others.forEach { tokens.remove(it) }
+                    others.size
+                }
+                ok(buildJsonObject { put("closed", closed) })
+            }
             method == "GET" && r == listOf("me", "reports") -> myReports(auth(ex))
             method == "POST" && r == listOf("reports") -> report(ex)
             method == "POST" && r == listOf("jobs") -> submit(ex, auth(ex))
@@ -219,12 +240,12 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
     private fun login(b: JsonObject): Reply {
         val email = field(b, "email").lowercase()
         val password = field(b, "password")
-        field(b, "device")
+        val device = field(b, "device")
         val a = synchronized(lock) { accounts[email] }
         if (a == null || a.password != password) throw Stop(401, "Wrong e-mail or password")
         if (a.disabled) throw Stop(403, "This account is disabled")
         if (!a.verified) throw Stop(403, "Confirm your e-mail first")
-        return ok(session(email))
+        return ok(session(email, device))
     }
 
     private fun register(b: JsonObject): Reply {
@@ -259,9 +280,9 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
         return ok(buildJsonObject { put("ok", true) })
     }
 
-    private fun session(email: String): JsonObject {
+    private fun session(email: String, device: String = "unknown"): JsonObject {
         val token = UUID.randomUUID().toString().replace("-", "")
-        synchronized(lock) { tokens[token] = email }
+        synchronized(lock) { tokens[token] = email; devices[token] = device to now() }
         return buildJsonObject { put("token", token); put("email", email) }
     }
 
@@ -274,6 +295,25 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
         val a = accounts[email] ?: throw Stop(401, "Not authenticated")
         if (a.disabled) throw Stop(401, "Not authenticated")
         a
+    }
+
+    private fun sessionId(token: String) = token.take(8)
+
+    private fun sessions(ex: HttpExchange, a: AccountDef): Reply {
+        val mine = bearer(ex)
+        return ok(buildJsonObject {
+            put("sessions", buildJsonArray {
+                synchronized(lock) {
+                    tokens.filter { it.value == a.email }.keys.forEach { t ->
+                        add(buildJsonObject {
+                            put("id", sessionId(t)); put("device", devices[t]?.first ?: "unknown")
+                            put("created_at", devices[t]?.second ?: now()); put("last_used", null as String?)
+                            put("current", t == mine)
+                        })
+                    }
+                }
+            })
+        })
     }
 
     private fun planOf(a: AccountDef) = plans.first { it.name == a.plan }
@@ -301,6 +341,9 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
             put("hours_left", (included - used).coerceAtLeast(0.0))
             put("active_jobs", jobs.count { it.owner == a.email && it.status in setOf("queued", "running") })
             put("max_concurrent", p.maxConcurrent)
+            put("unlimited", false)
+            put("remote_printers", if (p.name == "Pro") 3 else 0)
+            put("has_password", true)
         }
     }
 

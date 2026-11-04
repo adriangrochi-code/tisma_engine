@@ -96,6 +96,8 @@ class PrintersTest {
 
     @Test
     fun `MA7 a G-code sent to a Klipper printer starts, shows its progress, and pauses`() {
+        // Slow enough that the print never ends while the test pauses and cancels it.
+        moonraker.stepPercent = 0.01
         addPrinter("moonraker", moonraker.url, null)
         val id = printers.state.value.printers.single().id
         waitFor("printer_$id")
@@ -104,7 +106,6 @@ class PrintersTest {
         compose.runOnIdle { printers.upload(id, "cube.gcode", gcode.size.toLong(), true) { gcode.inputStream() } }
         waitState { moonraker.state == "printing" || moonraker.state == "complete" }
         assertTrue(moonraker.files.getValue("cube.gcode").contentEquals(gcode))
-        moonraker.stepPercent = 1.0
         waitFor("printer_pause")
         waitForText("Nozzle 210 / 210 °C")
         compose.onNodeWithTag("printer_pause").performClick()

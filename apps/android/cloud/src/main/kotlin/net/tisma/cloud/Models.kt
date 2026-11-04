@@ -24,6 +24,12 @@ data class Account(
     val hoursLeft: Double,
     val activeJobs: Int,
     val maxConcurrent: Int,
+    /** No hour limit. */
+    val unlimited: Boolean = false,
+    /** How many printers the plan lets the account use from outside (cloud.md, rule 16). */
+    val remotePrinters: Int = 0,
+    /** False for an account made with Google only. */
+    val hasPassword: Boolean = true,
 ) {
     companion object {
         fun from(o: JsonObject) = Account(
@@ -36,7 +42,18 @@ data class Account(
             hoursLeft = o.number("hours_left"),
             activeJobs = o.number("active_jobs").toInt(),
             maxConcurrent = o.number("max_concurrent").toInt(),
+            unlimited = o.bool("unlimited"),
+            remotePrinters = o.number("remote_printers").toInt(),
+            hasPassword = (o["has_password"] as? JsonPrimitive)?.booleanOrNull ?: true,
         )
+    }
+}
+
+/** An open session of the account, `GET /v1/me/sessions`. */
+data class AccountSession(val id: String, val device: String, val createdAt: String, val lastUsed: String, val current: Boolean) {
+    companion object {
+        fun from(o: JsonObject) = AccountSession(o.text("id"), o.text("device"), o.text("created_at"), o.text("last_used"),
+            o.bool("current"))
     }
 }
 

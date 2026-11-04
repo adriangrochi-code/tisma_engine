@@ -255,6 +255,21 @@ class CloudClientTest {
     }
 
     @Test
+    fun `sessions are listed with the current one, and the others can be closed`() {
+        signIn()
+        val other = CloudClient(server.url).apply { login("ana@example.com", "password1", "Tablet") }
+        val list = client.sessions()
+        assertEquals(2, list.size)
+        assertEquals("Test phone", list.single { it.current }.device)
+        assertEquals(1, client.closeOtherSessions())
+        assertEquals(CloudException.Kind.EXPIRED, assertFailsWith<CloudException> { other.account() }.kind)
+        val third = CloudClient(server.url).apply { login("ana@example.com", "password1", "Laptop") }
+        client.closeSession(client.sessions().single { !it.current }.id)
+        assertEquals(CloudException.Kind.EXPIRED, assertFailsWith<CloudException> { third.account() }.kind)
+        assertTrue(client.account().hasPassword)
+    }
+
+    @Test
     fun `the server address gets https and loses trailing slashes`() {
         assertEquals("https://tismaservidores.net", CloudClient.normalizeServer("tismaservidores.net/"))
         assertEquals("http://10.0.2.2:8765", CloudClient.normalizeServer(" http://10.0.2.2:8765// "))

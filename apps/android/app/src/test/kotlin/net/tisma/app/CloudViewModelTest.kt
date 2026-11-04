@@ -159,6 +159,17 @@ class CloudViewModelTest {
     }
 
     @Test
+    fun `the other sessions can be closed from the phone`() {
+        val vm = signedIn()
+        net.tisma.cloud.CloudClient(server.url).login("ana@example.com", "password1", "Tablet")
+        vm.loadSessions()
+        eventually { vm.state.value.sessions.size == 2 }
+        assertEquals("Test phone (Android)", vm.state.value.sessions.single { it.current }.device)
+        vm.closeOtherSessions()
+        eventually { vm.state.value.sessions.size == 1 }
+    }
+
+    @Test
     fun `signing out forgets the session`() {
         val vm = signedIn()
         vm.signOut()
