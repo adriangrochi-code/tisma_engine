@@ -13,6 +13,8 @@ interface (`apps/tisma/`), are required before Tisma Slicer is dropped.
 
 - Never read, copy or translate the source of PrusaSlicer, Slic3r, SuperSlicer, OrcaSlicer, Bambu Studio, Cura,
   CuraEngine, Tisma Slicer (`adriangrochi-code/Nuevo-slicer-basado-en-prusa-`) or any other GPL/AGPL code.
+  - This includes the server's repository, `adriangrochi-code/tisma-cloud` (owner's decision, 2026-11-04: it holds
+    open-source code processed apart). What the engine needs from the server comes as specs or black-box tests.
   - This includes the history of `imported/` and `docs/tisma/` in this repository (commits `4768a57` and `759eccd`,
     removed on 2026-10-24): never read it, by `git log`, `git show` or any other way.
   - Do not clone them.
