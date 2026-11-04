@@ -938,6 +938,8 @@ private:
     void poll_pack_update();
     void add_pack_printer(const std::string& printer);
     void pack_catalog_entry(const PackModelRef& ref);
+    void published_values(const std::vector<CommunityValue>& values);
+    void use_community_value(const CommunityValue& v);
     void first_run_next();
 
     // Widgets.
@@ -1630,6 +1632,10 @@ private:
     std::vector<std::string> pack_printers_;
     std::vector<std::string> pack_filaments_;                // packs.filaments: more filaments added from the pack
     std::map<std::string, int> pack_printer_number_;         // a pack printer profile's name: its number in the index
+    std::map<std::string, std::pair<std::string, std::string>> pack_printer_model_; // its vendor's and model's names
+    std::string community_for_ = "\x01";                    // the printer community_values_ are for
+    std::vector<CommunityValue> community_values_;
+    std::optional<CommunityValue> community_confirm_;        // a value waiting for the person's yes (rule 24)
     int pack_filaments_number_ = -2;                         // the printer pack_filaments_found_ is for
     std::vector<PackFilamentRef> pack_filaments_found_;
     std::string pack_url_; // packs.url; empty: the latest release
@@ -2689,9 +2695,21 @@ void App::printer_page() {
         T title;
         const char* icon;
     };
-    static constexpr Extra extras[] = {{"calibration", T::SecCalibration, "tisma_calibrate"},
-                                       {"connection", T::SecConnection, "tisma_printer"},
-                                       {"notes", T::SecNotes, "section_other"}};
+    std::vector<Extra> extras = {{"calibration", T::SecCalibration, "tisma_calibrate"},
+                                 {"connection", T::SecConnection, "tisma_printer"},
+                                 {"notes", T::SecNotes, "section_other"}};
+    // The pack's community data for a pack printer (profile_pack.md, rules 22 to 24).
+    {
+        const std::string& now = chosen_profile_[std::size_t(ProfileKind::Printer)];
+        if (now != community_for_) {
+            community_for_ = now;
+            community_values_.clear();
+            if (const auto it = pack_printer_model_.find(now); it != pack_printer_model_.end())
+                community_values_ = pack_community(pack_dir(), "printers", it->second.first, it->second.second);
+        }
+        if (!community_values_.empty())
+            extras.push_back({"published", T::SecPublished, "section_other"});
+    }
     const bool known = std::any_of(sections.begin(), sections.end(), [&](const SectionLayout* s) { return s->id == printer_section_; }) ||
                        std::any_of(std::begin(extras), std::end(extras), [&](const Extra& e) { return printer_section_ == e.id; });
     if (!known)
@@ -2857,6 +2875,8 @@ void App::printer_page() {
             printer_page_ = false;
             set_tab(Tab::Device);
         }
+    } else if (printer_section_ == "published") {
+        published_values(community_values_);
     } else if (printer_section_ == "notes") {
         std::string& notes = printer_notes_[printer];
         ImGui::InputTextMultiline("##notes", &notes, ImVec2(-FLT_MIN, 18.0f * ImGui::GetTextLineHeight()));
@@ -4446,8 +4466,11 @@ void App::load_profile_lists() {
     for (const ProfileKind kind : kProfileKinds) {
         const std::size_t k = std::size_t(kind);
         builtin_profiles_[k] = builtin_profiles(kind);
-        if (kind == ProfileKind::Printer)
+        if (kind == ProfileKind::Printer) {
             pack_printer_number_.clear();
+            pack_printer_model_.clear();
+            community_for_ = "\x01";
+        }
         // The built-in printer is one made from nothing: its speeds are the fallback.
         if (kind == ProfileKind::Printer)
             for (const Profile& p : builtin_profiles_[k])
@@ -4464,8 +4487,14 @@ void App::load_profile_lists() {
                     if (from && std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
                                              [&](const Profile& b) { return b.name == from->name; }))
                         builtin_profiles_[k].push_back(*from);
-                    if (kind == ProfileKind::Printer)
+                    if (kind == ProfileKind::Printer) {
                         pack_printer_number_[p.printer.name] = p.number;
+                        const std::string file = id.substr(0, id.rfind('#'));
+                        for (const PackVendor& v : pack_index_->vendors)
+                            for (const PackModel& m : v.models)
+                                if (m.file == file)
+                                    pack_printer_model_[p.printer.name] = {v.name, m.name};
+                    }
                 } catch (const std::exception& e) {
                     if (kind == ProfileKind::Printer)
                         errors.push_back(id + ": " + e.what());
@@ -5269,6 +5298,119 @@ void App::pack_catalog_entry(const PackModelRef& ref) {
         loc::TextDisabled("%s", tr(T::PackNotDownloaded));
     ImGui::Spacing();
     loc::TextDisabled(tr(T::PackOrigin), ref.vendor->license.c_str(), ref.vendor->origin.c_str());
+}
+
+// «Datos publicados» (rule 23): each value with its badge, unit, conditions
+// and source; **Usar este valor** for the engine's settings (rule 24), at
+// once for the maker's, after a yes for the others (PK13).
+// The name of a community value's key: the engine's setting row, or the
+// community's own keys (profile_pack_format.md, «Datos de la comunidad»).
+std::string community_label(const std::string& key) {
+    static const std::map<std::string, T> own = {
+        {"measured.max_flow", T::CmMaxFlow},
+        {"measured.acceleration", T::CmAccel},
+        {"measured.speed", T::CmSpeed},
+        {"input_shaper.frequency_x", T::CmShaperX},
+        {"input_shaper.frequency_y", T::CmShaperY},
+        {"input_shaper.type", T::CmShaperType},
+        {"head.clearance_radius", T::CmHeadRadius},
+        {"head.gantry_height", T::CmGantry},
+        {"head.nozzle_to_fan_height", T::CmFanHeight},
+        {"bed.mesh_points", T::CmMesh},
+        {"firmware.version", T::CmFirmware},
+        {"filament.tensile_strength_xy", T::CmTensileXY},
+        {"filament.tensile_strength_z", T::CmTensileZ},
+        {"filament.tensile_modulus_xy", T::CmModulusXY},
+        {"filament.tensile_modulus_z", T::CmModulusZ},
+        {"filament.elongation_xy", T::CmElongXY},
+        {"filament.elongation_z", T::CmElongZ},
+        {"filament.impact_strength", T::CmImpact},
+        {"filament.hdt", T::CmHdt},
+        {"filament.glass_transition", T::CmTg},
+        {"filament.shrinkage_xy", T::CmShrinkXY},
+        {"filament.shrinkage_z", T::CmShrinkZ},
+        {"filament.drying_temperature", T::CmDryTemp},
+        {"filament.drying_hours", T::CmDryHours},
+        {"filament.price_per_kg", T::CmPrice},
+        {"resin.exposure", T::CmExposure},
+        {"resin.bottom_exposure", T::CmBottomExposure},
+        {"resin.viscosity", T::CmViscosity}};
+    if (const auto it = own.find(key); it != own.end())
+        return tr(it->second);
+    return key_label(key);
+}
+
+void App::published_values(const std::vector<CommunityValue>& values) {
+    ImGui::PushTextWrapPos(0.0f);
+    loc::TextDisabled("%s", tr(T::PublishedHint));
+    ImGui::PopTextWrapPos();
+    std::map<std::string, std::string> now;
+    for (const auto& [key, value] : describe(settings_))
+        now[key] = value;
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        const CommunityValue& v = values[i];
+        ImGui::PushID(int(i));
+        ImGui::Separator();
+        const ImU32 colour = v.kind == CommunityKind::Official ? 0x3DA35AFF : v.kind == CommunityKind::Measured ? 0x3D8BE8FF : 0xE8A33DFF;
+        loc::TextColored(rgb(colour >> 8), "[%s]", tr(v.kind == CommunityKind::Official   ? T::BadgeOfficial
+                                                      : v.kind == CommunityKind::Measured ? T::BadgeMeasured
+                                                                                          : T::BadgeCommunity));
+        ImGui::SameLine();
+        std::string shown = v.value;
+        if (shown.size() >= 2 && shown.front() == '"' && shown.back() == '"')
+            shown = shown.substr(1, shown.size() - 2);
+        loc::Text("%s: %s %s", community_label(v.key).c_str(), shown.c_str(), v.unit.c_str());
+        if (!v.conditions.empty())
+            loc::TextDisabled("%s", v.conditions.c_str());
+        if (!v.source.url.empty()) {
+            std::string label = v.source.title.empty() ? v.source.url : v.source.title;
+            if (!v.source.author.empty())
+                label += " · " + v.source.author;
+            if (!v.source.at.empty())
+                label += " · " + format(tr(T::PublishedAt), v.source.at.c_str());
+            ImGui::TextLinkOpenURL(label.c_str(), v.source.url.c_str());
+        }
+        const auto it = now.find(v.key);
+        if (it != now.end()) {
+            if (ImGui::SmallButton(tr(T::UseThisValue))) {
+                if (v.kind == CommunityKind::Official)
+                    use_community_value(v);
+                else
+                    community_confirm_ = v;
+            }
+        }
+        ImGui::PopID();
+    }
+    if (community_confirm_)
+        ImGui::OpenPopup("##use_value");
+    if (ImGui::BeginPopupModal("##use_value", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        loc::Text("%s", tr(T::UseValueConfirm));
+        if (ImGui::Button(tr(T::UseThisValue))) {
+            if (community_confirm_)
+                use_community_value(*community_confirm_);
+            community_confirm_.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::Cancel))) {
+            community_confirm_.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void App::use_community_value(const CommunityValue& v) {
+    try {
+        nlohmann::json j = nlohmann::json::parse(settings_json(settings_));
+        const auto dot = v.key.find('.');
+        j[v.key.substr(0, dot)][v.key.substr(dot + 1)] = nlohmann::json::parse(v.value);
+        settings_ = parse_settings(j.dump());
+        settings_changed();
+        notify(key_label(v.key));
+    } catch (const std::exception& e) {
+        fail(T::SecPublished, e.what());
+    }
 }
 
 void App::export_gcode_to(const std::filesystem::path& path) {
@@ -20704,6 +20846,15 @@ void App::script_input() {
         } else {
             next();
         }
+    } else if (step.verb == "use-published") { // a published value's «Usar este valor», confirmed (rule 24)
+        const std::size_t n = std::size_t(std::atoi(step.key.c_str()));
+        if (n >= community_values_.size()) {
+            std::fprintf(stderr, "ui-script: no published value %zu (there are %zu)\n", n, community_values_.size());
+            failed_ = true;
+        } else {
+            use_community_value(community_values_[n]);
+        }
+        next();
     } else if (step.verb == "printer-page") {
         printer_page_ = true;
         if (!step.key.empty())

@@ -1062,6 +1062,42 @@
     X(PackReady, "Paquete de perfiles %s instalado", "Profile pack %s installed") \
     X(PackAdded, "Agregada %s con su filamento y su perfil de impresión", "Added %s with its filament and print profile") \
     X(PackTechnology, "Tecnología: %s", "Technology: %s") \
+    X(SecPublished, "Datos publicados", "Published data") \
+    X(BadgeOfficial, "Fabricante", "Maker") \
+    X(BadgeMeasured, "Medido", "Measured") \
+    X(BadgeCommunity, "Sugerido", "Suggested") \
+    X(UseThisValue, "Usar este valor", "Use this value") \
+    X(UseValueConfirm, "Este dato no lo publica el fabricante. ¿Usarlo igual?", "The maker does not publish this value. Use it anyway?") \
+    X(PublishedHint, "Datos de la comunidad del paquete libre, cada uno con su fuente. Ninguno cambia un ajuste solo.", "Community data from the free pack, each with its source. None changes a setting by itself.") \
+    X(PublishedAt, "minuto %s", "minute %s") \
+    X(CmMaxFlow, "Flujo máximo medido", "Measured maximum flow") \
+    X(CmAccel, "Aceleración medida", "Measured acceleration") \
+    X(CmSpeed, "Velocidad medida", "Measured speed") \
+    X(CmShaperX, "Frecuencia del input shaper en X", "Input shaper frequency in X") \
+    X(CmShaperY, "Frecuencia del input shaper en Y", "Input shaper frequency in Y") \
+    X(CmShaperType, "Tipo de input shaper", "Input shaper type") \
+    X(CmHeadRadius, "Radio libre alrededor del cabezal", "Clearance radius around the head") \
+    X(CmGantry, "Altura del pórtico", "Gantry height") \
+    X(CmFanHeight, "Altura de la boquilla al ventilador", "Nozzle to fan height") \
+    X(CmMesh, "Puntos de la malla de la cama", "Bed mesh points") \
+    X(CmFirmware, "Versión del firmware", "Firmware version") \
+    X(CmTensileXY, "Resistencia a la tracción en XY", "Tensile strength in XY") \
+    X(CmTensileZ, "Resistencia a la tracción en Z", "Tensile strength in Z") \
+    X(CmModulusXY, "Módulo de tracción en XY", "Tensile modulus in XY") \
+    X(CmModulusZ, "Módulo de tracción en Z", "Tensile modulus in Z") \
+    X(CmElongXY, "Alargamiento a la rotura en XY", "Elongation at break in XY") \
+    X(CmElongZ, "Alargamiento a la rotura en Z", "Elongation at break in Z") \
+    X(CmImpact, "Resistencia al impacto", "Impact strength") \
+    X(CmHdt, "Temperatura de deflexión (HDT)", "Heat deflection temperature (HDT)") \
+    X(CmTg, "Transición vítrea", "Glass transition") \
+    X(CmShrinkXY, "Contracción en XY", "Shrinkage in XY") \
+    X(CmShrinkZ, "Contracción en Z", "Shrinkage in Z") \
+    X(CmDryTemp, "Temperatura de secado", "Drying temperature") \
+    X(CmDryHours, "Horas de secado", "Drying hours") \
+    X(CmPrice, "Precio por kg", "Price per kg") \
+    X(CmExposure, "Exposición", "Exposure") \
+    X(CmBottomExposure, "Exposición de las capas de base", "Bottom layers exposure") \
+    X(CmViscosity, "Viscosidad", "Viscosity") \
     X(PackNewer, "Hay perfiles nuevos (%s): actualizalos desde el catálogo de impresoras", "New profiles (%s): update them from the printer catalog") \
     X(Material, "Material", "Material")                                                                               \
     X(NozzleRange, "Boquilla", "Nozzle")                                                                              \

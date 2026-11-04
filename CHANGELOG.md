@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Datos publicados** en la página de una impresora del paquete: lo que publica la comunidad, con su tipo y su fuente.
+  **Usar este valor** lo aplica, con confirmación cuando no es del fabricante.
 - El paquete libre de perfiles en la interfaz: el catálogo de impresoras muestra sus modelos y agrega uno con su
   filamento y su perfil de impresión, como perfiles de fábrica. Si hace falta, baja el fabricante en segundo plano.
   También hay un botón para actualizar el paquete (`docs/CATALOG.md`).

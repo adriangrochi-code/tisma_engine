@@ -10783,4 +10783,6 @@ plano). **Sin probar:** contra una versión publicada de verdad.
 - `pack community` en la línea de comandos.
 - Las rutas del paquete se leen como UTF-8 también en Windows.
 - Prueba: `[pack]`, con datos inventados en el paquete de prueba.
-- **Sigue:** la sección «Datos publicados» en el panel de la impresora y del material, con **Usar este valor** (PK13).
+- Después, la sección «Datos publicados» en la página de la impresora, con distintivos, fuentes y **Usar este valor**
+  (los que no son del fabricante piden confirmación). Prueba: `ui_pack_published` (aplica un dato del fabricante y lo
+  verifica). **Falta:** la misma sección para el material y la resina.
