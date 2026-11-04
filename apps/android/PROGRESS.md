@@ -35,15 +35,17 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
 - **2026-11-04 — controles e impresoras nuevas:** controles de la impresora (temperaturas siempre; ir a casa,
   mover y extruir cuando está quieta) en Moonraker, OctoPrint y Duet; PrusaLink (Digest de la RFC 7616, su OpenAPI)
   y Duet (pedidos `rr_*` con clave de sesión, del wiki de RepRapFirmware), con simuladores. Sin probar con
-  impresoras reales. En Duet, cancelar es M25 y M0 (lista de G-code de la wiki de RepRap): a confirmar con una
-  Duet real; sus errores de G-code llegan después (`rr_reply`) y la app todavía no los lee.
+  impresoras reales. En Duet, cancelar es M25 y M0 (confirmado en la referencia de G-code de RepRapFirmware:
+  M0 cancela un trabajo en pausa y corre stop.g; sin probar en hardware); sus errores de G-code llegan después (`rr_reply`) y la app todavía no los lee.
 
 - **2026-11-04 — Bambu Lab en modo LAN:** MQTT 3.1.1 propio sobre TLS (8883), el estado combinado de los informes,
   pausar, seguir, parar, controles por `gcode_line`, subir por FTPS implícito propio (990) como `.gcode.3mf` con su
   MD5 y empezar con `project_file`; la huella del certificado y el número de serie se confirman la primera vez y
-  después se exigen (BL1 a BL3 contra un simulador propio con TLS). Sin probar con una impresora real: la reanudación
-  de la sesión TLS en la conexión de datos del FTPS (el servidor de Bambu la exige), los valores de `gcode_state` que
-  no son los de la documentación y la unidad de `mc_remaining_time` (se toma en minutos). Sin la cámara de Bambu
+  después se exigen (BL1 a BL3 contra un simulador propio con TLS). Abierto hasta probar con la impresora Bambu del dueño
+  (Bambu Lab no publica el protocolo; consejo del equipo de fichas, 04-11-2026): la reanudación de la sesión TLS en la
+  conexión de datos del FTPS (sin probar en hardware); `gcode_state`: solo IDLE está documentado, RUNNING y PAUSE se
+  toman como imprimiendo y en pausa, cualquier otro valor se muestra tal cual; `mc_remaining_time` sin unidad
+  documentada: el tiempo restante no se muestra. Sin la cámara de Bambu
   todavía (puerto 6000 y RTSP).
 
 - **2026-11-04 — Ingeniería en el teléfono:** con un proyecto 3MF abierto en Placa, «¿Aguanta?» (`analyze`, con los

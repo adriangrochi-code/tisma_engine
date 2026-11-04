@@ -37,7 +37,7 @@ class BambuTest {
         val s = c.status()
         assertEquals(PrinterState.PRINTING, s.state)
         assertEquals(10.0, s.percent)
-        assertEquals(600L, s.remainingS)
+        assertEquals(null, s.remainingS) // unit not documented: not shown
         assertEquals(Temperature(220.0, 220.0), s.nozzle)
         c.pause(); Thread.sleep(200)
         assertEquals(PrinterState.PAUSED, c.status().state)

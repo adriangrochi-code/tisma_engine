@@ -102,13 +102,15 @@ class BambuConnection(
         waitForState(3_000)
         val s = synchronized(lock) { JsonObject(state.toMap()) }
         if (!s.containsKey("gcode_state")) return PrinterStatus(PrinterState.BUSY)
-        // Values seen in the community documentation and its examples; others count as busy.
-        val st = when (s.str("gcode_state").uppercase()) {
+        // Bambu Lab publishes no specification of these values (spec team, 04-11-2026): only IDLE is in the
+        // community documentation. RUNNING and PAUSE are taken as printing and paused, to be confirmed on a
+        // printer; any other value is shown as it comes, not guessed.
+        val raw = s.str("gcode_state")
+        val st = when (raw.uppercase()) {
             "RUNNING" -> PrinterState.PRINTING
             "PAUSE" -> PrinterState.PAUSED
-            "IDLE", "FINISH" -> PrinterState.READY
-            "FAILED" -> PrinterState.READY
-            else -> PrinterState.BUSY // PREPARE, SLICING…
+            "IDLE" -> PrinterState.READY
+            else -> PrinterState.BUSY
         }
         val active = st == PrinterState.PRINTING || st == PrinterState.PAUSED
         val error = s.num("print_error")?.toLong() ?: 0
@@ -116,14 +118,18 @@ class BambuConnection(
             state = if (error != 0L && active) PrinterState.ERROR else st,
             file = s.str("subtask_name").ifBlank { s.str("gcode_file") },
             percent = if (active) s.num("mc_percent") else null,
-            // Minutes, to be confirmed with a printer (the documentation does not give the unit).
-            remainingS = if (active) s.num("mc_remaining_time")?.let { (it * 60).toLong() } else null,
+            // mc_remaining_time has no documented unit: not shown until checked on a printer.
+            remainingS = null,
             layer = s.num("layer_num")?.toInt(),
             totalLayers = s.num("total_layer_num")?.toInt()?.takeIf { it > 0 },
             nozzle = s.num("nozzle_temper")?.let { Temperature(it, s.num("nozzle_target_temper") ?: 0.0) },
             bed = s.num("bed_temper")?.let { Temperature(it, s.num("bed_target_temper") ?: 0.0) },
             chamber = s.num("chamber_temper")?.let { Temperature(it, 0.0) },
-            message = if (error != 0L) "Error ${"%08X".format(error)}" else "",
+            message = when {
+                error != 0L -> "Error ${"%08X".format(error)}"
+                st == PrinterState.BUSY -> raw
+                else -> ""
+            },
         )
     }
 
