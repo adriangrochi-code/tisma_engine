@@ -121,6 +121,8 @@ class CloudScreensTest {
         waitFor("preview_ramp")
         waitForText("20 mm/s")
         compose.onNodeWithTag("preview_by_width").assertIsNotEnabled()
+        compose.onNodeWithTag("preview_3d_toggle").performClick()
+        waitFor("preview_3d")
     }
 
     @Test

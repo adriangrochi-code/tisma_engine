@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -45,6 +46,7 @@ import net.tisma.app.engine.GcodeLayers
 import net.tisma.cloud.readUpTo
 import java.io.File
 import java.util.Locale
+import kotlin.math.ceil
 
 /** The colors of the line types (own choice, readable on the dark 3D background of interface.md). */
 private fun typeColor(type: String): Color = when (type) {
@@ -124,6 +126,7 @@ fun PreviewScreen(path: String) {
     }
     val colors = remember(g) { g.types.map { typeColor(it) } }
     var coloring by remember(g) { mutableStateOf(PreviewColoring.TYPE) }
+    var threeD by remember(g) { mutableStateOf(false) }
     val range = when (coloring) {
         PreviewColoring.TYPE -> null
         PreviewColoring.WIDTH -> g.widthRange
@@ -138,37 +141,53 @@ fun PreviewScreen(path: String) {
     }
     val muted = Color(0xFF3A3A44)
     Column(Modifier.fillMaxSize()) {
-        Box(
-            Modifier.weight(1f).fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Tisma.colors.viewTop, Tisma.colors.viewBottom)))
-                .transformable(transform)
-                .testTag("preview_canvas")
-        ) {
-            Canvas(Modifier.fillMaxSize()) {
+        if (threeD) {
+            val bounds = remember(g) {
                 val b = g.bounds
-                val w = (b[2] - b[0]).coerceAtLeast(1f)
-                val h = (b[3] - b[1]).coerceAtLeast(1f)
-                val scale = 0.9f * minOf(size.width / w, size.height / h) * zoom
-                val ox = size.width / 2 + pan.x
-                val oy = size.height / 2 + pan.y
-                val cx = (b[0] + b[2]) / 2
-                val cy = (b[1] + b[3]) / 2
-                // Y up, as on the printer's bed.
-                fun px(x: Float) = ox + (x - cx) * scale
-                fun py(y: Float) = oy - (y - cy) * scale
-                val stroke = (0.4f * scale).coerceIn(1f, 12f)
-                if (layer > 0) {
-                    val l = g.layers[layer - 1]
-                    for (i in 0 until l.count) {
-                        val s = l.segments
-                        drawLine(muted, Offset(px(s[4 * i]), py(s[4 * i + 1])), Offset(px(s[4 * i + 2]), py(s[4 * i + 3])), stroke)
+                floatArrayOf(b[0], b[1], 0f, b[2], b[3], g.layers.last().z)
+            }
+            val bed = remember(g) {
+                val b = g.bounds
+                floatArrayOf(ceil(maxOf(b[2], 10f) / 10f) * 10f, ceil(maxOf(b[3], 10f) / 10f) * 10f)
+            }
+            var paths by remember(g) { mutableStateOf<FloatArray?>(null) }
+            LaunchedEffect(g, layer, coloring) {
+                paths = withContext(Dispatchers.Default) { g.lines3d(layer) { l, i -> colorOf(l, i).toArgb() and 0xFFFFFF } }
+            }
+            Plate3D(null, bed, Modifier.weight(1f).fillMaxWidth().testTag("preview_3d"), paths, bounds)
+        } else {
+            Box(
+                Modifier.weight(1f).fillMaxWidth()
+                    .background(Brush.verticalGradient(listOf(Tisma.colors.viewTop, Tisma.colors.viewBottom)))
+                    .transformable(transform)
+                    .testTag("preview_canvas")
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val b = g.bounds
+                    val w = (b[2] - b[0]).coerceAtLeast(1f)
+                    val h = (b[3] - b[1]).coerceAtLeast(1f)
+                    val scale = 0.9f * minOf(size.width / w, size.height / h) * zoom
+                    val ox = size.width / 2 + pan.x
+                    val oy = size.height / 2 + pan.y
+                    val cx = (b[0] + b[2]) / 2
+                    val cy = (b[1] + b[3]) / 2
+                    // Y up, as on the printer's bed.
+                    fun px(x: Float) = ox + (x - cx) * scale
+                    fun py(y: Float) = oy - (y - cy) * scale
+                    val stroke = (0.4f * scale).coerceIn(1f, 12f)
+                    if (layer > 0) {
+                        val l = g.layers[layer - 1]
+                        for (i in 0 until l.count) {
+                            val s = l.segments
+                            drawLine(muted, Offset(px(s[4 * i]), py(s[4 * i + 1])), Offset(px(s[4 * i + 2]), py(s[4 * i + 3])), stroke)
+                        }
                     }
-                }
-                val l = g.layers[layer]
-                val s = l.segments
-                for (i in 0 until l.count) {
-                    drawLine(colorOf(l, i), Offset(px(s[4 * i]), py(s[4 * i + 1])),
-                        Offset(px(s[4 * i + 2]), py(s[4 * i + 3])), stroke)
+                    val l = g.layers[layer]
+                    val s = l.segments
+                    for (i in 0 until l.count) {
+                        drawLine(colorOf(l, i), Offset(px(s[4 * i]), py(s[4 * i + 1])),
+                            Offset(px(s[4 * i + 2]), py(s[4 * i + 3])), stroke)
+                    }
                 }
             }
         }
@@ -178,7 +197,7 @@ fun PreviewScreen(path: String) {
             Slider(value = layer.toFloat(), onValueChange = { layer = it.toInt() },
                 valueRange = 0f..g.layers.lastIndex.toFloat().coerceAtLeast(1f),
                 steps = (g.layers.size - 2).coerceIn(0, 2000), modifier = Modifier.testTag("preview_slider"))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(
                     PreviewColoring.TYPE to R.string.preview_by_type,
                     PreviewColoring.WIDTH to R.string.preview_by_width,
@@ -188,6 +207,8 @@ fun PreviewScreen(path: String) {
                     FilterChip(selected = coloring == c, enabled = has, onClick = { coloring = c },
                         label = { Text(stringResource(label)) }, modifier = Modifier.testTag("preview_by_${c.name.lowercase()}"))
                 }
+                FilterChip(selected = threeD, onClick = { threeD = !threeD }, label = { Text(stringResource(R.string.preview_3d)) },
+                    modifier = Modifier.testTag("preview_3d_toggle"))
             }
             val r = range
             if (r == null) {

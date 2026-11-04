@@ -33,6 +33,35 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
     /** The smallest and largest speed (mm/s) of the extrusions, or null when the G-code gives none. */
     val speedRange: ClosedFloatingPointRange<Float>? by lazy { range { it.speeds } }
 
+    /**
+     * The extrusions of layers 0..[upTo] as 3D lines for the 3D view: two
+     * vertices per segment, each x y z r g b, at the layer's Z. [rgb] gives a
+     * segment's color as 0xRRGGBB. At most [maxSegments] are kept, the top
+     * layers first (the ones seen; the top one always), so a large print stays drawable.
+     */
+    fun lines3d(upTo: Int, maxSegments: Int = 1_500_000, rgb: (Layer, Int) -> Int): FloatArray {
+        val last = upTo.coerceIn(-1, layers.lastIndex)
+        var first = last + 1
+        var total = 0
+        while (first > 0 && (first == last + 1 || total + layers[first - 1].count <= maxSegments)) { first--; total += layers[first].count }
+        val out = FloatArray(12 * total)
+        var o = 0
+        for (li in first..last) {
+            val l = layers[li]
+            val s = l.segments
+            for (i in 0 until l.count) {
+                val c = rgb(l, i)
+                val r = (c shr 16 and 0xFF) / 255f; val g = (c shr 8 and 0xFF) / 255f; val bl = (c and 0xFF) / 255f
+                for (k in 0..1) {
+                    out[o] = s[4 * i + 2 * k]; out[o + 1] = s[4 * i + 2 * k + 1]; out[o + 2] = l.z
+                    out[o + 3] = r; out[o + 4] = g; out[o + 5] = bl
+                    o += 6
+                }
+            }
+        }
+        return out
+    }
+
     private fun range(values: (Layer) -> FloatArray): ClosedFloatingPointRange<Float>? {
         var lo = Float.MAX_VALUE; var hi = -Float.MAX_VALUE
         for (l in layers) for (v in values(l)) if (v > 0) { if (v < lo) lo = v; if (v > hi) hi = v }

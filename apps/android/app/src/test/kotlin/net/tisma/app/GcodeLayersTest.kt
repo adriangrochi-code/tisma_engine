@@ -125,4 +125,20 @@ class GcodeLayersTest {
         assertEquals(0.45f..0.6f, g.widthRange)
         assertEquals(10f..30f, g.speedRange)
     }
+
+    @Test
+    fun `3D lines stand at each layer's Z, colored, up to the chosen layer`() {
+        val text = javaClass.getResourceAsStream("/engine_cube.gcode")!!.bufferedReader()
+        val g = GcodeLayers.read(text)
+        val upTo = 9
+        val all = g.lines3d(upTo) { _, _ -> 0xFF8000 }
+        assertEquals(12 * (0..upTo).sumOf { g.layers[it].count }, all.size)
+        assertEquals(g.layers[0].z, all[2])
+        assertEquals(g.layers[upTo].z, all[all.size - 4])
+        assertEquals(1f, all[3]); assertEquals(128 / 255f, all[4], 1e-6f); assertEquals(0f, all[5])
+        // Capped: only the top layers that fit, and always the top one.
+        val capped = g.lines3d(upTo, maxSegments = g.layers[upTo].count + g.layers[upTo - 1].count) { _, _ -> 0 }
+        assertEquals(12 * (g.layers[upTo].count + g.layers[upTo - 1].count), capped.size)
+        assertEquals(12 * g.layers[upTo].count, g.lines3d(upTo, maxSegments = 1) { _, _ -> 0 }.size)
+    }
 }

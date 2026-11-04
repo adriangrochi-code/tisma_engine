@@ -143,6 +143,12 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
         set(v) { field = v; meshDirty = true }
     @Volatile var bed = floatArrayOf(220f, 220f)
         set(v) { field = v; bedDirty = true }
+    /** Toolpaths as lines, x y z r g b per vertex (GcodeLayers.lines3d), drawn in their own colors. */
+    @Volatile var paths: FloatArray? = null
+        set(v) { field = v; pathsDirty = true }
+    @Volatile private var pathsDirty = true
+    private var pathsBuf: FloatBuffer? = null
+    private var pathsCount = 0
     @Volatile private var meshDirty = true
     @Volatile private var bedDirty = true
     private var program = 0
@@ -159,9 +165,12 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
             uniform mat4 uMvp;
             attribute vec3 aPos;
             attribute vec3 aNormal;
+            attribute vec3 aColor;
             varying float vLight;
+            varying vec3 vColor;
             void main() {
                 gl_Position = uMvp * vec4(aPos, 1.0);
+                vColor = aColor;
                 vec3 l = normalize(vec3(-0.4, -0.6, 0.7));
                 vLight = 0.35 + 0.65 * abs(dot(normalize(aNormal), l));
             }
@@ -169,14 +178,20 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
             precision mediump float;
             uniform vec4 uColor;
             uniform float uLit;
+            uniform float uOwnColor;
             varying float vLight;
-            void main() { gl_FragColor = vec4(uColor.rgb * mix(1.0, vLight, uLit), uColor.a); }
+            varying vec3 vColor;
+            void main() {
+                vec3 c = mix(uColor.rgb, vColor, uOwnColor);
+                gl_FragColor = vec4(c * mix(1.0, vLight, uLit), uColor.a);
+            }
         """)
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         // The 3D view's dark background of interface.md, the same in both themes.
         GLES20.glClearColor(0.10f, 0.10f, 0.12f, 1f)
         meshDirty = true
         bedDirty = true
+        pathsDirty = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
@@ -188,6 +203,7 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
     override fun onDrawFrame(gl: GL10?) {
         if (bedDirty) { buildGrid(); bedDirty = false }
         if (meshDirty) { buildMesh(); meshDirty = false }
+        if (pathsDirty) { paths.let { p -> pathsBuf = p?.let { buffer(it) }; pathsCount = (p?.size ?: 0) / 6 }; pathsDirty = false }
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         GLES20.glUseProgram(program)
         val mvp = camera.viewProjection(aspect)
@@ -196,6 +212,10 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
         val nor = GLES20.glGetAttribLocation(program, "aNormal")
         val color = GLES20.glGetUniformLocation(program, "uColor")
         val lit = GLES20.glGetUniformLocation(program, "uLit")
+        val own = GLES20.glGetUniformLocation(program, "uOwnColor")
+        val col = GLES20.glGetAttribLocation(program, "aColor")
+        GLES20.glUniform1f(own, 0f)
+        GLES20.glDisableVertexAttribArray(col)
         gridBuf?.let { g ->
             GLES20.glUniform1f(lit, 0f)
             GLES20.glDisableVertexAttribArray(nor)
@@ -222,6 +242,21 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
             GLES20.glEnableVertexAttribArray(nor)
             GLES20.glVertexAttribPointer(nor, 3, GLES20.GL_FLOAT, false, 24, m)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, meshCount)
+        }
+        pathsBuf?.takeIf { pathsCount > 0 }?.let { p ->
+            GLES20.glUniform1f(lit, 0f)
+            GLES20.glUniform1f(own, 1f)
+            GLES20.glUniform4f(color, 1f, 1f, 1f, 1f)
+            GLES20.glDisableVertexAttribArray(nor)
+            GLES20.glVertexAttrib3f(nor, 0f, 0f, 1f)
+            p.position(0)
+            GLES20.glEnableVertexAttribArray(pos)
+            GLES20.glVertexAttribPointer(pos, 3, GLES20.GL_FLOAT, false, 24, p)
+            p.position(3)
+            GLES20.glEnableVertexAttribArray(col)
+            GLES20.glVertexAttribPointer(col, 3, GLES20.GL_FLOAT, false, 24, p)
+            GLES20.glDrawArrays(GLES20.GL_LINES, 0, pathsCount)
+            GLES20.glDisableVertexAttribArray(col)
         }
     }
 
@@ -274,16 +309,24 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
  * buttons and «Frame» along the bottom.
  */
 @Composable
-fun Plate3D(mesh: MeshFile?, bed: FloatArray, modifier: Modifier = Modifier) {
+fun Plate3D(
+    mesh: MeshFile?, bed: FloatArray, modifier: Modifier = Modifier,
+    paths: FloatArray? = null, pathBounds: FloatArray? = null,
+) {
     val camera = remember { OrbitCamera() }
     val renderer = remember { PlateRenderer(camera) }
     val holder = remember { arrayOfNulls<GLSurfaceView>(1) }
     fun frame() {
-        val b = mesh?.bounds ?: floatArrayOf(0f, 0f, 0f, bed[0], bed[1], 0f)
+        val b = pathBounds ?: mesh?.bounds ?: floatArrayOf(0f, 0f, 0f, bed[0], bed[1], 0f)
         camera.frame(b)
         holder[0]?.requestRender()
     }
-    DisposableEffect(mesh, bed[0], bed[1]) {
+    DisposableEffect(paths) {
+        renderer.paths = paths
+        holder[0]?.requestRender()
+        onDispose { }
+    }
+    DisposableEffect(mesh, bed[0], bed[1], pathBounds) {
         renderer.bed = bed
         renderer.mesh = mesh
         frame()

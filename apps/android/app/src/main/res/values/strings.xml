@@ -334,4 +334,5 @@
     <string name="preview_by_speed">By speed</string>
     <string name="unit_mm">mm</string>
     <string name="unit_mm_s">mm/s</string>
+    <string name="preview_3d" translatable="false">3D</string>
 </resources>
