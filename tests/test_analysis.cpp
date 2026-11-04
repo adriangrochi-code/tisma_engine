@@ -1108,3 +1108,49 @@ TEST_CASE("reinforcement: thicker walls and denser infill round the clamp and th
     std::printf("reinforcement: rest at %d %% (factor %.2f), %.3f g against %.3f g at 30 %%, %d analyses\n",
                 best.best.density, best.best.min_safety, best.mass_g, best.plain_mass_g, best.analyses);
 }
+
+TEST_CASE("recommended orientation: layers along Z, X and Y (structural_optimization.md, rule 8)", "[analysis][engineering]") {
+    // A bar along X held at one end and bent at the other: with the layers
+    // across it (stacked along X) the bending pulls the layers apart.
+    const IndexedMesh bar = box_mesh(24.0f, 6.0f, 6.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {24.0, 3.0, 3.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 3.0;
+    tip.newtons = 20.0;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    e.structural.quality = "normal";
+    // The turns stack the layers along the axis asked.
+    const std::array<double, 9> x = layers_along(1), y = layers_along(2);
+    CHECK(x[6] == 1.0); // z' = x
+    CHECK(y[7] == 1.0); // z' = y
+    double last = -1.0;
+    const OrientationChoice o = recommended_orientation(triangles, beads_04(), e, "PLA", [&](double done) {
+        CHECK(done >= last);
+        last = done;
+    });
+    std::printf("orientation: factor %.3f along Z, %.3f along X, %.3f along Y; best %d, recommended %d\n", o.safety[0],
+                o.safety[1], o.safety[2], o.best, int(o.recommend));
+    CHECK(last == 1.0);
+    CHECK(o.analyses == 3);
+    CHECK(o.safety[0] > 0.0);
+    CHECK(o.safety[1] > 0.0);
+    CHECK(o.safety[2] > 0.0);
+    CHECK(o.safety[std::size_t(o.best)] >= o.safety[0]);
+    CHECK(o.recommend == (o.best != 0 && o.safety[std::size_t(o.best)] > 1.05 * o.safety[0]));
+}

@@ -10451,3 +10451,19 @@ refuerzos» pone la densidad y agrega la zona como cajas modificadoras (2 perím
 idiomas con los mismos campos). **Sin probar en la interfaz:** «Usar los refuerzos» y su deshacer.
 
 **Sigue:** regla 7 de structural_optimization.md (lattice), regla 8 (orientación recomendada).
+
+## 2026-11-04 — Optimizar, regla 8 (orientación recomendada), paso A
+
+**Hecho:** `recommended_orientation(colocada, ajustes, ingeniería, filamento)` analiza la pieza tres veces: con las
+capas en Z (como está), en X y en Y (`layers_along`: un cuarto de vuelta que lleva ese eje a Z; las condiciones giran
+con `turn_engineering`). Recomienda la de mayor factor si supera en más de un 5 % al de Z. Con avance.
+
+**Prueba:** barra de 24 × 6 × 6 mm, empotrada en X = 0, 20 N hacia abajo en la punta: factor 1,60 con capas en Z,
+2,27 en X, 1,90 en Y; recomienda X. 31 s.
+
+**Pendiente, a revisar:** se esperaba que la barra parada (capas a lo ancho, en X) fuera la más débil, porque la
+flexión separa las capas. Puede ser el modelo (la resistencia entre capas del PLA, o la tensión de la esquina del
+empotramiento que manda en Z) o el giro de la carga o de las caras fijas. La prueba solo comprueba el contrato; antes
+del panel hay que mirar el modo de rotura y dónde está el mínimo en cada orientación.
+
+**Sigue:** revisar eso; después «Orientación» en el panel Optimizar (recomendación y «Girar» la pieza con deshacer).

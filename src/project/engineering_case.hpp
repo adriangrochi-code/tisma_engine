@@ -146,6 +146,24 @@ struct Reinforcement {
 Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCase& c, const Settings& settings,
                                  double radius = 0.0);
 
+// «Orientación recomendada» (structural_optimization.md, rule 8): the part
+// (`placed`, on the bed) analysed with its layers stacked along Z (as it
+// is), X and Y, its conditions turned with it; the best is recommended when
+// its safety factor is more than 5 % above Z's. The overhangs of the new
+// orientation are not checked.
+struct OrientationChoice {
+    std::array<double, 3> safety{}; // Z, X, Y; 0 when that analysis failed
+    int best = 0;                   // 0 Z (as it is), 1 X, 2 Y
+    bool recommend = false;
+    int analyses = 0;
+};
+// The turn that stacks the layers along an axis (0 Z, 1 X, 2 Y): that axis
+// becomes Z.
+std::array<double, 9> layers_along(int axis);
+OrientationChoice recommended_orientation(const TriangleMesh& placed, const Settings& settings, const ProjectEngineering& e,
+                                          std::string_view filament_type,
+                                          const std::function<void(double)>& progress = {});
+
 // Rule 6's search: from the analysis at the lowest uniform `density` that
 // holds, the reinforcement zone; then the lightest uniform infill of the rest
 // with the zone in place, and its mass against the part's at `density`

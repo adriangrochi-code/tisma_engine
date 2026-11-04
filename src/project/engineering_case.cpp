@@ -9,6 +9,7 @@
 
 #include "fea/materials.hpp"
 #include "fea/zone.hpp"
+#include "mesh/indexed_mesh.hpp"
 #include "project/engineering_values.hpp"
 
 #include <algorithm>
@@ -569,6 +570,47 @@ Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCas
                 out.modifiers.push_back({"reinforcement", 0, box_between(lo, hi), own});
                 i = end;
             }
+    return out;
+}
+
+std::array<double, 9> layers_along(int axis) {
+    switch (axis) {
+    case 1: return {0, 0, -1, 0, 1, 0, 1, 0, 0}; // a quarter turn about Y: X up
+    case 2: return {1, 0, 0, 0, 0, -1, 0, 1, 0}; // a quarter turn about X: Y up
+    default: return {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    }
+}
+
+OrientationChoice recommended_orientation(const TriangleMesh& placed, const Settings& settings, const ProjectEngineering& e,
+                                          std::string_view filament_type, const std::function<void(double)>& progress) {
+    OrientationChoice out;
+    for (int axis = 0; axis < 3; ++axis) {
+        const std::array<double, 9> r = layers_along(axis);
+        std::vector<Vec3f> corners = placed.corners();
+        for (Vec3f& v : corners)
+            v = Vec3f{float(r[0] * v.x + r[1] * v.y + r[2] * v.z), float(r[3] * v.x + r[4] * v.y + r[5] * v.z),
+                      float(r[6] * v.x + r[7] * v.y + r[8] * v.z)};
+        const TriangleMesh turned(std::move(corners));
+        ProjectEngineering moved = e;
+        turn_engineering(moved, r);
+        std::vector<std::string> notes;
+        AnalysisCase c = engineering_analysis_case(moved, turned, {}, notes, filament_type, settings.layer_height,
+                                                   print_conditions(settings, moved));
+        const IndexedMesh mesh = weld_exact(turned);
+        fit_voxel_limit(c, mesh, settings);
+        const AnalysisReport report = run_analysis(mesh, settings, c, nullptr, [&](std::string_view, double done) {
+            if (progress)
+                progress((double(axis) + std::clamp(done, 0.0, 1.0)) / 3.0);
+        });
+        ++out.analyses;
+        out.safety[std::size_t(axis)] = report.valid && std::isfinite(report.result.min_safety) ? report.result.min_safety : 0.0;
+    }
+    for (int axis = 1; axis < 3; ++axis)
+        if (out.safety[std::size_t(axis)] > out.safety[std::size_t(out.best)])
+            out.best = axis;
+    out.recommend = out.best != 0 && out.safety[std::size_t(out.best)] > 1.05 * out.safety[0];
+    if (progress)
+        progress(1.0);
     return out;
 }
 
