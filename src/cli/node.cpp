@@ -98,12 +98,17 @@ private:
 } // namespace
 
 bool node_slice_wanted(std::span<const std::string_view> args) {
-    bool config = false;
+    bool config = false, node = false;
     for (const std::string_view a : args) {
-        if (a == "--summary" || a == "--sandbox" || a == "--no-gpu")
-            return true;
+        node |= a == "--summary" || a == "--sandbox" || a == "--no-gpu";
         config |= a == "--config" || a == "-c";
     }
+    // A model with --config is the plain slice, which also writes a summary
+    // (the Android app's request, 2026-11-04).
+    if (config && !is_project_file(first_input(args)))
+        return false;
+    if (node)
+        return true;
     const std::string input = first_input(args);
     return !config && !input.empty() && is_project_file(input);
 }
@@ -269,20 +274,27 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
         }
     }
 
-    const std::optional<GcodeTotals> totals = read_gcode_totals(target);
-    const double seconds = totals ? totals->print_seconds : 0.0;
-    nlohmann::json summary{{"print_time", duration_text(seconds)},
-                           {"print_time_s", std::llround(seconds)},
-                           {"filament_mm", std::round(r.check.stats.filament * 100.0) / 100.0},
-                           {"layers", r.model ? r.model->layers.size() : r.check.stats.layers}};
-    // The grams only with the filament's density: an unknown one (0) gives
-    // no weight rather than a wrong 0 g (the spec team's note, 2026-11-02).
-    if (settings.filament_density > 0.0)
-        summary["filament_g"] = std::round((totals ? totals->grams : 0.0) * 100.0) / 100.0;
+    const nlohmann::json summary = nlohmann::json::parse(
+        slice_summary_json(target, r.check.stats.filament, r.model ? r.model->layers.size() : r.check.stats.layers,
+                           settings.filament_density > 0.0));
     if (!write_summary(summary))
         return kExitInput;
     progress(100);
     return kExitOk;
+}
+
+std::string slice_summary_json(const std::filesystem::path& gcode, double filament_mm, std::size_t layers, bool grams) {
+    const std::optional<GcodeTotals> totals = read_gcode_totals(gcode);
+    const double seconds = totals ? totals->print_seconds : 0.0;
+    nlohmann::json summary{{"print_time", duration_text(seconds)},
+                           {"print_time_s", std::llround(seconds)},
+                           {"filament_mm", std::round(filament_mm * 100.0) / 100.0},
+                           {"layers", layers}};
+    // The grams only with the filament's density: an unknown one (0) gives
+    // no weight rather than a wrong 0 g (the spec team's note, 2026-11-02).
+    if (grams)
+        summary["filament_g"] = std::round((totals ? totals->grams : 0.0) * 100.0) / 100.0;
+    return summary.dump(2);
 }
 
 bool node_analyze_wanted(std::span<const std::string_view> args) {

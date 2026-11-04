@@ -4,6 +4,8 @@
 #include "project/engineering.hpp"
 
 #include <array>
+#include <cstddef>
+#include <filesystem>
 #include <functional>
 #include <iosfwd>
 #include <span>
@@ -88,6 +90,11 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
 // placement), "cost" and "cost_before"; the summary cost, cost_before and
 // candidates, or `error` and `code`.
 int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err);
+
+// The summary of a slice as the nodes give it (cloud.md, rule 18):
+// print_time, print_time_s, filament_mm, layers and, with `grams`, filament_g
+// from the written G-code.
+std::string slice_summary_json(const std::filesystem::path& gcode, double filament_mm, std::size_t layers, bool grams);
 
 // Writes a file in one piece: into "<path>.part" first, renamed over the
 // path once complete, so a process stopped half way never leaves a partial

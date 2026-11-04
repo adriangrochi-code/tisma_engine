@@ -10075,4 +10075,7 @@ otro 10 % en el cubo, pero cambió 9 % el Cd de EP9, cuyo flujo no se asienta.
 
 **Sigue (hoja de ruta):** Diseño D4 (barrido, transición, texto), después D5b (DXF/SVG). Pedido de la app de
 Android, en cola después de este ítem: `--summary` también para `slice <modelo> --config`.
+- Pedido de la app de Android (2026-11-04): `slice <modelo> --config <ajustes> -o <salida> --summary <resumen.json>`
+  escribe el mismo resumen que la nube (`print_time`, `print_time_s`, `filament_mm`, `layers`, `filament_g`). Un modelo
+  con `--config` va siempre por el laminado común, aunque lleve `--summary`.
 

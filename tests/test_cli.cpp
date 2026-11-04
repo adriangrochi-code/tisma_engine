@@ -652,3 +652,19 @@ TEST_CASE("a folder given as the model or the settings says so (the spec team's 
     CHECK_THAT(config.err, ContainsSubstring("is a folder, not a settings file"));
     fs::remove_all(dir);
 }
+
+TEST_CASE("slice of a model with --config writes the nodes' summary when asked (Android app, 2026-11-04)", "[cli]") {
+    const auto gcode = test_temp_dir() / "tisma_test_summary.gcode";
+    const auto json = test_temp_dir() / "tisma_test_summary.json";
+    std::filesystem::remove(json);
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/printer_settings.json", "-o", gcode.string(),
+                       "--summary", json.string()});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    std::ifstream f(json);
+    std::stringstream text;
+    text << f.rdbuf();
+    CHECK_THAT(text.str(), ContainsSubstring("\"print_time_s\""));
+    CHECK_THAT(text.str(), ContainsSubstring("\"filament_mm\""));
+    CHECK_THAT(text.str(), ContainsSubstring("\"layers\""));
+}
