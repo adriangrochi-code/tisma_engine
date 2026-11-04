@@ -1,0 +1,94 @@
+{
+ "format": "tisma-profile-pack",
+ "version": 2,
+ "pack_version": "2026.11.04-bbbbbbb",
+ "generated": "2026-11-04T00:00:00Z",
+ "license": "AGPL-3.0-or-later",
+ "printers": [
+  "vendors/acme/models/A1.json#0.4",
+  "vendors/acme/models/A1.json#0.6",
+  "vendors/bolt/models/B2.json#default"
+ ],
+ "compatible": {
+  "name": "compatible.json",
+  "size": 102,
+  "sha256": "83a5d721be3042c315f3ad87726f0b7918eb963bdf809cc3c1761be7ad29e18d"
+ },
+ "community": {
+  "name": "community.tar.xz",
+  "size": 224,
+  "sha256": "a259aedc05801c0348b4ec6493cf1405a2984e19e986c2c19cd0f442a1221e48"
+ },
+ "vendors": [
+  {
+   "id": "acme",
+   "name": "Acme",
+   "license": "AGPL-3.0-or-later",
+   "origin": "Invented",
+   "printers": [
+    "vendors/acme/models/A1.json#0.4",
+    "vendors/acme/models/A1.json#0.6"
+   ],
+   "filaments": [
+    "vendors/acme/filaments/PLA.json"
+   ],
+   "prints": [
+    "vendors/acme/prints/Standard.json"
+   ],
+   "archive": {
+    "name": "acme.tar.xz",
+    "size": 680,
+    "sha256": "1a86b63a9600cd88dacd7edb9f82966de502d006f4f147289d029c30fdc65e90"
+   },
+   "models": [
+    {
+     "id": "A1",
+     "name": "Acme One",
+     "technology": "fff",
+     "family": "One",
+     "file": "vendors/acme/models/A1.json",
+     "default_variant": "0.4",
+     "variants": [
+      {
+       "id": "0.4",
+       "nozzle": 0.4
+      },
+      {
+       "id": "0.6",
+       "nozzle": 0.6
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bolt",
+   "name": "Bolt",
+   "license": "AGPL-3.0-or-later",
+   "origin": "Invented",
+   "printers": [
+    "vendors/bolt/models/B2.json#default"
+   ],
+   "archive": {
+    "name": "bolt.tar.xz",
+    "size": 340,
+    "sha256": "528a098f24e701a167d29fb969dd9996621758ac207956d8bb237c5d88b8f7c5"
+   },
+   "models": [
+    {
+     "id": "B2",
+     "name": "Bolt Two",
+     "technology": "sla",
+     "file": "vendors/bolt/models/B2.json",
+     "default_variant": "default",
+     "variants": [
+      {
+       "id": "default",
+       "nozzle": 0
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

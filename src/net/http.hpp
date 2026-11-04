@@ -39,6 +39,7 @@ struct Response {
     std::string body;
     std::string error; // why there is no answer (connection, certificate, timeout, too large), in English
     std::string www_authenticate; // the server's WWW-Authenticate header, if any (a Digest challenge)
+    std::string location;         // a redirect's Location header, if any; redirects are never followed here
     bool ok() const { return error.empty() && status >= 200 && status < 300; }
 };
 

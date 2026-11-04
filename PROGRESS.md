@@ -10679,3 +10679,67 @@ Decisión: la descarga la hace quien llama (la app de Android la hace ella misma
 **Sigue:** descomprimir `.tar.xz` (falta elegir la biblioteca: xz-embedded, 0BSD, a revisar y anotar en
 `THIRD_PARTY.md` antes de usarla) y leer tar; después `pack plan`, `pack install --from`, `pack list` en la línea de
 comandos y `profile --pack`.
+
+## 2026-11-04 — paquete libre de perfiles, paso 2: `.xz`, tar, instalación y línea de comandos
+
+**Decisión:** xz-embedded es 0BSD, que no está en la lista de licencias permitidas (`tools/check_licenses.py`).
+Cambiar esa lista le toca al dueño. Por eso el motor tiene su propio lector de `.xz` (LZMA2) y de tar, hecho desde las
+especificaciones públicas (ver PROVENANCE). No hay biblioteca nueva.
+
+**Hecho:**
+- `src/catalog/xz.*`:
+  - `xz_decompress`: varios flujos, relleno, CRC32, CRC64 y SHA-256, índice y pie verificados, con tope de salida;
+  - `tar_read`: ustar, pax y nombres largos de GNU; los enlaces se informan aparte.
+- `src/catalog/pack_install.cpp`:
+  - `pack_install`: verifica tamaño y SHA-256; revisa cada entrada antes de escribir (regla 5: ruta insegura, enlace
+    o más de 50 MB descartan el archivo entero); conserva lo anterior de lo descartado y de lo no bajado; arma
+    `pack.new` y cambia con un renombre (regla 7);
+  - `installed.json` guarda lo instalado de verdad, así un archivo rechazado se vuelve a pedir.
+- `pack_installed` para el plan.
+- Línea de comandos (`src/cli/pack_cli.*`, `docs/CATALOG.md`): `pack plan`, `pack install`, `pack list` y
+  `profile --pack … --printer "<archivo>#<variante>"`, con el filamento y el perfil de impresión por defecto de la
+  variante (regla 13) y el filtro de compatibles (PK7).
+
+**Prueba:**
+- `test_xz`: 8 archivos hechos con `xz` (CRC64, SHA-256, CRC32 en bloques, sin chequeo, lc/lp/pb distintos, dos
+  flujos, tar pax y GNU), dañados, cortados, tope de salida, y 900 bytes cambiados al azar.
+- Aparte, 24 000 archivos dañados con ASan y UBSan, sin hallazgos.
+- `test_pack`, con el paquete inventado de `tests/data/pack`: primera instalación, actualización de un solo
+  fabricante (PK12), byte cambiado y descarga cortada (PF2, PK3, PK14), ruta `..` y enlace (PF3, PK4), versión 3
+  (PF1, PK5), y la línea de comandos (PK6, PK7).
+- A mano: el perfil del paquete lamina un cubo con código 0 y `M104 S210` del filamento.
+
+**Velocidad:** 200 KB por archivo de prueba en unos ms. No se midió con el paquete real de 32 MB.
+
+**Sin probar:** contra el paquete real publicado. Por sala limpia no se lee: lo puede probar el equipo de fichas como
+caja negra.
+
+**Sigue:** `knowledge --data`, los datos de la comunidad en el panel (reglas 22–24), y el paquete en el asistente de
+la interfaz (PK1, PK2).
+
+**El mismo día, paso 3, la descarga para la interfaz (`src/catalog/pack_fetch.*`, en `tisma_net`):**
+- `pack_fetch` baja los archivos del plan y sigue hasta 5 redirecciones. GitHub responde con 302 en
+  `releases/latest/download`. Para eso, `net::Response` trae ahora `location`, en cpp-httplib y en WinHTTP.
+- `pack_update` hace todo junto: el índice primero, el plan contra lo instalado, los fabricantes elegidos más los
+  instalados (o todos), y después `pack_install`.
+- `pack_newer` dice si hay una versión publicada más nueva (regla 19).
+- La línea de comandos del motor sigue sin red: los nodos corren aislados.
+- **Prueba** (`test_pack_fetch`, con un servidor simulado que responde con redirección): primer arranque sin
+  fabricantes (PK1), con uno elegido, actualización que pide solo el fabricante cambiado (PK12; el servidor no tiene
+  el otro), y sin conexión (PK2: no cambia nada).
+- **Sin probar:** contra GitHub de verdad, y la cabecera `Location` de WinHTTP, que solo compila en el CI de Windows.
+- **Sigue:** el paquete en la interfaz: asistente, lista de impresoras, aviso de versión nueva.
+- **Plan para la interfaz** (decisión según `profile_pack.md`, reglas 1, 2, 9, 13 y 19; próximo bloque):
+  - el catálogo de impresoras suma los modelos del paquete instalado, agrupados por fabricante, con una variante por
+    boquilla en una sola fila (PK15);
+  - al agregar uno, se arman su perfil de impresora y los de `defaults` como perfiles de fábrica, que no se pueden
+    sobrescribir (regla 9, PK11);
+  - las impresoras elegidas del paquete se guardan en las preferencias (`packs.printers`) y se vuelven a armar al abrir;
+  - «Actualizar perfiles» corre `pack_update` en segundo plano, con avance;
+  - al abrir, como mucho una vez por día, `pack_newer` (regla 19).
+
+**Fechas del dueño (2026-11-04, por la sesión de fichas):**
+- beta cerrada en diciembre de 2026, con lo que esté listo; sirve para arreglar cada error que aparezca;
+- versión 1.0 en la segunda semana de enero de 2027;
+- las pruebas en hardware corren aparte y no frenan el software.
+El orden del roadmap se planifica con esas fechas.

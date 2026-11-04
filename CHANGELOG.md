@@ -12,6 +12,17 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- `--set grupo.clave=valor` (se repite) y `--config-over <parcial.json>` en `slice`, `analyze`, `aero` y `orient` de un
+  proyecto: cambios encima de los ajustes del proyecto, sin tocar el archivo (pedido de la app de Android,
+  `mobile_app.md` regla 13).
+- Material › Temperaturas muestra en el nivel Básico la boquilla y la cama de la primera capa (`settings_panel.md`,
+  regla 10). Vacías, son las mismas que en las demás capas. `tisma --settings-layout` da el tipo, la unidad, el
+  mínimo, el máximo y el valor de las temperaturas (pedido de la app de Android).
+- El paquete libre de perfiles en la línea de comandos: `tisma-engine pack plan|install|list` y
+  `profile --pack <carpeta> --printer "<archivo>#<variante>"` (`docs/CATALOG.md`). Comprueba el tamaño y el SHA-256,
+  descomprime de forma segura y cambia el paquete de una sola vez. Para eso, el motor lee `.xz` y tar con código
+  propio, sin bibliotecas nuevas.
+- Impresoras por red: OctoPrint, Moonraker (Klipper) y PrusaLink (con autenticación Digest), en `src/device/print_host.*`.
 - `tisma-engine analyze <proyecto> --mode lightest-infill [--no-zones] [--ribs]` corre en los nodos de la nube y en el
   teléfono: el relleno uniforme mínimo, por zonas y con nervios, con avance; el resumen da la densidad, el factor, los
   niveles y las masas, y el resultado las cajas de las zonas con sus ajustes. `resin-structure` sigue sin correr.
@@ -299,6 +310,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   transformación de su ítem). Mover o girar una pieza ya no cambia dónde quedan sus condiciones de Ingeniería.
 
 ### Corregido
+
+- La ayuda de los ajustes ya no nombra documentos internos (`docs/INFILL.md`, «Ficha …md») ni la clave `width` en la de paredes (QA de la app de Android).
+- La fila de variables de la pestaña Impresora se llamaba «Temperatura de boquilla» en la búsqueda y en `--settings-layout`.
 
 - En Estructural, Ctrl+Z deshace también lo que hizo Optimizar en la pieza («Girar la pieza», «Usar …»), no solo
   las condiciones (UI51); la ayuda de sus botones ya no tapa el resultado (UI52).

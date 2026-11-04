@@ -489,3 +489,31 @@ TEST_CASE("TR29: slice, aero and orient errors carry a stable code and the Spani
     CHECK(j["code"] == "not_a_project");
     CHECK(j["error_es"] == "el archivo no es un proyecto de Tisma");
 }
+
+TEST_CASE("slice of a project with --set and --config-over: changes over its own settings (mobile_app.md rule 13)",
+          "[cli][cloud]") {
+    const auto dir = fresh_dir("tisma_test_node_set");
+    const auto project = dir / "plate.3mf";
+    save_project(project, box_project(100.0, 100.0));
+    const auto gcode = dir / "plate.gcode", summary = dir / "summary.json", over = dir / "over.json";
+    const auto layers = [&](std::vector<std::string> extra) {
+        std::vector<std::string> args{"slice", project.string(), "-o", gcode.string(), "--summary", summary.string(),
+                                      "--sandbox", "--no-gpu"};
+        args.insert(args.end(), extra.begin(), extra.end());
+        const Run r = run(args);
+        INFO(r.err);
+        const nlohmann::json j = nlohmann::json::parse(read_text(summary));
+        return r.code == kExitOk ? j["layers"].get<int>() : -r.code;
+    };
+    CHECK(layers({}) == 100);
+    CHECK(layers({"--set", "layers.height=0.25", "--set", "layers.first_height=0.25"}) == 80);
+    std::ofstream(over) << R"({"layers": {"height": 0.4, "first_height": 0.4}})";
+    CHECK(layers({"--config-over", over.string()}) == 50);
+    // --set goes over --config-over.
+    CHECK(layers({"--config-over", over.string(), "--set", "layers.height=0.25", "--set", "layers.first_height=0.25"}) == 80);
+    // An unknown key or a bad value is an error, said in the summary.
+    CHECK(layers({"--set", "layers.no_such_key=1"}) == -kExitInput);
+    CHECK(read_text(summary).find("bad_settings") != std::string::npos);
+    CHECK(layers({"--set", "layers.height"}) == -kExitInput);
+    std::filesystem::remove_all(dir);
+}

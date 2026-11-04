@@ -280,6 +280,8 @@ add_library(tisma_core
   src/project/project.cpp
   src/catalog/catalog.cpp
   src/catalog/pack.cpp
+  src/catalog/pack_install.cpp
+  src/catalog/xz.cpp
   src/device/gcode_host.cpp
   src/device/printer.cpp
   src/device/serial_port.cpp
@@ -293,6 +295,7 @@ add_library(tisma_core
   src/ui/project_slice.cpp
   src/cli/cli.cpp
   src/cli/node.cpp
+  src/cli/pack_cli.cpp
 )
 if(TISMA_GPU)
   target_sources(tisma_core PRIVATE src/gpu/compute_vulkan.cpp)
@@ -344,7 +347,7 @@ if(NOT WIN32)
   endif()
 endif()
 add_library(tisma_net STATIC src/net/http.cpp src/cloud/client.cpp src/cloud/secret_store.cpp src/cloud/report.cpp
-  src/device/print_host.cpp src/net/digest.cpp)
+  src/device/print_host.cpp src/net/digest.cpp src/catalog/pack_fetch.cpp)
 target_include_directories(tisma_net PUBLIC src)
 # tisma_core: running secret-tool or security (cad/process).
 target_link_libraries(tisma_net PRIVATE tisma_core nlohmann_json::nlohmann_json tisma_warnings)

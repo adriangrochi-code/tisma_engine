@@ -39,7 +39,7 @@ TEST_CASE("settings panel: every setting has a section, a card and a level (SP1)
             }
         }
     CHECK_FALSE(setting_place("compute.gpu"));
-    CHECK(setting_place("machine.variables.first_layer_temperature")->subsection->id == "variables");
+    CHECK(setting_place("machine.variables.first_layer_temperature")->subsection->id == "nozzle_temp"); // settings_panel.md rule 10
 }
 
 TEST_CASE("settings panel: Basic shows the spec's list, Normal more, Advanced all (rule 10)", "[ui][layout]") {
@@ -48,7 +48,8 @@ TEST_CASE("settings panel: Basic shows the spec's list, Normal more, Advanced al
         "surfaces.bottom_layers", "surfaces.top_min_thickness", "surfaces.bottom_min_thickness", "surfaces.top_pattern",
         "infill.density", "infill.pattern", "support.enabled", "support.automatic", "adhesion.skirt_loops",
         "adhesion.skirt_distance", "adhesion.brim_width", "machine.variables.temperature",
-        "machine.variables.bed_temperature", "cooling.fan_min", "cooling.fan_max", "retraction.length", "retraction.lift",
+        "machine.variables.bed_temperature", "machine.variables.first_layer_temperature",
+        "machine.variables.first_layer_bed_temperature", "cooling.fan_min", "cooling.fan_max", "retraction.length", "retraction.lift",
         // the printer's, in its own page
         "machine.bed", "machine.max_height", "machine.nozzle_diameter", "machine.filament_diameter"};
     std::size_t shown = 0, normal = 0, all = 0;

@@ -275,8 +275,8 @@ const std::vector<SectionLayout>& print_layout() {
 const std::vector<SectionLayout>& material_layout() {
     static const std::vector<SectionLayout> layout = {
         {"temperature", T::SecTemperature, "section_temperature.svg",
-         {{"nozzle_temp", T::SubNozzleTemp, {{"machine.variables.temperature", B}}},
-          {"bed_temp", T::SubBedTemp, {{"machine.variables.bed_temperature", B}}},
+         {{"nozzle_temp", T::SubNozzleTemp, {{"machine.variables.temperature", B}, {"machine.variables.first_layer_temperature", B}}},
+          {"bed_temp", T::SubBedTemp, {{"machine.variables.bed_temperature", B}, {"machine.variables.first_layer_bed_temperature", B}}},
           {"chamber", T::SubChamber, {{"extrusion.chamber_temperature", N}, {"extrusion.chamber_min_temperature", A}}},
           {"price", T::SubPrice, {{"extrusion.density", N}, {"extrusion.cost", N}, {"extrusion.spool_weight", A}}},
           {"shrinkage", T::SubShrinkage, {{"extrusion.shrinkage_xy", A}, {"extrusion.shrinkage_z", A}}}}},

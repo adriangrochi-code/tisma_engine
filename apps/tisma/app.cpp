@@ -1766,7 +1766,8 @@ const std::map<T, const char*>& row_keys() {
         {T::Overhang3, "speed.overhang_3"}, {T::FlowSlopeUp, "speed.flow_slope_up"},
         {T::FlowSlopeDown, "speed.flow_slope_down"},
         {T::FilamentDiameter, "machine.filament_diameter"}, {T::FeedstockRow, "machine.feedstock"}, {T::NozzleTemp, "machine.variables"},
-        {T::BedTemp, "machine.variables"}, {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
+        {T::BedTemp, "machine.variables"}, {T::FirstNozzleTemp, "machine.variables"}, {T::FirstBedTemp, "machine.variables"},
+        {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
         {T::FanMax, "cooling.fan_max"}, {T::MinLayerTime, "cooling.min_layer_time"},
         {T::KeepOuterSpeed, "cooling.keep_outer_speed"}, {T::BedWidth, "machine.bed"}, {T::BedDepth, "machine.bed"},
         {T::MaxHeight, "machine.max_height"}, {T::Nozzle, "machine.nozzle_diameter"},
@@ -1951,10 +1952,14 @@ const char* row_key(T label) {
 std::string key_label(std::string_view key) {
     static const std::map<std::string, T, std::less<>> labels = [] {
         std::map<std::string, T, std::less<>> m;
+        // The temperature rows also point at machine.variables: its own row names it.
+        m.emplace("machine.variables", T::VariablesRow);
         for (const auto& [label, k] : row_keys())
             m.emplace(k, label);
         m.emplace("machine.variables.temperature", T::NozzleTemp);
         m.emplace("machine.variables.bed_temperature", T::BedTemp);
+        m.emplace("machine.variables.first_layer_temperature", T::FirstNozzleTemp);
+        m.emplace("machine.variables.first_layer_bed_temperature", T::FirstBedTemp);
         return m;
     }();
     const auto it = labels.find(key);
@@ -3166,6 +3171,24 @@ bool variable_row(T label, Settings& s, const char* name, int min, int max, cons
     if (!row(label, v, min, max, fmt, tip))
         return false;
     values.front() = std::to_string(v);
+    return true;
+}
+
+// A first-layer variable ([first_layer_temperature]): empty means the same as
+// `fallback` on every layer, so it shows that value and is written only when
+// changed; set back to the fallback's value, it is emptied again.
+bool first_layer_variable_row(T label, Settings& s, const char* name, const char* fallback, int min, int max, const char* fmt,
+                              const char* tip) {
+    const auto own = s.variables.find(name);
+    const auto other = s.variables.find(fallback);
+    const int base = other != s.variables.end() && !other->second.empty() ? std::atoi(other->second.front().c_str()) : 0;
+    int v = own != s.variables.end() && !own->second.empty() ? std::atoi(own->second.front().c_str()) : base;
+    if (!row(label, v, min, max, fmt, tip))
+        return false;
+    if (v == base)
+        s.variables.erase(name);
+    else
+        s.variables[name] = {std::to_string(v)};
     return true;
 }
 
@@ -7859,9 +7882,15 @@ bool App::card_rows(std::string_view id, bool& bed) {
     else if (id == "nozzle_temp") {
         if (shown("machine.variables.temperature"))
             changed |= variable_row(T::NozzleTemp, s, "temperature", 0, 450, "%d °C", tr(T::TempTip));
+        if (shown("machine.variables.first_layer_temperature"))
+            changed |= first_layer_variable_row(T::FirstNozzleTemp, s, "first_layer_temperature", "temperature", 0, 450, "%d °C",
+                                                tr(T::FirstTempTip));
     } else if (id == "bed_temp") {
         if (shown("machine.variables.bed_temperature"))
             changed |= variable_row(T::BedTemp, s, "bed_temperature", 0, 150, "%d °C", tr(T::TempTip));
+        if (shown("machine.variables.first_layer_bed_temperature"))
+            changed |= first_layer_variable_row(T::FirstBedTemp, s, "first_layer_bed_temperature", "bed_temperature", 0, 150,
+                                                "%d °C", tr(T::FirstTempTip));
     } else if (id == "chamber") {
         mm(T::ChamberTemp, "extrusion.chamber_temperature", s.chamber_temperature, 0.0, 200.0, "%.0f °C", 0.5f);
         mm(T::ChamberMinTemp, "extrusion.chamber_min_temperature", s.chamber_min_temperature, 0.0, 200.0,
@@ -21277,6 +21306,9 @@ int write_settings_layout(const AppOptions& options) {
     std::map<std::string, std::string> values;
     for (const auto& [key, value] : describe(settings))
         values[key] = value;
+    for (const auto& [name, list] : settings.variables) // each variable as its own row's value
+        if (!list.empty())
+            values["machine.variables." + name] = list.front();
     const auto level_name = [](SettingLevel l) {
         return l == SettingLevel::Basic ? "basic" : l == SettingLevel::Normal ? "normal" : "advanced";
     };
@@ -21306,6 +21338,20 @@ int write_settings_layout(const AppOptions& options) {
                         row["type"] = doc->second.type;
                         row["default"] = doc->second.default_value;
                         row["range"] = doc->second.range;
+                    }
+                    // The temperature variables have no row in CONFIG.md's tables:
+                    // the same limits as the panel's fields.
+                    if (doc == setting_docs().end() && key.starts_with("machine.variables.")) {
+                        const bool bed = key.find("bed_") != std::string::npos;
+                        const bool first = key.find("first_layer_") != std::string::npos;
+                        row["type"] = "entero";
+                        row["unit"] = "°C";
+                        row["min"] = 0;
+                        row["max"] = bed ? 150 : 450;
+                        row["range"] = bed ? "0 a 150" : "0 a 450";
+                        row["default"] = first ? "" : "0";
+                        if (first) // empty: the same as on the other layers
+                            row["fallback"] = bed ? "machine.variables.bed_temperature" : "machine.variables.temperature";
                     }
                     if (const auto v = values.find(key); v != values.end())
                         row["value"] = v->second;

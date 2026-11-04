@@ -456,6 +456,9 @@
     X(FeedstockPellet, "Pellets", "Pellets") \
     X(NozzleTemp, "Temperatura de boquilla", "Nozzle temperature")                                                    \
     X(BedTemp, "Temperatura de cama", "Bed temperature")                                                              \
+    X(FirstNozzleTemp, "Boquilla, primera capa", "Nozzle, first layer")                                               \
+    X(FirstBedTemp, "Cama, primera capa", "Bed, first layer")                                                         \
+    X(FirstTempTip, "Vacío: la misma que en las demás capas", "Empty: the same as on the other layers")              \
     X(TempTip, "Va al G-code de inicio como [temperature] y [bed_temperature]",                                       \
       "Goes into the start G-code as [temperature] and [bed_temperature]")                                            \
     X(Retraction, "Retracción", "Retraction")                                                                         \

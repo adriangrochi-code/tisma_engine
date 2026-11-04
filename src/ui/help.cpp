@@ -65,6 +65,49 @@ std::string plain_text(std::string_view md) {
     return out;
 }
 
+// The meaning as the person reads it: a parenthesis that only points at a
+// document of this repository ("(docs/INFILL.md)", "(ficha placement.md,
+// reglas 2 a 4)") is taken out, with the space before it; the rest stays.
+std::string without_doc_references(const std::string& text) {
+    std::string out;
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const std::size_t open = text.find('(', pos);
+        if (open == std::string::npos)
+            break;
+        const std::size_t close = text.find(')', open);
+        if (close == std::string::npos)
+            break;
+        const std::string inside = text.substr(open + 1, close - open - 1);
+        const bool reference = inside.find(".md") != std::string::npos && inside.find('(') == std::string::npos;
+        std::size_t keep_to = open;
+        if (reference && keep_to > pos && text[keep_to - 1] == ' ')
+            --keep_to;
+        out += text.substr(pos, (reference ? keep_to : close + 1) - pos);
+        pos = close + 1;
+    }
+    out += text.substr(pos);
+    // A sentence that only says where the rule comes from ("Ficha
+    // perimeters.md, regla 7.", "Es lo que la ficha sequential.md llama…").
+    std::string kept;
+    std::size_t start = 0;
+    while (start < out.size()) {
+        std::size_t end = out.find(". ", start);
+        end = end == std::string::npos ? out.size() : end + 1;
+        std::string sentence = out.substr(start, end - start);
+        const std::size_t first = sentence.find_first_not_of(' ');
+        const std::string_view body = first == std::string::npos ? std::string_view() : std::string_view(sentence).substr(first);
+        const bool reference = body.find(".md") != std::string_view::npos &&
+                               (body.starts_with("Ficha ") || body.starts_with("De la ficha ") || body.starts_with("Es lo que la ficha "));
+        if (!reference)
+            kept += sentence;
+        start = end;
+    }
+    while (!kept.empty() && kept.back() == ' ')
+        kept.pop_back();
+    return kept;
+}
+
 std::map<std::string, SettingDoc> parse_setting_docs(std::string_view md) {
     std::map<std::string, SettingDoc> out;
     std::string group;
@@ -104,7 +147,7 @@ std::map<std::string, SettingDoc> parse_setting_docs(std::string_view md) {
             else if (header[k] == "Rango")
                 doc.range = text;
             else if (header[k] == "Significado")
-                doc.meaning = text;
+                doc.meaning = without_doc_references(text);
         }
         // A row may name several keys: "`start_gcode`, `end_gcode`".
         for (std::size_t open = row[0].find('`'); open != std::string::npos;) {
