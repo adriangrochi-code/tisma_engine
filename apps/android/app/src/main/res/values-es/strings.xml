@@ -314,4 +314,9 @@
     <string name="credits_features">Funciones basadas en otras fuentes</string>
     <string name="credits_based_on">Basado en %1$s, de %2$s</string>
     <string name="credits_libraries">Componentes de terceros</string>
+    <string name="preview_by_type">Por tipo</string>
+    <string name="preview_by_width">Por ancho</string>
+    <string name="preview_by_speed">Por velocidad</string>
+    <string name="unit_mm">mm</string>
+    <string name="unit_mm_s">mm/s</string>
 </resources>

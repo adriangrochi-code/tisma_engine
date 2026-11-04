@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -62,6 +64,21 @@ private fun typeColor(type: String): Color = when (type) {
     else -> Color(0xFF8C8C99)
 }
 
+/** What the preview colors by. */
+enum class PreviewColoring { TYPE, WIDTH, SPEED }
+
+/** A value's color on a blue-green-yellow-red ramp, low to high (own choice, readable on the dark view). */
+internal fun rampColor(t: Float): Color {
+    val stops = RAMP
+    val x = t.coerceIn(0f, 1f) * (stops.size - 1)
+    val i = x.toInt().coerceAtMost(stops.size - 2)
+    val f = x - i
+    val a = stops[i]; val b = stops[i + 1]
+    return Color(a.red + (b.red - a.red) * f, a.green + (b.green - a.green) * f, a.blue + (b.blue - a.blue) * f)
+}
+
+private val RAMP = listOf(Color(0xFF2B59C3), Color(0xFF1FB5C9), Color(0xFF3DDC97), Color(0xFFFFD23F), Color(0xFFE8452C))
+
 /** A G-code layer by layer, seen from above (mobile_app.md, rules 6 and 12; MA10). Pinch to zoom, drag to move. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -106,6 +123,19 @@ fun PreviewScreen(path: String) {
         pan += p
     }
     val colors = remember(g) { g.types.map { typeColor(it) } }
+    var coloring by remember(g) { mutableStateOf(PreviewColoring.TYPE) }
+    val range = when (coloring) {
+        PreviewColoring.TYPE -> null
+        PreviewColoring.WIDTH -> g.widthRange
+        PreviewColoring.SPEED -> g.speedRange
+    }
+    fun colorOf(l: GcodeLayers.Layer, i: Int): Color {
+        val r = range ?: return colors[l.segmentTypes[i].toInt()]
+        val v = if (coloring == PreviewColoring.WIDTH) l.widths[i] else l.speeds[i]
+        if (v <= 0f) return Color(0xFF8C8C99)
+        val span = r.endInclusive - r.start
+        return rampColor(if (span < 1e-6f) 0.5f else (v - r.start) / span)
+    }
     val muted = Color(0xFF3A3A44)
     Column(Modifier.fillMaxSize()) {
         Box(
@@ -137,7 +167,7 @@ fun PreviewScreen(path: String) {
                 val l = g.layers[layer]
                 val s = l.segments
                 for (i in 0 until l.count) {
-                    drawLine(colors[l.segmentTypes[i].toInt()], Offset(px(s[4 * i]), py(s[4 * i + 1])),
+                    drawLine(colorOf(l, i), Offset(px(s[4 * i]), py(s[4 * i + 1])),
                         Offset(px(s[4 * i + 2]), py(s[4 * i + 3])), stroke)
                 }
             }
@@ -148,13 +178,36 @@ fun PreviewScreen(path: String) {
             Slider(value = layer.toFloat(), onValueChange = { layer = it.toInt() },
                 valueRange = 0f..g.layers.lastIndex.toFloat().coerceAtLeast(1f),
                 steps = (g.layers.size - 2).coerceIn(0, 2000), modifier = Modifier.testTag("preview_slider"))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                g.types.forEachIndexed { i, t ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(10.dp).background(colors[i]))
-                        Spacer(Modifier.size(4.dp))
-                        Text(t, style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(
+                    PreviewColoring.TYPE to R.string.preview_by_type,
+                    PreviewColoring.WIDTH to R.string.preview_by_width,
+                    PreviewColoring.SPEED to R.string.preview_by_speed,
+                ).forEach { (c, label) ->
+                    val has = c == PreviewColoring.TYPE || (if (c == PreviewColoring.WIDTH) g.widthRange else g.speedRange) != null
+                    FilterChip(selected = coloring == c, enabled = has, onClick = { coloring = c },
+                        label = { Text(stringResource(label)) }, modifier = Modifier.testTag("preview_by_${c.name.lowercase()}"))
+                }
+            }
+            val r = range
+            if (r == null) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    g.types.forEachIndexed { i, t ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(10.dp).background(colors[i]))
+                            Spacer(Modifier.size(4.dp))
+                            Text(t, style = MaterialTheme.typography.bodySmall)
+                        }
                     }
+                }
+            } else {
+                val unit = stringResource(if (coloring == PreviewColoring.WIDTH) R.string.unit_mm else R.string.unit_mm_s)
+                val fmt = if (coloring == PreviewColoring.WIDTH) "%.2f %s" else "%.0f %s"
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("preview_ramp")) {
+                    Text(String.format(Locale.getDefault(), fmt, r.start, unit), style = MaterialTheme.typography.bodySmall)
+                    Box(Modifier.weight(1f).padding(horizontal = 8.dp).height(10.dp)
+                        .background(Brush.horizontalGradient(RAMP)))
+                    Text(String.format(Locale.getDefault(), fmt, r.endInclusive, unit), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

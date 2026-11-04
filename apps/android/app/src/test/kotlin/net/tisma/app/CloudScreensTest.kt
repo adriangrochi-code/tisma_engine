@@ -1,6 +1,7 @@
 package net.tisma.app
 
 import android.content.Context
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -115,6 +116,11 @@ class CloudScreensTest {
         compose.onNodeWithTag("preview_result").performScrollTo().performClick()
         waitFor("preview_layer")
         waitForText("Layer 3 of 3")
+        // Colored by speed: the mock's F1200 is 20 mm/s; it gives no ;WIDTH, so By width is off.
+        compose.onNodeWithTag("preview_by_speed").performClick()
+        waitFor("preview_ramp")
+        waitForText("20 mm/s")
+        compose.onNodeWithTag("preview_by_width").assertIsNotEnabled()
     }
 
     @Test

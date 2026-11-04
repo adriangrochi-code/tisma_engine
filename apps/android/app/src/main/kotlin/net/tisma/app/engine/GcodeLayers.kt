@@ -11,15 +11,32 @@ import kotlin.math.sin
 /**
  * The extrusions of a G-code, layer by layer, for the preview (mobile_app.md,
  * rule 12; cloud.md, rule 9). Read from the tags of docs/spec/GCODE_OUTPUT.md
- * (`;LAYER_CHANGE`, `;Z:`, `;HEIGHT:`, `;TYPE:`) and the moves themselves
- * (G0/G1, G2/G3 arcs as short chords, G90/G91, M82/M83, G92). Travel moves
- * are left out. Each layer keeps its segments in one float array (x0 y0 x1 y1),
- * so a large print stays small in memory. Own design.
+ * (`;LAYER_CHANGE`, `;Z:`, `;HEIGHT:`, `;TYPE:`, `;WIDTH:`) and the moves
+ * themselves (G0/G1 with their feed rate, G2/G3 arcs as short chords,
+ * G90/G91, M82/M83, G92). Travel moves are left out. Each layer keeps its
+ * segments in one float array (x0 y0 x1 y1) and their width (mm, 0 when the
+ * G-code does not say) and speed (mm/s) in two more, so a large print stays
+ * small in memory. Own design.
  */
 class GcodeLayers private constructor(val layers: List<Layer>, val types: List<String>) {
 
-    class Layer(val z: Float, val height: Float, val segments: FloatArray, val segmentTypes: ByteArray) {
+    class Layer(
+        val z: Float, val height: Float, val segments: FloatArray, val segmentTypes: ByteArray,
+        val widths: FloatArray, val speeds: FloatArray,
+    ) {
         val count get() = segmentTypes.size
+    }
+
+    /** The smallest and largest width (mm) of the extrusions, or null when the G-code gives none. */
+    val widthRange: ClosedFloatingPointRange<Float>? by lazy { range { it.widths } }
+
+    /** The smallest and largest speed (mm/s) of the extrusions, or null when the G-code gives none. */
+    val speedRange: ClosedFloatingPointRange<Float>? by lazy { range { it.speeds } }
+
+    private fun range(values: (Layer) -> FloatArray): ClosedFloatingPointRange<Float>? {
+        var lo = Float.MAX_VALUE; var hi = -Float.MAX_VALUE
+        for (l in layers) for (v in values(l)) if (v > 0) { if (v < lo) lo = v; if (v > hi) hi = v }
+        return if (lo > hi) null else lo..hi
     }
 
     /** The extent of all extrusions, for fitting the view. */
@@ -47,17 +64,25 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
     private class Builder(val z: Float, var height: Float) {
         var seg = FloatArray(1024)
         var types = ByteArray(256)
+        var widths = FloatArray(256)
+        var speeds = FloatArray(256)
         var n = 0
 
-        fun add(x0: Float, y0: Float, x1: Float, y1: Float, type: Int) {
+        fun add(x0: Float, y0: Float, x1: Float, y1: Float, type: Int, width: Float, speed: Float) {
             if (4 * (n + 1) > seg.size) seg = seg.copyOf(seg.size * 2)
-            if (n + 1 > types.size) types = types.copyOf(types.size * 2)
+            if (n + 1 > types.size) {
+                types = types.copyOf(types.size * 2)
+                widths = widths.copyOf(types.size)
+                speeds = speeds.copyOf(types.size)
+            }
             seg[4 * n] = x0; seg[4 * n + 1] = y0; seg[4 * n + 2] = x1; seg[4 * n + 3] = y1
             types[n] = type.toByte()
+            widths[n] = width
+            speeds[n] = speed
             n++
         }
 
-        fun build() = Layer(z, height, seg.copyOf(4 * n), types.copyOf(n))
+        fun build() = Layer(z, height, seg.copyOf(4 * n), types.copyOf(n), widths.copyOf(n), speeds.copyOf(n))
     }
 
     private class Parser {
@@ -70,6 +95,9 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
         var absoluteE = true
         var tagZ: Float? = null
         var tagHeight = 0f
+        var width = 0f
+        /** The feed rate in mm/min, kept from move to move as G-code does. */
+        var feed = 0.0
 
         fun typeIndex(name: String): Int {
             val i = types.indexOf(name)
@@ -102,6 +130,7 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
                     t.startsWith(";Z:") -> tagZ = t.substring(3).trim().toFloatOrNull()
                     t.startsWith(";HEIGHT:") -> tagHeight = t.substring(8).trim().toFloatOrNull() ?: 0f
                     t.startsWith(";TYPE:") -> type = typeIndex(t.substring(6).trim())
+                    t.startsWith(";WIDTH:") -> width = t.substring(7).trim().toFloatOrNull() ?: width
                 }
                 return
             }
@@ -143,11 +172,11 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
             val nx = a['X']?.let { if (absolute) it else x + it } ?: x
             val ny = a['Y']?.let { if (absolute) it else y + it } ?: y
             val nz = a['Z']?.let { if (absolute) it else z + it } ?: z
+            a['F']?.let { feed = it }
             val de = extrude(a)
             if (de > 1e-9 && (nx != x || ny != y)) {
-                layerFor(nz).add(x.toFloat(), y.toFloat(), nx.toFloat(), ny.toFloat(), type.coerceAtLeast(0).also {
-                    if (type < 0) type = typeIndex("Custom")
-                })
+                if (type < 0) type = typeIndex("Custom")
+                layerFor(nz).add(x.toFloat(), y.toFloat(), nx.toFloat(), ny.toFloat(), type, width, (feed / 60).toFloat())
             }
             x = nx; y = ny; z = nz
         }
@@ -157,6 +186,7 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
             val ny = a['Y']?.let { if (absolute) it else y + it } ?: y
             val cx = x + (a['I'] ?: 0.0)
             val cy = y + (a['J'] ?: 0.0)
+            a['F']?.let { feed = it }
             val de = extrude(a)
             val r = hypot(x - cx, y - cy)
             var a0 = atan2(y - cy, x - cx)
@@ -172,7 +202,7 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
                     val ang = a0 + (a1 - a0) * k / steps
                     val qx = if (k == steps) nx else cx + r * cos(ang)
                     val qy = if (k == steps) ny else cy + r * sin(ang)
-                    layer.add(px.toFloat(), py.toFloat(), qx.toFloat(), qy.toFloat(), type)
+                    layer.add(px.toFloat(), py.toFloat(), qx.toFloat(), qy.toFloat(), type, width, (feed / 60).toFloat())
                     px = qx; py = qy
                 }
             }

@@ -100,4 +100,29 @@ class GcodeLayersTest {
         assertFailsWith<BinaryGcode.Unreadable> { BinaryGcode.open(f).bufferedReader().use { GcodeLayers.read(it) } }
         f.delete()
     }
+
+    @Test
+    fun `width and speed come from WIDTH tags and the feed rate`() {
+        val g = read("""
+            G90
+            M83
+            ;LAYER_CHANGE
+            ;Z:0.2
+            ;TYPE:Perimeter
+            ;WIDTH:0.45
+            G1 X0 Y0 F6000
+            G1 X10 Y0 E1 F1800
+            ;WIDTH:0.6
+            G1 X10 Y10 E1
+            G2 X0 Y10 I-5 J0 E1 F600
+        """)
+        val l = g.layers.single()
+        assertEquals(0.45f, l.widths[0], 1e-6f)
+        assertEquals(30f, l.speeds[0], 1e-4f)
+        assertEquals(0.6f, l.widths[1], 1e-6f)
+        assertEquals(30f, l.speeds[1], 1e-4f)
+        assertEquals(10f, l.speeds[l.count - 1], 1e-4f)
+        assertEquals(0.45f..0.6f, g.widthRange)
+        assertEquals(10f..30f, g.speedRange)
+    }
 }
