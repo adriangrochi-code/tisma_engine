@@ -25,6 +25,7 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   preferencia; la vista previa del G-code por capas (desde el teléfono y desde la nube, MA10); los avisos al terminar,
   pausar o fallar una impresión, con un servicio en primer plano mientras algo imprime.
 
+- **2026-11-04 — «Compartir con Tisma»** (MA5): un STL, OBJ o 3MF compartido o abierto con Tisma desde otra app va a la Placa.
 - **2026-11-04 — la tarjeta de la impresora y el catálogo:** el catálogo del motor (`resources/catalog/`, el mismo
   del escritorio) va en el APK; en Placa, la tarjeta de la impresora abre el selector de impresora, boquilla y
   filamento. El perfil lo arma el motor con `tisma-engine profile` (pedido al equipo del motor el 04-11-2026); hasta

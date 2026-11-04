@@ -52,14 +52,43 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleShared(intent)
+    }
+
+    /** A model shared from another app or opened with Tisma goes to the plate (MA5). */
+    private fun handleShared(intent: android.content.Intent?) {
+        val uri: android.net.Uri = sharedUri(intent) ?: return
+        val name = runCatching {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        }.getOrNull() ?: uri.lastPathSegment?.substringAfterLast('/') ?: "model.stl"
+        slice.open(name) { contentResolver.openInputStream(uri) }
+        nav.select(net.tisma.app.ui.Section.PLATE)
+    }
+
+    private val nav = net.tisma.app.ui.Navigator()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val app = application as TismaApplication
+        handleShared(intent)
         setContent {
             TismaTheme {
-                TismaApp(cloud, printers, slice, app.settings)
+                TismaApp(cloud, printers, slice, app.settings, nav)
             }
         }
     }
+}
+
+/** The model's address in a «Share» or «Open with» intent, if there is one. */
+fun sharedUri(intent: android.content.Intent?): android.net.Uri? = when (intent?.action) {
+    android.content.Intent.ACTION_SEND ->
+        if (android.os.Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(android.content.Intent.EXTRA_STREAM, android.net.Uri::class.java)
+        else @Suppress("DEPRECATION") intent.getParcelableExtra(android.content.Intent.EXTRA_STREAM)
+    android.content.Intent.ACTION_VIEW -> intent.data
+    else -> null
 }
