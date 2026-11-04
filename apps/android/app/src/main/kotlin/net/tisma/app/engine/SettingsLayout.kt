@@ -31,6 +31,10 @@ class SettingsLayout(val version: String, val tabs: List<Tab>) {
         val key: String, val level: Level, val label: String, val help: String,
         val type: String, val default: String, val range: String, val value: String,
         val editor: Editor,
+        /** The unit to show next to the value (°C), when the layout gives one. */
+        val unit: String = "",
+        /** The key whose value this row takes while it has none of its own (the first layer's temperatures). */
+        val fallback: String? = null,
     )
 
     enum class Level { BASIC, NORMAL, ADVANCED }
@@ -78,7 +82,10 @@ class SettingsLayout(val version: String, val tabs: List<Tab>) {
                                 range = r.str("range"),
                                 value = unquote(r.str("value")),
                                 editor = editorFor(key, type.ifBlank { guessType(key, unquote(r.str("value"))) },
-                                    r.str("range").ifBlank { if (type.isBlank() && key.endsWith("temperature")) "0 a 600" else "" }, ranges),
+                                    r.str("range").ifBlank { if (type.isBlank() && key.endsWith("temperature")) "0 a 600" else "" }, ranges)
+                                    .let { e -> if (e is Editor.Number) e.copy(min = r.num("min") ?: e.min, max = r.num("max") ?: e.max) else e },
+                                unit = r.str("unit"),
+                                fallback = r.str("fallback").ifBlank { null },
                             )
                         })
                     })
@@ -126,6 +133,7 @@ class SettingsLayout(val version: String, val tabs: List<Tab>) {
         private fun unquote(s: String) = if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) s.substring(1, s.length - 1) else s
 
         private fun JsonObject.str(k: String) = (this[k] as? JsonPrimitive)?.contentOrNull ?: ""
+        private fun JsonObject.num(k: String) = (this[k] as? JsonPrimitive)?.doubleOrNull
         private fun JsonObject.arr(k: String) = (this[k] as? JsonArray)?.map { it.jsonObject } ?: emptyList()
 
         /**

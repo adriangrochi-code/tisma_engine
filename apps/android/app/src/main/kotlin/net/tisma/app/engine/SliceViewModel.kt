@@ -58,6 +58,8 @@ data class SliceState(
         "layers.height" -> kotlinx.serialization.json.JsonPrimitive(settings.layerHeight)
         "support.enabled" -> kotlinx.serialization.json.JsonPrimitive(settings.supports)
         else -> settings.changes[key] ?: profileValues[key]
+            // A row without its own value takes another's (the first layer's temperature is the other layers').
+            ?: layout?.rows?.get(key)?.fallback?.takeIf { it != key }?.let { value(it) }
             ?: layout?.rows?.get(key)?.let { SettingsLayout.toJson(it.editor, it.value) ?: kotlinx.serialization.json.JsonPrimitive(it.value) }
     }
 

@@ -306,6 +306,7 @@ private fun Editor(row: SettingsLayout.Row, value: kotlinx.serialization.json.Js
                 singleLine = !(e is SettingsLayout.Editor.Text && e.multiline),
                 minLines = if (e is SettingsLayout.Editor.Text && e.multiline) 3 else 1,
                 isError = bad,
+                suffix = if (row.unit.isNotBlank()) ({ Text(row.unit) }) else null,
                 supportingText = if (bad) ({ Text(stringResource(R.string.panel_invalid, row.range)) }) else null,
                 keyboardOptions = KeyboardOptions(keyboardType = if (number) KeyboardType.Decimal else KeyboardType.Text),
                 modifier = Modifier.fillMaxWidth().testTag("edit_${row.key}"),

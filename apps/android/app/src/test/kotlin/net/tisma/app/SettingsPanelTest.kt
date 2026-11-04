@@ -57,9 +57,10 @@ class SettingsPanelTest {
             "surfaces.bottom_layers", "surfaces.top_min_thickness", "surfaces.bottom_min_thickness", "surfaces.top_pattern",
             "infill.density", "infill.pattern", "support.enabled", "support.automatic", "adhesion.skirt_loops",
             "adhesion.skirt_distance", "adhesion.brim_width"), basic("print"))
-        // The engine keeps material.nozzle_temp and bed_temp as machine.variables (docs/CONFIG.md); the first layer's
-        // temperatures of rule 10 are not in its panel yet (asked to the desktop session).
-        assertEquals(setOf("machine.variables.temperature", "machine.variables.bed_temperature",
+        // The engine keeps material.nozzle_temp, first_nozzle_temp, bed_temp and first_bed_temp as machine.variables
+        // (docs/CONFIG.md).
+        assertEquals(setOf("machine.variables.temperature", "machine.variables.first_layer_temperature",
+            "machine.variables.bed_temperature", "machine.variables.first_layer_bed_temperature",
             "cooling.fan_min", "cooling.fan_max", "retraction.length", "retraction.lift"), basic("material"))
         // Both languages carry the same rows.
         assertEquals(l.rows.keys, layout("es").rows.keys)
@@ -76,8 +77,10 @@ class SettingsPanelTest {
         // "the same as top_pattern"
         assertEquals(r["surfaces.top_pattern"]!!.editor, r["surfaces.bottom_pattern"]!!.editor)
         assertEquals(Editor.ReadOnly, r["layers.heights"]!!.editor)
-        // No documented type: a number by its value.
-        assertEquals(Editor.Number(false, 0.0, 600.0), r["machine.variables.temperature"]!!.editor)
+        // The temperature variables: whole °C with the layout's limits; the first layer's falls back to the others'.
+        assertEquals(Editor.Number(true, 0.0, 450.0), r["machine.variables.temperature"]!!.editor)
+        assertEquals("°C", r["machine.variables.temperature"]!!.unit)
+        assertEquals("machine.variables.temperature", r["machine.variables.first_layer_temperature"]!!.fallback)
         assertEquals(JsonPrimitive(0.15), SettingsLayout.toJson(r["layers.height"]!!.editor, "0,15"))
         assertNull(SettingsLayout.toJson(r["layers.height"]!!.editor, "11"))
         assertNull(SettingsLayout.toJson(r["walls.count"]!!.editor, "2.5"))

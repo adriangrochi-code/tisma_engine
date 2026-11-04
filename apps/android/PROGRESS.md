@@ -70,8 +70,7 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
   `analyze --mode lightest-infill --no-zones` (motor faf85b6) y muestra el relleno encontrado, la seguridad y los
   análisis. Probado con un motor falso; no con el real, porque aquí no hay un proyecto con condiciones. «Usar N % de
   relleno al laminar» lo guarda como cambio del panel, y los cambios del panel van ahora también a los proyectos con
-  `--config-over` (motor 8129dc7; **hasta que ese commit llegue a `dev` y se mezcle aquí, el motor del APK rechaza la
-  opción** y un proyecto con cambios no lamina). El panel muestra los valores del perfil, no los del proyecto.
+  `--config-over` (motor 8129dc7, ya mezclado en `android`). El panel muestra los valores del perfil, no los del proyecto.
 
 - **2026-11-04 — Impresión y Material (regla 7, MA12):** las pestañas salen del panel del escritorio
   (`tisma --settings-layout`, motor 63dee4f), guardado como `assets/settings/layout_{en,es}.json` por
@@ -91,8 +90,8 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
     sección Impresora abre el perfil (impresora, boquilla, filamento), Máquina, Boquilla y extrusor, Límites y G-code
     como el panel, y Notas (por impresora). Conexión es la propia sección (las impresoras de la red). Calibración
     (regla 38) espera las pruebas de calibración en el teléfono.
-  - Pedido al escritorio: tipo y rango de `machine.variables.*` (hoy la app supone 0–600 °C), y las temperaturas de
-    la primera capa en Básico.
+  - Con el motor 57f39be: las temperaturas son enteros en °C con los topes del panel (0–450 boquilla, 0–150 cama), y
+    las de la primera capa están en Básico; sin valor propio muestran la de las otras capas (`fallback`).
 
 - **2026-11-04 — base y Tisma Cloud** (commit `feat(android): Android app with the Tisma Cloud screens`, PR #55
   `android` → `dev`): proyecto Gradle (`cloud`, `mockcloud`, `app`), CI aparte (`.github/workflows/android.yml`),
