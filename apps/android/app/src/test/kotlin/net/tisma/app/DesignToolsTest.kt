@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import net.tisma.app.data.AppSettings
 import net.tisma.app.engine.EngineRunner
 import net.tisma.app.engine.SliceViewModel
+import kotlinx.coroutines.launch
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -101,5 +102,31 @@ class DesignToolsTest {
         slice.orientAutomatically()
         idle { !slice.state.value.analyzing }
         assertEquals(null, slice.state.value.error)
+    }
+
+    @Test
+    fun `a quick analysis runs at once after its estimate, and the stages reach the screen`() {
+        val (slice, _) = vm()
+        slice.open("cube.stl") { cube.absoluteFile.inputStream() }
+        idle { slice.state.value.mesh != null }
+        val stages = java.util.concurrent.CopyOnWriteArraySet<String>()
+        val job = kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.Unconfined) {
+            slice.state.collect { it.progressStage?.let(stages::add) }
+        }
+        val b = slice.state.value.mesh!!.bounds
+        val cx = (b[0] + b[3]) / 2; val cy = (b[1] + b[4]) / 2
+        slice.setMarking(net.tisma.app.engine.EngineeringCase.Kind.FIXED)
+        slice.pick(floatArrayOf(cx, cy, -50f), floatArrayOf(0f, 0f, 1f))
+        idle { slice.state.value.case.conditions.size == 1 }
+        slice.setMarking(net.tisma.app.engine.EngineeringCase.Kind.LOAD)
+        slice.pick(floatArrayOf(cx, cy, 50f), floatArrayOf(0f, 0f, -1f))
+        idle { slice.state.value.case.conditions.size == 2 }
+        slice.setCase(slice.state.value.case.copy(solid = true))
+        slice.analyzeModel()
+        idle { slice.state.value.analysis != null || slice.state.value.slowAnalysis != null || slice.state.value.error != null }
+        job.cancel()
+        assertEquals(null, slice.state.value.slowAnalysis)
+        assertTrue(slice.state.value.analysis!!.any { it.first == "verdict" })
+        assertTrue("estimate" in stages && "solving" in stages, stages.toString())
     }
 }

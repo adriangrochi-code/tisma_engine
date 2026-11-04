@@ -64,6 +64,10 @@ data class SliceState(
     val rotation: FloatArray = MeshFile.identity3(),
     val scalePercent: Float = 100f,
     val layFlat: Boolean = false,
+    /** The analysis' stage now (estimate, slicing, voxels, solving, summary, resolution), to show with the bar. */
+    val progressStage: String? = null,
+    /** The estimate says the analysis would take this long on the phone (seconds): asked before running. */
+    val slowAnalysis: Double? = null,
     /** What a tap on the 3D view marks now, or null when it only turns the view. */
     val marking: EngineeringCase.Kind? = null,
     /** A calibration test on the plate: its kind, unit, segments (from, to, value) and its settings file. */
@@ -150,6 +154,7 @@ class SliceViewModel(
     }
 
     init {
+        runner.stageListener = { stage -> _state.update { it.copy(progressStage = stage) } }
         viewModelScope.launch {
             val c = withContext(io) { runCatching { loadCatalog() }.getOrNull() }
             _state.update { it.copy(catalog = c) }
@@ -620,12 +625,32 @@ class SliceViewModel(
 
     fun showStress(on: Boolean) = _state.update { it.copy(showStress = on && it.stressMap != null) }
 
-    /** Analyzes the bare model with the marked faces (docs/ANALYSIS.md, «El caso»). */
-    fun analyzeModel() {
+    /**
+     * How much slower than the engine's 4-core reference machine a phone is
+     * assumed to be, for the estimate (own guess until measured on phones,
+     * mobile_app.md rule 18).
+     */
+    private val phoneFactor = 4.0
+
+    /** Analyzes the bare model with the marked faces (docs/ANALYSIS.md, «El caso»); first estimates its time. */
+    fun analyzeModel(force: Boolean = false) {
         val m = model ?: return
         val s = state.value
         val mesh = s.mesh ?: return
         if (s.slicing || s.analyzing || s.isProject) return
+        if (!force) {
+            _state.update { it.copy(analyzing = true, progress = 0, progressStage = "estimate", slowAnalysis = null) }
+            viewModelScope.launch {
+                val e = withContext(io) { runCatching { runner.estimateModel(engineModel(m), s.settings, s.case.toJson(mesh.offset), s.profile) } }
+                e.onFailure { AppLog.line("engine: estimate ${it.message}") }
+                val seconds = (e.getOrNull()?.first ?: 0.0) * phoneFactor
+                _state.update { it.copy(analyzing = false, progressStage = null) }
+                // More than a minute on the phone: say so first, with the quick option (QA, 04-11-2026).
+                if (seconds > 60) _state.update { it.copy(slowAnalysis = seconds) } else analyzeModel(force = true)
+            }
+            return
+        }
+        _state.update { it.copy(slowAnalysis = null) }
         cancel.set(false)
         _state.update { it.copy(analyzing = true, progress = 0, analysis = null, error = null, lightest = null, marking = null,
             stressMap = null, showStress = false) }
@@ -661,7 +686,7 @@ class SliceViewModel(
             } catch (e: java.io.IOException) {
                 _state.update { it.copy(error = EngineRunner.EngineException("error", e.message ?: "", "", -1)) }
             } finally {
-                _state.update { it.copy(analyzing = false) }
+                _state.update { it.copy(analyzing = false, progressStage = null) }
             }
         }
     }
@@ -703,7 +728,7 @@ class SliceViewModel(
             } catch (e: java.io.IOException) {
                 _state.update { it.copy(error = EngineRunner.EngineException("error", e.message ?: "", "", -1)) }
             } finally {
-                _state.update { it.copy(analyzing = false) }
+                _state.update { it.copy(analyzing = false, progressStage = null) }
             }
         }
     }

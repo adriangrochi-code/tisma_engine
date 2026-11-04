@@ -25,6 +25,14 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Avance y aviso de demora en Ingeniería (QA):** QA vio el análisis de un cubo seguir corriendo después
+  de 40 min en el emulador sin KVM. El mismo caso tarda 32 s en la máquina de QA.
+  - La tarjeta muestra la etapa del motor y su porcentaje (estimando, laminando, vóxeles, resolviendo…).
+  - Antes de correr, `analyze --estimate`. Si el tiempo estimado por 4 (supuesto propio para un teléfono, hasta
+    medirlo, regla 18) pasa de un minuto, avisa cuánto puede tardar y ofrece «Correr igual» o «Rápida (maciza)»
+    (`model: solid`).
+  - La nube no se ofrece para esto: sus trabajos de Ingeniería toman proyectos, no modelos sueltos.
+
 - **2026-11-04 — Diseño, calibraciones, orientación y aerodinámica en el teléfono (motor 057a8ec):**
   - **Más › Diseño: engranajes y tornillería** (`part gear|fastener`): la especificación parte de la del motor
     (`--defaults`). Cada número y cada interruptor se puede cambiar. La tornillería tiene sus 9 tipos y medidas

@@ -26,6 +26,9 @@ class EngineRunner(
     /** Where the profile pack lives (`<packDir>/pack`), for its printers' profiles. */
     private val packDir: File? = null,
 ) {
+    /** The stage the engine is in (`progress: <stage> <fraction>`: slicing, voxels, solving…), for the screen. */
+    @Volatile var stageListener: ((String) -> Unit)? = null
+
     /** The engine's program, for the profile pack's commands. */
     val program: File get() = executable
 
@@ -280,6 +283,20 @@ class EngineRunner(
         return m to o
     }
 
+    /**
+     * How long an analysis would take and how much memory it would need
+     * (`analyze --estimate`, docs/ANALYSIS.md: on the reference 4-core
+     * machine): seconds and MB.
+     */
+    fun estimateModel(model: File, settings: SimpleSettings, case: JsonObject, profile: ProfileChoice?): Pair<Double, Double> {
+        val config = writeConfig(settings, profile)
+        val caseFile = File(workDir, "case.json").apply { writeText(case.toString()) }
+        val out = File(workDir, "estimate.json").apply { delete() }
+        capture(listOf("analyze", model.absolutePath, "--config", config.path, "--case", caseFile.path, "-o", out.path, "--estimate"), 600)
+        val o = json(out.readText())
+        return ((o["estimated_seconds"] as? JsonPrimitive)?.doubleOrNull ?: 0.0) to ((o["estimated_memory_mb"] as? JsonPrimitive)?.doubleOrNull ?: 0.0)
+    }
+
     /** The air's drag on a bare model (`aero <model> --config`, aerodynamics.md). */
     fun aeroModel(model: File, settings: SimpleSettings, profile: ProfileChoice?, quality: String, speed: Double, direction: String,
                   onProgress: (Int) -> Unit, cancelled: () -> Boolean): Analysis {
@@ -317,7 +334,11 @@ class EngineRunner(
         val reader = Thread {
             process.inputStream.bufferedReader().forEachLine { line ->
                 // `analyze <model> --progress` says «progress: <stage> <0 to 1>».
-                if (line.startsWith("progress: ")) line.substringAfterLast(' ').toDoubleOrNull()?.let { onProgress((it * 100).toInt().coerceIn(0, 100)) }
+                if (line.startsWith("progress: ")) {
+                    val parts = line.removePrefix("progress: ").trim().split(' ')
+                    parts.lastOrNull()?.toDoubleOrNull()?.let { onProgress((it * 100).toInt().coerceIn(0, 100)) }
+                    if (parts.size >= 2) stageListener?.invoke(parts[0])
+                }
                 if (line.startsWith("progress ")) line.removePrefix("progress ").trim().toDoubleOrNull()?.let {
                     onProgress(it.toInt().coerceIn(0, 100))
                 }

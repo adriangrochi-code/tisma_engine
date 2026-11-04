@@ -294,10 +294,7 @@ private fun EngineeringCard(state: SliceState, slice: SliceViewModel) {
             enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("eng_lightest")) {
             Text(stringResource(R.string.eng_lightest))
         }
-        if (state.analyzing) {
-            LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth())
-            OutlinedButton(onClick = { slice.cancel() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
-        }
+        if (state.analyzing) AnalysisProgress(state, slice)
         state.analysis?.let { lines ->
             context.readableSummary(lines).forEach { (k, v) ->
                 Row { Text(k, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant); Text(v) }
@@ -376,8 +373,11 @@ private fun ModelEngineeringCard(state: SliceState, slice: SliceViewModel) {
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth().testTag("eng_required"))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = case.solid, onClick = { slice.setCase(case.copy(solid = true, quality = "normal")) },
+                label = { Text(stringResource(R.string.eng_fast_solid)) }, modifier = Modifier.testTag("eng_quality_fast"))
             listOf("normal" to R.string.quality_normal, "high" to R.string.quality_high).forEach { (q, l) ->
-                FilterChip(selected = case.quality == q, onClick = { slice.setCase(case.copy(quality = q)) }, label = { Text(stringResource(l)) })
+                FilterChip(selected = !case.solid && case.quality == q, onClick = { slice.setCase(case.copy(quality = q, solid = false)) },
+                    label = { Text(stringResource(l)) })
             }
         }
         val ready = case.conditions.any { it.kind == net.tisma.app.engine.EngineeringCase.Kind.FIXED } &&
@@ -386,6 +386,14 @@ private fun ModelEngineeringCard(state: SliceState, slice: SliceViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = { slice.analyzeModel() }, enabled = ready && !state.analyzing && !state.slicing,
             modifier = Modifier.fillMaxWidth().testTag("eng_analyze_model")) { Text(stringResource(R.string.eng_analyze)) }
+        state.slowAnalysis?.let { secs ->
+            Text(stringResource(R.string.eng_slow, Math.round(secs / 60.0).coerceAtLeast(1).toInt()), modifier = Modifier.testTag("eng_slow"))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { slice.analyzeModel(force = true) }, modifier = Modifier.testTag("eng_run_anyway")) { Text(stringResource(R.string.eng_run_anyway)) }
+                if (!case.solid) OutlinedButton(onClick = { slice.setCase(case.copy(solid = true)); slice.analyzeModel() },
+                    modifier = Modifier.testTag("eng_go_fast")) { Text(stringResource(R.string.eng_go_fast)) }
+            }
+        }
         // aerodynamics.md on the bare model: the drag at a speed, along an axis.
         var speed by rememberSaveable { mutableStateOf("10") }
         var dir by rememberSaveable { mutableStateOf("x") }
@@ -406,10 +414,7 @@ private fun ModelEngineeringCard(state: SliceState, slice: SliceViewModel) {
                 }
             }, enabled = !state.analyzing && !state.slicing, modifier = Modifier.testTag("aero_model")) { Text(stringResource(R.string.aero_run)) }
         }
-        if (state.analyzing) {
-            LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth())
-            OutlinedButton(onClick = { slice.cancel() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
-        }
+        if (state.analyzing) AnalysisProgress(state, slice)
         state.analysis?.let { lines ->
             context.readableSummary(lines).forEach { (k, v) ->
                 Row { Text(k, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant); Text(v) }
@@ -478,6 +483,24 @@ private fun TransformCard(state: SliceState, slice: SliceViewModel) {
             }
         }
     }
+}
+
+/** An analysis running: the engine's stage and percent over the bar (QA: only «Cancel» showed), and Cancel. */
+@Composable
+private fun AnalysisProgress(state: SliceState, slice: SliceViewModel) {
+    val stage = when (state.progressStage) {
+        "estimate" -> R.string.stage_estimate
+        "slicing" -> R.string.stage_slicing
+        "voxels" -> R.string.stage_voxels
+        "solving" -> R.string.stage_solving
+        "summary" -> R.string.stage_summary
+        "resolution" -> R.string.stage_resolution
+        else -> R.string.stage_working
+    }
+    Text(stringResource(R.string.stage_line, stringResource(stage), state.progress), style = MaterialTheme.typography.bodySmall,
+        modifier = Modifier.testTag("analysis_stage"))
+    LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth())
+    OutlinedButton(onClick = { slice.cancel() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
 }
 
 fun Context.sliceNoticeText(n: SliceNotice): String = when (n) {

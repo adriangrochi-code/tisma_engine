@@ -490,4 +490,16 @@
     <string name="cal_applied">%1$s: %2$s aplicado a los ajustes</string>
     <string name="tools_orient">Orientar sola</string>
     <string name="aero_run">Arrastre</string>
+    <string name="eng_slow">Este análisis puede tardar unos %1$d min en este teléfono. ¿Correrlo igual, o usar la calidad rápida (maciza)?</string>
+    <string name="eng_run_anyway">Correr igual</string>
+    <string name="eng_go_fast">Rápida (maciza)</string>
+    <string name="eng_fast_solid">Rápida (maciza)</string>
+    <string name="stage_estimate">Estimando</string>
+    <string name="stage_slicing">Laminando</string>
+    <string name="stage_voxels">Armando los vóxeles</string>
+    <string name="stage_solving">Resolviendo</string>
+    <string name="stage_summary">Resumiendo</string>
+    <string name="stage_resolution">Revisando la resolución</string>
+    <string name="stage_working">Trabajando</string>
+    <string name="stage_line">%1$s · %2$d %%</string>
 </resources>

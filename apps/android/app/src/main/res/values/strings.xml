@@ -506,4 +506,16 @@
     <string name="cal_applied">%1$s: %2$s applied to the settings</string>
     <string name="tools_orient">Orient automatically</string>
     <string name="aero_run">Drag</string>
+    <string name="eng_slow">This analysis may take about %1$d min on this phone. Run it anyway, or use the fast (solid) quality?</string>
+    <string name="eng_run_anyway">Run anyway</string>
+    <string name="eng_go_fast">Fast (solid)</string>
+    <string name="eng_fast_solid">Fast (solid)</string>
+    <string name="stage_estimate">Estimating</string>
+    <string name="stage_slicing">Slicing</string>
+    <string name="stage_voxels">Making the voxels</string>
+    <string name="stage_solving">Solving</string>
+    <string name="stage_summary">Summing up</string>
+    <string name="stage_resolution">Checking the resolution</string>
+    <string name="stage_working">Working</string>
+    <string name="stage_line">%1$s · %2$d %%</string>
 </resources>

@@ -18,6 +18,8 @@ data class EngineeringCase(
     val material: String = "bambu-pla-basic",
     val quality: String = "normal",
     val requiredSafety: Double = 2.0,
+    /** «Fast»: the solid part, without slicing it (docs/ANALYSIS.md, `model` = `solid`): a first idea, much quicker. */
+    val solid: Boolean = false,
 ) {
     enum class Kind { FIXED, LOAD }
 
@@ -45,6 +47,7 @@ data class EngineeringCase(
     fun toJson(offset: FloatArray): JsonObject = buildJsonObject {
         put("material", material)
         put("quality", quality)
+        if (solid) put("model", "solid")
         fun region(c: Condition) = c.face?.let { JsonPrimitive(it) } ?: buildJsonObject {
             put("min", buildJsonArray { for (a in 0..2) add(JsonPrimitive((c.box[a] - offset[a]).toDouble())) })
             put("max", buildJsonArray { for (a in 0..2) add(JsonPrimitive((c.box[a + 3] - offset[a]).toDouble())) })
