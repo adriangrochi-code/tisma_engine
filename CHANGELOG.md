@@ -311,6 +311,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- La ayuda de los ajustes ya no nombra documentos internos (`docs/INFILL.md`, «Ficha …md») ni la clave `width` en la de paredes (QA de la app de Android).
 - La fila de variables de la pestaña Impresora se llamaba «Temperatura de boquilla» en la búsqueda y en `--settings-layout`.
 
 - En Estructural, Ctrl+Z deshace también lo que hizo Optimizar en la pieza («Girar la pieza», «Usar …»), no solo

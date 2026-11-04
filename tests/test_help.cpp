@@ -39,11 +39,27 @@ TEST_CASE("help: tables and marks are read as plain text", "[ui][help]") {
     const auto docs = parse_setting_docs(md);
     REQUIRE(docs.size() == 4);
     CHECK(docs.at("walls.side").meaning == "Dónde empieza");
-    CHECK(docs.at("walls.count").meaning == "Paredes desde cada borde (docs/X.md, ficha)");
+    CHECK(docs.at("walls.count").meaning == "Paredes desde cada borde"); // the reference to a document is not shown
     CHECK(docs.at("walls.count").range == "0 a 10");
     CHECK(docs.at("walls.seam").default_value == "\"aligned\"");
     CHECK(docs.at("walls.seam").range == "a | b");
     CHECK(docs.at("speed.walls").range.empty());
     CHECK(docs.at("speed.walls").default_value == "40");
     CHECK(docs.find("nope") == docs.end());
+}
+
+TEST_CASE("help: the help the person reads names no document of the repository (QA, 2026-11-04)", "[ui][help]") {
+    CHECK(without_doc_references("hasta llegar (docs/INFILL.md)") == "hasta llegar");
+    CHECK(without_doc_references("en una (docs/INFILL.md): lo que todas") == "en una: lo que todas");
+    CHECK(without_doc_references("de 1 a 5 (en mm) y más") == "de 1 a 5 (en mm) y más");
+    CHECK(without_doc_references("Ancho 0,4. Ficha perimeters.md, regla 7; otra.md, SM14") == "Ancho 0,4.");
+    std::ifstream in(std::string(TISMA_DOCS_DIR) + "/CONFIG.md", std::ios::binary);
+    REQUIRE(in);
+    std::ostringstream text;
+    text << in.rdbuf();
+    for (const auto& [key, doc] : parse_setting_docs(text.str())) {
+        CAPTURE(key, doc.meaning);
+        CHECK(doc.meaning.find("docs/") == std::string::npos);
+        CHECK(doc.meaning.find(".md") == std::string::npos);
+    }
 }
