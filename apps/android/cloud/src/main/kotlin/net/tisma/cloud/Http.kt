@@ -14,6 +14,7 @@ class FormPart(
     val filename: String? = null,
     /** The length in bytes when known (for the progress of an upload). */
     val length: Long = -1,
+    /** Gives the part's bytes; it may be called twice (once to measure, when [length] is unknown). */
     val open: () -> InputStream,
 ) {
     companion object {
@@ -80,7 +81,8 @@ object UrlConnectionHttp : Http {
                 val boundary = "tisma-" + UUID.randomUUID().toString()
                 c.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
                 c.doOutput = true
-                c.setChunkedStreamingMode(64 * 1024)
+                // A fixed length, never chunked: the server wants Content-Length before it reads.
+                c.setFixedLengthStreamingMode(multipartLength(boundary, request.form))
                 c.outputStream.use { writeMultipart(it, boundary, request.form) }
             }
             request.body != null -> {
@@ -93,20 +95,45 @@ object UrlConnectionHttp : Http {
     }
 }
 
+/** The headers of one part of a multipart/form-data body (RFC 7578). */
+private fun partHead(boundary: String, part: FormPart): ByteArray {
+    val disposition = buildString {
+        append("form-data; name=\"").append(quote(part.name)).append('"')
+        part.filename?.let { append("; filename=\"").append(quote(it)).append('"') }
+    }
+    return "--$boundary\r\nContent-Disposition: $disposition\r\nContent-Type: ${part.contentType}\r\n\r\n"
+        .toByteArray(Charsets.UTF_8)
+}
+
+private fun closing(boundary: String) = "--$boundary--\r\n".toByteArray()
+
+/**
+ * The exact length of a multipart body. A part of unknown length is measured
+ * by reading it once (Tisma Cloud refuses uploads without Content-Length:
+ * it checks the size before reading, QA AND1).
+ */
+fun multipartLength(boundary: String, parts: List<FormPart>): Long = parts.sumOf { part ->
+    val len = if (part.length >= 0) part.length else part.open().use { input ->
+        var n = 0L
+        val buf = ByteArray(64 * 1024)
+        while (true) {
+            val r = input.read(buf)
+            if (r < 0) break
+            n += r
+        }
+        n
+    }
+    partHead(boundary, part).size + len + 2
+} + closing(boundary).size
+
 /** Writes a multipart/form-data body (RFC 7578). */
 fun writeMultipart(out: OutputStream, boundary: String, parts: List<FormPart>) {
-    val crlf = "\r\n"
     for (part in parts) {
-        val disposition = buildString {
-            append("form-data; name=\"").append(quote(part.name)).append('"')
-            part.filename?.let { append("; filename=\"").append(quote(it)).append('"') }
-        }
-        out.write("--$boundary${crlf}Content-Disposition: $disposition${crlf}Content-Type: ${part.contentType}$crlf$crlf"
-            .toByteArray(Charsets.UTF_8))
+        out.write(partHead(boundary, part))
         part.open().use { it.copyTo(out, 64 * 1024) }
-        out.write(crlf.toByteArray())
+        out.write("\r\n".toByteArray())
     }
-    out.write("--$boundary--$crlf".toByteArray())
+    out.write(closing(boundary))
 }
 
 // Quotes and line breaks cannot go inside a quoted header value.

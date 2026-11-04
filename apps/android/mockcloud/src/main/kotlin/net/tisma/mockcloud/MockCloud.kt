@@ -351,6 +351,8 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
         val type = ex.requestHeaders.getFirst("Content-Type") ?: ""
         val boundary = Regex("boundary=\"?([^\";]+)\"?").find(type)?.groupValues?.get(1)
             ?: throw Stop(422, "Expected multipart/form-data")
+        // Like the real server's upload guard: the size is known before reading.
+        if (ex.requestHeaders.getFirst("Content-Length") == null) throw Stop(411, "Content-Length is required")
         val body = readLimited(ex, maxUploadBytes + 64 * 1024) ?: throw Stop(413, "The file is too large")
         val parts = parseMultipart(body, boundary)
         val kind = parts["kind"]?.text() ?: throw Stop(422, "kind is required")

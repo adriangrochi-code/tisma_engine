@@ -122,6 +122,18 @@ class CloudClientTest {
     }
 
     @Test
+    fun `AND1 uploads carry Content-Length, also when the file's size is unknown`() {
+        signIn()
+        val bytes = cube3mf()
+        val job = client.submit(JobRequest.Slice, "cube.3mf", -1) { bytes.inputStream() }
+        assertEquals(JobStatus.QUEUED, job.status)
+        val parts = listOf(FormPart.text("kind", "slice"), FormPart("file", "x", "a.3mf", -1) { bytes.inputStream() })
+        val out = java.io.ByteArrayOutputStream()
+        writeMultipart(out, "b", parts)
+        assertEquals(out.size().toLong(), multipartLength("b", parts))
+    }
+
+    @Test
     fun `CC4 cancelling a running job leaves it cancelled`() {
         signIn()
         val job = submit(JobRequest.Slice)
