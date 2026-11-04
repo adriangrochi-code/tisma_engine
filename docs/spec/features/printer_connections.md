@@ -277,6 +277,54 @@ del firmware. Hay que medirlo con una impresora real (regla 4) antes de escribir
 6. **Nunca:** las bibliotecas cerradas de los fabricantes (por ejemplo, el complemento de red de Bambu Studio), ni
    código de otro laminador o de Tisma Slicer, aunque el protocolo sea el mismo.
 
+## Lo que usa la app de Android (04-11-2026)
+
+De la documentación pública de la tabla de arriba y de los simuladores de la app; **sin probar en hardware**. Lo
+mandó la sesión de Android (solo comportamiento).
+
+1. **Servicio local de la computadora para impresoras USB:** un subconjunto compatible con Moonraker, el mismo que la
+   app ya usa con Klipper. JSON por HTTP; las respuestas van en `{"result": …}` y los errores en
+   `{"error": {"code", "message"}}` con su código HTTP; el código de emparejamiento va como `X-Api-Key` (401 si no
+   coincide).
+   - `GET /server/info`: `moonraker_version` y `klippy_state` (`ready`, `startup`, `shutdown`, `error`).
+   - `GET /printer/objects/query?print_stats&virtual_sdcard&extruder&heater_bed&webhooks`: `webhooks.state` y
+     `state_message`; `print_stats.state` (`standby`, `printing`, `paused`, `complete`, `cancelled`, `error`),
+     `filename`, `print_duration` (s), `message`, `info.current_layer`, `info.total_layer`; `virtual_sdcard.progress`
+     (0 a 1, por la posición en el archivo); `extruder` y `heater_bed` con `temperature` y `target` (°C). La app
+     pregunta cada 2 s; el tiempo restante es `print_duration / progress − print_duration`.
+   - `POST /printer/print/pause`, `/resume`, `/cancel`: `"ok"`; 400 con el motivo si no está imprimiendo o en pausa.
+   - `POST /server/files/upload` (multipart: `root=gcodes`, `print=true` opcional, `file`; con `Content-Length`):
+     201 con `item.path`, `item.root`, `print_started` y `action`.
+   - `POST /printer/print/start?filename=…`: `"ok"`; 404 si el archivo no existe.
+   - `POST /printer/gcode/script?script=…` (líneas separadas por `\n`): `"ok"`; 400 con el motivo si se rechaza
+     (movimientos o extrusión mientras imprime; «Extrude below minimum temp»). La app manda `M104 S`, `M140 S`,
+     `G28`, `G91`/`G1`/`G90` para mover y `M83`/`G1 E` para extruir.
+   - `GET /server/webcams/list`: `webcams` con `name`, `enabled`, `stream_url` y `snapshot_url` (relativas al host);
+     la app pide una foto JPEG por segundo.
+   - Búsqueda: `_moonraker._tcp` y `_http._tcp` por DNS-SD, y se confirma con `/server/info`.
+2. **OctoPrint:** `X-Api-Key`. `GET /api/printer` da 409 sin conexión con la placa: se muestra desconectada con ese
+   texto. Estado por `state.flags`; avance por `GET /api/job` (`completion`, `printTime`, `printTimeLeft`). Pausa y
+   reanudar: `POST /api/job` con `command: "pause"` y `action`; cancelar con `command: "cancel"` (204; 409 si no
+   imprime). Subir: `POST /api/files/local` con `select` y `print`. Temperaturas: `/api/printer/tool` (`target`) y
+   `/api/printer/bed`; mover y llevar a cero: `/api/printer/printhead`; extruir: `/api/printer/tool` (`extrude`).
+   Cámara: `webcam.streamUrl` y `snapshotUrl` de `GET /api/settings`. Búsqueda: `_octoprint._tcp` con `path` en el TXT.
+3. **PrusaLink:** HTTP Digest (RFC 7616, MD5, `qop=auth`; usuario `maker`, la contraseña en la impresora).
+   `GET /api/v1/status`: `printer.state` (`IDLE`, `BUSY`, `PRINTING`, `PAUSED`, `FINISHED`, `STOPPED`, `ERROR`,
+   `ATTENTION`, `READY`), temperaturas, `job.progress`, `time_printing`, `time_remaining`. El trabajo y el nombre del
+   archivo salen de `GET /api/v1/job` (204 sin trabajo). Pausa y reanudar: `PUT /api/v1/job/{id}/pause|resume`;
+   detener: `DELETE /api/v1/job/{id}`. Subir: `PUT /api/v1/files/{almacén}/{nombre}` con `Content-Length`,
+   `Print-After-Upload: ?1` y `Overwrite: ?1` (el almacén es el primero disponible de `GET /api/v1/storage`). La v1
+   no tiene controles a mano ni cámara.
+4. **Duet (RepRapFirmware):** `GET /rr_connect?password=…&sessionKey=yes` (`err` 0, 1 contraseña mal, 2 sin
+   sesiones libres); `sessionKey` va como `X-Session-Key` en cada pedido y un 401 reconecta una vez. Estado con
+   `rr_model` (`key=state`, `key=job`: archivo, tamaño, posición, duración, `timesLeft`, capas; `key=heat.heaters`
+   con la cama y la herramienta 0). Subir: `POST /rr_upload?name=0:/gcodes/<nombre>` (cuerpo crudo, `err` 0).
+   Imprimir `M32 "<ruta>"`, pausa `M25`, reanudar `M24`, cancelar `M25` y después `M0` (corre `stop.g`, según la
+   referencia de G-code de Duet3D). Los errores de G-code no vuelven en `rr_gcode`: llegan después por `rr_reply`.
+5. **Bambu Lab por la red local:** el fabricante no publica la especificación. Los valores de `gcode_state`, la unidad
+   de `mc_remaining_time` y la reutilización de la sesión TLS del FTPS quedan **sin confirmar** hasta medirlos con una
+   impresora real (regla 4 de «Integración en sala limpia»); un estado desconocido se muestra tal cual.
+
 ## Pruebas
 
 Contra simuladores propios de cada impresora (un programa que contesta como ella), sin impresora real.
