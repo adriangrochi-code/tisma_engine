@@ -19,6 +19,8 @@ import net.tisma.app.data.KeystoreSecretStore
 import net.tisma.app.ui.Navigator
 import net.tisma.app.ui.Screen
 import net.tisma.app.ui.Section
+import net.tisma.app.printers.PrinterStore
+import net.tisma.app.printers.PrintersViewModel
 import net.tisma.app.ui.TismaApp
 import net.tisma.app.ui.TismaTheme
 import net.tisma.cloud.CloudClient
@@ -53,7 +55,7 @@ class CloudScreensTest {
         server = MockCloud().start()
         settings = AppSettings(context).apply { server = this@CloudScreensTest.server.url }
         vm = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
-        compose.setContent { TismaTheme { TismaApp(vm, settings, nav) } }
+        compose.setContent { TismaTheme { TismaApp(vm, PrintersViewModel(PrinterStore(context, MemorySecrets())), noEngine(context), settings, nav) } }
     }
 
     @After

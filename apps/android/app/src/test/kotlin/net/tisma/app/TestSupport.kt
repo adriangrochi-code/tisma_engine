@@ -2,6 +2,7 @@ package net.tisma.app
 
 import net.tisma.app.data.SecretStore
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import javax.crypto.KeyGenerator
@@ -37,4 +38,10 @@ fun cube3mf(): ByteArray {
         z.write("<model unit=\"millimeter\"><resources/><build/></model>".toByteArray())
     }
     return out.toByteArray()
+}
+
+/** A slicing model without an engine (the engine runs only on Android). */
+fun noEngine(context: android.content.Context): net.tisma.app.engine.SliceViewModel {
+    val work = File(context.cacheDir, "engine")
+    return net.tisma.app.engine.SliceViewModel(net.tisma.app.engine.EngineRunner(File(work, "none"), work), work)
 }

@@ -14,6 +14,8 @@ import net.tisma.app.data.KeystoreSecretStore
 import net.tisma.app.ui.Navigator
 import net.tisma.app.ui.Screen
 import net.tisma.app.ui.Section
+import net.tisma.app.printers.PrinterStore
+import net.tisma.app.printers.PrintersViewModel
 import net.tisma.app.ui.TismaApp
 import net.tisma.app.ui.TismaTheme
 import net.tisma.mockcloud.MockCloud
@@ -47,7 +49,7 @@ class ScreenshotTest {
             val vm = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test", pollMs = 5)
             val nav = Navigator()
             var dark by androidx.compose.runtime.mutableStateOf(false)
-            compose.setContent { TismaTheme(dark = dark) { TismaApp(vm, settings, nav) } }
+            compose.setContent { TismaTheme(dark = dark) { TismaApp(vm, PrintersViewModel(PrinterStore(context, MemorySecrets())), noEngine(context), settings, nav) } }
             compose.runOnIdle { vm.signIn("ana@example.com", "password1") }
             compose.waitUntil(10_000) {
                 org.robolectric.shadows.ShadowLooper.idleMainLooper()

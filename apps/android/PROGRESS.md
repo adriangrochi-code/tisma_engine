@@ -9,15 +9,35 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   pantallas de la nube (cuenta, planes, trabajos, trabajo nuevo, informes, preferencias), token cifrado con el
   Android Keystore. 38 pruebas en la JVM, todas pasan. Detalle en `README.md`.
 
+- **2026-11-04 — impresoras de la red** (commit `feat(android): Moonraker and OctoPrint clients with simulators`
+  y las pantallas): Klipper (Moonraker) y OctoPrint en Kotlin detrás de `PrinterConnection`, con simuladores propios;
+  sección Impresora: lista con estado, agregar con prueba de conexión, detalle con avance, capa, tiempos,
+  temperaturas, pausar, seguir, cancelar (con confirmación) y mandar un G-code. La clave, cifrada.
+- **2026-11-04 — el motor del escritorio en el teléfono** (decisión del dueño: «usemos todo lo de la pc»): el mismo
+  `tisma-engine` compilado con el NDK r29 para arm64-v8a y x86_64, sin cambios en `src/`, empaquetado en el APK y
+  corrido como programa aparte (línea de comandos de `cloud.md`, regla 18). Pantalla Placa: abrir STL, OBJ o 3MF,
+  calidad 0,12 / 0,20 / 0,28 mm y soportes, laminar con avance y cancelar, guardar el G-code o mandarlo a una
+  impresora. `minSdk` 28 (Android 9), porque el motor usa `posix_spawn`.
+
 ## Abierto
 
-- **Paso 3, impresoras de la red** (`printer_connections.md`, `devices.md`): siguiente. Preguntado al equipo del
-  motor si espera a `src/device/` en C++ o si van clientes en Kotlin dentro de la app.
+- **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS), PrusaLink, Duet, la búsqueda en la red, la cámara, mover
+  ejes y temperaturas a mano, y los avisos al terminar. Si el motor suma conexiones de red a `src/device/`, se usan
+  desde la app en lugar de las de Kotlin («usemos todo lo de la pc»).
+- **Motor en el teléfono:** nunca corrió en un Android real (esta máquina no tiene KVM ni emulador); probado solo
+  con un motor falso. Falta: perfiles de impresora y filamento (paquete de perfiles, `profile_pack.md`), la vista
+  previa por capas, la estimación de memoria (MA9) y el resumen de un modelo suelto (`slice` con `--config` no
+  escribe `--summary`).
 - **Paso 4, laminar en el teléfono:** pedida al equipo del motor (session_01JDAJxTVh345Lfm4794rJF8) la API en C
   (`mobile_app.md`, regla 2), con una propuesta de forma. Sin respuesta todavía.
-- **Preguntas al equipo de fichas** (session_01QadJfL7KViJEaJL92p8Swb): campos de `GET /v1/me`; nombre del campo de la
-  contraseña nueva en el reset; `object` e `instance` (¿índice o id del 3MF?); campos de `/v1/me/sessions`; si el
-  servidor elige `slice_large` por tamaño; qué 3MF acepta `slice`; qué recibe `POST /v1/auth/google`.
+- **Respuestas del equipo de fichas (04-11-2026), a aplicar:** `GET /v1/me` trae además `unlimited`,
+  `remote_printers`, `extra_printers`, `extra_printer_cents` y `has_password`; el reset devuelve `{token, email}` y
+  acepta `device` (hoy la app no lo usa como sesión); `object`/`instance` son índices desde 0 (lo que ya hace la
+  app); `GET /v1/me/sessions` → `{sessions: [{id, device, created_at, last_used, current}]}` (falta la pantalla);
+  el servidor elige `slice_large` por triángulos (más de 300 000); `slice` en la nube acepta solo proyectos del motor
+  (3MF con `Metadata/tisma_project.json`); `POST /v1/auth/google` toma `{id_token, device}` y puede pedir verificar.
+- **API en C del motor:** el encabezado está en `dev` (9276c39, `include/tisma/tisma_engine.h`, `docs/C_API.md`), sin
+  implementar; viene después de Ingeniería y Diseño. Hasta entonces la app corre el programa `tisma-engine`.
 - **No probado:** teléfono real, emulador, servidor real.
 
 ## Decidido (por la sesión, a confirmar si una ficha dice otra cosa)
@@ -27,6 +47,10 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
 - En inglés, un trabajo fallido muestra el texto por `code` y si no `error`; en español, `error_es` primero (regla 19a).
 - Identificador de la app `net.tismaservidores.tisma` (a confirmar por el dueño antes de publicar).
 - Sin Google (inicio de sesión ni Play Billing) hasta que el dueño decida sobre esas bibliotecas.
+- «Usemos todo lo de la pc» (dueño, 04-11-2026): se toma como el código del motor y del escritorio de este
+  repositorio (misma licencia). No incluye Tisma Slicer (AGPL, sala limpia).
+- El motor va como programa aparte y no como biblioteca por JNI: no hace falta tocar `src/`, cancelar es terminar el
+  proceso, y un fallo del motor no cierra la app.
 
 ## Para que decida el dueño
 

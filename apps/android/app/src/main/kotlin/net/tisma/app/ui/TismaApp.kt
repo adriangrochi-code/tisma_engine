@@ -51,6 +51,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import net.tisma.app.R
 import net.tisma.app.cloud.CloudViewModel
 import net.tisma.app.data.AppSettings
+import net.tisma.app.printers.PrintersViewModel
+import net.tisma.app.engine.SliceViewModel
 
 /** The five sections of mobile_app.md, rule 5. */
 enum class Section(@StringRes val label: Int, @DrawableRes val icon: Int) {
@@ -72,6 +74,8 @@ sealed interface Screen {
     data object Report : Screen
     data object MyReports : Screen
     data object Preferences : Screen
+    data class AddPrinter(val editId: String?) : Screen
+    data class PrinterDetail(val id: String) : Screen
 }
 
 /** Where the person is: a section and the screens opened on it. */
@@ -104,8 +108,16 @@ class Navigator {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TismaApp(cloud: CloudViewModel, settings: AppSettings, nav: Navigator = remember { Navigator() }) {
+fun TismaApp(
+    cloud: CloudViewModel,
+    printers: PrintersViewModel,
+    slice: SliceViewModel,
+    settings: AppSettings,
+    nav: Navigator = remember { Navigator() },
+) {
     val state by cloud.state.collectAsStateWithLifecycle()
+    val printerState by printers.state.collectAsStateWithLifecycle()
+    val sliceState by slice.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val context = ctx()
     LaunchedEffect(Unit) { cloud.refreshPublic() }
@@ -118,6 +130,16 @@ fun TismaApp(cloud: CloudViewModel, settings: AppSettings, nav: Navigator = reme
             nav.open(Screen.Account)
         }
         snackbar.showSnackbar(context.noticeText(n))
+    }
+    LaunchedEffect(printerState.notice) {
+        val n = printerState.notice ?: return@LaunchedEffect
+        printers.dismissNotice()
+        snackbar.showSnackbar(context.printerNoticeText(n))
+    }
+    LaunchedEffect(sliceState.notice) {
+        val n = sliceState.notice ?: return@LaunchedEffect
+        slice.dismissNotice()
+        snackbar.showSnackbar(context.sliceNoticeText(n))
     }
     BackHandler(enabled = nav.stack.isNotEmpty()) { nav.back() }
 
@@ -176,7 +198,11 @@ fun TismaApp(cloud: CloudViewModel, settings: AppSettings, nav: Navigator = reme
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 when (top) {
-                    null -> SectionHome(nav.section, state.signedIn, state.email, nav)
+                    null -> when (nav.section) {
+                        Section.PRINTER -> PrintersScreen(printerState, printers, nav)
+                        Section.PLATE -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav)
+                        else -> SectionHome(nav.section, state.signedIn, state.email, nav)
+                    }
                     Screen.Account -> AccountScreen(state, cloud, nav)
                     Screen.Register -> RegisterScreen(state, cloud, nav)
                     Screen.Forgot -> ForgotScreen(state, cloud, nav)
@@ -186,6 +212,8 @@ fun TismaApp(cloud: CloudViewModel, settings: AppSettings, nav: Navigator = reme
                     Screen.Report -> ReportScreen(state, cloud, nav)
                     Screen.MyReports -> MyReportsScreen(state, cloud)
                     Screen.Preferences -> PreferencesScreen(state, cloud, settings)
+                    is Screen.AddPrinter -> AddPrinterScreen(top.editId, printerState, printers, nav)
+                    is Screen.PrinterDetail -> PrinterDetailScreen(top.id, printerState, printers, nav)
                 }
             }
         }
@@ -200,6 +228,8 @@ private fun titleOf(s: Screen): Int = when (s) {
     Screen.Report -> R.string.report_title
     Screen.MyReports -> R.string.more_my_reports
     Screen.Preferences -> R.string.more_preferences
+    is Screen.AddPrinter -> R.string.printer_add
+    is Screen.PrinterDetail -> R.string.section_printer
 }
 
 @Composable

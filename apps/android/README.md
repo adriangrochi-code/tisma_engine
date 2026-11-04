@@ -10,6 +10,8 @@ compila con Gradle, aparte del CMake del motor.
 |---|---|
 | `cloud/` | El cliente de Tisma Cloud (API v1 de `cloud.md`), en Kotlin sin Android: cuenta, planes, trabajos, resultados, informes. Se prueba en la JVM. |
 | `mockcloud/` | Un servidor de prueba escrito desde `cloud.md`, en memoria. Lo usan las pruebas y sirve para probar la app en un emulador. |
+| `printers/` | Clientes de Klipper (Moonraker) y OctoPrint, en Kotlin sin Android (`printer_connections.md`). |
+| `mockprinters/` | Simuladores de Moonraker y OctoPrint, escritos desde su documentación pública. |
 | `app/` | La app: secciones Placa, Impresión, Material, Impresora y Más (`mobile_app.md`, regla 5). |
 
 ## Qué hace hoy (2026-11-04)
@@ -29,19 +31,29 @@ compila con Gradle, aparte del CMake del motor.
 - **El token** se guarda cifrado con AES-256-GCM con una clave del almacén de claves de Android, nunca en texto
   (regla 3; `mobile_app.md`, regla 14).
 
-Falta: impresoras de la red (paso 3), laminar en el teléfono con el motor (paso 4, espera la API en C del equipo del
-motor), entrar con Google y pagar con Google Play (los dos necesitan bibliotecas de Google con licencia propia: lo
+- **Impresora:** impresoras Klipper (Moonraker) y OctoPrint de la red: estado, avance, capa, tiempos, temperaturas,
+  pausar, seguir, cancelar y mandar un G-code.
+- **Placa:** el motor del escritorio adentro del APK (`tisma-engine` compilado con el NDK, sin cambios): abrir STL,
+  OBJ o 3MF, calidad y soportes, laminar en el teléfono con avance y cancelar, guardar el G-code o mandarlo a una
+  impresora.
+
+Falta: Bambu Lab y las demás marcas, perfiles de impresora y filamento, la vista previa, entrar con Google y pagar con Google Play (los dos necesitan bibliotecas de Google con licencia propia: lo
 decide el dueño), abrir el G-code en la vista previa (llega con el motor).
 
 ## Compilar y probar
 
-Con un JDK 17 o más nuevo y el SDK de Android (plataforma 36):
+Con un JDK 17 o más nuevo, el SDK de Android (plataforma 36), el NDK r29 (`29.0.14206865`), CMake y Ninja. El
+APK compila el motor desde la raíz del repositorio (unos minutos por arquitectura la primera vez);
+`-Ptisma.engine=false` lo deja afuera para trabajar solo en las pantallas:
 
 ```text
 cd apps/android
 tools/ci.sh                      # íconos, licencias, pruebas y el APK de depuración
 ./gradlew :app:assembleDebug     # solo el APK: app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Impresoras simuladas para un emulador: `./gradlew :mockprinters:run` (Moonraker en `http://10.0.2.2:7125` sin
+clave; OctoPrint en `http://10.0.2.2:7126` con la clave `test-key`).
 
 Probar en un emulador contra el servidor de prueba:
 

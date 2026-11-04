@@ -66,6 +66,12 @@ de los mismos datos.
 | Compose Material 3 | androidx.compose.material3:material3 | la del BOM | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/compose | Componentes, con los colores de `interface.md`. Sin el paquete de íconos de Material: los íconos son los de `assets/brand/`. |
 | Compose UI Test Manifest | androidx.compose.ui:ui-test-manifest | la del BOM | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/compose | Solo en la versión de depuración, para las pruebas de pantallas. |
 
+**El motor dentro del APK** (desde el 2026-11-04): el APK lleva el programa `tisma-engine` compilado con el NDK
+(`lib/<abi>/libtisma_engine.so`), y con él las bibliotecas del motor de la tabla de arriba que enlaza `tisma_core`:
+oneTBB, Clipper2, nlohmann/json y Boost.Polygon con Boost.Config, en las mismas versiones. Sin GPU (`TISMA_GPU=OFF`), sin
+interfaz y sin OpenSSL. La biblioteca de C++ es la `libc++` del NDK, enlazada estática (Apache-2.0 con la excepción
+LLVM). Al publicar la app, sus avisos van en Más › Créditos (`credits.md`), como en el escritorio.
+
 ### Herramientas de prueba de la app (no entran al APK)
 
 Corren solo en la máquina que compila (pruebas en la JVM con Robolectric); no se enlazan ni se distribuyen, como las
@@ -89,3 +95,4 @@ en su ejecución (probado: sin ella no arranca). Ninguna se copia ni se modifica
 | Android Gradle Plugin | 8.13.2 | Apache-2.0 | Compila el APK. |
 | Kotlin (compilador y complementos Compose y serialization) | 2.2.21 | Apache-2.0 | Compila el código de la app. |
 | Android SDK (plataforma 36, build-tools 36.0.0) | — | Licencia del SDK de Android (aceptada en la máquina que compila) | Compila el APK; no se guarda en el repositorio. |
+| Android NDK | r29 (29.0.14206865) | Licencia del SDK de Android; su `libc++` es Apache-2.0 con la excepción LLVM | Compila `tisma-engine` para el teléfono. La r28 no sirve: su `libc++` no tiene `std::from_chars` con decimales, que el motor usa. |
