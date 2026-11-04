@@ -175,3 +175,12 @@ TEST_CASE("adhesion: the analysis case reads the profile and the hand changes", 
     CHECK_THAT(cold.material.zt, WithinRel(ref.material.zt * std::pow(0.5, 0.25), 1e-9));
     CHECK(cold.material.xt == ref.material.xt);
 }
+
+TEST_CASE("adhesion: the band adds the voxels' error in quadrature", "[adhesion]") {
+    const Adhesion a = adhesion(family_of("PLA"), {});
+    const SafetyBand b = safety_band(2.0, FailureMode::BetweenLayers, a, 0.2);
+    CHECK_THAT(b.sigma, WithinAbs(std::sqrt(0.25 * 0.25 + 0.2 * 0.2), 1e-12));
+    CHECK_THAT(b.low, WithinAbs(2.0 * (1.0 - b.sigma), 1e-12));
+    // Never below a tenth of the value.
+    CHECK(safety_band(2.0, FailureMode::BetweenLayers, a, 5.0).low > 0.19);
+}

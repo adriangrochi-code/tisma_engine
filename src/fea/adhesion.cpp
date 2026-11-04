@@ -155,7 +155,7 @@ void apply_adhesion(OrthotropicMaterial& m, const Adhesion& a) {
     m.s12 *= a.across_strength;
 }
 
-SafetyBand safety_band(double min_safety, FailureMode mode, const Adhesion& a) {
+SafetyBand safety_band(double min_safety, FailureMode mode, const Adhesion& a, double discretization) {
     double sigma = 0.0;
     switch (mode) {
     case FailureMode::BetweenLayers:
@@ -170,7 +170,10 @@ SafetyBand safety_band(double min_safety, FailureMode mode, const Adhesion& a) {
     case FailureMode::None:
         break;
     }
-    return {min_safety * (1.0 - sigma), min_safety * (1.0 + sigma)};
+    if (mode != FailureMode::None && std::isfinite(discretization))
+        sigma = std::sqrt(sigma * sigma + discretization * discretization);
+    sigma = std::min(sigma, 0.9);
+    return {min_safety * (1.0 - sigma), min_safety * (1.0 + sigma), sigma};
 }
 
 } // namespace tisma

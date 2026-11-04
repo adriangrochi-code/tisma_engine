@@ -58,8 +58,10 @@ AeroResult run(TriangleMesh mesh, std::array<double, 3> direction, int cells, do
     in.cells = cells;
     in.flow_throughs = flow_throughs;
     AeroResult r = analyze(in);
-    std::printf("cd %.3f (pressure %.3f, friction %.4f), area %.1f mm2, grid %dx%dx%d, %ld steps, %.1f s\n", r.cd, r.cd_pressure,
-                r.cd_friction, r.frontal_area_mm2, r.cells_x, r.cells_y, r.cells_z, r.steps, r.seconds);
+    std::printf("cd %.3f (pressure %.3f, coarse %.3f at %d, faces %.3f, simulated total %.3f, blockage %.3f, friction %.4f, "
+                "range %.3f to %.3f), grid %dx%dx%d, %ld steps, %.1f s\n",
+                r.cd, r.cd_pressure, r.cd_pressure_coarse, r.cells_coarse, r.cd_pressure_surface, r.cd_total_simulated, r.blockage,
+                r.cd_friction, r.cd_low, r.cd_high, r.cells_x, r.cells_y, r.cells_z, r.steps, r.seconds);
     return r;
 }
 
@@ -217,10 +219,15 @@ TEST_CASE("aero: AE1 to AE4, drag coefficients against Hoerner", "[.aero-full]")
         const AeroResult cube = run(prism(0, 20, 20), {1, 0, 0}, cells);
         REQUIRE(plate.ok);
         REQUIRE(cube.ok);
-        CHECK(plate.cd > 0.9); // Hoerner 1.17 to 1.2; 1.00 at 12 cells (2026-11-03): a plate of one or two cells
+        CHECK(plate.cd > 0.9); // Hoerner 1.17 to 1.2; 1.09 at 12 cells (2026-11-03): a plate of one or two cells
         CHECK(plate.cd < 1.4);
         CHECK(cube.cd > 0.95); // Hoerner 1.05; the domain's blockage adds 5 to 10 %
         CHECK(cube.cd < 1.3);
+        // The likely range holds Hoerner's values, and the resolution check ran.
+        CHECK(cube.resolution_checked);
+        CHECK(cube.cd_low < 1.05);
+        CHECK(cube.cd_high > 1.05);
+        CHECK(plate.cd_high > 1.17);
         // AE3: the cube with the air along another axis.
         const AeroResult side = run(prism(0, 20, 20), {0, -1, 0}, cells);
         REQUIRE(side.ok);

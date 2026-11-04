@@ -82,6 +82,7 @@ add_executable(tisma_tests
   test_determinism.cpp
   test_profiles.cpp
   test_project.cpp
+  test_orient.cpp
   test_catalog.cpp
   test_device.cpp
   test_cad.cpp

@@ -38,6 +38,10 @@ struct AeroInput {
     // (0: the quality's), and how many times the air crosses the domain.
     int cells = 0;
     double flow_throughs = 3.0;
+    // Simulate again with two thirds of the cells (about a fifth more time)
+    // to see how much the pressure drag depends on the lattice: the error
+    // band's resolution part.
+    bool resolution_check = true;
 };
 
 struct AeroResult {
@@ -45,6 +49,21 @@ struct AeroResult {
     std::string error;
     double drag_n = 0.0, cd = 0.0, cd_pressure = 0.0, cd_friction = 0.0;
     double side_force_n = 0.0;     // across the air, from the pressure
+    // The pressure drag's sources: the momentum the walls take (before the
+    // blockage correction) and the density on the faces (the map's);
+    // the simulated total with the low Reynolds number's friction; the
+    // domain's blockage (frontal over cross-section).
+    double cd_pressure_surface = 0.0, cd_total_simulated = 0.0, blockage = 0.0;
+    // The resolution check: the pressure drag with fewer cells.
+    bool resolution_checked = false;
+    double cd_pressure_coarse = 0.0;
+    int cells_coarse = 0;
+    // The likely range of the drag coefficient (±1 sigma, relative
+    // `uncertainty`): the method's own error (12 %, from the drag of the
+    // validation shapes against Hoerner's) with the resolution's change in
+    // quadrature; at «friction» quality the correlations' 15 % (and the
+    // pressure drag is missing).
+    double cd_low = 0.0, cd_high = 0.0, uncertainty = 0.0;
     double frontal_area_mm2 = 0.0; // the part's shadow on a plane across the air
     double frontal_size_mm = 0.0;  // the larger of its two sizes across the air
     double reynolds = 0.0, reynolds_simulated = 0.0;

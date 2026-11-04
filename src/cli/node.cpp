@@ -5,6 +5,7 @@
 #include "cli/cli.hpp"
 #include "calibration/calibration.hpp"
 #include "aero/aero.hpp"
+#include "mesh/orient.hpp"
 #include "config/settings.hpp"
 #include "fea/analysis.hpp"
 #include "fea/verdict.hpp"
@@ -446,6 +447,11 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         return fail_coded(kExitInput, model.name + ": the analysis needs a fixed point or zone and a force (mark them in Engineering)",
                           "needs_conditions", model.name + ": el análisis necesita un punto o zona fija y una fuerza (marcalos en Ingeniería)");
     const IndexedMesh mesh = weld_exact(part.mesh);
+    // A quality finer than the part's size allows: the finest voxels that
+    // fit, said in the summary (BH24).
+    const bool capped = fit_voxel_limit(c, mesh, settings);
+    if (capped)
+        err << "warning: the part needs larger voxels than the quality's to fit max_voxels: " << c.voxel << " mm\n";
     progress(10);
     AnalysisReport report;
     try {
@@ -453,7 +459,8 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
             progress(10 + int(std::clamp(done, 0.0, 1.0) * 80.0));
         });
     } catch (const AnalysisError& e) {
-        return fail(kExitAnalysis, e.what());
+        return fail_coded(kExitAnalysis, e.what(), "too_large",
+                          "la pieza es demasiado grande para analizarla con esta memoria; probá la calidad rápida");
     }
     if (!report.valid)
         return fail_coded(kExitAnalysis, "the analysis gave no valid result", "no_valid_result",
@@ -478,7 +485,15 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
                            {"max_displacement_mm", finite(report.result.elasticity.max_displacement)},
                            {"mass_g", std::round(v.value("mass_g", 0.0) * 100.0) / 100.0},
                            {"family", v.value("family", "")},
-                           {"voxels", report.grid.count()}};
+                           {"voxels", report.grid.count()},
+                           {"voxel_mm", analysis_resolution(c, settings).first},
+                           {"voxel_capped", capped}};
+    // The likely range of the smallest safety factor (adhesion and voxel size).
+    if (const nlohmann::json& rep = result["report"]; rep.contains("adhesion") && rep["adhesion"].is_object()) {
+        const nlohmann::json& ad = rep["adhesion"];
+        summary["min_safety_low"] = ad.contains("min_safety_low") ? ad["min_safety_low"] : nlohmann::json(nullptr);
+        summary["min_safety_high"] = ad.contains("min_safety_high") ? ad["min_safety_high"] : nlohmann::json(nullptr);
+    }
     if (!write_summary(summary))
         return kExitInput;
     progress(100);
@@ -648,6 +663,8 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
                                  {"cd", finite(r.cd)},
                                  {"cd_pressure", finite(r.cd_pressure)},
                                  {"cd_friction", finite(r.cd_friction)},
+                                 {"cd_low", finite(r.cd_low)},
+                                 {"cd_high", finite(r.cd_high)},
                                  {"reynolds", finite(r.reynolds)},
                                  {"reynolds_simulated", finite(r.reynolds_simulated)}};
     if (!write_summary(summary))
@@ -684,4 +701,136 @@ PlacedPart placed_part(const ProjectModel& m) {
     return p;
 }
 
+int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
+    NodeArgs a;
+    std::string usage;
+    long object = -1, instance = -1;
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        const std::string_view arg = args[i];
+        const bool has_value = i + 1 < args.size();
+        if ((arg == "-o" || arg == "--output") && has_value) {
+            a.output = std::string(args[++i]);
+        } else if (arg == "--summary" && has_value) {
+            a.summary = std::string(args[++i]);
+        } else if ((arg == "--object" || arg == "--instance") && has_value) {
+            const std::string_view v = args[++i];
+            long n = -1;
+            const auto [end, ec] = std::from_chars(v.data(), v.data() + v.size(), n);
+            if (ec != std::errc() || end != v.data() + v.size() || n < 0) {
+                if (usage.empty())
+                    usage = "error: orient: " + std::string(arg) + " needs a whole number from 0";
+            } else {
+                (arg == "--object" ? object : instance) = n;
+            }
+        } else if (arg == "--sandbox") {
+            a.sandbox = true;
+        } else if (arg == "--no-gpu") {
+            a.no_gpu = true;
+        } else if (!arg.starts_with("-") && a.project.empty()) {
+            a.project = std::string(arg);
+        } else if (usage.empty()) {
+            usage = "error: orient: unexpected argument '" + std::string(arg) + "'";
+        }
+    }
+    if (usage.empty() && (a.project.empty() || a.output.empty() || a.summary.empty()))
+        usage = "error: orient needs the project, -o and --summary";
+    const auto write_summary = [&](const nlohmann::json& j) {
+        if (a.summary.empty())
+            return false;
+        if (!write_file(a.summary, [&](std::ostream& f) { f << j.dump(2) << "\n"; })) {
+            err << "error: cannot write the summary '" << a.summary << "'\n";
+            return false;
+        }
+        return true;
+    };
+    const auto fail = [&](int code, const std::string& message, const std::string& error_code = "error") {
+        err << "error: " << message << "\n";
+        write_summary(nlohmann::json{{"error", message}, {"code", error_code}});
+        return code;
+    };
+    if (!usage.empty()) {
+        err << usage << "\n";
+        write_summary(nlohmann::json{{"error", usage.substr(7)}, {"code", "usage"}});
+        return kExitUsage;
+    }
+    if (same_file(a.output, a.project) || same_file(a.summary, a.project))
+        return fail(kExitInput, "an output would overwrite the project");
+    if (a.output == a.summary || same_file(a.output, a.summary))
+        return fail(kExitInput, "-o and --summary name the same file");
+    for (const std::string* path : {&a.output, &a.summary})
+        if (std::string problem = output_problem(write_target(*path)); !problem.empty())
+            return fail(kExitInput, problem);
+
+    Progress progress(out);
+    progress(0);
+    const std::optional<std::string> data = read_whole(a.project);
+    if (!data)
+        return fail(kExitInput, "cannot read the project '" + a.project + "'");
+    if (!looks_like_project(*data))
+        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma");
+    Project project;
+    try {
+        project = read_project(*data);
+    } catch (const std::exception& e) {
+        return fail(kExitInput, a.project + ": " + e.what());
+    }
+    if (project.models.empty())
+        return fail(kExitModel, "the project has no models");
+    const std::size_t index = object < 0 ? 0 : std::size_t(object);
+    if (index >= project.models.size())
+        return fail(kExitInput, "the project has no object " + std::to_string(index) + " (it has " +
+                                    std::to_string(project.models.size()) + ", counted from 0)");
+    if (instance > 0)
+        return fail(kExitInput, "object " + std::to_string(index) + " has no instance " + std::to_string(instance) +
+                                    " (each object has one, 0)");
+    const ProjectModel& model = project.models[index];
+    const PlacedPart part = placed_part(model);
+    if (part.mesh.triangle_count() == 0)
+        return fail(kExitModel, model.name + ": the part has no triangles");
+    progress(10);
+    // The method by the printer (orientation.md, orient.method): least peel
+    // for resin, least support for FDM.
+    const bool resin = project.settings.machine_technology == MachineTechnology::Msla;
+    OrientResult r;
+    PeelResult peel;
+    if (resin) {
+        peel = orient_least_peel(part.mesh, project.settings);
+        r = peel;
+    } else {
+        OrientOptions options;
+        if (project.settings.support_angle > 0.0)
+            options.support_angle = project.settings.support_angle;
+        r = orient_least_support(part.mesh, options);
+    }
+    progress(90);
+    nlohmann::json rotation = nlohmann::json::array();
+    for (int i = 0; i < 3; ++i)
+        rotation.push_back({r.rotation[std::size_t(i * 3)], r.rotation[std::size_t(i * 3 + 1)], r.rotation[std::size_t(i * 3 + 2)]});
+    nlohmann::json result{{"format", "tisma-orientation"},
+                                {"version", 1},
+                                {"object", index},
+                                {"instance", 0},
+                                {"part", model.name},
+                                {"method", resin ? "least_peel" : "least_support"},
+                                {"rotation", rotation},
+                                {"cost", r.cost},
+                                {"cost_before", r.cost_before},
+                                {"support_mm3", r.support_mm3},
+                                {"bed_area_mm2", r.bed_area_mm2},
+                                {"candidates", r.candidates}};
+    if (resin) {
+        result["cups"] = peel.cups;
+        result["cups_before"] = peel.cups_before;
+        result["largest_layer_mm2"] = peel.largest_layer_mm2;
+        result["largest_layer_before_mm2"] = peel.largest_layer_before_mm2;
+    }
+    if (!write_file(a.output, [&](std::ostream& f) { f << result.dump(2) << "\n"; }))
+        return fail(kExitInput, "cannot write the result '" + a.output + "'");
+    if (!write_summary(nlohmann::json{{"cost", r.cost}, {"cost_before", r.cost_before}, {"candidates", r.candidates}}))
+        return kExitInput;
+    progress(100);
+    return kExitOk;
+}
+
 } // namespace tisma
+

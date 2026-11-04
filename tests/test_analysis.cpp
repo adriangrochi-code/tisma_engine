@@ -8,6 +8,7 @@
 #include "io/vtk.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "mesh/mesh.hpp"
+#include "mesh/shapes.hpp"
 #include "project/engineering_case.hpp"
 #include "report/analysis_json.hpp"
 
@@ -732,7 +733,7 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     e.structural.quality = "fast";
     const AnalysisCase fast = engineering_analysis_case(e, triangles, {}, notes, "PLA");
     CHECK(fast.model == AnalysisModel::Solid);
-    CHECK_FALSE(fast.resolution_check);
+    CHECK(fast.resolution_check); // the band takes its voxel error
     const std::size_t voxels = analysis_grid_voxels(bar, beads_04(), fast);
     INFO(voxels);
     CHECK(voxels > 10000);
@@ -741,3 +742,26 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     REQUIRE(rf.valid);
     CHECK(nlohmann::json::parse(structural_report_json(rf, fast, e))["verdict"]["name"] == "holds");
 }
+
+TEST_CASE("BH24: a quality finer than the voxel limit allows takes the finest voxels that fit", "[analysis]") {
+    TriangleMesh box = make_box(20, 20, 10);
+    const IndexedMesh mesh = weld_exact(box);
+    Settings s;
+    s.layer_height = 0.2;
+    s.wall_width = 0.42;
+    AnalysisCase c;
+    c.quality = AnalysisQuality::Extreme;
+    c.max_voxels = 200000;
+    const std::size_t asked = analysis_grid_voxels(mesh, s, c);
+    REQUIRE(asked > c.max_voxels);
+    CHECK(fit_voxel_limit(c, mesh, s));
+    const std::size_t fitted = analysis_grid_voxels(mesh, s, c);
+    INFO(asked << " -> " << fitted << " at " << c.voxel << " mm, " << c.rows_per_layer << " rows");
+    CHECK(fitted <= c.max_voxels);
+    CHECK(fitted > c.max_voxels / 3); // not much coarser than it needs
+    // Within the limit: nothing changes.
+    AnalysisCase normal;
+    CHECK_FALSE(fit_voxel_limit(normal, mesh, s));
+    CHECK(normal.voxel == 0.0);
+}
+

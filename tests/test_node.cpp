@@ -290,6 +290,12 @@ TEST_CASE("analyze of a project the nodes' way: progress, the .tea result and th
     CHECK(t["object"] == 0);
     CHECK_FALSE(t["fingerprint"].get<std::string>().empty());
     CHECK(t["report"]["verdict"]["name"] == "holds");
+    {
+        const nlohmann::json sum = nlohmann::json::parse(read_text(summary));
+        REQUIRE(sum["min_safety_low"].is_number());
+        CHECK(sum["min_safety_low"].get<double>() <= sum["min_safety"].get<double>());
+        CHECK(sum["min_safety_high"].get<double>() >= sum["min_safety"].get<double>());
+    }
 
     // --solid: the whole part solid, still held.
     const Run solid = run({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
@@ -395,3 +401,39 @@ TEST_CASE("aero of a project the nodes' way: progress, the .taero result and the
                ContainsSubstring("no object 2"));
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("orient of a project the nodes' way (cloud.md, rules 10c and 19c)", "[cli][cloud]") {
+    const auto dir = fresh_dir("node_orient");
+    const auto project = dir / "bar.3mf";
+    // A standing bar (OR2): lying down is cheaper.
+    Project bar = box_project(100.0, 100.0);
+    bar.models[0].mesh = make_box(5.0, 5.0, 60.0);
+    save_project(project, bar);
+    const auto json = dir / "orientation.json", summary = dir / "summary.json";
+    const Run r = run({"orient", project.string(), "-o", json.string(), "--summary", summary.string(), "--sandbox", "--object", "0",
+                       "--instance", "0", "--threads", "2"});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    const nlohmann::json j = nlohmann::json::parse(read_text(json));
+    CHECK(j["format"] == "tisma-orientation");
+    REQUIRE(j["rotation"].size() == 3);
+    CHECK(std::abs(j["rotation"][2][2].get<double>()) < 0.01); // the bar's Z no longer up
+    CHECK(j["cost"].get<double>() < j["cost_before"].get<double>());
+    const nlohmann::json s = nlohmann::json::parse(read_text(summary));
+    CHECK(s["candidates"].get<int>() >= 2);
+    // A resin printer: least peel; a cube on the platform has no cup.
+    Project resin = box_project(100.0, 100.0);
+    resin.settings.machine_technology = MachineTechnology::Msla;
+    const auto resin_project = dir / "resin.3mf";
+    save_project(resin_project, resin);
+    REQUIRE(run({"orient", resin_project.string(), "-o", json.string(), "--summary", summary.string(), "--sandbox"}).code == kExitOk);
+    const nlohmann::json jr = nlohmann::json::parse(read_text(json));
+    CHECK(jr["method"] == "least_peel");
+    CHECK(jr["cups"] == 0);
+    // Errors: in the summary, with a code.
+    const Run bad = run({"orient", project.string(), "-o", json.string(), "--summary", summary.string(), "--object", "4"});
+    CHECK(bad.code == kExitInput);
+    CHECK_THAT(nlohmann::json::parse(read_text(summary))["error"].get<std::string>(), ContainsSubstring("no object 4"));
+    std::filesystem::remove_all(dir);
+}
+

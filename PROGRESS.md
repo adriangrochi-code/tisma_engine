@@ -9912,5 +9912,140 @@ no llega al análisis (sale del laminado) y las paredes simples no se distinguen
 - BH22, revisado: sin `--quality`, `analyze` sobre el proyecto guardado por la interfaz da lo mismo que Analizar
   (cubo de 10 mm: seguridad 49,55, 1,2 g, 0,000419 mm). Con `--quality fast` la pieza se analiza entera sólida, como
   pide la calidad Rápida (`structural_analysis.md`, «Resolución»): 1,24 g. La diferencia del informe venía de pedir
-  `fast` a un proyecto que la interfaz analizó en media.
+  `fast` a un proyecto que la interfaz analizó en media.- Regla 19a (`cloud.md` de spec/next, pasó `check_spec`) y CC20: la lista de trabajos del diálogo de la nube y el
+  aviso de un trabajo fallido muestran, en castellano, el `error_es` del resumen; si no hay, un texto por su `code`;
+  si no, el `error` en inglés (`cloud::job_error`).
+
+## 2026-11-03 — La fiabilidad más alta que dé cada calidad (CFD y FEA)
+
+**Pedido del dueño:** «Busquemos la fiabilidad sea lo más alta alcanzable en cada preset».
+
+**CFD**, probado con las recetas de `docs/research/cfd_fea_optimizations.md`, medido con AE1 a AE4 a 12 celdas. La
+tabla da el Cd de presión, de la fuerza en las paredes y sin corrección por bloqueo:
+
+| Variante | Placa (Hoerner 1,17) | Cubo (1,05) | Prisma 3:1 (Tisma 1,06) | Prisma con punta (Tisma 0,34) |
+|---|---|---|---|---|
+| BGK, sin esponja (antes) | 1,010 | 1,007 | 0,936 | 0,366 |
+| BGK, con esponja (ahora) | **1,072** | **1,042** | **0,980** | 0,409 |
+| TRT Λ = 3/16, con esponja | 0,638 | 0,441 | 0,665 | 0,418 |
+| Smagorinsky 0,10 | inestable | inestable | inestable | inestable |
+
+- **Fuerza por intercambio de momento:** la presión sale de los enlaces que rebotan. La parte de presión es el
+  equilibrio en reposo de cada enlace. Coincide con la lectura anterior en las caras (placa 1,010 contra 0,986) y es
+  coherente con la pared. El mapa por cara sigue saliendo de la densidad junto a la cara.
+- **Capa absorbente** de medio tamaño de pieza antes de la salida: queda, por la tabla.
+- **TRT**: queda como opción apagada. A la viscosidad del análisis (τ a menos de 0,01 de 1/2) la tasa impar es
+  casi 0, y el cubo cayó a 0,44.
+- **Maskell**: no se aplica. Con un bloqueo de 6,2 % bajaría el cubo a 0,87; el bloqueo y la disipación de
+  Smagorinsky se compensan. La fracción de bloqueo queda en el resultado.
+- **Verificación de resolución:** cada calidad simula también con 2/3 de las celdas, con un quinto más de tiempo.
+- **Rango probable del Cd:** ±1σ, con el error propio del método (12 %, el promedio de las diferencias de la tabla) y
+  el cambio con la resolución, en cuadratura. A calidad «solo rozamiento» es el 15 % de las correlaciones, y avisa
+  que falta la presión.
+- El rango se ve en la pestaña Aerodinámica y va en el `.taero` y en el resumen de `aero` (`cd_low`, `cd_high`).
+
+**FEA:**
+- El rango del factor de seguridad suma en cuadratura la incertidumbre de la adherencia y el cambio con vóxeles del
+  doble de tamaño (la verificación de resolución que ya existía). La calidad rápida ahora también la hace: un octavo
+  más de tiempo.
+- El resumen de `analyze` lleva `min_safety_low` y `min_safety_high`.
+- El promedio sobre la distancia crítica (Taylor 2007) ya estaba en el factor de seguridad.
+
+**Sigue, por impacto según la investigación:**
+- CFD: paredes de Bouzidi (con q desde la malla), el arranque de grueso a fino y la parada temprana cuando el Cd
+  converge;
+- FEA: hexaedros de modos incompatibles, contra el bloqueo por corte en paredes de 2 vóxeles;
+- después, la GPU.
+- BH24 (equipo de especificaciones, prueba de punta a punta de la nube): la calidad extrema de un cubo de 20 mm pedía
+  10,7 millones de vóxeles y se negaba. Ahora `fit_voxel_limit` toma los vóxeles más finos que entran en `max_voxels`
+  (más anchos y menos filas por capa), en Analizar, en su estimación y en `analyze` de la nube. El resumen dice
+  `voxel_mm` y `voxel_capped`. Si igual no entra, el error tiene `code` `too_large` y texto en castellano.
+- `ui_script_cloud_slice` falló una vez en la etapa ASan del CI, con la máquina cargada: no apareció el aviso de
+  «cancelado». Causa: el botón «x» para cancelar quedaba a la derecha del texto de estado, que cambia de ancho
+  («Enviando», «En cola», «Calculando 40 %»), y se movía entre el cuadro que guarda su lugar y el del clic. Ahora va
+  antes del texto y no se mueve; también es mejor para una persona.
+
+## 2026-11-04 — Orientación automática, «menos material de soporte» (FDM) y `orient` en la nube
+
+**Hecho** (`orientation.md`, reglas 1 a 6; `cloud.md`, reglas 10c y 19c; pasó `check_spec`):
+- `src/mesh/orient.*`: candidatas = la orientación actual y cada cara de la envolvente convexa apoyada en la cama;
+  costo = volumen de soporte (caras más horizontales que `support.angle_limit`, 45° si es automático, por su área
+  proyectada y la altura hasta la pieza de abajo o la cama, por rayos en una jerarquía de cajas armada una vez) menos
+  el área apoyada × 1 mm; se evitan las que tocan la cama con menos de 10 mm²; empate, la más baja. Al final, girada
+  en Z para que su caja mínima en XY quede apaisada. Nunca peor que como estaba.
+- Interfaz: «Orientar (menos soporte)» en el menú de la placa (clic derecho), sobre el modelo elegido o todos, con
+  deshacer y un aviso de cuántos giró.
+- `tisma-engine orient <proyecto.3mf> -o <orientacion.json> --summary <resumen.json> --sandbox --object --instance`:
+  el JSON lleva `rotation` (3 × 3 por filas, en los ejes de la cama, después de la colocación), `cost`,
+  `cost_before`, `support_mm3`, `bed_area_mm2` y `candidates`; el resumen, `cost`, `cost_before` y `candidates`.
+
+**Pruebas:** `[orient]` (OR1: el hongo queda con el sombrero en la cama, Z de la pieza −1; OR2: la barra queda
+acostada y a lo largo de X; un cubo no cambia; la rotación es ortonormal; una losa flotante pide su área × altura),
+`orient` de la línea de comandos sobre un proyecto, y el menú en `ui_script_plate_menu`. En el hongo, el costo de
+antes da 16 811 contra 16 656 a mano: el muestreo de las caras en pedazos.
+
+**Falta:** el método de resina, «menor fuerza de despegue» (reglas 7 a 9, OR3 y OR4), que necesita laminar cada
+candidata y el detector de ventosas; recordar el método y la precisión por tecnología.
+
+**Sigue:** resina en `orient`; después Diseño (D4: barrido, transición, texto).
+
+## HANDOFF (2026-11-04) — para la sesión nueva del motor
+
+**Estado de `dev`:** todo lo de esta sesión está en `dev` hasta a862c86 (orientación) más este traspaso. CI: el
+`tools/ci_linux.sh` completo pasó la etapa principal en fd1ed33 (966/966); clang y ASan corrían cuando se empujó
+(regla nueva del dueño: control rápido por push, CI completo en segundo plano). Si ASan encontró algo, va primero.
+
+**Cómo compilar y probar:**
+- `cmake -S . -B build-next -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build-next`;
+- pruebas: `build-next/tests/tisma_tests "[tag]"` (tags útiles: `[aero]`, `[adhesion]`, `[analysis]`, `[orient]`,
+  `[cloud]`, `[cli]`), y los guiones de interfaz con `ctest -R ui_script_<nombre>` en el directorio de compilación;
+- `[.aero-full]` (AE1 a AE4, unos 15 min) corre solo en compilaciones optimizadas como `aero_drag_coefficients`;
+- CI completo: `tools/ci_linux.sh` (normal, clang, ASan; más de una hora con 4 núcleos).
+
+**Reglas nuevas del dueño (2026-11-04), ahora en CLAUDE.md:**
+- control rápido por push (compilar y las pruebas que toca el cambio); el CI completo con ASan en segundo plano o cada
+  pocas horas, y lo que encuentre se arregla primero;
+- seguir la hoja de ruta sin desvíos; ante una duda, elegir lo que dicen la hoja de ruta y las fichas, anotarlo aquí y
+  seguir; las impresiones reales no son condición: «no probado en impresora»;
+- mensajes cortos entre sesiones; bloques programados sin trabajo terminan en una línea;
+- el dueño decidió no renovar la sesión del motor (2026-11-04); las demás reglas están en CLAUDE.md.
+
+**Hoja de ruta (orden del dueño, 2026-11-04):**
+1. Nube: `orient` (hecho para FDM; falta resina, reglas 7 a 9, OR3 y OR4), BH24 (hecho), verificación de resolución
+   del CFD (hecha).
+2. Ingeniería: terminar EP1 a EP10 (`engineering_panel.md`) y acelerar el CFD: parada temprana cuando el Cd converge
+   y arranque de grueso a fino (`docs/research/cfd_fea_optimizations.md` §2.5).
+3. Diseño: D4 (barrido, transición entre perfiles, texto), después D5b (DXF/SVG).
+4. Después, el orden de PLAN.md.
+
+**Abierto y decisiones recientes:**
+- CFD: BGK con capa absorbente y presión por intercambio de momento; TRT queda apagada (empeoró el cubo); Maskell no
+  se aplica. Rango del Cd: 12 % del método más el cambio con 2/3 de las celdas. Medidas en la entrada «La fiabilidad
+  más alta que dé cada calidad».
+- FEA: adherencia entre capas y entre líneas (`src/fea/adhesion.*`); rango del factor de seguridad con la
+  adherencia y el error de vóxel; `fit_voxel_limit` para calidades finas en piezas grandes. Falta el tiempo de capa
+  real en la adherencia y los hexaedros de modos incompatibles.
+- Nube: los errores de `analyze` llevan `code` y `error_es`; `aero`, `slice` y `orient` todavía no tienen `error_es`.
+- La sesión de la app Android (session_01QadJfKGJU2WtuAunZW5p9B) va a pedir la API en C del motor
+  (`mobile_app.md`, regla 2): acordarla con ella.
+- Equipo de fichas: session_015csYE6YXftDTgfC23i81xG (mensajes por send_message, con el pie de Claude Code).
+
+## 2026-11-04 — Orientación para resina, «menor fuerza de despegue»
+
+**Hecho** (`orientation.md`, reglas 7 a 9):
+- `orient_least_peel` en `src/mesh/orient.*`. Candidatas: sobre la plataforma, las caras de la envolvente; levantada
+  en soportes, 200 direcciones en una red de Fibonacci; más la orientación actual.
+- Preselección: se quedan las `max(4, 16 · precisión)` mejores por el costo de soporte de la regla 4, con el ángulo
+  crítico de los soportes de resina.
+- Elección: cada una se lamina entera, con capas de `max(altura de capa, alto / 400)`; gana la de menos ventosas
+  (`find_cups`) y, entre esas, la de capa más grande más chica.
+- El método sale de la impresora (resina o FDM) en el menú de la placa y en `orient`. En resina, el JSON lleva
+  además `cups`, `cups_before` y las capas más grandes, y el `cost` es `1e6 · ventosas + capa más grande`.
+- La precisión queda en 0,75, el valor por defecto de la ficha. Decisión: el ajuste `orient.precision` y recordarlo
+  por tecnología quedan para el panel de ajustes, que no está en este ítem de la hoja de ruta.
+
+**Pruebas:** OR3 (vaso con soportes: 0 ventosas, Z de la pieza < 0,5; 13 candidatas laminadas), OR4 (vaso sobre la
+plataforma: queda de costado) y `orient` en resina desde la línea de comandos.
+
+**Sigue (hoja de ruta):** Ingeniería EP1 a EP10 y el CFD más rápido (parada temprana, de grueso a fino).
 

@@ -26,6 +26,8 @@
     X(AeroLayer, "Altura de capa (mm, da la rugosidad)", "Layer height (mm, gives the roughness)") \
     X(AeroCloud, "Calcular en la nube", "Compute in the cloud") \
     X(AeroDrag, "Arrastre: %.4g N", "Drag: %.4g N") \
+    X(AeroRange, "Rango probable del Cd: %.3f a %.3f (±%.0f %%: el método y la resolución)", "Likely Cd range: %.3f to %.3f (±%.0f %%: the method and the resolution)") \
+    X(AeroRangeFriction, "Rango probable del Cd: %.3f a %.3f (±%.0f %% de las correlaciones; sin la presión, que pide simular)", "Likely Cd range: %.3f to %.3f (±%.0f %% of the correlations; without the pressure, which needs a simulation)") \
     X(AeroCd, "Cd %.3f (presión %.3f · rozamiento %.4f)", "Cd %.3f (pressure %.3f · friction %.4f)") \
     X(AeroCdFriction, "Cd de rozamiento %.4f (sin simular la presión)", "Friction Cd %.4f (pressure not simulated)") \
     X(AeroSide, "Fuerza transversal: %.4g N", "Side force: %.4g N") \
@@ -96,7 +98,7 @@
     X(StructQualityNormal, "Media (2 vóxeles por ancho de línea)", "Medium (2 voxels per line width)") \
     X(StructQualityHigh, "Alta (4 vóxeles por ancho de línea)", "High (4 voxels per line width)") \
     X(StructQualityExtreme, "Extrema (6 vóxeles por ancho de línea; lenta)", "Extreme (6 voxels per line width; slow)") \
-    X(StructSafetyBand, "Rango probable: %.3g a %.3g (±1σ de la adherencia; falla %s)", "Likely range: %.3g to %.3g (±1σ of the adhesion; fails %s)") \
+    X(StructSafetyBand, "Rango probable: %.3g a %.3g (±1σ de la adherencia y del tamaño de vóxel; falla %s)", "Likely range: %.3g to %.3g (±1σ of the adhesion and the voxel size; fails %s)") \
     X(StructFailsBetweenLayers, "entre capas", "between layers") \
     X(StructFailsBetweenLines, "entre líneas", "between lines") \
     X(StructFailsLine, "en la línea", "along the line") \
@@ -604,6 +606,10 @@
       "Lay on face")\
     X(TipLay, "Hacé clic en la cara que querés contra la cama: el modelo gira para apoyarla. Atajo: F.",\
       "Click the face you want on the bed: the model turns to lay it down. Shortcut: F.")\
+    X(OrientLeastPeel, "Orientar (menor fuerza de despegue)", "Orient (least peel force)") \
+    X(OrientLeastSupport, "Orientar (menos soporte)", "Orient (least support)") \
+    X(OrientDone, "Orientado: %d modelo(s) girado(s)", "Oriented: %d model(s) turned") \
+    X(OrientNothing, "Ya estaba en la mejor orientación", "It already was in the best orientation") \
     X(TipArrangeTitle, "Organizar",\
       "Arrange")\
     X(TipArrange, "Ordena todos los modelos en una grilla compacta, centrada en la cama, con 6 mm entre ellos. No los gira. Atajo: A.",\

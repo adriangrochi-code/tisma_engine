@@ -43,6 +43,7 @@
 #include "io/model.hpp"
 #include "io/stl.hpp"
 #include "mesh/shapes.hpp"
+#include "mesh/orient.hpp"
 #include "project/project.hpp"
 #include "project/engineering_values.hpp"
 #include "mesh/face_region.hpp"
@@ -8355,17 +8356,20 @@ void App::status_bar() {
                     : cloud_slice_state_->status == "queued" ? std::string(tr(T::CloudSliceQueued))
                                                               : std::string(tr(T::CloudSliceSending));
         }
+        // The cancel button first: after the state, whose text changes
+        // width («Enviando», «En cola», «Calculando 40 %»), it moved under
+        // the pointer.
         ImGui::SameLine(0, 24.0f * scale_);
-        loc::TextColored(rgb(theme_.accent_hover), "%s", state.c_str());
-        g_menu_rects["cloud_slice_state"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
-                                                   ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
-        ImGui::SameLine();
         if (ImGui::SmallButton("x##cloud_slice_cancel"))
             cloud_slice_state_->cancel = true;
         g_menu_rects["cloud_slice_cancel"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                                     ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         if (ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(T::CloudSliceCancelTip));
+        ImGui::SameLine();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", state.c_str());
+        g_menu_rects["cloud_slice_state"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                                   ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
     }
     // On the right: the 3D view's time per frame on the GPU, and what sliced.
     std::string right;
@@ -8922,6 +8926,42 @@ void App::plate_menu() {
     if (arrange) {
         arrange_plate();
         tip("arrange");
+    }
+    // Automatic orientation (orientation.md, «menos material de soporte»):
+    // the chosen model, or every model when none is chosen.
+    const bool orient = ImGui::MenuItem(
+        tr(settings_.machine_technology == MachineTechnology::Msla ? T::OrientLeastPeel : T::OrientLeastSupport), nullptr, false,
+        !objects_.empty());
+    placed("orient");
+    if (orient) {
+        int turned = 0;
+        for (std::size_t i = 0; i < objects_.size(); ++i) {
+            if ((selected_ >= 0 && std::size_t(selected_) != i) || i >= placed_meshes_.size() || placed_meshes_[i].empty())
+                continue;
+            // By the printer: least peel for resin, least support for FDM.
+            OrientResult r;
+            if (settings_.machine_technology == MachineTechnology::Msla) {
+                r = orient_least_peel(placed_meshes_[i], settings_);
+            } else {
+                OrientOptions options;
+                if (settings_.support_angle > 0.0)
+                    options.support_angle = settings_.support_angle;
+                r = orient_least_support(placed_meshes_[i], options);
+            }
+            if (r.cost < r.cost_before - 1e-6) {
+                Rotation& rot = objects_[i].place.rotation;
+                Rotation out{};
+                for (int a = 0; a < 3; ++a)
+                    for (int b = 0; b < 3; ++b)
+                        for (int k = 0; k < 3; ++k)
+                            out[std::size_t(a * 3 + b)] += r.rotation[std::size_t(a * 3 + k)] * rot[std::size_t(k * 3 + b)];
+                rot = out;
+                ++turned;
+            }
+        }
+        if (turned > 0)
+            plate_changed();
+        notify(turned > 0 ? format(tr(T::OrientDone), turned) : std::string(tr(T::OrientNothing)));
     }
     ImGui::EndPopup();
 }
@@ -13178,10 +13218,11 @@ void App::structural_panel() {
             apply_engineering_overrides(settings, e, notes);
             ProjectEngineering bare = e;
             bare.conditions.clear(); // the size does not depend on them
-            const AnalysisCase c =
+            AnalysisCase c =
                 engineering_analysis_case(bare, placed_meshes_[part], {}, notes, settings_.filament_type, settings.layer_height,
                                           print_conditions(settings, bare));
             const IndexedMesh mesh = weld_exact(placed_meshes_[part]);
+            fit_voxel_limit(c, mesh, settings); // what Analizar will use (BH24)
             estimate = {analysis_grid_voxels(mesh, settings, c), analysis_resolution(c, settings).first};
         }
         if (estimate.first > 0)
@@ -13361,6 +13402,15 @@ void App::aerodynamics_panel() {
                 ImGui::TextUnformatted(format(tr(T::AeroCd), num("cd"), num("cd_pressure"), num("cd_friction")).c_str());
             else
                 ImGui::TextUnformatted(format(tr(T::AeroCdFriction), num("cd_friction")).c_str());
+            // The likely range (the owner's request: the most reliable
+            // result each quality gives, and how far it can be off).
+            if (j.contains("cd_low") && j["cd_low"].is_number() && num("uncertainty") > 0.0) {
+                ImGui::PushTextWrapPos(0.0f);
+                loc::TextDisabled("%s", format(tr(j.value("simulated", false) ? T::AeroRange : T::AeroRangeFriction), num("cd_low"),
+                                               num("cd_high"), 100.0 * num("uncertainty"))
+                                            .c_str());
+                ImGui::PopTextWrapPos();
+            }
             ImGui::TextUnformatted(format(tr(T::AeroSide), num("side_force_n")).c_str());
             ImGui::TextUnformatted(format(tr(T::AeroArea), num("frontal_area_mm2")).c_str());
             ImGui::TextUnformatted(format(tr(T::AeroReynolds), num("reynolds"), num("reynolds_simulated")).c_str());
@@ -13770,9 +13820,11 @@ void App::start_structural() {
         struct Cancelled {};
         try {
             std::vector<std::string> case_notes;
-            const AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height,
-                                                             print_conditions(settings, moved));
+            AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height,
+                                                       print_conditions(settings, moved));
             const IndexedMesh mesh = weld_exact(placed);
+            // A quality finer than the part allows: the finest voxels that fit (BH24).
+            fit_voxel_limit(c, mesh, settings);
             const AnalysisReport r = run_analysis(mesh, settings, c, nullptr, [this](std::string_view, double done) {
                 structural_permille_ = int(done * 1000.0);
                 if (structural_cancel_)
@@ -14969,6 +15021,7 @@ void App::cloud_slice_step() {
     const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
                             : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
                             : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
+                            : r.job.status == "failed" ? cloud::job_error(r.job, language() == Language::Spanish)
                                                     : r.error.message;
     notify(format(tr(T::CloudSliceFailed), why.c_str()), true);
 }
@@ -15088,7 +15141,7 @@ void App::cloud_window() {
                     else
                         loc::Text("%s", tr(state));
                     if (!j.error.empty() && ImGui::IsItemHovered())
-                        loc::SetTooltip("%s", j.error.c_str());
+                        loc::SetTooltip("%s", cloud::job_error(j, language() == Language::Spanish).c_str());
                     ImGui::TableNextColumn();
                     loc::TextDisabled(tr(T::CloudJobMinutes), number(j.seconds / 60.0, 1).c_str());
                 }

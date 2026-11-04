@@ -169,6 +169,7 @@ add_library(tisma_core
   src/mesh/indexed_mesh.cpp
   src/mesh/face_region.cpp
   src/mesh/shapes.cpp
+  src/mesh/orient.cpp
   src/mesh/paint.cpp
   src/slice/level_set.cpp
   src/slice/contours.cpp

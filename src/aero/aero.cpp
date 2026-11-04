@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -26,6 +27,10 @@ V scaled(const V& a, double s) { return {a[0] * s, a[1] * s, a[2] * s}; }
 
 // The lattice's velocity: a Mach number low enough for the lattice.
 constexpr double kLatticeVelocity = 0.05;
+// The method's own error, 1 sigma: the mean of the validation shapes'
+// differences at 12 cells (2026-11-03: plate −7 %, cube +4 %, blunt prism
+// −1 %, nosed prism +34 % against Hoerner and the spec's values) is 11 %.
+constexpr double kMethodError = 0.12;
 
 } // namespace
 
@@ -224,18 +229,29 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
     // Pressure: the lattice, unless only the friction is asked for.
     const int cells = in.cells > 0 ? in.cells : quality_cells(in.quality);
     double pressure_x = 0.0, pressure_y = 0.0, pressure_z = 0.0;
-    if (cells > 0) {
-        const double dx = r.frontal_size_mm / cells;
-        const double L = r.frontal_size_mm;
-        const V origin{lo[0] - 1.5 * L, lo[1] - 1.5 * L, lo[2] - 1.5 * L};
+    // A lattice of n cells across the part: its size, the part in it, the
+    // flow, and the cells of the part's shadow on a plane across the air.
+    struct Lattice {
         LbmOptions o;
+        V origin{};
+        double dx = 0.0;
+        std::vector<std::uint8_t> solid;
+        LbmResult flow;
+        std::size_t shadow = 0;
+    };
+    const auto lattice = [&](int n, const std::function<bool(double)>& report) {
+        Lattice l;
+        l.dx = r.frontal_size_mm / n;
+        const double dx = l.dx;
+        const double L = r.frontal_size_mm;
+        l.origin = V{lo[0] - 1.5 * L, lo[1] - 1.5 * L, lo[2] - 1.5 * L};
+        LbmOptions& o = l.o;
         o.nx = int(std::ceil((hi[0] - lo[0] + 4.5 * L) / dx));
         o.ny = int(std::ceil((size_y + 3.0 * L) / dx));
         o.nz = int(std::ceil((size_z + 3.0 * L) / dx));
-        r.cells_x = o.nx, r.cells_y = o.ny, r.cells_z = o.nz;
         // The part in voxels of the lattice's size, placed in the lattice.
         const VoxelGrid grid = voxelize(weld_exact(turned), dx);
-        std::vector<std::uint8_t> solid(std::size_t(o.nx) * std::size_t(o.ny) * std::size_t(o.nz), 0);
+        l.solid.assign(std::size_t(o.nx) * std::size_t(o.ny) * std::size_t(o.nz), 0);
         for (int k = 0; k < grid.nz; ++k)
             for (int j = 0; j < grid.ny; ++j)
                 for (int i = 0; i < grid.nx; ++i) {
@@ -243,27 +259,76 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
                         continue;
                     const double cx = grid.x0 + (i + 0.5) * grid.hx, cy = grid.y0 + (j + 0.5) * grid.hy,
                                  cz = 0.5 * (grid.z[std::size_t(k)] + grid.z[std::size_t(k) + 1]);
-                    const int x = int(std::floor((cx - origin[0]) / dx)), y = int(std::floor((cy - origin[1]) / dx)),
-                              z = int(std::floor((cz - origin[2]) / dx));
+                    const int x = int(std::floor((cx - l.origin[0]) / dx)), y = int(std::floor((cy - l.origin[1]) / dx)),
+                              z = int(std::floor((cz - l.origin[2]) / dx));
                     if (x >= 1 && y >= 0 && z >= 0 && x < o.nx - 1 && y < o.ny && z < o.nz)
-                        solid[(std::size_t(z) * std::size_t(o.ny) + std::size_t(y)) * std::size_t(o.nx) + std::size_t(x)] = 1;
+                        l.solid[(std::size_t(z) * std::size_t(o.ny) + std::size_t(y)) * std::size_t(o.nx) + std::size_t(x)] = 1;
                 }
-        r.reynolds_simulated = std::min(r.reynolds, 40.0 * cells);
+        for (int z = 0; z < o.nz; ++z)
+            for (int y = 0; y < o.ny; ++y)
+                for (int x = 0; x < o.nx; ++x)
+                    if (l.solid[(std::size_t(z) * std::size_t(o.ny) + std::size_t(y)) * std::size_t(o.nx) + std::size_t(x)]) {
+                        ++l.shadow;
+                        break;
+                    }
         o.velocity = kLatticeVelocity;
-        o.viscosity = kLatticeVelocity * cells / r.reynolds_simulated;
+        o.viscosity = kLatticeVelocity * n / std::min(r.reynolds, 40.0 * n);
         o.steps = long(std::ceil(std::max(1.0, in.flow_throughs) * o.nx / kLatticeVelocity));
         o.average_from = o.steps * 2 / 3;
+        // An absorbing layer half the part's size before the outlet: the
+        // pressure waves the outlet sent back biased the mean pressure
+        // (measured at 12 cells, 2026-11-03: plate 1.01 to 1.07 against
+        // Hoerner's 1.17, cube 1.007 to 1.042 against 1.05).
+        o.sponge = std::max(3, n / 2);
+        l.flow = run_lbm(o, l.solid, report);
+        return l;
+    };
+    // The pressure drag from the momentum the walls take (consistent with
+    // the bounce-back), over the voxel part's own frontal area.
+    const double q_lat = 0.5 * kLatticeVelocity * kLatticeVelocity;
+    const auto pressure_cd = [&](const Lattice& l) {
+        return l.shadow > 0 ? l.flow.pressure_force[0] / (q_lat * double(l.shadow)) : 0.0;
+    };
+    if (cells > 0) {
+        // With the resolution check the coarser run takes about a fifth of
+        // the time: the progress is shared out by the cells' fourth power.
+        const int coarse = in.resolution_check && cells >= 12 ? int(std::lround(cells * 2.0 / 3.0)) : 0;
+        const double fine_share = coarse > 0 ? std::pow(double(cells), 4) / (std::pow(double(cells), 4) + std::pow(double(coarse), 4)) : 1.0;
+        std::function<bool(double)> fine_progress;
+        if (progress)
+            fine_progress = [&](double d) { return progress(d * fine_share); };
+        const Lattice main = lattice(cells, fine_progress);
+        const LbmOptions& o = main.o;
+        const V origin = main.origin;
+        const double dx = main.dx;
+        const std::vector<std::uint8_t>& solid = main.solid;
+        const LbmResult& flow = main.flow;
+        r.cells_x = o.nx, r.cells_y = o.ny, r.cells_z = o.nz;
+        r.reynolds_simulated = std::min(r.reynolds, 40.0 * cells);
         r.steps = o.steps;
-        const LbmResult flow = run_lbm(o, solid, progress);
         r.stable = flow.stable;
         if (!flow.stable) {
             r.error = progress ? "the simulation was stopped or did not stay stable" : "the simulation did not stay stable";
             return r;
         }
+        if (coarse > 0) {
+            std::function<bool(double)> coarse_progress;
+            if (progress)
+                coarse_progress = [&](double d) { return progress(fine_share + d * (1.0 - fine_share)); };
+            const Lattice check = lattice(coarse, coarse_progress);
+            if (!check.flow.stable && progress) {
+                r.error = "the simulation was stopped or did not stay stable";
+                return r;
+            }
+            if (check.flow.stable) {
+                r.resolution_checked = true;
+                r.cd_pressure_coarse = pressure_cd(check);
+                r.cells_coarse = coarse;
+            }
+        }
         r.simulated = true;
         // The pressure on each face: the mean density just outside it,
         // against the free stream's.
-        const double q_lat = 0.5 * kLatticeVelocity * kLatticeVelocity;
         const auto density_at = [&](const V& p) -> std::optional<double> {
             const int x = int(std::floor((p[0] - origin[0]) / dx)), y = int(std::floor((p[1] - origin[1]) / dx)),
                       z = int(std::floor((p[2] - origin[2]) / dx));
@@ -304,7 +369,15 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
             pressure_y += -cp * normal[t][1] * area[t];
             pressure_z += -cp * normal[t][2] * area[t];
         }
-        r.cd_pressure = pressure_x / r.frontal_area_mm2;
+        r.cd_pressure_surface = pressure_x / r.frontal_area_mm2;
+        r.blockage = double(main.shadow) / (double(o.ny) * double(o.nz));
+        r.cd_pressure = pressure_cd(main);
+        r.cd_total_simulated = main.shadow > 0 ? flow.force[0] / (q_lat * double(main.shadow)) : 0.0;
+        // Across the air: the same force's other parts, over the true area.
+        if (main.shadow > 0) {
+            pressure_y = flow.pressure_force[1] / (q_lat * double(main.shadow)) * r.frontal_area_mm2;
+            pressure_z = flow.pressure_force[2] / (q_lat * double(main.shadow)) * r.frontal_area_mm2;
+        }
 
         // Streamlines: seeds on a grid across the part's front, a little
         // wider than it, followed through the mean velocity (Heun's steps
@@ -384,6 +457,14 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
         r.reynolds_simulated = 0.0;
     }
     r.cd = r.cd_pressure + r.cd_friction;
+    if (r.simulated) {
+        const double change = r.resolution_checked && r.cd > 0.0 ? std::abs(r.cd_pressure - r.cd_pressure_coarse) / r.cd : 0.0;
+        r.uncertainty = std::min(0.9, std::hypot(kMethodError, change));
+    } else {
+        r.uncertainty = 0.15;
+    }
+    r.cd_low = r.cd * (1.0 - r.uncertainty);
+    r.cd_high = r.cd * (1.0 + r.uncertainty);
     r.drag_n = r.cd * q_pa * r.frontal_area_mm2 * 1e-6;
     r.side_force_n = std::hypot(pressure_y, pressure_z) * q_pa * 1e-6;
     // What a symmetric part gives across the air is rounding noise: 0 below
@@ -415,6 +496,11 @@ std::string result_json(const AeroResult& r, const AeroInput& in) {
                      {"cd", finite(r.cd)},
                      {"cd_pressure", finite(r.cd_pressure)},
                      {"cd_friction", finite(r.cd_friction)},
+                     {"cd_low", finite(r.cd_low)},
+                     {"cd_high", finite(r.cd_high)},
+                     {"uncertainty", finite(r.uncertainty)},
+                     {"resolution_check", r.resolution_checked ? nlohmann::json{{"cells", r.cells_coarse}, {"cd_pressure", finite(r.cd_pressure_coarse)}}
+                                                               : nlohmann::json(nullptr)},
                      {"side_force_n", finite(r.side_force_n)},
                      {"frontal_area_mm2", finite(r.frontal_area_mm2)},
                      {"reynolds", finite(r.reynolds)},

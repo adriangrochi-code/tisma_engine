@@ -175,7 +175,10 @@ AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const Triang
         c.model = AnalysisModel::Solid;
         c.voxel = std::max(std::sqrt(volume / (layer * 20000.0)), layer);
         c.rows_per_layer = 1;
-        c.resolution_check = false;
+        // The check costs an eighth more and gives the band its voxel error
+        // (the owner's request, 2026-11-03: the most reliable result each
+        // quality can give).
+        c.resolution_check = true;
     }
     for (std::string& note : add_conditions(c, e, mesh, shift))
         notes.push_back(std::move(note));
@@ -272,7 +275,8 @@ std::string structural_report_json(const AnalysisReport& report, const AnalysisC
     // the smallest safety factor (an approximation; the owner's request,
     // 2026-11-03).
     const FailureMode mode = weakest_mode(report);
-    const SafetyBand band = safety_band(report.result.min_safety, mode, c.adhesion);
+    const double discretization = report.resolution.done ? std::abs(report.resolution.change) : 0.0;
+    const SafetyBand band = safety_band(report.result.min_safety, mode, c.adhesion, discretization);
     const auto finite_or_null = [](double v) { return std::isfinite(v) ? nlohmann::json(v) : nlohmann::json(nullptr); };
     j["adhesion"] = {{"modelled", c.adhesion.modelled},
                      {"nozzle_temperature", c.adhesion.temperature},
@@ -287,7 +291,9 @@ std::string structural_report_json(const AnalysisReport& report, const AnalysisC
                      {"too_hot", c.adhesion.too_hot},
                      {"weakest_mode", failure_mode_name(mode)},
                      {"min_safety_low", finite_or_null(band.low)},
-                     {"min_safety_high", finite_or_null(band.high)}};
+                     {"min_safety_high", finite_or_null(band.high)},
+                     {"band_sigma", band.sigma},
+                     {"discretization", discretization}};
     return j.dump();
 }
 

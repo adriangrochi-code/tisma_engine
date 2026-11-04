@@ -32,7 +32,7 @@ std::vector<std::string> add_conditions(AnalysisCase& c, const ProjectEngineerin
 // else the case's default, with the adhesion between layers and lines of
 // `print` applied (fea/adhesion.hpp; kept in the case), the Structural tab's quality ("high"
 // is high; "fast" the whole part solid in about 20 000 voxels a row per
-// layer of `layer_height`, without the resolution check; the rest normal), then add_conditions. Notes, as add_conditions,
+// layer of `layer_height`, with the resolution check; the rest normal), then add_conditions. Notes, as add_conditions,
 // also name an unknown material (the default is used).
 AnalysisCase engineering_analysis_case(const ProjectEngineering& e, const TriangleMesh& mesh,
                                        const std::array<double, 3>& shift, std::vector<std::string>& notes,
