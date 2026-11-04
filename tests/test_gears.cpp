@@ -145,6 +145,13 @@ TEST_CASE("gears: the checks, the saved spec, and a gear that slices", "[gears]"
     CHECK(back.helix_angle == 30.0);
     CHECK(back.herringbone);
     CHECK_THROWS(parse_gear("{\"format\":\"tisma-gear-1\",\"teeth\":2}"));
+    // Plain messages that name the key, never the JSON library's text.
+    CHECK_THROWS_WITH(parse_gear("{\"format\":\"tisma-gear-1\",\"teeth\":\"abc\"}"), "\"teeth\" must be a whole number");
+    CHECK_THROWS_WITH(parse_gear("{\"format\":\"tisma-gear-1\",\"module\":true}"), "\"module\" must be a number");
+    CHECK_THROWS_WITH(parse_gear("{\"format\":\"tisma-gear-1\",\"rack\":1}"), "\"rack\" must be true or false");
+    CHECK_THROWS_WITH(parse_gear("[]"), "not a gear");
+    CHECK_THROWS_WITH(parse_gear("{bad"), "not valid JSON");
+    CHECK(parse_gear("{\"format\":\"tisma-gear-1\",\"module\":2}").module == 2.0); // a whole number is a number
 
     TriangleMesh part = make_gear(g);
     part.translate(100.0f, 100.0f, 0.0f);

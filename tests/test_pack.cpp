@@ -376,6 +376,21 @@ TEST_CASE("pack: a resin printer's resin and resin print profile (rules 10, 12, 
     CHECK(values[1].kind == CommunityKind::Community);
 }
 
+TEST_CASE("pack plan on the command line: a broken install is planned whole, so it can be repaired", "[pack]") {
+    const fs::path data = fresh_dir("tisma_pack_broken_plan");
+    fs::create_directories(data / "pack");
+    std::ofstream(data / "pack/index.json") << "garbage";
+    std::string out, err;
+    REQUIRE(run({"pack", "plan", "--data", data.string(), "--index", (kPackData / "release1/index.json").string()}, out,
+                err) == 0);
+    CHECK_THAT(err, ContainsSubstring("cannot be read"));
+    CHECK_THAT(out, ContainsSubstring("acme.tar.xz"));
+    CHECK_THAT(out, ContainsSubstring("bolt.tar.xz"));
+    CHECK_THAT(out, ContainsSubstring("\"installed\": null"));
+    CHECK(run({"pack"}, out, err) == 1);
+    CHECK_THAT(err, ContainsSubstring("list or community"));
+}
+
 TEST_CASE("pack on the command line: a resin printer's settings (rule 13)", "[pack]") {
     const fs::path data = fresh_dir("tisma_pack_resin_cli");
     pack_install(data / "pack", staging_from("release1", "tisma_pack_stage_resin_cli"));

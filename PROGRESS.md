@@ -10810,3 +10810,25 @@ plano). **Sin probar:** contra una versión publicada de verdad.
   - corregido: la impresora `sla` del paquete quedaba como de filamento; ahora su perfil lleva
     `machine.technology = msla`.
   - Pruebas: `[pack]` (dos casos nuevos) y `ui_pack_published_resin`. Probado solo con el paquete inventado de prueba.
+
+## 2026-11-04 — mantenimiento (16:41 UTC)
+
+**Revisado:** `origin/main` ya estaba en `dev`; el merge de la app de Android (#55) no toca el motor y pasa
+`check_licenses.py`. Fuzz de G-code con semilla nueva (`tisma_fuzz_gcode 2000 202611041705`, 5 min 17 s): 0 fallas, 25
+rechazados por no imprimibles. Entradas raras en los comandos nuevos para el teléfono (`pack`, `profile --pack`,
+`part`, `calibration`, `orient`). Sin avisos del compilador en los archivos tocados estos días.
+
+**Encontrado y arreglado:**
+- `pack plan` con un `index.json` instalado roto terminaba con error, y el paquete no se podía reparar desde el plan.
+  Ahora avisa y planea todo el paquete otra vez (`pack install` ya se recuperaba). Prueba en `[pack]`.
+- El error de `tisma-engine pack` sin subcomando no nombraba `community`.
+- `part gear|fastener` con un valor de otro tipo mostraba el texto de la biblioteca JSON
+  (`[json.exception.type_error.302] …`) sin decir qué clave. Ahora dice, por ejemplo, `"teeth" must be a whole number`,
+  y `not valid JSON` o `not a gear` (`src/cad/spec_json.hpp`). Pruebas en `[gears]` y `[fasteners]`.
+- `pack community` con `../` en el nombre ya devolvía vacío: no hacía falta cambio.
+
+**Sin medir:** la esfera de 1 millón de triángulos no se midió: la máquina tenía carga 13 con 4 núcleos (CI con ASan y
+fuzz al lado). Queda para el próximo bloque.
+
+**CI de Linux:** `tools/ci_linux.sh` sobre `222fd59`: gcc 1041/1041; la etapa con ASan sigue corriendo.
+

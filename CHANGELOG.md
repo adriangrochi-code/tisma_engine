@@ -326,6 +326,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Corregido
 
 - Una impresora de resina del paquete (`"technology": "sla"`) quedaba como impresora de filamento.
+- `pack plan` con un paquete instalado roto ya no falla: planea todo el paquete otra vez para repararlo.
+- `part gear|fastener` dice qué clave del archivo tiene un valor del tipo equivocado.
 
 - Un filamento sin temperatura de cama aparecía como modificado («1 cambio») apenas se mostraba su panel.
 - La prueba de interfaz del análisis estructural esperaba el veredicto antes de que arrancara el cálculo en una máquina cargada (falla de la CI de Linux).

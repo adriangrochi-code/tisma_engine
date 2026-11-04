@@ -88,9 +88,16 @@ int pack_plan_cmd(std::span<const std::string_view> args, std::ostream& out, std
     if (!o.count("--data"))
         return usage(err, "pack plan needs --data");
     const fs::path pack = fs::path(o["--data"]) / "pack";
+    // A broken install is planned as none, so downloading the whole pack
+    // again repairs it.
     std::optional<PackIndex> installed;
-    if (fs::exists(pack / "index.json"))
-        installed = pack_installed(pack);
+    if (fs::exists(pack / "index.json")) {
+        try {
+            installed = pack_installed(pack);
+        } catch (const PackError& e) {
+            err << "warning: the installed pack cannot be read (" << e.what() << "): planning it whole\n";
+        }
+    }
     std::optional<PackIndex> index;
     if (o.count("--index")) {
         std::string text;
@@ -186,7 +193,7 @@ int pack_community_cmd(std::span<const std::string_view> args, std::ostream& out
 
 int cmd_pack(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
     if (args.empty())
-        return usage(err, "pack needs plan, install or list");
+        return usage(err, "pack needs plan, install, list or community");
     const std::string_view sub = args[0];
     try {
         if (sub == "plan")
