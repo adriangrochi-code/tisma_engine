@@ -27,4 +27,6 @@ tasks.named<JavaExec>("run") {
 
 dependencies {
     implementation(libs.kotlinx.serialization.json)
+    // The Bambu simulator speaks MQTT with the client's own packet helpers.
+    implementation(project(":printers"))
 }

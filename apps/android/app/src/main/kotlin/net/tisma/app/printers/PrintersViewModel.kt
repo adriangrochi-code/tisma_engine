@@ -34,7 +34,13 @@ data class PrintersState(
     val cameras: Map<String, CameraView> = emptyMap(),
     /** Printers found on the network and not saved yet. */
     val found: List<net.tisma.printers.FoundPrinter> = emptyList(),
+    /** A Bambu Lab printer waiting for the person to confirm its serial and certificate (BL3). */
+    val confirm: PendingCertificate? = null,
 )
+
+/** What the person confirms the first time a Bambu Lab printer is added. */
+data class PendingCertificate(val config: PrinterConfig, val secret: String?, val serial: String, val fingerprint: String,
+                              val text: String)
 
 /** What the camera box shows (printer_connections.md, «Cámara de la impresora», rule 1). */
 sealed interface CameraView {
@@ -61,6 +67,15 @@ class PrintersViewModel(
     private val connector: (PrinterConfig, String?) -> PrinterConnection = { c, s -> c.connect(s) },
     /** Called when a printer is seen printing: the app starts following it in the background. */
     private val onActivePrint: () -> Unit = {},
+    /** Reads a Bambu Lab printer's test text, serial and certificate fingerprint (replaceable in tests). */
+    private val probeBambu: (url: String, code: String) -> Triple<String, String, String> = { url, code ->
+        val b = net.tisma.printers.BambuConnection.of(url, code, null)
+        try {
+            Triple(b.test(), b.seenSerial.orEmpty(), b.seenFingerprint.orEmpty())
+        } finally {
+            b.close()
+        }
+    },
 ) : ViewModel() {
     private val _state = MutableStateFlow(PrintersState(printers = store.all()))
     val state: StateFlow<PrintersState> = _state.asStateFlow()
@@ -84,7 +99,23 @@ class PrintersViewModel(
 
     fun dismissNotice() = _state.update { it.copy(notice = null) }
 
-    private fun connection(c: PrinterConfig) = connector(c, store.secret(c.id))
+    // Connections are kept while the config is the same: Bambu Lab's MQTT stays open between reads.
+    private val open = mutableMapOf<String, Pair<PrinterConfig, PrinterConnection>>()
+
+    @Synchronized
+    private fun connection(c: PrinterConfig): PrinterConnection {
+        open[c.id]?.let { (cfg, conn) -> if (cfg == c) return conn else conn.close() }
+        return connector(c, store.secret(c.id)).also { open[c.id] = c to it }
+    }
+
+    @Synchronized
+    private fun forget(id: String) {
+        open.remove(id)?.second?.close()
+    }
+
+    override fun onCleared() {
+        synchronized(this) { open.values.forEach { it.second.close() }; open.clear() }
+    }
 
     /** Tests a printer before it is saved; [onOk] gets the saved printer. */
     fun testAndSave(id: String?, name: String, kind: PrinterKind, address: String, secret: String?, user: String = "",
@@ -92,15 +123,37 @@ class PrintersViewModel(
         val config = PrinterConfig(id ?: PrinterStore.newId(), name.trim().ifEmpty { address.trim() }, kind,
             PrinterConfig.normalizeUrl(address, kind), user.trim())
         val stored = secret ?: id?.let { store.secret(it) }
-        val text = withContext(io) { connector(config, stored).test() }
-        store.save(config, secret)
+        val kept = id?.let { i -> store.all().firstOrNull { it.id == i } }
+        if (kind == PrinterKind.BAMBU && (kept?.certSha256.isNullOrBlank() || kept?.url != config.url)) {
+            // First time (or a new address): read the serial and the certificate for the person to confirm.
+            val (text, serial, fingerprint) = withContext(io) { probeBambu(config.url, stored.orEmpty()) }
+            _state.update { it.copy(confirm = PendingCertificate(config, secret, serial, fingerprint, text)) }
+            return@launch
+        }
+        val toSave = if (kind == PrinterKind.BAMBU && kept != null) config.copy(serial = kept.serial, certSha256 = kept.certSha256) else config
+        val text = withContext(io) { connector(toSave, stored).let { c -> try { c.test() } finally { c.close() } } }
+        forget(toSave.id)
+        store.save(toSave, secret)
         AppLog.line("printer: ${kind.wire} saved ($text)")
         _state.update { it.copy(printers = store.all(), notice = PrinterNotice.Tested(text)) }
         refreshFound()
         onOk(config)
     }
 
+    /** The person confirmed the printer's serial and certificate: saved with them (rule 4). */
+    fun confirmCertificate(onOk: (PrinterConfig) -> Unit) {
+        val p = state.value.confirm ?: return
+        val saved = store.save(p.config.copy(serial = p.serial, certSha256 = p.fingerprint), p.secret)
+        AppLog.line("printer: bambu saved, certificate confirmed")
+        _state.update { it.copy(confirm = null, printers = store.all(), notice = PrinterNotice.Tested(p.text)) }
+        refreshFound()
+        onOk(saved)
+    }
+
+    fun rejectCertificate() = _state.update { it.copy(confirm = null) }
+
     fun remove(id: String) {
+        forget(id)
         store.remove(id)
         _state.update { s -> s.copy(printers = store.all(), status = s.status - id) }
     }

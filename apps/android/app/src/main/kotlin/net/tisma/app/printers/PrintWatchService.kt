@@ -64,12 +64,15 @@ class PrintWatchService : Service() {
         val app = application as TismaApplication
         val store = PrinterStore(app, app.secrets)
         val last = mutableMapOf<String, PrinterStatus>()
+        val open = mutableMapOf<String, Pair<net.tisma.printers.PrinterConfig, net.tisma.printers.PrinterConnection>>()
         var quiet = 0
         while (scope.isActive) {
             var anyActive = false
             for (p in store.all()) {
+                val conn = open[p.id]?.takeIf { it.first == p }?.second
+                    ?: p.connect(store.secret(p.id)).also { c -> open.put(p.id, p to c)?.second?.close() }
                 val now = try {
-                    p.connect(store.secret(p.id)).status()
+                    conn.status()
                 } catch (e: PrinterException) {
                     null
                 }
@@ -82,6 +85,7 @@ class PrintWatchService : Service() {
             if (quiet >= 2) break
             delay(POLL_MS)
         }
+        open.values.forEach { it.second.close() }
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

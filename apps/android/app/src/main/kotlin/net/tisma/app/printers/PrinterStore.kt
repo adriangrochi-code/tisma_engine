@@ -27,7 +27,8 @@ class PrinterStore(context: Context, private val secrets: SecretStore) {
         return array.filterIsInstance<JsonObject>().mapNotNull { o ->
             fun s(k: String) = (o[k] as? JsonPrimitive)?.contentOrNull
             val kind = PrinterKind.of(s("kind") ?: return@mapNotNull null) ?: return@mapNotNull null
-            PrinterConfig(s("id") ?: return@mapNotNull null, s("name").orEmpty(), kind, s("url").orEmpty(), s("user").orEmpty())
+            PrinterConfig(s("id") ?: return@mapNotNull null, s("name").orEmpty(), kind, s("url").orEmpty(), s("user").orEmpty(),
+                s("serial").orEmpty(), s("cert_sha256").orEmpty())
         }
     }
 
@@ -53,7 +54,9 @@ class PrinterStore(context: Context, private val secrets: SecretStore) {
     private fun write(list: List<PrinterConfig>) {
         val json = buildJsonArray {
             list.forEach { p ->
-                add(buildJsonObject { put("id", p.id); put("name", p.name); put("kind", p.kind.wire); put("url", p.url); if (p.user.isNotEmpty()) put("user", p.user) })
+                add(buildJsonObject { put("id", p.id); put("name", p.name); put("kind", p.kind.wire); put("url", p.url); if (p.user.isNotEmpty()) put("user", p.user)
+                    if (p.serial.isNotEmpty()) put("serial", p.serial)
+                    if (p.certSha256.isNotEmpty()) put("cert_sha256", p.certSha256) })
             }
         }
         prefs.edit().putString(LIST, json.toString()).apply()

@@ -168,6 +168,27 @@ class PrintersTest {
     }
 
     @Test
+    fun `BL1 a Bambu Lab printer is added after confirming its serial and certificate`() {
+        // The protocol itself is tested in the printers module (BambuTest); here, the screens and the saving.
+        val vm = PrintersViewModel(store, pollMs = 20, connector = { _, _ -> net.tisma.printers.BambuConnection.of("bambu://127.0.0.1:1", "", null) },
+            probeBambu = { _, _ -> Triple("Bambu Lab 01S00C1", "01S00C1", "AA:BB") })
+        var done = false
+        vm.testAndSave(null, "X1", net.tisma.printers.PrinterKind.BAMBU, "192.168.1.9", "12345678") { done = true }
+        waitState { vm.state.value.confirm != null }
+        assertEquals("01S00C1", vm.state.value.confirm!!.serial)
+        assertTrue(vm.state.value.printers.isEmpty())
+        vm.confirmCertificate { done = true }
+        waitState { done }
+        val p = vm.state.value.printers.single()
+        assertEquals("bambu://192.168.1.9", p.url)
+        assertEquals("01S00C1", p.serial)
+        assertEquals("AA:BB", p.certSha256)
+        assertEquals("12345678", store.secret(p.id))
+        // Saved data survives a new store.
+        assertEquals("AA:BB", PrinterStore(context, net.tisma.app.data.KeystoreSecretStore(context) { testKey }).all().single().certSha256)
+    }
+
+    @Test
     fun `CM1 the printer's camera shows on its page`() {
         addPrinter("moonraker", moonraker.url, null)
         val id = printers.state.value.printers.single().id

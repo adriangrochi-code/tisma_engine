@@ -15,6 +15,9 @@ fun main(args: Array<String>) {
     println("OctoPrint simulator: http://10.0.2.2:${port + 1} from an emulator, API key \"${octo.apiKey}\"")
     println("PrusaLink simulator: http://10.0.2.2:${port + 2}, user \"${prusa.user}\", password \"${prusa.password}\"")
     println("Duet simulator: http://10.0.2.2:${port + 3}, board password \"reprap\"")
+    // Bambu Lab listens on the loopback only in this simulator: from an emulator, use `adb reverse`.
+    val bambu = MockBambu().start()
+    println("Bambu Lab simulator: ${bambu.url}, access code \"${bambu.accessCode}\" (adb reverse tcp:${bambu.mqttPort} tcp:${bambu.mqttPort}; same for ${bambu.ftpPort})")
     println("Upload a G-code with «print» to start; each status read moves the print forward.")
     Thread.currentThread().join()
 }

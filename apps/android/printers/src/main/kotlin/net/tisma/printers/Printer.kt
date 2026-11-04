@@ -33,6 +33,9 @@ interface PrinterConnection {
     /** Whether the controls below work over this connection. */
     val hasControls: Boolean get() = true
 
+    /** Ends a connection that stays open (Bambu Lab's MQTT); nothing for HTTP ones. */
+    fun close() {}
+
     // ---- Controls (docs/MOBILE.md, «Controles»): temperatures any time; moving and extruding only when it is idle. ----
 
     /** Sets a heater's target in °C (0 turns it off). */
@@ -57,7 +60,8 @@ enum class PrinterKind(val wire: String, val defaultPort: Int) {
     MOONRAKER("moonraker", 7125),
     OCTOPRINT("octoprint", 80),
     PRUSALINK("prusalink", 80),
-    DUET("duet", 80);
+    DUET("duet", 80),
+    BAMBU("bambu", 8883);
 
     companion object {
         fun of(wire: String) = entries.firstOrNull { it.wire == wire }
@@ -99,6 +103,8 @@ class PrinterException(val kind: Kind, val detail: String, cause: Throwable? = n
         CONFLICT,
         /** This connection does not offer it (for example, PrusaLink has no moving by hand). */
         UNSUPPORTED,
+        /** The printer's certificate is not the saved one (Bambu Lab, BL3). */
+        CERTIFICATE,
         /** The answer is not what the API documents. */
         UNEXPECTED,
         /** Any other error of the printer's program. */
@@ -115,12 +121,17 @@ data class PrinterConfig(
     val url: String,
     /** The user name, for connections that ask for one (PrusaLink: «maker» by default). */
     val user: String = "",
+    /** Bambu Lab: the serial number (the certificate's name) and the confirmed certificate fingerprint. */
+    val serial: String = "",
+    val certSha256: String = "",
 ) {
     companion object {
         /** Adds `http://` when there is no scheme and the kind's port when there is none; drops trailing slashes. */
         fun normalizeUrl(address: String, kind: PrinterKind): String {
             var t = address.trim().trimEnd('/')
             if (t.isEmpty()) return t
+            // Bambu Lab is not HTTP: its address is the host (and, for tests, other ports).
+            if (kind == PrinterKind.BAMBU) return if (t.startsWith("bambu://")) t else "bambu://" + t.substringAfter("://")
             if (!t.startsWith("http://", true) && !t.startsWith("https://", true)) {
                 t = "http://$t"
                 val hostPart = t.removePrefix("http://").substringBefore('/')
@@ -141,4 +152,5 @@ fun PrinterConfig.connect(secret: String?, http: net.tisma.cloud.Http = net.tism
         PrinterKind.OCTOPRINT -> OctoPrintConnection(url, secret.orEmpty(), http)
         PrinterKind.PRUSALINK -> PrusaLinkConnection(url, user.ifBlank { "maker" }, secret.orEmpty(), http)
         PrinterKind.DUET -> DuetConnection(url, secret.orEmpty().ifEmpty { "reprap" }, http)
+        PrinterKind.BAMBU -> BambuConnection.of(url, secret.orEmpty(), certSha256.ifBlank { null })
     }

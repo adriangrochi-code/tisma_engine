@@ -288,4 +288,12 @@
     <string name="printer_password">Contraseña (la muestra la impresora)</string>
     <string name="printer_board_password">Contraseña de la placa (solo si tiene)</string>
     <string name="printer_error_unsupported">La conexión de esta impresora no lo permite.</string>
+
+    <string name="kind_bambu">Bambu Lab (modo LAN)</string>
+    <string name="printer_access_code">Código de acceso (en la pantalla de la impresora)</string>
+    <string name="printer_bambu_hint">En la impresora: prendé «solo LAN» y el modo desarrollador; el código de acceso está en ese menú. Dirección: la IP de la impresora.</string>
+    <string name="bambu_confirm_title">¿Es tu impresora?</string>
+    <string name="bambu_confirm_text">Número de serie %1$s\n\nCertificado %2$s\n\nSi lo es, Tisma recuerda este certificado y no se conecta si alguna vez cambia.</string>
+    <string name="bambu_confirm_yes">Sí, guardarla</string>
+    <string name="printer_error_certificate">El certificado de la impresora no es el guardado: no se conectó. Si cambiaste de impresora, quitala y agregala de nuevo.</string>
 </resources>

@@ -395,6 +395,7 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                     PrinterKind.MOONRAKER -> R.string.printer_key_optional
                     PrinterKind.PRUSALINK -> R.string.printer_password
                     PrinterKind.DUET -> R.string.printer_board_password
+                    PrinterKind.BAMBU -> R.string.printer_access_code
                 })) },
                 supportingText = if (existing != null) { { Text(stringResource(R.string.printer_key_keep)) } } else null,
                 visualTransformation = PasswordVisualTransformation(),
@@ -408,13 +409,28 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                         if (kind == PrinterKind.PRUSALINK) user else "") { nav.back() }
                     key = ""
                 },
-                enabled = !state.busy && address.isNotBlank() && (kind !in setOf(PrinterKind.OCTOPRINT, PrinterKind.PRUSALINK) || key.isNotBlank() || existing != null),
+                enabled = !state.busy && address.isNotBlank() && (kind !in setOf(PrinterKind.OCTOPRINT, PrinterKind.PRUSALINK, PrinterKind.BAMBU) || key.isNotBlank() || existing != null),
                 modifier = Modifier.fillMaxWidth().height(56.dp).testTag("printer_save"),
             ) { Text(stringResource(R.string.printer_test_save)) }
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (kind == PrinterKind.BAMBU) Text(stringResource(R.string.printer_bambu_hint), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(stringResource(R.string.printer_key_safe), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+    }
+    state.confirm?.let { c ->
+        AlertDialog(
+            onDismissRequest = { printers.rejectCertificate() },
+            title = { Text(stringResource(R.string.bambu_confirm_title)) },
+            text = { Text(stringResource(R.string.bambu_confirm_text, c.serial, c.fingerprint), modifier = Modifier.testTag("bambu_confirm_text")) },
+            confirmButton = {
+                AccentTextButton(onClick = { printers.confirmCertificate { nav.back() } }, modifier = Modifier.testTag("bambu_confirm")) {
+                    Text(stringResource(R.string.bambu_confirm_yes))
+                }
+            },
+            dismissButton = { AccentTextButton(onClick = { printers.rejectCertificate() }) { Text(stringResource(R.string.cancel)) } },
+        )
     }
 }
 
@@ -426,6 +442,7 @@ private fun kindName(k: PrinterKind) = stringResource(when (k) {
     PrinterKind.OCTOPRINT -> R.string.kind_octoprint
     PrinterKind.PRUSALINK -> R.string.kind_prusalink
     PrinterKind.DUET -> R.string.kind_duet
+    PrinterKind.BAMBU -> R.string.kind_bambu
 })
 
 private fun temp(t: Temperature): String =
@@ -449,6 +466,7 @@ fun Context.printerNoticeText(n: PrinterNotice): String = when (n) {
         PrinterException.Kind.UNEXPECTED -> getString(R.string.printer_error_unexpected)
         PrinterException.Kind.SERVER -> getString(R.string.printer_error_server, n.error.detail)
         PrinterException.Kind.UNSUPPORTED -> getString(R.string.printer_error_unsupported)
+        PrinterException.Kind.CERTIFICATE -> getString(R.string.printer_error_certificate)
     }
     is PrinterNotice.Tested -> getString(R.string.printer_tested, n.text)
     is PrinterNotice.Uploaded -> getString(if (n.started) R.string.printer_uploaded_started else R.string.printer_uploaded, n.name)

@@ -38,6 +38,14 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   impresoras reales. En Duet, cancelar es M25 y M0 (lista de G-code de la wiki de RepRap): a confirmar con una
   Duet real; sus errores de G-code llegan después (`rr_reply`) y la app todavía no los lee.
 
+- **2026-11-04 — Bambu Lab en modo LAN:** MQTT 3.1.1 propio sobre TLS (8883), el estado combinado de los informes,
+  pausar, seguir, parar, controles por `gcode_line`, subir por FTPS implícito propio (990) como `.gcode.3mf` con su
+  MD5 y empezar con `project_file`; la huella del certificado y el número de serie se confirman la primera vez y
+  después se exigen (BL1 a BL3 contra un simulador propio con TLS). Sin probar con una impresora real: la reanudación
+  de la sesión TLS en la conexión de datos del FTPS (el servidor de Bambu la exige), los valores de `gcode_state` que
+  no son los de la documentación y la unidad de `mc_remaining_time` (se toma en minutos). Sin la cámara de Bambu
+  todavía (puerto 6000 y RTSP).
+
 ## Abierto
 
 - **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS: necesita una biblioteca MQTT o una propia; decidir), PrusaLink,
