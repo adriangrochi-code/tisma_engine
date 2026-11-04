@@ -115,3 +115,31 @@ fun shortDate(iso: String): String = iso.replace('T', ' ').take(16)
 
 @Composable
 fun ctx(): Context = LocalContext.current
+
+/**
+ * A job's summary in words (QA AND4): known keys get a label and a unit, the
+ * time in seconds is left out when the text time is there, and unknown keys
+ * are shown as they come.
+ */
+fun Context.readableSummary(lines: List<Pair<String, String>>): List<Pair<String, String>> {
+    val keys = lines.map { it.first }.toSet()
+    fun num(v: String) = v.toDoubleOrNull()
+    fun fmt(pattern: String, v: Double) = String.format(Locale.getDefault(), pattern, v)
+    return lines.mapNotNull { (k, v) ->
+        when (k) {
+            "print_time" -> getString(R.string.plate_time) to v
+            "print_time_s" -> if ("print_time" in keys) null
+                else getString(R.string.plate_time) to (num(v)?.let { duration(it.toLong()) } ?: v)
+            "filament_mm" -> getString(R.string.plate_filament) to (num(v)?.let { fmt("%.2f m", it / 1000) } ?: v)
+            "filament_g" -> getString(R.string.summary_weight) to (num(v)?.let { fmt("%.1f g", it) } ?: v)
+            "layers" -> getString(R.string.plate_layers) to v
+            "verdict" -> getString(R.string.summary_verdict) to v
+            "min_safety" -> getString(R.string.summary_min_safety) to (num(v)?.let { fmt("%.2f", it) } ?: v)
+            "max_displacement_mm" -> getString(R.string.summary_displacement) to (num(v)?.let { fmt("%.3f mm", it) } ?: v)
+            "mass_g" -> getString(R.string.summary_mass) to (num(v)?.let { fmt("%.1f g", it) } ?: v)
+            "drag_n" -> getString(R.string.summary_drag) to (num(v)?.let { fmt("%.4f N", it) } ?: v)
+            "cd" -> getString(R.string.summary_cd) to (num(v)?.let { fmt("%.3f", it) } ?: v)
+            else -> k to v
+        }
+    }
+}

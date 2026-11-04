@@ -278,4 +278,12 @@
     <string name="profile_nozzle">Nozzle</string>
     <string name="profile_filament">Filament</string>
     <string name="profile_not_used">The engine could not make this printer\'s profile: it was sliced with its defaults.</string>
+
+    <string name="summary_weight">Filament weight</string>
+    <string name="summary_verdict">Verdict</string>
+    <string name="summary_min_safety">Lowest safety factor</string>
+    <string name="summary_displacement">Largest displacement</string>
+    <string name="summary_mass">Mass</string>
+    <string name="summary_drag">Drag</string>
+    <string name="summary_cd">Drag coefficient</string>
 </resources>

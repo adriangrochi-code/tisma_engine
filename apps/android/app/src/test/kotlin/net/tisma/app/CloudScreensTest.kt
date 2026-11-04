@@ -107,6 +107,11 @@ class CloudScreensTest {
         repeat(3) { client.job(job.id) }
         compose.runOnIdle { nav.select(Section.MORE); nav.open(Screen.JobDetail(job.id)) }
         waitFor("preview_result")
+        // AND4: the summary in words, without the duplicate time.
+        waitForText("Print time")
+        waitForText("3.22 m")
+        compose.onAllNodes(hasText("print_time_s", substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+            .let { assert(it.isEmpty()) }
         compose.onNodeWithTag("preview_result").performScrollTo().performClick()
         waitFor("preview_layer")
         waitForText("Layer 3 of 3")

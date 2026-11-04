@@ -263,4 +263,12 @@
     <string name="profile_nozzle">Boquilla</string>
     <string name="profile_filament">Filamento</string>
     <string name="profile_not_used">El motor no pudo armar el perfil de esta impresora: se laminó con sus valores por defecto.</string>
+
+    <string name="summary_weight">Peso del filamento</string>
+    <string name="summary_verdict">Veredicto</string>
+    <string name="summary_min_safety">Factor de seguridad mínimo</string>
+    <string name="summary_displacement">Desplazamiento máximo</string>
+    <string name="summary_mass">Masa</string>
+    <string name="summary_drag">Arrastre</string>
+    <string name="summary_cd">Coeficiente de arrastre</string>
 </resources>

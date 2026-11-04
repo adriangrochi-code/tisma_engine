@@ -173,7 +173,7 @@ fun JobDetailScreen(id: String, state: CloudState, cloud: CloudViewModel, nav: N
         if (job.status == JobStatus.DONE && lines.isNotEmpty()) {
             TismaCard(Modifier.testTag("summary")) {
                 Text(stringResource(R.string.job_summary), style = MaterialTheme.typography.titleMedium)
-                lines.forEach { (k, v) ->
+                context.readableSummary(lines).forEach { (k, v) ->
                     Row {
                         Text(k, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(v)
