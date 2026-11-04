@@ -380,4 +380,15 @@
     <string name="pack_builtin">Impresoras incluidas</string>
     <string name="pack_use">Usar esta impresora</string>
     <string name="pack_open">Impresoras del paquete de perfiles</string>
+    <string name="updates_check">Buscar actualizaciones</string>
+    <string name="updates_available">Versión %1$s disponible</string>
+    <string name="updates_downloading">Bajando la versión %1$s · %2$d %%</string>
+    <string name="updates_ready">Versión %1$s lista</string>
+    <string name="updates_damaged">La descarga llegó dañada; se va a intentar de nuevo.</string>
+    <string name="updates_up_to_date">Tisma está al día.</string>
+    <string name="updates_notes">Ver novedades</string>
+    <string name="updates_install">Instalar</string>
+    <string name="updates_download">Bajar</string>
+    <string name="pref_updates">Buscar versiones nuevas</string>
+    <string name="pref_updates_beta">También las versiones de prueba (beta)</string>
 </resources>

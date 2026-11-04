@@ -36,6 +36,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val updates: net.tisma.app.updates.UpdatesViewModel by viewModels {
+        val app = application as TismaApplication
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                val key = net.tisma.app.updates.AppUpdater.hexKey(BuildConfig.UPDATES_KEY)
+                // From a store, the store updates the app (app_updates.md, rule 11).
+                val updater = if (key == null || fromStore()) null else net.tisma.app.updates.AppUpdater(
+                    net.tisma.cloud.UrlConnectionHttp, key,
+                    listOf(net.tisma.app.updates.AppUpdater.GITHUB_LIST, net.tisma.app.updates.AppUpdater.cloudList(app.settings.server)),
+                    java.io.File(app.cacheDir, "updates"))
+                return net.tisma.app.updates.UpdatesViewModel(updater, app.settings, BuildConfig.VERSION_NAME,
+                    android.os.Build.VERSION.SDK_INT) as T
+            }
+        }
+    }
+
+    private fun fromStore(): Boolean {
+        val installer = runCatching {
+            if (android.os.Build.VERSION.SDK_INT >= 30) packageManager.getInstallSourceInfo(packageName).installingPackageName
+            else @Suppress("DEPRECATION") packageManager.getInstallerPackageName(packageName)
+        }.getOrNull()
+        return installer != null && installer != "com.google.android.packageinstaller" && installer != "com.android.packageinstaller"
+            && installer != "com.android.shell"
+    }
+
     private val slice: SliceViewModel by viewModels {
         val app = application as TismaApplication
         object : ViewModelProvider.Factory {
@@ -96,7 +122,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             TismaTheme {
-                TismaApp(cloud, printers, slice, app.settings, nav)
+                TismaApp(cloud, printers, slice, app.settings, nav, updates)
             }
         }
     }

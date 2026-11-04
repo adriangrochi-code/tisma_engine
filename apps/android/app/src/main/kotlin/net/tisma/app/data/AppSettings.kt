@@ -75,6 +75,20 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("pack.wizard_done", false)
         set(v) = prefs.edit().putBoolean("pack.wizard_done", v).apply()
 
+    /** app_updates.md, «Ajustes»: look for new versions on opening (once a day), the channel, download at once. */
+    var updatesCheck: Boolean
+        get() = prefs.getBoolean("updates.check", true)
+        set(v) = prefs.edit().putBoolean("updates.check", v).apply()
+    var updatesChannel: String
+        get() = prefs.getString("updates.channel", null) ?: "stable"
+        set(v) = prefs.edit().putString("updates.channel", v).apply()
+    var updatesAutoDownload: Boolean
+        get() = prefs.getBoolean("updates.auto_download", true)
+        set(v) = prefs.edit().putBoolean("updates.auto_download", v).apply()
+    var updatesLastCheck: Long
+        get() = prefs.getLong("updates.last_check", 0)
+        set(v) = prefs.edit().putLong("updates.last_check", v).apply()
+
     companion object {
         private const val SEARCH_NETWORK = "printers.search_network"
         const val FILE = "tisma_settings"

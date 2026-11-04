@@ -189,6 +189,21 @@ fun PreferencesScreen(state: CloudState, cloud: CloudViewModel, settings: AppSet
                     modifier = Modifier.testTag("pref_search").named(stringResource(R.string.pref_search_network)))
             }
         }
+        // app_updates.md, «Ajustes»: updates.check and updates.channel.
+        var check by rememberSaveable { mutableStateOf(settings.updatesCheck) }
+        var beta by rememberSaveable { mutableStateOf(settings.updatesChannel == "beta") }
+        TismaCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.pref_updates), modifier = Modifier.weight(1f))
+                Switch(check, { check = it; settings.updatesCheck = it },
+                    modifier = Modifier.testTag("pref_updates").named(stringResource(R.string.pref_updates)))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.pref_updates_beta), modifier = Modifier.weight(1f))
+                Switch(beta, { beta = it; settings.updatesChannel = if (it) "beta" else "stable" },
+                    modifier = Modifier.testTag("pref_updates_beta").named(stringResource(R.string.pref_updates_beta)))
+            }
+        }
         // Accessibility (accessibility_touch.md, rule 2): the preview's colors for color blindness.
         var vision by rememberSaveable { mutableStateOf(settings.colorVision) }
         TismaCard {

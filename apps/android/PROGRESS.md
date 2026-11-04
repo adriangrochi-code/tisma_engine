@@ -56,9 +56,20 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 - **2026-11-04 — Tabletas y horizontal:** con 720 dp o más de ancho, la Placa muestra la vista 3D a la izquierda y los
   controles a la derecha, e Impresión, Material e Impresora muestran la lista de secciones a la izquierda y la sección
   elegida a la derecha. Probado con Robolectric a 900 × 600 dp; no en una tableta.
-- **Actualizaciones de la app (`app_updates.md`, regla 11):** en espera. Ninguna ficha da el formato de la lista de
-  versiones (dónde está, campos, firma). Se le preguntó a la sesión de fichas, para que la app y el escritorio lean lo
-  mismo.
+- **2026-11-04 — Actualizaciones de la app (`app_updates.md`, reglas 1 a 6, 11 y 13, en `spec/next` ec3ee8a):**
+  - Al abrir, como mucho una vez por día, y con Más › «Buscar actualizaciones», la app lee `updates.json` y su `.sig`:
+    primero de la release `updates` de GitHub y, si no responde, de `GET /v1/updates` de Tisma Cloud.
+  - Sin una firma válida descarta la lista. Elige la primera versión de su canal cuyo `min_system` (nivel de API)
+    cumple el teléfono. La baja en segundo plano y sigue desde donde se cortó (`Range`). La comprueba por tamaño,
+    SHA-256 y su firma Ed25519. Después la ofrece en una línea arriba, «Versión X lista · Ver novedades · Instalar».
+  - Nunca la instala mientras lamina, analiza o manda un archivo. Instalar abre el instalador de Android
+    (FileProvider; permiso `REQUEST_INSTALL_PACKAGES`).
+  - Si la app vino de una tienda, el actualizador queda apagado.
+  - Ed25519 propio (RFC 8032, §5.1), porque Android no lo trae antes de API 33. Probado con firmas hechas por otra
+    implementación (el paquete `cryptography` de Python, solo para generar datos de prueba).
+  - Pruebas: AU2, AU4, AU9 a AU12 y la parte del teléfono de AU1.
+  - **Falta la clave pública del proyecto (decisión del dueño):** se pasa con `-Ptisma.updatesKey=<64 hex>`. Sin ella,
+    el actualizador queda apagado.
 
 - **2026-11-04 — AND5 y AND6 (QA):**
   - AND5: un G-code, de texto o binario, abierto desde la placa o compartido, va a la vista previa y no a la placa

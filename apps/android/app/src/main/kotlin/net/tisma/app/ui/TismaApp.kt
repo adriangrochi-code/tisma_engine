@@ -130,6 +130,7 @@ fun TismaApp(
     slice: SliceViewModel,
     settings: AppSettings,
     nav: Navigator = remember { Navigator() },
+    updates: net.tisma.app.updates.UpdatesViewModel? = null,
 ) {
     val state by cloud.state.collectAsStateWithLifecycle()
     val printerState by printers.state.collectAsStateWithLifecycle()
@@ -137,6 +138,7 @@ fun TismaApp(
     val snackbar = remember { SnackbarHostState() }
     val context = ctx()
     LaunchedEffect(Unit) { cloud.refreshPublic() }
+    LaunchedEffect(Unit) { updates?.checkOnOpen() }
     // MA1: the first start with an engine and no printer opens the profile pack's wizard, once.
     LaunchedEffect(sliceState.packAvailable) {
         if (sliceState.packAvailable && !settings.packWizardDone && sliceState.profile == null && nav.stack.isEmpty()) {
@@ -242,7 +244,12 @@ fun TismaApp(
             snackbarHost = { SnackbarHost(snackbar) },
             containerColor = MaterialTheme.colorScheme.background,
         ) { padding ->
-            Box(Modifier.padding(padding).fillMaxSize()) {
+            Column(Modifier.padding(padding).fillMaxSize()) {
+            updates?.let { u ->
+                val us by u.state.collectAsStateWithLifecycle()
+                UpdateBanner(us, u, busy = sliceState.slicing || sliceState.analyzing || printerState.uploading)
+            }
+            Box(Modifier.weight(1f).fillMaxSize()) {
                 when (top) {
                     null -> when (nav.section) {
                         Section.PRINTER -> PrintersScreen(printerState, printers, nav, settings.searchNetwork) {
@@ -251,7 +258,10 @@ fun TismaApp(
                         Section.PLATE -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav)
                         Section.PRINT -> SettingsTabScreen("print", sliceState, slice, nav)
                         Section.MATERIAL -> SettingsTabScreen("material", sliceState, slice, nav)
-                        else -> SectionHome(nav.section, state.signedIn, state.email, nav)
+                        else -> SectionHome(nav.section, state.signedIn, state.email, nav, updates?.let { u -> {
+                            // Rule 1: «Buscar actualizaciones» in More.
+                            MoreItem(R.string.updates_check, null, "more_updates") { u.check() }
+                        } })
                     }
                     Screen.Account -> AccountScreen(state, cloud, nav)
                     Screen.Register -> RegisterScreen(state, cloud, nav)
@@ -275,6 +285,7 @@ fun TismaApp(
                         settings.setPrinterNotes(sliceState.profile?.printer, it)
                     }
                 }
+            }
             }
         }
     }
@@ -305,7 +316,7 @@ private fun titleOf(s: Screen): Int = when (s) {
 }
 
 @Composable
-private fun SectionHome(section: Section, signedIn: Boolean, email: String?, nav: Navigator) {
+private fun SectionHome(section: Section, signedIn: Boolean, email: String?, nav: Navigator, updateItem: (@Composable () -> Unit)? = null) {
     when (section) {
         Section.PLATE -> Placeholder(R.string.plate_coming) {
             Button(onClick = { nav.open(if (signedIn) Screen.NewJob else Screen.Account) },
@@ -315,7 +326,7 @@ private fun SectionHome(section: Section, signedIn: Boolean, email: String?, nav
         }
         Section.PRINT, Section.MATERIAL -> Unit
         Section.PRINTER -> Placeholder(R.string.printer_coming)
-        Section.MORE -> MoreHome(signedIn, email, nav)
+        Section.MORE -> MoreHome(signedIn, email, nav, updateItem)
     }
 }
 
@@ -336,7 +347,7 @@ private fun Placeholder(@StringRes text: Int, action: (@Composable () -> Unit)? 
 }
 
 @Composable
-private fun MoreHome(signedIn: Boolean, email: String?, nav: Navigator) {
+private fun MoreHome(signedIn: Boolean, email: String?, nav: Navigator, updateItem: (@Composable () -> Unit)? = null) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         MoreItem(R.string.more_cloud, if (signedIn) stringResource(R.string.more_signed_in_as, email.orEmpty())
@@ -346,6 +357,7 @@ private fun MoreHome(signedIn: Boolean, email: String?, nav: Navigator) {
         if (signedIn) MoreItem(R.string.more_my_reports, null, "more_my_reports") { nav.open(Screen.MyReports) }
         MoreItem(R.string.more_preferences, null, "more_preferences") { nav.open(Screen.Preferences) }
         MoreItem(R.string.more_messages, null, "more_messages") { nav.open(Screen.Messages) }
+        updateItem?.invoke()
         MoreItem(R.string.more_credits, null, "more_credits") { nav.open(Screen.Credits) }
     }
 }
@@ -370,4 +382,54 @@ private fun MessagesScreen(notices: List<String>) {
         if (notices.isEmpty()) Text(stringResource(R.string.messages_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
         notices.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
     }
+}
+
+/**
+ * The update notice (app_updates.md, rule 3): a small line at the top that
+ * covers nothing, «Version 1.0.1 ready · See what's new», the download's
+ * progress (rule 4), and «Install», never while slicing, analyzing or sending
+ * a file (rule 6). Android's installer asks the person (rule 11).
+ */
+@Composable
+private fun UpdateBanner(s: net.tisma.app.updates.UpdatesState, u: net.tisma.app.updates.UpdatesViewModel, busy: Boolean) {
+    val context = ctx()
+    var notes by remember { mutableStateOf(false) }
+    val offer = s.offer
+    val text = when {
+        s.damaged -> stringResource(R.string.updates_damaged)
+        offer != null && s.ready != null -> stringResource(R.string.updates_ready, offer.release.version)
+        offer != null && s.downloading -> stringResource(R.string.updates_downloading, offer.release.version, s.progress)
+        offer != null -> stringResource(R.string.updates_available, offer.release.version)
+        s.upToDate -> stringResource(R.string.updates_up_to_date)
+        else -> null
+    } ?: return
+    androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.fillMaxWidth().testTag("update_banner")) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+            if (offer != null) {
+                androidx.compose.material3.TextButton(onClick = { notes = true }) { Text(stringResource(R.string.updates_notes)) }
+                when {
+                    s.ready != null -> androidx.compose.material3.TextButton(onClick = { installApk(context, s.ready) }, enabled = !busy,
+                        modifier = Modifier.testTag("update_install")) { Text(stringResource(R.string.updates_install)) }
+                    !s.downloading -> androidx.compose.material3.TextButton(onClick = { u.download() },
+                        modifier = Modifier.testTag("update_download")) { Text(stringResource(R.string.updates_download)) }
+                }
+            }
+        }
+    }
+    if (notes && offer != null) {
+        androidx.compose.material3.AlertDialog(onDismissRequest = { notes = false },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { notes = false }) { Text(stringResource(android.R.string.ok)) } },
+            title = { Text(stringResource(R.string.updates_available, offer.release.version)) },
+            text = { Text(net.tisma.app.updates.Updates.notes(offer.release, if (context.isSpanish()) "es" else "en")) })
+    }
+}
+
+/** Hands the checked APK to Android's installer, which asks the person (rule 11). */
+private fun installApk(context: android.content.Context, apk: java.io.File) {
+    val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".updates", apk)
+    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW)
+        .setDataAndType(uri, "application/vnd.android.package-archive")
+        .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { context.startActivity(intent) }
 }
