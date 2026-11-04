@@ -628,13 +628,17 @@ class SliceViewModel(
         viewModelScope.launch {
             val r = withContext(io) {
                 runCatching {
-                    p.update(listOf(vendor.id), packUrl, { pr -> _state.update { it.copy(packProgress = pr) } }) { false }
+                    // The filament libraries come with every printer, so the generic filaments are there too.
+                    val libraries = (_state.value.packIndex ?: p.index())?.libraries.orEmpty()
+                    p.update(listOf(vendor.id) + libraries, packUrl, { pr -> _state.update { it.copy(packProgress = pr) } }) { false }
                 }
             }
             r.onFailure { AppLog.line("pack: install ${it.message}") }
             _state.update { it.copy(packBusy = false, packError = r.exceptionOrNull()?.let { e -> e.message ?: "error" }) }
             if (r.isSuccess) {
-                setProfile(EngineRunner.ProfileChoice(model.file + "#" + variant.id, variant.nozzle, null, pack = true, name = model.name))
+                val printer = model.file + "#" + variant.id
+                val filament = withContext(io) { runCatching { p.defaultFilament(printer) }.getOrNull() }
+                setProfile(EngineRunner.ProfileChoice(printer, variant.nozzle, filament, pack = true, name = model.name))
                 done()
             }
         }

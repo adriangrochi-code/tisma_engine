@@ -37,7 +37,9 @@ class ProfilePack(
     class PackException(message: String) : Exception(message)
 
     /** The pack's printers as its index lists them, before any vendor is downloaded (profile_pack.md, rule 2). */
-    data class Index(val version: String, val vendors: List<Vendor>)
+    data class Index(val version: String, val vendors: List<Vendor>,
+                     /** Vendors with filaments and no printers (filament libraries), installed with every printer. */
+                     val libraries: List<String> = emptyList())
     data class Vendor(val id: String, val name: String, val models: List<Model>)
     data class Model(val name: String, val file: String, val variants: List<Variant>, val defaultVariant: String,
                      /** The bed's 3D model (STL) and picture (SVG or PNG), paths in the pack (rule 14). */
@@ -109,6 +111,21 @@ class ProfilePack(
         return out.sortedBy { if (it.vendor == printerVendor && !it.generic) 0 else if (it.generic) 1 else 2 }
     }
 
+    /**
+     * Rule 13: the first filament of the variant's `defaults.filament` in the
+     * installed model file, when it is installed, or null.
+     */
+    fun defaultFilament(printer: String): String? {
+        val file = printer.substringBefore('#')
+        val variant = printer.substringAfter('#', "")
+        val o = runCatching { Json.parseToJsonElement(File(File(dataDir, "pack"), file).readText()) as JsonObject }.getOrNull() ?: return null
+        val v = (o["variants"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+            .firstOrNull { (it["id"] as? JsonPrimitive)?.contentOrNull == variant } ?: return null
+        val path = ((v["defaults"] as? JsonObject)?.get("filament") as? JsonArray)?.firstOrNull()
+            ?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return null
+        return path.takeIf { File(File(dataDir, "pack"), it).isFile }
+    }
+
     private fun readIndex(f: File): Index? {
         if (!f.isFile) return null
         val o = runCatching { Json.parseToJsonElement(f.readText()) as JsonObject }.getOrNull() ?: return null
@@ -124,7 +141,10 @@ class ProfilePack(
                     (m["assets"] as? JsonObject)?.s("bed_texture").orEmpty())
             })
         }.filter { it.models.isNotEmpty() }
-        return Index(o.s("pack_version"), vendors)
+        val libraries = o.a("vendors").filter { v ->
+            v.a("models").isEmpty() && ((v["filaments"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0) > 0
+        }.map { it.s("id") }
+        return Index(o.s("pack_version"), vendors, libraries)
     }
 
     /** Updates the pack: [vendors] empty means the installed ones, or all on the first start (MA1). Returns its version. */

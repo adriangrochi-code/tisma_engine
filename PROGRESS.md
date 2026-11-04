@@ -10850,3 +10850,18 @@ vuelta de perfilado.
 - PK1/PK2 en el primer arranque (asistente con el paquete) y la regla 15 (licencia y origen en el panel del perfil,
   no solo en el catálogo): revisar contra la ficha.
 
+
+## 2026-11-04 — Android: impresora y filamento en el asistente; el APK de CI trae SolidCraft
+
+Pedido del dueño: «tenés que elegir impresora y filamento primero», y que los filamentos salgan del paquete de perfiles.
+- El asistente del primer arranque, después de «Usar esta impresora», pasa al paso de filamento: los del paquete para
+  esa impresora (regla 12: su conjunto de `compatible.json`, los del fabricante primero, después los genéricos), con
+  el fabricante debajo de cada nombre. Antes volvía a la placa y el filamento solo se cambiaba tocando la tarjeta.
+- Regla 13: al instalar, el filamento queda en el primero de `defaults.filament` de la variante.
+- Decisión propia: los fabricantes del índice sin impresoras y con filamentos (bibliotecas de filamentos, hoy
+  `Orca_OrcaFilamentLibrary`, 36 KB) se bajan junto con la impresora elegida, para que estén los genéricos. El motor los
+  planea bien (`pack plan --vendors Anycubic,Orca_OrcaFilamentLibrary`, probado con el índice real).
+- CI de Android (`.github/workflows/android.yml`): baja los artefactos de la última corrida buena de «SolidCraft for
+  Android» y arma el APK con `-Ptisma.solidcraft`; sin artefactos, arma sin SolidCraft y lo avisa.
+- Pruebas: `PackWizardTest` (MA1 con el paso de filamento, el filamento de fábrica y la biblioteca), `ProfilePackTest`.
+  No probado en un teléfono.

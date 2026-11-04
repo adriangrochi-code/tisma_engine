@@ -127,7 +127,8 @@ fun ProfilePickerScreen(state: SliceState, slice: SliceViewModel, nav: Navigator
  * profile_pack.md, rules 1 to 3 and 11; MA1): the index's printers by vendor,
  * searched by name; a model, then its nozzle (the default variant first);
  * «Use this printer» downloads that vendor, installs it and puts it on the
- * printer card. Without network: the built-in catalog.
+ * printer card, with its default filament; then the filament step (the
+ * pack's filaments for that printer). Without network: the built-in catalog.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -186,7 +187,7 @@ fun PackWizardScreen(state: SliceState, slice: SliceViewModel, nav: Navigator, o
             }
             AccentTextButton(onClick = { chosenFile = null }) { Text(stringResource(R.string.profile_change_printer)) }
             val variant = model.variants.firstOrNull { it.id == variantId }
-            Button(onClick = { if (variant != null) slice.choosePackPrinter(vendor, model, variant) { onDone(); nav.back() } },
+            Button(onClick = { if (variant != null) slice.choosePackPrinter(vendor, model, variant) { onDone(); nav.replace(Screen.ProfilePicker) } },
                 enabled = variant != null && !state.packBusy, modifier = Modifier.fillMaxWidth().testTag("pack_use")) {
                 Text(stringResource(R.string.pack_use))
             }
@@ -212,8 +213,20 @@ private fun PackFilamentPicker(state: SliceState, slice: SliceViewModel, nav: Na
                     label = { Text(stringResource(R.string.pack_default_filament)) }, modifier = Modifier.testTag("pack_filament_default"))
             }
             items(state.packFilaments, key = { it.path }) { f ->
-                FilterChip(selected = choice.filament == f.path, onClick = { slice.setProfile(choice.copy(filament = f.path)); nav.back() },
-                    label = { Text(f.name) }, modifier = Modifier.testTag("pack_filament_" + f.name))
+                Card(onClick = { slice.setProfile(choice.copy(filament = f.path)); nav.back() },
+                    modifier = Modifier.fillMaxWidth().testTag("pack_filament_" + f.name),
+                    colors = if (choice.filament == f.path) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                        else CardDefaults.cardColors()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(f.name, style = MaterialTheme.typography.bodyLarge)
+                        Text(f.vendor.replace('_', ' '), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            if (state.packFilaments.isEmpty()) item {
+                Text(stringResource(R.string.pack_no_filaments), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("pack_no_filaments"))
             }
         }
     }

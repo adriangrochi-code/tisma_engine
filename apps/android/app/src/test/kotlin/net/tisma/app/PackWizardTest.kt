@@ -42,17 +42,23 @@ class PackWizardTest {
     private val index = """{"pack_version":"2026.11.04","vendors":[{"id":"Acme","name":"Acme 3D","models":[
         {"name":"Acme One","file":"vendors/Acme/models/One.json","technology":"fff",
          "variants":[{"id":"0.4","nozzle":0.4},{"id":"0.6","nozzle":0.6}],"default_variant":"0.4"},
-        {"name":"Acme Resin","file":"vendors/Acme/models/R.json","technology":"sla","variants":[{"id":"r","nozzle":0}]}]}]}"""
+        {"name":"Acme Resin","file":"vendors/Acme/models/R.json","technology":"sla","variants":[{"id":"r","nozzle":0}]}]},
+        {"id":"Lib","name":"Filament library","models":[],"filaments":2}]}"""
 
     private fun engine(base: String): File = tmp.newFile("engine.sh").apply {
         writeText("""#!/bin/sh
-            |cmd="${'$'}2"; data=""; from=""; index=""
-            |while [ ${'$'}# -gt 0 ]; do case "${'$'}1" in --data) data="${'$'}2"; shift;; --from) from="${'$'}2"; shift;; --index) index="${'$'}2"; shift;; esac; shift; done
+            |cmd="${'$'}2"; data=""; from=""; index=""; vendors=""
+            |while [ ${'$'}# -gt 0 ]; do case "${'$'}1" in --data) data="${'$'}2"; shift;; --from) from="${'$'}2"; shift;; --index) index="${'$'}2"; shift;; --vendors) vendors="${'$'}2"; shift;; esac; shift; done
             |if [ "${'$'}cmd" = "plan" ]; then
             |  if [ -z "${'$'}index" ]; then echo '{"downloads":[{"url":"$base/index.json","name":"index.json","size":0,"sha256":""}]}'
-            |  else echo '{"downloads":[{"url":"$base/Acme.tar.xz","name":"Acme.tar.xz","size":4,"sha256":"x"}],"published":"2026.11.04"}'; fi
+            |  else echo "${'$'}vendors" > "${'$'}data/installed_vendors"; echo '{"downloads":[{"url":"$base/Acme.tar.xz","name":"Acme.tar.xz","size":4,"sha256":"x"}],"published":"2026.11.04"}'; fi
             |elif [ "${'$'}cmd" = "install" ]; then
-            |  mkdir -p "${'$'}data/pack"; cp -r "${'$'}from"/. "${'$'}data/pack"/; echo '{"pack_version":"2026.11.04"}'
+            |  mkdir -p "${'$'}data/pack"; cp -r "${'$'}from"/. "${'$'}data/pack"/
+            |  p="${'$'}data/pack/vendors"; mkdir -p "${'$'}p/Acme/models" "${'$'}p/Acme/filaments" "${'$'}p/Lib/filaments"
+            |  echo '{"variants":[{"id":"0.6","defaults":{"filament":["vendors/Acme/filaments/Acme_PLA.json"]}}]}' > "${'$'}p/Acme/models/One.json"
+            |  echo '{"compatible":null}' > "${'$'}p/Acme/filaments/Acme_PLA.json"
+            |  echo '{"generic":"true"}' > "${'$'}p/Lib/filaments/Generic_PETG.json"
+            |  echo '{"pack_version":"2026.11.04"}'
             |elif [ "${'$'}cmd" = "list" ]; then echo '{"vendors":[]}'
             |else exit 1; fi
             |""".trimMargin())
@@ -88,6 +94,18 @@ class PackWizardTest {
             compose.waitUntil(10_000) {
                 org.robolectric.shadows.ShadowLooper.idleMainLooper()
                 slice.state.value.profile != null && nav.stack.none { it is Screen.PackWizard }
+            }
+            // Rule 13: the variant's default filament; the filament library comes with the printer.
+            assertEquals("vendors/Acme/filaments/Acme_PLA.json", slice.state.value.profile!!.filament)
+            assertEquals("Acme,Lib", File(data, "installed_vendors").readText().trim())
+            // Then the filament step, with the pack's filaments for that printer.
+            wait("pack_filaments")
+            wait("pack_filament_Generic PETG")
+            compose.onNodeWithTag("pack_filament_Acme PLA").assertExists()
+            compose.onNodeWithTag("pack_filament_Generic PETG").performClick()
+            compose.waitUntil(10_000) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                slice.state.value.profile?.filament == "vendors/Lib/filaments/Generic_PETG.json"
             }
             val p = slice.state.value.profile!!
             assertEquals("vendors/Acme/models/One.json#0.6", p.printer)

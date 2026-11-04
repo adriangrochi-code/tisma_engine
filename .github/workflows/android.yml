@@ -1,7 +1,9 @@
 name: Android
 
 # The Android app (apps/android/, Gradle): its tests and a debug APK with the
-# engine inside (tisma-engine built with the NDK for arm64-v8a and x86_64).
+# engine inside (tisma-engine built with the NDK for arm64-v8a and x86_64)
+# and, when the workflow «SolidCraft for Android» has a successful run whose
+# artifacts are still kept, its solidcraft-cli for the Design tab.
 # It is kept apart from the desktop CI: it runs only when the app, the
 # engine's sources or this file change, or when started by hand.
 on:
@@ -17,6 +19,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: android-${{ github.ref }}
@@ -41,8 +44,27 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" > /dev/null
       - name: Check the brand icons are up to date
         run: python3 tools/brand_icons.py --check
+      - name: Get SolidCraft from its own workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow solidcraft-android.yml --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId' || true)
+          dir="$RUNNER_TEMP/solidcraft"
+          if [ -n "$run" ]; then
+            for abi in arm64-v8a x86_64; do
+              gh run download "$run" -R "$GITHUB_REPOSITORY" -n "solidcraft-android-$abi" -D "$RUNNER_TEMP/sc-$abi" || true
+              mkdir -p "$dir" && cp -rn "$RUNNER_TEMP/sc-$abi"/. "$dir"/ 2>/dev/null || true
+            done
+          fi
+          if [ -f "$dir/arm64-v8a/solidcraft-cli" ] && [ -f "$dir/x86_64/solidcraft-cli" ]; then
+            chmod +x "$dir"/*/solidcraft-cli
+            echo "SolidCraft from run $run"; echo "SOLIDCRAFT=-Ptisma.solidcraft=$dir" >> "$GITHUB_ENV"
+          else
+            echo "::notice::No SolidCraft artifacts: the APK is built without the Design tab's CAD"
+          fi
       - name: Test and build
-        run: ./gradlew --no-daemon :cloud:test :printers:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+        run: ./gradlew --no-daemon $SOLIDCRAFT :cloud:test :printers:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: tisma-android-debug-apk
