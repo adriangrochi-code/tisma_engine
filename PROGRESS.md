@@ -10898,7 +10898,14 @@ elección. Los que la persona cambió a mano se quedan, con el aviso «Se mantuv
   (regla 12, `pack_prints_for`), no solo el de la variante.
 
 Prueba: `ui_pack_print_speeds` (Acme Standard → Acme Fine → velocidad de viaje a mano → Acme Standard) y los verbos de
-guion `choose-profile` y `set`. **Sin probar:** con el paquete real; se pidió a la sesión de fichas.
+guion `choose-profile` y `set`.
+
+**Con el paquete real** (sesión de fichas, caja negra sobre `b8f5906`), sin aviso:
+- MK4S: paredes a 170, el cubo en 12 min 04 s (antes 14 min 54 s);
+- M5C: 200; MINI: 140; XL: 170.
+
+La AnkerMake M5 todavía avisa por `speed.first_layer`: su perfil de impresión no la trae. Es un dato del paquete, y el
+reemplazo con aviso es lo correcto. BH27 cerrado.
 
 ## 2026-11-04 — primer arranque con el paquete (reglas 1 y 3, PK1, PK2) y licencia en el panel (regla 15)
 
