@@ -401,3 +401,30 @@ TEST_CASE("aero of a project the nodes' way: progress, the .taero result and the
                ContainsSubstring("no object 2"));
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("orient of a project the nodes' way (cloud.md, rules 10c and 19c)", "[cli][cloud]") {
+    const auto dir = fresh_dir("node_orient");
+    const auto project = dir / "bar.3mf";
+    // A standing bar (OR2): lying down is cheaper.
+    Project bar = box_project(100.0, 100.0);
+    bar.models[0].mesh = make_box(5.0, 5.0, 60.0);
+    save_project(project, bar);
+    const auto json = dir / "orientation.json", summary = dir / "summary.json";
+    const Run r = run({"orient", project.string(), "-o", json.string(), "--summary", summary.string(), "--sandbox", "--object", "0",
+                       "--instance", "0", "--threads", "2"});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    const nlohmann::json j = nlohmann::json::parse(read_text(json));
+    CHECK(j["format"] == "tisma-orientation");
+    REQUIRE(j["rotation"].size() == 3);
+    CHECK(std::abs(j["rotation"][2][2].get<double>()) < 0.01); // the bar's Z no longer up
+    CHECK(j["cost"].get<double>() < j["cost_before"].get<double>());
+    const nlohmann::json s = nlohmann::json::parse(read_text(summary));
+    CHECK(s["candidates"].get<int>() >= 2);
+    // Errors: in the summary, with a code.
+    const Run bad = run({"orient", project.string(), "-o", json.string(), "--summary", summary.string(), "--object", "4"});
+    CHECK(bad.code == kExitInput);
+    CHECK_THAT(nlohmann::json::parse(read_text(summary))["error"].get<std::string>(), ContainsSubstring("no object 4"));
+    std::filesystem::remove_all(dir);
+}
+

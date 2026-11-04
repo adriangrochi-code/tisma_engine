@@ -12,6 +12,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Orientación automática, menos soporte** (`orientation.md`): en el menú de la placa, «Orientar (menos soporte)»
+  gira el modelo elegido, o todos, a la orientación que menos soporte necesita y mejor se agarra a la cama; nunca
+  queda peor que como estaba. Para los nodos de Tisma Cloud, `tisma-engine orient` (`cloud.md`, regla 19c).
+- **Calidad extrema en piezas grandes**: en vez de negarse, el análisis estructural toma los vóxeles más finos que
+  entran en memoria y lo dice.
 - **Rango probable en los análisis** (pedido del dueño: la mayor fiabilidad que dé cada calidad):
   - Aerodinámica: cada calidad simula también con 2/3 de las celdas, y el resultado da el rango probable del Cd: el
     error propio del método (12 %, medido) y el cambio con la resolución.

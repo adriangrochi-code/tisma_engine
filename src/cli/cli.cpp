@@ -97,10 +97,12 @@ constexpr std::string_view kUsage =
     "  tisma-engine analyze <project> -o <report.json> [--config <settings.json>] [...]\n"
     "                       (the first part with Engineering conditions, as the project keeps them)\n"
     "  tisma-engine analyze <project> -o <result.tea> --summary <summary.json> --sandbox --mode analyze\n"
-    "                       --quality <fast|normal|high|ultra> --object <n> --instance <n> [--solid] [--no-gpu]\n"
+    "                       --quality <fast|normal|high|extreme> --object <n> --instance <n> [--solid] [--no-gpu]\n"
     "                       (the nodes' way: progress lines, the result and a JSON summary)\n"
     "  tisma-engine aero <project> -o <result.taero> --summary <summary.json> --sandbox --object <n> --instance <n>\n"
-    "                    --quality <friction|fast|normal|high> --speed <m/s> --direction <x|-x|y|-y|z|-z|x,y,z>\n"
+    "                    --quality <friction|fast|normal|high|extreme> --speed <m/s> --direction <x|-x|y|-y|z|-z|x,y,z>\n"
+    "  tisma-engine orient <project> -o <orientation.json> --summary <summary.json> --sandbox --object <n> --instance <n>\n"
+    "                      (least support for FDM: the rotation, its cost and the cost before)\n"
     "  tisma-engine info <model>\n"
     "  --threads <n> on any command: at most n threads of work (cloud.md, rule 19d); without it, all\n"
     "  tisma-engine --help | --version\n"
@@ -900,6 +902,8 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
             return cmd_info(args_left, out, err);
         if (command == "aero")
             return cmd_aero_project(args_left, out, err);
+        if (command == "orient")
+            return cmd_orient_project(args_left, out, err);
         if (command == "analyze")
             return node_analyze_wanted(args_left) ? cmd_analyze_project(args_left, out, err) : cmd_analyze(args_left, out, err);
     } catch (const std::exception& e) {

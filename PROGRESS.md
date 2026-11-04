@@ -9965,3 +9965,27 @@ tabla da el Cd de presión, de la fuerza en las paredes y sin corrección por bl
   («Enviando», «En cola», «Calculando 40 %»), y se movía entre el cuadro que guarda su lugar y el del clic. Ahora va
   antes del texto y no se mueve; también es mejor para una persona.
 
+## 2026-11-04 — Orientación automática, «menos material de soporte» (FDM) y `orient` en la nube
+
+**Hecho** (`orientation.md`, reglas 1 a 6; `cloud.md`, reglas 10c y 19c; pasó `check_spec`):
+- `src/mesh/orient.*`: candidatas = la orientación actual y cada cara de la envolvente convexa apoyada en la cama;
+  costo = volumen de soporte (caras más horizontales que `support.angle_limit`, 45° si es automático, por su área
+  proyectada y la altura hasta la pieza de abajo o la cama, por rayos en una jerarquía de cajas armada una vez) menos
+  el área apoyada × 1 mm; se evitan las que tocan la cama con menos de 10 mm²; empate, la más baja. Al final, girada
+  en Z para que su caja mínima en XY quede apaisada. Nunca peor que como estaba.
+- Interfaz: «Orientar (menos soporte)» en el menú de la placa (clic derecho), sobre el modelo elegido o todos, con
+  deshacer y un aviso de cuántos giró.
+- `tisma-engine orient <proyecto.3mf> -o <orientacion.json> --summary <resumen.json> --sandbox --object --instance`:
+  el JSON lleva `rotation` (3 × 3 por filas, en los ejes de la cama, después de la colocación), `cost`,
+  `cost_before`, `support_mm3`, `bed_area_mm2` y `candidates`; el resumen, `cost`, `cost_before` y `candidates`.
+
+**Pruebas:** `[orient]` (OR1: el hongo queda con el sombrero en la cama, Z de la pieza −1; OR2: la barra queda
+acostada y a lo largo de X; un cubo no cambia; la rotación es ortonormal; una losa flotante pide su área × altura),
+`orient` de la línea de comandos sobre un proyecto, y el menú en `ui_script_plate_menu`. En el hongo, el costo de
+antes da 16 811 contra 16 656 a mano: el muestreo de las caras en pedazos.
+
+**Falta:** el método de resina, «menor fuerza de despegue» (reglas 7 a 9, OR3 y OR4), que necesita laminar cada
+candidata y el detector de ventosas; recordar el método y la precisión por tecnología.
+
+**Sigue:** resina en `orient`; después Diseño (D4: barrido, transición, texto).
+

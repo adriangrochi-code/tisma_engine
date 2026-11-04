@@ -80,6 +80,15 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
 // `error`. Progress and exit codes as for slice.
 int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err);
 
+// tisma-engine orient <project> -o <orientation.json> --summary <summary.json>
+//   --sandbox --object <n> --instance <n> [--threads <n>] [--no-gpu]
+// (cloud.md, rules 10c and 19c; orientation.md, rules 1 to 6, «menos material
+// de soporte»): the part where it is on the bed; the result is JSON with
+// "rotation" (3 x 3 by rows, in the bed's axes, applied after the part's
+// placement), "cost" and "cost_before"; the summary cost, cost_before and
+// candidates, or `error` and `code`.
+int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out, std::ostream& err);
+
 // Writes a file in one piece: into "<path>.part" first, renamed over the
 // path once complete, so a process stopped half way never leaves a partial
 // file under the real name. False (and no temporary left) on failure.
