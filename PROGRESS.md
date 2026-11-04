@@ -10655,5 +10655,12 @@ y el 409 sin impresora. **Sin probar:** contra un OctoPrint real.
 `print`), `/printer/objects/query` (print_stats, virtual_sdcard, extruder, heater_bed) y `/printer/print/pause`,
 `resume`, `cancel`; prueba contra un Moonraker simulado.
 
-**Sigue:** PrusaLink (Digest) y Duet con el mismo contrato (la sesión de Android ofreció notas de
+**PrusaLink, el mismo día:** `HostKind::PrusaLink` con usuario y contraseña por Digest (`src/net/digest.*`: MD5 de la
+RFC 1321 y Digest de la RFC 7616, probados con los ejemplos de las RFC; `net::Response` trae ahora la cabecera
+`WWW-Authenticate`, en cpp-httplib y en WinHTTP): versión, subida con `PUT /api/v1/files/usb/<nombre>` y
+`Print-After-Upload`, estado (`/api/v1/status`, el nombre largo del archivo de `/api/v1/job`), pausar, seguir y
+detener por el id del trabajo (sin trabajo: `conflict`). Prueba contra un PrusaLink simulado que exige Digest.
+**Sin probar:** la cabecera de WinHTTP (solo compila en el CI de Windows) y contra una impresora real.
+
+**Sigue:** Duet con el mismo contrato (la sesión de Android ofreció notas de
 comportamiento de los cuatro); después en la página Dispositivos.

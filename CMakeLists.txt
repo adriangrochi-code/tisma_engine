@@ -343,7 +343,7 @@ if(NOT WIN32)
   endif()
 endif()
 add_library(tisma_net STATIC src/net/http.cpp src/cloud/client.cpp src/cloud/secret_store.cpp src/cloud/report.cpp
-  src/device/print_host.cpp)
+  src/device/print_host.cpp src/net/digest.cpp)
 target_include_directories(tisma_net PUBLIC src)
 # tisma_core: running secret-tool or security (cad/process).
 target_link_libraries(tisma_net PRIVATE tisma_core nlohmann_json::nlohmann_json tisma_warnings)

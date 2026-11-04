@@ -5,19 +5,22 @@
 // credentials, upload a file, start it, read the state, and pause, resume or
 // cancel. Each call as the program's public API documentation describes it:
 // OctoPrint's REST API (docs.octoprint.org, «REST API») and Moonraker's
-// (moonraker.readthedocs.io, «External API»: server, files, printer). Own design; see
+// (moonraker.readthedocs.io, «External API»: server, files, printer) and
+// PrusaLink's published OpenAPI (v1: version, status, files, job), with
+// HTTP Digest (RFC 7616) for its user and password. Own design; see
 // PROVENANCE.md.
 
 #include <string>
 
 namespace tisma::device {
 
-enum class HostKind { OctoPrint, Moonraker };
+enum class HostKind { OctoPrint, Moonraker, PrusaLink };
 
 struct HostConfig {
     HostKind kind = HostKind::OctoPrint;
     std::string url;     // http(s)://host[:port], the program's address
     std::string api_key; // a secret: never logged
+    std::string user, password; // PrusaLink's Digest login (a secret too)
     int timeout_s = 20;
 };
 
@@ -49,5 +52,9 @@ HostResult host_upload(const HostConfig& host, const std::string& path, const st
 HostStatus host_status(const HostConfig& host);
 HostResult host_pause(const HostConfig& host, bool pause); // false: resume
 HostResult host_cancel(const HostConfig& host);
+
+// The OctoPrint names to the engine's words for a host kind ("octoprint",
+// "moonraker", "prusalink"); false for another word.
+bool host_kind_from(const std::string& word, HostKind& out);
 
 } // namespace tisma::device

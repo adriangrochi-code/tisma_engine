@@ -108,7 +108,10 @@ private:
 TEST_CASE("print host: OctoPrint's REST API, test, upload and print, state, pause and cancel (printer_connections.md)",
           "[device][net]") {
     FakeOctoPrint fake;
-    HostConfig host{HostKind::OctoPrint, fake.url() + "/", "KEY"};
+    HostConfig host;
+    host.kind = HostKind::OctoPrint;
+    host.url = fake.url() + "/";
+    host.api_key = "KEY";
     // The connection and the key.
     const HostVersion v = host_version(host);
     REQUIRE(v.ok);
@@ -218,7 +221,9 @@ private:
 
 TEST_CASE("print host: Moonraker's API (Klipper), the same calls (printer_connections.md)", "[device][net]") {
     FakeMoonraker fake;
-    const HostConfig host{HostKind::Moonraker, fake.url(), ""};
+    HostConfig host;
+    host.kind = HostKind::Moonraker;
+    host.url = fake.url();
     const HostVersion v = host_version(host);
     REQUIRE(v.ok);
     CHECK(v.server == "Moonraker v0.9.3 (Klipper ready)");
@@ -240,5 +245,166 @@ TEST_CASE("print host: Moonraker's API (Klipper), the same calls (printer_connec
     REQUIRE(host_cancel(host).ok);
     CHECK(fake.calls == std::vector<std::string>{"pause", "resume", "cancel"});
     CHECK_FALSE(host_status(host).printing);
+    std::filesystem::remove(g);
+}
+
+#include "net/digest.hpp"
+
+TEST_CASE("digest: MD5 (RFC 1321's test suite) and the Digest response (RFC 2617's example)", "[device][net]") {
+    using namespace tisma::net;
+    CHECK(md5_hex("") == "d41d8cd98f00b204e9800998ecf8427e");
+    CHECK(md5_hex("abc") == "900150983cd24fb0d6963f7d28e17f72");
+    CHECK(md5_hex("message digest") == "f96b697d7cb7938d525a2f31aaf161d0");
+    CHECK(md5_hex("12345678901234567890123456789012345678901234567890123456789012345678901234567890") ==
+          "57edf4a22be3c955ac49da2e2107b67a");
+    DigestChallenge ch;
+    REQUIRE(parse_digest_challenge(R"(Digest realm="testrealm@host.com", qop="auth,auth-int", nonce="dcd98b7102dd2f0e8b11d0f600bfb0c093", opaque="5ccc069c403ebaf9f0171e9517f40e41")",
+                                   ch));
+    CHECK(ch.realm == "testrealm@host.com");
+    CHECK(ch.opaque == "5ccc069c403ebaf9f0171e9517f40e41");
+    const std::string h = digest_authorization(ch, "Mufasa", "Circle Of Life", "GET", "/dir/index.html", "0a4f113b", 1);
+    CHECK(h.find("response=\"6629fae49393a05397450978507c4ef1\"") != std::string::npos);
+    CHECK(h.find("nc=00000001") != std::string::npos);
+    CHECK_FALSE(parse_digest_challenge("Basic realm=\"x\"", ch));
+}
+
+namespace {
+
+// A PrusaLink that asks for Digest (user "maker"), from its published OpenAPI.
+class FakePrusaLink {
+public:
+    FakePrusaLink() {
+        const auto authorized = [](const httplib::Request& req, httplib::Response& res) {
+            const std::string a = req.get_header_value("Authorization");
+            const auto field = [&](const std::string& key) {
+                const std::size_t at = a.find(key + "=\"");
+                if (at == std::string::npos)
+                    return std::string();
+                const std::size_t from = at + key.size() + 2;
+                return a.substr(from, a.find('"', from) - from);
+            };
+            const std::size_t nc_at = a.find("nc=");
+            const std::string nc = nc_at == std::string::npos ? "" : a.substr(nc_at + 3, 8);
+            const std::string ha1 = tisma::net::md5_hex("maker:Printer:secret");
+            const std::string ha2 = tisma::net::md5_hex(req.method + ":" + field("uri"));
+            const std::string expected = tisma::net::md5_hex(ha1 + ":N0NCE:" + nc + ":" + field("cnonce") + ":auth:" + ha2);
+            if (a.rfind("Digest ", 0) == 0 && field("username") == "maker" && field("response") == expected &&
+                field("uri") == req.path)
+                return true;
+            res.status = 401;
+            res.set_header("WWW-Authenticate", R"(Digest realm="Printer", nonce="N0NCE", qop="auth", algorithm=MD5)");
+            return false;
+        };
+        server_.Get("/api/version", [authorized](const httplib::Request& req, httplib::Response& res) {
+            if (authorized(req, res))
+                res.set_content(R"({"api": "2.0.0", "server": "2.1.2", "text": "PrusaLink"})", "application/json");
+        });
+        server_.Put(R"(/api/v1/files/usb/(.+))", [this, authorized](const httplib::Request& req, httplib::Response& res) {
+            if (!authorized(req, res))
+                return;
+            std::lock_guard lock(mutex_);
+            name = req.matches[1];
+            body = req.body;
+            started = req.get_header_value("Print-After-Upload") == "?1";
+            if (started)
+                state = "PRINTING";
+            res.status = 201;
+        });
+        server_.Get("/api/v1/status", [this, authorized](const httplib::Request& req, httplib::Response& res) {
+            if (!authorized(req, res))
+                return;
+            std::lock_guard lock(mutex_);
+            nlohmann::json j{{"printer", {{"state", state}, {"temp_nozzle", 214.0}, {"target_nozzle", 215.0},
+                                          {"temp_bed", 59.0}, {"target_bed", 60.0}}},
+                             {"job", {{"id", 7}, {"progress", 12.0}, {"time_remaining", 1800}}}};
+            res.set_content(j.dump(), "application/json");
+        });
+        server_.Get("/api/v1/job", [this, authorized](const httplib::Request& req, httplib::Response& res) {
+            if (!authorized(req, res))
+                return;
+            std::lock_guard lock(mutex_);
+            if (state == "IDLE") {
+                res.status = 204;
+                return;
+            }
+            res.set_content(nlohmann::json{{"id", 7}, {"state", state}, {"file", {{"name", "CUBE~1.GCO"}, {"display_name", name}}}}.dump(),
+                            "application/json");
+        });
+        server_.Put(R"(/api/v1/job/(\d+)/(pause|resume))", [this, authorized](const httplib::Request& req, httplib::Response& res) {
+            if (!authorized(req, res))
+                return;
+            std::lock_guard lock(mutex_);
+            calls.push_back(std::string(req.matches[2]) + " " + std::string(req.matches[1]));
+            state = req.matches[2] == "pause" ? "PAUSED" : "PRINTING";
+            res.status = 204;
+        });
+        server_.Delete(R"(/api/v1/job/(\d+))", [this, authorized](const httplib::Request& req, httplib::Response& res) {
+            if (!authorized(req, res))
+                return;
+            std::lock_guard lock(mutex_);
+            calls.push_back("stop " + std::string(req.matches[1]));
+            state = "IDLE";
+            res.status = 204;
+        });
+        port_ = server_.bind_to_any_port("127.0.0.1");
+        thread_ = std::thread([this] { server_.listen_after_bind(); });
+        server_.wait_until_ready();
+    }
+    ~FakePrusaLink() {
+        server_.stop();
+        thread_.join();
+    }
+    std::string url() const { return "http://127.0.0.1:" + std::to_string(port_); }
+    std::string state = "IDLE", name, body;
+    bool started = false;
+    std::vector<std::string> calls;
+
+private:
+    httplib::Server server_;
+    std::thread thread_;
+    std::mutex mutex_;
+    int port_ = 0;
+};
+
+} // namespace
+
+TEST_CASE("print host: PrusaLink's API with Digest, upload and print, state, pause, resume and stop (printer_connections.md)",
+          "[device][net]") {
+    FakePrusaLink fake;
+    HostConfig host;
+    host.kind = HostKind::PrusaLink;
+    host.url = fake.url();
+    host.user = "maker";
+    host.password = "secret";
+    const HostVersion v = host_version(host);
+    INFO(v.error);
+    REQUIRE(v.ok);
+    CHECK(v.server == "PrusaLink 2.1.2");
+    HostConfig wrong = host;
+    wrong.password = "nope";
+    CHECK(host_version(wrong).code == "unauthorized");
+    CHECK(host_cancel(host).code == "conflict"); // no job yet
+    const std::filesystem::path g = std::filesystem::temp_directory_path() / "tisma_print_host_p.gcode";
+    std::ofstream(g, std::ios::binary) << "G28\nM104 S215\n";
+    REQUIRE(host_upload(host, g.string(), "cube.gcode", true).ok);
+    CHECK(fake.name == "cube.gcode");
+    CHECK(fake.body == "G28\nM104 S215\n");
+    CHECK(fake.started);
+    const HostStatus s = host_status(host);
+    REQUIRE(s.ok);
+    CHECK(s.printing);
+    CHECK(s.file == "cube.gcode"); // the long name, from the job
+    CHECK(s.progress == 12.0);
+    CHECK(s.seconds_left == 1800.0);
+    CHECK(s.nozzle_target == 215.0);
+    REQUIRE(host_pause(host, true).ok);
+    CHECK(host_status(host).paused);
+    REQUIRE(host_pause(host, false).ok);
+    REQUIRE(host_cancel(host).ok);
+    CHECK(fake.calls == std::vector<std::string>{"pause 7", "resume 7", "stop 7"});
+    HostKind k;
+    CHECK(host_kind_from("prusalink", k));
+    CHECK(k == HostKind::PrusaLink);
+    CHECK_FALSE(host_kind_from("duet", k));
     std::filesystem::remove(g);
 }
