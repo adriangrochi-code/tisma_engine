@@ -10512,3 +10512,17 @@ giran con ella.
 pieza» y su deshacer.
 
 **Sigue:** la retícula (regla 7).
+
+## 2026-11-04 — Optimizar, regla 7 (retícula), paso A: la geometría
+
+**Hecho:** `src/mesh/lattice.*`: `lattice_bars(lo, hi, a)` da las barras de las celdas cúbicas de lado `a` que llenan
+la caja (las 4 aristas verticales y las 2 diagonales de cada cara lateral, cada barra una sola vez entre celdas
+vecinas); `lattice_mesh(barras, diámetro)` las hace prismas cerrados de 6 lados, hacia afuera, que se solapan en los
+nodos; `lattice_density(diámetro, a) = π(1 + 4√2)(r/a)²`.
+
+**Prueba (O6):** una celda: 12 barras, ninguna con menos de 45° de inclinación; cada prisma cerrado (cada arista en
+dos triángulos) con el volumen de un hexágono por su largo; 2 × 2 × 1 celdas: 33 barras compartidas; la densidad.
+
+**Sigue (regla 7):** paso B, las barras que tocan la pieza, recortadas a ella, como zona maciza con el relleno de la
+pieza al 0 %; paso C, el análisis homogéneo por celda (exponente 1,5) y la búsqueda del diámetro (0,9 a 3 mm, después
+por celda); paso D, en el panel.
