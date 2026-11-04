@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- Material › Temperaturas muestra en el nivel Básico la boquilla y la cama de la primera capa (`settings_panel.md`,
+  regla 10). Vacías, son las mismas que en las demás capas. `tisma --settings-layout` da el tipo, la unidad, el
+  mínimo, el máximo y el valor de las temperaturas (pedido de la app de Android).
 - El paquete libre de perfiles en la línea de comandos: `tisma-engine pack plan|install|list` y
   `profile --pack <carpeta> --printer "<archivo>#<variante>"` (`docs/CATALOG.md`). Comprueba el tamaño y el SHA-256,
   descomprime de forma segura y cambia el paquete de una sola vez. Para eso, el motor lee `.xz` y tar con código
@@ -304,6 +307,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   transformación de su ítem). Mover o girar una pieza ya no cambia dónde quedan sus condiciones de Ingeniería.
 
 ### Corregido
+
+- La fila de variables de la pestaña Impresora se llamaba «Temperatura de boquilla» en la búsqueda y en `--settings-layout`.
 
 - En Estructural, Ctrl+Z deshace también lo que hizo Optimizar en la pieza («Girar la pieza», «Usar …»), no solo
   las condiciones (UI51); la ayuda de sus botones ya no tapa el resultado (UI52).
