@@ -275,19 +275,33 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
     if (!read_pack(file, model_text))
         throw PackError("the printer's model file is not installed: " + file);
     out.printer = pack_printer_profile(model_text, variant, out.warnings);
-    // Rule 13: the variant's first filament and its print profile by default.
+    // Rule 13: the variant's first filament and its print profile by default
+    // (on a resin printer, its first resin and its resin print profile).
     out.filament_path = filament;
     out.print_path = print;
     const nlohmann::json model = nlohmann::json::parse(model_text, nullptr, false);
+    out.resin = model.is_object() && model.value("technology", "") == "sla";
+    const char* material_key = out.resin ? "resin" : "filament";
+    const char* print_key = out.resin ? "resin_print" : "print";
+    // A path, or a list whose first one is chosen.
+    const auto first_path = [](const nlohmann::json& d, const char* key) {
+        if (!d.contains(key))
+            return std::string();
+        const nlohmann::json& x = d.at(key);
+        if (x.is_string())
+            return x.get<std::string>();
+        if (x.is_array() && !x.empty() && x.front().is_string())
+            return x.front().get<std::string>();
+        return std::string();
+    };
     if (model.is_object() && model.contains("variants") && model.at("variants").is_array())
         for (const nlohmann::json& v : model.at("variants"))
             if (v.is_object() && v.value("id", "") == variant && v.contains("defaults") && v.at("defaults").is_object()) {
                 const nlohmann::json& d = v.at("defaults");
-                if (out.filament_path.empty() && d.contains("filament") && d.at("filament").is_array() &&
-                    !d.at("filament").empty() && d.at("filament").front().is_string())
-                    out.filament_path = d.at("filament").front().get<std::string>();
-                if (out.print_path.empty() && d.contains("print") && d.at("print").is_string())
-                    out.print_path = d.at("print").get<std::string>();
+                if (out.filament_path.empty())
+                    out.filament_path = first_path(d, material_key);
+                if (out.print_path.empty())
+                    out.print_path = first_path(d, print_key);
             }
     std::vector<std::vector<int>> sets;
     std::string sets_text;
@@ -304,6 +318,9 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
             throw PackError(path + " is not a " + (kind == ProfileKind::Filament ? "filament" : "print") + " profile");
         if (!pack_compatible(entry.compatible, sets, out.number)) // rule 12, PK7
             throw PackError(entry.profile.name + " is not for the " + out.printer.name);
+        if (entry.resin != out.resin)
+            throw PackError(entry.profile.name + (out.resin ? " is not a resin profile, and the " : " is a resin profile, and the ") +
+                            out.printer.name + (out.resin ? " is a resin printer" : " is not a resin printer"));
         if (kind == ProfileKind::Filament)
             out.filament_vendor = entry.vendor;
         (kind == ProfileKind::Filament ? out.filament : out.print) = std::move(entry.profile);
@@ -332,6 +349,18 @@ std::vector<PackModelRef> find_pack_models(const PackIndex& index, const std::st
     return out;
 }
 
+bool pack_printer_is_resin(const PackIndex& index, int printer) {
+    if (printer < 0 || printer >= int(index.printers.size()))
+        return false;
+    const std::string& name = index.printers[std::size_t(printer)];
+    const std::string file = name.substr(0, name.rfind('#'));
+    for (const PackVendor& v : index.vendors)
+        for (const PackModel& m : v.models)
+            if (m.file == file || "vendors/" + m.file == file || m.file == "vendors/" + file)
+                return m.technology == "sla";
+    return false;
+}
+
 std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const PackIndex& index, int printer) {
     std::vector<std::vector<int>> sets;
     std::string sets_text;
@@ -341,18 +370,19 @@ std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const 
         } catch (const PackError&) {
         }
     }
+    const bool resin = pack_printer_is_resin(index, printer);
     std::vector<PackFilamentRef> out;
     for (const PackVendor& v : index.vendors) {
         if (v.archive.sha256.empty())
             continue; // not installed
-        for (const std::string& path : v.filaments) {
+        for (const std::string& path : resin ? v.resins : v.filaments) {
             std::string text;
             if (!safe_pack_path(path) || !read_all(pack_dir / utf8_path(path), text))
                 continue;
             try {
                 std::vector<std::string> ignored;
                 const PackEntry e = parse_pack_entry(text, ignored);
-                if (e.profile.kind == ProfileKind::Filament && pack_compatible(e.compatible, sets, printer))
+                if (e.profile.kind == ProfileKind::Filament && e.resin == resin && pack_compatible(e.compatible, sets, printer))
                     out.push_back({path, e.profile.name, v.name});
             } catch (const std::exception&) {
             }

@@ -98,6 +98,10 @@ struct PackEntry {
     bool generic = false;
     std::string license, origin;
     std::string vendor; // the entry's maker, as the community data names it
+    // A resin ("resin") or resin print ("resin_print") profile: the engine
+    // keeps it as a filament or print profile (the resin's keys are those
+    // kinds', docs/PROFILES.md), for a resin printer only.
+    bool resin = false;
 };
 PackEntry parse_pack_entry(std::string_view json, std::vector<std::string>& warnings);
 
@@ -132,7 +136,8 @@ PackIndex pack_installed(const std::filesystem::path& pack_dir);
 // PK7): `printer` is "<model file>#<variant>" as the index names it (the file
 // with or without "vendors/" in front); `filament` and `print` are paths in the
 // pack, and when left empty the variant's defaults (its first filament, its
-// print profile), if it has them. Throws PackError: the printer not in the
+// print profile; for a resin printer, its first resin and its resin print
+// profile), if it has them. Throws PackError: the printer not in the
 // index or not installed, a path not in the pack, a profile of another kind,
 // or a filament or print profile not for this printer (compatible.json).
 struct PackProfiles {
@@ -141,6 +146,7 @@ struct PackProfiles {
     std::optional<Profile> filament, print;
     std::string filament_path, print_path;
     std::string filament_vendor; // the filament entry's maker (community data)
+    bool resin = false;          // a resin printer: the filament is its resin
     std::vector<std::string> warnings; // keys left out
 };
 PackProfiles pack_profiles(const std::filesystem::path& pack_dir, const PackIndex& index, const std::string& printer,
@@ -153,9 +159,12 @@ struct PackModelRef {
     const PackModel* model = nullptr;
 };
 std::vector<PackModelRef> find_pack_models(const PackIndex& index, const std::string& query);
+// Whether printer number `printer` of the index is a resin printer (its
+// model's technology is "sla").
+bool pack_printer_is_resin(const PackIndex& index, int printer);
 
-// The filaments of the installed vendors offered for printer number
-// `printer` (rule 12, PK7): each with its path in the pack and its profile's
+// The filaments (for a resin printer, the resins) of the installed vendors
+// offered for printer number `printer` (rule 12, PK7): each with its path in the pack and its profile's
 // name, vendor by vendor as the index lists them. Entries that cannot be read
 // are left out.
 struct PackFilamentRef {

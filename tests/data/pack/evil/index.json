@@ -16,8 +16,8 @@
  },
  "community": {
   "name": "community.tar.xz",
-  "size": 628,
-  "sha256": "a787f74ecd2d60064b00d1a8c780793b7c78f01573b93ccccb70393ca6214692"
+  "size": 720,
+  "sha256": "150285872dbb2d99dcf13f7e1821a1bd7679f32950857914f46771f254797282"
  },
  "vendors": [
   {
@@ -74,6 +74,12 @@
     "size": 208,
     "sha256": "87ced52e5cfdd86747cb1a6773e47b4e1f7db2262c29d12988c0931e4dd3365c"
    },
+   "resins": [
+    "vendors/bolt/resins/Grey.json"
+   ],
+   "resin_prints": [
+    "vendors/bolt/resin_prints/Fine.json"
+   ],
    "models": [
     {
      "id": "B2",

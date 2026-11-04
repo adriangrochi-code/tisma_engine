@@ -10801,3 +10801,12 @@ plano). **Sin probar:** contra una versión publicada de verdad.
 - `design new|check|build` en la línea de comandos, con SolidCraft (pedido de Android). Probado solo con el SolidCraft
   falso.
 - Corregido: mostrar la fila de una temperatura vacía la escribía como 0 y marcaba el perfil como cambiado.
+- Resinas del paquete (reglas 10, 12, 13 y 23):
+  - un perfil `resin` o `resin_print` se lee como perfil de material o de impresión (las claves de la resina ya son de
+    esos tipos);
+  - una impresora de resina toma `defaults.resin` y `defaults.resin_print`, y el catálogo le ofrece solo resinas;
+  - una resina en una impresora de filamento, o al revés, se rechaza;
+  - «Datos publicados» de la resina en la pestaña Material;
+  - corregido: la impresora `sla` del paquete quedaba como de filamento; ahora su perfil lleva
+    `machine.technology = msla`.
+  - Pruebas: `[pack]` (dos casos nuevos) y `ui_pack_published_resin`. Probado solo con el paquete inventado de prueba.

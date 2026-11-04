@@ -32,8 +32,8 @@ def model(name, nozzle_diameter):
                             "settings": {"machine": {"nozzle_diameter": nozzle_diameter}}}],
               "license": "AGPL-3.0-or-later", "origin": "Invented"})
 
-def entry(kind, name, settings, compatible):
-    return j({"format": "tisma-pack-entry", "version": 2, "technology": "fff", "vendor": "Acme",
+def entry(kind, name, settings, compatible, vendor="Acme", technology="fff"):
+    return j({"format": "tisma-pack-entry", "version": 2, "technology": technology, "vendor": vendor,
               "profile": {"format": "tisma-profile", "version": 1, "kind": kind, "name": name, "settings": settings},
               "compatible": compatible, "generic": False, "license": "AGPL-3.0-or-later", "origin": "Invented"})
 
@@ -45,7 +45,12 @@ acme2 = tar([("vendors/acme/models/A1.json", model("Acme One Plus", 0.6)),
              ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}}, None))])
 bolt = tar([("vendors/bolt/models/B2.json", j({"format": "tisma-pack-model", "version": 2, "technology": "sla",
              "vendor": "Bolt", "model": {"id": "B2", "name": "Bolt Two"}, "default_variant": "default",
-             "common": {"settings": {}}, "variants": [{"id": "default", "nozzle": 0, "name": "Bolt Two", "settings": {}}]}))])
+             "common": {"settings": {}}, "variants": [{"id": "default", "nozzle": 0, "name": "Bolt Two", "settings": {},
+                           "defaults": {"resin": ["vendors/bolt/resins/Grey.json"],
+                                        "resin_print": "vendors/bolt/resin_prints/Fine.json"}}]})),
+            ("vendors/bolt/resins/Grey.json", entry("resin", "Bolt Grey", {"resin": {"exposure": 3.5}}, 1, "Bolt", "sla")),
+            ("vendors/bolt/resin_prints/Fine.json",
+             entry("resin_print", "Bolt Fine", {"resin": {"layer_height": 0.03}}, 1, "Bolt", "sla"))])
 def value(key, v, unit, kind, url):
     return {"key": key, "value": v, "unit": unit, "kind": kind,
             "source": {"type": "video" if kind != "official" else "manufacturer", "url": url, "title": "Invented",
@@ -58,7 +63,10 @@ community = tar([("community/printers/Acme/Acme One.json", j({"vendor": "Acme", 
     value("machine.max_bed_temp", 110, "°C", "rumour", "https://example.org/y")]})),
     ("community/filaments/Acme/Acme PLA.json", j({"vendor": "Acme", "name": "Acme PLA", "data": [
     value("extrusion.density", 1.24, "g/cm³", "official", "https://example.org/acme-pla"),
-    value("filament.drying_temperature", 50, "°C", "measured", "https://example.org/dry")]}))])
+    value("filament.drying_temperature", 50, "°C", "measured", "https://example.org/dry")]})),
+    ("community/resins/Bolt/Bolt Grey.json", j({"vendor": "Bolt", "name": "Bolt Grey", "data": [
+    value("resin.exposure", 2.2, "s", "official", "https://example.org/bolt-grey"),
+    value("resin.viscosity", 350, "mPa·s", "community", "https://example.org/forum-grey")]}))])
 knowledge = tar([("knowledge/glossary.json", j({"format": "tisma-knowledge-glossary", "version": 1, "language": "es",
                                                  "sources": [], "terms": []}))])
 compatible = j({"format": "tisma-pack-compatible", "version": 1, "sets": [[0, 1], [2]]})
@@ -84,6 +92,7 @@ def index(version, acme, bolt_data):
                                "variants": [{"id": "0.4", "nozzle": 0.4}, {"id": "0.6", "nozzle": 0.6}]}]},
                   {"id": "bolt", "name": "Bolt", "license": "AGPL-3.0-or-later", "origin": "Invented",
                    "printers": ["vendors/bolt/models/B2.json#default"], "archive": file("bolt.tar.xz", bolt_data),
+                   "resins": ["vendors/bolt/resins/Grey.json"], "resin_prints": ["vendors/bolt/resin_prints/Fine.json"],
                    "models": [{"id": "B2", "name": "Bolt Two", "technology": "sla", "file": "vendors/bolt/models/B2.json",
                                "default_variant": "default", "variants": [{"id": "default", "nozzle": 0}]}]}]})
 

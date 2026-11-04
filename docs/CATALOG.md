@@ -226,7 +226,11 @@ app del teléfono) baja los archivos que pide el plan a una carpeta y el motor l
 - Con una impresora del paquete elegida, su página tiene la sección **Datos publicados** (reglas 23 y 24). Cada dato de
   la comunidad aparece con su distintivo («Fabricante», «Medido» o «Sugerido»), su valor y unidad, sus condiciones y
   el enlace a la fuente (en un video, con el minuto). **Usar este valor** cambia el ajuste: los del fabricante en el
-  momento y los demás después de una confirmación (PK13).
+  momento y los demás después de una confirmación (PK13). El filamento o la resina del paquete elegidos tienen la misma
+  sección, plegada bajo su perfil en la pestaña Material.
+- Una impresora de resina del paquete (modelo con `"technology": "sla"`) queda con `machine.technology = msla`, elige
+  su primera resina (`defaults.resin`) y su perfil de impresión de resina (`defaults.resin_print`), y el catálogo le
+  ofrece solo resinas. Una resina en una impresora de filamento, o al revés, se rechaza.
 - `tisma --pack CARPETA` usa otro paquete, también en las capturas. `--pick-pack-printer "<archivo>#<variante>"`
   agrega y elige una impresora del paquete; es para las pruebas.
 

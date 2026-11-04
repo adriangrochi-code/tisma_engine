@@ -1642,7 +1642,7 @@ private:
     std::set<std::string> pack_gone_; // pack printers the pack no longer has, kept from the copy
     std::optional<CommunityValue> community_confirm_;        // a value waiting for the person's yes (rule 24)
     std::map<std::string, std::string> pack_filament_vendor_; // a pack filament profile's name: its maker
-    std::string material_community_for_ = "\x01";             // the filament material_community_ is for
+    std::string material_community_for_ = "\x01";             // "filaments/<name>" or "resins/<name>"
     std::vector<CommunityValue> material_community_;
     int pack_filaments_number_ = -2;                         // the printer pack_filaments_found_ is for
     std::vector<PackFilamentRef> pack_filaments_found_;
@@ -5477,15 +5477,17 @@ void App::published_values(const std::vector<CommunityValue>& values) {
     }
 }
 
-// The chosen pack filament's community data (rule 23).
+// The chosen pack filament's (on a resin printer, resin's) community data (rule 23).
 void App::refresh_material_community() {
     const std::string& name = chosen_profile_[std::size_t(ProfileKind::Filament)];
-    if (name == material_community_for_)
+    const bool resin = settings_.machine_technology == MachineTechnology::Msla;
+    const std::string key = (resin ? "resins/" : "filaments/") + name;
+    if (key == material_community_for_)
         return;
-    material_community_for_ = name;
+    material_community_for_ = key;
     material_community_.clear();
     if (const auto it = pack_filament_vendor_.find(name); it != pack_filament_vendor_.end() && !it->second.empty())
-        material_community_ = pack_community(pack_dir(), "filaments", it->second, name);
+        material_community_ = pack_community(pack_dir(), resin ? "resins" : "filaments", it->second, name);
 }
 
 // «Datos publicados» under the material's card, folded (rule 23).
@@ -20963,7 +20965,8 @@ void App::script_input() {
         refresh_material_community();
         const std::size_t n = std::size_t(std::atoi(step.key.c_str()));
         if (n >= material_community_.size()) {
-            std::fprintf(stderr, "ui-script: no published material value %zu (there are %zu)\n", n, material_community_.size());
+            std::fprintf(stderr, "ui-script: no published material value %zu (there are %zu, for %s)\n", n,
+                         material_community_.size(), material_community_for_.c_str());
             failed_ = true;
         } else {
             use_community_value(material_community_[n]);

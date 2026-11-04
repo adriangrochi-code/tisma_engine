@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Resinas del paquete:** una impresora de resina del paquete elige su resina y su perfil de impresión de resina por
+  defecto, ofrece solo resinas en el catálogo y muestra los **Datos publicados** de la resina.
 - **Datos publicados** también para el filamento del paquete, plegados bajo su perfil en la pestaña Material.
 - `tisma-engine part gear|fastener` y `tisma-engine calibration <tipo>` / `calibration apply`: engranajes, tornillería y
   las calibraciones de la pestaña Calibrar desde la línea de comandos; `aero` y `orient` sobre un modelo con
@@ -322,6 +324,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   transformación de su ítem). Mover o girar una pieza ya no cambia dónde quedan sus condiciones de Ingeniería.
 
 ### Corregido
+
+- Una impresora de resina del paquete (`"technology": "sla"`) quedaba como impresora de filamento.
 
 - Un filamento sin temperatura de cama aparecía como modificado («1 cambio») apenas se mostraba su panel.
 - La prueba de interfaz del análisis estructural esperaba el veredicto antes de que arrancara el cálculo en una máquina cargada (falla de la CI de Linux).
