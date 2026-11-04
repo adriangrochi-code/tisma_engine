@@ -21292,6 +21292,10 @@ void App::script_input() {
         for (const EngineeringResult& r : pe.results)
             if (r.kind == "structural")
                 got = nlohmann::json::parse(r.report).value("verdict", nlohmann::json::object()).value("name", std::string("?"));
+        // The run may start a few frames after the click (a loaded CI machine,
+        // 2026-11-04): no result yet is not «none» until it had time to start.
+        if (got == "none" && step.key != "none" && f < 120)
+            return;
         std::printf("ui-script: expect-structural-verdict %s: got %s%s\n", step.key.c_str(), got.c_str(),
                     structural_message_.empty() ? "" : (" (" + structural_message_ + ")").c_str());
         if (got != step.key)

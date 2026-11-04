@@ -99,6 +99,7 @@ constexpr std::string_view kUsage =
     "  tisma-engine slice <project> -o <out.gcode> --summary <summary.json> [--sandbox] [--no-gpu] [--yes]\n"
     "                     (a project saved by the interface, as the cloud's nodes run it: docs/spec/features/cloud.md)\n"
     "  on a project's slice, analyze, aero and orient: [--config-over <partial.json>] [--set group.key=value ...]\n"
+    "  aero and orient also take a model with --config <settings.json> instead of a project\n"
     "                     (changes over the project's own settings)\n"
     "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
     "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"

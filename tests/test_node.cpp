@@ -2,6 +2,7 @@
 // 20; CC10 to CC12).
 
 #include "cli/cli.hpp"
+#include "io/stl.hpp"
 #include "mesh/shapes.hpp"
 #include "project/project.hpp"
 #include "test_temp.hpp"
@@ -515,5 +516,31 @@ TEST_CASE("slice of a project with --set and --config-over: changes over its own
     CHECK(layers({"--set", "layers.no_such_key=1"}) == -kExitInput);
     CHECK(read_text(summary).find("bad_settings") != std::string::npos);
     CHECK(layers({"--set", "layers.height"}) == -kExitInput);
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("orient and aero on a bare model with --config, as on a project (the phone's request)", "[cli][cloud]") {
+    const auto dir = fresh_dir("tisma_test_node_bare");
+    const auto config = dir / "s.json", model = dir / "box.stl";
+    std::ofstream(config) << settings_json(ui::default_settings());
+    {
+        std::ofstream f(model, std::ios::binary);
+        f << stl_binary(make_box(20.0, 20.0, 20.0));
+    }
+    const auto out = dir / "o.json", summary = dir / "s_out.json";
+    Run r = run({"orient", model.string(), "--config", config.string(), "-o", out.string(), "--summary", summary.string(),
+                 "--sandbox", "--object", "0", "--instance", "0"});
+    INFO(r.err);
+    CHECK(r.code == kExitOk);
+    r = run({"aero", model.string(), "--config", config.string(), "-o", (dir / "a.taero").string(), "--summary",
+             summary.string(), "--sandbox", "--object", "0", "--instance", "0", "--quality", "friction", "--speed", "10",
+             "--direction", "x"});
+    CHECK(r.code == kExitOk);
+    CHECK(nlohmann::json::parse(read_text(summary)).contains("cd"));
+    // Without --config a model is not a project.
+    r = run({"orient", model.string(), "-o", out.string(), "--summary", summary.string(), "--sandbox", "--object", "0",
+             "--instance", "0"});
+    CHECK(r.code == kExitInput);
+    CHECK_THAT(r.err, ContainsSubstring("needs --config"));
     std::filesystem::remove_all(dir);
 }
