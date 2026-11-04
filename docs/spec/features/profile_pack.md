@@ -77,6 +77,12 @@ Preferencias de la interfaz, no del laminado:
     - los genéricos (`generic`) van después de los del fabricante de la impresora.
 13. **Por defecto:** al elegir una variante, se eligen el primer filamento de su `defaults.filament` y el perfil de
     `defaults.print` (en resina, `defaults.resin` y `defaults.resin_print`).
+13 bis. **Ajustes de impresora que trae un perfil** (decisión del equipo de fichas, 04-11-2026, BH27): un perfil de
+    impresión o de filamento del paquete puede traer ajustes que el motor guarda en la impresora (las velocidades
+    `speed.*` y `cooling.min_speed`). Cada vez que la persona elige un perfil de impresión o un filamento del paquete,
+    no solo la primera, esos ajustes reemplazan a los de la impresora; el del perfil de impresión va encima del de la
+    variante. Si la persona cambió uno de esos ajustes a mano, se le deja el suyo y un aviso dice cuál no se cambió
+    («Velocidad de paredes: se dejó la tuya, 120 mm/s; el perfil trae 170»).
 14. **Cama e imágenes:** `bed_model` (STL) y `bed_texture` (SVG o PNG) del modelo se dibujan en la vista 3D. Los
     archivos no traen un origen: los STL del paquete están hechos alrededor de su propio centro (por ejemplo, el de la
     AnkerMake M5 va de −127,5 a 127,5 en X y de −147 a 130 en Y). Así que (decisión del equipo de fichas,
