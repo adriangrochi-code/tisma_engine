@@ -27,6 +27,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- **CFD más rápido**: la simulación termina cuando el arrastre ya se asentó. Entre 0 y 33 % menos pasos en las piezas
+  de validación, con el mismo resultado dentro de 0,5 %.
 - **CFD más fiel**: la presión sobre la pieza sale de la fuerza que el flujo deja en las paredes, en vez de leer la
   densidad junto a cada cara. Una capa absorbente antes de la salida deja de devolver ondas de presión. Medido a 12
   celdas: placa de 1,01 a 1,07 (Hoerner 1,17), cubo de 1,007 a 1,042 (Hoerner 1,05).

@@ -42,6 +42,14 @@ struct AeroInput {
     // to see how much the pressure drag depends on the lattice: the error
     // band's resolution part.
     bool resolution_check = true;
+    // Stop when the drag settles (relative change over a quarter of a
+    // flow-through; 0: never early; below 0: the quality's, 1 % fast to
+    // 0.3 % extreme).
+    double converge = -1.0;
+    // Start the fine lattice from the resolution check's flow. Off: measured
+    // 2026-11-04 it saved 10 % of the steps on the cube but moved the
+    // unsteady EP9 cube's Cd by 9 % (1.111 to 1.216).
+    bool warm_start = false;
 };
 
 struct AeroResult {
@@ -84,6 +92,7 @@ struct AeroResult {
     std::vector<Streamline> streamlines;
     int cells_x = 0, cells_y = 0, cells_z = 0;
     long steps = 0;
+    bool stopped_early = false; // the drag settled before the flow-throughs asked
     bool stable = true;
     double seconds = 0.0;
 };

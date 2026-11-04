@@ -33,6 +33,16 @@ struct LbmOptions {
     // the cube's drag fell from 1.01 to 0.44 (measured 2026-11-03).
     bool trt = false;
     int sponge = 0;           // cells of the absorbing layer before the outlet
+    // Stop once the drag settles: three quarter-flow-through windows in a
+    // row within this relative change (0: run every step).
+    double converge = 0.0;
+    // No early stop before this many flow-throughs (the start's pressure
+    // wave must leave the domain); a warm start needs fewer.
+    double min_flow_throughs = 1.5;
+    // A warm start (coarse to fine; Skordos, Phys. Rev. E 48, 1993): the
+    // density and the velocity (3 per cell, lattice units) of every cell to
+    // start from, at equilibrium; empty: the inlet's everywhere.
+    std::vector<float> initial_density, initial_velocity;
     long steps = 1000;
     long average_from = 666;  // steps after which the density is averaged
 };
@@ -43,6 +53,8 @@ struct LbmResult {
     std::vector<float> mean_density;
     std::vector<float> mean_velocity; // 3 per cell (x, y, z), lattice units; 0 in solid cells
     long averaged_steps = 0;
+    long steps = 0;              // the steps it ran
+    bool stopped_early = false;  // the drag settled before options.steps
     bool stable = true;
     double inlet_density = 1.0; // the averaged density just behind the inlet: the free stream's
     // The mean force on the solid cells over the averaged steps, lattice

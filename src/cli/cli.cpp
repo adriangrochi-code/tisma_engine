@@ -89,6 +89,7 @@ constexpr std::string_view kUsage =
     "                     (a .goo file: for a resin printer, docs/spec/features/resin.md)\n"
     "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
     "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
+    "                     [--summary <summary.json>]   (the nodes' summary: print time, filament, layers)\n"
     "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
     "  tisma-engine slice <project> -o <out.gcode> --summary <summary.json> [--sandbox] [--no-gpu] [--yes]\n"
     "                     (a project saved by the interface, as the cloud's nodes run it: docs/spec/features/cloud.md)\n"
@@ -113,6 +114,7 @@ struct SliceArgs {
     std::string config;
     std::string output;
     std::string warnings; // empty: not written
+    std::string summary;  // slice only: the nodes' JSON summary; empty: not written
     std::string analysis_case; // analyze; slice: the load case of stress-guided infill
     std::string vtk;           // analyze only; empty: not written
     std::string mesh;          // analyze only; empty: not written
@@ -145,6 +147,9 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
                 return std::nullopt;
         } else if (a == "--warnings" && !analyze) {
             if (!value(out.warnings))
+                return std::nullopt;
+        } else if (a == "--summary" && !analyze) {
+            if (!value(out.summary))
                 return std::nullopt;
         } else if (a == "--case") {
             if (!value(out.analysis_case))
@@ -207,7 +212,7 @@ bool outputs_are_safe(const SliceArgs& a, std::ostream& err) {
     const std::pair<const char*, const std::string*> inputs[] = {
         {"the model", &a.model}, {"--config", &a.config}, {"--case", &a.analysis_case}};
     const std::pair<const char*, const std::string*> outputs[] = {
-        {"-o", &a.output}, {"--warnings", &a.warnings}, {"--vtk", &a.vtk}, {"--mesh", &a.mesh}};
+        {"-o", &a.output}, {"--warnings", &a.warnings}, {"--vtk", &a.vtk}, {"--mesh", &a.mesh}, {"--summary", &a.summary}};
     for (std::size_t i = 0; i < std::size(outputs); ++i) {
         const auto& [name, path] = outputs[i];
         if (path->empty())
@@ -653,6 +658,15 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
             return kExitInput;
         }
         out << "wrote " << parsed->warnings << "\n";
+    }
+    if (!parsed->summary.empty()) {
+        const std::string summary = slice_summary_json(target, exported.check.stats.filament, sliced.layers.size(),
+                                                       settings.filament_density > 0.0);
+        if (!write_file(parsed->summary, [&](std::ostream& f) { f << summary << "\n"; })) {
+            err << "error: cannot write '" << parsed->summary << "'\n";
+            return kExitInput;
+        }
+        out << "wrote " << parsed->summary << "\n";
     }
     return kExitOk;
 }

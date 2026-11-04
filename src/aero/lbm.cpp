@@ -43,9 +43,14 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
     float inlet[kQ];
     for (int i = 0; i < kQ; ++i)
         inlet[i] = float(equilibrium(i, 1.0, u0, 0.0, 0.0));
+    const bool warm = o.initial_density.size() == cells && o.initial_velocity.size() == 3 * cells;
     for (std::size_t c = 0; c < cells; ++c)
         for (int i = 0; i < kQ; ++i)
-            a[std::size_t(i) * cells + c] = solid[c] ? 0.0f : inlet[i];
+            a[std::size_t(i) * cells + c] =
+                solid[c] ? 0.0f
+                : warm   ? float(equilibrium(i, o.initial_density[c], o.initial_velocity[3 * c], o.initial_velocity[3 * c + 1],
+                                             o.initial_velocity[3 * c + 2]))
+                         : inlet[i];
     std::vector<double> sum(cells, 0.0); // double: the pressure is a small part of the density
     std::vector<float> velocity_sum(3 * cells, 0.0f);
     const double tau0 = 3.0 * o.viscosity + 0.5;
@@ -91,8 +96,19 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
                 }
     });
 
-    for (long step = 0; step < o.steps; ++step) {
-        const bool averaging = step >= o.average_from;
+    // Early stop (docs/research/cfd_fea_optimizations.md §2.5): the drag
+    // along x is followed in windows of a quarter of a flow-through; after
+    // 1.5 flow-throughs, once three windows in a row agree within
+    // `converge`, two more windows are averaged and the run ends.
+    long steps = o.steps, average_from = o.average_from;
+    const long through = std::max(1L, long(std::ceil(double(nx) / std::max(1e-6, o.velocity))));
+    const long window = std::max(1L, through / 4);
+    std::vector<double> plane_drag(std::size_t(nz), 0.0);
+    std::vector<double> windows;
+    double window_sum = 0.0;
+    bool stopping = false;
+    for (long step = 0; step < steps; ++step) {
+        const bool averaging = step >= average_from;
         const std::vector<float>& src = a;
         std::vector<float>& dst = b;
         tbb::parallel_for(tbb::blocked_range<int>(0, nz), [&](const tbb::blocked_range<int>& range) {
@@ -164,6 +180,7 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
                         // 2 e_i f_i each; at rest its equilibrium part,
                         // 2 e_i w_i rho, is the pressure's.
                         const auto exchange = [&](int i) {
+                            plane_drag[std::size_t(z)] += kE[i][0] * 2.0 * kW[i] * (rho - 1.0);
                             if (!averaging)
                                 return;
                             double* fz = &plane_force[std::size_t(z) * 6];
@@ -217,15 +234,40 @@ LbmResult run_lbm(const LbmOptions& o, const std::vector<std::uint8_t>& solid, c
         std::swap(a, b);
         if (averaging)
             ++result.averaged_steps;
+        if (o.converge > 0.0 && !stopping) {
+            double drag = 0.0;
+            for (double& d : plane_drag)
+                drag += d, d = 0.0;
+            window_sum += drag;
+            if ((step + 1) % window == 0) {
+                windows.push_back(window_sum / double(window));
+                window_sum = 0.0;
+                const std::size_t n = windows.size();
+                const auto close = [&](double x, double y) { return std::abs(x - y) <= o.converge * std::max(std::abs(y), 1e-12); };
+                if (double(step + 1) >= o.min_flow_throughs * double(through) && n >= 4 && close(windows[n - 2], windows[n - 1]) &&
+                    close(windows[n - 3], windows[n - 2]) && close(windows[n - 4], windows[n - 3]) &&
+                    step + 1 + 2 * window < steps) {
+                    stopping = true;
+                    // Keep what was averaged if the averaging had begun.
+                    if (step + 1 < average_from)
+                        average_from = step + 1;
+                    steps = step + 1 + 2 * window;
+                    result.stopped_early = true;
+                }
+            }
+        } else {
+            std::fill(plane_drag.begin(), plane_drag.end(), 0.0);
+        }
         if (!finite) {
             result.stable = false;
             break;
         }
-        if (progress && step % 25 == 0 && !progress(double(step) / double(o.steps))) {
+        if (progress && step % 25 == 0 && !progress(double(step) / double(steps))) {
             result.stable = false;
             break;
         }
     }
+    result.steps = steps;
     result.mean_density.assign(cells, 1.0f);
     result.mean_velocity.assign(3 * cells, 0.0f);
     if (result.averaged_steps > 0)

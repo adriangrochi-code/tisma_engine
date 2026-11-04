@@ -40,6 +40,19 @@ TEST_CASE("orient: OR1, a mushroom ends upside down with its cap on the bed", "[
     CHECK_THAT(r.bed_area_mm2, WithinAbs(900.0, 0.5));
 }
 
+TEST_CASE("orient: a mushroom wound inside out gives the same (QA, 2026-11-04)", "[orient]") {
+    TriangleMesh mushroom = make_box(8, 8, 20);
+    TriangleMesh cap = make_box(30, 30, 3);
+    cap.translate(0, 0, 20);
+    append(mushroom, cap);
+    TriangleMesh inside_out;
+    for (std::size_t t = 0; t < mushroom.triangle_count(); ++t)
+        inside_out.add_triangle(mushroom.corner(t, 0), mushroom.corner(t, 2), mushroom.corner(t, 1));
+    const OrientResult r = orient_least_support(inside_out);
+    CHECK(part_z(r)[2] < -0.99);
+    CHECK_THAT(r.bed_area_mm2, WithinAbs(900.0, 0.5));
+}
+
 TEST_CASE("orient: OR2, a standing bar lies down", "[orient]") {
     const OrientResult r = orient_least_support(make_box(5, 5, 60));
     CHECK(std::abs(part_z(r)[2]) < 0.01);
