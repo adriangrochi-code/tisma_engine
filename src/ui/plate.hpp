@@ -126,6 +126,11 @@ PlateVolume carried_volume(const PlateVolume& volume, const BoundingBox& from, c
 std::optional<PlateVolume> volume_for_bed_box(const PlateObject& object, const TriangleMesh& placed,
                                               const std::array<double, 3>& lo, const std::array<double, 3>& hi,
                                               const std::string& settings);
+// The same with the model's map to the bed given (as placing gave it when
+// the box was found: the volume then follows the model wherever it moved).
+std::optional<PlateVolume> volume_for_bed_box(const PlateObject& object, const Affine& to_bed,
+                                              const std::array<double, 3>& lo, const std::array<double, 3>& hi,
+                                              const std::string& settings);
 
 // r turned by `degrees` about the bed's axis 0 (X), 1 (Y) or 2 (Z).
 Rotation rotated(const Rotation& r, int axis, double degrees);

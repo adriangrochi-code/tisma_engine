@@ -746,6 +746,10 @@ private:
         ZonedInfill zoned;
         bool ribs = false; // also with ribs (rule 4)
         RibbedInfill ribbed;
+        // The part's map to the bed and its mesh's size when searched: the
+        // zones go on the model where it was (it may have moved since).
+        Affine to_bed;
+        std::size_t triangles = 0;
     };
     Background<OptimizeRun> optimize_job_;
     std::atomic<bool> optimize_cancel_{false};
@@ -14219,11 +14223,13 @@ void App::apply_zones(std::size_t part, const ZonedInfill& zoned) {
     if (part >= objects_.size())
         return;
     PlateObject& o = objects_[part];
-    const TriangleMesh placed = placed_mesh(o);
+    if (!optimize_result_ || o.mesh.triangle_count() != optimize_result_->triangles)
+        return;
     std::vector<PlateVolume> added;
     for (const MeshModifier& m : zoned.zones.modifiers) {
         const BoundingBox b = m.mesh.bounding_box();
-        const std::optional<PlateVolume> v = volume_for_bed_box(o, placed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
+        const std::optional<PlateVolume> v =
+            volume_for_bed_box(o, optimize_result_->to_bed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
         if (!v) {
             structural_message_ = tr(T::StructZonedTurned);
             return;
@@ -14253,11 +14259,13 @@ void App::apply_ribs(std::size_t part, const RibbedInfill& ribbed) {
     if (part >= objects_.size())
         return;
     PlateObject& o = objects_[part];
-    const TriangleMesh placed = placed_mesh(o);
+    if (!optimize_result_ || o.mesh.triangle_count() != optimize_result_->triangles)
+        return;
     std::vector<PlateVolume> added;
     for (const MeshModifier& m : ribbed.ribs.modifiers) {
         const BoundingBox b = m.mesh.bounding_box();
-        const std::optional<PlateVolume> v = volume_for_bed_box(o, placed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
+        const std::optional<PlateVolume> v =
+            volume_for_bed_box(o, optimize_result_->to_bed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
         if (!v) {
             structural_message_ = tr(T::StructZonedTurned);
             return;
@@ -14300,9 +14308,13 @@ void App::start_optimize(OptimizeExtra extra) {
     optimize_cancel_ = false;
     optimize_permille_ = 0;
     const bool zones = extra == OptimizeExtra::Zones, ribs = extra == OptimizeExtra::Ribs;
-    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs]() {
+    const Affine to_bed{a, b};
+    const std::size_t triangles = o.mesh.triangle_count();
+    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs, to_bed, triangles]() {
         OptimizeRun run;
         run.part = part;
+        run.to_bed = to_bed;
+        run.triangles = triangles;
         run.zones = zones;
         run.ribs = ribs;
         struct Cancelled {};

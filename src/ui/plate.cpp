@@ -653,7 +653,14 @@ std::optional<PlateVolume> volume_for_bed_box(const PlateObject& object, const T
                                               const std::string& settings) {
     if (object.mesh.triangle_count() == 0 || placed.triangle_count() != object.mesh.triangle_count())
         return std::nullopt;
-    const Affine to_bed = placing(object, placed);
+    return volume_for_bed_box(object, placing(object, placed), lo, hi, settings);
+}
+
+std::optional<PlateVolume> volume_for_bed_box(const PlateObject& object, const Affine& to_bed,
+                                              const std::array<double, 3>& lo, const std::array<double, 3>& hi,
+                                              const std::string& settings) {
+    if (object.mesh.triangle_count() == 0)
+        return std::nullopt;
     const auto& a = to_bed.a;
     // The inverse of the linear part, by cofactors.
     const double det = a[0] * (a[4] * a[8] - a[5] * a[7]) - a[1] * (a[3] * a[8] - a[5] * a[6]) + a[2] * (a[3] * a[7] - a[4] * a[6]);
