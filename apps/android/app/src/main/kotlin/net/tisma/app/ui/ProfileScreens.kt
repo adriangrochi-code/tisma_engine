@@ -214,11 +214,23 @@ private fun PackFilamentPicker(state: SliceState, slice: SliceViewModel, nav: Na
                 Text(f.name, style = MaterialTheme.typography.bodyLarge)
                 Text(f.vendor.replace('_', ' '), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Rule 15: its licence and origin in a small line.
+                listOf(f.license, f.origin).filter { it.isNotBlank() }.joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
     Column(Modifier.fillMaxSize().padding(16.dp).testTag("pack_filaments"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(choice.name ?: choice.printer, style = MaterialTheme.typography.titleLarge)
+        if (state.packPrinterLicense.isNotEmpty()) {
+            Text(state.packPrinterLicense, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("pack_license"))
+        }
+        val uri = androidx.compose.ui.platform.LocalUriHandler.current
+        AccentTextButton(onClick = { runCatching { uri.openUri(net.tisma.app.engine.ProfilePack.REPOSITORY) } }) {
+            Text(stringResource(R.string.pack_repository))
+        }
         AccentTextButton(onClick = { nav.replace(Screen.PackWizard) }) { Text(stringResource(R.string.profile_change_printer)) }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             item { Text(stringResource(R.string.profile_filament), style = MaterialTheme.typography.labelLarge) }

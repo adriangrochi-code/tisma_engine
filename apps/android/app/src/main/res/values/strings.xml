@@ -434,6 +434,7 @@
     <string name="pack_no_filaments">The pack has no filaments for this printer: the default one is used.</string>
     <string name="pack_print_profile">Print profile</string>
     <string name="pack_done">Done</string>
+    <string name="pack_repository">Profiles repository</string>
     <string name="profile_kept_changes">New profile. Your own changes are kept: %1$s</string>
     <string name="eng_show_map">Show the safety map on the part</string>
     <string name="map_fails">Fails (under 1)</string>

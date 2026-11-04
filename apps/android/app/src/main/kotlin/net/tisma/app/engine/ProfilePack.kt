@@ -76,10 +76,27 @@ class ProfilePack(
     /** The index of the installed pack, or the one the wizard downloaded, or null. */
     fun index(): Index? = readIndex(File(dataDir, "pack/index.json")) ?: readIndex(File(dataDir, "index.json"))
 
+    companion object {
+        /** Where the pack's profiles come from (rule 15; src/catalog/pack.hpp, kPackRepository). */
+        const val REPOSITORY = "https://github.com/adriangrochi-code/Tisma-profiles-"
+    }
+
     val installed: Boolean get() = File(dataDir, "pack/index.json").isFile
 
     /** A filament of the installed pack: the path the engine takes with `--filament`, and what the person reads. */
-    data class Filament(val path: String, val name: String, val vendor: String, val generic: Boolean)
+    data class Filament(val path: String, val name: String, val vendor: String, val generic: Boolean,
+                        /** Rule 15: the entry's `license` and `origin`. */
+                        val license: String = "", val origin: String = "")
+
+    /** Rule 15: `license · origin` of a pack file (a model, filament or print), or empty. */
+    fun licenseLine(path: String): String {
+        val o = runCatching { Json.parseToJsonElement(File(File(dataDir, "pack"), path.substringBefore('#')).readText()) as JsonObject }
+            .getOrNull() ?: return ""
+        return line(o)
+    }
+
+    private fun line(o: JsonObject): String = listOf("license", "origin")
+        .mapNotNull { (o[it] as? JsonPrimitive)?.contentOrNull?.takeIf { v -> v.isNotBlank() } }.joinToString(" · ")
 
     /**
      * The installed pack's filaments for [printer] (`<file>#<variant>`), as
@@ -110,7 +127,8 @@ class ProfilePack(
                 val set = (o["compatible"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
                 if (set != null && (number < 0 || sets.getOrNull(set)?.contains(number) != true)) return@forEach
                 val generic = (o["generic"] as? JsonPrimitive)?.contentOrNull == "true"
-                out += Filament("vendors/${v.name}/$folder/${f.name}", f.nameWithoutExtension.replace('_', ' '), v.name, generic)
+                out += Filament("vendors/${v.name}/$folder/${f.name}", f.nameWithoutExtension.replace('_', ' '), v.name, generic,
+                    (o["license"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (o["origin"] as? JsonPrimitive)?.contentOrNull.orEmpty())
             }
         }
         return out.sortedBy { if (it.vendor == printerVendor && !it.generic) 0 else if (it.generic) 1 else 2 }

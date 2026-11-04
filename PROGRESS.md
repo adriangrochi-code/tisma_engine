@@ -10951,3 +10951,7 @@ del paquete, sus ajustes reemplazan a los actuales, salvo los cambiados a mano, 
   dice cuáles se mantuvieron.
 - Pruebas: `PackWizardTest` (perfil de impresión por defecto y elegido, aviso de cambios mantenidos, el valor a mano
   queda y el del perfil nuevo entra). No probado en un teléfono.
+- Regla 15 en la app (después de dev `9ebf378`): la pantalla del perfil de una impresora del paquete muestra
+  `license · origin` de la impresora y de cada filamento y perfil de impresión, con el enlace al repositorio de los
+  perfiles. Las reglas 1 y 3 ya estaban (asistente del primer arranque; sin red, el catálogo incluido). Prueba en
+  `PackWizardTest`.

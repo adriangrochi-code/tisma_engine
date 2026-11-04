@@ -1,6 +1,7 @@
 package net.tisma.app
 
 import android.content.Context
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -59,7 +60,7 @@ class PackWizardTest {
             |elif [ "${'$'}cmd" = "install" ]; then
             |  mkdir -p "${'$'}data/pack"; cp -r "${'$'}from"/. "${'$'}data/pack"/
             |  p="${'$'}data/pack/vendors"; mkdir -p "${'$'}p/Acme/models" "${'$'}p/Acme/filaments" "${'$'}p/Acme/prints" "${'$'}p/Lib/filaments"
-            |  echo '{"variants":[{"id":"0.6","defaults":{"filament":["vendors/Acme/filaments/Acme_PLA.json"],"print":["vendors/Acme/prints/Normal.json"]}}]}' > "${'$'}p/Acme/models/One.json"
+            |  echo '{"license":"CC0-1.0","origin":"Acme profiles","variants":[{"id":"0.6","defaults":{"filament":["vendors/Acme/filaments/Acme_PLA.json"],"print":["vendors/Acme/prints/Normal.json"]}}]}' > "${'$'}p/Acme/models/One.json"
             |  echo '{"compatible":null}' > "${'$'}p/Acme/filaments/Acme_PLA.json"
             |  echo '{"generic":"true"}' > "${'$'}p/Lib/filaments/Generic_PETG.json"
             |  echo '{}' > "${'$'}p/Acme/prints/Normal.json"; echo '{}' > "${'$'}p/Acme/prints/Fast.json"
@@ -108,6 +109,9 @@ class PackWizardTest {
             wait("pack_filaments")
             wait("pack_filament_Generic PETG")
             compose.onNodeWithTag("pack_filament_Acme PLA").assertExists()
+            // Rule 15: the printer's licence and origin.
+            wait("pack_license")
+            compose.onNodeWithTag("pack_license").assertTextEquals("CC0-1.0 · Acme profiles")
             // BH27: another profile replaces the printer settings, except those changed by hand, which are said.
             compose.runOnIdle { slice.setValue("speed.perimeter", kotlinx.serialization.json.JsonPrimitive(30)) }
             compose.onNodeWithTag("pack_filament_Generic PETG").performClick()
