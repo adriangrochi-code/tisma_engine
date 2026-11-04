@@ -317,3 +317,18 @@ TEST_CASE("pack: the models a search finds, and a printer's profiles with its de
     CHECK_THROWS_AS(pack_profiles(pack, index, "vendors/bolt/models/B2.json#default", "vendors/acme/filaments/PLA.json"),
                     PackError);
 }
+
+TEST_CASE("pack: the filaments offered for a printer (rule 12, PK7)", "[pack]") {
+    const fs::path pack = fresh_dir("tisma_pack_filaments") / "pack";
+    pack_install(pack, staging_from("release1", "tisma_pack_stage_filaments"));
+    const PackIndex index = pack_installed(pack);
+    // Acme PLA is in set 0, the Acme One's two printers (0 and 1); not the Bolt Two (2).
+    const auto for_acme = pack_filaments_for(pack, index, 1);
+    REQUIRE(for_acme.size() == 1);
+    CHECK(for_acme[0].name == "Acme PLA");
+    CHECK(for_acme[0].path == "vendors/acme/filaments/PLA.json");
+    CHECK(pack_filaments_for(pack, index, 2).empty());
+    std::vector<std::string> warnings;
+    CHECK(pack_entry_profile(pack, "vendors/acme/filaments/PLA.json", warnings).kind == ProfileKind::Filament);
+    CHECK_THROWS_AS(pack_entry_profile(pack, "../x.json", warnings), PackError);
+}

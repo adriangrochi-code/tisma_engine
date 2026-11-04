@@ -10769,9 +10769,11 @@ El orden del roadmap se planifica con esas fechas.
 **Sin probar:** la descarga real desde la interfaz contra GitHub.
 
 **Sigue:**
-- el filtro de filamentos compatibles en la lista de Material (regla 12, PK7);
 - el aviso «Este perfil ya no está en el paquete» (regla 20);
 - los datos de la comunidad (reglas 22 a 24).
 
 **El mismo día:** el aviso de versión nueva al abrir, como mucho una vez por día (regla 19, `pack_newer` en segundo
 plano). **Sin probar:** contra una versión publicada de verdad.
+
+**El mismo día:** el catálogo de filamentos ofrece los del paquete que sirven para la impresora del paquete elegida
+(regla 12, PK7; `pack_filaments_for`). Prueba: `[pack]` y `ui_pack_filaments` (captura).

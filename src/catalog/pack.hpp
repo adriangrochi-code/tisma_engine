@@ -152,4 +152,15 @@ struct PackModelRef {
 };
 std::vector<PackModelRef> find_pack_models(const PackIndex& index, const std::string& query);
 
+// The filaments of the installed vendors offered for printer number
+// `printer` (rule 12, PK7): each with its path in the pack and its profile's
+// name, vendor by vendor as the index lists them. Entries that cannot be read
+// are left out.
+struct PackFilamentRef {
+    std::string path, name, vendor;
+};
+std::vector<PackFilamentRef> pack_filaments_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer);
+// One filament or print profile of the pack by its path (rule 10).
+Profile pack_entry_profile(const std::filesystem::path& pack_dir, const std::string& path, std::vector<std::string>& warnings);
+
 } // namespace tisma

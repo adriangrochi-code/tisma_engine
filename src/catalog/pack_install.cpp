@@ -323,4 +323,40 @@ std::vector<PackModelRef> find_pack_models(const PackIndex& index, const std::st
     return out;
 }
 
+std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const PackIndex& index, int printer) {
+    std::vector<std::vector<int>> sets;
+    std::string sets_text;
+    if (read_all(pack_dir / "compatible.json", sets_text)) {
+        try {
+            sets = parse_pack_compatible(sets_text);
+        } catch (const PackError&) {
+        }
+    }
+    std::vector<PackFilamentRef> out;
+    for (const PackVendor& v : index.vendors) {
+        if (v.archive.sha256.empty())
+            continue; // not installed
+        for (const std::string& path : v.filaments) {
+            std::string text;
+            if (!safe_pack_path(path) || !read_all(pack_dir / path, text))
+                continue;
+            try {
+                std::vector<std::string> ignored;
+                const PackEntry e = parse_pack_entry(text, ignored);
+                if (e.profile.kind == ProfileKind::Filament && pack_compatible(e.compatible, sets, printer))
+                    out.push_back({path, e.profile.name, v.name});
+            } catch (const std::exception&) {
+            }
+        }
+    }
+    return out;
+}
+
+Profile pack_entry_profile(const fs::path& pack_dir, const std::string& path, std::vector<std::string>& warnings) {
+    std::string text;
+    if (!safe_pack_path(path) || !read_all(pack_dir / path, text))
+        throw PackError("not in the installed pack: " + path);
+    return parse_pack_entry(text, warnings).profile;
+}
+
 } // namespace tisma

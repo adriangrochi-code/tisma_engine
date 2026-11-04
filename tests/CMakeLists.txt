@@ -208,6 +208,16 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_pack_printer_picked PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          PASS_REGULAR_EXPRESSION "pack printer: Acme One 0.4 · Acme PLA · Acme Standard" TIMEOUT 300)
+    # The filament catalog offers the pack's filaments for that printer (rule 12).
+    add_test(NAME ui_pack_filaments
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack --pick-pack-printer "vendors/acme/models/A1.json#0.4"
+              --catalog filament --catalog-search acme
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_filaments.png)
+    set_tests_properties(ui_pack_filaments PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
     add_test(NAME ui_pack_catalog
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               --lang es --light --size 1200x760 --catalog printer --catalog-search acme
