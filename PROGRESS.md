@@ -10491,3 +10491,10 @@ resistencias espera la ficha para PLA?).
 Con esa hoja la unión entre capas casi no es más débil, y la barra acostada carga más sus pieles finas (15,2 MPa
 contra 11,3 parada). El equipo de fichas lee la regla como 0,65 · Xt siempre: pregunta enviada; hasta su respuesta
 queda como está (decisión: seguir `docs/MATERIALS.md`).
+
+**Respuesta del equipo de fichas (10:51 UTC):** se mantiene la Z medida cuando la hoja la trae (0,65 · Xt solo si
+falta); el orden de la regla 8 sigue a los datos y el hallazgo queda cerrado. Para el panel: cuando la recomendación
+pare la pieza, decir que la resistencia entre capas viene de la hoja del fabricante y que una impresión real puede
+ser más débil entre capas.
+
+**Sigue:** «Orientación» en el panel Optimizar con esa nota; la retícula (regla 7).
