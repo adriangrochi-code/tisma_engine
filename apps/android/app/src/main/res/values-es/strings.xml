@@ -305,4 +305,7 @@
     <string name="summary_cd_friction">Coeficiente de arrastre por rozamiento</string>
     <string name="summary_reynolds">Número de Reynolds</string>
     <string name="summary_required_safety">Factor de seguridad pedido</string>
+
+    <string name="mem_too_big">Este modelo necesita unos %1$d MB para laminarse y el teléfono tiene %2$d MB libres. ¿Laminarlo en la nube?</string>
+    <string name="mem_try_anyway">Probar igual en el teléfono</string>
 </resources>

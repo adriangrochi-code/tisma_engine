@@ -52,14 +52,18 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   `error_es`. Marcar caras en el teléfono necesita la vista 3D (pendiente). Pedido a la sesión de escritorio: los
   modos de Optimizar por `analyze`.
 
+- **2026-11-04 — memoria (MA9):** antes de laminar se cuentan los triángulos (STL, OBJ, 3MF) y se estima la memoria
+  (150 MB más 3 kB por triángulo, valor de diseño a medir); si no alcanza la libre del teléfono, se ofrece la nube o
+  probar igual. Se reemplaza por la estimación del motor cuando exista (su API en C).
+
 ## Abierto
 
 - **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS: necesita una biblioteca MQTT o una propia; decidir), PrusaLink,
   Duet, mover ejes y poner temperaturas a mano. La cámara se ve por imágenes fijas, no por video (MJPEG o RTSP). Si el motor suma conexiones de red a `src/device/`, se usan
   desde la app en lugar de las de Kotlin («usemos todo lo de la pc»).
 - **Motor en el teléfono:** nunca corrió en un Android real (esta máquina no tiene KVM ni emulador); probado solo
-  con un motor falso. Falta: perfiles de impresora y filamento (paquete de perfiles, `profile_pack.md`), la
-  estimación de memoria (MA9) y la vista previa del G-code binario. El resumen de un modelo suelto ya llega (`--summary`, motor
+  con un motor falso. Falta: perfiles de impresora y filamento (paquete de perfiles, `profile_pack.md`) y la
+  vista previa del G-code binario. El resumen de un modelo suelto ya llega (`--summary`, motor
   9e8c43e).
 - **Paso 4, laminar en el teléfono:** pedida al equipo del motor (session_01JDAJxTVh345Lfm4794rJF8) la API en C
   (`mobile_app.md`, regla 2), con una propuesta de forma. Sin respuesta todavía.

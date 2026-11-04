@@ -32,6 +32,8 @@ data class SliceState(
     /** An Engineering run on the phone: running, and its summary when done (mobile_app.md, rule 13). */
     val analyzing: Boolean = false,
     val analysis: List<Pair<String, String>>? = null,
+    /** MA9: the model needs more memory than the phone has free (bytes needed, bytes free). */
+    val tooBig: Pair<Long, Long>? = null,
     /** The printer card: the printer, nozzle and filament the model is sliced for. */
     val profile: EngineRunner.ProfileChoice? = null,
 )
@@ -51,6 +53,8 @@ class SliceViewModel(
     private val loadCatalog: () -> Catalog? = { null },
     /** Where the printer card's choice is kept. */
     private val saved: net.tisma.app.data.AppSettings? = null,
+    /** Free memory for the engine, in bytes (the phone's available memory). */
+    private val freeMemory: () -> Long = { Long.MAX_VALUE },
 ) : ViewModel() {
     private val _state = MutableStateFlow(SliceState(engineAvailable = runner.available,
         profile = saved?.profilePrinter?.let { EngineRunner.ProfileChoice(it, saved.profileNozzle, saved.profileFilament) }))
@@ -99,9 +103,26 @@ class SliceViewModel(
 
     fun setSettings(s: EngineRunner.SimpleSettings) = _state.update { it.copy(settings = s, result = null) }
 
-    fun slice() {
+    /** Slices even when the estimate says the memory may not be enough (the person chose it). */
+    fun sliceAnyway() {
+        _state.update { it.copy(tooBig = null) }
+        slice(checkMemory = false)
+    }
+
+    fun dismissTooBig() = _state.update { it.copy(tooBig = null) }
+
+    fun slice(checkMemory: Boolean = true) {
         val m = model ?: return
         if (state.value.slicing) return
+        if (checkMemory) {
+            val need = MemoryEstimate.needed(MemoryEstimate.triangles(m))
+            val free = freeMemory()
+            if (need > free) {
+                AppLog.line("engine: model needs ~${need shr 20} MB, ${free shr 20} MB free")
+                _state.update { it.copy(tooBig = need to free) }
+                return
+            }
+        }
         cancel.set(false)
         _state.update { it.copy(slicing = true, progress = 0, result = null, error = null) }
         val s = state.value

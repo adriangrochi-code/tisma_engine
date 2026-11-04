@@ -117,6 +117,15 @@ fun PlateScreen(
                 Text(stringResource(R.string.plate_slice))
             }
         }
+        state.tooBig?.let { (need, free) ->
+            // MA9: too big for this phone: the cloud is offered (rule 12).
+            TismaCard(Modifier.testTag("too_big")) {
+                Text(stringResource(R.string.mem_too_big, need shr 20, free shr 20), color = MaterialTheme.colorScheme.error)
+                Button(onClick = { slice.dismissTooBig(); nav.open(if (signedIn) Screen.NewJob else Screen.Account) },
+                    modifier = Modifier.fillMaxWidth().testTag("too_big_cloud")) { Text(stringResource(R.string.plate_slice_cloud)) }
+                AccentTextButton(onClick = { slice.sliceAnyway() }) { Text(stringResource(R.string.mem_try_anyway)) }
+            }
+        }
         if (state.modelName != null && state.isProject && state.engineAvailable) EngineeringCard(state, slice)
         state.error?.let { e ->
             TismaCard {

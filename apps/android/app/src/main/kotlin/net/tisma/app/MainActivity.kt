@@ -47,7 +47,12 @@ class MainActivity : ComponentActivity() {
                     Catalog.parse(app.assets.open("catalog/printers.json").bufferedReader().readText(),
                         app.assets.open("catalog/filaments.json").bufferedReader().readText())
                 }
-                return SliceViewModel(EngineRunner(exe, work), work, loadCatalog = catalog, saved = app.settings) as T
+                val free = {
+                    val am = app.getSystemService(android.app.ActivityManager::class.java)
+                    android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }.availMem
+                }
+                return SliceViewModel(EngineRunner(exe, work), work, loadCatalog = catalog, saved = app.settings,
+                    freeMemory = free) as T
             }
         }
     }

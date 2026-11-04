@@ -157,6 +157,23 @@ class EngineRunnerTest {
     }
 
     @Test
+    fun `MA9 the triangles of an STL and a 3MF are counted for the memory estimate`() {
+        val root = File(System.getProperty("user.dir")).parentFile.parentFile.parentFile
+        val cube = File(root, "tests/data/cube_ascii.stl")
+        assertEquals(12, net.tisma.app.engine.MemoryEstimate.triangles(cube))
+        val bin = tmp.newFile("b.stl").apply {
+            writeBytes(ByteArray(80) + byteArrayOf(2, 0, 0, 0) + ByteArray(100))
+        }
+        assertEquals(2, net.tisma.app.engine.MemoryEstimate.triangles(bin))
+        val zip = tmp.newFile("m.3mf")
+        java.util.zip.ZipOutputStream(zip.outputStream()).use { z ->
+            z.putNextEntry(java.util.zip.ZipEntry("3D/3dmodel.model"))
+            z.write("<triangles>".plus("<triangle v1=\"0\" v2=\"1\" v3=\"2\"/>".repeat(5000)).plus("</triangles>").toByteArray())
+        }
+        assertEquals(5000, net.tisma.app.engine.MemoryEstimate.triangles(zip))
+    }
+
+    @Test
     fun `the simple settings are the engine's keys (docs CONFIG md)`() {
         assertEquals("""{"layers":{"height":0.12},"support":{"enabled":true}}""",
             EngineRunner.SimpleSettings(0.12, true).toJson().toString())
