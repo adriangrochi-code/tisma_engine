@@ -10827,8 +10827,26 @@ rechazados por no imprimibles. Entradas raras en los comandos nuevos para el tel
   y `not valid JSON` o `not a gear` (`src/cad/spec_json.hpp`). Pruebas en `[gears]` y `[fasteners]`.
 - `pack community` con `../` en el nombre ya devolvía vacío: no hacía falta cambio.
 
-**Sin medir:** la esfera de 1 millón de triángulos no se midió: la máquina tenía carga 13 con 4 núcleos (CI con ASan y
-fuzz al lado). Queda para el próximo bloque.
+**Medido** (esfera de 1 millón de triángulos, `slice` completo, 4 núcleos, máquina libre, 7 corridas alternadas de
+cada uno): el motor del 2026-10-29 (`725633f`) tarda 1,63 a 1,95 s (mediana 1,83) y el de hoy 1,74 a 1,91 s (mediana
+1,83). No hay regresión: los 1,45 a 1,60 s anotados el 29 eran otra máquina. El corte es 1,23 a 1,39 s de cada corrida
+(`slice_ms`); escribir, 0,26 s; el control, 0,05 s. No se tocó nada: no hay una ganancia medible a la vista sin otra
+vuelta de perfilado.
 
-**CI de Linux:** `tools/ci_linux.sh` sobre `222fd59`: gcc 1041/1041; la etapa con ASan sigue corriendo.
+**CI:**
+- `tools/ci_linux.sh` sobre `222fd59`: gcc 1041/1041. La etapa con ASan se cortó a las 2 horas (límite de la sesión),
+  sin fallas hasta la prueba 649 de 1040.
+- ASan sobre `4176d0a`, solo lo tocado (paquete, xz, créditos, engranajes, tornillería, línea de comandos, calibración,
+  nodos, diseño, plantillas, ayuda): 140/140.
+- Windows en `dev`: el merge de Android (#55, `9e4ff3d`) rompió la prueba de créditos CR2. Una nota en
+  `THIRD_PARTY.md` quedó en medio de la tabla de bibliotecas y cortó nanosvg, cpp-httplib y OpenSSL. Se movió debajo de
+  la tabla (`4176d0a`); Windows en verde.
+
+**Sigue (paquete de perfiles, lo que falta en el escritorio):**
+- Regla 14: dibujar `bed_model` (STL) y `bed_texture` (SVG o PNG) del modelo del paquete en la vista 3D, en las
+  coordenadas de la cama, en OpenGL y en Vulkan. El SVG se rasteriza con nanosvg (ya en `THIRD_PARTY.md`). Para PNG
+  no hay lector en el motor: elegir uno permisivo y anotarlo antes de usarlo, o leer solo SVG y dejar PNG anotado.
+  La app de Android ya lo hace.
+- PK1/PK2 en el primer arranque (asistente con el paquete) y la regla 15 (licencia y origen en el panel del perfil,
+  no solo en el catálogo): revisar contra la ficha.
 
