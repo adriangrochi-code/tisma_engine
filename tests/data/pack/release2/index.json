@@ -33,12 +33,13 @@
     "vendors/acme/filaments/PLA.json"
    ],
    "prints": [
-    "vendors/acme/prints/Standard.json"
+    "vendors/acme/prints/Standard.json",
+    "vendors/acme/prints/Fine.json"
    ],
    "archive": {
     "name": "acme.tar.xz",
-    "size": 1052,
-    "sha256": "4a46ce4da40c5557eade08ac443702d5c6b9f81b628a5fb06a5c892def4ecdd2"
+    "size": 1080,
+    "sha256": "163a4ad5dd85890aded6a29dbc9f3948d1490b39e37ea43a1bc29a819b469863"
    },
    "models": [
     {

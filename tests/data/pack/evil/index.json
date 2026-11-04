@@ -33,7 +33,8 @@
     "vendors/acme/filaments/PLA.json"
    ],
    "prints": [
-    "vendors/acme/prints/Standard.json"
+    "vendors/acme/prints/Standard.json",
+    "vendors/acme/prints/Fine.json"
    ],
    "archive": {
     "name": "acme.tar.xz",

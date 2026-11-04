@@ -10891,6 +10891,14 @@ afuera con un aviso. Sirve para la línea de comandos, la app y el escritorio.
 **Prueba:** `[pack]`. El perfil de impresión de prueba trae `speed.walls` 170 y `speed.travel` 300 (versión 1), y el
 filamento `cooling.min_speed` 12; la impresora sale con 170, 300 (sobre los 150 propios) y 12.
 
-**Límite:** en el escritorio, elegir después otro perfil de impresión del paquete no cambia las velocidades: quedan las
-del perfil por defecto de la variante. **Sin probar:** con el paquete real; se pidió a la sesión de fichas.
+**Al cambiar de perfil** (decisión de la sesión de fichas, va a `profile_pack.md`): al elegir otro perfil de
+impresión o filamento del paquete, los ajustes de impresora que trae reemplazan a los actuales, como en la primera
+elección. Los que la persona cambió a mano se quedan, con el aviso «Se mantuvieron tus cambios en …». En la interfaz:
+- los ajustes que trae cada entrada se cuentan como parte de su perfil (`saved_settings`), así que no aparecen como
+  cambios;
+- el escritorio ofrece todos los perfiles de impresión del paquete que sirven para cada impresora del paquete elegida
+  (regla 12, `pack_prints_for`), no solo el de la variante.
+
+Prueba: `ui_pack_print_speeds` (Acme Standard → Acme Fine → velocidad de viaje a mano → Acme Standard) y los verbos de
+guion `choose-profile` y `set`. **Sin probar:** con el paquete real; se pidió a la sesión de fichas.
 

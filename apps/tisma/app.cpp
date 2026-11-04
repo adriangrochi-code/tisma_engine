@@ -975,6 +975,8 @@ private:
     // The settings of the chosen profiles, as saved: what a change is
     // measured from and a card's Reset goes back to (rule 8).
     Settings saved_settings() const;
+    Settings with_carried(const Settings& s, std::initializer_list<ProfileKind> kinds,
+                          const std::set<std::string>* skip = nullptr) const;
     void choose_level(ViewLevel level);
     // The search (rule 5): the field in the top bar, and going to a setting.
     void search_box(float width, float height);
@@ -1645,6 +1647,9 @@ private:
     std::set<std::string> pack_gone_; // pack printers the pack no longer has, kept from the copy
     std::optional<CommunityValue> community_confirm_;        // a value waiting for the person's yes (rule 24)
     std::map<std::string, std::string> pack_filament_vendor_; // a pack filament profile's name: its maker
+    // A pack filament's or print profile's name: the printer settings it
+    // carries (its speeds, as JSON groups), part of the profile (BH27).
+    std::map<std::string, std::string> pack_entry_printer_;
     std::string material_community_for_ = "\x01";             // "filaments/<name>" or "resins/<name>"
     std::vector<CommunityValue> material_community_;
     int pack_filaments_number_ = -2;                         // the printer pack_filaments_found_ is for
@@ -4489,6 +4494,7 @@ void App::load_profile_lists() {
             bed_extras_for_ = "\x01";
             pack_gone_.clear();
             pack_filament_vendor_.clear();
+            pack_entry_printer_.clear();
             community_for_ = "\x01";
             material_community_for_ = "\x01";
         }
@@ -4514,8 +4520,12 @@ void App::load_profile_lists() {
                     if (p.print)
                         made.push_back(*p.print);
                     number = p.number;
-                    if (p.filament)
+                    if (p.filament) {
                         pack_filament_vendor_[p.filament->name] = p.filament_vendor;
+                        pack_entry_printer_[p.filament->name] = p.filament_printer_settings;
+                    }
+                    if (p.print)
+                        pack_entry_printer_[p.print->name] = p.print_printer_settings;
                     if (kind == ProfileKind::Printer) {
                         std::vector<std::string> texts;
                         for (const Profile& m : made)
@@ -4556,6 +4566,22 @@ void App::load_profile_lists() {
                     }
                 }
             }
+        // Every print profile of the pack for the chosen pack printers (rule
+        // 12), with the printer settings each carries (BH27).
+        if (kind == ProfileKind::Print && pack_index_)
+            for (const auto& [printer_name, number] : pack_printer_number_)
+                for (const PackFilamentRef& ref : pack_prints_for(pack_dir(), *pack_index_, number)) {
+                    try {
+                        std::vector<std::string> ignored;
+                        PackEntry entry = read_pack_entry(pack_dir(), ref.path, ignored);
+                        pack_entry_printer_[entry.profile.name] = entry.printer_settings;
+                        if (std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
+                                         [&](const Profile& b) { return b.name == entry.profile.name; }))
+                            builtin_profiles_[k].push_back(std::move(entry.profile));
+                    } catch (const std::exception& e) {
+                        errors.push_back(ref.path + ": " + e.what());
+                    }
+                }
         // The other filaments added from the pack (rule 12).
         if (kind == ProfileKind::Filament && (!root.empty() || !options_.pack.empty()) && pack_index_)
             for (const std::string& path : pack_filaments_) {
@@ -4563,6 +4589,7 @@ void App::load_profile_lists() {
                     std::vector<std::string> ignored;
                     PackEntry entry = read_pack_entry(pack_dir(), path, ignored);
                     pack_filament_vendor_[entry.profile.name] = entry.vendor;
+                    pack_entry_printer_[entry.profile.name] = entry.printer_settings;
                     Profile f = std::move(entry.profile);
                     if (std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
                                      [&](const Profile& b) { return b.name == f.name; }))
@@ -4651,6 +4678,23 @@ void App::refresh_profiles() {
 }
 
 void App::choose_profile(ProfileKind kind, const Profile& profile) {
+    // The printer settings a pack filament or print profile carries (its
+    // speeds) replace the current ones, but not those changed by hand: they
+    // stay, and the person is told (BH27, profile_pack.md).
+    std::set<std::string> by_hand;
+    if (kind != ProfileKind::Printer && pack_entry_printer_.contains(profile.name)) {
+        try {
+            const nlohmann::json now = nlohmann::json::parse(settings_json(settings_));
+            const nlohmann::json was = nlohmann::json::parse(settings_json(saved_settings()));
+            const nlohmann::json carried = nlohmann::json::parse(pack_entry_printer_.at(profile.name));
+            for (const auto& [group, keys] : carried.items())
+                for (const auto& [key, value] : keys.items())
+                    if (now.contains(group) && now.at(group).contains(key) && was.contains(group) &&
+                        was.at(group).contains(key) && now.at(group).at(key) != was.at(group).at(key))
+                        by_hand.insert(group + "." + key);
+        } catch (const std::exception&) {
+        }
+    }
     try {
         settings_ = with_profile(settings_, kind, profile.settings);
     } catch (const std::exception& e) {
@@ -4658,6 +4702,15 @@ void App::choose_profile(ProfileKind kind, const Profile& profile) {
         return;
     }
     chosen_profile_[std::size_t(kind)] = profile.name;
+    if (kind != ProfileKind::Printer && pack_entry_printer_.contains(profile.name)) {
+        settings_ = with_carried(settings_, {kind}, &by_hand);
+        if (!by_hand.empty()) {
+            std::string names;
+            for (const std::string& key : by_hand)
+                names += (names.empty() ? "" : ", ") + key_label(key);
+            notify(format(tr(T::PackKeptByHand), names.c_str()));
+        }
+    }
     profiles_checked_.clear();
     if (kind == ProfileKind::Printer)
         fire("printer_selected");
@@ -6231,7 +6284,37 @@ Settings App::saved_settings() const {
     for (const ProfileKind kind : kProfileKinds)
         if (const Profile* p = find_profile(kind, chosen_profile_[std::size_t(kind)]))
             saved = with_profile(saved, kind, p->settings);
-    return saved;
+    // The printer settings the chosen pack filament and print profile carry
+    // are theirs (BH27), the print's last.
+    return with_carried(saved, {ProfileKind::Filament, ProfileKind::Print});
+}
+
+// `s` with the printer settings the chosen pack profiles of `kinds` carry
+// (BH27), but not the keys in `skip`.
+Settings App::with_carried(const Settings& s, std::initializer_list<ProfileKind> kinds,
+                           const std::set<std::string>* skip) const {
+    nlohmann::json over = nlohmann::json::object();
+    for (const ProfileKind kind : kinds)
+        if (const auto it = pack_entry_printer_.find(chosen_profile_[std::size_t(kind)]); it != pack_entry_printer_.end()) {
+            const nlohmann::json carried = nlohmann::json::parse(it->second, nullptr, false);
+            if (carried.is_object())
+                for (const auto& [group, keys] : carried.items())
+                    if (keys.is_object())
+                        for (const auto& [key, value] : keys.items())
+                            if (!skip || !skip->contains(group + "." + key))
+                                over[group][key] = value;
+        }
+    if (over.empty())
+        return s;
+    try {
+        nlohmann::json all = nlohmann::json::parse(settings_json(s));
+        for (const auto& [group, keys] : over.items())
+            for (const auto& [key, value] : keys.items())
+                all[group][key] = value;
+        return parse_settings(all.dump());
+    } catch (const std::exception&) {
+        return s;
+    }
 }
 
 // A level for the panel; Custom the first time shows what the level before
@@ -21018,6 +21101,28 @@ void App::script_input() {
                         chosen_profile_[std::size_t(ProfileKind::Printer)].c_str());
             next();
         }
+    } else if (step.verb == "choose-profile") { // choose-profile filament|print <name>: as picked in its list
+        const std::optional<ProfileKind> kind = profile_kind_from_name(step.key);
+        const Profile* p = kind ? find_profile(*kind, step.value) : nullptr;
+        if (!p) {
+            std::fprintf(stderr, "ui-script: no %s profile '%s'\n", step.key.c_str(), step.value.c_str());
+            failed_ = true;
+        } else {
+            choose_profile(*kind, *p);
+        }
+        next();
+    } else if (step.verb == "set") { // set <group.key> <JSON value>: a setting changed by hand
+        try {
+            nlohmann::json all = nlohmann::json::parse(settings_json(settings_));
+            const auto dot = step.key.find('.');
+            all[step.key.substr(0, dot)][step.key.substr(dot + 1)] = nlohmann::json::parse(step.value);
+            settings_ = parse_settings(all.dump());
+            settings_changed();
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "ui-script: set %s: %s\n", step.key.c_str(), e.what());
+            failed_ = true;
+        }
+        next();
     } else if (step.verb == "use-published-material") { // the same for the chosen pack filament's values
         refresh_material_community();
         const std::size_t n = std::size_t(std::atoi(step.key.c_str()));

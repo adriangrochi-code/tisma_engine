@@ -329,7 +329,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - Una impresora de resina del paquete (`"technology": "sla"`) quedaba como impresora de filamento.
 - Las velocidades del perfil de impresión del paquete se perdían y se laminaba con las de una Ender-3 (BH27). Ahora
-  pasan a la impresora.
+  pasan a la impresora, y cambian al elegir otro perfil de impresión o filamento del paquete; las que cambiaste a mano
+  se mantienen, con un aviso. Se ofrecen todos los perfiles de impresión del paquete para la impresora.
 - `pack plan` con un paquete instalado roto ya no falla: planea todo el paquete otra vez para repararlo.
 - `part gear|fastener` dice qué clave del archivo tiene un valor del tipo equivocado.
 
