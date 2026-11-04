@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Estructural dice cuánto va a costar el análisis:** junto a la resolución, la memoria y el tiempo aproximados.
+  La pestaña «Análisis» de Impresión 3D se fue: todo lo que mostraba está en Ingeniería, Estructural
+  (`engineering_panel.md`, regla 1).
 - **Estructural: más mapas y la deformación** (`engineering_panel.md`, regla 12): además del factor de seguridad,
   el mapa de la tensión de von Mises o del desplazamiento, con su escala; y la pieza deformada, exagerada tanto
   como se elija.

@@ -474,7 +474,7 @@ void keep_unreadable(const std::filesystem::path& path) {
     std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ec);
 }
 
-enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device, Structural, Aerodynamics };
+enum class Tab { Prepare, Preview, Design, Calibration, Device, Structural, Aerodynamics };
 // The tabs of the Ingeniería section; the rest are Impresión 3D's (the
 // owner's request, 2026-11-02: each section with its tabs and its own panel).
 // Fasteners live inside Design (the owner, the same day).
@@ -580,7 +580,6 @@ private:
     void viewport();
     void view_tools();
     void preview_panels();
-    void analysis_panel();
     // The Design tab (cad_design.md, stage D1): the panel, the command line
     // under the view, the design built through the bundled tool.
     void design_panel();
@@ -707,6 +706,14 @@ private:
     std::atomic<int> structural_permille_{0};
     std::optional<StructuralRun> structural_map_; // the last finished run of this session
     bool structural_show_map_ = true;
+    // «Más opciones» (rule 10): the memory and time the analysis would take,
+    // counted in the background (estimate_analysis voxelizes the part).
+    struct StructuralEstimate {
+        std::string key;
+        double memory_mb = 0.0, seconds = 0.0;
+    };
+    Background<StructuralEstimate> structural_estimate_job_;
+    StructuralEstimate structural_estimate_;
     int structural_map_kind_ = 0;          // 0 the safety factor, 1 von Mises, 2 the displacement (rule 12)
     bool structural_deformed_ = false;     // the shape drawn deformed (rule 12)
     float structural_exaggerate_ = 0.0f;   // times the real displacement; 0: chosen for the part
@@ -844,7 +851,6 @@ private:
     void frame_all();
     void frame_now();
     void set_tab(Tab tab);
-    void estimate_voxels_if_stale();
     void notify(std::string text, bool error = false);
     void fail(T title, std::string message, std::vector<std::string> details = {});
     void load_preferences();
@@ -1079,7 +1085,7 @@ private:
 
     // What the model and the settings are now, and what the running jobs
     // were started from.
-    Revision revision_, slice_made_, voxels_made_;
+    Revision revision_, slice_made_;
     Slicer slicer_;
     Background<SliceResult> slice_job_;
     std::optional<SliceResult> result_;
@@ -1091,9 +1097,6 @@ private:
     std::filesystem::path gcode_path_;
     double slice_started_ = 0.0;
 
-    Background<VoxelEstimate> voxel_job_;
-    std::optional<VoxelEstimate> voxels_;
-    bool voxels_stale_ = true;
 
     // The Design tab (cad_design.md): the design, its last build and the
     // bundled tool (rule 1, first step).
@@ -3572,7 +3575,6 @@ void App::apply_theme() {
 
 void App::shutdown() {
     slice_job_.wait();
-    voxel_job_.wait();
     device_disconnect();
     // A normal exit: no mark left for the next start (problem_reports.md, rule 10).
     session_file_.close();
@@ -3871,8 +3873,6 @@ void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab
     renderer_.clear_preview();
     vk_view_.clear_preview();
     place_model();
-    voxels_.reset();
-    voxels_stale_ = true;
     stale_ = false;
     set_tab(tab);
     frame_all();
@@ -3975,7 +3975,6 @@ void App::plate_changed() {
     ++revision_.model;
     if (result_ && !viewer_)
         stale_ = true;
-    voxels_stale_ = true;
     rebuild_plate();
 }
 
@@ -4947,7 +4946,8 @@ void App::poll_jobs() {
         if (options_.layer > 0)
             top_layer_ = std::clamp(options_.layer - 1, 0, top_layer_);
         // A screenshot keeps the tab it asked for.
-        const Tab asked = options_.view == "analysis"      ? Tab::Analysis
+        // «analysis», the old tab, opens Structural (engineering_panel.md, rule 1).
+        const Tab asked = options_.view == "analysis"      ? Tab::Structural
                           : options_.view == "design"      ? Tab::Design
                           : options_.view == "structural"  ? Tab::Structural
                           : options_.view == "aerodynamics" ? Tab::Aerodynamics
@@ -4967,14 +4967,6 @@ void App::poll_jobs() {
             fail(T::CannotSlice, format(tr(T::GcodeBad), int(result_->check.problem_count)), std::move(details));
         }
     }
-    if (std::optional<VoxelEstimate> v = voxel_job_.take()) {
-        if (fit(voxels_made_, revision_) == Fit::Current) {
-            voxels_ = std::move(*v);
-        } else {
-            voxels_.reset();
-            voxels_stale_ = true;
-        }
-    }
     if (std::optional<cad::SolidCraftInfo> info = solidcraft_job_.take()) {
         solidcraft_ = std::move(*info);
         solidcraft_probed_ = true;
@@ -4991,9 +4983,6 @@ void App::poll_jobs() {
         aerodynamics_done(std::move(*run));
     update_structural_view();
     update_aero_view();
-    // The Analysis tab keeps its estimate up to date.
-    if (tab_ == Tab::Analysis)
-        estimate_voxels_if_stale();
 }
 
 void App::show_preview() {
@@ -5020,7 +5009,6 @@ void App::settings_changed() {
     ++revision_.settings;
     if (result_ && !viewer_)
         stale_ = true;
-    voxels_stale_ = true;
 }
 
 void App::bed_changed() {
@@ -5108,8 +5096,6 @@ void App::set_tab(Tab tab) {
     if (tab != tab_)
         printer_page_ = false;
     tab_ = tab;
-    if (tab == Tab::Analysis)
-        estimate_voxels_if_stale();
     // The Design tab shows the design in the same view, over the same bed;
     // leaving it brings the plate back (cad_design.md, rules 3 and 19).
     if (engineering_tab(tab))
@@ -5124,18 +5110,6 @@ void App::set_tab(Tab tab) {
         rebuild_plate();
         frame_all();
     }
-}
-
-void App::estimate_voxels_if_stale() {
-    if (!has_plate_ || !voxels_stale_ || voxel_job_.running())
-        return;
-    voxels_stale_ = false;
-    voxels_made_ = revision_;
-    TriangleMesh placed = plate_now();
-    Settings settings = settings_;
-    voxel_job_.start([placed = std::move(placed), settings = std::move(settings)]() {
-        return estimate_voxels(placed, settings);
-    });
 }
 
 void App::top_bar() {
@@ -5180,7 +5154,6 @@ void App::top_bar() {
                               {Tab::Structural, "tisma_engineering", T::TabStructural},
                               {Tab::Aerodynamics, "tisma_engineering", T::TabAerodynamics},
                               {Tab::Design, "tisma_design", T::TabDesign},
-                              {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
                               {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
                               {Tab::Device, "tisma_printer", T::TabDevice}};
     // A narrow window: the tabs, then the sections too, keep only their icons
@@ -5260,7 +5233,6 @@ void App::top_bar() {
                                             : t.tab == Tab::Design      ? "design"
                                             : t.tab == Tab::Structural  ? "structural"
                                             : t.tab == Tab::Aerodynamics ? "aerodynamics"
-                                            : t.tab == Tab::Analysis    ? "analysis"
                                             : t.tab == Tab::Calibration ? "calibration"
                                                                         : "device")] =
             ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
@@ -5268,7 +5240,7 @@ void App::top_bar() {
             anchor("preview");
         else if (t.tab == Tab::Calibration)
             anchor("calibrations");
-        else if (t.tab == Tab::Analysis)
+        else if (t.tab == Tab::Structural)
             anchor("engineering_panel");
         ImGui::SameLine(0, 4.0f * scale_);
     }
@@ -6583,7 +6555,7 @@ void App::guide_overlay() {
         else if (step.anchor == "help_problems" || step.anchor == "help_procedures")
             help_open_ = true;
         else if (step.anchor.starts_with("engineering_"))
-            set_tab(Tab::Analysis);
+            set_tab(Tab::Structural);
         else if (step.anchor == "calibrations")
             set_tab(Tab::Calibration);
     } else if (found != anchors_.end()) {
@@ -8508,7 +8480,6 @@ void App::viewport() {
             } else {
                 add_condition(o.engineering, kind, point, normal, face);
             }
-            voxels_stale_ = true;
         }
     }
     const auto bed_point = [&](float z) -> std::optional<Vec3> {
@@ -10343,7 +10314,7 @@ void App::help_windows() {
         static const std::map<std::string, PlateTool> tool_of = {{"move", PlateTool::Move}, {"rotate", PlateTool::Rotate},
                                                                  {"scale", PlateTool::Scale}, {"lay", PlateTool::LayFlat},
                                                                  {"paint", PlateTool::Paint}};
-        static const std::map<std::string, Tab> tab_of = {{"preview", Tab::Preview}, {"analysis", Tab::Analysis},
+        static const std::map<std::string, Tab> tab_of = {{"preview", Tab::Preview}, {"analysis", Tab::Structural},
                                                           {"design", Tab::Design}, {"calibration", Tab::Calibration},
                                                           {"device", Tab::Device}};
         const auto tool = tool_of.find(tip_);
@@ -11055,74 +11026,6 @@ void App::preview_panels() {
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
-}
-
-void App::analysis_panel() {
-    const float margin = 12.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(360.0f * scale_, 0), ImVec2(460.0f * scale_, FLT_MAX));
-    ImGui::SetNextWindowBgAlpha(0.92f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
-    ImGui::Begin("##analysis", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
-    ImGui::TextUnformatted(tr(T::AnalysisTitle));
-    ImGui::PopFont();
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 420.0f * scale_);
-    loc::TextDisabled("%s", tr(T::AnalysisHint));
-    ImGui::Separator();
-    if (!has_plate_) {
-        ImGui::TextUnformatted(tr(T::AnalysisNeedsModel));
-    } else if (voxel_job_.running() || !voxels_) {
-        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::Estimating));
-    } else if (!voxels_->ok) {
-        loc::TextColored(rgb(0xE5484D), "%s", voxels_->error.c_str());
-    } else {
-        const auto card = [&](const char* id, T title, const VoxelCount& c) {
-            ImGui::PushID(id);
-            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
-            if (!c.ok) {
-                loc::TextColored(rgb(0xE5484D), "%s", c.error.c_str());
-                ImGui::PopID();
-                return;
-            }
-            const bool counted = c.printed_voxels > 0;
-            ImGui::PushFont(nullptr, kTitleSize * 1.25f);
-            ImGui::TextUnformatted(number_text(counted ? c.printed_voxels : c.grid_voxels).c_str());
-            ImGui::PopFont();
-            loc::TextDisabled("%s", tr(counted ? T::Voxels : T::GridVoxels));
-            if (counted && ImGui::BeginTable("##card", 2)) {
-                auto line = [](const char* name, const std::string& value) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    loc::TextDisabled("%s", name);
-                    ImGui::TableNextColumn();
-                    ImGui::TextUnformatted(value.c_str());
-                };
-                line(tr(T::GridVoxels), number_text(c.grid_voxels));
-                line(tr(T::VoxelSize), format("%.3f mm  ·  %s", c.voxel, format(tr(T::PerLayer), c.rows_per_layer).c_str()));
-                line(tr(T::Memory), format("%.0f MB", c.memory_mb));
-                line(tr(T::ApproxTime), format_duration(c.seconds));
-                ImGui::EndTable();
-            }
-            if (c.over_limit)
-                loc::TextColored(rgb(0xE8A33D), "%s", format(tr(T::OverLimit), number_text(c.limit).c_str()).c_str());
-            ImGui::PopID();
-        };
-        card("normal", T::QualityNormal, voxels_->normal);
-        ImGui::Separator();
-        card("high", T::QualityHigh, voxels_->high);
-    }
-    ImGui::Separator();
-    loc::TextDisabled("%s", tr(T::AnalysisCli));
-    ImGui::TextDisabled("tisma-engine analyze");
-    ImGui::PopTextWrapPos();
-    ImGui::End();
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
 }
 
 // The Design tab (docs/spec/features/cad_design.md, stage D1): the panel on
@@ -13305,6 +13208,7 @@ void App::structural_panel() {
                                 engineering_json(e);
         static std::string estimated_for;
         static std::pair<std::size_t, double> estimate{0, 0.0};
+        static std::function<StructuralEstimate()> asked_estimate;
         if (key != estimated_for && part < placed_meshes_.size() && !placed_meshes_[part].empty()) {
             estimated_for = key;
             Settings settings = settings_;
@@ -13318,9 +13222,25 @@ void App::structural_panel() {
             const IndexedMesh mesh = weld_exact(placed_meshes_[part]);
             fit_voxel_limit(c, mesh, settings); // what Analizar will use (BH24)
             estimate = {analysis_grid_voxels(mesh, settings, c), analysis_resolution(c, settings).first};
+            // The memory and the time, in the background (the old Analysis
+            // tab's cards, engineering_panel.md rule 10): the latest asked
+            // starts when the running one ends.
+            asked_estimate = [key, mesh, settings, c]() {
+                const AnalysisEstimate a = estimate_analysis(mesh, settings, c);
+                return StructuralEstimate{key, a.memory_mb, a.seconds};
+            };
+        }
+        if (std::optional<StructuralEstimate> done = structural_estimate_job_.take())
+            structural_estimate_ = std::move(*done);
+        if (asked_estimate && !structural_estimate_job_.running()) {
+            structural_estimate_job_.start(std::move(asked_estimate));
+            asked_estimate = nullptr;
         }
         if (estimate.first > 0)
             loc::TextDisabled("%s", format(tr(T::StructEstimate), estimate.first, estimate.second).c_str());
+        if (structural_estimate_.key == key && structural_estimate_.memory_mb > 0.0)
+            loc::TextDisabled("%s", format(tr(T::StructEstimateCost), structural_estimate_.memory_mb,
+                                           format_duration(structural_estimate_.seconds).c_str()).c_str());
     }
     ImGui::TextUnformatted(tr(T::StructWorkingTemp));
     if (ImGui::IsItemHovered())
@@ -14739,7 +14659,6 @@ void App::undo_engineering(bool redo) {
     to.push_back({step.object, step.count, now});
     now = std::move(step.before);
     structural_part_ = int(step.object);
-    voxels_stale_ = true;
 }
 
 // Ctrl+Z puts the last moved model back where it was; Ctrl+Y (or
@@ -18586,8 +18505,6 @@ void App::layout() {
             slice_panel();
         if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
             part_labels();
-        if (tab_ == Tab::Analysis)
-            analysis_panel();
         if (tab_ == Tab::Design && design_page_ == DesignPage::Design) {
             design_command_line();
             if (sketch_edit_) {
@@ -18618,12 +18535,12 @@ void App::layout() {
     }
     if (tab_ != last_tab_) {
         last_tab_ = tab_;
-        static const std::map<Tab, const char*> tab_tips = {{Tab::Preview, "preview"}, {Tab::Analysis, "analysis"},
+        static const std::map<Tab, const char*> tab_tips = {{Tab::Preview, "preview"}, {Tab::Structural, "analysis"},
                                                             {Tab::Design, "design"},
                                                             {Tab::Calibration, "calibration"}, {Tab::Device, "device"}};
         if (const auto it = tab_tips.find(tab_); it != tab_tips.end())
             tip(it->second);
-        if (tab_ == Tab::Analysis && !guide_memory_.done.contains("opened:engineering")) {
+        if (tab_ == Tab::Structural && !guide_memory_.done.contains("opened:engineering")) {
             guide_memory_.done.insert("opened:engineering");
             offer_tutorials("first_open:engineering");
         }
@@ -20237,7 +20154,7 @@ void App::frame() {
     // were used in the last 3 s (a tooltip shows after a delay with no event)
     // or a printer is connected (its status comes from its own thread); else
     // up to 2 s. A background job wakes the window when it ends.
-    const bool busy = !options_.screenshot.empty() || slice_job_.running() || voxel_job_.running() ||
+    const bool busy = !options_.screenshot.empty() || slice_job_.running() || structural_estimate_job_.running() ||
                       ray_job_.running() || !toasts_.empty() || ImGui::IsAnyItemActive() ||
                       (render_mode_ == RenderMode::RayTraced && renderer_.has_ray_scene() &&
                        renderer_.ray_samples() < 256);
@@ -20426,7 +20343,7 @@ void App::frame() {
         }
         const bool device_pending =
             options_.device_print && !device_print_done_ && (printer_ != nullptr || !options_.device.empty());
-        const bool waiting = slice_job_.running() || voxel_job_.running() || design_job_.running() ||
+        const bool waiting = slice_job_.running() || structural_estimate_job_.running() || design_job_.running() ||
                              solidcraft_job_.running() || slice_pending || rays_pending ||
                              (options_.coarse && (coarse_job_.running() || coarse_version_ != scene_version_)) ||
                              script_at_ < script_.size() ||
@@ -20434,7 +20351,7 @@ void App::frame() {
                              frame_pending_; // the camera (and --look) not set yet: in Preview it waits for the legend
         if (frames_ == 2) {
             if (options_.view == "analysis")
-                set_tab(Tab::Analysis);
+                set_tab(Tab::Structural);
             else if (options_.view == "design")
                 set_tab(Tab::Design);
             else if (options_.view == "structural")

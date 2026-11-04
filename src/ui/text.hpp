@@ -114,6 +114,7 @@
     X(StructTooCold, "Temperatura baja para este material: las capas pegan poco", "Temperature low for this material: the layers bond poorly") \
     X(StructTooHot, "Temperatura alta para este material: el polímero se degrada", "Temperature high for this material: the polymer degrades") \
     X(Approximation, "Es una aproximación: sirve para comparar diseños, materiales y orientaciones, no reemplaza un ensayo ni un cálculo profesional.", "This is an approximation: it compares designs, materials and orientations; it does not replace a test or a professional calculation.") \
+    X(StructEstimateCost, "Memoria: unos %.0f MB · tiempo: unos %s", "Memory: about %.0f MB · time: about %s") \
     X(StructEstimate, "Unos %zu vóxeles de %.2f mm", "About %zu voxels of %.2f mm") \
     X(StructCritical, "Punto crítico: %.2f", "Critical point: %.2f") \
     X(StructNotValid, "El resultado no sirve:", "The result is not usable:") \

@@ -10183,3 +10183,20 @@ Mirado en una captura: el cubo empujado arriba se ve hundido y en rojo arriba.
 
 **Sigue (Estructural):** Más opciones (memoria y tiempo, dirección de impresión, nube), Optimizar, arrastrar la punta
 de la flecha y sacar «Análisis» de Impresión 3D.
+
+## 2026-11-04 — Estructural: memoria y tiempo; «Análisis» fuera de Impresión 3D (reglas 1 y 10, EP1)
+
+**Hecho:**
+- «Más opciones» de Estructural muestra, junto a la resolución y los vóxeles, la memoria y el tiempo aproximados
+  (`estimate_analysis` en segundo plano; si cambia algo mientras corre, el último pedido arranca al terminar).
+- La pestaña «Análisis» de Impresión 3D se fue (regla 1, EP1): lo único que mostraba (vóxeles, memoria y tiempo por
+  calidad) está ahora en Estructural. `--view analysis`, el consejo de la pestaña, el tutorial de Ingeniería y su
+  ancla llevan a Estructural. Se borraron `analysis_panel`, la estimación de vóxeles de la app y `Tab::Analysis`;
+  `estimate_voxels` (en `src/ui/slicing.*`) queda para quien lo use.
+
+**Pruebas:** `ui_script_structural_tab` ve «vóxeles de», después «Memoria: unos», y que Impresión 3D no tiene
+`tab_analysis`. Pasan las pruebas de interfaz de Estructural, Diseño, Aerodinámica, tutoriales y capturas.
+`ui_script_structural_analyze` falló una vez en una tanda de 55 pruebas en paralelo y pasó en las tres corridas
+siguientes; sin el mensaje de esa vez. Queda anotado para el CI completo.
+
+**Sigue (Estructural):** dirección de impresión y nube en Más opciones, Optimizar, arrastrar la punta de la flecha.
