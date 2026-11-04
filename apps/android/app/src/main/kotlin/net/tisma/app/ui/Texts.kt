@@ -136,7 +136,12 @@ fun Context.readableSummary(lines: List<Pair<String, String>>): List<Pair<String
             "filament_mm" -> getString(R.string.plate_filament) to (num(v)?.let { fmt("%.2f m", it / 1000) } ?: v)
             "filament_g" -> getString(R.string.summary_weight) to (num(v)?.let { fmt("%.1f g", it) } ?: v)
             "layers" -> getString(R.string.plate_layers) to v
-            "verdict" -> getString(R.string.summary_verdict) to v
+            "verdict" -> getString(R.string.summary_verdict) to when (v) {
+                "holds" -> getString(R.string.verdict_holds)
+                "fails" -> getString(R.string.verdict_fails)
+                "no_result" -> getString(R.string.verdict_no_result)
+                else -> v
+            }
             "min_safety" -> getString(R.string.summary_min_safety) to (num(v)?.let { fmt("%.2f", it) } ?: v)
             "max_displacement_mm" -> getString(R.string.summary_displacement) to (num(v)?.let { fmt("%.3f mm", it) } ?: v)
             "mass_g" -> getString(R.string.summary_mass) to (num(v)?.let { fmt("%.1f g", it) } ?: v)

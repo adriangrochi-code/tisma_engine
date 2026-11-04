@@ -143,6 +143,13 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
         set(v) { field = v; meshDirty = true }
     @Volatile var bed = floatArrayOf(220f, 220f)
         set(v) { field = v; bedDirty = true }
+    /** Marked faces (Engineering): triangles as x y z per corner, and their color (0xRRGGBB). */
+    @Volatile var marks: List<Pair<FloatArray, Int>> = emptyList()
+        set(v) { field = v; marksDirty = true }
+    @Volatile private var marksDirty = true
+    private var marksBuf: List<Triple<FloatBuffer, Int, Int>> = emptyList()
+    var aspectNow = 1f
+        private set
     /** Toolpaths as lines, x y z r g b per vertex (GcodeLayers.lines3d), drawn in their own colors. */
     @Volatile var paths: FloatArray? = null
         set(v) { field = v; pathsDirty = true }
@@ -197,12 +204,32 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
         GLES20.glViewport(0, 0, w, h)
         aspect = w.toFloat() / max(1, h)
+        aspectNow = aspect
         height = h
     }
 
     override fun onDrawFrame(gl: GL10?) {
         if (bedDirty) { buildGrid(); bedDirty = false }
         if (meshDirty) { buildMesh(); meshDirty = false }
+        if (marksDirty) {
+            marksBuf = marks.map { (tris, c) ->
+                val n = tris.size / 9
+                val data = FloatArray(n * 3 * 6)
+                for (t in 0 until n) {
+                    val i = 9 * t
+                    val ux = tris[i + 3] - tris[i]; val uy = tris[i + 4] - tris[i + 1]; val uz = tris[i + 5] - tris[i + 2]
+                    val vx = tris[i + 6] - tris[i]; val vy = tris[i + 7] - tris[i + 1]; val vz = tris[i + 8] - tris[i + 2]
+                    val nx = uy * vz - uz * vy; val ny = uz * vx - ux * vz; val nz = ux * vy - uy * vx
+                    for (k in 0..2) {
+                        val o = (3 * t + k) * 6
+                        data[o] = tris[i + 3 * k]; data[o + 1] = tris[i + 3 * k + 1]; data[o + 2] = tris[i + 3 * k + 2]
+                        data[o + 3] = nx; data[o + 4] = ny; data[o + 5] = nz
+                    }
+                }
+                Triple(buffer(data), n * 3, c)
+            }
+            marksDirty = false
+        }
         if (pathsDirty) { paths.let { p -> pathsBuf = p?.let { buffer(it) }; pathsCount = (p?.size ?: 0) / 6 }; pathsDirty = false }
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT or GLES20.GL_DEPTH_BUFFER_BIT)
         GLES20.glUseProgram(program)
@@ -242,6 +269,23 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
             GLES20.glEnableVertexAttribArray(nor)
             GLES20.glVertexAttribPointer(nor, 3, GLES20.GL_FLOAT, false, 24, m)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, meshCount)
+        }
+        if (marksBuf.isNotEmpty()) {
+            // On top of the model's faces: pulled toward the eye so they are not hidden by them.
+            GLES20.glEnable(GLES20.GL_POLYGON_OFFSET_FILL)
+            GLES20.glPolygonOffset(-1f, -2f)
+            GLES20.glUniform1f(lit, 1f)
+            for ((b, count, c) in marksBuf) {
+                GLES20.glUniform4f(color, (c shr 16 and 0xFF) / 255f, (c shr 8 and 0xFF) / 255f, (c and 0xFF) / 255f, 1f)
+                b.position(0)
+                GLES20.glEnableVertexAttribArray(pos)
+                GLES20.glVertexAttribPointer(pos, 3, GLES20.GL_FLOAT, false, 24, b)
+                b.position(3)
+                GLES20.glEnableVertexAttribArray(nor)
+                GLES20.glVertexAttribPointer(nor, 3, GLES20.GL_FLOAT, false, 24, b)
+                GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, count)
+            }
+            GLES20.glDisable(GLES20.GL_POLYGON_OFFSET_FILL)
         }
         pathsBuf?.takeIf { pathsCount > 0 }?.let { p ->
             GLES20.glUniform1f(lit, 0f)
@@ -312,6 +356,9 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
 fun Plate3D(
     mesh: MeshFile?, bed: FloatArray, modifier: Modifier = Modifier,
     paths: FloatArray? = null, pathBounds: FloatArray? = null,
+    marks: List<Pair<FloatArray, Int>> = emptyList(),
+    /** With it, a tap gives the ray under the finger (origin, direction) instead of zooming. */
+    onPick: ((FloatArray, FloatArray) -> Unit)? = null,
 ) {
     val camera = remember { OrbitCamera() }
     val renderer = remember { PlateRenderer(camera) }
@@ -321,6 +368,12 @@ fun Plate3D(
         camera.frame(b)
         holder[0]?.requestRender()
     }
+    DisposableEffect(marks) {
+        renderer.marks = marks
+        holder[0]?.requestRender()
+        onDispose { }
+    }
+    val pickNow = androidx.compose.runtime.rememberUpdatedState(onPick)
     DisposableEffect(paths) {
         renderer.paths = paths
         holder[0]?.requestRender()
@@ -358,7 +411,16 @@ fun Plate3D(
             },
             modifier = Modifier.matchParentSize()
                 .pointerInput(Unit) {
-                    detectTapGestures(onDoubleTap = { camera.zoom(1.6f); holder[0]?.requestRender() })
+                    detectTapGestures(
+                        onDoubleTap = { camera.zoom(1.6f); holder[0]?.requestRender() },
+                        onTap = { at ->
+                            val pick = pickNow.value ?: return@detectTapGestures
+                            val x = 2f * at.x / size.width - 1f
+                            val y = 1f - 2f * at.y / size.height
+                            val (o, d) = net.tisma.app.engine.Picking.ray(camera.viewProjection(renderer.aspectNow), x, y)
+                            pick(o, d)
+                        },
+                    )
                 }
                 .pointerInput(Unit) {
                     awaitEachGesture {
@@ -372,8 +434,10 @@ fun Plate3D(
                             if (pressed.isEmpty()) break
                             val c = pressed.fold(androidx.compose.ui.geometry.Offset.Zero) { a, p -> a + p.position } / pressed.size.toFloat()
                             val span = if (pressed.size >= 2) (pressed[0].position - pressed[1].position).getDistance() else 0f
+                            var moved = false
                             if (pressed.size == lastCount && lastCentroid != null) {
                                 val d = c - lastCentroid
+                                moved = d.getDistance() > 0f || (lastSpan > 0f && span != lastSpan)
                                 if (pressed.size == 1) camera.rotate(d.x, d.y)
                                 else {
                                     camera.pan(d.x, d.y, renderer.viewHeight)
@@ -384,7 +448,8 @@ fun Plate3D(
                             lastCentroid = c
                             lastSpan = span
                             lastCount = pressed.size
-                            pressed.forEach { it.consume() }
+                            // Only movement is taken, so a still tap reaches the tap detector (picking, double tap).
+                            if (moved) pressed.forEach { it.consume() }
                         }
                     }
                 },

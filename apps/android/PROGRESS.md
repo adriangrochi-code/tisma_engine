@@ -25,6 +25,20 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Ingeniería en un modelo suelto (regla 13, MA6):**
+  - En la Placa, con un STL u OBJ, se elige qué marca un toque (fijas, carga, o solo girar). Al tocar la pieza se marca
+    la cara plana bajo el dedo: rayo y Möller–Trumbore, después los triángulos unidos en el mismo plano.
+  - Cada carga lleva su fuerza en N, hacia la cara. Se eligen el material (`docs/MATERIALS.md`), la calidad y el factor
+    de seguridad pedido, y se corre `analyze <modelo> --config --case --progress`. El veredicto compara la seguridad
+    mínima con la pedida.
+  - Una cara que es el extremo de la pieza en un eje va como cara del motor (`top`, `x_min`…); otra va como caja con un
+    margen de 0,08 mm (normal) o 0,04 mm (alta).
+  - Medido con el motor de la máquina en una viga de 60 × 10 × 6 mm, fija en los extremos y con 200 N arriba: la misma
+    seguridad (1,582) con caras, con cajas y con el caso escrito a mano. Con 0,3 mm de margen daba 1,752; con menos de
+    0,08, nada sujeto. Prueba `EngineeringModelTest` (con `TISMA_HOST_ENGINE`).
+  - Falta: la temperatura (el motor todavía no la usa en el material), cargas en un punto, y el mapa de colores sobre
+    la pieza. La selección por toque no se probó en un teléfono.
+
 - **2026-11-04 — Tabletas y horizontal:** con 720 dp o más de ancho, la Placa muestra la vista 3D a la izquierda y los
   controles a la derecha, e Impresión, Material e Impresora muestran la lista de secciones a la izquierda y la sección
   elegida a la derecha. Probado con Robolectric a 900 × 600 dp; no en una tableta.

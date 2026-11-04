@@ -15,7 +15,12 @@ import kotlin.math.sqrt
  * core specification: the build items' objects, their components and
  * transforms). Only for showing: the engine reads the model itself to slice.
  */
-class MeshFile(val positions: FloatArray, val normals: FloatArray) {
+class MeshFile(
+    val positions: FloatArray,
+    val normals: FloatArray,
+    /** How far the model was moved from its file's coordinates (x, y, z), to give regions back in them. */
+    val offset: FloatArray = floatArrayOf(0f, 0f, 0f),
+) {
     val triangles get() = positions.size / 9
 
     /** min x, y, z, max x, y, z. */
@@ -42,7 +47,7 @@ class MeshFile(val positions: FloatArray, val normals: FloatArray) {
         val p = positions.copyOf()
         var i = 0
         while (i < p.size) { p[i] += dx; p[i + 1] += dy; p[i + 2] += dz; i += 3 }
-        return MeshFile(p, normals)
+        return MeshFile(p, normals, floatArrayOf(offset[0] + dx, offset[1] + dy, offset[2] + dz))
     }
 
     companion object {

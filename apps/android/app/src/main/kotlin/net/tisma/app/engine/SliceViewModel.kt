@@ -43,6 +43,10 @@ data class SliceState(
     val layout: SettingsLayout? = null,
     val profileValues: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
     val view: PanelVisibility.View = PanelVisibility.View.BASIC,
+    /** Engineering on a bare model: the marked faces, the material and the safety asked (mobile_app.md, rule 13). */
+    val case: EngineeringCase = EngineeringCase(),
+    /** What a tap on the 3D view marks now, or null when it only turns the view. */
+    val marking: EngineeringCase.Kind? = null,
     /** The lightest infill found that holds, in %, to apply to the slice (mobile_app.md, rule 13). */
     val lightest: Int? = null,
     /** A G-code that was opened or shared, to show in the preview (QA AND5). */
@@ -172,7 +176,7 @@ class SliceViewModel(
     private fun loadMesh(f: File) = viewModelScope.launch {
         val bed = bedSize()
         val mesh = withContext(io) { runCatching { MeshFile.read(f).onBed(bed[0] / 2, bed[1] / 2) }.getOrNull() }
-        _state.update { it.copy(mesh = mesh, bed = bed) }
+        _state.update { it.copy(mesh = mesh, bed = bed, case = it.case.copy(conditions = emptyList())) }
     }
 
     /** Picks the printer, nozzle and filament (the printer card). */
@@ -223,7 +227,8 @@ class SliceViewModel(
         model = copied
         loadMesh(copied)
         _state.update {
-            it.copy(modelName = name, isProject = copied.extension.equals("3mf", true), result = null, error = null, progress = 0)
+            it.copy(modelName = name, isProject = copied.extension.equals("3mf", true), result = null, error = null, progress = 0,
+                case = it.case.copy(conditions = emptyList()), marking = null, analysis = null)
         }
     }
 
@@ -275,6 +280,70 @@ class SliceViewModel(
                 _state.update { it.copy(error = EngineRunner.EngineException("error", e.message ?: "", "", -1)) }
             } finally {
                 _state.update { it.copy(slicing = false) }
+            }
+        }
+    }
+
+    /** Taps mark fixed faces or loaded faces, or (null) only turn the view. */
+    fun setMarking(kind: EngineeringCase.Kind?) = _state.update { it.copy(marking = kind) }
+
+    /** A tap on the 3D view along the ray [o] + t·[d]: the flat face under it becomes a condition. */
+    fun pick(o: FloatArray, d: FloatArray) {
+        val kind = state.value.marking ?: return
+        val mesh = state.value.mesh ?: return
+        viewModelScope.launch {
+            val c = withContext(Dispatchers.Default) {
+                val t = Picking.hit(mesh, o, d) ?: return@withContext null
+                val face = Picking.flatFace(mesh, t)
+                val n = Picking.normal(mesh, face)
+                EngineeringCase.Condition(kind, face, Picking.box(mesh, face, EngineeringCase.pad(state.value.case.quality)),
+                    direction = floatArrayOf(-n[0], -n[1], -n[2]), face = EngineeringCase.endFace(mesh, face, n))
+            } ?: return@launch
+            _state.update { it.copy(case = it.case.copy(conditions = it.case.conditions + c), analysis = null) }
+        }
+    }
+
+    fun removeCondition(index: Int) = _state.update {
+        it.copy(case = it.case.copy(conditions = it.case.conditions.filterIndexed { i, _ -> i != index }), analysis = null)
+    }
+
+    fun setCase(case: EngineeringCase) = _state.update { it.copy(case = case, analysis = null) }
+
+    /** Analyzes the bare model with the marked faces (docs/ANALYSIS.md, «El caso»). */
+    fun analyzeModel() {
+        val m = model ?: return
+        val s = state.value
+        val mesh = s.mesh ?: return
+        if (s.slicing || s.analyzing || s.isProject) return
+        cancel.set(false)
+        _state.update { it.copy(analyzing = true, progress = 0, analysis = null, error = null, lightest = null, marking = null) }
+        viewModelScope.launch {
+            try {
+                val r = withContext(io) {
+                    runner.analyzeModel(m, s.settings, s.case.toJson(mesh.offset), s.profile,
+                        { p -> _state.update { it.copy(progress = p) } }) { cancel.get() }
+                }
+                val min = (r.summary["min_safety"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()
+                val valid = r.summary["valid"]?.toString() == "true"
+                val verdict = when {
+                    !valid || min == null -> "no_result"
+                    min >= s.case.requiredSafety -> "holds"
+                    else -> "fails"
+                }
+                val lines = listOf("verdict" to verdict, "required_safety" to s.case.requiredSafety.toString()) +
+                    r.summary.mapNotNull { (k, v) -> (v as? kotlinx.serialization.json.JsonPrimitive)?.let { k to it.content } }
+                        .filter { (k, _) -> k in setOf("min_safety", "max_displacement_mm", "max_von_mises_mpa") }
+                AppLog.line("engine: model analysis $verdict")
+                _state.update { it.copy(analysis = lines) }
+            } catch (e: EngineRunner.Cancelled) {
+                _state.update { it.copy(notice = SliceNotice.Cancelled) }
+            } catch (e: EngineRunner.EngineException) {
+                AppLog.line("engine: model analysis failed (${e.exitCode}) ${e.error}")
+                _state.update { it.copy(error = e) }
+            } catch (e: java.io.IOException) {
+                _state.update { it.copy(error = EngineRunner.EngineException("error", e.message ?: "", "", -1)) }
+            } finally {
+                _state.update { it.copy(analyzing = false) }
             }
         }
     }

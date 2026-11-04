@@ -374,4 +374,18 @@
     <string name="messages_empty">No messages yet.</string>
     <string name="eng_lightest_apply">Use %1$d %% infill in the slice</string>
     <string name="eng_lightest_applied">%1$d %% infill is used in the slice</string>
+    <string name="verdict_holds">Holds</string>
+    <string name="verdict_fails">Does not hold</string>
+    <string name="verdict_no_result">No result (see the warnings)</string>
+    <string name="eng_model_hint">Mark faces by touching the model: first pick what a tap marks.</string>
+    <string name="eng_mark_fixed">Tap marks fixed</string>
+    <string name="eng_mark_load">Tap marks a load</string>
+    <string name="eng_mark_off">Tap turns the view</string>
+    <string name="eng_fixed">Fixed face %1$d</string>
+    <string name="eng_load">Load %1$d</string>
+    <string name="eng_newtons">Force (N)</string>
+    <string name="eng_material">Material</string>
+    <string name="eng_required">Safety factor asked</string>
+    <string name="eng_remove">Remove</string>
+    <string name="eng_need_both">Mark at least one fixed face and one load.</string>
 </resources>

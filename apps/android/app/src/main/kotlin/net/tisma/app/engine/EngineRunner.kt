@@ -143,6 +143,26 @@ class EngineRunner(private val executable: File, private val workDir: File) {
         return Analysis(out, runTool(args, out, summary, onProgress, cancelled) ?: JsonObject(emptyMap()))
     }
 
+    /**
+     * Engineering on a bare model (docs/ANALYSIS.md): `analyze <model>
+     * --config --case --progress`. The summary is the report's `result`, with
+     * `valid`.
+     */
+    fun analyzeModel(model: File, settings: SimpleSettings, case: JsonObject, profile: ProfileChoice?,
+                     onProgress: (Int) -> Unit, cancelled: () -> Boolean): Analysis {
+        workDir.mkdirs()
+        val base = profile?.let { profile(it) }
+        val merged = if (base != null) merge(base, settings.toJson()) else settings.toJson()
+        val config = File(workDir, "settings.json").apply { writeText(merged.toString()) }
+        val caseFile = File(workDir, "case.json").apply { writeText(case.toString()) }
+        val out = File(workDir, "report.json")
+        runTool(listOf("analyze", model.path, "--config", config.path, "--case", caseFile.path, "-o", out.path, "--progress"),
+            out, null, onProgress, cancelled, okCodes = setOf(0, 5)) // 5: no valid result, the report says why
+        val report = runCatching { Json.parseToJsonElement(out.readText()) as JsonObject }.getOrNull() ?: JsonObject(emptyMap())
+        val result = (report["result"] as? JsonObject) ?: JsonObject(emptyMap())
+        return Analysis(out, JsonObject(result + mapOf("valid" to (report["valid"] ?: JsonPrimitive(false)))))
+    }
+
     /** The air's drag on the part (cloud.md, rule 19b; aerodynamics.md): `aero`. */
     fun aero(project: File, objectIndex: Int, quality: String, speed: Double, direction: String,
              onProgress: (Int) -> Unit, cancelled: () -> Boolean): Analysis {
@@ -155,7 +175,8 @@ class EngineRunner(private val executable: File, private val workDir: File) {
     }
 
     /** Runs the engine with [args]; the summary, or an [EngineException] with its reason. */
-    private fun runTool(args: List<String>, out: File, summary: File?, onProgress: (Int) -> Unit, cancelled: () -> Boolean): JsonObject? {
+    private fun runTool(args: List<String>, out: File, summary: File?, onProgress: (Int) -> Unit, cancelled: () -> Boolean,
+                        okCodes: Set<Int> = setOf(0)): JsonObject? {
         workDir.mkdirs()
         out.delete()
         summary?.delete()
@@ -167,6 +188,8 @@ class EngineRunner(private val executable: File, private val workDir: File) {
         process.outputStream.close()
         val reader = Thread {
             process.inputStream.bufferedReader().forEachLine { line ->
+                // `analyze <model> --progress` says «progress: <stage> <0 to 1>».
+                if (line.startsWith("progress: ")) line.substringAfterLast(' ').toDoubleOrNull()?.let { onProgress((it * 100).toInt().coerceIn(0, 100)) }
                 if (line.startsWith("progress ")) line.removePrefix("progress ").trim().toDoubleOrNull()?.let {
                     onProgress(it.toInt().coerceIn(0, 100))
                 }
@@ -185,7 +208,7 @@ class EngineRunner(private val executable: File, private val workDir: File) {
         val code = process.exitValue()
         val s = summary?.takeIf { it.isFile }?.let { runCatching { Json.parseToJsonElement(it.readText()) as JsonObject }.getOrNull() }
         fun str(k: String) = (s?.get(k) as? JsonPrimitive)?.contentOrNull.orEmpty()
-        if (code != 0 || !out.isFile) {
+        if (code !in okCodes || !out.isFile) {
             val err = str("error").ifBlank { stderr.takeIf { it.isFile }?.readText()?.trim()?.lines()?.lastOrNull().orEmpty() }
             throw EngineException(str("code"), err.ifBlank { "The engine stopped (exit code $code)" }, str("error_es"), code)
         }

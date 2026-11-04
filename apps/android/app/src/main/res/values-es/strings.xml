@@ -358,4 +358,18 @@
     <string name="messages_empty">Todavía no hay mensajes.</string>
     <string name="eng_lightest_apply">Usar %1$d %% de relleno al laminar</string>
     <string name="eng_lightest_applied">Se lamina con %1$d %% de relleno</string>
+    <string name="verdict_holds">Aguanta</string>
+    <string name="verdict_fails">No aguanta</string>
+    <string name="verdict_no_result">Sin resultado (ver los avisos)</string>
+    <string name="eng_model_hint">Marcá las caras tocando la pieza: primero elegí qué marca un toque.</string>
+    <string name="eng_mark_fixed">El toque marca fijas</string>
+    <string name="eng_mark_load">El toque marca una carga</string>
+    <string name="eng_mark_off">El toque gira la vista</string>
+    <string name="eng_fixed">Cara fija %1$d</string>
+    <string name="eng_load">Carga %1$d</string>
+    <string name="eng_newtons">Fuerza (N)</string>
+    <string name="eng_material">Material</string>
+    <string name="eng_required">Factor de seguridad pedido</string>
+    <string name="eng_remove">Quitar</string>
+    <string name="eng_need_both">Marcá al menos una cara fija y una carga.</string>
 </resources>

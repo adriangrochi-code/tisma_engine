@@ -74,8 +74,18 @@ fun PlateScreen(
     // Tablets and landscape (mobile_app.md, rule 5; accessibility_touch.md, rule 11): with room, the 3D view
     // takes the left and the controls the right, so neither scrolls the other away.
     val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 720
+    // Engineering's marked faces: fixed in sky blue, loads in orange (Okabe and Ito, readable with color blindness).
+    val marks = androidx.compose.runtime.remember(state.case.conditions, state.mesh) {
+        val mesh = state.mesh
+        if (mesh == null) emptyList() else state.case.conditions.map { c ->
+            val f = FloatArray(9 * c.triangles.size)
+            c.triangles.forEachIndexed { j, t -> System.arraycopy(mesh.positions, 9 * t, f, 9 * j, 9) }
+            f to (if (c.kind == net.tisma.app.engine.EngineeringCase.Kind.FIXED) 0x56B4E9 else 0xE69F00)
+        }
+    }
     val view: @Composable (Modifier) -> Unit = { m ->
-        Plate3D(state.mesh, state.bed, m.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)))
+        Plate3D(state.mesh, state.bed, m.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
+            marks = marks, onPick = if (state.marking != null) slice::pick else null)
     }
     if (wide && state.modelName != null) {
         Row(Modifier.fillMaxSize()) {
@@ -166,6 +176,7 @@ private fun PlateControls(
             }
         }
         if (state.modelName != null && state.isProject && state.engineAvailable) EngineeringCard(state, slice)
+        if (state.modelName != null && !state.isProject && state.engineAvailable && state.mesh != null) ModelEngineeringCard(state, slice)
         state.error?.let { e ->
             TismaCard {
                 Text(stringResource(R.string.job_error), style = MaterialTheme.typography.titleMedium)
@@ -283,6 +294,90 @@ private fun EngineeringCard(state: SliceState, slice: SliceViewModel) {
             Button(onClick = { slice.setValue("infill.density", kotlinx.serialization.json.JsonPrimitive(d)) }, enabled = !applied,
                 modifier = Modifier.fillMaxWidth().testTag("eng_apply_lightest")) {
                 Text(stringResource(if (applied) R.string.eng_lightest_applied else R.string.eng_lightest_apply, d))
+            }
+        }
+    }
+}
+
+/**
+ * Engineering on a bare model (mobile_app.md, rule 13): pick what a tap
+ * marks, touch the faces, set each load's force, the material and the safety
+ * asked, then Analyze. The verdict compares the engine's lowest safety factor
+ * with the one asked.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ModelEngineeringCard(state: SliceState, slice: SliceViewModel) {
+    val context = ctx()
+    val case = state.case
+    TismaCard(Modifier.testTag("model_engineering")) {
+        Text(stringResource(R.string.eng_title), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.eng_model_hint), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(null to R.string.eng_mark_off, net.tisma.app.engine.EngineeringCase.Kind.FIXED to R.string.eng_mark_fixed,
+                net.tisma.app.engine.EngineeringCase.Kind.LOAD to R.string.eng_mark_load).forEach { (k, l) ->
+                FilterChip(selected = state.marking == k, onClick = { slice.setMarking(k) }, label = { Text(stringResource(l)) },
+                    modifier = Modifier.testTag("eng_mark_" + (k?.name?.lowercase() ?: "off")))
+            }
+        }
+        var fixedN = 0; var loadN = 0
+        case.conditions.forEachIndexed { i, c ->
+            val fixed = c.kind == net.tisma.app.engine.EngineeringCase.Kind.FIXED
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("eng_condition_$i")) {
+                Text(if (fixed) stringResource(R.string.eng_fixed, ++fixedN) else stringResource(R.string.eng_load, ++loadN),
+                    modifier = Modifier.weight(1f))
+                if (!fixed) {
+                    var text by rememberSaveable(i, c.newtons) { mutableStateOf(c.newtons.toString().removeSuffix(".0")) }
+                    androidx.compose.material3.OutlinedTextField(text, { t ->
+                        text = t
+                        t.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }?.let { n ->
+                            slice.setCase(case.copy(conditions = case.conditions.mapIndexed { j, x -> if (j == i) x.copy(newtons = n) else x }))
+                        }
+                    }, singleLine = true, label = { Text(stringResource(R.string.eng_newtons)) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f).testTag("eng_newtons_$i"))
+                }
+                androidx.compose.material3.TextButton(onClick = { slice.removeCondition(i) }) { Text(stringResource(R.string.eng_remove)) }
+            }
+        }
+        // The material (docs/MATERIALS.md) and the safety factor the part must keep.
+        var open by androidx.compose.runtime.remember { mutableStateOf(false) }
+        androidx.compose.foundation.layout.Box {
+            OutlinedButton(onClick = { open = true }, modifier = Modifier.testTag("eng_material")) {
+                Text(stringResource(R.string.eng_material) + ": " + case.material)
+            }
+            androidx.compose.material3.DropdownMenu(open, { open = false }) {
+                net.tisma.app.engine.EngineeringCase.MATERIALS.forEach { m ->
+                    androidx.compose.material3.DropdownMenuItem(text = { Text(m) }, onClick = { open = false; slice.setCase(case.copy(material = m)) })
+                }
+            }
+        }
+        var safety by rememberSaveable { mutableStateOf(case.requiredSafety.toString().removeSuffix(".0")) }
+        androidx.compose.material3.OutlinedTextField(safety, { t ->
+            safety = t
+            t.replace(',', '.').toDoubleOrNull()?.takeIf { it >= 1 }?.let { slice.setCase(case.copy(requiredSafety = it)) }
+        }, singleLine = true, label = { Text(stringResource(R.string.eng_required)) },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth().testTag("eng_required"))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("normal" to R.string.quality_normal, "high" to R.string.quality_high).forEach { (q, l) ->
+                FilterChip(selected = case.quality == q, onClick = { slice.setCase(case.copy(quality = q)) }, label = { Text(stringResource(l)) })
+            }
+        }
+        val ready = case.conditions.any { it.kind == net.tisma.app.engine.EngineeringCase.Kind.FIXED } &&
+            case.conditions.any { it.kind == net.tisma.app.engine.EngineeringCase.Kind.LOAD }
+        if (!ready) Text(stringResource(R.string.eng_need_both), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Button(onClick = { slice.analyzeModel() }, enabled = ready && !state.analyzing && !state.slicing,
+            modifier = Modifier.fillMaxWidth().testTag("eng_analyze_model")) { Text(stringResource(R.string.eng_analyze)) }
+        if (state.analyzing) {
+            LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth())
+            OutlinedButton(onClick = { slice.cancel() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
+        }
+        state.analysis?.let { lines ->
+            context.readableSummary(lines).forEach { (k, v) ->
+                Row { Text(k, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant); Text(v) }
             }
         }
     }
