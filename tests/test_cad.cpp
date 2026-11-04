@@ -19,6 +19,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <random>
@@ -26,6 +27,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <numbers>
+#include <tuple>
 
 using namespace tisma;
 using namespace tisma::cad;
