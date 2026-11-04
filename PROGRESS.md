@@ -10769,7 +10769,9 @@ El orden del roadmap se planifica con esas fechas.
 **Sin probar:** la descarga real desde la interfaz contra GitHub.
 
 **Sigue:**
-- el aviso de versión nueva al abrir, una vez por día (regla 19);
 - el filtro de filamentos compatibles en la lista de Material (regla 12, PK7);
 - el aviso «Este perfil ya no está en el paquete» (regla 20);
 - los datos de la comunidad (reglas 22 a 24).
+
+**El mismo día:** el aviso de versión nueva al abrir, como mucho una vez por día (regla 19, `pack_newer` en segundo
+plano). **Sin probar:** contra una versión publicada de verdad.

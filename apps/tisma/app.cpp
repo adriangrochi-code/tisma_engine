@@ -1636,6 +1636,9 @@ private:
     std::shared_ptr<PackJobState> pack_state_;
     std::future<std::string> pack_job_; // the error; empty when it went well
     std::string pack_add_after_;         // a printer to add once its download ends
+    bool pack_check_updates_ = true;     // packs.check_updates
+    long long pack_checked_ = 0;         // packs.checked: when the last look for a newer pack was (seconds)
+    std::future<std::string> pack_newer_job_; // the newer pack_version, empty when none
     int catalog_pack_pick_ = -1;
     std::size_t catalog_pack_variant_ = 0;
     // The project file last opened or saved.
@@ -3505,6 +3508,14 @@ bool App::init(std::string& error) {
     }
     // The profiles; with none chosen yet, the ones the settings match.
     load_pack();
+    // A newer pack, looked for at most once a day (profile_pack.md, rule 19).
+    if (pack_index_ && pack_check_updates_ && options_.screenshot.empty() && options_.pack.empty()) {
+        const long long now = static_cast<long long>(std::time(nullptr));
+        if (now - pack_checked_ >= 24 * 3600) {
+            pack_checked_ = now;
+            pack_newer_job_ = std::async(std::launch::async, [dir = pack_dir(), url = pack_url_] { return pack_newer(dir, url); });
+        }
+    }
     load_profile_lists();
     for (const ProfileKind kind : kProfileKinds) {
         std::string& chosen = chosen_profile_[std::size_t(kind)];
@@ -3732,6 +3743,8 @@ void App::load_preferences() {
         tips_ = j.value("tips", true);
         if (const auto packs = j.find("packs"); packs != j.end() && packs->is_object()) {
             pack_url_ = packs->value("url", "");
+            pack_check_updates_ = packs->value("check_updates", true);
+            pack_checked_ = packs->value("checked", 0LL);
             if (const auto chosen = packs->find("printers"); chosen != packs->end() && chosen->is_array())
                 for (const auto& p : *chosen)
                     if (p.is_string())
@@ -3871,6 +3884,8 @@ void App::save_preferences() {
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
         j["packs"]["url"] = pack_url_;
+        j["packs"]["check_updates"] = pack_check_updates_;
+        j["packs"]["checked"] = pack_checked_;
         j["packs"]["printers"] = pack_printers_;
         j["assistant"]["tutorials"] = assistant_tutorials_;
         j["assistant"]["glossary_tips"] = assistant_glossary_;
@@ -5084,6 +5099,11 @@ void App::start_pack_update(PackChoice choice, std::string add_after) {
 }
 
 void App::poll_pack_update() {
+    if (pack_newer_job_.valid() && pack_newer_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const std::string version = pack_newer_job_.get();
+        if (!version.empty())
+            notify(format(tr(T::PackNewer), version.c_str()));
+    }
     if (!pack_job_.valid() || pack_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
         return;
     const std::string error = pack_job_.get();

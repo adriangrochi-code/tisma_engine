@@ -1062,6 +1062,7 @@
     X(PackReady, "Paquete de perfiles %s instalado", "Profile pack %s installed") \
     X(PackAdded, "Agregada %s con su filamento y su perfil de impresión", "Added %s with its filament and print profile") \
     X(PackTechnology, "Tecnología: %s", "Technology: %s") \
+    X(PackNewer, "Hay perfiles nuevos (%s): actualizalos desde el catálogo de impresoras", "New profiles (%s): update them from the printer catalog") \
     X(Material, "Material", "Material")                                                                               \
     X(NozzleRange, "Boquilla", "Nozzle")                                                                              \
     X(BedRange, "Cama", "Bed")                                                                                        \

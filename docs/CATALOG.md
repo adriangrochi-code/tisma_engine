@@ -210,6 +210,8 @@ app del teléfono) baja los archivos que pide el plan a una carpeta y el motor l
 - Los perfiles del paquete son de fábrica: no se guardan encima, como los propios del motor (regla 9).
 - Las impresoras elegidas se guardan en las preferencias (`packs.printers`) y se vuelven a armar al abrir.
   `packs.url` cambia de dónde se baja.
+- Al abrir, como mucho una vez por día, se busca si hay una versión publicada más nueva (regla 19). Si la hay, aparece
+  el aviso «Hay perfiles nuevos». `packs.check_updates` en falso lo apaga; `packs.checked` guarda cuándo se buscó.
 - Sin paquete instalado, el catálogo ofrece **Bajar la lista de impresoras del paquete**. Con uno, **Actualizar el
   paquete** baja solo lo que cambió.
 - `tisma --pack CARPETA` usa otro paquete, también en las capturas. `--pick-pack-printer "<archivo>#<variante>"`
