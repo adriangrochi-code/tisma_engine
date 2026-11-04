@@ -25,13 +25,20 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — La PR #55 (`android` → `dev`) se fusionó.** `android` sigue desde `dev` (9e4ff3d), y lo que viene va
+  en una PR nueva.
+
 - **2026-11-04 — SolidCraft para Android (opción b del dueño: compilarlo en GitHub Actions):**
   - El flujo `.github/workflows/solidcraft-android.yml` compila `solidcraft-cli` v0.30.0 (commit fijo `afd8138`) para
     arm64-v8a y x86_64 con el NDK r29. Corre a mano, o cuando cambia su archivo; por eso el push a `android` lo lanza.
   - Deja los artefactos `solidcraft-android-<abi>`, con el programa sin símbolos, su SHA-256 y las licencias.
   - La app lo lleva con `-Ptisma.solidcraft=<carpeta de los artefactos>` como `lib/<abi>/libsolidcraft.so`, y sus
     licencias van a los créditos. Probado con una carpeta falsa: el APK lo trae, y sin la propiedad no.
-  - Todavía no se sabe si compila para Android (la compilación corre en GitHub, no aquí).
+  - Primera corrida (41866108833, 04-11-2026): compila para las dos arquitecturas en unos 8 y 12 min. Artefactos:
+    `solidcraft-android-arm64-v8a` (29 MB comprimido; ejecutable de 70 MB, ELF aarch64 para `/system/bin/linker64`) y
+    `solidcraft-android-x86_64` (31 MB). Vencen el 2027-02-02.
+  - El dueño recibió un APK de prueba (`app-debug`, 71 MB) con el motor y SolidCraft arm64. El motor de ese APK todavía
+    no tiene `design build`, así que Diseño (CAD) no construye en él. No se probó en un teléfono.
   - **Más › Diseño (CAD):** el diseño en el formato del motor (`tisma-design-1`), con:
     - cuerpos nuevos: caja, cilindro, esfera, cono, tubo, toro;
     - operaciones: mover o girar (con copia), combinar (unir, cortar, intersecar), espejar, patrones circular y
@@ -43,7 +50,9 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
     - Sin SolidCraft en el APK, la pantalla lo dice y remite a engranajes y tornillería.
     - Falta: redondeo, chaflán, agujero, rosca, corte, desmoldeo y bocetos (necesitan tocar aristas, caras o dibujar
       en el teléfono).
-    - Probado con un motor falso; con el real, cuando c168fac llegue a `dev`.
+    - Probado con el motor real (c168fac, en `dev`) y el SolidCraft falso del repositorio (`tests/fake_solidcraft_cli.cpp`):
+      una caja cortada por un cilindro se revisa y se construye, y los cuerpos vuelven como STL (prueba `CadTest`, con
+      `TISMA_HOST_ENGINE` y `TISMA_FAKE_SOLIDCRAFT`). Con el SolidCraft real, solo en un teléfono.
 
 - **2026-11-04 — Avance y aviso de demora en Ingeniería (QA):** QA vio el análisis de un cubo seguir corriendo después
   de 40 min en el emulador sin KVM. El mismo caso tarda 32 s en la máquina de QA.
