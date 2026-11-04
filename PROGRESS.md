@@ -10971,3 +10971,6 @@ del paquete, sus ajustes reemplazan a los actuales, salvo los cambiados a mano, 
 **Prueba:** `[calibration]` (forma, áreas a 6,1 y 8,5 mm, G-code verificado, ángulo aplicado, ajustes de impresión) y
 `ui_calibration_bridges` (la pieza laminada; captura mirada). **No probado en una impresora.**
 
+- Calibración `bridges_overhangs` en la app (dev `e540e9c`): «Puentes y voladizos» en Calibrar. El motor pone los
+  ajustes propios de la prueba (sin soportes ni arcos) en `--settings`, que la app ya usa para cortar; el ángulo
+  elegido deja `support.threshold_angle` = 90 − ángulo. Prueba con el motor real en `DesignToolsTest`.

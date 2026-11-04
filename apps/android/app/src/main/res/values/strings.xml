@@ -498,6 +498,7 @@
     <string name="cal_acceleration">Acceleration</string>
     <string name="cal_dimensions">Dimensions</string>
     <string name="cal_elephant_foot">Elephant foot</string>
+    <string name="cal_bridges_overhangs">Bridges and overhangs</string>
     <string name="cal_fit">Fit (clearances)</string>
     <string name="cal_range">Range (empty: the suggested one)</string>
     <string name="cal_start">Start</string>
