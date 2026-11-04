@@ -117,6 +117,15 @@ Están en Configuración › General (`preferences.md`, que ya tiene «Notify ab
     - una clave desconocida se ignora; un `format` distinto o una `version` mayor de la lista, se ignora la lista y se
       vuelve a probar al día siguiente.
 
+14. **Dónde vive la clave privada** (decisión del dueño, 04-11-2026): solo en un USB del dueño, con una segunda
+    copia en otro USB guardado aparte; nunca en GitHub, en un repositorio, en la nube ni en la computadora.
+    - El flujo de publicación arma los paquetes y un `updates.json` sin firmar, y deja la versión como borrador.
+    - El dueño corre en su computadora un programa de firma que lee la clave del USB, firma cada paquete y los bytes de
+      `updates.json`, comprueba las firmas con la clave pública, las sube al borrador y lo publica.
+    - La clave pública entra en cada programa al compilarlo; sin ella el actualizador queda apagado.
+    - Si se pierden las dos copias, los programas instalados no aceptan más actualizaciones: hay que publicar una
+      versión con la clave nueva y que la gente la instale a mano.
+
 ## Casos límite
 
 - Dos ventanas del programa abiertas: instala cuando se cierra la última.
