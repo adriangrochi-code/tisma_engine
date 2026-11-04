@@ -67,3 +67,32 @@ TEST_CASE("lattice: only the bars that touch the part (structural_optimization.m
     for (const LatticeBar& b : kept) // none wholly beyond x = 10
         CHECK(std::min(b.from[0], b.to[0]) <= 10.0 + 1e-9);
 }
+
+TEST_CASE("lattice: the column grid gives the same bars as the plain test, faster", "[lattice]") {
+    // A sphere-like part: many triangles.
+    TriangleMesh part;
+    const int n = 48;
+    const auto at = [&](int i, int j) {
+        const double th = std::numbers::pi * i / n, ph = 2.0 * std::numbers::pi * j / n;
+        return Vec3f{float(20.0 + 15.0 * std::sin(th) * std::cos(ph)), float(20.0 + 15.0 * std::sin(th) * std::sin(ph)),
+                     float(15.0 + 15.0 * std::cos(th))};
+    };
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j) {
+            part.add_triangle(at(i, j), at(i + 1, j), at(i + 1, j + 1));
+            part.add_triangle(at(i, j), at(i + 1, j + 1), at(i, j + 1));
+        }
+    const std::vector<LatticeBar> all = lattice_bars({5, 5, 0}, {35, 35, 30}, 4.0);
+    const std::vector<LatticeBar> kept = bars_touching(all, part);
+    std::size_t plain = 0;
+    for (const LatticeBar& b : all)
+        for (double t : {0.5, 0.0, 1.0, 0.25, 0.75})
+            if (inside_mesh(part, {b.from[0] + t * (b.to[0] - b.from[0]), b.from[1] + t * (b.to[1] - b.from[1]),
+                                   b.from[2] + t * (b.to[2] - b.from[2])})) {
+                ++plain;
+                break;
+            }
+    CHECK(kept.size() == plain);
+    CHECK(kept.size() > 0);
+    CHECK(kept.size() < all.size());
+}

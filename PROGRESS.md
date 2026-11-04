@@ -10582,5 +10582,6 @@ caras).
 la interfaz:** «Usar la retícula» y su deshacer; la ventana de ajustes del objeto todavía muestra lugar y tamaño para
 este volumen aunque no los usa.
 
-**Pendiente:** el diámetro por celda (regla 7, segunda búsqueda); `bars_touching` recorre todas las caras por cada
-punto (lento en mallas grandes: una grilla de celdas lo resolvería).
+**Pendiente:** el diámetro por celda (regla 7, segunda búsqueda); `bars_touching` recorría todas las caras por cada
+punto: arreglado el mismo día con una grilla de columnas en XY (el rayo vertical solo mira las caras de su casilla;
+prueba: las mismas barras que la prueba simple sobre una esfera de 4608 caras).

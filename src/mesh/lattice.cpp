@@ -85,35 +85,87 @@ TriangleMesh lattice_mesh(const std::vector<LatticeBar>& bars, double diameter) 
     return m;
 }
 
-bool inside_mesh(const TriangleMesh& mesh, const std::array<double, 3>& p) {
-    // A tiny offset in X and Y keeps the ray off the mesh's edges and corners
-    // (grid points of a lattice often lie in line with a box's edges).
-    const double x = p[0] + 1.234567e-5, y = p[1] + 2.345671e-5;
-    int crossings = 0;
-    for (std::uint32_t t = 0; t < mesh.triangle_count(); ++t) {
-        const Vec3f a = mesh.corner(t, 0), b = mesh.corner(t, 1), c = mesh.corner(t, 2);
-        // Barycentric coordinates of (x, y) in the triangle's shadow on XY.
-        const double d = (double(b.y) - c.y) * (double(a.x) - c.x) + (double(c.x) - b.x) * (double(a.y) - c.y);
-        if (std::abs(d) < 1e-18)
-            continue; // a face standing on its edge: the ray runs along it
-        const double l1 = ((double(b.y) - c.y) * (x - c.x) + (double(c.x) - b.x) * (y - c.y)) / d;
-        const double l2 = ((double(c.y) - a.y) * (x - c.x) + (double(a.x) - c.x) * (y - c.y)) / d;
-        const double l3 = 1.0 - l1 - l2;
-        if (l1 < 0.0 || l2 < 0.0 || l3 < 0.0)
-            continue;
-        if (l1 * a.z + l2 * b.z + l3 * c.z > p[2])
-            ++crossings;
+namespace {
+
+// The vertical ray's test against one triangle: whether it crosses it above p.
+bool crosses_above(const Vec3f& a, const Vec3f& b, const Vec3f& c, double x, double y, double z) {
+    const double d = (double(b.y) - c.y) * (double(a.x) - c.x) + (double(c.x) - b.x) * (double(a.y) - c.y);
+    if (std::abs(d) < 1e-18)
+        return false; // a face standing on its edge: the ray runs along it
+    const double l1 = ((double(b.y) - c.y) * (x - c.x) + (double(c.x) - b.x) * (y - c.y)) / d;
+    const double l2 = ((double(c.y) - a.y) * (x - c.x) + (double(a.x) - c.x) * (y - c.y)) / d;
+    const double l3 = 1.0 - l1 - l2;
+    if (l1 < 0.0 || l2 < 0.0 || l3 < 0.0)
+        return false;
+    return l1 * a.z + l2 * b.z + l3 * c.z > z;
+}
+
+// A tiny offset in X and Y keeps the ray off the mesh's edges and corners
+// (grid points of a lattice often lie in line with a box's edges).
+constexpr double kNudgeX = 1.234567e-5, kNudgeY = 2.345671e-5;
+
+// The triangles by the cells of a grid over the mesh's shadow on XY, so a
+// vertical ray looks only at the triangles over its cell.
+class ColumnGrid {
+public:
+    explicit ColumnGrid(const TriangleMesh& mesh) : mesh_(mesh) {
+        const BoundingBox b = mesh.bounding_box();
+        x0_ = b.min.x, y0_ = b.min.y;
+        const double w = std::max(1e-9, double(b.max.x) - b.min.x), h = std::max(1e-9, double(b.max.y) - b.min.y);
+        const double cells = std::clamp(double(mesh.triangle_count()) / 4.0, 1.0, 65536.0);
+        cell_ = std::max(std::sqrt(w * h / cells), 1e-6);
+        nx_ = std::max(1, int(std::ceil(w / cell_)) + 1);
+        ny_ = std::max(1, int(std::ceil(h / cell_)) + 1);
+        bins_.resize(std::size_t(nx_) * std::size_t(ny_));
+        for (std::uint32_t t = 0; t < mesh.triangle_count(); ++t) {
+            const Vec3f a = mesh.corner(t, 0), c1 = mesh.corner(t, 1), c2 = mesh.corner(t, 2);
+            const int i0 = column(std::min({a.x, c1.x, c2.x}) - x0_), i1 = column(std::max({a.x, c1.x, c2.x}) - x0_);
+            const int j0 = row(std::min({a.y, c1.y, c2.y}) - y0_), j1 = row(std::max({a.y, c1.y, c2.y}) - y0_);
+            for (int j = j0; j <= j1; ++j)
+                for (int i = i0; i <= i1; ++i)
+                    bins_[std::size_t(j) * std::size_t(nx_) + std::size_t(i)].push_back(t);
+        }
     }
+    bool inside(const std::array<double, 3>& p) const {
+        const double x = p[0] + kNudgeX, y = p[1] + kNudgeY;
+        const int i = column(x - x0_), j = row(y - y0_);
+        if (x < x0_ || y < y0_ || i >= nx_ || j >= ny_)
+            return false;
+        int crossings = 0;
+        for (std::uint32_t t : bins_[std::size_t(j) * std::size_t(nx_) + std::size_t(i)])
+            crossings += crosses_above(mesh_.corner(t, 0), mesh_.corner(t, 1), mesh_.corner(t, 2), x, y, p[2]) ? 1 : 0;
+        return crossings % 2 == 1;
+    }
+
+private:
+    int column(double dx) const { return std::clamp(int(std::floor(dx / cell_)), 0, nx_ - 1); }
+    int row(double dy) const { return std::clamp(int(std::floor(dy / cell_)), 0, ny_ - 1); }
+    const TriangleMesh& mesh_;
+    double x0_ = 0.0, y0_ = 0.0, cell_ = 1.0;
+    int nx_ = 1, ny_ = 1;
+    std::vector<std::vector<std::uint32_t>> bins_;
+};
+
+} // namespace
+
+bool inside_mesh(const TriangleMesh& mesh, const std::array<double, 3>& p) {
+    const double x = p[0] + kNudgeX, y = p[1] + kNudgeY;
+    int crossings = 0;
+    for (std::uint32_t t = 0; t < mesh.triangle_count(); ++t)
+        crossings += crosses_above(mesh.corner(t, 0), mesh.corner(t, 1), mesh.corner(t, 2), x, y, p[2]) ? 1 : 0;
     return crossings % 2 == 1;
 }
 
 std::vector<LatticeBar> bars_touching(const std::vector<LatticeBar>& bars, const TriangleMesh& part) {
     std::vector<LatticeBar> out;
+    if (part.empty())
+        return out;
+    const ColumnGrid grid(part);
     for (const LatticeBar& b : bars)
         for (double t : {0.5, 0.0, 1.0, 0.25, 0.75}) {
             const std::array<double, 3> q{b.from[0] + t * (b.to[0] - b.from[0]), b.from[1] + t * (b.to[1] - b.from[1]),
                                           b.from[2] + t * (b.to[2] - b.from[2])};
-            if (inside_mesh(part, q)) {
+            if (grid.inside(q)) {
                 out.push_back(b);
                 break;
             }
