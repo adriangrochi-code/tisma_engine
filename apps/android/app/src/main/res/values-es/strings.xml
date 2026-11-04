@@ -422,4 +422,10 @@
     <string name="map_2">2 o más</string>
     <string name="map_none">Sin carga</string>
     <string name="plate_copies">Copias</string>
+    <string name="tools_title">Posición y tamaño</string>
+    <string name="tools_rotate">Girar %1$s 90°</string>
+    <string name="tools_mirror">Espejar</string>
+    <string name="tools_lay_flat">Apoyar en una cara</string>
+    <string name="tools_lay_flat_hint">Tocá la cara que tiene que quedar sobre la cama.</string>
+    <string name="tools_scale">Escala</string>
 </resources>

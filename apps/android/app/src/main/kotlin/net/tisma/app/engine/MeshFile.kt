@@ -50,7 +50,76 @@ class MeshFile(
         return MeshFile(p, normals, floatArrayOf(offset[0] + dx, offset[1] + dy, offset[2] + dz))
     }
 
+    /**
+     * The model turned and scaled by [m] (a 3×3 matrix, rows), in the file's
+     * own coordinates: the plate's tools (rotate, mirror, scale, lay on a
+     * face). A mirror flips the corners' order so the faces still look out.
+     */
+    fun transformed(m: FloatArray): MeshFile {
+        val det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6])
+        val b = Builder()
+        val v = FloatArray(9)
+        for (t in 0 until triangles) {
+            for (k in 0..2) {
+                val i = 9 * t + 3 * k
+                val x = positions[i]; val y = positions[i + 1]; val z = positions[i + 2]
+                v[3 * k] = m[0] * x + m[1] * y + m[2] * z
+                v[3 * k + 1] = m[3] * x + m[4] * y + m[5] * z
+                v[3 * k + 2] = m[6] * x + m[7] * y + m[8] * z
+            }
+            if (det < 0) b.add(v[0], v[1], v[2], v[6], v[7], v[8], v[3], v[4], v[5])
+            else b.add(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8])
+        }
+        return b.build()
+    }
+
+    /** As a binary STL (the format's public description), for the engine. */
+    fun writeStl(file: File) {
+        val bb = ByteBuffer.allocate(84 + 50 * triangles).order(ByteOrder.LITTLE_ENDIAN)
+        bb.put(ByteArray(80)); bb.putInt(triangles)
+        for (t in 0 until triangles) {
+            bb.putFloat(normals[3 * t]); bb.putFloat(normals[3 * t + 1]); bb.putFloat(normals[3 * t + 2])
+            for (k in 0..8) bb.putFloat(positions[9 * t + k])
+            bb.putShort(0)
+        }
+        file.writeBytes(bb.array())
+    }
+
     companion object {
+        /** Row-major 3×3 matrices for the plate's tools. */
+        fun identity3() = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f)
+
+        fun times(a: FloatArray, b: FloatArray) = FloatArray(9) { i ->
+            val r = i / 3; val c = i % 3
+            a[3 * r] * b[c] + a[3 * r + 1] * b[3 + c] + a[3 * r + 2] * b[6 + c]
+        }
+
+        /** A quarter turn about axis 0 (X), 1 (Y) or 2 (Z), counter-clockwise looking down the axis. */
+        fun quarterTurn(axis: Int): FloatArray = when (axis) {
+            0 -> floatArrayOf(1f, 0f, 0f, 0f, 0f, -1f, 0f, 1f, 0f)
+            1 -> floatArrayOf(0f, 0f, 1f, 0f, 1f, 0f, -1f, 0f, 0f)
+            else -> floatArrayOf(0f, -1f, 0f, 1f, 0f, 0f, 0f, 0f, 1f)
+        }
+
+        fun mirror(axis: Int) = identity3().also { it[4 * axis] = -1f }
+
+        fun scale(s: Float) = floatArrayOf(s, 0f, 0f, 0f, s, 0f, 0f, 0f, s)
+
+        /** The rotation that takes the unit vector [n] to −Z (the face lies on the bed); Rodrigues' formula. */
+        fun layFlat(n: FloatArray): FloatArray {
+            val tx = 0f; val ty = 0f; val tz = -1f
+            val c = n[0] * tx + n[1] * ty + n[2] * tz
+            if (c > 0.99999f) return identity3()
+            if (c < -0.99999f) return floatArrayOf(1f, 0f, 0f, 0f, -1f, 0f, 0f, 0f, -1f)
+            // axis k = n × t, |k| = sin
+            val kx = n[1] * tz - n[2] * ty; val ky = n[2] * tx - n[0] * tz; val kz = n[0] * ty - n[1] * tx
+            val f = 1f / (1f + c)
+            return floatArrayOf(
+                c + kx * kx * f, kx * ky * f - kz, kx * kz * f + ky,
+                ky * kx * f + kz, c + ky * ky * f, ky * kz * f - kx,
+                kz * kx * f - ky, kz * ky * f + kx, c + kz * kz * f)
+        }
+
         fun read(file: File): MeshFile = when (file.extension.lowercase()) {
             "stl" -> readStl(file)
             "obj" -> file.inputStream().use { readObj(it) }

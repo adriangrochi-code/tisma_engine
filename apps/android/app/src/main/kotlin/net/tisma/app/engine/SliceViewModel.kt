@@ -58,6 +58,10 @@ data class SliceState(
     /** The last analysis' safety map on the part, and whether the 3D view shows it instead of the part. */
     val stressMap: StressMap? = null,
     val showStress: Boolean = false,
+    /** The plate's tools: the model's rotation (row-major 3×3, with mirrors) and its scale in %; a tap lays a face down. */
+    val rotation: FloatArray = MeshFile.identity3(),
+    val scalePercent: Float = 100f,
+    val layFlat: Boolean = false,
     /** What a tap on the 3D view marks now, or null when it only turns the view. */
     val marking: EngineeringCase.Kind? = null,
     /** The lightest infill found that holds, in %, to apply to the slice (mobile_app.md, rule 13). */
@@ -198,6 +202,49 @@ class SliceViewModel(
         return MeshFile(p, m.normals)
     }
 
+    /** The open model as read, in its file's coordinates, for the plate's tools. */
+    private var original: MeshFile? = null
+    private var originalFile: File? = null
+
+    /** The plate's tools: rotation (and mirror) times the uniform scale. */
+    private fun transform(): FloatArray = MeshFile.times(_state.value.rotation, MeshFile.scale(_state.value.scalePercent / 100f))
+
+    private fun retransform(rotation: FloatArray = _state.value.rotation, scale: Float = _state.value.scalePercent) {
+        _state.update { it.copy(rotation = rotation, scalePercent = scale, result = null) }
+        model?.let { loadMesh(it) }
+    }
+
+    /** A quarter turn about X, Y or Z. */
+    fun rotate(axis: Int) = retransform(MeshFile.times(MeshFile.quarterTurn(axis), _state.value.rotation))
+
+    fun mirror(axis: Int) = retransform(MeshFile.times(MeshFile.mirror(axis), _state.value.rotation))
+
+    fun setScale(percent: Float) { if (percent in 1f..10_000f) retransform(scale = percent) }
+
+    fun resetTransform() = retransform(MeshFile.identity3(), 100f)
+
+    /** The next tap on the part picks the face that goes down on the bed. */
+    fun setLayFlat(on: Boolean) = _state.update { it.copy(layFlat = on, marking = if (on) null else it.marking) }
+
+    private fun layFlatAt(o: FloatArray, d: FloatArray) {
+        val mesh = _state.value.mesh ?: return
+        viewModelScope.launch {
+            val n = withContext(Dispatchers.Default) {
+                Picking.hit(mesh, o, d)?.let { t -> Picking.normal(mesh, Picking.flatFace(mesh, t)) }
+            } ?: return@launch
+            _state.update { it.copy(layFlat = false) }
+            retransform(MeshFile.times(MeshFile.layFlat(n), _state.value.rotation))
+        }
+    }
+
+    /** What the engine reads: the model file, or the turned and scaled one written next to it. */
+    private fun engineModel(m: File): File {
+        val t = transform()
+        if (t.contentEquals(MeshFile.identity3()) || _state.value.isProject) return m
+        val o = original?.takeIf { originalFile == m } ?: MeshFile.read(m)
+        return File(workDir, "plate_model.stl").also { o.transformed(t).writeStl(it) }
+    }
+
     /** Sets a setting from the panel, or puts it back to the profile's value with null. */
     fun setValue(key: String, value: kotlinx.serialization.json.JsonElement?) {
         val s = _state.value.settings
@@ -248,7 +295,13 @@ class SliceViewModel(
     /** Reads the model for the 3D view; a model it cannot read is still sliced by the engine. */
     private fun loadMesh(f: File) = viewModelScope.launch {
         val bed = bedSize()
-        val mesh = withContext(io) { runCatching { MeshFile.read(f).onBed(bed[0] / 2, bed[1] / 2) }.getOrNull() }
+        val t = transform()
+        val mesh = withContext(io) {
+            runCatching {
+                val o = original?.takeIf { originalFile == f } ?: MeshFile.read(f).also { original = it; originalFile = f }
+                (if (t.contentEquals(MeshFile.identity3())) o else o.transformed(t)).onBed(bed[0] / 2, bed[1] / 2)
+            }.getOrNull()
+        }
         _state.update { it.copy(mesh = mesh, bed = bed, case = it.case.copy(conditions = emptyList()), stressMap = null, showStress = false) }
     }
 
@@ -300,11 +353,13 @@ class SliceViewModel(
             return@launch
         }
         model = copied
-        loadMesh(copied)
+        original = null; originalFile = null
         _state.update {
             it.copy(modelName = name, isProject = copied.extension.equals("3mf", true), result = null, error = null, progress = 0,
-                case = it.case.copy(conditions = emptyList()), marking = null, analysis = null)
+                case = it.case.copy(conditions = emptyList()), marking = null, analysis = null,
+                rotation = MeshFile.identity3(), scalePercent = 100f, layFlat = false)
         }
+        loadMesh(copied)
     }
 
     fun setSettings(s: EngineRunner.SimpleSettings) {
@@ -341,7 +396,7 @@ class SliceViewModel(
                 val r = withContext(io) {
                     val onProgress = { p: Int -> _state.update { it.copy(progress = p) } }
                     if (s.isProject) runner.sliceProject(m, onProgress, { cancel.get() }, s.settings.changes)
-                    else runner.sliceModel(m, s.settings, onProgress, { cancel.get() }, s.profile)
+                    else runner.sliceModel(engineModel(m), s.settings, onProgress, { cancel.get() }, s.profile)
                 }
                 AppLog.line("engine: sliced in ${System.currentTimeMillis() - started} ms")
                 _state.update { it.copy(result = r, progress = 100) }
@@ -413,6 +468,7 @@ class SliceViewModel(
 
     /** A tap on the 3D view along the ray [o] + t·[d]: the flat face under it becomes a condition. */
     fun pick(o: FloatArray, d: FloatArray) {
+        if (_state.value.layFlat) { layFlatAt(o, d); return }
         val kind = state.value.marking ?: return
         val mesh = state.value.mesh ?: return
         viewModelScope.launch {
@@ -457,7 +513,7 @@ class SliceViewModel(
         viewModelScope.launch {
             try {
                 val r = withContext(io) {
-                    runner.analyzeModel(m, s.settings, s.case.toJson(mesh.offset), s.profile,
+                    runner.analyzeModel(engineModel(m), s.settings, s.case.toJson(mesh.offset), s.profile,
                         { p -> _state.update { it.copy(progress = p) } }) { cancel.get() }
                 }
                 val min = (r.summary["min_safety"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()

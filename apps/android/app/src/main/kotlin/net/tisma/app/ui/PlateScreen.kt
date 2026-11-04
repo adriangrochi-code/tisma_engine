@@ -87,7 +87,8 @@ fun PlateScreen(
     }
     val view: @Composable (Modifier) -> Unit = { m ->
         Plate3D(state.mesh, state.bed, m.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
-            marks = marks, onPick = if (state.marking != null) slice::pick else null, lockRotation = state.marking != null,
+            marks = marks, onPick = if (state.marking != null || state.layFlat) slice::pick else null,
+            lockRotation = state.marking != null || state.layFlat,
             bedModel = state.bedModel, bedTexture = state.bedTexture, stress = state.stressMap?.takeIf { state.showStress })
     }
     if (wide && state.modelName != null) {
@@ -188,6 +189,7 @@ private fun PlateControls(
             }
         }
         if (state.modelName != null && state.isProject && state.engineAvailable) EngineeringCard(state, slice)
+        if (state.modelName != null && !state.isProject && state.mesh != null) TransformCard(state, slice)
         if (state.modelName != null && !state.isProject && state.engineAvailable && state.mesh != null) ModelEngineeringCard(state, slice)
         state.error?.let { e ->
             TismaCard {
@@ -408,6 +410,47 @@ private fun ModelEngineeringCard(state: SliceState, slice: SliceViewModel) {
                         Text(stringResource(l), style = MaterialTheme.typography.bodySmall)
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The plate's tools on a bare model (the desktop's plate tools; accessibility_touch.md, rule 14): quarter
+ * turns about X, Y and Z, mirror, scale in %, and «lay on a face» (the next tap picks the face that goes
+ * down). The engine slices the turned model.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TransformCard(state: SliceState, slice: SliceViewModel) {
+    TismaCard(Modifier.testTag("transform")) {
+        Text(stringResource(R.string.tools_title), style = MaterialTheme.typography.titleMedium)
+        val b = state.mesh?.bounds
+        if (b != null) Text(String.format(Locale.getDefault(), "%.1f × %.1f × %.1f mm", b[3] - b[0], b[4] - b[1], b[5] - b[2]),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("model_size"))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("X", "Y", "Z").forEachIndexed { axis, name ->
+                OutlinedButton(onClick = { slice.rotate(axis) }, enabled = !state.slicing, modifier = Modifier.testTag("rotate_$name")) {
+                    Text(stringResource(R.string.tools_rotate, name))
+                }
+            }
+            OutlinedButton(onClick = { slice.mirror(0) }, enabled = !state.slicing, modifier = Modifier.testTag("mirror_x")) {
+                Text(stringResource(R.string.tools_mirror))
+            }
+            FilterChip(selected = state.layFlat, onClick = { slice.setLayFlat(!state.layFlat) }, enabled = !state.slicing,
+                label = { Text(stringResource(R.string.tools_lay_flat)) }, modifier = Modifier.testTag("lay_flat"))
+        }
+        if (state.layFlat) Text(stringResource(R.string.tools_lay_flat_hint), style = MaterialTheme.typography.bodySmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            var text by rememberSaveable(state.scalePercent) { mutableStateOf(state.scalePercent.toString().removeSuffix(".0")) }
+            androidx.compose.material3.OutlinedTextField(text, { t ->
+                text = t
+                t.replace(',', '.').toFloatOrNull()?.takeIf { it in 1f..10_000f }?.let { if (it != state.scalePercent) slice.setScale(it) }
+            }, singleLine = true, label = { Text(stringResource(R.string.tools_scale)) }, suffix = { Text("%") },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                modifier = Modifier.weight(1f).testTag("scale"))
+            androidx.compose.material3.TextButton(onClick = { slice.resetTransform() }, modifier = Modifier.testTag("transform_reset")) {
+                Text(stringResource(R.string.panel_reset))
             }
         }
     }

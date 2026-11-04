@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ApplicationProvider
 import net.tisma.app.cloud.CloudViewModel
 import net.tisma.app.data.AppSettings
@@ -73,6 +74,30 @@ class EngineeringScreenTest {
         compose.runOnIdle { slice.pick(floatArrayOf(cx, cy, 50f), floatArrayOf(0f, 0f, -1f)) }
         compose.waitUntil(5_000) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); slice.state.value.case.conditions.size == 1 }
         compose.onNodeWithTag("eng_analyze_model").performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test
+    fun `the plate's tools turn and scale the shown model`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val settings = AppSettings(context)
+        val work = File(context.cacheDir, "engine")
+        val slice = SliceViewModel(EngineRunner(File(work, "none"), work), work, saved = settings)
+        val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
+        val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
+        compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, Navigator()) } }
+        compose.runOnIdle { slice.open("cube.stl") { File("../../../tests/data/cube_ascii.stl").inputStream() } }
+        wait("transform")
+        compose.onNodeWithTag("scale").performScrollTo().performTextReplacement("200")
+        compose.waitUntil(5_000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            slice.state.value.mesh?.bounds?.let { it[5] - it[2] }?.let { kotlin.math.abs(it - 20f) < 1e-3f } == true
+        }
+        compose.onNodeWithTag("rotate_X").performScrollTo().performClick()
+        compose.onNodeWithTag("transform_reset").performScrollTo().performClick()
+        compose.waitUntil(5_000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            slice.state.value.mesh?.bounds?.let { it[5] - it[2] }?.let { kotlin.math.abs(it - 10f) < 1e-3f } == true
+        }
     }
 
     private fun wait(tag: String) = compose.waitUntil(10_000) {

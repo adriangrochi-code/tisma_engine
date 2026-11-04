@@ -36,6 +36,15 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
      - `aero` y `orient` sobre un modelo suelto;
      - y cómo llevar el CAD general (SolidCraft para Android arm64, o primitivas y booleanas propias).
   3. Cuando lleguen, cada uno con su pantalla y sus pruebas contra el motor real.
+- **Herramientas de la placa:** en un modelo suelto se puede:
+  - girarlo 90° en X, Y o Z, espejarlo y escalarlo en %;
+  - «Apoyar en una cara»: el próximo toque elige la cara que queda sobre la cama (fórmula de Rodrigues);
+  - ver su tamaño, y volver todo atrás con Restablecer.
+  El motor lamina y analiza el modelo transformado, que la app escribe como STL binario. Probado con el motor de la
+  máquina: el cubo de 10 × 20 × 30 girado en X da 100 capas.
+- **CAD completo (SolidCraft para Android):** se intentó compilar `solidcraft-cli` 0.30.0 (MIT o Apache-2.0) para
+  aarch64-linux-android con el NDK. El sistema de permisos de la sesión no deja correr la compilación de código
+  externo sin permiso del dueño. Queda pedido.
 - **Mapa de seguridad (regla 13):** el análisis de un modelo suelto pide `--mesh voxels.ply`. La app lee el PLY binario
   (formato de Turk, con los colores del motor) y lo dibuja sobre la pieza en lugar del modelo, con un interruptor y su
   leyenda: falla, 1–1,5, 1,5–2, 2 o más, sin carga. Probado con el motor de la máquina: el mapa cae sobre la pieza
