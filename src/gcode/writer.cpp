@@ -2428,6 +2428,18 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     c.variables["first_layer_print_min"] = pair(lo[0], lo[1]);
     c.variables["first_layer_print_max"] = pair(hi[0], hi[1]);
     c.variables["first_layer_print_size"] = pair(hi[0] - lo[0], hi[1] - lo[1]);
+    // The same box one number each, and the other names the profile pack's
+    // start G-code uses (profile_pack_format.md, «G-code de inicio y de fin»,
+    // rule 3).
+    const auto mm3 = [](double v) { return TemplateValue::of(std::round(v * 1000.0) / 1000.0); };
+    c.variables["first_layer_min_x"] = mm3(lo[0]);
+    c.variables["first_layer_min_y"] = mm3(lo[1]);
+    c.variables["first_layer_max_x"] = mm3(hi[0]);
+    c.variables["first_layer_max_y"] = mm3(hi[1]);
+    c.variables["first_layer_size_x"] = mm3(hi[0] - lo[0]);
+    c.variables["first_layer_size_y"] = mm3(hi[1] - lo[1]);
+    c.variables["layer_count"] = c.variables["total_layer_count"];
+    c.variables["travel_speed"] = TemplateValue::of(s.travel_speed);
     const std::time_t now = std::time(nullptr);
     std::tm local{};
 #ifdef _WIN32
@@ -2438,6 +2450,11 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     char stamp[32];
     std::strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", &local);
     c.variables["year"] = TemplateValue::of(static_cast<long long>(local.tm_year + 1900));
+    c.variables["month"] = TemplateValue::of(static_cast<long long>(local.tm_mon + 1));
+    c.variables["day"] = TemplateValue::of(static_cast<long long>(local.tm_mday));
+    c.variables["hour"] = TemplateValue::of(static_cast<long long>(local.tm_hour));
+    c.variables["minute"] = TemplateValue::of(static_cast<long long>(local.tm_min));
+    c.variables["second"] = TemplateValue::of(static_cast<long long>(local.tm_sec));
     c.variables["timestamp"] = TemplateValue::of(std::string(stamp));
     // The layer the templates are at: the first, until a layer change.
     const double first_z = model.layers.empty() ? 0.0 : model.layers.front().top - model.layers.front().bottom;

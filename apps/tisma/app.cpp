@@ -30,6 +30,8 @@
 #include "aero/aero.hpp"
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
+#include "catalog/pack.hpp"
+#include "catalog/pack_fetch.hpp"
 #include "illustrations.hpp"
 #include "config/analysis_case.hpp"
 #include "config/profiles.hpp"
@@ -929,6 +931,13 @@ private:
     const Profile* find_profile(ProfileKind kind, const std::string& name, bool* builtin = nullptr) const;
     void catalog_dialog();
     void add_catalog_profile(const Profile& profile);
+    // The free profile pack (profile_pack.md).
+    std::filesystem::path pack_dir() const;
+    void load_pack();
+    void start_pack_update(PackChoice choice, std::string add_after);
+    void poll_pack_update();
+    void add_pack_printer(const std::string& printer);
+    void pack_catalog_entry(const PackModelRef& ref);
     void first_run_next();
 
     // Widgets.
@@ -1479,6 +1488,7 @@ private:
     bool ray_checked_ = false;
     bool moire_checked_ = false;
     bool catalog_printer_picked_ = false; // --pick-catalog-printer done
+    bool pack_printer_picked_ = false;    // --pick-pack-printer done
     // The Measure tool's prepared mesh (measure_mesh) of one object, for the
     // plate as it was at scene_version_ measure_version_.
     MeasureMesh measure_prepared_;
@@ -1613,6 +1623,28 @@ private:
     std::string catalog_query_;
     int catalog_pick_ = -1;
     std::size_t catalog_nozzle_ = 0;
+    // The free profile pack (profile_pack.md): the installed index, the
+    // printers chosen from it (packs.printers), whose profiles show as factory
+    // ones (rule 9), and the download in flight.
+    std::optional<PackIndex> pack_index_;
+    std::vector<std::string> pack_printers_;
+    std::vector<std::string> pack_filaments_;                // packs.filaments: more filaments added from the pack
+    std::map<std::string, int> pack_printer_number_;         // a pack printer profile's name: its number in the index
+    int pack_filaments_number_ = -2;                         // the printer pack_filaments_found_ is for
+    std::vector<PackFilamentRef> pack_filaments_found_;
+    std::string pack_url_; // packs.url; empty: the latest release
+    struct PackJobState {
+        std::mutex mutex;
+        std::string status;
+    };
+    std::shared_ptr<PackJobState> pack_state_;
+    std::future<std::string> pack_job_; // the error; empty when it went well
+    std::string pack_add_after_;         // a printer to add once its download ends
+    bool pack_check_updates_ = true;     // packs.check_updates
+    long long pack_checked_ = 0;         // packs.checked: when the last look for a newer pack was (seconds)
+    std::future<std::string> pack_newer_job_; // the newer pack_version, empty when none
+    int catalog_pack_pick_ = -1;
+    std::size_t catalog_pack_variant_ = 0;
     // The project file last opened or saved.
     std::filesystem::path project_path_;
 
@@ -3479,6 +3511,15 @@ bool App::init(std::string& error) {
         device_connect(device_port_);
     }
     // The profiles; with none chosen yet, the ones the settings match.
+    load_pack();
+    // A newer pack, looked for at most once a day (profile_pack.md, rule 19).
+    if (pack_index_ && pack_check_updates_ && options_.screenshot.empty() && options_.pack.empty()) {
+        const long long now = static_cast<long long>(std::time(nullptr));
+        if (now - pack_checked_ >= 24 * 3600) {
+            pack_checked_ = now;
+            pack_newer_job_ = std::async(std::launch::async, [dir = pack_dir(), url = pack_url_] { return pack_newer(dir, url); });
+        }
+    }
     load_profile_lists();
     for (const ProfileKind kind : kProfileKinds) {
         std::string& chosen = chosen_profile_[std::size_t(kind)];
@@ -3704,6 +3745,19 @@ void App::load_preferences() {
     try {
         const nlohmann::json j = nlohmann::json::parse(in);
         tips_ = j.value("tips", true);
+        if (const auto packs = j.find("packs"); packs != j.end() && packs->is_object()) {
+            pack_url_ = packs->value("url", "");
+            pack_check_updates_ = packs->value("check_updates", true);
+            pack_checked_ = packs->value("checked", 0LL);
+            if (const auto chosen = packs->find("printers"); chosen != packs->end() && chosen->is_array())
+                for (const auto& p : *chosen)
+                    if (p.is_string())
+                        pack_printers_.push_back(p.get<std::string>());
+            if (const auto chosen = packs->find("filaments"); chosen != packs->end() && chosen->is_array())
+                for (const auto& p : *chosen)
+                    if (p.is_string())
+                        pack_filaments_.push_back(p.get<std::string>());
+        }
         if (const auto a = j.find("assistant"); a != j.end() && a->is_object()) {
             assistant_tutorials_ = a->value("tutorials", true);
             g_glossary_tips = assistant_glossary_ = a->value("glossary_tips", true);
@@ -3837,6 +3891,11 @@ void App::save_preferences() {
         j["device_baud"] = device_baud_;
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
+        j["packs"]["url"] = pack_url_;
+        j["packs"]["check_updates"] = pack_check_updates_;
+        j["packs"]["checked"] = pack_checked_;
+        j["packs"]["printers"] = pack_printers_;
+        j["packs"]["filaments"] = pack_filaments_;
         j["assistant"]["tutorials"] = assistant_tutorials_;
         j["assistant"]["glossary_tips"] = assistant_glossary_;
         j["assistant"]["material_tips"] = assistant_material_;
@@ -4387,10 +4446,44 @@ void App::load_profile_lists() {
     for (const ProfileKind kind : kProfileKinds) {
         const std::size_t k = std::size_t(kind);
         builtin_profiles_[k] = builtin_profiles(kind);
+        if (kind == ProfileKind::Printer)
+            pack_printer_number_.clear();
         // The built-in printer is one made from nothing: its speeds are the fallback.
         if (kind == ProfileKind::Printer)
             for (const Profile& p : builtin_profiles_[k])
                 speed_fallback_.insert(p.name);
+        // The pack's printers chosen here, with their filament and print
+        // profile, as factory profiles: not saved over (profile_pack.md, rule 9).
+        if ((!root.empty() || !options_.pack.empty()) && pack_index_)
+            for (const std::string& id : pack_printers_) {
+                try {
+                    const PackProfiles p = pack_profiles(pack_dir(), *pack_index_, id);
+                    const Profile* from = kind == ProfileKind::Printer    ? &p.printer
+                                          : kind == ProfileKind::Filament ? (p.filament ? &*p.filament : nullptr)
+                                                                          : (p.print ? &*p.print : nullptr);
+                    if (from && std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
+                                             [&](const Profile& b) { return b.name == from->name; }))
+                        builtin_profiles_[k].push_back(*from);
+                    if (kind == ProfileKind::Printer)
+                        pack_printer_number_[p.printer.name] = p.number;
+                } catch (const std::exception& e) {
+                    if (kind == ProfileKind::Printer)
+                        errors.push_back(id + ": " + e.what());
+                }
+            }
+        // The other filaments added from the pack (rule 12).
+        if (kind == ProfileKind::Filament && (!root.empty() || !options_.pack.empty()) && pack_index_)
+            for (const std::string& path : pack_filaments_) {
+                try {
+                    std::vector<std::string> ignored;
+                    Profile f = pack_entry_profile(pack_dir(), path, ignored);
+                    if (std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
+                                     [&](const Profile& b) { return b.name == f.name; }))
+                        builtin_profiles_[k].push_back(std::move(f));
+                } catch (const std::exception& e) {
+                    errors.push_back(path + ": " + e.what());
+                }
+            }
         user_profiles_[k].clear();
         if (root.empty())
             continue;
@@ -4635,6 +4728,8 @@ void App::catalog_dialog() {
         catalog_open_ = false;
         catalog_pick_ = -1;
         catalog_nozzle_ = 0;
+        catalog_pack_pick_ = -1;
+        catalog_pack_variant_ = 0;
     }
     if (!catalog_kind_)
         return;
@@ -4670,7 +4765,37 @@ void App::catalog_dialog() {
             ImGui::SetKeyboardFocusHere();
         ImGui::SetNextItemWidth(-FLT_MIN);
         if (ImGui::InputTextWithHint("##search", tr(T::CatalogSearch), &catalog_query_))
-            catalog_pick_ = -1, catalog_nozzle_ = 0;
+            catalog_pick_ = -1, catalog_nozzle_ = 0, catalog_pack_pick_ = -1, catalog_pack_variant_ = 0;
+        // The pack's models that match too (profile_pack.md, rule 2).
+        const std::vector<PackModelRef> pack_found =
+            printers && pack_index_ ? find_pack_models(*pack_index_, catalog_query_) : std::vector<PackModelRef>{};
+        // The pack's filaments for the chosen pack printer (rule 12, PK7).
+        std::vector<const PackFilamentRef*> pack_fils;
+        if (!printers && pack_index_) {
+            const auto it = pack_printer_number_.find(chosen_profile_[std::size_t(ProfileKind::Printer)]);
+            const int number = it == pack_printer_number_.end() ? -1 : it->second;
+            if (number != pack_filaments_number_) {
+                pack_filaments_found_ = number < 0 ? std::vector<PackFilamentRef>{}
+                                                   : pack_filaments_for(pack_dir(), *pack_index_, number);
+                pack_filaments_number_ = number;
+            }
+            std::string lower_query = catalog_query_;
+            std::transform(lower_query.begin(), lower_query.end(), lower_query.begin(),
+                           [](unsigned char c) { return char(std::tolower(c)); });
+            std::vector<std::string> words;
+            std::istringstream split(lower_query);
+            for (std::string w; split >> w;)
+                words.push_back(w);
+            for (const PackFilamentRef& f : pack_filaments_found_) {
+                std::string text = f.vendor + " " + f.name;
+                std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                if (std::all_of(words.begin(), words.end(), [&](const std::string& w) { return text.find(w) != std::string::npos; }))
+                    pack_fils.push_back(&f);
+            }
+        }
+        const int pack_count = printers ? int(pack_found.size()) : int(pack_fils.size());
+        if (catalog_pack_pick_ >= pack_count)
+            catalog_pack_pick_ = -1;
         const std::vector<const PrinterModel*> found_printers =
             printers ? find_printers(*catalog, catalog_query_) : std::vector<const PrinterModel*>{};
         // The filaments the printer takes (pellets.md, rule 1; profiles.md, rule 5).
@@ -4685,7 +4810,9 @@ void App::catalog_dialog() {
                      : int(std::count_if(catalog->filaments.begin(), catalog->filaments.end(), offered));
         if (catalog_pick_ >= found)
             catalog_pick_ = -1;
-        if (catalog_pick_ < 0 && found > 0 && !options_.screenshot.empty())
+        if (catalog_pick_ < 0 && catalog_pack_pick_ < 0 && found == 0 && pack_count > 0 && !options_.screenshot.empty())
+            catalog_pack_pick_ = 0; // a screenshot shows the first pack model when the own catalog has none
+        if (catalog_pick_ < 0 && catalog_pack_pick_ < 0 && found > 0 && !options_.screenshot.empty())
             catalog_pick_ = 0; // a screenshot shows the first entry
         loc::TextDisabled(tr(T::CatalogCount), found, total);
 
@@ -4701,10 +4828,54 @@ void App::catalog_dialog() {
             ImGui::PushID(i);
             const std::string label = printers ? found_printers[std::size_t(i)]->model : found_filaments[std::size_t(i)]->name;
             if (ImGui::Selectable(label.c_str(), catalog_pick_ == i))
-                catalog_pick_ = i, catalog_nozzle_ = 0;
+                catalog_pick_ = i, catalog_nozzle_ = 0, catalog_pack_pick_ = -1;
             ImGui::PopID();
         }
-        if (found == 0) {
+        if (printers) {
+            ImGui::SeparatorText(tr(T::PackSection));
+            if (!pack_index_) {
+                ImGui::PushTextWrapPos(0.0f);
+                loc::TextDisabled("%s", tr(T::PackHint));
+                ImGui::PopTextWrapPos();
+                ImGui::BeginDisabled(pack_job_.valid());
+                if (ImGui::SmallButton(tr(T::PackGetList)))
+                    start_pack_update({}, {});
+                ImGui::EndDisabled();
+            }
+            std::string pack_vendor;
+            for (int i = 0; i < int(pack_found.size()); ++i) {
+                const PackModelRef& ref = pack_found[std::size_t(i)];
+                if (ref.vendor->name != pack_vendor) {
+                    pack_vendor = ref.vendor->name;
+                    loc::TextDisabled("%s", pack_vendor.c_str());
+                }
+                ImGui::PushID(10000 + i);
+                if (ImGui::Selectable(ref.model->name.c_str(), catalog_pack_pick_ == i)) {
+                    catalog_pack_pick_ = i, catalog_pick_ = -1;
+                    // The variant the model names first (rule 11).
+                    catalog_pack_variant_ = 0;
+                    for (std::size_t n = 0; n < ref.model->variants.size(); ++n)
+                        if (ref.model->variants[n].id == ref.model->default_variant)
+                            catalog_pack_variant_ = n;
+                }
+                ImGui::PopID();
+            }
+        }
+        if (!printers && !pack_fils.empty()) {
+            ImGui::SeparatorText(tr(T::PackSection));
+            std::string pack_vendor;
+            for (int i = 0; i < int(pack_fils.size()); ++i) {
+                if (pack_fils[std::size_t(i)]->vendor != pack_vendor) {
+                    pack_vendor = pack_fils[std::size_t(i)]->vendor;
+                    loc::TextDisabled("%s", pack_vendor.c_str());
+                }
+                ImGui::PushID(20000 + i);
+                if (ImGui::Selectable(pack_fils[std::size_t(i)]->name.c_str(), catalog_pack_pick_ == i))
+                    catalog_pack_pick_ = i, catalog_pick_ = -1;
+                ImGui::PopID();
+            }
+        }
+        if (found == 0 && pack_count == 0) {
             ImGui::PushTextWrapPos(0.0f);
             loc::TextDisabled("%s", tr(total == 0 ? T::CatalogNoMaterial : T::CatalogEmpty));
             ImGui::PopTextWrapPos();
@@ -4728,7 +4899,15 @@ void App::catalog_dialog() {
             return std::string(text);
         };
         const std::vector<std::string>* sources = nullptr;
-        if (catalog_pick_ >= 0 && printers) {
+        if (catalog_pack_pick_ >= 0 && printers) {
+            pack_catalog_entry(pack_found[std::size_t(catalog_pack_pick_)]);
+        } else if (catalog_pack_pick_ >= 0) {
+            const PackFilamentRef& f = *pack_fils[std::size_t(catalog_pack_pick_)];
+            ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+            loc::Text("%s", f.name.c_str());
+            ImGui::PopFont();
+            loc::TextDisabled("%s · %s", f.vendor.c_str(), tr(T::PackSection));
+        } else if (catalog_pick_ >= 0 && printers) {
             const PrinterModel& p = *found_printers[std::size_t(catalog_pick_)];
             ImGui::PushFont(nullptr, kTitleSize * 0.9f);
             loc::Text("%s %s", p.vendor.c_str(), p.model.c_str());
@@ -4842,6 +5021,64 @@ void App::catalog_dialog() {
         ImGui::PopTextWrapPos();
         ImGui::EndChild();
 
+        // A pack model: added at once when its vendor is installed, else
+        // downloaded first, in the background (rules 1 and 13).
+        if (catalog_pack_pick_ >= 0 && !printers) {
+            if (ImGui::Button(tr(T::AddToProfiles), ImVec2(200.0f * scale_, 0))) {
+                const std::string path = pack_fils[std::size_t(catalog_pack_pick_)]->path;
+                if (std::find(pack_filaments_.begin(), pack_filaments_.end(), path) == pack_filaments_.end())
+                    pack_filaments_.push_back(path);
+                std::vector<std::string> ignored;
+                std::string name;
+                try {
+                    name = pack_entry_profile(pack_dir(), path, ignored).name;
+                } catch (const std::exception& e) {
+                    fail(T::PackSection, e.what());
+                }
+                load_profile_lists();
+                if (const Profile* added = find_profile(ProfileKind::Filament, name))
+                    choose_profile(ProfileKind::Filament, *added);
+                if (options_.screenshot.empty())
+                    save_preferences();
+                catalog_kind_.reset();
+                ImGui::CloseCurrentPopup();
+                first_run_next();
+            }
+            ImGui::SameLine();
+        } else if (catalog_pack_pick_ >= 0) {
+            const PackModelRef& ref = pack_found[std::size_t(catalog_pack_pick_)];
+            const bool installed = !ref.vendor->archive.sha256.empty();
+            std::string printer;
+            if (!ref.model->variants.empty())
+                printer = ref.model->file + "#" + ref.model->variants[std::min(catalog_pack_variant_, ref.model->variants.size() - 1)].id;
+            ImGui::BeginDisabled(pack_job_.valid() || printer.empty());
+            if (ImGui::Button(tr(installed ? T::AddToProfiles : T::PackDownloadAdd), ImVec2(200.0f * scale_, 0))) {
+                if (installed) {
+                    add_pack_printer(printer);
+                    catalog_kind_.reset();
+                    ImGui::CloseCurrentPopup();
+                    first_run_next();
+                } else {
+                    start_pack_update(PackChoice{false, {ref.vendor->id}}, printer);
+                }
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+        }
+        if (pack_job_.valid() && pack_state_) {
+            std::string status;
+            {
+                std::lock_guard lock(pack_state_->mutex);
+                status = pack_state_->status;
+            }
+            loc::TextDisabled(tr(T::PackBusy), status.c_str());
+            ImGui::SameLine();
+        } else if (printers && pack_index_ && catalog_pack_pick_ < 0) {
+            if (ImGui::Button(tr(T::PackUpdate), ImVec2(0, 0)))
+                start_pack_update({}, {});
+            ImGui::SameLine();
+        }
+        if (catalog_pack_pick_ < 0) {
         ImGui::BeginDisabled(catalog_pick_ < 0);
         if (ImGui::Button(tr(T::AddToProfiles), ImVec2(200.0f * scale_, 0))) {
             const Profile profile =
@@ -4855,6 +5092,7 @@ void App::catalog_dialog() {
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
+        }
     }
     if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) ||
         (ImGui::IsKeyPressed(ImGuiKey_Escape) && catalog_kind_)) {
@@ -4911,6 +5149,126 @@ void App::add_catalog_profile(const Profile& catalog) {
     // The catalog's printers have no speeds of their own (printer_profile).
     notify(format(tr(profile.kind == ProfileKind::Printer ? T::CatalogSpeedFallback : T::ProfileAdded),
                   shown_name(profile.name).c_str()));
+}
+
+std::filesystem::path App::pack_dir() const {
+    if (!options_.pack.empty())
+        return from_utf8(options_.pack);
+    const std::filesystem::path prefs = preferences_path();
+    return prefs.empty() ? prefs : prefs.parent_path() / "pack";
+}
+
+void App::load_pack() {
+    pack_index_.reset();
+    pack_filaments_number_ = -2;
+    const std::filesystem::path dir = pack_dir();
+    // Screenshots read a pack only when given one (--pack).
+    if (dir.empty() || (!options_.screenshot.empty() && options_.pack.empty()))
+        return;
+    try {
+        pack_index_ = pack_installed(dir);
+    } catch (const std::exception&) {
+        // None installed, or one this program cannot read: the own catalog only.
+    }
+}
+
+// Downloads the pack in the background (rules 1 and 20); `add_after`, a
+// printer to add once it is there.
+void App::start_pack_update(PackChoice choice, std::string add_after) {
+    if (pack_job_.valid() || pack_dir().empty())
+        return;
+    pack_state_ = std::make_shared<PackJobState>();
+    pack_add_after_ = std::move(add_after);
+    pack_job_ = std::async(std::launch::async, [state = pack_state_, dir = pack_dir(), url = pack_url_, choice] {
+        try {
+            pack_update(dir, url, choice, [&](const std::string& line) {
+                std::lock_guard lock(state->mutex);
+                state->status = line;
+            });
+            return std::string();
+        } catch (const std::exception& e) {
+            return std::string(e.what());
+        }
+    });
+}
+
+void App::poll_pack_update() {
+    if (pack_newer_job_.valid() && pack_newer_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const std::string version = pack_newer_job_.get();
+        if (!version.empty())
+            notify(format(tr(T::PackNewer), version.c_str()));
+    }
+    if (!pack_job_.valid() || pack_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+    const std::string error = pack_job_.get();
+    load_pack();
+    if (!error.empty()) {
+        pack_add_after_.clear();
+        fail(T::PackSection, format(tr(T::PackFailed), error.c_str()));
+        return;
+    }
+    if (!pack_add_after_.empty()) {
+        add_pack_printer(std::exchange(pack_add_after_, {}));
+        return;
+    }
+    load_profile_lists();
+    notify(format(tr(T::PackReady), pack_index_ ? pack_index_->pack_version.c_str() : ""));
+}
+
+// A pack printer becomes one of the factory profiles here, and the chosen
+// one with its filament and print profile (rule 13, PK6).
+void App::add_pack_printer(const std::string& printer) {
+    if (!pack_index_)
+        return;
+    PackProfiles p;
+    try {
+        p = pack_profiles(pack_dir(), *pack_index_, printer);
+    } catch (const std::exception& e) {
+        fail(T::PackSection, e.what());
+        return;
+    }
+    if (std::find(pack_printers_.begin(), pack_printers_.end(), printer) == pack_printers_.end())
+        pack_printers_.push_back(printer);
+    load_profile_lists();
+    for (const auto& [kind, profile] : {std::pair{ProfileKind::Printer, std::optional<Profile>(p.printer)},
+                                        std::pair{ProfileKind::Filament, p.filament}, std::pair{ProfileKind::Print, p.print}})
+        if (profile)
+            if (const Profile* found = find_profile(kind, profile->name))
+                choose_profile(kind, *found);
+    if (options_.screenshot.empty())
+        save_preferences();
+    notify(format(tr(T::PackAdded), p.printer.name.c_str()));
+}
+
+// The right side of the catalog for a pack model: its variants (one row
+// per model, PK15), license and origin (rule 15).
+void App::pack_catalog_entry(const PackModelRef& ref) {
+    const PackModel& m = *ref.model;
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    // The model's name alone when it already says the vendor ("Acme One").
+    if (m.name.starts_with(ref.vendor->name))
+        loc::Text("%s", m.name.c_str());
+    else
+        loc::Text("%s %s", ref.vendor->name.c_str(), m.name.c_str());
+    ImGui::PopFont();
+    loc::Text(tr(T::PackTechnology), m.technology == "sla" ? "SLA" : "FFF");
+    if (!m.variants.empty()) {
+        catalog_pack_variant_ = std::min(catalog_pack_variant_, m.variants.size() - 1);
+        const auto label = [](const PackVariant& v) {
+            return v.nozzle > 0.0 ? format("%g mm", v.nozzle) : v.id;
+        };
+        ImGui::SetNextItemWidth(160.0f * scale_);
+        if (ImGui::BeginCombo(tr(T::NozzleSize), label(m.variants[catalog_pack_variant_]).c_str())) {
+            for (std::size_t n = 0; n < m.variants.size(); ++n)
+                if (ImGui::Selectable(label(m.variants[n]).c_str(), n == catalog_pack_variant_))
+                    catalog_pack_variant_ = n;
+            ImGui::EndCombo();
+        }
+    }
+    if (ref.vendor->archive.sha256.empty())
+        loc::TextDisabled("%s", tr(T::PackNotDownloaded));
+    ImGui::Spacing();
+    loc::TextDisabled(tr(T::PackOrigin), ref.vendor->license.c_str(), ref.vendor->origin.c_str());
 }
 
 void App::export_gcode_to(const std::filesystem::path& path) {
@@ -20994,6 +21352,23 @@ void App::script_input() {
 }
 
 void App::frame() {
+    poll_pack_update();
+    // --pick-pack-printer: that pack printer added and chosen (profile_pack.md, PK6).
+    if (!options_.pick_pack_printer.empty() && !pack_printer_picked_ && frames_ >= 2) {
+        pack_printer_picked_ = true;
+        add_pack_printer(options_.pick_pack_printer);
+        const Profile* now_printer = find_profile(ProfileKind::Printer, chosen_profile_[std::size_t(ProfileKind::Printer)]);
+        bool builtin = false;
+        if (!now_printer || !find_profile(ProfileKind::Printer, now_printer->name, &builtin) || !builtin ||
+            chosen_profile_[std::size_t(ProfileKind::Filament)].empty()) {
+            std::fprintf(stderr, "error: the pack printer %s was not chosen with its filament\n", options_.pick_pack_printer.c_str());
+            failed_ = true;
+        } else {
+            std::fprintf(stderr, "pack printer: %s · %s · %s\n", now_printer->name.c_str(),
+                         chosen_profile_[std::size_t(ProfileKind::Filament)].c_str(),
+                         chosen_profile_[std::size_t(ProfileKind::Print)].c_str());
+        }
+    }
     if (frames_ < 8) {
         static char step[32];
         std::snprintf(step, sizeof step, "frame %d", frames_);

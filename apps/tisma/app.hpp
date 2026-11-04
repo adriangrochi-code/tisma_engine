@@ -73,12 +73,14 @@ struct AppOptions {
     bool credits = false;         // with screenshot: More › Credits and sources (credits.md, rule 4)
     std::string help;             // the help panel open at this tab: problems, procedures, glossary, tutorials, calibrations
     std::string knowledge;        // the help's data folder instead of the pack's (knowledge/)
+    std::string pack;             // the profile pack's folder instead of the one beside the preferences
     std::string help_open;        // with help: a problem or procedure id opened in it
     std::string tutorial;         // a guided tutorial of the help's data started at its step tutorial_step
     int tutorial_step = 0;
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     bool coarse = false;            // with screenshot: draw a large plate as while the view moves (V6)
     std::string pick_catalog_printer; // test hook: the printer card picks this catalog printer ("Vendor Model")
+    std::string pick_pack_printer;    // test hook: this pack printer ("<model file>#<variant>") is added and chosen
     std::string ui_script;          // test hook: steps of input played into the window (App::script_input)
     std::string dump_ui;            // with screenshot: write the setting rows drawn (key, label, value, rectangle) as JSON
     bool view_check = true;         // with screenshot: check the 3D view's picture (no black pixels, few sparkles)

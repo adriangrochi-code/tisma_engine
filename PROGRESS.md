@@ -10743,3 +10743,37 @@ la interfaz (PK1, PK2).
 - versión 1.0 en la segunda semana de enero de 2027;
 - las pruebas en hardware corren aparte y no frenan el software.
 El orden del roadmap se planifica con esas fechas.
+
+## 2026-11-04 — el paquete de perfiles en la interfaz (`profile_pack.md`, paso 4)
+
+**Hecho:**
+- `pack_profiles` y `find_pack_models` en `src/catalog/`. La línea de comandos y la interfaz arman igual la impresora
+  con sus valores por defecto.
+- En el catálogo de impresoras, la sección «Paquete libre de perfiles»: una fila por modelo, la boquilla, la licencia y
+  el origen. **Agregar** (o **Bajar y agregar**, en segundo plano) elige la impresora, el filamento y el perfil de
+  impresión, como perfiles de fábrica.
+- Las impresoras elegidas quedan en `packs.printers`. Hay botones para bajar la lista y para actualizar el paquete.
+- Opciones nuevas: `--pack` y `--pick-pack-printer`.
+- Variables de plantilla que pide la ficha para el G-code del paquete: `layer_count`, la caja de la primera capa,
+  `travel_speed`, mes, día, hora, minuto y segundo. La app de Android encontró `{layer_count}` con el paquete real.
+- `--set` y `--config-over` en los comandos de proyecto (pedido de Android).
+- La ayuda de los ajustes ya no nombra documentos internos (QA).
+
+**Prueba:**
+- `ui_pack_install`, `ui_pack_printer_picked` (elige «Acme One 0.4 · Acme PLA · Acme Standard») y `ui_pack_catalog`
+  (captura).
+- `[pack]`, con la búsqueda y los valores por defecto.
+- Un error encontrado al probar: elegir la impresora desde la tarjeta de impresora rompía la memoria (`bad_alloc`)
+  porque la tarjeta guarda punteros a las listas. El gancho de prueba ahora corre al empezar el cuadro.
+
+**Sin probar:** la descarga real desde la interfaz contra GitHub.
+
+**Sigue:**
+- el aviso «Este perfil ya no está en el paquete» (regla 20);
+- los datos de la comunidad (reglas 22 a 24).
+
+**El mismo día:** el aviso de versión nueva al abrir, como mucho una vez por día (regla 19, `pack_newer` en segundo
+plano). **Sin probar:** contra una versión publicada de verdad.
+
+**El mismo día:** el catálogo de filamentos ofrece los del paquete que sirven para la impresora del paquete elegida
+(regla 12, PK7; `pack_filaments_for`). Prueba: `[pack]` y `ui_pack_filaments` (captura).
