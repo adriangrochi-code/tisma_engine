@@ -10,6 +10,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <fstream>
@@ -130,8 +131,151 @@ std::string complaint(const ProcessResult& r) {
 
 } // namespace
 
+SolidCraftSession::SolidCraftSession(std::filesystem::path exe) : exe_(std::move(exe)), last_use_(std::chrono::steady_clock::now()) {}
+SolidCraftSession::~SolidCraftSession() { close(); }
+
+bool SolidCraftSession::open() const {
+    std::lock_guard<std::mutex> g(lock_);
+    return process_ && process_->running();
+}
+
+void SolidCraftSession::close() {
+    std::lock_guard<std::mutex> g(lock_);
+    if (process_)
+        process_->stop();
+    process_.reset();
+}
+
+void SolidCraftSession::close_if_idle(double seconds) {
+    {
+        std::lock_guard<std::mutex> g(lock_);
+        if (!process_ || std::chrono::steady_clock::now() - last_use_ < std::chrono::duration<double>(seconds))
+            return;
+    }
+    close();
+}
+
+bool SolidCraftSession::start(std::string& error) {
+    process_ = std::make_unique<ChildProcess>();
+    if (!process_->start(exe_, {"mcp"}, error)) {
+        process_.reset();
+        return false;
+    }
+    if (starts_ > 0)
+        ++restarts_;
+    ++starts_;
+    // The MCP handshake: initialize, its answer, then «initialized».
+    const nlohmann::json init{{"jsonrpc", "2.0"},
+                              {"id", next_id_++},
+                              {"method", "initialize"},
+                              {"params",
+                               {{"protocolVersion", "2025-06-18"},
+                                {"capabilities", nlohmann::json::object()},
+                                {"clientInfo", {{"name", "tisma"}, {"version", kSolidCraftVersion}}}}}};
+    if (!process_->write_line(init.dump())) {
+        error = "the design component closed at once";
+        process_.reset();
+        return false;
+    }
+    for (;;) {
+        const std::optional<std::string> line = process_->read_line(30.0);
+        if (!line) {
+            error = "the design component did not answer its start";
+            process_->stop();
+            process_.reset();
+            return false;
+        }
+        const nlohmann::json j = nlohmann::json::parse(*line, nullptr, false);
+        if (j.is_object() && j.contains("id") && j["id"] == init["id"]) {
+            if (j.contains("error")) {
+                error = "the design component refused the session: " + j["error"].value("message", std::string());
+                process_->stop();
+                process_.reset();
+                return false;
+            }
+            break;
+        }
+    }
+    process_->write_line(nlohmann::json{{"jsonrpc", "2.0"}, {"method", "notifications/initialized"}}.dump());
+    return true;
+}
+
+bool SolidCraftSession::call(const std::string& tool, const std::string& arguments_json, std::string& text, bool& is_error,
+                             double timeout_seconds) {
+    text.clear();
+    is_error = false;
+    if (!process_ || !process_->running())
+        return false;
+    last_use_ = std::chrono::steady_clock::now();
+    const long id = next_id_++;
+    nlohmann::json request{{"jsonrpc", "2.0"}, {"id", id}, {"method", "tools/call"}};
+    request["params"] = {{"name", tool}, {"arguments", nlohmann::json::parse(arguments_json)}};
+    if (!process_->write_line(request.dump()))
+        return false;
+    const auto until = std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_seconds > 0 ? timeout_seconds : 3600.0);
+    while (std::chrono::steady_clock::now() < until) {
+        const double left = std::chrono::duration<double>(until - std::chrono::steady_clock::now()).count();
+        const std::optional<std::string> line = process_->read_line(std::max(0.01, left));
+        if (!line) {
+            if (!process_->running())
+                return false;
+            continue;
+        }
+        const nlohmann::json j = nlohmann::json::parse(*line, nullptr, false);
+        if (!j.is_object() || !j.contains("id") || j["id"] != id)
+            continue; // a notification or another answer
+        last_use_ = std::chrono::steady_clock::now();
+        if (j.contains("error")) {
+            is_error = true;
+            text = j["error"].value("message", std::string("error"));
+            return true;
+        }
+        const nlohmann::json& r = j.value("result", nlohmann::json::object());
+        is_error = r.value("isError", false);
+        for (const nlohmann::json& part : r.value("content", nlohmann::json::array()))
+            if (part.value("type", std::string()) == "text")
+                text += (text.empty() ? "" : "\n") + part.value("text", std::string());
+        return true;
+    }
+    // Late: the session is not trusted any more.
+    process_->stop();
+    return false;
+}
+
+namespace {
+
+// One build through the session: a fresh design, the script as one batch
+// (it exports the bodies), then measure and save. False when the session
+// went away on the way (then `r` is not filled).
+bool session_build(SolidCraftSession& s, const std::string& script, const std::filesystem::path& out,
+                   const std::filesystem::path& saved, double timeout, BuildResult& r) {
+    std::string text;
+    bool error = false;
+    if (!s.call("new_design", "{}", text, error, timeout))
+        return false;
+    const nlohmann::json parsed = nlohmann::json::parse(script);
+    const nlohmann::json batch{{"commands", parsed.value("commands", nlohmann::json::array())}, {"rollback", true}, {"verbose", false}};
+    if (!s.call("batch", batch.dump(), text, error, timeout))
+        return false;
+    if (error) {
+        r.error = "the design component refused the design: " + text;
+        r.refused = true;
+        return true;
+    }
+    if (!s.call("measure", "{}", text, error, timeout))
+        return false;
+    r.measure = error ? std::string() : text;
+    if (!s.call("save", nlohmann::json{{"path", saved.string()}}.dump(), text, error, timeout))
+        return false;
+    (void)out;
+    r.ok = true;
+    return true;
+}
+
+} // namespace
+
 BuildResult build_design(const std::filesystem::path& exe, const Design& design, MeshQuality quality,
-                         double timeout_seconds) {
+                         double timeout_seconds, SolidCraftSession* session) {
     BuildResult result;
     if (!design.has_body()) {
         result.ok = true;
@@ -156,6 +300,38 @@ BuildResult build_design(const std::filesystem::path& exe, const Design& design,
             return result;
         }
     }
+    if (session) {
+        // Rule 20 bis: the open session; if it had died, open again (once)
+        // and rebuild from the script.
+        BuildResult r;
+        bool done = false;
+        for (int attempt = 0; attempt < 2 && !done; ++attempt) {
+            if (!session->open()) {
+                std::string error;
+                const bool had_started = session->starts() > 0;
+                if (!session->start(error)) {
+                    result.error = error;
+                    return result;
+                }
+                if (had_started)
+                    result.session_restarted = true;
+            }
+            r = BuildResult{};
+            done = session_build(*session, read_file(script), out, saved, timeout_seconds, r);
+            if (!done)
+                session->close();
+        }
+        if (!done) {
+            result.error = "the design component did not answer in time";
+            return result;
+        }
+        if (!r.ok) {
+            result.error = r.error;
+            result.refused = r.refused;
+            return result;
+        }
+        result.measure = r.measure;
+    } else {
     const ProcessResult run = run_process(exe, {"run", script.string(), "--save", saved.string()}, timeout_seconds);
     if (!run.ok()) {
         result.error = run.timed_out ? "the design component did not answer in time"
@@ -163,6 +339,8 @@ BuildResult build_design(const std::filesystem::path& exe, const Design& design,
                                       : "the design component refused the design: " + complaint(run);
         result.refused = run.started && !run.timed_out;
         return result;
+    }
+    result.measure = run.out;
     }
     std::error_code ec;
     if (!std::filesystem::is_regular_file(out, ec)) {
@@ -177,15 +355,14 @@ BuildResult build_design(const std::filesystem::path& exe, const Design& design,
         return result;
     }
     result.design_file = read_file(saved);
-    result.measure = run.out;
     result.volume_mm3 = result.mesh.signed_volume();
     result.ok = true;
     return result;
 }
 
 BuildResult build_timeline(const std::filesystem::path& exe, const Design& design, MeshQuality quality,
-                           double timeout_seconds) {
-    BuildResult whole = build_design(exe, design, quality, timeout_seconds);
+                           double timeout_seconds, SolidCraftSession* session) {
+    BuildResult whole = build_design(exe, design, quality, timeout_seconds, session);
     if (whole.ok || !whole.refused)
         return whole;
     // The features that take part, in order; the design up to the k-th of
@@ -207,7 +384,7 @@ BuildResult build_timeline(const std::filesystem::path& exe, const Design& desig
     std::string why = whole.error;
     while (hi - lo > 1) {
         const std::size_t mid = (lo + hi) / 2;
-        BuildResult r = build_design(exe, upto(mid), quality, timeout_seconds);
+        BuildResult r = build_design(exe, upto(mid), quality, timeout_seconds, session);
         if (r.ok) {
             lo = mid;
         } else if (r.refused) {
@@ -217,7 +394,7 @@ BuildResult build_timeline(const std::filesystem::path& exe, const Design& desig
             return r; // the tool went missing or late on the way
         }
     }
-    BuildResult before = build_design(exe, upto(lo), quality, timeout_seconds);
+    BuildResult before = build_design(exe, upto(lo), quality, timeout_seconds, session);
     if (!before.ok)
         return before.refused ? whole : before;
     before.failed_feature = active[hi - 1];

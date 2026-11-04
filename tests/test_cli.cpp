@@ -668,3 +668,40 @@ TEST_CASE("slice of a model with --config writes the nodes' summary when asked (
     CHECK_THAT(text.str(), ContainsSubstring("\"filament_mm\""));
     CHECK_THAT(text.str(), ContainsSubstring("\"layers\""));
 }
+
+TEST_CASE("profile: the settings made from the catalog, ready for slice --config (the Android app's request)", "[cli]") {
+    const auto dir = std::filesystem::temp_directory_path() / "tisma_test_cli_profile";
+    std::filesystem::create_directories(dir);
+    const auto settings = dir / "settings.json", gcode = dir / "out.gcode";
+    // The full name wins over the longer ones that hold it (S1 Plus, S1 Pro).
+    Run r = run({"profile", "--printer", "creality ender-3 s1", "--nozzle", "0.4", "--filament", "Anycubic PLA Basic",
+                 "-o", settings.string()});
+    INFO(r.err);
+    REQUIRE(r.code == 0);
+    std::ifstream in(settings, std::ios::binary);
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const Settings s = parse_settings(text);
+    CHECK(s.nozzle_diameter == 0.4);
+    CHECK(s.max_nozzle_temp == 260.0);
+    r = run({"slice", kData + "/cube_ascii.stl", "--config", settings.string(), "-o", gcode.string()});
+    INFO(r.err);
+    CHECK(r.code == 0);
+    // Without -o, on standard output; without --nozzle, the stock one.
+    r = run({"profile", "--printer", "Creality Ender-3 S1"});
+    CHECK(r.code == 0);
+    CHECK(parse_settings(r.out).nozzle_diameter == 0.4);
+
+    r = run({"profile", "--printer", "Ender-3"});
+    CHECK(r.code == 2);
+    CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("names"));
+    r = run({"profile", "--printer", "Nobody Nothing 9000"});
+    CHECK(r.code == 2);
+    CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("no printer"));
+    r = run({"profile", "--printer", "Creality Ender-3 S1", "--nozzle", "0.8"});
+    CHECK(r.code == 2);
+    CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("takes nozzles of 0.4"));
+    r = run({"profile", "--printer", "Creality Ender-3 S1", "--filament", "Nobody Glue"});
+    CHECK(r.code == 2);
+    r = run({"profile", "--nozzle", "0.4"});
+    CHECK(r.code == 1);
+}

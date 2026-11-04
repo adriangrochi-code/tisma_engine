@@ -437,3 +437,40 @@ TEST_CASE("orient of a project the nodes' way (cloud.md, rules 10c and 19c)", "[
     std::filesystem::remove_all(dir);
 }
 
+
+TEST_CASE("TR29: slice, aero and orient errors carry a stable code and the Spanish text", "[cli][cloud]") {
+    const auto dir = fresh_dir("node_error_codes");
+    const auto project = dir / "plate.3mf", out_file = dir / "out", summary = dir / "summary.json";
+    save_project(project, box_project(100.0, 100.0));
+    const auto summary_of = [&](std::vector<std::string> args, int exit_code) {
+        const Run r = run(std::move(args));
+        INFO(r.err);
+        CHECK(r.code == exit_code);
+        return nlohmann::json::parse(read_text(summary));
+    };
+    for (const char* command : {"aero", "orient"}) {
+        const nlohmann::json j = summary_of({command, project.string(), "-o", out_file.string(), "--summary",
+                                             summary.string(), "--sandbox", "--object", "4"},
+                                            kExitInput);
+        CHECK(j["code"] == "no_object");
+        CHECK(j["error_es"] == "el proyecto no tiene ese objeto");
+    }
+    nlohmann::json j = summary_of({"aero", project.string(), "-o", out_file.string(), "--summary", summary.string(),
+                                   "--sandbox", "--speed", "500"},
+                                  kExitUsage);
+    CHECK(j["code"] == "bad_speed");
+    CHECK_THAT(j["error_es"].get<std::string>(), ContainsSubstring("100 m/s"));
+    j = summary_of({"aero", project.string(), "-o", out_file.string(), "--summary", summary.string(), "--sandbox",
+                    "--direction", "up"},
+                   kExitUsage);
+    CHECK(j["code"] == "bad_direction");
+    const auto other = dir / "other.3mf";
+    {
+        std::ofstream f(other, std::ios::binary);
+        f << "not a project";
+    }
+    j = summary_of({"slice", other.string(), "-o", out_file.string(), "--summary", summary.string(), "--sandbox"},
+                   kExitInput);
+    CHECK(j["code"] == "not_a_project");
+    CHECK(j["error_es"] == "el archivo no es un proyecto de Tisma");
+}

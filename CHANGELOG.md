@@ -12,6 +12,19 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **`profile` en la línea de comandos:** escribe los ajustes de una impresora del catálogo con su boquilla y,
+  si se pide, un filamento, listos para `slice --config`.
+- **Errores de la nube con código y texto en español** también en `slice`, `aero` y `orient` (antes solo
+  `analyze`).
+- **Vista como DXF** (`cad_design.md`, regla 20): en Diseño, «Vista como DXF» guarda las aristas de la vista actual
+  como líneas DXF, con las ocultas punteadas en su capa o sin ellas.
+- **Diseño más rápido** (`cad_design.md`, regla 20 bis): el componente de diseño queda abierto mientras se diseña y
+  cada cambio se construye sin volver a arrancarlo. Se cierra tras 10 minutos sin uso; si se cae, se abre de nuevo con
+  el diseño entero y avisa una vez.
+- **DXF y SVG en Diseño** (`cad_design.md`, D5b): «Traer DXF» y «Traer SVG» en el boceto traen líneas, círculos,
+  arcos, polilíneas, elipses, curvas y bloques, en milímetros según las unidades del archivo, como curvas del boceto
+  que se recortan, se acotan y se extruyen; «Exportar DXF» guarda el boceto. Un archivo que no se puede leer avisa con
+  el motivo y no cambia nada.
 - **Orientación automática, menos soporte** (`orientation.md`): en el menú de la placa, «Orientar (menos soporte)»
   gira el modelo elegido, o todos, a la orientación que menos soporte necesita y mejor se agarra a la cama; nunca
   queda peor que como estaba. Con una impresora de resina, «Orientar (menor fuerza de despegue)» busca la orientación

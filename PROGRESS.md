@@ -10025,7 +10025,7 @@ candidata y el detector de ventosas; recordar el método y la precisión por tec
 - FEA: adherencia entre capas y entre líneas (`src/fea/adhesion.*`); rango del factor de seguridad con la
   adherencia y el error de vóxel; `fit_voxel_limit` para calidades finas en piezas grandes. Falta el tiempo de capa
   real en la adherencia y los hexaedros de modos incompatibles.
-- Nube: los errores de `analyze` llevan `code` y `error_es`; `aero`, `slice` y `orient` todavía no tienen `error_es`.
+- Nube: los errores de `analyze`, `slice`, `aero` y `orient` llevan `code` y `error_es`.
 - La sesión de la app Android (session_01QadJfKGJU2WtuAunZW5p9B) va a pedir la API en C del motor
   (`mobile_app.md`, regla 2): acordarla con ella.
 - Equipo de fichas: session_015csYE6YXftDTgfC23i81xG (mensajes por send_message, con el pie de Claude Code).
@@ -10079,3 +10079,87 @@ Android, en cola después de este ítem: `--summary` también para `slice <model
   escribe el mismo resumen que la nube (`print_time`, `print_time_s`, `filament_mm`, `layers`, `filament_g`). Un modelo
   con `--config` va siempre por el laminado común, aunque lleve `--summary`.
 
+## 2026-11-04 — Diseño D5b: DXF y SVG de entrada y salida
+
+**D4 revisado:** las pruebas de la etapa (CD5, CD17, CD18) ya estaban. El barrido y el recubrimiento (regla 7) no
+están en ninguna etapa de la ficha; quedan para cuando SolidCraft los publique en su interfaz.
+
+**Hecho** (reglas 19 bis y 20; pasó `check_spec`):
+- `src/cad/sketch_io.*`: el lector de DXF ASCII trae líneas, círculos, arcos, polilíneas con `bulge`, elipses,
+  splines (de Boor, racionales con pesos) y bloques con escala, giro y matrices, en mm según `$INSUNITS`. Deja afuera,
+  con una nota, el espacio papel, el texto y los puntos.
+- El lector de SVG trae path (M, L, H, V, C, S, Q, T, A, Z, absolutos y relativos), rect, circle, ellipse, line,
+  polyline y polygon, con las transformaciones de sus grupos, el `viewBox` y el ancho en mm, y la y hacia arriba.
+- El escritor de DXF R12 en mm: líneas, cadenas y rectángulos como POLYLINE; círculos y arcos como tales; la
+  construcción en su capa.
+- **Decisión:** la ficha nombra `sketch.insert_dxf` y `sketch.insert_svg` de SolidCraft. El motor lee los archivos
+  él mismo, así lo traído son curvas propias del boceto que se recortan y se acotan como pide la regla. Anotado en
+  PROVENANCE.
+- Interfaz: «Traer DXF», «Traer SVG» y «Exportar DXF» en el panel del boceto. Lo traído se suma al boceto; si el
+  archivo no se lee, avisa el motivo y no cambia nada.
+
+**Pruebas:** CD22 (DXF en pulgadas: rectángulo de 1016 × 508 mm y círculo de 254 mm; el boceto tiene región), CD23
+(un contorno SVG cerrado), CD24 (línea, arco y círculo a DXF y de vuelta, dentro de 0,001 mm; un arco horario sale
+igual), bulges, bloques en matriz, espacio papel, archivos rotos y arcos, curvas y transformaciones SVG. Los botones,
+en `ui_script_design_sketch_edit`; el selector de archivos no se prueba desde el guion.
+
+**Falta de D5b:** CD25 (la sesión `solidcraft-cli mcp` abierta, regla 20 bis) y la vista como DXF de líneas
+(`file.export_view_dxf`).
+
+**Sigue:** CD25, después el orden de PLAN.md.
+
+
+## 2026-11-04 — Diseño CD25: SolidCraft abierto mientras se diseña
+
+**Hecho** (regla 20 bis; pasó `check_spec`):
+- `ChildProcess` en `src/cad/process.*`: un proceso hijo con stdin, stdout y stderr por tuberías y un hilo lector por
+  tubería; Windows (CreateProcessW) y POSIX (posix_spawn).
+- `SolidCraftSession`: `solidcraft-cli mcp` (JSON-RPC 2.0 por stdio, MCP 2025-06-18). Cada construcción es
+  `new_design`, `batch` (el guion con la exportación, `rollback`), `measure` y `save`. Si el proceso murió, se abre de
+  nuevo y se manda el guion entero (dos intentos); `BuildResult::session_restarted` lo marca.
+- La app guarda una sesión por binario, la pasa al trabajo de construcción, la cierra tras 600 s sin uso (solo cuando
+  no corre una construcción) y avisa una vez si se reinició. Sin sesión, `build_design` sigue con un proceso por
+  construcción.
+
+**Pruebas:** CD25 con el SolidCraft falso en modo `mcp`: 20 construcciones con un solo arranque y el mismo volumen;
+el proceso muere, la siguiente construcción lo reabre (`restarts == 1`); el cierre por inactividad. Pasan las pruebas
+de diseño de la interfaz. **Sin probar** con el `solidcraft-cli` real (no está en este entorno).
+
+**Arreglo (7c6229b):** parar la sesión ya no se cuelga si el componente dejó procesos propios con las tuberías
+abiertas (lectores con `poll` en POSIX y `CancelSynchronousIo` en Windows). Prueba con `sh` que deja un `sleep`.
+
+## 2026-11-04 — Diseño D5b: la vista como DXF (`file.export_view_dxf`)
+
+**Hecho** (regla 20; pasó `check_spec`):
+- `src/cad/view_dxf.*`: las aristas del dibujo (bordes, pliegues de más de 30° y siluetas) de la malla del diseño,
+  proyectadas según la cámara. Cada arista se parte en tramos visibles y ocultos con un rayo hacia el ojo.
+- DXF R12 con las capas VISIBLE (continua) y HIDDEN (punteada, 3 y 1,5 mm).
+- Interfaz: «Vista como DXF» y «Ocultas punteadas» en el panel de Diseño.
+- **Decisión:** el motor dibuja la vista él mismo, con la malla del diseño (proyección ortogonal aunque la cámara
+  esté en perspectiva).
+
+**Pruebas:** un cubo de frente (40 mm vistos, 40 ocultos) y desde una esquina (9 aristas vistas, 3 ocultas); sin
+ocultas no sale ninguna; nuestro lector lee el DXF. Un cilindro desde arriba (borde de arriba visto, el de abajo
+oculto, sin líneas de facetas) y de costado (siluetas y la mitad delantera de los bordes). El botón, en
+`ui_script_design_tab`.
+
+**Decisión sobre la regla 19 bis:** los puntos y el texto de un DXF se siguen dejando afuera con una nota. El boceto
+no tiene puntos sueltos, y el texto llega con D5.
+
+**D5b terminado.** **Sigue:** el orden de PLAN.md.
+
+## 2026-11-04 — Nube: códigos de error en slice, aero y orient; `profile` para la app de Android
+
+**Hecho:**
+- `slice`, `aero` y `orient` escriben en el resumen `code` y, para los errores que ve una persona, `error_es`, igual
+  que `analyze`. Códigos: cannot_read, not_a_project, bad_project, no_models, no_object, no_instance, bad_settings,
+  not_in_cloud, vase_objects, slice_failed, gcode_check, aero_failed, empty_part, bad_quality, bad_speed y
+  bad_direction. `cloud::job_error` tiene el texto de cada uno por si falta `error_es`.
+- `tisma-engine profile --printer ... [--nozzle] [--filament] -o ajustes.json`: los ajustes del catálogo para
+  `slice --config` (pedido de la app de Android). Documentado en `docs/CATALOG.md`.
+
+**Pruebas:** TR29 de slice, aero y orient (objeto que no está, velocidad y dirección malas, archivo que no es
+proyecto); `profile` (nombre completo frente a los que lo contienen, nombre ambiguo, impresora, boquilla y filamento
+que no están, y el resultado lamina un cubo con `slice --config`).
+
+**Sigue:** el orden de PLAN.md.

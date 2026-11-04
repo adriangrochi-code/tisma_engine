@@ -1,5 +1,7 @@
 #include "cli/cli.hpp"
 #include "cli/node.hpp"
+#include "catalog/catalog.hpp"
+#include "config/profiles.hpp"
 
 #include "io/model.hpp"
 #include "io/paths.hpp"
@@ -104,6 +106,8 @@ constexpr std::string_view kUsage =
     "                    --quality <friction|fast|normal|high|extreme> --speed <m/s> --direction <x|-x|y|-y|z|-z|x,y,z>\n"
     "  tisma-engine orient <project> -o <orientation.json> --summary <summary.json> --sandbox --object <n> --instance <n>\n"
     "                      (least support for FDM: the rotation, its cost and the cost before)\n"
+    "  tisma-engine profile --printer \"<vendor> <model>\" [--nozzle <mm>] [--filament \"<vendor> <name>\"] -o <settings.json>\n"
+    "                       (the settings the engine makes from its catalog, for slice --config)\n"
     "  tisma-engine info <model>\n"
     "  --threads <n> on any command: at most n threads of work (cloud.md, rule 19d); without it, all\n"
     "  tisma-engine --help | --version\n"
@@ -267,6 +271,116 @@ int load_model(const std::string& path, ModelFile& stl, double& seconds, std::os
         return kExitInput;
     }
     seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    return kExitOk;
+}
+
+namespace {
+
+std::string lower(std::string_view text) {
+    std::string out(text);
+    for (char& c : out)
+        c = char(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+// One catalog entry by its full name ("Vendor Model", any case), else the
+// only one holding every word; null with the reason otherwise.
+template <class Entry>
+const Entry* pick_entry(const std::vector<Entry>& all, const std::vector<const Entry*>& found,
+                        const std::string& query, const char* what, std::string& reason,
+                        std::string (*name_of)(const Entry&)) {
+    for (const Entry& e : all)
+        if (lower(name_of(e)) == lower(query))
+            return &e;
+    if (found.size() == 1)
+        return found.front();
+    if (found.empty()) {
+        reason = std::string("no ") + what + " in the catalog is called '" + query + "'";
+    } else {
+        reason = std::string("'") + query + "' names " + std::to_string(found.size()) + " " + what + "s:";
+        for (std::size_t i = 0; i < found.size() && i < 8; ++i)
+            reason += (i ? ", " : " ") + name_of(*found[i]);
+        if (found.size() > 8)
+            reason += "...";
+    }
+    return nullptr;
+}
+
+std::string printer_name(const PrinterModel& p) { return p.vendor + " " + p.model; }
+std::string filament_name(const FilamentModel& f) { return f.vendor + " " + f.name; }
+
+} // namespace
+
+// The settings the engine makes from its catalog (the Android app's request,
+// 2026-11-04): the printer's profile for the nozzle and, when named, the
+// filament's, the rest the defaults; the same document slice --config reads.
+int cmd_profile(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
+    std::string printer, filament, output, nozzle_text, usage;
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        const std::string_view a = args[i];
+        std::string* value = a == "--printer" ? &printer : a == "--filament" ? &filament : a == "--nozzle" ? &nozzle_text
+                             : a == "-o"      ? &output
+                                              : nullptr;
+        if (value && i + 1 < args.size())
+            *value = std::string(args[++i]);
+        else if (usage.empty())
+            usage = value ? "profile: " + std::string(a) + " needs a value" : "profile: unexpected argument '" + std::string(a) + "'";
+    }
+    if (usage.empty() && printer.empty())
+        usage = "profile needs --printer";
+    double nozzle = 0.0;
+    if (usage.empty() && !nozzle_text.empty()) {
+        const auto [end, ec] = std::from_chars(nozzle_text.data(), nozzle_text.data() + nozzle_text.size(), nozzle);
+        if (ec != std::errc() || end != nozzle_text.data() + nozzle_text.size() || !(nozzle > 0.0))
+            usage = "profile: --nozzle needs a diameter in mm";
+    }
+    if (!usage.empty()) {
+        err << "error: " << usage << "\n" << kUsage;
+        return kExitUsage;
+    }
+    const Catalog& catalog = builtin_catalog();
+    std::string reason;
+    const PrinterModel* p = pick_entry(catalog.printers, find_printers(catalog, printer), printer, "printer", reason, printer_name);
+    if (!p) {
+        err << "error: " << reason << "\n";
+        return kExitInput;
+    }
+    if (nozzle_text.empty()) {
+        nozzle = p->nozzles.empty() ? 0.4 : p->nozzles.front();
+    } else if (!p->nozzles.empty() &&
+               std::none_of(p->nozzles.begin(), p->nozzles.end(), [&](double n) { return std::abs(n - nozzle) < 1e-6; })) {
+        std::string offered;
+        for (double n : p->nozzles) {
+            char buf[32];
+            const auto [end, ec] = std::to_chars(buf, buf + sizeof buf, n);
+            offered += (offered.empty() ? "" : ", ") + std::string(buf, ec == std::errc() ? end : buf);
+        }
+        err << "error: the " << printer_name(*p) << " takes nozzles of " << offered << " mm, not " << nozzle_text << "\n";
+        return kExitInput;
+    }
+    Settings settings = with_profile(Settings{}, ProfileKind::Printer, printer_profile(*p, nozzle).settings);
+    if (!filament.empty()) {
+        const FilamentModel* f =
+            pick_entry(catalog.filaments, find_filaments(catalog, filament), filament, "filament", reason, filament_name);
+        if (!f) {
+            err << "error: " << reason << "\n";
+            return kExitInput;
+        }
+        if (!filament_offered(*f, settings.feedstock, {p->filament_diameter})) {
+            err << "error: " << filament_name(*f) << " does not fit the " << printer_name(*p) << " (its filament or feedstock differs)\n";
+            return kExitInput;
+        }
+        settings = with_profile(settings, ProfileKind::Filament, filament_profile(*f).settings);
+    }
+    const std::string json = settings_json(settings);
+    if (output.empty() || output == "-") {
+        out << json;
+        return kExitOk;
+    }
+    if (!write_file(output, [&](std::ostream& f) { f << json; })) {
+        err << "error: cannot write '" << output << "'\n";
+        return kExitInput;
+    }
     return kExitOk;
 }
 
@@ -914,6 +1028,8 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
             return node_slice_wanted(args_left) ? cmd_slice_project(args_left, out, err) : cmd_slice(args_left, out, err);
         if (command == "info")
             return cmd_info(args_left, out, err);
+        if (command == "profile")
+            return cmd_profile(args_left, out, err);
         if (command == "aero")
             return cmd_aero_project(args_left, out, err);
         if (command == "orient")

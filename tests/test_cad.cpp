@@ -8,6 +8,8 @@
 #include "cad/process.hpp"
 #include "cad/sketch.hpp"
 #include "cad/solidcraft.hpp"
+#include "cad/sketch_io.hpp"
+#include "cad/view_dxf.hpp"
 #include "io/model.hpp"
 #include "mesh/shapes.hpp"
 
@@ -22,6 +24,7 @@
 #include <random>
 #include <map>
 #include <cstdlib>
+#include <fstream>
 #include <numbers>
 
 using namespace tisma;
@@ -1067,4 +1070,130 @@ TEST_CASE("cad: CD5 and CD6, a standard hole and a fillet through the tool (rule
     REQUIRE(b.failed_feature);
     CHECK(*b.failed_feature == 1);
     CHECK_THAT(b.volume_mm3, WithinAbs(8000.0, 1e-3));
+}
+
+TEST_CASE("CD25: one design session for twenty builds, and opened again when it dies", "[cad]") {
+    const auto starts = std::filesystem::temp_directory_path() / "tisma_cd25_starts.txt";
+    const auto die = std::filesystem::temp_directory_path() / "tisma_cd25_die";
+    std::filesystem::remove(starts);
+    std::filesystem::remove(die);
+#ifdef _WIN32
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_STARTS", starts.string().c_str());
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_MCP_DIE", die.string().c_str());
+#else
+    setenv("TISMA_FAKE_SOLIDCRAFT_STARTS", starts.string().c_str(), 1);
+    setenv("TISMA_FAKE_SOLIDCRAFT_MCP_DIE", die.string().c_str(), 1);
+#endif
+    {
+        SolidCraftSession session(kFake);
+        for (int i = 0; i < 20; ++i) {
+            const BuildResult built = build_design(kFake, box_design(), MeshQuality::Standard, 60.0, &session);
+            INFO(built.error);
+            REQUIRE(built.ok);
+            CHECK_THAT(built.volume_mm3, WithinAbs(24000.0, 1e-3));
+            CHECK_FALSE(built.session_restarted);
+            CHECK_THAT(built.measure, ContainsSubstring("volume_mm3"));
+            CHECK_FALSE(built.design_file.empty());
+        }
+        CHECK(session.starts() == 1);
+        CHECK(session.open());
+        // Killed: the next build opens it again and gives the same design.
+        { std::ofstream(die) << "x"; }
+        const BuildResult again = build_design(kFake, box_design(), MeshQuality::Standard, 60.0, &session);
+        INFO(again.error);
+        REQUIRE(again.ok);
+        CHECK(again.session_restarted);
+        CHECK_THAT(again.volume_mm3, WithinAbs(24000.0, 1e-3));
+        CHECK(session.starts() == 2);
+        CHECK(session.restarts() == 1);
+        // Idle: closed after the time, opened again by the next build.
+        session.close_if_idle(0.0);
+        CHECK_FALSE(session.open());
+    }
+    std::ifstream f(starts);
+    int lines = 0;
+    for (std::string l; std::getline(f, l);)
+        ++lines;
+    CHECK(lines == 2);
+#ifdef _WIN32
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_STARTS", "");
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_MCP_DIE", "");
+#else
+    unsetenv("TISMA_FAKE_SOLIDCRAFT_STARTS");
+    unsetenv("TISMA_FAKE_SOLIDCRAFT_MCP_DIE");
+#endif
+}
+
+#ifndef _WIN32
+TEST_CASE("CD25: a stopped child whose own child keeps the pipes open does not hang", "[cad]") {
+    cad::ChildProcess child;
+    std::string error;
+    REQUIRE(child.start("/bin/sh", {"-c", "sleep 30 & echo ready; sleep 30"}, error));
+    const std::optional<std::string> line = child.read_line(10.0);
+    REQUIRE(line);
+    CHECK(*line == "ready");
+    const auto t0 = std::chrono::steady_clock::now();
+    child.stop();
+    CHECK(std::chrono::steady_clock::now() - t0 < std::chrono::seconds(5));
+    CHECK_FALSE(child.running());
+}
+#endif
+
+namespace {
+std::pair<double, double> view_lengths(const std::vector<cad::ViewLine>& lines) {
+    double shown = 0, hidden = 0;
+    for (const cad::ViewLine& l : lines)
+        (l.hidden ? hidden : shown) += std::hypot(l.x1 - l.x0, l.y1 - l.y0);
+    return {shown, hidden};
+}
+} // namespace
+
+TEST_CASE("view as DXF: a cube from the front and from a corner, hidden edges dashed or left out", "[cad]") {
+    const TriangleMesh cube = make_box(10, 10, 10);
+    cad::ViewDxfOptions front;
+    front.look = {0, 1, 0};
+    front.up = {0, 0, 1};
+    auto [shown, hidden] = view_lengths(cad::view_lines(cube, front));
+    CHECK_THAT(shown, Catch::Matchers::WithinAbs(40.0, 0.01)); // the front square
+    CHECK_THAT(hidden, Catch::Matchers::WithinAbs(40.0, 0.01)); // the back one, behind it
+
+    // From the corner (+,+,+): nine edges seen, the three at the far corner hidden.
+    cad::ViewDxfOptions corner;
+    corner.look = {-1, -1, -1};
+    corner.up = {0, 0, 1};
+    const double edge = 10.0 * std::sqrt(2.0 / 3.0);
+    std::tie(shown, hidden) = view_lengths(cad::view_lines(cube, corner));
+    CHECK_THAT(shown, Catch::Matchers::WithinRel(9 * edge, 0.02));
+    CHECK_THAT(hidden, Catch::Matchers::WithinRel(3 * edge, 0.05));
+
+    corner.hidden = false;
+    const std::vector<cad::ViewLine> seen = cad::view_lines(cube, corner);
+    CHECK(std::none_of(seen.begin(), seen.end(), [](const cad::ViewLine& l) { return l.hidden; }));
+
+    const std::string dxf = cad::write_view_dxf(cad::view_lines(cube, front));
+    CHECK_THAT(dxf, Catch::Matchers::ContainsSubstring("DASHED"));
+    CHECK_THAT(dxf, Catch::Matchers::ContainsSubstring("8\nHIDDEN\n"));
+    CHECK_THAT(dxf, Catch::Matchers::ContainsSubstring("8\nVISIBLE\n"));
+    // Our own reader takes it back as lines.
+    const cad::SketchImport back = cad::read_dxf(dxf);
+    REQUIRE(back.ok());
+    CHECK(back.entities.size() == cad::view_lines(cube, front).size());
+}
+
+TEST_CASE("view as DXF: a cylinder from above, its rim seen and the bottom one hidden, no facet lines", "[cad]") {
+    const TriangleMesh cylinder = make_cylinder(10, 20, 64);
+    cad::ViewDxfOptions top;
+    const double rim = 64 * 2 * 10 * std::sin(3.14159265358979323846 / 64);
+    auto [shown, hidden] = view_lengths(cad::view_lines(cylinder, top));
+    CHECK_THAT(shown, Catch::Matchers::WithinRel(rim, 0.01));
+    CHECK_THAT(hidden, Catch::Matchers::WithinRel(rim, 0.01));
+
+    // From the side: two silhouettes, the front halves of the rims seen, the
+    // back halves behind them.
+    cad::ViewDxfOptions side;
+    side.look = {0, 1, 0};
+    side.up = {0, 0, 1};
+    std::tie(shown, hidden) = view_lengths(cad::view_lines(cylinder, side));
+    CHECK_THAT(shown, Catch::Matchers::WithinRel(2 * 20.0 + 2 * 20.0, 0.02));
+    CHECK_THAT(hidden, Catch::Matchers::WithinRel(2 * 20.0, 0.02));
 }

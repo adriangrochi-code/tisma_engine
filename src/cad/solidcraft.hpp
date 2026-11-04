@@ -8,7 +8,10 @@
 #include "cad/design.hpp"
 #include "mesh/mesh.hpp"
 
+#include <chrono>
 #include <filesystem>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <string>
@@ -53,13 +56,48 @@ struct BuildResult {
     // ones after it wait.
     std::optional<std::size_t> failed_feature;
     std::string failure;
+    bool session_restarted = false; // the session had died and was opened again for this build
+};
+
+class ChildProcess;
+
+// SolidCraft kept open while designing (rule 20 bis): `solidcraft-cli mcp`,
+// a Model Context Protocol server over stdio (JSON-RPC 2.0, a line per
+// message; its tools new_design, batch, measure and save, from SolidCraft's
+// public docs/mcp.md), started once and sent every build. When it dies the
+// next build starts it again and rebuilds from the script; `restarts`
+// counts those. Safe to use from one thread at a time (a lock guards it).
+class SolidCraftSession {
+public:
+    explicit SolidCraftSession(std::filesystem::path exe);
+    ~SolidCraftSession();
+    const std::filesystem::path& exe() const { return exe_; }
+    bool open() const;
+    void close();
+    // Closed after `seconds` without a build (rule 20 bis: ten minutes).
+    void close_if_idle(double seconds);
+    int starts() const { return starts_; }
+    int restarts() const { return restarts_; }
+    // One tool call; the text of its content, and whether it was an error.
+    // False when the session is gone (no answer in time, or it ended).
+    bool call(const std::string& tool, const std::string& arguments_json, std::string& text, bool& is_error,
+              double timeout_seconds);
+    bool start(std::string& error);
+
+private:
+    std::filesystem::path exe_;
+    std::unique_ptr<ChildProcess> process_;
+    long next_id_ = 1;
+    int starts_ = 0, restarts_ = 0;
+    std::chrono::steady_clock::time_point last_use_;
+    mutable std::mutex lock_;
 };
 
 // Runs the design's script through the tool, exporting its bodies as a 3MF
 // at `quality` and saving the design file, in a temporary folder removed
 // after. A design with nothing to build gives an empty mesh and ok.
 BuildResult build_design(const std::filesystem::path& exe, const Design& design, MeshQuality quality,
-                         double timeout_seconds = 120.0);
+                         double timeout_seconds = 120.0, SolidCraftSession* session = nullptr);
 
 // The design built as a timeline (rule 8): when the tool refuses it, the
 // first feature that fails is found (the shortest failing run of features
@@ -67,6 +105,6 @@ BuildResult build_design(const std::filesystem::path& exe, const Design& design,
 // result is ok with `failed_feature` and `failure` set; a missing or late
 // tool is an error as in build_design.
 BuildResult build_timeline(const std::filesystem::path& exe, const Design& design, MeshQuality quality,
-                           double timeout_seconds = 120.0);
+                           double timeout_seconds = 120.0, SolidCraftSession* session = nullptr);
 
 } // namespace tisma::cad

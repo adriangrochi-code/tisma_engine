@@ -60,3 +60,7 @@ sketch-point 5 5
 sketch-point 0 10
 expect-sketch-entities 9
 expect-sketch-point 9 0 -1.414 1.414
+# D5b (rules 19 bis, 20): bring in DXF and SVG, export DXF.
+expect-control sketch_import_dxf
+expect-control sketch_import_svg
+expect-control sketch_export_dxf

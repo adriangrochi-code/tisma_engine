@@ -1276,6 +1276,7 @@
     X(DesignSendTip, "Ctrl+Mayús+P: la pieza pasa a Preparar como un objeto; si vino de ahí, lo reemplaza y conserva su lugar, sus ajustes y lo pintado", \
       "Ctrl+Shift+P: the part goes to Prepare as an object; if it came from there, it replaces it and keeps its place, settings and painting") \
     X(DesignNeedsSolid, "Hacé un sólido primero.", "Make a solid first.") \
+    X(DesignRestarted, "El componente de diseño se cerró y se abrió de nuevo.", "The design component closed and was opened again.") \
     X(DesignMissing, "Falta el componente de diseño: reinstalá Tisma para usar Diseño.", "The design component is missing: reinstall Tisma to use Design.") \
     X(DesignChecking, "Comprobando el componente de diseño…", "Checking the design component…") \
     X(DesignBuilding, "Construyendo…", "Building…") \
@@ -1375,6 +1376,17 @@
     X(SketchToolArc, "Arco (A)", "Arc (A)") \
     X(SketchExtrude, "Extruir (E)", "Extrude (E)") \
     X(SketchRevolve, "Revolucionar (REV)", "Revolve (REV)") \
+    X(SketchImportDxf, "Traer DXF", "Bring in DXF") \
+    X(SketchImportSvg, "Traer SVG", "Bring in SVG") \
+    X(SketchExportDxf, "Exportar DXF", "Export DXF") \
+    X(SketchImported, "Se trajeron %d curvas de %s", "Brought in %d curves from %s") \
+    X(SketchCannotRead, "no se puede leer el archivo", "the file cannot be read") \
+    X(SketchImportFailed, "No se pudo traer el dibujo", "The drawing could not be brought in") \
+    X(DesignViewDxf, "Vista como DXF", "View as DXF") \
+    X(DesignViewDxfHidden, "Ocultas punteadas", "Hidden dashed") \
+    X(DesignViewDxfTip, "Guarda las aristas de la vista actual como líneas DXF.", "Saves the current view's edges as DXF lines.") \
+    X(DesignViewExported, "Vista exportada: %s", "View exported: %s") \
+    X(SketchExported, "Boceto exportado: %s", "Sketch exported: %s") \
     X(SketchFinish, "Terminar boceto", "Finish sketch") \
     X(SketchDof, "Grados de libertad: %d", "Degrees of freedom: %d") \
     X(SketchDofNone, "Totalmente definido", "Fully defined") \

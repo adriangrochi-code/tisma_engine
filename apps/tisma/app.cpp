@@ -24,6 +24,8 @@
 #include "cad/process.hpp"
 #include "cad/solidcraft.hpp"
 #include "cad/sketch_edit.hpp"
+#include "cad/sketch_io.hpp"
+#include "cad/view_dxf.hpp"
 #include "aero/aero.hpp"
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
@@ -550,7 +552,11 @@ enum class Purpose {
     SaveExtruderTest,
     LoadCase,
     ExportView,
-    ImportView
+    ImportView,
+    ImportSketchDxf, // cad_design.md, rule 19 bis
+    ImportSketchSvg,
+    ExportSketchDxf, // rule 20
+    ExportViewDxf
 };
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
@@ -1096,6 +1102,11 @@ private:
     char design_rename_buf_[128] = {};
     bool design_dirty_ = false;     // changed since the build that runs
     Background<cad::BuildResult> design_job_;
+    // CD25: the bundled tool kept open while designing, closed after 10
+    // minutes idle; only touched by the design job or when it is not running.
+    std::shared_ptr<cad::SolidCraftSession> design_session_;
+    bool design_restart_noted_ = false;
+    bool view_dxf_hidden_ = true; // «Vista como DXF»: hidden edges dashed
     Background<cad::SolidCraftInfo> solidcraft_job_;
     cad::SolidCraftInfo solidcraft_;
     bool solidcraft_probed_ = false;
@@ -1303,6 +1314,7 @@ private:
     void sketch_strip();
     void sketch_cursor_input();
     cad::Sketch* editing_sketch();
+    void import_sketch_file(const std::filesystem::path& path, bool svg);
     void sketch_rule_tool(SketchEdit::Rule rule);
     void sketch_pick(const cad::Pt& p);
     void sketch_rule_prompt();
@@ -4960,6 +4972,8 @@ void App::poll_jobs() {
     }
     if (std::optional<cad::BuildResult> built = design_job_.take())
         design_built(std::move(*built));
+    if (design_session_ && !design_job_.running())
+        design_session_->close_if_idle(600.0);
     if (std::optional<StructuralRun> run = structural_job_.take())
         structural_done(std::move(*run));
     if (std::optional<AeroRun> run = aero_job_.take())
@@ -11447,12 +11461,21 @@ void App::rebuild_design() {
     const cad::Design copy = design_;
     const std::filesystem::path exe = solidcraft_.exe;
     const cad::MeshQuality quality = cad::quality_for(settings_.cad_chord_tolerance, cad::nominal_size(copy));
-    design_job_.start([exe, copy, quality] { return cad::build_timeline(exe, copy, quality); });
+    if (!design_session_ || design_session_->exe() != exe)
+        design_session_ = std::make_shared<cad::SolidCraftSession>(exe);
+    std::shared_ptr<cad::SolidCraftSession> session = design_session_;
+    design_job_.start([exe, copy, quality, session] {
+        return cad::build_timeline(exe, copy, quality, 120.0, session.get());
+    });
 }
 
 void App::design_built(cad::BuildResult built) {
     design_failed_ = built.failed_feature;
     design_failure_ = built.failure;
+    if (built.session_restarted && !design_restart_noted_) {
+        design_restart_noted_ = true;
+        notify(tr(T::DesignRestarted));
+    }
     if (built.ok) {
         design_error_.clear();
         design_mesh_ = std::move(built.mesh);
@@ -11755,6 +11778,24 @@ void App::design_panel() {
                 x += w + ImGui::GetStyle().ItemSpacing.x;
             }
         }
+        // Drawings from other programs, and the sketch out (rules 19 bis, 20).
+        if (ImGui::SmallButton(tr(T::SketchImportDxf))) {
+            purpose_ = Purpose::ImportSketchDxf;
+            browser_.open(FileBrowser::Mode::Open, tr(T::SketchImportDxf), {".dxf"}, last_folder_);
+        }
+        rect_of("sketch_import_dxf");
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::SketchImportSvg))) {
+            purpose_ = Purpose::ImportSketchSvg;
+            browser_.open(FileBrowser::Mode::Open, tr(T::SketchImportSvg), {".svg"}, last_folder_);
+        }
+        rect_of("sketch_import_svg");
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::SketchExportDxf))) {
+            purpose_ = Purpose::ExportSketchDxf;
+            browser_.open(FileBrowser::Mode::Save, tr(T::SketchExportDxf), {".dxf"}, last_folder_, "boceto.dxf");
+        }
+        rect_of("sketch_export_dxf");
         if (ImGui::Button(tr(T::SketchFinish)))
             finish_sketch();
         rect_of("design_sketch_finish");
@@ -12337,6 +12378,20 @@ void App::design_panel() {
             ImGui::EndTable();
         }
     }
+    // The view as DXF lines (rule 20, `file.export_view_dxf`).
+    ImGui::Spacing();
+    ImGui::BeginDisabled(design_mesh_.empty());
+    if (ImGui::SmallButton(tr(T::DesignViewDxf))) {
+        purpose_ = Purpose::ExportViewDxf;
+        browser_.open(FileBrowser::Mode::Save, tr(T::DesignViewDxf), {".dxf"}, last_folder_, "vista.dxf");
+    }
+    ImGui::EndDisabled();
+    rect_of("design_view_dxf");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(T::DesignViewDxfTip));
+    ImGui::SameLine();
+    ImGui::Checkbox(tr(T::DesignViewDxfHidden), &view_dxf_hidden_);
+    rect_of("design_view_dxf_hidden");
     ImGui::Spacing();
     loc::TextDisabled("%s", tr(T::DesignBasedOn));
     ImGui::PopTextWrapPos();
@@ -16178,6 +16233,33 @@ std::optional<cad::Constraint> constraint_of(const cad::Snap& snap, const cad::E
 
 } // namespace
 
+// «Traer DXF» and «Traer SVG» (rule 19 bis): the curves join the sketch
+// being edited; a file that cannot be read says why and changes nothing.
+void App::import_sketch_file(const std::filesystem::path& path, bool svg) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch)
+        return;
+    std::ifstream in(path, std::ios::binary);
+    const std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (!in && !in.eof()) {
+        fail(T::SketchImportFailed, utf8(path.filename()) + ": " + std::string(tr(T::SketchCannotRead)));
+        return;
+    }
+    const cad::SketchImport r = svg ? cad::read_svg(data) : cad::read_dxf(data);
+    if (!r.ok()) {
+        fail(T::SketchImportFailed, utf8(path.filename()) + ": " + r.error);
+        return;
+    }
+    sketch->entities.insert(sketch->entities.end(), r.entities.begin(), r.entities.end());
+    if (sketch_edit_)
+        sketch_edit_->selected.clear();
+    design_dirty_ = true;
+    std::string message = format(tr(T::SketchImported), int(r.entities.size()), utf8(path.filename()).c_str());
+    for (const std::string& note : r.notes)
+        message += " · " + note;
+    notify(message);
+}
+
 cad::Sketch* App::editing_sketch() {
     if (!sketch_edit_ || sketch_edit_->feature >= design_.features.size() ||
         design_.features[sketch_edit_->feature].type != cad::Feature::Type::Sketch)
@@ -18179,6 +18261,35 @@ void App::dialogs() {
             break;
         }
         case Purpose::SaveProject: save_project_to(chosen); break;
+        case Purpose::ImportSketchDxf:
+        case Purpose::ImportSketchSvg: import_sketch_file(chosen, purpose_ == Purpose::ImportSketchSvg); break;
+        case Purpose::ExportSketchDxf: {
+            cad::Sketch* sketch = editing_sketch();
+            std::ofstream out(chosen, std::ios::binary);
+            if (sketch)
+                out << cad::write_dxf(*sketch);
+            out.close();
+            if (!sketch || !out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::SketchExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
+        case Purpose::ExportViewDxf: {
+            cad::ViewDxfOptions view;
+            const Vec3 look = camera_.forward(), up = camera_.up();
+            view.look = {look.x, look.y, look.z};
+            view.up = {up.x, up.y, up.z};
+            view.hidden = view_dxf_hidden_;
+            std::ofstream out(chosen, std::ios::binary);
+            out << cad::write_view_dxf(cad::view_lines(design_mesh_, view));
+            out.close();
+            if (!out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::DesignViewExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
         case Purpose::LoadCase: load_case_file(chosen); break;
         case Purpose::SaveExtruderTest: {
             std::ofstream out(chosen, std::ios::binary);

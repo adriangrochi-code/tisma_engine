@@ -163,6 +163,18 @@ Los materiales que se ofrecen, en el catálogo y en la lista de perfiles de Fila
 
 `--catalog printer|filament` y `--catalog-search TEXTO` abren el catálogo en las capturas.
 
+## Desde la línea de comandos
+
+`tisma-engine profile --printer "<marca> <modelo>" [--nozzle <mm>] [--filament "<marca> <nombre>"] -o <ajustes.json>`
+escribe los ajustes que arma el motor con el catálogo (el perfil de la impresora para esa boquilla y, si se nombra, el
+del filamento; lo demás, los valores por defecto). Es el mismo documento que lee `slice --config`. Lo pidió la app de
+Android, para no repetir la lógica en Kotlin.
+
+- El nombre completo gana sobre los que lo contienen; si no, vale el único que tenga todas las palabras.
+- Sin `--nozzle`, la boquilla de fábrica. Sin `-o`, a la salida estándar.
+- Una impresora, filamento o boquilla que no está, o un nombre que alcanza a varios: código de salida 2 y el motivo
+  en stderr.
+
 ## Cómo se arman los datos
 
 1. **Recolección:** se buscan las páginas oficiales de cada fabricante y se anotan los números con la URL y una cita
