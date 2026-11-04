@@ -175,6 +175,30 @@ Android, para no repetir la lógica en Kotlin.
 - Una impresora, filamento o boquilla que no está, o un nombre que alcanza a varios: código de salida 2 y el motivo
   en stderr.
 
+### El paquete libre de perfiles
+
+El paquete (ficha `profile_pack.md`) vive en `<carpeta>/pack`. El motor no baja nada: quien lo llama (la interfaz, la
+app del teléfono) baja los archivos que pide el plan a una carpeta y el motor los instala desde ahí.
+
+1. `tisma-engine pack plan --data <carpeta>` da la lista de descargas en JSON (`downloads`: `url`, `name`, `size`,
+   `sha256`). Sin `--index`, solo el índice. Con `--index <index.json bajado>`, el resto: `compatible.json`,
+   `community.tar.xz`, `knowledge.tar.xz` y cada fabricante. Solo entran los fabricantes cuyo archivo cambió. Sin
+   `--vendors a,b`, los instalados, o todos si no hay ninguno. `--url` cambia la dirección de la última versión.
+2. `tisma-engine pack install --data <carpeta> --from <carpeta con lo bajado>`:
+   - compara cada archivo con el tamaño y el SHA-256 del índice;
+   - descomprime cada `.tar.xz` en memoria y revisa cada entrada antes de escribir nada;
+   - una ruta insegura, un enlace o un archivo de más de 50 MB descartan el archivo entero;
+   - lo descartado y lo que no se bajó quedan como estaban;
+   - arma el paquete nuevo al lado y lo cambia con un solo renombre;
+   - escribe líneas `progress:` en stderr y el informe en JSON (`installed`, `kept`, `discarded`, `warnings`);
+   - un índice de versión más nueva no cambia nada (código 2).
+3. `tisma-engine pack list --data <carpeta>` da los fabricantes, sus modelos y variantes, cada una con su nombre de
+   impresora `<archivo>#<variante>`.
+4. `tisma-engine profile --pack <carpeta> --printer "<archivo>#<variante>" [--filament <ruta>] [--print <ruta>]`
+   escribe los ajustes de esa impresora del paquete, igual que `profile --printer`.
+   - Sin `--filament` ni `--print`, usa los de `defaults` de la variante.
+   - Un filamento que no es para esa impresora (`compatible.json`) da código 2.
+
 ## Cómo se arman los datos
 
 1. **Recolección:** se buscan las páginas oficiales de cada fabricante y se anotan los números con la URL y una cita

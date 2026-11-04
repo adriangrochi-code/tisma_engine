@@ -9,6 +9,8 @@
 #include "config/profiles.hpp"
 
 #include <cstdint>
+#include <filesystem>
+#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -102,5 +104,27 @@ PackEntry parse_pack_entry(std::string_view json, std::vector<std::string>& warn
 std::vector<std::vector<int>> parse_pack_compatible(std::string_view json);
 // Whether an entry is offered for printer number `printer` (rule 12, PF5).
 bool pack_compatible(const std::optional<int>& set, const std::vector<std::vector<int>>& sets, int printer);
+
+// Installs the pack from `staging`, a folder with the downloaded files under
+// their published names (index.json first), into `pack_dir` (rules 4, 5, 7,
+// 8, 20, 21). Each file is checked against the index's size and SHA-256 and
+// each archive entry against rule 5; a file that fails is discarded with a
+// warning and the earlier install of it is kept (PF2, PF3, PK3, PK4). What
+// was not downloaded is kept from the earlier install. The new pack is built
+// beside the old one and switched in one rename (rule 7, PK14). Throws
+// PackError when the index cannot be read (PF1) or the folder not written;
+// then nothing changed. `progress` gets one line per step.
+struct PackInstallReport {
+    std::string pack_version;
+    std::vector<std::string> installed, kept, discarded; // file names
+    std::vector<std::string> warnings;
+};
+PackInstallReport pack_install(const std::filesystem::path& pack_dir, const std::filesystem::path& staging,
+                               const std::function<void(const std::string&)>& progress = {});
+
+// The installed pack's index, each vendor's archive SHA-256 being the one
+// really installed (empty when not installed), for pack_plan's `installed`.
+// Throws PackError when there is none.
+PackIndex pack_installed(const std::filesystem::path& pack_dir);
 
 } // namespace tisma

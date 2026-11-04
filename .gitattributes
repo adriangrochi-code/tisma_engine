@@ -1,3 +1,5 @@
 # Test data that must reach every platform byte for byte (no line-ending conversion).
 *.deflate binary
 *.3mf binary
+*.xz binary
+tests/data/pack/** binary

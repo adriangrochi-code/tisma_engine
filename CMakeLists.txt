@@ -280,6 +280,8 @@ add_library(tisma_core
   src/project/project.cpp
   src/catalog/catalog.cpp
   src/catalog/pack.cpp
+  src/catalog/pack_install.cpp
+  src/catalog/xz.cpp
   src/device/gcode_host.cpp
   src/device/printer.cpp
   src/device/serial_port.cpp
@@ -293,6 +295,7 @@ add_library(tisma_core
   src/ui/project_slice.cpp
   src/cli/cli.cpp
   src/cli/node.cpp
+  src/cli/pack_cli.cpp
 )
 if(TISMA_GPU)
   target_sources(tisma_core PRIVATE src/gpu/compute_vulkan.cpp)

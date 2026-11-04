@@ -1,9 +1,16 @@
 // The free profile pack (profile_pack.md, profile_pack_format.md), with a
 // small pack of invented data that follows the format.
 #include "catalog/pack.hpp"
+#include "cli/cli.hpp"
+#include "config/settings.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
+
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 
 using namespace tisma;
 using Catch::Matchers::ContainsSubstring;
@@ -125,4 +132,168 @@ TEST_CASE("pack: entries and compatible printers (PF5)", "[pack]") {
     CHECK(pack_compatible(pla.compatible, sets, 2)); // PF5: only printer 2
     CHECK(pack_compatible(std::nullopt, sets, 0));   // compatible null: every printer
     CHECK_FALSE(pack_compatible(7, sets, 2));         // a set that is not there
+}
+
+// ---------------------------------------------------------------------------
+// Installing (rules 4, 5, 7, 20, 21) from tests/data/pack, made by
+// tests/data/pack/make_pack_data.py: release1 (two vendors), release2 (only
+// Acme changed) and evil (a path out of the folder, a link).
+
+namespace {
+
+namespace fs = std::filesystem;
+
+const fs::path kPackData = fs::path(TISMA_TEST_DATA_DIR) / "pack";
+
+fs::path fresh_dir(const char* name) {
+    const fs::path dir = fs::temp_directory_path() / name;
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    return dir;
+}
+
+fs::path staging_from(const char* release, const char* name) {
+    const fs::path dir = fresh_dir(name);
+    for (const auto& e : fs::directory_iterator(kPackData / release))
+        fs::copy_file(e.path(), dir / e.path().filename());
+    return dir;
+}
+
+std::string text_of(const fs::path& p) {
+    std::ifstream in(p, std::ios::binary);
+    std::ostringstream s;
+    s << in.rdbuf();
+    return s.str();
+}
+
+} // namespace
+
+TEST_CASE("pack install: a first install writes every archive under the pack folder", "[pack]") {
+    const fs::path root = fresh_dir("tisma_pack_first");
+    const fs::path pack = root / "pack";
+    std::vector<std::string> lines;
+    const PackInstallReport r = pack_install(pack, staging_from("release1", "tisma_pack_stage1"),
+                                             [&](const std::string& l) { lines.push_back(l); });
+    CHECK(r.pack_version == "2026.11.01-aaaaaaa");
+    CHECK(r.discarded.empty());
+    CHECK(r.installed.size() == 5); // compatible, community, knowledge, acme, bolt
+    CHECK(fs::exists(pack / "vendors/acme/models/A1.json"));
+    CHECK(fs::exists(pack / "vendors/bolt/models/B2.json"));
+    CHECK(fs::exists(pack / "community/printers/Acme/Acme One.json"));
+    CHECK(fs::exists(pack / "knowledge/glossary.json"));
+    CHECK(fs::exists(pack / "compatible.json"));
+    CHECK(text_of(pack / "index.json") == text_of(kPackData / "release1/index.json")); // kept as published
+    CHECK(!fs::exists(root / "pack.new"));
+    CHECK(!lines.empty());
+    // What is installed is read back with the archives' SHA-256 for the next plan.
+    const PackIndex installed = pack_installed(pack);
+    REQUIRE(installed.vendors.size() == 2);
+    CHECK(installed.vendors[0].archive.sha256 == sha256_hex(text_of(kPackData / "release1/acme.tar.xz")));
+    // PF4 on the installed model.
+    std::vector<std::string> warnings;
+    const Profile p06 = pack_printer_profile(text_of(pack / "vendors/acme/models/A1.json"), "0.6", warnings);
+    CHECK(p06.name == "Acme One 0.6");
+    CHECK(p06.settings.nozzle_diameter == 0.6);
+}
+
+TEST_CASE("pack install: an update downloads and replaces only the changed vendor (rule 20, PK12)", "[pack]") {
+    const fs::path pack = fresh_dir("tisma_pack_update") / "pack";
+    pack_install(pack, staging_from("release1", "tisma_pack_stage2a"));
+    const std::string bolt_before = text_of(pack / "vendors/bolt/models/B2.json");
+    const PackIndex published = parse_pack_index(text_of(kPackData / "release2/index.json"));
+    const PackIndex installed = pack_installed(pack);
+    const auto plan = pack_plan(&published, "", {"acme", "bolt"}, &installed);
+    CHECK(std::any_of(plan.begin(), plan.end(), [](const PackDownload& d) { return d.name == "acme.tar.xz"; }));
+    CHECK(std::none_of(plan.begin(), plan.end(), [](const PackDownload& d) { return d.name == "bolt.tar.xz"; }));
+    // release2 holds only the new index and Acme's archive.
+    const PackInstallReport r = pack_install(pack, staging_from("release2", "tisma_pack_stage2b"));
+    CHECK(r.pack_version == "2026.11.04-bbbbbbb");
+    CHECK(r.installed == std::vector<std::string>{"acme.tar.xz"});
+    CHECK(std::find(r.kept.begin(), r.kept.end(), "bolt.tar.xz") != r.kept.end());
+    CHECK(text_of(pack / "vendors/acme/models/A1.json").find("Acme One Plus") != std::string::npos);
+    CHECK(text_of(pack / "vendors/bolt/models/B2.json") == bolt_before);
+    CHECK(fs::exists(pack / "knowledge/glossary.json")); // kept too
+    CHECK(pack_installed(pack).vendors[1].archive.sha256 == sha256_hex(text_of(kPackData / "release1/bolt.tar.xz")));
+}
+
+TEST_CASE("pack install: a changed byte or a cut download is discarded, the earlier one stays (PF2, PK3, PK14)", "[pack]") {
+    const fs::path pack = fresh_dir("tisma_pack_bad") / "pack";
+    pack_install(pack, staging_from("release1", "tisma_pack_stage3a"));
+    const fs::path stage = staging_from("release2", "tisma_pack_stage3b");
+    std::string acme = text_of(stage / "acme.tar.xz");
+    acme[acme.size() / 2] = char(acme[acme.size() / 2] ^ 1);
+    std::ofstream(stage / "acme.tar.xz", std::ios::binary) << acme;
+    PackInstallReport r = pack_install(pack, stage);
+    CHECK(r.discarded == std::vector<std::string>{"acme.tar.xz"});
+    REQUIRE(r.warnings.size() == 1);
+    CHECK_THAT(r.warnings[0], ContainsSubstring("SHA-256"));
+    CHECK(text_of(pack / "vendors/acme/models/A1.json").find("Acme One Plus") == std::string::npos);
+    // Still the earlier archive's SHA-256, so the next plan downloads it again.
+    CHECK(pack_installed(pack).vendors[0].archive.sha256 == sha256_hex(text_of(kPackData / "release1/acme.tar.xz")));
+    // Cut to half.
+    std::ofstream(stage / "acme.tar.xz", std::ios::binary) << text_of(kPackData / "release2/acme.tar.xz").substr(0, 300);
+    r = pack_install(pack, stage);
+    CHECK(r.discarded == std::vector<std::string>{"acme.tar.xz"});
+    CHECK_THAT(r.warnings[0], ContainsSubstring("size"));
+    CHECK(fs::exists(pack / "vendors/acme/filaments/PLA.json"));
+}
+
+TEST_CASE("pack install: a path out of the folder or a link discards the whole archive (rule 5, PF3, PK4)", "[pack]") {
+    const fs::path root = fresh_dir("tisma_pack_evil");
+    const PackInstallReport r = pack_install(root / "pack", staging_from("evil", "tisma_pack_stage4"));
+    CHECK(r.discarded.size() == 2);
+    CHECK(r.installed.empty());
+    CHECK(!fs::exists(root / "pack/vendors/acme"));
+    CHECK(!fs::exists(root / "pack/vendors/bolt"));
+    CHECK(!fs::exists(root / "x.json"));
+    CHECK(!fs::exists(root / "pack/x.json"));
+}
+
+TEST_CASE("pack install: a newer index changes nothing (PF1, PK5)", "[pack]") {
+    const fs::path pack = fresh_dir("tisma_pack_newer") / "pack";
+    pack_install(pack, staging_from("release1", "tisma_pack_stage5a"));
+    const fs::path stage = staging_from("release2", "tisma_pack_stage5b");
+    std::string index = text_of(stage / "index.json");
+    index.replace(index.find("\"version\": 2"), 12, "\"version\": 3");
+    std::ofstream(stage / "index.json", std::ios::binary) << index;
+    CHECK_THROWS_AS(pack_install(pack, stage), PackError);
+    CHECK(pack_installed(pack).pack_version == "2026.11.01-aaaaaaa");
+}
+
+TEST_CASE("pack on the command line: plan, install, list, and a pack printer's settings (PK6, PK7)", "[pack]") {
+    const fs::path data = fresh_dir("tisma_pack_cli");
+    const auto run = [](std::vector<std::string> args, std::string& out, std::string& err) {
+        std::vector<std::string_view> views(args.begin(), args.end());
+        std::ostringstream o, e;
+        const int code = run_cli(views, o, e);
+        out = o.str();
+        err = e.str();
+        return code;
+    };
+    std::string out, err;
+    const std::string d = data.string(), stage = (kPackData / "release1").string();
+    REQUIRE(run({"pack", "plan", "--data", d}, out, err) == 0);
+    CHECK_THAT(out, ContainsSubstring("index.json"));
+    REQUIRE(run({"pack", "plan", "--data", d, "--index", stage + "/index.json", "--vendors", "acme"}, out, err) == 0);
+    CHECK_THAT(out, ContainsSubstring("acme.tar.xz"));
+    CHECK_THAT(out, !ContainsSubstring("bolt.tar.xz"));
+    REQUIRE(run({"pack", "install", "--data", d, "--from", stage}, out, err) == 0);
+    CHECK_THAT(err, ContainsSubstring("progress: pack 2026.11.01-aaaaaaa ready"));
+    REQUIRE(run({"pack", "list", "--data", d}, out, err) == 0);
+    CHECK_THAT(out, ContainsSubstring("vendors/acme/models/A1.json#0.6"));
+    // PK6: the variant's own filament and print profile by default.
+    REQUIRE(run({"profile", "--pack", d, "--printer", "vendors/acme/models/A1.json#0.4"}, out, err) == 0);
+    const Settings s = parse_settings(out);
+    CHECK(s.nozzle_diameter == 0.4);
+    CHECK(s.travel_speed == 150.0);
+    CHECK(s.layer_height == 0.16); // the print profile, not the default
+    REQUIRE(s.variables.count("temperature"));
+    CHECK(s.variables.at("temperature") == std::vector<std::string>{"210"});
+    // PK7: a filament whose set has not the printer.
+    CHECK(run({"profile", "--pack", d, "--printer", "vendors/bolt/models/B2.json#default", "--filament",
+               "vendors/acme/filaments/PLA.json"}, out, err) == 2);
+    CHECK_THAT(err, ContainsSubstring("is not for the Bolt Two"));
+    // Not in the pack.
+    CHECK(run({"profile", "--pack", d, "--printer", "vendors/acme/models/A1.json#0.8"}, out, err) == 2);
+    CHECK(run({"pack", "list", "--data", (data / "none").string()}, out, err) == 2);
 }

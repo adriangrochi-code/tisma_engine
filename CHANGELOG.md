@@ -12,6 +12,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- El paquete libre de perfiles en la línea de comandos: `tisma-engine pack plan|install|list` y
+  `profile --pack <carpeta> --printer "<archivo>#<variante>"` (`docs/CATALOG.md`). Comprueba el tamaño y el SHA-256,
+  descomprime de forma segura y cambia el paquete de una sola vez. Para eso, el motor lee `.xz` y tar con código
+  propio, sin bibliotecas nuevas.
+- Impresoras por red: OctoPrint, Moonraker (Klipper) y PrusaLink (con autenticación Digest), en `src/device/print_host.*`.
 - `tisma-engine analyze <proyecto> --mode lightest-infill [--no-zones] [--ribs]` corre en los nodos de la nube y en el
   teléfono: el relleno uniforme mínimo, por zonas y con nervios, con avance; el resumen da la densidad, el factor, los
   niveles y las masas, y el resultado las cajas de las zonas con sus ajustes. `resin-structure` sigue sin correr.

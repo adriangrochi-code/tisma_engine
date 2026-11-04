@@ -1,5 +1,6 @@
 #include "cli/cli.hpp"
 #include "cli/node.hpp"
+#include "cli/pack_cli.hpp"
 #include "catalog/catalog.hpp"
 #include "config/profiles.hpp"
 
@@ -108,6 +109,9 @@ constexpr std::string_view kUsage =
     "                      (least support for FDM: the rotation, its cost and the cost before)\n"
     "  tisma-engine profile --printer \"<vendor> <model>\" [--nozzle <mm>] [--filament \"<vendor> <name>\"] -o <settings.json>\n"
     "                       (the settings the engine makes from its catalog, for slice --config)\n"
+    "  tisma-engine profile --pack <folder> --printer \"<model file>#<variant>\" [--filament <path>] [--print <path>] -o <settings.json>\n"
+    "                       (a printer of the installed profile pack, with its default filament and print profile)\n"
+    "  tisma-engine pack plan|install|list --data <folder> ...   (the profile pack: tisma-engine pack for help)\n"
     "  tisma-engine info <model>\n"
     "  --threads <n> on any command: at most n threads of work (cloud.md, rule 19d); without it, all\n"
     "  tisma-engine --help | --version\n"
@@ -1029,7 +1033,11 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
         if (command == "info")
             return cmd_info(args_left, out, err);
         if (command == "profile")
-            return cmd_profile(args_left, out, err);
+            return std::find(args_left.begin(), args_left.end(), "--pack") != args_left.end()
+                       ? cmd_pack_profile(args_left, out, err)
+                       : cmd_profile(args_left, out, err);
+        if (command == "pack")
+            return cmd_pack(args_left, out, err);
         if (command == "aero")
             return cmd_aero_project(args_left, out, err);
         if (command == "orient")
