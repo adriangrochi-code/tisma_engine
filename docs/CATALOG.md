@@ -194,7 +194,11 @@ app del teléfono) baja los archivos que pide el plan a una carpeta y el motor l
    - un índice de versión más nueva no cambia nada (código 2).
 3. `tisma-engine pack list --data <carpeta>` da los fabricantes, sus modelos y variantes, cada una con su nombre de
    impresora `<archivo>#<variante>`.
-4. `tisma-engine profile --pack <carpeta> --printer "<archivo>#<variante>" [--filament <ruta>] [--print <ruta>]`
+4. `tisma-engine pack community --data <carpeta> --printer|--filament|--resin "<fabricante>/<nombre>"` da los datos
+   publicados por la comunidad (reglas 22 a 24). Cada uno trae `key`, `value`, `unit`, `kind` (`official`, `measured`
+   o `community`), `conditions` y `source`; los de clave o tipo desconocidos se dejan afuera. Solo un dato `official`
+   puede llenar solo un ajuste vacío. Los demás necesitan que la persona confirme (PK13).
+5. `tisma-engine profile --pack <carpeta> --printer "<archivo>#<variante>" [--filament <ruta>] [--print <ruta>]`
    escribe los ajustes de esa impresora del paquete, igual que `profile --printer`.
    - Sin `--filament` ni `--print`, usa los de `defaults` de la variante.
    - Un filamento que no es para esa impresora (`compatible.json`) da código 2.
@@ -216,6 +220,10 @@ app del teléfono) baja los archivos que pide el plan a una carpeta y el motor l
   el aviso «Hay perfiles nuevos». `packs.check_updates` en falso lo apaga; `packs.checked` guarda cuándo se buscó.
 - Sin paquete instalado, el catálogo ofrece **Bajar la lista de impresoras del paquete**. Con uno, **Actualizar el
   paquete** baja solo lo que cambió.
+- Con una impresora del paquete elegida, su página tiene la sección **Datos publicados** (reglas 23 y 24). Cada dato de
+  la comunidad aparece con su distintivo («Fabricante», «Medido» o «Sugerido»), su valor y unidad, sus condiciones y
+  el enlace a la fuente (en un video, con el minuto). **Usar este valor** cambia el ajuste: los del fabricante en el
+  momento y los demás después de una confirmación (PK13).
 - `tisma --pack CARPETA` usa otro paquete, también en las capturas. `--pick-pack-printer "<archivo>#<variante>"`
   agrega y elige una impresora del paquete; es para las pruebas.
 

@@ -1,0 +1,7 @@
+# The pack printer's «Datos publicados» (profile_pack.md, rules 23 and 24):
+# the section, then a maker's value used.
+wait 4
+printer-page published
+wait 6
+use-published 0
+expect machine.max_flow 15

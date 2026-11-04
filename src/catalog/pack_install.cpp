@@ -9,6 +9,7 @@
 #include <cctype>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <system_error>
 
@@ -17,6 +18,12 @@ namespace tisma {
 namespace fs = std::filesystem;
 
 namespace {
+
+// A UTF-8 path from the pack (tar names, community files), the same on
+// Windows, where a narrow string is the ANSI code page.
+fs::path utf8_path(const std::string& text) {
+    return fs::path(std::u8string(reinterpret_cast<const char8_t*>(text.data()), text.size()));
+}
 
 constexpr std::uint64_t kMaxEntry = 50ull << 20;   // rule 5: a file over 50 MB discards the archive
 constexpr std::size_t kMaxArchive = std::size_t(1) << 30; // what one archive may unpack to
@@ -202,7 +209,7 @@ PackInstallReport pack_install(const fs::path& pack_dir, const fs::path& staging
             why = unpack(data, a.prefix, files);
         if (why.empty()) {
             for (const TarEntry& f : files)
-                if (!write_all(fresh / fs::path(f.path), f.data)) {
+                if (!write_all(fresh / utf8_path(f.path), f.data)) {
                     why = "cannot write " + f.path;
                     break;
                 }
@@ -260,9 +267,9 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
     out.number = int(number - index.printers.begin());
     // A file of the pack, under vendors/ when the index names it without.
     const auto read_pack = [&](const std::string& path, std::string& data) {
-        if (safe_pack_path(path) && read_all(pack_dir / path, data))
+        if (safe_pack_path(path) && read_all(pack_dir / utf8_path(path), data))
             return true;
-        return safe_pack_path("vendors/" + path) && read_all(pack_dir / ("vendors/" + path), data);
+        return safe_pack_path("vendors/" + path) && read_all(pack_dir / utf8_path("vendors/" + path), data);
     };
     std::string model_text;
     if (!read_pack(file, model_text))
@@ -338,7 +345,7 @@ std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const 
             continue; // not installed
         for (const std::string& path : v.filaments) {
             std::string text;
-            if (!safe_pack_path(path) || !read_all(pack_dir / path, text))
+            if (!safe_pack_path(path) || !read_all(pack_dir / utf8_path(path), text))
                 continue;
             try {
                 std::vector<std::string> ignored;
@@ -354,9 +361,91 @@ std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const 
 
 Profile pack_entry_profile(const fs::path& pack_dir, const std::string& path, std::vector<std::string>& warnings) {
     std::string text;
-    if (!safe_pack_path(path) || !read_all(pack_dir / path, text))
+    if (!safe_pack_path(path) || !read_all(pack_dir / utf8_path(path), text))
         throw PackError("not in the installed pack: " + path);
     return parse_pack_entry(text, warnings).profile;
+}
+
+namespace {
+// The engine's own setting keys ("walls.count"...).
+bool engine_setting(const std::string& key) {
+    static const std::set<std::string> keys = [] {
+        std::set<std::string> out;
+        for (const auto& [k, v] : describe(Settings{}))
+            out.insert(k);
+        return out;
+    }();
+    return keys.count(key) > 0;
+}
+} // namespace
+
+bool community_key_known(const std::string& key) {
+    static const std::set<std::string> own = {
+        "measured.max_flow", "measured.acceleration", "measured.speed", "input_shaper.frequency_x",
+        "input_shaper.frequency_y", "input_shaper.type", "head.clearance_radius", "head.gantry_height",
+        "head.nozzle_to_fan_height", "bed.mesh_points", "firmware.version", "filament.tensile_strength_xy",
+        "filament.tensile_strength_z", "filament.tensile_modulus_xy", "filament.tensile_modulus_z", "filament.elongation_xy",
+        "filament.elongation_z", "filament.impact_strength", "filament.hdt", "filament.glass_transition",
+        "filament.shrinkage_xy", "filament.shrinkage_z", "filament.drying_temperature", "filament.drying_hours",
+        "filament.price_per_kg", "resin.exposure", "resin.bottom_exposure", "resin.viscosity"};
+    return own.count(key) > 0 || engine_setting(key);
+}
+
+std::vector<CommunityValue> parse_community(std::string_view text) {
+    std::vector<CommunityValue> out;
+    const nlohmann::json j = nlohmann::json::parse(text, nullptr, false);
+    if (!j.is_object() || !j.contains("data") || !j.at("data").is_array())
+        return out;
+    const auto str = [](const nlohmann::json& o, const char* k) {
+        return o.contains(k) && o.at(k).is_string() ? o.at(k).get<std::string>()
+               : o.contains(k) && o.at(k).is_number() ? o.at(k).dump()
+                                                      : std::string();
+    };
+    for (const nlohmann::json& d : j.at("data")) {
+        if (!d.is_object())
+            continue;
+        CommunityValue v;
+        v.key = str(d, "key");
+        if (!community_key_known(v.key) || !d.contains("value"))
+            continue;
+        const std::string kind = str(d, "kind");
+        if (kind == "official")
+            v.kind = CommunityKind::Official;
+        else if (kind == "measured")
+            v.kind = CommunityKind::Measured;
+        else if (kind == "community")
+            v.kind = CommunityKind::Community;
+        else
+            continue;
+        v.value = d.at("value").dump();
+        v.unit = str(d, "unit");
+        v.conditions = d.contains("conditions") && !d.at("conditions").is_null()
+                           ? (d.at("conditions").is_string() ? d.at("conditions").get<std::string>() : d.at("conditions").dump())
+                           : std::string();
+        if (d.contains("source") && d.at("source").is_object()) {
+            const nlohmann::json& s = d.at("source");
+            v.source = {str(s, "type"), str(s, "url"), str(s, "title"), str(s, "author"), str(s, "published"), str(s, "at"),
+                        str(s, "accessed")};
+        }
+        out.push_back(std::move(v));
+    }
+    return out;
+}
+
+std::vector<CommunityValue> pack_community(const fs::path& pack_dir, const std::string& group, const std::string& vendor,
+                                           const std::string& name) {
+    if (group != "printers" && group != "filaments" && group != "resins")
+        return {};
+    const std::string path = "community/" + group + "/" + vendor + "/" + name + ".json";
+    std::string text;
+    if (vendor.find('/') != std::string::npos || name.find('/') != std::string::npos || !safe_pack_path(path) ||
+        !read_all(pack_dir / utf8_path(path), text))
+        return {};
+    return parse_community(text);
+}
+
+bool community_fills_alone(const CommunityValue& v, bool setting_empty) {
+    return v.kind == CommunityKind::Official && setting_empty && engine_setting(v.key);
 }
 
 } // namespace tisma

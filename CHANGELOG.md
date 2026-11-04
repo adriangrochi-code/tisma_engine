@@ -12,6 +12,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- `tisma-engine part gear|fastener` y `tisma-engine calibration <tipo>` / `calibration apply`: engranajes, tornillería y
+  las calibraciones de la pestaña Calibrar desde la línea de comandos; `aero` y `orient` sobre un modelo con
+  `--config` (pedidos de la app de Android).
+- **Datos publicados** en la página de una impresora del paquete: lo que publica la comunidad, con su tipo y su fuente.
+  **Usar este valor** lo aplica, con confirmación cuando no es del fabricante.
 - El paquete libre de perfiles en la interfaz: el catálogo de impresoras muestra sus modelos y agrega uno con su
   filamento y su perfil de impresión, como perfiles de fábrica. Si hace falta, baja el fabricante en segundo plano.
   También hay un botón para actualizar el paquete (`docs/CATALOG.md`).
@@ -317,6 +322,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- La prueba de interfaz del análisis estructural esperaba el veredicto antes de que arrancara el cálculo en una máquina cargada (falla de la CI de Linux).
 - La ayuda de los ajustes ya no nombra documentos internos (`docs/INFILL.md`, «Ficha …md») ni la clave `width` en la de paredes (QA de la app de Android).
 - La fila de variables de la pestaña Impresora se llamaba «Temperatura de boquilla» en la búsqueda y en `--settings-layout`.
 

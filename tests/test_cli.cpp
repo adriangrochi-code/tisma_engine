@@ -705,3 +705,59 @@ TEST_CASE("profile: the settings made from the catalog, ready for slice --config
     r = run({"profile", "--nozzle", "0.4"});
     CHECK(r.code == 1);
 }
+
+TEST_CASE("part: a gear and a fastener from their spec, as STL, for the phone", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_cli_part";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    for (const std::string kind : {"gear", "fastener"}) {
+        INFO(kind);
+        const Run d = run({"part", kind, "--defaults"});
+        REQUIRE(d.code == kExitOk);
+        const auto spec = dir / (kind + ".json"), stl = dir / (kind + ".stl");
+        std::ofstream(spec) << d.out;
+        const Run r = run({"part", kind, spec.string(), "-o", stl.string()});
+        INFO(r.err);
+        REQUIRE(r.code == kExitOk);
+        const nlohmann::json sizes = nlohmann::json::parse(r.out);
+        CHECK(sizes["triangles"].get<int>() > 100);
+        CHECK(read_stl(stl).mesh.triangle_count() == sizes["triangles"].get<std::size_t>());
+    }
+    // A spec that cannot be made says why.
+    const auto bad = dir / "bad.json";
+    std::ofstream(bad) << R"({"format": "tisma-gear-1", "teeth": 2, "module": 1.5, "width": 8})";
+    const Run r = run({"part", "gear", bad.string(), "-o", (dir / "bad.stl").string()});
+    CHECK(r.code == kExitInput);
+    CHECK_FALSE(r.err.empty());
+    CHECK(run({"part", "spring", "--defaults"}).code == kExitUsage);
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("calibration: the part and its height changes, then the best value written (for the phone)", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_cli_calibration";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "s.json", model = dir / "t.stl", tower = dir / "t.json", applied = dir / "a.json";
+    REQUIRE(run({"profile", "--printer", "Creality Ender-3 V3 SE", "-o", config.string()}).code == kExitOk);
+    Run r = run({"calibration", "retraction", "--config", config.string(), "--start", "0.2", "--end", "1", "--step", "0.4",
+                 "--model", model.string(), "--settings", tower.string()});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    const nlohmann::json j = nlohmann::json::parse(r.out);
+    REQUIRE(j["segments"].size() == 3);
+    CHECK(j["segments"][2]["value"].get<double>() == 1.0);
+    CHECK(read_stl(model).mesh.triangle_count() > 0);
+    CHECK(load_settings(tower).changes.size() >= 2);
+    r = run({"calibration", "apply", "retraction", "--value", "0.6", "--config", tower.string(), "-o", applied.string()});
+    REQUIRE(r.code == kExitOk);
+    const Settings best = load_settings(applied);
+    CHECK(best.retract_length == 0.6);
+    CHECK(best.changes.empty());
+    // A test that sets no value, and a range for one that is not a tower.
+    CHECK(run({"calibration", "apply", "fit", "--value", "0.2", "--config", tower.string(), "-o", applied.string()}).code ==
+          kExitInput);
+    CHECK(run({"calibration", "fit", "--config", config.string(), "--start", "1", "--end", "2", "--step", "1", "--model",
+               model.string(), "--settings", tower.string()}).code == kExitUsage);
+    CHECK(run({"calibration", "nothing", "--config", config.string()}).code == kExitUsage);
+    std::filesystem::remove_all(dir);
+}

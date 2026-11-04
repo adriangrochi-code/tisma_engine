@@ -296,6 +296,9 @@ TEST_CASE("pack on the command line: plan, install, list, and a pack printer's s
     // Not in the pack.
     CHECK(run({"profile", "--pack", d, "--printer", "vendors/acme/models/A1.json#0.8"}, out, err) == 2);
     CHECK(run({"pack", "list", "--data", (data / "none").string()}, out, err) == 2);
+    REQUIRE(run({"pack", "community", "--data", d, "--printer", "Acme/Acme One"}, out, err) == 0);
+    CHECK_THAT(out, ContainsSubstring("\"kind\": \"measured\""));
+    CHECK_THAT(out, ContainsSubstring("18.5"));
 }
 
 TEST_CASE("pack: the models a search finds, and a printer's profiles with its defaults (rules 2, 13)", "[pack]") {
@@ -331,4 +334,27 @@ TEST_CASE("pack: the filaments offered for a printer (rule 12, PK7)", "[pack]") 
     std::vector<std::string> warnings;
     CHECK(pack_entry_profile(pack, "vendors/acme/filaments/PLA.json", warnings).kind == ProfileKind::Filament);
     CHECK_THROWS_AS(pack_entry_profile(pack, "../x.json", warnings), PackError);
+}
+
+TEST_CASE("pack: community data by printer, with its kind and source (rules 22 to 24, PK13)", "[pack]") {
+    const fs::path pack = fresh_dir("tisma_pack_community") / "pack";
+    pack_install(pack, staging_from("release1", "tisma_pack_stage_community"));
+    const auto values = pack_community(pack, "printers", "Acme", "Acme One");
+    REQUIRE(values.size() == 3); // an unknown key and an unknown kind are left out
+    CHECK(values[0].key == "machine.max_flow");
+    CHECK(values[0].kind == CommunityKind::Official);
+    CHECK(values[0].value == "15");
+    CHECK(values[0].source.url == "https://example.org/acme-one");
+    CHECK(values[1].kind == CommunityKind::Measured);
+    CHECK(values[1].value == "18.5");
+    CHECK(values[1].source.at == "3:20");
+    CHECK(values[2].value == "\"mzv\"");
+    // Rule 24: only an official value fills an empty engine setting by itself.
+    CHECK(community_fills_alone(values[0], true));
+    CHECK_FALSE(community_fills_alone(values[0], false));
+    CHECK_FALSE(community_fills_alone(values[1], true)); // PK13: measured needs the person
+    CHECK_FALSE(community_fills_alone(values[2], true));
+    CHECK(pack_community(pack, "printers", "Acme", "Nobody").empty());
+    CHECK(pack_community(pack, "printers", "..", "x").empty());
+    CHECK(pack_community(pack, "secrets", "Acme", "Acme One").empty());
 }

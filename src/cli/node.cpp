@@ -13,6 +13,7 @@
 #include "project/engineering_case.hpp"
 #include "gcode/binary.hpp"
 #include "gcode/output.hpp"
+#include "io/model.hpp"
 #include "io/paths.hpp"
 #include "project/project.hpp"
 #include "ui/project_slice.hpp"
@@ -41,9 +42,46 @@ struct NodeArgs {
     bool sandbox = false, no_gpu = false, yes = false;
     std::vector<std::string> sets; // --set group.key=value, in order
     std::string over;              // --config-over: a partial settings JSON
+    std::string config;            // --config: the settings of a bare model (aero, orient, analyze)
 };
 
 std::optional<std::string> read_whole(const std::filesystem::path& path);
+
+// The project, or a bare model with --config made into one (the phone's
+// request: aero and orient on a model, as analyze takes one). Empty on
+// success, else why, with the summary's code and its Spanish text.
+std::string read_input(const NodeArgs& a, Project& project, std::string& code, std::string& es) {
+    const std::optional<std::string> data = read_whole(a.project);
+    if (!data) {
+        code = "cannot_read", es = "no se puede leer el archivo";
+        return "cannot read '" + a.project + "'";
+    }
+    if (looks_like_project(*data)) {
+        try {
+            project = read_project(*data);
+        } catch (const std::exception& e) {
+            code = "bad_project", es = "el proyecto está dañado o incompleto";
+            return a.project + ": " + e.what();
+        }
+        return {};
+    }
+    if (a.config.empty()) {
+        code = "not_a_project", es = "el archivo no es un proyecto de Tisma";
+        return "'" + a.project + "' is not a project saved by Tisma (a model needs --config)";
+    }
+    try {
+        const std::string ext = std::filesystem::path(a.project).extension().string();
+        ProjectModel m;
+        m.name = std::filesystem::path(a.project).filename().string();
+        m.mesh = parse_model(*data, ext).mesh;
+        project.models.push_back(std::move(m));
+        project.settings = load_settings(a.config);
+    } catch (const std::exception& e) {
+        code = "bad_input", es = "el modelo o los ajustes no se pueden leer";
+        return e.what();
+    }
+    return {};
+}
 
 // --set and --config-over: changes over the project's own settings (the
 // phone's «apply to the slicing», mobile_app.md rule 13). The settings go to
@@ -181,6 +219,8 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
             a.sets.emplace_back(args[++i]);
         } else if (arg == "--config-over" && has_value) {
             a.over = std::string(args[++i]);
+        } else if ((arg == "--config" || arg == "-c") && has_value) {
+            a.config = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -400,6 +440,8 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
             a.sets.emplace_back(args[++i]);
         } else if (arg == "--config-over" && has_value) {
             a.over = std::string(args[++i]);
+        } else if ((arg == "--config" || arg == "-c") && has_value) {
+            a.config = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -474,17 +516,9 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
 
     Progress progress(out);
     progress(0);
-    const std::optional<std::string> data = read_whole(a.project);
-    if (!data)
-        return fail(kExitInput, "cannot read the project '" + a.project + "'", "cannot_read", "no se puede leer el proyecto");
-    if (!looks_like_project(*data))
-        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma", "not_a_project", "el archivo no es un proyecto de Tisma");
     Project project;
-    try {
-        project = read_project(*data);
-    } catch (const std::exception& e) {
-        return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
-    }
+    if (std::string code, es, why = read_input(a, project, code, es); !why.empty())
+        return fail(kExitInput, why, code, es);
     if (project.models.empty())
         return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
     const std::size_t index = object < 0 ? 0 : std::size_t(object);
@@ -696,6 +730,8 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
             a.sets.emplace_back(args[++i]);
         } else if (arg == "--config-over" && has_value) {
             a.over = std::string(args[++i]);
+        } else if ((arg == "--config" || arg == "-c") && has_value) {
+            a.config = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -786,17 +822,9 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
 
     Progress progress(out);
     progress(0);
-    const std::optional<std::string> data = read_whole(a.project);
-    if (!data)
-        return fail(kExitInput, "cannot read the project '" + a.project + "'", "cannot_read", "no se puede leer el proyecto");
-    if (!looks_like_project(*data))
-        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma", "not_a_project", "el archivo no es un proyecto de Tisma");
     Project project;
-    try {
-        project = read_project(*data);
-    } catch (const std::exception& e) {
-        return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
-    }
+    if (std::string code, es, why = read_input(a, project, code, es); !why.empty())
+        return fail(kExitInput, why, code, es);
     if (project.models.empty())
         return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
     const std::size_t index = object < 0 ? 0 : std::size_t(object);
@@ -903,6 +931,8 @@ int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out
             a.sets.emplace_back(args[++i]);
         } else if (arg == "--config-over" && has_value) {
             a.over = std::string(args[++i]);
+        } else if ((arg == "--config" || arg == "-c") && has_value) {
+            a.config = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -945,17 +975,9 @@ int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out
 
     Progress progress(out);
     progress(0);
-    const std::optional<std::string> data = read_whole(a.project);
-    if (!data)
-        return fail(kExitInput, "cannot read the project '" + a.project + "'", "cannot_read", "no se puede leer el proyecto");
-    if (!looks_like_project(*data))
-        return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma", "not_a_project", "el archivo no es un proyecto de Tisma");
     Project project;
-    try {
-        project = read_project(*data);
-    } catch (const std::exception& e) {
-        return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
-    }
+    if (std::string code, es, why = read_input(a, project, code, es); !why.empty())
+        return fail(kExitInput, why, code, es);
     if (project.models.empty())
         return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
     const std::size_t index = object < 0 ? 0 : std::size_t(object);

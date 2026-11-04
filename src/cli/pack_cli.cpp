@@ -31,6 +31,8 @@ constexpr std::string_view kPackUsage =
     "  tisma-engine pack install --data <folder> --from <folder with the downloaded files>\n"
     "      checks size and SHA-256, unpacks safely and switches the pack at once; progress lines on stderr\n"
     "  tisma-engine pack list --data <folder>\n"
+    "  tisma-engine pack community --data <folder> --printer|--filament|--resin \"<vendor>/<model or name>\"\n"
+    "      the community's published values for it, each with its kind (official, measured, community) and source\n"
     "  tisma-engine profile --pack <folder> --printer \"<model file>#<variant>\" [--filament <path>] [--print <path>]\n"
     "                       [-o <settings.json>]   (the variant's defaults when --filament or --print is left out)\n"
     "The pack lives in <folder>/pack.\n";
@@ -154,6 +156,32 @@ int pack_list_cmd(std::span<const std::string_view> args, std::ostream& out, std
     return kExitOk;
 }
 
+int pack_community_cmd(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
+    std::map<std::string, std::string> o;
+    std::string problem;
+    if (!options(args, o, {"--data", "--printer", "--filament", "--resin"}, problem))
+        return usage(err, "pack community: " + problem);
+    std::string group, who;
+    for (const auto& [flag, name] : {std::pair{"--printer", "printers"}, std::pair{"--filament", "filaments"},
+                                     std::pair{"--resin", "resins"}})
+        if (o.count(flag))
+            group = name, who = o[flag];
+    const auto slash = who.find('/');
+    if (!o.count("--data") || group.empty() || slash == std::string::npos)
+        return usage(err, "pack community needs --data and --printer, --filament or --resin \"<vendor>/<name>\"");
+    json values = json::array();
+    for (const CommunityValue& v : pack_community(fs::path(o["--data"]) / "pack", group, who.substr(0, slash), who.substr(slash + 1))) {
+        const char* kind = v.kind == CommunityKind::Official ? "official" : v.kind == CommunityKind::Measured ? "measured" : "community";
+        values.push_back({{"key", v.key}, {"value", json::parse(v.value)}, {"unit", v.unit}, {"kind", kind},
+                          {"conditions", v.conditions},
+                          {"source", {{"type", v.source.type}, {"url", v.source.url}, {"title", v.source.title},
+                                      {"author", v.source.author}, {"published", v.source.published}, {"at", v.source.at},
+                                      {"accessed", v.source.accessed}}}});
+    }
+    out << json({{"values", values}}).dump(1) << "\n";
+    return kExitOk;
+}
+
 } // namespace
 
 int cmd_pack(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
@@ -167,6 +195,8 @@ int cmd_pack(std::span<const std::string_view> args, std::ostream& out, std::ost
             return pack_install_cmd(args.subspan(1), out, err);
         if (sub == "list")
             return pack_list_cmd(args.subspan(1), out, err);
+        if (sub == "community")
+            return pack_community_cmd(args.subspan(1), out, err);
     } catch (const PackError& e) {
         err << "error: " << e.what() << "\n";
         return kExitInput;

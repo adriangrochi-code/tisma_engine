@@ -92,6 +92,15 @@ Para cambiar ajustes del proyecto sin tocar el archivo, en `slice`, `analyze`, `
 
 Una clave desconocida o un valor fuera de rango es un error (código 2, `bad_settings` en el resumen).
 
+Para el teléfono, que solo corre `tisma-engine`:
+- `part gear|fastener <spec.json> -o <pieza.stl>` arma un engranaje o una pieza de tornillería desde su JSON (el mismo
+  de la pestaña Diseño); `--defaults` da uno para empezar;
+- `calibration <tipo> --config <ajustes.json> --model <pieza.stl> --settings <ajustes.json>` arma la pieza de una
+  calibración y los ajustes con sus cambios por altura, listos para `slice`; con `--start`, `--end`, `--step` y
+  `--segment`, otro rango;
+- `calibration apply <tipo> --value <v> --config … -o …` escribe el valor que salió mejor.
+- `aero` y `orient` también toman un modelo con `--config <ajustes.json>` en lugar de un proyecto.
+
 Códigos de salida: 0 bien; 1 línea de comandos mal escrita; 2 un archivo de entrada falta, está mal o no se puede
 escribir la salida; 3 orden todavía sin hacer; 4 el modelo no se puede imprimir (sin triángulos, ninguna capa cerrada,
 fuera de `machine.bed`, más alto que `machine.max_height`, falda o borde fuera de la cama, o nada que extruir); 5 el

@@ -46,7 +46,16 @@ acme2 = tar([("vendors/acme/models/A1.json", model("Acme One Plus", 0.6)),
 bolt = tar([("vendors/bolt/models/B2.json", j({"format": "tisma-pack-model", "version": 2, "technology": "sla",
              "vendor": "Bolt", "model": {"id": "B2", "name": "Bolt Two"}, "default_variant": "default",
              "common": {"settings": {}}, "variants": [{"id": "default", "nozzle": 0, "name": "Bolt Two", "settings": {}}]}))])
-community = tar([("community/printers/Acme/Acme One.json", j({"vendor": "Acme", "model": "Acme One", "data": []}))])
+def value(key, v, unit, kind, url):
+    return {"key": key, "value": v, "unit": unit, "kind": kind,
+            "source": {"type": "video" if kind != "official" else "manufacturer", "url": url, "title": "Invented",
+                       "author": "Nobody", "published": "2026-01-01", "at": "3:20", "accessed": "2026-11-04"}}
+community = tar([("community/printers/Acme/Acme One.json", j({"vendor": "Acme", "model": "Acme One", "data": [
+    value("machine.max_flow", 15, "mm³/s", "official", "https://example.org/acme-one"),
+    value("measured.max_flow", 18.5, "mm³/s", "measured", "https://example.org/video"),
+    value("input_shaper.type", "mzv", "", "community", "https://example.org/forum"),
+    value("no.such_key", 1, "", "official", "https://example.org/x"),
+    value("machine.max_bed_temp", 110, "°C", "rumour", "https://example.org/y")]}))])
 knowledge = tar([("knowledge/glossary.json", j({"format": "tisma-knowledge-glossary", "version": 1, "language": "es",
                                                  "sources": [], "terms": []}))])
 compatible = j({"format": "tisma-pack-compatible", "version": 1, "sets": [[0, 1], [2]]})
