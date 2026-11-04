@@ -636,6 +636,13 @@ private:
     Project current_project() const;
     void start_cloud_slice();
     void cloud_slice_step();
+    // «Calcular en la nube» in Structural (engineering_panel.md, rule 10;
+    // cloud.md, rules 6 to 10b): the project as a fea job, its .tea result
+    // kept with the part as a local one.
+    std::size_t cloud_fea_part_ = 0;
+    std::string cloud_fea_fingerprint_;
+    void start_cloud_structural();
+    void cloud_structural_step();
     struct CloudSliceState { // shared with the call's thread
         std::mutex mutex;
         std::string status; // queued, running, done...
@@ -1199,6 +1206,8 @@ private:
     // Slicing in the cloud (cloud.md, rules 6 to 9): the job in flight and its state.
     std::future<CloudSliceReply> cloud_slice_;
     std::shared_ptr<CloudSliceState> cloud_slice_state_;
+    std::future<CloudSliceReply> cloud_fea_;
+    std::shared_ptr<CloudSliceState> cloud_fea_state_;
     int config_page_ = 0;
     std::string config_query_;
     struct ConfigState {
@@ -13399,7 +13408,23 @@ void App::structural_panel() {
         if (block == AnalyzeBlock::None)
             start_structural();
     }
-    if (structural_job_.running()) {
+    if (cloud_fea_.valid() && cloud_fea_state_) {
+        // In the cloud: the job's state and its progress, and Cancelar.
+        std::string status;
+        int progress = 0;
+        {
+            std::lock_guard lock(cloud_fea_state_->mutex);
+            status = cloud_fea_state_->status;
+            progress = cloud_fea_state_->progress;
+        }
+        ImGui::ProgressBar(float(progress) / 100.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
+                           format(tr(T::StructCloudState), status.empty() ? "…" : status.c_str(), progress).c_str());
+        rect_of("structural_cloud_state");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            cloud_fea_state_->cancel = true;
+        rect_of("structural_cloud_cancel");
+    } else if (structural_job_.running()) {
         // While it calculates (rule 11): its progress and Cancelar; the view
         // still turns.
         const int permille = structural_permille_.load();
@@ -13415,12 +13440,31 @@ void App::structural_panel() {
         ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-        if (ImGui::Button(tr(T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
-            start_structural();
+        const bool in_cloud = e.structural.cloud && !cloud_token_.empty();
+        if (ImGui::Button(tr(in_cloud ? T::StructAnalyzeCloud : T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f))) {
+            if (in_cloud)
+                start_cloud_structural();
+            else
+                start_structural();
+        }
         ImGui::PopStyleColor(3);
         ImGui::EndDisabled();
     }
     rect_of("structural_analyze");
+    // «En la nube» (rule 10; cloud.md, rule 10b): off at first on a
+    // computer, and only with a session (without one everything is local).
+    ImGui::BeginDisabled(cloud_token_.empty() || cloud_fea_.valid());
+    {
+        bool cloud = e.structural.cloud;
+        if (ImGui::Checkbox(tr(T::StructCloud), &cloud)) {
+            remember_engineering(std::size_t(structural_part_));
+            objects_[std::size_t(structural_part_)].engineering.structural.cloud = cloud;
+        }
+    }
+    ImGui::EndDisabled();
+    rect_of("structural_cloud");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(cloud_token_.empty() ? T::StructCloudLogin : T::StructCloudTip));
     if (block != AnalyzeBlock::None)
         loc::TextDisabled("%s", tr(block == AnalyzeBlock::Material ? T::StructNeedMaterial
                                    : block == AnalyzeBlock::Fixed  ? T::StructNeedFixed
@@ -13924,6 +13968,101 @@ void App::aero_overlay() {
 // Analizar (rules 9 and 11): the part as it is on the bed, its conditions
 // moved with it, the values changed by hand, in the background; Cancelar
 // stops it at its next step.
+void App::start_cloud_structural() {
+    if (cloud_fea_.valid() || objects_.empty() || cloud_token_.empty())
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    const std::filesystem::path dir = std::filesystem::temp_directory_path();
+    const std::string stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const std::filesystem::path project = dir / ("tisma-cloud-" + stamp + ".3mf");
+    try {
+        save_project(project, current_project());
+    } catch (const std::exception& e) {
+        fail(T::CannotSave, e.what());
+        return;
+    }
+    // The fingerprint now: the result belongs to the part as it was sent.
+    cloud_fea_part_ = part;
+    cloud_fea_fingerprint_ = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), "structural");
+    const nlohmann::json params{{"mode", "analyze"}, {"quality", o.engineering.structural.quality},
+                                {"object", part}, {"instance", 0}};
+    log_line("cloud: analyzing part " + std::to_string(part) + " on " + cloud_server_);
+    auto state = std::make_shared<CloudSliceState>();
+    cloud_fea_state_ = state;
+    cloud_fea_ = std::async(std::launch::async, [state, project, dir, stamp, params = params.dump(), server = cloud_server_,
+                                                 token = cloud_token_] {
+        CloudSliceReply r;
+        cloud::Client client(server, token);
+        const std::filesystem::path result = dir / ("tisma-cloud-" + stamp + ".tea");
+        r.ok = client.run("fea", params, utf8(project), utf8(result), r.job, r.error,
+                          [&](const cloud::Job& job) {
+                              std::lock_guard lock(state->mutex);
+                              state->status = job.status;
+                              state->progress = job.progress;
+                          },
+                          state->cancel);
+        std::error_code ec;
+        std::filesystem::remove(project, ec);
+        r.result = result;
+        return r;
+    });
+}
+
+void App::cloud_structural_step() {
+    if (!cloud_fea_.valid())
+        return;
+    frame_pending_ = true;
+    if (cloud_fea_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+    const CloudSliceReply r = cloud_fea_.get();
+    cloud_fea_state_.reset();
+    if (r.ok) {
+        // The .tea: the report, kept with the part as a local result (its
+        // map stays local-only: the file has no voxels).
+        std::string report;
+        try {
+            std::ifstream in(r.result, std::ios::binary);
+            const nlohmann::json t = nlohmann::json::parse(in);
+            if (t.value("kind", std::string()) != "structural" || !t.contains("report"))
+                throw std::runtime_error("not a structural result");
+            report = t["report"].dump();
+        } catch (const std::exception& e) {
+            notify(format(tr(T::StructCloudFailed), e.what()), true);
+            return;
+        }
+        std::error_code ec;
+        std::filesystem::remove(r.result, ec);
+        if (cloud_fea_part_ < objects_.size()) {
+            std::vector<EngineeringResult>& results = objects_[cloud_fea_part_].engineering.results;
+            std::erase_if(results, [](const EngineeringResult& x) { return x.kind == "structural"; });
+            results.push_back({"structural", cloud_fea_fingerprint_, report});
+        }
+        structural_map_.reset();
+        structural_map_in_view_ = false;
+        notify(tr(T::StructCloudDone));
+        return;
+    }
+    if (r.error.message == "Cancelled") {
+        notify(tr(T::StructCancelled));
+        return;
+    }
+    if (r.error.expired()) {
+        cloud_token_.clear();
+        cloud_account_.reset();
+        cloud::forget_secret(cloud_server_);
+        notify(tr(T::CloudExpired), true);
+        cloud_open_ = true;
+        return;
+    }
+    const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
+                            : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
+                            : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
+                            : r.job.status == "failed" ? cloud::job_error(r.job, language() == Language::Spanish)
+                                                    : r.error.message;
+    notify(format(tr(T::StructCloudFailed), why.c_str()), true);
+}
+
 void App::start_optimize() {
     if (optimize_job_.running() || objects_.empty())
         return;
@@ -15323,6 +15462,7 @@ void App::cloud_slice_step() {
 // to the account's page for paying.
 void App::cloud_window() {
     cloud_slice_step();
+    cloud_structural_step();
     if (cloud_job_.valid() && cloud_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
         cloud_finished(cloud_job_.get());
     if (cloud_job_.valid())
@@ -19970,6 +20110,11 @@ void App::script_input() {
             return fail_step("no such field");
         field = step.value;
         next();
+    } else if (step.verb == "cloud-fea-wait") { // until the analysis in the cloud ends (up to 60 s)
+        if (!cloud_fea_.valid() && f >= 2)
+            next();
+        else if (f > 3600)
+            fail_step("no answer");
     } else if (step.verb == "cloud-slice-wait") { // until the slicing in the cloud ends (up to 60 s)
         if (!cloud_slice_.valid() && f >= 2)
             next();

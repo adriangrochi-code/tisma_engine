@@ -10263,3 +10263,18 @@ guion por el tiempo bajo ASan; la búsqueda la prueba el motor. **Sin probar en 
 deshacer (necesitan una búsqueda completa).
 
 **Sigue:** el resto de Optimizar (zonas, nervios, refuerzos, retícula, orientación) y «Calcular en la nube».
+
+## 2026-11-04 — Estructural: «Calcular en la nube» (regla 10)
+
+**Hecho:** casilla «Calcular en la nube» bajo Analizar (apagada y gris sin sesión, con el motivo al pasar el mouse).
+Prendida, el botón dice «Analizar en la nube» y manda el proyecto como trabajo `fea` (`mode` analyze, la calidad, el
+objeto y la copia 0), con estado, avance y «Cancelar»; el `.tea` que vuelve deja el informe con la pieza, con la
+huella tomada al mandar. El resultado de la nube no trae vóxeles: se ven el veredicto y los números, no el mapa.
+Errores como en el laminado en la nube (sesión vencida, 413, 422, 429, texto del trabajo).
+
+**Pruebas:** `ui_script_cloud_structural` con el servidor de prueba (que ahora contesta un `.tea` a los trabajos
+`fea`): inicia sesión, marca, prende la nube, analiza y ve «Aguanta». Pasan las de nube y Estructural.
+**Falta:** el candado «Incluido en el plan …» por `classes` de `GET /v1/plans` (regla 10b); hoy el 402 del servidor
+llega como aviso.
+
+**Sigue:** el resto de Optimizar (relleno por zonas, regla 3) y el candado por plan.

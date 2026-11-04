@@ -156,6 +156,15 @@ public:
         server_.Get(R"(/v1/jobs/([a-z0-9]+)/result)", [this](const httplib::Request& req, httplib::Response& res) {
             if (!authorized(req, res))
                 return;
+            std::lock_guard lock(mutex_);
+            if (kind_ == "fea") { // an analysis: the engine's .tea (cloud.md, rule 9)
+                const json tea = {{"format", "tisma-engineering-result"}, {"version", 1}, {"kind", "structural"},
+                                  {"object", 0}, {"fingerprint", "mock"},
+                                  {"report", {{"verdict", {{"name", "holds"}, {"min_safety", 3.5}, {"required_safety", 2.0}}},
+                                              {"valid", true}}}};
+                res.set_content(tea.dump(), "application/json");
+                return;
+            }
             res.set_content("; sliced on the server\nG1 X10 Y10 E1\n", "text/plain");
         });
         port_ = server_.bind_to_any_port("127.0.0.1");

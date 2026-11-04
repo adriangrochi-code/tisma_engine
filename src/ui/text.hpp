@@ -128,6 +128,13 @@
     X(StructOptimizeFound, "Aguanta con %d %% de relleno (factor %.2f).", "Holds with %d %% infill (factor %.2f).") \
     X(StructOptimizeApply, "Usar %d %% de relleno", "Use %d %% infill") \
     X(StructOptimizeApplied, "Relleno: %d %%", "Infill: %d %%") \
+    X(StructCloud, "Calcular en la nube", "Calculate in the cloud") \
+    X(StructCloudTip, "Manda el análisis a Tisma Cloud; el resultado vuelve a esta pieza.", "Sends the analysis to Tisma Cloud; the result comes back to this part.") \
+    X(StructCloudLogin, "Iniciá sesión en Tisma Cloud para calcular en la nube.", "Log in to Tisma Cloud to calculate in the cloud.") \
+    X(StructAnalyzeCloud, "Analizar en la nube", "Analyze in the cloud") \
+    X(StructCloudState, "En la nube: %s %d %%", "In the cloud: %s %d %%") \
+    X(StructCloudDone, "Análisis en la nube listo.", "Analysis in the cloud done.") \
+    X(StructCloudFailed, "El análisis en la nube falló: %s", "The analysis in the cloud failed: %s") \
     X(StructEstimate, "Unos %zu vóxeles de %.2f mm", "About %zu voxels of %.2f mm") \
     X(StructCritical, "Punto crítico: %.2f", "Critical point: %.2f") \
     X(StructNotValid, "El resultado no sirve:", "The result is not usable:") \

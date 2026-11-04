@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Estructural: calcular en la nube** (`engineering_panel.md`, regla 10; `cloud.md`, reglas 6 a 10b): con sesión
+  en Tisma Cloud, «Calcular en la nube» manda el análisis como trabajo `fea` y el resultado vuelve a la pieza, con
+  avance y «Cancelar».
 - **Estructural: «Optimizar», relleno mínimo** (`structural_optimization.md`, regla 2): debajo de los resultados,
   busca el menor relleno con el que la pieza aguanta y lo deja usar con un botón (se puede deshacer).
 - **Estructural en impresoras de cinta** (`engineering_panel.md`, regla 10): «Dirección de impresión» elige Z o la

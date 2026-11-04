@@ -1,0 +1,25 @@
+# «Calcular en la nube» in Structural (engineering_panel.md, rule 10;
+# cloud.md, rules 6 to 10b): off and greyed without a session; logged in, the
+# analysis goes as a fea job and its result (the .tea) comes back to the part.
+menu mode_engineering
+menu tab_structural
+expect-control structural_cloud
+menu cloud_chip
+cloud-wait
+cloud-field email ana@example.com
+cloud-field password secret123
+menu cloud_login
+cloud-wait
+expect-cloud logged yes
+menu cloud_close
+menu tab_structural
+menu structural_tool_fixed_zone
+click-model
+menu structural_tool_force_point
+click-model
+key escape
+menu structural_cloud
+menu structural_analyze
+cloud-fea-wait
+expect-toast Analysis in the cloud done.
+expect-structural-verdict holds
