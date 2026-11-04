@@ -63,7 +63,13 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
   - Filamentos del paquete (reglas 12 y 13): con una impresora del paquete, la tarjeta de la impresora ofrece el
     filamento de fábrica y los compatibles según `compatible.json`, primero los del fabricante de la impresora y
     después los genéricos. Van al motor con `profile --pack … --filament <ruta>`.
-  - Falta: las imágenes de la cama (regla 14).
+  - Cama del paquete (regla 14, 04-11-2026): con una impresora del paquete, la vista 3D dibuja su modelo de cama
+    (STL, en gris) y su imagen (SVG con AndroidSVG, o PNG) sobre la cama. La cama toma el tamaño de `machine.bed` del
+    perfil.
+    - **Decisión, preguntada a fichas:** los STL del paquete vienen centrados en su origen (la M5 va de −127,5 a
+      127,5 en X; su cama es de 0 a 235). La app conserva la altura del STL y centra su planta en la cama. La imagen
+      cubre la planta del modelo de cama, o la cama si no hay modelo.
+    - Probado con archivos propios y con las dos imágenes reales de Anker; el dibujo no se vio en un teléfono.
 
 - **2026-11-04 — Ingeniería en un modelo suelto (regla 13, MA6):**
   - En la Placa, con un STL u OBJ, se elige qué marca un toque (fijas, carga, o solo girar). Al tocar la pieza se marca

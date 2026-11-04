@@ -119,6 +119,7 @@ dependencies {
     implementation(project(":printers"))
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.core)
+    implementation(libs.androidsvg)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

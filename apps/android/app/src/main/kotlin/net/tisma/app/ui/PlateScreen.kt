@@ -86,7 +86,8 @@ fun PlateScreen(
     }
     val view: @Composable (Modifier) -> Unit = { m ->
         Plate3D(state.mesh, state.bed, m.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
-            marks = marks, onPick = if (state.marking != null) slice::pick else null, lockRotation = state.marking != null)
+            marks = marks, onPick = if (state.marking != null) slice::pick else null, lockRotation = state.marking != null,
+            bedModel = state.bedModel, bedTexture = state.bedTexture)
     }
     if (wide && state.modelName != null) {
         Row(Modifier.fillMaxSize()) {

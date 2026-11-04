@@ -39,7 +39,9 @@ class ProfilePack(
     /** The pack's printers as its index lists them, before any vendor is downloaded (profile_pack.md, rule 2). */
     data class Index(val version: String, val vendors: List<Vendor>)
     data class Vendor(val id: String, val name: String, val models: List<Model>)
-    data class Model(val name: String, val file: String, val variants: List<Variant>, val defaultVariant: String)
+    data class Model(val name: String, val file: String, val variants: List<Variant>, val defaultVariant: String,
+                     /** The bed's 3D model (STL) and picture (SVG or PNG), paths in the pack (rule 14). */
+                     val bedModel: String = "", val bedTexture: String = "")
     data class Variant(val id: String, val nozzle: Double)
 
     /**
@@ -105,7 +107,8 @@ class ProfilePack(
             }.map { m ->
                 Model(m.s("name"), m.s("file"), m.a("variants").map { va ->
                     Variant(va.s("id"), va.s("nozzle").toDoubleOrNull() ?: 0.0)
-                }, m.s("default_variant"))
+                }, m.s("default_variant"), (m["assets"] as? JsonObject)?.s("bed_model").orEmpty(),
+                    (m["assets"] as? JsonObject)?.s("bed_texture").orEmpty())
             })
         }.filter { it.models.isNotEmpty() }
         return Index(o.s("pack_version"), vendors)

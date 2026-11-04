@@ -143,6 +143,19 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
         set(v) { field = v; meshDirty = true }
     @Volatile var bed = floatArrayOf(220f, 220f)
         set(v) { field = v; bedDirty = true }
+    /** The pack printer's bed model (rule 14), drawn in gray under the grid. */
+    @Volatile var bedModel: MeshFile? = null
+        set(v) { field = v; bedDirty2 = true }
+    @Volatile private var bedDirty2 = true
+    private var bedModelBuf: FloatBuffer? = null
+    private var bedModelCount = 0
+    /** The bed's picture and the rectangle it covers (min x, min y, max x, max y). */
+    @Volatile var texture: android.graphics.Bitmap? = null
+        set(v) { field = v; textureDirty = true }
+    @Volatile var textureRect = floatArrayOf(0f, 0f, 220f, 220f)
+    @Volatile private var textureDirty = true
+    private var texId = 0
+    private var texProgram = 0
     /** Marked faces (Engineering): triangles as x y z per corner, and their color (0xRRGGBB). */
     @Volatile var marks: List<Pair<FloatArray, Int>> = emptyList()
         set(v) { field = v; marksDirty = true }
@@ -193,12 +206,27 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
                 gl_FragColor = vec4(c * mix(1.0, vLight, uLit), uColor.a);
             }
         """)
+        texProgram = link("""
+            uniform mat4 uMvp;
+            attribute vec3 aPos;
+            attribute vec2 aUV;
+            varying vec2 vUV;
+            void main() { gl_Position = uMvp * vec4(aPos, 1.0); vUV = aUV; }
+        """, """
+            precision mediump float;
+            uniform sampler2D uTex;
+            varying vec2 vUV;
+            void main() { vec4 c = texture2D(uTex, vUV); gl_FragColor = vec4(c.rgb, c.a * 0.9); }
+        """)
+        texId = 0
         GLES20.glEnable(GLES20.GL_DEPTH_TEST)
         // The 3D view's dark background of interface.md, the same in both themes.
         GLES20.glClearColor(0.10f, 0.10f, 0.12f, 1f)
         meshDirty = true
         bedDirty = true
         pathsDirty = true
+        bedDirty2 = true
+        textureDirty = true
     }
 
     override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
@@ -211,6 +239,28 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
     override fun onDrawFrame(gl: GL10?) {
         if (bedDirty) { buildGrid(); bedDirty = false }
         if (meshDirty) { buildMesh(); meshDirty = false }
+        if (bedDirty2) {
+            val m = bedModel
+            bedModelBuf = m?.let { meshBuffer(it) }
+            bedModelCount = (m?.triangles ?: 0) * 3
+            bedDirty2 = false
+        }
+        if (textureDirty) {
+            if (texId != 0) GLES20.glDeleteTextures(1, intArrayOf(texId), 0)
+            texId = 0
+            texture?.let { bmp ->
+                val ids = IntArray(1)
+                GLES20.glGenTextures(1, ids, 0)
+                texId = ids[0]
+                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+                android.opengl.GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bmp, 0)
+            }
+            textureDirty = false
+        }
         if (marksDirty) {
             marksBuf = marks.map { (tris, c) ->
                 val n = tris.size / 9
@@ -243,6 +293,44 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
         val col = GLES20.glGetAttribLocation(program, "aColor")
         GLES20.glUniform1f(own, 0f)
         GLES20.glDisableVertexAttribArray(col)
+        bedModelBuf?.takeIf { bedModelCount > 0 }?.let { m ->
+            GLES20.glUniform1f(lit, 1f)
+            GLES20.glUniform4f(color, 0.30f, 0.30f, 0.34f, 1f)
+            m.position(0)
+            GLES20.glEnableVertexAttribArray(pos)
+            GLES20.glVertexAttribPointer(pos, 3, GLES20.GL_FLOAT, false, 24, m)
+            m.position(3)
+            GLES20.glEnableVertexAttribArray(nor)
+            GLES20.glVertexAttribPointer(nor, 3, GLES20.GL_FLOAT, false, 24, m)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, bedModelCount)
+        }
+        if (texId != 0) {
+            // The picture just over the bed's surface, blended, under the grid lines.
+            val r = textureRect
+            val z = 0.01f
+            val quad = buffer(floatArrayOf(
+                r[0], r[1], z, 0f, 1f, r[2], r[1], z, 1f, 1f, r[2], r[3], z, 1f, 0f,
+                r[0], r[1], z, 0f, 1f, r[2], r[3], z, 1f, 0f, r[0], r[3], z, 0f, 0f))
+            GLES20.glUseProgram(texProgram)
+            GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(texProgram, "uMvp"), 1, false, mvp, 0)
+            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+            GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
+            GLES20.glUniform1i(GLES20.glGetUniformLocation(texProgram, "uTex"), 0)
+            val tp = GLES20.glGetAttribLocation(texProgram, "aPos")
+            val tu = GLES20.glGetAttribLocation(texProgram, "aUV")
+            quad.position(0)
+            GLES20.glEnableVertexAttribArray(tp)
+            GLES20.glVertexAttribPointer(tp, 3, GLES20.GL_FLOAT, false, 20, quad)
+            quad.position(3)
+            GLES20.glEnableVertexAttribArray(tu)
+            GLES20.glVertexAttribPointer(tu, 2, GLES20.GL_FLOAT, false, 20, quad)
+            GLES20.glEnable(GLES20.GL_BLEND)
+            GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6)
+            GLES20.glDisable(GLES20.GL_BLEND)
+            GLES20.glDisableVertexAttribArray(tu)
+            GLES20.glUseProgram(program)
+        }
         gridBuf?.let { g ->
             GLES20.glUniform1f(lit, 0f)
             GLES20.glDisableVertexAttribArray(nor)
@@ -324,14 +412,19 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
     private fun buildMesh() {
         val m = mesh
         if (m == null) { meshBuf = null; meshCount = 0; return }
+        meshBuf = meshBuffer(m)
+        meshCount = m.triangles * 3
+    }
+
+    /** A mesh as x y z and its triangle's normal per corner. */
+    private fun meshBuffer(m: MeshFile): FloatBuffer {
         val data = FloatArray(m.triangles * 3 * 6)
         for (t in 0 until m.triangles) for (k in 0..2) {
             val o = (3 * t + k) * 6
             data[o] = m.positions[9 * t + 3 * k]; data[o + 1] = m.positions[9 * t + 3 * k + 1]; data[o + 2] = m.positions[9 * t + 3 * k + 2]
             data[o + 3] = m.normals[3 * t]; data[o + 4] = m.normals[3 * t + 1]; data[o + 5] = m.normals[3 * t + 2]
         }
-        meshBuf = buffer(data)
-        meshCount = m.triangles * 3
+        return buffer(data)
     }
 
     private fun buffer(a: FloatArray): FloatBuffer =
@@ -359,6 +452,9 @@ fun Plate3D(
     marks: List<Pair<FloatArray, Int>> = emptyList(),
     /** With it, a tap gives the ray under the finger (origin, direction) instead of zooming. */
     onPick: ((FloatArray, FloatArray) -> Unit)? = null,
+    /** The pack printer's bed model and picture (profile_pack.md, rule 14). */
+    bedModel: MeshFile? = null,
+    bedTexture: java.io.File? = null,
     /** One finger does not turn the view (QA AND9: while marking, the page scrolls and a tap marks); two still move and zoom. */
     lockRotation: Boolean = false,
 ) {
@@ -369,6 +465,20 @@ fun Plate3D(
     fun frame() {
         val b = pathBounds ?: mesh?.bounds ?: floatArrayOf(0f, 0f, 0f, bed[0], bed[1], 0f)
         camera.frame(b)
+        holder[0]?.requestRender()
+    }
+    DisposableEffect(bedModel, bed[0], bed[1]) {
+        renderer.bedModel = bedModel
+        // The picture covers the bed model's plan, or the bed when there is no model (asked to the spec team).
+        renderer.textureRect = bedModel?.bounds?.let { floatArrayOf(it[0], it[1], it[3], it[4]) }
+            ?: floatArrayOf(0f, 0f, bed[0], bed[1])
+        holder[0]?.requestRender()
+        onDispose { }
+    }
+    androidx.compose.runtime.LaunchedEffect(bedTexture) {
+        renderer.texture = bedTexture?.let { f ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { BedTexture.load(f) }
+        }
         holder[0]?.requestRender()
     }
     DisposableEffect(marks) {

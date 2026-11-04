@@ -58,6 +58,7 @@ de los mismos datos.
 | Kotlin coroutines (Android) | org.jetbrains.kotlinx:kotlinx-coroutines-android | 1.10.2 | Apache-2.0 | POM publicado | https://github.com/Kotlin/kotlinx.coroutines | El hilo principal de Android. |
 | kotlinx.serialization JSON | org.jetbrains.kotlinx:kotlinx-serialization-json | 1.9.0 | Apache-2.0 | POM publicado | https://github.com/Kotlin/kotlinx.serialization | Leer y escribir el JSON de Tisma Cloud (`cloud.md`). |
 | AndroidX Core | androidx.core:core-ktx | 1.17.0 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | Base de la app. |
+| AndroidSVG | com.caverock:androidsvg-aar | 1.4 | Apache-2.0 | POM publicado (sin dependencias) | https://bigbadaboom.github.io/androidsvg/ | Pasa a imagen las texturas SVG de las camas del paquete de perfiles (`profile_pack.md`, regla 14). |
 | AndroidX Activity Compose | androidx.activity:activity-compose | 1.11.0 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | La actividad con Compose, elegir y guardar archivos. |
 | AndroidX Lifecycle ViewModel Compose | androidx.lifecycle:lifecycle-viewmodel-compose | 2.9.4 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | El estado de las pantallas sobrevive a girar el teléfono. |
 | AndroidX Lifecycle Runtime Compose | androidx.lifecycle:lifecycle-runtime-compose | 2.9.4 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | Leer el estado según el ciclo de vida. |

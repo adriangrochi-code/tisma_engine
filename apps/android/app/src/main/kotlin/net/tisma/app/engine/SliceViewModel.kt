@@ -47,6 +47,9 @@ data class SliceState(
     val packAvailable: Boolean = false,
     val packIndex: ProfilePack.Index? = null,
     val packFilaments: List<ProfilePack.Filament> = emptyList(),
+    /** The pack printer's bed: its 3D model placed on the bed, and its picture file (rule 14). */
+    val bedModel: MeshFile? = null,
+    val bedTexture: File? = null,
     val packBusy: Boolean = false,
     val packProgress: Int = 0,
     val packError: String? = null,
@@ -145,8 +148,51 @@ class SliceViewModel(
         if (choice == null || !runner.available) { _state.update { it.copy(profileValues = emptyMap()) }; return }
         viewModelScope.launch {
             val v = withContext(io) { runCatching { runner.profile(choice) }.getOrNull() }
-            if (_state.value.profile == choice) _state.update { it.copy(profileValues = v?.let { SettingsLayout.flatten(it) } ?: emptyMap()) }
+            if (_state.value.profile == choice) {
+                _state.update { it.copy(profileValues = v?.let { SettingsLayout.flatten(it) } ?: emptyMap()) }
+                // The bed may have changed size: the model goes back to its centre, and the pack's bed is drawn.
+                val bed = bedSize()
+                _state.update { it.copy(bed = bed) }
+                model?.let { loadMesh(it) }
+                loadBedAssets(choice, bed)
+            }
         }
+    }
+
+    /**
+     * The pack printer's bed model and picture (profile_pack.md, rule 14). The
+     * STL keeps its height (its top is the bed's surface); its plan is centred
+     * on the bed, since the pack's files are centred on their origin (asked to
+     * the spec team).
+     */
+    private fun loadBedAssets(choice: EngineRunner.ProfileChoice?, bed: FloatArray) {
+        val p = pack
+        if (choice == null || !choice.pack || p == null) { _state.update { it.copy(bedModel = null, bedTexture = null) }; return }
+        viewModelScope.launch {
+            val r = withContext(io) {
+                runCatching {
+                    val file = choice.printer.substringBefore('#')
+                    val m = p.index()?.vendors?.flatMap { it.models }?.firstOrNull { it.file == file } ?: return@runCatching null
+                    val stl = m.bedModel.takeIf { it.isNotBlank() }?.let { File(p.dataDir, "pack/$it") }?.takeIf { it.isFile }
+                    val mesh = stl?.let { MeshFile.read(it) }?.let { bedOnBed(it, bed) }
+                    val tex = m.bedTexture.takeIf { it.isNotBlank() }?.let { File(p.dataDir, "pack/$it") }?.takeIf { it.isFile }
+                    mesh to tex
+                }.onFailure { AppLog.line("bed: ${it.message}") }.getOrNull()
+            }
+            if (_state.value.profile == choice) _state.update { it.copy(bedModel = r?.first, bedTexture = r?.second) }
+        }
+    }
+
+    private fun bedOnBed(m: MeshFile, bed: FloatArray): MeshFile {
+        val b = m.bounds
+        val dx = bed[0] / 2 - (b[0] + b[3]) / 2
+        val dy = bed[1] / 2 - (b[1] + b[4]) / 2
+        // A little under the grid, so the lines stay seen on its top.
+        val dz = -0.05f
+        val p = m.positions.copyOf()
+        var i = 0
+        while (i < p.size) { p[i] += dx; p[i + 1] += dy; p[i + 2] += dz; i += 3 }
+        return MeshFile(p, m.normals)
     }
 
     /** Sets a setting from the panel, or puts it back to the profile's value with null. */
@@ -182,6 +228,14 @@ class SliceViewModel(
 
     /** The bed of the chosen printer (catalog), or 220 × 220 mm. */
     private fun bedSize(): FloatArray {
+        // The profile's own bed shape (`machine.bed`, its points), when the engine made one.
+        (_state.value.profileValues["machine.bed"] as? kotlinx.serialization.json.JsonArray)?.let { pts ->
+            val xy = pts.mapNotNull { p ->
+                (p as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.toFloatOrNull() }
+            }.filter { it.size >= 2 }
+            val w = xy.maxOfOrNull { it[0] } ?: 0f; val d = xy.maxOfOrNull { it[1] } ?: 0f
+            if (w > 0 && d > 0) return floatArrayOf(w, d)
+        }
         val choice = _state.value.profile
         val p = _state.value.catalog?.let { c -> c.printer(choice?.printer) ?: c.printer(choice?.name) }
         val v = p?.buildVolume
