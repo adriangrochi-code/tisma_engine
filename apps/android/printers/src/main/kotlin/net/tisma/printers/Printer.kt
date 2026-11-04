@@ -30,6 +30,9 @@ interface PrinterConnection {
     /** The camera's addresses, if the printer has one. */
     fun camera(): Camera?
 
+    /** Whether the controls below work over this connection. */
+    val hasControls: Boolean get() = true
+
     // ---- Controls (docs/MOBILE.md, «Controles»): temperatures any time; moving and extruding only when it is idle. ----
 
     /** Sets a heater's target in °C (0 turns it off). */
@@ -52,7 +55,9 @@ enum class Axis { X, Y, Z }
 /** The kinds of connection the app speaks (mobile_app.md, rule 14). */
 enum class PrinterKind(val wire: String, val defaultPort: Int) {
     MOONRAKER("moonraker", 7125),
-    OCTOPRINT("octoprint", 80);
+    OCTOPRINT("octoprint", 80),
+    PRUSALINK("prusalink", 80),
+    DUET("duet", 80);
 
     companion object {
         fun of(wire: String) = entries.firstOrNull { it.wire == wire }
@@ -92,6 +97,8 @@ class PrinterException(val kind: Kind, val detail: String, cause: Throwable? = n
         AUTH,
         /** The printer cannot do it now (409: not connected to its board, or not printing). */
         CONFLICT,
+        /** This connection does not offer it (for example, PrusaLink has no moving by hand). */
+        UNSUPPORTED,
         /** The answer is not what the API documents. */
         UNEXPECTED,
         /** Any other error of the printer's program. */
@@ -106,6 +113,8 @@ data class PrinterConfig(
     val kind: PrinterKind,
     /** The base address, e.g. `http://192.168.1.20:7125`. */
     val url: String,
+    /** The user name, for connections that ask for one (PrusaLink: «maker» by default). */
+    val user: String = "",
 ) {
     companion object {
         /** Adds `http://` when there is no scheme and the kind's port when there is none; drops trailing slashes. */
@@ -130,4 +139,6 @@ fun PrinterConfig.connect(secret: String?, http: net.tisma.cloud.Http = net.tism
     when (kind) {
         PrinterKind.MOONRAKER -> MoonrakerConnection(url, secret, http)
         PrinterKind.OCTOPRINT -> OctoPrintConnection(url, secret.orEmpty(), http)
+        PrinterKind.PRUSALINK -> PrusaLinkConnection(url, user.ifBlank { "maker" }, secret.orEmpty(), http)
+        PrinterKind.DUET -> DuetConnection(url, secret.orEmpty().ifEmpty { "reprap" }, http)
     }

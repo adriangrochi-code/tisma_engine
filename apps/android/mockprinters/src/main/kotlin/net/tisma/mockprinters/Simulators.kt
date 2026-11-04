@@ -384,3 +384,167 @@ class MockOctoPrint(port: Int = 0, host: String = "127.0.0.1") : SimulatedPrinte
         }
     }
 }
+
+/**
+ * PrusaLink, from its published OpenAPI: HTTP Digest (RFC 7616, MD5, qop auth)
+ * checked here like a printer would, v1 status, job, files by PUT.
+ */
+class MockPrusaLink(port: Int = 0, host: String = "127.0.0.1") : SimulatedPrinter(port, host) {
+    var user = "maker"
+    var password = "test-pass"
+    private val realm = "Printer API"
+    private val nonce = java.util.UUID.randomUUID().toString().replace("-", "")
+    private var jobId = 0
+
+    init {
+        apiKey = null // Digest instead
+    }
+
+    override fun unauthorized() = ""
+
+    private fun md5(s: String) = java.security.MessageDigest.getInstance("MD5").digest(s.toByteArray())
+        .joinToString("") { "%02x".format(it) }
+
+    private fun checkDigest(ex: HttpExchange) {
+        val h = ex.requestHeaders.getFirst("Authorization")
+        val challenge = "Digest realm=\"$realm\", nonce=\"$nonce\", qop=\"auth\", algorithm=MD5"
+        if (h == null || !h.startsWith("Digest ")) {
+            ex.responseHeaders.add("WWW-Authenticate", challenge); throw Stop(401, "")
+        }
+        val p = Regex("""(\w+)\s*=\s*(?:"([^"]*)"|([^\s,]+))""").findAll(h.substring(7))
+            .associate { it.groupValues[1] to it.groupValues[2].ifEmpty { it.groupValues[3] } }
+        val ha1 = md5("${p["username"]}:$realm:$password")
+        val ha2 = md5("${ex.requestMethod}:${p["uri"]}")
+        val expected = md5("$ha1:${p["nonce"]}:${p["nc"]}:${p["cnonce"]}:${p["qop"]}:$ha2")
+        if (p["username"] != user || p["nonce"] != nonce || p["response"] != expected ||
+            p["uri"] != ex.requestURI.rawPath + (ex.requestURI.rawQuery?.let { "?$it" } ?: "")) {
+            ex.responseHeaders.add("WWW-Authenticate", challenge); throw Stop(401, "")
+        }
+    }
+
+    override fun route(method: String, path: String, query: Map<String, String>, ex: HttpExchange): Reply {
+        checkDigest(ex)
+        return when {
+            method == "GET" && path == "/api/version" -> json(buildJsonObject {
+                put("api", "2.0.0"); put("version", "0.8.0"); put("printer", "1.3.0"); put("text", "PrusaLink"); put("firmware", "6.1.0")
+            })
+            method == "GET" && path == "/api/v1/status" -> { tick(); json(status()) }
+            method == "GET" && path == "/api/v1/job" -> synchronized(lock) {
+                if (state != "printing" && state != "paused") Reply(204, "") else json(buildJsonObject {
+                    put("id", jobId); put("state", state.uppercase()); put("progress", progress * 100)
+                    putJsonObject("file") { put("name", file.take(8)); put("display_name", file) }
+                })
+            }
+            method == "GET" && path == "/api/v1/storage" -> json(buildJsonObject {
+                put("storage_list", buildJsonArray {
+                    add(buildJsonObject { put("path", "/usb/"); put("available", true); put("read_only", false) })
+                })
+            })
+            method == "PUT" && path.startsWith("/api/v1/files/usb/") -> {
+                val len = ex.requestHeaders.getFirst("Content-Length") ?: throw Stop(411, "")
+                val name = java.net.URLDecoder.decode(path.removePrefix("/api/v1/files/usb/"), "UTF-8")
+                val data = ex.requestBody.readBytes()
+                if (data.size != len.toInt()) throw Stop(400, "")
+                synchronized(lock) { files[name] = data }
+                if (ex.requestHeaders.getFirst("Print-After-Upload") == "?1") { startPrint(name); synchronized(lock) { jobId++ } }
+                Reply(201, "")
+            }
+            method == "PUT" && path == "/api/v1/job/$jobId/pause" -> synchronized(lock) {
+                if (state != "printing") throw Stop(409, ""); state = "paused"; Reply(204, "")
+            }
+            method == "PUT" && path == "/api/v1/job/$jobId/resume" -> synchronized(lock) {
+                if (state != "paused") throw Stop(409, ""); state = "printing"; Reply(204, "")
+            }
+            method == "DELETE" && path == "/api/v1/job/$jobId" -> synchronized(lock) {
+                if (state != "printing" && state != "paused") throw Stop(409, "")
+                state = "cancelled"; nozzleTarget = 0.0; bedTarget = 0.0; Reply(204, "")
+            }
+            else -> throw Stop(404, "")
+        }
+    }
+
+    private fun status() = synchronized(lock) {
+        buildJsonObject {
+            putJsonObject("printer") {
+                put("state", when (state) { "printing" -> "PRINTING"; "paused" -> "PAUSED"; "complete" -> "FINISHED"; "cancelled" -> "STOPPED"; else -> "IDLE" })
+                put("temp_nozzle", nozzle); put("target_nozzle", nozzleTarget); put("temp_bed", bed); put("target_bed", bedTarget)
+            }
+            if (state == "printing" || state == "paused") putJsonObject("job") {
+                put("id", jobId); put("progress", progress * 100); put("time_printing", printSeconds.toInt())
+                put("time_remaining", (400 * (1 - progress)).toInt())
+            }
+        }
+    }
+}
+
+/** A Duet (RepRapFirmware): rr_connect with a session key, rr_model, rr_upload, rr_gcode. */
+class MockDuet(port: Int = 0, host: String = "127.0.0.1") : SimulatedPrinter(port, host) {
+    var password = "reprap"
+    private val sessionKey = (100000..999999).random().toString()
+    private var size = 1
+
+    init {
+        apiKey = null // a session instead
+    }
+
+    override fun unauthorized() = "{}"
+
+    override fun route(method: String, path: String, query: Map<String, String>, ex: HttpExchange): Reply {
+        if (path == "/rr_connect") {
+            return if (query["password"] != password) json(buildJsonObject { put("err", 1) })
+            else json(buildJsonObject { put("err", 0); put("sessionTimeout", 8000); put("boardType", "duet3mb6hc"); put("sessionKey", sessionKey.toLong()) })
+        }
+        if (ex.requestHeaders.getFirst("X-Session-Key") != sessionKey) throw Stop(401, "{}")
+        return when (path) {
+            "/rr_model" -> { if (query["key"] == "state") tick(); json(buildJsonObject { put("key", query["key"] ?: ""); put("result", model(query["key"] ?: "")) }) }
+            "/rr_upload" -> {
+                val name = query["name"] ?: throw Stop(400, "{}")
+                val data = ex.requestBody.readBytes()
+                synchronized(lock) { files[name] = data; size = data.size.coerceAtLeast(1) }
+                json(buildJsonObject { put("err", 0) })
+            }
+            "/rr_gcode" -> {
+                val code = query["gcode"] ?: throw Stop(400, "{}")
+                synchronized(lock) {
+                    for (line in code.lines().map { it.trim() }.filter { it.isNotEmpty() }) {
+                        commands += line
+                        when {
+                            line.startsWith("M32") -> startPrint(line.substringAfter('"').substringBefore('"'))
+                            line == "M25" && state == "printing" -> state = "paused"
+                            line == "M24" && state == "paused" -> state = "printing"
+                            line == "M0" && state == "paused" -> { state = "cancelled"; nozzleTarget = 0.0; bedTarget = 0.0 }
+                            line.startsWith("M104") -> { nozzleTarget = line.substringAfter("S").toDouble(); nozzle = nozzleTarget.coerceAtLeast(24.0) }
+                            line.startsWith("M140") -> { bedTarget = line.substringAfter("S").toDouble(); bed = bedTarget.coerceAtLeast(23.0) }
+                            line.startsWith("G28") -> homed = true
+                        }
+                    }
+                }
+                json(buildJsonObject { put("buff", 255) })
+            }
+            else -> throw Stop(404, "{}")
+        }
+    }
+
+    private fun model(key: String): JsonElement = synchronized(lock) {
+        when (key) {
+            "state" -> buildJsonObject {
+                put("status", when (state) { "printing" -> "processing"; "paused" -> "paused"; else -> if (disconnected) "halted" else "idle" })
+            }
+            "job" -> buildJsonObject {
+                val active = state == "printing" || state == "paused"
+                putJsonObject("file") { put("fileName", if (active) file else null as String?); put("size", size); put("numLayers", 100) }
+                put("filePosition", if (active) progress * size else null as Double?)
+                put("duration", if (active) printSeconds else null as Double?)
+                put("layer", if (active) (progress * 100).toInt() else null as Int?)
+                putJsonObject("timesLeft") { put("slicer", if (active) 400 * (1 - progress) else null as Double?) }
+            }
+            "heat" -> buildJsonObject { put("bedHeaters", buildJsonArray { add(JsonPrimitive(0)) }) }
+            "heat.heaters" -> buildJsonArray {
+                add(buildJsonObject { put("current", bed); put("active", bedTarget) })
+                add(buildJsonObject { put("current", nozzle); put("active", nozzleTarget) })
+            }
+            "tools" -> buildJsonArray { add(buildJsonObject { put("heaters", buildJsonArray { add(JsonPrimitive(1)) }) }) }
+            else -> JsonObject(emptyMap())
+        }
+    }
+}

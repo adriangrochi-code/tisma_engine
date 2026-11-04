@@ -227,7 +227,7 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
             }
             else -> Unit
         }
-        ControlsCard(id, s, state, printers)
+        if (p.kind != PrinterKind.PRUSALINK) ControlsCard(id, s, state, printers)
         TismaCard {
             Text(stringResource(R.string.printer_files), style = MaterialTheme.typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -369,6 +369,7 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
     var name by rememberSaveable { mutableStateOf(existing?.name ?: found?.name.orEmpty()) }
     var address by rememberSaveable { mutableStateOf(existing?.url ?: found?.url.orEmpty()) }
     var key by rememberSaveable { mutableStateOf("") }
+    var user by rememberSaveable { mutableStateOf(existing?.user?.ifBlank { null } ?: "maker") }
     ScreenColumn {
         TismaCard {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -384,8 +385,17 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                 placeholder = { Text(if (kind == PrinterKind.MOONRAKER) "192.168.1.20:7125" else "192.168.1.30") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 modifier = Modifier.fillMaxWidth().testTag("printer_address"))
+            if (kind == PrinterKind.PRUSALINK) {
+                OutlinedTextField(user, { user = it }, singleLine = true, label = { Text(stringResource(R.string.printer_user)) },
+                    modifier = Modifier.fillMaxWidth().testTag("printer_user"))
+            }
             OutlinedTextField(key, { key = it }, singleLine = true,
-                label = { Text(stringResource(if (kind == PrinterKind.OCTOPRINT) R.string.printer_key else R.string.printer_key_optional)) },
+                label = { Text(stringResource(when (kind) {
+                    PrinterKind.OCTOPRINT -> R.string.printer_key
+                    PrinterKind.MOONRAKER -> R.string.printer_key_optional
+                    PrinterKind.PRUSALINK -> R.string.printer_password
+                    PrinterKind.DUET -> R.string.printer_board_password
+                })) },
                 supportingText = if (existing != null) { { Text(stringResource(R.string.printer_key_keep)) } } else null,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
@@ -394,10 +404,11 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                 onClick = {
                     // An empty key on an edit keeps the stored one.
                     val secret = key.ifEmpty { if (existing != null) null else "" }
-                    printers.testAndSave(existing?.id, name, kind, address, secret) { nav.back() }
+                    printers.testAndSave(existing?.id, name, kind, address, secret,
+                        if (kind == PrinterKind.PRUSALINK) user else "") { nav.back() }
                     key = ""
                 },
-                enabled = !state.busy && address.isNotBlank() && (kind != PrinterKind.OCTOPRINT || key.isNotBlank() || existing != null),
+                enabled = !state.busy && address.isNotBlank() && (kind !in setOf(PrinterKind.OCTOPRINT, PrinterKind.PRUSALINK) || key.isNotBlank() || existing != null),
                 modifier = Modifier.fillMaxWidth().height(56.dp).testTag("printer_save"),
             ) { Text(stringResource(R.string.printer_test_save)) }
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -413,6 +424,8 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
 private fun kindName(k: PrinterKind) = stringResource(when (k) {
     PrinterKind.MOONRAKER -> R.string.kind_moonraker
     PrinterKind.OCTOPRINT -> R.string.kind_octoprint
+    PrinterKind.PRUSALINK -> R.string.kind_prusalink
+    PrinterKind.DUET -> R.string.kind_duet
 })
 
 private fun temp(t: Temperature): String =
@@ -435,6 +448,7 @@ fun Context.printerNoticeText(n: PrinterNotice): String = when (n) {
         PrinterException.Kind.CONFLICT -> getString(R.string.printer_error_conflict, n.error.detail)
         PrinterException.Kind.UNEXPECTED -> getString(R.string.printer_error_unexpected)
         PrinterException.Kind.SERVER -> getString(R.string.printer_error_server, n.error.detail)
+        PrinterException.Kind.UNSUPPORTED -> getString(R.string.printer_error_unsupported)
     }
     is PrinterNotice.Tested -> getString(R.string.printer_tested, n.text)
     is PrinterNotice.Uploaded -> getString(if (n.started) R.string.printer_uploaded_started else R.string.printer_uploaded, n.name)

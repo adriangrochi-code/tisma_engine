@@ -147,6 +147,27 @@ class PrintersTest {
     }
 
     @Test
+    fun `a PrusaLink printer is added with its user and password, and has no controls`() {
+        val prusa = net.tisma.mockprinters.MockPrusaLink().apply { start() }
+        try {
+            compose.onNodeWithTag("add_printer").performClick()
+            waitFor("printer_address")
+            compose.onNodeWithTag("kind_prusalink").performClick()
+            compose.onNodeWithTag("printer_address").performTextInput(prusa.url)
+            compose.onNodeWithTag("printer_key").performTextInput("test-pass")
+            compose.onNodeWithTag("printer_save").performClick()
+            waitState { printers.state.value.printers.isNotEmpty() }
+            val p = printers.state.value.printers.single()
+            assertEquals("maker", p.user)
+            compose.runOnIdle { nav.open(net.tisma.app.ui.Screen.PrinterDetail(p.id)) }
+            waitFor("printer_upload")
+            assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasTestTag("controls"), true).fetchSemanticsNodes().isEmpty())
+        } finally {
+            prusa.stop()
+        }
+    }
+
+    @Test
     fun `CM1 the printer's camera shows on its page`() {
         addPrinter("moonraker", moonraker.url, null)
         val id = printers.state.value.printers.single().id

@@ -161,7 +161,7 @@
     <string name="code_no_valid_result">No se encontró un resultado válido.</string>
     <string name="code_usage">El servidor llamó mal al motor.</string>
 
-    <string name="printers_empty">Todavía no hay impresoras. Agregá una impresora Klipper (Moonraker) u OctoPrint de tu red.</string>
+    <string name="printers_empty">Todavía no hay impresoras. Agregá una impresora Klipper (Moonraker), OctoPrint, Prusa (PrusaLink) o Duet de tu red.</string>
     <string name="printer_add">Agregar una impresora</string>
     <string name="printer_state_unknown">…</string>
     <string name="printer_state_offline">Desconectada</string>
@@ -281,4 +281,11 @@
     <string name="controls_home">Ir a casa</string>
     <string name="controls_extrude">Extruir 5 mm</string>
     <string name="controls_retract">Retraer 5 mm</string>
+
+    <string name="kind_prusalink">Prusa (PrusaLink)</string>
+    <string name="kind_duet">Duet (RepRapFirmware)</string>
+    <string name="printer_user">Usuario (lo muestra la impresora)</string>
+    <string name="printer_password">Contraseña (la muestra la impresora)</string>
+    <string name="printer_board_password">Contraseña de la placa (solo si tiene)</string>
+    <string name="printer_error_unsupported">La conexión de esta impresora no lo permite.</string>
 </resources>

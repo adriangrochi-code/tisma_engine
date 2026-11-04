@@ -87,10 +87,10 @@ class PrintersViewModel(
     private fun connection(c: PrinterConfig) = connector(c, store.secret(c.id))
 
     /** Tests a printer before it is saved; [onOk] gets the saved printer. */
-    fun testAndSave(id: String?, name: String, kind: PrinterKind, address: String, secret: String?,
+    fun testAndSave(id: String?, name: String, kind: PrinterKind, address: String, secret: String?, user: String = "",
                     onOk: (PrinterConfig) -> Unit) = launch {
         val config = PrinterConfig(id ?: PrinterStore.newId(), name.trim().ifEmpty { address.trim() }, kind,
-            PrinterConfig.normalizeUrl(address, kind))
+            PrinterConfig.normalizeUrl(address, kind), user.trim())
         val stored = secret ?: id?.let { store.secret(it) }
         val text = withContext(io) { connector(config, stored).test() }
         store.save(config, secret)

@@ -32,6 +32,12 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   de esta máquina (perfil del catálogo más la calidad elegida: un cubo de 10 mm da 83 capas a 0,12 mm). Si el motor
   no puede armarlo, el laminado usa sus valores por defecto y la pantalla lo dice.
 
+- **2026-11-04 — controles e impresoras nuevas:** controles de la impresora (temperaturas siempre; ir a casa,
+  mover y extruir cuando está quieta) en Moonraker, OctoPrint y Duet; PrusaLink (Digest de la RFC 7616, su OpenAPI)
+  y Duet (pedidos `rr_*` con clave de sesión, del wiki de RepRapFirmware), con simuladores. Sin probar con
+  impresoras reales. En Duet, cancelar es M25 y M0 (lista de G-code de la wiki de RepRap): a confirmar con una
+  Duet real; sus errores de G-code llegan después (`rr_reply`) y la app todavía no los lee.
+
 ## Abierto
 
 - **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS: necesita una biblioteca MQTT o una propia; decidir), PrusaLink,

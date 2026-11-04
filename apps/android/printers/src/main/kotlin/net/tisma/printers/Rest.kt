@@ -13,21 +13,51 @@ import net.tisma.cloud.HttpResponse
 import java.io.IOException
 
 /** JSON over HTTP to a printer's program on the local network. */
-internal class Rest(baseUrl: String, private val headers: Map<String, String>, private val http: Http) {
+internal class Rest(
+    baseUrl: String,
+    private val headers: Map<String, String>,
+    private val http: Http,
+    /** HTTP Digest credentials (PrusaLink), or null. */
+    private val digest: Digest? = null,
+) {
     val base = baseUrl.trimEnd('/')
+    /** Headers added after connecting (Duet's session key). */
+    @Volatile var extraHeaders: Map<String, String> = emptyMap()
 
-    fun get(path: String): JsonElement = parse(send(HttpRequest("GET", base + path, all(), timeoutMs = 10_000)))
+    fun get(path: String): JsonElement = call(HttpRequest("GET", base + path, all(), timeoutMs = 10_000))
 
     fun post(path: String, body: JsonObject? = null): JsonElement {
         val h = if (body != null) all() + ("Content-Type" to "application/json") else all()
-        return parse(send(HttpRequest("POST", base + path, h, body?.toString()?.toByteArray() ?: ByteArray(0),
-            timeoutMs = 15_000)))
+        return call(HttpRequest("POST", base + path, h, body?.toString()?.toByteArray() ?: ByteArray(0), timeoutMs = 15_000))
     }
 
-    fun upload(path: String, parts: List<FormPart>): JsonElement =
-        parse(send(HttpRequest("POST", base + path, all(), form = parts, timeoutMs = 30 * 60_000)))
+    fun put(path: String): JsonElement = call(HttpRequest("PUT", base + path, all(), ByteArray(0), timeoutMs = 15_000))
 
-    private fun all() = headers + ("Accept" to "application/json")
+    fun delete(path: String): JsonElement = call(HttpRequest("DELETE", base + path, all(), timeoutMs = 15_000))
+
+    fun upload(path: String, parts: List<FormPart>): JsonElement =
+        call(HttpRequest("POST", base + path, all(), form = parts, timeoutMs = 30 * 60_000))
+
+    /** A file as the raw body of [method] (PrusaLink's PUT, Duet's rr_upload POST). */
+    fun uploadRaw(method: String, path: String, part: FormPart, extra: Map<String, String> = emptyMap()): JsonElement =
+        call(HttpRequest(method, base + path, all() + extra, stream = part, timeoutMs = 30 * 60_000))
+
+    private fun all() = headers + extraHeaders + ("Accept" to "application/json")
+
+    /** Sends [r]; with Digest, answers the server's challenge once (RFC 7616). */
+    private fun call(r: HttpRequest): JsonElement {
+        if (digest == null) return parse(send(r))
+        val uri = r.url.substringAfter("://").let { "/" + it.substringAfter('/', "") }
+        var req = digest.authorization(r.method, uri)?.let { r.withHeader("Authorization", it) } ?: r
+        val first = send(req)
+        val challenge = first.header("WWW-Authenticate")
+        if (first.status == 401 && challenge != null && digest.learn(challenge)) {
+            first.close()
+            req = r.withHeader("Authorization", digest.authorization(r.method, uri)!!)
+            return parse(send(req))
+        }
+        return parse(first)
+    }
 
     private fun send(r: HttpRequest): HttpResponse = try {
         http.send(r)

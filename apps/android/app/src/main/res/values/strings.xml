@@ -175,7 +175,7 @@
     <string name="code_usage">The server called the engine the wrong way.</string>
 
     <!-- Printers on the network (printer_connections.md, MOBILE.md) -->
-    <string name="printers_empty">No printers yet. Add a Klipper (Moonraker) or OctoPrint printer on your network.</string>
+    <string name="printers_empty">No printers yet. Add a Klipper (Moonraker), OctoPrint, Prusa (PrusaLink) or Duet printer on your network.</string>
     <string name="printer_add">Add a printer</string>
     <string name="printer_state_unknown">…</string>
     <string name="printer_state_offline">Disconnected</string>
@@ -296,4 +296,11 @@
     <string name="controls_home">Home</string>
     <string name="controls_extrude">Extrude 5 mm</string>
     <string name="controls_retract">Retract 5 mm</string>
+
+    <string name="kind_prusalink">Prusa (PrusaLink)</string>
+    <string name="kind_duet">Duet (RepRapFirmware)</string>
+    <string name="printer_user">User (shown on the printer)</string>
+    <string name="printer_password">Password (shown on the printer)</string>
+    <string name="printer_board_password">Board password (only if it has one)</string>
+    <string name="printer_error_unsupported">This printer\'s connection does not offer that.</string>
 </resources>

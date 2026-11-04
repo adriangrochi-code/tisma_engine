@@ -32,7 +32,11 @@ class HttpRequest(
     val body: ByteArray? = null,
     val form: List<FormPart> = emptyList(),
     val timeoutMs: Int = 30_000,
-)
+    /** A raw body streamed with its exact length (a file upload by PUT or POST). */
+    val stream: FormPart? = null,
+) {
+    fun withHeader(name: String, value: String) = HttpRequest(method, url, headers + (name to value), body, form, timeoutMs, stream)
+}
 
 /** An answer. [body] is read only when the caller asks for it, so a large result can be streamed. */
 class HttpResponse(val status: Int, val headers: Map<String, String>, val body: InputStream) : AutoCloseable {
@@ -85,6 +89,14 @@ object UrlConnectionHttp : Http {
                 c.setFixedLengthStreamingMode(multipartLength(boundary, request.form))
                 c.outputStream.use { writeMultipart(it, boundary, request.form) }
             }
+            request.stream != null -> {
+                val part = request.stream
+                val length = if (part.length >= 0) part.length else part.open().use { measure(it) }
+                c.setRequestProperty("Content-Type", part.contentType)
+                c.doOutput = true
+                c.setFixedLengthStreamingMode(length)
+                c.outputStream.use { out -> part.open().use { it.copyTo(out, 64 * 1024) } }
+            }
             request.body != null -> {
                 // Small JSON bodies are not streamed, so a 401 keeps its text
                 // (in streaming mode the JVM throws it away).
@@ -113,16 +125,7 @@ private fun closing(boundary: String) = "--$boundary--\r\n".toByteArray()
  * it checks the size before reading, QA AND1).
  */
 fun multipartLength(boundary: String, parts: List<FormPart>): Long = parts.sumOf { part ->
-    val len = if (part.length >= 0) part.length else part.open().use { input ->
-        var n = 0L
-        val buf = ByteArray(64 * 1024)
-        while (true) {
-            val r = input.read(buf)
-            if (r < 0) break
-            n += r
-        }
-        n
-    }
+    val len = if (part.length >= 0) part.length else part.open().use { measure(it) }
     partHead(boundary, part).size + len + 2
 } + closing(boundary).size
 
@@ -155,4 +158,16 @@ fun InputStream.readUpTo(max: Int): ByteArray {
         left -= n
     }
     return out.toByteArray()
+}
+
+/** How many bytes a stream gives, read to its end. */
+fun measure(input: InputStream): Long {
+    var n = 0L
+    val buf = ByteArray(64 * 1024)
+    while (true) {
+        val r = input.read(buf)
+        if (r < 0) break
+        n += r
+    }
+    return n
 }

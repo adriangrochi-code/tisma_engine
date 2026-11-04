@@ -27,7 +27,7 @@ class PrinterConnectionTest {
     private fun walk(c: PrinterConnection, printer: SimulatedPrinter) {
         assertEquals(PrinterState.READY, c.status().state)
         c.upload("cube.gcode", gcode.size.toLong(), start = true) { gcode.inputStream() }
-        assertTrue(printer.files.getValue("cube.gcode").contentEquals(gcode))
+        assertTrue(printer.files.entries.single { it.key.endsWith("cube.gcode") }.value.contentEquals(gcode))
         val s = c.status()
         assertEquals(PrinterState.PRINTING, s.state)
         assertEquals("cube.gcode", s.file)
@@ -147,8 +147,9 @@ class PrinterConnectionTest {
     }
 
     /** Controls: heat, home, move and extrude when idle; extruding cold and moving while printing are refused. */
-    private fun controls(c: PrinterConnection, p: SimulatedPrinter) {
-        assertFailsWith<PrinterException> { c.extrude(5.0, 5.0) }
+    private fun controls(c: PrinterConnection, p: SimulatedPrinter, refusesAtOnce: Boolean = true) {
+        // A Duet takes any G-code and tells its errors later (rr_reply): nothing to refuse at once.
+        if (refusesAtOnce) assertFailsWith<PrinterException> { c.extrude(5.0, 5.0) }
         c.setTemperature(Heater.NOZZLE, 215.0)
         c.setTemperature(Heater.BED, 60.0)
         assertEquals(Temperature(215.0, 215.0), c.status().nozzle)
@@ -157,7 +158,7 @@ class PrinterConnectionTest {
         c.jog(Axis.X, 10.0, 50.0)
         c.extrude(5.0, 5.0)
         c.upload("a.gcode", gcode.size.toLong(), start = true) { gcode.inputStream() }
-        assertFailsWith<PrinterException> { c.jog(Axis.Z, 1.0, 10.0) }
+        if (refusesAtOnce) assertFailsWith<PrinterException> { c.jog(Axis.Z, 1.0, 10.0) }
         c.setTemperature(Heater.NOZZLE, 220.0) // temperatures may change while printing
     }
 
@@ -175,6 +176,46 @@ class PrinterConnectionTest {
         val o = sim(MockOctoPrint())
         controls(OctoPrintConnection(o.url, "test-key", UrlConnectionHttp), o)
         assertTrue(o.commands.any { it.startsWith("/api/printer/printhead jog") && it.contains("\"x\":10.0") })
+    }
+
+    @Test
+    fun `N1 PrusaLink with Digest, upload and print, pause, resume, stop`() {
+        val p = sim(net.tisma.mockprinters.MockPrusaLink())
+        val c = PrinterConfig("3", "MK4", PrinterKind.PRUSALINK, p.url, "maker").connect("test-pass")
+        assertEquals("PrusaLink (1.3.0)", c.test())
+        walk(c, p)
+        assertTrue(p.files.containsKey("cube.gcode"))
+        assertEquals(false, c.hasControls)
+        assertEquals(PrinterException.Kind.UNSUPPORTED, assertFailsWith<PrinterException> { c.home() }.kind)
+        val wrong = PrinterConfig("3", "MK4", PrinterKind.PRUSALINK, p.url, "maker").connect("nope")
+        assertEquals(PrinterException.Kind.AUTH, assertFailsWith<PrinterException> { wrong.test() }.kind)
+    }
+
+    @Test
+    fun `N1 Duet with a session key, upload and print, pause, resume, cancel, and controls`() {
+        val d = sim(net.tisma.mockprinters.MockDuet())
+        val c = PrinterConfig("4", "Duet", PrinterKind.DUET, d.url).connect(null)
+        assertEquals("Duet duet3mb6hc", c.test())
+        walk(c, d)
+        assertTrue(d.files.containsKey("0:/gcodes/cube.gcode"))
+        controls(c, d, refusesAtOnce = false)
+        assertTrue("M32 \"0:/gcodes/a.gcode\"" in d.commands)
+        val wrong = PrinterConfig("4", "Duet", PrinterKind.DUET, d.url).connect("bad")
+        assertEquals(PrinterException.Kind.AUTH, assertFailsWith<PrinterException> { wrong.status() }.kind)
+    }
+
+    @Test
+    fun `Digest answers follow RFC 7616`() {
+        // RFC 7616, section 3.9.1 (MD5): the example's response.
+        val d = Digest("Mufasa", "Circle of Life")
+        d.learn("Digest realm=\"http-auth@example.org\", qop=\"auth, auth-int\", algorithm=MD5, " +
+            "nonce=\"7ypf/xlj9XXwfDPEoM4URrv/xwf94BcCAzFZH4GiTo0v\", opaque=\"FQhe/qaU925kfnzjCev0ciny7QMkPqMAFRtzCUYo5tdS\"")
+        val h = d.authorization("GET", "/dir/index.html")!!
+        val p = Digest.params(h.removePrefix("Digest "))
+        val ha1 = Digest.md5("Mufasa:http-auth@example.org:Circle of Life")
+        val ha2 = Digest.md5("GET:/dir/index.html")
+        assertEquals(Digest.md5("$ha1:${p["nonce"]}:00000001:${p["cnonce"]}:auth:$ha2"), p["response"])
+        assertEquals("FQhe/qaU925kfnzjCev0ciny7QMkPqMAFRtzCUYo5tdS", p["opaque"])
     }
 
     @Test
