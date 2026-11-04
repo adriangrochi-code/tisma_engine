@@ -47,6 +47,8 @@ data class SliceState(
     val packAvailable: Boolean = false,
     val packIndex: ProfilePack.Index? = null,
     val packFilaments: List<ProfilePack.Filament> = emptyList(),
+    /** The pack's print profiles for the chosen printer (rule 12). */
+    val packPrints: List<ProfilePack.Filament> = emptyList(),
     /** Rule 19: a newer published pack, to offer its update. */
     val packNewer: String? = null,
     /** The pack printer's bed: its 3D model placed on the bed, and its picture file (rule 14). */
@@ -118,6 +120,8 @@ sealed interface SliceNotice {
     data object ProfileGone : SliceNotice
     data class PackUpdated(val version: String) : SliceNotice
     data class Calibrated(val kind: String, val value: Double) : SliceNotice
+    /** Another profile replaced the printer settings, except these, changed by hand (BH27). */
+    data class KeptChanges(val labels: List<String>) : SliceNotice
 }
 
 /** Slicing on the phone with the engine (mobile_app.md, rule 12; MOBILE.md, step 5). */
@@ -140,7 +144,8 @@ class SliceViewModel(
 ) : ViewModel() {
     private val _state = MutableStateFlow(SliceState(engineAvailable = runner.available,
         profile = saved?.profilePrinter?.let {
-            EngineRunner.ProfileChoice(it, saved.profileNozzle, saved.profileFilament, saved.profilePack, saved.profileName)
+            EngineRunner.ProfileChoice(it, saved.profileNozzle, saved.profileFilament, saved.profilePack, saved.profileName,
+                saved.profilePrint)
         },
         settings = savedSettings(),
         view = saved?.panelView?.let { v -> PanelVisibility.View.entries.firstOrNull { it.name.equals(v, true) } }
@@ -175,13 +180,16 @@ class SliceViewModel(
     }
 
     /** The profile's values for the panel (`tisma-engine profile`), when the engine and a printer are there. */
-    private fun loadProfileValues() {
+    private fun loadProfileValues(announceKept: Boolean = false) {
         val choice = _state.value.profile
         if (choice == null || !runner.available) { _state.update { it.copy(profileValues = emptyMap()) }; return }
         viewModelScope.launch {
             val v = withContext(io) { runCatching { runner.profile(choice) }.getOrNull() }
             if (_state.value.profile == choice) {
-                _state.update { it.copy(profileValues = v?.let { SettingsLayout.flatten(it) } ?: emptyMap()) }
+                val values = v?.let { SettingsLayout.flatten(it) } ?: emptyMap()
+                // BH27: the new profile's settings replace the old ones, except those changed by hand, which are said.
+                val kept = if (announceKept) _state.value.settings.changes.keys.filter { it in values }.sorted() else emptyList()
+                _state.update { it.copy(profileValues = values, notice = if (kept.isNotEmpty()) SliceNotice.KeptChanges(kept.map { k -> it.layout?.rows?.get(k)?.label ?: k }) else it.notice) }
                 // The bed may have changed size: the model goes back to its centre, and the pack's bed is drawn.
                 val bed = bedSize()
                 _state.update { it.copy(bed = bed) }
@@ -339,9 +347,10 @@ class SliceViewModel(
         saved?.profileFilament = choice?.filament
         saved?.profilePack = choice?.pack == true
         saved?.profileName = choice?.name
+        saved?.profilePrint = choice?.print
         _state.update { it.copy(profile = choice, result = null) }
         model?.let { loadMesh(it) }
-        loadProfileValues()
+        loadProfileValues(announceKept = true)
     }
     val state: StateFlow<SliceState> = _state.asStateFlow()
     private val cancel = AtomicBoolean(false)
@@ -581,7 +590,8 @@ class SliceViewModel(
         val choice = _state.value.profile?.takeIf { it.pack } ?: return
         viewModelScope.launch {
             val list = withContext(io) { runCatching { p.filamentsFor(choice.printer) }.getOrDefault(emptyList()) }
-            _state.update { it.copy(packFilaments = list) }
+            val prints = withContext(io) { runCatching { p.printsFor(choice.printer) }.getOrDefault(emptyList()) }
+            _state.update { it.copy(packFilaments = list, packPrints = prints) }
         }
     }
 
@@ -638,7 +648,8 @@ class SliceViewModel(
             if (r.isSuccess) {
                 val printer = model.file + "#" + variant.id
                 val filament = withContext(io) { runCatching { p.defaultFilament(printer) }.getOrNull() }
-                setProfile(EngineRunner.ProfileChoice(printer, variant.nozzle, filament, pack = true, name = model.name))
+                val print = withContext(io) { runCatching { p.defaultPrint(printer) }.getOrNull() }
+                setProfile(EngineRunner.ProfileChoice(printer, variant.nozzle, filament, pack = true, name = model.name, print = print))
                 done()
             }
         }

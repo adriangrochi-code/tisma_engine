@@ -510,6 +510,8 @@ fun Context.sliceNoticeText(n: SliceNotice): String = when (n) {
     SliceNotice.ProfileGone -> getString(R.string.pack_profile_gone)
     is SliceNotice.PackUpdated -> getString(R.string.pack_updated, n.version)
     is SliceNotice.Calibrated -> getString(R.string.cal_applied, calibrationName(n.kind), n.value.toString().removeSuffix(".0"))
+    is SliceNotice.KeptChanges -> getString(R.string.profile_kept_changes,
+        n.labels.take(3).joinToString(", ") + if (n.labels.size > 3) " (+${n.labels.size - 3})" else "")
 }
 
 private fun displayName(context: Context, uri: Uri): String? = runCatching {

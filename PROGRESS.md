@@ -10918,3 +10918,16 @@ elección. Los que la persona cambió a mano se quedan, con el aviso «Se mantuv
 Prueba: `ui_pack_print_speeds` (Acme Standard → Acme Fine → velocidad de viaje a mano → Acme Standard) y los verbos de
 guion `choose-profile` y `set`. **Sin probar:** con el paquete real; se pidió a la sesión de fichas.
 
+
+## 2026-11-04 — Android: perfil de impresión del paquete y BH27 (cambios a mano)
+
+Del motor (dev `b8f5906`, BH27): los perfiles de impresión del paquete traen `speed.*`, y `profile --pack` los pone en
+los ajustes de la impresora. Decisión de la sesión de especificación: al elegir otro perfil de impresión o filamento
+del paquete, sus ajustes reemplazan a los actuales, salvo los cambiados a mano, que se mantienen y se avisan.
+- La pantalla del perfil de una impresora del paquete elige filamento y perfil de impresión (regla 12, los
+  compatibles), con «Listo». Al elegir la impresora queda el primero de `defaults.print` (regla 13).
+- `ProfileChoice.print` va a `profile --pack ... --print` (y por ahí a todo lo que corta); se guarda.
+- El panel ya tomaba los valores del perfil nuevo y dejaba encima los cambios a mano; ahora, además, un aviso
+  dice cuáles se mantuvieron.
+- Pruebas: `PackWizardTest` (perfil de impresión por defecto y elegido, aviso de cambios mantenidos, el valor a mano
+  queda y el del perfil nuevo entra). No probado en un teléfono.

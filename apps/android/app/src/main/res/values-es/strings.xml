@@ -416,6 +416,9 @@
     <string name="help_result">Resultado</string>
     <string name="pack_default_filament">El filamento de fábrica de la impresora</string>
     <string name="pack_no_filaments">No hay filamentos del paquete para esta impresora: se usa el de fábrica.</string>
+    <string name="pack_print_profile">Perfil de impresión</string>
+    <string name="pack_done">Listo</string>
+    <string name="profile_kept_changes">Perfil nuevo. Se mantienen tus cambios a mano: %1$s</string>
     <string name="eng_show_map">Mostrar el mapa de seguridad en la pieza</string>
     <string name="map_fails">Falla (menos de 1)</string>
     <string name="map_1_15">1 a 1,5</string>

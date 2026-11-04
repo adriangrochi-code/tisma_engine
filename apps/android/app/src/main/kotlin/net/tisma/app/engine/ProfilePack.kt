@@ -87,7 +87,12 @@ class ProfilePack(
      * holds the printer (none: every printer), the printer's vendor's first,
      * then the generic ones, then the rest.
      */
-    fun filamentsFor(printer: String): List<Filament> {
+    fun filamentsFor(printer: String): List<Filament> = entriesFor(printer, "filaments")
+
+    /** The installed pack's print profiles for [printer], by the same rule 12 as the filaments. */
+    fun printsFor(printer: String): List<Filament> = entriesFor(printer, "prints")
+
+    private fun entriesFor(printer: String, folder: String): List<Filament> {
         val pack = File(dataDir, "pack")
         val index = runCatching { Json.parseToJsonElement(File(pack, "index.json").readText()) as JsonObject }.getOrNull() ?: return emptyList()
         val number = (index["printers"] as? JsonArray)?.indexOfFirst { (it as? JsonPrimitive)?.contentOrNull == printer } ?: -1
@@ -99,13 +104,13 @@ class ProfilePack(
         val printerVendor = printer.removePrefix("vendors/").substringBefore('/')
         val out = ArrayList<Filament>()
         File(pack, "vendors").listFiles()?.sortedBy { it.name }?.forEach { v ->
-            File(v, "filaments").listFiles()?.filter { it.extension == "json" }?.sortedBy { it.name }?.forEach { f ->
+            File(v, folder).listFiles()?.filter { it.extension == "json" }?.sortedBy { it.name }?.forEach { f ->
                 val o = runCatching { Json.parseToJsonElement(f.readText()) as JsonObject }.getOrNull() ?: return@forEach
                 if ((o["technology"] as? JsonPrimitive)?.contentOrNull.let { it != null && it != "fff" }) return@forEach
                 val set = (o["compatible"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
                 if (set != null && (number < 0 || sets.getOrNull(set)?.contains(number) != true)) return@forEach
                 val generic = (o["generic"] as? JsonPrimitive)?.contentOrNull == "true"
-                out += Filament("vendors/${v.name}/filaments/${f.name}", f.nameWithoutExtension.replace('_', ' '), v.name, generic)
+                out += Filament("vendors/${v.name}/$folder/${f.name}", f.nameWithoutExtension.replace('_', ' '), v.name, generic)
             }
         }
         return out.sortedBy { if (it.vendor == printerVendor && !it.generic) 0 else if (it.generic) 1 else 2 }
@@ -115,13 +120,18 @@ class ProfilePack(
      * Rule 13: the first filament of the variant's `defaults.filament` in the
      * installed model file, when it is installed, or null.
      */
-    fun defaultFilament(printer: String): String? {
+    fun defaultFilament(printer: String): String? = defaultEntry(printer, "filament")
+
+    /** Rule 13: the first print profile of the variant's `defaults.print`, or null. */
+    fun defaultPrint(printer: String): String? = defaultEntry(printer, "print")
+
+    private fun defaultEntry(printer: String, kind: String): String? {
         val file = printer.substringBefore('#')
         val variant = printer.substringAfter('#', "")
         val o = runCatching { Json.parseToJsonElement(File(File(dataDir, "pack"), file).readText()) as JsonObject }.getOrNull() ?: return null
         val v = (o["variants"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
             .firstOrNull { (it["id"] as? JsonPrimitive)?.contentOrNull == variant } ?: return null
-        val path = ((v["defaults"] as? JsonObject)?.get("filament") as? JsonArray)?.firstOrNull()
+        val path = ((v["defaults"] as? JsonObject)?.get(kind) as? JsonArray)?.firstOrNull()
             ?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return null
         return path.takeIf { File(File(dataDir, "pack"), it).isFile }
     }

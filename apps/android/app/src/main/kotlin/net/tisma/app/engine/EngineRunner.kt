@@ -60,6 +60,8 @@ class EngineRunner(
         /** A printer of the profile pack, named `<model file>#<variant>`; [name] is what the person reads. */
         val pack: Boolean = false,
         val name: String? = null,
+        /** The pack's print profile (`vendors/<v>/prints/<file>`), or null for the variant's default. */
+        val print: String? = null,
     )
 
     /** The simple settings of MOBILE.md, step 5: a quality (layer height) and supports or not. */
@@ -119,7 +121,7 @@ class EngineRunner(
         val args = if (choice.pack && packDir != null) {
             // The pack's variant with its own default filament and print profile (docs/CATALOG.md).
             mutableListOf(executable.path, "profile", "--pack", packDir.path, "--printer", choice.printer, "-o", out.path)
-                .also { a -> choice.filament?.let { a += listOf("--filament", it) } }
+                .also { a -> choice.filament?.let { a += listOf("--filament", it) }; choice.print?.let { a += listOf("--print", it) } }
         } else mutableListOf(executable.path, "profile", "--printer", choice.printer,
             "--nozzle", choice.nozzle.toString(), "-o", out.path).also { a -> choice.filament?.let { a += listOf("--filament", it) } }
         return runCatching {

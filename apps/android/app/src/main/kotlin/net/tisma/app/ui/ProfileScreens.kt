@@ -196,38 +196,53 @@ fun PackWizardScreen(state: SliceState, slice: SliceViewModel, nav: Navigator, o
 }
 
 /**
- * A pack printer's filament (profile_pack.md, rules 12 and 13): the
- * printer's default first, then the compatible ones, the printer's vendor's
- * before the generic ones. Another printer is chosen in the wizard.
+ * A pack printer's print profile and filament (profile_pack.md, rules 12
+ * and 13): the compatible ones, the printer's vendor's before the generic
+ * ones; the variant's defaults are chosen when the printer is. A new choice
+ * replaces the printer settings, except those changed by hand (BH27).
+ * Another printer is chosen in the wizard.
  */
 @Composable
 private fun PackFilamentPicker(state: SliceState, slice: SliceViewModel, nav: Navigator, choice: EngineRunner.ProfileChoice) {
     androidx.compose.runtime.LaunchedEffect(choice.printer) { slice.loadPackFilaments() }
+    @Composable
+    fun Entry(f: net.tisma.app.engine.ProfilePack.Filament, selected: Boolean, tag: String, onClick: () -> Unit) {
+        Card(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag(tag),
+            colors = if (selected) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                else CardDefaults.cardColors()) {
+            Column(Modifier.padding(12.dp)) {
+                Text(f.name, style = MaterialTheme.typography.bodyLarge)
+                Text(f.vendor.replace('_', ' '), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
     Column(Modifier.fillMaxSize().padding(16.dp).testTag("pack_filaments"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(choice.name ?: choice.printer, style = MaterialTheme.typography.titleLarge)
         AccentTextButton(onClick = { nav.replace(Screen.PackWizard) }) { Text(stringResource(R.string.profile_change_printer)) }
-        Text(stringResource(R.string.profile_filament), style = MaterialTheme.typography.labelLarge)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            item { Text(stringResource(R.string.profile_filament), style = MaterialTheme.typography.labelLarge) }
             item {
-                FilterChip(selected = choice.filament == null, onClick = { slice.setProfile(choice.copy(filament = null)); nav.back() },
+                FilterChip(selected = choice.filament == null, onClick = { slice.setProfile(choice.copy(filament = null)) },
                     label = { Text(stringResource(R.string.pack_default_filament)) }, modifier = Modifier.testTag("pack_filament_default"))
             }
             items(state.packFilaments, key = { it.path }) { f ->
-                Card(onClick = { slice.setProfile(choice.copy(filament = f.path)); nav.back() },
-                    modifier = Modifier.fillMaxWidth().testTag("pack_filament_" + f.name),
-                    colors = if (choice.filament == f.path) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-                        else CardDefaults.cardColors()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(f.name, style = MaterialTheme.typography.bodyLarge)
-                        Text(f.vendor.replace('_', ' '), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+                Entry(f, choice.filament == f.path, "pack_filament_" + f.name) { slice.setProfile(choice.copy(filament = f.path)) }
             }
             if (state.packFilaments.isEmpty()) item {
                 Text(stringResource(R.string.pack_no_filaments), color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag("pack_no_filaments"))
             }
+            if (state.packPrints.isNotEmpty()) {
+                item { Text(stringResource(R.string.pack_print_profile), style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 8.dp)) }
+                items(state.packPrints, key = { it.path }) { f ->
+                    Entry(f, choice.print == f.path, "pack_print_" + f.name) { slice.setProfile(choice.copy(print = f.path)) }
+                }
+            }
+        }
+        Button(onClick = { nav.back() }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("pack_done")) {
+            Text(stringResource(R.string.pack_done))
         }
     }
 }
