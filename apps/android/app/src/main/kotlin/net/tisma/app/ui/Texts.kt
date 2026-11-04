@@ -139,6 +139,12 @@ fun Context.readableSummary(lines: List<Pair<String, String>>): List<Pair<String
             "mass_g" -> getString(R.string.summary_mass) to (num(v)?.let { fmt("%.1f g", it) } ?: v)
             "drag_n" -> getString(R.string.summary_drag) to (num(v)?.let { fmt("%.4f N", it) } ?: v)
             "cd" -> getString(R.string.summary_cd) to (num(v)?.let { fmt("%.3f", it) } ?: v)
+            "cd_pressure" -> getString(R.string.summary_cd_pressure) to (num(v)?.let { fmt("%.3f", it) } ?: v)
+            "cd_friction" -> getString(R.string.summary_cd_friction) to (num(v)?.let { fmt("%.3f", it) } ?: v)
+            "cd_low", "cd_high" -> null
+            "reynolds" -> getString(R.string.summary_reynolds) to (num(v)?.let { fmt("%.0f", it) } ?: v)
+            "reynolds_simulated" -> null
+            "required_safety" -> getString(R.string.summary_required_safety) to (num(v)?.let { fmt("%.2f", it) } ?: v)
             else -> k to v
         }
     }

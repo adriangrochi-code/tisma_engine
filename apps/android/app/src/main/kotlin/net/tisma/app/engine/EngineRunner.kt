@@ -95,6 +95,41 @@ class EngineRunner(private val executable: File, private val workDir: File) {
     }
 
     private fun run(args: List<String>, out: File, summary: File?, onProgress: (Int) -> Unit, cancelled: () -> Boolean): Slice {
+        val s = runTool(args, out, summary, onProgress, cancelled)
+        fun str(k: String) = (s?.get(k) as? JsonPrimitive)?.contentOrNull.orEmpty()
+        fun num(k: String) = (s?.get(k) as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
+        return Slice(out, str("print_time"), num("print_time_s"), num("filament_mm"), num("filament_g"), num("layers")?.toInt())
+    }
+
+    /** An analysis's result: its file and the summary of cloud.md rules 19 and 19b. */
+    data class Analysis(val result: File, val summary: JsonObject)
+
+    /**
+     * Analyzes whether the part holds, with the supports, loads and material saved
+     * in the project (cloud.md, rule 19; mobile_app.md, rule 13): `analyze`.
+     */
+    fun analyze(project: File, objectIndex: Int, quality: String?, onProgress: (Int) -> Unit, cancelled: () -> Boolean): Analysis {
+        val out = File(workDir, "result.tea")
+        val summary = File(workDir, "summary.json")
+        val args = mutableListOf("analyze", project.path, "-o", out.path, "--summary", summary.path, "--sandbox",
+            "--mode", "analyze", "--object", objectIndex.toString(), "--instance", "0", "--no-gpu")
+        quality?.let { args += listOf("--quality", it) }
+        return Analysis(out, runTool(args, out, summary, onProgress, cancelled) ?: JsonObject(emptyMap()))
+    }
+
+    /** The air's drag on the part (cloud.md, rule 19b; aerodynamics.md): `aero`. */
+    fun aero(project: File, objectIndex: Int, quality: String, speed: Double, direction: String,
+             onProgress: (Int) -> Unit, cancelled: () -> Boolean): Analysis {
+        val out = File(workDir, "result.taero")
+        val summary = File(workDir, "summary.json")
+        val args = listOf("aero", project.path, "-o", out.path, "--summary", summary.path, "--sandbox",
+            "--object", objectIndex.toString(), "--instance", "0", "--quality", quality, "--speed", speed.toString(),
+            "--direction", direction, "--no-gpu")
+        return Analysis(out, runTool(args, out, summary, onProgress, cancelled) ?: JsonObject(emptyMap()))
+    }
+
+    /** Runs the engine with [args]; the summary, or an [EngineException] with its reason. */
+    private fun runTool(args: List<String>, out: File, summary: File?, onProgress: (Int) -> Unit, cancelled: () -> Boolean): JsonObject? {
         workDir.mkdirs()
         out.delete()
         summary?.delete()
@@ -124,12 +159,11 @@ class EngineRunner(private val executable: File, private val workDir: File) {
         val code = process.exitValue()
         val s = summary?.takeIf { it.isFile }?.let { runCatching { Json.parseToJsonElement(it.readText()) as JsonObject }.getOrNull() }
         fun str(k: String) = (s?.get(k) as? JsonPrimitive)?.contentOrNull.orEmpty()
-        fun num(k: String) = (s?.get(k) as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
         if (code != 0 || !out.isFile) {
             val err = str("error").ifBlank { stderr.takeIf { it.isFile }?.readText()?.trim()?.lines()?.lastOrNull().orEmpty() }
             throw EngineException(str("code"), err.ifBlank { "The engine stopped (exit code $code)" }, str("error_es"), code)
         }
-        return Slice(out, str("print_time"), num("print_time_s"), num("filament_mm"), num("filament_g"), num("layers")?.toInt())
+        return s
     }
 
     companion object {

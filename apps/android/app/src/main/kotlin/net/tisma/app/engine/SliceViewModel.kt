@@ -29,6 +29,9 @@ data class SliceState(
     val error: EngineRunner.EngineException? = null,
     val notice: SliceNotice? = null,
     val catalog: Catalog? = null,
+    /** An Engineering run on the phone: running, and its summary when done (mobile_app.md, rule 13). */
+    val analyzing: Boolean = false,
+    val analysis: List<Pair<String, String>>? = null,
     /** The printer card: the printer, nozzle and filament the model is sliced for. */
     val profile: EngineRunner.ProfileChoice? = null,
 )
@@ -122,6 +125,42 @@ class SliceViewModel(
                 _state.update { it.copy(error = EngineRunner.EngineException("error", e.message ?: "", "", -1)) }
             } finally {
                 _state.update { it.copy(slicing = false) }
+            }
+        }
+    }
+
+    /** What Engineering runs on the phone. */
+    enum class Study { STRUCTURE, AERO }
+
+    /** Runs an analysis of the open 3MF project with the engine (its conditions come from the desktop). */
+    fun analyze(study: Study, objectIndex: Int, quality: String?, speed: Double = 10.0, direction: String = "x") {
+        val m = model ?: return
+        if (state.value.slicing || state.value.analyzing) return
+        cancel.set(false)
+        _state.update { it.copy(analyzing = true, progress = 0, analysis = null, error = null) }
+        viewModelScope.launch {
+            try {
+                val r = withContext(io) {
+                    val onProgress = { p: Int -> _state.update { it.copy(progress = p) } }
+                    when (study) {
+                        Study.STRUCTURE -> runner.analyze(m, objectIndex, quality, onProgress) { cancel.get() }
+                        Study.AERO -> runner.aero(m, objectIndex, quality ?: "fast", speed, direction, onProgress) { cancel.get() }
+                    }
+                }
+                val lines = r.summary.mapNotNull { (k, v) ->
+                    (v as? kotlinx.serialization.json.JsonPrimitive)?.let { k to it.content }
+                }.filter { (k, _) -> k !in setOf("code", "error", "error_es") }
+                AppLog.line("engine: ${study.name.lowercase()} done")
+                _state.update { it.copy(analysis = lines) }
+            } catch (e: EngineRunner.Cancelled) {
+                _state.update { it.copy(notice = SliceNotice.Cancelled) }
+            } catch (e: EngineRunner.EngineException) {
+                AppLog.line("engine: ${study.name.lowercase()} failed (${e.exitCode}) ${e.error}")
+                _state.update { it.copy(error = e) }
+            } catch (e: java.io.IOException) {
+                _state.update { it.copy(error = EngineRunner.EngineException("error", e.message ?: "", "", -1)) }
+            } finally {
+                _state.update { it.copy(analyzing = false) }
             }
         }
     }

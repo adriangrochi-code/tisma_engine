@@ -296,4 +296,13 @@
     <string name="bambu_confirm_text">Número de serie %1$s\n\nCertificado %2$s\n\nSi lo es, Tisma recuerda este certificado y no se conecta si alguna vez cambia.</string>
     <string name="bambu_confirm_yes">Sí, guardarla</string>
     <string name="printer_error_certificate">El certificado de la impresora no es el guardado: no se conectó. Si cambiaste de impresora, quitala y agregala de nuevo.</string>
+
+    <string name="eng_title">Ingeniería</string>
+    <string name="eng_hint">Con los apoyos, las cargas y el material guardados en el proyecto (se ponen en la computadora).</string>
+    <string name="eng_analyze">¿Aguanta?</string>
+
+    <string name="summary_cd_pressure">Coeficiente de arrastre por presión</string>
+    <string name="summary_cd_friction">Coeficiente de arrastre por rozamiento</string>
+    <string name="summary_reynolds">Número de Reynolds</string>
+    <string name="summary_required_safety">Factor de seguridad pedido</string>
 </resources>

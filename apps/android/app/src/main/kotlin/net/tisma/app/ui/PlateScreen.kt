@@ -117,6 +117,7 @@ fun PlateScreen(
                 Text(stringResource(R.string.plate_slice))
             }
         }
+        if (state.modelName != null && state.isProject && state.engineAvailable) EngineeringCard(state, slice)
         state.error?.let { e ->
             TismaCard {
                 Text(stringResource(R.string.job_error), style = MaterialTheme.typography.titleMedium)
@@ -174,6 +175,55 @@ fun PlateScreen(
         AccentTextButton(onClick = { nav.open(if (signedIn) Screen.NewJob else Screen.Account) },
             modifier = Modifier.testTag("plate_slice_cloud")) {
             Text(stringResource(R.string.plate_slice_cloud))
+        }
+    }
+}
+
+/**
+ * Engineering on the phone (mobile_app.md, rule 13): whether the part holds, with the
+ * supports, loads and material saved in the project, and the air's drag; both with the
+ * engine, like the desktop and the cloud. Picking faces needs the 3D view: the
+ * conditions come from the project for now.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EngineeringCard(state: SliceState, slice: SliceViewModel) {
+    val context = ctx()
+    var objectIndex by rememberSaveable { mutableStateOf("0") }
+    var quality by rememberSaveable { mutableStateOf("normal") }
+    TismaCard(Modifier.testTag("engineering")) {
+        Text(stringResource(R.string.eng_title), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.eng_hint), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        androidx.compose.material3.OutlinedTextField(objectIndex, { v -> objectIndex = v.filter(Char::isDigit).take(3) },
+            singleLine = true, label = { Text(stringResource(R.string.object_index)) },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth())
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("fast" to R.string.quality_fast, "normal" to R.string.quality_normal, "high" to R.string.quality_high).forEach { (q, l) ->
+                FilterChip(selected = quality == q, onClick = { quality = q }, label = { Text(stringResource(l)) })
+            }
+        }
+        val busy = state.analyzing || state.slicing
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { slice.analyze(SliceViewModel.Study.STRUCTURE, objectIndex.toIntOrNull() ?: 0, quality) },
+                enabled = !busy, modifier = Modifier.weight(1f).testTag("eng_analyze")) {
+                Text(stringResource(R.string.eng_analyze))
+            }
+            OutlinedButton(onClick = { slice.analyze(SliceViewModel.Study.AERO, objectIndex.toIntOrNull() ?: 0,
+                    if (quality == "high") "normal" else "fast") },
+                enabled = !busy, modifier = Modifier.weight(1f).testTag("eng_aero")) {
+                Text(stringResource(R.string.kind_aero))
+            }
+        }
+        if (state.analyzing) {
+            LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth())
+            OutlinedButton(onClick = { slice.cancel() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
+        }
+        state.analysis?.let { lines ->
+            context.readableSummary(lines).forEach { (k, v) ->
+                Row { Text(k, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant); Text(v) }
+            }
         }
     }
 }

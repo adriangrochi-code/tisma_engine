@@ -145,6 +145,18 @@ class EngineRunnerTest {
     }
 
     @Test
+    fun `analyze runs the nodes' command line and returns the verdict`() {
+        val engine = fake("""
+            echo "progress 50"
+            echo "{}" > "${'$'}out"
+            echo '{"verdict": "holds", "min_safety": 3.2, "required_safety": 2, "mass_g": 12.5}' > "${'$'}summary"
+        """.trimIndent())
+        val r = EngineRunner(engine, tmp.newFolder("work")).analyze(project(), 0, "normal", {}, { false })
+        assertEquals("\"holds\"", r.summary["verdict"].toString())
+        assertTrue(r.result.isFile)
+    }
+
+    @Test
     fun `the simple settings are the engine's keys (docs CONFIG md)`() {
         assertEquals("""{"layers":{"height":0.12},"support":{"enabled":true}}""",
             EngineRunner.SimpleSettings(0.12, true).toJson().toString())

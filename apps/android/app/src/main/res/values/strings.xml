@@ -311,4 +311,13 @@
     <string name="bambu_confirm_text">Serial number %1$s\n\nCertificate %2$s\n\nIf it is, Tisma remembers this certificate and will not connect if it ever changes.</string>
     <string name="bambu_confirm_yes">Yes, save it</string>
     <string name="printer_error_certificate">The printer\'s certificate is not the one saved: it was not connected. If you changed the printer, remove it and add it again.</string>
+
+    <string name="eng_title">Engineering</string>
+    <string name="eng_hint">With the supports, loads and material saved in the project (set them on the computer).</string>
+    <string name="eng_analyze">Does it hold?</string>
+
+    <string name="summary_cd_pressure">Pressure drag coefficient</string>
+    <string name="summary_cd_friction">Friction drag coefficient</string>
+    <string name="summary_reynolds">Reynolds number</string>
+    <string name="summary_required_safety">Required safety factor</string>
 </resources>

@@ -46,6 +46,12 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   no son los de la documentación y la unidad de `mc_remaining_time` (se toma en minutos). Sin la cámara de Bambu
   todavía (puerto 6000 y RTSP).
 
+- **2026-11-04 — Ingeniería en el teléfono:** con un proyecto 3MF abierto en Placa, «¿Aguanta?» (`analyze`, con los
+  apoyos, cargas y material del proyecto) y Aerodinámica (`aero`), con el motor en el teléfono, avance y cancelar.
+  Probado con el motor de esta máquina: un cubo de 20 mm da Cd 1,16; sin condiciones, `needs_conditions` con su
+  `error_es`. Marcar caras en el teléfono necesita la vista 3D (pendiente). Pedido a la sesión de escritorio: los
+  modos de Optimizar por `analyze`.
+
 ## Abierto
 
 - **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS: necesita una biblioteca MQTT o una propia; decidir), PrusaLink,
