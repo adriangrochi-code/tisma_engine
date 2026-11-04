@@ -372,4 +372,6 @@
     <string name="vision_achromatopsia">Achromatopsia</string>
     <string name="more_messages">Messages</string>
     <string name="messages_empty">No messages yet.</string>
+    <string name="eng_lightest_apply">Use %1$d %% infill in the slice</string>
+    <string name="eng_lightest_applied">%1$d %% infill is used in the slice</string>
 </resources>

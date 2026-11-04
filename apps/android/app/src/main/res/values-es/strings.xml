@@ -356,4 +356,6 @@
     <string name="vision_achromatopsia">Acromatopsia</string>
     <string name="more_messages">Mensajes</string>
     <string name="messages_empty">Todavía no hay mensajes.</string>
+    <string name="eng_lightest_apply">Usar %1$d %% de relleno al laminar</string>
+    <string name="eng_lightest_applied">Se lamina con %1$d %% de relleno</string>
 </resources>

@@ -58,11 +58,18 @@ class EngineRunner(private val executable: File, private val workDir: File) {
     }
 
     /** Slices a 3MF project as the cloud nodes do: its own settings, sandboxed, on the CPU. */
-    fun sliceProject(project: File, onProgress: (Int) -> Unit, cancelled: () -> Boolean): Slice {
+    fun sliceProject(project: File, onProgress: (Int) -> Unit, cancelled: () -> Boolean,
+                     changes: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap()): Slice {
+        workDir.mkdirs()
         val out = File(workDir, project.nameWithoutExtension + ".gcode")
         val summary = File(workDir, "summary.json")
-        return run(listOf("slice", project.path, "-o", out.path, "--summary", summary.path, "--sandbox", "--no-gpu"),
-            out, summary, onProgress, cancelled)
+        val args = mutableListOf("slice", project.path, "-o", out.path, "--summary", summary.path, "--sandbox", "--no-gpu")
+        // The panel's changes over the project's own settings (`--config-over`, merged as RFC 7386).
+        if (changes.isNotEmpty()) {
+            val over = File(workDir, "config_over.json").apply { writeText(SettingsLayout.nest(changes).toString()) }
+            args += listOf("--config-over", over.path)
+        }
+        return run(args, out, summary, onProgress, cancelled)
     }
 
     /** Slices a model (STL, OBJ, 3MF mesh) with [settings] (docs/CONFIG.md). */

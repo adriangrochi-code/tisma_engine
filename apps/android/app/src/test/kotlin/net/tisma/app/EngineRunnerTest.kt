@@ -177,6 +177,25 @@ class EngineRunnerTest {
     }
 
     @Test
+    fun `a project slice takes the panel's changes with --config-over`() {
+        val engine = tmp.newFile("over_engine.sh").apply {
+            writeText("#!/bin/sh\n" + """
+                out=""; summary=""; over=""
+                while [ ${'$'}# -gt 0 ]; do
+                  case "${'$'}1" in -o) out="${'$'}2"; shift ;; --summary) summary="${'$'}2"; shift ;; --config-over) over="${'$'}2"; shift ;; esac
+                  shift
+                done
+                cat "${'$'}over" > "${'$'}out"
+                echo "{}" > "${'$'}summary"
+            """.trimIndent())
+            setExecutable(true)
+        }
+        val runner = EngineRunner(engine, tmp.newFolder("work"))
+        val r = runner.sliceProject(project(), {}, { false }, mapOf("infill.density" to kotlinx.serialization.json.JsonPrimitive(15)))
+        assertEquals("{\"infill\":{\"density\":15}}", r.gcode.readText().trim())
+    }
+
+    @Test
     fun `MA9 the triangles of an STL and a 3MF are counted for the memory estimate`() {
         val root = File(System.getProperty("user.dir")).parentFile.parentFile.parentFile
         val cube = File(root, "tests/data/cube_ascii.stl")

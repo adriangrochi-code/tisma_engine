@@ -243,6 +243,14 @@ private fun EngineeringCard(state: SliceState, slice: SliceViewModel) {
                 Row { Text(k, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant); Text(v) }
             }
         }
+        // Rule 13: «Relleno mínimo» offers to apply what it found to the slice.
+        state.lightest?.let { d ->
+            val applied = (state.settings.changes["infill.density"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() == d
+            Button(onClick = { slice.setValue("infill.density", kotlinx.serialization.json.JsonPrimitive(d)) }, enabled = !applied,
+                modifier = Modifier.fillMaxWidth().testTag("eng_apply_lightest")) {
+                Text(stringResource(if (applied) R.string.eng_lightest_applied else R.string.eng_lightest_apply, d))
+            }
+        }
     }
 }
 

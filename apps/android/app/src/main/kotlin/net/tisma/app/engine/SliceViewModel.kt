@@ -43,6 +43,8 @@ data class SliceState(
     val layout: SettingsLayout? = null,
     val profileValues: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
     val view: PanelVisibility.View = PanelVisibility.View.BASIC,
+    /** The lightest infill found that holds, in %, to apply to the slice (mobile_app.md, rule 13). */
+    val lightest: Int? = null,
     /** A G-code that was opened or shared, to show in the preview (QA AND5). */
     val gcodeToPreview: String? = null,
     val custom: Set<String> = emptySet(),
@@ -258,7 +260,7 @@ class SliceViewModel(
                 val started = System.currentTimeMillis()
                 val r = withContext(io) {
                     val onProgress = { p: Int -> _state.update { it.copy(progress = p) } }
-                    if (s.isProject) runner.sliceProject(m, onProgress) { cancel.get() }
+                    if (s.isProject) runner.sliceProject(m, onProgress, { cancel.get() }, s.settings.changes)
                     else runner.sliceModel(m, s.settings, onProgress, { cancel.get() }, s.profile)
                 }
                 AppLog.line("engine: sliced in ${System.currentTimeMillis() - started} ms")
@@ -285,7 +287,7 @@ class SliceViewModel(
         val m = model ?: return
         if (state.value.slicing || state.value.analyzing) return
         cancel.set(false)
-        _state.update { it.copy(analyzing = true, progress = 0, analysis = null, error = null) }
+        _state.update { it.copy(analyzing = true, progress = 0, analysis = null, error = null, lightest = null) }
         viewModelScope.launch {
             try {
                 val r = withContext(io) {
@@ -300,7 +302,9 @@ class SliceViewModel(
                     (v as? kotlinx.serialization.json.JsonPrimitive)?.let { k to it.content }
                 }.filter { (k, _) -> k !in setOf("code", "error", "error_es") }
                 AppLog.line("engine: ${study.name.lowercase()} done")
-                _state.update { it.copy(analysis = lines) }
+                val found = study == Study.LIGHTEST && r.summary["found"]?.toString() == "true" && r.summary["solid"]?.toString() != "true"
+                val density = if (found) (r.summary["density"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull()?.toInt() else null
+                _state.update { it.copy(analysis = lines, lightest = density) }
             } catch (e: EngineRunner.Cancelled) {
                 _state.update { it.copy(notice = SliceNotice.Cancelled) }
             } catch (e: EngineRunner.EngineException) {
