@@ -1,6 +1,7 @@
 #include "ui/plate.hpp"
 #include "mesh/shapes.hpp"
 #include "ui/measure.hpp"
+#include "project/engineering_case.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -532,4 +533,14 @@ TEST_CASE("plate: a box on the bed becomes a modifier that lands on it (structur
     o.place.rotation = rotated(kNoRotation, 2, 30.0);
     const TriangleMesh placed = placed_mesh(o);
     CHECK_FALSE(volume_for_bed_box(o, placed, lo, hi, "{}"));
+}
+
+TEST_CASE("plate: the recommended orientation turns the part so its layers stack along that axis (rule 8)", "[plate]") {
+    PlateObject o{"bar", box(0, 0, 0, 24, 6, 6), {}, {}};
+    for (int axis = 1; axis < 3; ++axis) {
+        o.place.rotation = layers_along(axis); // as «Girar la pieza» turns a part that was not turned
+        const BoundingBox b = placed_mesh(o).bounding_box();
+        CHECK_THAT(b.max.z - b.min.z, WithinAbs(axis == 1 ? 24.0 : 6.0, 1e-4));
+        CHECK_THAT(b.min.z, WithinAbs(0.0, 1e-4));
+    }
 }

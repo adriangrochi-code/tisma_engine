@@ -748,6 +748,8 @@ private:
         RibbedInfill ribbed;
         bool reinforce = false; // also with reinforcements (rule 6)
         ReinforcedInfill reinforced;
+        bool orientation = false; // the orientation instead (rule 8)
+        OrientationChoice orient;
         // The part's map to the bed and its mesh's size when searched: the
         // zones go on the model where it was (it may have moved since).
         Affine to_bed;
@@ -757,7 +759,7 @@ private:
     std::atomic<bool> optimize_cancel_{false};
     std::atomic<int> optimize_permille_{0};
     std::optional<OptimizeRun> optimize_result_;
-    enum class OptimizeExtra { None, Zones, Ribs, Reinforce };
+    enum class OptimizeExtra { None, Zones, Ribs, Reinforce, Orientation };
     void start_optimize(OptimizeExtra extra = OptimizeExtra::None);
     void apply_zones(std::size_t part, const ZonedInfill& zoned);
     void apply_ribs(std::size_t part, const RibbedInfill& ribbed);
@@ -13036,6 +13038,11 @@ void App::structural_panel() {
                     rect_of("structural_reinforce");
                     if (ImGui::IsItemHovered())
                         loc::SetTooltip("%s", tr(T::StructReinforceTip));
+                    if (ImGui::Button(tr(T::StructOrientation), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Orientation);
+                    rect_of("structural_orientation");
+                    if (ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", tr(T::StructOrientationTip));
                 }
                 if (optimize_result_ && optimize_result_->part == part && !optimize_job_.running()) {
                     const OptimizeRun& o = *optimize_result_;
@@ -13044,7 +13051,39 @@ void App::structural_panel() {
                         loc::TextDisabled("%s", tr(T::StructCancelled));
                     else if (!o.error.empty())
                         loc::TextColored(rgb(0xE5484D), "%s", o.error.c_str());
-                    else if (o.best.solid)
+                    else if (o.orientation) {
+                        const OrientationChoice& r = o.orient;
+                        loc::TextWrapped("%s", format(tr(T::StructOrientationFactors), r.safety[0], r.safety[1], r.safety[2]).c_str());
+                        rect_of("structural_orientation_found");
+                        if (!r.recommend) {
+                            loc::TextDisabled("%s", tr(T::StructOrientationKeep));
+                        } else {
+                            const char* axis = r.best == 1 ? "X" : "Y";
+                            loc::TextColored(rgb(0x3FBF7F), "%s",
+                                             format(tr(T::StructOrientationBetter), axis, r.safety[std::size_t(r.best)],
+                                                    100.0 * (r.safety[std::size_t(r.best)] / std::max(r.safety[0], 1e-9) - 1.0))
+                                                 .c_str());
+                            loc::TextDisabled("%s", tr(T::StructOrientationNote));
+                            if (ImGui::Button(tr(T::StructOrientationApply)) && part < objects_.size()) {
+                                PlateObject& turned = objects_[part];
+                                const Rotation before = turned.place.rotation;
+                                const std::array<double, 9> m = layers_along(r.best);
+                                Rotation after{};
+                                for (std::size_t row = 0; row < 3; ++row)
+                                    for (std::size_t col = 0; col < 3; ++col)
+                                        after[3 * row + col] = m[3 * row] * before[col] + m[3 * row + 1] * before[3 + col] + m[3 * row + 2] * before[6 + col];
+                                turned.place.rotation = after;
+                                plate_changed();
+                                notify_undo(format(tr(T::StructOrientationApplied), axis), [this, part, before] {
+                                    if (part >= objects_.size())
+                                        return;
+                                    objects_[part].place.rotation = before;
+                                    plate_changed();
+                                });
+                            }
+                            rect_of("structural_orientation_apply");
+                        }
+                    } else if (o.best.solid)
                         loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructOptimizeSolid));
                     else if (!o.best.found)
                         loc::TextColored(rgb(0xE5484D), "%s", format(tr(T::StructOptimizeNone), o.best.min_safety).c_str());
@@ -14365,10 +14404,11 @@ void App::start_optimize(OptimizeExtra extra) {
     const std::string filament_type = settings_.filament_type;
     optimize_cancel_ = false;
     optimize_permille_ = 0;
-    const bool zones = extra == OptimizeExtra::Zones, ribs = extra == OptimizeExtra::Ribs, reinforce = extra == OptimizeExtra::Reinforce;
+    const bool zones = extra == OptimizeExtra::Zones, ribs = extra == OptimizeExtra::Ribs, reinforce = extra == OptimizeExtra::Reinforce,
+               orientation = extra == OptimizeExtra::Orientation;
     const Affine to_bed{a, b};
     const std::size_t triangles = o.mesh.triangle_count();
-    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs, reinforce, to_bed, triangles]() {
+    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs, reinforce, orientation, to_bed, triangles]() {
         OptimizeRun run;
         run.part = part;
         run.to_bed = to_bed;
@@ -14376,6 +14416,7 @@ void App::start_optimize(OptimizeExtra extra) {
         run.zones = zones;
         run.ribs = ribs;
         run.reinforce = reinforce;
+        run.orientation = orientation;
         struct Cancelled {};
         try {
             std::vector<std::string> case_notes;
@@ -14383,6 +14424,14 @@ void App::start_optimize(OptimizeExtra extra) {
                                                        print_conditions(settings, moved));
             const IndexedMesh mesh = weld_exact(placed);
             fit_voxel_limit(c, mesh, settings);
+            if (orientation) { // the three orientations alone, no infill search
+                run.orient = recommended_orientation(placed, settings, moved, filament_type, [this](double done) {
+                    optimize_permille_ = int(done * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+                return run;
+            }
             // By zones the uniform search is the first half of the bar.
             const double share = zones || ribs || reinforce ? 0.5 : 1.0;
             run.best = lightest_infill(mesh, placed, settings, c, moved, [this, share](double done) {
