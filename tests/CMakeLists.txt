@@ -743,6 +743,12 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
               --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --tutorial first_print,1
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_tutorial.png)
+    # Bridges and overhangs (docs/CALIBRATION.md): the part made and sliced, its card with the angles.
+    add_test(NAME ui_calibration_bridges
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --light --size 1200x760 --calibration bridges_overhangs
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_calibration_bridges.png)
+    set_tests_properties(ui_calibration_bridges PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # A calibration guide with a guide before it not done (assistant.md, AS16, AS17).
     add_test(NAME ui_calibration_guide
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

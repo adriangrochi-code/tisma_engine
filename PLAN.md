@@ -647,7 +647,7 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   velocidad
 - [x] Calibraciones estándar, tercera tanda: tope de flujo volumétrico (`machine.max_flow`), resonancias (el motor
   escribe la aceleración: `M204`, `SET_VELOCITY_LIMIT`), pata de elefante (`slicing.first_layer_shrink`)
-- [ ] Calibraciones estándar que faltan: puentes y voladizos
+- [x] Calibraciones estándar que faltan: puentes y voladizos (2026-11-04, `docs/CALIBRATION.md`)
 - [ ] App móvil de Android para seguir la impresión (pedido del dueño, 2026-10-24). Decidido: la opción 1 (seguir
   la impresión, no la interfaz entera), solo por WiFi (el USB es de la PC), con la estética de la app de Prusa
   (EasyPrint) como caja negra; después, Device en el escritorio. El plan y el orden de trabajo están en `docs/MOBILE.md` (P6)

@@ -10955,3 +10955,19 @@ del paquete, sus ajustes reemplazan a los actuales, salvo los cambiados a mano, 
   `license · origin` de la impresora y de cada filamento y perfil de impresión, con el enlace al repositorio de los
   perfiles. Las reglas 1 y 3 ya estaban (asistente del primer arranque; sin red, el catálogo incluido). Prueba en
   `PackWizardTest`.
+
+## 2026-11-04 — calibración de puentes y voladizos (PLAN, P1)
+
+**Hecho** (diseño propio en `docs/CALIBRATION.md`; ninguna ficha la describe):
+- `bridges_overhangs_test`: seis aletas inclinadas de 20° a 70° y cinco puentes de 10 a 50 mm, con los valores en
+  relieve.
+- Elegir la aleta más inclinada que salió bien pone `support.threshold_angle = 90° − ángulo`.
+- `calibration_print_settings` junta los ajustes con que se imprime cada prueba: las de resina sin soportes, base ni
+  vaciado (antes solo en la interfaz); esta sin soportes ni arcos. La línea de comandos (`calibration <tipo>`) ahora
+  también los usa.
+- En la pestaña Calibrar va con las aletas como botones para elegir; sin el editor de rango, que es de las torres.
+  Está en `--calibration` y en la tarjeta de la impresora.
+
+**Prueba:** `[calibration]` (forma, áreas a 6,1 y 8,5 mm, G-code verificado, ángulo aplicado, ajustes de impresión) y
+`ui_calibration_bridges` (la pieza laminada; captura mirada). **No probado en una impresora.**
+

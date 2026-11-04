@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Calibración de puentes y voladizos:** aletas de 20° a 70° y puentes de 10 a 50 mm; la aleta más inclinada que sale
+  bien da el ángulo desde el que van los soportes.
 - **Paquete de perfiles, primer arranque:** la primera vez se baja solo la lista de impresoras del paquete; sin red
   aparece un aviso y quedan las impresoras incluidas. Los perfiles del paquete muestran su licencia, su origen y el
   enlace al repositorio.
