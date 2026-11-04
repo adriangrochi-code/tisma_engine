@@ -169,6 +169,18 @@ TEST_CASE("templates in the G-code: the print's variables (rule 7, T6)", "[templ
     CHECK(at(g, ";T6 50 cube20 1 90 110 20 0 0 true true 0.2") != std::string::npos);
 }
 
+TEST_CASE("templates in the G-code: the names the profile pack's start G-code uses (profile_pack_format.md; PK9)",
+          "[template][gcode]") {
+    Settings s = printer();
+    s.start_gcode = ";PK9 {layer_count} [layer_count] {first_layer_min_x} {first_layer_min_y} {first_layer_max_x} "
+                    "{first_layer_max_y} {first_layer_size_x} {first_layer_size_y} {travel_speed > 0} "
+                    "{month >= 1} {day >= 1} {hour >= 0} {minute >= 0} {second >= 0}\n"
+                    "G1 X{first_layer_min_x} Y{first_layer_min_y}";
+    const std::string g = gcode_of(s);
+    CHECK(at(g, ";PK9 50 50 90 90 110 110 20 20 true true true true true true") != std::string::npos);
+    CHECK(at(g, "G1 X90 Y90") != std::string::npos); // PK9: the first layer's corner, 90 to 90.5
+}
+
 TEST_CASE("templates in the G-code: the profiles' own parameters (gcode_templates.md; presets.md, rules 21 and 22)",
           "[template][gcode]") {
     const Settings own = parse_settings(R"({"machine": {"custom_parameters": {"bed_probe": true, "zone": "A \"1\""}},

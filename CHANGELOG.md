@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- Variables nuevas para el G-code de inicio y de fin, las que usa el paquete de perfiles: `layer_count`, la caja de la
+  primera capa número por número (`first_layer_min_x` … `first_layer_size_y`), `travel_speed`, `month`, `day`, `hour`,
+  `minute` y `second`. Antes, una impresora del paquete con `{layer_count}` no laminaba (la app de Android lo encontró).
 - `--set grupo.clave=valor` (se repite) y `--config-over <parcial.json>` en `slice`, `analyze`, `aero` y `orient` de un
   proyecto: cambios encima de los ajustes del proyecto, sin tocar el archivo (pedido de la app de Android,
   `mobile_app.md` regla 13).

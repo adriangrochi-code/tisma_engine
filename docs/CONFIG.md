@@ -847,7 +847,9 @@ G-code (`machine.start_gcode` y `end_gcode`, `extrusion.start_gcode` y `end_gcod
   `first_layer_height`, `nozzle_diameter`, `filament_diameter`), las de `machine.variables` y las de la impresión:
   `total_layer_count`, `num_extruders`, `initial_extruder`, `initial_tool`, `is_extruder_used`,
   `input_filename_base` (el nombre del modelo en la línea de comandos), `first_layer_print_min`, `_max` y `_size`,
-  `year`, `timestamp`, y `layer_num`, `layer_z` y `max_layer_z` (la primera capa hasta el primer cambio; en el fin, la
+  `year`, `timestamp`; los nombres que usa el G-code del paquete de perfiles: `layer_count`, `first_layer_min_x`, `_min_y`,
+  `_max_x`, `_max_y`, `_size_x` y `_size_y` (la caja de la primera capa, mm), `travel_speed` (mm/s), `month`, `day`,
+  `hour`, `minute` y `second`; y `layer_num`, `layer_z` y `max_layer_z` (la primera capa hasta el primer cambio; en el fin, la
   última);
 - un error (variable o función desconocida, mal usada, de sintaxis) hace fallar la exportación con la sección, la
   línea y una marca en la columna.
