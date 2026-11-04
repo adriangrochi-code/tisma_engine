@@ -13440,7 +13440,8 @@ void App::structural_panel() {
         ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-        const bool in_cloud = e.structural.cloud && !cloud_token_.empty();
+        const bool in_cloud = e.structural.cloud && !cloud_token_.empty() &&
+                              !(cloud_account_ && !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "fea"));
         if (ImGui::Button(tr(in_cloud ? T::StructAnalyzeCloud : T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f))) {
             if (in_cloud)
                 start_cloud_structural();
@@ -13453,9 +13454,13 @@ void App::structural_panel() {
     rect_of("structural_analyze");
     // «En la nube» (rule 10; cloud.md, rule 10b): off at first on a
     // computer, and only with a session (without one everything is local).
-    ImGui::BeginDisabled(cloud_token_.empty() || cloud_fea_.valid());
+    // A plan without "fea" (rule 10b): the lock and the plans that have it,
+    // which open the account page.
+    const bool fea_locked = !cloud_token_.empty() && cloud_account_ &&
+                            !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "fea");
+    ImGui::BeginDisabled(cloud_token_.empty() || cloud_fea_.valid() || fea_locked);
     {
-        bool cloud = e.structural.cloud;
+        bool cloud = e.structural.cloud && !fea_locked;
         if (ImGui::Checkbox(tr(T::StructCloud), &cloud)) {
             remember_engineering(std::size_t(structural_part_));
             objects_[std::size_t(structural_part_)].engineering.structural.cloud = cloud;
@@ -13465,6 +13470,12 @@ void App::structural_panel() {
     rect_of("structural_cloud");
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
         loc::SetTooltip("%s", tr(cloud_token_.empty() ? T::StructCloudLogin : T::StructCloudTip));
+    if (fea_locked) {
+        const std::string with = cloud::plans_with(cloud_plans_, "fea");
+        if (ImGui::SmallButton(format(tr(T::CloudPlanLock), with.empty() ? "…" : with.c_str()).c_str()))
+            cloud_open_ = true;
+        rect_of("structural_cloud_lock");
+    }
     if (block != AnalyzeBlock::None)
         loc::TextDisabled("%s", tr(block == AnalyzeBlock::Material ? T::StructNeedMaterial
                                    : block == AnalyzeBlock::Fixed  ? T::StructNeedFixed

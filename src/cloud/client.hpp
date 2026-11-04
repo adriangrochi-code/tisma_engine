@@ -12,6 +12,7 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace tisma::cloud {
@@ -38,7 +39,15 @@ struct Plan {
     long long price_cents = 0;
     std::string currency;
     int remote_printers = 0;
+    std::vector<std::string> classes; // the queues it includes: slice, slice_large, fea, fea_optimize, aero, orient
 };
+
+// Whether the plan named `plan` includes the job class (cloud.md, rule 10b).
+// A plan not in the list, or one that lists no classes (an older server),
+// counts as including it: the server still has the last word (402).
+bool plan_includes(const std::vector<Plan>& plans, std::string_view plan, std::string_view job_class);
+// The names of the plans that include the class, joined with ", ".
+std::string plans_with(const std::vector<Plan>& plans, std::string_view job_class);
 
 // A report the account sent (GET /v1/me/reports; problem_reports.md, rule 11).
 struct SentReport {

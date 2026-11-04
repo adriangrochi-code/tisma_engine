@@ -128,6 +128,7 @@
     X(StructOptimizeFound, "Aguanta con %d %% de relleno (factor %.2f).", "Holds with %d %% infill (factor %.2f).") \
     X(StructOptimizeApply, "Usar %d %% de relleno", "Use %d %% infill") \
     X(StructOptimizeApplied, "Relleno: %d %%", "Infill: %d %%") \
+    X(CloudPlanLock, "Incluido en el plan %s", "Included in the plan %s") \
     X(StructCloud, "Calcular en la nube", "Calculate in the cloud") \
     X(StructCloudTip, "Manda el análisis a Tisma Cloud; el resultado vuelve a esta pieza.", "Sends the analysis to Tisma Cloud; the result comes back to this part.") \
     X(StructCloudLogin, "Iniciá sesión en Tisma Cloud para calcular en la nube.", "Log in to Tisma Cloud to calculate in the cloud.") \

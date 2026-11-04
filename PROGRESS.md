@@ -10274,7 +10274,11 @@ Errores como en el laminado en la nube (sesión vencida, 413, 422, 429, texto de
 
 **Pruebas:** `ui_script_cloud_structural` con el servidor de prueba (que ahora contesta un `.tea` a los trabajos
 `fea`): inicia sesión, marca, prende la nube, analiza y ve «Aguanta». Pasan las de nube y Estructural.
-**Falta:** el candado «Incluido en el plan …» por `classes` de `GET /v1/plans` (regla 10b); hoy el 402 del servidor
-llega como aviso.
+**Candado por plan (regla 10b), hecho después:** `cloud::Plan` lee `classes`; `plan_includes` y `plans_with`. Si el
+plan de la cuenta no tiene `fea`, la casilla queda apagada y abajo dice «Incluido en el plan …» con los planes que lo
+tienen; al tocarlo abre la ventana de la cuenta. Un plan sin `classes` (servidor viejo) o que no está en la lista
+cuenta como incluido: el servidor decide (402). Probado en `test_cloud` con el servidor de prueba (Free solo
+`slice`, Maker todo); **sin guion de interfaz** del candado (la cuenta de prueba es Maker).
 
-**Sigue:** el resto de Optimizar (relleno por zonas, regla 3) y el candado por plan.
+**Sigue:** el resto de Optimizar (relleno por zonas, regla 3); el mismo candado en Aerodinámica y en el laminado en la
+nube.

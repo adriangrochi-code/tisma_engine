@@ -50,9 +50,10 @@ public:
         // The public plans, with or without a session; a hidden plan is not sent.
         server_.Get("/v1/plans", [](const httplib::Request&, httplib::Response& res) {
             res.set_content(R"([{"name": "Free", "monthly_hours": 1, "max_concurrent": 1, "price_cents": 0,
-                                 "currency": "USD", "remote_printers": 1},
+                                 "currency": "USD", "remote_printers": 1, "classes": ["slice"]},
                                 {"name": "Maker", "monthly_hours": 10, "max_concurrent": 2, "price_cents": 900,
-                                 "currency": "USD", "remote_printers": 3}])",
+                                 "currency": "USD", "remote_printers": 3,
+                                 "classes": ["slice", "slice_large", "fea", "fea_optimize", "aero", "orient"]}])",
                             "application/json");
         });
         server_.Post("/v1/reports", [this](const httplib::Request& req, httplib::Response& res) {
