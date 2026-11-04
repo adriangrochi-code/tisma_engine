@@ -23,6 +23,7 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <random>
 #include <utility>
@@ -937,4 +938,21 @@ TEST_CASE("infill zones: denser cells where the stress is higher (structural_opt
     const InfillZones half = infill_zones(uniform, 50.0, 2.0, InfillPattern::Rectilinear, 0.5);
     for (int l = 0; l < 3; ++l)
         CHECK(half.density[l] <= z.density[l] + 1e-9);
+    // Rule 3's search: the zones scaled until they hold, lighter than 50 % everywhere.
+    double last = -1.0;
+    const ZonedInfill zoned = zoned_infill(bar, triangles, s, c, e, 50, [&](double done) {
+        CHECK(done >= last);
+        last = done;
+    });
+    CHECK(last == 1.0);
+    CHECK(zoned.analyses <= 7);
+    REQUIRE(zoned.found);
+    CHECK(zoned.uniform_mass_g > 0.0);
+    CHECK(zoned.mass_g > 0.0);
+    CHECK(zoned.lighter == (zoned.mass_g < zoned.uniform_mass_g));
+    CHECK(zoned.mass_g <= 1.05 * zoned.uniform_mass_g); // the voxels weigh beads coarsely: near, not always below
+    for (const MeshModifier& m : zoned.zones.modifiers)
+        CHECK(m.name != "zone 1"); // the lowest level is the object's own infill
+    std::printf("zoned infill: levels %.0f/%.0f/%.0f %%, %.3f g vs %.3f g uniform, %d analyses\n", zoned.zones.density[0],
+                zoned.zones.density[1], zoned.zones.density[2], zoned.mass_g, zoned.uniform_mass_g, zoned.analyses);
 }

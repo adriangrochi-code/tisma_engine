@@ -355,6 +355,86 @@ InfillZones infill_zones(const AnalysisReport& report, double density, double as
     return out;
 }
 
+ZonedInfill zoned_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                         const AnalysisCase& c, const ProjectEngineering& e, int density,
+                         const std::function<void(double)>& progress) {
+    ZonedInfill out;
+    if (c.model == AnalysisModel::Solid)
+        return out;
+    // The uniform analysis, then scale 1, then halving: at most 7 analyses.
+    constexpr int kMostAnalyses = 7, kHalvings = 5;
+    const MaterialFamily* family = family_of(c.material_id);
+    const double grams_per_cm3 = family ? family->density : 1.0;
+    const auto analyse = [&](const Settings& s, const std::vector<MeshModifier>* modifiers) {
+        const int step = out.analyses++;
+        return run_analysis(mesh, s, c, nullptr,
+                            [&](std::string_view, double done) {
+                                if (progress)
+                                    progress((double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses);
+                            },
+                            nullptr, modifiers);
+    };
+    Settings uniform = settings;
+    uniform.infill_density = double(density);
+    const AnalysisReport base = analyse(uniform, nullptr);
+    if (!base.valid) {
+        if (progress)
+            progress(1.0);
+        return out;
+    }
+    out.uniform_mass_g = voxel_mass_grams(base.grid, grams_per_cm3);
+    const double asked = e.structural.safety_factor;
+    // A try: the object at the lowest level, the denser levels as modifiers.
+    const auto holds = [&](double scale, InfillZones& zones, double& mass, double& safety) {
+        zones = infill_zones(base, double(density), asked, settings.infill_pattern, scale);
+        if (zones.modifiers.empty())
+            return false;
+        const std::string lowest = "zone 1";
+        std::vector<MeshModifier> denser;
+        for (const MeshModifier& m : zones.modifiers)
+            if (m.name != lowest)
+                denser.push_back(m);
+        zones.modifiers = denser;
+        Settings s = settings;
+        s.infill_density = zones.density[0];
+        const AnalysisReport r = analyse(s, &zones.modifiers);
+        mass = voxel_mass_grams(r.grid, grams_per_cm3);
+        safety = r.result.min_safety;
+        return r.valid && report_verdict(r, c, e, placed) == Verdict::Holds;
+    };
+    const auto keep = [&](const InfillZones& zones, double mass, double safety) {
+        out.found = true;
+        out.zones = zones;
+        out.mass_g = mass;
+        out.min_safety = safety;
+    };
+    InfillZones zones;
+    double mass = 0.0, safety = 0.0;
+    // At scale 1 every cell gets what brings it to the asked factor; the
+    // scale that fills the lowest level to 100 % is the most that matters.
+    double fails = 0.0, holds_at = 0.0;
+    if (holds(1.0, zones, mass, safety)) {
+        keep(zones, mass, safety);
+        holds_at = 1.0;
+    } else {
+        fails = 1.0;
+        holds_at = 100.0 / std::max(1.0, infill_zones(base, double(density), asked, settings.infill_pattern).density[0]);
+    }
+    for (int h = 0; h < kHalvings && holds_at > fails; ++h) {
+        const double mid = 0.5 * (fails + holds_at);
+        if (holds(mid, zones, mass, safety)) {
+            keep(zones, mass, safety);
+            holds_at = mid;
+        } else {
+            fails = mid;
+        }
+    }
+    out.lighter = out.found && out.mass_g < out.uniform_mass_g;
+    if (progress)
+        progress(1.0);
+    return out;
+}
+
 LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
                                const AnalysisCase& c, const ProjectEngineering& e,
                                const std::function<void(double)>& progress) {

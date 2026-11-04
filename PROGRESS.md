@@ -10315,3 +10315,19 @@ junto al empotramiento, con escala 0,5 nunca pide más.
 
 **Sigue (regla 3):** paso C, la bisección de la escala común hasta que aguante, la comparación con el uniforme y el
 análisis final con las zonas; paso D, en el panel.
+
+## 2026-11-04 — Optimizar, regla 3, paso C: la escala común
+
+**Hecho:** `zoned_infill(malla, colocada, ajustes, caso, ingeniería, densidad_uniforme)` analiza la pieza con el
+relleno uniforme, saca las zonas y busca la escala común: prueba la escala 1 y después 5 mitades (entre 0 y 1 si
+aguanta; entre 1 y la que lleva el nivel más bajo al 100 % si no). Cada prueba es un análisis con las zonas tal como
+se imprimen: el objeto al nivel más bajo y los dos más densos como cajas modificadoras. Se queda con la escala más
+chica que aguanta y compara la masa (por vóxeles) con la del uniforme: `lighter` solo si pesa menos (lo que la regla
+pide para proponerla). Como mucho 7 análisis, con avance.
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N desde el 50 % uniforme: niveles 28/48/73 %, 0,877 g contra 0,880 g,
+7 análisis (31 s con 4 hilos). La masa por vóxeles cambia poco en una barra tan fina (casi todo es pared y piel); la
+prueba pide como mucho un 5 % más y que `lighter` coincida con la comparación.
+
+**Sigue (regla 3):** paso D, en el panel Optimizar (después del uniforme: zonas, masa contra el uniforme, «Usar» pone
+el relleno del objeto y los modificadores, con deshacer).

@@ -121,6 +121,23 @@ LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& plac
                                const AnalysisCase& c, const ProjectEngineering& e,
                                const std::function<void(double)>& progress = {});
 
+// The zones' three levels scaled together, by bisection, until the part
+// holds (structural_optimization.md, rule 3): from the analysis at the
+// uniform `density` (the lightest that holds), the object at the lowest level
+// and the other two as box modifiers; each try is analysed with those zones as
+// printed. Proposed (`lighter`) only when it weighs less than the uniform.
+struct ZonedInfill {
+    bool found = false;   // some scale holds
+    bool lighter = false; // and the part weighs less than at the uniform density
+    InfillZones zones;    // the object at density[0], modifiers for the denser levels
+    double mass_g = 0.0, uniform_mass_g = 0.0;
+    double min_safety = 0.0;
+    int analyses = 0;
+};
+ZonedInfill zoned_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                         const AnalysisCase& c, const ProjectEngineering& e, int density,
+                         const std::function<void(double)>& progress = {});
+
 // "fixed_zone 1", "force_point 2"...: a condition's name in the case.
 std::string condition_name(const EngineeringCondition& condition);
 
