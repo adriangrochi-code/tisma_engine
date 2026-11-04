@@ -10108,3 +10108,23 @@ en `ui_script_design_sketch_edit`; el selector de archivos no se prueba desde el
 
 **Sigue:** CD25, después el orden de PLAN.md.
 
+
+## 2026-11-04 — Diseño CD25: SolidCraft abierto mientras se diseña
+
+**Hecho** (regla 20 bis; pasó `check_spec`):
+- `ChildProcess` en `src/cad/process.*`: un proceso hijo con stdin, stdout y stderr por tuberías y un hilo lector por
+  tubería; Windows (CreateProcessW) y POSIX (posix_spawn).
+- `SolidCraftSession`: `solidcraft-cli mcp` (JSON-RPC 2.0 por stdio, MCP 2025-06-18). Cada construcción es
+  `new_design`, `batch` (el guion con la exportación, `rollback`), `measure` y `save`. Si el proceso murió, se abre de
+  nuevo y se manda el guion entero (dos intentos); `BuildResult::session_restarted` lo marca.
+- La app guarda una sesión por binario, la pasa al trabajo de construcción, la cierra tras 600 s sin uso (solo cuando
+  no corre una construcción) y avisa una vez si se reinició. Sin sesión, `build_design` sigue con un proceso por
+  construcción.
+
+**Pruebas:** CD25 con el SolidCraft falso en modo `mcp`: 20 construcciones con un solo arranque y el mismo volumen;
+el proceso muere, la siguiente construcción lo reabre (`restarts == 1`); el cierre por inactividad. Pasan las pruebas
+de diseño de la interfaz. **Sin probar** con el `solidcraft-cli` real (no está en este entorno).
+
+**Falta de D5b:** la vista como DXF de líneas (`file.export_view_dxf`).
+
+**Sigue:** `file.export_view_dxf`, después el orden de PLAN.md.

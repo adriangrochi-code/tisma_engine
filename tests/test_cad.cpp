@@ -22,6 +22,7 @@
 #include <random>
 #include <map>
 #include <cstdlib>
+#include <fstream>
 #include <numbers>
 
 using namespace tisma;
@@ -1067,4 +1068,56 @@ TEST_CASE("cad: CD5 and CD6, a standard hole and a fillet through the tool (rule
     REQUIRE(b.failed_feature);
     CHECK(*b.failed_feature == 1);
     CHECK_THAT(b.volume_mm3, WithinAbs(8000.0, 1e-3));
+}
+
+TEST_CASE("CD25: one design session for twenty builds, and opened again when it dies", "[cad]") {
+    const auto starts = std::filesystem::temp_directory_path() / "tisma_cd25_starts.txt";
+    const auto die = std::filesystem::temp_directory_path() / "tisma_cd25_die";
+    std::filesystem::remove(starts);
+    std::filesystem::remove(die);
+#ifdef _WIN32
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_STARTS", starts.string().c_str());
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_MCP_DIE", die.string().c_str());
+#else
+    setenv("TISMA_FAKE_SOLIDCRAFT_STARTS", starts.string().c_str(), 1);
+    setenv("TISMA_FAKE_SOLIDCRAFT_MCP_DIE", die.string().c_str(), 1);
+#endif
+    {
+        SolidCraftSession session(kFake);
+        for (int i = 0; i < 20; ++i) {
+            const BuildResult built = build_design(kFake, box_design(), MeshQuality::Standard, 60.0, &session);
+            INFO(built.error);
+            REQUIRE(built.ok);
+            CHECK_THAT(built.volume_mm3, WithinAbs(24000.0, 1e-3));
+            CHECK_FALSE(built.session_restarted);
+            CHECK_THAT(built.measure, ContainsSubstring("volume_mm3"));
+            CHECK_FALSE(built.design_file.empty());
+        }
+        CHECK(session.starts() == 1);
+        CHECK(session.open());
+        // Killed: the next build opens it again and gives the same design.
+        { std::ofstream(die) << "x"; }
+        const BuildResult again = build_design(kFake, box_design(), MeshQuality::Standard, 60.0, &session);
+        INFO(again.error);
+        REQUIRE(again.ok);
+        CHECK(again.session_restarted);
+        CHECK_THAT(again.volume_mm3, WithinAbs(24000.0, 1e-3));
+        CHECK(session.starts() == 2);
+        CHECK(session.restarts() == 1);
+        // Idle: closed after the time, opened again by the next build.
+        session.close_if_idle(0.0);
+        CHECK_FALSE(session.open());
+    }
+    std::ifstream f(starts);
+    int lines = 0;
+    for (std::string l; std::getline(f, l);)
+        ++lines;
+    CHECK(lines == 2);
+#ifdef _WIN32
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_STARTS", "");
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_MCP_DIE", "");
+#else
+    unsetenv("TISMA_FAKE_SOLIDCRAFT_STARTS");
+    unsetenv("TISMA_FAKE_SOLIDCRAFT_MCP_DIE");
+#endif
 }

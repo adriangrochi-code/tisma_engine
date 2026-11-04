@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Diseño más rápido** (`cad_design.md`, regla 20 bis): el componente de diseño queda abierto mientras se diseña y
+  cada cambio se construye sin volver a arrancarlo. Se cierra tras 10 minutos sin uso; si se cae, se abre de nuevo con
+  el diseño entero y avisa una vez.
 - **DXF y SVG en Diseño** (`cad_design.md`, D5b): «Traer DXF» y «Traer SVG» en el boceto traen líneas, círculos,
   arcos, polilíneas, elipses, curvas y bloques, en milímetros según las unidades del archivo, como curvas del boceto
   que se recortan, se acotan y se extruyen; «Exportar DXF» guarda el boceto. Un archivo que no se puede leer avisa con

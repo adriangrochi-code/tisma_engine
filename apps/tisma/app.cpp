@@ -1100,6 +1100,10 @@ private:
     char design_rename_buf_[128] = {};
     bool design_dirty_ = false;     // changed since the build that runs
     Background<cad::BuildResult> design_job_;
+    // CD25: the bundled tool kept open while designing, closed after 10
+    // minutes idle; only touched by the design job or when it is not running.
+    std::shared_ptr<cad::SolidCraftSession> design_session_;
+    bool design_restart_noted_ = false;
     Background<cad::SolidCraftInfo> solidcraft_job_;
     cad::SolidCraftInfo solidcraft_;
     bool solidcraft_probed_ = false;
@@ -4965,6 +4969,8 @@ void App::poll_jobs() {
     }
     if (std::optional<cad::BuildResult> built = design_job_.take())
         design_built(std::move(*built));
+    if (design_session_ && !design_job_.running())
+        design_session_->close_if_idle(600.0);
     if (std::optional<StructuralRun> run = structural_job_.take())
         structural_done(std::move(*run));
     if (std::optional<AeroRun> run = aero_job_.take())
@@ -11452,12 +11458,21 @@ void App::rebuild_design() {
     const cad::Design copy = design_;
     const std::filesystem::path exe = solidcraft_.exe;
     const cad::MeshQuality quality = cad::quality_for(settings_.cad_chord_tolerance, cad::nominal_size(copy));
-    design_job_.start([exe, copy, quality] { return cad::build_timeline(exe, copy, quality); });
+    if (!design_session_ || design_session_->exe() != exe)
+        design_session_ = std::make_shared<cad::SolidCraftSession>(exe);
+    std::shared_ptr<cad::SolidCraftSession> session = design_session_;
+    design_job_.start([exe, copy, quality, session] {
+        return cad::build_timeline(exe, copy, quality, 120.0, session.get());
+    });
 }
 
 void App::design_built(cad::BuildResult built) {
     design_failed_ = built.failed_feature;
     design_failure_ = built.failure;
+    if (built.session_restarted && !design_restart_noted_) {
+        design_restart_noted_ = true;
+        notify(tr(T::DesignRestarted));
+    }
     if (built.ok) {
         design_error_.clear();
         design_mesh_ = std::move(built.mesh);

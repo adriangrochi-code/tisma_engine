@@ -13,6 +13,9 @@
 #include "mesh/shapes.hpp"
 
 #include <nlohmann/json.hpp>
+#include <iostream>
+#include <ctime>
+#include <filesystem>
 
 #include <algorithm>
 #include <array>
@@ -355,7 +358,7 @@ int run(const std::vector<std::string>& args) {
         std::fprintf(stderr, "usage: solidcraft-cli run <script.json> [--save FILE] [--out FILE] [--quiet]\n");
         return 2;
     }
-    std::string save, script_path = args.front();
+    std::string save, measure_to, script_path = args.front();
     std::vector<std::string> outs;
     bool quiet = false;
     for (std::size_t i = 1; i < args.size(); ++i) {
@@ -365,6 +368,8 @@ int run(const std::vector<std::string>& args) {
             outs.push_back(args[++i]);
         else if (args[i] == "--quiet")
             quiet = true;
+        else if (args[i] == "--measure" && i + 1 < args.size())
+            measure_to = args[++i];
         else {
             std::fprintf(stderr, "run doesn't take %s\n", args[i].c_str());
             return 2;
@@ -840,7 +845,7 @@ int run(const std::vector<std::string>& args) {
         text_of << script.dump();
         write_file(save, "fake-solidcraft-design\n" + text_of.str());
     }
-    if (!quiet) {
+    if (!quiet || !measure_to.empty()) {
         json measured = json::array();
         double total = 0.0;
         for (const Body& b : bodies) {
@@ -848,8 +853,93 @@ int run(const std::vector<std::string>& args) {
             total += v;
             measured.push_back({{"name", b.name}, {"volume_mm3", v}});
         }
-        std::printf("%s\n", json{{"body_count", bodies.size()}, {"bodies", measured}, {"total", {{"volume_mm3", total}}}}.dump(2).c_str());
+        const std::string report = json{{"body_count", bodies.size()}, {"bodies", measured}, {"total", {{"volume_mm3", total}}}}.dump(2);
+        if (!measure_to.empty())
+            write_file(measure_to, report);
+        if (!quiet)
+            std::printf("%s\n", report.c_str());
     }
+    return 0;
+}
+
+// `mcp`: the session mode (SolidCraft's docs/mcp.md): JSON-RPC 2.0 on
+// stdin and stdout, a line per message; the tools new_design, batch,
+// measure and save, each batch run as `run` on a script in a temporary file.
+// TISMA_FAKE_SOLIDCRAFT_STARTS: a file that gets a line per start;
+// TISMA_FAKE_SOLIDCRAFT_MCP_DIE: a file; while it exists, the session ends
+// (as a crash) at the next tool call, and removes it.
+int mcp() {
+    if (const char* starts = std::getenv("TISMA_FAKE_SOLIDCRAFT_STARTS")) {
+        std::ofstream f(starts, std::ios::app);
+        f << "start\n";
+    }
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() /
+                                      ("fake-solidcraft-mcp-" + std::to_string(std::rand()) + "-" + std::to_string(std::time(nullptr)));
+    std::filesystem::create_directories(dir);
+    std::string measured = "{}";
+    json last_script = json::object();
+    std::string line;
+    const auto answer = [](const json& id, const json& result) {
+        std::printf("%s\n", json{{"jsonrpc", "2.0"}, {"id", id}, {"result", result}}.dump().c_str());
+        std::fflush(stdout);
+    };
+    const auto content = [](const std::string& text, bool error) {
+        return json{{"content", json::array({json{{"type", "text"}, {"text", text}}})}, {"isError", error}};
+    };
+    while (std::getline(std::cin, line)) {
+        const json j = json::parse(line, nullptr, false);
+        if (!j.is_object())
+            continue;
+        const std::string method = j.value("method", std::string());
+        if (!j.contains("id"))
+            continue; // a notification
+        if (method == "initialize") {
+            answer(j["id"], {{"protocolVersion", "2025-06-18"}, {"capabilities", {{"tools", json::object()}}},
+                             {"serverInfo", {{"name", "solidcraft"}, {"version", "0.30.0"}}}});
+            continue;
+        }
+        if (method != "tools/call") {
+            std::printf("%s\n", json{{"jsonrpc", "2.0"}, {"id", j["id"]}, {"error", {{"code", -32601}, {"message", "no such method"}}}}.dump().c_str());
+            std::fflush(stdout);
+            continue;
+        }
+        if (const char* die = std::getenv("TISMA_FAKE_SOLIDCRAFT_MCP_DIE"); die && std::filesystem::exists(die)) {
+            std::filesystem::remove(die);
+            return 9;
+        }
+        const std::string tool = j["params"].value("name", std::string());
+        const json args = j["params"].value("arguments", json::object());
+        if (tool == "new_design") {
+            last_script = json::object();
+            measured = "{}";
+            answer(j["id"], content("new design", false));
+        } else if (tool == "batch") {
+            last_script = json{{"commands", args.value("commands", json::array())}};
+            const std::filesystem::path script = dir / "batch.json", measure = dir / "measure.json";
+            write_file(script.string(), last_script.dump());
+            // run() reports problems on stderr; it may also end the process
+            // on a malformed command, as a crash would.
+            const int rc = run({script.string(), "--quiet", "--measure", measure.string()});
+            if (rc == 0) {
+                std::ifstream in(measure, std::ios::binary);
+                std::stringstream text;
+                text << in.rdbuf();
+                measured = text.str();
+                answer(j["id"], content("ok", false));
+            } else {
+                answer(j["id"], content("the batch failed (exit " + std::to_string(rc) + ")", true));
+            }
+        } else if (tool == "measure") {
+            answer(j["id"], content(measured, false));
+        } else if (tool == "save") {
+            write_file(args.value("path", std::string()), "fake-solidcraft-design\n" + last_script.dump());
+            answer(j["id"], content("saved", false));
+        } else {
+            answer(j["id"], content(tool + ": not a tool", true));
+        }
+    }
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
     return 0;
 }
 
@@ -881,6 +971,8 @@ int main(int argc, char** argv) {
     }
     if (args[0] == "run")
         return run(std::vector<std::string>(args.begin() + 1, args.end()));
+    if (args[0] == "mcp")
+        return mcp();
     std::fprintf(stderr, "%s: not a command\n", args[0].c_str());
     return 2;
 }
