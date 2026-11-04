@@ -93,6 +93,7 @@ add_executable(tisma_tests
   test_fasteners.cpp
   test_gears.cpp
   test_cloud.cpp
+  test_print_host.cpp
 )
 # The stand-in for the bundled solidcraft-cli (cad_design.md, rule 1): the
 # tests drive it instead of the real tool.

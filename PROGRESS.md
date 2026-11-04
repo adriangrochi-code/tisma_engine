@@ -10637,3 +10637,19 @@ ese modo.
 `not_in_cloud` con `error_es`). **Sin probar desde la línea de comandos:** la búsqueda completa con calidad normal
 (las funciones del motor tienen sus pruebas). **Falta:** devolver el proyecto con los cambios aplicados (`-o
 proyecto.3mf`), que necesita pasar las cajas a volúmenes de la pieza fuera de la interfaz.
+
+## 2026-11-04 — conexiones de red: OctoPrint (motor)
+
+**Hecho:** `src/device/print_host.*` (en `tisma_net`): `host_version` (prueba la dirección y la clave de API),
+`host_upload` (sube el G-code a `/api/files/local` y, si se pide, lo elige e imprime), `host_status` (estado, archivo,
+avance, tiempo restante y temperaturas; sin impresora conectada al programa, 409, da el estado sin temperaturas),
+`host_pause` (pausa o sigue) y `host_cancel`. Los errores llevan un código estable (`unreachable`, `unauthorized`,
+`not_connected`, `bad_answer`, `failed`); la clave nunca se escribe en mensajes. Desde la documentación pública de la
+API REST de OctoPrint.
+
+**Prueba:** `test_print_host` contra un OctoPrint simulado (servidor de cpp-httplib): clave buena y mala, dirección
+sin respuesta, subida y comienzo (nombre y contenido del archivo), estado con temperaturas, pausa, seguir y cancelar,
+y el 409 sin impresora. **Sin probar:** contra un OctoPrint real.
+
+**Sigue:** Moonraker, PrusaLink (Digest) y Duet con el mismo contrato (la sesión de Android ofreció notas de
+comportamiento de los cuatro); después en la página Dispositivos.
