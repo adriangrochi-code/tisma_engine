@@ -10163,3 +10163,338 @@ proyecto); `profile` (nombre completo frente a los que lo contienen, nombre ambi
 que no están, y el resultado lamina un cubo con `slice --config`).
 
 **Sigue:** el orden de PLAN.md.
+
+## 2026-11-04 — Estructural: mapas de von Mises y desplazamiento, deformación exagerada (regla 12)
+
+**Decisión de orden:** terminado D5b, PLAN.md no nombra un ítem siguiente único; tomé lo que falta de la pestaña
+Estructural en el orden de su lista (deformación exagerada y los otros mapas), que es lo más cercano a lo terminado.
+
+**Hecho** (`engineering_panel.md`, regla 12; pasó `check_spec`):
+- `voxel_surface` recibe además el desplazamiento de los nodos y da el de cada esquina.
+- La pestaña guarda por triángulo el factor, la tensión de von Mises y el movimiento, y pinta el mapa elegido:
+  factor de seguridad (sus cinco franjas), von Mises o desplazamiento (cinco franjas iguales de 0 al máximo, azul a
+  rojo), con la escala abajo.
+- «Ver la deformación exagerada» con un deslizador logarítmico (× 1 a × 100 000); al principio el mayor movimiento
+  se ve como un décimo de la pieza.
+
+**Pruebas:** EP4 en el motor (el mayor movimiento en las esquinas de afuera es el de la barra; un campo u = (0, 0, z)
+llega igual a cada esquina); `ui_script_structural_analyze` cambia de mapa, ve las escalas y prende la deformación.
+Mirado en una captura: el cubo empujado arriba se ve hundido y en rojo arriba.
+
+**Sigue (Estructural):** Más opciones (memoria y tiempo, dirección de impresión, nube), Optimizar, arrastrar la punta
+de la flecha y sacar «Análisis» de Impresión 3D.
+
+## 2026-11-04 — Estructural: memoria y tiempo; «Análisis» fuera de Impresión 3D (reglas 1 y 10, EP1)
+
+**Hecho:**
+- «Más opciones» de Estructural muestra, junto a la resolución y los vóxeles, la memoria y el tiempo aproximados
+  (`estimate_analysis` en segundo plano; si cambia algo mientras corre, el último pedido arranca al terminar).
+- La pestaña «Análisis» de Impresión 3D se fue (regla 1, EP1): lo único que mostraba (vóxeles, memoria y tiempo por
+  calidad) está ahora en Estructural. `--view analysis`, el consejo de la pestaña, el tutorial de Ingeniería y su
+  ancla llevan a Estructural. Se borraron `analysis_panel`, la estimación de vóxeles de la app y `Tab::Analysis`;
+  `estimate_voxels` (en `src/ui/slicing.*`) queda para quien lo use.
+
+**Pruebas:** `ui_script_structural_tab` ve «vóxeles de», después «Memoria: unos», y que Impresión 3D no tiene
+`tab_analysis`. Pasan las pruebas de interfaz de Estructural, Diseño, Aerodinámica, tutoriales y capturas.
+`ui_script_structural_analyze` falló una vez en una tanda de 55 pruebas en paralelo y pasó en las tres corridas
+siguientes; sin el mensaje de esa vez. Queda anotado para el CI completo.
+
+**Sigue (Estructural):** dirección de impresión y nube en Más opciones, Optimizar, arrastrar la punta de la flecha.
+
+## 2026-11-04 — Estructural: arrastrar la flecha de una fuerza (regla 7)
+
+**Hecho:** el extremo libre de cada flecha de fuerza lleva un punto que se arrastra. Al soltarlo, la fuerza queda
+como «Tres números», apuntando desde el puntero (en el plano por su punto, de frente a la cámara) hacia su punto.
+Deshacer la vuelve atrás; mientras se arrastra, la vista no gira. **Decisión:** la ficha dice «arrastrar la punta»,
+pero la punta dibujada está sobre la pieza (es donde actúa la fuerza); se arrastra el otro extremo, que es lo que
+cambia la dirección sin mover el punto.
+
+**Pruebas:** `ui_script_structural_tab` arrastra `structural_arrow_2`, ve el campo de tres números y lo ve irse con
+Ctrl+Z. Pasan las pruebas de interfaz de Estructural y Aerodinámica.
+
+**Sigue (Estructural):** Más opciones (dirección de impresión, nube) y Optimizar.
+
+## 2026-11-04 — Estructural: dirección de impresión (Z o cinta, regla 10)
+
+**Hecho:**
+- «Dirección de impresión» en Más opciones: Z, o «Cinta (capas a α°)» si la impresora elegida es de cinta (si no,
+  apagada; un proyecto con «belt» en una impresora común avisa que se analiza en Z).
+- Con la cinta, `start_structural` gira la pieza y sus condiciones con `belt_layer_rotation` (capas planas) y
+  `turn_engineering` (puntos, normales y direcciones; un eje pasa a tres números). El análisis corre con
+  `belt.enabled` apagado y el mapa, los desplazamientos y el punto crítico vuelven girados. Los puntos del informe
+  usan la vuelta compuesta.
+
+**Pruebas:** en el motor, el giro es una rotación (det 1) y da la `s` de `belt_mesh`; las condiciones giran y una
+fuerza en −Z queda en (0, sin α, −cos α). En la interfaz, el selector está en Estructural. **Sin probar de punta a
+punta en la app con una impresora de cinta** (el guion no tiene cómo elegir una impresora de cinta); queda para un
+verbo de guion o la prueba del dueño.
+
+**Sigue (Estructural):** «Calcular en la nube» y Optimizar.
+
+## 2026-11-04 — Optimizar, regla 2: relleno mínimo uniforme (motor)
+
+**Hecho** (`structural_optimization.md`, reglas 1 y 2; pasó `check_spec`):
+- `report_verdict`: el veredicto del informe (factor pedido, temperatura, familia, límites) como función.
+- `lightest_infill`: el menor relleno entero que «Aguanta», por bisección: el 100 % primero (si no aguanta, se
+  informa sin buscar), después mitades; a lo sumo 8 análisis, con avance y cancelación por el aviso de avance.
+- **Decisión:** con la calidad Rápida el análisis toma la pieza maciza y el relleno no cuenta; la búsqueda no corre
+  y lo dice (`solid`).
+
+**Medido** (calidad media, PLA, voladizo con fuerza en la punta): barra de 24 × 6 × 6 mm con 20 N → **71 %**
+(aguanta con factor 2,03; al 70 % no), 40 s; barra de 16 × 4 × 4 mm con 10,5 N → 1 %, 11 s (las paredes llevan casi
+todo); con 11 N ni el 100 % alcanza.
+
+**Pruebas:** la de la regla 2 comprueba que aguanta en la densidad encontrada y no un punto por debajo, que el avance
+solo crece y llega a 1, que con Rápida no busca, y que con 20 000 N no la encuentra en un solo análisis.
+
+**Sigue:** «Optimizar» en el panel de Estructural (botón Relleno mínimo, resultado y «Aplicar»), después las demás
+reglas (zonas, nervios, refuerzos, retícula, orientación) y «Calcular en la nube».
+
+## 2026-11-04 — Optimizar en el panel de Estructural (regla 13)
+
+**Hecho:** «Optimizar», plegado debajo de los resultados, con «Relleno mínimo que aguanta»: corre `lightest_infill`
+en segundo plano con barra de avance y «Cancelar», y dice el resultado: «Aguanta con N % de relleno (factor F)» con
+«Usar N % de relleno» (se deshace desde el aviso), «Ni con 100 %…» o que con Rápida no se busca. Verbo de guion
+`expect-optimize` (found, none, solid, cancelled, error).
+
+**Pruebas:** `ui_script_structural_analyze` abre Optimizar, empieza la búsqueda, la cancela y ve el botón de nuevo
+(22 s). La búsqueda completa en la interfaz tomó 61 s con el cubo de 10 mm (8 análisis, dio 0 %): quedó afuera del
+guion por el tiempo bajo ASan; la búsqueda la prueba el motor. **Sin probar en el guion:** el botón «Usar» y su
+deshacer (necesitan una búsqueda completa).
+
+**Sigue:** el resto de Optimizar (zonas, nervios, refuerzos, retícula, orientación) y «Calcular en la nube».
+
+## 2026-11-04 — Estructural: «Calcular en la nube» (regla 10)
+
+**Hecho:** casilla «Calcular en la nube» bajo Analizar (apagada y gris sin sesión, con el motivo al pasar el mouse).
+Prendida, el botón dice «Analizar en la nube» y manda el proyecto como trabajo `fea` (`mode` analyze, la calidad, el
+objeto y la copia 0), con estado, avance y «Cancelar»; el `.tea` que vuelve deja el informe con la pieza, con la
+huella tomada al mandar. El resultado de la nube no trae vóxeles: se ven el veredicto y los números, no el mapa.
+Errores como en el laminado en la nube (sesión vencida, 413, 422, 429, texto del trabajo).
+
+**Pruebas:** `ui_script_cloud_structural` con el servidor de prueba (que ahora contesta un `.tea` a los trabajos
+`fea`): inicia sesión, marca, prende la nube, analiza y ve «Aguanta». Pasan las de nube y Estructural.
+**Candado por plan (regla 10b), hecho después:** `cloud::Plan` lee `classes`; `plan_includes` y `plans_with`. Si el
+plan de la cuenta no tiene `fea`, la casilla queda apagada y abajo dice «Incluido en el plan …» con los planes que lo
+tienen; al tocarlo abre la ventana de la cuenta. Un plan sin `classes` (servidor viejo) o que no está en la lista
+cuenta como incluido: el servidor decide (402). Probado en `test_cloud` con el servidor de prueba (Free solo
+`slice`, Maker todo); **sin guion de interfaz** del candado (la cuenta de prueba es Maker).
+
+**Laminar en la nube** también lleva el candado: con un plan sin `slice`, la entrada del menú dice «… — Incluido en el
+plan …» y abre la cuenta en vez de mandar. **Aerodinámica en la nube**, hecho después: el mismo camino generalizado (`start_cloud_engineering("aerodynamics")`):
+trabajo `aero` con `object`, `instance`, `quality`, `speed` y `direction` (el eje sin «+», o tres números con la
+dirección de la vista); el `.taero` queda como el resultado de la pieza (sin mapa, como en Estructural). Casilla,
+candado por plan (`aero`) y avance como en Estructural. `ui_script_cloud_structural` sigue a Aerodinámica: analiza en
+la nube y `expect-aero 1` ve el arrastre del servidor de prueba.
+
+**Sigue:** el resto de Optimizar (relleno por zonas, regla 3).
+
+## 2026-11-04 — Optimizar, regla 3 (relleno por zonas), paso A: el análisis con modificadores
+
+**Hecho:** `run_analysis` recibe modificadores (`MeshModifier`, model_tools.md regla 3) y el laminado del modelo
+como se imprime los usa; así cada zona se analiza con su propio relleno (lo que la regla 3 pide para el análisis de
+las mallas de las zonas). El modelo macizo los ignora.
+
+**Prueba:** barra de 24 × 6 × 6 mm de PLA con 20 N en la punta y relleno 0 %: con un modificador al 100 % en la mitad
+empotrada, el factor sube más del 20 % y el desplazamiento baja (5,8 s).
+
+**Sigue (regla 3):** paso B, las celdas (3 vóxeles, mínimo 3 mm) con su densidad `ρ · utilización^(1/nS)`, en 3
+niveles como cajas modificadoras unidas en filas; paso C, la bisección del factor común y la comparación con el
+uniforme; paso D, en el panel.
+
+## 2026-11-04 — Optimizar, regla 3, paso B: las zonas
+
+**Hecho:** `infill_zones(informe, densidad, pedido, patrón, escala)` parte la pieza en celdas de 3 vóxeles (al menos
+3 mm); cada vóxel pide `densidad · (pedido / factor)^(1/nS)` (como mucho 100 %, `nS` del patrón:
+`infill_strength_exponent`) y la celda el máximo de los suyos. Las celdas caen en 3 niveles por tercios; cada nivel va
+al máximo de sus celdas por la escala común, y sus celdas vecinas en X se unen en una caja modificadora
+(`{"infill": {"density": N}}`, «zone L»). Arreglados dos avisos `-Wshadow`.
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N y relleno uniforme 50 %: niveles crecientes y ≤ 100, la zona más densa
+junto al empotramiento, con escala 0,5 nunca pide más.
+
+**Sigue (regla 3):** paso C, la bisección de la escala común hasta que aguante, la comparación con el uniforme y el
+análisis final con las zonas; paso D, en el panel.
+
+## 2026-11-04 — Optimizar, regla 3, paso C: la escala común
+
+**Hecho:** `zoned_infill(malla, colocada, ajustes, caso, ingeniería, densidad_uniforme)` analiza la pieza con el
+relleno uniforme, saca las zonas y busca la escala común: prueba la escala 1 y después 5 mitades (entre 0 y 1 si
+aguanta; entre 1 y la que lleva el nivel más bajo al 100 % si no). Cada prueba es un análisis con las zonas tal como
+se imprimen: el objeto al nivel más bajo y los dos más densos como cajas modificadoras. Se queda con la escala más
+chica que aguanta y compara la masa (por vóxeles) con la del uniforme: `lighter` solo si pesa menos (lo que la regla
+pide para proponerla). Como mucho 7 análisis, con avance.
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N desde el 50 % uniforme: niveles 28/48/73 %, 0,877 g contra 0,880 g,
+7 análisis (31 s con 4 hilos). La masa por vóxeles cambia poco en una barra tan fina (casi todo es pared y piel); la
+prueba pide como mucho un 5 % más y que `lighter` coincida con la comparación.
+
+**Sigue (regla 3):** paso D, en el panel Optimizar (después del uniforme: zonas, masa contra el uniforme, «Usar» pone
+el relleno del objeto y los modificadores, con deshacer).
+
+## 2026-11-04 — Optimizar, regla 3, paso D: «Relleno por zonas» en el panel
+
+**Hecho:** en Optimizar, debajo de «Relleno mínimo», el botón «Relleno por zonas» corre el mismo trabajo en segundo
+plano: el uniforme (primera mitad de la barra) y después `zoned_infill` (segunda mitad), con Cancelar. El resultado
+dice los tres niveles, el factor y la masa contra la del uniforme; si no queda más liviano lo dice y no propone nada.
+«Usar las zonas» pone el relleno propio de la pieza al nivel más bajo y agrega una caja modificadora por zona
+(`volume_for_bed_box`, `src/ui/plate.*`: la caja de la cama llevada al marco del modelo, aunque esté escalado o
+girado; con un giro y escalas distintas no hay caja que quepa y lo avisa). Un solo deshacer quita todo.
+
+**Prueba:** `test_plate` (la caja vuelve a caer donde estaba con escala, con giro de ángulos rectos y escala pareja, y
+se rechaza con giro de 30° y escalas distintas); `ui_script_structural_analyze` arranca y cancela la búsqueda por
+zonas. **Sin probar en la interfaz:** «Usar las zonas» y su deshacer (la búsqueda completa tarda más de un minuto en
+el guion).
+
+**Sigue:** regla 4 de structural_optimization.md (nervios: relleno a lo largo de las tensiones).
+
+## 2026-11-04 — Optimizar, regla 4 (nervios), paso A: los grupos por ángulo
+
+**Hecho:** `solve_as_printed` guarda por vóxel la tensión promediada en el plano de la capa (σxx, σyy, τxy:
+`layer_stress`). `infill_ribs(informe)` calcula en cada vóxel las tensiones principales, la dirección de la mayor y
+`a`; cada celda (las mismas que la regla 3, ahora en una clase compartida `Cells`) promedia `a · (cos 2θ, sin 2θ)`
+pesado por el índice de rotura (1 / factor); quedan las celdas con al menos el 20 % del índice máximo y
+direccionalidad ≥ 0,5, agrupadas por ángulo en pasos de 15°; cada grupo son cajas modificadoras con relleno
+`aligned_rectilinear` (una sola dirección, todas las capas) a su ángulo, la densidad sin tocar.
+
+**Prueba:** barra de 24 × 6 × 6 mm traccionada a lo largo de X: 31 celdas a 0° y 1 a 165°; la misma a lo largo de Y:
+30 a 90° y 2 a 75° (junto al empotramiento y la carga la tensión se abre).
+
+**Sigue (regla 4):** paso B, la búsqueda doble del relleno mínimo (sin nervios, después con ellos, solo si queda más
+liviano); necesita la regla 5 (el relleno en una sola dirección en el análisis: E_T y G ∝ ρ², resistencias a lo
+ancho 0,3 · ρ^1,5) para que el análisis vea la ventaja; después, en el panel.
+
+## 2026-11-04 — Optimizar, regla 4 (nervios), paso B: la segunda búsqueda; regla 5
+
+**Decisión (regla 5):** el análisis «como se imprime» con calidad normal o alta modela cada línea del relleno con su
+dirección (vóxeles de media línea, material ortótropo girado a la línea), así que el relleno en una sola dirección ya
+es más rígido y resistente a lo largo que a lo ancho por su geometría. Los factores homogeneizados de la regla 5
+(ρ, ρ², 0,3 · ρ^1,5) solo harían falta con vóxeles más gruesos que los huecos, que hoy se analizan macizos (aviso
+`coarse_voxels`); quedan para cuando exista ese modelo.
+
+**Hecho:** `ribbed_infill(…, densidad)` analiza a la densidad uniforme mínima, saca los nervios, comprueba que con
+ellos aguanta a esa densidad y busca por bisección la menor que aguanta con ellos (como mucho 9 análisis, con
+avance). `lighter` solo si baja la densidad.
+
+**Prueba:** barra de 24 × 6 × 6 mm traccionada a 175 N, PLA, factor pedido 2: al 30 % el factor pasa de 2,26 a 2,36
+con los nervios, y el mínimo con nervios es 26 % (factor 2,12), 7 análisis (la ficha, O4: 31 % → 27 %). La prueba
+tarda ~70 s sola (2 min 20 s con el CI de Linux corriendo al lado).
+
+**Sigue (regla 4):** en el panel Optimizar, «Nervios» después del uniforme; «Usar» pone la densidad y agrega las
+zonas con relleno en una dirección, con deshacer.
+
+## 2026-11-04 — Optimizar, regla 4, paso C: «Nervios» en el panel
+
+**Hecho:** en Optimizar, el botón «Nervios» corre el uniforme (primera mitad de la barra) y después `ribbed_infill`
+(segunda mitad), con Cancelar. El resultado da la densidad con nervios contra la del uniforme, cuántas zonas y a qué
+ángulos; si no bajan el relleno, o no hay zonas que trabajen en una dirección, lo dice. «Usar los nervios» pone la
+densidad propia de la pieza y agrega las zonas como cajas modificadoras con relleno en una dirección
+(`volume_for_bed_box`); un solo deshacer quita todo.
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda con nervios. **Sin probar en la interfaz:**
+«Usar los nervios» y su deshacer (la búsqueda completa tarda más de un minuto en el guion).
+
+**Sigue:** regla 6 de structural_optimization.md (refuerzos).
+
+## 2026-11-04 — Optimizar, regla 6 (refuerzos), paso A: la zona
+
+**Hecho:** `reinforcement_zone(informe, caso, ajustes, radio)` toma las celdas de 2 mm con parte de la pieza cuyo
+centro está a menos del radio de una cara fija o de una carga (la superficie marcada, o la caja de la región; el
+radio por defecto es 2 × el de la carga más grande, al menos 5 mm) y las da como cajas modificadoras unidas en filas
+a lo largo de X, con 2 perímetros más y relleno del 40 % (nunca menos que el de la pieza).
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N en la punta (disco de 3 mm), relleno 15 %: radio 6 mm, 64 celdas junto
+al empotramiento y la carga y ninguna en el medio; el factor pasa de 1,56 a 2,15 con el mismo relleno (la ficha,
+O5: de 2,63 a 2,90). 22 s.
+
+**Sigue (regla 6):** paso B, el relleno uniforme más liviano del resto con la zona puesta, comparado con el mejor sin
+ella; después, en el panel.
+
+## 2026-11-04 — mantenimiento (08:41 UTC)
+
+**Revisado:** `origin/main` ya estaba en `dev`; `tools/ci_linux.sh` sobre `dc87386`; búsqueda aleatoria de G-code con
+semilla nueva (`tisma_fuzz_gcode 2000 20261104`, 5 min 19 s); los cambios recientes de Optimizar.
+
+**Encontrado y arreglado:**
+- Fuzz, corrida 1308: tres copias impresas una tras otra, la del medio con otra boquilla y otras capas, termina a Z
+  5,938 y la última a 5,875; el control tomaba el tope de Z de la última capa y rechazaba el G-code (Z 6,092 > 6,029).
+  Ahora toma la capa más alta (`gcode_limits`). Prueba: «check limits: the highest layer, not the last». Con la misma
+  semilla: 2000 corridas, 0 fallas. También afectaba la exportación desde la interfaz (el mismo control).
+- «Usar las zonas» y «Usar los nervios» ponían las cajas donde estaba la pieza en la cama al usarlas, no al buscar:
+  si se movía o giraba entre medio, las zonas quedaban corridas. Ahora el resultado guarda la colocación del momento
+  de la búsqueda (`volume_for_bed_box` con el mapa dado) y no hace nada si la malla cambió.
+- CI de Linux: gcc y clang pasan 990/990; la etapa con ASan se cortó por disco lleno (compilaciones viejas en
+  `/home/user/tisma_engine/build-*`, 7 GB borrados). Se corre otra vez.
+
+## 2026-11-04 — Optimizar, regla 6, paso B: la búsqueda con el refuerzo
+
+**Hecho:** `lightest_infill` acepta modificadores. `reinforced_infill(…, densidad)` analiza a la densidad uniforme
+mínima, saca la zona de refuerzo, busca el relleno uniforme más liviano del resto con la zona puesta y compara la
+masa (por vóxeles) con la de la pieza sin la zona; `lighter` solo si pesa menos. Como mucho 10 análisis, con avance.
+
+**Prueba:** la barra de 24 × 6 × 6 mm con 20 N: con la zona, el resto aguanta al 0 % (factor 2,15), pero pesa 0,925 g
+contra 0,788 g al 30 % sin ella: no se propone. 9 análisis, 65 s (con el CI de Linux al lado).
+
+**Pendiente:** la búsqueda arranca en el 100 % con la zona al 40 %, que ahí es menos que la pieza (la regla pide
+nunca menos); como la búsqueda baja, el resultado no cambia salvo en piezas que necesitan más del 40 %.
+
+**Sigue (regla 6):** «Refuerzos» en el panel Optimizar.
+
+## 2026-11-04 — Optimizar, regla 6, paso C: «Refuerzos» en el panel
+
+**Hecho:** el botón «Refuerzos» corre el uniforme y después `reinforced_infill`, con Cancelar; el resultado da el
+radio, la densidad del resto, el factor y la masa contra la de sin refuerzos, o que no queda más liviano. «Usar los
+refuerzos» pone la densidad y agrega la zona como cajas modificadoras (2 perímetros más, 40 %), con un solo deshacer
+(`apply_boxes`, el mismo camino que las zonas y los nervios).
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda con refuerzos; `[ui]` (los textos en los dos
+idiomas con los mismos campos). **Sin probar en la interfaz:** «Usar los refuerzos» y su deshacer.
+
+**Sigue:** regla 7 de structural_optimization.md (lattice), regla 8 (orientación recomendada).
+
+## 2026-11-04 — Optimizar, regla 8 (orientación recomendada), paso A
+
+**Hecho:** `recommended_orientation(colocada, ajustes, ingeniería, filamento)` analiza la pieza tres veces: con las
+capas en Z (como está), en X y en Y (`layers_along`: un cuarto de vuelta que lleva ese eje a Z; las condiciones giran
+con `turn_engineering`). Recomienda la de mayor factor si supera en más de un 5 % al de Z. Con avance.
+
+**Prueba:** barra de 24 × 6 × 6 mm, empotrada en X = 0, 20 N hacia abajo en la punta: factor 1,60 con capas en Z,
+2,27 en X, 1,90 en Y; recomienda X. 31 s.
+
+**Pendiente, a revisar:** se esperaba que la barra parada (capas a lo ancho, en X) fuera la más débil, porque la
+flexión separa las capas. Puede ser el modelo (la resistencia entre capas del PLA, o la tensión de la esquina del
+empotramiento que manda en Z) o el giro de la carga o de las caras fijas. La prueba solo comprueba el contrato; antes
+del panel hay que mirar el modo de rotura y dónde está el mínimo en cada orientación.
+
+**Revisado (10:25 UTC):** el giro está bien: la carga queda (20, 0, 0) con capas en X y (0, 20, 0) con capas en Y,
+el empotramiento abajo, una fijación y una carga en cada caso. Lo que manda cambia: con capas en Z, la unión entre
+líneas en la esquina de arriba del empotramiento (1,60); con capas en X, la unión entre capas (2,27); en Y, otra vez
+entre líneas (1,90). O sea, para este PLA el modelo da la unión entre líneas más débil que la unión entre capas, y por
+eso la barra parada sale más fuerte. No es un error del giro sino del modelo de adherencia (factores entre líneas y
+entre capas, `fea/adhesion`): pregunta de comportamiento para el equipo de fichas (¿qué relación entre las dos
+resistencias espera la ficha para PLA?).
+
+**Sigue:** esa respuesta; después «Orientación» en el panel Optimizar (recomendación y «Girar» la pieza con deshacer).
+
+## 2026-11-04 — regla 8: por qué la barra parada sale más fuerte (10:50 UTC)
+
+**Revisado (las tres comprobaciones del equipo de fichas):**
+1. El giro está bien: con capas en X, la flexión es σzz en el sistema de la capa y la rotura es «entre capas»; la
+   tensión en el plano de la capa es casi nula (0,3 MPa) y la de von Mises 11,3 MPa a 3 mm del empotramiento, la de
+   la viga (M c / I = 420 · 3 / 108 = 11,7 MPa).
+2. La esquina del empotramiento no decide el orden: lejos de ella (≥ 2 mm) los factores son Z 2,21 (a lo largo de
+   la línea), X 2,70 (entre capas), Y 2,58 (a lo largo de la línea).
+3. La adherencia solo toca Z: factor 0,993 a 205 °C.
+
+**Causa:** el material del caso es «Bambu Lab PLA Basic», que trae Z medida (31 MPa) contra XY 35 MPa; según
+`docs/MATERIALS.md` Zt toma la Z medida y solo usa 0,65 · Xt cuando falta, así que Zt = 30,8 ≈ Yt = 31 ≈ 0,88 · Xt.
+Con esa hoja la unión entre capas casi no es más débil, y la barra acostada carga más sus pieles finas (15,2 MPa
+contra 11,3 parada). El equipo de fichas lee la regla como 0,65 · Xt siempre: pregunta enviada; hasta su respuesta
+queda como está (decisión: seguir `docs/MATERIALS.md`).
+
+**Respuesta del equipo de fichas (10:51 UTC):** se mantiene la Z medida cuando la hoja la trae (0,65 · Xt solo si
+falta); el orden de la regla 8 sigue a los datos y el hallazgo queda cerrado. Para el panel: cuando la recomendación
+pare la pieza, decir que la resistencia entre capas viene de la hoja del fabricante y que una impresión real puede
+ser más débil entre capas.
+
+**Sigue:** «Orientación» en el panel Optimizar con esa nota; la retícula (regla 7).

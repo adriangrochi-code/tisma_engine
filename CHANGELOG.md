@@ -12,6 +12,26 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Estructural: calcular en la nube** (`engineering_panel.md`, regla 10; `cloud.md`, reglas 6 a 10b): con sesión
+  en Tisma Cloud, «Calcular en la nube» manda el análisis como trabajo `fea` y el resultado vuelve a la pieza, con
+  avance y «Cancelar». Lo mismo en Aerodinámica (trabajo `aero`). Un cálculo que el plan no incluye se ve con
+  «Incluido en el plan …».
+- **Estructural: «Optimizar», relleno por zonas y nervios** (`structural_optimization.md`, reglas 3 y 4): «Relleno por
+  zonas» pone más relleno solo donde la tensión lo pide, en 3 niveles escalados juntos hasta que la pieza aguanta, y
+  lo propone si pesa menos que el uniforme; «Nervios» pone relleno en una sola dirección a lo largo de las tensiones y
+  busca otra vez el mínimo. «Usar» los agrega como modificadores de la pieza, con un solo deshacer.
+- **Estructural: «Optimizar», relleno mínimo** (`structural_optimization.md`, regla 2): debajo de los resultados,
+  busca el menor relleno con el que la pieza aguanta y lo deja usar con un botón (se puede deshacer).
+- **Estructural en impresoras de cinta** (`engineering_panel.md`, regla 10): «Dirección de impresión» elige Z o la
+  cinta; con la cinta, el análisis toma las capas inclinadas como se imprimen.
+- **Estructural: girar una fuerza arrastrando su flecha** (`engineering_panel.md`, regla 7): el extremo libre de la
+  flecha roja se arrastra en la vista; la fuerza pasa a apuntar desde ahí a su punto (Ctrl+Z la devuelve).
+- **Estructural dice cuánto va a costar el análisis:** junto a la resolución, la memoria y el tiempo aproximados.
+  La pestaña «Análisis» de Impresión 3D se fue: todo lo que mostraba está en Ingeniería, Estructural
+  (`engineering_panel.md`, regla 1).
+- **Estructural: más mapas y la deformación** (`engineering_panel.md`, regla 12): además del factor de seguridad,
+  el mapa de la tensión de von Mises o del desplazamiento, con su escala; y la pieza deformada, exagerada tanto
+  como se elija.
 - **`profile` en la línea de comandos:** escribe los ajustes de una impresora del catálogo con su boquilla y,
   si se pide, un filamento, listos para `slice --config`.
 - **Errores de la nube con código y texto en español** también en `slice`, `aero` y `orient` (antes solo
@@ -271,6 +291,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- El control del G-code ya no rechaza las piezas impresas una tras otra cuando una copia termina más alta que la
+  última (otra boquilla, otras capas): el tope de Z sale de la capa más alta, no de la última (búsqueda aleatoria,
+  semilla 20261104).
 - Una expresión de parámetro con miles de paréntesis anidados podía cerrar el programa; ahora es un error.
 - Estructural ya no se pone lento con piezas grandes: «Desactualizado» se calculaba en cada cuadro recorriendo toda
   la malla (200 ms con 2 millones de triángulos).

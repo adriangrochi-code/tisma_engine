@@ -50,9 +50,10 @@ public:
         // The public plans, with or without a session; a hidden plan is not sent.
         server_.Get("/v1/plans", [](const httplib::Request&, httplib::Response& res) {
             res.set_content(R"([{"name": "Free", "monthly_hours": 1, "max_concurrent": 1, "price_cents": 0,
-                                 "currency": "USD", "remote_printers": 1},
+                                 "currency": "USD", "remote_printers": 1, "classes": ["slice"]},
                                 {"name": "Maker", "monthly_hours": 10, "max_concurrent": 2, "price_cents": 900,
-                                 "currency": "USD", "remote_printers": 3}])",
+                                 "currency": "USD", "remote_printers": 3,
+                                 "classes": ["slice", "slice_large", "fea", "fea_optimize", "aero", "orient"]}])",
                             "application/json");
         });
         server_.Post("/v1/reports", [this](const httplib::Request& req, httplib::Response& res) {
@@ -156,6 +157,20 @@ public:
         server_.Get(R"(/v1/jobs/([a-z0-9]+)/result)", [this](const httplib::Request& req, httplib::Response& res) {
             if (!authorized(req, res))
                 return;
+            std::lock_guard lock(mutex_);
+            if (kind_ == "aero") { // the engine's .taero (cloud.md, rule 10c)
+                res.set_content(json{{"drag_n", 0.42}, {"cd", 1.05}, {"simulated", true}, {"object", 0}, {"instance", 0}}.dump(),
+                                "application/json");
+                return;
+            }
+            if (kind_ == "fea") { // an analysis: the engine's .tea (cloud.md, rule 9)
+                const json tea = {{"format", "tisma-engineering-result"}, {"version", 1}, {"kind", "structural"},
+                                  {"object", 0}, {"fingerprint", "mock"},
+                                  {"report", {{"verdict", {{"name", "holds"}, {"min_safety", 3.5}, {"required_safety", 2.0}}},
+                                              {"valid", true}}}};
+                res.set_content(tea.dump(), "application/json");
+                return;
+            }
             res.set_content("; sliced on the server\nG1 X10 Y10 E1\n", "text/plain");
         });
         port_ = server_.bind_to_any_port("127.0.0.1");

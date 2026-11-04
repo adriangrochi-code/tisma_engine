@@ -2,6 +2,7 @@
 // directions, the solve and its summary. Own design; see PROVENANCE.md.
 
 #include "fea/analysis.hpp"
+#include "slice/placement.hpp"
 
 #include "config/settings.hpp"
 #include "fea/as_printed.hpp"
@@ -156,7 +157,8 @@ struct Prepared {
 };
 
 Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c, gpu::Context* gpu,
-                 const AnalysisProgress& progress, const StressField* infill_stress = nullptr) {
+                 const AnalysisProgress& progress, const StressField* infill_stress = nullptr,
+                 const std::vector<MeshModifier>* modifiers = nullptr) {
     Prepared p;
     if (mesh.vertices.empty())
         throw AnalysisError("the model is empty");
@@ -173,7 +175,7 @@ Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const Analys
         Settings designed = settings;
         designed.scale_x = designed.scale_y = designed.scale_z = 100.0;
         designed.hole_offset = 0.0;
-        sliced = slice_model(mesh, designed, gpu, infill_stress);
+        sliced = slice_model(mesh, designed, gpu, infill_stress, nullptr, nullptr, nullptr, nullptr, modifiers);
         p.layers = sliced.layers;
     } else {
         double min_z = std::numeric_limits<double>::infinity(), max_z = -min_z;
@@ -258,10 +260,11 @@ namespace {
 
 // One analysis at the case's resolution, without the resolution check.
 AnalysisReport analyze(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c, gpu::Context* gpu,
-                       const AnalysisProgress& progress, const StressField* infill_stress) {
+                       const AnalysisProgress& progress, const StressField* infill_stress,
+                       const std::vector<MeshModifier>* modifiers) {
     AnalysisReport out;
     const auto start = std::chrono::steady_clock::now();
-    Prepared p = prepare(mesh, settings, c, gpu, progress, infill_stress);
+    Prepared p = prepare(mesh, settings, c, gpu, progress, infill_stress, modifiers);
     const int rows = p.rows;
     out.rows_per_layer = rows;
     out.layers = std::move(p.layers);
@@ -393,7 +396,8 @@ AnalysisReport analyze(const IndexedMesh& mesh, const Settings& settings, const 
 } // namespace
 
 AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
-                            gpu::Context* gpu, const AnalysisProgress& progress, const StressField* infill_stress) {
+                            gpu::Context* gpu, const AnalysisProgress& progress, const StressField* infill_stress,
+                            const std::vector<MeshModifier>* modifiers) {
     const auto [voxel, rows] = analysis_resolution(c, settings);
     AnalysisCase coarse = c;
     coarse.voxel = 2.0 * voxel;
@@ -414,13 +418,13 @@ AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, c
     AnalysisProgress main;
     if (progress)
         main = [&](std::string_view stage, double done) { progress(stage, share * done); };
-    AnalysisReport out = analyze(mesh, settings, c, gpu, main, infill_stress);
+    AnalysisReport out = analyze(mesh, settings, c, gpu, main, infill_stress, modifiers);
     out.resolution.reason = reason;
     if (check && out.valid) {
         AnalysisProgress second;
         if (progress)
             second = [&](std::string_view, double done) { progress("resolution", share + (1.0 - share) * done); };
-        const AnalysisReport r = analyze(mesh, settings, coarse, gpu, second, infill_stress);
+        const AnalysisReport r = analyze(mesh, settings, coarse, gpu, second, infill_stress, modifiers);
         ResolutionCheck& check_result = out.resolution;
         check_result.voxel = coarse.voxel;
         check_result.rows_per_layer = coarse.rows_per_layer;

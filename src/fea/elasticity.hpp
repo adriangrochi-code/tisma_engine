@@ -120,6 +120,10 @@ struct AsPrintedResult {
     // voxel's own without a window); +infinity for empty or unstressed voxels.
     std::vector<double> safety;
     std::vector<FailureMode> mode; // per voxel: what gives way first at that safety factor
+    // Per voxel, the averaged stress in the layer's plane, global axes: σxx,
+    // σyy and τxy, MPa (0 for empty voxels): where the infill's lines should
+    // run (structural_optimization.md, rule 4).
+    std::vector<std::array<float, 3>> layer_stress;
     double min_safety = std::numeric_limits<double>::infinity();
     std::size_t weakest = 0; // the voxel with min_safety
     // From each voxel's own stress. Where linear elasticity has no finite

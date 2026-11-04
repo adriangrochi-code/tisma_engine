@@ -648,6 +648,64 @@ Affine between(const Affine& from, const Affine& to) {
     return out;
 }
 
+std::optional<PlateVolume> volume_for_bed_box(const PlateObject& object, const TriangleMesh& placed,
+                                              const std::array<double, 3>& lo, const std::array<double, 3>& hi,
+                                              const std::string& settings) {
+    if (object.mesh.triangle_count() == 0 || placed.triangle_count() != object.mesh.triangle_count())
+        return std::nullopt;
+    return volume_for_bed_box(object, placing(object, placed), lo, hi, settings);
+}
+
+std::optional<PlateVolume> volume_for_bed_box(const PlateObject& object, const Affine& to_bed,
+                                              const std::array<double, 3>& lo, const std::array<double, 3>& hi,
+                                              const std::string& settings) {
+    if (object.mesh.triangle_count() == 0)
+        return std::nullopt;
+    const auto& a = to_bed.a;
+    // The inverse of the linear part, by cofactors.
+    const double det = a[0] * (a[4] * a[8] - a[5] * a[7]) - a[1] * (a[3] * a[8] - a[5] * a[6]) + a[2] * (a[3] * a[7] - a[4] * a[6]);
+    if (!(std::abs(det) > 1e-12))
+        return std::nullopt;
+    const std::array<double, 9> inv{(a[4] * a[8] - a[5] * a[7]) / det, (a[2] * a[7] - a[1] * a[8]) / det, (a[1] * a[5] - a[2] * a[4]) / det,
+                                    (a[5] * a[6] - a[3] * a[8]) / det, (a[0] * a[8] - a[2] * a[6]) / det, (a[2] * a[3] - a[0] * a[5]) / det,
+                                    (a[3] * a[7] - a[4] * a[6]) / det, (a[1] * a[6] - a[0] * a[7]) / det, (a[0] * a[4] - a[1] * a[3]) / det};
+    // The bed's axes in the model's frame: the box's own axes, square to each other.
+    std::array<std::array<double, 3>, 3> axis{};
+    std::array<double, 3> length{};
+    for (int i = 0; i < 3; ++i) {
+        axis[std::size_t(i)] = {inv[std::size_t(i)], inv[std::size_t(3 + i)], inv[std::size_t(6 + i)]};
+        const auto& d = axis[std::size_t(i)];
+        length[std::size_t(i)] = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    }
+    for (int i = 0; i < 3; ++i)
+        for (int j = i + 1; j < 3; ++j) {
+            const auto& u = axis[std::size_t(i)];
+            const auto& w = axis[std::size_t(j)];
+            if (std::abs(u[0] * w[0] + u[1] * w[1] + u[2] * w[2]) > 1e-6 * length[std::size_t(i)] * length[std::size_t(j)])
+                return std::nullopt;
+        }
+    PlateVolume v;
+    v.kind = PlateVolume::Kind::Modifier;
+    v.shape = PlateVolume::Shape::Box;
+    v.settings = settings;
+    for (int i = 0; i < 3; ++i) {
+        for (int r = 0; r < 3; ++r)
+            v.turn[std::size_t(3 * r + i)] = axis[std::size_t(i)][std::size_t(r)] / length[std::size_t(i)];
+        v.size[std::size_t(i)] = (hi[std::size_t(i)] - lo[std::size_t(i)]) * length[std::size_t(i)];
+    }
+    if (det < 0.0) // a mirror: the box is its own mirror image, so its third axis turns round
+        for (int r = 0; r < 3; ++r)
+            v.turn[std::size_t(3 * r + 2)] = -v.turn[std::size_t(3 * r + 2)];
+    // The centre in the model's frame, as volume_mesh measures it.
+    const std::array<double, 3> c{0.5 * (lo[0] + hi[0]) - to_bed.b[0], 0.5 * (lo[1] + hi[1]) - to_bed.b[1], 0.5 * (lo[2] + hi[2]) - to_bed.b[2]};
+    const std::array<double, 3> q{inv[0] * c[0] + inv[1] * c[1] + inv[2] * c[2], inv[3] * c[0] + inv[4] * c[1] + inv[5] * c[2],
+                                  inv[6] * c[0] + inv[7] * c[1] + inv[8] * c[2]};
+    const BoundingBox box = object.mesh.bounding_box();
+    v.offset = {q[0] - 0.5 * (double(box.min.x) + box.max.x), q[1] - 0.5 * (double(box.min.y) + box.max.y),
+                q[2] - double(box.min.z) - v.size[2] / 2.0};
+    return v;
+}
+
 TriangleMesh volume_mesh(const PlateVolume& v, const PlateObject& object, const TriangleMesh& placed) {
     TriangleMesh m;
     if (object.mesh.triangle_count() == 0 || placed.triangle_count() != object.mesh.triangle_count())

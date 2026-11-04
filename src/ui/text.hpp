@@ -88,7 +88,14 @@
     X(StructMinSafety, "Factor de seguridad mínimo: %.3g (pedido %.3g)", "Lowest safety factor: %.3g (asked %.3g)") \
     X(StructMaxDisplacement, "Desplazamiento máximo: %.3g mm", "Largest displacement: %.3g mm") \
     X(StructMass, "Masa: %.1f g de %s", "Mass: %.1f g of %s") \
-    X(StructShowMap, "Ver el mapa del factor de seguridad", "Show the safety factor map") \
+    X(StructShowMap, "Ver el mapa", "Show the map") \
+    X(StructMapSafety, "Factor de seguridad", "Safety factor") \
+    X(StructMapStress, "Tensión de von Mises", "Von Mises stress") \
+    X(StructMapMotion, "Desplazamiento", "Displacement") \
+    X(StructLegendStress, "Azul: 0 · rojo: %.3g MPa", "Blue: 0 · red: %.3g MPa") \
+    X(StructLegendMotion, "Azul: 0 · rojo: %.3g mm", "Blue: 0 · red: %.3g mm") \
+    X(StructDeformed, "Ver la deformación exagerada", "Show the exaggerated deformation") \
+    X(StructExaggerate, "× %.0f", "× %.0f") \
     X(StructLegend, "Rojo: menos de 1 · amarillo: hasta el pedido · verde claro: hasta el doble · verde: hasta 4 veces · azul: más", "Red: below 1 · yellow: up to the asked · light green: up to twice · green: up to 4 times · blue: more") \
     X(StructLimitLine, "Límite de desplazamiento: se mueve %.3g mm de %.3g", "Displacement limit: moves %.3g mm of %.3g") \
     X(StructFamilyTypical, "%s (valores típicos)", "%s (typical values)") \
@@ -107,6 +114,49 @@
     X(StructTooCold, "Temperatura baja para este material: las capas pegan poco", "Temperature low for this material: the layers bond poorly") \
     X(StructTooHot, "Temperatura alta para este material: el polímero se degrada", "Temperature high for this material: the polymer degrades") \
     X(Approximation, "Es una aproximación: sirve para comparar diseños, materiales y orientaciones, no reemplaza un ensayo ni un cálculo profesional.", "This is an approximation: it compares designs, materials and orientations; it does not replace a test or a professional calculation.") \
+    X(StructEstimateCost, "Memoria: unos %.0f MB · tiempo: unos %s", "Memory: about %.0f MB · time: about %s") \
+    X(StructPrintDirection, "Dirección de impresión", "Print direction") \
+    X(StructPrintZ, "Z (capas horizontales)", "Z (flat layers)") \
+    X(StructPrintBelt, "Cinta (capas a %.0f°)", "Belt (layers at %.0f°)") \
+    X(StructPrintBeltOff, "La impresora elegida no es de cinta: se analiza en Z.", "The chosen printer is not a belt printer: analysed along Z.") \
+    X(StructOptimize, "Optimizar", "Optimize") \
+    X(StructOptimizing, "Buscando el relleno…", "Searching the infill…") \
+    X(StructLightestInfill, "Relleno mínimo que aguanta", "Lowest infill that holds") \
+    X(StructLightestInfillTip, "Busca el menor porcentaje de relleno con el que la pieza aguanta (varios análisis).", "Finds the lowest infill percentage at which the part holds (several analyses).") \
+    X(StructOptimizeSolid, "Con la resolución Rápida la pieza se analiza maciza y el relleno no cuenta: elegí Media o más.", "At the Fast resolution the part is analysed solid and the infill does not count: choose Normal or finer.") \
+    X(StructOptimizeNone, "Ni con 100 %% de relleno aguanta (factor %.2f): hacen falta más paredes, otro material u otra forma.", "Not even 100 %% infill holds (factor %.2f): it needs more walls, another material or another shape.") \
+    X(StructOptimizeFound, "Aguanta con %d %% de relleno (factor %.2f).", "Holds with %d %% infill (factor %.2f).") \
+    X(StructOptimizeApply, "Usar %d %% de relleno", "Use %d %% infill") \
+    X(StructOptimizeApplied, "Relleno: %d %%", "Infill: %d %%") \
+    X(StructZonedInfill, "Relleno por zonas", "Infill by zones") \
+    X(StructZonedInfillTip, "Después del relleno uniforme, más relleno solo donde la tensión lo pide, en 3 niveles (varios análisis más).", "After the uniform infill, more infill only where the stress asks for it, in 3 levels (several more analyses).") \
+    X(StructZonedFound, "Por zonas: %.0f / %.0f / %.0f %% (factor %.2f), %.2f g contra %.2f g del uniforme.", "By zones: %.0f / %.0f / %.0f %% (factor %.2f), %.2f g against %.2f g uniform.") \
+    X(StructZonedHeavier, "Por zonas no queda más liviano que el uniforme: conviene el uniforme.", "By zones it is not lighter than uniform: the uniform infill is better.") \
+    X(StructZonedNone, "Ninguna escala de las zonas aguanta: usá el relleno uniforme.", "No scale of the zones holds: use the uniform infill.") \
+    X(StructZonedApply, "Usar las zonas", "Use the zones") \
+    X(StructZonedApplied, "Relleno por zonas: %d modificadores", "Infill by zones: %d modifiers") \
+    X(StructRibs, "Nervios", "Ribs") \
+    X(StructRibsTip, "Después del relleno uniforme, el relleno en una sola dirección a lo largo de las tensiones donde trabajan en una dirección, y el mínimo buscado otra vez (varios análisis más).", "After the uniform infill, one-direction infill along the stresses where they work one way, and the lowest searched again (several more analyses).") \
+    X(StructRibsFound, "Con nervios: %d %% (factor %.2f) contra %d %% sin ellos; %d zonas a %s.", "With ribs: %d %% (factor %.2f) against %d %% without; %d zones at %s.") \
+    X(StructRibsNotLighter, "Los nervios no bajan el relleno: conviene el uniforme.", "The ribs do not lower the infill: the uniform infill is better.") \
+    X(StructRibsNone, "No hay zonas donde el relleno trabaje en una sola dirección.", "There are no zones where the infill works one way.") \
+    X(StructRibsApply, "Usar los nervios", "Use the ribs") \
+    X(StructRibsApplied, "Nervios: %d %%, %d modificadores", "Ribs: %d %%, %d modifiers") \
+    X(StructReinforce, "Refuerzos", "Reinforcements") \
+    X(StructReinforceTip, "Después del relleno uniforme, 2 perímetros más y relleno más denso alrededor de los apoyos y las cargas, y el relleno mínimo del resto buscado otra vez (varios análisis más).", "After the uniform infill, 2 more walls and denser infill round the supports and the loads, and the lowest infill of the rest searched again (several more analyses).") \
+    X(StructReinforceFound, "Con refuerzos (%.0f mm): el resto al %d %% (factor %.2f), %.2f g contra %.2f g sin ellos.", "With reinforcements (%.0f mm): the rest at %d %% (factor %.2f), %.2f g against %.2f g without.") \
+    X(StructReinforceHeavier, "Con refuerzos no queda más liviano: conviene el uniforme.", "With reinforcements it is not lighter: the uniform infill is better.") \
+    X(StructReinforceApply, "Usar los refuerzos", "Use the reinforcements") \
+    X(StructReinforceApplied, "Refuerzos: el resto al %d %%, %d modificadores", "Reinforcements: the rest at %d %%, %d modifiers") \
+    X(StructZonedTurned, "La pieza está girada con escalas distintas: las zonas no caben como cajas.", "The part is turned with unequal scales: the zones do not fit as boxes.") \
+    X(CloudPlanLock, "Incluido en el plan %s", "Included in the plan %s") \
+    X(StructCloud, "Calcular en la nube", "Calculate in the cloud") \
+    X(StructCloudTip, "Manda el análisis a Tisma Cloud; el resultado vuelve a esta pieza.", "Sends the analysis to Tisma Cloud; the result comes back to this part.") \
+    X(StructCloudLogin, "Iniciá sesión en Tisma Cloud para calcular en la nube.", "Log in to Tisma Cloud to calculate in the cloud.") \
+    X(StructAnalyzeCloud, "Analizar en la nube", "Analyze in the cloud") \
+    X(StructCloudState, "En la nube: %s %d %%", "In the cloud: %s %d %%") \
+    X(StructCloudDone, "Análisis en la nube listo.", "Analysis in the cloud done.") \
+    X(StructCloudFailed, "El análisis en la nube falló: %s", "The analysis in the cloud failed: %s") \
     X(StructEstimate, "Unos %zu vóxeles de %.2f mm", "About %zu voxels of %.2f mm") \
     X(StructCritical, "Punto crítico: %.2f", "Critical point: %.2f") \
     X(StructNotValid, "El resultado no sirve:", "The result is not usable:") \

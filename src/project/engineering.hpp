@@ -118,6 +118,12 @@ const char* condition_kind_name(ConditionKind kind);
 // Triangle numbers, forces' axes and vectors stay: they are the world's.
 void move_engineering(ProjectEngineering& e, const std::array<double, 9>& a, const std::array<double, 3>& b);
 
+// The conditions turned by the rotation r (3 × 3 by rows), the bed's
+// directions with them: points, normals and each force's direction (one
+// along an axis becomes three numbers). For an analysis made on the part
+// turned (a belt printer's layers laid flat).
+void turn_engineering(ProjectEngineering& e, const std::array<double, 9>& r);
+
 // What a result depends on, as 16 hexadecimal digits (FNV-1a, 64 bits): the
 // part's mesh, its conditions, values and options (not its results), and the
 // settings' JSON. A result whose fingerprint differs from the current one is

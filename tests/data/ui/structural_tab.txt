@@ -17,10 +17,18 @@ expect-control structural_line_width
 expect-control structural_working_temperature
 expect-control structural_analyze
 expect-structural fixed
+# Rule 10: the size, memory and time the analysis would take (what the old
+# Análisis tab of Impresión 3D showed).
+expect-text vóxeles de
+wait 20
+expect-text Memoria: unos
+expect-control structural_print_direction
 expect-no-control tab_prepare
 menu mode_print
 expect-control tab_prepare
 expect-no-control tab_structural
+# EP1: Impresión 3D has no «Análisis» any more (rule 1).
+expect-no-control tab_analysis
 # Marking (rules 5 and 8; EP5, EP7): a fixed zone clicked on the cube, then
 # a force point; Ctrl+Z takes the force back, Ctrl+Y puts it again; with
 # Rotar (Esc) a click marks nothing.
@@ -43,3 +51,11 @@ key escape
 click-model
 expect-structural none
 expect-no-control structural_condition_remove_2
+# Rule 7: the force's arrow, its free end dragged, turns the force (its
+# direction becomes three numbers); Ctrl+Z puts it back.
+expect-control structural_arrow_2
+expect-no-control structural_force_vector_1
+drag-control structural_arrow_2 60 -40
+expect-control structural_force_vector_1
+key ctrl+z
+expect-no-control structural_force_vector_1

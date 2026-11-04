@@ -21,6 +21,13 @@ namespace tisma {
 // (its lowest y and z to 0), so that its first layer starts on the belt.
 IndexedMesh belt_mesh(const IndexedMesh& mesh, const Settings& settings);
 
+// The turn about X that lays a belt printer's layers flat, as a 3 × 3 matrix
+// by rows: z' = y·sin α + z·cos α across the layers, y' = y·cos α − z·sin α
+// (a rotation: belt_mesh's v with its sign changed, so nothing is mirrored).
+// The structural analysis of a part printed on the belt runs on the part so
+// turned (engineering_panel.md, rule 10: «dirección de impresión»).
+std::array<double, 9> belt_layer_rotation(const Settings& settings);
+
 // The machine's axes for a point (x, v) of the layer at s (rule 2): x; the
 // belt at s / sin α; the gantry at z / sin α = v + s·cot α. {x, belt, gantry}.
 std::array<double, 3> belt_axes(const Settings& settings, double x, double v, double s);

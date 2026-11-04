@@ -411,3 +411,15 @@ TEST_CASE("G-code check: a part below or above z = 0 prints from the bed up", "[
         CHECK(o.gcode == on_bed.gcode);
     }
 }
+
+TEST_CASE("check limits: the highest layer, not the last (fuzz seed 20261104, run 1308)", "[gcode][check]") {
+    // Copies one after another, the middle one with other layers (another
+    // nozzle): its top is above the last copy's.
+    SlicedModel model;
+    model.layers = {{0.0, 0.2}, {0.2, 5.875}, {0.0, 0.2}, {0.2, 5.938}, {0.0, 0.2}, {0.2, 5.875}};
+    Settings s;
+    s.retract_lift = 0.15;
+    s.ramping_lift = false;
+    const GcodeLimits limits = gcode_limits(model, s);
+    CHECK(limits.max_z >= 5.938 + 0.15 - 1e-9);
+}

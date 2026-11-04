@@ -9,11 +9,13 @@
 
 #include "fea/materials.hpp"
 #include "fea/zone.hpp"
+#include "mesh/indexed_mesh.hpp"
 #include "project/engineering_values.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <numbers>
 
 namespace tisma {
 
@@ -240,6 +242,619 @@ FailureMode weakest_mode(const AnalysisReport& report) {
     return report.result.weakest < mode.size() ? mode[report.result.weakest] : FailureMode::None;
 }
 
+Verdict report_verdict(const AnalysisReport& report, const AnalysisCase& c, const ProjectEngineering& e,
+                       const TriangleMesh& mesh) {
+    VerdictInput in;
+    for (const LimitCheck& l : check_limits(e, mesh, report))
+        in.limit_exceeded = in.limit_exceeded || l.exceeded;
+    in.family = family_of(c.material_id);
+    in.required_safety = e.structural.safety_factor;
+    in.working_temperature = e.working_temperature;
+    in.min_safety = report.result.min_safety;
+    return structural_verdict(in);
+}
+
+double infill_strength_exponent(InfillPattern pattern) {
+    // structural_analysis.md, «Exponentes del relleno»; the patterns the table
+    // does not name take the nearest kind's (lines as rectilinear, 3D cells
+    // as cubic).
+    switch (pattern) {
+    case InfillPattern::Honeycomb: return 1.4;
+    case InfillPattern::Cubic:
+    case InfillPattern::AdaptiveCubic:
+    case InfillPattern::SupportCubic:
+    case InfillPattern::Octagram: return 1.4;
+    case InfillPattern::Gyroid: return 1.5;
+    case InfillPattern::Lightning: return 2.5;
+    default: return 1.2;
+    }
+}
+
+namespace {
+
+TriangleMesh box_between(const Vec3f& lo, const Vec3f& hi) {
+    const Vec3f v[8] = {{lo.x, lo.y, lo.z}, {hi.x, lo.y, lo.z}, {hi.x, hi.y, lo.z}, {lo.x, hi.y, lo.z},
+                        {lo.x, lo.y, hi.z}, {hi.x, lo.y, hi.z}, {hi.x, hi.y, hi.z}, {lo.x, hi.y, hi.z}};
+    static constexpr int kFaces[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                                          {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+    TriangleMesh m;
+    for (const auto& f : kFaces)
+        m.add_triangle(v[f[0]], v[f[1]], v[f[2]]);
+    return m;
+}
+
+} // namespace
+
+namespace {
+
+// The part cut in cells of 3 voxels a side and at least 3 mm (in Z by the
+// planes' heights): structural_optimization.md, rules 3 and 4.
+struct Cells {
+    const VoxelGrid& g;
+    int cx = 3, cy = 3, nx = 0, ny = 0, nz = 0;
+    std::vector<int> z_cell; // each layer of voxels to its cell row
+    std::vector<double> z_cut;
+    explicit Cells(const VoxelGrid& grid) : g(grid) {
+        cx = std::max(3, int(std::ceil(3.0 / g.hx)));
+        cy = std::max(3, int(std::ceil(3.0 / g.hy)));
+        z_cell.resize(std::size_t(g.nz));
+        z_cut = {g.z.front()};
+        for (int k = 0, count = 0; k < g.nz; ++k) {
+            z_cell[std::size_t(k)] = int(z_cut.size()) - 1;
+            ++count;
+            if ((count >= 3 && g.z[std::size_t(k) + 1] - z_cut.back() >= 3.0 - 1e-9) || k + 1 == g.nz) {
+                z_cut.push_back(g.z[std::size_t(k) + 1]);
+                count = 0;
+            }
+        }
+        nx = (g.nx + cx - 1) / cx;
+        ny = (g.ny + cy - 1) / cy;
+        nz = int(z_cut.size()) - 1;
+    }
+    std::size_t count() const { return std::size_t(nx) * std::size_t(ny) * std::size_t(nz); }
+    std::size_t cell(int i, int j, int k) const { return (std::size_t(k) * std::size_t(ny) + std::size_t(j)) * std::size_t(nx) + std::size_t(i); }
+    std::size_t of(int i, int j, int k) const { return cell(i / cx, j / cy, z_cell[std::size_t(k)]); }
+    // Each run along X of cells in the same group (group_of: -1 for none) as
+    // one box: emit(group, cells, lo, hi).
+    template <class GroupOf, class Emit>
+    void rows(GroupOf group_of, Emit emit) const {
+        for (int k = 0; k < nz; ++k)
+            for (int j = 0; j < ny; ++j)
+                for (int i = 0; i < nx;) {
+                    const int which = group_of(cell(i, j, k));
+                    if (which < 0) {
+                        ++i;
+                        continue;
+                    }
+                    int end = i + 1;
+                    while (end < nx && group_of(cell(end, j, k)) == which)
+                        ++end;
+                    const Vec3f lo{float(g.x0 + i * cx * g.hx), float(g.y0 + j * cy * g.hy), float(z_cut[std::size_t(k)])};
+                    const Vec3f hi{float(g.x0 + std::min(end * cx, g.nx) * g.hx), float(g.y0 + std::min((j + 1) * cy, g.ny) * g.hy),
+                                   float(z_cut[std::size_t(k) + 1])};
+                    emit(which, std::size_t(end - i), lo, hi);
+                    i = end;
+                }
+    }
+};
+
+} // namespace
+
+InfillZones infill_zones(const AnalysisReport& report, double density, double asked, InfillPattern pattern, double scale) {
+    InfillZones out;
+    const VoxelGrid& g = report.grid;
+    const std::vector<double>& safety = report.result.safety;
+    if (g.solid.empty() || safety.size() != g.solid.size() || g.z.size() < 2)
+        return out;
+    const double n = infill_strength_exponent(pattern);
+    const Cells cells(g);
+    std::vector<double> want(cells.count(), -1.0); // -1: no voxel
+    for (int k = 0; k < g.nz; ++k)
+        for (int j = 0; j < g.ny; ++j)
+            for (int i = 0; i < g.nx; ++i) {
+                if (!g.at(i, j, k))
+                    continue;
+                const double s = safety[g.index(i, j, k)];
+                const double u = std::isfinite(s) && s > 0.0 ? asked / s : 0.0;
+                double& w = want[cells.of(i, j, k)];
+                w = std::max(w, std::min(100.0, density * std::pow(u, 1.0 / n)));
+            }
+    // Three levels by thirds of the cells, each at its most.
+    std::vector<double> sorted;
+    for (double w : want)
+        if (w >= 0.0)
+            sorted.push_back(w);
+    if (sorted.empty())
+        return out;
+    std::sort(sorted.begin(), sorted.end());
+    const std::size_t third = sorted.size() / 3;
+    const std::array<double, 2> cut{sorted[std::min(sorted.size() - 1, third)], sorted[std::min(sorted.size() - 1, 2 * third)]};
+    std::array<double, 3> most{0.0, 0.0, 0.0};
+    const auto level_of = [&](double w) { return w <= cut[0] ? 0 : w <= cut[1] ? 1 : 2; };
+    for (double w : sorted)
+        most[std::size_t(level_of(w))] = std::max(most[std::size_t(level_of(w))], w);
+    for (std::size_t l = 0; l < 3; ++l)
+        out.density[l] = std::min(100.0, std::round(most[l] * scale));
+    // The boxes: a level's cells along X joined.
+    cells.rows([&](std::size_t c) { return want[c] < 0.0 ? -1 : level_of(want[c]); },
+               [&](int level, std::size_t count, const Vec3f& lo, const Vec3f& hi) {
+                   out.cells[std::size_t(level)] += count;
+                   out.modifiers.push_back({"zone " + std::to_string(level + 1), 0, box_between(lo, hi),
+                                            "{\"infill\": {\"density\": " + std::to_string(int(out.density[std::size_t(level)])) + "}}"});
+               });
+    return out;
+}
+
+InfillRibs infill_ribs(const AnalysisReport& report) {
+    InfillRibs out;
+    const VoxelGrid& g = report.grid;
+    const std::vector<double>& safety = report.result.safety;
+    const auto& stress = report.result.layer_stress;
+    if (g.solid.empty() || safety.size() != g.solid.size() || stress.size() != g.solid.size() || g.z.size() < 2)
+        return out;
+    // Each voxel: its principal stresses in the layer, the larger one's
+    // direction θ and how much it works one way, a = (|σ1| - |σ2|) / (|σ1| + |σ2|);
+    // each cell averages a · (cos 2θ, sin 2θ) weighed by the failure index.
+    const Cells cells(g);
+    struct Sum {
+        double c = 0.0, s = 0.0, weight = 0.0, most = 0.0;
+        bool any = false;
+    };
+    std::vector<Sum> sum(cells.count());
+    double most = 0.0;
+    for (int k = 0; k < g.nz; ++k)
+        for (int j = 0; j < g.ny; ++j)
+            for (int i = 0; i < g.nx; ++i) {
+                if (!g.at(i, j, k))
+                    continue;
+                const std::size_t v = g.index(i, j, k);
+                Sum& t = sum[cells.of(i, j, k)];
+                t.any = true;
+                const double f = std::isfinite(safety[v]) && safety[v] > 0.0 ? 1.0 / safety[v] : 0.0;
+                if (f <= 0.0)
+                    continue;
+                const double sx = stress[v][0], sy = stress[v][1], txy = stress[v][2];
+                const double mid = 0.5 * (sx + sy), r = std::hypot(0.5 * (sx - sy), txy);
+                const double s1 = mid + r, s2 = mid - r;
+                if (std::abs(s1) + std::abs(s2) <= 0.0)
+                    continue;
+                const double a = std::abs(std::abs(s1) - std::abs(s2)) / (std::abs(s1) + std::abs(s2));
+                // The direction of s1 is at 2θ1 = atan2(2τ, σx - σy); s2's is 90° from it.
+                double two_theta = std::atan2(2.0 * txy, sx - sy);
+                if (std::abs(s2) > std::abs(s1))
+                    two_theta += std::numbers::pi;
+                t.c += f * a * std::cos(two_theta);
+                t.s += f * a * std::sin(two_theta);
+                t.weight += f;
+                t.most = std::max(t.most, f);
+                most = std::max(most, f);
+            }
+    if (most <= 0.0)
+        return out;
+    // The cells kept: at least 20 % of the largest failure index, and working
+    // one way 0.5 or more on average; grouped by angle in steps of 15°.
+    constexpr double kStep = 15.0;
+    std::vector<int> group(cells.count(), -1);
+    for (std::size_t c = 0; c < cells.count(); ++c) {
+        const Sum& t = sum[c];
+        if (!t.any || t.weight <= 0.0 || t.most < 0.2 * most || std::hypot(t.c, t.s) / t.weight < 0.5)
+            continue;
+        double degrees = 0.5 * std::atan2(t.s, t.c) * 180.0 / std::numbers::pi; // (-90, 90]
+        int step = int(std::lround(degrees / kStep));
+        step = ((step % 12) + 12) % 12; // 0 to 165 degrees
+        group[c] = step;
+        ++out.cells;
+    }
+    std::array<std::size_t, 12> used{};
+    cells.rows([&](std::size_t c) { return group[c]; },
+               [&](int step, std::size_t count, const Vec3f& lo, const Vec3f& hi) {
+                   used[std::size_t(step)] += count;
+                   const int degrees = int(step * kStep);
+                   out.modifiers.push_back({"rib " + std::to_string(degrees), 0, box_between(lo, hi),
+                                            "{\"infill\": {\"pattern\": \"aligned_rectilinear\", \"angle\": " + std::to_string(degrees) + "}}"});
+               });
+    for (int step = 0; step < 12; ++step)
+        if (used[std::size_t(step)] > 0) {
+            out.angles.push_back(step * kStep);
+            out.group_cells.push_back(used[std::size_t(step)]);
+        }
+    return out;
+}
+
+Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCase& c, const Settings& settings, double radius) {
+    Reinforcement out;
+    const VoxelGrid& g = report.grid;
+    if (g.solid.empty() || g.z.size() < 2)
+        return out;
+    if (radius <= 0.0) {
+        double load = 0.0;
+        for (const CaseLoad& l : c.loads)
+            if (l.region.shape && l.region.shape->disc)
+                load = std::max(load, l.region.shape->radius);
+        radius = std::max(5.0, 2.0 * load);
+    }
+    out.radius = radius;
+    // The places: each region's marked surface, else its box (a face of the
+    // part: the grid's side).
+    const double x1 = g.x0 + g.nx * g.hx, y1 = g.y0 + g.ny * g.hy, z0 = g.z.front(), z1 = g.z.back();
+    struct Place {
+        std::unique_ptr<SurfaceZone> zone;
+        double lo[3], hi[3];
+    };
+    std::vector<Place> places;
+    const auto add = [&](const Region& r) {
+        Place p;
+        for (int a = 0; a < 3; ++a)
+            p.lo[a] = r.box.min[a], p.hi[a] = r.box.max[a];
+        switch (r.face) {
+        case PartFace::Bottom: p.hi[2] = z0; break;
+        case PartFace::Top: p.lo[2] = z1; break;
+        case PartFace::XMin: p.hi[0] = g.x0; break;
+        case PartFace::XMax: p.lo[0] = x1; break;
+        case PartFace::YMin: p.hi[1] = g.y0; break;
+        case PartFace::YMax: p.lo[1] = y1; break;
+        case PartFace::None: break;
+        }
+        if (r.shape)
+            p.zone = std::make_unique<SurfaceZone>(*r.shape, radius, radius);
+        places.push_back(std::move(p));
+    };
+    for (const CaseFixture& f : c.fixtures)
+        add(f.region);
+    for (const CaseLoad& l : c.loads)
+        add(l.region);
+    const auto near = [&](double x, double y, double z) {
+        for (const Place& p : places) {
+            if (p.zone) {
+                if (p.zone->near(x, y, z))
+                    return true;
+                continue;
+            }
+            const double q[3] = {x, y, z};
+            double d2 = 0.0;
+            for (int a = 0; a < 3; ++a) {
+                const double d = std::max({p.lo[a] - q[a], 0.0, q[a] - p.hi[a]});
+                d2 += d * d;
+            }
+            if (d2 <= radius * radius)
+                return true;
+        }
+        return false;
+    };
+    // Cells of 2 mm (at least a voxel) with some of the part.
+    const int cx = std::max(1, int(std::lround(2.0 / g.hx))), cy = std::max(1, int(std::lround(2.0 / g.hy)));
+    std::vector<int> z_cell(std::size_t(g.nz));
+    std::vector<double> z_cut{z0};
+    for (int k = 0; k < g.nz; ++k) {
+        z_cell[std::size_t(k)] = int(z_cut.size()) - 1;
+        if (g.z[std::size_t(k) + 1] - z_cut.back() >= 2.0 - 1e-9 || k + 1 == g.nz)
+            z_cut.push_back(g.z[std::size_t(k) + 1]);
+    }
+    const int nx = (g.nx + cx - 1) / cx, ny = (g.ny + cy - 1) / cy, nz = int(z_cut.size()) - 1;
+    std::vector<std::uint8_t> part(std::size_t(nx) * std::size_t(ny) * std::size_t(nz), 0);
+    const auto cell = [&](int i, int j, int k) { return (std::size_t(k) * std::size_t(ny) + std::size_t(j)) * std::size_t(nx) + std::size_t(i); };
+    for (int k = 0; k < g.nz; ++k)
+        for (int j = 0; j < g.ny; ++j)
+            for (int i = 0; i < g.nx; ++i)
+                if (g.at(i, j, k))
+                    part[cell(i / cx, j / cy, z_cell[std::size_t(k)])] = 1;
+    std::vector<std::uint8_t> in(part.size(), 0);
+    for (int k = 0; k < nz; ++k)
+        for (int j = 0; j < ny; ++j)
+            for (int i = 0; i < nx; ++i) {
+                if (!part[cell(i, j, k)])
+                    continue;
+                const double x = g.x0 + (std::min((i + 1) * cx, g.nx) + i * cx) * 0.5 * g.hx;
+                const double y = g.y0 + (std::min((j + 1) * cy, g.ny) + j * cy) * 0.5 * g.hy;
+                const double z = 0.5 * (z_cut[std::size_t(k)] + z_cut[std::size_t(k) + 1]);
+                if (near(x, y, z)) {
+                    in[cell(i, j, k)] = 1;
+                    ++out.cells;
+                }
+            }
+    const std::string own = "{\"walls\": {\"count\": " + std::to_string(settings.wall_count + 2) +
+                            "}, \"infill\": {\"density\": " + std::to_string(int(std::max(40.0, std::ceil(settings.infill_density)))) + "}}";
+    for (int k = 0; k < nz; ++k)
+        for (int j = 0; j < ny; ++j)
+            for (int i = 0; i < nx;) {
+                if (!in[cell(i, j, k)]) {
+                    ++i;
+                    continue;
+                }
+                int end = i + 1;
+                while (end < nx && in[cell(end, j, k)])
+                    ++end;
+                const Vec3f lo{float(g.x0 + i * cx * g.hx), float(g.y0 + j * cy * g.hy), float(z_cut[std::size_t(k)])};
+                const Vec3f hi{float(g.x0 + std::min(end * cx, g.nx) * g.hx), float(g.y0 + std::min((j + 1) * cy, g.ny) * g.hy),
+                               float(z_cut[std::size_t(k) + 1])};
+                out.modifiers.push_back({"reinforcement", 0, box_between(lo, hi), own});
+                i = end;
+            }
+    return out;
+}
+
+std::array<double, 9> layers_along(int axis) {
+    switch (axis) {
+    case 1: return {0, 0, -1, 0, 1, 0, 1, 0, 0}; // a quarter turn about Y: X up
+    case 2: return {1, 0, 0, 0, 0, -1, 0, 1, 0}; // a quarter turn about X: Y up
+    default: return {1, 0, 0, 0, 1, 0, 0, 0, 1};
+    }
+}
+
+OrientationChoice recommended_orientation(const TriangleMesh& placed, const Settings& settings, const ProjectEngineering& e,
+                                          std::string_view filament_type, const std::function<void(double)>& progress) {
+    OrientationChoice out;
+    for (int axis = 0; axis < 3; ++axis) {
+        const std::array<double, 9> r = layers_along(axis);
+        std::vector<Vec3f> corners = placed.corners();
+        for (Vec3f& v : corners)
+            v = Vec3f{float(r[0] * v.x + r[1] * v.y + r[2] * v.z), float(r[3] * v.x + r[4] * v.y + r[5] * v.z),
+                      float(r[6] * v.x + r[7] * v.y + r[8] * v.z)};
+        const TriangleMesh turned(std::move(corners));
+        ProjectEngineering moved = e;
+        turn_engineering(moved, r);
+        std::vector<std::string> notes;
+        AnalysisCase c = engineering_analysis_case(moved, turned, {}, notes, filament_type, settings.layer_height,
+                                                   print_conditions(settings, moved));
+        const IndexedMesh mesh = weld_exact(turned);
+        fit_voxel_limit(c, mesh, settings);
+        const AnalysisReport report = run_analysis(mesh, settings, c, nullptr, [&](std::string_view, double done) {
+            if (progress)
+                progress((double(axis) + std::clamp(done, 0.0, 1.0)) / 3.0);
+        });
+        ++out.analyses;
+        out.safety[std::size_t(axis)] = report.valid && std::isfinite(report.result.min_safety) ? report.result.min_safety : 0.0;
+    }
+    for (int axis = 1; axis < 3; ++axis)
+        if (out.safety[std::size_t(axis)] > out.safety[std::size_t(out.best)])
+            out.best = axis;
+    out.recommend = out.best != 0 && out.safety[std::size_t(out.best)] > 1.05 * out.safety[0];
+    if (progress)
+        progress(1.0);
+    return out;
+}
+
+ReinforcedInfill reinforced_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                                   const AnalysisCase& c, const ProjectEngineering& e, int density,
+                                   const std::function<void(double)>& progress) {
+    ReinforcedInfill out;
+    const auto finish = [&]() -> ReinforcedInfill {
+        if (progress)
+            progress(1.0);
+        return out;
+    };
+    if (c.model == AnalysisModel::Solid)
+        return finish();
+    // The plain analysis (a tenth of the bar), the search (eight tenths),
+    // the mass with the zone (the last tenth).
+    const MaterialFamily* family = family_of(c.material_id);
+    const double grams_per_cm3 = family ? family->density : 1.0;
+    const auto part = [&](double from, double width) {
+        return [&progress, from, width](std::string_view, double done) {
+            if (progress)
+                progress(from + width * std::clamp(done, 0.0, 1.0));
+        };
+    };
+    Settings at = settings;
+    at.infill_density = double(density);
+    const AnalysisReport plain = run_analysis(mesh, at, c, nullptr, part(0.0, 0.1));
+    ++out.analyses;
+    if (!plain.valid)
+        return finish();
+    out.plain_mass_g = voxel_mass_grams(plain.grid, grams_per_cm3);
+    out.zone = reinforcement_zone(plain, c, at);
+    if (out.zone.modifiers.empty())
+        return finish();
+    out.best = lightest_infill(
+        mesh, placed, settings, c, e,
+        [&](double done) {
+            if (progress)
+                progress(0.1 + 0.8 * done);
+        },
+        &out.zone.modifiers);
+    out.analyses += out.best.analyses;
+    if (!out.best.found || out.best.solid)
+        return finish();
+    out.found = true;
+    Settings best = settings;
+    best.infill_density = double(out.best.density);
+    const AnalysisReport r = run_analysis(mesh, best, c, nullptr, part(0.9, 0.1), nullptr, &out.zone.modifiers);
+    ++out.analyses;
+    out.mass_g = voxel_mass_grams(r.grid, grams_per_cm3);
+    out.lighter = out.mass_g < out.plain_mass_g;
+    return finish();
+}
+
+RibbedInfill ribbed_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                           const AnalysisCase& c, const ProjectEngineering& e, int density,
+                           const std::function<void(double)>& progress) {
+    RibbedInfill out;
+    if (c.model == AnalysisModel::Solid || density <= 0) {
+        if (progress)
+            progress(1.0);
+        return out;
+    }
+    // The analysis without ribs, then `density` with them, then halving
+    // below it: at most 2 + 7 analyses.
+    constexpr int kMostAnalyses = 9;
+    const auto analyse = [&](int at, const std::vector<MeshModifier>* modifiers) {
+        Settings s = settings;
+        s.infill_density = double(at);
+        const int step = out.analyses++;
+        return run_analysis(mesh, s, c, nullptr,
+                            [&](std::string_view, double done) {
+                                if (progress)
+                                    progress((double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses);
+                            },
+                            nullptr, modifiers);
+    };
+    const auto finish = [&]() -> RibbedInfill {
+        if (progress)
+            progress(1.0);
+        return out;
+    };
+    const AnalysisReport plain = analyse(density, nullptr);
+    if (!plain.valid)
+        return finish();
+    out.ribs = infill_ribs(plain);
+    if (out.ribs.modifiers.empty())
+        return finish();
+    const auto holds = [&](int at, double& safety) {
+        const AnalysisReport r = analyse(at, &out.ribs.modifiers);
+        safety = r.result.min_safety;
+        return r.valid && report_verdict(r, c, e, placed) == Verdict::Holds;
+    };
+    double safety = 0.0;
+    if (!holds(density, safety))
+        return finish();
+    out.found = true;
+    out.density = density;
+    out.min_safety = safety;
+    int fails = -1;
+    while (out.density - fails > 1) {
+        const int mid = (fails + out.density) / 2;
+        if (holds(mid, safety)) {
+            out.density = mid;
+            out.min_safety = safety;
+        } else {
+            fails = mid;
+        }
+    }
+    out.lighter = out.density < density;
+    return finish();
+}
+
+ZonedInfill zoned_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                         const AnalysisCase& c, const ProjectEngineering& e, int density,
+                         const std::function<void(double)>& progress) {
+    ZonedInfill out;
+    if (c.model == AnalysisModel::Solid)
+        return out;
+    // The uniform analysis, then scale 1, then halving: at most 7 analyses.
+    constexpr int kMostAnalyses = 7, kHalvings = 5;
+    const MaterialFamily* family = family_of(c.material_id);
+    const double grams_per_cm3 = family ? family->density : 1.0;
+    const auto analyse = [&](const Settings& s, const std::vector<MeshModifier>* modifiers) {
+        const int step = out.analyses++;
+        return run_analysis(mesh, s, c, nullptr,
+                            [&](std::string_view, double done) {
+                                if (progress)
+                                    progress((double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses);
+                            },
+                            nullptr, modifiers);
+    };
+    Settings uniform = settings;
+    uniform.infill_density = double(density);
+    const AnalysisReport base = analyse(uniform, nullptr);
+    if (!base.valid) {
+        if (progress)
+            progress(1.0);
+        return out;
+    }
+    out.uniform_mass_g = voxel_mass_grams(base.grid, grams_per_cm3);
+    const double asked = e.structural.safety_factor;
+    // A try: the object at the lowest level, the denser levels as modifiers.
+    const auto holds = [&](double scale, InfillZones& zones, double& mass, double& safety) {
+        zones = infill_zones(base, double(density), asked, settings.infill_pattern, scale);
+        if (zones.modifiers.empty())
+            return false;
+        const std::string lowest = "zone 1";
+        std::vector<MeshModifier> denser;
+        for (const MeshModifier& m : zones.modifiers)
+            if (m.name != lowest)
+                denser.push_back(m);
+        zones.modifiers = denser;
+        Settings s = settings;
+        s.infill_density = zones.density[0];
+        const AnalysisReport r = analyse(s, &zones.modifiers);
+        mass = voxel_mass_grams(r.grid, grams_per_cm3);
+        safety = r.result.min_safety;
+        return r.valid && report_verdict(r, c, e, placed) == Verdict::Holds;
+    };
+    const auto keep = [&](const InfillZones& zones, double mass, double safety) {
+        out.found = true;
+        out.zones = zones;
+        out.mass_g = mass;
+        out.min_safety = safety;
+    };
+    InfillZones zones;
+    double mass = 0.0, safety = 0.0;
+    // At scale 1 every cell gets what brings it to the asked factor; the
+    // scale that fills the lowest level to 100 % is the most that matters.
+    double fails = 0.0, holds_at = 0.0;
+    if (holds(1.0, zones, mass, safety)) {
+        keep(zones, mass, safety);
+        holds_at = 1.0;
+    } else {
+        fails = 1.0;
+        holds_at = 100.0 / std::max(1.0, infill_zones(base, double(density), asked, settings.infill_pattern).density[0]);
+    }
+    for (int h = 0; h < kHalvings && holds_at > fails; ++h) {
+        const double mid = 0.5 * (fails + holds_at);
+        if (holds(mid, zones, mass, safety)) {
+            keep(zones, mass, safety);
+            holds_at = mid;
+        } else {
+            fails = mid;
+        }
+    }
+    out.lighter = out.found && out.mass_g < out.uniform_mass_g;
+    if (progress)
+        progress(1.0);
+    return out;
+}
+
+LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                               const AnalysisCase& c, const ProjectEngineering& e,
+                               const std::function<void(double)>& progress, const std::vector<MeshModifier>* modifiers) {
+    LightestInfill out;
+    if (c.model == AnalysisModel::Solid) {
+        out.solid = true;
+        return out;
+    }
+    // 100 %, then halving between the highest that fails and the lowest
+    // that holds: at most 8 analyses.
+    constexpr int kMostAnalyses = 8;
+    const auto holds = [&](int density, double& safety) {
+        Settings s = settings;
+        s.infill_density = double(density);
+        const int step = out.analyses++;
+        const AnalysisReport r = run_analysis(
+            mesh, s, c, nullptr,
+            [&](std::string_view, double done) {
+                if (progress)
+                    progress((double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses);
+            },
+            nullptr, modifiers);
+        safety = r.result.min_safety;
+        return r.valid && report_verdict(r, c, e, placed) == Verdict::Holds;
+    };
+    double safety = 0.0;
+    if (!holds(100, safety)) {
+        out.min_safety = safety;
+        if (progress)
+            progress(1.0);
+        return out;
+    }
+    out.found = true;
+    out.min_safety = safety;
+    int fails = -1, holds_at = 100;
+    while (holds_at - fails > 1) {
+        const int mid = (fails + holds_at) / 2;
+        double s = 0.0;
+        if (holds(mid, s)) {
+            holds_at = mid;
+            out.min_safety = s;
+        } else {
+            fails = mid;
+        }
+    }
+    out.density = holds_at;
+    if (progress)
+        progress(1.0);
+    return out;
+}
+
 std::string structural_report_json(const AnalysisReport& report, const AnalysisCase& c, const ProjectEngineering& e,
                                    const std::array<double, 12>& to_part, const TriangleMesh* mesh) {
     nlohmann::json j = nlohmann::json::parse(analysis_json(report, c, to_part));
@@ -277,7 +892,7 @@ std::string structural_report_json(const AnalysisReport& report, const AnalysisC
     const FailureMode mode = weakest_mode(report);
     const double discretization = report.resolution.done ? std::abs(report.resolution.change) : 0.0;
     const SafetyBand band = safety_band(report.result.min_safety, mode, c.adhesion, discretization);
-    const auto finite_or_null = [](double v) { return std::isfinite(v) ? nlohmann::json(v) : nlohmann::json(nullptr); };
+    const auto finite_or_null = [](double x) { return std::isfinite(x) ? nlohmann::json(x) : nlohmann::json(nullptr); };
     j["adhesion"] = {{"modelled", c.adhesion.modelled},
                      {"nozzle_temperature", c.adhesion.temperature},
                      {"reference_temperature", c.adhesion.reference_temperature},

@@ -26,6 +26,7 @@
 #include "cad/sketch_edit.hpp"
 #include "cad/sketch_io.hpp"
 #include "cad/view_dxf.hpp"
+#include "slice/belt.hpp"
 #include "aero/aero.hpp"
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
@@ -474,7 +475,7 @@ void keep_unreadable(const std::filesystem::path& path) {
     std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ec);
 }
 
-enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device, Structural, Aerodynamics };
+enum class Tab { Prepare, Preview, Design, Calibration, Device, Structural, Aerodynamics };
 // The tabs of the Ingeniería section; the rest are Impresión 3D's (the
 // owner's request, 2026-11-02: each section with its tabs and its own panel).
 // Fasteners live inside Design (the owner, the same day).
@@ -580,7 +581,6 @@ private:
     void viewport();
     void view_tools();
     void preview_panels();
-    void analysis_panel();
     // The Design tab (cad_design.md, stage D1): the panel, the command line
     // under the view, the design built through the bundled tool.
     void design_panel();
@@ -636,6 +636,14 @@ private:
     Project current_project() const;
     void start_cloud_slice();
     void cloud_slice_step();
+    // «Calcular en la nube» in Structural (engineering_panel.md, rule 10;
+    // cloud.md, rules 6 to 10b): the project as a fea job, its .tea result
+    // kept with the part as a local one.
+    std::size_t cloud_eng_part_ = 0;
+    std::string cloud_eng_kind_; // "structural" (a fea job) or "aerodynamics" (aero)
+    std::string cloud_eng_fingerprint_;
+    void start_cloud_engineering(const std::string& kind);
+    void cloud_engineering_step();
     struct CloudSliceState { // shared with the call's thread
         std::mutex mutex;
         std::string status; // queued, running, done...
@@ -691,7 +699,13 @@ private:
         std::string error;
         std::size_t part = 0;
         std::string fingerprint, report;
-        std::vector<float> surface;     // the voxels' outside, 6 floats a corner (mesh_vertices' layout)
+        // The voxels' outside (rule 12): 3 corners a triangle, each corner's
+        // displacement (mm), and per triangle its safety factor, von Mises
+        // stress (MPa) and how far it moved (mm).
+        std::vector<Vec3f> corners, moved;
+        std::vector<float> safety, stress, motion;
+        double asked = 2.0, max_stress = 0.0, max_motion = 0.0, size = 1.0;
+        std::vector<float> surface;     // what the view paints: 6 floats a corner (mesh_vertices' layout), by band
         std::vector<std::uint8_t> band; // per triangle of `surface`: the map's colour band, 0 to 4
         std::optional<std::array<double, 3>> weakest; // on the bed
         double weakest_safety = 0.0;
@@ -701,12 +715,55 @@ private:
     std::atomic<int> structural_permille_{0};
     std::optional<StructuralRun> structural_map_; // the last finished run of this session
     bool structural_show_map_ = true;
+    // «Más opciones» (rule 10): the memory and time the analysis would take,
+    // counted in the background (estimate_analysis voxelizes the part).
+    struct StructuralEstimate {
+        std::string key;
+        double memory_mb = 0.0, seconds = 0.0;
+    };
+    Background<StructuralEstimate> structural_estimate_job_;
+    StructuralEstimate structural_estimate_;
+    int structural_map_kind_ = 0;          // 0 the safety factor, 1 von Mises, 2 the displacement (rule 12)
+    bool structural_deformed_ = false;     // the shape drawn deformed (rule 12)
+    float structural_exaggerate_ = 0.0f;   // times the real displacement; 0: chosen for the part
+    std::string structural_paint_key_;     // what the view's map shows
+    void paint_structural_map();
     bool try_material_ = false; // a suggested material chosen: analyze again
     bool structural_map_in_view_ = false;
     std::string structural_message_;
     std::string structural_parsed_for_;
     nlohmann::json structural_parsed_;
     void start_structural();
+    // «Optimizar» (rule 13; structural_optimization.md, rule 2): the lowest
+    // uniform infill that holds, searched in the background.
+    struct OptimizeRun {
+        std::size_t part = 0;
+        std::string fingerprint;
+        bool cancelled = false;
+        std::string error;
+        LightestInfill best;
+        bool zones = false; // also by zones (rule 3)
+        ZonedInfill zoned;
+        bool ribs = false; // also with ribs (rule 4)
+        RibbedInfill ribbed;
+        bool reinforce = false; // also with reinforcements (rule 6)
+        ReinforcedInfill reinforced;
+        // The part's map to the bed and its mesh's size when searched: the
+        // zones go on the model where it was (it may have moved since).
+        Affine to_bed;
+        std::size_t triangles = 0;
+    };
+    Background<OptimizeRun> optimize_job_;
+    std::atomic<bool> optimize_cancel_{false};
+    std::atomic<int> optimize_permille_{0};
+    std::optional<OptimizeRun> optimize_result_;
+    enum class OptimizeExtra { None, Zones, Ribs, Reinforce };
+    void start_optimize(OptimizeExtra extra = OptimizeExtra::None);
+    void apply_zones(std::size_t part, const ZonedInfill& zoned);
+    void apply_ribs(std::size_t part, const RibbedInfill& ribbed);
+    // The optimization's boxes as the part's own modifiers, its infill at
+    // `density`; undone together. False when they do not fit.
+    bool apply_boxes(std::size_t part, const std::vector<MeshModifier>& boxes, int density, const std::string& note);
     // Whether a part's result is out of date (rule 14): its fingerprint
     // hashes the whole mesh (200 ms for 2 million triangles), so it is
     // computed again only when the part, the plate, its Engineering data or
@@ -746,6 +803,15 @@ private:
     std::array<double, 3> aero_direction(const AerodynamicsInputs& a) const;
     bool structural_map_wanted();
     void structural_overlay();
+    // A force arrow's free end, dragged to turn the force (rule 7): the
+    // overlay keeps where each is drawn; a press on one starts the drag.
+    struct ArrowHandle {
+        std::size_t part = 0, condition = 0;
+        ImVec2 tail;
+        std::array<double, 3> at{}; // where the force acts, on the bed
+    };
+    std::vector<ArrowHandle> arrow_handles_;
+    std::optional<ArrowHandle> arrow_drag_;
     // Undo and redo of each part's Engineering data (rule 8): the part and
     // its data before the change.
     struct EngineeringStep {
@@ -833,7 +899,6 @@ private:
     void frame_all();
     void frame_now();
     void set_tab(Tab tab);
-    void estimate_voxels_if_stale();
     void notify(std::string text, bool error = false);
     void fail(T title, std::string message, std::vector<std::string> details = {});
     void load_preferences();
@@ -1068,7 +1133,7 @@ private:
 
     // What the model and the settings are now, and what the running jobs
     // were started from.
-    Revision revision_, slice_made_, voxels_made_;
+    Revision revision_, slice_made_;
     Slicer slicer_;
     Background<SliceResult> slice_job_;
     std::optional<SliceResult> result_;
@@ -1080,9 +1145,6 @@ private:
     std::filesystem::path gcode_path_;
     double slice_started_ = 0.0;
 
-    Background<VoxelEstimate> voxel_job_;
-    std::optional<VoxelEstimate> voxels_;
-    bool voxels_stale_ = true;
 
     // The Design tab (cad_design.md): the design, its last build and the
     // bundled tool (rule 1, first step).
@@ -1161,6 +1223,8 @@ private:
     // Slicing in the cloud (cloud.md, rules 6 to 9): the job in flight and its state.
     std::future<CloudSliceReply> cloud_slice_;
     std::shared_ptr<CloudSliceState> cloud_slice_state_;
+    std::future<CloudSliceReply> cloud_eng_;
+    std::shared_ptr<CloudSliceState> cloud_eng_state_;
     int config_page_ = 0;
     std::string config_query_;
     struct ConfigState {
@@ -3561,7 +3625,6 @@ void App::apply_theme() {
 
 void App::shutdown() {
     slice_job_.wait();
-    voxel_job_.wait();
     device_disconnect();
     // A normal exit: no mark left for the next start (problem_reports.md, rule 10).
     session_file_.close();
@@ -3860,8 +3923,6 @@ void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab
     renderer_.clear_preview();
     vk_view_.clear_preview();
     place_model();
-    voxels_.reset();
-    voxels_stale_ = true;
     stale_ = false;
     set_tab(tab);
     frame_all();
@@ -3964,7 +4025,6 @@ void App::plate_changed() {
     ++revision_.model;
     if (result_ && !viewer_)
         stale_ = true;
-    voxels_stale_ = true;
     rebuild_plate();
 }
 
@@ -4936,7 +4996,8 @@ void App::poll_jobs() {
         if (options_.layer > 0)
             top_layer_ = std::clamp(options_.layer - 1, 0, top_layer_);
         // A screenshot keeps the tab it asked for.
-        const Tab asked = options_.view == "analysis"      ? Tab::Analysis
+        // «analysis», the old tab, opens Structural (engineering_panel.md, rule 1).
+        const Tab asked = options_.view == "analysis"      ? Tab::Structural
                           : options_.view == "design"      ? Tab::Design
                           : options_.view == "structural"  ? Tab::Structural
                           : options_.view == "aerodynamics" ? Tab::Aerodynamics
@@ -4956,14 +5017,6 @@ void App::poll_jobs() {
             fail(T::CannotSlice, format(tr(T::GcodeBad), int(result_->check.problem_count)), std::move(details));
         }
     }
-    if (std::optional<VoxelEstimate> v = voxel_job_.take()) {
-        if (fit(voxels_made_, revision_) == Fit::Current) {
-            voxels_ = std::move(*v);
-        } else {
-            voxels_.reset();
-            voxels_stale_ = true;
-        }
-    }
     if (std::optional<cad::SolidCraftInfo> info = solidcraft_job_.take()) {
         solidcraft_ = std::move(*info);
         solidcraft_probed_ = true;
@@ -4976,13 +5029,12 @@ void App::poll_jobs() {
         design_session_->close_if_idle(600.0);
     if (std::optional<StructuralRun> run = structural_job_.take())
         structural_done(std::move(*run));
+    if (std::optional<OptimizeRun> run = optimize_job_.take())
+        optimize_result_ = std::move(*run);
     if (std::optional<AeroRun> run = aero_job_.take())
         aerodynamics_done(std::move(*run));
     update_structural_view();
     update_aero_view();
-    // The Analysis tab keeps its estimate up to date.
-    if (tab_ == Tab::Analysis)
-        estimate_voxels_if_stale();
 }
 
 void App::show_preview() {
@@ -5009,7 +5061,6 @@ void App::settings_changed() {
     ++revision_.settings;
     if (result_ && !viewer_)
         stale_ = true;
-    voxels_stale_ = true;
 }
 
 void App::bed_changed() {
@@ -5097,8 +5148,6 @@ void App::set_tab(Tab tab) {
     if (tab != tab_)
         printer_page_ = false;
     tab_ = tab;
-    if (tab == Tab::Analysis)
-        estimate_voxels_if_stale();
     // The Design tab shows the design in the same view, over the same bed;
     // leaving it brings the plate back (cad_design.md, rules 3 and 19).
     if (engineering_tab(tab))
@@ -5113,18 +5162,6 @@ void App::set_tab(Tab tab) {
         rebuild_plate();
         frame_all();
     }
-}
-
-void App::estimate_voxels_if_stale() {
-    if (!has_plate_ || !voxels_stale_ || voxel_job_.running())
-        return;
-    voxels_stale_ = false;
-    voxels_made_ = revision_;
-    TriangleMesh placed = plate_now();
-    Settings settings = settings_;
-    voxel_job_.start([placed = std::move(placed), settings = std::move(settings)]() {
-        return estimate_voxels(placed, settings);
-    });
 }
 
 void App::top_bar() {
@@ -5169,7 +5206,6 @@ void App::top_bar() {
                               {Tab::Structural, "tisma_engineering", T::TabStructural},
                               {Tab::Aerodynamics, "tisma_engineering", T::TabAerodynamics},
                               {Tab::Design, "tisma_design", T::TabDesign},
-                              {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
                               {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
                               {Tab::Device, "tisma_printer", T::TabDevice}};
     // A narrow window: the tabs, then the sections too, keep only their icons
@@ -5249,7 +5285,6 @@ void App::top_bar() {
                                             : t.tab == Tab::Design      ? "design"
                                             : t.tab == Tab::Structural  ? "structural"
                                             : t.tab == Tab::Aerodynamics ? "aerodynamics"
-                                            : t.tab == Tab::Analysis    ? "analysis"
                                             : t.tab == Tab::Calibration ? "calibration"
                                                                         : "device")] =
             ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
@@ -5257,7 +5292,7 @@ void App::top_bar() {
             anchor("preview");
         else if (t.tab == Tab::Calibration)
             anchor("calibrations");
-        else if (t.tab == Tab::Analysis)
+        else if (t.tab == Tab::Structural)
             anchor("engineering_panel");
         ImGui::SameLine(0, 4.0f * scale_);
     }
@@ -5326,10 +5361,20 @@ void App::top_bar() {
                                        ImGui::GetItemRectMax().y);
         if (cloud)
             cloud_open_ = true;
-        const bool cloud_slice = ImGui::MenuItem(tr(T::CloudSliceMenu), nullptr, false, has_plate_ && !cloud_slice_.valid());
+        // A plan without "slice" (cloud.md, rule 10b): the entry shows which
+        // plans have it and opens the account page instead.
+        const bool slice_locked = !cloud_token_.empty() && cloud_account_ &&
+                                  !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "slice");
+        const std::string slice_label =
+            slice_locked ? std::string(tr(T::CloudSliceMenu)) + " — " +
+                               format(tr(T::CloudPlanLock), cloud::plans_with(cloud_plans_, "slice").c_str())
+                         : std::string(tr(T::CloudSliceMenu));
+        const bool cloud_slice = ImGui::MenuItem(slice_label.c_str(), nullptr, false, has_plate_ && !cloud_slice_.valid());
         g_menu_rects["cloud_slice"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
                                              ImGui::GetItemRectMax().y);
-        if (cloud_slice)
+        if (cloud_slice && slice_locked)
+            cloud_open_ = true;
+        else if (cloud_slice)
             start_cloud_slice();
         const bool report = ImGui::MenuItem(tr(T::ReportMenu));
         g_menu_rects["report"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
@@ -6572,7 +6617,7 @@ void App::guide_overlay() {
         else if (step.anchor == "help_problems" || step.anchor == "help_procedures")
             help_open_ = true;
         else if (step.anchor.starts_with("engineering_"))
-            set_tab(Tab::Analysis);
+            set_tab(Tab::Structural);
         else if (step.anchor == "calibrations")
             set_tab(Tab::Calibration);
     } else if (found != anchors_.end()) {
@@ -8458,7 +8503,43 @@ void App::viewport() {
     // clicked, a zone as the whole face (face_region); with Shift a zone adds
     // the face to the last zone of its kind.
     // A double click's second click marks nothing more (UI50).
-    if (tab_ == Tab::Structural && structural_tool_ > 0 && !objects_.empty() && ImGui::IsItemActivated() &&
+    // A press on a force arrow's free end turns the force instead (rule 7).
+    if (tab_ == Tab::Structural && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const ImVec2 m = ImGui::GetMousePos();
+        for (const ArrowHandle& h : arrow_handles_)
+            if (std::hypot(m.x - h.tail.x, m.y - h.tail.y) <= 9.0f * scale_ && h.part < objects_.size() &&
+                h.condition < objects_[h.part].engineering.conditions.size()) {
+                remember_engineering(h.part);
+                arrow_drag_ = h;
+                break;
+            }
+    }
+    if (arrow_drag_) {
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || arrow_drag_->part >= objects_.size() ||
+            arrow_drag_->condition >= objects_[arrow_drag_->part].engineering.conditions.size()) {
+            arrow_drag_.reset();
+        } else if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+            // The pointer on the plane through the force's point facing the
+            // camera: the force points from there to its point.
+            const Vec3 d = mouse_ray(), e = camera_.eye(), f = camera_.forward();
+            const Vec3 at{float(arrow_drag_->at[0]), float(arrow_drag_->at[1]), float(arrow_drag_->at[2])};
+            const float den = d.x * f.x + d.y * f.y + d.z * f.z;
+            if (std::abs(den) > 1e-6f) {
+                const float t = ((at.x - e.x) * f.x + (at.y - e.y) * f.y + (at.z - e.z) * f.z) / den;
+                const Vec3 p{e.x + d.x * t, e.y + d.y * t, e.z + d.z * t};
+                const double vx = double(at.x - p.x), vy = double(at.y - p.y), vz = double(at.z - p.z);
+                const double l = std::sqrt(vx * vx + vy * vy + vz * vz);
+                if (l > 1e-6) {
+                    EngineeringCondition& c = objects_[arrow_drag_->part].engineering.conditions[arrow_drag_->condition];
+                    c.direction = ForceDirection::Vector;
+                    // Rounded to a thousandth, as the field shows it.
+                    c.vector = {std::round(vx / l * 1000.0) / 1000.0, std::round(vy / l * 1000.0) / 1000.0,
+                                std::round(vz / l * 1000.0) / 1000.0};
+                }
+            }
+        }
+    }
+    if (!arrow_drag_ && tab_ == Tab::Structural && structural_tool_ > 0 && !objects_.empty() && ImGui::IsItemActivated() &&
         ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
         const Vec3 d = mouse_ray(), e = camera_.eye();
         if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d); hit && hit->object < objects_.size()) {
@@ -8497,7 +8578,6 @@ void App::viewport() {
             } else {
                 add_condition(o.engineering, kind, point, normal, face);
             }
-            voxels_stale_ = true;
         }
     }
     const auto bed_point = [&](float z) -> std::optional<Vec3> {
@@ -8646,7 +8726,7 @@ void App::viewport() {
                 drag_anchor_ = *p;
                 dragged_ = true;
             }
-        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && !(sketch_edit_ && sketch_edit_->drag) &&
+        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && !(sketch_edit_ && sketch_edit_->drag) && !arrow_drag_ &&
                    ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) &&
                    !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             // Not on the press itself: its frame's delta is where the pointer
@@ -10332,7 +10412,7 @@ void App::help_windows() {
         static const std::map<std::string, PlateTool> tool_of = {{"move", PlateTool::Move}, {"rotate", PlateTool::Rotate},
                                                                  {"scale", PlateTool::Scale}, {"lay", PlateTool::LayFlat},
                                                                  {"paint", PlateTool::Paint}};
-        static const std::map<std::string, Tab> tab_of = {{"preview", Tab::Preview}, {"analysis", Tab::Analysis},
+        static const std::map<std::string, Tab> tab_of = {{"preview", Tab::Preview}, {"analysis", Tab::Structural},
                                                           {"design", Tab::Design}, {"calibration", Tab::Calibration},
                                                           {"device", Tab::Device}};
         const auto tool = tool_of.find(tip_);
@@ -11044,74 +11124,6 @@ void App::preview_panels() {
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
-}
-
-void App::analysis_panel() {
-    const float margin = 12.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(360.0f * scale_, 0), ImVec2(460.0f * scale_, FLT_MAX));
-    ImGui::SetNextWindowBgAlpha(0.92f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
-    ImGui::Begin("##analysis", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
-    ImGui::TextUnformatted(tr(T::AnalysisTitle));
-    ImGui::PopFont();
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 420.0f * scale_);
-    loc::TextDisabled("%s", tr(T::AnalysisHint));
-    ImGui::Separator();
-    if (!has_plate_) {
-        ImGui::TextUnformatted(tr(T::AnalysisNeedsModel));
-    } else if (voxel_job_.running() || !voxels_) {
-        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::Estimating));
-    } else if (!voxels_->ok) {
-        loc::TextColored(rgb(0xE5484D), "%s", voxels_->error.c_str());
-    } else {
-        const auto card = [&](const char* id, T title, const VoxelCount& c) {
-            ImGui::PushID(id);
-            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
-            if (!c.ok) {
-                loc::TextColored(rgb(0xE5484D), "%s", c.error.c_str());
-                ImGui::PopID();
-                return;
-            }
-            const bool counted = c.printed_voxels > 0;
-            ImGui::PushFont(nullptr, kTitleSize * 1.25f);
-            ImGui::TextUnformatted(number_text(counted ? c.printed_voxels : c.grid_voxels).c_str());
-            ImGui::PopFont();
-            loc::TextDisabled("%s", tr(counted ? T::Voxels : T::GridVoxels));
-            if (counted && ImGui::BeginTable("##card", 2)) {
-                auto line = [](const char* name, const std::string& value) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    loc::TextDisabled("%s", name);
-                    ImGui::TableNextColumn();
-                    ImGui::TextUnformatted(value.c_str());
-                };
-                line(tr(T::GridVoxels), number_text(c.grid_voxels));
-                line(tr(T::VoxelSize), format("%.3f mm  ·  %s", c.voxel, format(tr(T::PerLayer), c.rows_per_layer).c_str()));
-                line(tr(T::Memory), format("%.0f MB", c.memory_mb));
-                line(tr(T::ApproxTime), format_duration(c.seconds));
-                ImGui::EndTable();
-            }
-            if (c.over_limit)
-                loc::TextColored(rgb(0xE8A33D), "%s", format(tr(T::OverLimit), number_text(c.limit).c_str()).c_str());
-            ImGui::PopID();
-        };
-        card("normal", T::QualityNormal, voxels_->normal);
-        ImGui::Separator();
-        card("high", T::QualityHigh, voxels_->high);
-    }
-    ImGui::Separator();
-    loc::TextDisabled("%s", tr(T::AnalysisCli));
-    ImGui::TextDisabled("tisma-engine analyze");
-    ImGui::PopTextWrapPos();
-    ImGui::End();
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
 }
 
 // The Design tab (docs/spec/features/cad_design.md, stage D1): the panel on
@@ -12950,17 +12962,162 @@ void App::structural_panel() {
                 ImGui::Checkbox(tr(T::StructShowMap), &structural_show_map_);
                 rect_of("structural_show_map");
                 if (structural_show_map_) {
+                    // Rule 12: the safety factor (at first), von Mises or the displacement.
+                    const T kinds[3] = {T::StructMapSafety, T::StructMapStress, T::StructMapMotion};
+                    for (int k = 0; k < 3; ++k) {
+                        if (ImGui::RadioButton(tr(kinds[k]), structural_map_kind_ == k))
+                            structural_map_kind_ = k;
+                        rect_of("structural_map_kind_" + std::to_string(k));
+                    }
+                    const StructuralRun& m = *structural_map_;
                     const float w = (ImGui::GetContentRegionAvail().x - 8.0f * scale_) / 5.0f;
                     for (int k = 0; k < 5; ++k) {
                         if (k > 0)
                             ImGui::SameLine(0.0f, 2.0f * scale_);
                         const ImVec2 at = ImGui::GetCursorScreenPos();
+                        const std::uint32_t colour = structural_map_kind_ == 0 ? kSafetyBands[k] : kSafetyBands[4 - k];
                         ImGui::GetWindowDrawList()->AddRectFilled(at, ImVec2(at.x + std::max(w, 8.0f), at.y + 8.0f * scale_),
-                                                                  ImGui::GetColorU32(rgb(kSafetyBands[k])));
+                                                                  ImGui::GetColorU32(rgb(colour)));
                         ImGui::Dummy(ImVec2(std::max(w, 8.0f), 8.0f * scale_));
                     }
                     ImGui::PushTextWrapPos(0.0f);
-                    loc::TextDisabled("%s", tr(T::StructLegend));
+                    if (structural_map_kind_ == 1)
+                        loc::TextDisabled("%s", format(tr(T::StructLegendStress), m.max_stress).c_str());
+                    else if (structural_map_kind_ == 2)
+                        loc::TextDisabled("%s", format(tr(T::StructLegendMotion), m.max_motion).c_str());
+                    else
+                        loc::TextDisabled("%s", tr(T::StructLegend));
+                    ImGui::PopTextWrapPos();
+                    // The deformed shape, exaggerated so the largest movement
+                    // shows as a tenth of the part at first.
+                    if (m.max_motion > 0.0 && m.moved.size() == m.corners.size()) {
+                        ImGui::Checkbox(tr(T::StructDeformed), &structural_deformed_);
+                        rect_of("structural_deformed");
+                        if (structural_deformed_) {
+                            if (!(structural_exaggerate_ > 0.0f))
+                                structural_exaggerate_ = float(std::clamp(0.1 * m.size / m.max_motion, 1.0, 100000.0));
+                            ImGui::SetNextItemWidth(-FLT_MIN);
+                            ImGui::SliderFloat("##exaggerate", &structural_exaggerate_, 1.0f, 100000.0f, tr(T::StructExaggerate),
+                                               ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+                            rect_of("structural_exaggerate");
+                        }
+                    }
+                }
+            }
+            // Optimizar (rule 13), under the results: the lowest uniform infill.
+            const bool optimize_open = !stale && ImGui::CollapsingHeader(tr(T::StructOptimize));
+            if (!stale)
+                rect_of("structural_optimize");
+            if (optimize_open) {
+                const std::size_t part = std::size_t(structural_part_);
+                if (optimize_job_.running()) {
+                    ImGui::ProgressBar(float(optimize_permille_.load()) / 1000.0f, ImVec2(-FLT_MIN, 0.0f), tr(T::StructOptimizing));
+                    if (ImGui::Button(tr(T::Cancel)))
+                        optimize_cancel_ = true;
+                    rect_of("structural_optimize_cancel");
+                } else {
+                    if (ImGui::Button(tr(T::StructLightestInfill), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize();
+                    rect_of("structural_lightest_infill");
+                    if (ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", tr(T::StructLightestInfillTip));
+                    if (ImGui::Button(tr(T::StructZonedInfill), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Zones);
+                    rect_of("structural_zoned_infill");
+                    if (ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", tr(T::StructZonedInfillTip));
+                    if (ImGui::Button(tr(T::StructRibs), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Ribs);
+                    rect_of("structural_ribs");
+                    if (ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", tr(T::StructRibsTip));
+                    if (ImGui::Button(tr(T::StructReinforce), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Reinforce);
+                    rect_of("structural_reinforce");
+                    if (ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", tr(T::StructReinforceTip));
+                }
+                if (optimize_result_ && optimize_result_->part == part && !optimize_job_.running()) {
+                    const OptimizeRun& o = *optimize_result_;
+                    ImGui::PushTextWrapPos(0.0f);
+                    if (o.cancelled)
+                        loc::TextDisabled("%s", tr(T::StructCancelled));
+                    else if (!o.error.empty())
+                        loc::TextColored(rgb(0xE5484D), "%s", o.error.c_str());
+                    else if (o.best.solid)
+                        loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructOptimizeSolid));
+                    else if (!o.best.found)
+                        loc::TextColored(rgb(0xE5484D), "%s", format(tr(T::StructOptimizeNone), o.best.min_safety).c_str());
+                    else {
+                        loc::TextColored(rgb(0x3FBF7F), "%s", format(tr(T::StructOptimizeFound), o.best.density, o.best.min_safety).c_str());
+                        rect_of("structural_optimize_found");
+                        if (std::abs(settings_.infill_density - double(o.best.density)) > 1e-9) {
+                            if (ImGui::Button(format(tr(T::StructOptimizeApply), o.best.density).c_str())) {
+                                const double before = settings_.infill_density;
+                                settings_.infill_density = double(o.best.density);
+                                settings_changed();
+                                notify_undo(format(tr(T::StructOptimizeApplied), o.best.density), [this, before] {
+                                    settings_.infill_density = before;
+                                    settings_changed();
+                                });
+                            }
+                            rect_of("structural_optimize_apply");
+                        }
+                        if (o.zones) {
+                            const ZonedInfill& z = o.zoned;
+                            if (!z.found) {
+                                loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructZonedNone));
+                            } else {
+                                loc::TextColored(rgb(0x3FBF7F), "%s",
+                                                 format(tr(T::StructZonedFound), z.zones.density[0], z.zones.density[1], z.zones.density[2],
+                                                        z.min_safety, z.mass_g, z.uniform_mass_g)
+                                                     .c_str());
+                                rect_of("structural_zoned_found");
+                                if (!z.lighter)
+                                    loc::TextDisabled("%s", tr(T::StructZonedHeavier));
+                                else if (ImGui::Button(tr(T::StructZonedApply)))
+                                    apply_zones(part, z);
+                                if (z.lighter)
+                                    rect_of("structural_zoned_apply");
+                            }
+                        }
+                        if (o.ribs) {
+                            const RibbedInfill& r = o.ribbed;
+                            if (r.ribs.modifiers.empty()) {
+                                loc::TextDisabled("%s", tr(T::StructRibsNone));
+                            } else if (!r.found || !r.lighter) {
+                                loc::TextDisabled("%s", tr(T::StructRibsNotLighter));
+                            } else {
+                                std::string angles;
+                                for (double a : r.ribs.angles)
+                                    angles += (angles.empty() ? "" : ", ") + std::to_string(int(a)) + "°";
+                                loc::TextColored(rgb(0x3FBF7F), "%s",
+                                                 format(tr(T::StructRibsFound), r.density, r.min_safety, o.best.density,
+                                                        int(r.ribs.angles.size()), angles.c_str())
+                                                     .c_str());
+                                rect_of("structural_ribs_found");
+                                if (ImGui::Button(tr(T::StructRibsApply)))
+                                    apply_ribs(part, r);
+                                rect_of("structural_ribs_apply");
+                            }
+                        }
+                        if (o.reinforce) {
+                            const ReinforcedInfill& r = o.reinforced;
+                            if (!r.found || !r.lighter) {
+                                loc::TextDisabled("%s", tr(T::StructReinforceHeavier));
+                            } else {
+                                loc::TextColored(rgb(0x3FBF7F), "%s",
+                                                 format(tr(T::StructReinforceFound), r.zone.radius, r.best.density, r.best.min_safety,
+                                                        r.mass_g, r.plain_mass_g)
+                                                     .c_str());
+                                rect_of("structural_reinforce_found");
+                                if (ImGui::Button(tr(T::StructReinforceApply)))
+                                    apply_boxes(part, r.zone.modifiers, r.best.density,
+                                                format(tr(T::StructReinforceApplied), r.best.density, int(r.zone.modifiers.size())));
+                                rect_of("structural_reinforce_apply");
+                            }
+                        }
+                    }
                     ImGui::PopTextWrapPos();
                 }
             }
@@ -13102,6 +13259,7 @@ void App::structural_panel() {
                         remember_engineering(std::size_t(structural_part_));
                     e.conditions[i].vector = {vec[0], vec[1], vec[2]};
                 }
+                rect_of("structural_force_vector_" + std::to_string(i));
             }
         } else if (c.is_point()) {
             double r = c.radius;
@@ -13266,6 +13424,7 @@ void App::structural_panel() {
                                 engineering_json(e);
         static std::string estimated_for;
         static std::pair<std::size_t, double> estimate{0, 0.0};
+        static std::function<StructuralEstimate()> asked_estimate;
         if (key != estimated_for && part < placed_meshes_.size() && !placed_meshes_[part].empty()) {
             estimated_for = key;
             Settings settings = settings_;
@@ -13279,9 +13438,48 @@ void App::structural_panel() {
             const IndexedMesh mesh = weld_exact(placed_meshes_[part]);
             fit_voxel_limit(c, mesh, settings); // what Analizar will use (BH24)
             estimate = {analysis_grid_voxels(mesh, settings, c), analysis_resolution(c, settings).first};
+            // The memory and the time, in the background (the old Analysis
+            // tab's cards, engineering_panel.md rule 10): the latest asked
+            // starts when the running one ends.
+            asked_estimate = [key, mesh, settings, c]() {
+                const AnalysisEstimate a = estimate_analysis(mesh, settings, c);
+                return StructuralEstimate{key, a.memory_mb, a.seconds};
+            };
+        }
+        if (std::optional<StructuralEstimate> done = structural_estimate_job_.take())
+            structural_estimate_ = std::move(*done);
+        if (asked_estimate && !structural_estimate_job_.running()) {
+            structural_estimate_job_.start(std::move(asked_estimate));
+            asked_estimate = nullptr;
         }
         if (estimate.first > 0)
             loc::TextDisabled("%s", format(tr(T::StructEstimate), estimate.first, estimate.second).c_str());
+        if (structural_estimate_.key == key && structural_estimate_.memory_mb > 0.0)
+            loc::TextDisabled("%s", format(tr(T::StructEstimateCost), structural_estimate_.memory_mb,
+                                           format_duration(structural_estimate_.seconds).c_str()).c_str());
+    }
+    // The print direction (rule 10): Z, or the belt printer's.
+    ImGui::TextUnformatted(tr(T::StructPrintDirection));
+    {
+        const bool belt = e.structural.print_direction == "belt";
+        const std::string belt_label = format(tr(T::StructPrintBelt), settings_.belt_angle);
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##structural_print_direction", belt ? belt_label.c_str() : tr(T::StructPrintZ))) {
+            if (ImGui::Selectable(tr(T::StructPrintZ), !belt) && belt) {
+                remember_engineering(std::size_t(structural_part_));
+                objects_[std::size_t(structural_part_)].engineering.structural.print_direction = "z";
+            }
+            ImGui::BeginDisabled(!settings_.belt_enabled);
+            if (ImGui::Selectable(belt_label.c_str(), belt) && !belt) {
+                remember_engineering(std::size_t(structural_part_));
+                objects_[std::size_t(structural_part_)].engineering.structural.print_direction = "belt";
+            }
+            ImGui::EndDisabled();
+            ImGui::EndCombo();
+        }
+        rect_of("structural_print_direction");
+        if (belt && !settings_.belt_enabled)
+            loc::TextDisabled("%s", tr(T::StructPrintBeltOff));
     }
     ImGui::TextUnformatted(tr(T::StructWorkingTemp));
     if (ImGui::IsItemHovered())
@@ -13306,7 +13504,23 @@ void App::structural_panel() {
         if (block == AnalyzeBlock::None)
             start_structural();
     }
-    if (structural_job_.running()) {
+    if (cloud_eng_.valid() && cloud_eng_state_) {
+        // In the cloud: the job's state and its progress, and Cancelar.
+        std::string status;
+        int progress = 0;
+        {
+            std::lock_guard lock(cloud_eng_state_->mutex);
+            status = cloud_eng_state_->status;
+            progress = cloud_eng_state_->progress;
+        }
+        ImGui::ProgressBar(float(progress) / 100.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
+                           format(tr(T::StructCloudState), status.empty() ? "…" : status.c_str(), progress).c_str());
+        rect_of("structural_cloud_state");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            cloud_eng_state_->cancel = true;
+        rect_of("structural_cloud_cancel");
+    } else if (structural_job_.running()) {
         // While it calculates (rule 11): its progress and Cancelar; the view
         // still turns.
         const int permille = structural_permille_.load();
@@ -13322,12 +13536,42 @@ void App::structural_panel() {
         ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-        if (ImGui::Button(tr(T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
-            start_structural();
+        const bool in_cloud = e.structural.cloud && !cloud_token_.empty() &&
+                              !(cloud_account_ && !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "fea"));
+        if (ImGui::Button(tr(in_cloud ? T::StructAnalyzeCloud : T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f))) {
+            if (in_cloud)
+                start_cloud_engineering("structural");
+            else
+                start_structural();
+        }
         ImGui::PopStyleColor(3);
         ImGui::EndDisabled();
     }
     rect_of("structural_analyze");
+    // «En la nube» (rule 10; cloud.md, rule 10b): off at first on a
+    // computer, and only with a session (without one everything is local).
+    // A plan without "fea" (rule 10b): the lock and the plans that have it,
+    // which open the account page.
+    const bool fea_locked = !cloud_token_.empty() && cloud_account_ &&
+                            !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "fea");
+    ImGui::BeginDisabled(cloud_token_.empty() || cloud_eng_.valid() || fea_locked);
+    {
+        bool cloud = e.structural.cloud && !fea_locked;
+        if (ImGui::Checkbox(tr(T::StructCloud), &cloud)) {
+            remember_engineering(std::size_t(structural_part_));
+            objects_[std::size_t(structural_part_)].engineering.structural.cloud = cloud;
+        }
+    }
+    ImGui::EndDisabled();
+    rect_of("structural_cloud");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(cloud_token_.empty() ? T::StructCloudLogin : T::StructCloudTip));
+    if (fea_locked) {
+        const std::string with = cloud::plans_with(cloud_plans_, "fea");
+        if (ImGui::SmallButton(format(tr(T::CloudPlanLock), with.empty() ? "…" : with.c_str()).c_str()))
+            cloud_open_ = true;
+        rect_of("structural_cloud_lock");
+    }
     if (block != AnalyzeBlock::None)
         loc::TextDisabled("%s", tr(block == AnalyzeBlock::Material ? T::StructNeedMaterial
                                    : block == AnalyzeBlock::Fixed  ? T::StructNeedFixed
@@ -13601,7 +13845,24 @@ void App::aerodynamics_panel() {
 
     ImGui::Separator();
     ImGui::Spacing();
-    if (aero_job_.running()) {
+    const bool aero_locked = !cloud_token_.empty() && cloud_account_ &&
+                             !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "aero");
+    if (cloud_eng_.valid() && cloud_eng_state_) {
+        std::string status;
+        int progress = 0;
+        {
+            std::lock_guard lock(cloud_eng_state_->mutex);
+            status = cloud_eng_state_->status;
+            progress = cloud_eng_state_->progress;
+        }
+        ImGui::ProgressBar(float(progress) / 100.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
+                           format(tr(T::StructCloudState), status.empty() ? "…" : status.c_str(), progress).c_str());
+        rect_of("aero_cloud_state");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            cloud_eng_state_->cancel = true;
+        rect_of("aero_cloud_cancel");
+    } else if (aero_job_.running()) {
         const int permille = aero_permille_.load();
         ImGui::ProgressBar(float(permille) / 1000.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
                            format(tr(T::AeroAnalyzing), permille / 10).c_str());
@@ -13614,11 +13875,37 @@ void App::aerodynamics_panel() {
         ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-        if (ImGui::Button(tr(T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
-            start_aerodynamics();
+        const AerodynamicsInputs& inputs = objects_[std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1))].engineering.aerodynamics;
+        const bool in_cloud = inputs.cloud && !cloud_token_.empty() && !aero_locked;
+        if (ImGui::Button(tr(in_cloud ? T::StructAnalyzeCloud : T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f))) {
+            if (in_cloud)
+                start_cloud_engineering("aerodynamics");
+            else
+                start_aerodynamics();
+        }
         ImGui::PopStyleColor(3);
     }
     rect_of("aero_analyze");
+    // «En la nube» (rule 16; cloud.md, rule 10b), as in Structural.
+    ImGui::BeginDisabled(cloud_token_.empty() || cloud_eng_.valid() || aero_locked);
+    {
+        const std::size_t shown = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+        bool on = objects_[shown].engineering.aerodynamics.cloud && !aero_locked;
+        if (ImGui::Checkbox(tr(T::StructCloud), &on)) {
+            remember_engineering(shown);
+            objects_[shown].engineering.aerodynamics.cloud = on;
+        }
+    }
+    ImGui::EndDisabled();
+    rect_of("aero_cloud");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(cloud_token_.empty() ? T::StructCloudLogin : T::StructCloudTip));
+    if (aero_locked) {
+        const std::string with = cloud::plans_with(cloud_plans_, "aero");
+        if (ImGui::SmallButton(format(tr(T::CloudPlanLock), with.empty() ? "…" : with.c_str()).c_str()))
+            cloud_open_ = true;
+        rect_of("aero_cloud_lock");
+    }
     ImGui::PopTextWrapPos();
     ImGui::End();
     ImGui::PopStyleColor();
@@ -13831,6 +14118,305 @@ void App::aero_overlay() {
 // Analizar (rules 9 and 11): the part as it is on the bed, its conditions
 // moved with it, the values changed by hand, in the background; Cancelar
 // stops it at its next step.
+void App::start_cloud_engineering(const std::string& kind) {
+    if (cloud_eng_.valid() || objects_.empty() || cloud_token_.empty())
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    const std::filesystem::path dir = std::filesystem::temp_directory_path();
+    const std::string stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const std::filesystem::path project = dir / ("tisma-cloud-" + stamp + ".3mf");
+    try {
+        save_project(project, current_project());
+    } catch (const std::exception& e) {
+        fail(T::CannotSave, e.what());
+        return;
+    }
+    // The fingerprint now: the result belongs to the part as it was sent.
+    const bool aero = kind == "aerodynamics";
+    cloud_eng_part_ = part;
+    cloud_eng_kind_ = kind;
+    cloud_eng_fingerprint_ = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), kind);
+    nlohmann::json params{{"object", part}, {"instance", 0}};
+    if (aero) {
+        // cloud.md, rule 6: the direction as an axis without its plus, or
+        // three numbers (the view's).
+        const AerodynamicsInputs& a = o.engineering.aerodynamics;
+        params["quality"] = a.quality;
+        params["speed"] = a.speed;
+        if (a.direction == "view") {
+            const std::array<double, 3> d = aero_direction(a);
+            params["direction"] = format("%.6g,%.6g,%.6g", d[0], d[1], d[2]);
+        } else {
+            params["direction"] = a.direction.starts_with("+") ? a.direction.substr(1) : a.direction;
+        }
+    } else {
+        params["mode"] = "analyze";
+        params["quality"] = o.engineering.structural.quality;
+    }
+    log_line("cloud: " + std::string(aero ? "aero" : "fea") + " of part " + std::to_string(part) + " on " + cloud_server_);
+    auto state = std::make_shared<CloudSliceState>();
+    cloud_eng_state_ = state;
+    cloud_eng_ = std::async(std::launch::async, [state, project, dir, stamp, params = params.dump(), server = cloud_server_,
+                                                 token = cloud_token_, aero] {
+        CloudSliceReply r;
+        cloud::Client client(server, token);
+        const std::filesystem::path result = dir / ("tisma-cloud-" + stamp + (aero ? ".taero" : ".tea"));
+        r.ok = client.run(aero ? "aero" : "fea", params, utf8(project), utf8(result), r.job, r.error,
+                          [&](const cloud::Job& job) {
+                              std::lock_guard lock(state->mutex);
+                              state->status = job.status;
+                              state->progress = job.progress;
+                          },
+                          state->cancel);
+        std::error_code ec;
+        std::filesystem::remove(project, ec);
+        r.result = result;
+        return r;
+    });
+}
+
+void App::cloud_engineering_step() {
+    if (!cloud_eng_.valid())
+        return;
+    frame_pending_ = true;
+    if (cloud_eng_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+    const CloudSliceReply r = cloud_eng_.get();
+    cloud_eng_state_.reset();
+    if (r.ok) {
+        // The .tea: the report, kept with the part as a local result (its
+        // map stays local-only: the file has no voxels).
+        std::string report;
+        try {
+            std::ifstream in(r.result, std::ios::binary);
+            const nlohmann::json t = nlohmann::json::parse(in);
+            if (cloud_eng_kind_ == "aerodynamics") { // the .taero is the result itself
+                if (!t.is_object() || !t.contains("drag_n"))
+                    throw std::runtime_error("not an aerodynamics result");
+                report = t.dump();
+            } else {
+                if (t.value("kind", std::string()) != "structural" || !t.contains("report"))
+                    throw std::runtime_error("not a structural result");
+                report = t["report"].dump();
+            }
+        } catch (const std::exception& e) {
+            notify(format(tr(T::StructCloudFailed), e.what()), true);
+            return;
+        }
+        std::error_code ec;
+        std::filesystem::remove(r.result, ec);
+        if (cloud_eng_part_ < objects_.size()) {
+            std::vector<EngineeringResult>& results = objects_[cloud_eng_part_].engineering.results;
+            const std::string kind = cloud_eng_kind_;
+            std::erase_if(results, [&](const EngineeringResult& x) { return x.kind == kind; });
+            results.push_back({kind, cloud_eng_fingerprint_, report});
+        }
+        if (cloud_eng_kind_ == "aerodynamics") {
+            aero_map_.reset();
+            aero_map_in_view_ = false;
+        } else {
+            structural_map_.reset();
+            structural_map_in_view_ = false;
+        }
+        notify(tr(T::StructCloudDone));
+        return;
+    }
+    if (r.error.message == "Cancelled") {
+        notify(tr(T::StructCancelled));
+        return;
+    }
+    if (r.error.expired()) {
+        cloud_token_.clear();
+        cloud_account_.reset();
+        cloud::forget_secret(cloud_server_);
+        notify(tr(T::CloudExpired), true);
+        cloud_open_ = true;
+        return;
+    }
+    const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
+                            : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
+                            : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
+                            : r.job.status == "failed" ? cloud::job_error(r.job, language() == Language::Spanish)
+                                                    : r.error.message;
+    notify(format(tr(T::StructCloudFailed), why.c_str()), true);
+}
+
+// The zones as the part's own modifiers (structural_optimization.md, rule
+// 3): its own infill at the lowest level, a box modifier for each zone of the
+// two denser ones; undone together.
+void App::apply_zones(std::size_t part, const ZonedInfill& zoned) {
+    if (part >= objects_.size())
+        return;
+    PlateObject& o = objects_[part];
+    if (!optimize_result_ || o.mesh.triangle_count() != optimize_result_->triangles)
+        return;
+    std::vector<PlateVolume> added;
+    for (const MeshModifier& m : zoned.zones.modifiers) {
+        const BoundingBox b = m.mesh.bounding_box();
+        const std::optional<PlateVolume> v =
+            volume_for_bed_box(o, optimize_result_->to_bed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
+        if (!v) {
+            structural_message_ = tr(T::StructZonedTurned);
+            return;
+        }
+        added.push_back(*v);
+    }
+    const std::string settings_before = o.settings;
+    const std::vector<PlateVolume> volumes_before = o.volumes;
+    Settings lowest = settings_;
+    lowest.infill_density = zoned.zones.density[0];
+    o.settings = with_own_key(o.settings, lowest, "infill.density");
+    o.volumes.insert(o.volumes.end(), added.begin(), added.end());
+    plate_changed();
+    notify_undo(format(tr(T::StructZonedApplied), int(added.size())), [this, part, settings_before, volumes_before] {
+        if (part >= objects_.size())
+            return;
+        objects_[part].settings = settings_before;
+        objects_[part].volumes = volumes_before;
+        plate_changed();
+    });
+}
+
+// The ribs as the part's own modifiers (structural_optimization.md, rule
+// 4): its infill at the density found with them, a box modifier with
+// one-direction infill for each rib zone; undone together.
+void App::apply_ribs(std::size_t part, const RibbedInfill& ribbed) {
+    if (part >= objects_.size())
+        return;
+    PlateObject& o = objects_[part];
+    if (!optimize_result_ || o.mesh.triangle_count() != optimize_result_->triangles)
+        return;
+    std::vector<PlateVolume> added;
+    for (const MeshModifier& m : ribbed.ribs.modifiers) {
+        const BoundingBox b = m.mesh.bounding_box();
+        const std::optional<PlateVolume> v =
+            volume_for_bed_box(o, optimize_result_->to_bed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
+        if (!v) {
+            structural_message_ = tr(T::StructZonedTurned);
+            return;
+        }
+        added.push_back(*v);
+    }
+    const std::string settings_before = o.settings;
+    const std::vector<PlateVolume> volumes_before = o.volumes;
+    Settings at = settings_;
+    at.infill_density = double(ribbed.density);
+    o.settings = with_own_key(o.settings, at, "infill.density");
+    o.volumes.insert(o.volumes.end(), added.begin(), added.end());
+    plate_changed();
+    notify_undo(format(tr(T::StructRibsApplied), ribbed.density, int(added.size())), [this, part, settings_before, volumes_before] {
+        if (part >= objects_.size())
+            return;
+        objects_[part].settings = settings_before;
+        objects_[part].volumes = volumes_before;
+        plate_changed();
+    });
+}
+
+bool App::apply_boxes(std::size_t part, const std::vector<MeshModifier>& boxes, int density, const std::string& note) {
+    if (part >= objects_.size() || !optimize_result_ || objects_[part].mesh.triangle_count() != optimize_result_->triangles)
+        return false;
+    PlateObject& o = objects_[part];
+    std::vector<PlateVolume> added;
+    for (const MeshModifier& m : boxes) {
+        const BoundingBox b = m.mesh.bounding_box();
+        const std::optional<PlateVolume> v =
+            volume_for_bed_box(o, optimize_result_->to_bed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
+        if (!v) {
+            structural_message_ = tr(T::StructZonedTurned);
+            return false;
+        }
+        added.push_back(*v);
+    }
+    const std::string settings_before = o.settings;
+    const std::vector<PlateVolume> volumes_before = o.volumes;
+    Settings at = settings_;
+    at.infill_density = double(density);
+    o.settings = with_own_key(o.settings, at, "infill.density");
+    o.volumes.insert(o.volumes.end(), added.begin(), added.end());
+    plate_changed();
+    notify_undo(note, [this, part, settings_before, volumes_before] {
+        if (part >= objects_.size())
+            return;
+        objects_[part].settings = settings_before;
+        objects_[part].volumes = volumes_before;
+        plate_changed();
+    });
+    return true;
+}
+
+void App::start_optimize(OptimizeExtra extra) {
+    if (optimize_job_.running() || objects_.empty())
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    TriangleMesh placed = placed_mesh(o);
+    if (placed.empty())
+        return;
+    std::array<double, 9> a{};
+    std::array<double, 3> b{};
+    own_to_placed(o, placed, a, b);
+    ProjectEngineering moved = o.engineering;
+    move_engineering(moved, a, b);
+    Settings settings = settings_;
+    std::vector<std::string> notes;
+    apply_engineering_overrides(settings, o.engineering, notes);
+    const std::string filament_type = settings_.filament_type;
+    optimize_cancel_ = false;
+    optimize_permille_ = 0;
+    const bool zones = extra == OptimizeExtra::Zones, ribs = extra == OptimizeExtra::Ribs, reinforce = extra == OptimizeExtra::Reinforce;
+    const Affine to_bed{a, b};
+    const std::size_t triangles = o.mesh.triangle_count();
+    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs, reinforce, to_bed, triangles]() {
+        OptimizeRun run;
+        run.part = part;
+        run.to_bed = to_bed;
+        run.triangles = triangles;
+        run.zones = zones;
+        run.ribs = ribs;
+        run.reinforce = reinforce;
+        struct Cancelled {};
+        try {
+            std::vector<std::string> case_notes;
+            AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height,
+                                                       print_conditions(settings, moved));
+            const IndexedMesh mesh = weld_exact(placed);
+            fit_voxel_limit(c, mesh, settings);
+            // By zones the uniform search is the first half of the bar.
+            const double share = zones || ribs || reinforce ? 0.5 : 1.0;
+            run.best = lightest_infill(mesh, placed, settings, c, moved, [this, share](double done) {
+                optimize_permille_ = int(done * share * 1000.0);
+                if (optimize_cancel_)
+                    throw Cancelled{};
+            });
+            if (zones && run.best.found && !run.best.solid)
+                run.zoned = zoned_infill(mesh, placed, settings, c, moved, run.best.density, [this](double done) {
+                    optimize_permille_ = int((0.5 + 0.5 * done) * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+            if (reinforce && run.best.found && !run.best.solid)
+                run.reinforced = reinforced_infill(mesh, placed, settings, c, moved, run.best.density, [this](double done) {
+                    optimize_permille_ = int((0.5 + 0.5 * done) * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+            if (ribs && run.best.found && !run.best.solid)
+                run.ribbed = ribbed_infill(mesh, placed, settings, c, moved, run.best.density, [this](double done) {
+                    optimize_permille_ = int((0.5 + 0.5 * done) * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+        } catch (const Cancelled&) {
+            run.cancelled = true;
+        } catch (const std::exception& e) {
+            run.error = e.what();
+        }
+        return run;
+    });
+}
+
 void App::start_structural() {
     if (structural_job_.running() || objects_.empty())
         return;
@@ -13844,6 +14430,18 @@ void App::start_structural() {
     own_to_placed(o, placed, a, b);
     ProjectEngineering moved = o.engineering;
     move_engineering(moved, a, b);
+    // Printed on a belt (rule 10): the analysis runs on the part turned so its
+    // layers lie flat, and its map and points are turned back for the view.
+    const bool on_belt = o.engineering.structural.print_direction == "belt" && settings_.belt_enabled;
+    const std::array<double, 9> turn = on_belt ? belt_layer_rotation(settings_) : std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    if (on_belt) {
+        std::vector<Vec3f> corners = placed.corners();
+        for (Vec3f& v : corners)
+            v = Vec3f{float(turn[0] * v.x + turn[1] * v.y + turn[2] * v.z), float(turn[3] * v.x + turn[4] * v.y + turn[5] * v.z),
+                      float(turn[6] * v.x + turn[7] * v.y + turn[8] * v.z)};
+        placed = TriangleMesh(std::move(corners));
+        turn_engineering(moved, turn);
+    }
     // And back, for the report's points (in the part's own frame).
     std::array<double, 12> to_part{1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
     const double det = a[0] * (a[4] * a[8] - a[5] * a[7]) - a[1] * (a[3] * a[8] - a[5] * a[6]) + a[2] * (a[3] * a[7] - a[4] * a[6]);
@@ -13858,7 +14456,16 @@ void App::start_structural() {
         for (std::size_t i = 0; i < 3; ++i)
             to_part[9 + i] = -(inv[3 * i] * b[0] + inv[3 * i + 1] * b[1] + inv[3 * i + 2] * b[2]);
     }
+    if (on_belt) { // from the turned frame: first back by the transpose
+        std::array<double, 12> m = to_part;
+        for (std::size_t i = 0; i < 3; ++i)
+            for (std::size_t j = 0; j < 3; ++j)
+                m[3 * i + j] = to_part[3 * i] * turn[3 * j] + to_part[3 * i + 1] * turn[3 * j + 1] + to_part[3 * i + 2] * turn[3 * j + 2];
+        to_part = m;
+    }
     Settings settings = settings_;
+    if (on_belt)
+        settings.belt_enabled = false; // already turned
     std::vector<std::string> notes;
     apply_engineering_overrides(settings, o.engineering, notes);
     const std::string fingerprint = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), "structural");
@@ -13868,7 +14475,7 @@ void App::start_structural() {
     structural_permille_ = 0;
     structural_message_.clear();
     structural_job_.start([this, part, placed = std::move(placed), moved, settings, fingerprint, filament_type, to_part,
-                           asked]() {
+                           asked, on_belt, turn]() {
         StructuralRun run;
         run.part = part;
         run.fingerprint = fingerprint;
@@ -13886,30 +14493,52 @@ void App::start_structural() {
                     throw Cancelled{};
             });
             run.report = structural_report_json(r, c, moved, to_part, &placed);
-            // The map: the voxels' outside, in its colour bands one after
-            // the other (each band one group of the view's paint).
-            const VoxelSurface v = voxel_surface(r.grid, r.result.safety);
-            std::array<std::vector<float>, 5> bands;
-            for (std::size_t t = 0; t < v.value.size(); ++t) {
-                const Vec3f& p = v.corners[3 * t];
-                const Vec3f& q = v.corners[3 * t + 1];
-                const Vec3f& w = v.corners[3 * t + 2];
-                const Vec3f u{q.x - p.x, q.y - p.y, q.z - p.z}, s{w.x - p.x, w.y - p.y, w.z - p.z};
-                Vec3f n{u.y * s.z - u.z * s.y, u.z * s.x - u.x * s.z, u.x * s.y - u.y * s.x};
-                const float len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
-                if (len > 0.0f)
-                    n = Vec3f{n.x / len, n.y / len, n.z / len};
-                std::vector<float>& out = bands[std::size_t(safety_band(v.value[t], asked))];
-                for (const Vec3f* c3 : {&p, &q, &w})
-                    out.insert(out.end(), {c3->x, c3->y, c3->z, n.x, n.y, n.z});
-            }
-            for (std::size_t k = 0; k < bands.size(); ++k) {
-                run.band.insert(run.band.end(), bands[k].size() / 18, std::uint8_t(k));
-                run.surface.insert(run.surface.end(), bands[k].begin(), bands[k].end());
-            }
+            // The map's data: the voxels' outside with each triangle's
+            // values and each corner's displacement; the view paints it by
+            // the chosen kind (paint_structural_map).
+            const VoxelSurface v = voxel_surface(r.grid, r.result.safety, &r.result.elasticity.displacement);
+            const VoxelSurface vm = voxel_surface(r.grid, r.result.elasticity.von_mises);
+            run.asked = asked;
+            run.corners = v.corners;
+            run.moved = v.displacement;
+            run.safety.reserve(v.value.size());
+            for (double x : v.value)
+                run.safety.push_back(float(x));
+            run.stress.assign(v.value.size(), 0.0f);
+            if (vm.value.size() == v.value.size())
+                for (std::size_t t = 0; t < vm.value.size(); ++t)
+                    run.stress[t] = float(vm.value[t]);
+            run.motion.assign(v.value.size(), 0.0f);
+            if (run.moved.size() == run.corners.size())
+                for (std::size_t t = 0; t < run.motion.size(); ++t) {
+                    float sum = 0.0f;
+                    for (std::size_t q = 3 * t; q < 3 * t + 3; ++q)
+                        sum += std::sqrt(run.moved[q].x * run.moved[q].x + run.moved[q].y * run.moved[q].y + run.moved[q].z * run.moved[q].z);
+                    run.motion[t] = sum / 3.0f;
+                }
+            for (float x : run.stress)
+                run.max_stress = std::max(run.max_stress, double(x));
+            for (float x : run.motion)
+                run.max_motion = std::max(run.max_motion, double(x));
+            run.size = std::max(1e-6, double(std::max({r.grid.nx * r.grid.hx, r.grid.ny * r.grid.hy,
+                                                       r.grid.z.empty() ? 0.0 : r.grid.z.back() - r.grid.z.front()})));
             if (r.valid && std::isfinite(r.result.min_safety)) {
                 run.weakest = r.weakest;
                 run.weakest_safety = r.result.min_safety;
+            }
+            if (on_belt) { // back to the bed's frame: the transpose
+                const auto back = [&](float x, float y, float z) {
+                    return Vec3f{float(turn[0] * x + turn[3] * y + turn[6] * z), float(turn[1] * x + turn[4] * y + turn[7] * z),
+                                 float(turn[2] * x + turn[5] * y + turn[8] * z)};
+                };
+                for (Vec3f& q : run.corners)
+                    q = back(q.x, q.y, q.z);
+                for (Vec3f& q : run.moved)
+                    q = back(q.x, q.y, q.z);
+                if (run.weakest) {
+                    const Vec3f w = back(float((*run.weakest)[0]), float((*run.weakest)[1]), float((*run.weakest)[2]));
+                    run.weakest = std::array<double, 3>{w.x, w.y, w.z};
+                }
             }
             run.ok = true;
         } catch (const Cancelled&) {
@@ -13938,6 +14567,7 @@ void App::structural_done(StructuralRun run) {
         results.push_back({"structural", run.fingerprint, run.report});
     }
     structural_map_in_view_ = false;
+    structural_exaggerate_ = 0.0f; // chosen again for the new result
     structural_map_ = std::move(run);
 }
 
@@ -13971,29 +14601,77 @@ bool App::structural_map_wanted() {
            !structural_stale(part, *it);
 }
 
+// The map in the view (rule 12): the voxels' outside, deformed when asked
+// (corner + exaggeration * displacement), its triangles grouped by colour
+// band of the chosen kind: the safety factor's five bands, or von Mises and
+// the displacement in five equal steps from 0 (blue) to the largest (red).
+void App::paint_structural_map() {
+    StructuralRun& m = *structural_map_;
+    const std::size_t n = m.safety.size();
+    const float scale = structural_deformed_ && m.moved.size() == m.corners.size() ? structural_exaggerate_ : 0.0f;
+    const auto band_of = [&](std::size_t t) {
+        if (structural_map_kind_ == 1 || structural_map_kind_ == 2) {
+            const double v = structural_map_kind_ == 1 ? m.stress[t] : m.motion[t];
+            const double top = structural_map_kind_ == 1 ? m.max_stress : m.max_motion;
+            return top > 0.0 ? std::clamp(int(v / top * 5.0), 0, 4) : 0;
+        }
+        return safety_band(m.safety[t], m.asked);
+    };
+    std::array<std::vector<float>, 5> bands;
+    for (std::size_t t = 0; t < n && 3 * t + 2 < m.corners.size(); ++t) {
+        Vec3f c[3];
+        for (std::size_t k = 0; k < 3; ++k) {
+            c[k] = m.corners[3 * t + k];
+            if (scale != 0.0f) {
+                const Vec3f& d = m.moved[3 * t + k];
+                c[k] = Vec3f{c[k].x + scale * d.x, c[k].y + scale * d.y, c[k].z + scale * d.z};
+            }
+        }
+        const Vec3f u{c[1].x - c[0].x, c[1].y - c[0].y, c[1].z - c[0].z}, w{c[2].x - c[0].x, c[2].y - c[0].y, c[2].z - c[0].z};
+        Vec3f nn{u.y * w.z - u.z * w.y, u.z * w.x - u.x * w.z, u.x * w.y - u.y * w.x};
+        const float len = std::sqrt(nn.x * nn.x + nn.y * nn.y + nn.z * nn.z);
+        if (len > 0.0f)
+            nn = Vec3f{nn.x / len, nn.y / len, nn.z / len};
+        std::vector<float>& out = bands[std::size_t(band_of(t))];
+        for (const Vec3f& q : c)
+            out.insert(out.end(), {q.x, q.y, q.z, nn.x, nn.y, nn.z});
+    }
+    m.surface.clear();
+    m.band.clear();
+    for (std::size_t k = 0; k < bands.size(); ++k) {
+        m.band.insert(m.band.end(), bands[k].size() / 18, std::uint8_t(k));
+        m.surface.insert(m.surface.end(), bands[k].begin(), bands[k].end());
+    }
+    std::vector<Vec3f> corners;
+    corners.reserve(m.surface.size() / 6);
+    for (std::size_t i = 0; i + 5 < m.surface.size(); i += 6)
+        corners.push_back(Vec3f{m.surface[i], m.surface[i + 1], m.surface[i + 2]});
+    show_in_view(TriangleMesh(std::move(corners)));
+    std::vector<Renderer::PaintGroup> groups;
+    std::size_t first = 0;
+    for (std::size_t k = 0; k < 5; ++k) {
+        const std::size_t count = 3 * std::size_t(std::count(m.band.begin(), m.band.end(), std::uint8_t(k)));
+        const std::uint32_t colour = structural_map_kind_ == 0 ? kSafetyBands[k] : kSafetyBands[4 - k];
+        if (count > 0)
+            groups.push_back({first, count, vec(colour)});
+        first += count;
+    }
+    renderer_.set_paint(m.surface, groups);
+    vk_view_.set_paint(m.surface, groups);
+}
+
 void App::update_structural_view() {
     // Checked a few times a second: the fingerprint hashes the part's mesh.
+    // A new map kind or exaggeration repaints at once.
     static int frame = 0;
-    if (++frame % 10 != 0 && structural_map_in_view_ == (tab_ == Tab::Structural && structural_show_map_ && structural_map_.has_value()))
+    const std::string key = std::to_string(structural_map_kind_) + "|" + (structural_deformed_ ? std::to_string(structural_exaggerate_) : "flat");
+    if (++frame % 10 != 0 && structural_map_in_view_ == (tab_ == Tab::Structural && structural_show_map_ && structural_map_.has_value()) &&
+        (!structural_map_in_view_ || key == structural_paint_key_))
         return;
     const bool want = structural_map_wanted();
-    if (want && !structural_map_in_view_) {
-        const StructuralRun& m = *structural_map_;
-        std::vector<Vec3f> corners;
-        corners.reserve(m.surface.size() / 6);
-        for (std::size_t i = 0; i + 5 < m.surface.size(); i += 6)
-            corners.push_back(Vec3f{m.surface[i], m.surface[i + 1], m.surface[i + 2]});
-        show_in_view(TriangleMesh(std::move(corners)));
-        std::vector<Renderer::PaintGroup> groups;
-        std::size_t first = 0;
-        for (std::size_t k = 0; k < 5; ++k) {
-            const std::size_t count = 3 * std::size_t(std::count(m.band.begin(), m.band.end(), std::uint8_t(k)));
-            if (count > 0)
-                groups.push_back({first, count, vec(kSafetyBands[k])});
-            first += count;
-        }
-        renderer_.set_paint(m.surface, groups);
-        vk_view_.set_paint(m.surface, groups);
+    if (want && (!structural_map_in_view_ || key != structural_paint_key_)) {
+        paint_structural_map();
+        structural_paint_key_ = key;
         structural_map_in_view_ = true;
     } else if (!want && structural_map_in_view_) {
         structural_map_in_view_ = false;
@@ -14007,6 +14685,7 @@ void App::update_structural_view() {
 // as long as its value says, each point as a disc (blue fixed, red force),
 // and with the map, the critical point and its factor.
 void App::structural_overlay() {
+    arrow_handles_.clear();
     if (tab_ != Tab::Structural || objects_.empty() || !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
         return;
     const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
@@ -14129,6 +14808,14 @@ void App::structural_overlay() {
                     dl->AddTriangleFilled(q, ImVec2(q.x - ux * h - uy * h * 0.5f, q.y - uy * h + ux * h * 0.5f),
                                           ImVec2(q.x - ux * h + uy * h * 0.5f, q.y - uy * h - ux * h * 0.5f), red);
                 }
+                // The free end: a handle to drag (rule 7), named for the
+                // scripted tests (structural_arrow_1 is the first condition).
+                const std::size_t index = std::size_t(&c - o.engineering.conditions.data());
+                const bool held = arrow_drag_ && arrow_drag_->part == part && arrow_drag_->condition == index;
+                dl->AddCircleFilled(from, (held ? 6.0f : 5.0f) * scale_, held ? ImGui::GetColorU32(ImVec4(1, 1, 1, 1)) : red, 16);
+                arrow_handles_.push_back({part, index, from, at});
+                const float r = 8.0f * scale_;
+                g_menu_rects["structural_arrow_" + std::to_string(index + 1)] = ImVec4(from.x - r, from.y - r, from.x + r, from.y + r);
             }
         }
     }
@@ -14643,7 +15330,6 @@ void App::undo_engineering(bool redo) {
     to.push_back({step.object, step.count, now});
     now = std::move(step.before);
     structural_part_ = int(step.object);
-    voxels_stale_ = true;
 }
 
 // Ctrl+Z puts the last moved model back where it was; Ctrl+Y (or
@@ -15087,6 +15773,7 @@ void App::cloud_slice_step() {
 // to the account's page for paying.
 void App::cloud_window() {
     cloud_slice_step();
+    cloud_engineering_step();
     if (cloud_job_.valid() && cloud_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
         cloud_finished(cloud_job_.get());
     if (cloud_job_.valid())
@@ -18490,8 +19177,6 @@ void App::layout() {
             slice_panel();
         if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
             part_labels();
-        if (tab_ == Tab::Analysis)
-            analysis_panel();
         if (tab_ == Tab::Design && design_page_ == DesignPage::Design) {
             design_command_line();
             if (sketch_edit_) {
@@ -18522,12 +19207,12 @@ void App::layout() {
     }
     if (tab_ != last_tab_) {
         last_tab_ = tab_;
-        static const std::map<Tab, const char*> tab_tips = {{Tab::Preview, "preview"}, {Tab::Analysis, "analysis"},
+        static const std::map<Tab, const char*> tab_tips = {{Tab::Preview, "preview"}, {Tab::Structural, "analysis"},
                                                             {Tab::Design, "design"},
                                                             {Tab::Calibration, "calibration"}, {Tab::Device, "device"}};
         if (const auto it = tab_tips.find(tab_); it != tab_tips.end())
             tip(it->second);
-        if (tab_ == Tab::Analysis && !guide_memory_.done.contains("opened:engineering")) {
+        if (tab_ == Tab::Structural && !guide_memory_.done.contains("opened:engineering")) {
             guide_memory_.done.insert("opened:engineering");
             offer_tutorials("first_open:engineering");
         }
@@ -19714,6 +20399,15 @@ void App::script_input() {
         if (!ok)
             return fail_step("it is " + std::to_string(got));
         next();
+    } else if (step.verb == "expect-optimize") { // Optimizar's search ended: found, none, solid or cancelled
+        if (optimize_job_.running() || !optimize_result_)
+            return f >= 20000 ? fail_step("the search did not end") : void();
+        const OptimizeRun& o = *optimize_result_;
+        const std::string got = o.cancelled ? "cancelled" : !o.error.empty() ? "error" : o.best.solid ? "solid" : o.best.found ? "found" : "none";
+        std::printf("ui-script: expect-optimize %s: got %s (%d %%)\n", step.key.c_str(), got.c_str(), o.best.density);
+        if (got != step.key)
+            return fail_step("got " + got);
+        next();
     } else if (step.verb == "expect-control") { // a named control (menu entry, slider, button) is on the screen
         if (g_menu_rects.contains(step.key)) {
             std::printf("ui-script: expect-control %s: ok\n", step.key.c_str());
@@ -19727,6 +20421,11 @@ void App::script_input() {
             return fail_step("no such field");
         field = step.value;
         next();
+    } else if (step.verb == "cloud-fea-wait") { // until the analysis in the cloud ends (up to 60 s)
+        if (!cloud_eng_.valid() && f >= 2)
+            next();
+        else if (f > 3600)
+            fail_step("no answer");
     } else if (step.verb == "cloud-slice-wait") { // until the slicing in the cloud ends (up to 60 s)
         if (!cloud_slice_.valid() && f >= 2)
             next();
@@ -19860,7 +20559,7 @@ void App::script_input() {
         aero_test_cells_ = std::max(0, std::atoi(step.key.c_str()));
         next();
     } else if (step.verb == "expect-aero") { // the Aerodynamics run finished: drag above 0 N, simulated (1) or not (0)
-        if (aero_job_.running())
+        if (aero_job_.running() || cloud_eng_.valid())
             return f >= 120000 ? fail_step("the analysis is still running") : void();
         if (f < 2)
             return;
@@ -20141,7 +20840,7 @@ void App::frame() {
     // were used in the last 3 s (a tooltip shows after a delay with no event)
     // or a printer is connected (its status comes from its own thread); else
     // up to 2 s. A background job wakes the window when it ends.
-    const bool busy = !options_.screenshot.empty() || slice_job_.running() || voxel_job_.running() ||
+    const bool busy = !options_.screenshot.empty() || slice_job_.running() || structural_estimate_job_.running() || optimize_job_.running() ||
                       ray_job_.running() || !toasts_.empty() || ImGui::IsAnyItemActive() ||
                       (render_mode_ == RenderMode::RayTraced && renderer_.has_ray_scene() &&
                        renderer_.ray_samples() < 256);
@@ -20330,7 +21029,7 @@ void App::frame() {
         }
         const bool device_pending =
             options_.device_print && !device_print_done_ && (printer_ != nullptr || !options_.device.empty());
-        const bool waiting = slice_job_.running() || voxel_job_.running() || design_job_.running() ||
+        const bool waiting = slice_job_.running() || structural_estimate_job_.running() || optimize_job_.running() || design_job_.running() ||
                              solidcraft_job_.running() || slice_pending || rays_pending ||
                              (options_.coarse && (coarse_job_.running() || coarse_version_ != scene_version_)) ||
                              script_at_ < script_.size() ||
@@ -20338,7 +21037,7 @@ void App::frame() {
                              frame_pending_; // the camera (and --look) not set yet: in Preview it waits for the legend
         if (frames_ == 2) {
             if (options_.view == "analysis")
-                set_tab(Tab::Analysis);
+                set_tab(Tab::Structural);
             else if (options_.view == "design")
                 set_tab(Tab::Design);
             else if (options_.view == "structural")

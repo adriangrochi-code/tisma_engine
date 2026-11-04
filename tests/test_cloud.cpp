@@ -113,6 +113,14 @@ TEST_CASE("cloud: log in, read the account and the plans, log out (CC1, CC2, CC1
     CHECK(plans[1].price_cents == 900);
     CHECK(plans[1].currency == "USD");
     CHECK(plans[1].max_concurrent == 2);
+    // Rule 10b: what each plan includes, and the lock it gives.
+    CHECK(plans[0].classes == std::vector<std::string>{"slice"});
+    CHECK(cloud::plan_includes(plans, "Maker", "fea"));
+    CHECK_FALSE(cloud::plan_includes(plans, "Free", "fea"));
+    CHECK(cloud::plan_includes(plans, "Free", "slice"));
+    CHECK(cloud::plan_includes(plans, "Unknown", "fea")); // the server decides
+    CHECK(cloud::plans_with(plans, "fea") == "Maker");
+    CHECK(cloud::plans_with(plans, "slice") == "Free, Maker");
 
     std::string token;
     CHECK_FALSE(client.login("ana@example.com", "wrong", "pc", token, error));

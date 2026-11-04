@@ -43,6 +43,11 @@ IndexedMesh belt_mesh(const IndexedMesh& mesh, const Settings& s) {
     return out;
 }
 
+std::array<double, 9> belt_layer_rotation(const Settings& s) {
+    const double a = radians(s), sin_a = std::sin(a), cos_a = std::cos(a);
+    return {1.0, 0.0, 0.0, 0.0, cos_a, -sin_a, 0.0, sin_a, cos_a};
+}
+
 std::array<double, 3> belt_axes(const Settings& s, double x, double v, double layer) {
     const double a = radians(s);
     return {x, layer / std::sin(a), v + layer / std::tan(a)};

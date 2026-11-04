@@ -207,6 +207,21 @@ bool Client::account(Account& account, Failure& error) {
     }
 }
 
+bool plan_includes(const std::vector<Plan>& plans, std::string_view plan, std::string_view job_class) {
+    for (const Plan& p : plans)
+        if (p.name == plan)
+            return p.classes.empty() || std::find(p.classes.begin(), p.classes.end(), job_class) != p.classes.end();
+    return true;
+}
+
+std::string plans_with(const std::vector<Plan>& plans, std::string_view job_class) {
+    std::string out;
+    for (const Plan& p : plans)
+        if (std::find(p.classes.begin(), p.classes.end(), job_class) != p.classes.end())
+            out += (out.empty() ? "" : ", ") + p.name;
+    return out;
+}
+
 bool Client::plans(std::vector<Plan>& plans, Failure& error) {
     const net::Response r = net::perform(api("GET", url_ + "/v1/plans", token_, 30));
     if (!r.ok()) {
@@ -232,6 +247,10 @@ bool Client::plans(std::vector<Plan>& plans, Failure& error) {
             plan.price_cents = p.contains("price_cents") && p["price_cents"].is_number() ? p["price_cents"].get<long long>() : 0;
             plan.currency = p.value("currency", std::string());
             plan.remote_printers = p.value("remote_printers", 0);
+            if (p.contains("classes") && p["classes"].is_array())
+                for (const nlohmann::json& c : p["classes"])
+                    if (c.is_string())
+                        plan.classes.push_back(c.get<std::string>());
             plans.push_back(std::move(plan));
         }
         return true;

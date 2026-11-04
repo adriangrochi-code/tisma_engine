@@ -2,6 +2,7 @@
 #include "config/settings.hpp"
 #include "fea/verdict.hpp"
 #include "fea/analysis.hpp"
+#include "slice/placement.hpp"
 #include "fea/materials.hpp"
 #include "fea/zone.hpp"
 #include "io/ply.hpp"
@@ -22,6 +23,7 @@
 #include <array>
 #include <bit>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <random>
 #include <utility>
@@ -661,6 +663,24 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     two.z = {0.0, 1.0};
     two.solid = {1, 1};
     CHECK(voxel_surface(two, {1.0, 2.0}).value.size() == 20);
+    CHECK(voxel_surface(two, {1.0, 2.0}).displacement.empty());
+    // With the nodes' displacement (here u = (0, 0, z)), each corner carries its own.
+    std::vector<double> lift(3 * 3 * 2 * 2, 0.0);
+    for (int k = 0; k < 2; ++k)
+        for (int y = 0; y < 2; ++y)
+            for (int i = 0; i < 3; ++i)
+                lift[3 * std::size_t((k * 2 + y) * 3 + i) + 2] = double(k);
+    const VoxelSurface lifted = voxel_surface(two, {1.0, 2.0}, &lift);
+    REQUIRE(lifted.displacement.size() == lifted.corners.size());
+    for (std::size_t n = 0; n < lifted.corners.size(); ++n)
+        CHECK(lifted.displacement[n].z == lifted.corners[n].z);
+    // The bar's corners: the largest movement on its outside is the bar's largest.
+    const VoxelSurface bent = voxel_surface(r.grid, r.result.safety, &r.result.elasticity.displacement);
+    REQUIRE(bent.displacement.size() == bent.corners.size());
+    double most = 0.0;
+    for (const Vec3f& d : bent.displacement)
+        most = std::max(most, std::sqrt(double(d.x) * d.x + double(d.y) * d.y + double(d.z) * d.z));
+    CHECK_THAT(most, WithinRel(r.result.elasticity.max_displacement, 1e-5));
     // EP6: the same force spread on the top face bends the bar less.
     e.conditions = {fixed, spread};
     const AnalysisCase c6 = engineering_analysis_case(e, triangles, {}, notes, "PLA");
@@ -765,3 +785,372 @@ TEST_CASE("BH24: a quality finer than the voxel limit allows takes the finest vo
     CHECK(normal.voxel == 0.0);
 }
 
+
+TEST_CASE("structural optimization rule 2: the lowest uniform infill that holds, by bisection", "[analysis][engineering]") {
+    const IndexedMesh bar = box_mesh(16.0f, 4.0f, 4.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {16.0, 2.0, 2.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 2.0;
+    tip.newtons = 10.5;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    // Rápida analyses the part solid: nothing to search.
+    e.structural.quality = "fast";
+    std::vector<std::string> notes;
+    const AnalysisCase solid = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    CHECK(lightest_infill(bar, triangles, beads_04(), solid, e).solid);
+    e.structural.quality = "normal";
+    const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    const Settings s = beads_04();
+    double last = -1.0;
+    const LightestInfill best = lightest_infill(bar, triangles, s, c, e, [&](double done) {
+        CHECK(done >= last); // the progress only grows
+        last = done;
+    });
+    CHECK(best.analyses <= 8);
+    CHECK(last == 1.0);
+    REQUIRE(best.found);
+    // It holds there and not one percent below.
+    Settings at = s;
+    at.infill_density = best.density;
+    CHECK(report_verdict(run_analysis(bar, at, c), c, e, triangles) == Verdict::Holds);
+    if (best.density > 0) {
+        at.infill_density = best.density - 1;
+        CHECK(report_verdict(run_analysis(bar, at, c), c, e, triangles) != Verdict::Holds);
+    }
+    // A load no infill carries: not found, with its factor.
+    e.conditions[1].newtons = 20000.0;
+    const AnalysisCase heavy = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    const LightestInfill none = lightest_infill(bar, triangles, s, heavy, e);
+    CHECK_FALSE(none.found);
+    CHECK(none.analyses == 1);
+    CHECK(none.min_safety < 2.0);
+}
+
+TEST_CASE("analysis with modifiers: a zone's own infill is printed and analysed (structural_optimization.md, rule 3)",
+          "[analysis][engineering]") {
+    const IndexedMesh bar = box_mesh(24.0f, 6.0f, 6.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {24.0, 3.0, 3.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 3.0;
+    tip.newtons = 20.0;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    e.structural.quality = "normal";
+    std::vector<std::string> notes;
+    const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    Settings s = beads_04();
+    s.infill_density = 0.0;
+    const AnalysisReport empty = run_analysis(bar, s, c);
+    // The fixed half, where the bending is largest, filled by a modifier.
+    const IndexedMesh half = box_mesh(12.0f, 6.0f, 6.0f);
+    TriangleMesh zone;
+    for (const auto& t : half.triangles)
+        zone.add_triangle(half.vertices[t[0]], half.vertices[t[1]], half.vertices[t[2]]);
+    const std::vector<MeshModifier> mods{{"zone", 0, zone, R"({"infill": {"density": 100}})"}};
+    const AnalysisReport filled = run_analysis(bar, s, c, nullptr, {}, nullptr, &mods);
+    REQUIRE(empty.valid);
+    REQUIRE(filled.valid);
+    CHECK(filled.result.min_safety > 1.2 * empty.result.min_safety);
+    CHECK(filled.result.elasticity.max_displacement < empty.result.elasticity.max_displacement);
+}
+
+TEST_CASE("infill zones: denser cells where the stress is higher (structural_optimization.md, rule 3)",
+          "[analysis][engineering]") {
+    const IndexedMesh bar = box_mesh(24.0f, 6.0f, 6.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {24.0, 3.0, 3.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 3.0;
+    tip.newtons = 20.0;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    e.structural.quality = "normal";
+    std::vector<std::string> notes;
+    const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    Settings s = beads_04();
+    s.infill_density = 50.0;
+    const AnalysisReport uniform = run_analysis(bar, s, c);
+    REQUIRE(uniform.valid);
+    CHECK(infill_strength_exponent(InfillPattern::Gyroid) > infill_strength_exponent(InfillPattern::Rectilinear));
+    const InfillZones z = infill_zones(uniform, 50.0, 2.0, InfillPattern::Rectilinear);
+    CHECK(z.cells[0] + z.cells[1] + z.cells[2] > 0);
+    REQUIRE_FALSE(z.modifiers.empty());
+    for (int l = 0; l < 3; ++l) {
+        CHECK(z.density[l] >= 0.0);
+        CHECK(z.density[l] <= 100.0);
+        if (l > 0)
+            CHECK(z.density[l] >= z.density[l - 1]);
+    }
+    // The densest zone is near the fixed end, where the bending is largest.
+    double densest_x = 1e9;
+    for (const MeshModifier& m : z.modifiers)
+        if (m.settings.find(std::to_string(static_cast<int>(std::lround(z.density[2])))) != std::string::npos) {
+            CHECK_FALSE(m.mesh.empty());
+            densest_x = std::min(densest_x, static_cast<double>(m.mesh.bounding_box().min.x));
+        }
+    CHECK(densest_x < 6.0);
+    // A smaller scale never asks for more.
+    const InfillZones half = infill_zones(uniform, 50.0, 2.0, InfillPattern::Rectilinear, 0.5);
+    for (int l = 0; l < 3; ++l)
+        CHECK(half.density[l] <= z.density[l] + 1e-9);
+    // Rule 3's search: the zones scaled until they hold, lighter than 50 % everywhere.
+    double last = -1.0;
+    const ZonedInfill zoned = zoned_infill(bar, triangles, s, c, e, 50, [&](double done) {
+        CHECK(done >= last);
+        last = done;
+    });
+    CHECK(last == 1.0);
+    CHECK(zoned.analyses <= 7);
+    REQUIRE(zoned.found);
+    CHECK(zoned.uniform_mass_g > 0.0);
+    CHECK(zoned.mass_g > 0.0);
+    CHECK(zoned.lighter == (zoned.mass_g < zoned.uniform_mass_g));
+    CHECK(zoned.mass_g <= 1.05 * zoned.uniform_mass_g); // the voxels weigh beads coarsely: near, not always below
+    for (const MeshModifier& m : zoned.zones.modifiers)
+        CHECK(m.name != "zone 1"); // the lowest level is the object's own infill
+    std::printf("zoned infill: levels %.0f/%.0f/%.0f %%, %.3f g vs %.3f g uniform, %d analyses\n", zoned.zones.density[0],
+                zoned.zones.density[1], zoned.zones.density[2], zoned.mass_g, zoned.uniform_mass_g, zoned.analyses);
+}
+
+TEST_CASE("infill ribs: lines along the stress (structural_optimization.md, rule 4)", "[analysis][engineering]") {
+    // A bar along X or along Y, held at one end and pulled at the other along itself.
+    const auto ribs_of = [](bool along_y) {
+        const float lx = along_y ? 6.0f : 24.0f, ly = along_y ? 24.0f : 6.0f;
+        const IndexedMesh bar = box_mesh(lx, ly, 6.0f);
+        TriangleMesh triangles;
+        for (const auto& t : bar.triangles)
+            triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+        ProjectEngineering e;
+        EngineeringCondition fixed, pull;
+        fixed.kind = ConditionKind::FixedZone;
+        for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+            bool at_min = true;
+            for (int k = 0; k < 3; ++k)
+                at_min &= (along_y ? triangles.corner(t, k).y : triangles.corner(t, k).x) == 0.0f;
+            if (at_min)
+                fixed.triangles.push_back(t);
+        }
+        pull.kind = ConditionKind::ForcePoint;
+        pull.point = along_y ? std::array<double, 3>{3.0, 24.0, 3.0} : std::array<double, 3>{24.0, 3.0, 3.0};
+        pull.normal = along_y ? std::array<double, 3>{0.0, 1.0, 0.0} : std::array<double, 3>{1.0, 0.0, 0.0};
+        pull.radius = 3.0;
+        pull.newtons = 175.0; // 30 % holds a factor of 2, the walls alone do not
+        pull.direction = ForceDirection::Axis;
+        pull.axis = along_y ? 2 : 1;
+        e.conditions = {fixed, pull};
+        e.structural.quality = "normal";
+        std::vector<std::string> notes;
+        const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+        Settings s = beads_04();
+        s.infill_density = 30.0;
+        const AnalysisReport r = run_analysis(bar, s, c);
+        REQUIRE(r.valid);
+        REQUIRE(r.result.layer_stress.size() == r.grid.solid.size());
+        InfillRibs ribs = infill_ribs(r);
+        // The same infill along the stress carries more (the as-printed
+        // analysis models each line and its direction: rule 5).
+        if (!along_y) {
+            const AnalysisReport ribbed = run_analysis(bar, s, c, nullptr, {}, nullptr, &ribs.modifiers);
+            REQUIRE(ribbed.valid);
+            std::printf("infill ribs: factor %.3f without, %.3f with\n", r.result.min_safety, ribbed.result.min_safety);
+            CHECK(ribbed.result.min_safety > r.result.min_safety);
+            // The search again with the ribs, from 30 % (which holds with
+            // room to spare): lower, and it holds there.
+            double last = -1.0;
+            const RibbedInfill again = ribbed_infill(bar, triangles, s, c, e, 30, [&](double done) {
+                CHECK(done >= last);
+                last = done;
+            });
+            CHECK(last == 1.0);
+            CHECK(again.analyses <= 9);
+            REQUIRE(again.found);
+            CHECK(again.density <= 30);
+            CHECK(again.lighter == (again.density < 30));
+            CHECK_FALSE(again.ribs.modifiers.empty());
+            std::printf("infill ribs: lowest with ribs %d %% (factor %.2f), %d analyses\n", again.density, again.min_safety,
+                        again.analyses);
+        }
+        return ribs;
+    };
+    // The angle of the group with the most cells.
+    const auto main_angle = [](const InfillRibs& ribs) {
+        std::size_t best = 0;
+        for (std::size_t g = 1; g < ribs.angles.size(); ++g)
+            if (ribs.group_cells[g] > ribs.group_cells[best])
+                best = g;
+        std::printf("infill ribs:");
+        for (std::size_t g = 0; g < ribs.angles.size(); ++g)
+            std::printf(" %.0f° × %zu", ribs.angles[g], ribs.group_cells[g]);
+        std::printf("\n");
+        return ribs.angles.empty() ? -1.0 : ribs.angles[best];
+    };
+    const InfillRibs x = ribs_of(false);
+    REQUIRE(x.cells > 0);
+    REQUIRE_FALSE(x.modifiers.empty());
+    CHECK(main_angle(x) == 0.0); // pulled along X: lines along X
+    REQUIRE(x.group_cells.size() == x.angles.size());
+    CHECK(x.modifiers.front().settings.find("aligned_rectilinear") != std::string::npos);
+    const InfillRibs y = ribs_of(true);
+    REQUIRE(y.cells > 0);
+    CHECK(main_angle(y) == 90.0);
+}
+
+TEST_CASE("reinforcement: thicker walls and denser infill round the clamp and the load (structural_optimization.md, rule 6)",
+          "[analysis][engineering]") {
+    const IndexedMesh bar = box_mesh(24.0f, 6.0f, 6.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {24.0, 3.0, 3.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 3.0;
+    tip.newtons = 20.0;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    e.structural.quality = "normal";
+    std::vector<std::string> notes;
+    const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    Settings s = beads_04();
+    s.infill_density = 15.0;
+    const AnalysisReport plain = run_analysis(bar, s, c);
+    REQUIRE(plain.valid);
+    const Reinforcement r = reinforcement_zone(plain, c, s);
+    CHECK(r.radius == 6.0); // twice the load's 3 mm
+    REQUIRE(r.cells > 0);
+    REQUIRE_FALSE(r.modifiers.empty());
+    CHECK(r.modifiers.front().settings.find("\"count\": " + std::to_string(s.wall_count + 2)) != std::string::npos);
+    CHECK(r.modifiers.front().settings.find("\"density\": 40") != std::string::npos);
+    // Round the clamp and the load, not in the middle of the bar.
+    bool at_clamp = false, at_load = false, middle = false;
+    for (const MeshModifier& m : r.modifiers) {
+        const BoundingBox b = m.mesh.bounding_box();
+        at_clamp |= b.min.x < 1.0f;
+        at_load |= b.max.x > 23.0f;
+        middle |= b.min.x < 12.0f && b.max.x > 12.0f;
+    }
+    CHECK(at_clamp);
+    CHECK(at_load);
+    CHECK_FALSE(middle);
+    const AnalysisReport stronger = run_analysis(bar, s, c, nullptr, {}, nullptr, &r.modifiers);
+    REQUIRE(stronger.valid);
+    std::printf("reinforcement: %zu cells, factor %.3f without, %.3f with\n", r.cells, plain.result.min_safety,
+                stronger.result.min_safety);
+    CHECK(stronger.result.min_safety > plain.result.min_safety);
+    // The search with the zone in place, against the part at 30 % without it.
+    double last = -1.0;
+    const ReinforcedInfill best = reinforced_infill(bar, triangles, s, c, e, 30, [&](double done) {
+        CHECK(done >= last);
+        last = done;
+    });
+    CHECK(last == 1.0);
+    CHECK(best.analyses <= 10);
+    REQUIRE(best.found);
+    CHECK(best.plain_mass_g > 0.0);
+    CHECK(best.mass_g > 0.0);
+    CHECK(best.lighter == (best.mass_g < best.plain_mass_g));
+    std::printf("reinforcement: rest at %d %% (factor %.2f), %.3f g against %.3f g at 30 %%, %d analyses\n",
+                best.best.density, best.best.min_safety, best.mass_g, best.plain_mass_g, best.analyses);
+}
+
+TEST_CASE("recommended orientation: layers along Z, X and Y (structural_optimization.md, rule 8)", "[analysis][engineering]") {
+    // A bar along X held at one end and bent at the other: with the layers
+    // across it (stacked along X) the bending pulls the layers apart.
+    const IndexedMesh bar = box_mesh(24.0f, 6.0f, 6.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {24.0, 3.0, 3.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 3.0;
+    tip.newtons = 20.0;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    e.structural.quality = "normal";
+    // The turns stack the layers along the axis asked.
+    const std::array<double, 9> x = layers_along(1), y = layers_along(2);
+    CHECK(x[6] == 1.0); // z' = x
+    CHECK(y[7] == 1.0); // z' = y
+    double last = -1.0;
+    const OrientationChoice o = recommended_orientation(triangles, beads_04(), e, "PLA", [&](double done) {
+        CHECK(done >= last);
+        last = done;
+    });
+    std::printf("orientation: factor %.3f along Z, %.3f along X, %.3f along Y; best %d, recommended %d\n", o.safety[0],
+                o.safety[1], o.safety[2], o.best, int(o.recommend));
+    CHECK(last == 1.0);
+    CHECK(o.analyses == 3);
+    CHECK(o.safety[0] > 0.0);
+    CHECK(o.safety[1] > 0.0);
+    CHECK(o.safety[2] > 0.0);
+    CHECK(o.safety[std::size_t(o.best)] >= o.safety[0]);
+    CHECK(o.recommend == (o.best != 0 && o.safety[std::size_t(o.best)] > 1.05 * o.safety[0]));
+}
