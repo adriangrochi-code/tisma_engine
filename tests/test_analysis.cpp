@@ -1039,3 +1039,58 @@ TEST_CASE("infill ribs: lines along the stress (structural_optimization.md, rule
     REQUIRE(y.cells > 0);
     CHECK(main_angle(y) == 90.0);
 }
+
+TEST_CASE("reinforcement: thicker walls and denser infill round the clamp and the load (structural_optimization.md, rule 6)",
+          "[analysis][engineering]") {
+    const IndexedMesh bar = box_mesh(24.0f, 6.0f, 6.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {24.0, 3.0, 3.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 3.0;
+    tip.newtons = 20.0;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    e.structural.quality = "normal";
+    std::vector<std::string> notes;
+    const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    Settings s = beads_04();
+    s.infill_density = 15.0;
+    const AnalysisReport plain = run_analysis(bar, s, c);
+    REQUIRE(plain.valid);
+    const Reinforcement r = reinforcement_zone(plain, c, s);
+    CHECK(r.radius == 6.0); // twice the load's 3 mm
+    REQUIRE(r.cells > 0);
+    REQUIRE_FALSE(r.modifiers.empty());
+    CHECK(r.modifiers.front().settings.find("\"count\": " + std::to_string(s.wall_count + 2)) != std::string::npos);
+    CHECK(r.modifiers.front().settings.find("\"density\": 40") != std::string::npos);
+    // Round the clamp and the load, not in the middle of the bar.
+    bool at_clamp = false, at_load = false, middle = false;
+    for (const MeshModifier& m : r.modifiers) {
+        const BoundingBox b = m.mesh.bounding_box();
+        at_clamp |= b.min.x < 1.0f;
+        at_load |= b.max.x > 23.0f;
+        middle |= b.min.x < 12.0f && b.max.x > 12.0f;
+    }
+    CHECK(at_clamp);
+    CHECK(at_load);
+    CHECK_FALSE(middle);
+    const AnalysisReport stronger = run_analysis(bar, s, c, nullptr, {}, nullptr, &r.modifiers);
+    REQUIRE(stronger.valid);
+    std::printf("reinforcement: %zu cells, factor %.3f without, %.3f with\n", r.cells, plain.result.min_safety,
+                stronger.result.min_safety);
+    CHECK(stronger.result.min_safety > plain.result.min_safety);
+}

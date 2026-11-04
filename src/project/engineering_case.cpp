@@ -460,6 +460,118 @@ InfillRibs infill_ribs(const AnalysisReport& report) {
     return out;
 }
 
+Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCase& c, const Settings& settings, double radius) {
+    Reinforcement out;
+    const VoxelGrid& g = report.grid;
+    if (g.solid.empty() || g.z.size() < 2)
+        return out;
+    if (radius <= 0.0) {
+        double load = 0.0;
+        for (const CaseLoad& l : c.loads)
+            if (l.region.shape && l.region.shape->disc)
+                load = std::max(load, l.region.shape->radius);
+        radius = std::max(5.0, 2.0 * load);
+    }
+    out.radius = radius;
+    // The places: each region's marked surface, else its box (a face of the
+    // part: the grid's side).
+    const double x1 = g.x0 + g.nx * g.hx, y1 = g.y0 + g.ny * g.hy, z0 = g.z.front(), z1 = g.z.back();
+    struct Place {
+        std::unique_ptr<SurfaceZone> zone;
+        double lo[3], hi[3];
+    };
+    std::vector<Place> places;
+    const auto add = [&](const Region& r) {
+        Place p;
+        for (int a = 0; a < 3; ++a)
+            p.lo[a] = r.box.min[a], p.hi[a] = r.box.max[a];
+        switch (r.face) {
+        case PartFace::Bottom: p.hi[2] = z0; break;
+        case PartFace::Top: p.lo[2] = z1; break;
+        case PartFace::XMin: p.hi[0] = g.x0; break;
+        case PartFace::XMax: p.lo[0] = x1; break;
+        case PartFace::YMin: p.hi[1] = g.y0; break;
+        case PartFace::YMax: p.lo[1] = y1; break;
+        case PartFace::None: break;
+        }
+        if (r.shape)
+            p.zone = std::make_unique<SurfaceZone>(*r.shape, radius, radius);
+        places.push_back(std::move(p));
+    };
+    for (const CaseFixture& f : c.fixtures)
+        add(f.region);
+    for (const CaseLoad& l : c.loads)
+        add(l.region);
+    const auto near = [&](double x, double y, double z) {
+        for (const Place& p : places) {
+            if (p.zone) {
+                if (p.zone->near(x, y, z))
+                    return true;
+                continue;
+            }
+            const double q[3] = {x, y, z};
+            double d2 = 0.0;
+            for (int a = 0; a < 3; ++a) {
+                const double d = std::max({p.lo[a] - q[a], 0.0, q[a] - p.hi[a]});
+                d2 += d * d;
+            }
+            if (d2 <= radius * radius)
+                return true;
+        }
+        return false;
+    };
+    // Cells of 2 mm (at least a voxel) with some of the part.
+    const int cx = std::max(1, int(std::lround(2.0 / g.hx))), cy = std::max(1, int(std::lround(2.0 / g.hy)));
+    std::vector<int> z_cell(std::size_t(g.nz));
+    std::vector<double> z_cut{z0};
+    for (int k = 0; k < g.nz; ++k) {
+        z_cell[std::size_t(k)] = int(z_cut.size()) - 1;
+        if (g.z[std::size_t(k) + 1] - z_cut.back() >= 2.0 - 1e-9 || k + 1 == g.nz)
+            z_cut.push_back(g.z[std::size_t(k) + 1]);
+    }
+    const int nx = (g.nx + cx - 1) / cx, ny = (g.ny + cy - 1) / cy, nz = int(z_cut.size()) - 1;
+    std::vector<std::uint8_t> part(std::size_t(nx) * std::size_t(ny) * std::size_t(nz), 0);
+    const auto cell = [&](int i, int j, int k) { return (std::size_t(k) * std::size_t(ny) + std::size_t(j)) * std::size_t(nx) + std::size_t(i); };
+    for (int k = 0; k < g.nz; ++k)
+        for (int j = 0; j < g.ny; ++j)
+            for (int i = 0; i < g.nx; ++i)
+                if (g.at(i, j, k))
+                    part[cell(i / cx, j / cy, z_cell[std::size_t(k)])] = 1;
+    std::vector<std::uint8_t> in(part.size(), 0);
+    for (int k = 0; k < nz; ++k)
+        for (int j = 0; j < ny; ++j)
+            for (int i = 0; i < nx; ++i) {
+                if (!part[cell(i, j, k)])
+                    continue;
+                const double x = g.x0 + (std::min((i + 1) * cx, g.nx) + i * cx) * 0.5 * g.hx;
+                const double y = g.y0 + (std::min((j + 1) * cy, g.ny) + j * cy) * 0.5 * g.hy;
+                const double z = 0.5 * (z_cut[std::size_t(k)] + z_cut[std::size_t(k) + 1]);
+                if (near(x, y, z)) {
+                    in[cell(i, j, k)] = 1;
+                    ++out.cells;
+                }
+            }
+    const std::string own = "{\"walls\": {\"count\": " + std::to_string(settings.wall_count + 2) +
+                            "}, \"infill\": {\"density\": " + std::to_string(int(std::max(40.0, std::ceil(settings.infill_density)))) + "}}";
+    for (int k = 0; k < nz; ++k)
+        for (int j = 0; j < ny; ++j)
+            for (int i = 0; i < nx;) {
+                if (!in[cell(i, j, k)]) {
+                    ++i;
+                    continue;
+                }
+                int end = i + 1;
+                while (end < nx && in[cell(end, j, k)])
+                    ++end;
+                const Vec3f lo{float(g.x0 + i * cx * g.hx), float(g.y0 + j * cy * g.hy), float(z_cut[std::size_t(k)])};
+                const Vec3f hi{float(g.x0 + std::min(end * cx, g.nx) * g.hx), float(g.y0 + std::min((j + 1) * cy, g.ny) * g.hy),
+                               float(z_cut[std::size_t(k) + 1])};
+                out.modifiers.push_back({"reinforcement", 0, box_between(lo, hi), own});
+                i = end;
+            }
+    return out;
+}
+
 RibbedInfill ribbed_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
                            const AnalysisCase& c, const ProjectEngineering& e, int density,
                            const std::function<void(double)>& progress) {

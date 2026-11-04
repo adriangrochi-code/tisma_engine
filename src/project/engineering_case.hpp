@@ -132,6 +132,19 @@ LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& plac
                                const AnalysisCase& c, const ProjectEngineering& e,
                                const std::function<void(double)>& progress = {});
 
+// «Refuerzos» (structural_optimization.md, rule 6): the cells of 2 mm whose
+// centre is within `radius` of a fixed face or a load, as box modifiers (a
+// row along X one box) with 2 walls more than `settings` and an infill of
+// 40 %, never less than the part's. radius 0: twice the largest load disc's
+// radius, at least 5 mm.
+struct Reinforcement {
+    double radius = 0.0;
+    std::size_t cells = 0;
+    std::vector<MeshModifier> modifiers; // "reinforcement", in the analysis' coordinates
+};
+Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCase& c, const Settings& settings,
+                                 double radius = 0.0);
+
 // Ribs (structural_optimization.md, rule 4): from the analysis at the
 // lowest uniform `density` that holds, the ribs; then the lowest density that
 // holds with them, searched again (at most that density). Used only when

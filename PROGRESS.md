@@ -10395,3 +10395,17 @@ densidad propia de la pieza y agrega las zonas como cajas modificadoras con rell
 «Usar los nervios» y su deshacer (la búsqueda completa tarda más de un minuto en el guion).
 
 **Sigue:** regla 6 de structural_optimization.md (refuerzos).
+
+## 2026-11-04 — Optimizar, regla 6 (refuerzos), paso A: la zona
+
+**Hecho:** `reinforcement_zone(informe, caso, ajustes, radio)` toma las celdas de 2 mm con parte de la pieza cuyo
+centro está a menos del radio de una cara fija o de una carga (la superficie marcada, o la caja de la región; el
+radio por defecto es 2 × el de la carga más grande, al menos 5 mm) y las da como cajas modificadoras unidas en filas
+a lo largo de X, con 2 perímetros más y relleno del 40 % (nunca menos que el de la pieza).
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N en la punta (disco de 3 mm), relleno 15 %: radio 6 mm, 64 celdas junto
+al empotramiento y la carga y ninguna en el medio; el factor pasa de 1,56 a 2,15 con el mismo relleno (la ficha,
+O5: de 2,63 a 2,90). 22 s.
+
+**Sigue (regla 6):** paso B, el relleno uniforme más liviano del resto con la zona puesta, comparado con el mejor sin
+ella; después, en el panel.
