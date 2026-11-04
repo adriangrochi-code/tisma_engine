@@ -109,9 +109,12 @@ class PrintersTest {
         assertTrue(moonraker.files.getValue("cube.gcode").contentEquals(gcode))
         waitFor("printer_pause")
         waitForText("Nozzle 210 / 210 °C")
+        waitState { !printers.state.value.busy }
         compose.onNodeWithTag("printer_pause").performScrollTo().performClick()
         waitState { moonraker.state == "paused" }
         waitFor("printer_resume")
+        // The buttons wait while a command is on its way.
+        waitState { !printers.state.value.busy }
         compose.onNodeWithTag("printer_cancel").performScrollTo().performClick()
         waitFor("printer_cancel_confirm")
         compose.onNodeWithTag("printer_cancel_confirm").performClick()

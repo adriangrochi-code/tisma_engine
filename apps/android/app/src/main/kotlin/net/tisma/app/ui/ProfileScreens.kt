@@ -1,0 +1,110 @@
+package net.tisma.app.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import net.tisma.app.R
+import net.tisma.app.engine.EngineRunner
+import net.tisma.app.engine.SliceState
+import net.tisma.app.engine.SliceViewModel
+import java.util.Locale
+
+/** The printer card on the plate (mobile_app.md, rule 6): the printer, nozzle and filament; a tap changes them. */
+@Composable
+fun PrinterCard(state: SliceState, onClick: () -> Unit) {
+    val p = state.profile
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag("printer_card")) {
+        androidx.compose.foundation.layout.Row(Modifier.padding(16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            androidx.compose.material3.Icon(painterResource(R.drawable.tisma_printer), null, Modifier.padding(end = 12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(p?.printer ?: stringResource(R.string.profile_none), style = MaterialTheme.typography.titleMedium)
+                Text(if (p == null) stringResource(R.string.profile_none_hint)
+                    else String.format(Locale.getDefault(), "%.2f mm", p.nozzle) + " · " + (p.filament ?: stringResource(R.string.profile_generic_filament)),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** Picks the printer from the engine's catalog, its nozzle and a filament that fits it (mobile_app.md, rule 11). */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun ProfilePickerScreen(state: SliceState, slice: SliceViewModel, nav: Navigator) {
+    val catalog = state.catalog
+    var query by rememberSaveable { mutableStateOf("") }
+    var printer by rememberSaveable { mutableStateOf(state.profile?.printer) }
+    var nozzle by rememberSaveable { mutableStateOf(state.profile?.nozzle ?: 0.4) }
+    var filament by rememberSaveable { mutableStateOf(state.profile?.filament) }
+    if (catalog == null) {
+        ScreenColumn { Text(stringResource(R.string.profile_no_catalog)) }
+        return
+    }
+    val chosen = catalog.printer(printer)
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (chosen == null) {
+            OutlinedTextField(query, { query = it }, singleLine = true, label = { Text(stringResource(R.string.profile_search)) },
+                modifier = Modifier.fillMaxWidth().testTag("profile_search"))
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(catalog.search(query), key = { it.name }) { p ->
+                    Card(onClick = { printer = p.name; nozzle = p.nozzles.first(); filament = null },
+                        modifier = Modifier.fillMaxWidth().testTag("profile_printer_" + p.name)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(p.name, style = MaterialTheme.typography.bodyLarge)
+                            Text(p.buildVolume.joinToString(" × ") { String.format(Locale.getDefault(), "%.0f", it) } + " mm",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        } else {
+            Text(chosen.name, style = MaterialTheme.typography.titleLarge)
+            AccentTextButton(onClick = { printer = null }) { Text(stringResource(R.string.profile_change_printer)) }
+            Text(stringResource(R.string.profile_nozzle), style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                chosen.nozzles.forEach { d ->
+                    FilterChip(selected = nozzle == d, onClick = { nozzle = d },
+                        label = { Text(String.format(Locale.getDefault(), "%.2f mm", d)) })
+                }
+            }
+            Text(stringResource(R.string.profile_filament), style = MaterialTheme.typography.labelLarge)
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(catalog.filamentsFor(chosen), key = { it.fullName }) { f ->
+                    val sel = filament == f.fullName
+                    Card(onClick = { filament = f.fullName }, modifier = Modifier.fillMaxWidth().testTag("profile_filament_" + f.fullName),
+                        colors = if (sel) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                            else CardDefaults.cardColors()) {
+                        Text(f.material + " · " + f.fullName, Modifier.padding(12.dp))
+                    }
+                }
+            }
+            Button(onClick = { slice.setProfile(EngineRunner.ProfileChoice(chosen.name, nozzle, filament)); nav.back() },
+                modifier = Modifier.fillMaxWidth().height(56.dp).testTag("profile_save")) {
+                Text(stringResource(R.string.pref_save))
+            }
+        }
+    }
+}

@@ -27,6 +27,17 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(SEARCH_NETWORK, true)
         set(value) = prefs.edit().putBoolean(SEARCH_NETWORK, value).apply()
 
+    /** The printer, nozzle and filament picked from the catalog (mobile_app.md, rule 6: the printer card). */
+    var profilePrinter: String?
+        get() = prefs.getString("profile.printer", null)
+        set(v) = prefs.edit().putString("profile.printer", v).apply()
+    var profileNozzle: Double
+        get() = prefs.getFloat("profile.nozzle", 0.4f).toDouble()
+        set(v) = prefs.edit().putFloat("profile.nozzle", v.toFloat()).apply()
+    var profileFilament: String?
+        get() = prefs.getString("profile.filament", null)
+        set(v) = prefs.edit().putString("profile.filament", v).apply()
+
     companion object {
         private const val SEARCH_NETWORK = "printers.search_network"
         const val FILE = "tisma_settings"

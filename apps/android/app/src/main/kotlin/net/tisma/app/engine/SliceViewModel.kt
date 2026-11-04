@@ -28,6 +28,9 @@ data class SliceState(
     val result: EngineRunner.Slice? = null,
     val error: EngineRunner.EngineException? = null,
     val notice: SliceNotice? = null,
+    val catalog: Catalog? = null,
+    /** The printer card: the printer, nozzle and filament the model is sliced for. */
+    val profile: EngineRunner.ProfileChoice? = null,
 )
 
 sealed interface SliceNotice {
@@ -41,8 +44,28 @@ class SliceViewModel(
     private val runner: EngineRunner,
     private val workDir: File,
     private val io: CoroutineDispatcher = Dispatchers.IO,
+    /** Reads the catalog (from the app's assets); null when it is not there. */
+    private val loadCatalog: () -> Catalog? = { null },
+    /** Where the printer card's choice is kept. */
+    private val saved: net.tisma.app.data.AppSettings? = null,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(SliceState(engineAvailable = runner.available))
+    private val _state = MutableStateFlow(SliceState(engineAvailable = runner.available,
+        profile = saved?.profilePrinter?.let { EngineRunner.ProfileChoice(it, saved.profileNozzle, saved.profileFilament) }))
+
+    init {
+        viewModelScope.launch {
+            val c = withContext(io) { runCatching { loadCatalog() }.getOrNull() }
+            _state.update { it.copy(catalog = c) }
+        }
+    }
+
+    /** Picks the printer, nozzle and filament (the printer card). */
+    fun setProfile(choice: EngineRunner.ProfileChoice?) {
+        saved?.profilePrinter = choice?.printer
+        choice?.let { saved?.profileNozzle = it.nozzle }
+        saved?.profileFilament = choice?.filament
+        _state.update { it.copy(profile = choice, result = null) }
+    }
     val state: StateFlow<SliceState> = _state.asStateFlow()
     private val cancel = AtomicBoolean(false)
     private var model: File? = null
@@ -85,7 +108,7 @@ class SliceViewModel(
                 val r = withContext(io) {
                     val onProgress = { p: Int -> _state.update { it.copy(progress = p) } }
                     if (s.isProject) runner.sliceProject(m, onProgress) { cancel.get() }
-                    else runner.sliceModel(m, s.settings, onProgress) { cancel.get() }
+                    else runner.sliceModel(m, s.settings, onProgress, { cancel.get() }, s.profile)
                 }
                 AppLog.line("engine: sliced in ${System.currentTimeMillis() - started} ms")
                 _state.update { it.copy(result = r, progress = 100) }

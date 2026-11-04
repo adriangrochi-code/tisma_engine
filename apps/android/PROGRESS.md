@@ -25,6 +25,11 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   preferencia; la vista previa del G-code por capas (desde el teléfono y desde la nube, MA10); los avisos al terminar,
   pausar o fallar una impresión, con un servicio en primer plano mientras algo imprime.
 
+- **2026-11-04 — la tarjeta de la impresora y el catálogo:** el catálogo del motor (`resources/catalog/`, el mismo
+  del escritorio) va en el APK; en Placa, la tarjeta de la impresora abre el selector de impresora, boquilla y
+  filamento. El perfil lo arma el motor con `tisma-engine profile` (pedido al equipo del motor el 04-11-2026); hasta
+  que exista, el laminado usa los valores por defecto del motor y la pantalla lo dice.
+
 ## Abierto
 
 - **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS: necesita una biblioteca MQTT o una propia; decidir), PrusaLink,
@@ -59,6 +64,10 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   proceso, y un fallo del motor no cierra la app.
 
 ## Para que decida el dueño
+
+- Bambu Lab por red local: `docs/MOBILE.md` dice que, sin documentación oficial (modo LAN), decide el dueño. La
+  ficha toma OpenBambuAPI (documentación de la comunidad). Hace falta MQTT con TLS (propio, desde la especificación
+  OASIS MQTT 3.1.1, o una biblioteca permisiva) y FTPS. Pendiente de esa decisión.
 
 - Herramientas de prueba con licencias fuera de la lista (no entran al APK): JUnit 4 (EPL-1.0) y
   `javax.annotation-api` (CDDL o GPL-2.0 con excepción), que Robolectric necesita (`THIRD_PARTY.md`).

@@ -10,6 +10,8 @@ val engineAbis = listOf("arm64-v8a", "x86_64")
 val engineLibs = layout.buildDirectory.dir("engine/jniLibs")
 val buildEngine = (project.findProperty("tisma.engine")?.toString() ?: "true") != "false"
 val repoRoot = rootProject.projectDir.parentFile.parentFile
+// The engine's catalog of printers and filaments (docs/CATALOG.md), the same files the desktop embeds.
+val catalogAssets = layout.buildDirectory.dir("catalog/assets")
 
 android {
     namespace = "net.tisma.app"
@@ -43,6 +45,7 @@ android {
     }
 
     sourceSets["main"].jniLibs.srcDir(engineLibs)
+    sourceSets["main"].assets.srcDir(catalogAssets)
 
     packaging {
         // The engine is a program, not a library: it must be on disk, unpacked,
@@ -89,6 +92,12 @@ val engineTasks = engineAbis.map { abi ->
         ).joinToString(" && "))
     }
 }
+
+val copyCatalog = tasks.register<Copy>("copyCatalog") {
+    from(File(repoRoot, "resources/catalog")) { include("printers.json", "filaments.json") }
+    into(catalogAssets.map { it.dir("catalog") })
+}
+tasks.named("preBuild") { dependsOn(copyCatalog) }
 
 if (buildEngine) {
     tasks.named("preBuild") { dependsOn(engineTasks) }

@@ -32,12 +32,17 @@ class EngineRunner(private val executable: File, private val workDir: File) {
         val filamentMm: Double?,
         val filamentG: Double?,
         val layers: Int?,
+        /** False when the printer's profile could not be made and the engine's defaults were used. */
+        val profileUsed: Boolean = true,
     )
 
     class EngineException(val code: String, val error: String, val errorEs: String, val exitCode: Int) :
         Exception(error)
 
     class Cancelled : Exception("Cancelled")
+
+    /** The printer and filament from the catalog, by the names the engine finds them by. */
+    data class ProfileChoice(val printer: String, val nozzle: Double, val filament: String?)
 
     /** The simple settings of MOBILE.md, step 5: a quality (layer height) and supports or not. */
     data class SimpleSettings(val layerHeight: Double = 0.20, val supports: Boolean = false) {
@@ -56,12 +61,37 @@ class EngineRunner(private val executable: File, private val workDir: File) {
     }
 
     /** Slices a model (STL, OBJ, 3MF mesh) with [settings] (docs/CONFIG.md). */
-    fun sliceModel(model: File, settings: SimpleSettings, onProgress: (Int) -> Unit, cancelled: () -> Boolean): Slice {
-        val config = File(workDir, "settings.json").apply { writeText(settings.toJson().toString()) }
+    fun sliceModel(model: File, settings: SimpleSettings, onProgress: (Int) -> Unit, cancelled: () -> Boolean,
+                   profile: ProfileChoice? = null): Slice {
+        workDir.mkdirs()
+        val base = profile?.let { profile(it) }
+        val merged = if (base != null) merge(base, settings.toJson()) else settings.toJson()
+        val config = File(workDir, "settings.json").apply { writeText(merged.toString()) }
         val out = File(workDir, model.nameWithoutExtension + ".gcode")
         val summary = File(workDir, "summary.json")
         return run(listOf("slice", model.path, "--config", config.path, "-o", out.path, "--summary", summary.path),
-            out, summary, onProgress, cancelled)
+            out, summary, onProgress, cancelled).copy(profileUsed = profile == null || base != null)
+    }
+
+    /**
+     * The settings the engine makes from its catalog for a printer, nozzle and
+     * filament (`tisma-engine profile`), or null when it cannot (an engine
+     * without the command, or a name it does not know): the slice then uses
+     * the engine's defaults and says so.
+     */
+    fun profile(choice: ProfileChoice): JsonObject? {
+        val out = File(workDir, "profile.json").apply { delete() }
+        val args = mutableListOf(executable.path, "profile", "--printer", choice.printer,
+            "--nozzle", choice.nozzle.toString(), "-o", out.path)
+        choice.filament?.let { args += listOf("--filament", it) }
+        return runCatching {
+            val p = ProcessBuilder(args).directory(workDir).redirectErrorStream(true).start()
+            p.outputStream.close()
+            p.inputStream.readAllBytes()
+            if (!p.waitFor(30, TimeUnit.SECONDS)) { p.destroyForcibly(); return null }
+            if (p.exitValue() != 0 || !out.isFile) return null
+            Json.parseToJsonElement(out.readText()) as? JsonObject
+        }.getOrNull()
     }
 
     private fun run(args: List<String>, out: File, summary: File?, onProgress: (Int) -> Unit, cancelled: () -> Boolean): Slice {
@@ -103,6 +133,14 @@ class EngineRunner(private val executable: File, private val workDir: File) {
     }
 
     companion object {
+        /** [over] on top of [base], object by object (the simple choices win over the profile). */
+        fun merge(base: JsonObject, over: JsonObject): JsonObject = JsonObject(base.toMutableMap().also { m ->
+            for ((k, v) in over) {
+                val b = m[k]
+                m[k] = if (b is JsonObject && v is JsonObject) merge(b, v) else v
+            }
+        })
+
         /** The engine's file inside the app: Android unpacks it with the native libraries. */
         const val FILE_NAME = "libtisma_engine.so"
     }

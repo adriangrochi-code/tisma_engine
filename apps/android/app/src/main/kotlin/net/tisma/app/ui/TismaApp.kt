@@ -75,6 +75,7 @@ sealed interface Screen {
     data object MyReports : Screen
     data object Preferences : Screen
     data class Preview(val path: String) : Screen
+    data object ProfilePicker : Screen
     data class AddPrinter(val editId: String?, val found: net.tisma.printers.FoundPrinter? = null) : Screen
     data class PrinterDetail(val id: String) : Screen
 }
@@ -216,6 +217,7 @@ fun TismaApp(
                     is Screen.AddPrinter -> AddPrinterScreen(top.editId, printerState, printers, nav, top.found)
                     is Screen.PrinterDetail -> PrinterDetailScreen(top.id, printerState, printers, nav)
                     is Screen.Preview -> PreviewScreen(top.path)
+                    Screen.ProfilePicker -> ProfilePickerScreen(sliceState, slice, nav)
                 }
             }
         }
@@ -233,6 +235,7 @@ private fun titleOf(s: Screen): Int = when (s) {
     is Screen.AddPrinter -> R.string.printer_add
     is Screen.PrinterDetail -> R.string.section_printer
     is Screen.Preview -> R.string.preview_title
+    Screen.ProfilePicker -> R.string.section_printer
 }
 
 @Composable

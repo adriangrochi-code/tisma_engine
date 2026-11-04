@@ -67,6 +67,7 @@ fun PlateScreen(
         }
     }
     ScreenColumn {
+        PrinterCard(state) { nav.open(Screen.ProfilePicker) }
         if (!state.engineAvailable) {
             Text(stringResource(R.string.plate_no_engine), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -127,6 +128,8 @@ fun PlateScreen(
         state.result?.let { r ->
             TismaCard(Modifier.testTag("plate_result")) {
                 Text(stringResource(R.string.plate_result), style = MaterialTheme.typography.titleMedium)
+                if (!r.profileUsed) Text(stringResource(R.string.profile_not_used), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("profile_not_used"))
                 if (r.printTime.isNotBlank()) Labeled(R.string.plate_time, r.printTime)
                 r.filamentMm?.let { mm ->
                     Labeled(R.string.plate_filament, String.format(Locale.getDefault(), "%.2f m", mm / 1000) +

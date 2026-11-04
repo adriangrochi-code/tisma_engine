@@ -253,4 +253,14 @@
     <string name="event_stopped">%1$s dejó de imprimir</string>
     <string name="event_paused">%1$s está en pausa</string>
     <string name="event_failed">%1$s tiene un error</string>
+
+    <string name="profile_none">Elegí tu impresora</string>
+    <string name="profile_none_hint">Sin ella, el motor lamina con sus valores por defecto.</string>
+    <string name="profile_generic_filament">filamento genérico</string>
+    <string name="profile_no_catalog">Esta versión no trae el catálogo de impresoras.</string>
+    <string name="profile_search">Buscar una impresora (marca o modelo)</string>
+    <string name="profile_change_printer">Otra impresora</string>
+    <string name="profile_nozzle">Boquilla</string>
+    <string name="profile_filament">Filamento</string>
+    <string name="profile_not_used">El motor no pudo armar el perfil de esta impresora: se laminó con sus valores por defecto.</string>
 </resources>

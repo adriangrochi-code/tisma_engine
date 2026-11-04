@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModelProvider
 import net.tisma.app.cloud.CloudViewModel
 import net.tisma.app.printers.PrinterStore
 import net.tisma.app.printers.PrintWatchService
+import net.tisma.app.engine.Catalog
 import net.tisma.app.engine.EngineRunner
 import net.tisma.app.engine.SliceViewModel
 import net.tisma.app.printers.PrintersViewModel
@@ -42,7 +43,11 @@ class MainActivity : ComponentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val work = java.io.File(app.cacheDir, "engine")
                 val exe = java.io.File(app.applicationInfo.nativeLibraryDir, EngineRunner.FILE_NAME)
-                return SliceViewModel(EngineRunner(exe, work), work) as T
+                val catalog = {
+                    Catalog.parse(app.assets.open("catalog/printers.json").bufferedReader().readText(),
+                        app.assets.open("catalog/filaments.json").bufferedReader().readText())
+                }
+                return SliceViewModel(EngineRunner(exe, work), work, loadCatalog = catalog, saved = app.settings) as T
             }
         }
     }

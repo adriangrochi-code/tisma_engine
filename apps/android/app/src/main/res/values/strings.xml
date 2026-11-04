@@ -268,4 +268,14 @@
     <string name="event_stopped">%1$s stopped printing</string>
     <string name="event_paused">%1$s paused</string>
     <string name="event_failed">%1$s has an error</string>
+
+    <string name="profile_none">Choose your printer</string>
+    <string name="profile_none_hint">Without it, the engine slices with its defaults.</string>
+    <string name="profile_generic_filament">generic filament</string>
+    <string name="profile_no_catalog">The catalog of printers is not in this build.</string>
+    <string name="profile_search">Search a printer (brand or model)</string>
+    <string name="profile_change_printer">Another printer</string>
+    <string name="profile_nozzle">Nozzle</string>
+    <string name="profile_filament">Filament</string>
+    <string name="profile_not_used">The engine could not make this printer\'s profile: it was sliced with its defaults.</string>
 </resources>
