@@ -74,7 +74,7 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
 
 - **Paquete de perfiles y ayuda (MA1, regla 16):** acordado con la sesión de escritorio que vive en el motor
   (`pack update/list`, `profile --pack`, `knowledge`), después de Optimizar; propuesto `pack plan` + `pack install`
-  porque el motor en Android no tiene HTTPS (sin OpenSSL): la app baja los archivos y el motor los verifica e instala.
+  porque el motor en Android no tiene HTTPS (sin OpenSSL): la app baja los archivos y el motor los verifica e instala. Aceptado por el escritorio; el lado de la app (`ProfilePack`: plan, descarga en staging, install, dos rondas) está hecho y probado con un motor falso, falta conectarlo a una pantalla cuando el motor tenga los comandos.
 
 ## Abierto
 
