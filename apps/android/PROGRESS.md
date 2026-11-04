@@ -25,6 +25,10 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Error mío en `THIRD_PARTY.md`:** el párrafo de SolidCraft para Android quedó entre filas de la tabla de
+  bibliotecas del motor. Las filas de abajo dejaron de ser tabla y falló la prueba de créditos CR2 en Windows. El
+  escritorio lo movió debajo de la tabla (dev 4176d0a). Regla: las notas van fuera de las tablas.
+
 - **2026-11-04 — La PR #55 (`android` → `dev`) se fusionó.** `android` sigue desde `dev` (9e4ff3d), y lo que viene va
   en una PR nueva.
 
