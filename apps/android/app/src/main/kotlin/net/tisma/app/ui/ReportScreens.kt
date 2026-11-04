@@ -97,7 +97,7 @@ fun ReportScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator, crash
             OutlinedTextField(expected, { expected = it.take(10_000) }, singleLine = true,
                 label = { Text(stringResource(R.string.report_expected)) }, modifier = Modifier.fillMaxWidth())
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(attach, { attach = it }, modifier = Modifier.testTag("report_attach"))
+                Checkbox(attach, { attach = it }, modifier = Modifier.testTag("report_attach").named(stringResource(R.string.report_attach)))
                 Text(stringResource(R.string.report_attach), style = MaterialTheme.typography.bodyMedium)
             }
             AccentTextButton(onClick = { showAttached = true }) { Text(stringResource(R.string.report_see_attached)) }
@@ -178,14 +178,30 @@ fun PreferencesScreen(state: CloudState, cloud: CloudViewModel, settings: AppSet
                     Text(stringResource(R.string.pref_cloud_prefer_hint), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(prefer, { prefer = it; cloud.setCloudPrefer(it) })
+                Switch(prefer, { prefer = it; cloud.setCloudPrefer(it) }, modifier = Modifier.named(stringResource(R.string.pref_cloud_prefer)))
             }
         }
         var search by rememberSaveable { mutableStateOf(settings.searchNetwork) }
         TismaCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.pref_search_network), modifier = Modifier.weight(1f))
-                Switch(search, { search = it; settings.searchNetwork = it }, modifier = Modifier.testTag("pref_search"))
+                Switch(search, { search = it; settings.searchNetwork = it },
+                    modifier = Modifier.testTag("pref_search").named(stringResource(R.string.pref_search_network)))
+            }
+        }
+        // Accessibility (accessibility_touch.md, rule 2): the preview's colors for color blindness.
+        var vision by rememberSaveable { mutableStateOf(settings.colorVision) }
+        TismaCard {
+            Text(stringResource(R.string.pref_color_vision), style = MaterialTheme.typography.bodyLarge)
+            Text(stringResource(R.string.pref_color_vision_hint), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            androidx.compose.foundation.layout.FlowRow(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                listOf("normal" to R.string.vision_normal, "deuteranopia" to R.string.vision_deuteranopia,
+                    "protanopia" to R.string.vision_protanopia, "tritanopia" to R.string.vision_tritanopia,
+                    "achromatopsia" to R.string.vision_achromatopsia).forEach { (v, label) ->
+                    androidx.compose.material3.FilterChip(selected = vision == v, onClick = { vision = v; settings.colorVision = v },
+                        label = { Text(stringResource(label)) }, modifier = Modifier.testTag("vision_$v"))
+                }
             }
         }
         Text(stringResource(R.string.pref_version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall,

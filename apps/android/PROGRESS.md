@@ -25,6 +25,17 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Accesibilidad, primera parte (`accessibility_touch.md`):**
+  - Más › Preferencias › «Visión de colores» (`ui.color_vision`). Con daltonismo, la vista previa toma Okabe e Ito
+    para los tipos y cividis para ancho y velocidad; con acromatopsia, grises (reglas 1 y 2).
+  - AC2 como prueba: la simulación de Machado et al. 2009 y CIEDE2000 (verificada con el par 1 de Sharma et al.).
+    El mínimo entre vecinos es 12,1 (tritanopía), contra 10 pedido.
+  - Los avisos se quedan hasta cerrarlos (el nuevo reemplaza al anterior) y se releen en Más › Mensajes (regla 8).
+  - Cada control de las pantallas principales tiene nombre para el lector (regla 9, prueba como AC7). Se arreglaron
+    los interruptores y casillas sin nombre y el botón de agregar impresora.
+  - Falta: tamaño de letra al 200 % revisado pantalla por pantalla (AC3), alto contraste (regla 4), movimiento
+    reducido (la cámara 3D ya salta, no anima), modo simple con pictogramas (reglas 18 a 24).
+
 - **2026-11-04 — Relleno mínimo en el teléfono (regla 13):** botón «Relleno mínimo» en Ingeniería, que corre
   `analyze --mode lightest-infill --no-zones` (motor faf85b6) y muestra el relleno encontrado, la seguridad y los
   análisis. Probado con un motor falso; no con el real, porque aquí no hay un proyecto con condiciones. Falta

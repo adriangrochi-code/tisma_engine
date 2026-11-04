@@ -1,5 +1,8 @@
 package net.tisma.app.ui
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
@@ -154,3 +157,7 @@ fun Context.readableSummary(lines: List<Pair<String, String>>): List<Pair<String
         }
     }
 }
+
+/** The control's name for the screen reader, when its label is a separate text (accessibility_touch.md, rule 9). */
+fun androidx.compose.ui.Modifier.named(label: String) =
+    this.then(androidx.compose.ui.Modifier.semantics { contentDescription = label })

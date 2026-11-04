@@ -57,6 +57,11 @@ class AppSettings(context: Context) {
     fun printerNotes(printer: String?): String = prefs.getString("printer.notes." + (printer ?: ""), null) ?: ""
     fun setPrinterNotes(printer: String?, text: String) = prefs.edit().putString("printer.notes." + (printer ?: ""), text).apply()
 
+    /** `ui.color_vision` (accessibility_touch.md): normal, deuteranopia, protanopia, tritanopia or achromatopsia. */
+    var colorVision: String
+        get() = prefs.getString("ui.color_vision", null) ?: "normal"
+        set(v) = prefs.edit().putString("ui.color_vision", v).apply()
+
     companion object {
         private const val SEARCH_NETWORK = "printers.search_network"
         const val FILE = "tisma_settings"

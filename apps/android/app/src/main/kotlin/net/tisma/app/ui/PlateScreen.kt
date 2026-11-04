@@ -102,7 +102,7 @@ fun PlateScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.plate_supports), modifier = Modifier.weight(1f))
                     Switch(state.settings.supports, { slice.setSettings(state.settings.copy(supports = it)) },
-                        enabled = !state.slicing)
+                        enabled = !state.slicing, modifier = Modifier.named(stringResource(R.string.plate_supports)))
                 }
             }
         }

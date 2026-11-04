@@ -120,7 +120,7 @@ fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navig
             onClick = { nav.open(Screen.AddPrinter(null)) },
             icon = { Icon(painterResource(R.drawable.tisma_printer), null) },
             text = { Text(stringResource(R.string.printer_add)) },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("add_printer"),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).testTag("add_printer").named(stringResource(R.string.printer_add)),
         )
     }
 }
@@ -234,7 +234,8 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
             Text(stringResource(R.string.printer_files), style = MaterialTheme.typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.printer_start_after), modifier = Modifier.weight(1f))
-                Switch(startAfterUpload, { startAfterUpload = it }, modifier = Modifier.testTag("printer_start_after"))
+                Switch(startAfterUpload, { startAfterUpload = it },
+                    modifier = Modifier.testTag("printer_start_after").named(stringResource(R.string.printer_start_after)))
             }
             Button(onClick = { pick.launch(arrayOf("*/*")) },
                 enabled = !state.uploading && s?.state != PrinterState.PRINTING && s?.state != PrinterState.PAUSED,

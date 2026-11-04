@@ -347,4 +347,13 @@
     <string name="summary_analyses">Análisis corridos</string>
     <string name="yes">Sí</string>
     <string name="no">No</string>
+    <string name="pref_color_vision">Visión de colores</string>
+    <string name="pref_color_vision_hint">Colores de la vista previa que se distinguen con daltonismo.</string>
+    <string name="vision_normal">Normal</string>
+    <string name="vision_deuteranopia">Deuteranopía</string>
+    <string name="vision_protanopia">Protanopía</string>
+    <string name="vision_tritanopia">Tritanopía</string>
+    <string name="vision_achromatopsia">Acromatopsia</string>
+    <string name="more_messages">Mensajes</string>
+    <string name="messages_empty">Todavía no hay mensajes.</string>
 </resources>

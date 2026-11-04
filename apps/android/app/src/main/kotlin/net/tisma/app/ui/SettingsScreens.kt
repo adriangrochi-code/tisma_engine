@@ -254,7 +254,7 @@ private fun Editor(row: SettingsLayout.Row, value: kotlinx.serialization.json.Js
     val shown = SettingsLayout.show(value)
     when (val e = row.editor) {
         SettingsLayout.Editor.Toggle -> Switch((value as? JsonPrimitive)?.booleanOrNull == true, { set(JsonPrimitive(it)) },
-            modifier = Modifier.testTag("edit_${row.key}"))
+            modifier = Modifier.testTag("edit_${row.key}").named(row.label))
         is SettingsLayout.Editor.Choice -> {
             var open by remember { mutableStateOf(false) }
             Box {
@@ -300,7 +300,7 @@ fun CustomPickerScreen(tabId: String, state: SliceState, slice: SliceViewModel) 
             s.subsections.forEach { b ->
                 items(b.rows, key = { it.key }) { r ->
                     Row(Modifier.fillMaxWidth().clickable { slice.toggleCustom(r.key) }, verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(r.key in state.custom, { slice.toggleCustom(r.key) }, modifier = Modifier.testTag("pick_${r.key}"))
+                        Checkbox(r.key in state.custom, { slice.toggleCustom(r.key) }, modifier = Modifier.testTag("pick_${r.key}").named(r.label))
                         Column {
                             Text(r.label)
                             Text(b.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

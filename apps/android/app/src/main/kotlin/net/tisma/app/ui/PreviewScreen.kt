@@ -66,12 +66,50 @@ private fun typeColor(type: String): Color = when (type) {
     else -> Color(0xFF8C8C99)
 }
 
+/**
+ * The line types' colors for color blindness (accessibility_touch.md, rule 2):
+ * the Okabe and Ito palette (Okabe & Ito 2008, «Color Universal Design») in a
+ * fixed order of the types; black, which the dark view would hide, is left
+ * out, and the types past the palette come back lighter. Achromatopsia: grays
+ * by brightness. The legend names every type (rule 1).
+ */
+private val OKABE_ITO = listOf(Color(0xFFE69F00), Color(0xFF56B4E9), Color(0xFF009E73), Color(0xFFF0E442),
+    Color(0xFF0072B2), Color(0xFFD55E00), Color(0xFFCC79A7))
+
+private val TYPE_ORDER = listOf("External perimeter", "Perimeter", "Internal infill", "Solid infill", "Top solid infill",
+    "Support material", "Skirt/Brim", "Overhang perimeter", "Bridge infill", "Gap fill", "Ironing",
+    "Support material interface", "Wipe tower")
+
+internal fun visionTypeColor(type: String, index: Int, vision: String): Color {
+    val i = TYPE_ORDER.indexOf(type).takeIf { it >= 0 } ?: (TYPE_ORDER.size + index)
+    if (vision == "achromatopsia") {
+        val g = 0.35f + 0.6f * ((i * 5) % 13) / 12f
+        return Color(g, g, g)
+    }
+    val c = OKABE_ITO[i % OKABE_ITO.size]
+    if (i < OKABE_ITO.size) return c
+    val k = 0.45f // lighter for the second round
+    return Color(c.red + (1 - c.red) * k, c.green + (1 - c.green) * k, c.blue + (1 - c.blue) * k)
+}
+
+/**
+ * Cividis (Nuñez, Anderton & Renslow 2018, «Optimizing colormaps with
+ * consideration for color vision deficiency»), sampled at five points, for
+ * continuous values with color blindness; grays with achromatopsia.
+ */
+private val CIVIDIS = listOf(Color(0xFF00204D), Color(0xFF414D6B), Color(0xFF7C7B78), Color(0xFFBCAF6F), Color(0xFFFFEA46))
+private val GRAYS = listOf(Color(0xFF303030), Color(0xFF6A6A6A), Color(0xFFA0A0A0), Color(0xFFCFCFCF), Color(0xFFFFFFFF))
+
 /** What the preview colors by. */
 enum class PreviewColoring { TYPE, WIDTH, SPEED }
 
 /** A value's color on a blue-green-yellow-red ramp, low to high (own choice, readable on the dark view). */
-internal fun rampColor(t: Float): Color {
-    val stops = RAMP
+internal fun rampColor(t: Float, vision: String = "normal"): Color {
+    val stops = when (vision) {
+        "normal" -> RAMP
+        "achromatopsia" -> GRAYS
+        else -> CIVIDIS
+    }
     val x = t.coerceIn(0f, 1f) * (stops.size - 1)
     val i = x.toInt().coerceAtMost(stops.size - 2)
     val f = x - i
@@ -84,7 +122,7 @@ private val RAMP = listOf(Color(0xFF2B59C3), Color(0xFF1FB5C9), Color(0xFF3DDC97
 /** A G-code layer by layer, seen from above (mobile_app.md, rules 6 and 12; MA10). Pinch to zoom, drag to move. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PreviewScreen(path: String) {
+fun PreviewScreen(path: String, vision: String = "normal") {
     var layers by remember { mutableStateOf<GcodeLayers?>(null) }
     var failed by remember { mutableStateOf(false) }
     var binary by remember { mutableStateOf(false) }
@@ -124,7 +162,10 @@ fun PreviewScreen(path: String) {
         zoom = (zoom * z).coerceIn(0.5f, 20f)
         pan += p
     }
-    val colors = remember(g) { g.types.map { typeColor(it) } }
+    val colors = remember(g, vision) {
+        g.types.mapIndexed { i, t -> if (vision == "normal") typeColor(t) else visionTypeColor(t, i, vision) }
+    }
+    val ramp = when (vision) { "normal" -> RAMP; "achromatopsia" -> GRAYS; else -> CIVIDIS }
     var coloring by remember(g) { mutableStateOf(PreviewColoring.TYPE) }
     var threeD by remember(g) { mutableStateOf(false) }
     val range = when (coloring) {
@@ -137,7 +178,7 @@ fun PreviewScreen(path: String) {
         val v = if (coloring == PreviewColoring.WIDTH) l.widths[i] else l.speeds[i]
         if (v <= 0f) return Color(0xFF8C8C99)
         val span = r.endInclusive - r.start
-        return rampColor(if (span < 1e-6f) 0.5f else (v - r.start) / span)
+        return rampColor(if (span < 1e-6f) 0.5f else (v - r.start) / span, vision)
     }
     val muted = Color(0xFF3A3A44)
     Column(Modifier.fillMaxSize()) {
@@ -151,7 +192,7 @@ fun PreviewScreen(path: String) {
                 floatArrayOf(ceil(maxOf(b[2], 10f) / 10f) * 10f, ceil(maxOf(b[3], 10f) / 10f) * 10f)
             }
             var paths by remember(g) { mutableStateOf<FloatArray?>(null) }
-            LaunchedEffect(g, layer, coloring) {
+            LaunchedEffect(g, layer, coloring, vision) {
                 paths = withContext(Dispatchers.Default) { g.lines3d(layer) { l, i -> colorOf(l, i).toArgb() and 0xFFFFFF } }
             }
             Plate3D(null, bed, Modifier.weight(1f).fillMaxWidth().testTag("preview_3d"), paths, bounds)
@@ -227,7 +268,7 @@ fun PreviewScreen(path: String) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.testTag("preview_ramp")) {
                     Text(String.format(Locale.getDefault(), fmt, r.start, unit), style = MaterialTheme.typography.bodySmall)
                     Box(Modifier.weight(1f).padding(horizontal = 8.dp).height(10.dp)
-                        .background(Brush.horizontalGradient(RAMP)))
+                        .background(Brush.horizontalGradient(ramp)))
                     Text(String.format(Locale.getDefault(), fmt, r.endInclusive, unit), style = MaterialTheme.typography.bodySmall)
                 }
             }

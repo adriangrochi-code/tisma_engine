@@ -363,4 +363,13 @@
     <string name="summary_analyses">Analyses run</string>
     <string name="yes">Yes</string>
     <string name="no">No</string>
+    <string name="pref_color_vision">Color vision</string>
+    <string name="pref_color_vision_hint">Colors of the preview that stay apart with color blindness.</string>
+    <string name="vision_normal">Normal</string>
+    <string name="vision_deuteranopia">Deuteranopia</string>
+    <string name="vision_protanopia">Protanopia</string>
+    <string name="vision_tritanopia">Tritanopia</string>
+    <string name="vision_achromatopsia">Achromatopsia</string>
+    <string name="more_messages">Messages</string>
+    <string name="messages_empty">No messages yet.</string>
 </resources>

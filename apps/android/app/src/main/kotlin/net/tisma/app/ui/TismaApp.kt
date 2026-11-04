@@ -87,6 +87,7 @@ sealed interface Screen {
     data class SettingsSection(val tab: String, val section: String) : Screen
     data class CustomPicker(val tab: String) : Screen
     data object PrinterSettings : Screen
+    data object Messages : Screen
 }
 
 /** Where the person is: a section and the screens opened on it. */
@@ -94,6 +95,9 @@ class Navigator {
     var section by mutableStateOf(Section.PLATE)
         private set
     val stack = mutableStateListOf<Screen>()
+
+    /** The notices shown, newest first, to read them again (accessibility_touch.md, rule 8). */
+    val notices = mutableStateListOf<String>()
 
     fun select(s: Section) {
         section = s
@@ -137,7 +141,12 @@ fun TismaApp(
     LaunchedEffect(Unit) {
         val show: (String) -> Unit = { text ->
             android.util.Log.i("Tisma", text)
-            launch { snackbar.showSnackbar(text) }
+            // accessibility_touch.md, rule 8: a notice stays until it is closed (a newer one takes its place),
+            // and every notice can be read again in More › Messages.
+            nav.notices.add(0, text)
+            if (nav.notices.size > 50) nav.notices.removeAt(nav.notices.lastIndex)
+            snackbar.currentSnackbarData?.dismiss()
+            launch { snackbar.showSnackbar(text, withDismissAction = true, duration = androidx.compose.material3.SnackbarDuration.Indefinite) }
         }
         launch {
             cloud.state.map { it.notice }.distinctUntilChanged().filterNotNull().collect { n ->
@@ -240,11 +249,12 @@ fun TismaApp(
                     Screen.Preferences -> PreferencesScreen(state, cloud, settings)
                     is Screen.AddPrinter -> AddPrinterScreen(top.editId, printerState, printers, nav, top.found)
                     is Screen.PrinterDetail -> PrinterDetailScreen(top.id, printerState, printers, nav)
-                    is Screen.Preview -> PreviewScreen(top.path)
+                    is Screen.Preview -> PreviewScreen(top.path, settings.colorVision)
                     Screen.ProfilePicker -> ProfilePickerScreen(sliceState, slice, nav)
                     Screen.Credits -> CreditsScreen()
                     is Screen.SettingsSection -> SettingsSectionScreen(top.tab, top.section, sliceState, slice)
                     is Screen.CustomPicker -> CustomPickerScreen(top.tab, sliceState, slice)
+                    Screen.Messages -> MessagesScreen(nav.notices)
                     Screen.PrinterSettings -> PrinterSettingsScreen(sliceState, slice, nav, settings.printerNotes(sliceState.profile?.printer)) {
                         settings.setPrinterNotes(sliceState.profile?.printer, it)
                     }
@@ -273,6 +283,7 @@ private fun titleOf(s: Screen): Int = when (s) {
         else -> R.string.section_print
     }
     Screen.PrinterSettings -> R.string.printer_settings
+    Screen.Messages -> R.string.more_messages
     is Screen.CustomPicker -> R.string.panel_choose
 }
 
@@ -317,6 +328,7 @@ private fun MoreHome(signedIn: Boolean, email: String?, nav: Navigator) {
         MoreItem(R.string.more_report, null, "more_report") { nav.open(Screen.Report()) }
         if (signedIn) MoreItem(R.string.more_my_reports, null, "more_my_reports") { nav.open(Screen.MyReports) }
         MoreItem(R.string.more_preferences, null, "more_preferences") { nav.open(Screen.Preferences) }
+        MoreItem(R.string.more_messages, null, "more_messages") { nav.open(Screen.Messages) }
         MoreItem(R.string.more_credits, null, "more_credits") { nav.open(Screen.Credits) }
     }
 }
@@ -330,5 +342,15 @@ private fun MoreItem(@StringRes title: Int, detail: String?, tag: String, onClic
                 Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+/** The notices shown in this session, newest first (accessibility_touch.md, rule 8). */
+@Composable
+private fun MessagesScreen(notices: List<String>) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("messages"),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (notices.isEmpty()) Text(stringResource(R.string.messages_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        notices.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
     }
 }
