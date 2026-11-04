@@ -59,7 +59,9 @@ class EngineRunner(private val executable: File, private val workDir: File) {
     fun sliceModel(model: File, settings: SimpleSettings, onProgress: (Int) -> Unit, cancelled: () -> Boolean): Slice {
         val config = File(workDir, "settings.json").apply { writeText(settings.toJson().toString()) }
         val out = File(workDir, model.nameWithoutExtension + ".gcode")
-        return run(listOf("slice", model.path, "--config", config.path, "-o", out.path), out, null, onProgress, cancelled)
+        val summary = File(workDir, "summary.json")
+        return run(listOf("slice", model.path, "--config", config.path, "-o", out.path, "--summary", summary.path),
+            out, summary, onProgress, cancelled)
     }
 
     private fun run(args: List<String>, out: File, summary: File?, onProgress: (Int) -> Unit, cancelled: () -> Boolean): Slice {

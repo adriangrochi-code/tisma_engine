@@ -26,8 +26,8 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   desde la app en lugar de las de Kotlin («usemos todo lo de la pc»).
 - **Motor en el teléfono:** nunca corrió en un Android real (esta máquina no tiene KVM ni emulador); probado solo
   con un motor falso. Falta: perfiles de impresora y filamento (paquete de perfiles, `profile_pack.md`), la vista
-  previa por capas, la estimación de memoria (MA9) y el resumen de un modelo suelto (`slice` con `--config` no
-  escribe `--summary`).
+  previa por capas, la estimación de memoria (MA9). El resumen de un modelo suelto ya llega (`--summary`, motor
+  9e8c43e).
 - **Paso 4, laminar en el teléfono:** pedida al equipo del motor (session_01JDAJxTVh345Lfm4794rJF8) la API en C
   (`mobile_app.md`, regla 2), con una propuesta de forma. Sin respuesta todavía.
 - **Respuestas del equipo de fichas (04-11-2026), a aplicar:** `GET /v1/me` trae además `unlimited`,

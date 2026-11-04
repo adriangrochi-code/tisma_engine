@@ -93,6 +93,18 @@ class EngineRunnerTest {
     }
 
     @Test
+    fun `a model gets the same summary as a project`() {
+        val engine = fake("""
+            echo "G28" > "${'$'}out"
+            echo '{"print_time": "5m", "print_time_s": 300, "filament_mm": 1000, "layers": 50}' > "${'$'}summary"
+        """.trimIndent())
+        val r = EngineRunner(engine, tmp.newFolder("work")).sliceModel(project(), EngineRunner.SimpleSettings(), {}, { false })
+        assertEquals(50, r.layers)
+        assertEquals(1000.0, r.filamentMm)
+        assertEquals(null, r.filamentG)
+    }
+
+    @Test
     fun `the simple settings are the engine's keys (docs CONFIG md)`() {
         assertEquals("""{"layers":{"height":0.12},"support":{"enabled":true}}""",
             EngineRunner.SimpleSettings(0.12, true).toJson().toString())
