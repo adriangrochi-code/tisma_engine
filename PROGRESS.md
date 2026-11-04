@@ -9989,3 +9989,45 @@ candidata y el detector de ventosas; recordar el método y la precisión por tec
 
 **Sigue:** resina en `orient`; después Diseño (D4: barrido, transición, texto).
 
+## HANDOFF (2026-11-04) — para la sesión nueva del motor
+
+**Estado de `dev`:** todo lo de esta sesión está en `dev` hasta a862c86 (orientación) más este traspaso. CI: el
+`tools/ci_linux.sh` completo pasó la etapa principal en fd1ed33 (966/966); clang y ASan corrían cuando se empujó
+(regla nueva del dueño: control rápido por push, CI completo en segundo plano). Si ASan encontró algo, va primero.
+
+**Cómo compilar y probar:**
+- `cmake -S . -B build-next -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build-next`;
+- pruebas: `build-next/tests/tisma_tests "[tag]"` (tags útiles: `[aero]`, `[adhesion]`, `[analysis]`, `[orient]`,
+  `[cloud]`, `[cli]`), y los guiones de interfaz con `ctest -R ui_script_<nombre>` en el directorio de compilación;
+- `[.aero-full]` (AE1 a AE4, unos 15 min) corre solo en compilaciones optimizadas como `aero_drag_coefficients`;
+- CI completo: `tools/ci_linux.sh` (normal, clang, ASan; más de una hora con 4 núcleos).
+
+**Reglas nuevas del dueño (2026-11-04), que no se pudieron escribir en CLAUDE.md desde esta sesión:**
+- control rápido por push (compilar y las pruebas que toca el cambio); el CI completo con ASan en segundo plano o cada
+  pocas horas, y lo que encuentre se arregla primero;
+- seguir la hoja de ruta sin desvíos; ante una duda, elegir lo que dicen la hoja de ruta y las fichas, anotarlo aquí y
+  seguir; las impresiones reales no son condición: «no probado en impresora»;
+- mensajes cortos entre sesiones; bloques programados sin trabajo terminan en una línea;
+- contexto: pasados unos 500 000 tokens, actualizar este traspaso y avisar al equipo de fichas.
+(84857cf agregó a CLAUDE.md la primera tanda, «Working economy».)
+
+**Hoja de ruta (orden del dueño, 2026-11-04):**
+1. Nube: `orient` (hecho para FDM; falta resina, reglas 7 a 9, OR3 y OR4), BH24 (hecho), verificación de resolución
+   del CFD (hecha).
+2. Ingeniería: terminar EP1 a EP10 (`engineering_panel.md`) y acelerar el CFD: parada temprana cuando el Cd converge
+   y arranque de grueso a fino (`docs/research/cfd_fea_optimizations.md` §2.5).
+3. Diseño: D4 (barrido, transición entre perfiles, texto), después D5b (DXF/SVG).
+4. Después, el orden de PLAN.md.
+
+**Abierto y decisiones recientes:**
+- CFD: BGK con capa absorbente y presión por intercambio de momento; TRT queda apagada (empeoró el cubo); Maskell no
+  se aplica. Rango del Cd: 12 % del método más el cambio con 2/3 de las celdas. Medidas en la entrada «La fiabilidad
+  más alta que dé cada calidad».
+- FEA: adherencia entre capas y entre líneas (`src/fea/adhesion.*`); rango del factor de seguridad con la
+  adherencia y el error de vóxel; `fit_voxel_limit` para calidades finas en piezas grandes. Falta el tiempo de capa
+  real en la adherencia y los hexaedros de modos incompatibles.
+- Nube: los errores de `analyze` llevan `code` y `error_es`; `aero`, `slice` y `orient` todavía no tienen `error_es`.
+- La sesión de la app Android (session_01QadJfKGJU2WtuAunZW5p9B) va a pedir la API en C del motor
+  (`mobile_app.md`, regla 2): acordarla con ella.
+- Equipo de fichas: session_015csYE6YXftDTgfC23i81xG (mensajes por send_message, con el pie de Claude Code).
+
