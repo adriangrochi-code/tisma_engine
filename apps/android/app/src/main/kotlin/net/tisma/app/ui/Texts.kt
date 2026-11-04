@@ -128,7 +128,9 @@ fun Context.readableSummary(lines: List<Pair<String, String>>): List<Pair<String
     val keys = lines.map { it.first }.toSet()
     fun num(v: String) = v.toDoubleOrNull()
     fun fmt(pattern: String, v: Double) = String.format(Locale.getDefault(), pattern, v)
-    return lines.mapNotNull { (k, v) ->
+    return lines.mapNotNull { (k, raw) ->
+        // QA AND8: a value the engine left empty reads «—», not «null».
+        val v = if (raw == "null") "—" else raw
         when (k) {
             "print_time" -> getString(R.string.plate_time) to v
             "print_time_s" -> if ("print_time" in keys) null
@@ -143,6 +145,8 @@ fun Context.readableSummary(lines: List<Pair<String, String>>): List<Pair<String
                 else -> v
             }
             "min_safety" -> getString(R.string.summary_min_safety) to (num(v)?.let { fmt("%.2f", it) } ?: v)
+            "max_von_mises_mpa" -> getString(R.string.summary_von_mises) to (num(v)?.let { fmt("%.2f MPa", it) } ?: v)
+            "warning" -> getString(R.string.summary_warning) to v
             "max_displacement_mm" -> getString(R.string.summary_displacement) to (num(v)?.let { fmt("%.3f mm", it) } ?: v)
             "mass_g" -> getString(R.string.summary_mass) to (num(v)?.let { fmt("%.1f g", it) } ?: v)
             "drag_n" -> getString(R.string.summary_drag) to (num(v)?.let { fmt("%.4f N", it) } ?: v)

@@ -377,7 +377,7 @@
     <string name="verdict_holds">Holds</string>
     <string name="verdict_fails">Does not hold</string>
     <string name="verdict_no_result">No result (see the warnings)</string>
-    <string name="eng_model_hint">Mark faces by touching the model: first pick what a tap marks.</string>
+    <string name="eng_model_hint">Mark faces by touching the model: first pick what a tap marks. While marking, one finger scrolls the page; two fingers move and zoom the view. Tapping a marked face again takes it off.</string>
     <string name="eng_mark_fixed">Tap marks fixed</string>
     <string name="eng_mark_load">Tap marks a load</string>
     <string name="eng_mark_off">Tap turns the view</string>
@@ -407,4 +407,6 @@
     <string name="updates_download">Download</string>
     <string name="pref_updates">Look for new versions</string>
     <string name="pref_updates_beta">Also test versions (beta)</string>
+    <string name="summary_von_mises">Highest stress (von Mises)</string>
+    <string name="summary_warning">Warning</string>
 </resources>

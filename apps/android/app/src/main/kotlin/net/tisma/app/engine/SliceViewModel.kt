@@ -350,7 +350,16 @@ class SliceViewModel(
                 EngineeringCase.Condition(kind, face, Picking.box(mesh, face, EngineeringCase.pad(state.value.case.quality)),
                     direction = floatArrayOf(-n[0], -n[1], -n[2]), face = EngineeringCase.endFace(mesh, face, n))
             } ?: return@launch
-            _state.update { it.copy(case = it.case.copy(conditions = it.case.conditions + c), analysis = null) }
+            // A face already marked is not marked twice: the same kind takes it off, the other replaces it (QA AND7).
+            _state.update {
+                val same = it.case.conditions.indexOfFirst { o -> o.triangles.contentEquals(c.triangles) }
+                val list = when {
+                    same < 0 -> it.case.conditions + c
+                    it.case.conditions[same].kind == c.kind -> it.case.conditions.filterIndexed { i, _ -> i != same }
+                    else -> it.case.conditions.mapIndexed { i, o -> if (i == same) c else o }
+                }
+                it.copy(case = it.case.copy(conditions = list), analysis = null)
+            }
         }
     }
 
@@ -383,7 +392,9 @@ class SliceViewModel(
                 }
                 val lines = listOf("verdict" to verdict, "required_safety" to s.case.requiredSafety.toString()) +
                     r.summary.mapNotNull { (k, v) -> (v as? kotlinx.serialization.json.JsonPrimitive)?.let { k to it.content } }
-                        .filter { (k, _) -> k in setOf("min_safety", "max_displacement_mm", "max_von_mises_mpa") }
+                        .filter { (k, _) -> k in setOf("min_safety", "max_displacement_mm", "max_von_mises_mpa") } +
+                    (r.summary["warnings"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+                        .mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.map { "warning" to it }
                 AppLog.line("engine: model analysis $verdict")
                 _state.update { it.copy(analysis = lines) }
             } catch (e: EngineRunner.Cancelled) {

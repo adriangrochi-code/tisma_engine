@@ -66,6 +66,13 @@ class EngineeringScreenTest {
             assertEquals(-1f, c[1].direction[2], 1e-5f)
         }
         compose.onNodeWithTag("eng_analyze_model").performScrollTo().assertIsEnabled()
+        // The top face marked again as fixed replaces the load; tapped once more, it is taken off.
+        compose.onNodeWithTag("eng_mark_fixed").performScrollTo().performClick()
+        compose.runOnIdle { slice.pick(floatArrayOf(cx, cy, 50f), floatArrayOf(0f, 0f, -1f)) }
+        compose.waitUntil(5_000) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); slice.state.value.case.conditions.map { it.kind } == listOf(EngineeringCase.Kind.FIXED, EngineeringCase.Kind.FIXED) }
+        compose.runOnIdle { slice.pick(floatArrayOf(cx, cy, 50f), floatArrayOf(0f, 0f, -1f)) }
+        compose.waitUntil(5_000) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); slice.state.value.case.conditions.size == 1 }
+        compose.onNodeWithTag("eng_analyze_model").performScrollTo().assertIsNotEnabled()
     }
 
     private fun wait(tag: String) = compose.waitUntil(10_000) {

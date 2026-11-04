@@ -25,6 +25,15 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — AND7 a AND9 (QA, Ingeniería en un modelo suelto):**
+  - AND7: los avisos del informe del motor se muestran (por ejemplo, la carga que cayó en la cara fija). Una cara ya
+    marcada no se marca dos veces: con el mismo tipo se desmarca y con el otro se reemplaza.
+  - AND8: «Tensión máxima (von Mises)» con su unidad, y «—» en vez de `null`.
+  - AND9: mientras se marca, un dedo ya no gira la vista y la página se desplaza; dos dedos mueven y acercan. El texto
+    de la tarjeta lo explica.
+  - Nota: en el emulador de QA el análisis tardó unos 10 min (calidad normal, «como se imprime», con el chequeo de
+    resolución). En la máquina, un cubo macizo tarda 1,3 s. Hay que medirlo en un teléfono real (regla 18).
+
 - **2026-11-04 — Paquete de perfiles y asistente del primer arranque (regla 11, MA1):**
   - `ProfilePack` sigue el protocolo real del motor (`docs/CATALOG.md`): `pack plan` sin `--index` (el índice),
     `plan --index … --vendors <id>` (el resto), descarga con el HTTPS de Android y `pack install`. `pack list` y

@@ -359,7 +359,10 @@ fun Plate3D(
     marks: List<Pair<FloatArray, Int>> = emptyList(),
     /** With it, a tap gives the ray under the finger (origin, direction) instead of zooming. */
     onPick: ((FloatArray, FloatArray) -> Unit)? = null,
+    /** One finger does not turn the view (QA AND9: while marking, the page scrolls and a tap marks); two still move and zoom. */
+    lockRotation: Boolean = false,
 ) {
+    val locked = androidx.compose.runtime.rememberUpdatedState(lockRotation)
     val camera = remember { OrbitCamera() }
     val renderer = remember { PlateRenderer(camera) }
     val holder = remember { arrayOfNulls<GLSurfaceView>(1) }
@@ -437,8 +440,9 @@ fun Plate3D(
                             var moved = false
                             if (pressed.size == lastCount && lastCentroid != null) {
                                 val d = c - lastCentroid
-                                moved = d.getDistance() > 0f || (lastSpan > 0f && span != lastSpan)
-                                if (pressed.size == 1) camera.rotate(d.x, d.y)
+                                moved = (d.getDistance() > 0f || (lastSpan > 0f && span != lastSpan)) &&
+                                    !(pressed.size == 1 && locked.value)
+                                if (pressed.size == 1) { if (!locked.value) camera.rotate(d.x, d.y) }
                                 else {
                                     camera.pan(d.x, d.y, renderer.viewHeight)
                                     if (lastSpan > 0f && span > 0f) camera.zoom(span / lastSpan)

@@ -177,7 +177,11 @@ class EngineRunner(
             out, null, onProgress, cancelled, okCodes = setOf(0, 5)) // 5: no valid result, the report says why
         val report = runCatching { Json.parseToJsonElement(out.readText()) as JsonObject }.getOrNull() ?: JsonObject(emptyMap())
         val result = (report["result"] as? JsonObject) ?: JsonObject(emptyMap())
-        return Analysis(out, JsonObject(result + mapOf("valid" to (report["valid"] ?: JsonPrimitive(false)))))
+        // QA AND7: the engine's warnings say why there is no result (a load on a fixed face, nothing held).
+        val warnings = (report["warnings"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+            .mapNotNull { ((it as? JsonObject)?.get("message") as? JsonPrimitive)?.contentOrNull }
+        return Analysis(out, JsonObject(result + mapOf("valid" to (report["valid"] ?: JsonPrimitive(false)),
+            "warnings" to kotlinx.serialization.json.JsonArray(warnings.map { JsonPrimitive(it) }))))
     }
 
     /** The air's drag on the part (cloud.md, rule 19b; aerodynamics.md): `aero`. */

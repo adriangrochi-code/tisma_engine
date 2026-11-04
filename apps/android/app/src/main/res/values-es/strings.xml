@@ -361,7 +361,7 @@
     <string name="verdict_holds">Aguanta</string>
     <string name="verdict_fails">No aguanta</string>
     <string name="verdict_no_result">Sin resultado (ver los avisos)</string>
-    <string name="eng_model_hint">Marcá las caras tocando la pieza: primero elegí qué marca un toque.</string>
+    <string name="eng_model_hint">Marcá las caras tocando la pieza: primero elegí qué marca un toque. Mientras marcás, un dedo mueve la página y dos mueven y acercan la vista. Tocar de nuevo una cara marcada la desmarca.</string>
     <string name="eng_mark_fixed">El toque marca fijas</string>
     <string name="eng_mark_load">El toque marca una carga</string>
     <string name="eng_mark_off">El toque gira la vista</string>
@@ -391,4 +391,6 @@
     <string name="updates_download">Bajar</string>
     <string name="pref_updates">Buscar versiones nuevas</string>
     <string name="pref_updates_beta">También las versiones de prueba (beta)</string>
+    <string name="summary_von_mises">Tensión máxima (von Mises)</string>
+    <string name="summary_warning">Aviso</string>
 </resources>

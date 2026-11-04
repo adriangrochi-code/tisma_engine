@@ -106,6 +106,15 @@ class EngineeringModelTest {
             .redirectErrorStream(true).start()
         p.inputStream.readBytes(); p.waitFor()
         val ref = Json.parseToJsonElement(out.readText()).jsonObject["result"]!!.jsonObject["min_safety"]!!.jsonPrimitive.doubleOrNull!!
+        // QA AND7: a load on the fixed face gives no result, and the engine's warning comes with it.
+        val bad = EngineeringCase(listOf(
+            pick(mesh, floatArrayOf(0f, 110f, 3f), floatArrayOf(1f, 0f, 0f), EngineeringCase.Kind.FIXED),
+            pick(mesh, floatArrayOf(0f, 110f, 3f), floatArrayOf(1f, 0f, 0f), EngineeringCase.Kind.LOAD)))
+        val r = EngineRunner(exe, tmp.newFolder()).analyzeModel(stl, EngineRunner.SimpleSettings(),
+            JsonObject(bad.toJson(mesh.offset) + mapOf("model" to JsonPrimitive("solid"), "resolution_check" to JsonPrimitive(false))),
+            null, {}, { false })
+        assertEquals("false", r.summary["valid"].toString())
+        assertTrue(r.summary["warnings"].toString().contains("load"), r.summary.toString())
         println("MA6 end faces $byFace, boxes $byBox, the engine's faces $ref")
         assertEquals(ref, byFace, 1e-9)
         assertTrue(abs(byBox - ref) / ref < 0.02, "boxes $byBox, faces $ref")
