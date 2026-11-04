@@ -56,6 +56,11 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   (150 MB más 3 kB por triángulo, valor de diseño a medir); si no alcanza la libre del teléfono, se ofrece la nube o
   probar igual. Se reemplaza por la estimación del motor cuando exista (su API en C).
 
+- **2026-11-04 — vista 3D de la Placa** (`mobile_app.md`, regla 6): OpenGL ES 2.0 propio, la cama del perfil elegido
+  como grilla con los ejes, el modelo (STL, OBJ, 3MF con componentes y transformaciones) parado en el centro; un dedo
+  gira, dos mueven, pellizcar acerca, doble toque acerca; vistas 3D, arriba, frente, izquierda, derecha, atrás y
+  «Encuadrar». Sin verlo en un teléfono (no hay emulador acá): probar que dibuje y que los gestos respondan.
+
 ## Abierto
 
 - **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS: necesita una biblioteca MQTT o una propia; decidir), PrusaLink,

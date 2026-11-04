@@ -323,4 +323,5 @@
 
     <string name="mem_too_big">This model needs about %1$d MB to slice and the phone has %2$d MB free. Slice it in the cloud?</string>
     <string name="mem_try_anyway">Try on the phone anyway</string>
+    <string name="plate_frame">Frame</string>
 </resources>

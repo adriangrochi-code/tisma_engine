@@ -34,6 +34,9 @@ data class SliceState(
     val analysis: List<Pair<String, String>>? = null,
     /** MA9: the model needs more memory than the phone has free (bytes needed, bytes free). */
     val tooBig: Pair<Long, Long>? = null,
+    /** The open model's triangles, standing on the bed, for the 3D view; and the bed's size (x, y). */
+    val mesh: MeshFile? = null,
+    val bed: FloatArray = floatArrayOf(220f, 220f),
     /** The printer card: the printer, nozzle and filament the model is sliced for. */
     val profile: EngineRunner.ProfileChoice? = null,
 )
@@ -66,12 +69,27 @@ class SliceViewModel(
         }
     }
 
+    /** The bed of the chosen printer (catalog), or 220 × 220 mm. */
+    private fun bedSize(): FloatArray {
+        val p = state.value.catalog?.printer(state.value.profile?.printer)
+        val v = p?.buildVolume
+        return if (v != null && v.size >= 2 && v[0] > 0 && v[1] > 0) floatArrayOf(v[0].toFloat(), v[1].toFloat()) else floatArrayOf(220f, 220f)
+    }
+
+    /** Reads the model for the 3D view; a model it cannot read is still sliced by the engine. */
+    private fun loadMesh(f: File) = viewModelScope.launch {
+        val bed = bedSize()
+        val mesh = withContext(io) { runCatching { MeshFile.read(f).onBed(bed[0] / 2, bed[1] / 2) }.getOrNull() }
+        _state.update { it.copy(mesh = mesh, bed = bed) }
+    }
+
     /** Picks the printer, nozzle and filament (the printer card). */
     fun setProfile(choice: EngineRunner.ProfileChoice?) {
         saved?.profilePrinter = choice?.printer
         choice?.let { saved?.profileNozzle = it.nozzle }
         saved?.profileFilament = choice?.filament
         _state.update { it.copy(profile = choice, result = null) }
+        model?.let { loadMesh(it) }
     }
     val state: StateFlow<SliceState> = _state.asStateFlow()
     private val cancel = AtomicBoolean(false)
@@ -96,6 +114,7 @@ class SliceViewModel(
             return@launch
         }
         model = copied
+        loadMesh(copied)
         _state.update {
             it.copy(modelName = name, isProject = copied.extension.equals("3mf", true), result = null, error = null, progress = 0)
         }

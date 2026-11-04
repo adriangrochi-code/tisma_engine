@@ -28,6 +28,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -68,6 +69,10 @@ fun PlateScreen(
     }
     ScreenColumn {
         PrinterCard(state) { nav.open(Screen.ProfilePicker) }
+        if (state.modelName != null) {
+            Plate3D(state.mesh, state.bed, Modifier.fillMaxWidth().height(320.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)))
+        }
         if (!state.engineAvailable) {
             Text(stringResource(R.string.plate_no_engine), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
