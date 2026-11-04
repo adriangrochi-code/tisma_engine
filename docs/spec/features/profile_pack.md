@@ -83,6 +83,9 @@ Preferencias de la interfaz, no del laminado:
     no solo la primera, esos ajustes reemplazan a los de la impresora; el del perfil de impresión va encima del de la
     variante. Si la persona cambió uno de esos ajustes a mano, se le deja el suyo y un aviso dice cuál no se cambió
     («Velocidad de paredes: se dejó la tuya, 120 mm/s; el perfil trae 170»).
+    Una velocidad que ni la impresora ni el perfil traen toma la de una Ender-3 de fábrica (`docs/CONFIG.md`, las
+    velocidades de respaldo, con los valores que publica Creality) y el laminado lo avisa (decisión del dueño,
+    04-11-2026).
 14. **Cama e imágenes:** `bed_model` (STL) y `bed_texture` (SVG o PNG) del modelo se dibujan en la vista 3D. Los
     archivos no traen un origen: los STL del paquete están hechos alrededor de su propio centro (por ejemplo, el de la
     AnkerMake M5 va de −127,5 a 127,5 en X y de −147 a 130 en Y). Así que (decisión del equipo de fichas,
