@@ -68,6 +68,55 @@ Están en Configuración › General (`preferences.md`, que ya tiene «Notify ab
 12. **Componentes:** lo que viene con el programa (el componente de Diseño, `cad_design.md`) se actualiza con él y se
     comprueba igual.
 
+13. **La lista de versiones** (decisión del equipo de fichas, 04-11-2026, para que el programa de escritorio y la app
+    lean lo mismo):
+    - **dónde:** `updates.json` y su firma `updates.json.sig` (64 bytes, Ed25519 sobre los bytes exactos del JSON, con
+      la misma clave del proyecto), como archivos de una release fija de etiqueta `updates` del repositorio del motor,
+      que el flujo de publicación reemplaza en cada versión (como `nightly`):
+      `https://github.com/adriangrochi-code/tisma_engine/releases/download/updates/updates.json`. Tisma Cloud la sirve
+      igual en `GET /v1/updates` y `GET /v1/updates.sig`, sin sesión, como segunda dirección si la primera no
+      responde;
+    - **comprobar:** sin una firma válida la lista se descarta entera; después cada paquete se comprueba por su
+      SHA-256 y su propia firma (regla 5);
+    - **el JSON:**
+
+      ```json
+      {
+       "format": "tisma-updates",
+       "version": 1,
+       "generated": "2027-01-12T10:00:00Z",
+       "releases": [
+        {
+         "version": "1.0.1",
+         "channel": "stable",
+         "date": "2027-01-20",
+         "notes": { "es": "…", "en": "…" },
+         "packages": [
+          {
+           "system": "windows-x64",
+           "family": "current",
+           "min_system": "10.0.17763",
+           "url": "https://…/TismaSetup-1.0.1-x64.exe",
+           "size": 123456789,
+           "sha256": "…",
+           "signature": "…"
+          }
+         ]
+        }
+       ]
+      }
+      ```
+
+    - **campos:** `version` según `docs/VERSIONING.md` (con etiqueta de pre-release si la tiene); `channel` `stable` o
+      `beta` (con `beta` elegido se ofrecen las dos); `notes` en cada idioma del programa (si falta el del programa, en
+      inglés); `system` uno de `windows-x64`, `windows-x86`, `linux-x64`, `android`; `family` `current` o `legacy`
+      (`legacy_windows.md`); `min_system` la versión mínima del sistema (en Android, el nivel de API, por ejemplo
+      `"26"`); `size` en bytes; `sha256` en hexadecimal; `signature` la firma Ed25519 del paquete en base64;
+    - **orden:** de la más nueva a la más vieja; el programa elige la primera de su canal, sistema y familia cuyo
+      `min_system` cumple la máquina (regla 2), y la ofrece solo si es más nueva que la instalada;
+    - una clave desconocida se ignora; un `format` distinto o una `version` mayor de la lista, se ignora la lista y se
+      vuelve a probar al día siguiente.
+
 ## Casos límite
 
 - Dos ventanas del programa abiertas: instala cuando se cierra la última.
@@ -89,3 +138,6 @@ Están en Configuración › General (`preferences.md`, que ya tiene «Notify ab
 | AU7 | Windows Vista con la familia clásica, versión nueva solo para Windows 10 | No se ofrece; ofrece la última clásica |
 | AU8 | Proyecto, perfiles y preferencias antes y después de actualizar | Iguales byte por byte, salvo el cambio de formato anunciado |
 | AU9 | `updates.channel` = `beta` | Se ofrecen también las versiones de prueba; con `stable`, no |
+| AU10 | `updates.json` con un byte cambiado y la firma vieja | La lista se descarta; no se ofrece nada |
+| AU11 | Lista con una versión cuyo `min_system` es más nuevo que la máquina | No se ofrece; Acerca de dice por qué |
+| AU12 | GitHub no responde, Tisma Cloud sí | La lista llega por `GET /v1/updates` |
