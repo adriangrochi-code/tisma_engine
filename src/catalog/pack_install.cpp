@@ -307,6 +307,7 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
     std::string sets_text;
     if (read_all(pack_dir / "compatible.json", sets_text))
         sets = parse_pack_compatible(sets_text);
+    nlohmann::json printer_over = nlohmann::json::object(); // the printer settings they carry (BH27)
     for (const auto& [path, kind] : {std::pair{out.filament_path, ProfileKind::Filament}, std::pair{out.print_path, ProfileKind::Print}}) {
         if (path.empty())
             continue;
@@ -323,7 +324,22 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
                             out.printer.name + (out.resin ? " is a resin printer" : " is not a resin printer"));
         if (kind == ProfileKind::Filament)
             out.filament_vendor = entry.vendor;
+        const nlohmann::json carried = nlohmann::json::parse(entry.printer_settings);
+        for (const auto& [group, keys] : carried.items())
+            for (const auto& [key, value] : keys.items())
+                printer_over[group][key] = value; // the print's after the filament's
         (kind == ProfileKind::Filament ? out.filament : out.print) = std::move(entry.profile);
+    }
+    if (!printer_over.empty()) {
+        nlohmann::json merged = nlohmann::json::parse(profile_file_json(out.printer));
+        for (const auto& [group, keys] : printer_over.items())
+            for (const auto& [key, value] : keys.items())
+                merged["settings"][group][key] = value;
+        try {
+            out.printer = parse_profile(merged.dump());
+        } catch (const SettingsError& e) {
+            throw PackError(out.printer.name + ": " + e.what());
+        }
     }
     return out;
 }

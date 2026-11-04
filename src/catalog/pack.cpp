@@ -1,5 +1,7 @@
 #include "catalog/pack.hpp"
 
+#include "config/profiles.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -329,6 +331,36 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
         profile["kind"] = kind == "resin" ? "filament" : "print";
         out.resin = true;
     }
+    // The printer's settings the entry carries (a print profile's speeds, as
+    // other programs keep them) go to the printer profile, not lost (BH27);
+    // another kind's are left out with a warning.
+    const std::optional<ProfileKind> own = profile_kind_from_name(text(profile, "kind"));
+    json printer_part = json::object();
+    if (own && *own != ProfileKind::Printer) {
+        json& settings = profile["settings"];
+        for (auto& [group, keys] : settings.items()) {
+            std::vector<std::string> moved;
+            for (const auto& [key, value] : keys.items()) {
+                const auto k = setting_kind(group, key);
+                if (!k || *k == *own || (group == "machine" && key == "variables"))
+                    continue;
+                if (*k == ProfileKind::Printer)
+                    printer_part[group][key] = value;
+                else
+                    warnings.push_back(where + ": " + group + "." + key + " is a " + std::string(profile_kind_name(*k)) +
+                                       " setting: left out");
+                moved.push_back(key);
+            }
+            for (const std::string& key : moved)
+                keys.erase(key);
+        }
+        for (auto it = settings.begin(); it != settings.end();)
+            it = it->is_object() && it->empty() ? settings.erase(it) : std::next(it);
+        // Nothing of the printer is left in it: read as this version's profile,
+        // so the old version's dropping of the speeds does not apply.
+        profile["version"] = 2;
+    }
+    out.printer_settings = printer_part.dump();
     try {
         out.profile = parse_profile(profile.dump());
     } catch (const SettingsError& e) {

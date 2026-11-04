@@ -37,8 +37,8 @@
    ],
    "archive": {
     "name": "acme.tar.xz",
-    "size": 1024,
-    "sha256": "d4617b7302d448cb123a03d0c9a62c20a7301350c7d50767f21564791008643b"
+    "size": 1052,
+    "sha256": "4a46ce4da40c5557eade08ac443702d5c6b9f81b628a5fb06a5c892def4ecdd2"
    },
    "models": [
     {

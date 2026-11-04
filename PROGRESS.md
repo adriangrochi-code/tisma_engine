@@ -10873,3 +10873,24 @@ encima. En Vulkan es una canalización nueva, `Decal`: la de la pintura sin escr
 **Sin probar:** con los SVG del paquete real (no se leen, sala limpia); se puede pedir a la sesión de fichas como caja
 negra.
 
+## 2026-11-04 — BH27: las velocidades del perfil de impresión del paquete se perdían
+
+**Reporte** (sesión de fichas, caja negra con el paquete real): `profile --pack` con la MK4S dejaba todo el grupo
+`speed` en nulo. Al laminar avisaba «no speed for speed.walls … using a stock Ender-3's», y un cubo de 20 mm tardaba
+14 min 54 s. Lo mismo con AnkerMake M5/M5C, MINI y XL.
+
+**Causa:** los perfiles de impresión del paquete son de la versión 1, con las velocidades adentro, como las guardan
+otros programas. Al leer un perfil de impresión de la versión 1, el motor saca `speed`, porque las velocidades son de la
+impresora (decisión del dueño, 2026-10-26).
+
+**Arreglo:** `parse_pack_entry` pasa los ajustes de impresora que trae una entrada de impresión o de filamento (las
+velocidades, `cooling.min_speed`) a `PackEntry::printer_settings`, en lugar de perderlos. `pack_profiles` los pone sobre
+el perfil de la impresora: primero los del filamento, después los del de impresión. Un ajuste de otro tipo se deja
+afuera con un aviso. Sirve para la línea de comandos, la app y el escritorio.
+
+**Prueba:** `[pack]`. El perfil de impresión de prueba trae `speed.walls` 170 y `speed.travel` 300 (versión 1), y el
+filamento `cooling.min_speed` 12; la impresora sale con 170, 300 (sobre los 150 propios) y 12.
+
+**Límite:** en el escritorio, elegir después otro perfil de impresión del paquete no cambia las velocidades: quedan las
+del perfil por defecto de la variante. **Sin probar:** con el paquete real; se pidió a la sesión de fichas.
+

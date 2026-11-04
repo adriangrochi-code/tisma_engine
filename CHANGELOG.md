@@ -328,6 +328,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Corregido
 
 - Una impresora de resina del paquete (`"technology": "sla"`) quedaba como impresora de filamento.
+- Las velocidades del perfil de impresión del paquete se perdían y se laminaba con las de una Ender-3 (BH27). Ahora
+  pasan a la impresora.
 - `pack plan` con un paquete instalado roto ya no falla: planea todo el paquete otra vez para repararlo.
 - `part gear|fastener` dice qué clave del archivo tiene un valor del tipo equivocado.
 

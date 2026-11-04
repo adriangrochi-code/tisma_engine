@@ -5,6 +5,7 @@
 #include "config/settings.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+#include <nlohmann/json.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <algorithm>
@@ -287,7 +288,9 @@ TEST_CASE("pack on the command line: plan, install, list, and a pack printer's s
     REQUIRE(run({"profile", "--pack", d, "--printer", "vendors/acme/models/A1.json#0.4"}, out, err) == 0);
     const Settings s = parse_settings(out);
     CHECK(s.nozzle_diameter == 0.4);
-    CHECK(s.travel_speed == 150.0);
+    CHECK(s.travel_speed == 300.0); // the print profile's, over the printer's 150 (BH27)
+    CHECK(s.wall_speed == 170.0);
+    CHECK(s.min_print_speed == 12.0); // the filament's cooling.min_speed
     CHECK(s.layer_height == 0.16); // the print profile, not the default
     REQUIRE(s.variables.count("temperature"));
     CHECK(s.variables.at("temperature") == std::vector<std::string>{"210"});
@@ -319,6 +322,15 @@ TEST_CASE("pack: the models a search finds, and a printer's profiles with its de
     CHECK(p.filament->name == "Acme PLA");
     REQUIRE(p.print);
     CHECK(p.print->settings.layer_height == 0.16);
+    // BH27: the speeds a print profile of the pack carries (a version 1 profile,
+    // as other programs keep them) go to the printer profile, not lost.
+    CHECK(p.printer.settings.wall_speed == 170.0);
+    CHECK(p.printer.settings.travel_speed == 300.0);
+    CHECK(p.printer.settings.min_print_speed == 12.0);
+    std::vector<std::string> warnings;
+    const PackEntry print = read_pack_entry(pack, "vendors/acme/prints/Standard.json", warnings);
+    CHECK(nlohmann::json::parse(print.printer_settings) == nlohmann::json::parse("{\"speed\":{\"walls\":170,\"travel\":300}}"));
+    CHECK(print.profile.kind == ProfileKind::Print);
     CHECK_THROWS_AS(pack_profiles(pack, index, "vendors/bolt/models/B2.json#default", "vendors/acme/filaments/PLA.json"),
                     PackError);
 }

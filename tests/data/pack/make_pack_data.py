@@ -54,12 +54,12 @@ bed_svg = (b'<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" vi
 
 acme1 = tar([("vendors/acme/beds/A1.stl", slab(0, 0, 220, 220, -3, 0)), ("vendors/acme/beds/A1.svg", bed_svg),
              ("vendors/acme/models/A1.json", model("Acme One", 0.6)),
-             ("vendors/acme/filaments/PLA.json", entry("filament", "Acme PLA", {"machine": {"variables": {"temperature": 210}}}, 0)),
-             ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}}, None))])
+             ("vendors/acme/filaments/PLA.json", entry("filament", "Acme PLA", {"machine": {"variables": {"temperature": 210}}, "cooling": {"min_speed": 12}}, 0)),
+             ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}, "speed": {"walls": 170, "travel": 300}}, None))])
 acme2 = tar([("vendors/acme/beds/A1.stl", slab(0, 0, 220, 220, -3, 0)), ("vendors/acme/beds/A1.svg", bed_svg),
              ("vendors/acme/models/A1.json", model("Acme One Plus", 0.6)),
-             ("vendors/acme/filaments/PLA.json", entry("filament", "Acme PLA", {"machine": {"variables": {"temperature": 215}}}, 0)),
-             ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}}, None))])
+             ("vendors/acme/filaments/PLA.json", entry("filament", "Acme PLA", {"machine": {"variables": {"temperature": 215}}, "cooling": {"min_speed": 12}}, 0)),
+             ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}, "speed": {"walls": 170, "travel": 300}}, None))])
 bolt = tar([("vendors/bolt/models/B2.json", j({"format": "tisma-pack-model", "version": 2, "technology": "sla",
              "vendor": "Bolt", "model": {"id": "B2", "name": "Bolt Two"}, "default_variant": "default",
              "common": {"settings": {}}, "variants": [{"id": "default", "nozzle": 0, "name": "Bolt Two", "settings": {},
