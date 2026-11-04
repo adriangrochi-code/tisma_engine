@@ -37,6 +37,17 @@ menu structural_deformed
 expect-control structural_exaggerate
 menu structural_map_kind_0
 expect-text Rojo: menos de 1
+# Optimizar (rule 13; structural_optimization.md, rule 2): the search for
+# the lowest uniform infill starts in the background and Cancelar stops it
+# (the search itself, several analyses, is tested in the engine).
+menu structural_deformed
+menu structural_optimize
+expect-control structural_lightest_infill
+menu structural_lightest_infill
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_lightest_infill
 menu structural_force_unit_1
 wait 20
 expect-no-control structural_show_map

@@ -726,6 +726,20 @@ private:
     std::string structural_parsed_for_;
     nlohmann::json structural_parsed_;
     void start_structural();
+    // «Optimizar» (rule 13; structural_optimization.md, rule 2): the lowest
+    // uniform infill that holds, searched in the background.
+    struct OptimizeRun {
+        std::size_t part = 0;
+        std::string fingerprint;
+        bool cancelled = false;
+        std::string error;
+        LightestInfill best;
+    };
+    Background<OptimizeRun> optimize_job_;
+    std::atomic<bool> optimize_cancel_{false};
+    std::atomic<int> optimize_permille_{0};
+    std::optional<OptimizeRun> optimize_result_;
+    void start_optimize();
     // Whether a part's result is out of date (rule 14): its fingerprint
     // hashes the whole mesh (200 ms for 2 million triangles), so it is
     // computed again only when the part, the plate, its Engineering data or
@@ -4989,6 +5003,8 @@ void App::poll_jobs() {
         design_session_->close_if_idle(600.0);
     if (std::optional<StructuralRun> run = structural_job_.take())
         structural_done(std::move(*run));
+    if (std::optional<OptimizeRun> run = optimize_job_.take())
+        optimize_result_ = std::move(*run);
     if (std::optional<AeroRun> run = aero_job_.take())
         aerodynamics_done(std::move(*run));
     update_structural_view();
@@ -12952,6 +12968,54 @@ void App::structural_panel() {
                     }
                 }
             }
+            // Optimizar (rule 13), under the results: the lowest uniform infill.
+            const bool optimize_open = !stale && ImGui::CollapsingHeader(tr(T::StructOptimize));
+            if (!stale)
+                rect_of("structural_optimize");
+            if (optimize_open) {
+                const std::size_t part = std::size_t(structural_part_);
+                if (optimize_job_.running()) {
+                    ImGui::ProgressBar(float(optimize_permille_.load()) / 1000.0f, ImVec2(-FLT_MIN, 0.0f), tr(T::StructOptimizing));
+                    if (ImGui::Button(tr(T::Cancel)))
+                        optimize_cancel_ = true;
+                    rect_of("structural_optimize_cancel");
+                } else {
+                    if (ImGui::Button(tr(T::StructLightestInfill), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize();
+                    rect_of("structural_lightest_infill");
+                    if (ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", tr(T::StructLightestInfillTip));
+                }
+                if (optimize_result_ && optimize_result_->part == part && !optimize_job_.running()) {
+                    const OptimizeRun& o = *optimize_result_;
+                    ImGui::PushTextWrapPos(0.0f);
+                    if (o.cancelled)
+                        loc::TextDisabled("%s", tr(T::StructCancelled));
+                    else if (!o.error.empty())
+                        loc::TextColored(rgb(0xE5484D), "%s", o.error.c_str());
+                    else if (o.best.solid)
+                        loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructOptimizeSolid));
+                    else if (!o.best.found)
+                        loc::TextColored(rgb(0xE5484D), "%s", format(tr(T::StructOptimizeNone), o.best.min_safety).c_str());
+                    else {
+                        loc::TextColored(rgb(0x3FBF7F), "%s", format(tr(T::StructOptimizeFound), o.best.density, o.best.min_safety).c_str());
+                        rect_of("structural_optimize_found");
+                        if (std::abs(settings_.infill_density - double(o.best.density)) > 1e-9) {
+                            if (ImGui::Button(format(tr(T::StructOptimizeApply), o.best.density).c_str())) {
+                                const double before = settings_.infill_density;
+                                settings_.infill_density = double(o.best.density);
+                                settings_changed();
+                                notify_undo(format(tr(T::StructOptimizeApplied), o.best.density), [this, before] {
+                                    settings_.infill_density = before;
+                                    settings_changed();
+                                });
+                            }
+                            rect_of("structural_optimize_apply");
+                        }
+                    }
+                    ImGui::PopTextWrapPos();
+                }
+            }
             ImGui::Separator();
         }
         if (!structural_message_.empty())
@@ -13860,6 +13924,49 @@ void App::aero_overlay() {
 // Analizar (rules 9 and 11): the part as it is on the bed, its conditions
 // moved with it, the values changed by hand, in the background; Cancelar
 // stops it at its next step.
+void App::start_optimize() {
+    if (optimize_job_.running() || objects_.empty())
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    TriangleMesh placed = placed_mesh(o);
+    if (placed.empty())
+        return;
+    std::array<double, 9> a{};
+    std::array<double, 3> b{};
+    own_to_placed(o, placed, a, b);
+    ProjectEngineering moved = o.engineering;
+    move_engineering(moved, a, b);
+    Settings settings = settings_;
+    std::vector<std::string> notes;
+    apply_engineering_overrides(settings, o.engineering, notes);
+    const std::string filament_type = settings_.filament_type;
+    optimize_cancel_ = false;
+    optimize_permille_ = 0;
+    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type]() {
+        OptimizeRun run;
+        run.part = part;
+        struct Cancelled {};
+        try {
+            std::vector<std::string> case_notes;
+            AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height,
+                                                       print_conditions(settings, moved));
+            const IndexedMesh mesh = weld_exact(placed);
+            fit_voxel_limit(c, mesh, settings);
+            run.best = lightest_infill(mesh, placed, settings, c, moved, [this](double done) {
+                optimize_permille_ = int(done * 1000.0);
+                if (optimize_cancel_)
+                    throw Cancelled{};
+            });
+        } catch (const Cancelled&) {
+            run.cancelled = true;
+        } catch (const std::exception& e) {
+            run.error = e.what();
+        }
+        return run;
+    });
+}
+
 void App::start_structural() {
     if (structural_job_.running() || objects_.empty())
         return;
@@ -19841,6 +19948,15 @@ void App::script_input() {
         if (!ok)
             return fail_step("it is " + std::to_string(got));
         next();
+    } else if (step.verb == "expect-optimize") { // Optimizar's search ended: found, none, solid or cancelled
+        if (optimize_job_.running() || !optimize_result_)
+            return f >= 20000 ? fail_step("the search did not end") : void();
+        const OptimizeRun& o = *optimize_result_;
+        const std::string got = o.cancelled ? "cancelled" : !o.error.empty() ? "error" : o.best.solid ? "solid" : o.best.found ? "found" : "none";
+        std::printf("ui-script: expect-optimize %s: got %s (%d %%)\n", step.key.c_str(), got.c_str(), o.best.density);
+        if (got != step.key)
+            return fail_step("got " + got);
+        next();
     } else if (step.verb == "expect-control") { // a named control (menu entry, slider, button) is on the screen
         if (g_menu_rects.contains(step.key)) {
             std::printf("ui-script: expect-control %s: ok\n", step.key.c_str());
@@ -20268,7 +20384,7 @@ void App::frame() {
     // were used in the last 3 s (a tooltip shows after a delay with no event)
     // or a printer is connected (its status comes from its own thread); else
     // up to 2 s. A background job wakes the window when it ends.
-    const bool busy = !options_.screenshot.empty() || slice_job_.running() || structural_estimate_job_.running() ||
+    const bool busy = !options_.screenshot.empty() || slice_job_.running() || structural_estimate_job_.running() || optimize_job_.running() ||
                       ray_job_.running() || !toasts_.empty() || ImGui::IsAnyItemActive() ||
                       (render_mode_ == RenderMode::RayTraced && renderer_.has_ray_scene() &&
                        renderer_.ray_samples() < 256);
@@ -20457,7 +20573,7 @@ void App::frame() {
         }
         const bool device_pending =
             options_.device_print && !device_print_done_ && (printer_ != nullptr || !options_.device.empty());
-        const bool waiting = slice_job_.running() || structural_estimate_job_.running() || design_job_.running() ||
+        const bool waiting = slice_job_.running() || structural_estimate_job_.running() || optimize_job_.running() || design_job_.running() ||
                              solidcraft_job_.running() || slice_pending || rays_pending ||
                              (options_.coarse && (coarse_job_.running() || coarse_version_ != scene_version_)) ||
                              script_at_ < script_.size() ||

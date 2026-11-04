@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Estructural: «Optimizar», relleno mínimo** (`structural_optimization.md`, regla 2): debajo de los resultados,
+  busca el menor relleno con el que la pieza aguanta y lo deja usar con un botón (se puede deshacer).
 - **Estructural en impresoras de cinta** (`engineering_panel.md`, regla 10): «Dirección de impresión» elige Z o la
   cinta; con la cinta, el análisis toma las capas inclinadas como se imprimen.
 - **Estructural: girar una fuerza arrastrando su flecha** (`engineering_panel.md`, regla 7): el extremo libre de la

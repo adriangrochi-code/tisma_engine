@@ -10249,3 +10249,17 @@ solo crece y llega a 1, que con Rápida no busca, y que con 20 000 N no la encue
 
 **Sigue:** «Optimizar» en el panel de Estructural (botón Relleno mínimo, resultado y «Aplicar»), después las demás
 reglas (zonas, nervios, refuerzos, retícula, orientación) y «Calcular en la nube».
+
+## 2026-11-04 — Optimizar en el panel de Estructural (regla 13)
+
+**Hecho:** «Optimizar», plegado debajo de los resultados, con «Relleno mínimo que aguanta»: corre `lightest_infill`
+en segundo plano con barra de avance y «Cancelar», y dice el resultado: «Aguanta con N % de relleno (factor F)» con
+«Usar N % de relleno» (se deshace desde el aviso), «Ni con 100 %…» o que con Rápida no se busca. Verbo de guion
+`expect-optimize` (found, none, solid, cancelled, error).
+
+**Pruebas:** `ui_script_structural_analyze` abre Optimizar, empieza la búsqueda, la cancela y ve el botón de nuevo
+(22 s). La búsqueda completa en la interfaz tomó 61 s con el cubo de 10 mm (8 análisis, dio 0 %): quedó afuera del
+guion por el tiempo bajo ASan; la búsqueda la prueba el motor. **Sin probar en el guion:** el botón «Usar» y su
+deshacer (necesitan una búsqueda completa).
+
+**Sigue:** el resto de Optimizar (zonas, nervios, refuerzos, retícula, orientación) y «Calcular en la nube».

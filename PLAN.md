@@ -1234,8 +1234,8 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
    Analizar en segundo plano con avance y Cancelar, veredicto, masa, sugerencias, mapa del factor de seguridad,
    punto crítico, «Desactualizado» y el resultado guardado con la pieza; límites de desplazamiento y «Demasiado
    flexible»; botón para probar cada material sugerido, con las familias de la tabla como material (2026-11-03).
-   Deformación exagerada y los mapas de von Mises y desplazamiento, hechos el 2026-11-04; la memoria y el tiempo en Más opciones y «Análisis» fuera de Impresión 3D, hechos el 2026-11-04. Arrastrar la flecha de una fuerza, hecho el 2026-11-04. La dirección de impresión (Z o cinta), hecha el 2026-11-04. Faltan: «Calcular en la nube» en Más opciones,
-   Optimizar;
+   Deformación exagerada y los mapas de von Mises y desplazamiento, hechos el 2026-11-04; la memoria y el tiempo en Más opciones y «Análisis» fuera de Impresión 3D, hechos el 2026-11-04. Arrastrar la flecha de una fuerza, hecho el 2026-11-04. La dirección de impresión (Z o cinta), hecha el 2026-11-04. Optimizar con el relleno mínimo uniforme, hecho el 2026-11-04. Faltan: «Calcular en la nube» en Más opciones,
+   el resto de Optimizar (zonas, nervios, refuerzos, retícula, orientación);
 5. la pestaña Aerodinámica, con A3 (CFD).
 
 ## Avance

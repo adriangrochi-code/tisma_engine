@@ -119,6 +119,15 @@
     X(StructPrintZ, "Z (capas horizontales)", "Z (flat layers)") \
     X(StructPrintBelt, "Cinta (capas a %.0f°)", "Belt (layers at %.0f°)") \
     X(StructPrintBeltOff, "La impresora elegida no es de cinta: se analiza en Z.", "The chosen printer is not a belt printer: analysed along Z.") \
+    X(StructOptimize, "Optimizar", "Optimize") \
+    X(StructOptimizing, "Buscando el relleno…", "Searching the infill…") \
+    X(StructLightestInfill, "Relleno mínimo que aguanta", "Lowest infill that holds") \
+    X(StructLightestInfillTip, "Busca el menor porcentaje de relleno con el que la pieza aguanta (varios análisis).", "Finds the lowest infill percentage at which the part holds (several analyses).") \
+    X(StructOptimizeSolid, "Con la resolución Rápida la pieza se analiza maciza y el relleno no cuenta: elegí Media o más.", "At the Fast resolution the part is analysed solid and the infill does not count: choose Normal or finer.") \
+    X(StructOptimizeNone, "Ni con 100 %% de relleno aguanta (factor %.2f): hacen falta más paredes, otro material u otra forma.", "Not even 100 %% infill holds (factor %.2f): it needs more walls, another material or another shape.") \
+    X(StructOptimizeFound, "Aguanta con %d %% de relleno (factor %.2f).", "Holds with %d %% infill (factor %.2f).") \
+    X(StructOptimizeApply, "Usar %d %% de relleno", "Use %d %% infill") \
+    X(StructOptimizeApplied, "Relleno: %d %%", "Infill: %d %%") \
     X(StructEstimate, "Unos %zu vóxeles de %.2f mm", "About %zu voxels of %.2f mm") \
     X(StructCritical, "Punto crítico: %.2f", "Critical point: %.2f") \
     X(StructNotValid, "El resultado no sirve:", "The result is not usable:") \
