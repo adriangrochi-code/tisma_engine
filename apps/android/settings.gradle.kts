@@ -20,5 +20,7 @@ rootProject.name = "tisma-android"
 
 // cloud: the Tisma Cloud client, plain Kotlin (no Android), tested on the JVM.
 // mockcloud: a test server written from docs/spec/features/cloud.md.
+// printers: clients of the printers on the network (printer_connections.md).
+// mockprinters: printer simulators written from the public API documentation.
 // app: the Android app.
-include(":cloud", ":mockcloud", ":app")
+include(":cloud", ":mockcloud", ":printers", ":mockprinters", ":app")
