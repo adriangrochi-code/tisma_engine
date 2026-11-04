@@ -142,6 +142,12 @@
     X(StructRibsNone, "No hay zonas donde el relleno trabaje en una sola dirección.", "There are no zones where the infill works one way.") \
     X(StructRibsApply, "Usar los nervios", "Use the ribs") \
     X(StructRibsApplied, "Nervios: %d %%, %d modificadores", "Ribs: %d %%, %d modifiers") \
+    X(StructReinforce, "Refuerzos", "Reinforcements") \
+    X(StructReinforceTip, "Después del relleno uniforme, 2 perímetros más y relleno más denso alrededor de los apoyos y las cargas, y el relleno mínimo del resto buscado otra vez (varios análisis más).", "After the uniform infill, 2 more walls and denser infill round the supports and the loads, and the lowest infill of the rest searched again (several more analyses).") \
+    X(StructReinforceFound, "Con refuerzos (%.0f mm): el resto al %d %% (factor %.2f), %.2f g contra %.2f g sin ellos.", "With reinforcements (%.0f mm): the rest at %d %% (factor %.2f), %.2f g against %.2f g without.") \
+    X(StructReinforceHeavier, "Con refuerzos no queda más liviano: conviene el uniforme.", "With reinforcements it is not lighter: the uniform infill is better.") \
+    X(StructReinforceApply, "Usar los refuerzos", "Use the reinforcements") \
+    X(StructReinforceApplied, "Refuerzos: el resto al %d %%, %d modificadores", "Reinforcements: the rest at %d %%, %d modifiers") \
     X(StructZonedTurned, "La pieza está girada con escalas distintas: las zonas no caben como cajas.", "The part is turned with unequal scales: the zones do not fit as boxes.") \
     X(CloudPlanLock, "Incluido en el plan %s", "Included in the plan %s") \
     X(StructCloud, "Calcular en la nube", "Calculate in the cloud") \

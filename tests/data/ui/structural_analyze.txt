@@ -61,6 +61,12 @@ expect-control structural_optimize_cancel
 menu structural_optimize_cancel
 expect-optimize cancelled
 expect-control structural_ribs
+# With reinforcements (rule 6): the same.
+menu structural_reinforce
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_reinforce
 menu structural_force_unit_1
 wait 20
 expect-no-control structural_show_map

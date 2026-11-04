@@ -10439,3 +10439,15 @@ contra 0,788 g al 30 % sin ella: no se propone. 9 análisis, 65 s (con el CI de 
 nunca menos); como la búsqueda baja, el resultado no cambia salvo en piezas que necesitan más del 40 %.
 
 **Sigue (regla 6):** «Refuerzos» en el panel Optimizar.
+
+## 2026-11-04 — Optimizar, regla 6, paso C: «Refuerzos» en el panel
+
+**Hecho:** el botón «Refuerzos» corre el uniforme y después `reinforced_infill`, con Cancelar; el resultado da el
+radio, la densidad del resto, el factor y la masa contra la de sin refuerzos, o que no queda más liviano. «Usar los
+refuerzos» pone la densidad y agrega la zona como cajas modificadoras (2 perímetros más, 40 %), con un solo deshacer
+(`apply_boxes`, el mismo camino que las zonas y los nervios).
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda con refuerzos; `[ui]` (los textos en los dos
+idiomas con los mismos campos). **Sin probar en la interfaz:** «Usar los refuerzos» y su deshacer.
+
+**Sigue:** regla 7 de structural_optimization.md (lattice), regla 8 (orientación recomendada).
