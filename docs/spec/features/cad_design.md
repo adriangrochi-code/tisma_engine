@@ -181,8 +181,11 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
 19 bis. **Dibujos 2D de otros programas** (pedido del dueño, 02-11-2026: «lo de AutoCAD en cuanto sea posible»):
     - **DXF** (ASCII, la referencia pública de Autodesk): «Traer DXF» en un boceto lee líneas, círculos, arcos,
       polilíneas, elipses, splines, puntos, texto y bloques (con escala, giro y matrices), en milímetros según
-      `$INSUNITS`; lo de espacio papel no se trae. Es el comando `sketch.insert_dxf` de SolidCraft;
-    - **SVG**: «Traer SVG» en un boceto (logos, contornos dibujados en otro programa), con `sketch.insert_svg`;
+      `$INSUNITS`; lo de espacio papel no se trae;
+    - **SVG**: «Traer SVG» en un boceto (logos, contornos dibujados en otro programa);
+    - **quién lee el archivo** (decisión del motor, 04-11-2026, D5b): el motor lee el DXF y el SVG él mismo, en vez de
+      `sketch.insert_dxf` y `sketch.insert_svg` de SolidCraft, para que lo traído sean entidades propias del boceto
+      (se recortan y se acotan como lo dibujado a mano). Lo registran `PROVENANCE.md` y `PROGRESS.md`;
     - lo traído queda como curvas del boceto: se recorta, se acota y se extruye como lo dibujado a mano;
     - un archivo que no se puede leer avisa con el motivo y no cambia el boceto.
 20. **Exportar:** STEP AP242 (con nombres, colores y ensambles), 3MF, STL y OBJ; el boceto abierto, como **DXF**

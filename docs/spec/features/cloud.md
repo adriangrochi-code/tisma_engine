@@ -64,6 +64,9 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
    - `file`: el proyecto como paquete 3MF (un ZIP con `3D/*.model`, `formats.md` regla 11); otro archivo da 422 «The
      project is not a 3MF file»;
    - `params`: JSON.
+   - **con su largo:** el pedido lleva `Content-Length`; el servidor rechaza un cuerpo por partes (*chunked*) con 411
+     «Content-Length is required», porque mira el tamaño antes de leerlo (lo mismo en toda subida: resultados de los
+     nodos, archivos de impresoras). Visto en la app de Android, 04-11-2026 (AND1).
      - `slice`: vacío.
      - `fea`: `mode` (`analyze`, `lightest-infill`, `resin-structure`), `quality` (`fast`, `normal`, `high`,
        `ultra`), `object`, `instance`, y opcionales `solid`, `zones`, `ribs`.
