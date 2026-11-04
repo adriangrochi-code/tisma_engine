@@ -199,6 +199,22 @@ app del teléfono) baja los archivos que pide el plan a una carpeta y el motor l
    - Sin `--filament` ni `--print`, usa los de `defaults` de la variante.
    - Un filamento que no es para esa impresora (`compatible.json`) da código 2.
 
+### El paquete en la interfaz
+
+- El catálogo de impresoras suma, bajo «Paquete libre de perfiles», los modelos del paquete instalado que coinciden con
+  la búsqueda, agrupados por fabricante. Cada modelo es una fila, con sus boquillas en una lista (PK15).
+- La ficha muestra la tecnología, la boquilla, y la licencia y el origen en una línea chica (regla 15).
+- **Agregar a mis perfiles**, con el fabricante ya bajado: arma la impresora de esa boquilla y su filamento y su perfil de
+  impresión por defecto, y los elige (reglas 9 y 13). Si el fabricante no está, el botón dice **Bajar y agregar**:
+  baja ese fabricante en segundo plano y después la agrega.
+- Los perfiles del paquete son de fábrica: no se guardan encima, como los propios del motor (regla 9).
+- Las impresoras elegidas se guardan en las preferencias (`packs.printers`) y se vuelven a armar al abrir.
+  `packs.url` cambia de dónde se baja.
+- Sin paquete instalado, el catálogo ofrece **Bajar la lista de impresoras del paquete**. Con uno, **Actualizar el
+  paquete** baja solo lo que cambió.
+- `tisma --pack CARPETA` usa otro paquete, también en las capturas. `--pick-pack-printer "<archivo>#<variante>"`
+  agrega y elige una impresora del paquete; es para las pruebas.
+
 ## Cómo se arman los datos
 
 1. **Recolección:** se buscan las páginas oficiales de cada fabricante y se anotan los números con la URL y una cita

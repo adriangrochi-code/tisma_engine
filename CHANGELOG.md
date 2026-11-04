@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- El paquete libre de perfiles en la interfaz: el catálogo de impresoras muestra sus modelos y agrega uno con su
+  filamento y su perfil de impresión, como perfiles de fábrica. Si hace falta, baja el fabricante en segundo plano.
+  También hay un botón para actualizar el paquete (`docs/CATALOG.md`).
 - Variables nuevas para el G-code de inicio y de fin, las que usa el paquete de perfiles: `layer_count`, la caja de la
   primera capa número por número (`first_layer_min_x` … `first_layer_size_y`), `travel_speed`, `month`, `day`, `hour`,
   `minute` y `second`. Antes, una impresora del paquete con `{layer_count}` no laminaba (la app de Android lo encontró).

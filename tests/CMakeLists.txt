@@ -193,6 +193,27 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
               --pick-catalog-printer "Creality CR-5 Pro H"
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_printer.png)
+    # The free profile pack (profile_pack.md): the invented test pack installed
+    # by the engine, then a printer of it added and chosen with its filament
+    # and print profile, as factory profiles (rules 9 and 13, PK6).
+    add_test(NAME ui_pack_install
+      COMMAND $<TARGET_FILE:tisma-engine> pack install --data ${CMAKE_CURRENT_BINARY_DIR}/ui_pack
+              --from ${CMAKE_CURRENT_SOURCE_DIR}/data/pack/release1)
+    set_tests_properties(ui_pack_install PROPERTIES FIXTURES_SETUP ui_pack)
+    add_test(NAME ui_pack_printer_picked
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack --pick-pack-printer "vendors/acme/models/A1.json#0.4"
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_printer.png)
+    set_tests_properties(ui_pack_printer_picked PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         PASS_REGULAR_EXPRESSION "pack printer: Acme One 0.4 · Acme PLA · Acme Standard" TIMEOUT 300)
+    add_test(NAME ui_pack_catalog
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --light --size 1200x760 --catalog printer --catalog-search acme
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_catalog.png)
+    set_tests_properties(ui_pack_catalog PROPERTIES FIXTURES_REQUIRED ui_pack ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # A 2.85 mm printer: the filament catalog offers only that diameter, and
     # says why it is empty (pellets.md, rule 1; profiles.md, rule 5).
     add_test(NAME ui_catalog_filament_by_diameter

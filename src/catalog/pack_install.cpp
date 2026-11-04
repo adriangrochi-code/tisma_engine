@@ -247,4 +247,80 @@ PackInstallReport pack_install(const fs::path& pack_dir, const fs::path& staging
     return report;
 }
 
+PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, const std::string& printer,
+                           const std::string& filament, const std::string& print) {
+    PackProfiles out;
+    const auto hash = printer.rfind('#');
+    if (hash == std::string::npos)
+        throw PackError("a pack printer is \"<model file>#<variant>\", not \"" + printer + "\"");
+    const std::string file = printer.substr(0, hash), variant = printer.substr(hash + 1);
+    const auto number = std::find(index.printers.begin(), index.printers.end(), printer);
+    if (number == index.printers.end())
+        throw PackError("the pack has no printer \"" + printer + "\"");
+    out.number = int(number - index.printers.begin());
+    // A file of the pack, under vendors/ when the index names it without.
+    const auto read_pack = [&](const std::string& path, std::string& data) {
+        if (safe_pack_path(path) && read_all(pack_dir / path, data))
+            return true;
+        return safe_pack_path("vendors/" + path) && read_all(pack_dir / ("vendors/" + path), data);
+    };
+    std::string model_text;
+    if (!read_pack(file, model_text))
+        throw PackError("the printer's model file is not installed: " + file);
+    out.printer = pack_printer_profile(model_text, variant, out.warnings);
+    // Rule 13: the variant's first filament and its print profile by default.
+    out.filament_path = filament;
+    out.print_path = print;
+    const nlohmann::json model = nlohmann::json::parse(model_text, nullptr, false);
+    if (model.is_object() && model.contains("variants") && model.at("variants").is_array())
+        for (const nlohmann::json& v : model.at("variants"))
+            if (v.is_object() && v.value("id", "") == variant && v.contains("defaults") && v.at("defaults").is_object()) {
+                const nlohmann::json& d = v.at("defaults");
+                if (out.filament_path.empty() && d.contains("filament") && d.at("filament").is_array() &&
+                    !d.at("filament").empty() && d.at("filament").front().is_string())
+                    out.filament_path = d.at("filament").front().get<std::string>();
+                if (out.print_path.empty() && d.contains("print") && d.at("print").is_string())
+                    out.print_path = d.at("print").get<std::string>();
+            }
+    std::vector<std::vector<int>> sets;
+    std::string sets_text;
+    if (read_all(pack_dir / "compatible.json", sets_text))
+        sets = parse_pack_compatible(sets_text);
+    for (const auto& [path, kind] : {std::pair{out.filament_path, ProfileKind::Filament}, std::pair{out.print_path, ProfileKind::Print}}) {
+        if (path.empty())
+            continue;
+        std::string text;
+        if (!read_pack(path, text))
+            throw PackError("not in the installed pack: " + path);
+        PackEntry entry = parse_pack_entry(text, out.warnings);
+        if (entry.profile.kind != kind)
+            throw PackError(path + " is not a " + (kind == ProfileKind::Filament ? "filament" : "print") + " profile");
+        if (!pack_compatible(entry.compatible, sets, out.number)) // rule 12, PK7
+            throw PackError(entry.profile.name + " is not for the " + out.printer.name);
+        (kind == ProfileKind::Filament ? out.filament : out.print) = std::move(entry.profile);
+    }
+    return out;
+}
+
+std::vector<PackModelRef> find_pack_models(const PackIndex& index, const std::string& query) {
+    const auto lower = [](std::string t) {
+        std::transform(t.begin(), t.end(), t.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        return t;
+    };
+    std::vector<std::string> words;
+    {
+        std::istringstream s(lower(query));
+        for (std::string w; s >> w;)
+            words.push_back(w);
+    }
+    std::vector<PackModelRef> out;
+    for (const PackVendor& v : index.vendors)
+        for (const PackModel& m : v.models) {
+            const std::string text = lower(v.name + " " + v.id + " " + m.name);
+            if (std::all_of(words.begin(), words.end(), [&](const std::string& w) { return text.find(w) != std::string::npos; }))
+                out.push_back({&v, &m});
+        }
+    return out;
+}
+
 } // namespace tisma

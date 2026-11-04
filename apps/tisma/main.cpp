@@ -170,6 +170,8 @@ int main(int argc, char** argv) {
             options.credits = true;
         } else if (arg == "--knowledge") {
             options.knowledge = value();
+        } else if (arg == "--pack") {
+            options.pack = value();
         } else if (arg == "--tutorial") {
             // ID or ID,STEP (from 1): a guided tutorial of the help's data on screen.
             const std::string t = value();
@@ -303,6 +305,8 @@ int main(int argc, char** argv) {
             options.cloud_server = value();
         } else if (arg == "--pick-catalog-printer") {
             options.pick_catalog_printer = value();
+        } else if (arg == "--pick-pack-printer") {
+            options.pick_pack_printer = value();
         } else if (arg == "--no-view-check") {
             options.view_check = false;
         } else if (arg == "--compare-view") {

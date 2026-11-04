@@ -184,67 +184,15 @@ int cmd_pack_profile(std::span<const std::string_view> args, std::ostream& out, 
     try {
         const fs::path pack = fs::path(o["--pack"]) / "pack";
         const PackIndex index = pack_installed(pack);
-        const std::string printer = o["--printer"];
-        const auto hash = printer.rfind('#');
-        if (hash == std::string::npos)
+        if (o["--printer"].rfind('#') == std::string::npos)
             return usage(err, "profile: --printer needs \"<model file>#<variant>\"");
-        const std::string file = printer.substr(0, hash), variant = printer.substr(hash + 1);
-        const auto number = std::find(index.printers.begin(), index.printers.end(), printer);
-        if (number == index.printers.end()) {
-            err << "error: the pack has no printer \"" << printer << "\"\n";
-            return kExitInput;
-        }
-        // The model file as the index names it, under vendors/ when given without it.
-        const auto read_pack = [&](const std::string& path, std::string& data) {
-            if (safe_pack_path(path) && read_all(pack / path, data))
-                return true;
-            return safe_pack_path("vendors/" + path) && read_all(pack / ("vendors/" + path), data);
-        };
-        std::string model_text;
-        if (!read_pack(file, model_text)) {
-            err << "error: the printer's model file is not installed: " << file << "\n";
-            return kExitInput;
-        }
-        std::vector<std::string> warnings;
-        const Profile printer_profile = pack_printer_profile(model_text, variant, warnings);
-        Settings settings = with_profile(Settings{}, ProfileKind::Printer, printer_profile.settings);
-        // Rule 13: the variant's first filament and its print profile by default.
-        std::string filament = o["--filament"], print = o["--print"];
-        const json model = json::parse(model_text, nullptr, false);
-        if (model.is_object() && model.contains("variants") && model.at("variants").is_array())
-            for (const json& v : model.at("variants"))
-                if (v.is_object() && v.value("id", "") == variant && v.contains("defaults") && v.at("defaults").is_object()) {
-                    const json& d = v.at("defaults");
-                    if (filament.empty() && d.contains("filament") && d.at("filament").is_array() && !d.at("filament").empty() &&
-                        d.at("filament").front().is_string())
-                        filament = d.at("filament").front().get<std::string>();
-                    if (print.empty() && d.contains("print") && d.at("print").is_string())
-                        print = d.at("print").get<std::string>();
-                }
-        std::vector<std::vector<int>> sets;
-        std::string sets_text;
-        if (read_all(pack / "compatible.json", sets_text))
-            sets = parse_pack_compatible(sets_text);
-        const int printer_number = int(number - index.printers.begin());
-        for (const auto& [path, kind] : {std::pair{filament, ProfileKind::Filament}, std::pair{print, ProfileKind::Print}}) {
-            if (path.empty())
-                continue;
-            std::string text;
-            if (!read_pack(path, text)) {
-                err << "error: not in the installed pack: " << path << "\n";
-                return kExitInput;
-            }
-            const PackEntry entry = parse_pack_entry(text, warnings);
-            if (entry.profile.kind != kind) {
-                err << "error: " << path << " is not a " << (kind == ProfileKind::Filament ? "filament" : "print") << " profile\n";
-                return kExitInput;
-            }
-            if (!pack_compatible(entry.compatible, sets, printer_number)) { // rule 12, PK7
-                err << "error: " << entry.profile.name << " is not for the " << printer_profile.name << "\n";
-                return kExitInput;
-            }
-            settings = with_profile(settings, kind, entry.profile.settings);
-        }
+        const PackProfiles p = pack_profiles(pack, index, o["--printer"], o["--filament"], o["--print"]);
+        Settings settings = with_profile(Settings{}, ProfileKind::Printer, p.printer.settings);
+        if (p.filament)
+            settings = with_profile(settings, ProfileKind::Filament, p.filament->settings);
+        if (p.print)
+            settings = with_profile(settings, ProfileKind::Print, p.print->settings);
+        const std::vector<std::string>& warnings = p.warnings;
         for (const std::string& w : warnings)
             err << "warning: " << w << "\n";
         const std::string text = settings_json(settings);

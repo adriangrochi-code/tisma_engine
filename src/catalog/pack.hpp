@@ -127,4 +127,29 @@ PackInstallReport pack_install(const std::filesystem::path& pack_dir, const std:
 // Throws PackError when there is none.
 PackIndex pack_installed(const std::filesystem::path& pack_dir);
 
+// A pack printer with its filament and print profile (rules 10 to 13, PK6,
+// PK7): `printer` is "<model file>#<variant>" as the index names it (the file
+// with or without "vendors/" in front); `filament` and `print` are paths in the
+// pack, and when left empty the variant's defaults (its first filament, its
+// print profile), if it has them. Throws PackError: the printer not in the
+// index or not installed, a path not in the pack, a profile of another kind,
+// or a filament or print profile not for this printer (compatible.json).
+struct PackProfiles {
+    int number = -1; // the printer's number in the index
+    Profile printer;
+    std::optional<Profile> filament, print;
+    std::string filament_path, print_path;
+    std::vector<std::string> warnings; // keys left out
+};
+PackProfiles pack_profiles(const std::filesystem::path& pack_dir, const PackIndex& index, const std::string& printer,
+                           const std::string& filament = {}, const std::string& print = {});
+
+// The pack's models whose vendor or name has every word of `query` (case
+// apart), vendor by vendor as the index lists them; all for an empty query.
+struct PackModelRef {
+    const PackVendor* vendor = nullptr;
+    const PackModel* model = nullptr;
+};
+std::vector<PackModelRef> find_pack_models(const PackIndex& index, const std::string& query);
+
 } // namespace tisma

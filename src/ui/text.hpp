@@ -1050,6 +1050,18 @@
     X(OwnStartGcode, "Este firmware tiene su propia secuencia de inicio: revisá el G-code de inicio antes de imprimir.", "This firmware has its own start sequence: check the start G-code before printing.") \
     X(NozzleSize, "Boquilla", "Nozzle")                                                                               \
     X(AddToProfiles, "Agregar a mis perfiles", "Add to my profiles")                                                  \
+    X(PackSection, "Paquete libre de perfiles", "Free profile pack") \
+    X(PackGetList, "Bajar la lista de impresoras del paquete", "Download the pack's printer list") \
+    X(PackHint, "Miles de impresoras más, de un repositorio aparte de uso libre. Se baja solo lo que elegís.", "Thousands more printers, from a separate free repository. Only what you choose is downloaded.") \
+    X(PackDownloadAdd, "Bajar y agregar", "Download and add") \
+    X(PackUpdate, "Actualizar el paquete", "Update the pack") \
+    X(PackOrigin, "Licencia %s · origen %s", "License %s · origin %s") \
+    X(PackNotDownloaded, "Sus perfiles todavía no se bajaron.", "Its profiles are not downloaded yet.") \
+    X(PackBusy, "Paquete: %s", "Pack: %s") \
+    X(PackFailed, "No se pudo bajar el paquete: %s", "The pack could not be downloaded: %s") \
+    X(PackReady, "Paquete de perfiles %s instalado", "Profile pack %s installed") \
+    X(PackAdded, "Agregada %s con su filamento y su perfil de impresión", "Added %s with its filament and print profile") \
+    X(PackTechnology, "Tecnología: %s", "Technology: %s") \
     X(Material, "Material", "Material")                                                                               \
     X(NozzleRange, "Boquilla", "Nozzle")                                                                              \
     X(BedRange, "Cama", "Bed")                                                                                        \
