@@ -10382,3 +10382,16 @@ tarda ~70 s sola (2 min 20 s con el CI de Linux corriendo al lado).
 
 **Sigue (regla 4):** en el panel Optimizar, «Nervios» después del uniforme; «Usar» pone la densidad y agrega las
 zonas con relleno en una dirección, con deshacer.
+
+## 2026-11-04 — Optimizar, regla 4, paso C: «Nervios» en el panel
+
+**Hecho:** en Optimizar, el botón «Nervios» corre el uniforme (primera mitad de la barra) y después `ribbed_infill`
+(segunda mitad), con Cancelar. El resultado da la densidad con nervios contra la del uniforme, cuántas zonas y a qué
+ángulos; si no bajan el relleno, o no hay zonas que trabajen en una dirección, lo dice. «Usar los nervios» pone la
+densidad propia de la pieza y agrega las zonas como cajas modificadoras con relleno en una dirección
+(`volume_for_bed_box`); un solo deshacer quita todo.
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda con nervios. **Sin probar en la interfaz:**
+«Usar los nervios» y su deshacer (la búsqueda completa tarda más de un minuto en el guion).
+
+**Sigue:** regla 6 de structural_optimization.md (refuerzos).

@@ -744,13 +744,17 @@ private:
         LightestInfill best;
         bool zones = false; // also by zones (rule 3)
         ZonedInfill zoned;
+        bool ribs = false; // also with ribs (rule 4)
+        RibbedInfill ribbed;
     };
     Background<OptimizeRun> optimize_job_;
     std::atomic<bool> optimize_cancel_{false};
     std::atomic<int> optimize_permille_{0};
     std::optional<OptimizeRun> optimize_result_;
-    void start_optimize(bool zones = false);
+    enum class OptimizeExtra { None, Zones, Ribs };
+    void start_optimize(OptimizeExtra extra = OptimizeExtra::None);
     void apply_zones(std::size_t part, const ZonedInfill& zoned);
+    void apply_ribs(std::size_t part, const RibbedInfill& ribbed);
     // Whether a part's result is out of date (rule 14): its fingerprint
     // hashes the whole mesh (200 ms for 2 million triangles), so it is
     // computed again only when the part, the plate, its Engineering data or
@@ -13009,10 +13013,15 @@ void App::structural_panel() {
                     if (ImGui::IsItemHovered())
                         loc::SetTooltip("%s", tr(T::StructLightestInfillTip));
                     if (ImGui::Button(tr(T::StructZonedInfill), ImVec2(-FLT_MIN, 0.0f)))
-                        start_optimize(true);
+                        start_optimize(OptimizeExtra::Zones);
                     rect_of("structural_zoned_infill");
                     if (ImGui::IsItemHovered())
                         loc::SetTooltip("%s", tr(T::StructZonedInfillTip));
+                    if (ImGui::Button(tr(T::StructRibs), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Ribs);
+                    rect_of("structural_ribs");
+                    if (ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", tr(T::StructRibsTip));
                 }
                 if (optimize_result_ && optimize_result_->part == part && !optimize_job_.running()) {
                     const OptimizeRun& o = *optimize_result_;
@@ -13056,6 +13065,26 @@ void App::structural_panel() {
                                     apply_zones(part, z);
                                 if (z.lighter)
                                     rect_of("structural_zoned_apply");
+                            }
+                        }
+                        if (o.ribs) {
+                            const RibbedInfill& r = o.ribbed;
+                            if (r.ribs.modifiers.empty()) {
+                                loc::TextDisabled("%s", tr(T::StructRibsNone));
+                            } else if (!r.found || !r.lighter) {
+                                loc::TextDisabled("%s", tr(T::StructRibsNotLighter));
+                            } else {
+                                std::string angles;
+                                for (double a : r.ribs.angles)
+                                    angles += (angles.empty() ? "" : ", ") + std::to_string(int(a)) + "°";
+                                loc::TextColored(rgb(0x3FBF7F), "%s",
+                                                 format(tr(T::StructRibsFound), r.density, r.min_safety, o.best.density,
+                                                        int(r.ribs.angles.size()), angles.c_str())
+                                                     .c_str());
+                                rect_of("structural_ribs_found");
+                                if (ImGui::Button(tr(T::StructRibsApply)))
+                                    apply_ribs(part, r);
+                                rect_of("structural_ribs_apply");
                             }
                         }
                     }
@@ -14217,7 +14246,41 @@ void App::apply_zones(std::size_t part, const ZonedInfill& zoned) {
     });
 }
 
-void App::start_optimize(bool zones) {
+// The ribs as the part's own modifiers (structural_optimization.md, rule
+// 4): its infill at the density found with them, a box modifier with
+// one-direction infill for each rib zone; undone together.
+void App::apply_ribs(std::size_t part, const RibbedInfill& ribbed) {
+    if (part >= objects_.size())
+        return;
+    PlateObject& o = objects_[part];
+    const TriangleMesh placed = placed_mesh(o);
+    std::vector<PlateVolume> added;
+    for (const MeshModifier& m : ribbed.ribs.modifiers) {
+        const BoundingBox b = m.mesh.bounding_box();
+        const std::optional<PlateVolume> v = volume_for_bed_box(o, placed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
+        if (!v) {
+            structural_message_ = tr(T::StructZonedTurned);
+            return;
+        }
+        added.push_back(*v);
+    }
+    const std::string settings_before = o.settings;
+    const std::vector<PlateVolume> volumes_before = o.volumes;
+    Settings at = settings_;
+    at.infill_density = double(ribbed.density);
+    o.settings = with_own_key(o.settings, at, "infill.density");
+    o.volumes.insert(o.volumes.end(), added.begin(), added.end());
+    plate_changed();
+    notify_undo(format(tr(T::StructRibsApplied), ribbed.density, int(added.size())), [this, part, settings_before, volumes_before] {
+        if (part >= objects_.size())
+            return;
+        objects_[part].settings = settings_before;
+        objects_[part].volumes = volumes_before;
+        plate_changed();
+    });
+}
+
+void App::start_optimize(OptimizeExtra extra) {
     if (optimize_job_.running() || objects_.empty())
         return;
     const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
@@ -14236,10 +14299,12 @@ void App::start_optimize(bool zones) {
     const std::string filament_type = settings_.filament_type;
     optimize_cancel_ = false;
     optimize_permille_ = 0;
-    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones]() {
+    const bool zones = extra == OptimizeExtra::Zones, ribs = extra == OptimizeExtra::Ribs;
+    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs]() {
         OptimizeRun run;
         run.part = part;
         run.zones = zones;
+        run.ribs = ribs;
         struct Cancelled {};
         try {
             std::vector<std::string> case_notes;
@@ -14248,7 +14313,7 @@ void App::start_optimize(bool zones) {
             const IndexedMesh mesh = weld_exact(placed);
             fit_voxel_limit(c, mesh, settings);
             // By zones the uniform search is the first half of the bar.
-            const double share = zones ? 0.5 : 1.0;
+            const double share = zones || ribs ? 0.5 : 1.0;
             run.best = lightest_infill(mesh, placed, settings, c, moved, [this, share](double done) {
                 optimize_permille_ = int(done * share * 1000.0);
                 if (optimize_cancel_)
@@ -14256,6 +14321,12 @@ void App::start_optimize(bool zones) {
             });
             if (zones && run.best.found && !run.best.solid)
                 run.zoned = zoned_infill(mesh, placed, settings, c, moved, run.best.density, [this](double done) {
+                    optimize_permille_ = int((0.5 + 0.5 * done) * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+            if (ribs && run.best.found && !run.best.solid)
+                run.ribbed = ribbed_infill(mesh, placed, settings, c, moved, run.best.density, [this](double done) {
                     optimize_permille_ = int((0.5 + 0.5 * done) * 1000.0);
                     if (optimize_cancel_)
                         throw Cancelled{};

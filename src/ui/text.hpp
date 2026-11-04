@@ -135,6 +135,13 @@
     X(StructZonedNone, "Ninguna escala de las zonas aguanta: usá el relleno uniforme.", "No scale of the zones holds: use the uniform infill.") \
     X(StructZonedApply, "Usar las zonas", "Use the zones") \
     X(StructZonedApplied, "Relleno por zonas: %d modificadores", "Infill by zones: %d modifiers") \
+    X(StructRibs, "Nervios", "Ribs") \
+    X(StructRibsTip, "Después del relleno uniforme, el relleno en una sola dirección a lo largo de las tensiones donde trabajan en una dirección, y el mínimo buscado otra vez (varios análisis más).", "After the uniform infill, one-direction infill along the stresses where they work one way, and the lowest searched again (several more analyses).") \
+    X(StructRibsFound, "Con nervios: %d %% (factor %.2f) contra %d %% sin ellos; %d zonas a %s.", "With ribs: %d %% (factor %.2f) against %d %% without; %d zones at %s.") \
+    X(StructRibsNotLighter, "Los nervios no bajan el relleno: conviene el uniforme.", "The ribs do not lower the infill: the uniform infill is better.") \
+    X(StructRibsNone, "No hay zonas donde el relleno trabaje en una sola dirección.", "There are no zones where the infill works one way.") \
+    X(StructRibsApply, "Usar los nervios", "Use the ribs") \
+    X(StructRibsApplied, "Nervios: %d %%, %d modificadores", "Ribs: %d %%, %d modifiers") \
     X(StructZonedTurned, "La pieza está girada con escalas distintas: las zonas no caben como cajas.", "The part is turned with unequal scales: the zones do not fit as boxes.") \
     X(CloudPlanLock, "Incluido en el plan %s", "Included in the plan %s") \
     X(StructCloud, "Calcular en la nube", "Calculate in the cloud") \
