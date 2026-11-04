@@ -10347,3 +10347,19 @@ zonas. **Sin probar en la interfaz:** «Usar las zonas» y su deshacer (la búsq
 el guion).
 
 **Sigue:** regla 4 de structural_optimization.md (nervios: relleno a lo largo de las tensiones).
+
+## 2026-11-04 — Optimizar, regla 4 (nervios), paso A: los grupos por ángulo
+
+**Hecho:** `solve_as_printed` guarda por vóxel la tensión promediada en el plano de la capa (σxx, σyy, τxy:
+`layer_stress`). `infill_ribs(informe)` calcula en cada vóxel las tensiones principales, la dirección de la mayor y
+`a`; cada celda (las mismas que la regla 3, ahora en una clase compartida `Cells`) promedia `a · (cos 2θ, sin 2θ)`
+pesado por el índice de rotura (1 / factor); quedan las celdas con al menos el 20 % del índice máximo y
+direccionalidad ≥ 0,5, agrupadas por ángulo en pasos de 15°; cada grupo son cajas modificadoras con relleno
+`aligned_rectilinear` (una sola dirección, todas las capas) a su ángulo, la densidad sin tocar.
+
+**Prueba:** barra de 24 × 6 × 6 mm traccionada a lo largo de X: 31 celdas a 0° y 1 a 165°; la misma a lo largo de Y:
+30 a 90° y 2 a 75° (junto al empotramiento y la carga la tensión se abre).
+
+**Sigue (regla 4):** paso B, la búsqueda doble del relleno mínimo (sin nervios, después con ellos, solo si queda más
+liviano); necesita la regla 5 (el relleno en una sola dirección en el análisis: E_T y G ∝ ρ², resistencias a lo
+ancho 0,3 · ρ^1,5) para que el análisis vea la ventaja; después, en el panel.

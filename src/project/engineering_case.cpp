@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <numbers>
 
 namespace tisma {
 
@@ -283,6 +284,61 @@ TriangleMesh box_between(const Vec3f& lo, const Vec3f& hi) {
 
 } // namespace
 
+namespace {
+
+// The part cut in cells of 3 voxels a side and at least 3 mm (in Z by the
+// planes' heights): structural_optimization.md, rules 3 and 4.
+struct Cells {
+    const VoxelGrid& g;
+    int cx = 3, cy = 3, nx = 0, ny = 0, nz = 0;
+    std::vector<int> z_cell; // each layer of voxels to its cell row
+    std::vector<double> z_cut;
+    explicit Cells(const VoxelGrid& grid) : g(grid) {
+        cx = std::max(3, int(std::ceil(3.0 / g.hx)));
+        cy = std::max(3, int(std::ceil(3.0 / g.hy)));
+        z_cell.resize(std::size_t(g.nz));
+        z_cut = {g.z.front()};
+        for (int k = 0, count = 0; k < g.nz; ++k) {
+            z_cell[std::size_t(k)] = int(z_cut.size()) - 1;
+            ++count;
+            if ((count >= 3 && g.z[std::size_t(k) + 1] - z_cut.back() >= 3.0 - 1e-9) || k + 1 == g.nz) {
+                z_cut.push_back(g.z[std::size_t(k) + 1]);
+                count = 0;
+            }
+        }
+        nx = (g.nx + cx - 1) / cx;
+        ny = (g.ny + cy - 1) / cy;
+        nz = int(z_cut.size()) - 1;
+    }
+    std::size_t count() const { return std::size_t(nx) * std::size_t(ny) * std::size_t(nz); }
+    std::size_t cell(int i, int j, int k) const { return (std::size_t(k) * std::size_t(ny) + std::size_t(j)) * std::size_t(nx) + std::size_t(i); }
+    std::size_t of(int i, int j, int k) const { return cell(i / cx, j / cy, z_cell[std::size_t(k)]); }
+    // Each run along X of cells in the same group (group_of: -1 for none) as
+    // one box: emit(group, cells, lo, hi).
+    template <class GroupOf, class Emit>
+    void rows(GroupOf group_of, Emit emit) const {
+        for (int k = 0; k < nz; ++k)
+            for (int j = 0; j < ny; ++j)
+                for (int i = 0; i < nx;) {
+                    const int which = group_of(cell(i, j, k));
+                    if (which < 0) {
+                        ++i;
+                        continue;
+                    }
+                    int end = i + 1;
+                    while (end < nx && group_of(cell(end, j, k)) == which)
+                        ++end;
+                    const Vec3f lo{float(g.x0 + i * cx * g.hx), float(g.y0 + j * cy * g.hy), float(z_cut[std::size_t(k)])};
+                    const Vec3f hi{float(g.x0 + std::min(end * cx, g.nx) * g.hx), float(g.y0 + std::min((j + 1) * cy, g.ny) * g.hy),
+                                   float(z_cut[std::size_t(k) + 1])};
+                    emit(which, std::size_t(end - i), lo, hi);
+                    i = end;
+                }
+    }
+};
+
+} // namespace
+
 InfillZones infill_zones(const AnalysisReport& report, double density, double asked, InfillPattern pattern, double scale) {
     InfillZones out;
     const VoxelGrid& g = report.grid;
@@ -290,21 +346,8 @@ InfillZones infill_zones(const AnalysisReport& report, double density, double as
     if (g.solid.empty() || safety.size() != g.solid.size() || g.z.size() < 2)
         return out;
     const double n = infill_strength_exponent(pattern);
-    // Cells: 3 voxels a side, at least 3 mm (in Z by the planes' heights).
-    const int cx = std::max(3, int(std::ceil(3.0 / g.hx))), cy = std::max(3, int(std::ceil(3.0 / g.hy)));
-    std::vector<int> z_cell(std::size_t(g.nz)); // each layer of voxels to its cell row
-    std::vector<double> z_cut{g.z.front()};
-    for (int k = 0, count = 0; k < g.nz; ++k) {
-        z_cell[std::size_t(k)] = int(z_cut.size()) - 1;
-        ++count;
-        if ((count >= 3 && g.z[std::size_t(k) + 1] - z_cut.back() >= 3.0 - 1e-9) || k + 1 == g.nz) {
-            z_cut.push_back(g.z[std::size_t(k) + 1]);
-            count = 0;
-        }
-    }
-    const int nx = (g.nx + cx - 1) / cx, ny = (g.ny + cy - 1) / cy, nz = int(z_cut.size()) - 1;
-    std::vector<double> want(std::size_t(nx) * std::size_t(ny) * std::size_t(nz), -1.0); // -1: no voxel
-    const auto cell = [&](int i, int j, int k) { return (std::size_t(k) * std::size_t(ny) + std::size_t(j)) * std::size_t(nx) + std::size_t(i); };
+    const Cells cells(g);
+    std::vector<double> want(cells.count(), -1.0); // -1: no voxel
     for (int k = 0; k < g.nz; ++k)
         for (int j = 0; j < g.ny; ++j)
             for (int i = 0; i < g.nx; ++i) {
@@ -312,7 +355,7 @@ InfillZones infill_zones(const AnalysisReport& report, double density, double as
                     continue;
                 const double s = safety[g.index(i, j, k)];
                 const double u = std::isfinite(s) && s > 0.0 ? asked / s : 0.0;
-                double& w = want[cell(i / cx, j / cy, z_cell[std::size_t(k)])];
+                double& w = want[cells.of(i, j, k)];
                 w = std::max(w, std::min(100.0, density * std::pow(u, 1.0 / n)));
             }
     // Three levels by thirds of the cells, each at its most.
@@ -332,26 +375,88 @@ InfillZones infill_zones(const AnalysisReport& report, double density, double as
     for (std::size_t l = 0; l < 3; ++l)
         out.density[l] = std::min(100.0, std::round(most[l] * scale));
     // The boxes: a level's cells along X joined.
-    for (int k = 0; k < nz; ++k)
-        for (int j = 0; j < ny; ++j)
-            for (int i = 0; i < nx;) {
-                const double w = want[cell(i, j, k)];
-                if (w < 0.0) {
-                    ++i;
+    cells.rows([&](std::size_t c) { return want[c] < 0.0 ? -1 : level_of(want[c]); },
+               [&](int level, std::size_t count, const Vec3f& lo, const Vec3f& hi) {
+                   out.cells[std::size_t(level)] += count;
+                   out.modifiers.push_back({"zone " + std::to_string(level + 1), 0, box_between(lo, hi),
+                                            "{\"infill\": {\"density\": " + std::to_string(int(out.density[std::size_t(level)])) + "}}"});
+               });
+    return out;
+}
+
+InfillRibs infill_ribs(const AnalysisReport& report) {
+    InfillRibs out;
+    const VoxelGrid& g = report.grid;
+    const std::vector<double>& safety = report.result.safety;
+    const auto& stress = report.result.layer_stress;
+    if (g.solid.empty() || safety.size() != g.solid.size() || stress.size() != g.solid.size() || g.z.size() < 2)
+        return out;
+    // Each voxel: its principal stresses in the layer, the larger one's
+    // direction θ and how much it works one way, a = (|σ1| - |σ2|) / (|σ1| + |σ2|);
+    // each cell averages a · (cos 2θ, sin 2θ) weighed by the failure index.
+    const Cells cells(g);
+    struct Sum {
+        double c = 0.0, s = 0.0, weight = 0.0, most = 0.0;
+        bool any = false;
+    };
+    std::vector<Sum> sum(cells.count());
+    double most = 0.0;
+    for (int k = 0; k < g.nz; ++k)
+        for (int j = 0; j < g.ny; ++j)
+            for (int i = 0; i < g.nx; ++i) {
+                if (!g.at(i, j, k))
                     continue;
-                }
-                const int level = level_of(w);
-                int end = i + 1;
-                while (end < nx && want[cell(end, j, k)] >= 0.0 && level_of(want[cell(end, j, k)]) == level)
-                    ++end;
-                out.cells[std::size_t(level)] += std::size_t(end - i);
-                const Vec3f lo{float(g.x0 + i * cx * g.hx), float(g.y0 + j * cy * g.hy), float(z_cut[std::size_t(k)])};
-                const Vec3f hi{float(g.x0 + std::min(end * cx, g.nx) * g.hx), float(g.y0 + std::min((j + 1) * cy, g.ny) * g.hy),
-                               float(z_cut[std::size_t(k) + 1])};
-                out.modifiers.push_back({"zone " + std::to_string(level + 1), 0, box_between(lo, hi),
-                                         "{\"infill\": {\"density\": " + std::to_string(int(out.density[std::size_t(level)])) + "}}"});
-                i = end;
+                const std::size_t v = g.index(i, j, k);
+                Sum& t = sum[cells.of(i, j, k)];
+                t.any = true;
+                const double f = std::isfinite(safety[v]) && safety[v] > 0.0 ? 1.0 / safety[v] : 0.0;
+                if (f <= 0.0)
+                    continue;
+                const double sx = stress[v][0], sy = stress[v][1], txy = stress[v][2];
+                const double mid = 0.5 * (sx + sy), r = std::hypot(0.5 * (sx - sy), txy);
+                const double s1 = mid + r, s2 = mid - r;
+                if (std::abs(s1) + std::abs(s2) <= 0.0)
+                    continue;
+                const double a = std::abs(std::abs(s1) - std::abs(s2)) / (std::abs(s1) + std::abs(s2));
+                // The direction of s1 is at 2θ1 = atan2(2τ, σx - σy); s2's is 90° from it.
+                double two_theta = std::atan2(2.0 * txy, sx - sy);
+                if (std::abs(s2) > std::abs(s1))
+                    two_theta += std::numbers::pi;
+                t.c += f * a * std::cos(two_theta);
+                t.s += f * a * std::sin(two_theta);
+                t.weight += f;
+                t.most = std::max(t.most, f);
+                most = std::max(most, f);
             }
+    if (most <= 0.0)
+        return out;
+    // The cells kept: at least 20 % of the largest failure index, and working
+    // one way 0.5 or more on average; grouped by angle in steps of 15°.
+    constexpr double kStep = 15.0;
+    std::vector<int> group(cells.count(), -1);
+    for (std::size_t c = 0; c < cells.count(); ++c) {
+        const Sum& t = sum[c];
+        if (!t.any || t.weight <= 0.0 || t.most < 0.2 * most || std::hypot(t.c, t.s) / t.weight < 0.5)
+            continue;
+        double degrees = 0.5 * std::atan2(t.s, t.c) * 180.0 / std::numbers::pi; // (-90, 90]
+        int step = int(std::lround(degrees / kStep));
+        step = ((step % 12) + 12) % 12; // 0 to 165 degrees
+        group[c] = step;
+        ++out.cells;
+    }
+    std::array<std::size_t, 12> used{};
+    cells.rows([&](std::size_t c) { return group[c]; },
+               [&](int step, std::size_t count, const Vec3f& lo, const Vec3f& hi) {
+                   used[std::size_t(step)] += count;
+                   const int degrees = int(step * kStep);
+                   out.modifiers.push_back({"rib " + std::to_string(degrees), 0, box_between(lo, hi),
+                                            "{\"infill\": {\"pattern\": \"aligned_rectilinear\", \"angle\": " + std::to_string(degrees) + "}}"});
+               });
+    for (int step = 0; step < 12; ++step)
+        if (used[std::size_t(step)] > 0) {
+            out.angles.push_back(step * kStep);
+            out.group_cells.push_back(used[std::size_t(step)]);
+        }
     return out;
 }
 

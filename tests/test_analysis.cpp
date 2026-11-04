@@ -956,3 +956,62 @@ TEST_CASE("infill zones: denser cells where the stress is higher (structural_opt
     std::printf("zoned infill: levels %.0f/%.0f/%.0f %%, %.3f g vs %.3f g uniform, %d analyses\n", zoned.zones.density[0],
                 zoned.zones.density[1], zoned.zones.density[2], zoned.mass_g, zoned.uniform_mass_g, zoned.analyses);
 }
+
+TEST_CASE("infill ribs: lines along the stress (structural_optimization.md, rule 4)", "[analysis][engineering]") {
+    // A bar along X or along Y, held at one end and pulled at the other along itself.
+    const auto ribs_of = [](bool along_y) {
+        const float lx = along_y ? 6.0f : 24.0f, ly = along_y ? 24.0f : 6.0f;
+        const IndexedMesh bar = box_mesh(lx, ly, 6.0f);
+        TriangleMesh triangles;
+        for (const auto& t : bar.triangles)
+            triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+        ProjectEngineering e;
+        EngineeringCondition fixed, pull;
+        fixed.kind = ConditionKind::FixedZone;
+        for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+            bool at_min = true;
+            for (int k = 0; k < 3; ++k)
+                at_min &= (along_y ? triangles.corner(t, k).y : triangles.corner(t, k).x) == 0.0f;
+            if (at_min)
+                fixed.triangles.push_back(t);
+        }
+        pull.kind = ConditionKind::ForcePoint;
+        pull.point = along_y ? std::array<double, 3>{3.0, 24.0, 3.0} : std::array<double, 3>{24.0, 3.0, 3.0};
+        pull.normal = along_y ? std::array<double, 3>{0.0, 1.0, 0.0} : std::array<double, 3>{1.0, 0.0, 0.0};
+        pull.radius = 3.0;
+        pull.newtons = 50.0;
+        pull.direction = ForceDirection::Axis;
+        pull.axis = along_y ? 2 : 1;
+        e.conditions = {fixed, pull};
+        e.structural.quality = "normal";
+        std::vector<std::string> notes;
+        const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+        Settings s = beads_04();
+        s.infill_density = 30.0;
+        const AnalysisReport r = run_analysis(bar, s, c);
+        REQUIRE(r.valid);
+        REQUIRE(r.result.layer_stress.size() == r.grid.solid.size());
+        return infill_ribs(r);
+    };
+    // The angle of the group with the most cells.
+    const auto main_angle = [](const InfillRibs& ribs) {
+        std::size_t best = 0;
+        for (std::size_t g = 1; g < ribs.angles.size(); ++g)
+            if (ribs.group_cells[g] > ribs.group_cells[best])
+                best = g;
+        std::printf("infill ribs:");
+        for (std::size_t g = 0; g < ribs.angles.size(); ++g)
+            std::printf(" %.0f° × %zu", ribs.angles[g], ribs.group_cells[g]);
+        std::printf("\n");
+        return ribs.angles.empty() ? -1.0 : ribs.angles[best];
+    };
+    const InfillRibs x = ribs_of(false);
+    REQUIRE(x.cells > 0);
+    REQUIRE_FALSE(x.modifiers.empty());
+    CHECK(main_angle(x) == 0.0); // pulled along X: lines along X
+    REQUIRE(x.group_cells.size() == x.angles.size());
+    CHECK(x.modifiers.front().settings.find("aligned_rectilinear") != std::string::npos);
+    const InfillRibs y = ribs_of(true);
+    REQUIRE(y.cells > 0);
+    CHECK(main_angle(y) == 90.0);
+}

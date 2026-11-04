@@ -113,6 +113,17 @@ struct InfillZones {
     std::array<std::size_t, 3> cells{};
     std::vector<MeshModifier> modifiers;
 };
+// «Nervios» (structural_optimization.md, rule 4): from an analysis, the
+// cells (as in rule 3) whose infill works mostly one way, grouped by that
+// way's angle on the bed in steps of 15°; each group a zone of rectilinear
+// infill in one direction at its angle, in every layer, its density unchanged.
+struct InfillRibs {
+    std::vector<double> angles; // degrees from X, 0 to 165, one per group
+    std::vector<std::size_t> group_cells; // the cells of each group
+    std::size_t cells = 0;
+    std::vector<MeshModifier> modifiers; // "rib <angle>", in the analysis' coordinates
+};
+InfillRibs infill_ribs(const AnalysisReport& report);
 double infill_strength_exponent(InfillPattern pattern);
 InfillZones infill_zones(const AnalysisReport& report, double density, double asked, InfillPattern pattern,
                          double scale = 1.0);
