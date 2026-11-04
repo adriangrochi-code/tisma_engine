@@ -12,11 +12,11 @@ una versión nueva. Así se tienen miles de impresoras sin que el motor contenga
 - el motor, de uso no comercial, no los incluye ni los copia: los descarga y los lee como datos;
 - el catálogo propio del motor (`docs/CATALOG.md`, solo datos oficiales) sigue igual y es lo que hay sin red.
 
-**Formato:** `docs/FORMAT.md` de ese repositorio (versión 2) describe cada archivo y cada campo. Esta ficha solo
+**Formato:** `profile_pack_format.md` (desde `docs/FORMAT.md` de ese repositorio, versión 2) describe cada archivo y cada campo. Esta ficha solo
 dice qué hace el motor con él.
 
 **Sala limpia:**
-- quien programa el motor lee `docs/FORMAT.md`, pero no los perfiles del paquete;
+- quien programa el motor lee `profile_pack_format.md`, no el repositorio de perfiles;
 - las pruebas usan un paquete chico que arma el equipo del motor, con datos inventados que sigan el formato;
 - los campos `original` y `original_common` (los valores con los nombres del programa de origen) no se leen ni se
   muestran.
