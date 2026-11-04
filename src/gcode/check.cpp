@@ -685,7 +685,13 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     // Heights count from the part's bottom, which rests on the bed (write_gcode).
     // A ramping lift climbs to travel.max_lift (retraction_travel.md, rule 5).
     const double lift = s.ramping_lift && s.travel_slope > 0.0 && s.max_lift > 0.0 ? s.max_lift : s.retract_lift;
-    limits.max_z = (model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom) + lift;
+    // The highest layer, not the last: with objects one after another
+    // (sequential.md) each has its own stack, and with other nozzles
+    // (multimaterial.md) a copy's layers can end higher than the last one's.
+    double highest = 0.0;
+    for (const Layer& layer : model.layers)
+        highest = std::max(highest, layer.top);
+    limits.max_z = (model.layers.empty() ? 0.0 : highest - model.layers.front().bottom) + lift;
     // machine.z_offset moves every Z (gcode_extras.md, rule 5), below the bed too.
     limits.max_z += std::max(0.0, s.z_offset);
     limits.min_z = std::min(0.0, s.z_offset);

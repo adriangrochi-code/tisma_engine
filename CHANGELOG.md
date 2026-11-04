@@ -16,6 +16,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   en Tisma Cloud, «Calcular en la nube» manda el análisis como trabajo `fea` y el resultado vuelve a la pieza, con
   avance y «Cancelar». Lo mismo en Aerodinámica (trabajo `aero`). Un cálculo que el plan no incluye se ve con
   «Incluido en el plan …».
+- **Estructural: «Optimizar», relleno por zonas y nervios** (`structural_optimization.md`, reglas 3 y 4): «Relleno por
+  zonas» pone más relleno solo donde la tensión lo pide, en 3 niveles escalados juntos hasta que la pieza aguanta, y
+  lo propone si pesa menos que el uniforme; «Nervios» pone relleno en una sola dirección a lo largo de las tensiones y
+  busca otra vez el mínimo. «Usar» los agrega como modificadores de la pieza, con un solo deshacer.
 - **Estructural: «Optimizar», relleno mínimo** (`structural_optimization.md`, regla 2): debajo de los resultados,
   busca el menor relleno con el que la pieza aguanta y lo deja usar con un botón (se puede deshacer).
 - **Estructural en impresoras de cinta** (`engineering_panel.md`, regla 10): «Dirección de impresión» elige Z o la
@@ -287,6 +291,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- El control del G-code ya no rechaza las piezas impresas una tras otra cuando una copia termina más alta que la
+  última (otra boquilla, otras capas): el tope de Z sale de la capa más alta, no de la última (búsqueda aleatoria,
+  semilla 20261104).
 - Una expresión de parámetro con miles de paréntesis anidados podía cerrar el programa; ahora es un error.
 - Estructural ya no se pone lento con piezas grandes: «Desactualizado» se calculaba en cada cuadro recorriendo toda
   la malla (200 ms con 2 millones de triángulos).

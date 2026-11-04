@@ -10409,3 +10409,19 @@ O5: de 2,63 a 2,90). 22 s.
 
 **Sigue (regla 6):** paso B, el relleno uniforme más liviano del resto con la zona puesta, comparado con el mejor sin
 ella; después, en el panel.
+
+## 2026-11-04 — mantenimiento (08:41 UTC)
+
+**Revisado:** `origin/main` ya estaba en `dev`; `tools/ci_linux.sh` sobre `dc87386`; búsqueda aleatoria de G-code con
+semilla nueva (`tisma_fuzz_gcode 2000 20261104`, 5 min 19 s); los cambios recientes de Optimizar.
+
+**Encontrado y arreglado:**
+- Fuzz, corrida 1308: tres copias impresas una tras otra, la del medio con otra boquilla y otras capas, termina a Z
+  5,938 y la última a 5,875; el control tomaba el tope de Z de la última capa y rechazaba el G-code (Z 6,092 > 6,029).
+  Ahora toma la capa más alta (`gcode_limits`). Prueba: «check limits: the highest layer, not the last». Con la misma
+  semilla: 2000 corridas, 0 fallas. También afectaba la exportación desde la interfaz (el mismo control).
+- «Usar las zonas» y «Usar los nervios» ponían las cajas donde estaba la pieza en la cama al usarlas, no al buscar:
+  si se movía o giraba entre medio, las zonas quedaban corridas. Ahora el resultado guarda la colocación del momento
+  de la búsqueda (`volume_for_bed_box` con el mapa dado) y no hace nada si la malla cambió.
+- CI de Linux: gcc y clang pasan 990/990; la etapa con ASan se cortó por disco lleno (compilaciones viejas en
+  `/home/user/tisma_engine/build-*`, 7 GB borrados). Se corre otra vez.
