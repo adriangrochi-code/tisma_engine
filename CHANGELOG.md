@@ -19,7 +19,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - **Estructural: «Optimizar», relleno por zonas y nervios** (`structural_optimization.md`, reglas 3 y 4): «Relleno por
   zonas» pone más relleno solo donde la tensión lo pide, en 3 niveles escalados juntos hasta que la pieza aguanta, y
   lo propone si pesa menos que el uniforme; «Nervios» pone relleno en una sola dirección a lo largo de las tensiones y
-  busca otra vez el mínimo. «Usar» los agrega como modificadores de la pieza, con un solo deshacer.
+  busca otra vez el mínimo; «Refuerzos» engrosa la pieza alrededor de los apoyos y las cargas. «Usar» los agrega
+  como modificadores de la pieza, con un solo deshacer. «Orientación recomendada» compara las capas en Z, X e Y y
+  ofrece «Girar la pieza».
 - **Estructural: «Optimizar», relleno mínimo** (`structural_optimization.md`, regla 2): debajo de los resultados,
   busca el menor relleno con el que la pieza aguanta y lo deja usar con un botón (se puede deshacer).
 - **Estructural en impresoras de cinta** (`engineering_panel.md`, regla 10): «Dirección de impresión» elige Z o la

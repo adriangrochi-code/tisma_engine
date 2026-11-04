@@ -10498,3 +10498,17 @@ pare la pieza, decir que la resistencia entre capas viene de la hoja del fabrica
 ser más débil entre capas.
 
 **Sigue:** «Orientación» en el panel Optimizar con esa nota; la retícula (regla 7).
+
+## 2026-11-04 — Optimizar, regla 8, paso B: «Orientación recomendada» en el panel
+
+**Hecho:** el botón corre `recommended_orientation` en el trabajo de Optimizar (sin buscar relleno), con Cancelar. El
+resultado da los tres factores; si una orientación mejora más de un 5 %, la propone con la nota del equipo de fichas
+(la resistencia entre capas viene de la hoja del fabricante; revisar los voladizos) y «Girar la pieza», que compone
+el cuarto de vuelta con el giro de la pieza, con deshacer. Las condiciones están en el marco del modelo, así que
+giran con ella.
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda; `test_plate`: el giro deja la barra de
+24 mm parada (capas en X) o de costado (capas en Y), apoyada en la cama. **Sin probar en la interfaz:** «Girar la
+pieza» y su deshacer.
+
+**Sigue:** la retícula (regla 7).

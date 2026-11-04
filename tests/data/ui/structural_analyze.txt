@@ -67,6 +67,12 @@ expect-control structural_optimize_cancel
 menu structural_optimize_cancel
 expect-optimize cancelled
 expect-control structural_reinforce
+# The orientation (rule 8): the same.
+menu structural_orientation
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_orientation
 menu structural_force_unit_1
 wait 20
 expect-no-control structural_show_map

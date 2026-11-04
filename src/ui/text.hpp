@@ -148,6 +148,14 @@
     X(StructReinforceHeavier, "Con refuerzos no queda más liviano: conviene el uniforme.", "With reinforcements it is not lighter: the uniform infill is better.") \
     X(StructReinforceApply, "Usar los refuerzos", "Use the reinforcements") \
     X(StructReinforceApplied, "Refuerzos: el resto al %d %%, %d modificadores", "Reinforcements: the rest at %d %%, %d modifiers") \
+    X(StructOrientation, "Orientación recomendada", "Recommended orientation") \
+    X(StructOrientationTip, "Analiza la pieza con las capas en Z (como está), en X y en Y, con las mismas cargas (tres análisis). No revisa los voladizos de la nueva orientación.", "Analyses the part with its layers along Z (as it is), X and Y, with the same loads (three analyses). It does not check the overhangs of the new orientation.") \
+    X(StructOrientationFactors, "Factor con capas en Z: %.2f; en X: %.2f; en Y: %.2f.", "Factor with layers along Z: %.2f; along X: %.2f; along Y: %.2f.") \
+    X(StructOrientationKeep, "La orientación actual es la mejor, o la otra mejora menos de un 5 %%.", "The current orientation is the best, or the other one is less than 5 %% better.") \
+    X(StructOrientationBetter, "Mejor con las capas en %s: factor %.2f (+%.0f %%).", "Better with the layers along %s: factor %.2f (+%.0f %%).") \
+    X(StructOrientationNote, "La resistencia entre capas viene de la hoja del fabricante: una pieza real puede ser más débil entre capas. Revisá los voladizos antes de imprimir.", "The strength between layers comes from the maker's sheet: a real print may be weaker between layers. Check the overhangs before printing.") \
+    X(StructOrientationApply, "Girar la pieza", "Turn the part") \
+    X(StructOrientationApplied, "Pieza girada: capas en %s", "Part turned: layers along %s") \
     X(StructZonedTurned, "La pieza está girada con escalas distintas: las zonas no caben como cajas.", "The part is turned with unequal scales: the zones do not fit as boxes.") \
     X(CloudPlanLock, "Incluido en el plan %s", "Included in the plan %s") \
     X(StructCloud, "Calcular en la nube", "Calculate in the cloud") \
