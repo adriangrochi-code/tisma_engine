@@ -12,11 +12,14 @@ class TismaApplication : Application() {
         private set
     lateinit var secrets: SecretStore
         private set
+    lateinit var crash: net.tisma.app.data.CrashMark
+        private set
 
     override fun onCreate() {
         super.onCreate()
         settings = AppSettings(this)
         secrets = KeystoreSecretStore(this)
+        crash = net.tisma.app.data.CrashMark(java.io.File(filesDir, "crash.txt")).also { it.install() }
     }
 
     /** The device name sent with a login (cloud.md, rule 2), to tell sessions apart. */

@@ -63,6 +63,7 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   gira, dos mueven, pellizcar acerca, doble toque acerca; vistas 3D, arriba, frente, izquierda, derecha, atrás y
   «Encuadrar». Sin verlo en un teléfono (no hay emulador acá): probar que dibuje y que los gestos respondan.
 
+- **2026-11-04 — cierre inesperado** (`problem_reports.md`, regla 10): al abrir después de un cierre por error, Informar un problema se abre con «Tisma se cerró» y el registro de esa sesión, una sola vez.
 - **2026-11-04 — Créditos y fuentes** (`credits.md`): Más › Créditos y fuentes, con las funciones «Basado en» de
   `resources/credits.json` (los mismos datos del escritorio) y las bibliotecas del APK con su aviso (las del motor y
   las de la app, `credits_android.json`); una prueba exige un crédito para cada biblioteca que llega al APK.

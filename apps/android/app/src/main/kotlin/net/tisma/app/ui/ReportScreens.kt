@@ -43,6 +43,12 @@ import net.tisma.app.data.AppLog
 import net.tisma.app.data.AppSettings
 import net.tisma.cloud.ProblemReport
 
+/** The first lines of the attached log: the program and the system. */
+fun attachmentHeader(): String {
+    val os = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}), ${Build.MANUFACTURER} ${Build.MODEL}".take(80)
+    return "Tisma for Android ${BuildConfig.VERSION_NAME}\n$os\n\n"
+}
+
 /** What a report attaches when the person accepts it (problem_reports.md, rule 3). */
 fun attachment(): Triple<String, String, String> {
     val version = BuildConfig.VERSION_NAME
@@ -55,8 +61,8 @@ fun attachment(): Triple<String, String, String> {
 /** Report a problem (cloud.md, rule 11; problem_reports.md, rules 1 to 9). Nothing is sent without «Send». */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ReportScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
-    var kind by rememberSaveable { mutableStateOf("bug") }
+fun ReportScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator, crashLog: String? = null) {
+    var kind by rememberSaveable { mutableStateOf(if (crashLog != null) "crash" else "bug") }
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var steps by rememberSaveable { mutableStateOf("") }
@@ -104,7 +110,9 @@ fun ReportScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
                     tooShort = true
                     return@Button
                 }
-                val (version, os, log) = attachment()
+                val (version, os, sessionLog) = attachment()
+                // After an unexpected close, the log is the closed session's (rule 10).
+                val log = crashLog?.let { attachmentHeader() + it } ?: sessionLog
                 cloud.sendReport(ProblemReport(
                     kind = kind, title = title.trim(), description = description, steps = steps, expected = expected,
                     appVersion = if (attach) version else null, os = if (attach) os else null,
@@ -123,7 +131,7 @@ fun ReportScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
             title = { Text(stringResource(R.string.report_see_attached)) },
             text = {
                 Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
-                    Text(attachment().third, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                    Text(crashLog?.let { attachmentHeader() + it } ?: attachment().third, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                 }
             },
         )

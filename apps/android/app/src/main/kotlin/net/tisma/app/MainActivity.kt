@@ -81,6 +81,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val app = application as TismaApplication
         handleShared(intent)
+        // After an unexpected close: offer to report it, once (problem_reports.md, rule 10).
+        if (savedInstanceState == null) app.crash.take()?.let { log ->
+            nav.select(net.tisma.app.ui.Section.MORE)
+            nav.open(net.tisma.app.ui.Screen.Report(log))
+        }
         setContent {
             TismaTheme {
                 TismaApp(cloud, printers, slice, app.settings, nav)

@@ -75,7 +75,8 @@ sealed interface Screen {
     data object Jobs : Screen
     data class JobDetail(val id: String) : Screen
     data object NewJob : Screen
-    data object Report : Screen
+    /** Report a problem; [crashLog] when offered after an unexpected close (problem_reports.md, rule 10). */
+    data class Report(val crashLog: String? = null) : Screen
     data object MyReports : Screen
     data object Preferences : Screen
     data class Preview(val path: String) : Screen
@@ -227,7 +228,7 @@ fun TismaApp(
                     Screen.Jobs -> JobsScreen(state, cloud, nav)
                     is Screen.JobDetail -> JobDetailScreen(top.id, state, cloud, nav)
                     Screen.NewJob -> NewJobScreen(state, cloud, nav)
-                    Screen.Report -> ReportScreen(state, cloud, nav)
+                    is Screen.Report -> ReportScreen(state, cloud, nav, top.crashLog)
                     Screen.MyReports -> MyReportsScreen(state, cloud)
                     Screen.Preferences -> PreferencesScreen(state, cloud, settings)
                     is Screen.AddPrinter -> AddPrinterScreen(top.editId, printerState, printers, nav, top.found)
@@ -246,7 +247,7 @@ private fun titleOf(s: Screen): Int = when (s) {
     Screen.Account, Screen.Register, Screen.Forgot -> R.string.account_title
     Screen.Jobs, is Screen.JobDetail -> R.string.jobs_title
     Screen.NewJob -> R.string.new_job
-    Screen.Report -> R.string.report_title
+    is Screen.Report -> R.string.report_title
     Screen.MyReports -> R.string.more_my_reports
     Screen.Preferences -> R.string.more_preferences
     is Screen.AddPrinter -> R.string.printer_add
@@ -294,7 +295,7 @@ private fun MoreHome(signedIn: Boolean, email: String?, nav: Navigator) {
         MoreItem(R.string.more_cloud, if (signedIn) stringResource(R.string.more_signed_in_as, email.orEmpty())
             else stringResource(R.string.more_signed_out), "more_cloud") { nav.open(Screen.Account) }
         MoreItem(R.string.more_jobs, null, "more_jobs") { nav.open(Screen.Jobs) }
-        MoreItem(R.string.more_report, null, "more_report") { nav.open(Screen.Report) }
+        MoreItem(R.string.more_report, null, "more_report") { nav.open(Screen.Report()) }
         if (signedIn) MoreItem(R.string.more_my_reports, null, "more_my_reports") { nav.open(Screen.MyReports) }
         MoreItem(R.string.more_preferences, null, "more_preferences") { nav.open(Screen.Preferences) }
         MoreItem(R.string.more_credits, null, "more_credits") { nav.open(Screen.Credits) }
