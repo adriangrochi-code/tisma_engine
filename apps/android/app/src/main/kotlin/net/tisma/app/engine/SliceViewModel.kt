@@ -70,6 +70,14 @@ data class SliceState(
     val slowAnalysis: Double? = null,
     /** What a tap on the 3D view marks now, or null when it only turns the view. */
     val marking: EngineeringCase.Kind? = null,
+    /** The Design tab: the design, its last build (bodies, volume) and what the engine said. */
+    val design: DesignDoc = DesignDoc(),
+    val designMesh: MeshFile? = null,
+    val designVolume: Double? = null,
+    val designMessage: String? = null,
+    val designBusy: Boolean = false,
+    /** SolidCraft is in this build (Design needs it). */
+    val solidcraft: Boolean = false,
     /** A calibration test on the plate: its kind, unit, segments (from, to, value) and its settings file. */
     val calibration: Calibrating? = null,
     /** The lightest infill found that holds, in %, to apply to the slice (mobile_app.md, rule 13). */
@@ -137,7 +145,7 @@ class SliceViewModel(
         settings = savedSettings(),
         view = saved?.panelView?.let { v -> PanelVisibility.View.entries.firstOrNull { it.name.equals(v, true) } }
             ?: PanelVisibility.View.BASIC,
-        custom = saved?.customVisible ?: emptySet(), packAvailable = pack != null))
+        custom = saved?.customVisible ?: emptySet(), packAvailable = pack != null, solidcraft = runner.solidcraft != null))
 
     private fun savedSettings(): EngineRunner.SimpleSettings {
         val o = saved?.panelChanges?.let { runCatching { kotlinx.serialization.json.Json.parseToJsonElement(it) as? kotlinx.serialization.json.JsonObject }.getOrNull() }
@@ -438,6 +446,51 @@ class SliceViewModel(
     private var knowledgeCache: Knowledge? = null
     fun knowledge(): Knowledge? = knowledgeCache ?: pack?.let { Knowledge.read(java.io.File(it.dataDir, "pack/knowledge")) }
         ?.takeIf { !it.empty }?.also { knowledgeCache = it }
+
+    fun setDesign(doc: DesignDoc) = _state.update { it.copy(design = doc, designMessage = null) }
+
+    /**
+     * Builds the design (cad_design.md): the engine checks it, then builds it
+     * through SolidCraft as a timeline; the bodies are shown, or the first
+     * feature that fails and why.
+     */
+    fun buildDesign() {
+        val sc = runner.solidcraft ?: return
+        val doc = state.value.design
+        if (state.value.designBusy) return
+        _state.update { it.copy(designBusy = true, designMessage = null) }
+        viewModelScope.launch {
+            val r = withContext(io) {
+                runCatching {
+                    val check = runner.designCheck(doc)
+                    val problems = (check["problems"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+                        .mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                    if (problems.isNotEmpty()) return@runCatching Triple<MeshFile?, Double?, String?>(null, null, problems.joinToString("\n"))
+                    val (stl, o) = runner.designBuild(doc, sc)
+                    fun s(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                    val mesh = stl?.let { MeshFile.read(it) }
+                    val failure = s("failure")?.takeIf { it.isNotBlank() && it != "null" }
+                        ?.let { f -> (s("failed_feature")?.toIntOrNull()?.let { doc.features.getOrNull(it)?.name + ": " } ?: "") + f }
+                        ?: s("error")?.takeIf { s("ok") != "true" }
+                    Triple(mesh, s("volume_mm3")?.toDoubleOrNull(), failure)
+                }
+            }
+            r.onFailure { AppLog.line("design: ${it.message}") }
+            _state.update {
+                it.copy(designBusy = false, designMesh = r.getOrNull()?.first, designVolume = r.getOrNull()?.second,
+                    designMessage = r.getOrNull()?.third ?: r.exceptionOrNull()?.let { e -> (e as? EngineRunner.EngineException)?.error ?: e.message })
+            }
+        }
+    }
+
+    /** The built bodies go to the plate as a model. */
+    fun designToPlate() {
+        val m = state.value.designMesh ?: return
+        viewModelScope.launch {
+            val f = withContext(io) { File(workDir, "design_plate.stl").also { m.writeStl(it) } }
+            open(state.value.design.name.replace(Regex("[^A-Za-z0-9 ._-]"), "_") + ".stl") { f.inputStream() }
+        }
+    }
 
     /** A Design part's starting spec, as the engine gives it (`part … --defaults`). */
     fun partDefaults(kind: String, done: (kotlinx.serialization.json.JsonObject?) -> Unit) = viewModelScope.launch {

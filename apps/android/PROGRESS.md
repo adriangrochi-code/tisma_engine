@@ -32,8 +32,18 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
   - La app lo lleva con `-Ptisma.solidcraft=<carpeta de los artefactos>` como `lib/<abi>/libsolidcraft.so`, y sus
     licencias van a los créditos. Probado con una carpeta falsa: el APK lo trae, y sin la propiedad no.
   - Todavía no se sabe si compila para Android (la compilación corre en GitHub, no aquí).
-  - Siguiente: con el binario, la pestaña Diseño en el teléfono: el guion de comandos del motor (`src/cad/design.*`)
-    a `solidcraft-cli`, y el 3MF de vuelta a la placa.
+  - **Más › Diseño (CAD):** el diseño en el formato del motor (`tisma-design-1`), con:
+    - cuerpos nuevos: caja, cilindro, esfera, cono, tubo, toro;
+    - operaciones: mover o girar (con copia), combinar (unir, cortar, intersecar), espejar, patrones circular y
+      rectangular, vaciar;
+    - el historial, con el ojo para incluir o dejar afuera, y borrar.
+    «Construir» pasa por `tisma-engine design check` y `design build --solidcraft <lib/…/libsolidcraft.so> --timeline`
+    (motor c168fac). Muestra los cuerpos en 3D, el volumen, o la operación que falló y por qué. «Poner en la placa»
+    los lleva a laminar.
+    - Sin SolidCraft en el APK, la pantalla lo dice y remite a engranajes y tornillería.
+    - Falta: redondeo, chaflán, agujero, rosca, corte, desmoldeo y bocetos (necesitan tocar aristas, caras o dibujar
+      en el teléfono).
+    - Probado con un motor falso; con el real, cuando c168fac llegue a `dev`.
 
 - **2026-11-04 — Avance y aviso de demora en Ingeniería (QA):** QA vio el análisis de un cubo seguir corriendo después
   de 40 min en el emulador sin KVM. El mismo caso tarda 32 s en la máquina de QA.

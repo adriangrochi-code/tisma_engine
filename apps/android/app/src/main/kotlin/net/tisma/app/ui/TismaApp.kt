@@ -92,6 +92,7 @@ sealed interface Screen {
     data object PackWizard : Screen
     data object Help : Screen
     data object Parts : Screen
+    data object Cad : Screen
     data object Calibrate : Screen
 }
 
@@ -298,6 +299,7 @@ fun TismaApp(
                     is Screen.CustomPicker -> CustomPickerScreen(top.tab, sliceState, slice)
                     Screen.Messages -> MessagesScreen(nav.notices)
                     Screen.Parts -> PartsScreen(slice, nav)
+                    Screen.Cad -> CadScreen(sliceState, slice, nav)
                     Screen.Calibrate -> CalibrateScreen(slice, nav)
                     Screen.Help -> HelpScreen(slice.knowledge(), { k, v -> slice.setValue(k, v) }) { key ->
                         sliceState.layout?.rows?.get(key)?.label ?: key
@@ -336,6 +338,7 @@ private fun titleOf(s: Screen): Int = when (s) {
     Screen.PackWizard -> R.string.pack_title
     Screen.Help -> R.string.more_help
     Screen.Parts -> R.string.more_parts
+    Screen.Cad -> R.string.more_cad
     Screen.Calibrate -> R.string.more_calibrate
     is Screen.CustomPicker -> R.string.panel_choose
 }
@@ -381,6 +384,7 @@ private fun MoreHome(signedIn: Boolean, email: String?, nav: Navigator, updateIt
         MoreItem(R.string.more_report, null, "more_report") { nav.open(Screen.Report()) }
         if (signedIn) MoreItem(R.string.more_my_reports, null, "more_my_reports") { nav.open(Screen.MyReports) }
         MoreItem(R.string.more_preferences, null, "more_preferences") { nav.open(Screen.Preferences) }
+        MoreItem(R.string.more_cad, null, "more_cad") { nav.open(Screen.Cad) }
         MoreItem(R.string.more_parts, null, "more_parts") { nav.open(Screen.Parts) }
         MoreItem(R.string.more_calibrate, null, "more_calibrate") { nav.open(Screen.Calibrate) }
         MoreItem(R.string.more_help, null, "more_help") { nav.open(Screen.Help) }

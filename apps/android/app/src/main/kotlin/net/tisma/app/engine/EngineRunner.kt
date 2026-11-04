@@ -297,6 +297,37 @@ class EngineRunner(
         return ((o["estimated_seconds"] as? JsonPrimitive)?.doubleOrNull ?: 0.0) to ((o["estimated_memory_mb"] as? JsonPrimitive)?.doubleOrNull ?: 0.0)
     }
 
+    /** SolidCraft beside the engine (the APK's lib/<abi>/libsolidcraft.so), or null when this build has none. */
+    val solidcraft: File? get() = File(executable.parentFile, "libsolidcraft.so").takeIf { it.isFile && it.canExecute() }
+
+    /** What the engine says of a design before building it (`design check`): ok, problems, has a body. */
+    fun designCheck(doc: DesignDoc): JsonObject {
+        workDir.mkdirs()
+        val f = File(workDir, "design.json").apply { writeText(doc.json().toString()) }
+        return json(capture(listOf("design", "check", f.path)))
+    }
+
+    /**
+     * Builds a design through SolidCraft (`design build … --timeline`): the
+     * bodies as an STL, and the engine's answer (volume, the feature that
+     * failed and why). A refused design still answers, with `ok` false.
+     */
+    fun designBuild(doc: DesignDoc, solidcraft: File, quality: String = "standard"): Pair<File?, JsonObject> {
+        workDir.mkdirs()
+        val f = File(workDir, "design.json").apply { writeText(doc.json().toString()) }
+        val out = File(workDir, "design.stl").apply { delete() }
+        val err = File(workDir, "engine.err").apply { delete() }
+        val p = ProcessBuilder(listOf(executable.path, "design", "build", f.path, "--solidcraft", solidcraft.path, "-o", out.path,
+            "--quality", quality, "--timeline")).directory(workDir).redirectError(err).start()
+        p.outputStream.close()
+        val text = p.inputStream.bufferedReader().readText()
+        if (!p.waitFor(300, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The design took too long", "", -1) }
+        val o = runCatching { json(text) }.getOrNull()
+            ?: throw EngineException("error", err.takeIf { it.isFile }?.readText()?.trim()?.lines()?.lastOrNull()?.removePrefix("error: ")
+                ?: "The engine stopped (exit code ${p.exitValue()})", "", p.exitValue())
+        return out.takeIf { it.isFile && it.length() > 84 } to o
+    }
+
     /** The air's drag on a bare model (`aero <model> --config`, aerodynamics.md). */
     fun aeroModel(model: File, settings: SimpleSettings, profile: ProfileChoice?, quality: String, speed: Double, direction: String,
                   onProgress: (Int) -> Unit, cancelled: () -> Boolean): Analysis {
