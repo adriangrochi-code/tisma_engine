@@ -120,7 +120,7 @@ fun ReportScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator, crash
                 )) { nav.back() }
             },
             enabled = !state.busy,
-            modifier = Modifier.fillMaxWidth().height(56.dp).testTag("report_send"),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("report_send"),
         ) { Text(stringResource(R.string.send)) }
         if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
     }

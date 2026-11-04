@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -202,7 +203,7 @@ fun TismaApp(
                         selected = nav.section == s,
                         onClick = { nav.select(s) },
                         icon = { Icon(painterResource(s.icon), null) },
-                        label = { Text(stringResource(s.label)) },
+                        label = { NavLabel(s.label) },
                     )
                 }
             }
@@ -231,7 +232,7 @@ fun TismaApp(
                                 selected = nav.section == s,
                                 onClick = { nav.select(s) },
                                 icon = { Icon(painterResource(s.icon), null) },
-                                label = { Text(stringResource(s.label)) },
+                                label = { NavLabel(s.label) },
                                 colors = NavigationBarItemDefaults.colors(
                                     selectedIconColor = Tisma.colors.accentText,
                                     selectedTextColor = Tisma.colors.accentText,
@@ -325,7 +326,7 @@ private fun SectionHome(section: Section, signedIn: Boolean, email: String?, nav
     when (section) {
         Section.PLATE -> Placeholder(R.string.plate_coming) {
             Button(onClick = { nav.open(if (signedIn) Screen.NewJob else Screen.Account) },
-                modifier = Modifier.fillMaxWidth().height(56.dp).testTag("plate_slice_cloud")) {
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("plate_slice_cloud")) {
                 Text(stringResource(R.string.plate_slice_cloud))
             }
         }
@@ -438,4 +439,16 @@ private fun installApk(context: android.content.Context, apk: java.io.File) {
         .setDataAndType(uri, "application/vnd.android.package-archive")
         .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }
+}
+
+/**
+ * A section's name in the bottom bar or the rail: one line, its size growing
+ * with the phone's text size up to 1.15 times (accessibility_touch.md, rule 5:
+ * nothing cut; at 200 % the names broke in the middle of the word).
+ */
+@Composable
+private fun NavLabel(@StringRes label: Int) {
+    val scale = androidx.compose.ui.platform.LocalDensity.current.fontScale
+    val size = MaterialTheme.typography.labelMedium.fontSize.value * minOf(scale, 1.15f) / scale
+    Text(stringResource(label), maxLines = 1, softWrap = false, fontSize = androidx.compose.ui.unit.TextUnit(size, androidx.compose.ui.unit.TextUnitType.Sp))
 }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -183,20 +184,20 @@ fun JobDetailScreen(id: String, state: CloudState, cloud: CloudViewModel, nav: N
         }
         if (!job.status.finished) {
             OutlinedButton(onClick = { cloud.cancel(job.id) }, enabled = !state.busy,
-                modifier = Modifier.fillMaxWidth().height(52.dp).testTag("cancel_job")) {
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("cancel_job")) {
                 Text(stringResource(R.string.job_cancel))
             }
         }
         if (job.status == JobStatus.DONE && job.kind == "slice") {
             // MA10: the G-code of a cloud slice opens in the preview like a local one (rule 9).
             OutlinedButton(onClick = { cloud.previewResult(job.id) { path -> nav.open(Screen.Preview(path)) } },
-                enabled = !state.busy, modifier = Modifier.fillMaxWidth().height(52.dp).testTag("preview_result")) {
+                enabled = !state.busy, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("preview_result")) {
                 Text(stringResource(R.string.preview_open))
             }
         }
         if (job.status == JobStatus.DONE) {
             Button(onClick = { save.launch(job.resultFilename.ifBlank { "result" }) }, enabled = !state.busy,
-                modifier = Modifier.fillMaxWidth().height(56.dp).testTag("save_result")) {
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("save_result")) {
                 Icon(painterResource(R.drawable.tisma_save), null)
                 Spacer(Modifier.size(8.dp))
                 Text(stringResource(R.string.job_save))
@@ -247,7 +248,7 @@ fun NewJobScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
 
     ScreenColumn {
         TismaCard {
-            OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth().height(52.dp)
+            OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
                 .testTag("pick_project")) {
                 Icon(painterResource(R.drawable.tisma_folder), null)
                 Spacer(Modifier.size(8.dp))
@@ -319,7 +320,7 @@ fun NewJobScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
                 cloud.submit(request ?: return@Button, source) { id -> nav.replace(Screen.JobDetail(id)) }
             },
             enabled = uriText != null && request != null && !state.uploading && state.signedIn,
-            modifier = Modifier.fillMaxWidth().height(56.dp).testTag("send_job"),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("send_job"),
         ) {
             Icon(painterResource(R.drawable.tisma_send), null)
             Spacer(Modifier.size(8.dp))

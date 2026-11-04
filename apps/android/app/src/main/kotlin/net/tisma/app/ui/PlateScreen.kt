@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -122,7 +123,7 @@ private fun PlateControls(
         }
         TismaCard {
             OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, enabled = !state.slicing,
-                modifier = Modifier.fillMaxWidth().height(52.dp).testTag("plate_open")) {
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_open")) {
                 Icon(painterResource(R.drawable.tisma_folder), null)
                 Spacer(Modifier.size(8.dp))
                 Text(stringResource(R.string.plate_open))
@@ -160,7 +161,7 @@ private fun PlateControls(
             }
         } else {
             Button(onClick = { slice.slice() }, enabled = state.engineAvailable && state.modelName != null,
-                modifier = Modifier.fillMaxWidth().height(56.dp).testTag("plate_slice")) {
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("plate_slice")) {
                 Icon(painterResource(R.drawable.tisma_slice), null)
                 Spacer(Modifier.size(8.dp))
                 Text(stringResource(R.string.plate_slice))
@@ -197,10 +198,10 @@ private fun PlateControls(
                 }
                 r.layers?.let { Labeled(R.string.plate_layers, it.toString()) }
                 OutlinedButton(onClick = { nav.open(Screen.Preview(r.gcode.path)) },
-                    modifier = Modifier.fillMaxWidth().height(52.dp).testTag("plate_preview")) {
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_preview")) {
                     Text(stringResource(R.string.preview_open))
                 }
-                Button(onClick = { save.launch(r.gcode.name) }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Button(onClick = { save.launch(r.gcode.name) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
                     Icon(painterResource(R.drawable.tisma_save), null)
                     Spacer(Modifier.size(8.dp))
                     Text(stringResource(R.string.plate_save))
@@ -221,7 +222,7 @@ private fun PlateControls(
                             printers.upload(id, r.gcode.name, r.gcode.length(), true) { r.gcode.inputStream() }
                         },
                         enabled = sendTo != null && !printerState.uploading,
-                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("plate_send"),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_send"),
                     ) {
                         Icon(painterResource(R.drawable.tisma_send), null)
                         Spacer(Modifier.size(8.dp))

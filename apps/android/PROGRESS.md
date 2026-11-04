@@ -25,6 +25,14 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Letra al 200 % (AC3, regla 5):** capturas de Placa, Impresión, una sección, Impresora y Más con la letra
+  al 200 % (`ScreenshotTest`, en `build/screenshots/text200_*.png`). Lo que se veía mal y se arregló:
+  - las etiquetas de la barra de abajo se partían en mitad de la palabra: ahora van en una línea y crecen hasta 1,15×;
+  - los botones de alto fijo cortaban su texto: ahora tienen alto mínimo;
+  - la ayuda de los ajustes se cortaba sin aviso: ahora muestra dos líneas con «…» y el texto entero con un toque.
+  No se pudo medir automáticamente el texto cortado: Robolectric no da medidas de texto confiables, ni con gráficos
+  nativos.
+
 - **2026-11-04 — Ayuda sin conexión (regla 16):** Más › Ayuda lee la carpeta `knowledge` del paquete instalado:
   problemas, procedimientos, glosario, materiales y guías de calibración. Hay una búsqueda sobre todo y chips por tipo.
   En un problema, cada causa muestra qué revisar y sus acciones: «Usar <ajuste> = <valor>» lo aplica al laminado, y

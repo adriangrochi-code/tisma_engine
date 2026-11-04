@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -67,7 +68,7 @@ private fun LoginCard(state: CloudState, cloud: CloudViewModel, nav: Navigator) 
                 password = ""
             },
             enabled = !state.busy && email.isNotBlank() && password.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth().height(52.dp).testTag("sign_in"),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("sign_in"),
         ) { Text(stringResource(R.string.sign_in)) }
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             AccentTextButton(onClick = { nav.open(Screen.Register) }) { Text(stringResource(R.string.create_account)) }
@@ -194,7 +195,7 @@ fun RegisterScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
                 Button(
                     onClick = { cloud.register(email, password, null) },
                     enabled = !state.busy && email.contains('@') && password.length >= 8,
-                    modifier = Modifier.fillMaxWidth().height(52.dp).testTag("register"),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("register"),
                 ) { Text(stringResource(R.string.create_account)) }
             } else {
                 Text(stringResource(R.string.verify_title), style = MaterialTheme.typography.titleMedium)
@@ -203,7 +204,7 @@ fun RegisterScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
                 Button(
                     onClick = { cloud.verify(code) },
                     enabled = !state.busy && code.length == 6,
-                    modifier = Modifier.fillMaxWidth().height(52.dp).testTag("verify"),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("verify"),
                 ) { Text(stringResource(R.string.verify)) }
                 AccentTextButton(onClick = { cloud.resendCode() }) { Text(stringResource(R.string.resend_code)) }
             }
@@ -225,14 +226,14 @@ fun ForgotScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
             if (!sent) {
                 Button(onClick = { cloud.forgotPassword(email) { sent = true } },
                     enabled = !state.busy && email.contains('@'),
-                    modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(stringResource(R.string.send_code)) }
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.send_code)) }
             } else {
                 CodeField(code) { code = it }
                 PasswordField(password, { password = it }, R.string.new_password, "new_password",
                     supporting = stringResource(R.string.password_rule))
                 Button(onClick = { cloud.resetPassword(email, code, password) { nav.back() } },
                     enabled = !state.busy && code.length == 6 && password.length >= 8,
-                    modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(stringResource(R.string.change_password)) }
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(stringResource(R.string.change_password)) }
             }
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
         }

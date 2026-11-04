@@ -74,4 +74,41 @@ class ScreenshotTest {
             mock.stop()
         }
     }
+
+    /** AC3 on the phone (accessibility_touch.md, rule 5): the main screens with the text at 200 %, to look at. */
+    @Test
+    fun `main screens with the text at 200 percent`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val settings = AppSettings(context)
+        val work = File(context.cacheDir, "engine")
+        val slice = net.tisma.app.engine.SliceViewModel(net.tisma.app.engine.EngineRunner(File(work, "none"), work), work,
+            saved = settings, loadLayout = {
+                net.tisma.app.engine.SettingsLayout.parse(File("src/main/assets/settings/layout_es.json").readText())
+            })
+        val vm = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test", pollMs = 5)
+        val printersModel = PrintersViewModel(PrinterStore(context, MemorySecrets()))
+        val nav = Navigator()
+        compose.setContent {
+            val d = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(d.density, 2f)) {
+                TismaTheme { TismaApp(vm, printersModel, slice, settings, nav) }
+            }
+        }
+        val dir = File("build/screenshots").apply { mkdirs() }
+        listOf<Pair<String, () -> Unit>>(
+            "plate" to { nav.select(Section.PLATE) },
+            "print" to { nav.select(Section.PRINT) },
+            "print_quality" to { nav.select(Section.PRINT); nav.open(Screen.SettingsSection("print", "quality")) },
+            "more" to { nav.select(Section.MORE) },
+            "printer" to { nav.select(Section.PRINTER) },
+        ).forEach { (name, go) ->
+            compose.runOnIdle { go() }
+            compose.waitForIdle()
+            val view = compose.activity.window.decorView
+            val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+            compose.runOnIdle { view.draw(android.graphics.Canvas(bmp)) }
+            File(dir, "text200_$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+    }
 }

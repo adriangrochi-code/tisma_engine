@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -114,7 +115,7 @@ fun ProfilePickerScreen(state: SliceState, slice: SliceViewModel, nav: Navigator
                 }
             }
             Button(onClick = { slice.setProfile(EngineRunner.ProfileChoice(chosen.name, nozzle, filament)); nav.back() },
-                modifier = Modifier.fillMaxWidth().height(56.dp).testTag("profile_save")) {
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("profile_save")) {
                 Text(stringResource(R.string.pref_save))
             }
         }

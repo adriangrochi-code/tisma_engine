@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
@@ -217,15 +218,15 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
         when (s?.state) {
             PrinterState.PRINTING -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { printers.pause(id) }, enabled = !state.busy,
-                    modifier = Modifier.weight(1f).height(56.dp).testTag("printer_pause")) { Text(stringResource(R.string.printer_pause)) }
+                    modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag("printer_pause")) { Text(stringResource(R.string.printer_pause)) }
                 OutlinedButton(onClick = { confirmCancel = true }, enabled = !state.busy,
-                    modifier = Modifier.weight(1f).height(56.dp).testTag("printer_cancel")) { Text(stringResource(R.string.printer_cancel)) }
+                    modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag("printer_cancel")) { Text(stringResource(R.string.printer_cancel)) }
             }
             PrinterState.PAUSED -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { printers.resume(id) }, enabled = !state.busy,
-                    modifier = Modifier.weight(1f).height(56.dp).testTag("printer_resume")) { Text(stringResource(R.string.printer_resume)) }
+                    modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag("printer_resume")) { Text(stringResource(R.string.printer_resume)) }
                 OutlinedButton(onClick = { confirmCancel = true }, enabled = !state.busy,
-                    modifier = Modifier.weight(1f).height(56.dp).testTag("printer_cancel")) { Text(stringResource(R.string.printer_cancel)) }
+                    modifier = Modifier.weight(1f).heightIn(min = 56.dp).testTag("printer_cancel")) { Text(stringResource(R.string.printer_cancel)) }
             }
             else -> Unit
         }
@@ -239,7 +240,7 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
             }
             Button(onClick = { pick.launch(arrayOf("*/*")) },
                 enabled = !state.uploading && s?.state != PrinterState.PRINTING && s?.state != PrinterState.PAUSED,
-                modifier = Modifier.fillMaxWidth().height(56.dp).testTag("printer_upload")) {
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("printer_upload")) {
                 Icon(painterResource(R.drawable.tisma_send), null)
                 Spacer(Modifier.size(8.dp))
                 Text(stringResource(if (state.uploading) R.string.sending else R.string.printer_upload))
@@ -413,7 +414,7 @@ fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersVi
                     key = ""
                 },
                 enabled = !state.busy && address.isNotBlank() && (kind !in setOf(PrinterKind.OCTOPRINT, PrinterKind.PRUSALINK, PrinterKind.BAMBU) || key.isNotBlank() || existing != null),
-                modifier = Modifier.fillMaxWidth().height(56.dp).testTag("printer_save"),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("printer_save"),
             ) { Text(stringResource(R.string.printer_test_save)) }
             if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             if (kind == PrinterKind.BAMBU) Text(stringResource(R.string.printer_bambu_hint), style = MaterialTheme.typography.bodySmall,

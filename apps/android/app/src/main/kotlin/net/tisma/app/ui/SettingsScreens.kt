@@ -270,7 +270,11 @@ private fun SettingRow(row: SettingsLayout.Row, state: SliceState, slice: SliceV
         }
         Editor(row, value) { slice.setValue(row.key, it) }
         if (row.help.isNotBlank()) {
-            Text(row.help, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
+            // Two lines with «…», the whole text with a tap: never cut silently (accessibility_touch.md, rule 5).
+            var all by remember(row.key) { mutableStateOf(false) }
+            Text(row.help, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = if (all) Int.MAX_VALUE else 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.clickable { all = !all }.testTag("help_${row.key}"))
         }
     }
 }
