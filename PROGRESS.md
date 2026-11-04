@@ -10842,3 +10842,11 @@ vuelta de perfilado.
   `THIRD_PARTY.md` quedó en medio de la tabla de bibliotecas y cortó nanosvg, cpp-httplib y OpenSSL. Se movió debajo de
   la tabla (`4176d0a`); Windows en verde.
 
+**Sigue (paquete de perfiles, lo que falta en el escritorio):**
+- Regla 14: dibujar `bed_model` (STL) y `bed_texture` (SVG o PNG) del modelo del paquete en la vista 3D, en las
+  coordenadas de la cama, en OpenGL y en Vulkan. El SVG se rasteriza con nanosvg (ya en `THIRD_PARTY.md`). Para PNG
+  no hay lector en el motor: elegir uno permisivo y anotarlo antes de usarlo, o leer solo SVG y dejar PNG anotado.
+  La app de Android ya lo hace.
+- PK1/PK2 en el primer arranque (asistente con el paquete) y la regla 15 (licencia y origen en el panel del perfil,
+  no solo en el catálogo): revisar contra la ficha.
+
