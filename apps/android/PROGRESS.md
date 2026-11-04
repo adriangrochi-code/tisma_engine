@@ -63,6 +63,14 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   gira, dos mueven, pellizcar acerca, doble toque acerca; vistas 3D, arriba, frente, izquierda, derecha, atrás y
   «Encuadrar». Sin verlo en un teléfono (no hay emulador acá): probar que dibuje y que los gestos respondan.
 
+- **2026-11-04 — Créditos y fuentes** (`credits.md`): Más › Créditos y fuentes, con las funciones «Basado en» de
+  `resources/credits.json` (los mismos datos del escritorio) y las bibliotecas del APK con su aviso (las del motor y
+  las de la app, `credits_android.json`); una prueba exige un crédito para cada biblioteca que llega al APK.
+- **Reglas nuevas (04-11-2026):** la app puede leer todo el código propio de Tisma (nunca PrusaSlicer ni Cura);
+  preguntas de la API del servidor también a la sesión del servidor (session_01QadJfL79pTm8Ks4houx1oK). La sesión
+  de escritorio aceptó `settings-layout` (en curso), el servicio local compatible con Moonraker (necesita ficha: la
+  lista de pedidos se mandó al equipo de fichas) y las notas de comportamiento (mandadas).
+
 ## Abierto
 
 - **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS: necesita una biblioteca MQTT o una propia; decidir), PrusaLink,

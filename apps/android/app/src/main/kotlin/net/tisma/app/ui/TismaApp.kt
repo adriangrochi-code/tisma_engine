@@ -80,6 +80,7 @@ sealed interface Screen {
     data object Preferences : Screen
     data class Preview(val path: String) : Screen
     data object ProfilePicker : Screen
+    data object Credits : Screen
     data class AddPrinter(val editId: String?, val found: net.tisma.printers.FoundPrinter? = null) : Screen
     data class PrinterDetail(val id: String) : Screen
 }
@@ -233,6 +234,7 @@ fun TismaApp(
                     is Screen.PrinterDetail -> PrinterDetailScreen(top.id, printerState, printers, nav)
                     is Screen.Preview -> PreviewScreen(top.path)
                     Screen.ProfilePicker -> ProfilePickerScreen(sliceState, slice, nav)
+                    Screen.Credits -> CreditsScreen()
                 }
             }
         }
@@ -251,6 +253,7 @@ private fun titleOf(s: Screen): Int = when (s) {
     is Screen.PrinterDetail -> R.string.section_printer
     is Screen.Preview -> R.string.preview_title
     Screen.ProfilePicker -> R.string.section_printer
+    Screen.Credits -> R.string.more_credits
 }
 
 @Composable
@@ -294,6 +297,7 @@ private fun MoreHome(signedIn: Boolean, email: String?, nav: Navigator) {
         MoreItem(R.string.more_report, null, "more_report") { nav.open(Screen.Report) }
         if (signedIn) MoreItem(R.string.more_my_reports, null, "more_my_reports") { nav.open(Screen.MyReports) }
         MoreItem(R.string.more_preferences, null, "more_preferences") { nav.open(Screen.Preferences) }
+        MoreItem(R.string.more_credits, null, "more_credits") { nav.open(Screen.Credits) }
     }
 }
 

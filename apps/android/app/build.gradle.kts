@@ -97,7 +97,15 @@ val copyCatalog = tasks.register<Copy>("copyCatalog") {
     from(File(repoRoot, "resources/catalog")) { include("printers.json", "filaments.json") }
     into(catalogAssets.map { it.dir("catalog") })
 }
-tasks.named("preBuild") { dependsOn(copyCatalog) }
+// The credits and license notices (docs/spec/features/credits.md): the engine's, the same as the
+// desktop's, and the app's own.
+val copyCredits = tasks.register<Copy>("copyCredits") {
+    from(File(repoRoot, "resources")) { include("credits.json", "licenses/**") }
+    from(rootProject.file("credits_android.json"))
+    from(rootProject.file("licenses")) { into("licenses") }
+    into(catalogAssets.map { it.dir("credits") })
+}
+tasks.named("preBuild") { dependsOn(copyCatalog, copyCredits) }
 
 if (buildEngine) {
     tasks.named("preBuild") { dependsOn(engineTasks) }

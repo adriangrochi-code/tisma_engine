@@ -1,0 +1,14 @@
+{
+  "format": "tisma-credits-android",
+  "version": 1,
+  "about": "What the Android app carries besides the engine's credits (resources/credits.json): its own libraries, with their notices (docs/spec/features/credits.md, rule 4). The engine's libraries in the APK are named in engine_libraries. A test checks every library of gradle/libs.versions.toml that reaches the APK is here.",
+  "engine_libraries": ["Clipper2", "nlohmann/json", "Boost.Polygon", "Boost.Config", "oneTBB"],
+  "libraries": [
+    {"name": "Kotlin standard library", "gradle": ["org.jetbrains.kotlin:kotlin-stdlib"], "version": "2.2.21", "license": "Apache-2.0", "url": "https://kotlinlang.org", "notices": ["apache-2.0.txt"]},
+    {"name": "kotlinx.coroutines", "gradle": ["org.jetbrains.kotlinx:kotlinx-coroutines-core", "org.jetbrains.kotlinx:kotlinx-coroutines-android"], "version": "1.10.2", "license": "Apache-2.0", "url": "https://github.com/Kotlin/kotlinx.coroutines", "notices": ["apache-2.0.txt"]},
+    {"name": "kotlinx.serialization", "gradle": ["org.jetbrains.kotlinx:kotlinx-serialization-json"], "version": "1.9.0", "license": "Apache-2.0", "url": "https://github.com/Kotlin/kotlinx.serialization", "notices": ["apache-2.0.txt"]},
+    {"name": "AndroidX (Core, Activity, Lifecycle)", "gradle": ["androidx.core:core-ktx", "androidx.activity:activity-compose", "androidx.lifecycle:lifecycle-viewmodel-compose", "androidx.lifecycle:lifecycle-runtime-compose"], "version": "1.17.0, 1.11.0, 2.9.4", "license": "Apache-2.0", "url": "https://developer.android.com/jetpack/androidx", "notices": ["apache-2.0.txt"]},
+    {"name": "Jetpack Compose (UI, Foundation, Material 3)", "gradle": ["androidx.compose:compose-bom", "androidx.compose.ui:ui", "androidx.compose.material3:material3"], "version": "BOM 2025.10.01", "license": "Apache-2.0", "url": "https://developer.android.com/jetpack/compose", "notices": ["apache-2.0.txt"]},
+    {"name": "libc++ (Android NDK)", "gradle": [], "version": "NDK r29", "license": "Apache-2.0 WITH LLVM-exception", "url": "https://libcxx.llvm.org", "notices": ["llvm-libcxx.txt"]}
+  ]
+}

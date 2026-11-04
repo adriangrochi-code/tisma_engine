@@ -70,7 +70,10 @@ de los mismos datos.
 (`lib/<abi>/libtisma_engine.so`), y con él las bibliotecas del motor de la tabla de arriba que enlaza `tisma_core`:
 oneTBB, Clipper2, nlohmann/json y Boost.Polygon con Boost.Config, en las mismas versiones. Sin GPU (`TISMA_GPU=OFF`), sin
 interfaz y sin OpenSSL. La biblioteca de C++ es la `libc++` del NDK, enlazada estática (Apache-2.0 con la excepción
-LLVM). Al publicar la app, sus avisos van en Más › Créditos (`credits.md`), como en el escritorio.
+LLVM). Los avisos van en Más › Créditos y fuentes de la app (`credits.md`, regla 4): los del motor salen de
+`resources/credits.json` y `resources/licenses/`, los de la app de `apps/android/credits_android.json` y
+`apps/android/licenses/` (el texto de la licencia de libc++, Apache-2.0 con las excepciones de LLVM, del archivo
+`libcxx/LICENSE.TXT` de LLVM); una prueba de la app compara esos créditos con `gradle/libs.versions.toml`.
 
 ### Herramientas de prueba de la app (no entran al APK)
 

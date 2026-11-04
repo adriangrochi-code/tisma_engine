@@ -153,6 +153,14 @@ class CloudScreensTest {
     }
 
     @Test
+    fun `credits list the engine's and the app's libraries`() {
+        compose.onNodeWithTag("section_more").performClick()
+        compose.onNodeWithTag("more_credits").performScrollTo().performClick()
+        waitFor("lib_oneTBB")
+        waitFor("lib_kotlinx.coroutines")
+    }
+
+    @Test
     fun `a report without the title says what is missing and sends nothing`() {
         compose.onNodeWithTag("section_more").performClick()
         compose.onNodeWithTag("more_report").performClick()
