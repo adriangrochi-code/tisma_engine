@@ -356,4 +356,11 @@
     <string name="printer_calibration">Calibration</string>
     <string name="printer_calibration_later">The state of each calibration comes with the calibration tests on the phone.</string>
     <string name="printer_notes">Notes</string>
+    <string name="eng_lightest">Lightest infill</string>
+    <string name="summary_lightest_density">Lightest infill that holds</string>
+    <string name="summary_found">Found</string>
+    <string name="summary_solid">Analyzed solid (Fast quality): the infill does not count</string>
+    <string name="summary_analyses">Analyses run</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
 </resources>

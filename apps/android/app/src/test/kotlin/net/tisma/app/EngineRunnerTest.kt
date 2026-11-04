@@ -157,6 +157,26 @@ class EngineRunnerTest {
     }
 
     @Test
+    fun `rule 13 the lightest infill runs the lightest-infill mode without zones`() {
+        val engine = tmp.newFile("args_engine.sh").apply {
+            writeText("#!/bin/sh\n" + """
+                all="${'$'}*"; out=""; summary=""
+                while [ ${'$'}# -gt 0 ]; do
+                  case "${'$'}1" in -o) out="${'$'}2"; shift ;; --summary) summary="${'$'}2"; shift ;; esac
+                  shift
+                done
+                echo "{}" > "${'$'}out"
+                echo "{\"mode\": \"lightest-infill\", \"found\": true, \"density\": 15, \"args\": \"${'$'}all\"}" > "${'$'}summary"
+            """.trimIndent())
+            setExecutable(true)
+        }
+        val r = EngineRunner(engine, tmp.newFolder("work")).lightestInfill(project(), 1, "fast", {}, { false })
+        val args = r.summary["args"].toString()
+        assertTrue("--mode lightest-infill --no-zones --object 1" in args, args)
+        assertEquals("15", r.summary["density"].toString())
+    }
+
+    @Test
     fun `MA9 the triangles of an STL and a 3MF are counted for the memory estimate`() {
         val root = File(System.getProperty("user.dir")).parentFile.parentFile.parentFile
         val cube = File(root, "tests/data/cube_ascii.stl")

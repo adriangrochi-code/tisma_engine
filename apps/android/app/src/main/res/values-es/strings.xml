@@ -340,4 +340,11 @@
     <string name="printer_calibration">Calibración</string>
     <string name="printer_calibration_later">El estado de cada calibración llega con las pruebas de calibración en el teléfono.</string>
     <string name="printer_notes">Notas</string>
+    <string name="eng_lightest">Relleno mínimo</string>
+    <string name="summary_lightest_density">Relleno más liviano que aguanta</string>
+    <string name="summary_found">Encontrado</string>
+    <string name="summary_solid">Analizada sólida (calidad Rápida): el relleno no cuenta</string>
+    <string name="summary_analyses">Análisis corridos</string>
+    <string name="yes">Sí</string>
+    <string name="no">No</string>
 </resources>

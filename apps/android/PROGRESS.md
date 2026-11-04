@@ -25,6 +25,12 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Relleno mínimo en el teléfono (regla 13):** botón «Relleno mínimo» en Ingeniería, que corre
+  `analyze --mode lightest-infill --no-zones` (motor faf85b6) y muestra el relleno encontrado, la seguridad y los
+  análisis. Probado con un motor falso; no con el real, porque aquí no hay un proyecto con condiciones. Falta
+  «aplicarlo al laminado»: `slice <proyecto>` usa los ajustes del proyecto y `--config` los reemplaza enteros, así que
+  se pidió al motor una forma de cambiar una clave encima del proyecto.
+
 - **2026-11-04 — Impresión y Material (regla 7, MA12):** las pestañas salen del panel del escritorio
   (`tisma --settings-layout`, motor 63dee4f), guardado como `assets/settings/layout_{en,es}.json` por
   `tools/settings_layout.sh` (hay que volver a correrlo con un `tisma` de la máquina cuando cambia el panel; el CI no

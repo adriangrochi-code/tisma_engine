@@ -144,6 +144,11 @@ fun Context.readableSummary(lines: List<Pair<String, String>>): List<Pair<String
             "cd_low", "cd_high" -> null
             "reynolds" -> getString(R.string.summary_reynolds) to (num(v)?.let { fmt("%.0f", it) } ?: v)
             "reynolds_simulated" -> null
+            "density" -> getString(R.string.summary_lightest_density) to (num(v)?.let { fmt("%.0f %%", it) } ?: v)
+            "found" -> getString(R.string.summary_found) to getString(if (v == "true") R.string.yes else R.string.no)
+            "solid" -> if (v == "true") getString(R.string.summary_solid) to "" else null
+            "analyses" -> getString(R.string.summary_analyses) to v
+            "mode" -> null
             "required_safety" -> getString(R.string.summary_required_safety) to (num(v)?.let { fmt("%.2f", it) } ?: v)
             else -> k to v
         }

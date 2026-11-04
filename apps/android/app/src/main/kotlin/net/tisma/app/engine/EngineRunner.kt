@@ -122,6 +122,20 @@ class EngineRunner(private val executable: File, private val workDir: File) {
         return Analysis(out, runTool(args, out, summary, onProgress, cancelled) ?: JsonObject(emptyMap()))
     }
 
+    /**
+     * The lowest infill that still holds (mobile_app.md, rule 13, «Relleno
+     * mínimo»; cloud.md, rule 6, `lightest-infill`), without zones: the phone
+     * can apply one density, not the zones' modifiers.
+     */
+    fun lightestInfill(project: File, objectIndex: Int, quality: String?, onProgress: (Int) -> Unit, cancelled: () -> Boolean): Analysis {
+        val out = File(workDir, "result.tea")
+        val summary = File(workDir, "summary.json")
+        val args = mutableListOf("analyze", project.path, "-o", out.path, "--summary", summary.path, "--sandbox",
+            "--mode", "lightest-infill", "--no-zones", "--object", objectIndex.toString(), "--instance", "0", "--no-gpu")
+        quality?.let { args += listOf("--quality", it) }
+        return Analysis(out, runTool(args, out, summary, onProgress, cancelled) ?: JsonObject(emptyMap()))
+    }
+
     /** The air's drag on the part (cloud.md, rule 19b; aerodynamics.md): `aero`. */
     fun aero(project: File, objectIndex: Int, quality: String, speed: Double, direction: String,
              onProgress: (Int) -> Unit, cancelled: () -> Boolean): Analysis {

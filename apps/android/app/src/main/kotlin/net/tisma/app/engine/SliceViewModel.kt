@@ -262,7 +262,7 @@ class SliceViewModel(
     }
 
     /** What Engineering runs on the phone. */
-    enum class Study { STRUCTURE, AERO }
+    enum class Study { STRUCTURE, LIGHTEST, AERO }
 
     /** Runs an analysis of the open 3MF project with the engine (its conditions come from the desktop). */
     fun analyze(study: Study, objectIndex: Int, quality: String?, speed: Double = 10.0, direction: String = "x") {
@@ -276,6 +276,7 @@ class SliceViewModel(
                     val onProgress = { p: Int -> _state.update { it.copy(progress = p) } }
                     when (study) {
                         Study.STRUCTURE -> runner.analyze(m, objectIndex, quality, onProgress) { cancel.get() }
+                        Study.LIGHTEST -> runner.lightestInfill(m, objectIndex, quality, onProgress) { cancel.get() }
                         Study.AERO -> runner.aero(m, objectIndex, quality ?: "fast", speed, direction, onProgress) { cancel.get() }
                     }
                 }

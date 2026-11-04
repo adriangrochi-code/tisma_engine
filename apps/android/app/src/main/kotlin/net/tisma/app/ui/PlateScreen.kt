@@ -230,6 +230,10 @@ private fun EngineeringCard(state: SliceState, slice: SliceViewModel) {
                 Text(stringResource(R.string.kind_aero))
             }
         }
+        OutlinedButton(onClick = { slice.analyze(SliceViewModel.Study.LIGHTEST, objectIndex.toIntOrNull() ?: 0, quality) },
+            enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("eng_lightest")) {
+            Text(stringResource(R.string.eng_lightest))
+        }
         if (state.analyzing) {
             LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth())
             OutlinedButton(onClick = { slice.cancel() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
