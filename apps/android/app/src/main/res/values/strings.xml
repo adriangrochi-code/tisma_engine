@@ -430,4 +430,5 @@
     <string name="help_surfaces">Bed surfaces</string>
     <string name="help_why">Why</string>
     <string name="help_result">Result</string>
+    <string name="pack_default_filament">The printer\'s default filament</string>
 </resources>

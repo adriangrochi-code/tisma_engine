@@ -61,6 +61,39 @@ class ProfilePack(
 
     val installed: Boolean get() = File(dataDir, "pack/index.json").isFile
 
+    /** A filament of the installed pack: the path the engine takes with `--filament`, and what the person reads. */
+    data class Filament(val path: String, val name: String, val vendor: String, val generic: Boolean)
+
+    /**
+     * The installed pack's filaments for [printer] (`<file>#<variant>`), as
+     * profile_pack.md, rule 12, says: only those whose `compatible.json` set
+     * holds the printer (none: every printer), the printer's vendor's first,
+     * then the generic ones, then the rest.
+     */
+    fun filamentsFor(printer: String): List<Filament> {
+        val pack = File(dataDir, "pack")
+        val index = runCatching { Json.parseToJsonElement(File(pack, "index.json").readText()) as JsonObject }.getOrNull() ?: return emptyList()
+        val number = (index["printers"] as? JsonArray)?.indexOfFirst { (it as? JsonPrimitive)?.contentOrNull == printer } ?: -1
+        val sets = runCatching {
+            ((Json.parseToJsonElement(File(pack, "compatible.json").readText()) as JsonObject)["sets"] as JsonArray).map { set ->
+                (set as JsonArray).mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toIntOrNull() }.toSet()
+            }
+        }.getOrDefault(emptyList())
+        val printerVendor = printer.removePrefix("vendors/").substringBefore('/')
+        val out = ArrayList<Filament>()
+        File(pack, "vendors").listFiles()?.sortedBy { it.name }?.forEach { v ->
+            File(v, "filaments").listFiles()?.filter { it.extension == "json" }?.sortedBy { it.name }?.forEach { f ->
+                val o = runCatching { Json.parseToJsonElement(f.readText()) as JsonObject }.getOrNull() ?: return@forEach
+                if ((o["technology"] as? JsonPrimitive)?.contentOrNull.let { it != null && it != "fff" }) return@forEach
+                val set = (o["compatible"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
+                if (set != null && (number < 0 || sets.getOrNull(set)?.contains(number) != true)) return@forEach
+                val generic = (o["generic"] as? JsonPrimitive)?.contentOrNull == "true"
+                out += Filament("vendors/${v.name}/filaments/${f.name}", f.nameWithoutExtension.replace('_', ' '), v.name, generic)
+            }
+        }
+        return out.sortedBy { if (it.vendor == printerVendor && !it.generic) 0 else if (it.generic) 1 else 2 }
+    }
+
     private fun readIndex(f: File): Index? {
         if (!f.isFile) return null
         val o = runCatching { Json.parseToJsonElement(f.readText()) as JsonObject }.getOrNull() ?: return null

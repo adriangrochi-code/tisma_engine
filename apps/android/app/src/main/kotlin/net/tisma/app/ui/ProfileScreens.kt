@@ -43,7 +43,8 @@ fun PrinterCard(state: SliceState, onClick: () -> Unit) {
             Column(Modifier.weight(1f)) {
                 Text(p?.let { it.name ?: it.printer } ?: stringResource(R.string.profile_none), style = MaterialTheme.typography.titleMedium)
                 Text(if (p == null) stringResource(R.string.profile_none_hint)
-                    else String.format(Locale.getDefault(), "%.2f mm", p.nozzle) + " · " + (p.filament ?: stringResource(R.string.profile_generic_filament)),
+                    else String.format(Locale.getDefault(), "%.2f mm", p.nozzle) + " · " + (p.filament?.let { f -> if (p.pack) f.substringAfterLast('/').removeSuffix(".json").replace('_', ' ') else f }
+                        ?: stringResource(if (p.pack) R.string.pack_default_filament else R.string.profile_generic_filament)),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -54,6 +55,11 @@ fun PrinterCard(state: SliceState, onClick: () -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ProfilePickerScreen(state: SliceState, slice: SliceViewModel, nav: Navigator) {
+    val current = state.profile
+    if (current != null && current.pack) {
+        PackFilamentPicker(state, slice, nav, current)
+        return
+    }
     val catalog = state.catalog
     var query by rememberSaveable { mutableStateOf("") }
     var printer by rememberSaveable { mutableStateOf(state.profile?.printer) }
@@ -182,6 +188,31 @@ fun PackWizardScreen(state: SliceState, slice: SliceViewModel, nav: Navigator, o
             Button(onClick = { if (variant != null) slice.choosePackPrinter(vendor, model, variant) { onDone(); nav.back() } },
                 enabled = variant != null && !state.packBusy, modifier = Modifier.fillMaxWidth().testTag("pack_use")) {
                 Text(stringResource(R.string.pack_use))
+            }
+        }
+    }
+}
+
+/**
+ * A pack printer's filament (profile_pack.md, rules 12 and 13): the
+ * printer's default first, then the compatible ones, the printer's vendor's
+ * before the generic ones. Another printer is chosen in the wizard.
+ */
+@Composable
+private fun PackFilamentPicker(state: SliceState, slice: SliceViewModel, nav: Navigator, choice: EngineRunner.ProfileChoice) {
+    androidx.compose.runtime.LaunchedEffect(choice.printer) { slice.loadPackFilaments() }
+    Column(Modifier.fillMaxSize().padding(16.dp).testTag("pack_filaments"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(choice.name ?: choice.printer, style = MaterialTheme.typography.titleLarge)
+        AccentTextButton(onClick = { nav.replace(Screen.PackWizard) }) { Text(stringResource(R.string.profile_change_printer)) }
+        Text(stringResource(R.string.profile_filament), style = MaterialTheme.typography.labelLarge)
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            item {
+                FilterChip(selected = choice.filament == null, onClick = { slice.setProfile(choice.copy(filament = null)); nav.back() },
+                    label = { Text(stringResource(R.string.pack_default_filament)) }, modifier = Modifier.testTag("pack_filament_default"))
+            }
+            items(state.packFilaments, key = { it.path }) { f ->
+                FilterChip(selected = choice.filament == f.path, onClick = { slice.setProfile(choice.copy(filament = f.path)); nav.back() },
+                    label = { Text(f.name) }, modifier = Modifier.testTag("pack_filament_" + f.name))
             }
         }
     }

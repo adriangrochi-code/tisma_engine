@@ -111,6 +111,7 @@ class EngineRunner(
         val args = if (choice.pack && packDir != null) {
             // The pack's variant with its own default filament and print profile (docs/CATALOG.md).
             mutableListOf(executable.path, "profile", "--pack", packDir.path, "--printer", choice.printer, "-o", out.path)
+                .also { a -> choice.filament?.let { a += listOf("--filament", it) } }
         } else mutableListOf(executable.path, "profile", "--printer", choice.printer,
             "--nozzle", choice.nozzle.toString(), "-o", out.path).also { a -> choice.filament?.let { a += listOf("--filament", it) } }
         return runCatching {

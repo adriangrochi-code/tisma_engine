@@ -46,6 +46,7 @@ data class SliceState(
     /** The profile pack for the wizard: its index, a download running, its progress, and what failed. */
     val packAvailable: Boolean = false,
     val packIndex: ProfilePack.Index? = null,
+    val packFilaments: List<ProfilePack.Filament> = emptyList(),
     val packBusy: Boolean = false,
     val packProgress: Int = 0,
     val packError: String? = null,
@@ -318,6 +319,16 @@ class SliceViewModel(
                 s.copy(packBusy = false, packIndex = r.getOrNull() ?: s.packIndex,
                     packError = r.exceptionOrNull()?.let { it.message ?: "error" }?.takeIf { s.packIndex == null || r.isFailure })
             }
+        }
+    }
+
+    /** The pack's filaments for the chosen pack printer (rule 12), read off the main thread into the state. */
+    fun loadPackFilaments() {
+        val p = pack ?: return
+        val choice = _state.value.profile?.takeIf { it.pack } ?: return
+        viewModelScope.launch {
+            val list = withContext(io) { runCatching { p.filamentsFor(choice.printer) }.getOrDefault(emptyList()) }
+            _state.update { it.copy(packFilaments = list) }
         }
     }
 

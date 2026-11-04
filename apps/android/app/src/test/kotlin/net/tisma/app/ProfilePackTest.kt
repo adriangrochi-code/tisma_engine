@@ -69,6 +69,22 @@ class ProfilePackTest {
         }
     }
 
+    @Test
+    fun `rule 12 a printer gets only its compatible filaments, its vendor's before the generic ones`() {
+        val data = tmp.newFolder("fil")
+        val pack = File(data, "pack").apply { mkdirs() }
+        File(pack, "index.json").writeText("""{"printers":["vendors/Acme/models/One.json#0.4","vendors/Other/models/Two.json#0.4"]}""")
+        File(pack, "compatible.json").writeText("""{"format":"tisma-pack-compatible","version":2,"sets":[[0],[1],[0,1]]}""")
+        fun entry(vendor: String, name: String, set: Int?, generic: Boolean) = File(pack, "vendors/$vendor/filaments").apply { mkdirs() }
+            .resolve("$name.json").writeText("""{"format":"tisma-pack-entry","technology":"fff","compatible":${set ?: "null"},"generic":$generic}""")
+        entry("Acme", "Acme_PLA", 0, false)
+        entry("Acme", "Acme_Only_Two", 1, false)
+        entry("Other", "Generic_PETG", 2, true)
+        entry("Other", "Any_TPU", null, false)
+        val names = ProfilePack(File("none"), data).filamentsFor("vendors/Acme/models/One.json#0.4").map { it.name }
+        assertEquals(listOf("Acme PLA", "Generic PETG", "Any TPU"), names)
+    }
+
     /**
      * With the real engine (TISMA_HOST_ENGINE) and the pack's files downloaded
      * once into TISMA_PACK_FILES (index.json, compatible.json, the archives),
@@ -88,6 +104,10 @@ class ProfilePackTest {
             println("pack $v")
             val printers = pack.printers()
             assertTrue(printers.any { it.name == "AnkerMake M5" }, printers.toString())
+            // Rule 12: the M5's filaments, Anker's first.
+            val fil = pack.filamentsFor("vendors/Anker/models/AnkerMake_M5.json#0.4")
+            println("filaments ${fil.map { it.name }}")
+            assertTrue(fil.isNotEmpty() && fil.first().vendor == "Anker", fil.toString())
             // The offline help comes with it (rule 16).
             val k = net.tisma.app.engine.Knowledge.read(File(data, "pack/knowledge"))
             println("knowledge ${k.problems.size} problems, ${k.procedures.size} procedures, ${k.glossary.size} terms, " +

@@ -52,8 +52,10 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
   - Probado con el motor de la máquina y los archivos reales servidos aquí (Anker: índice, plan, instalación,
     lista). Encontrado: el perfil de la AnkerMake M5 del paquete no lamina (`{layer_count}` desconocido en el G-code
     de inicio); avisado al motor.
-  - Falta: filamentos del paquete (`compatible.json`; hoy se usa el filamento por defecto de la variante), la ayuda
-    sin conexión con `knowledge` (regla 16), y las imágenes de la cama.
+  - Filamentos del paquete (reglas 12 y 13): con una impresora del paquete, la tarjeta de la impresora ofrece el
+    filamento de fábrica y los compatibles según `compatible.json`, primero los del fabricante de la impresora y
+    después los genéricos. Van al motor con `profile --pack … --filament <ruta>`.
+  - Falta: las imágenes de la cama (regla 14).
 
 - **2026-11-04 — Ingeniería en un modelo suelto (regla 13, MA6):**
   - En la Placa, con un STL u OBJ, se elige qué marca un toque (fijas, carga, o solo girar). Al tocar la pieza se marca

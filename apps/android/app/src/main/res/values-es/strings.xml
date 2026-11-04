@@ -414,4 +414,5 @@
     <string name="help_surfaces">Superficies de cama</string>
     <string name="help_why">Para qué</string>
     <string name="help_result">Resultado</string>
+    <string name="pack_default_filament">El filamento de fábrica de la impresora</string>
 </resources>
