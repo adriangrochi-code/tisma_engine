@@ -95,7 +95,7 @@ class PrinterConnectionTest {
         val c = OctoPrintConnection(o.url, "test-key", UrlConnectionHttp)
         c.upload("b.gcode", gcode.size.toLong(), start = false) { gcode.inputStream() }
         assertEquals(PrinterState.READY, c.status().state)
-        assertTrue("b.gcode" in o.files)
+        assertTrue(o.files.containsKey("b.gcode"))
     }
 
     @Test

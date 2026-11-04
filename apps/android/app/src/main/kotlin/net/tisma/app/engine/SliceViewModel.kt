@@ -192,6 +192,8 @@ class SliceViewModel(
 
     private fun bedOnBed(m: MeshFile, bed: FloatArray): MeshFile {
         val b = m.bounds
+        // Rule 14: a model much smaller than the bed is drawn anyway, and logged.
+        if (b[3] - b[0] < bed[0] / 2 || b[4] - b[1] < bed[1] / 2) AppLog.line("bed: the bed model is much smaller than machine.bed")
         val dx = bed[0] / 2 - (b[0] + b[3]) / 2
         val dy = bed[1] / 2 - (b[1] + b[4]) / 2
         // A little under the grid, so the lines stay seen on its top.

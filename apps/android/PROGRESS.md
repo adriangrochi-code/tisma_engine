@@ -91,9 +91,11 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
   - Cama del paquete (regla 14, 04-11-2026): con una impresora del paquete, la vista 3D dibuja su modelo de cama
     (STL, en gris) y su imagen (SVG con AndroidSVG, o PNG) sobre la cama. La cama toma el tamaño de `machine.bed` del
     perfil.
-    - **Decisión, preguntada a fichas:** los STL del paquete vienen centrados en su origen (la M5 va de −127,5 a
-      127,5 en X; su cama es de 0 a 235). La app conserva la altura del STL y centra su planta en la cama. La imagen
-      cubre la planta del modelo de cama, o la cama si no hay modelo.
+    - Respuesta de fichas (spec/next beeb817, regla 14):
+      - el centro de la planta del STL va al centro de `machine.bed`, con la cara de arriba a la altura 0;
+      - la imagen llena el rectángulo de `machine.bed`, con su proporción y centrada;
+      - un modelo de menos de la mitad de la cama se dibuja igual y se anota en el registro.
+      La app ya hace todo eso.
     - Probado con archivos propios y con las dos imágenes reales de Anker; el dibujo no se vio en un teléfono.
 
 - **2026-11-04 — Ingeniería en un modelo suelto (regla 13, MA6):**

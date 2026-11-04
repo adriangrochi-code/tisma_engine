@@ -521,18 +521,17 @@ fun Plate3D(
         holder[0]?.requestRender()
         onDispose { }
     }
-    DisposableEffect(bedModel, bed[0], bed[1]) {
+    DisposableEffect(bedModel) {
         renderer.bedModel = bedModel
-        // The picture covers the bed model's plan, or the bed when there is no model (asked to the spec team).
-        renderer.textureRect = bedModel?.bounds?.let { floatArrayOf(it[0], it[1], it[3], it[4]) }
-            ?: floatArrayOf(0f, 0f, bed[0], bed[1])
+        renderer.textureRect = floatArrayOf(0f, 0f, bed[0], bed[1])
         holder[0]?.requestRender()
         onDispose { }
     }
-    androidx.compose.runtime.LaunchedEffect(bedTexture) {
-        renderer.texture = bedTexture?.let { f ->
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { BedTexture.load(f) }
-        }
+    androidx.compose.runtime.LaunchedEffect(bedTexture, bed[0], bed[1]) {
+        val bmp = bedTexture?.let { f -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { BedTexture.load(f) } }
+        // profile_pack.md, rule 14: the picture fills the rectangle of machine.bed keeping its proportion, centred.
+        renderer.textureRect = bmp?.let { fitRect(it.width.toFloat() / it.height, bed) } ?: floatArrayOf(0f, 0f, bed[0], bed[1])
+        renderer.texture = bmp
         holder[0]?.requestRender()
     }
     DisposableEffect(marks) {
@@ -635,4 +634,12 @@ fun Plate3D(
             }
         }
     }
+}
+
+/** The largest rectangle of [aspect] (width / height) inside the bed, centred on it: min x, min y, max x, max y. */
+internal fun fitRect(aspect: Float, bed: FloatArray): FloatArray {
+    var w = bed[0]; var h = w / aspect
+    if (h > bed[1]) { h = bed[1]; w = h * aspect }
+    val x0 = (bed[0] - w) / 2; val y0 = (bed[1] - h) / 2
+    return floatArrayOf(x0, y0, x0 + w, y0 + h)
 }

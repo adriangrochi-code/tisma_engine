@@ -54,9 +54,9 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
     var nozzle = 25.0
     var nozzleTarget = 0.0
     /** Files stored by FTPS, and the print commands received. */
-    val files = mutableMapOf<String, ByteArray>()
-    val commands = mutableListOf<JsonObject>()
-    private val clients = mutableListOf<OutputStream>()
+    val files = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+    val commands = java.util.concurrent.CopyOnWriteArrayList<JsonObject>()
+    private val clients = java.util.concurrent.CopyOnWriteArrayList<OutputStream>()
     @Volatile private var running = true
 
     fun start(): MockBambu {

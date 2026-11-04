@@ -34,16 +34,16 @@ abstract class SimulatedPrinter(private val port: Int, private val host: String)
     var nozzleTarget = 0.0
     var bed = 23.0
     var bedTarget = 0.0
-    val files = mutableMapOf<String, ByteArray>()
+    val files = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
     /** Every request: method and path, for the tests. */
-    val log = mutableListOf<Pair<String, String>>()
+    val log = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
     /** The G-code lines and commands the printer was given by hand (controls), for the tests. */
-    val commands = mutableListOf<String>()
+    val commands = java.util.concurrent.CopyOnWriteArrayList<String>()
     var position = doubleArrayOf(0.0, 0.0, 0.0)
     var homed = false
 
     /** Every key the printer was sent (to check it never goes elsewhere). */
-    val keysSeen = mutableListOf<String?>()
+    val keysSeen = java.util.concurrent.CopyOnWriteArrayList<String?>()
 
     protected val lock = Any()
     private var server: HttpServer? = null
@@ -206,7 +206,7 @@ class MockMoonraker(port: Int = 0, host: String = "127.0.0.1") : SimulatedPrinte
         }
         method == "POST" && path == "/printer/print/start" -> {
             val name = query["filename"] ?: throw error(400, "filename is required")
-            if (name !in files) throw error(404, "File not found")
+            if (!files.containsKey(name)) throw error(404, "File not found")
             startPrint(name); ok(JsonPrimitive("ok"))
         }
         method == "POST" && path == "/server/files/upload" -> {

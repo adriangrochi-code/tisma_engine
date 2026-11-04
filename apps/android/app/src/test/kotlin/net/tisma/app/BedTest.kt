@@ -46,6 +46,15 @@ class BedTest {
     }
 
     @Test
+    fun `rule 14 the picture fills machine bed keeping its proportion, centred`() {
+        val bed = floatArrayOf(235f, 235f)
+        val wide = net.tisma.app.ui.fitRect(2f, bed)
+        assertEquals(listOf(0f, 58.75f, 235f, 176.25f), wide.toList())
+        val tall = net.tisma.app.ui.fitRect(0.5f, floatArrayOf(300f, 200f))
+        assertEquals(listOf(100f, 0f, 200f, 200f), tall.toList())
+    }
+
+    @Test
     fun `rule 14 the bed model is centred on the bed and keeps its height`() {
         val context: Context = ApplicationProvider.getApplicationContext()
         val data = tmp.newFolder("profiles")
