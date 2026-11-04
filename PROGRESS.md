@@ -10475,3 +10475,19 @@ entre capas, `fea/adhesion`): pregunta de comportamiento para el equipo de ficha
 resistencias espera la ficha para PLA?).
 
 **Sigue:** esa respuesta; después «Orientación» en el panel Optimizar (recomendación y «Girar» la pieza con deshacer).
+
+## 2026-11-04 — regla 8: por qué la barra parada sale más fuerte (10:50 UTC)
+
+**Revisado (las tres comprobaciones del equipo de fichas):**
+1. El giro está bien: con capas en X, la flexión es σzz en el sistema de la capa y la rotura es «entre capas»; la
+   tensión en el plano de la capa es casi nula (0,3 MPa) y la de von Mises 11,3 MPa a 3 mm del empotramiento, la de
+   la viga (M c / I = 420 · 3 / 108 = 11,7 MPa).
+2. La esquina del empotramiento no decide el orden: lejos de ella (≥ 2 mm) los factores son Z 2,21 (a lo largo de
+   la línea), X 2,70 (entre capas), Y 2,58 (a lo largo de la línea).
+3. La adherencia solo toca Z: factor 0,993 a 205 °C.
+
+**Causa:** el material del caso es «Bambu Lab PLA Basic», que trae Z medida (31 MPa) contra XY 35 MPa; según
+`docs/MATERIALS.md` Zt toma la Z medida y solo usa 0,65 · Xt cuando falta, así que Zt = 30,8 ≈ Yt = 31 ≈ 0,88 · Xt.
+Con esa hoja la unión entre capas casi no es más débil, y la barra acostada carga más sus pieles finas (15,2 MPa
+contra 11,3 parada). El equipo de fichas lee la regla como 0,65 · Xt siempre: pregunta enviada; hasta su respuesta
+queda como está (decisión: seguir `docs/MATERIALS.md`).
