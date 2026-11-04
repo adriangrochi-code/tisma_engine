@@ -8,6 +8,8 @@
 #include "cad/process.hpp"
 #include "cad/sketch.hpp"
 #include "cad/solidcraft.hpp"
+#include "cad/sketch_io.hpp"
+#include "cad/view_dxf.hpp"
 #include "io/model.hpp"
 #include "mesh/shapes.hpp"
 
@@ -1136,3 +1138,62 @@ TEST_CASE("CD25: a stopped child whose own child keeps the pipes open does not h
     CHECK_FALSE(child.running());
 }
 #endif
+
+namespace {
+std::pair<double, double> view_lengths(const std::vector<cad::ViewLine>& lines) {
+    double shown = 0, hidden = 0;
+    for (const cad::ViewLine& l : lines)
+        (l.hidden ? hidden : shown) += std::hypot(l.x1 - l.x0, l.y1 - l.y0);
+    return {shown, hidden};
+}
+} // namespace
+
+TEST_CASE("view as DXF: a cube from the front and from a corner, hidden edges dashed or left out", "[cad]") {
+    const TriangleMesh cube = make_box(10, 10, 10);
+    cad::ViewDxfOptions front;
+    front.look = {0, 1, 0};
+    front.up = {0, 0, 1};
+    auto [shown, hidden] = view_lengths(cad::view_lines(cube, front));
+    CHECK_THAT(shown, Catch::Matchers::WithinAbs(40.0, 0.01)); // the front square
+    CHECK_THAT(hidden, Catch::Matchers::WithinAbs(40.0, 0.01)); // the back one, behind it
+
+    // From the corner (+,+,+): nine edges seen, the three at the far corner hidden.
+    cad::ViewDxfOptions corner;
+    corner.look = {-1, -1, -1};
+    corner.up = {0, 0, 1};
+    const double edge = 10.0 * std::sqrt(2.0 / 3.0);
+    std::tie(shown, hidden) = view_lengths(cad::view_lines(cube, corner));
+    CHECK_THAT(shown, Catch::Matchers::WithinRel(9 * edge, 0.02));
+    CHECK_THAT(hidden, Catch::Matchers::WithinRel(3 * edge, 0.05));
+
+    corner.hidden = false;
+    const std::vector<cad::ViewLine> seen = cad::view_lines(cube, corner);
+    CHECK(std::none_of(seen.begin(), seen.end(), [](const cad::ViewLine& l) { return l.hidden; }));
+
+    const std::string dxf = cad::write_view_dxf(cad::view_lines(cube, front));
+    CHECK_THAT(dxf, Catch::Matchers::ContainsSubstring("DASHED"));
+    CHECK_THAT(dxf, Catch::Matchers::ContainsSubstring("8\nHIDDEN\n"));
+    CHECK_THAT(dxf, Catch::Matchers::ContainsSubstring("8\nVISIBLE\n"));
+    // Our own reader takes it back as lines.
+    const cad::SketchImport back = cad::read_dxf(dxf);
+    REQUIRE(back.ok());
+    CHECK(back.entities.size() == cad::view_lines(cube, front).size());
+}
+
+TEST_CASE("view as DXF: a cylinder from above, its rim seen and the bottom one hidden, no facet lines", "[cad]") {
+    const TriangleMesh cylinder = make_cylinder(10, 20, 64);
+    cad::ViewDxfOptions top;
+    const double rim = 64 * 2 * 10 * std::sin(3.14159265358979323846 / 64);
+    auto [shown, hidden] = view_lengths(cad::view_lines(cylinder, top));
+    CHECK_THAT(shown, Catch::Matchers::WithinRel(rim, 0.01));
+    CHECK_THAT(hidden, Catch::Matchers::WithinRel(rim, 0.01));
+
+    // From the side: two silhouettes, the front halves of the rims seen, the
+    // back halves behind them.
+    cad::ViewDxfOptions side;
+    side.look = {0, 1, 0};
+    side.up = {0, 0, 1};
+    std::tie(shown, hidden) = view_lengths(cad::view_lines(cylinder, side));
+    CHECK_THAT(shown, Catch::Matchers::WithinRel(2 * 20.0 + 2 * 20.0, 0.02));
+    CHECK_THAT(hidden, Catch::Matchers::WithinRel(2 * 20.0, 0.02));
+}

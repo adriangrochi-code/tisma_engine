@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Vista como DXF** (`cad_design.md`, regla 20): en Diseño, «Vista como DXF» guarda las aristas de la vista actual
+  como líneas DXF, con las ocultas punteadas en su capa o sin ellas.
 - **Diseño más rápido** (`cad_design.md`, regla 20 bis): el componente de diseño queda abierto mientras se diseña y
   cada cambio se construye sin volver a arrancarlo. Se cierra tras 10 minutos sin uso; si se cae, se abre de nuevo con
   el diseño entero y avisa una vez.

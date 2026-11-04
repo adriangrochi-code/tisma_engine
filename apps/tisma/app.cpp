@@ -25,6 +25,7 @@
 #include "cad/solidcraft.hpp"
 #include "cad/sketch_edit.hpp"
 #include "cad/sketch_io.hpp"
+#include "cad/view_dxf.hpp"
 #include "aero/aero.hpp"
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
@@ -554,7 +555,8 @@ enum class Purpose {
     ImportView,
     ImportSketchDxf, // cad_design.md, rule 19 bis
     ImportSketchSvg,
-    ExportSketchDxf // rule 20
+    ExportSketchDxf, // rule 20
+    ExportViewDxf
 };
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
@@ -1104,6 +1106,7 @@ private:
     // minutes idle; only touched by the design job or when it is not running.
     std::shared_ptr<cad::SolidCraftSession> design_session_;
     bool design_restart_noted_ = false;
+    bool view_dxf_hidden_ = true; // «Vista como DXF»: hidden edges dashed
     Background<cad::SolidCraftInfo> solidcraft_job_;
     cad::SolidCraftInfo solidcraft_;
     bool solidcraft_probed_ = false;
@@ -12375,6 +12378,20 @@ void App::design_panel() {
             ImGui::EndTable();
         }
     }
+    // The view as DXF lines (rule 20, `file.export_view_dxf`).
+    ImGui::Spacing();
+    ImGui::BeginDisabled(design_mesh_.empty());
+    if (ImGui::SmallButton(tr(T::DesignViewDxf))) {
+        purpose_ = Purpose::ExportViewDxf;
+        browser_.open(FileBrowser::Mode::Save, tr(T::DesignViewDxf), {".dxf"}, last_folder_, "vista.dxf");
+    }
+    ImGui::EndDisabled();
+    rect_of("design_view_dxf");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(T::DesignViewDxfTip));
+    ImGui::SameLine();
+    ImGui::Checkbox(tr(T::DesignViewDxfHidden), &view_dxf_hidden_);
+    rect_of("design_view_dxf_hidden");
     ImGui::Spacing();
     loc::TextDisabled("%s", tr(T::DesignBasedOn));
     ImGui::PopTextWrapPos();
@@ -18256,6 +18273,21 @@ void App::dialogs() {
                 fail(T::CannotSave, utf8(chosen));
             else
                 notify(format(tr(T::SketchExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
+        case Purpose::ExportViewDxf: {
+            cad::ViewDxfOptions view;
+            const Vec3 look = camera_.forward(), up = camera_.up();
+            view.look = {look.x, look.y, look.z};
+            view.up = {up.x, up.y, up.z};
+            view.hidden = view_dxf_hidden_;
+            std::ofstream out(chosen, std::ios::binary);
+            out << cad::write_view_dxf(cad::view_lines(design_mesh_, view));
+            out.close();
+            if (!out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::DesignViewExported), utf8(chosen.filename()).c_str()));
             break;
         }
         case Purpose::LoadCase: load_case_file(chosen); break;

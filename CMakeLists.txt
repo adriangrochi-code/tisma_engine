@@ -261,6 +261,7 @@ add_library(tisma_core
   src/cad/sketch.cpp
   src/cad/sketch_edit.cpp
   src/cad/sketch_io.cpp
+  src/cad/view_dxf.cpp
   src/aero/lbm.cpp
   src/aero/aero.cpp
   src/cad/parameters.cpp

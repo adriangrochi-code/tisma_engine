@@ -1382,6 +1382,10 @@
     X(SketchImported, "Se trajeron %d curvas de %s", "Brought in %d curves from %s") \
     X(SketchCannotRead, "no se puede leer el archivo", "the file cannot be read") \
     X(SketchImportFailed, "No se pudo traer el dibujo", "The drawing could not be brought in") \
+    X(DesignViewDxf, "Vista como DXF", "View as DXF") \
+    X(DesignViewDxfHidden, "Ocultas punteadas", "Hidden dashed") \
+    X(DesignViewDxfTip, "Guarda las aristas de la vista actual como líneas DXF.", "Saves the current view's edges as DXF lines.") \
+    X(DesignViewExported, "Vista exportada: %s", "View exported: %s") \
     X(SketchExported, "Boceto exportado: %s", "Sketch exported: %s") \
     X(SketchFinish, "Terminar boceto", "Finish sketch") \
     X(SketchDof, "Grados de libertad: %d", "Degrees of freedom: %d") \

@@ -10125,6 +10125,25 @@ en `ui_script_design_sketch_edit`; el selector de archivos no se prueba desde el
 el proceso muere, la siguiente construcción lo reabre (`restarts == 1`); el cierre por inactividad. Pasan las pruebas
 de diseño de la interfaz. **Sin probar** con el `solidcraft-cli` real (no está en este entorno).
 
-**Falta de D5b:** la vista como DXF de líneas (`file.export_view_dxf`).
+**Arreglo (7c6229b):** parar la sesión ya no se cuelga si el componente dejó procesos propios con las tuberías
+abiertas (lectores con `poll` en POSIX y `CancelSynchronousIo` en Windows). Prueba con `sh` que deja un `sleep`.
 
-**Sigue:** `file.export_view_dxf`, después el orden de PLAN.md.
+## 2026-11-04 — Diseño D5b: la vista como DXF (`file.export_view_dxf`)
+
+**Hecho** (regla 20; pasó `check_spec`):
+- `src/cad/view_dxf.*`: las aristas del dibujo (bordes, pliegues de más de 30° y siluetas) de la malla del diseño,
+  proyectadas según la cámara. Cada arista se parte en tramos visibles y ocultos con un rayo hacia el ojo.
+- DXF R12 con las capas VISIBLE (continua) y HIDDEN (punteada, 3 y 1,5 mm).
+- Interfaz: «Vista como DXF» y «Ocultas punteadas» en el panel de Diseño.
+- **Decisión:** el motor dibuja la vista él mismo, con la malla del diseño (proyección ortogonal aunque la cámara
+  esté en perspectiva).
+
+**Pruebas:** un cubo de frente (40 mm vistos, 40 ocultos) y desde una esquina (9 aristas vistas, 3 ocultas); sin
+ocultas no sale ninguna; nuestro lector lee el DXF. Un cilindro desde arriba (borde de arriba visto, el de abajo
+oculto, sin líneas de facetas) y de costado (siluetas y la mitad delantera de los bordes). El botón, en
+`ui_script_design_tab`.
+
+**Decisión sobre la regla 19 bis:** los puntos y el texto de un DXF se siguen dejando afuera con una nota. El boceto
+no tiene puntos sueltos, y el texto llega con D5.
+
+**D5b terminado.** **Sigue:** el orden de PLAN.md.

@@ -28,6 +28,8 @@ expect-design none
 menu design_box
 expect-design 8000
 expect-no-control design_needs_solid
+expect-control design_view_dxf
+expect-control design_view_dxf_hidden
 menu design_send
 expect-objects 2 Caja
 expect-control tab_prepare
