@@ -11,6 +11,7 @@ on:
       - "src/**"
       - "CMakeLists.txt"
       - "assets/brand/icons/**"
+      - "assets/icons/section_*.svg"
       - ".github/workflows/android.yml"
   workflow_dispatch:
 
