@@ -132,24 +132,29 @@ Response perform(const Request& request) {
         out.error = last_error("reading the answer");
         return out;
     }
-    // The challenge of a server that asks for a user and a password (Digest).
-    if (status == 401) {
+    // One header as UTF-8, empty when the answer has none.
+    const auto header_text = [&](DWORD which) {
         DWORD length = 0;
-        WinHttpQueryHeaders(req.h, WINHTTP_QUERY_WWW_AUTHENTICATE, WINHTTP_HEADER_NAME_BY_INDEX, WINHTTP_NO_OUTPUT_BUFFER,
-                            &length, WINHTTP_NO_HEADER_INDEX);
-        if (GetLastError() == ERROR_INSUFFICIENT_BUFFER && length > 0) {
-            std::wstring header(length / sizeof(wchar_t) + 1, L'\0');
-            if (WinHttpQueryHeaders(req.h, WINHTTP_QUERY_WWW_AUTHENTICATE, WINHTTP_HEADER_NAME_BY_INDEX, header.data(), &length,
-                                    WINHTTP_NO_HEADER_INDEX)) {
-                header.resize(length / sizeof(wchar_t));
-                const int bytes = WideCharToMultiByte(CP_UTF8, 0, header.c_str(), int(header.size()), nullptr, 0, nullptr, nullptr);
-                std::string narrow(std::size_t(std::max(bytes, 0)), '\0');
-                if (bytes > 0)
-                    WideCharToMultiByte(CP_UTF8, 0, header.c_str(), int(header.size()), narrow.data(), bytes, nullptr, nullptr);
-                out.www_authenticate = narrow;
-            }
-        }
-    }
+        WinHttpQueryHeaders(req.h, which, WINHTTP_HEADER_NAME_BY_INDEX, WINHTTP_NO_OUTPUT_BUFFER, &length,
+                            WINHTTP_NO_HEADER_INDEX);
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || length == 0)
+            return std::string();
+        std::wstring header(length / sizeof(wchar_t) + 1, L'\0');
+        if (!WinHttpQueryHeaders(req.h, which, WINHTTP_HEADER_NAME_BY_INDEX, header.data(), &length, WINHTTP_NO_HEADER_INDEX))
+            return std::string();
+        header.resize(length / sizeof(wchar_t));
+        const int bytes = WideCharToMultiByte(CP_UTF8, 0, header.c_str(), int(header.size()), nullptr, 0, nullptr, nullptr);
+        std::string narrow(std::size_t(std::max(bytes, 0)), '\0');
+        if (bytes > 0)
+            WideCharToMultiByte(CP_UTF8, 0, header.c_str(), int(header.size()), narrow.data(), bytes, nullptr, nullptr);
+        return narrow;
+    };
+    // The challenge of a server that asks for a user and a password (Digest).
+    if (status == 401)
+        out.www_authenticate = header_text(WINHTTP_QUERY_WWW_AUTHENTICATE);
+    // Where a redirect points (the caller decides whether to follow it).
+    if (status >= 300 && status < 400)
+        out.location = header_text(WINHTTP_QUERY_LOCATION);
     std::vector<char> chunk;
     for (;;) {
         DWORD available = 0;

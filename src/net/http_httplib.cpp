@@ -92,6 +92,7 @@ Response perform(const Request& request) {
     out.status = res.status;
     out.body = std::move(received);
     out.www_authenticate = res.get_header_value("WWW-Authenticate");
+    out.location = res.get_header_value("Location");
     return out;
 }
 

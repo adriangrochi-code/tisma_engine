@@ -10716,3 +10716,16 @@ caja negra.
 
 **Sigue:** `knowledge --data`, los datos de la comunidad en el panel (reglas 22–24), y el paquete en el asistente de
 la interfaz (PK1, PK2).
+
+**El mismo día, paso 3, la descarga para la interfaz (`src/catalog/pack_fetch.*`, en `tisma_net`):**
+- `pack_fetch` baja los archivos del plan y sigue hasta 5 redirecciones. GitHub responde con 302 en
+  `releases/latest/download`. Para eso, `net::Response` trae ahora `location`, en cpp-httplib y en WinHTTP.
+- `pack_update` hace todo junto: el índice primero, el plan contra lo instalado, los fabricantes elegidos más los
+  instalados (o todos), y después `pack_install`.
+- `pack_newer` dice si hay una versión publicada más nueva (regla 19).
+- La línea de comandos del motor sigue sin red: los nodos corren aislados.
+- **Prueba** (`test_pack_fetch`, con un servidor simulado que responde con redirección): primer arranque sin
+  fabricantes (PK1), con uno elegido, actualización que pide solo el fabricante cambiado (PK12; el servidor no tiene
+  el otro), y sin conexión (PK2: no cambia nada).
+- **Sin probar:** contra GitHub de verdad, y la cabecera `Location` de WinHTTP, que solo compila en el CI de Windows.
+- **Sigue:** el paquete en la interfaz: asistente, lista de impresoras, aviso de versión nueva.
