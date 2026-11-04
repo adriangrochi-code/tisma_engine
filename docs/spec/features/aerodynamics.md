@@ -23,7 +23,7 @@ Sirve para comparar diseños y orientaciones. No reemplaza un túnel de viento n
 | Malla de la pieza | mm | Cerrada |
 | Dirección del aire | — | Un eje, o la dirección de la vista |
 | Velocidad | m/s | — |
-| Calidad | — | Celdas en el tamaño frontal: rápida 16, normal 24, alta 32; «solo rozamiento» no simula |
+| Calidad | — | Celdas en el tamaño frontal: rápida 16, normal 24, alta 32, extrema 48 (a pedido del dueño, 03-11-2026); «solo rozamiento» no simula. Cada calidad con celdas repite el cálculo con 2/3 de las celdas para ver cuánto depende de ellas (`cd_low`, `cd_high`), un 20 % más de tiempo |
 | Altura de capa | mm | La del perfil; da la rugosidad |
 
 ## Resultados

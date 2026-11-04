@@ -71,7 +71,8 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
      - `fea`: `mode` (`analyze`, `lightest-infill`, `resin-structure`), `quality` (`fast`, `normal`, `high`,
        `ultra`), `object`, `instance`, y opcionales `solid`, `zones`, `ribs`.
      - `aero` (análisis aerodinámico, `aerodynamics.md`): `object`, `instance`, `quality` (`friction`, `fast`,
-       `normal`, `high`: solo rozamiento, 16, 24 o 32 celdas en el tamaño frontal), `speed` (m/s, más de 0 y hasta
+       `normal`, `high`, `extreme`: solo rozamiento, 16, 24, 32 o 48 celdas en el tamaño frontal; `extreme` a pedido
+       del dueño, 03-11-2026), `speed` (m/s, más de 0 y hasta
        100) y `direction` (`x`, `-x`, `y`, `-y`, `z`, `-z`, o la dirección de la vista como tres números).
      - `orient` (orientación automática, `orientation.md`): `object` e `instance`; el método y la precisión salen de
        los ajustes `orient.*` del proyecto.
