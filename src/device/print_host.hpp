@@ -4,14 +4,15 @@
 // «Programas que manejan impresoras»): test the connection and the
 // credentials, upload a file, start it, read the state, and pause, resume or
 // cancel. Each call as the program's public API documentation describes it:
-// OctoPrint's REST API (docs.octoprint.org, «REST API»). Own design; see
+// OctoPrint's REST API (docs.octoprint.org, «REST API») and Moonraker's
+// (moonraker.readthedocs.io, «External API»: server, files, printer). Own design; see
 // PROVENANCE.md.
 
 #include <string>
 
 namespace tisma::device {
 
-enum class HostKind { OctoPrint };
+enum class HostKind { OctoPrint, Moonraker };
 
 struct HostConfig {
     HostKind kind = HostKind::OctoPrint;

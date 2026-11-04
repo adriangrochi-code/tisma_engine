@@ -10651,5 +10651,9 @@ API REST de OctoPrint.
 sin respuesta, subida y comienzo (nombre y contenido del archivo), estado con temperaturas, pausa, seguir y cancelar,
 y el 409 sin impresora. **Sin probar:** contra un OctoPrint real.
 
-**Sigue:** Moonraker, PrusaLink (Digest) y Duet con el mismo contrato (la sesión de Android ofreció notas de
+**Moonraker (Klipper), el mismo día:** `HostKind::Moonraker`: `/server/info`, `/server/files/upload` (raíz `gcodes`,
+`print`), `/printer/objects/query` (print_stats, virtual_sdcard, extruder, heater_bed) y `/printer/print/pause`,
+`resume`, `cancel`; prueba contra un Moonraker simulado.
+
+**Sigue:** PrusaLink (Digest) y Duet con el mismo contrato (la sesión de Android ofreció notas de
 comportamiento de los cuatro); después en la página Dispositivos.

@@ -55,7 +55,83 @@ double number(const nlohmann::json& j, const char* key) {
 
 } // namespace
 
+namespace {
+
+// Moonraker (Klipper): JSON answers wrapped in {"result": …}.
+nlohmann::json moonraker_result(const net::Response& r) {
+    const nlohmann::json j = nlohmann::json::parse(r.body, nullptr, false);
+    return j.is_object() && j.contains("result") ? j["result"] : nlohmann::json();
+}
+
+HostVersion moonraker_version(const HostConfig& host) {
+    HostVersion out;
+    const net::Response r = net::perform(request(host, "GET", "/server/info"));
+    static_cast<HostResult&>(out) = result_of(r);
+    if (!out.ok)
+        return out;
+    const nlohmann::json j = moonraker_result(r);
+    if (!j.is_object() || !j.contains("klippy_state")) {
+        out.ok = false;
+        out.code = "bad_answer";
+        out.error = "the address answers, but not as Moonraker";
+        return out;
+    }
+    out.api = j.value("api_version_string", std::string());
+    out.server = "Moonraker " + j.value("moonraker_version", std::string()) + " (Klipper " + j.value("klippy_state", "") + ")";
+    return out;
+}
+
+HostResult moonraker_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start) {
+    net::Request r = request(host, "POST", "/server/files/upload");
+    r.timeout_s = std::max(host.timeout_s, 600);
+    r.form.push_back({"file", "", path, name, "application/octet-stream"});
+    r.form.push_back({"root", "gcodes", "", "", "text/plain"});
+    if (start)
+        r.form.push_back({"print", "true", "", "", "text/plain"});
+    return result_of(net::perform(r));
+}
+
+HostStatus moonraker_status(const HostConfig& host) {
+    HostStatus out;
+    const net::Response r =
+        net::perform(request(host, "GET", "/printer/objects/query?print_stats&virtual_sdcard&extruder&heater_bed"));
+    static_cast<HostResult&>(out) = result_of(r);
+    if (!out.ok)
+        return out;
+    const nlohmann::json j = moonraker_result(r);
+    if (!j.is_object() || !j.contains("status") || !j["status"].is_object()) {
+        out.ok = false;
+        out.code = "bad_answer";
+        out.error = "the printer's program sent no printer state";
+        return out;
+    }
+    const nlohmann::json& st = j["status"];
+    if (st.contains("print_stats") && st["print_stats"].is_object()) {
+        out.state = st["print_stats"].value("state", std::string());
+        out.file = st["print_stats"].value("filename", std::string());
+    }
+    out.printing = out.state == "printing" || out.state == "paused";
+    out.paused = out.state == "paused";
+    if (st.contains("virtual_sdcard")) {
+        const double p = number(st["virtual_sdcard"], "progress");
+        out.progress = p >= 0.0 ? 100.0 * p : -1.0;
+    }
+    if (st.contains("extruder")) {
+        out.nozzle = number(st["extruder"], "temperature");
+        out.nozzle_target = number(st["extruder"], "target");
+    }
+    if (st.contains("heater_bed")) {
+        out.bed = number(st["heater_bed"], "temperature");
+        out.bed_target = number(st["heater_bed"], "target");
+    }
+    return out;
+}
+
+} // namespace
+
 HostVersion host_version(const HostConfig& host) {
+    if (host.kind == HostKind::Moonraker)
+        return moonraker_version(host);
     HostVersion out;
     const net::Response r = net::perform(request(host, "GET", "/api/version"));
     static_cast<HostResult&>(out) = result_of(r);
@@ -74,6 +150,8 @@ HostVersion host_version(const HostConfig& host) {
 }
 
 HostResult host_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start) {
+    if (host.kind == HostKind::Moonraker)
+        return moonraker_upload(host, path, name, start);
     net::Request r = request(host, "POST", "/api/files/local");
     r.timeout_s = std::max(host.timeout_s, 600); // a large file on a slow network
     r.form.push_back({"file", "", path, name, "application/octet-stream"});
@@ -83,6 +161,8 @@ HostResult host_upload(const HostConfig& host, const std::string& path, const st
 }
 
 HostStatus host_status(const HostConfig& host) {
+    if (host.kind == HostKind::Moonraker)
+        return moonraker_status(host);
     HostStatus out;
     const net::Response job = net::perform(request(host, "GET", "/api/job"));
     static_cast<HostResult&>(out) = result_of(job);
@@ -124,6 +204,8 @@ HostStatus host_status(const HostConfig& host) {
 }
 
 HostResult host_pause(const HostConfig& host, bool pause) {
+    if (host.kind == HostKind::Moonraker)
+        return result_of(net::perform(request(host, "POST", pause ? "/printer/print/pause" : "/printer/print/resume")));
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = nlohmann::json{{"command", "pause"}, {"action", pause ? "pause" : "resume"}}.dump();
@@ -131,6 +213,8 @@ HostResult host_pause(const HostConfig& host, bool pause) {
 }
 
 HostResult host_cancel(const HostConfig& host) {
+    if (host.kind == HostKind::Moonraker)
+        return result_of(net::perform(request(host, "POST", "/printer/print/cancel")));
     net::Request r = request(host, "POST", "/api/job");
     r.headers.push_back({"Content-Type", "application/json"});
     r.body = R"({"command": "cancel"})";
