@@ -742,12 +742,15 @@ private:
         bool cancelled = false;
         std::string error;
         LightestInfill best;
+        bool zones = false; // also by zones (rule 3)
+        ZonedInfill zoned;
     };
     Background<OptimizeRun> optimize_job_;
     std::atomic<bool> optimize_cancel_{false};
     std::atomic<int> optimize_permille_{0};
     std::optional<OptimizeRun> optimize_result_;
-    void start_optimize();
+    void start_optimize(bool zones = false);
+    void apply_zones(std::size_t part, const ZonedInfill& zoned);
     // Whether a part's result is out of date (rule 14): its fingerprint
     // hashes the whole mesh (200 ms for 2 million triangles), so it is
     // computed again only when the part, the plate, its Engineering data or
@@ -13005,6 +13008,11 @@ void App::structural_panel() {
                     rect_of("structural_lightest_infill");
                     if (ImGui::IsItemHovered())
                         loc::SetTooltip("%s", tr(T::StructLightestInfillTip));
+                    if (ImGui::Button(tr(T::StructZonedInfill), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(true);
+                    rect_of("structural_zoned_infill");
+                    if (ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", tr(T::StructZonedInfillTip));
                 }
                 if (optimize_result_ && optimize_result_->part == part && !optimize_job_.running()) {
                     const OptimizeRun& o = *optimize_result_;
@@ -13031,6 +13039,24 @@ void App::structural_panel() {
                                 });
                             }
                             rect_of("structural_optimize_apply");
+                        }
+                        if (o.zones) {
+                            const ZonedInfill& z = o.zoned;
+                            if (!z.found) {
+                                loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructZonedNone));
+                            } else {
+                                loc::TextColored(rgb(0x3FBF7F), "%s",
+                                                 format(tr(T::StructZonedFound), z.zones.density[0], z.zones.density[1], z.zones.density[2],
+                                                        z.min_safety, z.mass_g, z.uniform_mass_g)
+                                                     .c_str());
+                                rect_of("structural_zoned_found");
+                                if (!z.lighter)
+                                    loc::TextDisabled("%s", tr(T::StructZonedHeavier));
+                                else if (ImGui::Button(tr(T::StructZonedApply)))
+                                    apply_zones(part, z);
+                                if (z.lighter)
+                                    rect_of("structural_zoned_apply");
+                            }
                         }
                     }
                     ImGui::PopTextWrapPos();
@@ -14157,7 +14183,41 @@ void App::cloud_engineering_step() {
     notify(format(tr(T::StructCloudFailed), why.c_str()), true);
 }
 
-void App::start_optimize() {
+// The zones as the part's own modifiers (structural_optimization.md, rule
+// 3): its own infill at the lowest level, a box modifier for each zone of the
+// two denser ones; undone together.
+void App::apply_zones(std::size_t part, const ZonedInfill& zoned) {
+    if (part >= objects_.size())
+        return;
+    PlateObject& o = objects_[part];
+    const TriangleMesh placed = placed_mesh(o);
+    std::vector<PlateVolume> added;
+    for (const MeshModifier& m : zoned.zones.modifiers) {
+        const BoundingBox b = m.mesh.bounding_box();
+        const std::optional<PlateVolume> v = volume_for_bed_box(o, placed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
+        if (!v) {
+            structural_message_ = tr(T::StructZonedTurned);
+            return;
+        }
+        added.push_back(*v);
+    }
+    const std::string settings_before = o.settings;
+    const std::vector<PlateVolume> volumes_before = o.volumes;
+    Settings lowest = settings_;
+    lowest.infill_density = zoned.zones.density[0];
+    o.settings = with_own_key(o.settings, lowest, "infill.density");
+    o.volumes.insert(o.volumes.end(), added.begin(), added.end());
+    plate_changed();
+    notify_undo(format(tr(T::StructZonedApplied), int(added.size())), [this, part, settings_before, volumes_before] {
+        if (part >= objects_.size())
+            return;
+        objects_[part].settings = settings_before;
+        objects_[part].volumes = volumes_before;
+        plate_changed();
+    });
+}
+
+void App::start_optimize(bool zones) {
     if (optimize_job_.running() || objects_.empty())
         return;
     const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
@@ -14176,9 +14236,10 @@ void App::start_optimize() {
     const std::string filament_type = settings_.filament_type;
     optimize_cancel_ = false;
     optimize_permille_ = 0;
-    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type]() {
+    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones]() {
         OptimizeRun run;
         run.part = part;
+        run.zones = zones;
         struct Cancelled {};
         try {
             std::vector<std::string> case_notes;
@@ -14186,11 +14247,19 @@ void App::start_optimize() {
                                                        print_conditions(settings, moved));
             const IndexedMesh mesh = weld_exact(placed);
             fit_voxel_limit(c, mesh, settings);
-            run.best = lightest_infill(mesh, placed, settings, c, moved, [this](double done) {
-                optimize_permille_ = int(done * 1000.0);
+            // By zones the uniform search is the first half of the bar.
+            const double share = zones ? 0.5 : 1.0;
+            run.best = lightest_infill(mesh, placed, settings, c, moved, [this, share](double done) {
+                optimize_permille_ = int(done * share * 1000.0);
                 if (optimize_cancel_)
                     throw Cancelled{};
             });
+            if (zones && run.best.found && !run.best.solid)
+                run.zoned = zoned_infill(mesh, placed, settings, c, moved, run.best.density, [this](double done) {
+                    optimize_permille_ = int((0.5 + 0.5 * done) * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
         } catch (const Cancelled&) {
             run.cancelled = true;
         } catch (const std::exception& e) {

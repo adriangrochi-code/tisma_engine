@@ -10331,3 +10331,19 @@ prueba pide como mucho un 5 % más y que `lighter` coincida con la comparación.
 
 **Sigue (regla 3):** paso D, en el panel Optimizar (después del uniforme: zonas, masa contra el uniforme, «Usar» pone
 el relleno del objeto y los modificadores, con deshacer).
+
+## 2026-11-04 — Optimizar, regla 3, paso D: «Relleno por zonas» en el panel
+
+**Hecho:** en Optimizar, debajo de «Relleno mínimo», el botón «Relleno por zonas» corre el mismo trabajo en segundo
+plano: el uniforme (primera mitad de la barra) y después `zoned_infill` (segunda mitad), con Cancelar. El resultado
+dice los tres niveles, el factor y la masa contra la del uniforme; si no queda más liviano lo dice y no propone nada.
+«Usar las zonas» pone el relleno propio de la pieza al nivel más bajo y agrega una caja modificadora por zona
+(`volume_for_bed_box`, `src/ui/plate.*`: la caja de la cama llevada al marco del modelo, aunque esté escalado o
+girado; con un giro y escalas distintas no hay caja que quepa y lo avisa). Un solo deshacer quita todo.
+
+**Prueba:** `test_plate` (la caja vuelve a caer donde estaba con escala, con giro de ángulos rectos y escala pareja, y
+se rechaza con giro de 30° y escalas distintas); `ui_script_structural_analyze` arranca y cancela la búsqueda por
+zonas. **Sin probar en la interfaz:** «Usar las zonas» y su deshacer (la búsqueda completa tarda más de un minuto en
+el guion).
+
+**Sigue:** regla 4 de structural_optimization.md (nervios: relleno a lo largo de las tensiones).

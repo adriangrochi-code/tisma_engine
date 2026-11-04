@@ -128,6 +128,14 @@
     X(StructOptimizeFound, "Aguanta con %d %% de relleno (factor %.2f).", "Holds with %d %% infill (factor %.2f).") \
     X(StructOptimizeApply, "Usar %d %% de relleno", "Use %d %% infill") \
     X(StructOptimizeApplied, "Relleno: %d %%", "Infill: %d %%") \
+    X(StructZonedInfill, "Relleno por zonas", "Infill by zones") \
+    X(StructZonedInfillTip, "Después del relleno uniforme, más relleno solo donde la tensión lo pide, en 3 niveles (varios análisis más).", "After the uniform infill, more infill only where the stress asks for it, in 3 levels (several more analyses).") \
+    X(StructZonedFound, "Por zonas: %.0f / %.0f / %.0f %% (factor %.2f), %.2f g contra %.2f g del uniforme.", "By zones: %.0f / %.0f / %.0f %% (factor %.2f), %.2f g against %.2f g uniform.") \
+    X(StructZonedHeavier, "Por zonas no queda más liviano que el uniforme: conviene el uniforme.", "By zones it is not lighter than uniform: the uniform infill is better.") \
+    X(StructZonedNone, "Ninguna escala de las zonas aguanta: usá el relleno uniforme.", "No scale of the zones holds: use the uniform infill.") \
+    X(StructZonedApply, "Usar las zonas", "Use the zones") \
+    X(StructZonedApplied, "Relleno por zonas: %d modificadores", "Infill by zones: %d modifiers") \
+    X(StructZonedTurned, "La pieza está girada con escalas distintas: las zonas no caben como cajas.", "The part is turned with unequal scales: the zones do not fit as boxes.") \
     X(CloudPlanLock, "Incluido en el plan %s", "Included in the plan %s") \
     X(StructCloud, "Calcular en la nube", "Calculate in the cloud") \
     X(StructCloudTip, "Manda el análisis a Tisma Cloud; el resultado vuelve a esta pieza.", "Sends the analysis to Tisma Cloud; the result comes back to this part.") \

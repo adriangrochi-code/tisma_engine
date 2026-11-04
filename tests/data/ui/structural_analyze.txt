@@ -48,6 +48,13 @@ expect-control structural_optimize_cancel
 menu structural_optimize_cancel
 expect-optimize cancelled
 expect-control structural_lightest_infill
+# By zones (rule 3): the same job, started and cancelled the same way.
+expect-control structural_zoned_infill
+menu structural_zoned_infill
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_zoned_infill
 menu structural_force_unit_1
 wait 20
 expect-no-control structural_show_map

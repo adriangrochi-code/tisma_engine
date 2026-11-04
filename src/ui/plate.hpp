@@ -118,6 +118,15 @@ Affine between(const Affine& from, const Affine& to);
 // cylinder are their own mirror images).
 PlateVolume carried_volume(const PlateVolume& volume, const BoundingBox& from, const Affine& map, const BoundingBox& to);
 
+// A box modifier with these settings that volume_mesh sets down on the bed
+// as the box from `lo` to `hi` (bed axes, mm): the zones of
+// structural_optimization.md, rule 3. None when the model's map turns the
+// bed's axes into ones that are not square to each other (a turn with
+// unequal scales), where no turned box fits.
+std::optional<PlateVolume> volume_for_bed_box(const PlateObject& object, const TriangleMesh& placed,
+                                              const std::array<double, 3>& lo, const std::array<double, 3>& hi,
+                                              const std::string& settings);
+
 // r turned by `degrees` about the bed's axis 0 (X), 1 (Y) or 2 (Z).
 Rotation rotated(const Rotation& r, int axis, double degrees);
 

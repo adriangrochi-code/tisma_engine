@@ -502,3 +502,34 @@ TEST_CASE("plate: the painting carried onto a design built again (cad_design.md,
     CHECK(carried_painting({}, before, after).empty());
 }
 
+
+TEST_CASE("plate: a box on the bed becomes a modifier that lands on it (structural_optimization.md, rule 3)", "[plate]") {
+    PlateObject o{"box", box(-50, 7, 40, 10, 20, 30), {}, {}};
+    o.place.x = 100, o.place.y = 120;
+    const std::array<double, 3> lo{96.0, 112.0, 2.0}, hi{99.0, 125.0, 8.5};
+    const auto lands = [&](const PlateObject& object) {
+        const TriangleMesh placed = placed_mesh(object);
+        const std::optional<PlateVolume> v = volume_for_bed_box(object, placed, lo, hi, R"({"infill": {"density": 70}})");
+        REQUIRE(v);
+        CHECK(v->kind == PlateVolume::Kind::Modifier);
+        CHECK(v->settings.find("70") != std::string::npos);
+        const BoundingBox b = volume_mesh(*v, object, placed).bounding_box();
+        CHECK_THAT(b.min.x, WithinAbs(lo[0], 1e-3));
+        CHECK_THAT(b.min.y, WithinAbs(lo[1], 1e-3));
+        CHECK_THAT(b.min.z, WithinAbs(lo[2], 1e-3));
+        CHECK_THAT(b.max.x, WithinAbs(hi[0], 1e-3));
+        CHECK_THAT(b.max.y, WithinAbs(hi[1], 1e-3));
+        CHECK_THAT(b.max.z, WithinAbs(hi[2], 1e-3));
+    };
+    lands(o);
+    o.place.scale = {2.0, 1.5, 0.5}; // scaled along its own axes
+    lands(o);
+    o.place.scale = {1.5, 1.5, 1.5};
+    o.place.rotation = rotated(rotated(kNoRotation, 2, 90.0), 0, 90.0); // turned, the same scale on every axis
+    lands(o);
+    // A turn by other than right angles with unequal scales: no box fits.
+    o.place.scale = {2.0, 1.0, 1.0};
+    o.place.rotation = rotated(kNoRotation, 2, 30.0);
+    const TriangleMesh placed = placed_mesh(o);
+    CHECK_FALSE(volume_for_bed_box(o, placed, lo, hi, "{}"));
+}
