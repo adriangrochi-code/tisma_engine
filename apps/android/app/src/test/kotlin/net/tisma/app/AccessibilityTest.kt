@@ -60,6 +60,8 @@ class AccessibilityTest {
             "Printer settings" to { nav.select(Section.PRINTER); nav.open(Screen.PrinterSettings) },
             "Report" to { nav.select(Section.MORE); nav.open(Screen.Report()) },
             "Account" to { nav.select(Section.MORE); nav.open(Screen.Account) },
+            "Parts" to { nav.select(Section.MORE); nav.open(Screen.Parts) },
+            "Calibrate" to { nav.select(Section.MORE); nav.open(Screen.Calibrate) },
         )
         for ((name, go) in screens) {
             compose.runOnIdle { go() }

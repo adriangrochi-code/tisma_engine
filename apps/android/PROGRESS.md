@@ -25,6 +25,23 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Diseño, calibraciones, orientación y aerodinámica en el teléfono (motor 057a8ec):**
+  - **Más › Diseño: engranajes y tornillería** (`part gear|fastener`): la especificación parte de la del motor
+    (`--defaults`). Cada número y cada interruptor se puede cambiar. La tornillería tiene sus 9 tipos y medidas
+    métricas. «Crear y poner en la placa» abre la pieza. Si el motor rechaza la especificación, muestra su motivo.
+  - **Más › Calibrar** (`calibration <tipo>`): 12 pruebas FDM, con rango opcional. La prueba va a la placa con sus
+    propios ajustes (los cambios por altura). En la Placa, una tarjeta muestra los tramos; «¿Cuál salió mejor?» corre
+    `calibration apply` y pasa al panel solo lo que cambió. Medidas, primera capa, encastre y pie de elefante se miran a
+    ojo.
+  - **Orientar sola** en las herramientas de la placa (`orient <modelo>`), sobre lo ya girado.
+  - **Arrastre** (aerodinámica) en la tarjeta de Ingeniería de un modelo suelto (`aero <modelo>`): velocidad y
+    dirección.
+  - Probado con el motor de la máquina: el engranaje por defecto da 30 mm de diámetro primitivo; tuerca M3; un
+    engranaje de 2 dientes se rechaza con su motivo; la torre de temperatura lamina con 3 o más temperaturas y el
+    valor elegido llega al panel; la orientación devuelve una rotación; el cubo da un Cd cercano a 1,18.
+  - CAD general (SolidCraft para Android): el dueño eligió compilarlo, pero el control de permisos de la sesión
+    bloquea compilar código externo. Espera una regla de permiso o un flujo de GitHub Actions.
+
 - **2026-11-04 — Versión nueva del paquete (reglas 19 y 20):**
   - Al abrir, una vez por día, la app compara el `pack_version` instalado con el publicado. Si cambió, muestra una
     línea arriba: «Hay perfiles nuevos · Actualizar».

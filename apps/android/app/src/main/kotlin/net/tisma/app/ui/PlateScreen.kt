@@ -189,6 +189,7 @@ private fun PlateControls(
             }
         }
         if (state.modelName != null && state.isProject && state.engineAvailable) EngineeringCard(state, slice)
+        state.calibration?.let { CalibrationCard(it, slice) }
         if (state.modelName != null && !state.isProject && state.mesh != null) TransformCard(state, slice)
         if (state.modelName != null && !state.isProject && state.engineAvailable && state.mesh != null) ModelEngineeringCard(state, slice)
         state.error?.let { e ->
@@ -385,6 +386,26 @@ private fun ModelEngineeringCard(state: SliceState, slice: SliceViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         Button(onClick = { slice.analyzeModel() }, enabled = ready && !state.analyzing && !state.slicing,
             modifier = Modifier.fillMaxWidth().testTag("eng_analyze_model")) { Text(stringResource(R.string.eng_analyze)) }
+        // aerodynamics.md on the bare model: the drag at a speed, along an axis.
+        var speed by rememberSaveable { mutableStateOf("10") }
+        var dir by rememberSaveable { mutableStateOf("x") }
+        Text(stringResource(R.string.kind_aero), style = MaterialTheme.typography.labelLarge)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("x", "-x", "y", "-y", "z", "-z").forEach { d ->
+                FilterChip(selected = dir == d, onClick = { dir = d }, label = { Text(d) }, modifier = Modifier.testTag("aero_dir_$d"))
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.OutlinedTextField(speed, { speed = it }, singleLine = true, label = { Text(stringResource(R.string.aero_speed)) },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+                modifier = Modifier.weight(1f).testTag("aero_speed"))
+            Spacer(Modifier.size(8.dp))
+            OutlinedButton(onClick = {
+                speed.replace(',', '.').toDoubleOrNull()?.takeIf { it > 0 }?.let {
+                    slice.analyze(SliceViewModel.Study.AERO, 0, if (case.quality == "high") "normal" else "fast", it, dir)
+                }
+            }, enabled = !state.analyzing && !state.slicing, modifier = Modifier.testTag("aero_model")) { Text(stringResource(R.string.aero_run)) }
+        }
         if (state.analyzing) {
             LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth())
             OutlinedButton(onClick = { slice.cancel() }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.cancel)) }
@@ -439,6 +460,9 @@ private fun TransformCard(state: SliceState, slice: SliceViewModel) {
             }
             FilterChip(selected = state.layFlat, onClick = { slice.setLayFlat(!state.layFlat) }, enabled = !state.slicing,
                 label = { Text(stringResource(R.string.tools_lay_flat)) }, modifier = Modifier.testTag("lay_flat"))
+            // orientation.md: the engine's least-support orientation.
+            if (state.engineAvailable) OutlinedButton(onClick = { slice.orientAutomatically() }, enabled = !state.slicing && !state.analyzing,
+                modifier = Modifier.testTag("orient_auto")) { Text(stringResource(R.string.tools_orient)) }
         }
         if (state.layFlat) Text(stringResource(R.string.tools_lay_flat_hint), style = MaterialTheme.typography.bodySmall)
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -462,6 +486,7 @@ fun Context.sliceNoticeText(n: SliceNotice): String = when (n) {
     is SliceNotice.Saved -> getString(R.string.notice_saved, n.name)
     SliceNotice.ProfileGone -> getString(R.string.pack_profile_gone)
     is SliceNotice.PackUpdated -> getString(R.string.pack_updated, n.version)
+    is SliceNotice.Calibrated -> getString(R.string.cal_applied, calibrationName(n.kind), n.value.toString().removeSuffix(".0"))
 }
 
 private fun displayName(context: Context, uri: Uri): String? = runCatching {

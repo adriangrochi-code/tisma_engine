@@ -91,17 +91,18 @@ class EngineRunner(
 
     /** Slices a model (STL, OBJ, 3MF mesh) with [settings] (docs/CONFIG.md). */
     fun sliceModel(model: File, settings: SimpleSettings, onProgress: (Int) -> Unit, cancelled: () -> Boolean,
-                   profile: ProfileChoice? = null): Slice {
+                   profile: ProfileChoice? = null, config: File? = null): Slice {
         workDir.mkdirs()
-        val base = profile?.let { profile(it) }
+        // A calibration test brings its own settings, with its height changes (`calibration --settings`).
+        val base = if (config == null) profile?.let { profile(it) } else null
         val merged = if (base != null) merge(base, settings.toJson()) else settings.toJson()
-        val config = File(workDir, "settings.json").apply { writeText(merged.toString()) }
+        val configFile = config ?: File(workDir, "settings.json").apply { writeText(merged.toString()) }
         val out = File(workDir, model.nameWithoutExtension + ".gcode")
         val summary = File(workDir, "summary.json")
-        val args = mutableListOf("slice", model.path, "--config", config.path, "-o", out.path, "--summary", summary.path)
+        val args = mutableListOf("slice", model.path, "--config", configFile.path, "-o", out.path, "--summary", summary.path)
         if (settings.copies > 1) args += listOf("--copies", settings.copies.toString())
         return run(args,
-            out, summary, onProgress, cancelled).copy(profileUsed = profile == null || base != null)
+            out, summary, onProgress, cancelled).copy(profileUsed = config != null || profile == null || base != null)
     }
 
     /**
@@ -190,6 +191,104 @@ class EngineRunner(
             .mapNotNull { ((it as? JsonObject)?.get("message") as? JsonPrimitive)?.contentOrNull }
         return Analysis(out, JsonObject(result + mapOf("valid" to (report["valid"] ?: JsonPrimitive(false)),
             "warnings" to kotlinx.serialization.json.JsonArray(warnings.map { JsonPrimitive(it) }))))
+    }
+
+    /** Runs a short engine command; its output, or an [EngineException] with stderr's last line. */
+    private fun capture(args: List<String>, timeoutS: Long = 120): String {
+        workDir.mkdirs()
+        val err = File(workDir, "engine.err").apply { delete() }
+        val p = ProcessBuilder(listOf(executable.path) + args).directory(workDir).redirectError(err).start()
+        p.outputStream.close()
+        val out = p.inputStream.bufferedReader().readText()
+        if (!p.waitFor(timeoutS, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The engine took too long", "", -1) }
+        if (p.exitValue() != 0) {
+            val e = err.takeIf { it.isFile }?.readText().orEmpty().lines().filter { it.isNotBlank() && !it.startsWith("progress") }
+                .lastOrNull()?.removePrefix("error: ").orEmpty()
+            throw EngineException("error", e.ifBlank { "The engine stopped (exit code ${p.exitValue()})" }, "", p.exitValue())
+        }
+        return out
+    }
+
+    private fun json(text: String): JsonObject =
+        runCatching { Json.parseToJsonElement(text) as JsonObject }.getOrElse { throw EngineException("bad_answer", "Unexpected answer from the engine", "", -1) }
+
+    /** A Design part's starting spec (`part gear|fastener --defaults`). */
+    fun partDefaults(kind: String): JsonObject = json(capture(listOf("part", kind, "--defaults")))
+
+    /**
+     * Makes a Design part (`part gear|fastener <spec> -o <stl>`): the engine's
+     * own gears and fasteners. Returns the STL and its sizes; a spec the
+     * engine refuses gives its reason.
+     */
+    fun makePart(kind: String, spec: JsonObject, name: String): Pair<File, JsonObject> {
+        workDir.mkdirs()
+        val specFile = File(workDir, "part.json").apply { writeText(spec.toString()) }
+        val out = File(workDir, "$name.stl").apply { delete() }
+        val sizes = json(capture(listOf("part", kind, specFile.path, "-o", out.path)))
+        return out to sizes
+    }
+
+    /** The settings the slice would use, written for the commands that take `--config`. */
+    fun writeConfig(settings: SimpleSettings, profile: ProfileChoice?): File {
+        workDir.mkdirs()
+        val base = profile?.let { profile(it) }
+        val merged = if (base != null) merge(base, settings.toJson()) else settings.toJson()
+        return File(workDir, "settings.json").apply { writeText(merged.toString()) }
+    }
+
+    /** A calibration test (calibrations.md): its model, the settings with its height changes, and its segments. */
+    data class Calibration(val model: File, val settings: File, val unit: String, val segments: List<Triple<Double, Double, Double>>)
+
+    fun calibration(kind: String, settings: SimpleSettings, profile: ProfileChoice?, range: DoubleArray? = null): Calibration {
+        val config = writeConfig(settings, profile)
+        val model = File(workDir, "calibration_$kind.stl").apply { delete() }
+        val out = File(workDir, "calibration_$kind.json").apply { delete() }
+        val args = mutableListOf("calibration", kind, "--config", config.path, "--model", model.path, "--settings", out.path)
+        range?.let { args += listOf("--start", it[0].toString(), "--end", it[1].toString(), "--step", it[2].toString()) }
+        val o = json(capture(args))
+        val segs = (o["segments"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { s ->
+            (s as? JsonObject)?.let {
+                fun d(k: String) = (it[k] as? JsonPrimitive)?.doubleOrNull
+                Triple(d("z0") ?: return@let null, d("z1") ?: return@let null, d("value") ?: return@let null)
+            }
+        }
+        return Calibration(model, out, (o["unit"] as? JsonPrimitive)?.contentOrNull.orEmpty(), segs)
+    }
+
+    /** The value that printed best, written into the settings (`calibration apply`); the full settings come back. */
+    fun calibrationApply(kind: String, value: Double, settings: SimpleSettings, profile: ProfileChoice?): JsonObject {
+        val config = writeConfig(settings, profile)
+        val out = File(workDir, "calibrated.json").apply { delete() }
+        capture(listOf("calibration", "apply", kind, "--value", value.toString(), "--config", config.path, "-o", out.path))
+        return json(out.readText())
+    }
+
+    /** The least-support orientation of a bare model (`orient <model> --config`): its 3×3 rotation, row by row. */
+    fun orientModel(model: File, settings: SimpleSettings, profile: ProfileChoice?, onProgress: (Int) -> Unit,
+                    cancelled: () -> Boolean): Pair<FloatArray, JsonObject> {
+        val config = writeConfig(settings, profile)
+        val out = File(workDir, "orientation.json")
+        val summary = File(workDir, "orientation_summary.json")
+        runTool(listOf("orient", model.absolutePath, "--config", config.path, "-o", out.path, "--summary", summary.path,
+            "--object", "0", "--instance", "0"), out, summary, onProgress, cancelled)
+        val o = json(out.readText())
+        val rows = (o["rotation"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+        val m = FloatArray(9) { i ->
+            ((rows.getOrNull(i / 3) as? kotlinx.serialization.json.JsonArray)?.getOrNull(i % 3) as? JsonPrimitive)?.doubleOrNull?.toFloat()
+                ?: if (i % 4 == 0) 1f else 0f
+        }
+        return m to o
+    }
+
+    /** The air's drag on a bare model (`aero <model> --config`, aerodynamics.md). */
+    fun aeroModel(model: File, settings: SimpleSettings, profile: ProfileChoice?, quality: String, speed: Double, direction: String,
+                  onProgress: (Int) -> Unit, cancelled: () -> Boolean): Analysis {
+        val config = writeConfig(settings, profile)
+        val out = File(workDir, "result.taero")
+        val summary = File(workDir, "summary.json")
+        val args = listOf("aero", model.absolutePath, "--config", config.path, "-o", out.path, "--summary", summary.path,
+            "--object", "0", "--instance", "0", "--quality", quality, "--speed", speed.toString(), "--direction", direction)
+        return Analysis(out, runTool(args, out, summary, onProgress, cancelled) ?: JsonObject(emptyMap()))
     }
 
     /** The air's drag on the part (cloud.md, rule 19b; aerodynamics.md): `aero`. */

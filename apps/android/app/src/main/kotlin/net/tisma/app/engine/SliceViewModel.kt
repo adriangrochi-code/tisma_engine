@@ -66,6 +66,8 @@ data class SliceState(
     val layFlat: Boolean = false,
     /** What a tap on the 3D view marks now, or null when it only turns the view. */
     val marking: EngineeringCase.Kind? = null,
+    /** A calibration test on the plate: its kind, unit, segments (from, to, value) and its settings file. */
+    val calibration: Calibrating? = null,
     /** The lightest infill found that holds, in %, to apply to the slice (mobile_app.md, rule 13). */
     val lightest: Int? = null,
     /** A G-code that was opened or shared, to show in the preview (QA AND5). */
@@ -92,6 +94,10 @@ data class SliceState(
     }
 }
 
+/** A calibration test on the plate (calibrations.md). */
+data class Calibrating(val kind: String, val unit: String, val segments: List<Triple<Double, Double, Double>>,
+                       val settings: File, val model: File)
+
 sealed interface SliceNotice {
     data object Cancelled : SliceNotice
     data object CannotRead : SliceNotice
@@ -99,6 +105,7 @@ sealed interface SliceNotice {
     /** Rule 20: the chosen pack printer is no longer in the pack; it stays chosen until the person changes it. */
     data object ProfileGone : SliceNotice
     data class PackUpdated(val version: String) : SliceNotice
+    data class Calibrated(val kind: String, val value: Double) : SliceNotice
 }
 
 /** Slicing on the phone with the engine (mobile_app.md, rule 12; MOBILE.md, step 5). */
@@ -364,7 +371,7 @@ class SliceViewModel(
         _state.update {
             it.copy(modelName = name, isProject = copied.extension.equals("3mf", true), result = null, error = null, progress = 0,
                 case = it.case.copy(conditions = emptyList()), marking = null, analysis = null,
-                rotation = MeshFile.identity3(), scalePercent = 100f, layFlat = false)
+                rotation = MeshFile.identity3(), scalePercent = 100f, layFlat = false, calibration = null, stressMap = null, showStress = false)
         }
         loadMesh(copied)
     }
@@ -403,7 +410,8 @@ class SliceViewModel(
                 val r = withContext(io) {
                     val onProgress = { p: Int -> _state.update { it.copy(progress = p) } }
                     if (s.isProject) runner.sliceProject(m, onProgress, { cancel.get() }, s.settings.changes)
-                    else runner.sliceModel(engineModel(m), s.settings, onProgress, { cancel.get() }, s.profile)
+                    else runner.sliceModel(engineModel(m), s.settings, onProgress, { cancel.get() }, s.profile,
+                        s.calibration?.settings?.takeIf { s.calibration.model == m })
                 }
                 AppLog.line("engine: sliced in ${System.currentTimeMillis() - started} ms")
                 _state.update { it.copy(result = r, progress = 100) }
@@ -425,6 +433,74 @@ class SliceViewModel(
     private var knowledgeCache: Knowledge? = null
     fun knowledge(): Knowledge? = knowledgeCache ?: pack?.let { Knowledge.read(java.io.File(it.dataDir, "pack/knowledge")) }
         ?.takeIf { !it.empty }?.also { knowledgeCache = it }
+
+    /** A Design part's starting spec, as the engine gives it (`part … --defaults`). */
+    fun partDefaults(kind: String, done: (kotlinx.serialization.json.JsonObject?) -> Unit) = viewModelScope.launch {
+        done(withContext(io) { runCatching { runner.partDefaults(kind) }.getOrNull() })
+    }
+
+    /** Makes a gear or a fastener with the engine and opens it on the plate; a refused spec gives its reason. */
+    fun makePart(kind: String, spec: kotlinx.serialization.json.JsonObject, done: (String?) -> Unit) = viewModelScope.launch {
+        val r = withContext(io) { runCatching { runner.makePart(kind, spec, kind) } }
+        val e = r.exceptionOrNull()
+        if (e != null) { done((e as? EngineRunner.EngineException)?.error ?: e.message ?: "error"); return@launch }
+        val stl = r.getOrThrow().first
+        open("$kind.stl") { stl.inputStream() }
+        done(null)
+    }
+
+    /** Makes a calibration test (calibrations.md) and opens it on the plate with its own settings. */
+    fun calibrate(kind: String, range: DoubleArray?, done: (String?) -> Unit) = viewModelScope.launch {
+        val s = state.value
+        val r = withContext(io) { runCatching { runner.calibration(kind, s.settings, s.profile, range) } }
+        val e = r.exceptionOrNull()
+        if (e != null) { done((e as? EngineRunner.EngineException)?.error ?: e.message ?: "error"); return@launch }
+        val c = r.getOrThrow()
+        // The test's model is opened like any other, then its settings are tied to it.
+        open("calibration_$kind.stl") { c.model.inputStream() }.join()
+        _state.update { it.copy(calibration = Calibrating(kind, c.unit, c.segments, c.settings, model ?: c.model)) }
+        done(null)
+    }
+
+    /** The value that printed best goes into the panel's changes (only what it changes), and the test is closed. */
+    fun applyCalibration(value: Double) {
+        val c = state.value.calibration ?: return
+        val s = state.value
+        viewModelScope.launch {
+            val r = withContext(io) {
+                runCatching {
+                    val before = SettingsLayout.flatten(kotlinx.serialization.json.Json.parseToJsonElement(
+                        runner.writeConfig(s.settings, s.profile).readText()) as kotlinx.serialization.json.JsonObject)
+                    val after = SettingsLayout.flatten(runner.calibrationApply(c.kind, value, s.settings, s.profile))
+                    after.filter { (k, v) -> v !is kotlinx.serialization.json.JsonObject && before[k] != v && k != "changes" }
+                }
+            }
+            r.onFailure { AppLog.line("calibration: apply ${it.message}") }
+            r.getOrNull()?.forEach { (k, v) -> setValue(k, v) }
+            _state.update { it.copy(calibration = null, notice = if (r.isSuccess) SliceNotice.Calibrated(c.kind, value) else it.notice,
+                error = r.exceptionOrNull()?.let { e -> (e as? EngineRunner.EngineException) }) }
+        }
+    }
+
+    fun closeCalibration() = _state.update { it.copy(calibration = null) }
+
+    /** Turns the bare model to the least-support orientation the engine finds (orientation.md). */
+    fun orientAutomatically() {
+        val m = model ?: return
+        if (state.value.slicing || state.value.analyzing || state.value.isProject) return
+        cancel.set(false)
+        _state.update { it.copy(analyzing = true, progress = 0) }
+        val s = state.value
+        viewModelScope.launch {
+            val r = withContext(io) {
+                runCatching { runner.orientModel(engineModel(m), s.settings, s.profile, { p -> _state.update { it.copy(progress = p) } }) { cancel.get() } }
+            }
+            r.onFailure { AppLog.line("orient: ${it.message}") }
+            _state.update { it.copy(analyzing = false, error = r.exceptionOrNull() as? EngineRunner.EngineException) }
+            // The engine turned the already turned model: its rotation goes on top of the plate's.
+            r.getOrNull()?.let { (rot, _) -> retransform(MeshFile.times(rot, _state.value.rotation)) }
+        }
+    }
 
     /** Downloads the pack's index for the wizard (MA1): its printers, before any vendor. */
     fun loadPackIndex() {
@@ -599,6 +675,7 @@ class SliceViewModel(
         if (state.value.slicing || state.value.analyzing) return
         cancel.set(false)
         _state.update { it.copy(analyzing = true, progress = 0, analysis = null, error = null, lightest = null) }
+        val s0 = state.value
         viewModelScope.launch {
             try {
                 val r = withContext(io) {
@@ -606,7 +683,9 @@ class SliceViewModel(
                     when (study) {
                         Study.STRUCTURE -> runner.analyze(m, objectIndex, quality, onProgress) { cancel.get() }
                         Study.LIGHTEST -> runner.lightestInfill(m, objectIndex, quality, onProgress) { cancel.get() }
-                        Study.AERO -> runner.aero(m, objectIndex, quality ?: "fast", speed, direction, onProgress) { cancel.get() }
+                        Study.AERO -> if (s0.isProject) runner.aero(m, objectIndex, quality ?: "fast", speed, direction, onProgress) { cancel.get() }
+                            // A bare model: `aero <model> --config` with the plate's settings.
+                            else runner.aeroModel(engineModel(m), s0.settings, s0.profile, quality ?: "fast", speed, direction, onProgress) { cancel.get() }
                     }
                 }
                 val lines = r.summary.mapNotNull { (k, v) ->
