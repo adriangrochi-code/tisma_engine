@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Paquete de perfiles, primer arranque:** la primera vez se baja solo la lista de impresoras del paquete; sin red
+  aparece un aviso y quedan las impresoras incluidas. Los perfiles del paquete muestran su licencia, su origen y el
+  enlace al repositorio.
 - **La cama de la impresora del paquete** en la vista 3D: su modelo (STL) y su dibujo (SVG) en la placa, en OpenGL y
   en Vulkan. Los dibujos PNG todavía no se muestran.
 - **Resinas del paquete:** una impresora de resina del paquete elige su resina y su perfil de impresión de resina por

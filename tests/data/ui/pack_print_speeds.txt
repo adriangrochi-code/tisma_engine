@@ -13,3 +13,5 @@ choose-profile print Acme Standard
 expect speed.walls 170
 expect speed.travel 250
 expect-toast Se mantuvieron tus cambios
+wait 2
+expect-text Licencia AGPL-3.0-or-later · origen Invented

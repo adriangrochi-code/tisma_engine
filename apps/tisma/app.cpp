@@ -922,6 +922,7 @@ private:
     std::filesystem::path profiles_root() const;
     void load_profile_lists();
     void profile_row(ProfileKind kind, bool compact = false);
+    void pack_source_line(ProfileKind kind);
     std::vector<double> printer_diameters() const;
     void choose_profile(ProfileKind kind, const Profile& profile);
     // Speeds the settings lack: a stock Ender-3's, and a word about it.
@@ -1650,6 +1651,8 @@ private:
     // A pack filament's or print profile's name: the printer settings it
     // carries (its speeds, as JSON groups), part of the profile (BH27).
     std::map<std::string, std::string> pack_entry_printer_;
+    // A pack profile's name: its license and origin, shown under its row (rule 15).
+    std::map<std::string, std::pair<std::string, std::string>> pack_profile_source_;
     std::string material_community_for_ = "\x01";             // "filaments/<name>" or "resins/<name>"
     std::vector<CommunityValue> material_community_;
     int pack_filaments_number_ = -2;                         // the printer pack_filaments_found_ is for
@@ -1661,6 +1664,7 @@ private:
     };
     std::shared_ptr<PackJobState> pack_state_;
     std::future<std::string> pack_job_; // the error; empty when it went well
+    bool pack_first_index_ = false;      // pack_job_ is the first run's index download (rules 1 and 3)
     std::string pack_add_after_;         // a printer to add once its download ends
     bool pack_check_updates_ = true;     // packs.check_updates
     long long pack_checked_ = 0;         // packs.checked: when the last look for a newer pack was (seconds)
@@ -2695,6 +2699,7 @@ void App::printer_page() {
         ImGui::BeginChild("##printer_profile", ImVec2(w, ImGui::GetFrameHeightWithSpacing()));
         profile_row(ProfileKind::Printer);
         ImGui::EndChild();
+        pack_source_line(ProfileKind::Printer);
     }
     ImGui::Separator();
 
@@ -3552,7 +3557,15 @@ bool App::init(std::string& error) {
         device_connect(device_port_);
     }
     // The profiles; with none chosen yet, the ones the settings match.
+    if (!options_.pack_url.empty())
+        pack_url_ = options_.pack_url;
     load_pack();
+    // The first run with no pack: its index, in the background and without
+    // asking, so the catalog lists its printers (profile_pack.md, rule 1, PK1).
+    if (first_run_ && !pack_index_ && !pack_dir().empty()) {
+        pack_first_index_ = true;
+        start_pack_update({}, {});
+    }
     // A newer pack, looked for at most once a day (profile_pack.md, rule 19).
     if (pack_index_ && pack_check_updates_ && options_.screenshot.empty() && options_.pack.empty()) {
         const long long now = static_cast<long long>(std::time(nullptr));
@@ -4495,6 +4508,7 @@ void App::load_profile_lists() {
             pack_gone_.clear();
             pack_filament_vendor_.clear();
             pack_entry_printer_.clear();
+            pack_profile_source_.clear();
             community_for_ = "\x01";
             material_community_for_ = "\x01";
         }
@@ -4523,9 +4537,12 @@ void App::load_profile_lists() {
                     if (p.filament) {
                         pack_filament_vendor_[p.filament->name] = p.filament_vendor;
                         pack_entry_printer_[p.filament->name] = p.filament_printer_settings;
+                        pack_profile_source_[p.filament->name] = {p.filament_license, p.filament_origin};
                     }
-                    if (p.print)
+                    if (p.print) {
                         pack_entry_printer_[p.print->name] = p.print_printer_settings;
+                        pack_profile_source_[p.print->name] = {p.print_license, p.print_origin};
+                    }
                     if (kind == ProfileKind::Printer) {
                         std::vector<std::string> texts;
                         for (const Profile& m : made)
@@ -4562,6 +4579,7 @@ void App::load_profile_lists() {
                                 if (pm.file == file) {
                                     pack_printer_model_[m.name] = {v.name, pm.name};
                                     pack_printer_bed_[m.name] = {pm.bed_model, pm.bed_texture};
+                                    pack_profile_source_[m.name] = {v.license, v.origin};
                                 }
                     }
                 }
@@ -4575,6 +4593,7 @@ void App::load_profile_lists() {
                         std::vector<std::string> ignored;
                         PackEntry entry = read_pack_entry(pack_dir(), ref.path, ignored);
                         pack_entry_printer_[entry.profile.name] = entry.printer_settings;
+                        pack_profile_source_[entry.profile.name] = {entry.license, entry.origin};
                         if (std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
                                          [&](const Profile& b) { return b.name == entry.profile.name; }))
                             builtin_profiles_[k].push_back(std::move(entry.profile));
@@ -4590,6 +4609,7 @@ void App::load_profile_lists() {
                     PackEntry entry = read_pack_entry(pack_dir(), path, ignored);
                     pack_filament_vendor_[entry.profile.name] = entry.vendor;
                     pack_entry_printer_[entry.profile.name] = entry.printer_settings;
+                    pack_profile_source_[entry.profile.name] = {entry.license, entry.origin};
                     Profile f = std::move(entry.profile);
                     if (std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
                                      [&](const Profile& b) { return b.name == f.name; }))
@@ -4783,6 +4803,21 @@ std::vector<double> App::printer_diameters() const {
 }
 
 // compact: the list only, the whole width (the folded panel's card).
+// Under a pack profile's row, a small line with its license and origin and
+// the link to the pack's repository (profile_pack.md, rule 15).
+void App::pack_source_line(ProfileKind kind) {
+    const auto it = pack_profile_source_.find(chosen_profile_[std::size_t(kind)]);
+    if (it == pack_profile_source_.end())
+        return;
+    ImGui::PushID("pack_source");
+    ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
+    loc::TextDisabled(tr(T::PackOrigin), it->second.first.c_str(), it->second.second.c_str());
+    ImGui::SameLine();
+    ImGui::TextLinkOpenURL(tr(T::PackRepository), kPackRepository);
+    ImGui::PopFont();
+    ImGui::PopID();
+}
+
 void App::profile_row(ProfileKind kind, bool compact) {
     const std::size_t k = std::size_t(kind);
     ImGui::PushID(int(k));
@@ -5418,9 +5453,17 @@ void App::poll_pack_update() {
         return;
     const std::string error = pack_job_.get();
     load_pack();
+    const bool first_index = std::exchange(pack_first_index_, false);
     if (!error.empty()) {
         pack_add_after_.clear();
-        fail(T::PackSection, format(tr(T::PackFailed), error.c_str()));
+        // The first run without a network: the included printers, and a
+        // notice, not an error (rule 3, PK2).
+        if (first_index) {
+            log_line("pack: " + error);
+            notify(tr(T::PackOffline));
+        } else {
+            fail(T::PackSection, format(tr(T::PackFailed), error.c_str()));
+        }
         return;
     }
     if (!pack_add_after_.empty()) {
@@ -7875,6 +7918,7 @@ void App::settings_panel() {
         return;
     }
     profile_row(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
+    pack_source_line(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
     if (panel_tab_ == SettingsTab::Material)
         anchor("filament_selector");
     if (panel_tab_ == SettingsTab::Material) {
@@ -9116,6 +9160,13 @@ void App::status_bar() {
     ImGui::SameLine(0, 30.0f * scale_);
     if (slice_job_.running()) {
         loc::TextColored(rgb(theme_.accent_hover), "%s %.1f s", tr(T::Slicing), glfwGetTime() - slice_started_);
+    } else if (pack_job_.valid() && pack_state_) { // the pack downloading (rule 1)
+        std::string status;
+        {
+            std::lock_guard lock(pack_state_->mutex);
+            status = pack_state_->status;
+        }
+        loc::TextDisabled(tr(T::PackBusy), status.c_str());
     } else if (result_ && viewer_) {
         loc::TextDisabled("%s", tr(T::ViewerOnly));
     } else if (result_ && stale_) {

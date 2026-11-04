@@ -25,6 +25,8 @@ public:
 };
 
 inline constexpr int kPackVersion = 2;
+// The pack's repository, linked beside a pack profile's license (rule 15).
+inline constexpr const char* kPackRepository = "https://github.com/adriangrochi-code/Tisma-profiles-";
 inline constexpr const char* kPackUrl = "https://github.com/adriangrochi-code/Tisma-profiles-/releases/latest/download/";
 
 struct PackFile {
@@ -157,6 +159,8 @@ struct PackProfiles {
     // The printer settings the filament and the print entry carry
     // (PackEntry::printer_settings), already laid over `printer`.
     std::string filament_printer_settings = "{}", print_printer_settings = "{}";
+    // The filament's and the print entry's license and origin (rule 15).
+    std::string filament_license, filament_origin, print_license, print_origin;
     std::vector<std::string> warnings; // keys left out
 };
 PackProfiles pack_profiles(const std::filesystem::path& pack_dir, const PackIndex& index, const std::string& printer,

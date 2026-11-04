@@ -10845,8 +10845,6 @@ vuelta de perfilado.
 **Sigue (paquete de perfiles, lo que falta en el escritorio):**
 - Regla 14, PNG: falta (decisión del dueño, 2026-11-04: SVG por ahora). Para PNG no hay lector en el motor: elegir
   uno permisivo y anotarlo antes de usarlo.
-- PK1/PK2 en el primer arranque (asistente con el paquete) y la regla 15 (licencia y origen en el panel del perfil,
-  no solo en el catálogo): revisar contra la ficha.
 
 ## 2026-11-04 — la cama del paquete en la vista 3D (`profile_pack.md`, regla 14, solo SVG)
 
@@ -10901,4 +10899,19 @@ elección. Los que la persona cambió a mano se quedan, con el aviso «Se mantuv
 
 Prueba: `ui_pack_print_speeds` (Acme Standard → Acme Fine → velocidad de viaje a mano → Acme Standard) y los verbos de
 guion `choose-profile` y `set`. **Sin probar:** con el paquete real; se pidió a la sesión de fichas.
+
+## 2026-11-04 — primer arranque con el paquete (reglas 1 y 3, PK1, PK2) y licencia en el panel (regla 15)
+
+**Hecho:**
+- Primer arranque sin paquete instalado: la interfaz baja el índice en segundo plano, sin preguntar, y la barra de
+  estado muestra el avance. El catálogo del asistente suma los modelos del paquete al llegar (regla 1, PK1).
+- Sin red: el aviso «Sin conexión: se muestran las impresoras incluidas; el resto se descarga cuando haya red», en
+  lugar de un error. El catálogo propio sigue (regla 3, PK2).
+- Opción `--pack-url` para las pruebas (en lugar de `packs.url`).
+- Regla 15: bajo la fila de un perfil del paquete (impresora, filamento o impresión), una línea chica con su licencia,
+  su origen y el enlace al repositorio del paquete.
+
+**Prueba:** `ui_pack_offline_first_run` (sin red: el catálogo propio y el aviso, captura mirada). En
+`ui_pack_print_speeds`, la línea de licencia. **Sin probar:** PK1 contra GitHub de verdad desde la interfaz; la
+descarga en sí ya la prueba `test_pack_fetch` con un servidor simulado.
 
