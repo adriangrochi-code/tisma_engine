@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- `--set grupo.clave=valor` (se repite) y `--config-over <parcial.json>` en `slice`, `analyze`, `aero` y `orient` de un
+  proyecto: cambios encima de los ajustes del proyecto, sin tocar el archivo (pedido de la app de Android,
+  `mobile_app.md` regla 13).
 - Material › Temperaturas muestra en el nivel Básico la boquilla y la cama de la primera capa (`settings_panel.md`,
   regla 10). Vacías, son las mismas que en las demás capas. `tisma --settings-layout` da el tipo, la unidad, el
   mínimo, el máximo y el valor de las temperaturas (pedido de la app de Android).

@@ -85,6 +85,13 @@ errores. El resumen lleva `print_time` («1h 2m 3s»), `print_time_s`, `filament
 la densidad del filamento) y `layers`, o `error` si falló. `--sandbox` no corre los scripts de posproceso de los
 ajustes; `--no-gpu` lamina con la CPU. En cualquier orden, `--threads <n>` usa como mucho `n` hilos de cálculo.
 
+Para cambiar ajustes del proyecto sin tocar el archivo, en `slice`, `analyze`, `aero` y `orient` de un proyecto:
+- `--config-over <parcial.json>`: un JSON con solo los grupos y claves que cambian, encima de los del proyecto;
+- `--set grupo.clave=valor`: una clave, se puede repetir y va después de `--config-over`. Un número, `true`, `false`,
+  una lista o un objeto se leen como JSON; lo demás, como texto.
+
+Una clave desconocida o un valor fuera de rango es un error (código 2, `bad_settings` en el resumen).
+
 Códigos de salida: 0 bien; 1 línea de comandos mal escrita; 2 un archivo de entrada falta, está mal o no se puede
 escribir la salida; 3 orden todavía sin hacer; 4 el modelo no se puede imprimir (sin triángulos, ninguna capa cerrada,
 fuera de `machine.bed`, más alto que `machine.max_height`, falda o borde fuera de la cama, o nada que extruir); 5 el

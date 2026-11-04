@@ -39,14 +39,58 @@ namespace {
 struct NodeArgs {
     std::string project, output, summary;
     bool sandbox = false, no_gpu = false, yes = false;
+    std::vector<std::string> sets; // --set group.key=value, in order
+    std::string over;              // --config-over: a partial settings JSON
 };
+
+std::optional<std::string> read_whole(const std::filesystem::path& path);
+
+// --set and --config-over: changes over the project's own settings (the
+// phone's «apply to the slicing», mobile_app.md rule 13). The settings go to
+// their JSON, the partial JSON is merged over it (RFC 7386, objects key by
+// key), then each --set; the result is read back as settings, so an unknown
+// key or a bad value is an error, not ignored. Empty on success, else why.
+std::string apply_changes(Settings& settings, const NodeArgs& a) {
+    if (a.sets.empty() && a.over.empty())
+        return {};
+    nlohmann::json j = nlohmann::json::parse(settings_json(settings));
+    if (!a.over.empty()) {
+        const std::optional<std::string> text = read_whole(a.over);
+        if (!text)
+            return "cannot read '" + a.over + "'";
+        const nlohmann::json over = nlohmann::json::parse(*text, nullptr, false);
+        if (!over.is_object())
+            return "'" + a.over + "' is not a JSON object of settings";
+        j.merge_patch(over);
+    }
+    for (const std::string& set : a.sets) {
+        const auto eq = set.find('=');
+        const auto dot = set.find('.');
+        if (eq == std::string::npos || dot == std::string::npos || dot == 0 || dot + 1 >= eq)
+            return "--set needs group.key=value, not '" + set + "'";
+        const std::string group = set.substr(0, dot), key = set.substr(dot + 1, eq - dot - 1), text = set.substr(eq + 1);
+        // A number, true/false, a list or an object as JSON; anything else as text.
+        nlohmann::json value = nlohmann::json::parse(text, nullptr, false);
+        if (value.is_discarded() || value.is_string())
+            value = text;
+        if (!j.contains(group) || !j.at(group).is_object())
+            j[group] = nlohmann::json::object();
+        j[group][key] = value;
+    }
+    try {
+        settings = parse_settings(j.dump());
+    } catch (const std::exception& e) {
+        return e.what();
+    }
+    return {};
+}
 
 // The first argument that is not an option or an option's value.
 std::string first_input(std::span<const std::string_view> args) {
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string_view a = args[i];
         if (a == "-o" || a == "--output" || a == "--summary" || a == "--config" || a == "-c" || a == "--warnings" ||
-            a == "--case" || a == "--copies") {
+            a == "--case" || a == "--copies" || a == "--set" || a == "--config-over") {
             ++i;
             continue;
         }
@@ -133,6 +177,10 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
             a.output = std::string(args[++i]);
         } else if (arg == "--summary" && has_value) {
             a.summary = std::string(args[++i]);
+        } else if (arg == "--set" && has_value) {
+            a.sets.emplace_back(args[++i]);
+        } else if (arg == "--config-over" && has_value) {
+            a.over = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -202,6 +250,8 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     progress(5);
 
     Settings settings = std::move(project.settings);
+    if (const std::string why = apply_changes(settings, a); !why.empty())
+        return fail(kExitInput, why, "bad_settings", "un cambio de ajustes no es válido");
     for (const std::string& key : fill_missing_speeds(settings))
         err << "warning: the printer's profile gives no speed for " << key << ": a stock Ender-3's is used\n";
     if (a.no_gpu)
@@ -346,6 +396,10 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         } else if ((arg == "--object" || arg == "--instance") && has_value) {
             if (!whole(args[++i], arg == "--object" ? object : instance) && usage.empty())
                 usage = "error: analyze: " + std::string(arg) + " needs a whole number from 0";
+        } else if (arg == "--set" && has_value) {
+            a.sets.emplace_back(args[++i]);
+        } else if (arg == "--config-over" && has_value) {
+            a.over = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -444,6 +498,8 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
                     "no_instance", "ese objeto no tiene esa copia");
     const ProjectModel& model = project.models[index];
     Settings settings = std::move(project.settings);
+    if (const std::string why = apply_changes(settings, a); !why.empty())
+        return fail(kExitInput, why, "bad_settings", "un cambio de ajustes no es válido");
     for (const std::string& key : fill_missing_speeds(settings))
         err << "warning: the printer's profile gives no speed for " << key << ": a stock Ender-3's is used\n";
     if (a.no_gpu)
@@ -636,6 +692,10 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
             } else {
                 (arg == "--object" ? object : instance) = n;
             }
+        } else if (arg == "--set" && has_value) {
+            a.sets.emplace_back(args[++i]);
+        } else if (arg == "--config-over" && has_value) {
+            a.over = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -750,6 +810,8 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
                     "no_instance", "ese objeto no tiene esa copia");
     const ProjectModel& model = project.models[index];
     Settings settings = std::move(project.settings);
+    if (const std::string why = apply_changes(settings, a); !why.empty())
+        return fail(kExitInput, why, "bad_settings", "un cambio de ajustes no es válido");
     std::vector<std::string> notes;
     apply_engineering_overrides(settings, model.engineering, notes);
     progress(5);
@@ -837,6 +899,10 @@ int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out
             } else {
                 (arg == "--object" ? object : instance) = n;
             }
+        } else if (arg == "--set" && has_value) {
+            a.sets.emplace_back(args[++i]);
+        } else if (arg == "--config-over" && has_value) {
+            a.over = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -901,6 +967,8 @@ int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out
         return fail(kExitInput, "object " + std::to_string(index) + " has no instance " + std::to_string(instance) +
                                     " (each object has one, 0)",
                     "no_instance", "ese objeto no tiene esa copia");
+    if (const std::string why = apply_changes(project.settings, a); !why.empty())
+        return fail(kExitInput, why, "bad_settings", "un cambio de ajustes no es válido");
     const ProjectModel& model = project.models[index];
     const PlacedPart part = placed_part(model);
     if (part.mesh.triangle_count() == 0)
