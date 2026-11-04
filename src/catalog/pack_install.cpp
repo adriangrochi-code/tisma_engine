@@ -325,6 +325,8 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
         if (kind == ProfileKind::Filament)
             out.filament_vendor = entry.vendor;
         (kind == ProfileKind::Filament ? out.filament_printer_settings : out.print_printer_settings) = entry.printer_settings;
+        (kind == ProfileKind::Filament ? out.filament_license : out.print_license) = entry.license;
+        (kind == ProfileKind::Filament ? out.filament_origin : out.print_origin) = entry.origin;
         const nlohmann::json carried = nlohmann::json::parse(entry.printer_settings);
         for (const auto& [group, keys] : carried.items())
             for (const auto& [key, value] : keys.items())

@@ -1051,10 +1051,12 @@
     X(NozzleSize, "Boquilla", "Nozzle")                                                                               \
     X(AddToProfiles, "Agregar a mis perfiles", "Add to my profiles")                                                  \
     X(PackSection, "Paquete libre de perfiles", "Free profile pack") \
+    X(PackOffline, "Sin conexión: se muestran las impresoras incluidas; el resto se descarga cuando haya red", "No connection: the included printers are shown; the rest downloads when there is a network") \
     X(PackGetList, "Bajar la lista de impresoras del paquete", "Download the pack's printer list") \
     X(PackHint, "Miles de impresoras más, de un repositorio aparte de uso libre. Se baja solo lo que elegís.", "Thousands more printers, from a separate free repository. Only what you choose is downloaded.") \
     X(PackDownloadAdd, "Bajar y agregar", "Download and add") \
     X(PackUpdate, "Actualizar el paquete", "Update the pack") \
+    X(PackRepository, "repositorio", "repository") \
     X(PackOrigin, "Licencia %s · origen %s", "License %s · origin %s") \
     X(PackNotDownloaded, "Sus perfiles todavía no se bajaron.", "Its profiles are not downloaded yet.") \
     X(PackBusy, "Paquete: %s", "Pack: %s") \

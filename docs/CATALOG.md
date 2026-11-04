@@ -235,6 +235,10 @@ app del teléfono) baja los archivos que pide el plan a una carpeta y el motor l
   el modelo en el color de la placa y el dibujo, con su forma, centrado en la caja de la cama y con la grilla encima
   (regla 14). Un dibujo PNG todavía no
   se muestra.
+- El primer arranque baja la lista del paquete solo, en segundo plano (regla 1). Sin red, aviso «Sin conexión…» y el
+  catálogo propio (regla 3). Bajo la fila de un perfil del paquete van su licencia, su origen y el enlace al
+  repositorio (regla 15).
+- `tisma --pack-url URL` baja el paquete de otra dirección (pruebas).
 - `tisma --pack CARPETA` usa otro paquete, también en las capturas. `--pick-pack-printer "<archivo>#<variante>"`
   agrega y elige una impresora del paquete; es para las pruebas.
 

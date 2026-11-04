@@ -172,6 +172,8 @@ int main(int argc, char** argv) {
             options.knowledge = value();
         } else if (arg == "--pack") {
             options.pack = value();
+        } else if (arg == "--pack-url") {
+            options.pack_url = value();
         } else if (arg == "--tutorial") {
             // ID or ID,STEP (from 1): a guided tutorial of the help's data on screen.
             const std::string t = value();

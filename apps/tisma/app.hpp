@@ -74,6 +74,7 @@ struct AppOptions {
     std::string help;             // the help panel open at this tab: problems, procedures, glossary, tutorials, calibrations
     std::string knowledge;        // the help's data folder instead of the pack's (knowledge/)
     std::string pack;             // the profile pack's folder instead of the one beside the preferences
+    std::string pack_url;         // the pack's address instead of packs.url (profile_pack.md; for tests)
     std::string help_open;        // with help: a problem or procedure id opened in it
     std::string tutorial;         // a guided tutorial of the help's data started at its step tutorial_step
     int tutorial_step = 0;
