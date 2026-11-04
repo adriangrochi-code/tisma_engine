@@ -74,8 +74,10 @@ std::vector<PlateObject> project_objects(std::vector<ProjectModel>& models) {
         o.settings = m.settings;
         for (const ProjectVolume& v : m.volumes)
             o.volumes.push_back({v.negative ? PlateVolume::Kind::Negative : PlateVolume::Kind::Modifier,
-                                 v.cylinder ? PlateVolume::Shape::Cylinder : PlateVolume::Shape::Box, v.offset, v.size,
-                                 v.settings, v.turn});
+                                 v.lattice    ? PlateVolume::Shape::Lattice
+                                 : v.cylinder ? PlateVolume::Shape::Cylinder
+                                              : PlateVolume::Shape::Box,
+                                 v.offset, v.size, v.settings, v.turn, v.lattice_cell, v.lattice_diameter});
         for (const ProjectRange& r : m.ranges)
             o.ranges.push_back({r.from, r.to, r.settings});
         // The conditions move with the mesh when it is baked; otherwise they

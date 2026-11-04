@@ -34,6 +34,10 @@ bool inside_mesh(const TriangleMesh& mesh, const std::array<double, 3>& p);
 // the part, so they reach its walls.
 std::vector<LatticeBar> bars_touching(const std::vector<LatticeBar>& bars, const TriangleMesh& part);
 
+// The lattice of cells of side `cell` over the part's box, its bars of
+// `diameter` that touch the part, as one mesh (empty when none does).
+TriangleMesh lattice_in(const TriangleMesh& part, double cell, double diameter);
+
 // The density of the lattice: the bars' volume over the cell's,
 // pi (1 + 4 sqrt 2) (r / a)^2 for cells of side a and bars of radius r.
 double lattice_density(double diameter, double a);

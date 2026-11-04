@@ -194,6 +194,19 @@ TEST_CASE("a project keeps a model's own settings, volumes and height ranges (mo
     CHECK(b.ranges[0].to == 6.0);
     CHECK(b.ranges[0].settings == m.ranges[0].settings);
     CHECK(back.models[1].volumes.empty());
+    // A lattice (structural_optimization.md, rule 7) keeps its cell and bars.
+    Project q = sample();
+    ProjectVolume lattice;
+    lattice.lattice = true;
+    lattice.lattice_cell = 5.0;
+    lattice.lattice_diameter = 1.25;
+    lattice.settings = R"({"infill":{"density":100}})";
+    q.models.front().volumes.push_back(lattice);
+    const Project qb = read_project(write_project(q));
+    REQUIRE(qb.models.front().volumes.size() == 1);
+    CHECK(qb.models.front().volumes[0].lattice);
+    CHECK(qb.models.front().volumes[0].lattice_cell == 5.0);
+    CHECK(qb.models.front().volumes[0].lattice_diameter == 1.25);
 }
 
 TEST_CASE("a project as a 3MF package: any reader sees the plate, the engine reads it all back (formats.md, rule 11)",

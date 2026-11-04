@@ -10567,3 +10567,20 @@ diámetro, la celda, el factor y la masa, o que ni con 3 mm aguanta.
 **Falta:** «Usar la retícula»: los volúmenes de una pieza son cajas o cilindros (`PlateVolume`), y la retícula es una
 malla. Hace falta un volumen con malla propia (guardado en el proyecto 3MF como una malla modificadora más) antes de
 poder aplicarla. También falta el diámetro por celda. Siguiente: el volumen con malla.
+
+## 2026-11-04 — Optimizar, regla 7, paso E: el volumen de retícula y «Usar la retícula»
+
+**Hecho:** un volumen nuevo de la pieza, `PlateVolume::Shape::Lattice` (celda y diámetro): su malla son las barras
+que tocan la pieza **donde está en la cama** (`lattice_in` sobre la pieza colocada), así las barras quedan verticales
+y a 45° aunque la pieza esté girada. El proyecto lo guarda como `"shape": "lattice"` con `"cell"` y `"diameter"` (no
+la malla) y lo lee de vuelta; el laminado del proyecto lo usa como cualquier modificador. «Usar la retícula» pone la
+pieza al 0 % y agrega el volumen al 100 %, con un solo deshacer. En la vista 3D no se dibuja su contorno (miles de
+caras).
+
+**Prueba:** `test_project` (ida y vuelta de la celda y el diámetro), `test_plate` (las barras sobre un cubo girado
+30°, dentro de su caja, con aristas verticales), `[lattice]`, `[ui]`, `ui_script_structural_analyze`. **Sin probar en
+la interfaz:** «Usar la retícula» y su deshacer; la ventana de ajustes del objeto todavía muestra lugar y tamaño para
+este volumen aunque no los usa.
+
+**Pendiente:** el diámetro por celda (regla 7, segunda búsqueda); `bars_touching` recorre todas las caras por cada
+punto (lento en mallas grandes: una grilla de celdas lo resolvería).

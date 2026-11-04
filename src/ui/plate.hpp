@@ -39,11 +39,16 @@ struct Placement {
 // scaled, turned and set on the bed with the model.
 struct PlateVolume {
     enum class Kind { Modifier, Negative } kind = Kind::Modifier;
-    enum class Shape { Box, Cylinder } shape = Shape::Box;
+    // Lattice (structural_optimization.md, rule 7): the support-free lattice
+    // of cells of side lattice_cell and bars of lattice_diameter over the
+    // part where it stands on the bed, bars vertical whatever its turn; its
+    // place and size are the part's.
+    enum class Shape { Box, Cylinder, Lattice } shape = Shape::Box;
     std::array<double, 3> offset{0.0, 0.0, 0.0}; // mm: its box's centre in X and Y, its bottom in Z
     std::array<double, 3> size{10.0, 10.0, 10.0}; // mm
     std::string settings{};
     Rotation turn = kNoRotation; // its own turn in the model's frame, about its centre
+    double lattice_cell = 0.0, lattice_diameter = 0.0; // mm, for a lattice
     friend bool operator==(const PlateVolume&, const PlateVolume&) = default;
 };
 // A height range of an object (model_tools.md, rule 6): from and to over its

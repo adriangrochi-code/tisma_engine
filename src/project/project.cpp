@@ -109,9 +109,13 @@ static ordered_json project_json(const Project& project, bool offsets) {
             models.back()["settings"] = ordered_json::parse(m.settings);
         for (const ProjectVolume& v : m.volumes) {
             ordered_json item = {{"kind", v.negative ? "negative" : "modifier"},
-                                 {"shape", v.cylinder ? "cylinder" : "box"},
+                                 {"shape", v.lattice ? "lattice" : v.cylinder ? "cylinder" : "box"},
                                  {"offset", v.offset},
                                  {"size", v.size}};
+            if (v.lattice) {
+                item["cell"] = v.lattice_cell;
+                item["diameter"] = v.lattice_diameter;
+            }
             if (v.turn != std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1})
                 item["turn"] = v.turn;
             if (!v.settings.empty())
@@ -319,10 +323,20 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
                         fail(at + ": must be an object");
                     ProjectVolume volume;
                     const std::string kind = v.value("kind", std::string("modifier")), shape = v.value("shape", std::string("box"));
-                    if ((kind != "modifier" && kind != "negative") || (shape != "box" && shape != "cylinder"))
-                        fail(at + ": kind must be modifier or negative, shape box or cylinder");
+                    if ((kind != "modifier" && kind != "negative") || (shape != "box" && shape != "cylinder" && shape != "lattice"))
+                        fail(at + ": kind must be modifier or negative, shape box, cylinder or lattice");
                     volume.negative = kind == "negative";
                     volume.cylinder = shape == "cylinder";
+                    volume.lattice = shape == "lattice";
+                    if (volume.lattice) {
+                        const auto positive = [&](const char* key) {
+                            if (!v.contains(key) || !v.at(key).is_number() || !(v.at(key).get<double>() > 0.0))
+                                fail(at + "." + key + ": a lattice needs a number above 0");
+                            return v.at(key).get<double>();
+                        };
+                        volume.lattice_cell = positive("cell");
+                        volume.lattice_diameter = positive("diameter");
+                    }
                     volume.offset = three(v, "offset", at);
                     volume.size = three(v, "size", at);
                     if (v.contains("turn")) {

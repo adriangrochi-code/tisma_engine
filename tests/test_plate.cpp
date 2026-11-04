@@ -535,6 +535,33 @@ TEST_CASE("plate: a box on the bed becomes a modifier that lands on it (structur
     CHECK_FALSE(volume_for_bed_box(o, placed, lo, hi, "{}"));
 }
 
+TEST_CASE("plate: a lattice volume is its bars on the part where it stands (structural_optimization.md, rule 7)", "[plate]") {
+    PlateObject o{"cube", box(0, 0, 0, 10, 10, 10), {}, {}};
+    o.place.x = 50, o.place.y = 60;
+    o.place.rotation = rotated(kNoRotation, 2, 30.0); // turned: the bars still stand
+    PlateVolume v;
+    v.shape = PlateVolume::Shape::Lattice;
+    v.lattice_cell = 5.0;
+    v.lattice_diameter = 1.0;
+    const TriangleMesh placed = placed_mesh(o);
+    const TriangleMesh bars = volume_mesh(v, o, placed);
+    REQUIRE_FALSE(bars.empty());
+    const BoundingBox p = placed.bounding_box(), b = bars.bounding_box();
+    CHECK(b.min.z >= p.min.z - 0.51f);
+    CHECK(b.max.z <= p.max.z + 0.51f);
+    CHECK(b.min.x >= p.min.x - 0.51f);
+    CHECK(b.max.x <= p.max.x + 5.51f); // whole cells from the box's corner
+    // The vertical bars: some triangle edge runs straight up.
+    bool upright = false;
+    for (std::size_t t = 0; t < bars.triangle_count() && !upright; ++t) {
+        for (int k = 0; k < 3; ++k) {
+            const Vec3f a = bars.corner(t, k), c = bars.corner(t, (k + 1) % 3);
+            upright |= std::fabs(a.x - c.x) < 1e-3f && std::fabs(a.y - c.y) < 1e-3f && std::fabs(a.z - c.z) > 4.9f;
+        }
+    }
+    CHECK(upright);
+}
+
 TEST_CASE("plate: the recommended orientation turns the part so its layers stack along that axis (rule 8)", "[plate]") {
     PlateObject o{"bar", box(0, 0, 0, 24, 6, 6), {}, {}};
     for (int axis = 1; axis < 3; ++axis) {

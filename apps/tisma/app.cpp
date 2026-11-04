@@ -4314,7 +4314,8 @@ Project App::current_project() const {
         // Its volumes, ranges and Engineering data, in the same coordinates.
         for (const PlateVolume& v : objects_[i].volumes)
             p.models.back().volumes.push_back({v.kind == PlateVolume::Kind::Negative, v.shape == PlateVolume::Shape::Cylinder,
-                                               v.offset, v.size, v.settings, v.turn});
+                                               v.offset, v.size, v.settings, v.turn, v.shape == PlateVolume::Shape::Lattice,
+                                               v.lattice_cell, v.lattice_diameter});
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
         p.models.back().engineering = objects_[i].engineering;
@@ -9960,6 +9961,8 @@ void App::volumes_overlay() {
         if (objects_[i].volumes.empty())
             continue;
         for (const PlateVolume& v : objects_[i].volumes) {
+            if (v.shape == PlateVolume::Shape::Lattice) // its bars, thousands of faces, not outlined
+                continue;
             const ImU32 colour = v.kind == PlateVolume::Kind::Negative ? IM_COL32(170, 170, 180, 220) : IM_COL32(240, 150, 40, 230);
             const TriangleMesh shape = volume_mesh(v, objects_[i], placed_meshes_[i]);
             // The outline of every face but the cylinder's caps' spokes.
@@ -13062,9 +13065,34 @@ void App::structural_panel() {
                         const LightestLattice& l = o.latticed;
                         if (!l.found)
                             loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructLatticeNone));
-                        else
+                        else {
                             loc::TextColored(rgb(0x3FBF7F), "%s",
                                              format(tr(T::StructLatticeFound), l.diameter, l.cell, l.min_safety, l.mass_g).c_str());
+                            if (ImGui::Button(tr(T::StructLatticeApply)) && part < objects_.size()) {
+                                // The part at 0 %, the lattice a solid zone in it, undone together.
+                                PlateObject& to = objects_[part];
+                                const std::string settings_before = to.settings;
+                                const std::vector<PlateVolume> volumes_before = to.volumes;
+                                Settings hollow = settings_;
+                                hollow.infill_density = 0.0;
+                                to.settings = with_own_key(to.settings, hollow, "infill.density");
+                                PlateVolume v;
+                                v.shape = PlateVolume::Shape::Lattice;
+                                v.lattice_cell = l.cell;
+                                v.lattice_diameter = l.diameter;
+                                v.settings = "{\"infill\": {\"density\": 100}}";
+                                to.volumes.push_back(v);
+                                plate_changed();
+                                notify_undo(format(tr(T::StructLatticeApplied), l.diameter), [this, part, settings_before, volumes_before] {
+                                    if (part >= objects_.size())
+                                        return;
+                                    objects_[part].settings = settings_before;
+                                    objects_[part].volumes = volumes_before;
+                                    plate_changed();
+                                });
+                            }
+                            rect_of("structural_lattice_apply");
+                        }
                         rect_of("structural_lattice_found");
                     } else if (o.orientation) {
                         const OrientationChoice& r = o.orient;

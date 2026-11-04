@@ -121,6 +121,13 @@ std::vector<LatticeBar> bars_touching(const std::vector<LatticeBar>& bars, const
     return out;
 }
 
+TriangleMesh lattice_in(const TriangleMesh& part, double cell, double diameter) {
+    if (part.empty() || !(cell > 0.0) || !(diameter > 0.0))
+        return {};
+    const BoundingBox b = part.bounding_box();
+    return lattice_mesh(bars_touching(lattice_bars({b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, cell), part), diameter);
+}
+
 double lattice_density(double diameter, double a) {
     if (!(a > 0.0))
         return 0.0;

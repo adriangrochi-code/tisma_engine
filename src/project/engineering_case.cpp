@@ -575,14 +575,7 @@ Reinforcement reinforcement_zone(const AnalysisReport& report, const AnalysisCas
 }
 
 MeshModifier lattice_modifier(const TriangleMesh& part, double cell, double diameter) {
-    MeshModifier out{"lattice", 0, {}, "{\"infill\": {\"density\": 100}}"};
-    if (part.empty() || !(cell > 0.0) || !(diameter > 0.0))
-        return out;
-    const BoundingBox b = part.bounding_box();
-    const std::vector<LatticeBar> bars =
-        bars_touching(lattice_bars({b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, cell), part);
-    out.mesh = lattice_mesh(bars, diameter);
-    return out;
+    return {"lattice", 0, lattice_in(part, cell, diameter), "{\"infill\": {\"density\": 100}}"};
 }
 
 double lattice_cell_for(const TriangleMesh& part) {
