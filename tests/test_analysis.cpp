@@ -666,9 +666,9 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     // With the nodes' displacement (here u = (0, 0, z)), each corner carries its own.
     std::vector<double> lift(3 * 3 * 2 * 2, 0.0);
     for (int k = 0; k < 2; ++k)
-        for (int j = 0; j < 2; ++j)
+        for (int y = 0; y < 2; ++y)
             for (int i = 0; i < 3; ++i)
-                lift[3 * std::size_t((k * 2 + j) * 3 + i) + 2] = double(k);
+                lift[3 * std::size_t((k * 2 + y) * 3 + i) + 2] = double(k);
     const VoxelSurface lifted = voxel_surface(two, {1.0, 2.0}, &lift);
     REQUIRE(lifted.displacement.size() == lifted.corners.size());
     for (std::size_t n = 0; n < lifted.corners.size(); ++n)
@@ -882,4 +882,59 @@ TEST_CASE("analysis with modifiers: a zone's own infill is printed and analysed 
     REQUIRE(filled.valid);
     CHECK(filled.result.min_safety > 1.2 * empty.result.min_safety);
     CHECK(filled.result.elasticity.max_displacement < empty.result.elasticity.max_displacement);
+}
+
+TEST_CASE("infill zones: denser cells where the stress is higher (structural_optimization.md, rule 3)",
+          "[analysis][engineering]") {
+    const IndexedMesh bar = box_mesh(24.0f, 6.0f, 6.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {24.0, 3.0, 3.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 3.0;
+    tip.newtons = 20.0;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    e.structural.quality = "normal";
+    std::vector<std::string> notes;
+    const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    Settings s = beads_04();
+    s.infill_density = 50.0;
+    const AnalysisReport uniform = run_analysis(bar, s, c);
+    REQUIRE(uniform.valid);
+    CHECK(infill_strength_exponent(InfillPattern::Gyroid) > infill_strength_exponent(InfillPattern::Rectilinear));
+    const InfillZones z = infill_zones(uniform, 50.0, 2.0, InfillPattern::Rectilinear);
+    CHECK(z.cells[0] + z.cells[1] + z.cells[2] > 0);
+    REQUIRE_FALSE(z.modifiers.empty());
+    for (int l = 0; l < 3; ++l) {
+        CHECK(z.density[l] >= 0.0);
+        CHECK(z.density[l] <= 100.0);
+        if (l > 0)
+            CHECK(z.density[l] >= z.density[l - 1]);
+    }
+    // The densest zone is near the fixed end, where the bending is largest.
+    double densest_x = 1e9;
+    for (const MeshModifier& m : z.modifiers)
+        if (m.settings.find(std::to_string(static_cast<int>(std::lround(z.density[2])))) != std::string::npos) {
+            CHECK_FALSE(m.mesh.empty());
+            densest_x = std::min(densest_x, static_cast<double>(m.mesh.bounding_box().min.x));
+        }
+    CHECK(densest_x < 6.0);
+    // A smaller scale never asks for more.
+    const InfillZones half = infill_zones(uniform, 50.0, 2.0, InfillPattern::Rectilinear, 0.5);
+    for (int l = 0; l < 3; ++l)
+        CHECK(half.density[l] <= z.density[l] + 1e-9);
 }

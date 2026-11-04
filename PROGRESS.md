@@ -10301,3 +10301,17 @@ empotrada, el factor sube más del 20 % y el desplazamiento baja (5,8 s).
 **Sigue (regla 3):** paso B, las celdas (3 vóxeles, mínimo 3 mm) con su densidad `ρ · utilización^(1/nS)`, en 3
 niveles como cajas modificadoras unidas en filas; paso C, la bisección del factor común y la comparación con el
 uniforme; paso D, en el panel.
+
+## 2026-11-04 — Optimizar, regla 3, paso B: las zonas
+
+**Hecho:** `infill_zones(informe, densidad, pedido, patrón, escala)` parte la pieza en celdas de 3 vóxeles (al menos
+3 mm); cada vóxel pide `densidad · (pedido / factor)^(1/nS)` (como mucho 100 %, `nS` del patrón:
+`infill_strength_exponent`) y la celda el máximo de los suyos. Las celdas caen en 3 niveles por tercios; cada nivel va
+al máximo de sus celdas por la escala común, y sus celdas vecinas en X se unen en una caja modificadora
+(`{"infill": {"density": N}}`, «zone L»). Arreglados dos avisos `-Wshadow`.
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N y relleno uniforme 50 %: niveles crecientes y ≤ 100, la zona más densa
+junto al empotramiento, con escala 0,5 nunca pide más.
+
+**Sigue (regla 3):** paso C, la bisección de la escala común hasta que aguante, la comparación con el uniforme y el
+análisis final con las zonas; paso D, en el panel.

@@ -252,6 +252,109 @@ Verdict report_verdict(const AnalysisReport& report, const AnalysisCase& c, cons
     return structural_verdict(in);
 }
 
+double infill_strength_exponent(InfillPattern pattern) {
+    // structural_analysis.md, «Exponentes del relleno»; the patterns the table
+    // does not name take the nearest kind's (lines as rectilinear, 3D cells
+    // as cubic).
+    switch (pattern) {
+    case InfillPattern::Honeycomb: return 1.4;
+    case InfillPattern::Cubic:
+    case InfillPattern::AdaptiveCubic:
+    case InfillPattern::SupportCubic:
+    case InfillPattern::Octagram: return 1.4;
+    case InfillPattern::Gyroid: return 1.5;
+    case InfillPattern::Lightning: return 2.5;
+    default: return 1.2;
+    }
+}
+
+namespace {
+
+TriangleMesh box_between(const Vec3f& lo, const Vec3f& hi) {
+    const Vec3f v[8] = {{lo.x, lo.y, lo.z}, {hi.x, lo.y, lo.z}, {hi.x, hi.y, lo.z}, {lo.x, hi.y, lo.z},
+                        {lo.x, lo.y, hi.z}, {hi.x, lo.y, hi.z}, {hi.x, hi.y, hi.z}, {lo.x, hi.y, hi.z}};
+    static constexpr int kFaces[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                                          {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+    TriangleMesh m;
+    for (const auto& f : kFaces)
+        m.add_triangle(v[f[0]], v[f[1]], v[f[2]]);
+    return m;
+}
+
+} // namespace
+
+InfillZones infill_zones(const AnalysisReport& report, double density, double asked, InfillPattern pattern, double scale) {
+    InfillZones out;
+    const VoxelGrid& g = report.grid;
+    const std::vector<double>& safety = report.result.safety;
+    if (g.solid.empty() || safety.size() != g.solid.size() || g.z.size() < 2)
+        return out;
+    const double n = infill_strength_exponent(pattern);
+    // Cells: 3 voxels a side, at least 3 mm (in Z by the planes' heights).
+    const int cx = std::max(3, int(std::ceil(3.0 / g.hx))), cy = std::max(3, int(std::ceil(3.0 / g.hy)));
+    std::vector<int> z_cell(std::size_t(g.nz)); // each layer of voxels to its cell row
+    std::vector<double> z_cut{g.z.front()};
+    for (int k = 0, count = 0; k < g.nz; ++k) {
+        z_cell[std::size_t(k)] = int(z_cut.size()) - 1;
+        ++count;
+        if ((count >= 3 && g.z[std::size_t(k) + 1] - z_cut.back() >= 3.0 - 1e-9) || k + 1 == g.nz) {
+            z_cut.push_back(g.z[std::size_t(k) + 1]);
+            count = 0;
+        }
+    }
+    const int nx = (g.nx + cx - 1) / cx, ny = (g.ny + cy - 1) / cy, nz = int(z_cut.size()) - 1;
+    std::vector<double> want(std::size_t(nx) * std::size_t(ny) * std::size_t(nz), -1.0); // -1: no voxel
+    const auto cell = [&](int i, int j, int k) { return (std::size_t(k) * std::size_t(ny) + std::size_t(j)) * std::size_t(nx) + std::size_t(i); };
+    for (int k = 0; k < g.nz; ++k)
+        for (int j = 0; j < g.ny; ++j)
+            for (int i = 0; i < g.nx; ++i) {
+                if (!g.at(i, j, k))
+                    continue;
+                const double s = safety[g.index(i, j, k)];
+                const double u = std::isfinite(s) && s > 0.0 ? asked / s : 0.0;
+                double& w = want[cell(i / cx, j / cy, z_cell[std::size_t(k)])];
+                w = std::max(w, std::min(100.0, density * std::pow(u, 1.0 / n)));
+            }
+    // Three levels by thirds of the cells, each at its most.
+    std::vector<double> sorted;
+    for (double w : want)
+        if (w >= 0.0)
+            sorted.push_back(w);
+    if (sorted.empty())
+        return out;
+    std::sort(sorted.begin(), sorted.end());
+    const std::size_t third = sorted.size() / 3;
+    const std::array<double, 2> cut{sorted[std::min(sorted.size() - 1, third)], sorted[std::min(sorted.size() - 1, 2 * third)]};
+    std::array<double, 3> most{0.0, 0.0, 0.0};
+    const auto level_of = [&](double w) { return w <= cut[0] ? 0 : w <= cut[1] ? 1 : 2; };
+    for (double w : sorted)
+        most[std::size_t(level_of(w))] = std::max(most[std::size_t(level_of(w))], w);
+    for (std::size_t l = 0; l < 3; ++l)
+        out.density[l] = std::min(100.0, std::round(most[l] * scale));
+    // The boxes: a level's cells along X joined.
+    for (int k = 0; k < nz; ++k)
+        for (int j = 0; j < ny; ++j)
+            for (int i = 0; i < nx;) {
+                const double w = want[cell(i, j, k)];
+                if (w < 0.0) {
+                    ++i;
+                    continue;
+                }
+                const int level = level_of(w);
+                int end = i + 1;
+                while (end < nx && want[cell(end, j, k)] >= 0.0 && level_of(want[cell(end, j, k)]) == level)
+                    ++end;
+                out.cells[std::size_t(level)] += std::size_t(end - i);
+                const Vec3f lo{float(g.x0 + i * cx * g.hx), float(g.y0 + j * cy * g.hy), float(z_cut[std::size_t(k)])};
+                const Vec3f hi{float(g.x0 + std::min(end * cx, g.nx) * g.hx), float(g.y0 + std::min((j + 1) * cy, g.ny) * g.hy),
+                               float(z_cut[std::size_t(k) + 1])};
+                out.modifiers.push_back({"zone " + std::to_string(level + 1), 0, box_between(lo, hi),
+                                         "{\"infill\": {\"density\": " + std::to_string(int(out.density[std::size_t(level)])) + "}}"});
+                i = end;
+            }
+    return out;
+}
+
 LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
                                const AnalysisCase& c, const ProjectEngineering& e,
                                const std::function<void(double)>& progress) {
@@ -337,7 +440,7 @@ std::string structural_report_json(const AnalysisReport& report, const AnalysisC
     const FailureMode mode = weakest_mode(report);
     const double discretization = report.resolution.done ? std::abs(report.resolution.change) : 0.0;
     const SafetyBand band = safety_band(report.result.min_safety, mode, c.adhesion, discretization);
-    const auto finite_or_null = [](double v) { return std::isfinite(v) ? nlohmann::json(v) : nlohmann::json(nullptr); };
+    const auto finite_or_null = [](double x) { return std::isfinite(x) ? nlohmann::json(x) : nlohmann::json(nullptr); };
     j["adhesion"] = {{"modelled", c.adhesion.modelled},
                      {"nozzle_temperature", c.adhesion.temperature},
                      {"reference_temperature", c.adhesion.reference_temperature},

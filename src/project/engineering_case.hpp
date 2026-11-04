@@ -6,6 +6,7 @@
 #include "fea/verdict.hpp"
 #include "mesh/mesh.hpp"
 #include "project/engineering.hpp"
+#include "slice/placement.hpp"
 
 #include <array>
 #include <functional>
@@ -99,6 +100,23 @@ struct LightestInfill {
     double min_safety = 0.0; // at that density
     int analyses = 0;
 };
+// «Relleno por zonas» (structural_optimization.md, rule 3), from an analysis
+// with uniform infill at `density` percent: each voxel wants the density that
+// brings its stress to the allowed, density · (asked / safety)^(1/nS) (nS the
+// pattern's strength exponent, structural_analysis.md); the part is cut into
+// cells of 3 voxels and at least 3 mm, each wanting its voxels' most; the
+// cells fall in 3 levels by thirds, each level at its cells' most, times
+// `scale` (at most 100 %). The zones are box modifiers, a level's cells next
+// to each other along X joined into one box, in the analysis' coordinates.
+struct InfillZones {
+    std::array<double, 3> density{}; // percent, lowest level first
+    std::array<std::size_t, 3> cells{};
+    std::vector<MeshModifier> modifiers;
+};
+double infill_strength_exponent(InfillPattern pattern);
+InfillZones infill_zones(const AnalysisReport& report, double density, double asked, InfillPattern pattern,
+                         double scale = 1.0);
+
 LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
                                const AnalysisCase& c, const ProjectEngineering& e,
                                const std::function<void(double)>& progress = {});
