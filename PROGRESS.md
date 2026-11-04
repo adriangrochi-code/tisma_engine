@@ -10281,6 +10281,10 @@ cuenta como incluido: el servidor decide (402). Probado en `test_cloud` con el s
 `slice`, Maker todo); **sin guion de interfaz** del candado (la cuenta de prueba es Maker).
 
 **Laminar en la nube** también lleva el candado: con un plan sin `slice`, la entrada del menú dice «… — Incluido en el
-plan …» y abre la cuenta en vez de mandar. Aerodinámica todavía no tiene «Calcular en la nube».
+plan …» y abre la cuenta en vez de mandar. **Aerodinámica en la nube**, hecho después: el mismo camino generalizado (`start_cloud_engineering("aerodynamics")`):
+trabajo `aero` con `object`, `instance`, `quality`, `speed` y `direction` (el eje sin «+», o tres números con la
+dirección de la vista); el `.taero` queda como el resultado de la pieza (sin mapa, como en Estructural). Casilla,
+candado por plan (`aero`) y avance como en Estructural. `ui_script_cloud_structural` sigue a Aerodinámica: analiza en
+la nube y `expect-aero 1` ve el arrastre del servidor de prueba.
 
-**Sigue:** el resto de Optimizar (relleno por zonas, regla 3); «Calcular en la nube» en Aerodinámica.
+**Sigue:** el resto de Optimizar (relleno por zonas, regla 3).

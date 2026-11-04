@@ -639,10 +639,11 @@ private:
     // «Calcular en la nube» in Structural (engineering_panel.md, rule 10;
     // cloud.md, rules 6 to 10b): the project as a fea job, its .tea result
     // kept with the part as a local one.
-    std::size_t cloud_fea_part_ = 0;
-    std::string cloud_fea_fingerprint_;
-    void start_cloud_structural();
-    void cloud_structural_step();
+    std::size_t cloud_eng_part_ = 0;
+    std::string cloud_eng_kind_; // "structural" (a fea job) or "aerodynamics" (aero)
+    std::string cloud_eng_fingerprint_;
+    void start_cloud_engineering(const std::string& kind);
+    void cloud_engineering_step();
     struct CloudSliceState { // shared with the call's thread
         std::mutex mutex;
         std::string status; // queued, running, done...
@@ -1206,8 +1207,8 @@ private:
     // Slicing in the cloud (cloud.md, rules 6 to 9): the job in flight and its state.
     std::future<CloudSliceReply> cloud_slice_;
     std::shared_ptr<CloudSliceState> cloud_slice_state_;
-    std::future<CloudSliceReply> cloud_fea_;
-    std::shared_ptr<CloudSliceState> cloud_fea_state_;
+    std::future<CloudSliceReply> cloud_eng_;
+    std::shared_ptr<CloudSliceState> cloud_eng_state_;
     int config_page_ = 0;
     std::string config_query_;
     struct ConfigState {
@@ -13418,21 +13419,21 @@ void App::structural_panel() {
         if (block == AnalyzeBlock::None)
             start_structural();
     }
-    if (cloud_fea_.valid() && cloud_fea_state_) {
+    if (cloud_eng_.valid() && cloud_eng_state_) {
         // In the cloud: the job's state and its progress, and Cancelar.
         std::string status;
         int progress = 0;
         {
-            std::lock_guard lock(cloud_fea_state_->mutex);
-            status = cloud_fea_state_->status;
-            progress = cloud_fea_state_->progress;
+            std::lock_guard lock(cloud_eng_state_->mutex);
+            status = cloud_eng_state_->status;
+            progress = cloud_eng_state_->progress;
         }
         ImGui::ProgressBar(float(progress) / 100.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
                            format(tr(T::StructCloudState), status.empty() ? "…" : status.c_str(), progress).c_str());
         rect_of("structural_cloud_state");
         ImGui::SameLine();
         if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
-            cloud_fea_state_->cancel = true;
+            cloud_eng_state_->cancel = true;
         rect_of("structural_cloud_cancel");
     } else if (structural_job_.running()) {
         // While it calculates (rule 11): its progress and Cancelar; the view
@@ -13454,7 +13455,7 @@ void App::structural_panel() {
                               !(cloud_account_ && !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "fea"));
         if (ImGui::Button(tr(in_cloud ? T::StructAnalyzeCloud : T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f))) {
             if (in_cloud)
-                start_cloud_structural();
+                start_cloud_engineering("structural");
             else
                 start_structural();
         }
@@ -13468,7 +13469,7 @@ void App::structural_panel() {
     // which open the account page.
     const bool fea_locked = !cloud_token_.empty() && cloud_account_ &&
                             !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "fea");
-    ImGui::BeginDisabled(cloud_token_.empty() || cloud_fea_.valid() || fea_locked);
+    ImGui::BeginDisabled(cloud_token_.empty() || cloud_eng_.valid() || fea_locked);
     {
         bool cloud = e.structural.cloud && !fea_locked;
         if (ImGui::Checkbox(tr(T::StructCloud), &cloud)) {
@@ -13759,7 +13760,24 @@ void App::aerodynamics_panel() {
 
     ImGui::Separator();
     ImGui::Spacing();
-    if (aero_job_.running()) {
+    const bool aero_locked = !cloud_token_.empty() && cloud_account_ &&
+                             !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "aero");
+    if (cloud_eng_.valid() && cloud_eng_state_) {
+        std::string status;
+        int progress = 0;
+        {
+            std::lock_guard lock(cloud_eng_state_->mutex);
+            status = cloud_eng_state_->status;
+            progress = cloud_eng_state_->progress;
+        }
+        ImGui::ProgressBar(float(progress) / 100.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
+                           format(tr(T::StructCloudState), status.empty() ? "…" : status.c_str(), progress).c_str());
+        rect_of("aero_cloud_state");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            cloud_eng_state_->cancel = true;
+        rect_of("aero_cloud_cancel");
+    } else if (aero_job_.running()) {
         const int permille = aero_permille_.load();
         ImGui::ProgressBar(float(permille) / 1000.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
                            format(tr(T::AeroAnalyzing), permille / 10).c_str());
@@ -13772,11 +13790,37 @@ void App::aerodynamics_panel() {
         ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
-        if (ImGui::Button(tr(T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
-            start_aerodynamics();
+        const AerodynamicsInputs& inputs = objects_[std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1))].engineering.aerodynamics;
+        const bool in_cloud = inputs.cloud && !cloud_token_.empty() && !aero_locked;
+        if (ImGui::Button(tr(in_cloud ? T::StructAnalyzeCloud : T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f))) {
+            if (in_cloud)
+                start_cloud_engineering("aerodynamics");
+            else
+                start_aerodynamics();
+        }
         ImGui::PopStyleColor(3);
     }
     rect_of("aero_analyze");
+    // «En la nube» (rule 16; cloud.md, rule 10b), as in Structural.
+    ImGui::BeginDisabled(cloud_token_.empty() || cloud_eng_.valid() || aero_locked);
+    {
+        const std::size_t shown = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+        bool on = objects_[shown].engineering.aerodynamics.cloud && !aero_locked;
+        if (ImGui::Checkbox(tr(T::StructCloud), &on)) {
+            remember_engineering(shown);
+            objects_[shown].engineering.aerodynamics.cloud = on;
+        }
+    }
+    ImGui::EndDisabled();
+    rect_of("aero_cloud");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(cloud_token_.empty() ? T::StructCloudLogin : T::StructCloudTip));
+    if (aero_locked) {
+        const std::string with = cloud::plans_with(cloud_plans_, "aero");
+        if (ImGui::SmallButton(format(tr(T::CloudPlanLock), with.empty() ? "…" : with.c_str()).c_str()))
+            cloud_open_ = true;
+        rect_of("aero_cloud_lock");
+    }
     ImGui::PopTextWrapPos();
     ImGui::End();
     ImGui::PopStyleColor();
@@ -13989,8 +14033,8 @@ void App::aero_overlay() {
 // Analizar (rules 9 and 11): the part as it is on the bed, its conditions
 // moved with it, the values changed by hand, in the background; Cancelar
 // stops it at its next step.
-void App::start_cloud_structural() {
-    if (cloud_fea_.valid() || objects_.empty() || cloud_token_.empty())
+void App::start_cloud_engineering(const std::string& kind) {
+    if (cloud_eng_.valid() || objects_.empty() || cloud_token_.empty())
         return;
     const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
     const PlateObject& o = objects_[part];
@@ -14004,19 +14048,36 @@ void App::start_cloud_structural() {
         return;
     }
     // The fingerprint now: the result belongs to the part as it was sent.
-    cloud_fea_part_ = part;
-    cloud_fea_fingerprint_ = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), "structural");
-    const nlohmann::json params{{"mode", "analyze"}, {"quality", o.engineering.structural.quality},
-                                {"object", part}, {"instance", 0}};
-    log_line("cloud: analyzing part " + std::to_string(part) + " on " + cloud_server_);
+    const bool aero = kind == "aerodynamics";
+    cloud_eng_part_ = part;
+    cloud_eng_kind_ = kind;
+    cloud_eng_fingerprint_ = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), kind);
+    nlohmann::json params{{"object", part}, {"instance", 0}};
+    if (aero) {
+        // cloud.md, rule 6: the direction as an axis without its plus, or
+        // three numbers (the view's).
+        const AerodynamicsInputs& a = o.engineering.aerodynamics;
+        params["quality"] = a.quality;
+        params["speed"] = a.speed;
+        if (a.direction == "view") {
+            const std::array<double, 3> d = aero_direction(a);
+            params["direction"] = format("%.6g,%.6g,%.6g", d[0], d[1], d[2]);
+        } else {
+            params["direction"] = a.direction.starts_with("+") ? a.direction.substr(1) : a.direction;
+        }
+    } else {
+        params["mode"] = "analyze";
+        params["quality"] = o.engineering.structural.quality;
+    }
+    log_line("cloud: " + std::string(aero ? "aero" : "fea") + " of part " + std::to_string(part) + " on " + cloud_server_);
     auto state = std::make_shared<CloudSliceState>();
-    cloud_fea_state_ = state;
-    cloud_fea_ = std::async(std::launch::async, [state, project, dir, stamp, params = params.dump(), server = cloud_server_,
-                                                 token = cloud_token_] {
+    cloud_eng_state_ = state;
+    cloud_eng_ = std::async(std::launch::async, [state, project, dir, stamp, params = params.dump(), server = cloud_server_,
+                                                 token = cloud_token_, aero] {
         CloudSliceReply r;
         cloud::Client client(server, token);
-        const std::filesystem::path result = dir / ("tisma-cloud-" + stamp + ".tea");
-        r.ok = client.run("fea", params, utf8(project), utf8(result), r.job, r.error,
+        const std::filesystem::path result = dir / ("tisma-cloud-" + stamp + (aero ? ".taero" : ".tea"));
+        r.ok = client.run(aero ? "aero" : "fea", params, utf8(project), utf8(result), r.job, r.error,
                           [&](const cloud::Job& job) {
                               std::lock_guard lock(state->mutex);
                               state->status = job.status;
@@ -14030,14 +14091,14 @@ void App::start_cloud_structural() {
     });
 }
 
-void App::cloud_structural_step() {
-    if (!cloud_fea_.valid())
+void App::cloud_engineering_step() {
+    if (!cloud_eng_.valid())
         return;
     frame_pending_ = true;
-    if (cloud_fea_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+    if (cloud_eng_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
         return;
-    const CloudSliceReply r = cloud_fea_.get();
-    cloud_fea_state_.reset();
+    const CloudSliceReply r = cloud_eng_.get();
+    cloud_eng_state_.reset();
     if (r.ok) {
         // The .tea: the report, kept with the part as a local result (its
         // map stays local-only: the file has no voxels).
@@ -14045,22 +14106,34 @@ void App::cloud_structural_step() {
         try {
             std::ifstream in(r.result, std::ios::binary);
             const nlohmann::json t = nlohmann::json::parse(in);
-            if (t.value("kind", std::string()) != "structural" || !t.contains("report"))
-                throw std::runtime_error("not a structural result");
-            report = t["report"].dump();
+            if (cloud_eng_kind_ == "aerodynamics") { // the .taero is the result itself
+                if (!t.is_object() || !t.contains("drag_n"))
+                    throw std::runtime_error("not an aerodynamics result");
+                report = t.dump();
+            } else {
+                if (t.value("kind", std::string()) != "structural" || !t.contains("report"))
+                    throw std::runtime_error("not a structural result");
+                report = t["report"].dump();
+            }
         } catch (const std::exception& e) {
             notify(format(tr(T::StructCloudFailed), e.what()), true);
             return;
         }
         std::error_code ec;
         std::filesystem::remove(r.result, ec);
-        if (cloud_fea_part_ < objects_.size()) {
-            std::vector<EngineeringResult>& results = objects_[cloud_fea_part_].engineering.results;
-            std::erase_if(results, [](const EngineeringResult& x) { return x.kind == "structural"; });
-            results.push_back({"structural", cloud_fea_fingerprint_, report});
+        if (cloud_eng_part_ < objects_.size()) {
+            std::vector<EngineeringResult>& results = objects_[cloud_eng_part_].engineering.results;
+            const std::string kind = cloud_eng_kind_;
+            std::erase_if(results, [&](const EngineeringResult& x) { return x.kind == kind; });
+            results.push_back({kind, cloud_eng_fingerprint_, report});
         }
-        structural_map_.reset();
-        structural_map_in_view_ = false;
+        if (cloud_eng_kind_ == "aerodynamics") {
+            aero_map_.reset();
+            aero_map_in_view_ = false;
+        } else {
+            structural_map_.reset();
+            structural_map_in_view_ = false;
+        }
         notify(tr(T::StructCloudDone));
         return;
     }
@@ -15483,7 +15556,7 @@ void App::cloud_slice_step() {
 // to the account's page for paying.
 void App::cloud_window() {
     cloud_slice_step();
-    cloud_structural_step();
+    cloud_engineering_step();
     if (cloud_job_.valid() && cloud_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
         cloud_finished(cloud_job_.get());
     if (cloud_job_.valid())
@@ -20132,7 +20205,7 @@ void App::script_input() {
         field = step.value;
         next();
     } else if (step.verb == "cloud-fea-wait") { // until the analysis in the cloud ends (up to 60 s)
-        if (!cloud_fea_.valid() && f >= 2)
+        if (!cloud_eng_.valid() && f >= 2)
             next();
         else if (f > 3600)
             fail_step("no answer");
@@ -20269,7 +20342,7 @@ void App::script_input() {
         aero_test_cells_ = std::max(0, std::atoi(step.key.c_str()));
         next();
     } else if (step.verb == "expect-aero") { // the Aerodynamics run finished: drag above 0 N, simulated (1) or not (0)
-        if (aero_job_.running())
+        if (aero_job_.running() || cloud_eng_.valid())
             return f >= 120000 ? fail_step("the analysis is still running") : void();
         if (f < 2)
             return;

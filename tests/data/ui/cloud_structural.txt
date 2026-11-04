@@ -23,3 +23,11 @@ menu structural_analyze
 cloud-fea-wait
 expect-toast Analysis in the cloud done.
 expect-structural-verdict holds
+# The same in Aerodinámica (rule 16): an aero job, its .taero kept with the part.
+menu tab_aerodynamics
+expect-control aero_cloud
+menu aero_cloud
+menu aero_analyze
+cloud-fea-wait
+expect-toast Analysis in the cloud done.
+expect-aero 1

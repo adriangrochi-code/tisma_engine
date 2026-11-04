@@ -158,6 +158,11 @@ public:
             if (!authorized(req, res))
                 return;
             std::lock_guard lock(mutex_);
+            if (kind_ == "aero") { // the engine's .taero (cloud.md, rule 10c)
+                res.set_content(json{{"drag_n", 0.42}, {"cd", 1.05}, {"simulated", true}, {"object", 0}, {"instance", 0}}.dump(),
+                                "application/json");
+                return;
+            }
             if (kind_ == "fea") { // an analysis: the engine's .tea (cloud.md, rule 9)
                 const json tea = {{"format", "tisma-engineering-result"}, {"version", 1}, {"kind", "structural"},
                                   {"object", 0}, {"fingerprint", "mock"},
