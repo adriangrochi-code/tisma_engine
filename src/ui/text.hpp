@@ -1375,6 +1375,13 @@
     X(SketchToolArc, "Arco (A)", "Arc (A)") \
     X(SketchExtrude, "Extruir (E)", "Extrude (E)") \
     X(SketchRevolve, "Revolucionar (REV)", "Revolve (REV)") \
+    X(SketchImportDxf, "Traer DXF", "Bring in DXF") \
+    X(SketchImportSvg, "Traer SVG", "Bring in SVG") \
+    X(SketchExportDxf, "Exportar DXF", "Export DXF") \
+    X(SketchImported, "Se trajeron %d curvas de %s", "Brought in %d curves from %s") \
+    X(SketchCannotRead, "no se puede leer el archivo", "the file cannot be read") \
+    X(SketchImportFailed, "No se pudo traer el dibujo", "The drawing could not be brought in") \
+    X(SketchExported, "Boceto exportado: %s", "Sketch exported: %s") \
     X(SketchFinish, "Terminar boceto", "Finish sketch") \
     X(SketchDof, "Grados de libertad: %d", "Degrees of freedom: %d") \
     X(SketchDofNone, "Totalmente definido", "Fully defined") \

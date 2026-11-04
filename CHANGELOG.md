@@ -12,6 +12,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **DXF y SVG en Diseño** (`cad_design.md`, D5b): «Traer DXF» y «Traer SVG» en el boceto traen líneas, círculos,
+  arcos, polilíneas, elipses, curvas y bloques, en milímetros según las unidades del archivo, como curvas del boceto
+  que se recortan, se acotan y se extruyen; «Exportar DXF» guarda el boceto. Un archivo que no se puede leer avisa con
+  el motivo y no cambia nada.
 - **Orientación automática, menos soporte** (`orientation.md`): en el menú de la placa, «Orientar (menos soporte)»
   gira el modelo elegido, o todos, a la orientación que menos soporte necesita y mejor se agarra a la cama; nunca
   queda peor que como estaba. Con una impresora de resina, «Orientar (menor fuerza de despegue)» busca la orientación

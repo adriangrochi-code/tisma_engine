@@ -10079,3 +10079,32 @@ Android, en cola después de este ítem: `--summary` también para `slice <model
   escribe el mismo resumen que la nube (`print_time`, `print_time_s`, `filament_mm`, `layers`, `filament_g`). Un modelo
   con `--config` va siempre por el laminado común, aunque lleve `--summary`.
 
+## 2026-11-04 — Diseño D5b: DXF y SVG de entrada y salida
+
+**D4 revisado:** las pruebas de la etapa (CD5, CD17, CD18) ya estaban. El barrido y el recubrimiento (regla 7) no
+están en ninguna etapa de la ficha; quedan para cuando SolidCraft los publique en su interfaz.
+
+**Hecho** (reglas 19 bis y 20; pasó `check_spec`):
+- `src/cad/sketch_io.*`: el lector de DXF ASCII trae líneas, círculos, arcos, polilíneas con `bulge`, elipses,
+  splines (de Boor, racionales con pesos) y bloques con escala, giro y matrices, en mm según `$INSUNITS`. Deja afuera,
+  con una nota, el espacio papel, el texto y los puntos.
+- El lector de SVG trae path (M, L, H, V, C, S, Q, T, A, Z, absolutos y relativos), rect, circle, ellipse, line,
+  polyline y polygon, con las transformaciones de sus grupos, el `viewBox` y el ancho en mm, y la y hacia arriba.
+- El escritor de DXF R12 en mm: líneas, cadenas y rectángulos como POLYLINE; círculos y arcos como tales; la
+  construcción en su capa.
+- **Decisión:** la ficha nombra `sketch.insert_dxf` y `sketch.insert_svg` de SolidCraft. El motor lee los archivos
+  él mismo, así lo traído son curvas propias del boceto que se recortan y se acotan como pide la regla. Anotado en
+  PROVENANCE.
+- Interfaz: «Traer DXF», «Traer SVG» y «Exportar DXF» en el panel del boceto. Lo traído se suma al boceto; si el
+  archivo no se lee, avisa el motivo y no cambia nada.
+
+**Pruebas:** CD22 (DXF en pulgadas: rectángulo de 1016 × 508 mm y círculo de 254 mm; el boceto tiene región), CD23
+(un contorno SVG cerrado), CD24 (línea, arco y círculo a DXF y de vuelta, dentro de 0,001 mm; un arco horario sale
+igual), bulges, bloques en matriz, espacio papel, archivos rotos y arcos, curvas y transformaciones SVG. Los botones,
+en `ui_script_design_sketch_edit`; el selector de archivos no se prueba desde el guion.
+
+**Falta de D5b:** CD25 (la sesión `solidcraft-cli mcp` abierta, regla 20 bis) y la vista como DXF de líneas
+(`file.export_view_dxf`).
+
+**Sigue:** CD25, después el orden de PLAN.md.
+
