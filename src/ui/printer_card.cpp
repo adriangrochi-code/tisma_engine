@@ -113,8 +113,8 @@ std::vector<CalibrationKind> printer_calibrations(const Settings& s) {
         CalibrationKind::Dimensions,   CalibrationKind::ElephantFoot,    CalibrationKind::FirstLayer,
         CalibrationKind::Temperature,  CalibrationKind::Flow,            CalibrationKind::PressureAdvance,
         CalibrationKind::Retraction,   CalibrationKind::RetractionSpeed, CalibrationKind::MaxFlow,
-        CalibrationKind::Speed,        CalibrationKind::Acceleration,    CalibrationKind::Fit,
-        CalibrationKind::ResinExposure, CalibrationKind::ResinMeasure};
+        CalibrationKind::Speed,        CalibrationKind::Acceleration,    CalibrationKind::BridgesOverhangs,
+        CalibrationKind::Fit,          CalibrationKind::ResinExposure,   CalibrationKind::ResinMeasure};
     std::vector<CalibrationKind> out;
     for (const CalibrationKind k : order)
         if (is_resin_calibration(k) == resin)
@@ -136,6 +136,7 @@ std::string_view calibration_key(CalibrationKind kind) {
     case CalibrationKind::ElephantFoot: return "slicing.first_layer_shrink";
     case CalibrationKind::ResinExposure: return "resin.exposure";
     case CalibrationKind::ResinMeasure: return "resin.scale_x";
+    case CalibrationKind::BridgesOverhangs: return "support.threshold_angle";
     case CalibrationKind::FirstLayer:
     case CalibrationKind::Fit: return {};
     }

@@ -2371,6 +2371,7 @@ const char* calibration_title(CalibrationKind kind) {
     case CalibrationKind::ElephantFoot: return tr(T::CalElephantFoot);
     case CalibrationKind::ResinExposure: return tr(T::CalResinExposure);
     case CalibrationKind::ResinMeasure: return tr(T::CalResinMeasure);
+    case CalibrationKind::BridgesOverhangs: return tr(T::CalBridges);
     }
     return "";
 }
@@ -5738,11 +5739,9 @@ void App::start_slice() {
         return;
     }
     TriangleMesh placed = plate_now();
-    Settings settings = settings_;
-    // The resin tests print on the platform, without supports, pad or
-    // hollowing (calibration_models.md, "Resina").
-    if (calibration_ && is_resin_calibration(calibration_kind_))
-        settings.resin_supports = settings.resin_pad = settings.resin_pad_around_object = settings.resin_hollow = false;
+    // A test prints with its own settings: no supports under the resin tests
+    // or the bridges, for one (calibration_print_settings).
+    const Settings settings = calibration_ ? calibration_print_settings(calibration_kind_, settings_) : settings_;
     PlateSlice plate = plate_slice(objects_, placed_meshes_, settings);
     Painting painting = std::move(plate.painting);
     std::vector<MeshObject> objects = std::move(plate.objects);
@@ -19325,7 +19324,8 @@ void App::calibration_panel() {
         if (c.unit.empty())
             std::snprintf(text, sizeof text, "%s", format("%g", v).c_str());
         else
-            std::snprintf(text, sizeof text, "%s", format("%g %s", v, c.unit == "C" ? "°C" : c.unit.c_str()).c_str());
+            std::snprintf(text, sizeof text, "%s",
+                          c.unit == "°" ? format("%g°", v).c_str() : format("%g %s", v, c.unit == "C" ? "°C" : c.unit.c_str()).c_str());
         return std::string(text);
     };
 
@@ -19345,6 +19345,7 @@ void App::calibration_panel() {
         {CalibrationKind::Speed, T::CalSpeed, T::CalSpeedWhat, T::CalSpeedHint},
         {CalibrationKind::MaxFlow, T::CalMaxFlow, T::CalMaxFlowWhat, T::CalMaxFlowHint},
         {CalibrationKind::Acceleration, T::CalAcceleration, T::CalAccelerationWhat, T::CalAccelerationHint},
+        {CalibrationKind::BridgesOverhangs, T::CalBridges, T::CalBridgesWhat, T::CalBridgesHint},
         {CalibrationKind::Fit, T::CalFit, T::CalFitWhat, T::CalFitHint},
         {CalibrationKind::ResinExposure, T::CalResinExposure, T::CalResinExposureWhat, T::CalResinExposureHint},
         {CalibrationKind::ResinMeasure, T::CalResinMeasure, T::CalResinMeasureWhat, T::CalResinMeasureHint},
@@ -19599,7 +19600,7 @@ void App::calibration_panel() {
                     }
                 }
                 // The range, for whoever wants to change it.
-                if (calibration_ && ImGui::TreeNode(tr(T::AdjustRange))) {
+                if (calibration_ && is_tower(card.kind) && ImGui::TreeNode(tr(T::AdjustRange))) {
                     TowerRange& r = ranges_[int(card.kind)];
                     double lo = 0.0, hi = 600.0, step_lo = 0.05;
                     float drag = 0.1f;

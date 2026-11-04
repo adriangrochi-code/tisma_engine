@@ -110,6 +110,7 @@ int cmd_calibration(std::span<const std::string_view> args, std::ostream& out, s
         err << "error: no " << calibration_kind_name(*kind) << " part for these settings\n";
         return kExitInput;
     }
+    settings = calibration_print_settings(*kind, settings);
     settings.changes = print.changes;
     if (!write_text(o["--model"], stl_binary(print.mesh, "tisma calibration " + print.kind)) ||
         !write_text(o["--settings"], settings_json(settings))) {
