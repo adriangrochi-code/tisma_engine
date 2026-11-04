@@ -10786,3 +10786,14 @@ plano). **Sin probar:** contra una versión publicada de verdad.
 - Después, la sección «Datos publicados» en la página de la impresora, con distintivos, fuentes y **Usar este valor**
   (los que no son del fabricante piden confirmación). Prueba: `ui_pack_published` (aplica un dato del fabricante y lo
   verifica). **Falta:** la misma sección para el material y la resina.
+
+**El mismo día, más:**
+- Regla 20: copia de las impresoras del paquete elegidas. Si el paquete deja de tenerlas, siguen elegidas con el aviso.
+  Prueba: `ui_pack_gone`.
+- Pedidos de la app de Android, en la línea de comandos:
+  - `part gear|fastener` (STL y `--defaults`);
+  - `calibration <tipo>` y `calibration apply`;
+  - `aero` y `orient` sobre un modelo con `--config`.
+  - Pruebas en `[cli]`.
+- Corregida una prueba de interfaz que fallaba por tiempos en la CI de Linux (`ui_script_structural_analyze`).
+- **Sigue:** «Datos publicados» para el material y la resina.

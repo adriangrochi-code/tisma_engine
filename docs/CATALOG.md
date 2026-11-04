@@ -212,6 +212,9 @@ app del teléfono) baja los archivos que pide el plan a una carpeta y el motor l
   impresión por defecto, y los elige (reglas 9 y 13). Si el fabricante no está, el botón dice **Bajar y agregar**:
   baja ese fabricante en segundo plano y después la agrega.
 - Los perfiles del paquete son de fábrica: no se guardan encima, como los propios del motor (regla 9).
+- Se guarda una copia de cada impresora del paquete elegida (`pack_profiles.json`, junto a la carpeta `pack`). Si una
+  actualización la quita del paquete, sigue elegida desde esa copia con el aviso «Este perfil ya no está en el
+  paquete» (regla 20).
 - Con una impresora del paquete elegida, el catálogo de filamentos suma los filamentos del paquete que sirven para ella,
   según `compatible.json` (regla 12, PK7). Los agregados quedan en `packs.filaments`.
 - Las impresoras elegidas se guardan en las preferencias (`packs.printers`) y se vuelven a armar al abrir.

@@ -1635,6 +1635,9 @@ private:
     std::map<std::string, std::pair<std::string, std::string>> pack_printer_model_; // its vendor's and model's names
     std::string community_for_ = "\x01";                    // the printer community_values_ are for
     std::vector<CommunityValue> community_values_;
+    std::map<std::string, std::vector<std::string>> pack_kept_; // each pack printer's profiles as last made (rule 20)
+    bool pack_kept_dirty_ = false;
+    std::set<std::string> pack_gone_; // pack printers the pack no longer has, kept from the copy
     std::optional<CommunityValue> community_confirm_;        // a value waiting for the person's yes (rule 24)
     int pack_filaments_number_ = -2;                         // the printer pack_filaments_found_ is for
     std::vector<PackFilamentRef> pack_filaments_found_;
@@ -4469,6 +4472,7 @@ void App::load_profile_lists() {
         if (kind == ProfileKind::Printer) {
             pack_printer_number_.clear();
             pack_printer_model_.clear();
+            pack_gone_.clear();
             community_for_ = "\x01";
         }
         // The built-in printer is one made from nothing: its speeds are the fallback.
@@ -4477,27 +4481,58 @@ void App::load_profile_lists() {
                 speed_fallback_.insert(p.name);
         // The pack's printers chosen here, with their filament and print
         // profile, as factory profiles: not saved over (profile_pack.md, rule 9).
-        if ((!root.empty() || !options_.pack.empty()) && pack_index_)
+        // A printer the pack no longer has stays chosen from the copy kept
+        // when it was last made, with a notice (rule 20).
+        if ((!root.empty() || !options_.pack.empty()) && (pack_index_ || !pack_kept_.empty()))
             for (const std::string& id : pack_printers_) {
+                std::vector<Profile> made;
+                std::optional<int> number;
                 try {
+                    if (!pack_index_)
+                        throw PackError("no pack installed");
                     const PackProfiles p = pack_profiles(pack_dir(), *pack_index_, id);
-                    const Profile* from = kind == ProfileKind::Printer    ? &p.printer
-                                          : kind == ProfileKind::Filament ? (p.filament ? &*p.filament : nullptr)
-                                                                          : (p.print ? &*p.print : nullptr);
-                    if (from && std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
-                                             [&](const Profile& b) { return b.name == from->name; }))
-                        builtin_profiles_[k].push_back(*from);
+                    made.push_back(p.printer);
+                    if (p.filament)
+                        made.push_back(*p.filament);
+                    if (p.print)
+                        made.push_back(*p.print);
+                    number = p.number;
                     if (kind == ProfileKind::Printer) {
-                        pack_printer_number_[p.printer.name] = p.number;
-                        const std::string file = id.substr(0, id.rfind('#'));
-                        for (const PackVendor& v : pack_index_->vendors)
-                            for (const PackModel& m : v.models)
-                                if (m.file == file)
-                                    pack_printer_model_[p.printer.name] = {v.name, m.name};
+                        std::vector<std::string> texts;
+                        for (const Profile& m : made)
+                            texts.push_back(profile_file_json(m));
+                        if (pack_kept_[id] != texts)
+                            pack_kept_[id] = std::move(texts), pack_kept_dirty_ = true;
                     }
                 } catch (const std::exception& e) {
-                    if (kind == ProfileKind::Printer)
-                        errors.push_back(id + ": " + e.what());
+                    const auto kept = pack_kept_.find(id);
+                    if (kept == pack_kept_.end()) {
+                        if (kind == ProfileKind::Printer)
+                            errors.push_back(id + ": " + e.what());
+                        continue;
+                    }
+                    for (const std::string& text : kept->second) {
+                        try {
+                            made.push_back(parse_profile(text));
+                        } catch (const std::exception&) {
+                        }
+                    }
+                    if (kind == ProfileKind::Printer && !made.empty())
+                        pack_gone_.insert(made.front().name);
+                }
+                for (const Profile& m : made) {
+                    if (m.kind != kind || std::any_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
+                                                      [&](const Profile& b) { return b.name == m.name; }))
+                        continue;
+                    builtin_profiles_[k].push_back(m);
+                    if (kind == ProfileKind::Printer && number) {
+                        pack_printer_number_[m.name] = *number;
+                        const std::string file = id.substr(0, id.rfind('#'));
+                        for (const PackVendor& v : pack_index_->vendors)
+                            for (const PackModel& pm : v.models)
+                                if (pm.file == file)
+                                    pack_printer_model_[m.name] = {v.name, pm.name};
+                    }
                 }
             }
         // The other filaments added from the pack (rule 12).
@@ -4531,6 +4566,17 @@ void App::load_profile_lists() {
     }
     if (!errors.empty())
         notify(format(tr(T::ProfilesSkipped), int(errors.size())), true);
+    // The kept copies of the pack's profiles, on disk beside the pack.
+    if (pack_kept_dirty_ && !root.empty() && !pack_dir().empty()) {
+        nlohmann::json kept = nlohmann::json::object();
+        for (const auto& [id, texts] : pack_kept_)
+            kept[id] = texts;
+        std::ofstream out(std::filesystem::path(pack_dir().string() + "_profiles.json"), std::ios::binary | std::ios::trunc);
+        out << kept.dump(1);
+        pack_kept_dirty_ = false;
+    }
+    for (const std::string& name : pack_gone_)
+        notify(format(tr(T::PackProfileGone), shown_name(name).c_str()), true);
     profiles_checked_.clear();
 }
 
@@ -5190,6 +5236,21 @@ std::filesystem::path App::pack_dir() const {
 void App::load_pack() {
     pack_index_.reset();
     pack_filaments_number_ = -2;
+    // The copies kept of the pack's printers (rule 20): those on disk join
+    // the ones this session made.
+    if (!pack_dir().empty()) {
+        std::ifstream in(std::filesystem::path(pack_dir().string() + "_profiles.json"), std::ios::binary);
+        if (in) {
+            const nlohmann::json kept = nlohmann::json::parse(in, nullptr, false);
+            if (kept.is_object())
+                for (const auto& [id, texts] : kept.items())
+                    if (texts.is_array())
+                        if (!pack_kept_.count(id))
+                            for (const auto& t : texts)
+                                if (t.is_string())
+                                    pack_kept_[id].push_back(t.get<std::string>());
+        }
+    }
     const std::filesystem::path dir = pack_dir();
     // Screenshots read a pack only when given one (--pack).
     if (dir.empty() || (!options_.screenshot.empty() && options_.pack.empty()))
@@ -20844,6 +20905,18 @@ void App::script_input() {
             io.AddKeyEvent(ImGuiKey_A, false);
             io.AddKeyEvent(ImGuiMod_Ctrl, false);
         } else {
+            next();
+        }
+    } else if (step.verb == "pack-remove") { // a file taken out of the test pack (--pack), then it is read again (rule 20)
+        if (options_.pack.empty() || !safe_pack_path(step.key)) {
+            fail_step("pack-remove needs --pack and a path in the pack");
+        } else {
+            std::error_code ec;
+            std::filesystem::remove(pack_dir() / step.key, ec);
+            load_pack();
+            load_profile_lists();
+            std::printf("ui-script: pack-remove %s: printer %s\n", step.key.c_str(),
+                        chosen_profile_[std::size_t(ProfileKind::Printer)].c_str());
             next();
         }
     } else if (step.verb == "use-published") { // a published value's «Usar este valor», confirmed (rule 24)
