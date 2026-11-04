@@ -78,6 +78,33 @@ class OctoPrintConnection(url: String, apiKey: String, http: Http) : PrinterConn
         rest.upload("/api/files/local", parts)
     }
 
+    override fun setTemperature(heater: Heater, target: Double) {
+        if (heater == Heater.NOZZLE) rest.post("/api/printer/tool", command("target") {
+            put("targets", buildJsonObject { put("tool0", target) })
+        }) else rest.post("/api/printer/bed", command("target") { put("target", target) })
+    }
+
+    override fun home(axes: Set<Axis>) {
+        val list = (axes.ifEmpty { Axis.entries.toSet() }).sorted().map { it.name.lowercase() }
+        rest.post("/api/printer/printhead", command("home") {
+            put("axes", kotlinx.serialization.json.JsonArray(list.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+        })
+    }
+
+    override fun jog(axis: Axis, distance: Double, feedMmS: Double) {
+        rest.post("/api/printer/printhead", command("jog") {
+            put(axis.name.lowercase(), distance)
+            put("speed", feedMmS * 60)
+        })
+    }
+
+    override fun extrude(mm: Double, feedMmS: Double) {
+        rest.post("/api/printer/tool", command("extrude") {
+            put("amount", mm)
+            put("speed", feedMmS * 60)
+        })
+    }
+
     override fun camera(): Camera? {
         val webcam = rest.get("/api/settings").obj()?.o("webcam") ?: return null
         if (webcam.str("webcamEnabled") == "false") return null

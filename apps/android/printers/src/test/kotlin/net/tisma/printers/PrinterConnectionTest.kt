@@ -146,6 +146,37 @@ class PrinterConnectionTest {
         assertEquals(PrinterException.Kind.UNEXPECTED, assertFailsWith<PrinterException> { Snapshot.fetch("rtsp://x") }.kind)
     }
 
+    /** Controls: heat, home, move and extrude when idle; extruding cold and moving while printing are refused. */
+    private fun controls(c: PrinterConnection, p: SimulatedPrinter) {
+        assertFailsWith<PrinterException> { c.extrude(5.0, 5.0) }
+        c.setTemperature(Heater.NOZZLE, 215.0)
+        c.setTemperature(Heater.BED, 60.0)
+        assertEquals(Temperature(215.0, 215.0), c.status().nozzle)
+        c.home()
+        assertTrue(p.homed)
+        c.jog(Axis.X, 10.0, 50.0)
+        c.extrude(5.0, 5.0)
+        c.upload("a.gcode", gcode.size.toLong(), start = true) { gcode.inputStream() }
+        assertFailsWith<PrinterException> { c.jog(Axis.Z, 1.0, 10.0) }
+        c.setTemperature(Heater.NOZZLE, 220.0) // temperatures may change while printing
+    }
+
+    @Test
+    fun `Moonraker controls through G-code`() {
+        val m = sim(MockMoonraker())
+        controls(MoonrakerConnection(m.url, null, UrlConnectionHttp), m)
+        assertTrue("G1 X10 F3000" in m.commands)
+        assertTrue("G1 E5 F300" in m.commands)
+        assertEquals("M104 S220", m.commands.last())
+    }
+
+    @Test
+    fun `OctoPrint controls through its printer API`() {
+        val o = sim(MockOctoPrint())
+        controls(OctoPrintConnection(o.url, "test-key", UrlConnectionHttp), o)
+        assertTrue(o.commands.any { it.startsWith("/api/printer/printhead jog") && it.contains("\"x\":10.0") })
+    }
+
     @Test
     fun `addresses get http and the kind's port`() {
         assertEquals("http://192.168.1.20:7125", PrinterConfig.normalizeUrl("192.168.1.20", PrinterKind.MOONRAKER))

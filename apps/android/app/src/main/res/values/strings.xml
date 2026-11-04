@@ -286,4 +286,14 @@
     <string name="summary_mass">Mass</string>
     <string name="summary_drag">Drag</string>
     <string name="summary_cd">Drag coefficient</string>
+
+    <string name="controls_title">Controls</string>
+    <string name="controls_nozzle">Nozzle (°C)</string>
+    <string name="controls_bed">Bed (°C)</string>
+    <string name="controls_set">Set</string>
+    <string name="controls_off">Off</string>
+    <string name="controls_move">Move the head</string>
+    <string name="controls_home">Home</string>
+    <string name="controls_extrude">Extrude 5 mm</string>
+    <string name="controls_retract">Retract 5 mm</string>
 </resources>

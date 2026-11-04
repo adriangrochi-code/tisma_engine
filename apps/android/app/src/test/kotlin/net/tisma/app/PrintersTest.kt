@@ -122,6 +122,31 @@ class PrintersTest {
     }
 
     @Test
+    fun `controls heat, home and move an idle printer`() {
+        // No camera image arriving while the page scrolls (it would move the buttons under the tap).
+        moonraker.hasCamera = false
+        addPrinter("moonraker", moonraker.url, null)
+        val id = printers.state.value.printers.single().id
+        compose.runOnIdle { nav.open(net.tisma.app.ui.Screen.PrinterDetail(id)) }
+        waitFor("temp_nozzle")
+        compose.onNodeWithTag("temp_nozzle").performScrollTo().performTextInput("215")
+        compose.onNodeWithTag("temp_set_nozzle").performScrollTo()
+        compose.waitForIdle()
+        compose.onNodeWithTag("temp_set_nozzle").performClick()
+        waitState { moonraker.nozzleTarget == 215.0 }
+        waitState { !printers.state.value.busy }
+        compose.onNodeWithTag("home").performScrollTo()
+        compose.waitForIdle()
+        compose.onNodeWithTag("home").performClick()
+        waitState { moonraker.homed }
+        waitState { !printers.state.value.busy }
+        compose.onNodeWithTag("jog_plus_x").performScrollTo()
+        compose.waitForIdle()
+        compose.onNodeWithTag("jog_plus_x").performClick()
+        waitState { moonraker.commands.any { it.startsWith("G1 X10") } }
+    }
+
+    @Test
     fun `CM1 the printer's camera shows on its page`() {
         addPrinter("moonraker", moonraker.url, null)
         val id = printers.state.value.printers.single().id

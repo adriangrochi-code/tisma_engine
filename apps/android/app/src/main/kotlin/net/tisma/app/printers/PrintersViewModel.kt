@@ -165,6 +165,13 @@ class PrintersViewModel(
         if (net.tisma.printers.PrintEvents.isActive(s)) onActivePrint()
     }
 
+    fun setTemperature(id: String, heater: net.tisma.printers.Heater, target: Double) =
+        command(id) { it.setTemperature(heater, target) }
+    fun home(id: String) = command(id) { it.home() }
+    fun jog(id: String, axis: net.tisma.printers.Axis, distance: Double) =
+        command(id) { it.jog(axis, distance, if (axis == net.tisma.printers.Axis.Z) 10.0 else 50.0) }
+    fun extrude(id: String, mm: Double) = command(id) { it.extrude(mm, 5.0) }
+
     fun pause(id: String) = command(id) { it.pause() }
     fun resume(id: String) = command(id) { it.resume() }
     fun cancel(id: String) = command(id) { it.cancel() }

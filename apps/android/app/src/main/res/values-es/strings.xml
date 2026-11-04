@@ -271,4 +271,14 @@
     <string name="summary_mass">Masa</string>
     <string name="summary_drag">Arrastre</string>
     <string name="summary_cd">Coeficiente de arrastre</string>
+
+    <string name="controls_title">Controles</string>
+    <string name="controls_nozzle">Boquilla (°C)</string>
+    <string name="controls_bed">Cama (°C)</string>
+    <string name="controls_set">Poner</string>
+    <string name="controls_off">Apagar</string>
+    <string name="controls_move">Mover el cabezal</string>
+    <string name="controls_home">Ir a casa</string>
+    <string name="controls_extrude">Extruir 5 mm</string>
+    <string name="controls_retract">Retraer 5 mm</string>
 </resources>

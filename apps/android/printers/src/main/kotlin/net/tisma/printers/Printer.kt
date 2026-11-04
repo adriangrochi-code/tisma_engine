@@ -29,7 +29,25 @@ interface PrinterConnection {
 
     /** The camera's addresses, if the printer has one. */
     fun camera(): Camera?
+
+    // ---- Controls (docs/MOBILE.md, «Controles»): temperatures any time; moving and extruding only when it is idle. ----
+
+    /** Sets a heater's target in °C (0 turns it off). */
+    fun setTemperature(heater: Heater, target: Double)
+
+    /** Homes the given axes (all when empty). */
+    fun home(axes: Set<Axis> = emptySet())
+
+    /** Moves the head by a relative distance in mm, at [feedMmS] mm/s. */
+    fun jog(axis: Axis, distance: Double, feedMmS: Double)
+
+    /** Extrudes [mm] of filament (negative retracts), at [feedMmS] mm/s. The nozzle must be hot. */
+    fun extrude(mm: Double, feedMmS: Double)
 }
+
+enum class Heater { NOZZLE, BED }
+
+enum class Axis { X, Y, Z }
 
 /** The kinds of connection the app speaks (mobile_app.md, rule 14). */
 enum class PrinterKind(val wire: String, val defaultPort: Int) {

@@ -80,3 +80,6 @@ internal fun temperature(o: JsonObject?, actual: String = "actual", target: Stri
     val a = o.num(actual) ?: return null
     return Temperature(a, o.num(target) ?: 0.0)
 }
+
+/** A number for G-code: no exponent, no trailing zeros. */
+internal fun num(v: Double): String = java.math.BigDecimal.valueOf(v).stripTrailingZeros().toPlainString()

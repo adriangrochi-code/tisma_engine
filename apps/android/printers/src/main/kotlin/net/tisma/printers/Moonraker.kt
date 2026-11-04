@@ -83,6 +83,21 @@ class MoonrakerConnection(url: String, apiKey: String?, http: Http) : PrinterCon
         rest.upload("/server/files/upload", parts)
     }
 
+    override fun setTemperature(heater: Heater, target: Double) =
+        gcode(if (heater == Heater.NOZZLE) "M104 S${num(target)}" else "M140 S${num(target)}")
+
+    override fun home(axes: Set<Axis>) = gcode("G28" + axes.sorted().joinToString("") { " " + it.name })
+
+    override fun jog(axis: Axis, distance: Double, feedMmS: Double) =
+        gcode("G91\nG1 ${axis.name}${num(distance)} F${num(feedMmS * 60)}\nG90")
+
+    override fun extrude(mm: Double, feedMmS: Double) = gcode("M83\nG1 E${num(mm)} F${num(feedMmS * 60)}")
+
+    /** Runs G-code through Moonraker's script endpoint; Klipper's refusal comes back as the error. */
+    private fun gcode(script: String) {
+        rest.post("/printer/gcode/script?script=" + java.net.URLEncoder.encode(script, "UTF-8").replace("+", "%20"))
+    }
+
     override fun camera(): Camera? {
         val r = result(rest.get("/server/webcams/list"))
         val cam = (r["webcams"] as? JsonArray)?.filterIsInstance<JsonObject>()?.firstOrNull { it.str("enabled") != "false" }

@@ -227,6 +227,7 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
             }
             else -> Unit
         }
+        ControlsCard(id, s, state, printers)
         TismaCard {
             Text(stringResource(R.string.printer_files), style = MaterialTheme.typography.titleMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -294,6 +295,65 @@ private fun CameraBox(id: String, state: PrintersState, printers: PrintersViewMo
                 } else {
                     Text(stringResource(R.string.camera_failed, "JPEG"), color = MaterialTheme.colorScheme.error)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Temperatures (any time), and homing, moving and extruding when the printer is idle
+ * (docs/MOBILE.md, «Controles»). Numbers are typed with the numeric keyboard (mobile_app.md, rule 17).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ControlsCard(id: String, s: PrinterStatus?, state: PrintersState, printers: PrintersViewModel) {
+    if (s == null || s.state == PrinterState.OFFLINE || s.state == PrinterState.ERROR) return
+    val idle = s.state == PrinterState.READY
+    var nozzle by rememberSaveable { mutableStateOf("") }
+    var bed by rememberSaveable { mutableStateOf("") }
+    var step by rememberSaveable { mutableStateOf(10.0) }
+    TismaCard(Modifier.testTag("controls")) {
+        Text(stringResource(R.string.controls_title), style = MaterialTheme.typography.titleMedium)
+        listOf(Triple(net.tisma.printers.Heater.NOZZLE, R.string.controls_nozzle, nozzle),
+            Triple(net.tisma.printers.Heater.BED, R.string.controls_bed, bed)).forEach { (heater, label, value) ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value, { v -> val t = v.filter { it.isDigit() }.take(3)
+                        if (heater == net.tisma.printers.Heater.NOZZLE) nozzle = t else bed = t },
+                    singleLine = true, label = { Text(stringResource(label)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.weight(1f).testTag("temp_" + heater.name.lowercase()))
+                OutlinedButton(onClick = { value.toDoubleOrNull()?.let { printers.setTemperature(id, heater, it) } },
+                    enabled = !state.busy && value.toDoubleOrNull() != null,
+                    modifier = Modifier.testTag("temp_set_" + heater.name.lowercase())) { Text(stringResource(R.string.controls_set)) }
+                AccentTextButton(onClick = { printers.setTemperature(id, heater, 0.0) }, enabled = !state.busy) {
+                    Text(stringResource(R.string.controls_off))
+                }
+            }
+        }
+        if (idle) {
+            Text(stringResource(R.string.controls_move), style = MaterialTheme.typography.labelLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(0.1, 1.0, 10.0).forEach { d ->
+                    FilterChip(selected = step == d, onClick = { step = d },
+                        label = { Text(String.format(Locale.getDefault(), "%s mm", if (d < 1) "0.1" else d.toInt().toString())) })
+                }
+            }
+            net.tisma.printers.Axis.entries.forEach { axis ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(axis.name, modifier = Modifier.weight(0.3f), style = MaterialTheme.typography.titleMedium)
+                    OutlinedButton(onClick = { printers.jog(id, axis, -step) }, enabled = !state.busy,
+                        modifier = Modifier.weight(1f).testTag("jog_minus_" + axis.name.lowercase())) { Text("−") }
+                    OutlinedButton(onClick = { printers.jog(id, axis, step) }, enabled = !state.busy,
+                        modifier = Modifier.weight(1f).testTag("jog_plus_" + axis.name.lowercase())) { Text("+") }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { printers.home(id) }, enabled = !state.busy,
+                    modifier = Modifier.weight(1f).testTag("home")) { Text(stringResource(R.string.controls_home)) }
+                OutlinedButton(onClick = { printers.extrude(id, 5.0) }, enabled = !state.busy,
+                    modifier = Modifier.weight(1f).testTag("extrude")) { Text(stringResource(R.string.controls_extrude)) }
+                OutlinedButton(onClick = { printers.extrude(id, -5.0) }, enabled = !state.busy,
+                    modifier = Modifier.weight(1f)) { Text(stringResource(R.string.controls_retract)) }
             }
         }
     }

@@ -37,6 +37,11 @@ abstract class SimulatedPrinter(private val port: Int, private val host: String)
     val files = mutableMapOf<String, ByteArray>()
     /** Every request: method and path, for the tests. */
     val log = mutableListOf<Pair<String, String>>()
+    /** The G-code lines and commands the printer was given by hand (controls), for the tests. */
+    val commands = mutableListOf<String>()
+    var position = doubleArrayOf(0.0, 0.0, 0.0)
+    var homed = false
+
     /** Every key the printer was sent (to check it never goes elsewhere). */
     val keysSeen = mutableListOf<String?>()
 
@@ -216,6 +221,24 @@ class MockMoonraker(port: Int = 0, host: String = "127.0.0.1") : SimulatedPrinte
                 put("action", "create_file")
             }, 201)
         }
+        method == "POST" && path == "/printer/gcode/script" -> {
+            val script = query["script"] ?: throw error(400, "script is required")
+            synchronized(lock) {
+                for (line in script.lines().map { it.trim() }.filter { it.isNotEmpty() }) {
+                    if ((state == "printing" || state == "paused") && !line.startsWith("M104") && !line.startsWith("M140"))
+                        throw error(400, "Printer is busy")
+                    if (line.startsWith("G1") && line.contains(" E") && nozzle < 170)
+                        throw error(400, "Extrude below minimum temp")
+                    when {
+                        line.startsWith("M104") -> { nozzleTarget = line.substringAfter("S").toDouble(); nozzle = nozzleTarget.coerceAtLeast(24.0) }
+                        line.startsWith("M140") -> { bedTarget = line.substringAfter("S").toDouble(); bed = bedTarget.coerceAtLeast(23.0) }
+                        line.startsWith("G28") -> homed = true
+                    }
+                    commands += line
+                }
+            }
+            ok(JsonPrimitive("ok"))
+        }
         method == "GET" && path == "/server/webcams/list" -> ok(buildJsonObject {
             put("webcams", buildJsonArray {
                 if (hasCamera) add(buildJsonObject {
@@ -276,6 +299,29 @@ class MockOctoPrint(port: Int = 0, host: String = "127.0.0.1") : SimulatedPrinte
                 putJsonObject("files") { putJsonObject("local") { put("name", name); put("origin", "local") } }
                 put("done", true)
             }, 201)
+        }
+        method == "POST" && path in setOf("/api/printer/tool", "/api/printer/bed", "/api/printer/printhead") -> {
+            val body = Json.parseToJsonElement(ex.requestBody.readBytes().toString(Charsets.UTF_8)) as JsonObject
+            val cmd = (body["command"] as? JsonPrimitive)?.contentOrNull
+            synchronized(lock) {
+                val busy = state == "printing" || state == "paused"
+                when {
+                    path == "/api/printer/bed" && cmd == "target" -> {
+                        bedTarget = (body["target"] as JsonPrimitive).content.toDouble(); bed = bedTarget.coerceAtLeast(23.0)
+                    }
+                    path == "/api/printer/tool" && cmd == "target" -> {
+                        nozzleTarget = ((body["targets"] as JsonObject)["tool0"] as JsonPrimitive).content.toDouble()
+                        nozzle = nozzleTarget.coerceAtLeast(24.0)
+                    }
+                    busy -> throw Stop(409, """{"error": "Printer is currently printing"}""")
+                    path == "/api/printer/tool" && cmd == "extrude" -> if (nozzle < 170) throw Stop(409, """{"error": "Tool is too cold"}""")
+                    path == "/api/printer/printhead" && cmd == "home" -> homed = true
+                    path == "/api/printer/printhead" && cmd == "jog" -> Unit
+                    else -> throw Stop(400, """{"error": "Unknown command"}""")
+                }
+                commands += "$path $cmd ${body}"
+            }
+            Reply(204, "")
         }
         method == "GET" && path == "/api/settings" -> json(buildJsonObject {
             putJsonObject("webcam") {
