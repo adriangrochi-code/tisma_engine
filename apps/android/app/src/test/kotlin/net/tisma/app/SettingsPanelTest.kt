@@ -168,6 +168,29 @@ class SettingsPanelTest {
         compose.runOnIdle { assertEquals("Glass bed", settings.printerNotes(null)) }
     }
 
+    @Test
+    @Config(qualifiers = "w900dp-h600dp-land-xhdpi")
+    fun `on a tablet the sections and the chosen one are side by side, as the plate's view and controls`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val settings = AppSettings(context)
+        val work = File(context.cacheDir, "engine")
+        val slice = SliceViewModel(EngineRunner(File(work, "none"), work), work, saved = settings, loadLayout = { layout() })
+        val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
+        val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
+        val nav = Navigator()
+        compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, nav) } }
+        compose.runOnIdle { nav.select(Section.PRINT) }
+        wait("panel_section_strength")
+        wait("panel_sub_layer_height")
+        compose.onNodeWithTag("panel_section_strength").performClick()
+        wait("row_walls.count")
+        compose.runOnIdle { assertTrue(nav.stack.isEmpty()) }
+        // The plate: the 3D view and the controls together once a model is open.
+        compose.runOnIdle { nav.select(Section.PLATE); slice.open("cube.stl") { File("../../../tests/data/cube_ascii.stl").inputStream() } }
+        wait("plate_3d")
+        wait("printer_card")
+    }
+
     private fun wait(tag: String) = compose.waitUntil(10_000) {
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()

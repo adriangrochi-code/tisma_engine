@@ -8,7 +8,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -67,12 +71,42 @@ fun PlateScreen(
             context.contentResolver.openOutputStream(uri, "wt")
         }
     }
+    // Tablets and landscape (mobile_app.md, rule 5; accessibility_touch.md, rule 11): with room, the 3D view
+    // takes the left and the controls the right, so neither scrolls the other away.
+    val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 720
+    val view: @Composable (Modifier) -> Unit = { m ->
+        Plate3D(state.mesh, state.bed, m.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)))
+    }
+    if (wide && state.modelName != null) {
+        Row(Modifier.fillMaxSize()) {
+            view(Modifier.weight(1.3f).fillMaxHeight().padding(start = 16.dp, top = 16.dp, bottom = 16.dp))
+            Box(Modifier.weight(1f)) { PlateControls(state, slice, printerState, printers, signedIn, nav, sendTo, { sendTo = it }, pick, save, null) }
+        }
+    } else {
+        PlateControls(state, slice, printerState, printers, signedIn, nav, sendTo, { sendTo = it }, pick, save,
+            if (state.modelName != null) view else null)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PlateControls(
+    state: SliceState,
+    slice: SliceViewModel,
+    printerState: PrintersState,
+    printers: PrintersViewModel,
+    signedIn: Boolean,
+    nav: Navigator,
+    sendTo: String?,
+    setSendTo: (String?) -> Unit,
+    pick: androidx.activity.compose.ManagedActivityResultLauncher<Array<String>, Uri?>,
+    save: androidx.activity.compose.ManagedActivityResultLauncher<String, Uri?>,
+    view: (@Composable (Modifier) -> Unit)?,
+) {
+    val context = ctx()
     ScreenColumn {
         PrinterCard(state) { nav.open(Screen.ProfilePicker) }
-        if (state.modelName != null) {
-            Plate3D(state.mesh, state.bed, Modifier.fillMaxWidth().height(320.dp)
-                .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)))
-        }
+        view?.invoke(Modifier.fillMaxWidth().height(320.dp))
         if (!state.engineAvailable) {
             Text(stringResource(R.string.plate_no_engine), color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -167,7 +201,7 @@ fun PlateScreen(
                     Text(stringResource(R.string.plate_send_to), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ready.forEach { p ->
-                            FilterChip(selected = sendTo == p.id, onClick = { sendTo = p.id }, label = { Text(p.name) })
+                            FilterChip(selected = sendTo == p.id, onClick = { setSendTo(p.id) }, label = { Text(p.name) })
                         }
                     }
                     Button(

@@ -107,12 +107,36 @@ fun SettingsTabScreen(
         return
     }
     var query by rememberSaveable { mutableStateOf("") }
+    // Tablets and landscape: the sections on the left, the chosen one on the right (mobile_app.md, rule 5).
+    val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 720
+    var chosen by rememberSaveable(tabId) { mutableStateOf(tab.sections.first().id) }
+    if (wide) {
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f)) {
+                SettingsList(tab, tabId, state, slice, nav, query, { query = it }, header, footer, chosen) { chosen = it }
+            }
+            Box(Modifier.weight(1.4f)) { SettingsSectionScreen(tabId, chosen, state, slice) }
+        }
+    } else {
+        SettingsList(tab, tabId, state, slice, nav, query, { query = it }, header, footer, null) {
+            nav.open(Screen.SettingsSection(tabId, it))
+        }
+    }
+}
+
+@Composable
+private fun SettingsList(
+    tab: SettingsLayout.Tab, tabId: String, state: SliceState, slice: SliceViewModel, nav: Navigator,
+    query: String, setQuery: (String) -> Unit,
+    header: (@Composable () -> Unit)?, footer: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)?,
+    chosen: String?, open: (String) -> Unit,
+) {
     LazyColumn(Modifier.fillMaxSize().testTag("panel_$tabId"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         header?.let { h -> item { h() } }
         item { ViewChips(state, slice, tabId, nav) }
         item {
-            OutlinedTextField(query, { query = it }, label = { Text(stringResource(R.string.panel_search)) }, singleLine = true,
+            OutlinedTextField(query, setQuery, label = { Text(stringResource(R.string.panel_search)) }, singleLine = true,
                 modifier = Modifier.fillMaxWidth().testTag("panel_search"))
         }
         val q = query.trim()
@@ -142,7 +166,9 @@ fun SettingsTabScreen(
         }
         items(sections, key = { it.first.id }) { (s, n) ->
             val changed = s.subsections.any { b -> b.rows.any { state.changed(it.key) } }
-            Card(Modifier.fillMaxWidth().clickable { nav.open(Screen.SettingsSection(tabId, s.id)) }.testTag("panel_section_${s.id}")) {
+            val colors = if (s.id == chosen) androidx.compose.material3.CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer) else androidx.compose.material3.CardDefaults.cardColors()
+            Card(Modifier.fillMaxWidth().clickable { open(s.id) }.testTag("panel_section_${s.id}"), colors = colors) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(painterResource(sectionIcon(s.icon)), null, tint = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.size(12.dp))

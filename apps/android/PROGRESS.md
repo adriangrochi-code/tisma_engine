@@ -25,6 +25,13 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Tabletas y horizontal:** con 720 dp o más de ancho, la Placa muestra la vista 3D a la izquierda y los
+  controles a la derecha, e Impresión, Material e Impresora muestran la lista de secciones a la izquierda y la sección
+  elegida a la derecha. Probado con Robolectric a 900 × 600 dp; no en una tableta.
+- **Actualizaciones de la app (`app_updates.md`, regla 11):** en espera. Ninguna ficha da el formato de la lista de
+  versiones (dónde está, campos, firma). Se le preguntó a la sesión de fichas, para que la app y el escritorio lean lo
+  mismo.
+
 - **2026-11-04 — AND5 y AND6 (QA):**
   - AND5: un G-code, de texto o binario, abierto desde la placa o compartido, va a la vista previa y no a la placa
     (por extensión o por el «GCDE» del binario). El manifiesto acepta además `text/x-gcode`, `text/x.gcode`,
