@@ -72,6 +72,10 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   de escritorio aceptó `settings-layout` (en curso), el servicio local compatible con Moonraker (necesita ficha: la
   lista de pedidos se mandó al equipo de fichas) y las notas de comportamiento (mandadas).
 
+- **Paquete de perfiles y ayuda (MA1, regla 16):** acordado con la sesión de escritorio que vive en el motor
+  (`pack update/list`, `profile --pack`, `knowledge`), después de Optimizar; propuesto `pack plan` + `pack install`
+  porque el motor en Android no tiene HTTPS (sin OpenSSL): la app baja los archivos y el motor los verifica e instala.
+
 ## Abierto
 
 - **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS: necesita una biblioteca MQTT o una propia; decidir), PrusaLink,
