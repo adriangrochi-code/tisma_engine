@@ -788,26 +788,42 @@ int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out
     if (part.mesh.triangle_count() == 0)
         return fail(kExitModel, model.name + ": the part has no triangles");
     progress(10);
-    OrientOptions options;
-    if (project.settings.support_angle > 0.0)
-        options.support_angle = project.settings.support_angle;
-    const OrientResult r = orient_least_support(part.mesh, options);
+    // The method by the printer (orientation.md, orient.method): least peel
+    // for resin, least support for FDM.
+    const bool resin = project.settings.machine_technology == MachineTechnology::Msla;
+    OrientResult r;
+    PeelResult peel;
+    if (resin) {
+        peel = orient_least_peel(part.mesh, project.settings);
+        r = peel;
+    } else {
+        OrientOptions options;
+        if (project.settings.support_angle > 0.0)
+            options.support_angle = project.settings.support_angle;
+        r = orient_least_support(part.mesh, options);
+    }
     progress(90);
     nlohmann::json rotation = nlohmann::json::array();
     for (int i = 0; i < 3; ++i)
         rotation.push_back({r.rotation[std::size_t(i * 3)], r.rotation[std::size_t(i * 3 + 1)], r.rotation[std::size_t(i * 3 + 2)]});
-    const nlohmann::json result{{"format", "tisma-orientation"},
+    nlohmann::json result{{"format", "tisma-orientation"},
                                 {"version", 1},
                                 {"object", index},
                                 {"instance", 0},
                                 {"part", model.name},
-                                {"method", "least_support"},
+                                {"method", resin ? "least_peel" : "least_support"},
                                 {"rotation", rotation},
                                 {"cost", r.cost},
                                 {"cost_before", r.cost_before},
                                 {"support_mm3", r.support_mm3},
                                 {"bed_area_mm2", r.bed_area_mm2},
                                 {"candidates", r.candidates}};
+    if (resin) {
+        result["cups"] = peel.cups;
+        result["cups_before"] = peel.cups_before;
+        result["largest_layer_mm2"] = peel.largest_layer_mm2;
+        result["largest_layer_before_mm2"] = peel.largest_layer_before_mm2;
+    }
     if (!write_file(a.output, [&](std::ostream& f) { f << result.dump(2) << "\n"; }))
         return fail(kExitInput, "cannot write the result '" + a.output + "'");
     if (!write_summary(nlohmann::json{{"cost", r.cost}, {"cost_before", r.cost_before}, {"candidates", r.candidates}}))

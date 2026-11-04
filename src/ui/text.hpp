@@ -606,9 +606,10 @@
       "Lay on face")\
     X(TipLay, "Hacé clic en la cara que querés contra la cama: el modelo gira para apoyarla. Atajo: F.",\
       "Click the face you want on the bed: the model turns to lay it down. Shortcut: F.")\
+    X(OrientLeastPeel, "Orientar (menor fuerza de despegue)", "Orient (least peel force)") \
     X(OrientLeastSupport, "Orientar (menos soporte)", "Orient (least support)") \
-    X(OrientDone, "Orientado: %d modelo(s) girado(s) para necesitar menos soporte", "Oriented: %d model(s) turned to need less support") \
-    X(OrientNothing, "Ya estaba en la orientación que menos soporte necesita", "It already was in the orientation that needs least support") \
+    X(OrientDone, "Orientado: %d modelo(s) girado(s)", "Oriented: %d model(s) turned") \
+    X(OrientNothing, "Ya estaba en la mejor orientación", "It already was in the best orientation") \
     X(TipArrangeTitle, "Organizar",\
       "Arrange")\
     X(TipArrange, "Ordena todos los modelos en una grilla compacta, centrada en la cama, con 6 mm entre ellos. No los gira. Atajo: A.",\

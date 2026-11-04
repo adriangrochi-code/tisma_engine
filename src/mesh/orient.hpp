@@ -34,6 +34,19 @@ struct OrientResult {
 // gives the identity.
 OrientResult orient_least_support(const TriangleMesh& mesh, const OrientOptions& options = {});
 
+// «Menor fuerza de despegue» for resin (rules 7 to 9): candidates from the
+// convex hull (on the platform) or spread over the sphere (raised on
+// supports), the best max(4, 16 precision) by rule 4's support cost kept and
+// sliced whole (layers of max(resin layer height, height / 400)); fewest
+// cups, then the smallest largest layer. `settings` gives the resin layer
+// height, whether the part stands raised on supports, and the angle.
+struct Settings;
+struct PeelResult : OrientResult {
+    int cups = 0, cups_before = 0;
+    double largest_layer_mm2 = 0.0, largest_layer_before_mm2 = 0.0;
+};
+PeelResult orient_least_peel(const TriangleMesh& mesh, const Settings& settings, double precision = 0.75);
+
 // The cost of resting the part with `up` (a unit vector in the part's own
 // coordinates) pointing up: rule 4's support volume and bed area.
 struct OrientCost {

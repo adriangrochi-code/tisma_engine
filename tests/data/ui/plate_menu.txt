@@ -8,7 +8,7 @@ expect-objects 2 Cube
 # no support; it says so and turns nothing.
 right-click-plate
 menu orient
-expect-toast It already was in the orientation that needs least support
+expect-toast It already was in the best orientation
 right-click-plate
 menu shape
 menu sphere

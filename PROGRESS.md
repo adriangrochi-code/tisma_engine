@@ -10030,3 +10030,22 @@ candidata y el detector de ventosas; recordar el método y la precisión por tec
   (`mobile_app.md`, regla 2): acordarla con ella.
 - Equipo de fichas: session_015csYE6YXftDTgfC23i81xG (mensajes por send_message, con el pie de Claude Code).
 
+## 2026-11-04 — Orientación para resina, «menor fuerza de despegue»
+
+**Hecho** (`orientation.md`, reglas 7 a 9):
+- `orient_least_peel` en `src/mesh/orient.*`. Candidatas: sobre la plataforma, las caras de la envolvente; levantada
+  en soportes, 200 direcciones en una red de Fibonacci; más la orientación actual.
+- Preselección: se quedan las `max(4, 16 · precisión)` mejores por el costo de soporte de la regla 4, con el ángulo
+  crítico de los soportes de resina.
+- Elección: cada una se lamina entera, con capas de `max(altura de capa, alto / 400)`; gana la de menos ventosas
+  (`find_cups`) y, entre esas, la de capa más grande más chica.
+- El método sale de la impresora (resina o FDM) en el menú de la placa y en `orient`. En resina, el JSON lleva
+  además `cups`, `cups_before` y las capas más grandes, y el `cost` es `1e6 · ventosas + capa más grande`.
+- La precisión queda en 0,75, el valor por defecto de la ficha. Decisión: el ajuste `orient.precision` y recordarlo
+  por tecnología quedan para el panel de ajustes, que no está en este ítem de la hoja de ruta.
+
+**Pruebas:** OR3 (vaso con soportes: 0 ventosas, Z de la pieza < 0,5; 13 candidatas laminadas), OR4 (vaso sobre la
+plataforma: queda de costado) y `orient` en resina desde la línea de comandos.
+
+**Sigue (hoja de ruta):** Ingeniería EP1 a EP10 y el CFD más rápido (parada temprana, de grueso a fino).
+

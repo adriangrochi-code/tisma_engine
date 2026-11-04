@@ -8929,17 +8929,25 @@ void App::plate_menu() {
     }
     // Automatic orientation (orientation.md, «menos material de soporte»):
     // the chosen model, or every model when none is chosen.
-    const bool orient = ImGui::MenuItem(tr(T::OrientLeastSupport), nullptr, false, !objects_.empty());
+    const bool orient = ImGui::MenuItem(
+        tr(settings_.machine_technology == MachineTechnology::Msla ? T::OrientLeastPeel : T::OrientLeastSupport), nullptr, false,
+        !objects_.empty());
     placed("orient");
     if (orient) {
         int turned = 0;
         for (std::size_t i = 0; i < objects_.size(); ++i) {
             if ((selected_ >= 0 && std::size_t(selected_) != i) || i >= placed_meshes_.size() || placed_meshes_[i].empty())
                 continue;
-            OrientOptions options;
-            if (settings_.support_angle > 0.0)
-                options.support_angle = settings_.support_angle;
-            const OrientResult r = orient_least_support(placed_meshes_[i], options);
+            // By the printer: least peel for resin, least support for FDM.
+            OrientResult r;
+            if (settings_.machine_technology == MachineTechnology::Msla) {
+                r = orient_least_peel(placed_meshes_[i], settings_);
+            } else {
+                OrientOptions options;
+                if (settings_.support_angle > 0.0)
+                    options.support_angle = settings_.support_angle;
+                r = orient_least_support(placed_meshes_[i], options);
+            }
             if (r.cost < r.cost_before - 1e-6) {
                 Rotation& rot = objects_[i].place.rotation;
                 Rotation out{};

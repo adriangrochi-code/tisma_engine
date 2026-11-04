@@ -14,7 +14,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - **Orientación automática, menos soporte** (`orientation.md`): en el menú de la placa, «Orientar (menos soporte)»
   gira el modelo elegido, o todos, a la orientación que menos soporte necesita y mejor se agarra a la cama; nunca
-  queda peor que como estaba. Para los nodos de Tisma Cloud, `tisma-engine orient` (`cloud.md`, regla 19c).
+  queda peor que como estaba. Con una impresora de resina, «Orientar (menor fuerza de despegue)» busca la orientación
+  sin ventosas y con la capa más grande lo más chica posible. Para los nodos de Tisma Cloud, `tisma-engine orient` (`cloud.md`, regla 19c).
 - **Calidad extrema en piezas grandes**: en vez de negarse, el análisis estructural toma los vóxeles más finos que
   entran en memoria y lo dice.
 - **Rango probable en los análisis** (pedido del dueño: la mayor fiabilidad que dé cada calidad):

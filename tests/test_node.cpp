@@ -421,6 +421,15 @@ TEST_CASE("orient of a project the nodes' way (cloud.md, rules 10c and 19c)", "[
     CHECK(j["cost"].get<double>() < j["cost_before"].get<double>());
     const nlohmann::json s = nlohmann::json::parse(read_text(summary));
     CHECK(s["candidates"].get<int>() >= 2);
+    // A resin printer: least peel; a cube on the platform has no cup.
+    Project resin = box_project(100.0, 100.0);
+    resin.settings.machine_technology = MachineTechnology::Msla;
+    const auto resin_project = dir / "resin.3mf";
+    save_project(resin_project, resin);
+    REQUIRE(run({"orient", resin_project.string(), "-o", json.string(), "--summary", summary.string(), "--sandbox"}).code == kExitOk);
+    const nlohmann::json jr = nlohmann::json::parse(read_text(json));
+    CHECK(jr["method"] == "least_peel");
+    CHECK(jr["cups"] == 0);
     // Errors: in the summary, with a code.
     const Run bad = run({"orient", project.string(), "-o", json.string(), "--summary", summary.string(), "--object", "4"});
     CHECK(bad.code == kExitInput);

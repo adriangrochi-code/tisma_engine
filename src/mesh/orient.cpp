@@ -6,6 +6,11 @@
 
 #include "mesh/orient.hpp"
 
+#include "config/settings.hpp"
+#include "geom/polygons.hpp"
+#include "mesh/indexed_mesh.hpp"
+#include "resin/resin.hpp"
+
 #include <oneapi/tbb/blocked_range.h>
 #include <oneapi/tbb/parallel_reduce.h>
 
@@ -14,6 +19,7 @@
 #include <limits>
 #include <map>
 #include <numbers>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -499,6 +505,108 @@ OrientResult orient_least_support(const TriangleMesh& mesh, const OrientOptions&
     const double a = landscape_angle(turned);
     const std::array<double, 9> rz{std::cos(a), -std::sin(a), 0, std::sin(a), std::cos(a), 0, 0, 0, 1};
     result.rotation = compose(r, rz);
+    return result;
+}
+
+namespace {
+
+// Rule 2 for any chosen up: onto +Z, then landscape about Z.
+std::array<double, 9> final_rotation(const std::vector<V>& vertices, const V& up) {
+    const std::array<double, 9> r = onto_z(up);
+    std::vector<V> turned;
+    turned.reserve(vertices.size());
+    for (const V& v : vertices)
+        turned.push_back(rotate_by(r, v));
+    const double a = landscape_angle(turned);
+    const std::array<double, 9> rz{std::cos(a), -std::sin(a), 0, std::sin(a), std::cos(a), 0, 0, 0, 1};
+    return compose(r, rz);
+}
+
+TriangleMesh turned_mesh(const TriangleMesh& mesh, const std::array<double, 9>& r) {
+    TriangleMesh out;
+    out.reserve(mesh.triangle_count());
+    for (std::size_t t = 0; t < mesh.triangle_count(); ++t) {
+        Vec3f c[3];
+        for (int k = 0; k < 3; ++k) {
+            const V v = rotate_by(r, of(mesh.corner(t, k)));
+            c[k] = {float(v[0]), float(v[1]), float(v[2])};
+        }
+        out.add_triangle(c[0], c[1], c[2]);
+    }
+    return out;
+}
+
+} // namespace
+
+PeelResult orient_least_peel(const TriangleMesh& mesh, const Settings& settings, double precision) {
+    PeelResult result;
+    if (mesh.triangle_count() == 0)
+        return result;
+    const Prepared p = prepare(mesh);
+    Bvh bvh;
+    bvh.build(p);
+    const bool raised = settings.resin_supports && settings.resin_support_elevation > 0.0 && !settings.resin_pad_around_object;
+    // Rule 7: on the platform, the hull's faces; raised, directions spread
+    // evenly over the sphere (a Fibonacci lattice); and as it is.
+    std::vector<V> ups{{0, 0, 1}};
+    if (!raised) {
+        for (const V& n : hull_normals(p.vertices))
+            ups.push_back(mul(n, -1.0));
+    } else {
+        const int count = 200;
+        const double golden = std::numbers::pi * (3.0 - std::sqrt(5.0));
+        for (int i = 0; i < count; ++i) {
+            const double z = 1.0 - 2.0 * (i + 0.5) / count, r = std::sqrt(1.0 - z * z), phi = golden * i;
+            ups.push_back({r * std::cos(phi), r * std::sin(phi), z});
+        }
+    }
+    // Rule 8: the best by rule 4's cost, the current one always kept.
+    OrientOptions options;
+    options.support_angle = settings.resin_support_critical_angle > 0.0 ? settings.resin_support_critical_angle : 45.0;
+    std::vector<std::pair<double, std::size_t>> ranked;
+    for (std::size_t i = 1; i < ups.size(); ++i)
+        ranked.emplace_back(cost_of(p, bvh, ups[i], options).cost, i);
+    std::sort(ranked.begin(), ranked.end());
+    const std::size_t keep = std::size_t(std::max(4, int(std::lround(16.0 * std::clamp(precision, 0.0, 1.0)))));
+    std::vector<std::size_t> chosen{0};
+    for (std::size_t k = 0; k < ranked.size() && chosen.size() < keep + 1; ++k)
+        chosen.push_back(ranked[k].second);
+    result.candidates = chosen.size();
+    // Rule 9: each sliced whole; fewest cups, then the smallest largest layer.
+    struct Score {
+        int cups = 0;
+        double largest = 0.0, height = 0.0;
+        std::array<double, 9> rotation{};
+    };
+    std::optional<Score> best;
+    for (const std::size_t i : chosen) {
+        Score s;
+        s.rotation = final_rotation(p.vertices, ups[i]);
+        const TriangleMesh turned = turned_mesh(mesh, s.rotation);
+        const BoundingBox box = turned.bounding_box();
+        s.height = double(box.max.z - box.min.z);
+        Settings coarse = settings;
+        coarse.resin_layer_height = std::max(settings.resin_layer_height > 0.0 ? settings.resin_layer_height : 0.05, s.height / 400.0);
+        const std::vector<Polygons> sections = resin_sections(weld_exact(turned), coarse);
+        s.cups = int(find_cups(sections, coarse.resin_layer_height, raised).size());
+        for (const Polygons& layer : sections)
+            s.largest = std::max(s.largest, area_mm2(layer));
+        if (i == 0) {
+            result.cups_before = s.cups;
+            result.largest_layer_before_mm2 = s.largest;
+        }
+        const bool better = !best || s.cups < best->cups ||
+                            (s.cups == best->cups && (s.largest < best->largest - 1e-6 ||
+                                                      (std::abs(s.largest - best->largest) <= 1e-6 && s.height < best->height - 1e-9)));
+        if (better)
+            best = s;
+    }
+    result.rotation = best->rotation;
+    result.cups = best->cups;
+    result.largest_layer_mm2 = best->largest;
+    // The cost the cloud reports: the cups first, then the largest layer.
+    result.cost = 1e6 * best->cups + best->largest;
+    result.cost_before = 1e6 * result.cups_before + result.largest_layer_before_mm2;
     return result;
 }
 

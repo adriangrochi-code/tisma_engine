@@ -2,6 +2,7 @@
 
 #include "mesh/orient.hpp"
 #include "mesh/shapes.hpp"
+#include "config/settings.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -74,3 +75,49 @@ TEST_CASE("orient: never worse than it was, and the rotation is a rotation", "[o
     CHECK_THAT(c.support_mm3, WithinAbs(300.0 * 10.0, 1.0));
     CHECK_THAT(c.bed_area_mm2, WithinAbs(4.0, 1e-6));
 }
+
+namespace {
+
+// OR3 and OR4's cup: 20 by 20 by 20 mm, walls and floor 2 mm, open on top.
+TriangleMesh cup() {
+    TriangleMesh m = make_box(20, 20, 2);
+    const struct {
+        double sx, sy, x, y;
+    } walls[] = {{2, 20, -9, 0}, {2, 20, 9, 0}, {16, 2, 0, -9}, {16, 2, 0, 9}};
+    for (const auto& w : walls) {
+        TriangleMesh b = make_box(w.sx, w.sy, 20);
+        b.translate(float(w.x), float(w.y), 0);
+        append(m, b);
+    }
+    return m;
+}
+
+Settings resin(bool raised) {
+    Settings s;
+    s.machine_technology = MachineTechnology::Msla;
+    s.resin_layer_height = 0.05;
+    s.resin_supports = raised;
+    s.resin_support_elevation = raised ? 5.0 : 0.0;
+    s.resin_pad_around_object = false;
+    return s;
+}
+
+} // namespace
+
+TEST_CASE("orient: OR3, a cup on supports does not open towards the film", "[orient][resin]") {
+    const PeelResult r = orient_least_peel(cup(), resin(true));
+    INFO("cups " << r.cups << " (before " << r.cups_before << "), largest " << r.largest_layer_mm2 << ", " << r.candidates
+                 << " candidates");
+    CHECK(r.cups_before >= 1); // as modelled, open upwards: a cup
+    CHECK(r.cups == 0);
+    CHECK(part_z(r)[2] < 0.5);
+    CHECK(r.candidates == 13); // max(4, 16 x 0.75) and the current one
+}
+
+TEST_CASE("orient: OR4, a cup on the platform lies on its side", "[orient][resin]") {
+    const PeelResult r = orient_least_peel(cup(), resin(false));
+    INFO("cups " << r.cups << " (before " << r.cups_before << "), largest " << r.largest_layer_mm2);
+    CHECK(r.cups == 0);
+    CHECK(std::abs(part_z(r)[2]) < 0.01);
+}
+
