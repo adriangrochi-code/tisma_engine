@@ -77,8 +77,16 @@ Preferencias de la interfaz, no del laminado:
     - los genéricos (`generic`) van después de los del fabricante de la impresora.
 13. **Por defecto:** al elegir una variante, se eligen el primer filamento de su `defaults.filament` y el perfil de
     `defaults.print` (en resina, `defaults.resin` y `defaults.resin_print`).
-14. **Cama e imágenes:** `bed_model` (STL) y `bed_texture` (SVG o PNG) del modelo se dibujan en la vista 3D, en las
-    coordenadas de la cama, sin moverlas.
+14. **Cama e imágenes:** `bed_model` (STL) y `bed_texture` (SVG o PNG) del modelo se dibujan en la vista 3D. Los
+    archivos no traen un origen: los STL del paquete están hechos alrededor de su propio centro (por ejemplo, el de la
+    AnkerMake M5 va de −127,5 a 127,5 en X y de −147 a 130 en Y). Así que (decisión del equipo de fichas,
+    04-11-2026):
+    - **el modelo:** el centro de su caja en XY va al centro de la cama (`machine.bed`) y su cara de arriba queda en
+      Z = 0 (la superficie de impresión), sin escalarlo ni girarlo;
+    - **la imagen:** cubre el rectángulo que encierra la cama (`machine.bed`), no el del modelo; un SVG se escala a ese
+      rectángulo manteniendo la proporción y centrado;
+    - si el modelo es mucho más chico que la cama (menos de la mitad en X o en Y), se dibuja igual y se avisa en el
+      registro; no se corrige.
 15. **Licencia y origen:** el panel de un perfil muestra su `license` y su `origin` en una línea chica, con el enlace
     al repositorio.
 
