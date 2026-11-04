@@ -933,6 +933,7 @@ private:
     void add_catalog_profile(const Profile& profile);
     // The free profile pack (profile_pack.md).
     std::filesystem::path pack_dir() const;
+    void refresh_bed_extras();
     void load_pack();
     void start_pack_update(PackChoice choice, std::string add_after);
     void poll_pack_update();
@@ -1635,6 +1636,8 @@ private:
     std::vector<std::string> pack_filaments_;                // packs.filaments: more filaments added from the pack
     std::map<std::string, int> pack_printer_number_;         // a pack printer profile's name: its number in the index
     std::map<std::string, std::pair<std::string, std::string>> pack_printer_model_; // its vendor's and model's names
+    std::map<std::string, std::pair<std::string, std::string>> pack_printer_bed_;   // its bed_model's and bed_texture's paths
+    std::string bed_extras_for_ = "\x01"; // the printer and bed the 3D view's bed model and picture are for
     std::string community_for_ = "\x01";                    // the printer community_values_ are for
     std::vector<CommunityValue> community_values_;
     std::map<std::string, std::vector<std::string>> pack_kept_; // each pack printer's profiles as last made (rule 20)
@@ -4482,6 +4485,8 @@ void App::load_profile_lists() {
         if (kind == ProfileKind::Printer) {
             pack_printer_number_.clear();
             pack_printer_model_.clear();
+            pack_printer_bed_.clear();
+            bed_extras_for_ = "\x01";
             pack_gone_.clear();
             pack_filament_vendor_.clear();
             community_for_ = "\x01";
@@ -4544,8 +4549,10 @@ void App::load_profile_lists() {
                         const std::string file = id.substr(0, id.rfind('#'));
                         for (const PackVendor& v : pack_index_->vendors)
                             for (const PackModel& pm : v.models)
-                                if (pm.file == file)
+                                if (pm.file == file) {
                                     pack_printer_model_[m.name] = {v.name, pm.name};
+                                    pack_printer_bed_[m.name] = {pm.bed_model, pm.bed_texture};
+                                }
                     }
                 }
             }
@@ -5240,6 +5247,56 @@ void App::add_catalog_profile(const Profile& catalog) {
     // The catalog's printers have no speeds of their own (printer_profile).
     notify(format(tr(profile.kind == ProfileKind::Printer ? T::CatalogSpeedFallback : T::ProfileAdded),
                   shown_name(profile.name).c_str()));
+}
+
+// A pack printer's bed model (STL) and picture (SVG) in the 3D view
+// (profile_pack.md, rule 14), redone when the printer or its bed changes. A
+// PNG picture is not drawn yet (no PNG reader in the engine; PROGRESS.md).
+void App::refresh_bed_extras() {
+    const std::string& printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
+    double min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+    for (std::size_t i = 0; i < settings_.bed.size(); ++i) {
+        const auto& p = settings_.bed[i];
+        min_x = i ? std::min(min_x, p[0]) : p[0], max_x = i ? std::max(max_x, p[0]) : p[0];
+        min_y = i ? std::min(min_y, p[1]) : p[1], max_y = i ? std::max(max_y, p[1]) : p[1];
+    }
+    const std::string key = printer + "|" + std::to_string(min_x) + "," + std::to_string(min_y) + "," +
+                            std::to_string(max_x) + "," + std::to_string(max_y);
+    if (key == bed_extras_for_)
+        return;
+    bed_extras_for_ = key;
+    BedArt art;
+    std::vector<float> model;
+    if (const auto it = pack_printer_bed_.find(printer); it != pack_printer_bed_.end()) {
+        // A file of the pack, under vendors/ when the index names it without.
+        const auto read_pack = [&](const std::string& path, std::string& data) {
+            for (const std::string& p : {path, "vendors/" + path}) {
+                if (path.empty() || !safe_pack_path(p))
+                    continue;
+                std::ifstream in(pack_dir() / std::filesystem::path(std::u8string(p.begin(), p.end())), std::ios::binary);
+                if (in) {
+                    data.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+                    return true;
+                }
+            }
+            return false;
+        };
+        const auto& [bed_model, bed_texture] = it->second;
+        std::string data;
+        if (read_pack(bed_model, data)) {
+            try {
+                model = mesh_vertices(parse_stl(data).mesh, Vec3{0, 0, 0});
+            } catch (const std::exception& e) {
+                log_line(std::string("bed model ") + bed_model + ": " + e.what());
+            }
+        }
+        std::string lower = bed_texture;
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        if (lower.ends_with(".svg") && read_pack(bed_texture, data))
+            art = bed_svg_art(data, min_x, min_y, max_x, max_y);
+    }
+    renderer_.set_bed_extras(art, model);
+    vk_view_.set_bed_extras(art, model);
 }
 
 std::filesystem::path App::pack_dir() const {
@@ -21634,6 +21691,7 @@ void App::script_input() {
 
 void App::frame() {
     poll_pack_update();
+    refresh_bed_extras();
     // --pick-pack-printer: that pack printer added and chosen (profile_pack.md, PK6).
     if (!options_.pick_pack_printer.empty() && !pack_printer_picked_ && frames_ >= 2) {
         pack_printer_picked_ = true;

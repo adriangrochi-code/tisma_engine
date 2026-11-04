@@ -10843,10 +10843,31 @@ vuelta de perfilado.
   la tabla (`4176d0a`); Windows en verde.
 
 **Sigue (paquete de perfiles, lo que falta en el escritorio):**
-- Regla 14: dibujar `bed_model` (STL) y `bed_texture` (SVG o PNG) del modelo del paquete en la vista 3D, en las
-  coordenadas de la cama, en OpenGL y en Vulkan. El SVG se rasteriza con nanosvg (ya en `THIRD_PARTY.md`). Para PNG
-  no hay lector en el motor: elegir uno permisivo y anotarlo antes de usarlo, o leer solo SVG y dejar PNG anotado.
-  La app de Android ya lo hace.
+- Regla 14, PNG: falta (decisión del dueño, 2026-11-04: SVG por ahora). Para PNG no hay lector en el motor: elegir
+  uno permisivo y anotarlo antes de usarlo.
 - PK1/PK2 en el primer arranque (asistente con el paquete) y la regla 15 (licencia y origen en el panel del perfil,
   no solo en el catálogo): revisar contra la ficha.
+
+## 2026-11-04 — la cama del paquete en la vista 3D (`profile_pack.md`, regla 14, solo SVG)
+
+**Hecho** (el dueño pidió SVG por ahora):
+- `src/ui/bed_art.*`: `bed_svg_art` lee el SVG con nanosvg. Las curvas se siguen a una décima de milímetro. Los rellenos
+  usan su regla (no nula o par-impar), los trazos se ensanchan con Clipper2 y `triangulate_polygon` llena el resultado.
+  Sale como triángulos de color plano. A cada forma se le quita lo que se pinta después, así los triángulos nunca se
+  superponen y no pelean en profundidad.
+- El dibujo cubre la caja de la cama (el borde de arriba del SVG va atrás, en y máxima). Los degradados y lo
+  transparente no se dibujan; lo semitransparente, sólido.
+- Las dos vistas, OpenGL y Vulkan, dibujan el `bed_model` (STL) en el color de la placa y encima el dibujo, adelantado
+  en profundidad como la pintura sobre una pieza. No hacen sombra.
+- La interfaz lo rehace al cambiar de impresora o de cama.
+- El paquete de prueba trae una cama de 220 × 220 con un STL y un SVG (cuadrado, círculo y un trazo).
+
+**Prueba:** `[bed_art]`: área y color de un rectángulo, la y invertida, agujero par-impar, trazo de 2 mm, círculo,
+formas superpuestas, entradas malas. En pantalla: `ui_pack_printer_picked` (OpenGL) y la misma corrida con
+`--graphics vulkan` (lavapipe) dan el mismo dibujo; capturas mirados a mano.
+
+**Decisión:** con el dibujo, la grilla queda debajo y no se ve, como en una cama impresa.
+
+**Sin probar:** con los SVG del paquete real (no se leen, sala limpia); se puede pedir a la sesión de fichas como caja
+negra.
 

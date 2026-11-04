@@ -2,6 +2,7 @@
 
 #include "ui/math.hpp"
 #include "ui/raytrace.hpp"
+#include "ui/bed_art.hpp"
 #include "ui/scene.hpp"
 
 #include <array>
@@ -97,6 +98,10 @@ public:
     void shutdown();
 
     void set_bed(const BedPolygon& bed, const BedLook& look);
+    // A pack printer's bed (profile_pack.md, rule 14): its picture on the
+    // plate, as coloured triangles (bed_svg_art), and its model (mesh_vertices),
+    // in the bed's coordinates; empty: none.
+    void set_bed_extras(const BedArt& art, const std::vector<float>& model);
     void set_model(const std::vector<float>& vertices); // mesh_vertices
     // A coarse copy (clustered, then mesh_vertices) drawn instead while the
     // view moves; empty: none.
@@ -168,8 +173,9 @@ private:
     bool ready_ = false; // init succeeded: without it (a Vulkan window), every call does nothing
     Programs p_;
     unsigned empty_vao_ = 0, white_ = 0;
-    Buffer plate_, grid_, model_, model_coarse_, paint_, extrusions_, travels_;
+    Buffer plate_, grid_, model_, model_coarse_, paint_, extrusions_, travels_, bed_art_, bed_model_;
     std::vector<PaintGroup> paint_groups_;
+    std::vector<BedArt::Group> bed_art_groups_;
     int grid_outline_ = 0;                    // the outline's vertices, after the grid's in grid_
     float grid_step_ = 10.0f;                 // mm between grid lines
     int grid_major_every_ = 5;

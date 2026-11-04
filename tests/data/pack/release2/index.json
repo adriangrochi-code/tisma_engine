@@ -37,8 +37,8 @@
    ],
    "archive": {
     "name": "acme.tar.xz",
-    "size": 680,
-    "sha256": "1a86b63a9600cd88dacd7edb9f82966de502d006f4f147289d029c30fdc65e90"
+    "size": 1024,
+    "sha256": "d4617b7302d448cb123a03d0c9a62c20a7301350c7d50767f21564791008643b"
    },
    "models": [
     {
@@ -46,6 +46,10 @@
      "name": "Acme One",
      "technology": "fff",
      "family": "One",
+     "assets": {
+      "bed_model": "vendors/acme/beds/A1.stl",
+      "bed_texture": "vendors/acme/beds/A1.svg"
+     },
      "file": "vendors/acme/models/A1.json",
      "default_variant": "0.4",
      "variants": [

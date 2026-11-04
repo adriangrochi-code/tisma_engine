@@ -1218,7 +1218,7 @@ void Renderer::shutdown() {
             glDeleteProgram(*p);
             *p = 0;
         }
-    for (Buffer* b : {&plate_, &grid_, &model_, &model_coarse_, &paint_, &extrusions_, &travels_}) {
+    for (Buffer* b : {&plate_, &grid_, &model_, &model_coarse_, &paint_, &extrusions_, &travels_, &bed_art_, &bed_model_}) {
         if (b->vbo)
             glDeleteBuffers(1, &b->vbo);
         if (b->vao)
@@ -1256,6 +1256,25 @@ void Renderer::set_bed(const BedPolygon& bed, const BedLook& look) {
     grid_outline_ = lines.empty() ? 0 : static_cast<int>(2 * bed.size()); // bed_lines puts it last
     grid_step_ = float(look.step);
     grid_major_every_ = std::max(look.major_every, 1);
+    scene_changed();
+}
+
+void Renderer::set_bed_extras(const BedArt& art, const std::vector<float>& model) {
+    if (!ready_)
+        return;
+    upload(bed_art_.vao, bed_art_.vbo, art.vertices.data(), art.vertices.size() * sizeof(float));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
+    bed_art_.count = static_cast<int>(art.vertices.size() / 6);
+    bed_art_groups_ = art.groups;
+    upload(bed_model_.vao, bed_model_.vbo, model.data(), model.size() * sizeof(float));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
+    bed_model_.count = static_cast<int>(model.size() / 6);
     scene_changed();
 }
 
@@ -1402,6 +1421,30 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
         glBindVertexArray(plate_.vao);
         glDrawArrays(GL_TRIANGLES, 0, plate_.count);
         glDisable(GL_POLYGON_OFFSET_FILL);
+    }
+    // A pack printer's bed (rule 14): its model in the plate's colour, then its
+    // picture pulled towards the eye in depth, as the paint over a model, so
+    // it wins over the plate and the model's top. Neither casts a shadow.
+    if ((bed_model_.count > 0 || bed_art_.count > 0) && !casters) {
+        lit_uniforms(p_.mesh, f, vp, gbuffer, visibility);
+        uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
+        uniform(p_.mesh, "u_model", identity());
+        if (bed_model_.count > 0) {
+            uniform(p_.mesh, "u_colour", f.plate);
+            glBindVertexArray(bed_model_.vao);
+            glDrawArrays(GL_TRIANGLES, 0, bed_model_.count);
+        }
+        if (bed_art_.count > 0) {
+            glBindVertexArray(bed_art_.vao);
+            glEnable(GL_POLYGON_OFFSET_FILL);
+            glPolygonOffset(-1.0f, -4.0f);
+            for (const BedArt::Group& g : bed_art_groups_) {
+                uniform(p_.mesh, "u_colour",
+                        Vec3{float((g.rgb >> 16) & 0xFF) / 255.0f, float((g.rgb >> 8) & 0xFF) / 255.0f, float(g.rgb & 0xFF) / 255.0f});
+                glDrawArrays(GL_TRIANGLES, GLint(g.first), GLsizei(g.count));
+            }
+            glDisable(GL_POLYGON_OFFSET_FILL);
+        }
     }
     if (!gbuffer && grid_.count > 0) {
         glEnable(GL_BLEND);

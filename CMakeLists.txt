@@ -369,6 +369,7 @@ if(TISMA_BUILD_UI)
     src/ui/camera.cpp
     src/ui/scene.cpp
     src/ui/icons.cpp
+    src/ui/bed_art.cpp
     src/ui/png.cpp
     src/ui/text.cpp
     src/ui/setting_guide.cpp

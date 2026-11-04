@@ -2,6 +2,7 @@
 
 #include "renderer.hpp"
 
+#include "ui/bed_art.hpp"
 #include "ui/scene.hpp"
 
 #include <imgui.h>
@@ -35,6 +36,7 @@ public:
 
     // As Renderer's.
     void set_bed(const BedPolygon& bed, const BedLook& look);
+    void set_bed_extras(const BedArt& art, const std::vector<float>& model);
     void set_model(const std::vector<float>& vertices);
     void set_model_coarse(const std::vector<float>& vertices);
     void set_paint(const std::vector<float>& vertices, const std::vector<Renderer::PaintGroup>& groups);

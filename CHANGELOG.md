@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **La cama de la impresora del paquete** en la vista 3D: su modelo (STL) y su dibujo (SVG) en la placa, en OpenGL y
+  en Vulkan. Los dibujos PNG todavía no se muestran.
 - **Resinas del paquete:** una impresora de resina del paquete elige su resina y su perfil de impresión de resina por
   defecto, ofrece solo resinas en el catálogo y muestra los **Datos publicados** de la resina.
 - **Datos publicados** también para el filamento del paquete, plegados bajo su perfil en la pestaña Material.

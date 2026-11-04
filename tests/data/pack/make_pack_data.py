@@ -23,7 +23,8 @@ def j(o):
 def model(name, nozzle_diameter):
     return j({"format": "tisma-pack-model", "version": 2, "technology": "fff", "vendor": "Acme",
               "model": {"id": "A1", "name": "Acme One", "family": "One"}, "default_variant": "0.4",
-              "common": {"settings": {"machine": {"max_bed_temp": 110, "nozzle_diameter": 0.4},
+              "common": {"settings": {"machine": {"max_bed_temp": 110, "nozzle_diameter": 0.4,
+                                                  "bed": [[0, 0], [220, 0], [220, 220], [0, 220]]},
                                       "speed": {"travel": 150}}},
               "variants": [{"id": "0.4", "nozzle": 0.4, "name": name + " 0.4", "settings": {},
                             "defaults": {"filament": ["vendors/acme/filaments/PLA.json"],
@@ -37,10 +38,26 @@ def entry(kind, name, settings, compatible, vendor="Acme", technology="fff"):
               "profile": {"format": "tisma-profile", "version": 1, "kind": kind, "name": name, "settings": settings},
               "compatible": compatible, "generic": False, "license": "AGPL-3.0-or-later", "origin": "Invented"})
 
-acme1 = tar([("vendors/acme/models/A1.json", model("Acme One", 0.6)),
+def slab(x0, y0, x1, y1, z0, z1):
+    v = [(x, y, z) for z in (z0, z1) for y in (y0, y1) for x in (x0, x1)]
+    faces = [(0, 2, 1), (1, 2, 3), (4, 5, 6), (5, 7, 6), (0, 1, 4), (1, 5, 4),
+             (2, 6, 3), (3, 6, 7), (0, 4, 2), (2, 4, 6), (1, 3, 5), (3, 7, 5)]
+    lines = ["solid bed"]
+    for f in faces:
+        lines += ["facet normal 0 0 0", "outer loop"] + ["vertex %g %g %g" % v[i] for i in f] + ["endloop", "endfacet"]
+    return ("\n".join(lines + ["endsolid bed"]) + "\n").encode()
+
+bed_svg = (b'<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220">'
+           b'<rect x="10" y="10" width="200" height="200" fill="#2a2f3a"/>'
+           b'<circle cx="110" cy="110" r="40" fill="#e05a2b"/>'
+           b'<path d="M20 200 H200" stroke="#ffffff" stroke-width="4"/></svg>\n')
+
+acme1 = tar([("vendors/acme/beds/A1.stl", slab(0, 0, 220, 220, -3, 0)), ("vendors/acme/beds/A1.svg", bed_svg),
+             ("vendors/acme/models/A1.json", model("Acme One", 0.6)),
              ("vendors/acme/filaments/PLA.json", entry("filament", "Acme PLA", {"machine": {"variables": {"temperature": 210}}}, 0)),
              ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}}, None))])
-acme2 = tar([("vendors/acme/models/A1.json", model("Acme One Plus", 0.6)),
+acme2 = tar([("vendors/acme/beds/A1.stl", slab(0, 0, 220, 220, -3, 0)), ("vendors/acme/beds/A1.svg", bed_svg),
+             ("vendors/acme/models/A1.json", model("Acme One Plus", 0.6)),
              ("vendors/acme/filaments/PLA.json", entry("filament", "Acme PLA", {"machine": {"variables": {"temperature": 215}}}, 0)),
              ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}}, None))])
 bolt = tar([("vendors/bolt/models/B2.json", j({"format": "tisma-pack-model", "version": 2, "technology": "sla",
@@ -88,6 +105,7 @@ def index(version, acme, bolt_data):
                    "filaments": ["vendors/acme/filaments/PLA.json"], "prints": ["vendors/acme/prints/Standard.json"],
                    "archive": file("acme.tar.xz", acme),
                    "models": [{"id": "A1", "name": "Acme One", "technology": "fff", "family": "One",
+                               "assets": {"bed_model": "vendors/acme/beds/A1.stl", "bed_texture": "vendors/acme/beds/A1.svg"},
                                "file": "vendors/acme/models/A1.json", "default_variant": "0.4",
                                "variants": [{"id": "0.4", "nozzle": 0.4}, {"id": "0.6", "nozzle": 0.6}]}]},
                   {"id": "bolt", "name": "Bolt", "license": "AGPL-3.0-or-later", "origin": "Invented",
