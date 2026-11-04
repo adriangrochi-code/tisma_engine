@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- `tisma-engine analyze <proyecto> --mode lightest-infill [--no-zones] [--ribs]` corre en los nodos de la nube y en el
+  teléfono: el relleno uniforme mínimo, por zonas y con nervios, con avance; el resumen da la densidad, el factor, los
+  niveles y las masas, y el resultado las cajas de las zonas con sus ajustes. `resin-structure` sigue sin correr.
 - `tisma --settings-layout FILE [--lang es|en] [--settings-summary ajustes.json]`: el panel de ajustes como JSON
   (pestañas, tarjetas, grupos con su línea cerrada y cada fila con clave, nivel, nombre, ayuda, tipo, valor por
   defecto, rango y valor), sin abrir ventana; la aplicación de Android arma con eso sus pantallas.

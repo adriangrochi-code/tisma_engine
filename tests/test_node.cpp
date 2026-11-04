@@ -319,9 +319,24 @@ TEST_CASE("analyze of a project the nodes' way: progress, the .tea result and th
                         kExitInput),
                ContainsSubstring("no instance 1"));
     CHECK_THAT(error_of({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
-                         "--mode", "lightest-infill", "--object", "0", "--instance", "0"},
+                         "--mode", "resin-structure", "--object", "0", "--instance", "0"},
                         kExitNotImplemented),
-               ContainsSubstring("lightest-infill"));
+               ContainsSubstring("resin-structure"));
+    // lightest-infill runs (structural_optimization.md, rule 2; CC20 now
+    // only for resin-structure): fast quality analyses the part solid, so
+    // there is no infill to search.
+    {
+        const Run lightest = run({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
+                                  "--mode", "lightest-infill", "--quality", "fast"});
+        INFO(lightest.err);
+        REQUIRE(lightest.code == kExitOk);
+        const nlohmann::json j = nlohmann::json::parse(read_text(summary));
+        CHECK(j["mode"] == "lightest-infill");
+        CHECK(j["solid"] == true);
+        CHECK(j["found"] == false);
+        CHECK(nlohmann::json::parse(read_text(tea))["kind"] == "lightest-infill");
+        CHECK_THAT(lightest.out, ContainsSubstring("100"));
+    }
     CHECK_THAT(error_of({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
                          "--quality", "best"},
                         kExitUsage),
@@ -330,7 +345,7 @@ TEST_CASE("analyze of a project the nodes' way: progress, the .tea result and th
     // extreme (and ultra, its earlier name) accepted, so the mode is what fails.
     for (const char* q : {"extreme", "ultra"}) {
         CHECK_THAT(error_of({"analyze", project.string(), "-o", tea.string(), "--summary", summary.string(), "--sandbox",
-                             "--mode", "lightest-infill", "--quality", q},
+                             "--mode", "resin-structure", "--quality", q},
                             kExitNotImplemented),
                    ContainsSubstring("does not run in the cloud"));
         const nlohmann::json j = nlohmann::json::parse(read_text(summary));

@@ -10622,3 +10622,18 @@ las líneas cerradas. Está en `tisma` y no en `tisma-engine` porque los nombres
 **Prueba:** `ui_settings_layout` (ctest). 3 pestañas (7, 6 y 5 tarjetas), 438 filas. **Falta:** la ayuda y el tipo
 salen de `docs/CONFIG.md`, que está en español, también con `--lang en`; las opciones de las listas van dentro del
 rango como texto (no como lista aparte).
+
+## 2026-11-04 — `analyze --mode lightest-infill` en los nodos (pedido de Android; CC20)
+
+**Hecho:** el nodo de análisis corre el modo `lightest-infill` de `cloud.md` (regla 6, `params.mode`, con `zones` y
+`ribs`): `lightest_infill`, después `zoned_infill` (salvo `--no-zones`) y `ribbed_infill` (con `--ribs`), el avance
+repartido entre las búsquedas. El resumen da `mode`, `solid`, `found`, `density`, `min_safety`, `required_safety`,
+`analyses` y, si corrieron, `zones` (encontrado, más liviano, niveles, masas) y `ribs` (encontrado, más liviano,
+densidad, ángulos); el resultado (`-o`, `kind` = `lightest-infill`) agrega las cajas de zonas y nervios cuando
+convienen (mín., máx. sobre la cama y sus ajustes). `resin-structure` sigue con `not_in_cloud`, así que CC20 queda para
+ese modo.
+
+**Prueba:** `test_node` (con calidad rápida la pieza se analiza maciza: `solid`, sin búsqueda; `resin-structure` da
+`not_in_cloud` con `error_es`). **Sin probar desde la línea de comandos:** la búsqueda completa con calidad normal
+(las funciones del motor tienen sus pruebas). **Falta:** devolver el proyecto con los cambios aplicados (`-o
+proyecto.3mf`), que necesita pasar las cajas a volúmenes de la pieza fuera de la interfaz.
