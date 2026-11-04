@@ -1152,7 +1152,7 @@ TEST_CASE("session marks: a session whose process is gone is found once, with it
     // One of a process that is gone: its log, its last bytes from a line's start.
     CHECK_FALSE(ui::process_running(2147483000));
     std::ofstream(dir / "session-2147483000.lock");
-    std::ofstream(dir / "session-2147483000.log") << "first line\nsecond line\nthird line\n";
+    std::ofstream(dir / "session-2147483000.log", std::ios::binary) << "first line\nsecond line\nthird line\n";
     std::ofstream(dir / "session-other.lock"); // not a mark: left alone
     const std::optional<std::string> log = ui::closed_session_log(dir, 16);
     REQUIRE(log);

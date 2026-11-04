@@ -102,7 +102,7 @@ TEST_CASE("aero: AE5, laminar friction of a 6:1 prism within 5 % of Blasius", "[
     CHECK(friction_coefficient(10, 20, 30.0, 0.2, 1.516e-5) > friction_coefficient(10, 20, 30.0, 0.0, 1.516e-5));
 }
 
-TEST_CASE("aero: AE6, a prism printed at 45° is rougher and rubs more", "[aero]") {
+TEST_CASE("aero: AE6, a prism printed at 45 degrees is rougher and rubs more", "[aero]") {
     // The same prism turned 45° about y, the air still along x... in print
     // coordinates the air goes along the prism's axis.
     TriangleMesh upright = prism(0, 60, 10), tilted;
