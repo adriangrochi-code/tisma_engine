@@ -168,6 +168,8 @@ class PrintersTest {
         // goes by too fast to read in a test: the session log has it), and
         // the key is not in the log.
         waitState { net.tisma.app.data.AppLog.text().contains("printer: auth Invalid API key") }
+        // The notice reaches the screen (QA AND1: notices were cancelled before showing).
+        waitForText("The printer refused the key: Invalid API key")
         assertTrue(printers.state.value.printers.isEmpty())
         assertFalse(net.tisma.app.data.AppLog.text().contains("wrong-key"))
     }

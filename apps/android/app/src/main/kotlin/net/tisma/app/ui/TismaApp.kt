@@ -35,6 +35,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -123,25 +127,36 @@ fun TismaApp(
     val snackbar = remember { SnackbarHostState() }
     val context = ctx()
     LaunchedEffect(Unit) { cloud.refreshPublic() }
-    LaunchedEffect(state.notice) {
-        val n = state.notice ?: return@LaunchedEffect
-        cloud.dismissNotice()
-        if (n == net.tisma.app.cloud.Notice.SessionExpired) {
-            // Rule 2: the interface asks to sign in again.
-            nav.select(Section.MORE)
-            nav.open(Screen.Account)
+    // Notices: each is taken off the model and shown in its own coroutine, so clearing it
+    // (which changes the state) never cancels the message on screen (QA AND1).
+    LaunchedEffect(Unit) {
+        val show: (String) -> Unit = { text ->
+            android.util.Log.i("Tisma", text)
+            launch { snackbar.showSnackbar(text) }
         }
-        snackbar.showSnackbar(context.noticeText(n))
-    }
-    LaunchedEffect(printerState.notice) {
-        val n = printerState.notice ?: return@LaunchedEffect
-        printers.dismissNotice()
-        snackbar.showSnackbar(context.printerNoticeText(n))
-    }
-    LaunchedEffect(sliceState.notice) {
-        val n = sliceState.notice ?: return@LaunchedEffect
-        slice.dismissNotice()
-        snackbar.showSnackbar(context.sliceNoticeText(n))
+        launch {
+            cloud.state.map { it.notice }.distinctUntilChanged().filterNotNull().collect { n ->
+                cloud.dismissNotice()
+                if (n == net.tisma.app.cloud.Notice.SessionExpired) {
+                    // Rule 2: the interface asks to sign in again.
+                    nav.select(Section.MORE)
+                    nav.open(Screen.Account)
+                }
+                show(context.noticeText(n))
+            }
+        }
+        launch {
+            printers.state.map { it.notice }.distinctUntilChanged().filterNotNull().collect { n ->
+                printers.dismissNotice()
+                show(context.printerNoticeText(n))
+            }
+        }
+        launch {
+            slice.state.map { it.notice }.distinctUntilChanged().filterNotNull().collect { n ->
+                slice.dismissNotice()
+                show(context.sliceNoticeText(n))
+            }
+        }
     }
     BackHandler(enabled = nav.stack.isNotEmpty()) { nav.back() }
 

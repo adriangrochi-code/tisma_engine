@@ -23,7 +23,7 @@ import net.tisma.cloud.JobRequest
 import net.tisma.cloud.Plan
 import net.tisma.cloud.ProblemReport
 import net.tisma.cloud.SentReport
-import net.tisma.cloud.isThreeMfPackage
+import net.tisma.cloud.looksLikeZip
 import net.tisma.cloud.submit
 import java.io.InputStream
 import java.io.OutputStream
@@ -201,10 +201,16 @@ class CloudViewModel(
         _state.update { it.copy(uploading = true) }
         viewModelScope.launch {
             try {
-                val readable = withContext(io) { project.open()?.use { isThreeMfPackage(it) } }
+                val readable = withContext(io) { runCatching { project.open()?.use { looksLikeZip(it) } }.getOrNull() }
                 when (readable) {
-                    null -> _state.update { it.copy(notice = Notice.CannotRead) }
-                    false -> _state.update { it.copy(notice = Notice.NotThreeMf) }
+                    null -> {
+                        AppLog.line("cloud: cannot read ${project.name}")
+                        _state.update { it.copy(notice = Notice.CannotRead) }
+                    }
+                    false -> {
+                        AppLog.line("cloud: ${project.name} is not a ZIP")
+                        _state.update { it.copy(notice = Notice.NotThreeMf) }
+                    }
                     true -> {
                         val job = request {
                             client.submit(request, project.name, project.length) {

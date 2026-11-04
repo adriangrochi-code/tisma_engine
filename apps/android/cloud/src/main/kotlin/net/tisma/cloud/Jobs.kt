@@ -97,6 +97,22 @@ fun List<Plan>.including(request: JobRequest): List<Plan> = filter { it.allows(r
  * rule 11). The server answers anything else with 422; checking first saves
  * the upload.
  */
+/**
+ * Whether a file may be a 3MF package: it starts like a ZIP. The app uses this
+ * light check before uploading and leaves the rest to the server (a 422 with
+ * its own text), so a valid package a ZIP reader dislikes (for example, one
+ * with data descriptors on stored entries) is never refused on the phone.
+ */
+fun looksLikeZip(input: InputStream): Boolean {
+    val head = ByteArray(4)
+    var n = 0
+    while (n < 4) {
+        val r = input.read(head, n, 4 - n)
+        if (r < 0) break
+        n += r
+    }
+    return n == 4 && head[0] == 0x50.toByte() && head[1] == 0x4B.toByte() && head[2] == 3.toByte() && head[3] == 4.toByte()
+}
 fun isThreeMfPackage(input: InputStream): Boolean = try {
     ZipInputStream(input).use { zip ->
         generateSequence { zip.nextEntry }.any { e ->

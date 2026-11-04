@@ -146,6 +146,9 @@ class CloudClientTest {
         val stl = "solid cube\nendsolid cube\n".toByteArray()
         assertFalse(isThreeMfPackage(stl.inputStream()))
         assertTrue(isThreeMfPackage(cube3mf().inputStream()))
+        assertTrue(looksLikeZip(cube3mf().inputStream()))
+        assertFalse(looksLikeZip(stl.inputStream()))
+        assertFalse(looksLikeZip(ByteArray(2).inputStream()))
         val e = assertFailsWith<CloudException> { submit(JobRequest.Slice, stl) }
         assertEquals(CloudException.Kind.BAD_PARAMS, e.kind)
         assertEquals("The project is not a 3MF file", e.detail)
