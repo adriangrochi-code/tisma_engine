@@ -259,4 +259,13 @@
     <string name="preview_layer">Layer %1$d of %2$d · Z %3$s mm</string>
     <string name="preview_empty">This G-code has no extrusions.</string>
     <string name="preview_binary">This G-code is binary; the preview reads text G-code for now.</string>
+
+    <string name="watch_channel">Following prints</string>
+    <string name="events_channel">Print notices</string>
+    <string name="watch_title">Following your prints</string>
+    <string name="watch_text">Tisma tells you when a print ends, pauses or fails.</string>
+    <string name="event_finished">%1$s finished printing</string>
+    <string name="event_stopped">%1$s stopped printing</string>
+    <string name="event_paused">%1$s paused</string>
+    <string name="event_failed">%1$s has an error</string>
 </resources>

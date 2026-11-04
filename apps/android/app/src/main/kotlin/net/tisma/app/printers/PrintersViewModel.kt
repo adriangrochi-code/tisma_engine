@@ -59,6 +59,8 @@ class PrintersViewModel(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val pollMs: Long = POLL_MS,
     private val connector: (PrinterConfig, String?) -> PrinterConnection = { c, s -> c.connect(s) },
+    /** Called when a printer is seen printing: the app starts following it in the background. */
+    private val onActivePrint: () -> Unit = {},
 ) : ViewModel() {
     private val _state = MutableStateFlow(PrintersState(printers = store.all()))
     val state: StateFlow<PrintersState> = _state.asStateFlow()
@@ -160,6 +162,7 @@ class PrintersViewModel(
                 message = e.detail)
         }
         _state.update { it.copy(status = it.status + (p.id to s)) }
+        if (net.tisma.printers.PrintEvents.isActive(s)) onActivePrint()
     }
 
     fun pause(id: String) = command(id) { it.pause() }

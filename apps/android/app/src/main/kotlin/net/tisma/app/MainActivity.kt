@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import net.tisma.app.cloud.CloudViewModel
 import net.tisma.app.printers.PrinterStore
+import net.tisma.app.printers.PrintWatchService
 import net.tisma.app.engine.EngineRunner
 import net.tisma.app.engine.SliceViewModel
 import net.tisma.app.printers.PrintersViewModel
@@ -30,7 +31,7 @@ class MainActivity : ComponentActivity() {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                PrintersViewModel(PrinterStore(app, app.secrets)) as T
+                PrintersViewModel(PrinterStore(app, app.secrets), onActivePrint = { PrintWatchService.start(app) }) as T
         }
     }
 

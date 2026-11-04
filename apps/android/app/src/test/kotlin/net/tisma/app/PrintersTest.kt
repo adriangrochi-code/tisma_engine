@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToString
 import androidx.test.core.app.ApplicationProvider
@@ -108,10 +109,10 @@ class PrintersTest {
         assertTrue(moonraker.files.getValue("cube.gcode").contentEquals(gcode))
         waitFor("printer_pause")
         waitForText("Nozzle 210 / 210 °C")
-        compose.onNodeWithTag("printer_pause").performClick()
+        compose.onNodeWithTag("printer_pause").performScrollTo().performClick()
         waitState { moonraker.state == "paused" }
         waitFor("printer_resume")
-        compose.onNodeWithTag("printer_cancel").performClick()
+        compose.onNodeWithTag("printer_cancel").performScrollTo().performClick()
         waitFor("printer_cancel_confirm")
         compose.onNodeWithTag("printer_cancel_confirm").performClick()
         waitState { moonraker.state == "cancelled" }
@@ -140,6 +141,16 @@ class PrintersTest {
         assertEquals(octoprint.url, printers.state.value.printers.single().url)
         // Saved, it is no longer offered.
         waitState { printers.state.value.found.isEmpty() }
+    }
+
+    @Test
+    fun `a finished print posts a notice`() {
+        val nm = context.getSystemService(android.app.NotificationManager::class.java)
+        net.tisma.app.printers.PrintWatchService.channels(context)
+        net.tisma.app.printers.PrintWatchService.notify(context, "Voron", net.tisma.printers.PrintEvent.Finished("cube.gcode"))
+        val posted = org.robolectric.Shadows.shadowOf(nm).allNotifications.single()
+        assertEquals("Voron finished printing", posted.extras.getString(android.app.Notification.EXTRA_TITLE))
+        assertEquals("cube.gcode", posted.extras.getString(android.app.Notification.EXTRA_TEXT))
     }
 
     @Test

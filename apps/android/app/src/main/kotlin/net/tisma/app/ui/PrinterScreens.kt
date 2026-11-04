@@ -65,6 +65,15 @@ import java.util.Locale
 fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navigator, search: Boolean = true) {
     LaunchedEffect(state.printers.size) { printers.followAll() }
     val context = ctx()
+    // The print notices need this permission from Android 13 on; asked once there are printers.
+    val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(state.printers.isNotEmpty()) {
+        if (state.printers.isNotEmpty() && android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            askNotify.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     if (search) {
         androidx.compose.runtime.DisposableEffect(Unit) {
             val d = net.tisma.app.printers.NetworkDiscovery(context, printers::onFound, printers::onLost)

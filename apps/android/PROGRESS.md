@@ -19,14 +19,20 @@ Estado de la sesión de Android, para seguir sin depender de la conversación (d
   calidad 0,12 / 0,20 / 0,28 mm y soportes, laminar con avance y cancelar, guardar el G-code o mandarlo a una
   impresora. `minSdk` 28 (Android 9), porque el motor usa `posix_spawn`.
 
+- **2026-11-04 — pendientes, sin parar** (pedido del dueño: «seguí de forma automática con los pendientes»):
+  sesiones abiertas de la cuenta (cerrar una o las otras) y los campos nuevos de `/v1/me`; la cámara de la
+  impresora (una imagen por segundo, CM1); la búsqueda en la red con DNS-SD (OctoPrint, Moonraker; BD2, BD4) y su
+  preferencia; la vista previa del G-code por capas (desde el teléfono y desde la nube, MA10); los avisos al terminar,
+  pausar o fallar una impresión, con un servicio en primer plano mientras algo imprime.
+
 ## Abierto
 
-- **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS), PrusaLink, Duet, la búsqueda en la red, la cámara, mover
-  ejes y temperaturas a mano, y los avisos al terminar. Si el motor suma conexiones de red a `src/device/`, se usan
+- **Impresoras:** faltan Bambu Lab (MQTT con TLS y FTPS: necesita una biblioteca MQTT o una propia; decidir), PrusaLink,
+  Duet, mover ejes y poner temperaturas a mano. La cámara se ve por imágenes fijas, no por video (MJPEG o RTSP). Si el motor suma conexiones de red a `src/device/`, se usan
   desde la app en lugar de las de Kotlin («usemos todo lo de la pc»).
 - **Motor en el teléfono:** nunca corrió en un Android real (esta máquina no tiene KVM ni emulador); probado solo
-  con un motor falso. Falta: perfiles de impresora y filamento (paquete de perfiles, `profile_pack.md`), la vista
-  previa por capas, la estimación de memoria (MA9). El resumen de un modelo suelto ya llega (`--summary`, motor
+  con un motor falso. Falta: perfiles de impresora y filamento (paquete de perfiles, `profile_pack.md`), la
+  estimación de memoria (MA9) y la vista previa del G-code binario. El resumen de un modelo suelto ya llega (`--summary`, motor
   9e8c43e).
 - **Paso 4, laminar en el teléfono:** pedida al equipo del motor (session_01JDAJxTVh345Lfm4794rJF8) la API en C
   (`mobile_app.md`, regla 2), con una propuesta de forma. Sin respuesta todavía.

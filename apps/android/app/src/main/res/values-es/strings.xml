@@ -244,4 +244,13 @@
     <string name="preview_layer">Capa %1$d de %2$d · Z %3$s mm</string>
     <string name="preview_empty">Este G-code no tiene extrusiones.</string>
     <string name="preview_binary">Este G-code es binario; por ahora la vista previa lee G-code de texto.</string>
+
+    <string name="watch_channel">Seguimiento de impresiones</string>
+    <string name="events_channel">Avisos de impresión</string>
+    <string name="watch_title">Siguiendo tus impresiones</string>
+    <string name="watch_text">Tisma te avisa cuando una impresión termina, se pausa o falla.</string>
+    <string name="event_finished">%1$s terminó de imprimir</string>
+    <string name="event_stopped">%1$s dejó de imprimir</string>
+    <string name="event_paused">%1$s está en pausa</string>
+    <string name="event_failed">%1$s tiene un error</string>
 </resources>
