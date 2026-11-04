@@ -43,6 +43,8 @@ data class SliceState(
     val layout: SettingsLayout? = null,
     val profileValues: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
     val view: PanelVisibility.View = PanelVisibility.View.BASIC,
+    /** A G-code that was opened or shared, to show in the preview (QA AND5). */
+    val gcodeToPreview: String? = null,
     val custom: Set<String> = emptySet(),
 ) {
     /** A setting's value now: the person's change, the plate's chips, the profile, or the engine's default. */
@@ -186,6 +188,15 @@ class SliceViewModel(
 
     fun dismissNotice() = _state.update { it.copy(notice = null) }
 
+    /** The preview opened the G-code that came in. */
+    fun gcodeOpened() = _state.update { it.copy(gcodeToPreview = null) }
+
+    private fun isGcode(f: File): Boolean {
+        if (f.extension.lowercase() in setOf("gcode", "bgcode", "gco", "g")) return true
+        val head = runCatching { f.inputStream().use { i -> ByteArray(4).also { b -> if (i.read(b) < 4) return false } } }.getOrNull()
+        return head != null && head.contentEquals(GcodeLayers.BINARY_MAGIC)
+    }
+
     /** Copies the chosen file next to the engine's work (the engine reads paths, not Android's content addresses). */
     fun open(name: String, input: () -> InputStream?) = viewModelScope.launch {
         val copied = withContext(io) {
@@ -200,6 +211,11 @@ class SliceViewModel(
         }
         if (copied == null) {
             _state.update { it.copy(notice = SliceNotice.CannotRead) }
+            return@launch
+        }
+        // QA AND5: a G-code (text or binary) is not a model: it opens in the preview.
+        if (withContext(io) { isGcode(copied) }) {
+            _state.update { it.copy(gcodeToPreview = copied.path) }
             return@launch
         }
         model = copied

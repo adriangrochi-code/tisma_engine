@@ -26,7 +26,8 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- «Share with Tisma» and «Open with» for models (mobile_app.md, rule 10; MA5). Many apps send STL
+            <!-- «Share with Tisma» and «Open with» for models (mobile_app.md, rule 10; MA5) and G-code, text or binary,
+                 which opens in the preview (QA AND5). Many apps send STL
                  and 3MF as generic types, so those are accepted and the file is checked when it opens. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -38,6 +39,10 @@
                 <data android:mimeType="application/vnd.ms-pki.stl" />
                 <data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
                 <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="text/x-gcode" />
+                <data android:mimeType="text/x.gcode" />
+                <data android:mimeType="application/x-gcode" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -51,6 +56,11 @@
                 <data android:mimeType="application/sla" />
                 <data android:mimeType="application/vnd.ms-pki.stl" />
                 <data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="text/x-gcode" />
+                <data android:mimeType="text/x.gcode" />
+                <data android:mimeType="application/x-gcode" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
         <service

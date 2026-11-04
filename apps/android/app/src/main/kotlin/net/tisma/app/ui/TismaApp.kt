@@ -166,6 +166,13 @@ fun TismaApp(
             }
         }
         launch {
+            slice.state.map { it.gcodeToPreview }.distinctUntilChanged().filterNotNull().collect { path ->
+                slice.gcodeOpened()
+                nav.select(Section.PLATE)
+                nav.open(Screen.Preview(path))
+            }
+        }
+        launch {
             slice.state.map { it.notice }.distinctUntilChanged().filterNotNull().collect { n ->
                 slice.dismissNotice()
                 show(context.sliceNoticeText(n))

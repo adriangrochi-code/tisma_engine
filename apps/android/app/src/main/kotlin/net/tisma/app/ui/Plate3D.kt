@@ -332,6 +332,20 @@ fun Plate3D(
         frame()
         onDispose { }
     }
+    // The GL thread follows the screen's life (GLSurfaceView's documented contract): paused when the app is
+    // not shown, so the main thread never waits on a frame while another screen or app takes over (QA AND6).
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            when (e) {
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> holder[0]?.onPause()
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> holder[0]?.onResume()
+                else -> {}
+            }
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
     Box(modifier.testTag("plate_3d")) {
         AndroidView(
             factory = { ctx ->
