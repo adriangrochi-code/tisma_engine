@@ -4,6 +4,9 @@
 Fails when:
 - a CMake dependency (FetchContent_Declare or ExternalProject_Add) is not in the
   table of THIRD_PARTY.md, or its license there is not in the allowed list;
+- a library of the Android app (apps/android/gradle/libs.versions.toml) is not
+  in the app's table of THIRD_PARTY.md (column "Gradle"), or its license there
+  is not in the allowed list (test-only tools have their own table);
 - a file of ours carries copyleft license text, which would mean copied code.
 
 usage: check_licenses.py [repo_root]
@@ -25,6 +28,8 @@ COPYLEFT = re.compile(
     re.IGNORECASE,
 )
 SKIP_PARTS = {"_deps", ".git"}
+# Build outputs of the Android app (Gradle), never committed.
+SKIP_BUILD_PARTS = {"build", ".gradle", ".kotlin"}
 
 
 def cmake_files(root):
@@ -44,8 +49,8 @@ def declared_dependencies(root):
     return deps
 
 
-def third_party_table(root):
-    """Maps the CMake name (lower case) to the license cell."""
+def third_party_table(root, column="CMake"):
+    """Maps the name in [column] (lower case) to the license cell."""
     rows = {}
     in_table = False
     for line in (root / "THIRD_PARTY.md").read_text(encoding="utf-8").splitlines():
@@ -55,9 +60,10 @@ def third_party_table(root):
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if "CMake" in cells and "Licencia" in cells:
-            in_table = True
-            name_col, license_col = cells.index("CMake"), cells.index("Licencia")
+        if "Licencia" in cells and ({"CMake", "Gradle", TEST_COLUMN} & set(cells)):
+            in_table = column in cells
+            if in_table:
+                name_col, license_col = cells.index(column), cells.index("Licencia")
             continue
         if not in_table or set(line) <= set("|-: "):
             continue
@@ -77,6 +83,8 @@ def copyleft_hits(root):
         if not base.is_dir():
             continue
         for path in base.rglob("*"):
+            if SKIP_BUILD_PARTS & set(path.relative_to(base).parts):
+                continue
             if not path.is_file() or path.resolve() == this:
                 continue
             try:
@@ -85,6 +93,29 @@ def copyleft_hits(root):
                 continue  # binary test data
             if COPYLEFT.search(text):
                 yield path.relative_to(root)
+
+
+# The app's test-only tools: they run on the build machine and never reach the
+# APK, so they are listed (with their license, for the owner) but not limited
+# to the allowed list, like the build tools of THIRD_PARTY.md.
+TEST_COLUMN = "Gradle (solo pruebas)"
+
+
+def gradle_libraries(root):
+    """The group:artifact of every library in the app's version catalog."""
+    catalog = root / "apps" / "android" / "gradle" / "libs.versions.toml"
+    if not catalog.is_file():
+        return {}
+    libs, section = {}, None
+    for line in catalog.read_text(encoding="utf-8").splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line.startswith("["):
+            section = line.strip("[]")
+            continue
+        m = re.search(r'module\s*=\s*"([^"]+)"', line)
+        if section == "libraries" and m:
+            libs[m.group(1).lower()] = catalog.relative_to(root)
+    return libs
 
 
 def main():
@@ -96,6 +127,15 @@ def main():
             errors.append(f"{where}: dependency '{name}' is not in THIRD_PARTY.md")
         elif not license_ok(table[name]):
             errors.append(f"THIRD_PARTY.md: '{name}' has license '{table[name]}', not in {sorted(ALLOWED)}")
+    gradle = third_party_table(root, "Gradle")
+    test_only = third_party_table(root, TEST_COLUMN)
+    for name, where in sorted(gradle_libraries(root).items()):
+        if name in test_only:
+            continue
+        if name not in gradle:
+            errors.append(f"{where}: library '{name}' is not in THIRD_PARTY.md (column Gradle)")
+        elif not license_ok(gradle[name]):
+            errors.append(f"THIRD_PARTY.md: '{name}' has license '{gradle[name]}', not in {sorted(ALLOWED)}")
     for path in copyleft_hits(root):
         errors.append(f"{path}: contains copyleft license text")
     for e in errors:
@@ -103,7 +143,7 @@ def main():
     if errors:
         print("The engine's license must stay closable; see CLEANROOM.md.")
         return 1
-    print(f"licenses ok: {len(table)} libraries in THIRD_PARTY.md, all dependencies listed")
+    print(f"licenses ok: {len(table)} libraries and {len(gradle)} app libraries in THIRD_PARTY.md, all dependencies listed")
     return 0
 
 

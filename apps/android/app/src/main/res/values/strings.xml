@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">Tisma</string>
+
+    <!-- Sections (mobile_app.md, rule 5) -->
+    <string name="section_plate">Plate</string>
+    <string name="section_print">Print</string>
+    <string name="section_material">Material</string>
+    <string name="section_printer">Printer</string>
+    <string name="section_more">More</string>
+
+    <string name="back">Back</string>
+    <string name="cancel">Cancel</string>
+    <string name="send">Send</string>
+    <string name="retry">Retry</string>
+    <string name="ok">OK</string>
+
+    <!-- Placeholders until the engine runs on the phone -->
+    <string name="plate_coming">Slicing on the phone comes with the engine library. Meanwhile, send a 3MF project to Tisma Cloud.</string>
+    <string name="plate_slice_cloud">Slice in the cloud</string>
+    <string name="settings_coming">Print and material settings come with the engine library on the phone.</string>
+    <string name="printer_coming">Printers on the network (Klipper, OctoPrint, Bambu Lab…) come in the next step.</string>
+
+    <!-- More -->
+    <string name="more_cloud">Tisma Cloud account</string>
+    <string name="more_jobs">Cloud jobs</string>
+    <string name="more_report">Report a problem</string>
+    <string name="more_my_reports">My reports</string>
+    <string name="more_preferences">Preferences</string>
+    <string name="more_signed_in_as">Signed in as %1$s</string>
+    <string name="more_signed_out">Not signed in</string>
+
+    <!-- Account (cloud.md, rules 2 to 5a) -->
+    <string name="account_title">Tisma Cloud</string>
+    <string name="email">E-mail</string>
+    <string name="password">Password</string>
+    <string name="new_password">New password</string>
+    <string name="code">Code from the e-mail (6 digits)</string>
+    <string name="sign_in">Sign in</string>
+    <string name="sign_out">Sign out</string>
+    <string name="create_account">Create an account</string>
+    <string name="forgot_password">Forgot the password</string>
+    <string name="password_rule">8 or more characters</string>
+    <string name="verify_title">Confirm the e-mail</string>
+    <string name="verify_text">We sent a 6-digit code to %1$s.</string>
+    <string name="verify">Confirm</string>
+    <string name="resend_code">Send the code again</string>
+    <string name="send_code">Send me a code</string>
+    <string name="change_password">Change the password</string>
+    <string name="plan">Plan</string>
+    <string name="hours_month">Hours this month</string>
+    <string name="hours_value">%1$s of %2$s h used · %3$s h left</string>
+    <string name="paid_until">Paid until %1$s</string>
+    <string name="jobs_running">Jobs running: %1$d of %2$d</string>
+    <string name="manage_plan">Plans and payment</string>
+    <string name="manage_plan_hint">Paying and changing the plan is done on the account page, in the browser.</string>
+    <string name="plans_title">Plans</string>
+    <string name="plan_current">Your plan</string>
+    <string name="plan_line">%1$s h a month · %2$d at once</string>
+    <string name="plan_free">Free</string>
+    <string name="plan_price">%1$s a month</string>
+    <string name="plan_includes">Includes: %1$s</string>
+    <string name="no_plans">The server lists no plans.</string>
+
+    <!-- Job classes (cloud.md, rule 10b) -->
+    <string name="class_slice">slicing</string>
+    <string name="class_slice_large">large slicing</string>
+    <string name="class_fea">structural analysis</string>
+    <string name="class_fea_optimize">lightest infill</string>
+    <string name="class_aero">aerodynamics</string>
+    <string name="class_orient">automatic orientation</string>
+
+    <!-- Jobs (rules 6 to 10c) -->
+    <string name="jobs_title">Cloud jobs</string>
+    <string name="jobs_empty">No jobs yet.</string>
+    <string name="jobs_sign_in">Sign in to Tisma Cloud to see your jobs.</string>
+    <string name="new_job">New job</string>
+    <string name="kind_slice">Slice</string>
+    <string name="kind_fea">Structural analysis</string>
+    <string name="kind_fea_optimize">Lightest infill</string>
+    <string name="kind_aero">Aerodynamics</string>
+    <string name="kind_orient">Orientation</string>
+    <string name="status_queued">Queued</string>
+    <string name="status_running">Running</string>
+    <string name="status_done">Done</string>
+    <string name="status_failed">Failed</string>
+    <string name="status_cancelled">Cancelled</string>
+    <string name="status_unknown">Unknown</string>
+    <string name="job_progress">%1$d %%</string>
+    <string name="job_seconds">Run time: %1$s s</string>
+    <string name="job_created">Sent %1$s</string>
+    <string name="job_cancel">Cancel the job</string>
+    <string name="job_save">Save the result</string>
+    <string name="job_summary">Summary</string>
+    <string name="job_error">What went wrong</string>
+
+    <!-- New job -->
+    <string name="pick_project">Choose a 3MF project</string>
+    <string name="project_none">No project chosen</string>
+    <string name="what_to_do">What to calculate</string>
+    <string name="object_index">Object</string>
+    <string name="instance_index">Copy</string>
+    <string name="fea_quality">Quality</string>
+    <string name="quality_fast">Fast</string>
+    <string name="quality_normal">Normal</string>
+    <string name="quality_high">High</string>
+    <string name="quality_ultra">Ultra</string>
+    <string name="quality_friction">Friction only</string>
+    <string name="aero_speed">Air speed (m/s)</string>
+    <string name="aero_speed_rule">More than 0 and up to 100</string>
+    <string name="aero_direction">Air comes from</string>
+    <string name="send_job">Send to the cloud</string>
+    <string name="sending">Sending…</string>
+    <string name="locked_plan">Included in the plan %1$s</string>
+    <string name="locked_no_plan">Not included in any public plan</string>
+    <string name="see_plans">See the plans</string>
+
+    <!-- Problem reports (problem_reports.md) -->
+    <string name="report_title">Report a problem</string>
+    <string name="report_intro">Tell what went wrong, or what you would like Tisma to do. It goes to the Tisma team, which groups the reports of the same problem to fix the most frequent ones first.</string>
+    <string name="report_privacy">E-mails, addresses, the user name in the paths, keys and serial numbers are removed before it is kept.</string>
+    <string name="report_kind_bug">Something does not work</string>
+    <string name="report_kind_crash">Tisma closed</string>
+    <string name="report_kind_suggestion">Suggestion</string>
+    <string name="report_words">In a few words</string>
+    <string name="report_words_hint">e.g. The supports are missing under the overhang</string>
+    <string name="report_what">What happened</string>
+    <string name="report_steps">Steps to make it happen again</string>
+    <string name="report_expected">What you expected</string>
+    <string name="report_attach">Attach the version, the system, the printer in use and the log of this session</string>
+    <string name="report_see_attached">See what is attached</string>
+    <string name="report_with_account">Sent with the account %1$s: its reports and their state are in the copy of its data.</string>
+    <string name="report_without_account">Sent without an account.</string>
+    <string name="report_too_short">Write in a few words what happened.</string>
+    <string name="report_sent">Thank you: the report was sent to the Tisma team.</string>
+    <string name="report_similar">The same problem was reported %1$d times before: it is among the ones to fix.</string>
+    <string name="report_failed">The report could not be sent: %1$s</string>
+    <string name="report_too_many">Too many reports were sent. Try again in an hour.</string>
+    <string name="my_reports_empty">No reports yet.</string>
+    <string name="report_status_new">New</string>
+    <string name="report_status_confirmed">Confirmed</string>
+    <string name="report_status_fixed">Fixed</string>
+    <string name="report_status_wontfix">Will not be fixed</string>
+    <string name="report_status_duplicate">Repeated</string>
+
+    <!-- Preferences -->
+    <string name="pref_server">Tisma Cloud server</string>
+    <string name="pref_server_hint">https://tismaservidores.net</string>
+    <string name="pref_save">Save</string>
+    <string name="pref_cloud_prefer">Heavy calculations in the cloud</string>
+    <string name="pref_cloud_prefer_hint">When the plan includes them. Without a session or a connection, nothing is sent.</string>
+    <string name="pref_version">Version %1$s</string>
+
+    <!-- Errors (cloud.md, rule 4) and notices -->
+    <string name="error_network">Tisma Cloud cannot be reached. Check the connection.</string>
+    <string name="error_unexpected">The server gave an answer the app does not understand.</string>
+    <string name="error_expired">The session expired or was closed. Sign in again.</string>
+    <string name="error_too_large">The file is too large for Tisma Cloud.</string>
+    <string name="error_bad_params">The server did not accept the data: %1$s</string>
+    <string name="error_too_many">Too many requests. Wait a moment and try again.</string>
+    <string name="error_plan">%1$s</string>
+    <string name="error_server">%1$s</string>
+    <string name="error_not_3mf">The project is not a 3MF file.</string>
+    <string name="error_cannot_read">The file cannot be read.</string>
+    <string name="notice_code_sent">Code sent. Look in your e-mail.</string>
+    <string name="notice_password_changed">Password changed. Sign in with the new one.</string>
+    <string name="notice_saved">Saved %1$s.</string>
+
+    <!-- Failed job codes (cloud.md, rule 19a) -->
+    <string name="code_bad_mode">The analysis mode is not valid.</string>
+    <string name="code_bad_quality">The quality is not valid.</string>
+    <string name="code_not_in_cloud">This calculation does not run in the cloud yet.</string>
+    <string name="code_needs_conditions">The project needs its fixed faces and loads first.</string>
+    <string name="code_no_valid_result">No valid result was found.</string>
+    <string name="code_usage">The server called the engine the wrong way.</string>
+</resources>

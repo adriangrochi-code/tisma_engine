@@ -1,0 +1,58 @@
+# Tisma para Android
+
+La app de teléfono de Tisma (ficha `docs/spec/features/mobile_app.md`; decisiones del dueño en `docs/MOBILE.md`).
+Kotlin y Jetpack Compose, tema claro y oscuro con los colores de `interface.md`, textos en inglés y español. Se
+compila con Gradle, aparte del CMake del motor.
+
+## Módulos
+
+| Módulo | Qué es |
+|---|---|
+| `cloud/` | El cliente de Tisma Cloud (API v1 de `cloud.md`), en Kotlin sin Android: cuenta, planes, trabajos, resultados, informes. Se prueba en la JVM. |
+| `mockcloud/` | Un servidor de prueba escrito desde `cloud.md`, en memoria. Lo usan las pruebas y sirve para probar la app en un emulador. |
+| `app/` | La app: secciones Placa, Impresión, Material, Impresora y Más (`mobile_app.md`, regla 5). |
+
+## Qué hace hoy (2026-11-04)
+
+- **Más › Cuenta de Tisma Cloud:** entrar, crear la cuenta con el código del correo, recuperar la contraseña, cerrar
+  sesión; el plan, las horas del mes tal como las manda el servidor y los planes públicos con el actual marcado (reglas
+  2 a 5a). Pagar se hace en la página de la cuenta, en el navegador (regla 5).
+- **Más › Trabajos en la nube:** la lista del más nuevo al más viejo, con el avance, preguntando cada 2 s mientras uno
+  corre (reglas 7, 8 y 10); el detalle con el resumen, cancelar y guardar el resultado donde elija la persona (regla 9).
+- **Trabajo nuevo** (también desde Placa › «Laminar en la nube»): elegir un proyecto 3MF (se comprueba que sea un
+  paquete 3MF antes de mandarlo), laminar, análisis estructural, relleno mínimo, aerodinámica u orientación con sus
+  parámetros (regla 6). Un cálculo que el plan no incluye muestra el candado y los planes que lo tienen (regla 10b).
+- **Errores:** 401 pide entrar de nuevo; 413, 422, 429 y 402 con su aviso y el texto del servidor (regla 4). Un trabajo
+  fallido muestra `error_es` en español, si no el texto por `code`, si no `error` (regla 19a).
+- **Más › Informar un problema** (`problem_reports.md`) con `app` `android`, y **Mis informes**.
+- **Más › Preferencias:** la dirección del servidor (por defecto `https://tismaservidores.net`) y `cloud.prefer`.
+- **El token** se guarda cifrado con AES-256-GCM con una clave del almacén de claves de Android, nunca en texto
+  (regla 3; `mobile_app.md`, regla 14).
+
+Falta: impresoras de la red (paso 3), laminar en el teléfono con el motor (paso 4, espera la API en C del equipo del
+motor), entrar con Google y pagar con Google Play (los dos necesitan bibliotecas de Google con licencia propia: lo
+decide el dueño), abrir el G-code en la vista previa (llega con el motor).
+
+## Compilar y probar
+
+Con un JDK 17 o más nuevo y el SDK de Android (plataforma 36):
+
+```text
+cd apps/android
+tools/ci.sh                      # íconos, licencias, pruebas y el APK de depuración
+./gradlew :app:assembleDebug     # solo el APK: app/build/outputs/apk/debug/app-debug.apk
+```
+
+Probar en un emulador contra el servidor de prueba:
+
+```text
+./gradlew :mockcloud:run         # escucha en el puerto 8765
+```
+
+En la app, Más › Preferencias › servidor `http://10.0.2.2:8765` (solo la versión de depuración acepta `http://`).
+Cuentas, todas con la contraseña `password1`: `ana@example.com` (plan Maker), `free@example.com` (Free, solo laminar),
+`pro@example.com` (Pro, todo). El código de confirmación es `123456`. Un trabajo avanza un paso cada vez que se
+pregunta por él. Para cambiar el estado: `POST /mock/grant {"email","hours"}`, `/mock/disable {"email"}`,
+`/mock/plan {"email","plan"}`, `/mock/expire`, `/mock/fail-next {"status","detail"}`, `/mock/max-upload {"bytes"}`.
+
+Los íconos de `app/src/main/res/drawable/tisma_*.xml` salen de `assets/brand/icons/` con `tools/brand_icons.py`.

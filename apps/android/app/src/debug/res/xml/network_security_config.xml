@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: plain HTTP is allowed so the app can talk to the test
+     server (mockcloud) on the computer, http://10.0.2.2:8765 from an emulator. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

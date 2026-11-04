@@ -40,3 +40,52 @@ licencia en `resources/licenses/`, que la interfaz muestra en Más › Créditos
 |---|---|---|---|
 | glslang (`glslangValidator`) | 15.1.0 (Ubuntu 24.04, paquete `glslang-tools`); licencia leída en el tag `vulkan-sdk-1.4.350.1`, commit `275822a6261ee689aadb1da5f09a0ec2f058685c` | Mezcla: el núcleo BSD-3-Clause; el preprocesador suma una licencia permisiva propia de NVIDIA; partes MIT y Apache-2.0; conserva el texto «GPL 3 with special bison exception», aunque dice que Bison ya no se usa | `tools/compile_shaders.py` pasa los shaders de GLSL a SPIR-V. El SPIR-V generado se guarda en `src/gpu/shaders/generated/` y es salida de la herramienta, no código de glslang. Nunca se enlaza ni se distribuye. |
 | Mesa lavapipe | la de Ubuntu 24.04 (paquete `mesa-vulkan-drivers`) | MIT | Solo en la CI y en pruebas locales: un dispositivo Vulkan por software para correr las pruebas de GPU sin GPU. |
+
+## App de Android (`apps/android/`, Gradle)
+
+Las bibliotecas de la app (ficha `mobile_app.md`, regla 4) se declaran en `apps/android/gradle/libs.versions.toml`;
+`tools/check_licenses.py` comprueba que cada una esté en esta tabla (columna «Gradle») con una licencia permitida, o en
+la de herramientas de prueba de abajo. Revisado el 2026-11-04: las 92 bibliotecas que entran al APK (las de la tabla y
+sus dependencias transitivas, según `./gradlew :app:dependencies --configuration releaseRuntimeClasspath`) son
+Apache-2.0 según la licencia declarada en el POM publicado de cada versión; `com.google.guava:listenablefuture:1.0` no
+la declara en su POM y la hereda de `guava-parent` (Apache-2.0). Ninguna trae GPL, LGPL ni AGPL. La lectura fue del POM,
+no del archivo de licencia de cada fuente: antes de publicar la app, `resources/credits.json` y los avisos van a salir
+de los mismos datos.
+
+| Biblioteca | Gradle | Versión | Licencia | Leída en | URL | Uso |
+|---|---|---|---|---|---|---|
+| Kotlin coroutines | org.jetbrains.kotlinx:kotlinx-coroutines-core | 1.10.2 | Apache-2.0 | POM publicado | https://github.com/Kotlin/kotlinx.coroutines | Hilos de la app y seguimiento de trabajos. Trae la biblioteca estándar de Kotlin (Apache-2.0) y `org.jetbrains:annotations` (Apache-2.0). |
+| Kotlin coroutines (Android) | org.jetbrains.kotlinx:kotlinx-coroutines-android | 1.10.2 | Apache-2.0 | POM publicado | https://github.com/Kotlin/kotlinx.coroutines | El hilo principal de Android. |
+| kotlinx.serialization JSON | org.jetbrains.kotlinx:kotlinx-serialization-json | 1.9.0 | Apache-2.0 | POM publicado | https://github.com/Kotlin/kotlinx.serialization | Leer y escribir el JSON de Tisma Cloud (`cloud.md`). |
+| AndroidX Core | androidx.core:core-ktx | 1.17.0 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | Base de la app. |
+| AndroidX Activity Compose | androidx.activity:activity-compose | 1.11.0 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | La actividad con Compose, elegir y guardar archivos. |
+| AndroidX Lifecycle ViewModel Compose | androidx.lifecycle:lifecycle-viewmodel-compose | 2.9.4 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | El estado de las pantallas sobrevive a girar el teléfono. |
+| AndroidX Lifecycle Runtime Compose | androidx.lifecycle:lifecycle-runtime-compose | 2.9.4 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | Leer el estado según el ciclo de vida. |
+| Jetpack Compose BOM | androidx.compose:compose-bom | 2025.10.01 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/compose | Fija las versiones de Compose. |
+| Compose UI | androidx.compose.ui:ui | la del BOM | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/compose | La interfaz. |
+| Compose Material 3 | androidx.compose.material3:material3 | la del BOM | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/compose | Componentes, con los colores de `interface.md`. Sin el paquete de íconos de Material: los íconos son los de `assets/brand/`. |
+| Compose UI Test Manifest | androidx.compose.ui:ui-test-manifest | la del BOM | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/compose | Solo en la versión de depuración, para las pruebas de pantallas. |
+
+### Herramientas de prueba de la app (no entran al APK)
+
+Corren solo en la máquina que compila (pruebas en la JVM con Robolectric); no se enlazan ni se distribuyen, como las
+herramientas de compilación de arriba. Dos traen licencias fuera de la lista permitida y quedan **para que decida el
+dueño**: JUnit 4 (EPL-1.0), que Robolectric y las pruebas de Compose necesitan como ejecutor, y
+`javax.annotation:javax.annotation-api` 1.3.2 (CDDL-1.1 o GPL-2.0 con la excepción de classpath), que Robolectric pide
+en su ejecución (probado: sin ella no arranca). Ninguna se copia ni se modifica.
+
+| Herramienta | Gradle (solo pruebas) | Versión | Licencia | Uso |
+|---|---|---|---|---|
+| JUnit 4 | junit:junit | 4.13.2 | EPL-1.0 (trae hamcrest-core 1.3, BSD-3-Clause) | Ejecutor de las pruebas. |
+| kotlin-test-junit | org.jetbrains.kotlin:kotlin-test-junit | 2.2.21 | Apache-2.0 | Afirmaciones de las pruebas. |
+| kotlinx-coroutines-test | org.jetbrains.kotlinx:kotlinx-coroutines-test | 1.10.2 | Apache-2.0 | El hilo principal en las pruebas. |
+| Robolectric | org.robolectric:robolectric | 4.16 | MIT (trae ASM, BSD-3-Clause; Bouncy Castle, MIT; ICU4J, Unicode-3.0; Guava, Apache-2.0; javax.annotation-api, CDDL-1.1 o GPL-2.0 con excepción) | Android en la JVM, sin emulador. Baja `android-all-instrumented` (Apache-2.0, AOSP) en la primera corrida. |
+| AndroidX Test Core | androidx.test:core | 1.7.0 | Apache-2.0 | El contexto de la app en las pruebas. |
+| Compose UI Test JUnit4 | androidx.compose.ui:ui-test-junit4 | la del BOM | Apache-2.0 | Pruebas de las pantallas. |
+
+| Herramienta de compilación de la app | Versión | Licencia | Uso |
+|---|---|---|---|
+| Gradle y su envoltorio (`gradlew`, `gradle/wrapper/`) | 8.14.3 | Apache-2.0 | Compila la app. |
+| Android Gradle Plugin | 8.13.2 | Apache-2.0 | Compila el APK. |
+| Kotlin (compilador y complementos Compose y serialization) | 2.2.21 | Apache-2.0 | Compila el código de la app. |
+| Android SDK (plataforma 36, build-tools 36.0.0) | — | Licencia del SDK de Android (aceptada en la máquina que compila) | Compila el APK; no se guarda en el repositorio. |
