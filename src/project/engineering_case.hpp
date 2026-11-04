@@ -4,6 +4,7 @@
 #include "fea/adhesion.hpp"
 #include "fea/analysis.hpp"
 #include "fea/verdict.hpp"
+#include "mesh/lattice.hpp"
 #include "mesh/mesh.hpp"
 #include "project/engineering.hpp"
 #include "slice/placement.hpp"
@@ -163,6 +164,20 @@ struct LightestLattice {
     MeshModifier lattice;
 };
 double lattice_cell_for(const TriangleMesh& part);
+// The second search of rule 7: from the analysis with the uniform bars, each
+// bar's section in proportion to the utilization (asked / safety) where it
+// is, d = k sqrt(u) between 0.9 and 3 mm, k scaled together by bisection
+// until the part holds. Used only when lighter than the uniform.
+struct GradedLattice {
+    bool found = false, lighter = false;
+    std::vector<LatticeBar> bars;
+    std::vector<double> diameters; // one per bar, mm
+    double thinnest = 0.0, thickest = 0.0, min_safety = 0.0, mass_g = 0.0;
+    int analyses = 0;
+};
+GradedLattice graded_lattice(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                             const AnalysisCase& c, const ProjectEngineering& e, const LightestLattice& uniform,
+                             const std::function<void(double)>& progress = {});
 LightestLattice lightest_lattice(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
                                  const AnalysisCase& c, const ProjectEngineering& e,
                                  const std::function<void(double)>& progress = {});

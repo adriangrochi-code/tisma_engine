@@ -1211,5 +1211,19 @@ TEST_CASE("lattice: printed as a solid zone in a part at 0 % infill (structural_
         CHECK(best.diameter <= 3.0);
         CHECK(best.min_safety >= 2.0 - 1e-9);
         CHECK_FALSE(best.lattice.mesh.empty());
+        // A diameter per bar: thicker where the stress is.
+        const GradedLattice graded = graded_lattice(bar, triangles, s, c, e, best);
+        std::printf("lattice: graded %d, bars %.2f to %.2f mm (factor %.2f, %.3f g against %.3f g uniform), %d analyses\n",
+                    int(graded.found), graded.thinnest, graded.thickest, graded.min_safety, graded.mass_g, best.mass_g,
+                    graded.analyses);
+        CHECK(graded.analyses <= 8);
+        if (graded.found) {
+            CHECK(graded.diameters.size() == graded.bars.size());
+            CHECK(graded.thinnest >= 0.9 - 1e-9);
+            CHECK(graded.thickest <= 3.0 + 1e-9);
+            CHECK(graded.lighter == (graded.mass_g < best.mass_g));
+        } else {
+            CHECK_FALSE(graded.lighter); // nothing to propose (here the uniform bars are already near 3 mm)
+        }
     }
 }

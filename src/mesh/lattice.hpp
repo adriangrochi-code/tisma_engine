@@ -24,6 +24,8 @@ std::vector<LatticeBar> lattice_bars(const std::array<double, 3>& lo, const std:
 // The bars as closed six-sided prisms of this diameter (across the corners),
 // faces out.
 TriangleMesh lattice_mesh(const std::vector<LatticeBar>& bars, double diameter);
+// Each bar its own diameter (one per bar).
+TriangleMesh lattice_mesh(const std::vector<LatticeBar>& bars, const std::vector<double>& diameters);
 
 // Whether a point is inside a closed mesh: the faces a ray straight up from
 // it crosses, counted (odd: inside). Own design.

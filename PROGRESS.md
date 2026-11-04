@@ -10585,3 +10585,17 @@ este volumen aunque no los usa.
 **Pendiente:** el diámetro por celda (regla 7, segunda búsqueda); `bars_touching` recorría todas las caras por cada
 punto: arreglado el mismo día con una grilla de columnas en XY (el rayo vertical solo mira las caras de su casilla;
 prueba: las mismas barras que la prueba simple sobre una esfera de 4608 caras).
+
+## 2026-11-04 — Optimizar, regla 7, paso F: el diámetro por barra (motor)
+
+**Hecho:** `graded_lattice(…, uniforme)`: del análisis con las barras uniformes, la utilización (pedido / factor) peor
+a menos de media celda del medio de cada barra; cada barra `d = k √(u / u_máx)` entre 0,9 y 3 mm, y `k` por
+bisección (6 mitades entre 0,9 y 3) hasta que aguanta. `lighter` solo si pesa menos que la uniforme. `lattice_mesh`
+acepta un diámetro por barra. Como mucho 8 análisis.
+
+**Prueba:** en la barra de 24 × 6 × 6 mm la uniforme ya pide 2,74 mm y ningún reparto aguanta (no se propone); la
+prueba comprueba el contrato (47 s la prueba entera de la retícula). La prueba de la ficha (O8, voladizo de 90 × 20 ×
+20 mm, de 1,0 a 2,5 mm y −30 %) queda para el banco de pruebas: es grande para la prueba unitaria.
+
+**Falta:** guardar y usar el diámetro por barra (el volumen de retícula guarda un solo diámetro) y mostrarlo en el
+panel.

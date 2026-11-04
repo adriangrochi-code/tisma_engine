@@ -48,9 +48,16 @@ std::vector<LatticeBar> lattice_bars(const std::array<double, 3>& lo, const std:
 }
 
 TriangleMesh lattice_mesh(const std::vector<LatticeBar>& bars, double diameter) {
+    return lattice_mesh(bars, std::vector<double>(bars.size(), diameter));
+}
+
+TriangleMesh lattice_mesh(const std::vector<LatticeBar>& bars, const std::vector<double>& diameters) {
     TriangleMesh m;
-    const double r = 0.5 * diameter;
-    for (const LatticeBar& b : bars) {
+    for (std::size_t n = 0; n < bars.size() && n < diameters.size(); ++n) {
+        const LatticeBar& b = bars[n];
+        const double r = 0.5 * diameters[n];
+        if (!(r > 0.0))
+            continue;
         const double d[3] = {b.to[0] - b.from[0], b.to[1] - b.from[1], b.to[2] - b.from[2]};
         const double length = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
         if (!(length > 0.0))
