@@ -62,7 +62,8 @@ import java.util.Locale
 
 /** The printers on the network and their state (MOBILE.md, «Impresoras»). */
 @Composable
-fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navigator, search: Boolean = true) {
+fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navigator, search: Boolean = true,
+                   header: @Composable () -> Unit = {}) {
     LaunchedEffect(state.printers.size) { printers.followAll() }
     val context = ctx()
     // The print notices need this permission from Android 13 on; asked once there are printers.
@@ -90,6 +91,7 @@ fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navig
     }
     Box(Modifier.fillMaxSize()) {
         ScreenColumn {
+            header()
             if (state.printers.isEmpty()) {
                 Text(stringResource(R.string.printers_empty), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

@@ -148,6 +148,26 @@ class SettingsPanelTest {
         compose.runOnIdle { assertEquals(0.12, slice.state.value.settings.layerHeight) }
     }
 
+    @Test
+    fun `rule 8 the printer's configuration opens from the Printer section`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val settings = AppSettings(context)
+        val work = File(context.cacheDir, "engine")
+        val slice = SliceViewModel(EngineRunner(File(work, "none"), work), work, saved = settings, loadLayout = { layout() })
+        val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
+        val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
+        val nav = Navigator()
+        compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, nav) } }
+        compose.runOnIdle { nav.select(Section.PRINTER) }
+        wait("printer_settings")
+        compose.onNodeWithTag("printer_settings").performClick()
+        wait("panel_section_machine")
+        compose.onNodeWithTag("panel_view_advanced").performClick()
+        compose.onNodeWithTag("panel_printer").performScrollToNode(hasTestTag("printer_notes"))
+        compose.onNodeWithTag("printer_notes").performTextReplacement("Glass bed")
+        compose.runOnIdle { assertEquals("Glass bed", settings.printerNotes(null)) }
+    }
+
     private fun wait(tag: String) = compose.waitUntil(10_000) {
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()

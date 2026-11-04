@@ -352,4 +352,8 @@
     <string name="panel_missing">The settings panel is not in this build.</string>
     <string name="panel_none">No settings at this level.</string>
     <string name="panel_custom_empty">Choose the settings to show with «Choose settings…».</string>
+    <string name="printer_settings">Printer settings</string>
+    <string name="printer_calibration">Calibration</string>
+    <string name="printer_calibration_later">The state of each calibration comes with the calibration tests on the phone.</string>
+    <string name="printer_notes">Notes</string>
 </resources>

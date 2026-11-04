@@ -336,4 +336,8 @@
     <string name="panel_missing">El panel de ajustes no está en esta versión.</string>
     <string name="panel_none">No hay ajustes en este nivel.</string>
     <string name="panel_custom_empty">Elegí los ajustes que querés ver con «Elegir ajustes…».</string>
+    <string name="printer_settings">Configuración de la impresora</string>
+    <string name="printer_calibration">Calibración</string>
+    <string name="printer_calibration_later">El estado de cada calibración llega con las pruebas de calibración en el teléfono.</string>
+    <string name="printer_notes">Notas</string>
 </resources>

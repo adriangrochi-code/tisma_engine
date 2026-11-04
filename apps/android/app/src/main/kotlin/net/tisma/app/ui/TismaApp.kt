@@ -86,6 +86,7 @@ sealed interface Screen {
     data class PrinterDetail(val id: String) : Screen
     data class SettingsSection(val tab: String, val section: String) : Screen
     data class CustomPicker(val tab: String) : Screen
+    data object PrinterSettings : Screen
 }
 
 /** Where the person is: a section and the screens opened on it. */
@@ -220,7 +221,9 @@ fun TismaApp(
             Box(Modifier.padding(padding).fillMaxSize()) {
                 when (top) {
                     null -> when (nav.section) {
-                        Section.PRINTER -> PrintersScreen(printerState, printers, nav, settings.searchNetwork)
+                        Section.PRINTER -> PrintersScreen(printerState, printers, nav, settings.searchNetwork) {
+                            PrinterSettingsCard(sliceState, nav)
+                        }
                         Section.PLATE -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav)
                         Section.PRINT -> SettingsTabScreen("print", sliceState, slice, nav)
                         Section.MATERIAL -> SettingsTabScreen("material", sliceState, slice, nav)
@@ -242,6 +245,9 @@ fun TismaApp(
                     Screen.Credits -> CreditsScreen()
                     is Screen.SettingsSection -> SettingsSectionScreen(top.tab, top.section, sliceState, slice)
                     is Screen.CustomPicker -> CustomPickerScreen(top.tab, sliceState, slice)
+                    Screen.PrinterSettings -> PrinterSettingsScreen(sliceState, slice, nav, settings.printerNotes(sliceState.profile?.printer)) {
+                        settings.setPrinterNotes(sliceState.profile?.printer, it)
+                    }
                 }
             }
         }
@@ -261,7 +267,12 @@ private fun titleOf(s: Screen): Int = when (s) {
     is Screen.Preview -> R.string.preview_title
     Screen.ProfilePicker -> R.string.section_printer
     Screen.Credits -> R.string.more_credits
-    is Screen.SettingsSection -> if (s.tab == "material") R.string.section_material else R.string.section_print
+    is Screen.SettingsSection -> when (s.tab) {
+        "material" -> R.string.section_material
+        "printer" -> R.string.printer_settings
+        else -> R.string.section_print
+    }
+    Screen.PrinterSettings -> R.string.printer_settings
     is Screen.CustomPicker -> R.string.panel_choose
 }
 

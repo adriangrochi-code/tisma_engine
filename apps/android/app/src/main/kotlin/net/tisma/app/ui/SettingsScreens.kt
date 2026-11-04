@@ -94,7 +94,11 @@ private fun SliceState.shows(row: SettingsLayout.Row, section: String) =
  * the tab's sections; each section opens on its own screen.
  */
 @Composable
-fun SettingsTabScreen(tabId: String, state: SliceState, slice: SliceViewModel, nav: Navigator) {
+fun SettingsTabScreen(
+    tabId: String, state: SliceState, slice: SliceViewModel, nav: Navigator,
+    header: (@Composable () -> Unit)? = null,
+    footer: (androidx.compose.foundation.lazy.LazyListScope.() -> Unit)? = null,
+) {
     val tab = state.layout?.tab(tabId)
     if (tab == null) {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -105,6 +109,7 @@ fun SettingsTabScreen(tabId: String, state: SliceState, slice: SliceViewModel, n
     var query by rememberSaveable { mutableStateOf("") }
     LazyColumn(Modifier.fillMaxSize().testTag("panel_$tabId"), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        header?.let { h -> item { h() } }
         item { ViewChips(state, slice, tabId, nav) }
         item {
             OutlinedTextField(query, { query = it }, label = { Text(stringResource(R.string.panel_search)) }, singleLine = true,
@@ -153,6 +158,7 @@ fun SettingsTabScreen(tabId: String, state: SliceState, slice: SliceViewModel, n
                 }
             }
         }
+        footer?.invoke(this)
         item {
             TextButton(onClick = { slice.resetAll() }, modifier = Modifier.testTag("panel_reset_all")) {
                 Text(stringResource(R.string.panel_reset_all))
@@ -301,6 +307,50 @@ fun CustomPickerScreen(tabId: String, state: SliceState, slice: SliceViewModel) 
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The printer's configuration (mobile_app.md, rule 8; settings_panel.md,
+ * rule 37): the printer, nozzle and filament, then Machine, Nozzle and
+ * extruder, Limits and G-code as the panel, then the person's notes.
+ * Connection is the Printer section itself (the printers on the network).
+ */
+@Composable
+fun PrinterSettingsScreen(state: SliceState, slice: SliceViewModel, nav: Navigator, notes: String, setNotes: (String) -> Unit) {
+    SettingsTabScreen("printer", state, slice, nav,
+        header = { PrinterCard(state) { nav.open(Screen.ProfilePicker) } },
+        footer = {
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(stringResource(R.string.printer_calibration), style = MaterialTheme.typography.titleMedium)
+                        Text(stringResource(R.string.printer_calibration_later), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            item {
+                var text by rememberSaveable { mutableStateOf(notes) }
+                OutlinedTextField(text, { text = it; setNotes(it) }, label = { Text(stringResource(R.string.printer_notes)) },
+                    minLines = 3, modifier = Modifier.fillMaxWidth().testTag("printer_notes"))
+            }
+        })
+}
+
+/** In the Printer section: the printer the plate slices for, and a way into its configuration. */
+@Composable
+fun PrinterSettingsCard(state: SliceState, nav: Navigator) {
+    Card(onClick = { nav.open(Screen.PrinterSettings) }, modifier = Modifier.fillMaxWidth().testTag("printer_settings")) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.section_machine), null, tint = MaterialTheme.colorScheme.onSurface)
+            Spacer(Modifier.size(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.printer_settings), style = MaterialTheme.typography.titleMedium)
+                Text(state.profile?.printer ?: stringResource(R.string.profile_none), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

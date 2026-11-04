@@ -53,6 +53,10 @@ class AppSettings(context: Context) {
         get() = prefs.getString("panel.changes", null)
         set(v) = prefs.edit().putString("panel.changes", v).apply()
 
+    /** The person's notes on a printer (settings_panel.md, rule 37, «Notas»), by its catalog name. */
+    fun printerNotes(printer: String?): String = prefs.getString("printer.notes." + (printer ?: ""), null) ?: ""
+    fun setPrinterNotes(printer: String?, text: String) = prefs.edit().putString("printer.notes." + (printer ?: ""), text).apply()
+
     companion object {
         private const val SEARCH_NETWORK = "printers.search_network"
         const val FILE = "tisma_settings"
