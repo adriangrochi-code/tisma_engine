@@ -783,3 +783,59 @@ TEST_CASE("BH24: a quality finer than the voxel limit allows takes the finest vo
     CHECK(normal.voxel == 0.0);
 }
 
+
+TEST_CASE("structural optimization rule 2: the lowest uniform infill that holds, by bisection", "[analysis][engineering]") {
+    const IndexedMesh bar = box_mesh(16.0f, 4.0f, 4.0f);
+    TriangleMesh triangles;
+    for (const auto& t : bar.triangles)
+        triangles.add_triangle(bar.vertices[t[0]], bar.vertices[t[1]], bar.vertices[t[2]]);
+    ProjectEngineering e;
+    EngineeringCondition fixed, tip;
+    fixed.kind = ConditionKind::FixedZone;
+    for (std::uint32_t t = 0; t < triangles.triangle_count(); ++t) {
+        bool at_min = true;
+        for (int k = 0; k < 3; ++k)
+            at_min &= triangles.corner(t, k).x == 0.0f;
+        if (at_min)
+            fixed.triangles.push_back(t);
+    }
+    tip.kind = ConditionKind::ForcePoint;
+    tip.point = {16.0, 2.0, 2.0};
+    tip.normal = {1.0, 0.0, 0.0};
+    tip.radius = 2.0;
+    tip.newtons = 10.5;
+    tip.direction = ForceDirection::Axis;
+    tip.axis = -3;
+    e.conditions = {fixed, tip};
+    // Rápida analyses the part solid: nothing to search.
+    e.structural.quality = "fast";
+    std::vector<std::string> notes;
+    const AnalysisCase solid = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    CHECK(lightest_infill(bar, triangles, beads_04(), solid, e).solid);
+    e.structural.quality = "normal";
+    const AnalysisCase c = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    const Settings s = beads_04();
+    double last = -1.0;
+    const LightestInfill best = lightest_infill(bar, triangles, s, c, e, [&](double done) {
+        CHECK(done >= last); // the progress only grows
+        last = done;
+    });
+    CHECK(best.analyses <= 8);
+    CHECK(last == 1.0);
+    REQUIRE(best.found);
+    // It holds there and not one percent below.
+    Settings at = s;
+    at.infill_density = best.density;
+    CHECK(report_verdict(run_analysis(bar, at, c), c, e, triangles) == Verdict::Holds);
+    if (best.density > 0) {
+        at.infill_density = best.density - 1;
+        CHECK(report_verdict(run_analysis(bar, at, c), c, e, triangles) != Verdict::Holds);
+    }
+    // A load no infill carries: not found, with its factor.
+    e.conditions[1].newtons = 20000.0;
+    const AnalysisCase heavy = engineering_analysis_case(e, triangles, {}, notes, "PLA");
+    const LightestInfill none = lightest_infill(bar, triangles, s, heavy, e);
+    CHECK_FALSE(none.found);
+    CHECK(none.analyses == 1);
+    CHECK(none.min_safety < 2.0);
+}

@@ -240,6 +240,66 @@ FailureMode weakest_mode(const AnalysisReport& report) {
     return report.result.weakest < mode.size() ? mode[report.result.weakest] : FailureMode::None;
 }
 
+Verdict report_verdict(const AnalysisReport& report, const AnalysisCase& c, const ProjectEngineering& e,
+                       const TriangleMesh& mesh) {
+    VerdictInput in;
+    for (const LimitCheck& l : check_limits(e, mesh, report))
+        in.limit_exceeded = in.limit_exceeded || l.exceeded;
+    in.family = family_of(c.material_id);
+    in.required_safety = e.structural.safety_factor;
+    in.working_temperature = e.working_temperature;
+    in.min_safety = report.result.min_safety;
+    return structural_verdict(in);
+}
+
+LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                               const AnalysisCase& c, const ProjectEngineering& e,
+                               const std::function<void(double)>& progress) {
+    LightestInfill out;
+    if (c.model == AnalysisModel::Solid) {
+        out.solid = true;
+        return out;
+    }
+    // 100 %, then halving between the highest that fails and the lowest
+    // that holds: at most 8 analyses.
+    constexpr int kMostAnalyses = 8;
+    const auto holds = [&](int density, double& safety) {
+        Settings s = settings;
+        s.infill_density = double(density);
+        const int step = out.analyses++;
+        const AnalysisReport r = run_analysis(mesh, s, c, nullptr, [&](std::string_view, double done) {
+            if (progress)
+                progress((double(step) + std::clamp(done, 0.0, 1.0)) / kMostAnalyses);
+        });
+        safety = r.result.min_safety;
+        return r.valid && report_verdict(r, c, e, placed) == Verdict::Holds;
+    };
+    double safety = 0.0;
+    if (!holds(100, safety)) {
+        out.min_safety = safety;
+        if (progress)
+            progress(1.0);
+        return out;
+    }
+    out.found = true;
+    out.min_safety = safety;
+    int fails = -1, holds_at = 100;
+    while (holds_at - fails > 1) {
+        const int mid = (fails + holds_at) / 2;
+        double s = 0.0;
+        if (holds(mid, s)) {
+            holds_at = mid;
+            out.min_safety = s;
+        } else {
+            fails = mid;
+        }
+    }
+    out.density = holds_at;
+    if (progress)
+        progress(1.0);
+    return out;
+}
+
 std::string structural_report_json(const AnalysisReport& report, const AnalysisCase& c, const ProjectEngineering& e,
                                    const std::array<double, 12>& to_part, const TriangleMesh* mesh) {
     nlohmann::json j = nlohmann::json::parse(analysis_json(report, c, to_part));

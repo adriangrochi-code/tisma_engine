@@ -3,10 +3,12 @@
 #include "config/settings.hpp"
 #include "fea/adhesion.hpp"
 #include "fea/analysis.hpp"
+#include "fea/verdict.hpp"
 #include "mesh/mesh.hpp"
 #include "project/engineering.hpp"
 
 #include <array>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -76,6 +78,30 @@ struct LimitCheck {
     bool exceeded = false;
 };
 std::vector<LimitCheck> check_limits(const ProjectEngineering& e, const TriangleMesh& mesh, const AnalysisReport& report);
+
+// The verdict of an analysis as the report gives it (structural_report_json):
+// the asked factor, the working temperature, the material's family and the
+// displacement limits.
+Verdict report_verdict(const AnalysisReport& report, const AnalysisCase& c, const ProjectEngineering& e,
+                       const TriangleMesh& mesh);
+
+// «Relleno mínimo uniforme» (structural_optimization.md, rule 2): the lowest
+// whole infill percentage whose verdict is «Aguanta», by bisection (more
+// infill never makes it worse). found is false when not even 100 % holds
+// (more walls, another material or another shape are needed); solid when the
+// case is the solid model (quality Rápida), which the infill cannot change. Each analysis
+// reports its share of `progress` (done from 0 to 1 over the whole search);
+// throwing from it stops the search.
+struct LightestInfill {
+    bool solid = false;      // the case analyses the part solid (Rápida): the infill does not count, nothing searched
+    bool found = false;
+    int density = 100;      // percent
+    double min_safety = 0.0; // at that density
+    int analyses = 0;
+};
+LightestInfill lightest_infill(const IndexedMesh& mesh, const TriangleMesh& placed, const Settings& settings,
+                               const AnalysisCase& c, const ProjectEngineering& e,
+                               const std::function<void(double)>& progress = {});
 
 // "fixed_zone 1", "force_point 2"...: a condition's name in the case.
 std::string condition_name(const EngineeringCondition& condition);

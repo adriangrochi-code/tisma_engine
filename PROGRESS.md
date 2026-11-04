@@ -10230,3 +10230,22 @@ punta en la app con una impresora de cinta** (el guion no tiene cómo elegir una
 verbo de guion o la prueba del dueño.
 
 **Sigue (Estructural):** «Calcular en la nube» y Optimizar.
+
+## 2026-11-04 — Optimizar, regla 2: relleno mínimo uniforme (motor)
+
+**Hecho** (`structural_optimization.md`, reglas 1 y 2; pasó `check_spec`):
+- `report_verdict`: el veredicto del informe (factor pedido, temperatura, familia, límites) como función.
+- `lightest_infill`: el menor relleno entero que «Aguanta», por bisección: el 100 % primero (si no aguanta, se
+  informa sin buscar), después mitades; a lo sumo 8 análisis, con avance y cancelación por el aviso de avance.
+- **Decisión:** con la calidad Rápida el análisis toma la pieza maciza y el relleno no cuenta; la búsqueda no corre
+  y lo dice (`solid`).
+
+**Medido** (calidad media, PLA, voladizo con fuerza en la punta): barra de 24 × 6 × 6 mm con 20 N → **71 %**
+(aguanta con factor 2,03; al 70 % no), 40 s; barra de 16 × 4 × 4 mm con 10,5 N → 1 %, 11 s (las paredes llevan casi
+todo); con 11 N ni el 100 % alcanza.
+
+**Pruebas:** la de la regla 2 comprueba que aguanta en la densidad encontrada y no un punto por debajo, que el avance
+solo crece y llega a 1, que con Rápida no busca, y que con 20 000 N no la encuentra en un solo análisis.
+
+**Sigue:** «Optimizar» en el panel de Estructural (botón Relleno mínimo, resultado y «Aplicar»), después las demás
+reglas (zonas, nervios, refuerzos, retícula, orientación) y «Calcular en la nube».
