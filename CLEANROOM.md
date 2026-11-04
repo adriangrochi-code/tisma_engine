@@ -19,7 +19,7 @@ El código fuente de:
   de Tisma Slicer y se sacó el 24-10-2026 (decisión del dueño: todo pasa por fichas). No se lee con `git log`,
   `git show` ni de ninguna otra forma;
 - **el repositorio del servidor** (`adriangrochi-code/tisma-cloud`, decisión del dueño del 04-11-2026): guarda código
-  abierto que se procesa aparte, en otra sesión. La sesión del motor no lo clona, no lo abre y no lo busca. Lo que haga
+  abierto (herramientas de escaneo 3D, también GPL) y por eso se separó del motor. Lo trabaja otra sesión. La sesión del motor no lo clona, no lo abre y no lo busca. Lo que haga
   falta del servidor llega como ficha (por ejemplo `cloud.md`) o como prueba de caja negra contra su API;
 - ArcWelderLib, Marlin, Klipper, RepRapFirmware y cualquier otro código GPL o AGPL;
 - el slicer no planar de Ahlers et al. (una rama GPLv3 de Slic3r);
