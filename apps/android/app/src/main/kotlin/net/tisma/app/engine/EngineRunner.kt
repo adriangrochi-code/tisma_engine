@@ -65,6 +65,8 @@ class EngineRunner(
         val supports: Boolean = false,
         /** The rest of what the person changed in Print and Material, by `layers.height` keys (mobile_app.md, rule 7). */
         val changes: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap(),
+        /** How many of the model, arranged on the bed by the engine (`slice --copies`). */
+        val copies: Int = 1,
     ) {
         fun toJson(): JsonObject = merge(SettingsLayout.nest(changes), buildJsonObject {
             putJsonObject("layers") { put("height", layerHeight) }
@@ -96,7 +98,9 @@ class EngineRunner(
         val config = File(workDir, "settings.json").apply { writeText(merged.toString()) }
         val out = File(workDir, model.nameWithoutExtension + ".gcode")
         val summary = File(workDir, "summary.json")
-        return run(listOf("slice", model.path, "--config", config.path, "-o", out.path, "--summary", summary.path),
+        val args = mutableListOf("slice", model.path, "--config", config.path, "-o", out.path, "--summary", summary.path)
+        if (settings.copies > 1) args += listOf("--copies", settings.copies.toString())
+        return run(args,
             out, summary, onProgress, cancelled).copy(profileUsed = profile == null || base != null)
     }
 
@@ -174,7 +178,10 @@ class EngineRunner(
         val config = File(workDir, "settings.json").apply { writeText(merged.toString()) }
         val caseFile = File(workDir, "case.json").apply { writeText(case.toString()) }
         val out = File(workDir, "report.json")
-        runTool(listOf("analyze", model.path, "--config", config.path, "--case", caseFile.path, "-o", out.path, "--progress"),
+        // The voxel surface colored by safety, for the map on the part (docs/ANALYSIS.md, «La malla de vóxeles»).
+        val voxels = File(workDir, "voxels.ply").apply { delete() }
+        runTool(listOf("analyze", model.path, "--config", config.path, "--case", caseFile.path, "-o", out.path, "--progress",
+            "--mesh", voxels.path),
             out, null, onProgress, cancelled, okCodes = setOf(0, 5)) // 5: no valid result, the report says why
         val report = runCatching { Json.parseToJsonElement(out.readText()) as JsonObject }.getOrNull() ?: JsonObject(emptyMap())
         val result = (report["result"] as? JsonObject) ?: JsonObject(emptyMap())

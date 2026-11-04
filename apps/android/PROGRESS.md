@@ -25,6 +25,22 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Todo lo del escritorio en el teléfono (pedido del dueño: «tantas funciones como el motor de PC:
+  CAD, FEA, CFD…»).** Plan, en orden:
+  1. Lo que el motor ya da por línea de comandos:
+     - hecho: el mapa de seguridad sobre la pieza (`analyze --mesh`, regla 13);
+     - hecho: copias en la Placa (`slice --copies`).
+  2. Pedido al motor (sesión de escritorio), para no reescribir su lógica en Kotlin:
+     - `part gear|fastener|lathe` (engranajes, tornillería y torno, que el motor genera sin SolidCraft);
+     - `calibration <tipo>` (torres y pruebas de `src/calibration`);
+     - `aero` y `orient` sobre un modelo suelto;
+     - y cómo llevar el CAD general (SolidCraft para Android arm64, o primitivas y booleanas propias).
+  3. Cuando lleguen, cada uno con su pantalla y sus pruebas contra el motor real.
+- **Mapa de seguridad (regla 13):** el análisis de un modelo suelto pide `--mesh voxels.ply`. La app lee el PLY binario
+  (formato de Turk, con los colores del motor) y lo dibuja sobre la pieza en lugar del modelo, con un interruptor y su
+  leyenda: falla, 1–1,5, 1,5–2, 2 o más, sin carga. Probado con el motor de la máquina: el mapa cae sobre la pieza
+  mostrada.
+
 - **2026-11-04 — Letra al 200 % (AC3, regla 5):** capturas de Placa, Impresión, una sección, Impresora y Más con la letra
   al 200 % (`ScreenshotTest`, en `build/screenshots/text200_*.png`). Lo que se veía mal y se arregló:
   - las etiquetas de la barra de abajo se partían en mitad de la palabra: ahora van en una línea y crecen hasta 1,15×;

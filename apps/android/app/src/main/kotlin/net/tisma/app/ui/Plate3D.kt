@@ -143,6 +143,12 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
         set(v) { field = v; meshDirty = true }
     @Volatile var bed = floatArrayOf(220f, 220f)
         set(v) { field = v; bedDirty = true }
+    /** The analysis' safety map, drawn in its own colors in place of the part. */
+    @Volatile var stress: net.tisma.app.engine.StressMap? = null
+        set(v) { field = v; stressDirty = true }
+    @Volatile private var stressDirty = true
+    private var stressBuf: FloatBuffer? = null
+    private var stressCount = 0
     /** The pack printer's bed model (rule 14), drawn in gray under the grid. */
     @Volatile var bedModel: MeshFile? = null
         set(v) { field = v; bedDirty2 = true }
@@ -239,6 +245,29 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
     override fun onDrawFrame(gl: GL10?) {
         if (bedDirty) { buildGrid(); bedDirty = false }
         if (meshDirty) { buildMesh(); meshDirty = false }
+        if (stressDirty) {
+            val s = stress
+            stressBuf = s?.let { m ->
+                // x y z, normal, r g b per corner: the normal from each triangle.
+                val data = FloatArray(m.triangles * 3 * 9)
+                val p = m.positions
+                for (t in 0 until m.triangles) {
+                    val i = 9 * t
+                    val ux = p[i + 3] - p[i]; val uy = p[i + 4] - p[i + 1]; val uz = p[i + 5] - p[i + 2]
+                    val vx = p[i + 6] - p[i]; val vy = p[i + 7] - p[i + 1]; val vz = p[i + 8] - p[i + 2]
+                    val nx = uy * vz - uz * vy; val ny = uz * vx - ux * vz; val nz = ux * vy - uy * vx
+                    for (k in 0..2) {
+                        val o = (3 * t + k) * 9
+                        data[o] = p[i + 3 * k]; data[o + 1] = p[i + 3 * k + 1]; data[o + 2] = p[i + 3 * k + 2]
+                        data[o + 3] = nx; data[o + 4] = ny; data[o + 5] = nz
+                        data[o + 6] = m.colors[i + 3 * k]; data[o + 7] = m.colors[i + 3 * k + 1]; data[o + 8] = m.colors[i + 3 * k + 2]
+                    }
+                }
+                buffer(data)
+            }
+            stressCount = (s?.triangles ?: 0) * 3
+            stressDirty = false
+        }
         if (bedDirty2) {
             val m = bedModel
             bedModelBuf = m?.let { meshBuffer(it) }
@@ -346,7 +375,25 @@ private class PlateRenderer(val camera: OrbitCamera) : GLSurfaceView.Renderer {
                 GLES20.glDrawArrays(GLES20.GL_LINES, gridCount - 6 + 2 * i, 2)
             }
         }
-        meshBuf?.let { m ->
+        val stressNow = stressBuf?.takeIf { stressCount > 0 }
+        if (stressNow != null) {
+            GLES20.glUniform1f(lit, 1f)
+            GLES20.glUniform1f(own, 1f)
+            GLES20.glUniform4f(color, 1f, 1f, 1f, 1f)
+            stressNow.position(0)
+            GLES20.glEnableVertexAttribArray(pos)
+            GLES20.glVertexAttribPointer(pos, 3, GLES20.GL_FLOAT, false, 36, stressNow)
+            stressNow.position(3)
+            GLES20.glEnableVertexAttribArray(nor)
+            GLES20.glVertexAttribPointer(nor, 3, GLES20.GL_FLOAT, false, 36, stressNow)
+            stressNow.position(6)
+            GLES20.glEnableVertexAttribArray(col)
+            GLES20.glVertexAttribPointer(col, 3, GLES20.GL_FLOAT, false, 36, stressNow)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, stressCount)
+            GLES20.glDisableVertexAttribArray(col)
+            GLES20.glUniform1f(own, 0f)
+        }
+        if (stressNow == null) meshBuf?.let { m ->
             GLES20.glUniform1f(lit, 1f)
             // The selected part's violet (interface.md accent), lighter to read the shading.
             GLES20.glUniform4f(color, 0.62f, 0.38f, 0.92f, 1f)
@@ -454,6 +501,8 @@ fun Plate3D(
     onPick: ((FloatArray, FloatArray) -> Unit)? = null,
     /** The pack printer's bed model and picture (profile_pack.md, rule 14). */
     bedModel: MeshFile? = null,
+    /** The analysis' safety map, shown in place of the part. */
+    stress: net.tisma.app.engine.StressMap? = null,
     bedTexture: java.io.File? = null,
     /** One finger does not turn the view (QA AND9: while marking, the page scrolls and a tap marks); two still move and zoom. */
     lockRotation: Boolean = false,
@@ -466,6 +515,11 @@ fun Plate3D(
         val b = pathBounds ?: mesh?.bounds ?: floatArrayOf(0f, 0f, 0f, bed[0], bed[1], 0f)
         camera.frame(b)
         holder[0]?.requestRender()
+    }
+    DisposableEffect(stress) {
+        renderer.stress = stress
+        holder[0]?.requestRender()
+        onDispose { }
     }
     DisposableEffect(bedModel, bed[0], bed[1]) {
         renderer.bedModel = bedModel

@@ -115,6 +115,16 @@ class EngineeringModelTest {
             null, {}, { false })
         assertEquals("false", r.summary["valid"].toString())
         assertTrue(r.summary["warnings"].toString().contains("load"), r.summary.toString())
+        // Rule 13: the safety map comes with it, on the shown part, in the table's colors.
+        val map = net.tisma.app.engine.StressMap.read(File(r.result.parentFile, "voxels.ply"), mesh.offset)
+        assertTrue(map.triangles > 0)
+        val mb = mesh.bounds
+        for (i in 0 until map.positions.size / 3) for (a in 0..2) {
+            val v = map.positions[3 * i + a]
+            assertTrue(v >= mb[a] - 0.5f && v <= mb[a + 3] + 0.5f, "map point outside the part: $v on axis $a")
+        }
+        // Nothing is loaded here (the load fell on the fixed face): gray.
+        assertEquals(190f / 255f, map.colors[0], 1e-3f)
         println("MA6 end faces $byFace, boxes $byBox, the engine's faces $ref")
         assertEquals(ref, byFace, 1e-9)
         assertTrue(abs(byBox - ref) / ref < 0.02, "boxes $byBox, faces $ref")

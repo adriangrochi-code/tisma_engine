@@ -196,6 +196,24 @@ class EngineRunnerTest {
     }
 
     @Test
+    fun `copies go to the engine as --copies`() {
+        val engine = tmp.newFile("copies_engine.sh").apply {
+            writeText("#!/bin/sh\n" + """
+                all="${'$'}*"; out=""; summary=""
+                while [ ${'$'}# -gt 0 ]; do
+                  case "${'$'}1" in -o) out="${'$'}2"; shift ;; --summary) summary="${'$'}2"; shift ;; esac
+                  shift
+                done
+                echo "${'$'}all" > "${'$'}out"; echo "{}" > "${'$'}summary"
+            """.trimIndent())
+            setExecutable(true)
+        }
+        val model = tmp.newFile("m.stl").apply { writeText("solid x\nendsolid x\n") }
+        val r = EngineRunner(engine, tmp.newFolder("work")).sliceModel(model, EngineRunner.SimpleSettings(copies = 4), {}, { false })
+        assertTrue(r.gcode.readText().contains("--copies 4"), r.gcode.readText())
+    }
+
+    @Test
     fun `MA9 the triangles of an STL and a 3MF are counted for the memory estimate`() {
         val root = File(System.getProperty("user.dir")).parentFile.parentFile.parentFile
         val cube = File(root, "tests/data/cube_ascii.stl")

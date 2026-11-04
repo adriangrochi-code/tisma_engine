@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -87,7 +88,7 @@ fun PlateScreen(
     val view: @Composable (Modifier) -> Unit = { m ->
         Plate3D(state.mesh, state.bed, m.clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp)),
             marks = marks, onPick = if (state.marking != null) slice::pick else null, lockRotation = state.marking != null,
-            bedModel = state.bedModel, bedTexture = state.bedTexture)
+            bedModel = state.bedModel, bedTexture = state.bedTexture, stress = state.stressMap?.takeIf { state.showStress })
     }
     if (wide && state.modelName != null) {
         Row(Modifier.fillMaxSize()) {
@@ -149,6 +150,15 @@ private fun PlateControls(
                     Text(stringResource(R.string.plate_supports), modifier = Modifier.weight(1f))
                     Switch(state.settings.supports, { slice.setSettings(state.settings.copy(supports = it)) },
                         enabled = !state.slicing, modifier = Modifier.named(stringResource(R.string.plate_supports)))
+                }
+                // Copies of the model, which the engine arranges on the bed.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.plate_copies), modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = { slice.setSettings(state.settings.copy(copies = (state.settings.copies - 1).coerceAtLeast(1))) },
+                        enabled = !state.slicing && state.settings.copies > 1, modifier = Modifier.testTag("copies_less")) { Text("−") }
+                    Text(state.settings.copies.toString(), modifier = Modifier.padding(horizontal = 12.dp).testTag("copies"))
+                    OutlinedButton(onClick = { slice.setSettings(state.settings.copy(copies = (state.settings.copies + 1).coerceAtMost(50))) },
+                        enabled = !state.slicing && state.settings.copies < 50, modifier = Modifier.testTag("copies_more")) { Text("+") }
                 }
             }
         }
@@ -380,6 +390,24 @@ private fun ModelEngineeringCard(state: SliceState, slice: SliceViewModel) {
         state.analysis?.let { lines ->
             context.readableSummary(lines).forEach { (k, v) ->
                 Row { Text(k, Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant); Text(v) }
+            }
+        }
+        // Rule 13: the map of colors on the part, with its legend (docs/ANALYSIS.md's colors and limits).
+        if (state.stressMap != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.eng_show_map), modifier = Modifier.weight(1f))
+                androidx.compose.material3.Switch(state.showStress, { slice.showStress(it) },
+                    modifier = Modifier.testTag("eng_show_map").named(stringResource(R.string.eng_show_map)))
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                listOf(0xFFDC2828 to R.string.map_fails, 0xFFF58C1E to R.string.map_1_15, 0xFFF0D228 to R.string.map_15_2,
+                    0xFF3CAA4B to R.string.map_2, 0xFFBEBEBE to R.string.map_none).forEach { (c, l) ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.foundation.layout.Box(Modifier.size(10.dp).background(androidx.compose.ui.graphics.Color(c)))
+                        Spacer(Modifier.size(4.dp))
+                        Text(stringResource(l), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
         }
     }

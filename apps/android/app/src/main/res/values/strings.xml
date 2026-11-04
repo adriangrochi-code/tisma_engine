@@ -431,4 +431,11 @@
     <string name="help_why">Why</string>
     <string name="help_result">Result</string>
     <string name="pack_default_filament">The printer\'s default filament</string>
+    <string name="eng_show_map">Show the safety map on the part</string>
+    <string name="map_fails">Fails (under 1)</string>
+    <string name="map_1_15">1 to 1.5</string>
+    <string name="map_15_2">1.5 to 2</string>
+    <string name="map_2">2 or more</string>
+    <string name="map_none">Not loaded</string>
+    <string name="plate_copies">Copies</string>
 </resources>

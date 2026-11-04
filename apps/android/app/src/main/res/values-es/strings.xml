@@ -415,4 +415,11 @@
     <string name="help_why">Para qué</string>
     <string name="help_result">Resultado</string>
     <string name="pack_default_filament">El filamento de fábrica de la impresora</string>
+    <string name="eng_show_map">Mostrar el mapa de seguridad en la pieza</string>
+    <string name="map_fails">Falla (menos de 1)</string>
+    <string name="map_1_15">1 a 1,5</string>
+    <string name="map_15_2">1,5 a 2</string>
+    <string name="map_2">2 o más</string>
+    <string name="map_none">Sin carga</string>
+    <string name="plate_copies">Copias</string>
 </resources>

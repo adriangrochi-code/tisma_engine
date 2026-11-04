@@ -55,6 +55,9 @@ data class SliceState(
     val packError: String? = null,
     /** Engineering on a bare model: the marked faces, the material and the safety asked (mobile_app.md, rule 13). */
     val case: EngineeringCase = EngineeringCase(),
+    /** The last analysis' safety map on the part, and whether the 3D view shows it instead of the part. */
+    val stressMap: StressMap? = null,
+    val showStress: Boolean = false,
     /** What a tap on the 3D view marks now, or null when it only turns the view. */
     val marking: EngineeringCase.Kind? = null,
     /** The lightest infill found that holds, in %, to apply to the slice (mobile_app.md, rule 13). */
@@ -246,7 +249,7 @@ class SliceViewModel(
     private fun loadMesh(f: File) = viewModelScope.launch {
         val bed = bedSize()
         val mesh = withContext(io) { runCatching { MeshFile.read(f).onBed(bed[0] / 2, bed[1] / 2) }.getOrNull() }
-        _state.update { it.copy(mesh = mesh, bed = bed, case = it.case.copy(conditions = emptyList())) }
+        _state.update { it.copy(mesh = mesh, bed = bed, case = it.case.copy(conditions = emptyList()), stressMap = null, showStress = false) }
     }
 
     /** Picks the printer, nozzle and filament (the printer card). */
@@ -428,16 +431,19 @@ class SliceViewModel(
                     it.case.conditions[same].kind == c.kind -> it.case.conditions.filterIndexed { i, _ -> i != same }
                     else -> it.case.conditions.mapIndexed { i, o -> if (i == same) c else o }
                 }
-                it.copy(case = it.case.copy(conditions = list), analysis = null)
+                it.copy(case = it.case.copy(conditions = list), analysis = null, stressMap = null, showStress = false)
             }
         }
     }
 
     fun removeCondition(index: Int) = _state.update {
-        it.copy(case = it.case.copy(conditions = it.case.conditions.filterIndexed { i, _ -> i != index }), analysis = null)
+        it.copy(case = it.case.copy(conditions = it.case.conditions.filterIndexed { i, _ -> i != index }), analysis = null,
+            stressMap = null, showStress = false)
     }
 
-    fun setCase(case: EngineeringCase) = _state.update { it.copy(case = case, analysis = null) }
+    fun setCase(case: EngineeringCase) = _state.update { it.copy(case = case, analysis = null, stressMap = null, showStress = false) }
+
+    fun showStress(on: Boolean) = _state.update { it.copy(showStress = on && it.stressMap != null) }
 
     /** Analyzes the bare model with the marked faces (docs/ANALYSIS.md, «El caso»). */
     fun analyzeModel() {
@@ -446,7 +452,8 @@ class SliceViewModel(
         val mesh = s.mesh ?: return
         if (s.slicing || s.analyzing || s.isProject) return
         cancel.set(false)
-        _state.update { it.copy(analyzing = true, progress = 0, analysis = null, error = null, lightest = null, marking = null) }
+        _state.update { it.copy(analyzing = true, progress = 0, analysis = null, error = null, lightest = null, marking = null,
+            stressMap = null, showStress = false) }
         viewModelScope.launch {
             try {
                 val r = withContext(io) {
@@ -466,7 +473,11 @@ class SliceViewModel(
                     (r.summary["warnings"] as? kotlinx.serialization.json.JsonArray).orEmpty()
                         .mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }.map { "warning" to it }
                 AppLog.line("engine: model analysis $verdict")
-                _state.update { it.copy(analysis = lines) }
+                val map = withContext(io) {
+                    runCatching { StressMap.read(File(r.result.parentFile, "voxels.ply"), mesh.offset) }
+                        .onFailure { AppLog.line("engine: no safety map ${it.message}") }.getOrNull()
+                }
+                _state.update { it.copy(analysis = lines, stressMap = map, showStress = map != null) }
             } catch (e: EngineRunner.Cancelled) {
                 _state.update { it.copy(notice = SliceNotice.Cancelled) }
             } catch (e: EngineRunner.EngineException) {
