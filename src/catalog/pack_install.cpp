@@ -304,6 +304,8 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
             throw PackError(path + " is not a " + (kind == ProfileKind::Filament ? "filament" : "print") + " profile");
         if (!pack_compatible(entry.compatible, sets, out.number)) // rule 12, PK7
             throw PackError(entry.profile.name + " is not for the " + out.printer.name);
+        if (kind == ProfileKind::Filament)
+            out.filament_vendor = entry.vendor;
         (kind == ProfileKind::Filament ? out.filament : out.print) = std::move(entry.profile);
     }
     return out;
@@ -359,11 +361,15 @@ std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const 
     return out;
 }
 
-Profile pack_entry_profile(const fs::path& pack_dir, const std::string& path, std::vector<std::string>& warnings) {
+PackEntry read_pack_entry(const fs::path& pack_dir, const std::string& path, std::vector<std::string>& warnings) {
     std::string text;
     if (!safe_pack_path(path) || !read_all(pack_dir / utf8_path(path), text))
         throw PackError("not in the installed pack: " + path);
-    return parse_pack_entry(text, warnings).profile;
+    return parse_pack_entry(text, warnings);
+}
+
+Profile pack_entry_profile(const fs::path& pack_dir, const std::string& path, std::vector<std::string>& warnings) {
+    return read_pack_entry(pack_dir, path, warnings).profile;
 }
 
 namespace {

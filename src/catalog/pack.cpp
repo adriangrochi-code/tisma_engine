@@ -330,6 +330,7 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
         out.compatible = j.at("compatible").get<int>();
     out.generic = j.value("generic", false);
     out.license = text(j, "license");
+    out.vendor = text(j, "vendor");
     out.origin = text(j, "origin");
     return out;
 }

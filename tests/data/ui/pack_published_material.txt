@@ -1,0 +1,5 @@
+# The chosen pack filament's «Datos publicados» (profile_pack.md, rule 23):
+# the maker's density used.
+wait 4
+use-published-material 0
+expect extrusion.density 1.24

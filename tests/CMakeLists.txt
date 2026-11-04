@@ -243,6 +243,16 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_pack_gone PROPERTIES FIXTURES_REQUIRED "ui_pack_gone;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
+    # The chosen pack filament's «Datos publicados», the maker's density used (rule 23).
+    add_test(NAME ui_pack_published_material
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack --pick-pack-printer "vendors/acme/models/A1.json#0.4"
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/pack_published_material.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_published_material.png)
+    set_tests_properties(ui_pack_published_material PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
     add_test(NAME ui_pack_catalog
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               --lang es --light --size 1200x760 --catalog printer --catalog-search acme

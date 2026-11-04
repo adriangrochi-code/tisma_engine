@@ -55,7 +55,10 @@ community = tar([("community/printers/Acme/Acme One.json", j({"vendor": "Acme", 
     value("measured.max_flow", 18.5, "mm³/s", "measured", "https://example.org/video"),
     value("input_shaper.type", "mzv", "", "community", "https://example.org/forum"),
     value("no.such_key", 1, "", "official", "https://example.org/x"),
-    value("machine.max_bed_temp", 110, "°C", "rumour", "https://example.org/y")]}))])
+    value("machine.max_bed_temp", 110, "°C", "rumour", "https://example.org/y")]})),
+    ("community/filaments/Acme/Acme PLA.json", j({"vendor": "Acme", "name": "Acme PLA", "data": [
+    value("extrusion.density", 1.24, "g/cm³", "official", "https://example.org/acme-pla"),
+    value("filament.drying_temperature", 50, "°C", "measured", "https://example.org/dry")]}))])
 knowledge = tar([("knowledge/glossary.json", j({"format": "tisma-knowledge-glossary", "version": 1, "language": "es",
                                                  "sources": [], "terms": []}))])
 compatible = j({"format": "tisma-pack-compatible", "version": 1, "sets": [[0, 1], [2]]})

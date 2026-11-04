@@ -939,6 +939,8 @@ private:
     void add_pack_printer(const std::string& printer);
     void pack_catalog_entry(const PackModelRef& ref);
     void published_values(const std::vector<CommunityValue>& values);
+    void refresh_material_community();
+    void material_published();
     void use_community_value(const CommunityValue& v);
     void first_run_next();
 
@@ -1639,6 +1641,9 @@ private:
     bool pack_kept_dirty_ = false;
     std::set<std::string> pack_gone_; // pack printers the pack no longer has, kept from the copy
     std::optional<CommunityValue> community_confirm_;        // a value waiting for the person's yes (rule 24)
+    std::map<std::string, std::string> pack_filament_vendor_; // a pack filament profile's name: its maker
+    std::string material_community_for_ = "\x01";             // the filament material_community_ is for
+    std::vector<CommunityValue> material_community_;
     int pack_filaments_number_ = -2;                         // the printer pack_filaments_found_ is for
     std::vector<PackFilamentRef> pack_filaments_found_;
     std::string pack_url_; // packs.url; empty: the latest release
@@ -3219,13 +3224,18 @@ bool height_steps_rows(std::vector<std::array<double, 2>>& steps, double layer_h
 
 // A whole-number variable of the start G-code ([temperature]), edited as a number.
 bool variable_row(T label, Settings& s, const char* name, int min, int max, const char* fmt, const char* tip) {
-    std::vector<std::string>& values = s.variables[name];
-    if (values.empty())
-        values.push_back("0");
-    int v = std::atoi(values.front().c_str());
+    // Shown as 0 when the profile does not give it, and written only when
+    // changed: drawing the row must not change the settings (a pack
+    // filament without a bed temperature showed «1 cambio», 2026-11-04).
+    const auto it = s.variables.find(name);
+    int v = it != s.variables.end() && !it->second.empty() ? std::atoi(it->second.front().c_str()) : 0;
     if (!row(label, v, min, max, fmt, tip))
         return false;
-    values.front() = std::to_string(v);
+    std::vector<std::string>& values = s.variables[name];
+    if (values.empty())
+        values.push_back(std::to_string(v));
+    else
+        values.front() = std::to_string(v);
     return true;
 }
 
@@ -4473,7 +4483,9 @@ void App::load_profile_lists() {
             pack_printer_number_.clear();
             pack_printer_model_.clear();
             pack_gone_.clear();
+            pack_filament_vendor_.clear();
             community_for_ = "\x01";
+            material_community_for_ = "\x01";
         }
         // The built-in printer is one made from nothing: its speeds are the fallback.
         if (kind == ProfileKind::Printer)
@@ -4497,6 +4509,8 @@ void App::load_profile_lists() {
                     if (p.print)
                         made.push_back(*p.print);
                     number = p.number;
+                    if (p.filament)
+                        pack_filament_vendor_[p.filament->name] = p.filament_vendor;
                     if (kind == ProfileKind::Printer) {
                         std::vector<std::string> texts;
                         for (const Profile& m : made)
@@ -4540,7 +4554,9 @@ void App::load_profile_lists() {
             for (const std::string& path : pack_filaments_) {
                 try {
                     std::vector<std::string> ignored;
-                    Profile f = pack_entry_profile(pack_dir(), path, ignored);
+                    PackEntry entry = read_pack_entry(pack_dir(), path, ignored);
+                    pack_filament_vendor_[entry.profile.name] = entry.vendor;
+                    Profile f = std::move(entry.profile);
                     if (std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
                                      [&](const Profile& b) { return b.name == f.name; }))
                         builtin_profiles_[k].push_back(std::move(f));
@@ -5459,6 +5475,28 @@ void App::published_values(const std::vector<CommunityValue>& values) {
         }
         ImGui::EndPopup();
     }
+}
+
+// The chosen pack filament's community data (rule 23).
+void App::refresh_material_community() {
+    const std::string& name = chosen_profile_[std::size_t(ProfileKind::Filament)];
+    if (name == material_community_for_)
+        return;
+    material_community_for_ = name;
+    material_community_.clear();
+    if (const auto it = pack_filament_vendor_.find(name); it != pack_filament_vendor_.end() && !it->second.empty())
+        material_community_ = pack_community(pack_dir(), "filaments", it->second, name);
+}
+
+// «Datos publicados» under the material's card, folded (rule 23).
+void App::material_published() {
+    refresh_material_community();
+    if (material_community_.empty())
+        return;
+    ImGui::PushID("material_published");
+    if (ImGui::CollapsingHeader(tr(T::SecPublished)))
+        published_values(material_community_);
+    ImGui::PopID();
 }
 
 void App::use_community_value(const CommunityValue& v) {
@@ -7697,8 +7735,10 @@ void App::settings_panel() {
     profile_row(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
     if (panel_tab_ == SettingsTab::Material)
         anchor("filament_selector");
-    if (panel_tab_ == SettingsTab::Material)
+    if (panel_tab_ == SettingsTab::Material) {
         material_card();
+        material_published();
+    }
     // In Custom, «Choose settings…» (rule 16): only the ones each person wants.
     // Every section shows in one list now (the owner's decision, 2026-10-29).
     if (view_level_ == ViewLevel::Custom) {
@@ -20919,6 +20959,16 @@ void App::script_input() {
                         chosen_profile_[std::size_t(ProfileKind::Printer)].c_str());
             next();
         }
+    } else if (step.verb == "use-published-material") { // the same for the chosen pack filament's values
+        refresh_material_community();
+        const std::size_t n = std::size_t(std::atoi(step.key.c_str()));
+        if (n >= material_community_.size()) {
+            std::fprintf(stderr, "ui-script: no published material value %zu (there are %zu)\n", n, material_community_.size());
+            failed_ = true;
+        } else {
+            use_community_value(material_community_[n]);
+        }
+        next();
     } else if (step.verb == "use-published") { // a published value's «Usar este valor», confirmed (rule 24)
         const std::size_t n = std::size_t(std::atoi(step.key.c_str()));
         if (n >= community_values_.size()) {

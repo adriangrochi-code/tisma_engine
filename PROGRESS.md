@@ -10796,4 +10796,8 @@ plano). **Sin probar:** contra una versión publicada de verdad.
   - `aero` y `orient` sobre un modelo con `--config`.
   - Pruebas en `[cli]`.
 - Corregida una prueba de interfaz que fallaba por tiempos en la CI de Linux (`ui_script_structural_analyze`).
-- **Sigue:** «Datos publicados» para el material y la resina.
+- «Datos publicados» del filamento del paquete, en la pestaña Material (prueba: `ui_pack_published_material`). **Falta:**
+  la resina.
+- `design new|check|build` en la línea de comandos, con SolidCraft (pedido de Android). Probado solo con el SolidCraft
+  falso.
+- Corregido: mostrar la fila de una temperatura vacía la escribía como 0 y marcaba el perfil como cambiado.

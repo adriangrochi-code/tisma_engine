@@ -97,6 +97,7 @@ struct PackEntry {
     std::optional<int> compatible; // a set of compatible.json; none: every printer
     bool generic = false;
     std::string license, origin;
+    std::string vendor; // the entry's maker, as the community data names it
 };
 PackEntry parse_pack_entry(std::string_view json, std::vector<std::string>& warnings);
 
@@ -139,6 +140,7 @@ struct PackProfiles {
     Profile printer;
     std::optional<Profile> filament, print;
     std::string filament_path, print_path;
+    std::string filament_vendor; // the filament entry's maker (community data)
     std::vector<std::string> warnings; // keys left out
 };
 PackProfiles pack_profiles(const std::filesystem::path& pack_dir, const PackIndex& index, const std::string& printer,
@@ -162,6 +164,7 @@ struct PackFilamentRef {
 std::vector<PackFilamentRef> pack_filaments_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer);
 // One filament or print profile of the pack by its path (rule 10).
 Profile pack_entry_profile(const std::filesystem::path& pack_dir, const std::string& path, std::vector<std::string>& warnings);
+PackEntry read_pack_entry(const std::filesystem::path& pack_dir, const std::string& path, std::vector<std::string>& warnings);
 
 // The community data (profile_pack.md, rules 22 to 24; profile_pack_format.md,
 // «Datos de la comunidad»): values for a printer, filament or resin, each
