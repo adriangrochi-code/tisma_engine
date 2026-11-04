@@ -73,6 +73,12 @@ expect-control structural_optimize_cancel
 menu structural_optimize_cancel
 expect-optimize cancelled
 expect-control structural_orientation
+# The lattice (rule 7): the same.
+menu structural_lattice
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_lattice
 menu structural_force_unit_1
 wait 20
 expect-no-control structural_show_map

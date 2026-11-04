@@ -10556,3 +10556,14 @@ celdas de 10 mm.
 
 **Sigue (regla 7):** el diámetro por celda (sección proporcional a la utilización, escalado en conjunto) y
 «Retícula» en el panel.
+
+## 2026-11-04 — Optimizar, regla 7, paso D: «Retícula» en el panel (sin «Usar»)
+
+**Hecho:** el botón «Retícula» corre `lightest_lattice` en el trabajo de Optimizar, con Cancelar, y muestra el
+diámetro, la celda, el factor y la masa, o que ni con 3 mm aguanta.
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda; `[ui]`.
+
+**Falta:** «Usar la retícula»: los volúmenes de una pieza son cajas o cilindros (`PlateVolume`), y la retícula es una
+malla. Hace falta un volumen con malla propia (guardado en el proyecto 3MF como una malla modificadora más) antes de
+poder aplicarla. También falta el diámetro por celda. Siguiente: el volumen con malla.

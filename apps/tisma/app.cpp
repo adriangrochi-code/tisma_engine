@@ -750,6 +750,8 @@ private:
         ReinforcedInfill reinforced;
         bool orientation = false; // the orientation instead (rule 8)
         OrientationChoice orient;
+        bool lattice = false; // a lattice instead (rule 7)
+        LightestLattice latticed;
         // The part's map to the bed and its mesh's size when searched: the
         // zones go on the model where it was (it may have moved since).
         Affine to_bed;
@@ -759,7 +761,7 @@ private:
     std::atomic<bool> optimize_cancel_{false};
     std::atomic<int> optimize_permille_{0};
     std::optional<OptimizeRun> optimize_result_;
-    enum class OptimizeExtra { None, Zones, Ribs, Reinforce, Orientation };
+    enum class OptimizeExtra { None, Zones, Ribs, Reinforce, Orientation, Lattice };
     void start_optimize(OptimizeExtra extra = OptimizeExtra::None);
     void apply_zones(std::size_t part, const ZonedInfill& zoned);
     void apply_ribs(std::size_t part, const RibbedInfill& ribbed);
@@ -13043,6 +13045,11 @@ void App::structural_panel() {
                     rect_of("structural_orientation");
                     if (ImGui::IsItemHovered())
                         loc::SetTooltip("%s", tr(T::StructOrientationTip));
+                    if (ImGui::Button(tr(T::StructLattice), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Lattice);
+                    rect_of("structural_lattice");
+                    if (ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", tr(T::StructLatticeTip));
                 }
                 if (optimize_result_ && optimize_result_->part == part && !optimize_job_.running()) {
                     const OptimizeRun& o = *optimize_result_;
@@ -13051,7 +13058,15 @@ void App::structural_panel() {
                         loc::TextDisabled("%s", tr(T::StructCancelled));
                     else if (!o.error.empty())
                         loc::TextColored(rgb(0xE5484D), "%s", o.error.c_str());
-                    else if (o.orientation) {
+                    else if (o.lattice) {
+                        const LightestLattice& l = o.latticed;
+                        if (!l.found)
+                            loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructLatticeNone));
+                        else
+                            loc::TextColored(rgb(0x3FBF7F), "%s",
+                                             format(tr(T::StructLatticeFound), l.diameter, l.cell, l.min_safety, l.mass_g).c_str());
+                        rect_of("structural_lattice_found");
+                    } else if (o.orientation) {
                         const OrientationChoice& r = o.orient;
                         loc::TextWrapped("%s", format(tr(T::StructOrientationFactors), r.safety[0], r.safety[1], r.safety[2]).c_str());
                         rect_of("structural_orientation_found");
@@ -14405,10 +14420,10 @@ void App::start_optimize(OptimizeExtra extra) {
     optimize_cancel_ = false;
     optimize_permille_ = 0;
     const bool zones = extra == OptimizeExtra::Zones, ribs = extra == OptimizeExtra::Ribs, reinforce = extra == OptimizeExtra::Reinforce,
-               orientation = extra == OptimizeExtra::Orientation;
+               orientation = extra == OptimizeExtra::Orientation, lattice = extra == OptimizeExtra::Lattice;
     const Affine to_bed{a, b};
     const std::size_t triangles = o.mesh.triangle_count();
-    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs, reinforce, orientation, to_bed, triangles]() {
+    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs, reinforce, orientation, lattice, to_bed, triangles]() {
         OptimizeRun run;
         run.part = part;
         run.to_bed = to_bed;
@@ -14417,6 +14432,7 @@ void App::start_optimize(OptimizeExtra extra) {
         run.ribs = ribs;
         run.reinforce = reinforce;
         run.orientation = orientation;
+        run.lattice = lattice;
         struct Cancelled {};
         try {
             std::vector<std::string> case_notes;
@@ -14426,6 +14442,14 @@ void App::start_optimize(OptimizeExtra extra) {
             fit_voxel_limit(c, mesh, settings);
             if (orientation) { // the three orientations alone, no infill search
                 run.orient = recommended_orientation(placed, settings, moved, filament_type, [this](double done) {
+                    optimize_permille_ = int(done * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+                return run;
+            }
+            if (lattice) { // the lattice alone, the part hollow
+                run.latticed = lightest_lattice(mesh, placed, settings, c, moved, [this](double done) {
                     optimize_permille_ = int(done * 1000.0);
                     if (optimize_cancel_)
                         throw Cancelled{};

@@ -156,6 +156,10 @@
     X(StructOrientationNote, "La resistencia entre capas viene de la hoja del fabricante: una pieza real puede ser más débil entre capas. Revisá los voladizos antes de imprimir.", "The strength between layers comes from the maker's sheet: a real print may be weaker between layers. Check the overhangs before printing.") \
     X(StructOrientationApply, "Girar la pieza", "Turn the part") \
     X(StructOrientationApplied, "Pieza girada: capas en %s", "Part turned: layers along %s") \
+    X(StructLattice, "Retícula", "Lattice") \
+    X(StructLatticeTip, "La pieza sin relleno y por dentro una retícula imprimible sin soporte (barras verticales y a 45 grados); busca las barras más finas que aguantan (varios análisis).", "The part without infill and inside it a lattice that prints without support (vertical bars and bars at 45 degrees); finds the thinnest bars that hold (several analyses).") \
+    X(StructLatticeFound, "Retícula: barras de %.2f mm en celdas de %.0f mm (factor %.2f), %.2f g.", "Lattice: bars of %.2f mm in cells of %.0f mm (factor %.2f), %.2f g.") \
+    X(StructLatticeNone, "Ni con barras de 3 mm aguanta: conviene el relleno.", "Not even 3 mm bars hold: infill is better.") \
     X(StructZonedTurned, "La pieza está girada con escalas distintas: las zonas no caben como cajas.", "The part is turned with unequal scales: the zones do not fit as boxes.") \
     X(CloudPlanLock, "Incluido en el plan %s", "Included in the plan %s") \
     X(StructCloud, "Calcular en la nube", "Calculate in the cloud") \
