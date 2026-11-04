@@ -9956,4 +9956,8 @@ tabla da el Cd de presión, de la fuerza en las paredes y sin corrección por bl
   converge;
 - FEA: hexaedros de modos incompatibles, contra el bloqueo por corte en paredes de 2 vóxeles;
 - después, la GPU.
+- BH24 (equipo de especificaciones, prueba de punta a punta de la nube): la calidad extrema de un cubo de 20 mm pedía
+  10,7 millones de vóxeles y se negaba. Ahora `fit_voxel_limit` toma los vóxeles más finos que entran en `max_voxels`
+  (más anchos y menos filas por capa), en Analizar, en su estimación y en `analyze` de la nube. El resumen dice
+  `voxel_mm` y `voxel_capped`. Si igual no entra, el error tiene `code` `too_large` y texto en castellano.
 

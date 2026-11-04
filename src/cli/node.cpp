@@ -446,6 +446,11 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         return fail_coded(kExitInput, model.name + ": the analysis needs a fixed point or zone and a force (mark them in Engineering)",
                           "needs_conditions", model.name + ": el análisis necesita un punto o zona fija y una fuerza (marcalos en Ingeniería)");
     const IndexedMesh mesh = weld_exact(part.mesh);
+    // A quality finer than the part's size allows: the finest voxels that
+    // fit, said in the summary (BH24).
+    const bool capped = fit_voxel_limit(c, mesh, settings);
+    if (capped)
+        err << "warning: the part needs larger voxels than the quality's to fit max_voxels: " << c.voxel << " mm\n";
     progress(10);
     AnalysisReport report;
     try {
@@ -453,7 +458,8 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
             progress(10 + int(std::clamp(done, 0.0, 1.0) * 80.0));
         });
     } catch (const AnalysisError& e) {
-        return fail(kExitAnalysis, e.what());
+        return fail_coded(kExitAnalysis, e.what(), "too_large",
+                          "la pieza es demasiado grande para analizarla con esta memoria; probá la calidad rápida");
     }
     if (!report.valid)
         return fail_coded(kExitAnalysis, "the analysis gave no valid result", "no_valid_result",
@@ -478,7 +484,9 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
                            {"max_displacement_mm", finite(report.result.elasticity.max_displacement)},
                            {"mass_g", std::round(v.value("mass_g", 0.0) * 100.0) / 100.0},
                            {"family", v.value("family", "")},
-                           {"voxels", report.grid.count()}};
+                           {"voxels", report.grid.count()},
+                           {"voxel_mm", analysis_resolution(c, settings).first},
+                           {"voxel_capped", capped}};
     // The likely range of the smallest safety factor (adhesion and voxel size).
     if (const nlohmann::json& rep = result["report"]; rep.contains("adhesion") && rep["adhesion"].is_object()) {
         const nlohmann::json& ad = rep["adhesion"];

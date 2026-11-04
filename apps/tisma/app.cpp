@@ -13178,10 +13178,11 @@ void App::structural_panel() {
             apply_engineering_overrides(settings, e, notes);
             ProjectEngineering bare = e;
             bare.conditions.clear(); // the size does not depend on them
-            const AnalysisCase c =
+            AnalysisCase c =
                 engineering_analysis_case(bare, placed_meshes_[part], {}, notes, settings_.filament_type, settings.layer_height,
                                           print_conditions(settings, bare));
             const IndexedMesh mesh = weld_exact(placed_meshes_[part]);
+            fit_voxel_limit(c, mesh, settings); // what Analizar will use (BH24)
             estimate = {analysis_grid_voxels(mesh, settings, c), analysis_resolution(c, settings).first};
         }
         if (estimate.first > 0)
@@ -13779,9 +13780,11 @@ void App::start_structural() {
         struct Cancelled {};
         try {
             std::vector<std::string> case_notes;
-            const AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height,
-                                                             print_conditions(settings, moved));
+            AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height,
+                                                       print_conditions(settings, moved));
             const IndexedMesh mesh = weld_exact(placed);
+            // A quality finer than the part allows: the finest voxels that fit (BH24).
+            fit_voxel_limit(c, mesh, settings);
             const AnalysisReport r = run_analysis(mesh, settings, c, nullptr, [this](std::string_view, double done) {
                 structural_permille_ = int(done * 1000.0);
                 if (structural_cancel_)

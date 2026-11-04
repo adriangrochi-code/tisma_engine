@@ -141,6 +141,12 @@ std::pair<double, int> analysis_resolution(const AnalysisCase& c, const Settings
 // cheap enough to ask before anything else.
 std::size_t analysis_grid_voxels(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c);
 
+// When the case asks for more voxels than max_voxels, the finest voxels that
+// fit: larger voxels across and fewer rows per layer, so a fine quality runs
+// on a large part instead of refusing it (BH24). True when it changed the
+// case (then c.voxel and c.rows_per_layer say what it chose).
+bool fit_voxel_limit(AnalysisCase& c, const IndexedMesh& mesh, const Settings& settings);
+
 // The region's box on these voxels: a face becomes a thin box on the plane of
 // the solid voxels' extent along that axis.
 Box resolve_region(const Region& region, const VoxelGrid& grid);

@@ -208,6 +208,22 @@ Prepared prepare(const IndexedMesh& mesh, const Settings& settings, const Analys
 
 } // namespace
 
+bool fit_voxel_limit(AnalysisCase& c, const IndexedMesh& mesh, const Settings& settings) {
+    std::size_t count = analysis_grid_voxels(mesh, settings, c);
+    if (count <= c.max_voxels || count == 0)
+        return false;
+    const double layer = settings.layer_height > 0.0 ? settings.layer_height : 0.2;
+    const double voxel = analysis_resolution(c, settings).first;
+    // The count goes as the voxel's size cubed while the rows follow it.
+    double scale = std::cbrt(double(count) / double(c.max_voxels)) * 1.02;
+    for (int attempt = 0; attempt < 12 && count > c.max_voxels; ++attempt, scale *= 1.08) {
+        c.voxel = voxel * scale;
+        c.rows_per_layer = std::max(1, int(std::lround(layer / c.voxel)));
+        count = analysis_grid_voxels(mesh, settings, c);
+    }
+    return true;
+}
+
 std::size_t analysis_grid_voxels(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c) {
     if (mesh.vertices.empty())
         return 0;
