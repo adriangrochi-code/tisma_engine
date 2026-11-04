@@ -10777,3 +10777,10 @@ plano). **Sin probar:** contra una versión publicada de verdad.
 
 **El mismo día:** el catálogo de filamentos ofrece los del paquete que sirven para la impresora del paquete elegida
 (regla 12, PK7; `pack_filaments_for`). Prueba: `[pack]` y `ui_pack_filaments` (captura).
+
+**El mismo día, datos de la comunidad (reglas 22 a 24), núcleo:**
+- `parse_community`, `pack_community` (busca por grupo, fabricante y nombre) y `community_fills_alone` (regla 24).
+- `pack community` en la línea de comandos.
+- Las rutas del paquete se leen como UTF-8 también en Windows.
+- Prueba: `[pack]`, con datos inventados en el paquete de prueba.
+- **Sigue:** la sección «Datos publicados» en el panel de la impresora y del material, con **Usar este valor** (PK13).

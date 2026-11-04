@@ -16,8 +16,8 @@
  },
  "community": {
   "name": "community.tar.xz",
-  "size": 224,
-  "sha256": "a259aedc05801c0348b4ec6493cf1405a2984e19e986c2c19cd0f442a1221e48"
+  "size": 528,
+  "sha256": "5244d3483a517768373fa788961415684471ae04c07994aa03a8c79533752c7d"
  },
  "vendors": [
   {

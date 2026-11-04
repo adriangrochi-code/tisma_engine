@@ -163,4 +163,32 @@ std::vector<PackFilamentRef> pack_filaments_for(const std::filesystem::path& pac
 // One filament or print profile of the pack by its path (rule 10).
 Profile pack_entry_profile(const std::filesystem::path& pack_dir, const std::string& path, std::vector<std::string>& warnings);
 
+// The community data (profile_pack.md, rules 22 to 24; profile_pack_format.md,
+// «Datos de la comunidad»): values for a printer, filament or resin, each
+// with its kind and source.
+enum class CommunityKind { Official, Measured, Community };
+struct CommunitySource {
+    std::string type, url, title, author, published, at, accessed;
+};
+struct CommunityValue {
+    std::string key;
+    std::string value; // as JSON text: 0.4, "PEI", [1, 2]
+    std::string unit, conditions;
+    CommunityKind kind = CommunityKind::Community;
+    CommunitySource source;
+};
+// The keys a value may have besides the engine's settings (an unknown key is
+// left out).
+bool community_key_known(const std::string& key);
+// One community file; values with an unknown key or kind are left out.
+std::vector<CommunityValue> parse_community(std::string_view json);
+// The file for a printer ("printers"), filament ("filaments") or resin
+// ("resins") by its vendor and model or name; empty when there is none.
+std::vector<CommunityValue> pack_community(const std::filesystem::path& pack_dir, const std::string& group,
+                                           const std::string& vendor, const std::string& name);
+// Rule 24: whether a value may fill the setting by itself (an official one,
+// for an engine setting the profile leaves empty); measured and community
+// values only with the person's confirmation.
+bool community_fills_alone(const CommunityValue& v, bool setting_empty);
+
 } // namespace tisma

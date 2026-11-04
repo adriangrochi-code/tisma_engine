@@ -194,7 +194,11 @@ app del teléfono) baja los archivos que pide el plan a una carpeta y el motor l
    - un índice de versión más nueva no cambia nada (código 2).
 3. `tisma-engine pack list --data <carpeta>` da los fabricantes, sus modelos y variantes, cada una con su nombre de
    impresora `<archivo>#<variante>`.
-4. `tisma-engine profile --pack <carpeta> --printer "<archivo>#<variante>" [--filament <ruta>] [--print <ruta>]`
+4. `tisma-engine pack community --data <carpeta> --printer|--filament|--resin "<fabricante>/<nombre>"` da los datos
+   publicados por la comunidad (reglas 22 a 24). Cada uno trae `key`, `value`, `unit`, `kind` (`official`, `measured`
+   o `community`), `conditions` y `source`; los de clave o tipo desconocidos se dejan afuera. Solo un dato `official`
+   puede llenar solo un ajuste vacío. Los demás necesitan que la persona confirme (PK13).
+5. `tisma-engine profile --pack <carpeta> --printer "<archivo>#<variante>" [--filament <ruta>] [--print <ruta>]`
    escribe los ajustes de esa impresora del paquete, igual que `profile --printer`.
    - Sin `--filament` ni `--print`, usa los de `defaults` de la variante.
    - Un filamento que no es para esa impresora (`compatible.json`) da código 2.
