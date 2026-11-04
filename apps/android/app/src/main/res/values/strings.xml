@@ -258,7 +258,7 @@
     <string name="preview_open">See the preview</string>
     <string name="preview_layer">Layer %1$d of %2$d · Z %3$s mm</string>
     <string name="preview_empty">This G-code has no extrusions.</string>
-    <string name="preview_binary">This G-code is binary; the preview reads text G-code for now.</string>
+    <string name="preview_binary">This binary G-code cannot be read: it has compressed or damaged blocks.</string>
 
     <string name="watch_channel">Following prints</string>
     <string name="events_channel">Print notices</string>

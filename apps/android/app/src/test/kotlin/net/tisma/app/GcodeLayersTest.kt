@@ -1,8 +1,11 @@
 package net.tisma.app
 
+import net.tisma.app.engine.BinaryGcode
 import net.tisma.app.engine.GcodeLayers
+import java.io.File
 import org.junit.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class GcodeLayersTest {
@@ -83,5 +86,18 @@ class GcodeLayersTest {
         val g = GcodeLayers.read(text)
         assertEquals(50, g.layers.size)
         assertTrue(g.layers.all { it.count > 0 })
+    }
+
+    @Test
+    fun `binary G-code from the engine reads (cube, 50 layers)`() {
+        val f = File.createTempFile("cube", ".bgcode")
+        javaClass.getResourceAsStream("/engine_cube.bgcode")!!.use { i -> f.outputStream().use { i.copyTo(it) } }
+        val g = BinaryGcode.open(f).bufferedReader().use { GcodeLayers.read(it) }
+        assertEquals(50, g.layers.size)
+        assertTrue(g.layers.all { it.count > 0 })
+        // One flipped byte in the last block's data fails its CRC32.
+        val bytes = f.readBytes(); bytes[bytes.size - 10] = (bytes[bytes.size - 10].toInt() xor 1).toByte(); f.writeBytes(bytes)
+        assertFailsWith<BinaryGcode.Unreadable> { BinaryGcode.open(f).bufferedReader().use { GcodeLayers.read(it) } }
+        f.delete()
     }
 }

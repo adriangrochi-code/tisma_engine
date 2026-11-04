@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.tisma.app.R
+import net.tisma.app.engine.BinaryGcode
 import net.tisma.app.engine.GcodeLayers
 import net.tisma.cloud.readUpTo
 import java.io.File
@@ -74,7 +75,9 @@ fun PreviewScreen(path: String) {
             val head = runCatching { f.inputStream().use { it.readUpTo(4) } }.getOrNull()
             when {
                 head == null -> failed = true
-                head.contentEquals(GcodeLayers.BINARY_MAGIC) -> binary = true
+                head.contentEquals(GcodeLayers.BINARY_MAGIC) -> layers = runCatching {
+                    BinaryGcode.open(f).bufferedReader().use { GcodeLayers.read(it) }
+                }.onFailure { binary = it is BinaryGcode.Unreadable; failed = true }.getOrNull()
                 else -> layers = runCatching { f.bufferedReader().use { GcodeLayers.read(it) } }
                     .onFailure { failed = true }.getOrNull()
             }

@@ -12,7 +12,7 @@ donde cada error visto se arregla. Las pruebas con hardware corren aparte y no f
 | Noviembre, semanas 1 y 2 | Impresión y Material con los datos del panel del escritorio (`settings-layout`); los niveles y la vista Personalizada (`mobile_app.md`, reglas 7 y 8, MA12) | `settings-layout` del motor (en curso) |
 | Noviembre, semanas 2 y 3 | Paquete de perfiles: primer arranque y asistente (MA1), perfiles del paquete en la tarjeta de la impresora; ayuda sin conexión (regla 16) | `pack plan/install`, `knowledge` del motor |
 | Noviembre, semana 4 | Ingeniería: Optimizar en el teléfono y en la nube; marcar caras fijas y de carga tocando la vista 3D (regla 13, MA6) | modos de `analyze` del motor |
-| Diciembre, semana 1 | Vista previa del G-code binario y por tipo/ancho/velocidad; vista previa en la vista 3D | — |
+| Diciembre, semana 1 | ~~Vista previa del G-code binario~~ (hecha, 04-11-2026) y por tipo/ancho/velocidad; vista previa en la vista 3D | — |
 | Diciembre, semana 2 | API en C del motor por JNI en lugar del programa aparte, si está lista (avance, cancelar, memoria) | API en C del motor |
 | Diciembre, semana 3 | Accesibilidad y uso táctil (`accessibility_touch.md`), tablets y horizontal, modo oscuro revisado; actualizaciones de la app (`app_updates.md`, regla 11) | — |
 | Diciembre, semana 4 | Rendimiento medido en un teléfono de gama media (regla 18) y lo que haga falta ajustar; APK firmado para la beta | teléfono del dueño |
@@ -102,8 +102,8 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
   Duet, mover ejes y poner temperaturas a mano. La cámara se ve por imágenes fijas, no por video (MJPEG o RTSP). Si el motor suma conexiones de red a `src/device/`, se usan
   desde la app en lugar de las de Kotlin («usemos todo lo de la pc»).
 - **Motor en el teléfono:** nunca corrió en un Android real (esta máquina no tiene KVM ni emulador); probado solo
-  con un motor falso. Falta: perfiles de impresora y filamento (paquete de perfiles, `profile_pack.md`) y la
-  vista previa del G-code binario. El resumen de un modelo suelto ya llega (`--summary`, motor
+  con un motor falso. Falta: perfiles de impresora y filamento (paquete de perfiles, `profile_pack.md`). La vista previa ya lee el G-code
+  binario sin comprimir (`BinaryGcode`, 04-11-2026). El resumen de un modelo suelto ya llega (`--summary`, motor
   9e8c43e).
 - **Paso 4, laminar en el teléfono:** pedida al equipo del motor (session_01JDAJxTVh345Lfm4794rJF8) la API en C
   (`mobile_app.md`, regla 2), con una propuesta de forma. Sin respuesta todavía.

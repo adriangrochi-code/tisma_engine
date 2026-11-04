@@ -38,7 +38,7 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
     }
 
     companion object {
-        /** The binary G-code format starts with these bytes; it is not read here yet. */
+        /** The binary G-code format starts with these bytes; read through [BinaryGcode]. */
         val BINARY_MAGIC = byteArrayOf('G'.code.toByte(), 'C'.code.toByte(), 'D'.code.toByte(), 'E'.code.toByte())
 
         fun read(reader: BufferedReader): GcodeLayers = Parser().run(reader)
