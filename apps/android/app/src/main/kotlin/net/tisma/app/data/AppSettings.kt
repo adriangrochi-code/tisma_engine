@@ -22,7 +22,13 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean(CLOUD_PREFER, true)
         set(value) = prefs.edit().putBoolean(CLOUD_PREFER, value).apply()
 
+    /** «Buscar impresoras en la red» (printer_connections.md, «Búsqueda en la red», rule 1). */
+    var searchNetwork: Boolean
+        get() = prefs.getBoolean(SEARCH_NETWORK, true)
+        set(value) = prefs.edit().putBoolean(SEARCH_NETWORK, value).apply()
+
     companion object {
+        private const val SEARCH_NETWORK = "printers.search_network"
         const val FILE = "tisma_settings"
         private const val SERVER = "cloud.server"
         private const val EMAIL = "cloud.email"

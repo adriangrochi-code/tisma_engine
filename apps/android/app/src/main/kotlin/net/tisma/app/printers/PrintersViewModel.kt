@@ -32,6 +32,8 @@ data class PrintersState(
     val notice: PrinterNotice? = null,
     /** The camera of each printer on screen, by id. */
     val cameras: Map<String, CameraView> = emptyMap(),
+    /** Printers found on the network and not saved yet. */
+    val found: List<net.tisma.printers.FoundPrinter> = emptyList(),
 )
 
 /** What the camera box shows (printer_connections.md, «Cámara de la impresora», rule 1). */
@@ -61,6 +63,23 @@ class PrintersViewModel(
     private val _state = MutableStateFlow(PrintersState(printers = store.all()))
     val state: StateFlow<PrintersState> = _state.asStateFlow()
 
+    private val foundList = net.tisma.printers.FoundPrinters()
+
+    /** From the network search (any thread). */
+    fun onFound(p: net.tisma.printers.FoundPrinter) {
+        foundList.seen(p, System.currentTimeMillis())
+        refreshFound()
+    }
+
+    fun onLost(host: String, port: Int) {
+        foundList.lost(host, port)
+        refreshFound()
+    }
+
+    fun refreshFound() = _state.update {
+        it.copy(found = foundList.current(System.currentTimeMillis(), it.printers.map { p -> p.url }))
+    }
+
     fun dismissNotice() = _state.update { it.copy(notice = null) }
 
     private fun connection(c: PrinterConfig) = connector(c, store.secret(c.id))
@@ -75,6 +94,7 @@ class PrintersViewModel(
         store.save(config, secret)
         AppLog.line("printer: ${kind.wire} saved ($text)")
         _state.update { it.copy(printers = store.all(), notice = PrinterNotice.Tested(text)) }
+        refreshFound()
         onOk(config)
     }
 

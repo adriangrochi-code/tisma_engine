@@ -173,6 +173,13 @@ fun PreferencesScreen(state: CloudState, cloud: CloudViewModel, settings: AppSet
                 Switch(prefer, { prefer = it; cloud.setCloudPrefer(it) })
             }
         }
+        var search by rememberSaveable { mutableStateOf(settings.searchNetwork) }
+        TismaCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.pref_search_network), modifier = Modifier.weight(1f))
+                Switch(search, { search = it; settings.searchNetwork = it }, modifier = Modifier.testTag("pref_search"))
+            }
+        }
         Text(stringResource(R.string.pref_version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

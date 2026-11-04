@@ -234,4 +234,8 @@
     <string name="camera_connecting">Conectando con la cámara…</string>
     <string name="camera_none">Esta impresora no tiene cámara.</string>
     <string name="camera_failed">No se puede leer la cámara: %1$s</string>
+
+    <string name="printers_found">Encontradas en la red</string>
+    <string name="printers_searching">Buscando impresoras en la red… Si no aparece ninguna, revisá que el teléfono y la impresora estén en la misma red wifi.</string>
+    <string name="pref_search_network">Buscar impresoras en la red</string>
 </resources>

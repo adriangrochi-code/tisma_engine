@@ -127,6 +127,22 @@ class PrintersTest {
     }
 
     @Test
+    fun `BD2 a printer found on the network is offered once and added with its address`() {
+        val f = net.tisma.printers.FoundPrinter(net.tisma.printers.PrinterKind.OCTOPRINT, "octopi",
+            "127.0.0.1", octoprint.url.substringAfterLast(':').toInt(), "/")
+        compose.runOnIdle { printers.onFound(f); printers.onFound(f) }
+        waitFor("found_" + f.key)
+        compose.onNodeWithTag("found_" + f.key).performClick()
+        waitFor("printer_key")
+        compose.onNodeWithTag("printer_key").performTextInput("test-key")
+        compose.onNodeWithTag("printer_save").performClick()
+        waitState { printers.state.value.printers.size == 1 }
+        assertEquals(octoprint.url, printers.state.value.printers.single().url)
+        // Saved, it is no longer offered.
+        waitState { printers.state.value.found.isEmpty() }
+    }
+
+    @Test
     fun `MA8 the OctoPrint key is kept encrypted and a wrong one is refused`() {
         compose.onNodeWithTag("add_printer").performClick()
         waitFor("printer_address")

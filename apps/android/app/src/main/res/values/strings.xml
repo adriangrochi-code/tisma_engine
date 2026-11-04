@@ -249,4 +249,8 @@
     <string name="camera_connecting">Connecting to the camera…</string>
     <string name="camera_none">This printer has no camera.</string>
     <string name="camera_failed">The camera cannot be read: %1$s</string>
+
+    <string name="printers_found">Found on the network</string>
+    <string name="printers_searching">Searching the network for printers… If none appears, check that the phone and the printer are on the same Wi-Fi network.</string>
+    <string name="pref_search_network">Search for printers on the network</string>
 </resources>

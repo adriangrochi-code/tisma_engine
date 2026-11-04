@@ -74,7 +74,7 @@ sealed interface Screen {
     data object Report : Screen
     data object MyReports : Screen
     data object Preferences : Screen
-    data class AddPrinter(val editId: String?) : Screen
+    data class AddPrinter(val editId: String?, val found: net.tisma.printers.FoundPrinter? = null) : Screen
     data class PrinterDetail(val id: String) : Screen
 }
 
@@ -199,7 +199,7 @@ fun TismaApp(
             Box(Modifier.padding(padding).fillMaxSize()) {
                 when (top) {
                     null -> when (nav.section) {
-                        Section.PRINTER -> PrintersScreen(printerState, printers, nav)
+                        Section.PRINTER -> PrintersScreen(printerState, printers, nav, settings.searchNetwork)
                         Section.PLATE -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav)
                         else -> SectionHome(nav.section, state.signedIn, state.email, nav)
                     }
@@ -212,7 +212,7 @@ fun TismaApp(
                     Screen.Report -> ReportScreen(state, cloud, nav)
                     Screen.MyReports -> MyReportsScreen(state, cloud)
                     Screen.Preferences -> PreferencesScreen(state, cloud, settings)
-                    is Screen.AddPrinter -> AddPrinterScreen(top.editId, printerState, printers, nav)
+                    is Screen.AddPrinter -> AddPrinterScreen(top.editId, printerState, printers, nav, top.found)
                     is Screen.PrinterDetail -> PrinterDetailScreen(top.id, printerState, printers, nav)
                 }
             }

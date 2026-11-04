@@ -62,8 +62,23 @@ import java.util.Locale
 
 /** The printers on the network and their state (MOBILE.md, «Impresoras»). */
 @Composable
-fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navigator) {
+fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navigator, search: Boolean = true) {
     LaunchedEffect(state.printers.size) { printers.followAll() }
+    val context = ctx()
+    if (search) {
+        androidx.compose.runtime.DisposableEffect(Unit) {
+            val d = net.tisma.app.printers.NetworkDiscovery(context, printers::onFound, printers::onLost)
+            d.start()
+            onDispose { d.stop() }
+        }
+        // A printer not heard for 3 minutes leaves the list.
+        LaunchedEffect(Unit) {
+            while (true) {
+                kotlinx.coroutines.delay(10_000)
+                printers.refreshFound()
+            }
+        }
+    }
     Box(Modifier.fillMaxSize()) {
         ScreenColumn {
             if (state.printers.isEmpty()) {
@@ -71,6 +86,22 @@ fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navig
             }
             state.printers.forEach { p ->
                 PrinterCard(p, state.status[p.id]) { nav.open(Screen.PrinterDetail(p.id)) }
+            }
+            if (state.found.isNotEmpty()) {
+                Text(stringResource(R.string.printers_found), style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(top = 8.dp))
+                state.found.forEach { f ->
+                    Card(onClick = { nav.open(Screen.AddPrinter(null, f)) }, modifier = Modifier.fillMaxWidth().testTag("found_" + f.key)) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(f.name, style = MaterialTheme.typography.titleMedium)
+                            Text(kindName(f.kind) + " · " + f.url + (if (f.model.isNotBlank()) " · " + f.model else ""),
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            } else if (search && state.printers.isEmpty()) {
+                Text(stringResource(R.string.printers_searching), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Spacer(Modifier.height(72.dp))
         }
@@ -262,11 +293,12 @@ private fun CameraBox(id: String, state: PrintersState, printers: PrintersViewMo
 /** Adds or edits a printer: its kind, name, address and key; it is saved only when the test passes. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersViewModel, nav: Navigator) {
+fun AddPrinterScreen(editId: String?, state: PrintersState, printers: PrintersViewModel, nav: Navigator,
+                     found: net.tisma.printers.FoundPrinter? = null) {
     val existing = state.printers.firstOrNull { it.id == editId }
-    var kind by rememberSaveable { mutableStateOf(existing?.kind ?: PrinterKind.MOONRAKER) }
-    var name by rememberSaveable { mutableStateOf(existing?.name.orEmpty()) }
-    var address by rememberSaveable { mutableStateOf(existing?.url.orEmpty()) }
+    var kind by rememberSaveable { mutableStateOf(existing?.kind ?: found?.kind ?: PrinterKind.MOONRAKER) }
+    var name by rememberSaveable { mutableStateOf(existing?.name ?: found?.name.orEmpty()) }
+    var address by rememberSaveable { mutableStateOf(existing?.url ?: found?.url.orEmpty()) }
     var key by rememberSaveable { mutableStateOf("") }
     ScreenColumn {
         TismaCard {
