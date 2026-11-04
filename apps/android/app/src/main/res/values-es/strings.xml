@@ -428,4 +428,9 @@
     <string name="tools_lay_flat">Apoyar en una cara</string>
     <string name="tools_lay_flat_hint">Tocá la cara que tiene que quedar sobre la cama.</string>
     <string name="tools_scale">Escala</string>
+    <string name="pack_newer">Hay perfiles nuevos (%1$s)</string>
+    <string name="pack_update">Actualizar</string>
+    <string name="pack_updating">Actualizando los perfiles · %1$d %%</string>
+    <string name="pack_updated">Perfiles actualizados (%1$s)</string>
+    <string name="pack_profile_gone">Este perfil ya no está en el paquete; sigue elegido hasta que lo cambies.</string>
 </resources>

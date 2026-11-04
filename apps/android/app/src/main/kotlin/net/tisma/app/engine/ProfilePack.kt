@@ -58,6 +58,19 @@ class ProfilePack(
         return readIndex(index) ?: throw PackException("The index cannot be read")
     }
 
+    /** The installed pack's version, or null with none. */
+    fun installedVersion(): String? = readIndex(File(dataDir, "pack/index.json"))?.version?.ifBlank { null }
+
+    /**
+     * Rule 19: the published index's version when it differs from the
+     * installed one, or null (nothing installed, or the same).
+     */
+    fun newerVersion(url: String?): String? {
+        val installed = installedVersion() ?: return null
+        val published = fetchIndex(url).version
+        return published.takeIf { it.isNotBlank() && it != installed }
+    }
+
     /** The index of the installed pack, or the one the wizard downloaded, or null. */
     fun index(): Index? = readIndex(File(dataDir, "pack/index.json")) ?: readIndex(File(dataDir, "index.json"))
 

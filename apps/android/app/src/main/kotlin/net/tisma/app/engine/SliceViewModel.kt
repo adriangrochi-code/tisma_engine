@@ -47,6 +47,8 @@ data class SliceState(
     val packAvailable: Boolean = false,
     val packIndex: ProfilePack.Index? = null,
     val packFilaments: List<ProfilePack.Filament> = emptyList(),
+    /** Rule 19: a newer published pack, to offer its update. */
+    val packNewer: String? = null,
     /** The pack printer's bed: its 3D model placed on the bed, and its picture file (rule 14). */
     val bedModel: MeshFile? = null,
     val bedTexture: File? = null,
@@ -94,6 +96,9 @@ sealed interface SliceNotice {
     data object Cancelled : SliceNotice
     data object CannotRead : SliceNotice
     data class Saved(val name: String) : SliceNotice
+    /** Rule 20: the chosen pack printer is no longer in the pack; it stays chosen until the person changes it. */
+    data object ProfileGone : SliceNotice
+    data class PackUpdated(val version: String) : SliceNotice
 }
 
 /** Slicing on the phone with the engine (mobile_app.md, rule 12; MOBILE.md, step 5). */
@@ -443,6 +448,42 @@ class SliceViewModel(
         viewModelScope.launch {
             val list = withContext(io) { runCatching { p.filamentsFor(choice.printer) }.getOrDefault(emptyList()) }
             _state.update { it.copy(packFilaments = list) }
+        }
+    }
+
+    /** Rule 19: on opening, at most once a day, whether a newer pack is published. */
+    fun checkPackOnOpen(now: Long = System.currentTimeMillis()) {
+        val p = pack ?: return
+        val s = saved ?: return
+        if (now - s.packLastCheck < 24L * 3600 * 1000) return
+        viewModelScope.launch {
+            val r = withContext(io) { runCatching { p.newerVersion(packUrl) } }
+            r.onFailure { AppLog.line("pack: check ${it.message}") }
+            if (r.isSuccess) s.packLastCheck = now
+            _state.update { it.copy(packNewer = r.getOrNull()) }
+        }
+    }
+
+    /** Rule 20: the installed vendors whose archive changed; the chosen printer is checked afterwards. */
+    fun updatePack() {
+        val p = pack ?: return
+        if (_state.value.packBusy) return
+        _state.update { it.copy(packBusy = true, packProgress = 0, packError = null) }
+        viewModelScope.launch {
+            val r = withContext(io) {
+                runCatching {
+                    val v = p.update(emptyList(), packUrl, { pr -> _state.update { it.copy(packProgress = pr) } }) { false }
+                    val choice = _state.value.profile?.takeIf { it.pack }
+                    v to (choice != null && p.printers().none { it.id == choice.printer })
+                }
+            }
+            r.onFailure { AppLog.line("pack: update ${it.message}") }
+            knowledgeCache = null
+            _state.update {
+                it.copy(packBusy = false, packError = r.exceptionOrNull()?.message,
+                    packNewer = if (r.isSuccess) null else it.packNewer,
+                    notice = r.getOrNull()?.let { (v, gone) -> if (gone) SliceNotice.ProfileGone else SliceNotice.PackUpdated(v ?: "") })
+            }
         }
     }
 

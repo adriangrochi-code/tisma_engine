@@ -89,6 +89,11 @@ class AppSettings(context: Context) {
         get() = prefs.getLong("updates.last_check", 0)
         set(v) = prefs.edit().putLong("updates.last_check", v).apply()
 
+    /** The last look for a newer profile pack (profile_pack.md, rule 19: at most once a day). */
+    var packLastCheck: Long
+        get() = prefs.getLong("pack.last_check", 0)
+        set(v) = prefs.edit().putLong("pack.last_check", v).apply()
+
     companion object {
         private const val SEARCH_NETWORK = "printers.search_network"
         const val FILE = "tisma_settings"

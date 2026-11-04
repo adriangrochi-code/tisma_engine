@@ -141,6 +141,7 @@ fun TismaApp(
     val context = ctx()
     LaunchedEffect(Unit) { cloud.refreshPublic() }
     LaunchedEffect(Unit) { updates?.checkOnOpen() }
+    LaunchedEffect(sliceState.packAvailable) { if (sliceState.packAvailable) slice.checkPackOnOpen() }
     // MA1: the first start with an engine and no printer opens the profile pack's wizard, once.
     LaunchedEffect(sliceState.packAvailable) {
         if (sliceState.packAvailable && !settings.packWizardDone && sliceState.profile == null && nav.stack.isEmpty()) {
@@ -247,6 +248,18 @@ fun TismaApp(
             containerColor = MaterialTheme.colorScheme.background,
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize()) {
+            // profile_pack.md, rule 19: «New profiles: update», a small line that covers nothing.
+            sliceState.packNewer?.let { v ->
+                androidx.compose.material3.Surface(color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.fillMaxWidth().testTag("pack_newer")) {
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (sliceState.packBusy) stringResource(R.string.pack_updating, sliceState.packProgress)
+                            else stringResource(R.string.pack_newer, v), style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                        if (!sliceState.packBusy) androidx.compose.material3.TextButton(onClick = { slice.updatePack() },
+                            modifier = Modifier.testTag("pack_update")) { Text(stringResource(R.string.pack_update)) }
+                    }
+                }
+            }
             updates?.let { u ->
                 val us by u.state.collectAsStateWithLifecycle()
                 UpdateBanner(us, u, busy = sliceState.slicing || sliceState.analyzing || printerState.uploading)

@@ -25,6 +25,13 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — Versión nueva del paquete (reglas 19 y 20):**
+  - Al abrir, una vez por día, la app compara el `pack_version` instalado con el publicado. Si cambió, muestra una
+    línea arriba: «Hay perfiles nuevos · Actualizar».
+  - Actualizar baja los fabricantes instalados: el motor elige los que cambiaron.
+  - Si la impresora elegida ya no está en el paquete, sigue elegida y lo avisa.
+  - Con el motor 4e4de4c (mezclado), el perfil de la AnkerMake M5 del paquete ya lamina: cubo, 50 capas, 7 min 2 s.
+
 - **2026-11-04 — Todo lo del escritorio en el teléfono (pedido del dueño: «tantas funciones como el motor de PC:
   CAD, FEA, CFD…»).** Plan, en orden:
   1. Lo que el motor ya da por línea de comandos:

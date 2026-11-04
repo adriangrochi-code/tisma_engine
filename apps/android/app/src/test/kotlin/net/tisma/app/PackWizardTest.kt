@@ -53,6 +53,7 @@ class PackWizardTest {
             |  else echo '{"downloads":[{"url":"$base/Acme.tar.xz","name":"Acme.tar.xz","size":4,"sha256":"x"}],"published":"2026.11.04"}'; fi
             |elif [ "${'$'}cmd" = "install" ]; then
             |  mkdir -p "${'$'}data/pack"; cp -r "${'$'}from"/. "${'$'}data/pack"/; echo '{"pack_version":"2026.11.04"}'
+            |elif [ "${'$'}cmd" = "list" ]; then echo '{"vendors":[]}'
             |else exit 1; fi
             |""".trimMargin())
         setExecutable(true)
@@ -96,6 +97,44 @@ class PackWizardTest {
             assertTrue(settings.packWizardDone)
             assertTrue(File(data, "pack/Acme.tar.xz").isFile)
             wait("printer_card")
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun `rules 19 and 20 a newer pack is offered once a day, and a chosen printer that left the pack is said`() {
+        val server = net.tisma.mockcloud.StaticFiles(mapOf("index.json" to index.toByteArray(), "Acme.tar.xz" to "ACME".toByteArray()))
+        try {
+            val context: Context = ApplicationProvider.getApplicationContext()
+            val settings = AppSettings(context).apply {
+                packWizardDone = true
+                profilePrinter = "vendors/Acme/models/Gone.json#0.4"; profilePack = true; profileName = "Acme Gone"
+            }
+            val exe = engine(server.url)
+            val work = tmp.newFolder("work")
+            val data = tmp.newFolder("profiles")
+            File(data, "pack").mkdirs()
+            File(data, "pack/index.json").writeText("""{"pack_version":"2026.10.01","vendors":[]}""")
+            val slice = SliceViewModel(EngineRunner(exe, work, data), work, saved = settings, pack = ProfilePack(exe, data), packUrl = server.url)
+            val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
+            val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
+            val nav = Navigator()
+            compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, nav) } }
+            wait("pack_update")
+            assertEquals("2026.11.04", slice.state.value.packNewer)
+            assertTrue(settings.packLastCheck > 0)
+            compose.onNodeWithTag("pack_update").performClick()
+            compose.waitUntil(10_000) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                nav.notices.any { it.contains("no longer in the pack") }
+            }
+            // It stays chosen (rule 20), and the line is gone.
+            assertEquals("Acme Gone", slice.state.value.profile!!.name)
+            assertEquals(null, slice.state.value.packNewer)
+            // The same day, no new look.
+            slice.checkPackOnOpen()
+            assertEquals(null, slice.state.value.packNewer)
         } finally {
             server.close()
         }

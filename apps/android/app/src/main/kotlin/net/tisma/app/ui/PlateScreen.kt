@@ -460,6 +460,8 @@ fun Context.sliceNoticeText(n: SliceNotice): String = when (n) {
     SliceNotice.Cancelled -> getString(R.string.plate_cancelled)
     SliceNotice.CannotRead -> getString(R.string.error_cannot_read)
     is SliceNotice.Saved -> getString(R.string.notice_saved, n.name)
+    SliceNotice.ProfileGone -> getString(R.string.pack_profile_gone)
+    is SliceNotice.PackUpdated -> getString(R.string.pack_updated, n.version)
 }
 
 private fun displayName(context: Context, uri: Uri): String? = runCatching {

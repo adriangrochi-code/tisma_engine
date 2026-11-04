@@ -444,4 +444,9 @@
     <string name="tools_lay_flat">Lay on a face</string>
     <string name="tools_lay_flat_hint">Tap the face that should go down on the bed.</string>
     <string name="tools_scale">Scale</string>
+    <string name="pack_newer">New profiles (%1$s)</string>
+    <string name="pack_update">Update</string>
+    <string name="pack_updating">Updating the profiles · %1$d %%</string>
+    <string name="pack_updated">Profiles updated (%1$s)</string>
+    <string name="pack_profile_gone">This profile is no longer in the pack; it stays chosen until you change it.</string>
 </resources>
