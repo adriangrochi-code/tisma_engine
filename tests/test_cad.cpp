@@ -1121,3 +1121,18 @@ TEST_CASE("CD25: one design session for twenty builds, and opened again when it 
     unsetenv("TISMA_FAKE_SOLIDCRAFT_MCP_DIE");
 #endif
 }
+
+#ifndef _WIN32
+TEST_CASE("CD25: a stopped child whose own child keeps the pipes open does not hang", "[cad]") {
+    cad::ChildProcess child;
+    std::string error;
+    REQUIRE(child.start("/bin/sh", {"-c", "sleep 30 & echo ready; sleep 30"}, error));
+    const std::optional<std::string> line = child.read_line(10.0);
+    REQUIRE(line);
+    CHECK(*line == "ready");
+    const auto t0 = std::chrono::steady_clock::now();
+    child.stop();
+    CHECK(std::chrono::steady_clock::now() - t0 < std::chrono::seconds(5));
+    CHECK_FALSE(child.running());
+}
+#endif

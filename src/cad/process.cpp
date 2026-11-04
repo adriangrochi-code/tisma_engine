@@ -4,6 +4,7 @@
 #include "cad/process.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstring>
@@ -323,6 +324,10 @@ struct ChildProcess::Impl {
     std::string partial, err;
     bool ended = false;
     std::thread out_reader, err_reader;
+    // Set by stop(): the readers end even when a process the child started
+    // still holds the pipes open (no end of file ever comes then).
+    std::atomic<bool> stopping{false}, out_done{false}, err_done{false};
+    void join_readers();
 #ifdef _WIN32
     HANDLE process = nullptr, in_write = nullptr, out_read = nullptr, err_read = nullptr;
 #else
@@ -377,6 +382,21 @@ std::string ChildProcess::stderr_text() const {
 
 #ifdef _WIN32
 
+// A blocked ReadFile is cancelled until the reader sees `stopping`.
+void ChildProcess::Impl::join_readers() {
+    stopping = true;
+    for (std::thread* t : {&out_reader, &err_reader}) {
+        if (!t->joinable())
+            continue;
+        std::atomic<bool>& done = t == &out_reader ? out_done : err_done;
+        while (!done) {
+            CancelSynchronousIo(t->native_handle());
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        t->join();
+    }
+}
+
 bool ChildProcess::start(const std::filesystem::path& exe, const std::vector<std::string>& args, std::string& error) {
     stop();
     impl_ = std::make_unique<Impl>();
@@ -418,15 +438,17 @@ bool ChildProcess::start(const std::filesystem::path& exe, const std::vector<std
     self->out_reader = std::thread([self] {
         char buffer[4096];
         DWORD got = 0;
-        while (ReadFile(self->out_read, buffer, sizeof buffer, &got, nullptr) && got > 0)
+        while (!self->stopping && ReadFile(self->out_read, buffer, sizeof buffer, &got, nullptr) && got > 0)
             self->got_out(buffer, got);
         self->out_closed();
+        self->out_done = true;
     });
     self->err_reader = std::thread([self] {
         char buffer[4096];
         DWORD got = 0;
-        while (ReadFile(self->err_read, buffer, sizeof buffer, &got, nullptr) && got > 0)
+        while (!self->stopping && ReadFile(self->err_read, buffer, sizeof buffer, &got, nullptr) && got > 0)
             self->got_err(buffer, got);
+        self->err_done = true;
     });
     return true;
 }
@@ -455,10 +477,7 @@ void ChildProcess::stop() {
         CloseHandle(impl_->process);
         impl_->process = nullptr;
     }
-    if (impl_->out_reader.joinable())
-        impl_->out_reader.join();
-    if (impl_->err_reader.joinable())
-        impl_->err_reader.join();
+    impl_->join_readers();
     if (impl_->out_read)
         CloseHandle(impl_->out_read), impl_->out_read = nullptr;
     if (impl_->err_read)
@@ -466,6 +485,15 @@ void ChildProcess::stop() {
 }
 
 #else
+
+// The readers wake every 100 ms to see `stopping`.
+void ChildProcess::Impl::join_readers() {
+    stopping = true;
+    if (out_reader.joinable())
+        out_reader.join();
+    if (err_reader.joinable())
+        err_reader.join();
+}
 
 bool ChildProcess::start(const std::filesystem::path& exe, const std::vector<std::string>& args, std::string& error) {
     stop();
@@ -518,7 +546,13 @@ bool ChildProcess::start(const std::filesystem::path& exe, const std::vector<std
     Impl* self = impl_.get();
     self->out_reader = std::thread([self] {
         char buffer[4096];
-        for (;;) {
+        while (!self->stopping) {
+            pollfd wait{self->out_fd, POLLIN, 0};
+            const int ready = poll(&wait, 1, 100);
+            if (ready == 0 || (ready < 0 && errno == EINTR))
+                continue;
+            if (ready < 0)
+                break;
             const ssize_t got = read(self->out_fd, buffer, sizeof buffer);
             if (got > 0)
                 self->got_out(buffer, std::size_t(got));
@@ -531,7 +565,13 @@ bool ChildProcess::start(const std::filesystem::path& exe, const std::vector<std
     });
     self->err_reader = std::thread([self] {
         char buffer[4096];
-        for (;;) {
+        while (!self->stopping) {
+            pollfd wait{self->err_fd, POLLIN, 0};
+            const int ready = poll(&wait, 1, 100);
+            if (ready == 0 || (ready < 0 && errno == EINTR))
+                continue;
+            if (ready < 0)
+                break;
             const ssize_t got = read(self->err_fd, buffer, sizeof buffer);
             if (got > 0)
                 self->got_err(buffer, std::size_t(got));
@@ -583,10 +623,7 @@ void ChildProcess::stop() {
         waitpid(impl_->pid, &status, 0);
         impl_->pid = -1;
     }
-    if (impl_->out_reader.joinable())
-        impl_->out_reader.join();
-    if (impl_->err_reader.joinable())
-        impl_->err_reader.join();
+    impl_->join_readers();
     if (impl_->out_fd >= 0)
         close(impl_->out_fd), impl_->out_fd = -1;
     if (impl_->err_fd >= 0)
