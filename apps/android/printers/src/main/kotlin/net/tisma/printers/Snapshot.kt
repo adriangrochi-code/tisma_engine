@@ -3,6 +3,7 @@ package net.tisma.printers
 import net.tisma.cloud.Http
 import net.tisma.cloud.HttpRequest
 import net.tisma.cloud.UrlConnectionHttp
+import net.tisma.cloud.readUpTo
 import java.io.IOException
 
 /**
@@ -24,7 +25,7 @@ object Snapshot {
         }
         r.use {
             if (!it.ok) throw PrinterException(PrinterException.Kind.SERVER, "HTTP ${it.status}")
-            val bytes = it.body.readNBytes(MAX_BYTES + 1)
+            val bytes = it.body.readUpTo(MAX_BYTES + 1)
             if (bytes.size > MAX_BYTES) throw PrinterException(PrinterException.Kind.UNEXPECTED, "The image is too large")
             return bytes
         }

@@ -76,4 +76,12 @@ class GcodeLayersTest {
         // Counter-clockwise from (10,0) to (-10,0) around (0,0) goes through y > 0.
         assertTrue((0 until g.layers[0].count).all { s[4 * it + 3] >= -1e-4f })
     }
+
+    @Test
+    fun `AND3 the engine's own G-code reads (cube, 50 layers)`() {
+        val text = javaClass.getResourceAsStream("/engine_cube.gcode")!!.bufferedReader()
+        val g = GcodeLayers.read(text)
+        assertEquals(50, g.layers.size)
+        assertTrue(g.layers.all { it.count > 0 })
+    }
 }

@@ -49,7 +49,9 @@ class ScreenshotTest {
             val vm = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test", pollMs = 5)
             val nav = Navigator()
             var dark by androidx.compose.runtime.mutableStateOf(false)
-            compose.setContent { TismaTheme(dark = dark) { TismaApp(vm, PrintersViewModel(PrinterStore(context, MemorySecrets())), noEngine(context), settings, nav) } }
+            val printersModel = PrintersViewModel(PrinterStore(context, MemorySecrets()))
+            val sliceModel = noEngine(context)
+            compose.setContent { TismaTheme(dark = dark) { TismaApp(vm, printersModel, sliceModel, settings, nav) } }
             compose.runOnIdle { vm.signIn("ana@example.com", "password1") }
             compose.waitUntil(10_000) {
                 org.robolectric.shadows.ShadowLooper.idleMainLooper()

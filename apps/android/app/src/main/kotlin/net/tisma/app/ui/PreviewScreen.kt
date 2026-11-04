@@ -39,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.tisma.app.R
 import net.tisma.app.engine.GcodeLayers
+import net.tisma.cloud.readUpTo
 import java.io.File
 import java.util.Locale
 
@@ -70,7 +71,7 @@ fun PreviewScreen(path: String) {
     LaunchedEffect(path) {
         withContext(Dispatchers.IO) {
             val f = File(path)
-            val head = runCatching { f.inputStream().use { it.readNBytes(4) } }.getOrNull()
+            val head = runCatching { f.inputStream().use { it.readUpTo(4) } }.getOrNull()
             when {
                 head == null -> failed = true
                 head.contentEquals(GcodeLayers.BINARY_MAGIC) -> binary = true

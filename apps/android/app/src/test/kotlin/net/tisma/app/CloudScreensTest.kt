@@ -55,7 +55,9 @@ class CloudScreensTest {
         server = MockCloud().start()
         settings = AppSettings(context).apply { server = this@CloudScreensTest.server.url }
         vm = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
-        compose.setContent { TismaTheme { TismaApp(vm, PrintersViewModel(PrinterStore(context, MemorySecrets())), noEngine(context), settings, nav) } }
+        val printersModel = PrintersViewModel(PrinterStore(context, MemorySecrets()))
+        val sliceModel = noEngine(context)
+        compose.setContent { TismaTheme { TismaApp(vm, printersModel, sliceModel, settings, nav) } }
     }
 
     @After

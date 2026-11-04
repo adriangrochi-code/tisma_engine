@@ -149,6 +149,8 @@ class PrintersTest {
     @Test
     fun `a finished print posts a notice`() {
         val nm = context.getSystemService(android.app.NotificationManager::class.java)
+        org.robolectric.Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         net.tisma.app.printers.PrintWatchService.channels(context)
         net.tisma.app.printers.PrintWatchService.notify(context, "Voron", net.tisma.printers.PrintEvent.Finished("cube.gcode"))
         val posted = org.robolectric.Shadows.shadowOf(nm).allNotifications.single()

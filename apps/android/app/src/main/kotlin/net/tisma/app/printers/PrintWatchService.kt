@@ -127,6 +127,8 @@ class PrintWatchService : Service() {
                 .setContentIntent(openApp(context))
                 .build()
             // Without the permission (Android 13+) the notice is simply not shown.
+            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context,
+                    android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
             runCatching { NotificationManagerCompat.from(context).notify((printer + e.file).hashCode(), n) }
         }
 

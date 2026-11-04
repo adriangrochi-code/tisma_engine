@@ -41,7 +41,7 @@ jobs:
       - name: Check the brand icons are up to date
         run: python3 tools/brand_icons.py --check
       - name: Test and build
-        run: ./gradlew --no-daemon :cloud:test :app:testDebugUnitTest :app:assembleDebug
+        run: ./gradlew --no-daemon :cloud:test :printers:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: tisma-android-debug-apk

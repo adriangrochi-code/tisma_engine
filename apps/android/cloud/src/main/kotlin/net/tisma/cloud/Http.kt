@@ -65,12 +65,12 @@ object UrlConnectionHttp : Http {
             c.responseCode
         } catch (e: java.net.HttpRetryException) {
             // In streaming mode the JVM answers a 401 by throwing instead of returning it.
-            return HttpResponse(e.responseCode(), emptyMap(), InputStream.nullInputStream())
+            return HttpResponse(e.responseCode(), emptyMap(), emptyStream())
         } catch (e: IOException) {
             throw written.exceptionOrNull() ?: e
         }
         val headers = c.headerFields.filterKeys { it != null }.mapValues { it.value.joinToString(",") }
-        val stream = (if (status >= 400) c.errorStream else c.inputStream) ?: InputStream.nullInputStream()
+        val stream = (if (status >= 400) c.errorStream else c.inputStream) ?: emptyStream()
         return HttpResponse(status, headers, stream)
     }
 
@@ -111,3 +111,21 @@ fun writeMultipart(out: OutputStream, boundary: String, parts: List<FormPart>) {
 
 // Quotes and line breaks cannot go inside a quoted header value.
 private fun quote(s: String) = s.replace("\"", "%22").replace("\r", "").replace("\n", "")
+
+// Android before API 33 lacks the JDK 9 stream helpers (the empty stream, read-n-bytes, read-all):
+// these helpers do the same with what every Android has.
+fun emptyStream(): InputStream = java.io.ByteArrayInputStream(ByteArray(0))
+
+/** Up to [max] bytes of a stream (fewer at its end). */
+fun InputStream.readUpTo(max: Int): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(minOf(max, 64 * 1024).coerceAtLeast(1))
+    var left = max
+    while (left > 0) {
+        val n = read(buf, 0, minOf(buf.size, left))
+        if (n < 0) break
+        out.write(buf, 0, n)
+        left -= n
+    }
+    return out.toByteArray()
+}

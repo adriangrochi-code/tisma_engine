@@ -87,7 +87,7 @@ class EngineRunner(private val executable: File, private val workDir: File) {
         return runCatching {
             val p = ProcessBuilder(args).directory(workDir).redirectErrorStream(true).start()
             p.outputStream.close()
-            p.inputStream.readAllBytes()
+            p.inputStream.readBytes()
             if (!p.waitFor(30, TimeUnit.SECONDS)) { p.destroyForcibly(); return null }
             if (p.exitValue() != 0 || !out.isFile) return null
             Json.parseToJsonElement(out.readText()) as? JsonObject
