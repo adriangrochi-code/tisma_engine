@@ -10796,4 +10796,39 @@ plano). **Sin probar:** contra una versión publicada de verdad.
   - `aero` y `orient` sobre un modelo con `--config`.
   - Pruebas en `[cli]`.
 - Corregida una prueba de interfaz que fallaba por tiempos en la CI de Linux (`ui_script_structural_analyze`).
-- **Sigue:** «Datos publicados» para el material y la resina.
+- «Datos publicados» del filamento del paquete, en la pestaña Material (prueba: `ui_pack_published_material`). **Falta:**
+  la resina.
+- `design new|check|build` en la línea de comandos, con SolidCraft (pedido de Android). Probado solo con el SolidCraft
+  falso.
+- Corregido: mostrar la fila de una temperatura vacía la escribía como 0 y marcaba el perfil como cambiado.
+- Resinas del paquete (reglas 10, 12, 13 y 23):
+  - un perfil `resin` o `resin_print` se lee como perfil de material o de impresión (las claves de la resina ya son de
+    esos tipos);
+  - una impresora de resina toma `defaults.resin` y `defaults.resin_print`, y el catálogo le ofrece solo resinas;
+  - una resina en una impresora de filamento, o al revés, se rechaza;
+  - «Datos publicados» de la resina en la pestaña Material;
+  - corregido: la impresora `sla` del paquete quedaba como de filamento; ahora su perfil lleva
+    `machine.technology = msla`.
+  - Pruebas: `[pack]` (dos casos nuevos) y `ui_pack_published_resin`. Probado solo con el paquete inventado de prueba.
+
+## 2026-11-04 — mantenimiento (16:41 UTC)
+
+**Revisado:** `origin/main` ya estaba en `dev`; el merge de la app de Android (#55) no toca el motor y pasa
+`check_licenses.py`. Fuzz de G-code con semilla nueva (`tisma_fuzz_gcode 2000 202611041705`, 5 min 17 s): 0 fallas, 25
+rechazados por no imprimibles. Entradas raras en los comandos nuevos para el teléfono (`pack`, `profile --pack`,
+`part`, `calibration`, `orient`). Sin avisos del compilador en los archivos tocados estos días.
+
+**Encontrado y arreglado:**
+- `pack plan` con un `index.json` instalado roto terminaba con error, y el paquete no se podía reparar desde el plan.
+  Ahora avisa y planea todo el paquete otra vez (`pack install` ya se recuperaba). Prueba en `[pack]`.
+- El error de `tisma-engine pack` sin subcomando no nombraba `community`.
+- `part gear|fastener` con un valor de otro tipo mostraba el texto de la biblioteca JSON
+  (`[json.exception.type_error.302] …`) sin decir qué clave. Ahora dice, por ejemplo, `"teeth" must be a whole number`,
+  y `not valid JSON` o `not a gear` (`src/cad/spec_json.hpp`). Pruebas en `[gears]` y `[fasteners]`.
+- `pack community` con `../` en el nombre ya devolvía vacío: no hacía falta cambio.
+
+**Sin medir:** la esfera de 1 millón de triángulos no se midió: la máquina tenía carga 13 con 4 núcleos (CI con ASan y
+fuzz al lado). Queda para el próximo bloque.
+
+**CI de Linux:** `tools/ci_linux.sh` sobre `222fd59`: gcc 1041/1041; la etapa con ASan sigue corriendo.
+

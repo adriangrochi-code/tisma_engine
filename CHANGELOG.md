@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Resinas del paquete:** una impresora de resina del paquete elige su resina y su perfil de impresión de resina por
+  defecto, ofrece solo resinas en el catálogo y muestra los **Datos publicados** de la resina.
+- **Datos publicados** también para el filamento del paquete, plegados bajo su perfil en la pestaña Material.
 - `tisma-engine part gear|fastener` y `tisma-engine calibration <tipo>` / `calibration apply`: engranajes, tornillería y
   las calibraciones de la pestaña Calibrar desde la línea de comandos; `aero` y `orient` sobre un modelo con
   `--config`; `tisma-engine design new|check|build` con SolidCraft (pedidos de la app de Android).
@@ -322,6 +325,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- Una impresora de resina del paquete (`"technology": "sla"`) quedaba como impresora de filamento.
+- `pack plan` con un paquete instalado roto ya no falla: planea todo el paquete otra vez para repararlo.
+- `part gear|fastener` dice qué clave del archivo tiene un valor del tipo equivocado.
+
+- Un filamento sin temperatura de cama aparecía como modificado («1 cambio») apenas se mostraba su panel.
 - La prueba de interfaz del análisis estructural esperaba el veredicto antes de que arrancara el cálculo en una máquina cargada (falla de la CI de Linux).
 - La ayuda de los ajustes ya no nombra documentos internos (`docs/INFILL.md`, «Ficha …md») ni la clave `width` en la de paredes (QA de la app de Android).
 - La fila de variables de la pestaña Impresora se llamaba «Temperatura de boquilla» en la búsqueda y en `--settings-layout`.

@@ -260,16 +260,18 @@ TEST_CASE("pack install: a newer index changes nothing (PF1, PK5)", "[pack]") {
     CHECK(pack_installed(pack).pack_version == "2026.11.01-aaaaaaa");
 }
 
+// The command line with `args`, its output in `out` and `err`.
+int run(std::vector<std::string> args, std::string& out, std::string& err) {
+    std::vector<std::string_view> views(args.begin(), args.end());
+    std::ostringstream o, e;
+    const int code = run_cli(views, o, e);
+    out = o.str();
+    err = e.str();
+    return code;
+}
+
 TEST_CASE("pack on the command line: plan, install, list, and a pack printer's settings (PK6, PK7)", "[pack]") {
     const fs::path data = fresh_dir("tisma_pack_cli");
-    const auto run = [](std::vector<std::string> args, std::string& out, std::string& err) {
-        std::vector<std::string_view> views(args.begin(), args.end());
-        std::ostringstream o, e;
-        const int code = run_cli(views, o, e);
-        out = o.str();
-        err = e.str();
-        return code;
-    };
     std::string out, err;
     const std::string d = data.string(), stage = (kPackData / "release1").string();
     REQUIRE(run({"pack", "plan", "--data", d}, out, err) == 0);
@@ -330,10 +332,76 @@ TEST_CASE("pack: the filaments offered for a printer (rule 12, PK7)", "[pack]") 
     REQUIRE(for_acme.size() == 1);
     CHECK(for_acme[0].name == "Acme PLA");
     CHECK(for_acme[0].path == "vendors/acme/filaments/PLA.json");
-    CHECK(pack_filaments_for(pack, index, 2).empty());
+    for (const PackFilamentRef& f : pack_filaments_for(pack, index, 2)) // the resin printer: its resins only
+        CHECK(f.name != "Acme PLA");
     std::vector<std::string> warnings;
     CHECK(pack_entry_profile(pack, "vendors/acme/filaments/PLA.json", warnings).kind == ProfileKind::Filament);
     CHECK_THROWS_AS(pack_entry_profile(pack, "../x.json", warnings), PackError);
+}
+
+TEST_CASE("pack: a resin printer's resin and resin print profile (rules 10, 12, 13)", "[pack]") {
+    const fs::path pack = fresh_dir("tisma_pack_resin") / "pack";
+    pack_install(pack, staging_from("release1", "tisma_pack_stage_resin"));
+    const PackIndex index = pack_installed(pack);
+    CHECK(pack_printer_is_resin(index, 2));
+    CHECK(!pack_printer_is_resin(index, 0));
+    CHECK(!pack_printer_is_resin(index, 7));
+    // Its defaults: the first resin and the resin print profile.
+    const PackProfiles p = pack_profiles(pack, index, "vendors/bolt/models/B2.json#default");
+    CHECK(p.resin);
+    CHECK(p.printer.settings.machine_technology == MachineTechnology::Msla); // the model's "sla"
+    REQUIRE(p.filament);
+    CHECK(p.filament->name == "Bolt Grey");
+    CHECK(p.filament->settings.resin_exposure == 3.5);
+    CHECK(p.filament_vendor == "Bolt");
+    REQUIRE(p.print);
+    CHECK(p.print->settings.resin_layer_height == 0.03);
+    CHECK(!pack_profiles(pack, index, "vendors/acme/models/A1.json#0.4").resin);
+    // A resin is offered only for the resin printer; a filament never for it.
+    const auto offered = pack_filaments_for(pack, index, 2);
+    REQUIRE(offered.size() == 1);
+    CHECK(offered[0].name == "Bolt Grey");
+    CHECK(offered[0].vendor == "Bolt");
+    for (const PackFilamentRef& f : pack_filaments_for(pack, index, 0))
+        CHECK(f.name != "Bolt Grey");
+    // A resin on a filament printer is refused (even with every printer compatible).
+    std::vector<std::string> warnings;
+    CHECK(read_pack_entry(pack, "vendors/bolt/resins/Grey.json", warnings).resin);
+    CHECK_THROWS_AS(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.4", "vendors/bolt/resins/Grey.json"),
+                    PackError);
+    // Its community data (rule 23).
+    const auto values = pack_community(pack, "resins", "Bolt", "Bolt Grey");
+    REQUIRE(values.size() == 2);
+    CHECK(values[0].key == "resin.exposure");
+    CHECK(values[1].kind == CommunityKind::Community);
+}
+
+TEST_CASE("pack plan on the command line: a broken install is planned whole, so it can be repaired", "[pack]") {
+    const fs::path data = fresh_dir("tisma_pack_broken_plan");
+    fs::create_directories(data / "pack");
+    std::ofstream(data / "pack/index.json") << "garbage";
+    std::string out, err;
+    REQUIRE(run({"pack", "plan", "--data", data.string(), "--index", (kPackData / "release1/index.json").string()}, out,
+                err) == 0);
+    CHECK_THAT(err, ContainsSubstring("cannot be read"));
+    CHECK_THAT(out, ContainsSubstring("acme.tar.xz"));
+    CHECK_THAT(out, ContainsSubstring("bolt.tar.xz"));
+    CHECK_THAT(out, ContainsSubstring("\"installed\": null"));
+    CHECK(run({"pack"}, out, err) == 1);
+    CHECK_THAT(err, ContainsSubstring("list or community"));
+}
+
+TEST_CASE("pack on the command line: a resin printer's settings (rule 13)", "[pack]") {
+    const fs::path data = fresh_dir("tisma_pack_resin_cli");
+    pack_install(data / "pack", staging_from("release1", "tisma_pack_stage_resin_cli"));
+    const std::string d = data.string();
+    std::string out, err;
+    REQUIRE(run({"profile", "--pack", d, "--printer", "vendors/bolt/models/B2.json#default"}, out, err) == 0);
+    const Settings s = parse_settings(out);
+    CHECK(s.resin_exposure == 3.5);
+    CHECK(s.resin_layer_height == 0.03);
+    REQUIRE(run({"pack", "community", "--data", d, "--resin", "Bolt/Bolt Grey"}, out, err) == 0);
+    CHECK_THAT(out, ContainsSubstring("resin.viscosity"));
 }
 
 TEST_CASE("pack: community data by printer, with its kind and source (rules 22 to 24, PK13)", "[pack]") {

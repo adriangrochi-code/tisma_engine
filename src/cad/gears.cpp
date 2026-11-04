@@ -13,6 +13,8 @@
 
 #include "cad/lathe.hpp"
 
+#include "cad/spec_json.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -274,28 +276,22 @@ std::string gear_json(const GearSpec& g) {
 }
 
 GearSpec parse_gear(std::string_view text) {
-    try {
-        const nlohmann::json j = nlohmann::json::parse(text);
-        if (j.value("format", "") != "tisma-gear-1")
-            throw std::runtime_error("not a gear");
-        GearSpec g;
-        g.teeth = j.value("teeth", g.teeth);
-        g.module = j.value("module", g.module);
-        g.pressure_angle = j.value("pressure_angle", g.pressure_angle);
-        g.width = j.value("width", g.width);
-        g.bore = j.value("bore", g.bore);
-        g.helix_angle = j.value("helix_angle", g.helix_angle);
-        g.herringbone = j.value("herringbone", g.herringbone);
-        g.backlash = j.value("backlash", g.backlash);
-        g.left_hand = j.value("left_hand", g.left_hand);
-        g.rack = j.value("rack", g.rack);
-        g.rack_base = j.value("rack_base", g.rack_base);
-        if (const std::string why = check_gear(g); !why.empty())
-            throw std::runtime_error(why);
-        return g;
-    } catch (const nlohmann::json::exception& e) {
-        throw std::runtime_error(std::string("gear: ") + e.what());
-    }
+    const nlohmann::json j = spec_object(text, "tisma-gear-1", "gear");
+    GearSpec g;
+    g.teeth = spec_field(j, "teeth", g.teeth);
+    g.module = spec_field(j, "module", g.module);
+    g.pressure_angle = spec_field(j, "pressure_angle", g.pressure_angle);
+    g.width = spec_field(j, "width", g.width);
+    g.bore = spec_field(j, "bore", g.bore);
+    g.helix_angle = spec_field(j, "helix_angle", g.helix_angle);
+    g.herringbone = spec_field(j, "herringbone", g.herringbone);
+    g.backlash = spec_field(j, "backlash", g.backlash);
+    g.left_hand = spec_field(j, "left_hand", g.left_hand);
+    g.rack = spec_field(j, "rack", g.rack);
+    g.rack_base = spec_field(j, "rack_base", g.rack_base);
+    if (const std::string why = check_gear(g); !why.empty())
+        throw std::runtime_error(why);
+    return g;
 }
 
 } // namespace tisma::cad

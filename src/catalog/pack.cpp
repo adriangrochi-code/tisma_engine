@@ -296,6 +296,12 @@ Profile pack_printer_profile(std::string_view model_json, const std::string& var
             for (const auto& [key, value] : keys.items())
                 settings[group][key] = value; // the variant's over common, key by key
         }
+    // The model's technology is the printer's, unless its settings say it:
+    // an "sla" model is a resin printer (machine.technology "msla").
+    const std::string technology = text(j, "technology");
+    if ((technology == "sla" || technology == "fff") &&
+        !(settings.contains("machine") && settings.at("machine").is_object() && settings.at("machine").contains("technology")))
+        settings["machine"]["technology"] = technology == "sla" ? "msla" : "fdm";
     const json profile{{"format", "tisma-profile"},
                        {"version", 2},
                        {"kind", "printer"},
@@ -319,8 +325,10 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
     const std::string where = text(profile, "name");
     profile["settings"] = known_settings(profile.contains("settings") ? profile.at("settings") : json::object(), where, warnings);
     const std::string kind = text(profile, "kind");
-    if (kind == "resin" || kind == "resin_print")
-        throw PackError(where + ": resin profiles are read by the resin printers' settings, not as a filament or print");
+    if (kind == "resin" || kind == "resin_print") {
+        profile["kind"] = kind == "resin" ? "filament" : "print";
+        out.resin = true;
+    }
     try {
         out.profile = parse_profile(profile.dump());
     } catch (const SettingsError& e) {
@@ -330,6 +338,7 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
         out.compatible = j.at("compatible").get<int>();
     out.generic = j.value("generic", false);
     out.license = text(j, "license");
+    out.vendor = text(j, "vendor");
     out.origin = text(j, "origin");
     return out;
 }

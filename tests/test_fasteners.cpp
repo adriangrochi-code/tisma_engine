@@ -203,7 +203,9 @@ TEST_CASE("fasteners: the checks, the pitch and the saved spec", "[fasteners]") 
     CHECK(back.length == 20.0);
     CHECK(back.clearance == 0.15);
     CHECK_THROWS(parse_fastener("{\"format\":\"tisma-fastener-1\",\"kind\":\"rivet\"}"));
-    CHECK_THROWS(parse_fastener("not json"));
+    CHECK_THROWS_WITH(parse_fastener("not json"), "not valid JSON");
+    CHECK_THROWS_WITH(parse_fastener("{\"format\":\"tisma-fastener-1\",\"size\":8}"), "\"size\" must be text");
+    CHECK_THROWS_WITH(parse_fastener("{\"format\":\"tisma-fastener-1\",\"length\":\"20\"}"), "\"length\" must be a number");
     FastenerSpec custom = spec_of(FastenerKind::ThreadedRod, "custom");
     custom.diameter = 1.0;
     CHECK_FALSE(check_fastener(custom).empty());
