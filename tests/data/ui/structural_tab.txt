@@ -22,6 +22,7 @@ expect-structural fixed
 expect-text vóxeles de
 wait 20
 expect-text Memoria: unos
+expect-control structural_print_direction
 expect-no-control tab_prepare
 menu mode_print
 expect-control tab_prepare

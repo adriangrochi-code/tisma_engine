@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Estructural en impresoras de cinta** (`engineering_panel.md`, regla 10): «Dirección de impresión» elige Z o la
+  cinta; con la cinta, el análisis toma las capas inclinadas como se imprimen.
 - **Estructural: girar una fuerza arrastrando su flecha** (`engineering_panel.md`, regla 7): el extremo libre de la
   flecha roja se arrastra en la vista; la fuerza pasa a apuntar desde ahí a su punto (Ctrl+Z la devuelve).
 - **Estructural dice cuánto va a costar el análisis:** junto a la resolución, la memoria y el tiempo aproximados.

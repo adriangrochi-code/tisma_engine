@@ -322,4 +322,23 @@ void move_engineering(ProjectEngineering& e, const std::array<double, 9>& a, con
     }
 }
 
+void turn_engineering(ProjectEngineering& e, const std::array<double, 9>& r) {
+    const auto turn = [&](const std::array<double, 3>& v) {
+        return std::array<double, 3>{r[0] * v[0] + r[1] * v[1] + r[2] * v[2], r[3] * v[0] + r[4] * v[1] + r[5] * v[2],
+                                     r[6] * v[0] + r[7] * v[1] + r[8] * v[2]};
+    };
+    for (EngineeringCondition& k : e.conditions) {
+        k.point = turn(k.point);
+        k.normal = turn(k.normal);
+        if (k.direction == ForceDirection::Axis) {
+            std::array<double, 3> v{0.0, 0.0, 0.0};
+            v[std::size_t(std::clamp(std::abs(k.axis), 1, 3) - 1)] = k.axis < 0 ? -1.0 : 1.0;
+            k.direction = ForceDirection::Vector;
+            k.vector = turn(v);
+        } else if (k.direction == ForceDirection::Vector) {
+            k.vector = turn(k.vector);
+        }
+    }
+}
+
 } // namespace tisma

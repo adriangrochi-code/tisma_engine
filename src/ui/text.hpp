@@ -115,6 +115,10 @@
     X(StructTooHot, "Temperatura alta para este material: el polímero se degrada", "Temperature high for this material: the polymer degrades") \
     X(Approximation, "Es una aproximación: sirve para comparar diseños, materiales y orientaciones, no reemplaza un ensayo ni un cálculo profesional.", "This is an approximation: it compares designs, materials and orientations; it does not replace a test or a professional calculation.") \
     X(StructEstimateCost, "Memoria: unos %.0f MB · tiempo: unos %s", "Memory: about %.0f MB · time: about %s") \
+    X(StructPrintDirection, "Dirección de impresión", "Print direction") \
+    X(StructPrintZ, "Z (capas horizontales)", "Z (flat layers)") \
+    X(StructPrintBelt, "Cinta (capas a %.0f°)", "Belt (layers at %.0f°)") \
+    X(StructPrintBeltOff, "La impresora elegida no es de cinta: se analiza en Z.", "The chosen printer is not a belt printer: analysed along Z.") \
     X(StructEstimate, "Unos %zu vóxeles de %.2f mm", "About %zu voxels of %.2f mm") \
     X(StructCritical, "Punto crítico: %.2f", "Critical point: %.2f") \
     X(StructNotValid, "El resultado no sirve:", "The result is not usable:") \

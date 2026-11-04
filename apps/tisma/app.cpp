@@ -26,6 +26,7 @@
 #include "cad/sketch_edit.hpp"
 #include "cad/sketch_io.hpp"
 #include "cad/view_dxf.hpp"
+#include "slice/belt.hpp"
 #include "aero/aero.hpp"
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
@@ -13288,6 +13289,29 @@ void App::structural_panel() {
             loc::TextDisabled("%s", format(tr(T::StructEstimateCost), structural_estimate_.memory_mb,
                                            format_duration(structural_estimate_.seconds).c_str()).c_str());
     }
+    // The print direction (rule 10): Z, or the belt printer's.
+    ImGui::TextUnformatted(tr(T::StructPrintDirection));
+    {
+        const bool belt = e.structural.print_direction == "belt";
+        const std::string belt_label = format(tr(T::StructPrintBelt), settings_.belt_angle);
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##structural_print_direction", belt ? belt_label.c_str() : tr(T::StructPrintZ))) {
+            if (ImGui::Selectable(tr(T::StructPrintZ), !belt) && belt) {
+                remember_engineering(std::size_t(structural_part_));
+                objects_[std::size_t(structural_part_)].engineering.structural.print_direction = "z";
+            }
+            ImGui::BeginDisabled(!settings_.belt_enabled);
+            if (ImGui::Selectable(belt_label.c_str(), belt) && !belt) {
+                remember_engineering(std::size_t(structural_part_));
+                objects_[std::size_t(structural_part_)].engineering.structural.print_direction = "belt";
+            }
+            ImGui::EndDisabled();
+            ImGui::EndCombo();
+        }
+        rect_of("structural_print_direction");
+        if (belt && !settings_.belt_enabled)
+            loc::TextDisabled("%s", tr(T::StructPrintBeltOff));
+    }
     ImGui::TextUnformatted(tr(T::StructWorkingTemp));
     if (ImGui::IsItemHovered())
         loc::SetTooltip("%s", tr(T::StructWorkingTempTip));
@@ -13849,6 +13873,18 @@ void App::start_structural() {
     own_to_placed(o, placed, a, b);
     ProjectEngineering moved = o.engineering;
     move_engineering(moved, a, b);
+    // Printed on a belt (rule 10): the analysis runs on the part turned so its
+    // layers lie flat, and its map and points are turned back for the view.
+    const bool on_belt = o.engineering.structural.print_direction == "belt" && settings_.belt_enabled;
+    const std::array<double, 9> turn = on_belt ? belt_layer_rotation(settings_) : std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    if (on_belt) {
+        std::vector<Vec3f> corners = placed.corners();
+        for (Vec3f& v : corners)
+            v = Vec3f{float(turn[0] * v.x + turn[1] * v.y + turn[2] * v.z), float(turn[3] * v.x + turn[4] * v.y + turn[5] * v.z),
+                      float(turn[6] * v.x + turn[7] * v.y + turn[8] * v.z)};
+        placed = TriangleMesh(std::move(corners));
+        turn_engineering(moved, turn);
+    }
     // And back, for the report's points (in the part's own frame).
     std::array<double, 12> to_part{1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
     const double det = a[0] * (a[4] * a[8] - a[5] * a[7]) - a[1] * (a[3] * a[8] - a[5] * a[6]) + a[2] * (a[3] * a[7] - a[4] * a[6]);
@@ -13863,7 +13899,16 @@ void App::start_structural() {
         for (std::size_t i = 0; i < 3; ++i)
             to_part[9 + i] = -(inv[3 * i] * b[0] + inv[3 * i + 1] * b[1] + inv[3 * i + 2] * b[2]);
     }
+    if (on_belt) { // from the turned frame: first back by the transpose
+        std::array<double, 12> m = to_part;
+        for (std::size_t i = 0; i < 3; ++i)
+            for (std::size_t j = 0; j < 3; ++j)
+                m[3 * i + j] = to_part[3 * i] * turn[3 * j] + to_part[3 * i + 1] * turn[3 * j + 1] + to_part[3 * i + 2] * turn[3 * j + 2];
+        to_part = m;
+    }
     Settings settings = settings_;
+    if (on_belt)
+        settings.belt_enabled = false; // already turned
     std::vector<std::string> notes;
     apply_engineering_overrides(settings, o.engineering, notes);
     const std::string fingerprint = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), "structural");
@@ -13873,7 +13918,7 @@ void App::start_structural() {
     structural_permille_ = 0;
     structural_message_.clear();
     structural_job_.start([this, part, placed = std::move(placed), moved, settings, fingerprint, filament_type, to_part,
-                           asked]() {
+                           asked, on_belt, turn]() {
         StructuralRun run;
         run.part = part;
         run.fingerprint = fingerprint;
@@ -13923,6 +13968,20 @@ void App::start_structural() {
             if (r.valid && std::isfinite(r.result.min_safety)) {
                 run.weakest = r.weakest;
                 run.weakest_safety = r.result.min_safety;
+            }
+            if (on_belt) { // back to the bed's frame: the transpose
+                const auto back = [&](float x, float y, float z) {
+                    return Vec3f{float(turn[0] * x + turn[3] * y + turn[6] * z), float(turn[1] * x + turn[4] * y + turn[7] * z),
+                                 float(turn[2] * x + turn[5] * y + turn[8] * z)};
+                };
+                for (Vec3f& q : run.corners)
+                    q = back(q.x, q.y, q.z);
+                for (Vec3f& q : run.moved)
+                    q = back(q.x, q.y, q.z);
+                if (run.weakest) {
+                    const Vec3f w = back(float((*run.weakest)[0]), float((*run.weakest)[1]), float((*run.weakest)[2]));
+                    run.weakest = std::array<double, 3>{w.x, w.y, w.z};
+                }
             }
             run.ok = true;
         } catch (const Cancelled&) {

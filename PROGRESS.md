@@ -10213,3 +10213,20 @@ cambia la dirección sin mover el punto.
 Ctrl+Z. Pasan las pruebas de interfaz de Estructural y Aerodinámica.
 
 **Sigue (Estructural):** Más opciones (dirección de impresión, nube) y Optimizar.
+
+## 2026-11-04 — Estructural: dirección de impresión (Z o cinta, regla 10)
+
+**Hecho:**
+- «Dirección de impresión» en Más opciones: Z, o «Cinta (capas a α°)» si la impresora elegida es de cinta (si no,
+  apagada; un proyecto con «belt» en una impresora común avisa que se analiza en Z).
+- Con la cinta, `start_structural` gira la pieza y sus condiciones con `belt_layer_rotation` (capas planas) y
+  `turn_engineering` (puntos, normales y direcciones; un eje pasa a tres números). El análisis corre con
+  `belt.enabled` apagado y el mapa, los desplazamientos y el punto crítico vuelven girados. Los puntos del informe
+  usan la vuelta compuesta.
+
+**Pruebas:** en el motor, el giro es una rotación (det 1) y da la `s` de `belt_mesh`; las condiciones giran y una
+fuerza en −Z queda en (0, sin α, −cos α). En la interfaz, el selector está en Estructural. **Sin probar de punta a
+punta en la app con una impresora de cinta** (el guion no tiene cómo elegir una impresora de cinta); queda para un
+verbo de guion o la prueba del dueño.
+
+**Sigue (Estructural):** «Calcular en la nube» y Optimizar.
