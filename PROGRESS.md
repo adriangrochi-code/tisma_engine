@@ -10610,3 +10610,15 @@ el final, «Girar la pieza» (giro en X 90°) y Ctrl+Z (0°).
 
 **UI52 (arreglado):** la ayuda de los botones de Optimizar tapaba la línea del resultado cuando el mouse quedaba
 sobre el botón; ahora sale con la demora de siempre y no mientras se muestra un resultado de esa pieza.
+
+## 2026-11-04 — el panel de ajustes como datos para el teléfono
+
+**Hecho (pedido de la sesión de Android, `mobile_app.md` regla 7):** `tisma --settings-layout FILE|-` escribe, sin
+abrir ventana, las pestañas (print, material, printer), sus tarjetas (id, título, icono), los grupos (id, título,
+línea cerrada) y cada fila: clave, nivel (basic, normal, advanced), nombre, ayuda, tipo, valor por defecto, rango y
+valor. `--lang` elige el idioma de los títulos y nombres; `--settings-summary ajustes.json` toma de ahí los valores y
+las líneas cerradas. Está en `tisma` y no en `tisma-engine` porque los nombres de las filas viven en la interfaz.
+
+**Prueba:** `ui_settings_layout` (ctest). 3 pestañas (7, 6 y 5 tarjetas), 438 filas. **Falta:** la ayuda y el tipo
+salen de `docs/CONFIG.md`, que está en español, también con `--lang en`; las opciones de las listas van dentro del
+rango como texto (no como lista aparte).

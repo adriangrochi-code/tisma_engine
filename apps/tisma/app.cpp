@@ -21258,7 +21258,84 @@ int App::run() {
 
 } // namespace
 
+// The settings panel as data (the phone builds its Print and Material
+// screens from it, mobile_app.md rule 7): tabs, cards (sections), their
+// groups (subsections) with their closed line, and each row's key, level,
+// name, help and CONFIG.md's type, default and range, in the language set.
+int write_settings_layout(const AppOptions& options) {
+    if (options.language_given)
+        set_language(options.language);
+    Settings settings;
+    if (!options.settings_summary.empty()) {
+        try {
+            settings = load_settings(options.settings_summary);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "error: %s\n", e.what());
+            return 2;
+        }
+    }
+    std::map<std::string, std::string> values;
+    for (const auto& [key, value] : describe(settings))
+        values[key] = value;
+    const auto level_name = [](SettingLevel l) {
+        return l == SettingLevel::Basic ? "basic" : l == SettingLevel::Normal ? "normal" : "advanced";
+    };
+    nlohmann::ordered_json root;
+    root["version"] = TISMA_VERSION;
+    root["language"] = language() == Language::English ? "en" : "es";
+    nlohmann::ordered_json tabs = nlohmann::ordered_json::array();
+    for (const auto& [tab, name] : {std::pair{SettingsTab::Print, "print"}, std::pair{SettingsTab::Material, "material"},
+                                    std::pair{SettingsTab::Printer, "printer"}}) {
+        nlohmann::ordered_json t{{"id", name}, {"sections", nlohmann::ordered_json::array()}};
+        for (const SectionLayout& section : settings_layout(tab)) {
+            nlohmann::ordered_json sj{{"id", std::string(section.id)},
+                                      {"title", tr(section.title)},
+                                      {"icon", std::string(section.icon)},
+                                      {"subsections", nlohmann::ordered_json::array()}};
+            for (const SubsectionLayout& sub : section.subsections) {
+                nlohmann::ordered_json bj{{"id", std::string(sub.id)},
+                                          {"title", tr(sub.title)},
+                                          {"summary", subsection_summary(sub.id, settings)},
+                                          {"settings", nlohmann::ordered_json::array()}};
+                for (const SettingEntry& entry : sub.settings) {
+                    const std::string key(entry.key);
+                    nlohmann::ordered_json row{{"key", key}, {"level", level_name(entry.level)}, {"label", key_label(key)}};
+                    const auto doc = setting_docs().find(key);
+                    if (doc != setting_docs().end()) {
+                        row["help"] = doc->second.meaning;
+                        row["type"] = doc->second.type;
+                        row["default"] = doc->second.default_value;
+                        row["range"] = doc->second.range;
+                    }
+                    if (const auto v = values.find(key); v != values.end())
+                        row["value"] = v->second;
+                    bj["settings"].push_back(std::move(row));
+                }
+                sj["subsections"].push_back(std::move(bj));
+            }
+            t["sections"].push_back(std::move(sj));
+        }
+        tabs.push_back(std::move(t));
+    }
+    root["tabs"] = std::move(tabs);
+    const std::string text = root.dump(1);
+    if (options.settings_layout == "-") {
+        std::fwrite(text.data(), 1, text.size(), stdout);
+        std::fputc('\n', stdout);
+        return 0;
+    }
+    std::ofstream out(options.settings_layout, std::ios::binary);
+    out << text << '\n';
+    if (!out) {
+        std::fprintf(stderr, "error: cannot write %s\n", options.settings_layout.c_str());
+        return 2;
+    }
+    return 0;
+}
+
 int run_app(const AppOptions& options) {
+    if (!options.settings_layout.empty())
+        return write_settings_layout(options);
     App app(options);
     return app.run();
 }

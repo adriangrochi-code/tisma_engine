@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- `tisma --settings-layout FILE [--lang es|en] [--settings-summary ajustes.json]`: el panel de ajustes como JSON
+  (pestañas, tarjetas, grupos con su línea cerrada y cada fila con clave, nivel, nombre, ayuda, tipo, valor por
+  defecto, rango y valor), sin abrir ventana; la aplicación de Android arma con eso sus pantallas.
 - **Estructural: calcular en la nube** (`engineering_panel.md`, regla 10; `cloud.md`, reglas 6 a 10b): con sesión
   en Tisma Cloud, «Calcular en la nube» manda el análisis como trabajo `fea` y el resultado vuelve a la pieza, con
   avance y «Cancelar». Lo mismo en Aerodinámica (trabajo `aero`). Un cálculo que el plan no incluye se ve con

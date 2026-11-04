@@ -140,6 +140,14 @@ add_executable(tisma_fuzz_gcode fuzz_gcode.cpp)
 target_link_libraries(tisma_fuzz_gcode PRIVATE tisma_core tisma_warnings)
 add_test(NAME fuzz_gcode_smoke COMMAND tisma_fuzz_gcode 12 7)
 
+# The settings panel as data for the phone (mobile_app.md, rule 7): no window,
+# so it runs everywhere the interface builds.
+if(TISMA_BUILD_UI)
+  add_test(NAME ui_settings_layout COMMAND $<TARGET_FILE:tisma> --settings-layout - --lang en)
+  set_tests_properties(ui_settings_layout PROPERTIES
+    PASS_REGULAR_EXPRESSION "\"id\": \"material\".*\"key\": \"layers.height\"|\"key\": \"layers.height\".*\"id\": \"material\"")
+endif()
+
 # The whole interface, end to end, where a display can be faked: open a
 # model, slice it, export the checked G-code and draw the preview.
 if(TISMA_BUILD_UI AND NOT WIN32)
