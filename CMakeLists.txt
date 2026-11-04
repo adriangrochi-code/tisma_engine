@@ -279,6 +279,7 @@ add_library(tisma_core
   src/fea/zone.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp
+  src/catalog/pack.cpp
   src/device/gcode_host.cpp
   src/device/printer.cpp
   src/device/serial_port.cpp

@@ -10664,3 +10664,18 @@ detener por el id del trabajo (sin trabajo: `conflict`). Prueba contra un PrusaL
 
 **Sigue:** Duet con el mismo contrato (la sesión de Android ofreció notas de
 comportamiento de los cuatro); después en la página Dispositivos.
+
+## 2026-11-04 — paquete libre de perfiles, paso 1 (`profile_pack.md`, ficha `profile_pack_format.md`)
+
+**Hecho:** `src/catalog/pack.*` (en `tisma_core`): `parse_pack_index` (formato y versión; una versión mayor no se carga,
+PF1), `pack_plan` (lista de archivos a bajar con URL, ruta, tamaño y SHA-256, solo los que cambiaron o faltan),
+`sha256_hex` (FIPS 180-4), `safe_pack_path` (solo `vendors/<id>/`, `community/`, `knowledge/`; nada absoluto ni con
+`..`, PF3), `pack_printer_profile` (`common.settings` con la variante encima, claves desconocidas descartadas con
+aviso; `original*` nunca se lee, PF4 y PF6), `parse_pack_entry`, `parse_pack_compatible` y `pack_compatible` (PF5).
+Decisión: la descarga la hace quien llama (la app de Android la hace ella misma); el motor da el plan y verifica.
+
+**Prueba:** `tests/test_pack.cpp` con un paquete inventado: ejemplos de FIPS, PF1, plan, rutas, PF4, PF6, PF5.
+
+**Sigue:** descomprimir `.tar.xz` (falta elegir la biblioteca: xz-embedded, 0BSD, a revisar y anotar en
+`THIRD_PARTY.md` antes de usarla) y leer tar; después `pack plan`, `pack install --from`, `pack list` en la línea de
+comandos y `profile --pack`.
