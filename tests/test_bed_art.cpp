@@ -35,12 +35,16 @@ std::string svg(const std::string& body, const char* box = "0 0 100 100") {
 
 } // namespace
 
-TEST_CASE("bed art: a full rectangle covers the bed's box in its colour, counter-clockwise", "[ui][bed_art]") {
+TEST_CASE("bed art: a square picture on a wide bed keeps its shape, centred, counter-clockwise", "[ui][bed_art]") {
     const BedArt art = bed_svg_art(svg("<rect x='0' y='0' width='100' height='100' fill='#ff0000'/>"), 0, 0, 200, 100);
     REQUIRE(art.groups.size() == 1);
     CHECK(art.groups[0].rgb == 0xFF0000);
     CHECK(art.groups[0].count % 3 == 0);
-    CHECK_THAT(area(art, art.groups[0]), WithinAbs(200.0 * 100.0, 1e-3)); // positive: facing up
+    CHECK_THAT(area(art, art.groups[0]), WithinAbs(100.0 * 100.0, 1e-3)); // positive: facing up
+    for (std::size_t i = 0; i < art.vertices.size(); i += 6) {
+        CHECK(art.vertices[i] >= 49.9999f); // x from 50 to 150
+        CHECK(art.vertices[i] <= 150.0001f);
+    }
     for (std::size_t i = 0; i < art.vertices.size(); i += 6) {
         CHECK(art.vertices[i + 2] == 0.01f);
         CHECK(art.vertices[i + 5] == 1.0f); // facing up

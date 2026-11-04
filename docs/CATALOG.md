@@ -232,7 +232,8 @@ app del teléfono) baja los archivos que pide el plan a una carpeta y el motor l
   su primera resina (`defaults.resin`) y su perfil de impresión de resina (`defaults.resin_print`), y el catálogo le
   ofrece solo resinas. Una resina en una impresora de filamento, o al revés, se rechaza.
 - Una impresora del paquete con `assets.bed_model` (STL) y `assets.bed_texture` (SVG) muestra en la vista 3D su cama:
-  el modelo en el color de la placa y el dibujo estirado sobre la caja de la cama (regla 14). Un dibujo PNG todavía no
+  el modelo en el color de la placa y el dibujo, con su forma, centrado en la caja de la cama y con la grilla encima
+  (regla 14). Un dibujo PNG todavía no
   se muestra.
 - `tisma --pack CARPETA` usa otro paquete, también en las capturas. `--pick-pack-printer "<archivo>#<variante>"`
   agrega y elige una impresora del paquete; es para las pruebas.

@@ -10855,8 +10855,9 @@ vuelta de perfilado.
   usan su regla (no nula o par-impar), los trazos se ensanchan con Clipper2 y `triangulate_polygon` llena el resultado.
   Sale como triángulos de color plano. A cada forma se le quita lo que se pinta después, así los triángulos nunca se
   superponen y no pelean en profundidad.
-- El dibujo cubre la caja de la cama (el borde de arriba del SVG va atrás, en y máxima). Los degradados y lo
-  transparente no se dibujan; lo semitransparente, sólido.
+- El dibujo va en el rectángulo más grande de su forma que entra en la caja de la cama, centrado, sin estirar (su
+  borde de arriba hacia y máxima). Así lo dibuja la app de Android. Los degradados y lo transparente no se dibujan; lo
+  semitransparente, sólido.
 - Las dos vistas, OpenGL y Vulkan, dibujan el `bed_model` (STL) en el color de la placa y encima el dibujo, adelantado
   en profundidad como la pintura sobre una pieza. No hacen sombra.
 - La interfaz lo rehace al cambiar de impresora o de cama.
@@ -10866,7 +10867,8 @@ vuelta de perfilado.
 formas superpuestas, entradas malas. En pantalla: `ui_pack_printer_picked` (OpenGL) y la misma corrida con
 `--graphics vulkan` (lavapipe) dan el mismo dibujo; capturas mirados a mano.
 
-**Decisión:** con el dibujo, la grilla queda debajo y no se ve, como en una cama impresa.
+**Decisión** (igual que la app de Android): el dibujo no escribe profundidad, así que la grilla y los ejes se ven
+encima. En Vulkan es una canalización nueva, `Decal`: la de la pintura sin escribir profundidad.
 
 **Sin probar:** con los SVG del paquete real (no se leen, sala limpia); se puede pedir a la sesión de fichas como caja
 negra.

@@ -126,7 +126,8 @@ struct VulkanView::Impl {
     VkFramebuffer scene_fb = VK_NULL_HANDLE, composite_fb = VK_NULL_HANDLE;
     VkDescriptorSet picture_set = VK_NULL_HANDLE; // ImGui's texture, the same through resizes
 
-    enum Pipe { Background, Plate, Grid, Outline, Mesh, Paint, Preview, Travels, Composite, kPipes };
+    // Decal: the paint's pipeline without writing depth (a pack bed's picture).
+    enum Pipe { Background, Plate, Grid, Outline, Mesh, Paint, Preview, Travels, Composite, Decal, kPipes };
     std::array<VkPipeline, kPipes> pipes{};
 
     // What is drawn.
@@ -486,7 +487,7 @@ struct VulkanView::Impl {
         // modules: 0 screen.vert, 1 background.frag, 2 plate.vert, 3 plate.frag, 4 line.vert, 5 grid.frag,
         // 6 line.frag, 7 mesh.vert, 8 mesh.frag, 9 preview.vert, 10 preview.frag, 11 composite.frag
         const std::array<std::array<int, 2>, kPipes> shader = {{
-            {0, 1}, {2, 3}, {4, 5}, {4, 6}, {7, 8}, {7, 8}, {9, 10}, {4, 6}, {0, 11},
+            {0, 1}, {2, 3}, {4, 5}, {4, 6}, {7, 8}, {7, 8}, {9, 10}, {4, 6}, {0, 11}, {7, 8},
         }};
         stages[0].module = modules[std::size_t(shader[which][0])];
         stages[1].module = modules[std::size_t(shader[which][1])];
@@ -509,6 +510,7 @@ struct VulkanView::Impl {
             break;
         case Mesh:
         case Paint:
+        case Decal:
             bindings.push_back({0, 6 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX});
             attributes.push_back({0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0});
             attributes.push_back({1, 0, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(float)});
@@ -547,7 +549,7 @@ struct VulkanView::Impl {
             raster.depthBiasEnable = VK_TRUE;
             raster.depthBiasConstantFactor = 1.0f;
             raster.depthBiasSlopeFactor = 1.0f;
-        } else if (which == Paint) { // pulled forward over its own faces
+        } else if (which == Paint || which == Decal) { // pulled forward over its own faces
             raster.depthBiasEnable = VK_TRUE;
             raster.depthBiasConstantFactor = -4.0f;
             raster.depthBiasSlopeFactor = -1.0f;
@@ -559,7 +561,7 @@ struct VulkanView::Impl {
         depth_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         const bool scene = which != Background && which != Composite;
         depth_state.depthTestEnable = scene ? VK_TRUE : VK_FALSE;
-        depth_state.depthWriteEnable = scene && which != Grid && which != Outline ? VK_TRUE : VK_FALSE;
+        depth_state.depthWriteEnable = scene && which != Grid && which != Outline && which != Decal ? VK_TRUE : VK_FALSE;
         depth_state.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
         VkPipelineColorBlendAttachmentState blend{};
         blend.colorWriteMask = 0xF;
@@ -866,7 +868,7 @@ struct VulkanView::Impl {
         }
         if (bed_art_count > 0) {
             draw = {};
-            bind(Paint, &bed_art_v);
+            bind(Decal, &bed_art_v); // writes no depth: the grid still draws over it
             for (const BedArt::Group& g : bed_art_groups) {
                 copy(draw.colour, Vec3{float((g.rgb >> 16) & 0xFF) / 255.0f, float((g.rgb >> 8) & 0xFF) / 255.0f,
                                        float(g.rgb & 0xFF) / 255.0f});

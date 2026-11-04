@@ -159,7 +159,12 @@ BedArt bed_svg_art(std::string_view svg, double min_x, double min_y, double max_
     if (!image)
         return art;
     if (image->width > 0 && image->height > 0) {
-        const Mapper map{(max_x - min_x) / image->width, (max_y - min_y) / image->height, min_x, max_y, z};
+        // The largest rectangle of the picture's shape inside the bed's box,
+        // centred: never stretched (as the phone app draws it).
+        const double scale = std::min((max_x - min_x) / image->width, (max_y - min_y) / image->height);
+        const double left = min_x + 0.5 * ((max_x - min_x) - image->width * scale);
+        const double top = max_y - 0.5 * ((max_y - min_y) - image->height * scale);
+        const Mapper map{scale, scale, left, top, z};
         // About a tenth of a millimetre on the bed.
         const double tolerance = 0.1 / std::max(map.sx, map.sy);
         std::vector<Region> regions;

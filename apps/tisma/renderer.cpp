@@ -1435,7 +1435,9 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
             glDrawArrays(GL_TRIANGLES, 0, bed_model_.count);
         }
         if (bed_art_.count > 0) {
+            // Without writing depth, so the grid and the axes still draw over it.
             glBindVertexArray(bed_art_.vao);
+            glDepthMask(GL_FALSE);
             glEnable(GL_POLYGON_OFFSET_FILL);
             glPolygonOffset(-1.0f, -4.0f);
             for (const BedArt::Group& g : bed_art_groups_) {
@@ -1444,6 +1446,7 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
                 glDrawArrays(GL_TRIANGLES, GLint(g.first), GLsizei(g.count));
             }
             glDisable(GL_POLYGON_OFFSET_FILL);
+            glDepthMask(GL_TRUE);
         }
     }
     if (!gbuffer && grid_.count > 0) {
@@ -1507,6 +1510,7 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
                 glDrawArrays(GL_TRIANGLES, GLint(g.first), GLsizei(g.count));
             }
             glDisable(GL_POLYGON_OFFSET_FILL);
+            glDepthMask(GL_TRUE);
         }
     }
     if (f.show_preview)
