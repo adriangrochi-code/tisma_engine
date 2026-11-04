@@ -181,6 +181,15 @@ Prepared prepare(const TriangleMesh& mesh) {
         p.area.push_back(0.5 * norm(cr));
         p.centroid.push_back(mul(add(add(a, b), c), 1.0 / 3.0));
     }
+    // A mesh turned inside out (every triangle wound the other way): its
+    // signed volume is negative; its normals are flipped so "looking down"
+    // means what it means for the part.
+    double volume = 0.0;
+    for (std::size_t t = 0; t < n; ++t)
+        volume += dot(p.a[t], cross(add(p.a[t], p.e1[t]), add(p.a[t], p.e2[t])));
+    if (volume < 0.0)
+        for (V& normal : p.normal)
+            normal = mul(normal, -1.0);
     // Unique corners (exact).
     std::vector<V> all;
     all.reserve(3 * n);
