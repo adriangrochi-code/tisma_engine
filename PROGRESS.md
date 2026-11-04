@@ -10466,4 +10466,12 @@ flexión separa las capas. Puede ser el modelo (la resistencia entre capas del P
 empotramiento que manda en Z) o el giro de la carga o de las caras fijas. La prueba solo comprueba el contrato; antes
 del panel hay que mirar el modo de rotura y dónde está el mínimo en cada orientación.
 
-**Sigue:** revisar eso; después «Orientación» en el panel Optimizar (recomendación y «Girar» la pieza con deshacer).
+**Revisado (10:25 UTC):** el giro está bien: la carga queda (20, 0, 0) con capas en X y (0, 20, 0) con capas en Y,
+el empotramiento abajo, una fijación y una carga en cada caso. Lo que manda cambia: con capas en Z, la unión entre
+líneas en la esquina de arriba del empotramiento (1,60); con capas en X, la unión entre capas (2,27); en Y, otra vez
+entre líneas (1,90). O sea, para este PLA el modelo da la unión entre líneas más débil que la unión entre capas, y por
+eso la barra parada sale más fuerte. No es un error del giro sino del modelo de adherencia (factores entre líneas y
+entre capas, `fea/adhesion`): pregunta de comportamiento para el equipo de fichas (¿qué relación entre las dos
+resistencias espera la ficha para PLA?).
+
+**Sigue:** esa respuesta; después «Orientación» en el panel Optimizar (recomendación y «Girar» la pieza con deshacer).
