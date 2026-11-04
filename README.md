@@ -100,6 +100,9 @@ Para el teléfono, que solo corre `tisma-engine`:
   `--segment`, otro rango;
 - `calibration apply <tipo> --value <v> --config … -o …` escribe el valor que salió mejor.
 - `aero` y `orient` también toman un modelo con `--config <ajustes.json>` en lugar de un proyecto.
+- `design new | check <diseño.json> | build <diseño.json> --solidcraft <exe> -o <pieza.stl|.3mf>`: la lógica de la
+  pestaña Diseño con el `solidcraft-cli` que se le indique. Opciones: `--quality`, `--timeline` (la primera operación
+  que falla) y `--save` (el archivo `.sc`).
 
 Códigos de salida: 0 bien; 1 línea de comandos mal escrita; 2 un archivo de entrada falta, está mal o no se puede
 escribir la salida; 3 orden todavía sin hacer; 4 el modelo no se puede imprimir (sin triángulos, ninguna capa cerrada,

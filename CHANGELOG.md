@@ -14,7 +14,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - `tisma-engine part gear|fastener` y `tisma-engine calibration <tipo>` / `calibration apply`: engranajes, tornillería y
   las calibraciones de la pestaña Calibrar desde la línea de comandos; `aero` y `orient` sobre un modelo con
-  `--config` (pedidos de la app de Android).
+  `--config`; `tisma-engine design new|check|build` con SolidCraft (pedidos de la app de Android).
 - **Datos publicados** en la página de una impresora del paquete: lo que publica la comunidad, con su tipo y su fuente.
   **Usar este valor** lo aplica, con confirmación cuando no es del fabricante.
 - El paquete libre de perfiles en la interfaz: el catálogo de impresoras muestra sus modelos y agrega uno con su

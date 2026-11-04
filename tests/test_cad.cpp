@@ -3,6 +3,7 @@
 // stand-in (tests/fake_solidcraft_cli.cpp), and the 3MF written and read.
 
 #include "cad/constraints.hpp"
+#include "cli/cli.hpp"
 #include "cad/design.hpp"
 #include "cad/parameters.hpp"
 #include "cad/process.hpp"
@@ -23,6 +24,7 @@
 #include <chrono>
 #include <cmath>
 #include <random>
+#include <sstream>
 #include <map>
 #include <cstdlib>
 #include <fstream>
@@ -1198,4 +1200,34 @@ TEST_CASE("view as DXF: a cylinder from above, its rim seen and the bottom one h
     std::tie(shown, hidden) = view_lengths(cad::view_lines(cylinder, side));
     CHECK_THAT(shown, Catch::Matchers::WithinRel(2 * 20.0 + 2 * 20.0, 0.02));
     CHECK_THAT(hidden, Catch::Matchers::WithinRel(2 * 20.0, 0.02));
+}
+
+TEST_CASE("design on the command line: new, check and build through SolidCraft, for the phone", "[cad][cli]") {
+    REQUIRE(!kFake.empty());
+    const auto dir = std::filesystem::temp_directory_path() / "tisma_test_design_cli";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto run = [](std::vector<std::string> args, std::string& out, std::string& err) {
+        std::vector<std::string_view> views(args.begin(), args.end());
+        std::ostringstream o, e;
+        const int code = tisma::run_cli(views, o, e);
+        out = o.str(), err = e.str();
+        return code;
+    };
+    std::string out, err;
+    REQUIRE(run({"design", "new"}, out, err) == 0);
+    CHECK(parse_design(out).features.empty());
+    const auto spec = dir / "box.json", stl = dir / "box.stl", sc = dir / "box.sc";
+    std::ofstream(spec) << design_json(box_design());
+    REQUIRE(run({"design", "check", spec.string()}, out, err) == 0);
+    CHECK(nlohmann::json::parse(out)["has_body"] == true);
+    REQUIRE(run({"design", "build", spec.string(), "--solidcraft", kFake.string(), "-o", stl.string(), "--save", sc.string()},
+                out, err) == 0);
+    const nlohmann::json j = nlohmann::json::parse(out);
+    CHECK(j["ok"] == true);
+    CHECK(j["triangles"].get<int>() > 0);
+    CHECK(std::filesystem::exists(stl));
+    CHECK(std::filesystem::exists(sc));
+    CHECK(run({"design", "build", spec.string(), "-o", stl.string()}, out, err) == 1); // no --solidcraft
+    std::filesystem::remove_all(dir);
 }

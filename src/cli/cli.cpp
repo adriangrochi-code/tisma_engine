@@ -3,6 +3,7 @@
 #include "cli/pack_cli.hpp"
 #include "cli/part_cli.hpp"
 #include "cli/calibration_cli.hpp"
+#include "cli/design_cli.hpp"
 #include "catalog/catalog.hpp"
 #include "config/profiles.hpp"
 
@@ -120,6 +121,8 @@ constexpr std::string_view kUsage =
     "  tisma-engine part gear|fastener <spec.json> -o <out.stl> | --defaults   (a gear, bolt, nut, washer or rod)\n"
     "  tisma-engine calibration <kind> --config <settings.json> --model <out.stl> --settings <out.json> [range]\n"
     "  tisma-engine calibration apply <kind> --value <v> --config <settings.json> -o <out.json>\n"
+    "  tisma-engine design new | check <design.json> | build <design.json> --solidcraft <exe> -o <out.stl|out.3mf>\n"
+    "                       [--quality standard|fine|finest] [--timeline] [--save <design.sc>]\n"
     "  tisma-engine info <model>\n"
     "  --threads <n> on any command: at most n threads of work (cloud.md, rule 19d); without it, all\n"
     "  tisma-engine --help | --version\n"
@@ -1050,6 +1053,8 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
             return cmd_part(args_left, out, err);
         if (command == "calibration")
             return cmd_calibration(args_left, out, err);
+        if (command == "design")
+            return cmd_design(args_left, out, err);
         if (command == "aero")
             return cmd_aero_project(args_left, out, err);
         if (command == "orient")
