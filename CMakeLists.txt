@@ -297,6 +297,7 @@ add_library(tisma_core
   src/cli/node.cpp
   src/cli/pack_cli.cpp
   src/cli/part_cli.cpp
+  src/cli/calibration_cli.cpp
 )
 if(TISMA_GPU)
   target_sources(tisma_core PRIVATE src/gpu/compute_vulkan.cpp)
