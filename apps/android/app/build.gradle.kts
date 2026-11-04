@@ -114,6 +114,31 @@ if (buildEngine) {
     tasks.named("preBuild") { dependsOn(engineTasks) }
 }
 
+// ---- SolidCraft for Design (owner's decision, 2026-11-04) ----
+//
+// The `solidcraft-cli` the workflow «SolidCraft for Android» builds (.github/workflows/solidcraft-android.yml):
+// -Ptisma.solidcraft=<the downloaded artifacts' folder, with <abi>/solidcraft-cli> packs it as
+// lib/<abi>/libsolidcraft.so beside the engine, and its licence files with the credits. Without it, the app
+// offers the engine's own parts only.
+val solidcraftDir = project.findProperty("tisma.solidcraft")?.toString()?.let { File(it) }
+if (solidcraftDir != null) {
+    // Its own folder, so a later build without the property does not carry it.
+    val solidcraftLibs = layout.buildDirectory.dir("solidcraft/jniLibs")
+    android.sourceSets["main"].jniLibs.srcDir(solidcraftLibs)
+    val copySolidcraft = tasks.register<Copy>("copySolidcraft") {
+        engineAbis.forEach { abi ->
+            from(File(solidcraftDir, "$abi/solidcraft-cli")) { into(abi); rename { "libsolidcraft.so" } }
+        }
+        into(solidcraftLibs)
+    }
+    val copySolidcraftLicences = tasks.register<Copy>("copySolidcraftLicences") {
+        from(solidcraftDir) { include("LICENSE-MIT", "LICENSE-APACHE", "NOTICE", "THIRD-PARTY-LICENSES.txt"); into("licenses/solidcraft") }
+        into(catalogAssets.map { it.dir("credits") })
+    }
+    tasks.named("preBuild") { dependsOn(copySolidcraft, copySolidcraftLicences) }
+    copySolidcraftLicences.configure { mustRunAfter(copyCredits) }
+}
+
 dependencies {
     implementation(project(":cloud"))
     implementation(project(":printers"))

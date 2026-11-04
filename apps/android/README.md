@@ -68,3 +68,10 @@ pregunta por él. Para cambiar el estado: `POST /mock/grant {"email","hours"}`, 
 `/mock/plan {"email","plan"}`, `/mock/expire`, `/mock/fail-next {"status","detail"}`, `/mock/max-upload {"bytes"}`.
 
 Los íconos de `app/src/main/res/drawable/tisma_*.xml` salen de `assets/brand/icons/` con `tools/brand_icons.py`.
+
+## SolidCraft (Design)
+
+The workflow «SolidCraft for Android» (`.github/workflows/solidcraft-android.yml`) builds `solidcraft-cli` for
+arm64-v8a and x86_64. Download its two artifacts into one folder (each brings `<abi>/solidcraft-cli` and the licence
+files) and build with `./gradlew :app:assembleDebug -Ptisma.solidcraft=<that folder>`: the APK then carries it as
+`lib/<abi>/libsolidcraft.so`. Without the property the app has the engine's own parts only.

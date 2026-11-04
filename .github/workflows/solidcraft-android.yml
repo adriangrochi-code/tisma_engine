@@ -1,0 +1,68 @@
+# SolidCraft for the Android app (owner's decision, 2026-11-04: «tantas funciones como el motor de PC», the
+# Design tab's CAD through SolidCraft, built in CI). Builds the pinned `solidcraft-cli` (MIT OR Apache-2.0,
+# THIRD_PARTY.md) for the phone's two ABIs with the same NDK as the engine, and keeps the programs with the
+# licence files as an artifact. It runs by hand, or when this file changes (a workflow started by hand must
+# be on the default branch first): it builds third-party code, and it is not part of the app's own CI.
+# The app takes the result with -Ptisma.solidcraft=<folder> (apps/android/README.md).
+name: SolidCraft for Android
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/solidcraft-android.yml"
+
+permissions:
+  contents: read
+
+env:
+  # The release the desktop carries (src/cad/solidcraft.hpp, kSolidCraftVersion) and its exact commit.
+  SOLIDCRAFT_TAG: v0.30.0
+  SOLIDCRAFT_COMMIT: afd81380ab06b0e77e03fdf68185d4b484d0e84e
+  NDK_VERSION: 29.0.14206865
+
+jobs:
+  build:
+    name: solidcraft-cli for ${{ matrix.target }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-linux-android
+            abi: arm64-v8a
+          - target: x86_64-linux-android
+            abi: x86_64
+    steps:
+      - name: Get the pinned SolidCraft source
+        run: |
+          git clone --filter=blob:none --branch "$SOLIDCRAFT_TAG" https://github.com/tangency-labs/solidcraft.git solidcraft
+          test "$(git -C solidcraft rev-parse HEAD)" = "$SOLIDCRAFT_COMMIT"
+      - name: Install the NDK and the Rust target
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" > /dev/null
+          rustup target add ${{ matrix.target }}
+      - name: Build
+        working-directory: solidcraft
+        run: |
+          bin="$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          t=${{ matrix.target }}
+          T=$(echo "$t" | tr 'a-z-' 'A-Z_')
+          export CARGO_TARGET_${T}_LINKER="$bin/${t}28-clang"
+          export CC_${t//-/_}="$bin/${t}28-clang"
+          export CXX_${t//-/_}="$bin/${t}28-clang++"
+          export AR_${t//-/_}="$bin/llvm-ar"
+          cargo build --release --locked -p solidcraft-cli --target "$t"
+      - name: Gather the program and its licences
+        run: |
+          mkdir -p out/${{ matrix.abi }}
+          cp solidcraft/target/${{ matrix.target }}/release/solidcraft-cli out/${{ matrix.abi }}/
+          "$ANDROID_HOME/ndk/$NDK_VERSION/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" out/${{ matrix.abi }}/solidcraft-cli
+          cp solidcraft/LICENSE-MIT solidcraft/LICENSE-APACHE solidcraft/NOTICE solidcraft/THIRD-PARTY-LICENSES.txt out/
+          (cd out && sha256sum ${{ matrix.abi }}/solidcraft-cli > ${{ matrix.abi }}/SHA256)
+          ls -l out/${{ matrix.abi }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: solidcraft-android-${{ matrix.abi }}
+          path: out
+          if-no-files-found: error

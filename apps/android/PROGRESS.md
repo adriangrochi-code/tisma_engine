@@ -25,6 +25,16 @@ licencia de Google), el identificador de la app, las herramientas de prueba con 
 
 ## Hecho
 
+- **2026-11-04 — SolidCraft para Android (opción b del dueño: compilarlo en GitHub Actions):**
+  - El flujo `.github/workflows/solidcraft-android.yml` compila `solidcraft-cli` v0.30.0 (commit fijo `afd8138`) para
+    arm64-v8a y x86_64 con el NDK r29. Corre a mano, o cuando cambia su archivo; por eso el push a `android` lo lanza.
+  - Deja los artefactos `solidcraft-android-<abi>`, con el programa sin símbolos, su SHA-256 y las licencias.
+  - La app lo lleva con `-Ptisma.solidcraft=<carpeta de los artefactos>` como `lib/<abi>/libsolidcraft.so`, y sus
+    licencias van a los créditos. Probado con una carpeta falsa: el APK lo trae, y sin la propiedad no.
+  - Todavía no se sabe si compila para Android (la compilación corre en GitHub, no aquí).
+  - Siguiente: con el binario, la pestaña Diseño en el teléfono: el guion de comandos del motor (`src/cad/design.*`)
+    a `solidcraft-cli`, y el 3MF de vuelta a la placa.
+
 - **2026-11-04 — Avance y aviso de demora en Ingeniería (QA):** QA vio el análisis de un cubo seguir corriendo después
   de 40 min en el emulador sin KVM. El mismo caso tarda 32 s en la máquina de QA.
   - La tarjeta muestra la etapa del motor y su porcentaje (estimando, laminando, vóxeles, resolviendo…).
