@@ -134,10 +134,16 @@ class PrinterConnectionTest {
         val m = sim(MockMoonraker())
         val cam = assertNotNull(MoonrakerConnection(m.url, null, UrlConnectionHttp).camera())
         assertEquals("http://127.0.0.1/webcam/?action=stream", cam.streamUrl)
+        assertTrue(Snapshot.fetch(cam.snapshotUrl).contentEquals(m.snapshot))
         val o = sim(MockOctoPrint())
         val oc = assertNotNull(OctoPrintConnection(o.url, "test-key", UrlConnectionHttp).camera())
         assertEquals(o.url + "/webcam/?action=stream", oc.streamUrl)
-        assertEquals("http://127.0.0.1:8080/?action=snapshot", oc.snapshotUrl)
+        assertEquals(o.url + "/snapshot.jpg", oc.snapshotUrl)
+        o.hasCamera = false
+        assertNull(OctoPrintConnection(o.url, "test-key", UrlConnectionHttp).camera())
+        m.hasCamera = false
+        assertNull(MoonrakerConnection(m.url, null, UrlConnectionHttp).camera())
+        assertEquals(PrinterException.Kind.UNEXPECTED, assertFailsWith<PrinterException> { Snapshot.fetch("rtsp://x") }.kind)
     }
 
     @Test

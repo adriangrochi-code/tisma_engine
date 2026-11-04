@@ -30,7 +30,18 @@ data class PrintersState(
     val busy: Boolean = false,
     val uploading: Boolean = false,
     val notice: PrinterNotice? = null,
+    /** The camera of each printer on screen, by id. */
+    val cameras: Map<String, CameraView> = emptyMap(),
 )
+
+/** What the camera box shows (printer_connections.md, «Cámara de la impresora», rule 1). */
+sealed interface CameraView {
+    data object Connecting : CameraView
+    data object None : CameraView
+    data class Failed(val reason: String) : CameraView
+    /** The last image, as JPEG bytes. */
+    class Image(val jpeg: ByteArray) : CameraView
+}
 
 sealed interface PrinterNotice {
     data class Failed(val error: PrinterException) : PrinterNotice
@@ -87,6 +98,39 @@ class PrintersViewModel(
             delay(pollMs)
         }
     }
+
+    /** Shows a printer's camera while its screen is open: one image every [cameraMs]. */
+    suspend fun followCamera(id: String, cameraMs: Long = 1_000) {
+        val p = state.value.printers.firstOrNull { it.id == id } ?: return
+        setCamera(id, CameraView.Connecting)
+        val camera = try {
+            withContext(io) { connection(p).camera() }
+        } catch (e: PrinterException) {
+            setCamera(id, CameraView.Failed(e.detail))
+            return
+        }
+        val url = camera?.snapshotUrl?.takeIf { it.isNotBlank() }
+        if (url == null) {
+            setCamera(id, CameraView.None)
+            return
+        }
+        try {
+            while (currentCoroutineContext().isActive) {
+                val view = try {
+                    CameraView.Image(withContext(io) { net.tisma.printers.Snapshot.fetch(url) })
+                } catch (e: PrinterException) {
+                    CameraView.Failed(e.detail)
+                }
+                setCamera(id, view)
+                delay(cameraMs)
+            }
+        } finally {
+            // Images live only while they are shown.
+            _state.update { it.copy(cameras = it.cameras - id) }
+        }
+    }
+
+    private fun setCamera(id: String, v: CameraView) = _state.update { it.copy(cameras = it.cameras + (id to v)) }
 
     private suspend fun read(p: PrinterConfig) {
         val s = try {

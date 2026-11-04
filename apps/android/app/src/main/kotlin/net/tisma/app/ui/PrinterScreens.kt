@@ -46,7 +46,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import net.tisma.app.R
+import net.tisma.app.printers.CameraView
 import net.tisma.app.printers.PrinterNotice
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.layout.aspectRatio
 import net.tisma.app.printers.PrintersState
 import net.tisma.app.printers.PrintersViewModel
 import net.tisma.printers.PrinterConfig
@@ -168,6 +171,7 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
             }
             s?.let { TemperaturesLine(it) }
         }
+        CameraBox(id, state, printers)
         when (s?.state) {
             PrinterState.PRINTING -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Button(onClick = { printers.pause(id) }, enabled = !state.busy,
@@ -227,6 +231,31 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
             },
             dismissButton = { AccentTextButton(onClick = { confirmRemove = false }) { Text(stringResource(R.string.back)) } },
         )
+    }
+}
+
+@Composable
+private fun CameraBox(id: String, state: PrintersState, printers: PrintersViewModel) {
+    LaunchedEffect(id) { printers.followCamera(id) }
+    val view = state.cameras[id] ?: return
+    TismaCard(Modifier.testTag("camera")) {
+        when (view) {
+            CameraView.Connecting -> Text(stringResource(R.string.camera_connecting), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            CameraView.None -> Text(stringResource(R.string.camera_none), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            is CameraView.Failed -> Text(stringResource(R.string.camera_failed, view.reason), color = MaterialTheme.colorScheme.error)
+            is CameraView.Image -> {
+                val bitmap = androidx.compose.runtime.remember(view) {
+                    android.graphics.BitmapFactory.decodeByteArray(view.jpeg, 0, view.jpeg.size)?.asImageBitmap()
+                }
+                if (bitmap != null) {
+                    androidx.compose.foundation.Image(bitmap, stringResource(R.string.camera_title),
+                        modifier = Modifier.fillMaxWidth().aspectRatio(bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1))
+                            .testTag("camera_image"))
+                } else {
+                    Text(stringResource(R.string.camera_failed, "JPEG"), color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
     }
 }
 

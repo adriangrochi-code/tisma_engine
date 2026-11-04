@@ -118,6 +118,15 @@ class PrintersTest {
     }
 
     @Test
+    fun `CM1 the printer's camera shows on its page`() {
+        addPrinter("moonraker", moonraker.url, null)
+        val id = printers.state.value.printers.single().id
+        compose.runOnIdle { nav.open(net.tisma.app.ui.Screen.PrinterDetail(id)) }
+        waitState { printers.state.value.cameras[id] is net.tisma.app.printers.CameraView.Image }
+        waitFor("camera_image")
+    }
+
+    @Test
     fun `MA8 the OctoPrint key is kept encrypted and a wrong one is refused`() {
         compose.onNodeWithTag("add_printer").performClick()
         waitFor("printer_address")

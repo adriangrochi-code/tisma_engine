@@ -229,4 +229,9 @@
     <string name="sessions_close">Cerrar</string>
     <string name="sessions_close_others">Cerrar las otras sesiones</string>
     <string name="hours_unlimited">%1$s h usadas · sin límite</string>
+
+    <string name="camera_title">Cámara de la impresora</string>
+    <string name="camera_connecting">Conectando con la cámara…</string>
+    <string name="camera_none">Esta impresora no tiene cámara.</string>
+    <string name="camera_failed">No se puede leer la cámara: %1$s</string>
 </resources>

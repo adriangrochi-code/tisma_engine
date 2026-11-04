@@ -63,7 +63,24 @@ abstract class SimulatedPrinter(private val port: Int, private val host: String)
 
     protected abstract fun route(method: String, path: String, query: Map<String, String>, ex: HttpExchange): Reply
 
+    /** The camera: false makes the printer report none. */
+    var hasCamera = true
+
+    /** A small JPEG, as a camera snapshot. */
+    val snapshot: ByteArray by lazy {
+        val img = java.awt.image.BufferedImage(16, 9, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        for (x in 0 until 16) for (y in 0 until 9) img.setRGB(x, y, 0x7A24C9)
+        java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(img, "jpg", it) }.toByteArray()
+    }
+
     private fun handle(ex: HttpExchange) {
+        if (ex.requestURI.rawPath == "/snapshot.jpg") {
+            // The camera is served apart from the API, without the key (like a camera streamer).
+            ex.responseHeaders.add("Content-Type", "image/jpeg")
+            ex.sendResponseHeaders(200, snapshot.size.toLong())
+            ex.responseBody.use { it.write(snapshot) }
+            return
+        }
         val reply = try {
             val key = ex.requestHeaders.getFirst("X-Api-Key")
             synchronized(lock) {
@@ -201,9 +218,9 @@ class MockMoonraker(port: Int = 0, host: String = "127.0.0.1") : SimulatedPrinte
         }
         method == "GET" && path == "/server/webcams/list" -> ok(buildJsonObject {
             put("webcams", buildJsonArray {
-                add(buildJsonObject {
+                if (hasCamera) add(buildJsonObject {
                     put("name", "printer"); put("enabled", true)
-                    put("stream_url", "/webcam/?action=stream"); put("snapshot_url", "/webcam/?action=snapshot")
+                    put("stream_url", "/webcam/?action=stream"); put("snapshot_url", "$url/snapshot.jpg")
                 })
             })
         })
@@ -262,9 +279,9 @@ class MockOctoPrint(port: Int = 0, host: String = "127.0.0.1") : SimulatedPrinte
         }
         method == "GET" && path == "/api/settings" -> json(buildJsonObject {
             putJsonObject("webcam") {
-                put("webcamEnabled", true)
+                put("webcamEnabled", hasCamera)
                 put("streamUrl", "/webcam/?action=stream")
-                put("snapshotUrl", "http://127.0.0.1:8080/?action=snapshot")
+                put("snapshotUrl", "$url/snapshot.jpg")
             }
         })
         else -> throw Stop(404, """{"error": "Not Found"}""")
