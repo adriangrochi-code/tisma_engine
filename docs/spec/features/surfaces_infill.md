@@ -18,7 +18,7 @@
 | `surfaces.top_layers`, `surfaces.bottom_layers` | — | 3 / 3 | Capas sólidas desde cada superficie de arriba y de abajo |
 | `infill.density` | % | 20 % | Densidad del relleno poco denso |
 | `infill.pattern` | — | ver `SETTINGS_V1.md` | `rectilinear`, `grid` o `gyroid` en la primera versión |
-| `surfaces.top_pattern`, `surfaces.bottom_pattern` | — | `monotonic` | `monotonic` o `rectilinear` |
+| `surfaces.top_pattern`, `surfaces.bottom_pattern` | — | `monotonic` | `monotonic` o `rectilinear` en esta ficha; los otros seis (`monotonic_lines`, `aligned_rectilinear`, `concentric`, `hilbert`, `archimedean`, `octagram`) en `infill_patterns.md`, reglas 14 a 17 y prueba P10 |
 | `infill.angle` | ° | 45 | Dirección base de las líneas |
 | `infill.wall_overlap` | % de la separación de los perímetros | 25 % | Cuánto se mete el relleno en el último perímetro |
 | `infill.solid_below_area` | mm² | 70 | Una zona de relleno más chica que esto se llena sólida |
