@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Estructural: más mapas y la deformación** (`engineering_panel.md`, regla 12): además del factor de seguridad,
+  el mapa de la tensión de von Mises o del desplazamiento, con su escala; y la pieza deformada, exagerada tanto
+  como se elija.
 - **`profile` en la línea de comandos:** escribe los ajustes de una impresora del catálogo con su boquilla y,
   si se pide, un filamento, listos para `slice --config`.
 - **Errores de la nube con código y texto en español** también en `slice`, `aero` y `orient` (antes solo

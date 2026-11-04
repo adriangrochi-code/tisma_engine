@@ -182,11 +182,18 @@ double voxel_mass_grams(const VoxelGrid& grid, double density) {
     return volume * density / 1000.0;
 }
 
-VoxelSurface voxel_surface(const VoxelGrid& grid, const std::vector<double>& per_voxel) {
+VoxelSurface voxel_surface(const VoxelGrid& grid, const std::vector<double>& per_voxel,
+                           const std::vector<double>* node_displacement) {
     VoxelSurface out;
     if (grid.solid.size() != std::size_t(grid.nx) * std::size_t(grid.ny) * std::size_t(grid.nz) ||
         per_voxel.size() != grid.solid.size())
         return out;
+    const std::size_t nodes = std::size_t(grid.nx + 1) * std::size_t(grid.ny + 1) * std::size_t(grid.nz + 1);
+    const std::vector<double>* u = node_displacement && node_displacement->size() == 3 * nodes ? node_displacement : nullptr;
+    const auto moved = [&](int i, int j, int k) {
+        const std::size_t n = 3 * ((std::size_t(k) * std::size_t(grid.ny + 1) + std::size_t(j)) * std::size_t(grid.nx + 1) + std::size_t(i));
+        return Vec3f{float((*u)[n]), float((*u)[n + 1]), float((*u)[n + 2])};
+    };
     // The six faces: the neighbour's offset, and the face's corners as
     // (x, y, z) picks of the voxel's low (0) and high (1) sides, counter-
     // clockwise seen from outside.
@@ -219,6 +226,12 @@ VoxelSurface voxel_surface(const VoxelGrid& grid, const std::vector<double>& per
                         q[n] = Vec3f{float(xs[f.c[n][0]]), float(ys[f.c[n][1]]), float(zs[f.c[n][2]])};
                     out.corners.insert(out.corners.end(), {q[0], q[1], q[2], q[0], q[2], q[3]});
                     out.value.insert(out.value.end(), {v, v});
+                    if (u) {
+                        Vec3f d[4];
+                        for (int n = 0; n < 4; ++n)
+                            d[n] = moved(i + f.c[n][0], j + f.c[n][1], k + f.c[n][2]);
+                        out.displacement.insert(out.displacement.end(), {d[0], d[1], d[2], d[0], d[2], d[3]});
+                    }
                 }
             }
     return out;

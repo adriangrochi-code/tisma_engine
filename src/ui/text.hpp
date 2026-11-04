@@ -88,7 +88,14 @@
     X(StructMinSafety, "Factor de seguridad mínimo: %.3g (pedido %.3g)", "Lowest safety factor: %.3g (asked %.3g)") \
     X(StructMaxDisplacement, "Desplazamiento máximo: %.3g mm", "Largest displacement: %.3g mm") \
     X(StructMass, "Masa: %.1f g de %s", "Mass: %.1f g of %s") \
-    X(StructShowMap, "Ver el mapa del factor de seguridad", "Show the safety factor map") \
+    X(StructShowMap, "Ver el mapa", "Show the map") \
+    X(StructMapSafety, "Factor de seguridad", "Safety factor") \
+    X(StructMapStress, "Tensión de von Mises", "Von Mises stress") \
+    X(StructMapMotion, "Desplazamiento", "Displacement") \
+    X(StructLegendStress, "Azul: 0 · rojo: %.3g MPa", "Blue: 0 · red: %.3g MPa") \
+    X(StructLegendMotion, "Azul: 0 · rojo: %.3g mm", "Blue: 0 · red: %.3g mm") \
+    X(StructDeformed, "Ver la deformación exagerada", "Show the exaggerated deformation") \
+    X(StructExaggerate, "× %.0f", "× %.0f") \
     X(StructLegend, "Rojo: menos de 1 · amarillo: hasta el pedido · verde claro: hasta el doble · verde: hasta 4 veces · azul: más", "Red: below 1 · yellow: up to the asked · light green: up to twice · green: up to 4 times · blue: more") \
     X(StructLimitLine, "Límite de desplazamiento: se mueve %.3g mm de %.3g", "Displacement limit: moves %.3g mm of %.3g") \
     X(StructFamilyTypical, "%s (valores típicos)", "%s (typical values)") \

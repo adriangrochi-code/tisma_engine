@@ -25,6 +25,18 @@ expect-control structural_show_map
 # owner's request, 2026-11-03).
 expect-text Adherencia a
 expect-text Rango probable
+# Rule 12: the map of von Mises or of the displacement, with its scale, and
+# the deformed shape with how much it is exaggerated.
+expect-control structural_map_kind_1
+menu structural_map_kind_1
+expect-text MPa
+menu structural_map_kind_2
+expect-text mm
+expect-control structural_deformed
+menu structural_deformed
+expect-control structural_exaggerate
+menu structural_map_kind_0
+expect-text Rojo: menos de 1
 menu structural_force_unit_1
 wait 20
 expect-no-control structural_show_map

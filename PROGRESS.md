@@ -10163,3 +10163,23 @@ proyecto); `profile` (nombre completo frente a los que lo contienen, nombre ambi
 que no están, y el resultado lamina un cubo con `slice --config`).
 
 **Sigue:** el orden de PLAN.md.
+
+## 2026-11-04 — Estructural: mapas de von Mises y desplazamiento, deformación exagerada (regla 12)
+
+**Decisión de orden:** terminado D5b, PLAN.md no nombra un ítem siguiente único; tomé lo que falta de la pestaña
+Estructural en el orden de su lista (deformación exagerada y los otros mapas), que es lo más cercano a lo terminado.
+
+**Hecho** (`engineering_panel.md`, regla 12; pasó `check_spec`):
+- `voxel_surface` recibe además el desplazamiento de los nodos y da el de cada esquina.
+- La pestaña guarda por triángulo el factor, la tensión de von Mises y el movimiento, y pinta el mapa elegido:
+  factor de seguridad (sus cinco franjas), von Mises o desplazamiento (cinco franjas iguales de 0 al máximo, azul a
+  rojo), con la escala abajo.
+- «Ver la deformación exagerada» con un deslizador logarítmico (× 1 a × 100 000); al principio el mayor movimiento
+  se ve como un décimo de la pieza.
+
+**Pruebas:** EP4 en el motor (el mayor movimiento en las esquinas de afuera es el de la barra; un campo u = (0, 0, z)
+llega igual a cada esquina); `ui_script_structural_analyze` cambia de mapa, ve las escalas y prende la deformación.
+Mirado en una captura: el cubo empujado arriba se ve hundido y en rojo arriba.
+
+**Sigue (Estructural):** Más opciones (memoria y tiempo, dirección de impresión, nube), Optimizar, arrastrar la punta
+de la flecha y sacar «Análisis» de Impresión 3D.

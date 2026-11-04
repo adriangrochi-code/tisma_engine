@@ -691,7 +691,13 @@ private:
         std::string error;
         std::size_t part = 0;
         std::string fingerprint, report;
-        std::vector<float> surface;     // the voxels' outside, 6 floats a corner (mesh_vertices' layout)
+        // The voxels' outside (rule 12): 3 corners a triangle, each corner's
+        // displacement (mm), and per triangle its safety factor, von Mises
+        // stress (MPa) and how far it moved (mm).
+        std::vector<Vec3f> corners, moved;
+        std::vector<float> safety, stress, motion;
+        double asked = 2.0, max_stress = 0.0, max_motion = 0.0, size = 1.0;
+        std::vector<float> surface;     // what the view paints: 6 floats a corner (mesh_vertices' layout), by band
         std::vector<std::uint8_t> band; // per triangle of `surface`: the map's colour band, 0 to 4
         std::optional<std::array<double, 3>> weakest; // on the bed
         double weakest_safety = 0.0;
@@ -701,6 +707,11 @@ private:
     std::atomic<int> structural_permille_{0};
     std::optional<StructuralRun> structural_map_; // the last finished run of this session
     bool structural_show_map_ = true;
+    int structural_map_kind_ = 0;          // 0 the safety factor, 1 von Mises, 2 the displacement (rule 12)
+    bool structural_deformed_ = false;     // the shape drawn deformed (rule 12)
+    float structural_exaggerate_ = 0.0f;   // times the real displacement; 0: chosen for the part
+    std::string structural_paint_key_;     // what the view's map shows
+    void paint_structural_map();
     bool try_material_ = false; // a suggested material chosen: analyze again
     bool structural_map_in_view_ = false;
     std::string structural_message_;
@@ -12950,18 +12961,46 @@ void App::structural_panel() {
                 ImGui::Checkbox(tr(T::StructShowMap), &structural_show_map_);
                 rect_of("structural_show_map");
                 if (structural_show_map_) {
+                    // Rule 12: the safety factor (at first), von Mises or the displacement.
+                    const T kinds[3] = {T::StructMapSafety, T::StructMapStress, T::StructMapMotion};
+                    for (int k = 0; k < 3; ++k) {
+                        if (ImGui::RadioButton(tr(kinds[k]), structural_map_kind_ == k))
+                            structural_map_kind_ = k;
+                        rect_of("structural_map_kind_" + std::to_string(k));
+                    }
+                    const StructuralRun& m = *structural_map_;
                     const float w = (ImGui::GetContentRegionAvail().x - 8.0f * scale_) / 5.0f;
                     for (int k = 0; k < 5; ++k) {
                         if (k > 0)
                             ImGui::SameLine(0.0f, 2.0f * scale_);
                         const ImVec2 at = ImGui::GetCursorScreenPos();
+                        const std::uint32_t colour = structural_map_kind_ == 0 ? kSafetyBands[k] : kSafetyBands[4 - k];
                         ImGui::GetWindowDrawList()->AddRectFilled(at, ImVec2(at.x + std::max(w, 8.0f), at.y + 8.0f * scale_),
-                                                                  ImGui::GetColorU32(rgb(kSafetyBands[k])));
+                                                                  ImGui::GetColorU32(rgb(colour)));
                         ImGui::Dummy(ImVec2(std::max(w, 8.0f), 8.0f * scale_));
                     }
                     ImGui::PushTextWrapPos(0.0f);
-                    loc::TextDisabled("%s", tr(T::StructLegend));
+                    if (structural_map_kind_ == 1)
+                        loc::TextDisabled("%s", format(tr(T::StructLegendStress), m.max_stress).c_str());
+                    else if (structural_map_kind_ == 2)
+                        loc::TextDisabled("%s", format(tr(T::StructLegendMotion), m.max_motion).c_str());
+                    else
+                        loc::TextDisabled("%s", tr(T::StructLegend));
                     ImGui::PopTextWrapPos();
+                    // The deformed shape, exaggerated so the largest movement
+                    // shows as a tenth of the part at first.
+                    if (m.max_motion > 0.0 && m.moved.size() == m.corners.size()) {
+                        ImGui::Checkbox(tr(T::StructDeformed), &structural_deformed_);
+                        rect_of("structural_deformed");
+                        if (structural_deformed_) {
+                            if (!(structural_exaggerate_ > 0.0f))
+                                structural_exaggerate_ = float(std::clamp(0.1 * m.size / m.max_motion, 1.0, 100000.0));
+                            ImGui::SetNextItemWidth(-FLT_MIN);
+                            ImGui::SliderFloat("##exaggerate", &structural_exaggerate_, 1.0f, 100000.0f, tr(T::StructExaggerate),
+                                               ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+                            rect_of("structural_exaggerate");
+                        }
+                    }
                 }
             }
             ImGui::Separator();
@@ -13886,27 +13925,35 @@ void App::start_structural() {
                     throw Cancelled{};
             });
             run.report = structural_report_json(r, c, moved, to_part, &placed);
-            // The map: the voxels' outside, in its colour bands one after
-            // the other (each band one group of the view's paint).
-            const VoxelSurface v = voxel_surface(r.grid, r.result.safety);
-            std::array<std::vector<float>, 5> bands;
-            for (std::size_t t = 0; t < v.value.size(); ++t) {
-                const Vec3f& p = v.corners[3 * t];
-                const Vec3f& q = v.corners[3 * t + 1];
-                const Vec3f& w = v.corners[3 * t + 2];
-                const Vec3f u{q.x - p.x, q.y - p.y, q.z - p.z}, s{w.x - p.x, w.y - p.y, w.z - p.z};
-                Vec3f n{u.y * s.z - u.z * s.y, u.z * s.x - u.x * s.z, u.x * s.y - u.y * s.x};
-                const float len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
-                if (len > 0.0f)
-                    n = Vec3f{n.x / len, n.y / len, n.z / len};
-                std::vector<float>& out = bands[std::size_t(safety_band(v.value[t], asked))];
-                for (const Vec3f* c3 : {&p, &q, &w})
-                    out.insert(out.end(), {c3->x, c3->y, c3->z, n.x, n.y, n.z});
-            }
-            for (std::size_t k = 0; k < bands.size(); ++k) {
-                run.band.insert(run.band.end(), bands[k].size() / 18, std::uint8_t(k));
-                run.surface.insert(run.surface.end(), bands[k].begin(), bands[k].end());
-            }
+            // The map's data: the voxels' outside with each triangle's
+            // values and each corner's displacement; the view paints it by
+            // the chosen kind (paint_structural_map).
+            const VoxelSurface v = voxel_surface(r.grid, r.result.safety, &r.result.elasticity.displacement);
+            const VoxelSurface vm = voxel_surface(r.grid, r.result.elasticity.von_mises);
+            run.asked = asked;
+            run.corners = v.corners;
+            run.moved = v.displacement;
+            run.safety.reserve(v.value.size());
+            for (double x : v.value)
+                run.safety.push_back(float(x));
+            run.stress.assign(v.value.size(), 0.0f);
+            if (vm.value.size() == v.value.size())
+                for (std::size_t t = 0; t < vm.value.size(); ++t)
+                    run.stress[t] = float(vm.value[t]);
+            run.motion.assign(v.value.size(), 0.0f);
+            if (run.moved.size() == run.corners.size())
+                for (std::size_t t = 0; t < run.motion.size(); ++t) {
+                    float sum = 0.0f;
+                    for (std::size_t q = 3 * t; q < 3 * t + 3; ++q)
+                        sum += std::sqrt(run.moved[q].x * run.moved[q].x + run.moved[q].y * run.moved[q].y + run.moved[q].z * run.moved[q].z);
+                    run.motion[t] = sum / 3.0f;
+                }
+            for (float x : run.stress)
+                run.max_stress = std::max(run.max_stress, double(x));
+            for (float x : run.motion)
+                run.max_motion = std::max(run.max_motion, double(x));
+            run.size = std::max(1e-6, double(std::max({r.grid.nx * r.grid.hx, r.grid.ny * r.grid.hy,
+                                                       r.grid.z.empty() ? 0.0 : r.grid.z.back() - r.grid.z.front()})));
             if (r.valid && std::isfinite(r.result.min_safety)) {
                 run.weakest = r.weakest;
                 run.weakest_safety = r.result.min_safety;
@@ -13938,6 +13985,7 @@ void App::structural_done(StructuralRun run) {
         results.push_back({"structural", run.fingerprint, run.report});
     }
     structural_map_in_view_ = false;
+    structural_exaggerate_ = 0.0f; // chosen again for the new result
     structural_map_ = std::move(run);
 }
 
@@ -13971,29 +14019,77 @@ bool App::structural_map_wanted() {
            !structural_stale(part, *it);
 }
 
+// The map in the view (rule 12): the voxels' outside, deformed when asked
+// (corner + exaggeration * displacement), its triangles grouped by colour
+// band of the chosen kind: the safety factor's five bands, or von Mises and
+// the displacement in five equal steps from 0 (blue) to the largest (red).
+void App::paint_structural_map() {
+    StructuralRun& m = *structural_map_;
+    const std::size_t n = m.safety.size();
+    const float scale = structural_deformed_ && m.moved.size() == m.corners.size() ? structural_exaggerate_ : 0.0f;
+    const auto band_of = [&](std::size_t t) {
+        if (structural_map_kind_ == 1 || structural_map_kind_ == 2) {
+            const double v = structural_map_kind_ == 1 ? m.stress[t] : m.motion[t];
+            const double top = structural_map_kind_ == 1 ? m.max_stress : m.max_motion;
+            return top > 0.0 ? std::clamp(int(v / top * 5.0), 0, 4) : 0;
+        }
+        return safety_band(m.safety[t], m.asked);
+    };
+    std::array<std::vector<float>, 5> bands;
+    for (std::size_t t = 0; t < n && 3 * t + 2 < m.corners.size(); ++t) {
+        Vec3f c[3];
+        for (std::size_t k = 0; k < 3; ++k) {
+            c[k] = m.corners[3 * t + k];
+            if (scale != 0.0f) {
+                const Vec3f& d = m.moved[3 * t + k];
+                c[k] = Vec3f{c[k].x + scale * d.x, c[k].y + scale * d.y, c[k].z + scale * d.z};
+            }
+        }
+        const Vec3f u{c[1].x - c[0].x, c[1].y - c[0].y, c[1].z - c[0].z}, w{c[2].x - c[0].x, c[2].y - c[0].y, c[2].z - c[0].z};
+        Vec3f nn{u.y * w.z - u.z * w.y, u.z * w.x - u.x * w.z, u.x * w.y - u.y * w.x};
+        const float len = std::sqrt(nn.x * nn.x + nn.y * nn.y + nn.z * nn.z);
+        if (len > 0.0f)
+            nn = Vec3f{nn.x / len, nn.y / len, nn.z / len};
+        std::vector<float>& out = bands[std::size_t(band_of(t))];
+        for (const Vec3f& q : c)
+            out.insert(out.end(), {q.x, q.y, q.z, nn.x, nn.y, nn.z});
+    }
+    m.surface.clear();
+    m.band.clear();
+    for (std::size_t k = 0; k < bands.size(); ++k) {
+        m.band.insert(m.band.end(), bands[k].size() / 18, std::uint8_t(k));
+        m.surface.insert(m.surface.end(), bands[k].begin(), bands[k].end());
+    }
+    std::vector<Vec3f> corners;
+    corners.reserve(m.surface.size() / 6);
+    for (std::size_t i = 0; i + 5 < m.surface.size(); i += 6)
+        corners.push_back(Vec3f{m.surface[i], m.surface[i + 1], m.surface[i + 2]});
+    show_in_view(TriangleMesh(std::move(corners)));
+    std::vector<Renderer::PaintGroup> groups;
+    std::size_t first = 0;
+    for (std::size_t k = 0; k < 5; ++k) {
+        const std::size_t count = 3 * std::size_t(std::count(m.band.begin(), m.band.end(), std::uint8_t(k)));
+        const std::uint32_t colour = structural_map_kind_ == 0 ? kSafetyBands[k] : kSafetyBands[4 - k];
+        if (count > 0)
+            groups.push_back({first, count, vec(colour)});
+        first += count;
+    }
+    renderer_.set_paint(m.surface, groups);
+    vk_view_.set_paint(m.surface, groups);
+}
+
 void App::update_structural_view() {
     // Checked a few times a second: the fingerprint hashes the part's mesh.
+    // A new map kind or exaggeration repaints at once.
     static int frame = 0;
-    if (++frame % 10 != 0 && structural_map_in_view_ == (tab_ == Tab::Structural && structural_show_map_ && structural_map_.has_value()))
+    const std::string key = std::to_string(structural_map_kind_) + "|" + (structural_deformed_ ? std::to_string(structural_exaggerate_) : "flat");
+    if (++frame % 10 != 0 && structural_map_in_view_ == (tab_ == Tab::Structural && structural_show_map_ && structural_map_.has_value()) &&
+        (!structural_map_in_view_ || key == structural_paint_key_))
         return;
     const bool want = structural_map_wanted();
-    if (want && !structural_map_in_view_) {
-        const StructuralRun& m = *structural_map_;
-        std::vector<Vec3f> corners;
-        corners.reserve(m.surface.size() / 6);
-        for (std::size_t i = 0; i + 5 < m.surface.size(); i += 6)
-            corners.push_back(Vec3f{m.surface[i], m.surface[i + 1], m.surface[i + 2]});
-        show_in_view(TriangleMesh(std::move(corners)));
-        std::vector<Renderer::PaintGroup> groups;
-        std::size_t first = 0;
-        for (std::size_t k = 0; k < 5; ++k) {
-            const std::size_t count = 3 * std::size_t(std::count(m.band.begin(), m.band.end(), std::uint8_t(k)));
-            if (count > 0)
-                groups.push_back({first, count, vec(kSafetyBands[k])});
-            first += count;
-        }
-        renderer_.set_paint(m.surface, groups);
-        vk_view_.set_paint(m.surface, groups);
+    if (want && (!structural_map_in_view_ || key != structural_paint_key_)) {
+        paint_structural_map();
+        structural_paint_key_ = key;
         structural_map_in_view_ = true;
     } else if (!want && structural_map_in_view_) {
         structural_map_in_view_ = false;

@@ -84,10 +84,15 @@ double voxel_mass_grams(const VoxelGrid& grid, double density);
 // The outside of the analysed voxels as triangles (two per face of a solid
 // voxel with no solid neighbour behind it, facing out), each with the value
 // of its voxel: what the Structural tab paints its map on (rule 12).
+// With the nodes' displacement (3 per node of the grid, as ElasticityResult
+// keeps it), each corner also gets its own: the deformed shape is corner +
+// scale * displacement (rule 12, «la deformación exagerada»).
 struct VoxelSurface {
-    std::vector<Vec3f> corners; // 3 per triangle
-    std::vector<double> value;  // per triangle
+    std::vector<Vec3f> corners;      // 3 per triangle
+    std::vector<double> value;       // per triangle
+    std::vector<Vec3f> displacement; // per corner, when the nodes' displacement was given
 };
-VoxelSurface voxel_surface(const VoxelGrid& grid, const std::vector<double>& per_voxel);
+VoxelSurface voxel_surface(const VoxelGrid& grid, const std::vector<double>& per_voxel,
+                           const std::vector<double>* node_displacement = nullptr);
 
 } // namespace tisma

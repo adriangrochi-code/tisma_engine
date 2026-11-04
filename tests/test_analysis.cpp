@@ -661,6 +661,24 @@ TEST_CASE("structural report: EP4 and EP6, a bar fixed at one end, the verdict, 
     two.z = {0.0, 1.0};
     two.solid = {1, 1};
     CHECK(voxel_surface(two, {1.0, 2.0}).value.size() == 20);
+    CHECK(voxel_surface(two, {1.0, 2.0}).displacement.empty());
+    // With the nodes' displacement (here u = (0, 0, z)), each corner carries its own.
+    std::vector<double> lift(3 * 3 * 2 * 2, 0.0);
+    for (int k = 0; k < 2; ++k)
+        for (int j = 0; j < 2; ++j)
+            for (int i = 0; i < 3; ++i)
+                lift[3 * std::size_t((k * 2 + j) * 3 + i) + 2] = double(k);
+    const VoxelSurface lifted = voxel_surface(two, {1.0, 2.0}, &lift);
+    REQUIRE(lifted.displacement.size() == lifted.corners.size());
+    for (std::size_t n = 0; n < lifted.corners.size(); ++n)
+        CHECK(lifted.displacement[n].z == lifted.corners[n].z);
+    // The bar's corners: the largest movement on its outside is the bar's largest.
+    const VoxelSurface bent = voxel_surface(r.grid, r.result.safety, &r.result.elasticity.displacement);
+    REQUIRE(bent.displacement.size() == bent.corners.size());
+    double most = 0.0;
+    for (const Vec3f& d : bent.displacement)
+        most = std::max(most, std::sqrt(double(d.x) * d.x + double(d.y) * d.y + double(d.z) * d.z));
+    CHECK_THAT(most, WithinRel(r.result.elasticity.max_displacement, 1e-5));
     // EP6: the same force spread on the top face bends the bar less.
     e.conditions = {fixed, spread};
     const AnalysisCase c6 = engineering_analysis_case(e, triangles, {}, notes, "PLA");
