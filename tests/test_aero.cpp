@@ -59,9 +59,9 @@ AeroResult run(TriangleMesh mesh, std::array<double, 3> direction, int cells, do
     in.flow_throughs = flow_throughs;
     AeroResult r = analyze(in);
     std::printf("cd %.3f (pressure %.3f, coarse %.3f at %d, faces %.3f, simulated total %.3f, blockage %.3f, friction %.4f, "
-                "range %.3f to %.3f), grid %dx%dx%d, %ld steps, %.1f s\n",
+                "range %.3f to %.3f), grid %dx%dx%d, %ld steps%s, %.1f s\n",
                 r.cd, r.cd_pressure, r.cd_pressure_coarse, r.cells_coarse, r.cd_pressure_surface, r.cd_total_simulated, r.blockage,
-                r.cd_friction, r.cd_low, r.cd_high, r.cells_x, r.cells_y, r.cells_z, r.steps, r.seconds);
+                r.cd_friction, r.cd_low, r.cd_high, r.cells_x, r.cells_y, r.cells_z, r.steps, r.stopped_early ? " (early)" : "", r.seconds);
     return r;
 }
 
@@ -242,4 +242,30 @@ TEST_CASE("aero: AE1 to AE4, drag coefficients against Hoerner", "[.aero-full]")
         CHECK(blunt.cd < 1.3);
         CHECK(nosed.cd < 0.7 * blunt.cd); // Tisma 0.34: the nose lowers the drag
     }
+}
+
+TEST_CASE("aero: EP9, a 20 mm cube in air along +X at 10 m/s, fast quality", "[.aero-full]") {
+    AeroInput in;
+    in.mesh = make_box(20, 20, 20);
+    in.direction = {1, 0, 0};
+    in.speed = 10.0;
+    in.quality = AeroQuality::Fast;
+    const AeroResult r = analyze(in);
+    std::printf("EP9: cd %.3f (pressure %.3f, coarse %.3f), range %.3f to %.3f, %ld steps%s, %.1f s\n", r.cd, r.cd_pressure,
+                r.cd_pressure_coarse, r.cd_low, r.cd_high, r.steps, r.stopped_early ? " (early)" : "", r.seconds);
+    REQUIRE(r.ok);
+    CHECK(r.cd > 0.8);
+    CHECK(r.cd < 1.3);
+    // The face the air meets in the map's top band (red: Cp from 0.66).
+    double front = 0;
+    int n = 0;
+    for (std::size_t t = 0; t < in.mesh.triangle_count(); ++t) {
+        const Vec3f a = in.mesh.corner(t, 0), b = in.mesh.corner(t, 1), c = in.mesh.corner(t, 2);
+        const float nx = (b.y - a.y) * (c.z - a.z) - (b.z - a.z) * (c.y - a.y);
+        if (nx < -1e-3f)
+            front += r.cp[t], ++n;
+    }
+    REQUIRE(n > 0);
+    INFO(front / n);
+    CHECK(front / n > 0.66);
 }

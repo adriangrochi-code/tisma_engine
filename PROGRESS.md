@@ -10049,3 +10049,30 @@ plataforma: queda de costado) y `orient` en resina desde la línea de comandos.
 
 **Sigue (hoja de ruta):** Ingeniería EP1 a EP10 y el CFD más rápido (parada temprana, de grueso a fino).
 
+## 2026-11-04 — CFD más rápido: parada temprana (y arranque de grueso a fino, medido y apagado); EP9
+
+**Hecho** (hoja de ruta, punto 2; `docs/research/cfd_fea_optimizations.md` §2.5):
+- **Parada temprana:** el arrastre de presión se sigue en ventanas de un cuarto de pasada del flujo; después de 1,5
+  pasadas, cuando cuatro ventanas seguidas coinciden dentro de 1 % (rápida), 0,5 % (media) o 0,3 % (alta y extrema),
+  se promedian dos ventanas más y la simulación termina. El resultado dice `stopped_early`.
+- **Arranque de grueso a fino:** la corrida de verificación (2/3 de las celdas) va ahora primero; su flujo medio
+  puede iniciar la fina (Skordos 1993). Queda **apagado**: medido, ahorra poco y mueve el Cd de un flujo inestable.
+- **EP9** (`engineering_panel.md`): cubo de 20 mm, aire en +X a 10 m/s, calidad rápida: Cd entre 0,8 y 1,3 y la cara
+  de adelante en la franja roja (Cp ≥ 0,66). Está en `[.aero-full]`. Con eso, EP1 a EP10 tienen todos su prueba.
+
+**Medido** (a 12 celdas en AE1 a AE4, a 16 en EP9; pasos y Cd de presión):
+
+| Caso | Antes | Parada temprana | Más arranque de grueso a fino |
+|---|---|---|---|
+| Placa | 3360 · 1,072 | 3360 · 1,072 (no corta: desprende vórtices) | 3360 · 1,095 |
+| Cubo | 3960 · 1,042 | **2970** · 1,037 | 2640 · 1,047 |
+| Prisma 3:1 | 5400 · 0,980 | **3600** · 0,975 | 3600 · 0,982 |
+| Prisma con punta | 5400 · 0,409 | **4500** · 0,408 | 4500 · 0,410 |
+| EP9, cubo rápida | — | 5280 · 1,111 (Cd total 1,157) | 5280 · 1,216 |
+
+La parada temprana ahorra entre 0 y 33 % de los pasos sin mover el Cd más de 0,5 %. El arranque en caliente ahorra
+otro 10 % en el cubo, pero cambió 9 % el Cd de EP9, cuyo flujo no se asienta.
+
+**Sigue (hoja de ruta):** Diseño D4 (barrido, transición, texto), después D5b (DXF/SVG). Pedido de la app de
+Android, en cola después de este ítem: `--summary` también para `slice <modelo> --config`.
+

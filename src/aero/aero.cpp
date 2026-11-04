@@ -239,7 +239,7 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
         LbmResult flow;
         std::size_t shadow = 0;
     };
-    const auto lattice = [&](int n, const std::function<bool(double)>& report) {
+    const auto lattice = [&](int n, const std::function<bool(double)>& report, const Lattice* warm) {
         Lattice l;
         l.dx = r.frontal_size_mm / n;
         const double dx = l.dx;
@@ -280,6 +280,53 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
         // (measured at 12 cells, 2026-11-03: plate 1.01 to 1.07 against
         // Hoerner's 1.17, cube 1.007 to 1.042 against 1.05).
         o.sponge = std::max(3, n / 2);
+        // Stop when the drag settles, tighter for the finer qualities.
+        o.converge = in.converge >= 0.0 ? in.converge
+                     : in.quality == AeroQuality::Fast ? 0.01
+                     : in.quality == AeroQuality::Normal ? 0.005
+                                                         : 0.003;
+        // A warm start: the coarser lattice's mean flow, trilinear at each
+        // cell's centre (its part's cells left out); then the wave of the
+        // start is mostly gone and the drag may settle sooner.
+        if (warm) {
+            const LbmOptions& wo = warm->o;
+            const std::size_t count = std::size_t(o.nx) * std::size_t(o.ny) * std::size_t(o.nz);
+            o.initial_density.assign(count, 1.0f);
+            o.initial_velocity.assign(3 * count, 0.0f);
+            for (int z = 0; z < o.nz; ++z)
+                for (int y = 0; y < o.ny; ++y)
+                    for (int x = 0; x < o.nx; ++x) {
+                        const std::size_t c = (std::size_t(z) * std::size_t(o.ny) + std::size_t(y)) * std::size_t(o.nx) + std::size_t(x);
+                        const double g[3] = {(x + 0.5) * dx / warm->dx - 0.5, (y + 0.5) * dx / warm->dx - 0.5, (z + 0.5) * dx / warm->dx - 0.5};
+                        const int b0[3] = {int(std::floor(g[0])), int(std::floor(g[1])), int(std::floor(g[2]))};
+                        double rho = 0.0, u[3] = {0, 0, 0}, weight = 0.0;
+                        for (int k = 0; k < 8; ++k) {
+                            const int d[3] = {k & 1, (k >> 1) & 1, (k >> 2) & 1};
+                            const int q[3] = {std::clamp(b0[0] + d[0], 0, wo.nx - 1), std::clamp(b0[1] + d[1], 0, wo.ny - 1),
+                                              std::clamp(b0[2] + d[2], 0, wo.nz - 1)};
+                            const std::size_t wc = (std::size_t(q[2]) * std::size_t(wo.ny) + std::size_t(q[1])) * std::size_t(wo.nx) + std::size_t(q[0]);
+                            if (warm->solid[wc])
+                                continue;
+                            double w = 1.0;
+                            for (int a = 0; a < 3; ++a) {
+                                const double t = g[a] - b0[a];
+                                w *= d[a] ? t : 1.0 - t;
+                            }
+                            rho += w * warm->flow.mean_density[wc];
+                            for (int a = 0; a < 3; ++a)
+                                u[a] += w * warm->flow.mean_velocity[3 * wc + std::size_t(a)];
+                            weight += w;
+                        }
+                        if (weight > 1e-9) {
+                            o.initial_density[c] = float(rho / weight);
+                            for (int a = 0; a < 3; ++a)
+                                o.initial_velocity[3 * c + std::size_t(a)] = float(u[a] / weight);
+                        } else {
+                            o.initial_velocity[3 * c] = float(kLatticeVelocity);
+                        }
+                    }
+            o.min_flow_throughs = 0.5;
+        }
         l.flow = run_lbm(o, l.solid, report);
         return l;
     };
@@ -293,11 +340,30 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
         // With the resolution check the coarser run takes about a fifth of
         // the time: the progress is shared out by the cells' fourth power.
         const int coarse = in.resolution_check && cells >= 12 ? int(std::lround(cells * 2.0 / 3.0)) : 0;
-        const double fine_share = coarse > 0 ? std::pow(double(cells), 4) / (std::pow(double(cells), 4) + std::pow(double(coarse), 4)) : 1.0;
+        // The coarser run first (about a fifth of the time): it is the
+        // resolution check, and its flow starts the fine one warm.
+        const double coarse_share =
+            coarse > 0 ? std::pow(double(coarse), 4) / (std::pow(double(cells), 4) + std::pow(double(coarse), 4)) : 0.0;
+        std::optional<Lattice> check;
+        if (coarse > 0) {
+            std::function<bool(double)> coarse_progress;
+            if (progress)
+                coarse_progress = [&](double d) { return progress(d * coarse_share); };
+            check = lattice(coarse, coarse_progress, nullptr);
+            if (!check->flow.stable && progress) {
+                r.error = "the simulation was stopped or did not stay stable";
+                return r;
+            }
+            if (check->flow.stable) {
+                r.resolution_checked = true;
+                r.cd_pressure_coarse = pressure_cd(*check);
+                r.cells_coarse = coarse;
+            }
+        }
         std::function<bool(double)> fine_progress;
         if (progress)
-            fine_progress = [&](double d) { return progress(d * fine_share); };
-        const Lattice main = lattice(cells, fine_progress);
+            fine_progress = [&](double d) { return progress(coarse_share + d * (1.0 - coarse_share)); };
+        const Lattice main = lattice(cells, fine_progress, check && check->flow.stable && in.warm_start ? &*check : nullptr);
         const LbmOptions& o = main.o;
         const V origin = main.origin;
         const double dx = main.dx;
@@ -305,26 +371,12 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
         const LbmResult& flow = main.flow;
         r.cells_x = o.nx, r.cells_y = o.ny, r.cells_z = o.nz;
         r.reynolds_simulated = std::min(r.reynolds, 40.0 * cells);
-        r.steps = o.steps;
+        r.steps = flow.steps;
+        r.stopped_early = flow.stopped_early;
         r.stable = flow.stable;
         if (!flow.stable) {
             r.error = progress ? "the simulation was stopped or did not stay stable" : "the simulation did not stay stable";
             return r;
-        }
-        if (coarse > 0) {
-            std::function<bool(double)> coarse_progress;
-            if (progress)
-                coarse_progress = [&](double d) { return progress(fine_share + d * (1.0 - fine_share)); };
-            const Lattice check = lattice(coarse, coarse_progress);
-            if (!check.flow.stable && progress) {
-                r.error = "the simulation was stopped or did not stay stable";
-                return r;
-            }
-            if (check.flow.stable) {
-                r.resolution_checked = true;
-                r.cd_pressure_coarse = pressure_cd(check);
-                r.cells_coarse = coarse;
-            }
         }
         r.simulated = true;
         // The pressure on each face: the mean density just outside it,
