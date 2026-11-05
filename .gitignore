@@ -3,3 +3,5 @@ build*/
 .vscode/
 .idea/
 *.gcode
+__pycache__/
+*.pyc

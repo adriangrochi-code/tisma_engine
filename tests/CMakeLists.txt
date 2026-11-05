@@ -843,6 +843,8 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME license_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_licenses.py ${PROJECT_SOURCE_DIR})
   # VERSION has its section in CHANGELOG.md (docs/VERSIONING.md).
   add_test(NAME release_notes_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/release_notes.py --check)
+  # The release list and its signing (docs/FIRMAR_VERSIONES.md); skipped without openssl 3.
+  add_test(NAME sign_release_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/test_sign_release.py)
   # Specs from the team that knows Tisma Slicer carry no code and no internal
   # names (see CLEANROOM.md).
   if(EXISTS ${PROJECT_SOURCE_DIR}/docs/spec)

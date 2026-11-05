@@ -398,6 +398,8 @@ bool pack_compatible(const std::optional<int>& set, const std::vector<std::vecto
         return true;
     if (*set < 0 || std::size_t(*set) >= sets.size())
         return false;
+    if (sets[std::size_t(*set)].empty())
+        return true; // an empty set is taken as none (rule 12): a pack error, not "no printer"
     return std::binary_search(sets[std::size_t(*set)].begin(), sets[std::size_t(*set)].end(), printer);
 }
 

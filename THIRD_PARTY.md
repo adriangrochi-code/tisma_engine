@@ -42,6 +42,8 @@ SolidCraft en la app de Android (decisión del dueño, 2026-11-04): el flujo `.g
 |---|---|---|---|
 | glslang (`glslangValidator`) | 15.1.0 (Ubuntu 24.04, paquete `glslang-tools`); licencia leída en el tag `vulkan-sdk-1.4.350.1`, commit `275822a6261ee689aadb1da5f09a0ec2f058685c` | Mezcla: el núcleo BSD-3-Clause; el preprocesador suma una licencia permisiva propia de NVIDIA; partes MIT y Apache-2.0; conserva el texto «GPL 3 with special bison exception», aunque dice que Bison ya no se usa | `tools/compile_shaders.py` pasa los shaders de GLSL a SPIR-V. El SPIR-V generado se guarda en `src/gpu/shaders/generated/` y es salida de la herramienta, no código de glslang. Nunca se enlaza ni se distribuye. |
 | Mesa lavapipe | la de Ubuntu 24.04 (paquete `mesa-vulkan-drivers`) | MIT | Solo en la CI y en pruebas locales: un dispositivo Vulkan por software para correr las pruebas de GPU sin GPU. |
+| OpenSSL (programa `openssl`) | 3.0 o más nueva: la de Git para Windows en la computadora del dueño; 3.0.13 de Ubuntu 24.04 en la CI | Apache-2.0 | `tools/sign_release.py` firma y comprueba las versiones con Ed25519 (`docs/FIRMAR_VERSIONES.md`), y su prueba crea una clave de prueba. Se llama como programa; no se enlaza ni se distribuye. |
+| GitHub CLI (`gh`) | la que instale el dueño; la de la imagen de la CI | MIT | `tools/sign_release.py` baja el borrador, sube la lista firmada y publica; el flujo de releases arma el borrador. No se distribuye. |
 
 ## App de Android (`apps/android/`, Gradle)
 

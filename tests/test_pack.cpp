@@ -133,6 +133,9 @@ TEST_CASE("pack: entries and compatible printers (PF5)", "[pack]") {
     CHECK(pack_compatible(pla.compatible, sets, 2)); // PF5: only printer 2
     CHECK(pack_compatible(std::nullopt, sets, 0));   // compatible null: every printer
     CHECK_FALSE(pack_compatible(7, sets, 2));         // a set that is not there
+    // An empty set is taken as null (rule 12, BH29): every printer.
+    const auto with_empty = parse_pack_compatible(R"({"format": "tisma-pack-compatible", "version": 1, "sets": [[0], []]})");
+    CHECK(pack_compatible(1, with_empty, 5));
 }
 
 // ---------------------------------------------------------------------------
@@ -349,6 +352,34 @@ TEST_CASE("pack: the filaments offered for a printer (rule 12, PK7)", "[pack]") 
     std::vector<std::string> warnings;
     CHECK(pack_entry_profile(pack, "vendors/acme/filaments/PLA.json", warnings).kind == ProfileKind::Filament);
     CHECK_THROWS_AS(pack_entry_profile(pack, "../x.json", warnings), PackError);
+}
+
+TEST_CASE("pack: a variant's defaults always valid for it, an empty set for every printer (rule 12, BH29)", "[pack]") {
+    const fs::path pack = fresh_dir("tisma_pack_bh29") / "pack";
+    pack_install(pack, staging_from("release1", "tisma_pack_stage_bh29"));
+    const PackIndex index = pack_installed(pack);
+    // Acme Standard is in set 1 (the Bolt Two only), but it is the Acme One
+    // 0.4's default print: chosen and offered for it, not for the 0.6.
+    const PackProfiles p = pack_profiles(pack, index, "vendors/acme/models/A1.json#0.4");
+    REQUIRE(p.print);
+    CHECK(p.print->name == "Acme Standard");
+    const auto names = [](const std::vector<PackFilamentRef>& refs) {
+        std::vector<std::string> out;
+        for (const PackFilamentRef& r : refs)
+            out.push_back(r.name);
+        return out;
+    };
+    CHECK(names(pack_prints_for(pack, index, 0)) == std::vector<std::string>{"Acme Standard", "Acme Fine"});
+    CHECK(names(pack_prints_for(pack, index, 1)) == std::vector<std::string>{"Acme Fine"});
+    CHECK_THROWS_AS(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.6", "", "vendors/acme/prints/Standard.json"),
+                    PackError);
+    // Acme Fine points to set 2, empty: offered with every printer, and
+    // logged as a pack error when it is chosen.
+    const PackProfiles fine = pack_profiles(pack, index, "vendors/acme/models/A1.json#0.6", "", "vendors/acme/prints/Fine.json");
+    REQUIRE(fine.print);
+    CHECK(std::any_of(fine.warnings.begin(), fine.warnings.end(), [](const std::string& w) {
+        return w.find("compatible set #2, which is empty") != std::string::npos;
+    }));
 }
 
 TEST_CASE("pack: a resin printer's resin and resin print profile (rules 10, 12, 13)", "[pack]") {

@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Versiones firmadas:** la CI deja cada versión como borrador y el dueño la firma con la clave Ed25519 de su
+  pendrive (`tools/sign_release.py`, guía en `docs/FIRMAR_VERSIONES.md`). Así los programas solo instalan lo que él
+  firmó.
 - **Calibración de puentes y voladizos:** aletas de 20° a 70° y puentes de 10 a 50 mm; la aleta más inclinada que sale
   bien da el ángulo desde el que van los soportes.
 - **Paquete de perfiles, primer arranque:** la primera vez se baja solo la lista de impresoras del paquete; sin red
@@ -332,6 +335,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Paquete de perfiles:** las variantes que no se podían elegir porque su filamento o su perfil apuntaban a un
+  conjunto de impresoras vacío ahora se eligen. Las macros de inicio reciben las temperaturas de cámara y de espera, en
+  0 si el filamento no las trae. Un G-code de inicio que llama a `START_PRINT` después de apagar la boquilla ya no se
+  rechaza: queda un aviso. El modelo de la cama se centra en la placa.
 - Una impresora de resina del paquete (`"technology": "sla"`) quedaba como impresora de filamento.
 - Las velocidades del perfil de impresión del paquete se perdían y se laminaba con las de una Ender-3 (BH27). Ahora
   pasan a la impresora, y cambian al elegir otro perfil de impresión o filamento del paquete; las que cambiaste a mano

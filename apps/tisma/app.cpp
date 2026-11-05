@@ -5374,7 +5374,22 @@ void App::refresh_bed_extras() {
         std::string data;
         if (read_pack(bed_model, data)) {
             try {
-                model = mesh_vertices(parse_stl(data).mesh, Vec3{0, 0, 0});
+                const TriangleMesh mesh = parse_stl(data).mesh;
+                if (!mesh.empty()) {
+                    // Rule 14: the pack's STL is made around its own centre.
+                    double lo[3], hi[3];
+                    for (int a = 0; a < 3; ++a)
+                        lo[a] = 1e300, hi[a] = -1e300;
+                    for (const Vec3f& c : mesh.corners())
+                        for (int a = 0; a < 3; ++a) {
+                            const double v = a == 0 ? c.x : a == 1 ? c.y : c.z;
+                            lo[a] = std::min(lo[a], v), hi[a] = std::max(hi[a], v);
+                        }
+                    const BedModelPlace place = bed_model_place(lo, hi, min_x, min_y, max_x, max_y);
+                    if (place.small)
+                        log_line("bed model " + bed_model + " is under half the bed; drawn anyway");
+                    model = mesh_vertices(mesh, Vec3{float(place.dx), float(place.dy), float(place.dz)});
+                }
             } catch (const std::exception& e) {
                 log_line(std::string("bed model ") + bed_model + ": " + e.what());
             }
@@ -21833,13 +21848,13 @@ void App::script_input() {
         if (!ok)
             return fail_step("the plate has " + std::to_string(objects_.size()) + " models, the last " + last);
         next();
-    } else if (step.verb == "expect-toast") { // a toast with this text, within 30 frames
+    } else if (step.verb == "expect-toast") { // a toast with this text, within 300 frames (a background job's may be late)
         for (const Toast& toast : toasts_)
             if (toast.text.find(step.value) != std::string::npos) {
                 std::printf("ui-script: expect-toast %s: ok\n", step.value.c_str());
                 return next();
             }
-        if (f >= 30)
+        if (f >= 300)
             fail_step("no toast says \"" + step.value + "\"");
     } else {
         fail_step("unknown step");

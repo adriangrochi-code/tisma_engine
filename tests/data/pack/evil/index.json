@@ -11,8 +11,8 @@
  ],
  "compatible": {
   "name": "compatible.json",
-  "size": 102,
-  "sha256": "83a5d721be3042c315f3ad87726f0b7918eb963bdf809cc3c1761be7ad29e18d"
+  "size": 108,
+  "sha256": "3f623874013cfa17459322fb34f6287b9dcad95b84896d68b08ed0ec295a922e"
  },
  "community": {
   "name": "community.tar.xz",

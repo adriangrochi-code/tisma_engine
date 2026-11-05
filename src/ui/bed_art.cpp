@@ -150,6 +150,15 @@ bool solid(const NSVGpaint& paint, float opacity) {
 
 } // namespace
 
+BedModelPlace bed_model_place(const double lo[3], const double hi[3], double min_x, double min_y, double max_x, double max_y) {
+    BedModelPlace out;
+    out.dx = 0.5 * (min_x + max_x) - 0.5 * (lo[0] + hi[0]);
+    out.dy = 0.5 * (min_y + max_y) - 0.5 * (lo[1] + hi[1]);
+    out.dz = -hi[2];
+    out.small = hi[0] - lo[0] < 0.5 * (max_x - min_x) || hi[1] - lo[1] < 0.5 * (max_y - min_y);
+    return out;
+}
+
 BedArt bed_svg_art(std::string_view svg, double min_x, double min_y, double max_x, double max_y, double z) {
     BedArt art;
     if (!(max_x > min_x) || !(max_y > min_y))

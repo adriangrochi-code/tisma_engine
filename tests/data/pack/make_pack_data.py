@@ -55,13 +55,13 @@ bed_svg = (b'<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" vi
 acme1 = tar([("vendors/acme/beds/A1.stl", slab(0, 0, 220, 220, -3, 0)), ("vendors/acme/beds/A1.svg", bed_svg),
              ("vendors/acme/models/A1.json", model("Acme One", 0.6)),
              ("vendors/acme/filaments/PLA.json", entry("filament", "Acme PLA", {"machine": {"variables": {"temperature": 210}}, "cooling": {"min_speed": 12}}, 0)),
-             ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}, "speed": {"walls": 170, "travel": 300}}, None)),
-             ("vendors/acme/prints/Fine.json", entry("print", "Acme Fine", {"layers": {"height": 0.1}, "speed": {"walls": 60, "travel": 200}}, None))])
+             ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}, "speed": {"walls": 170, "travel": 300}}, 1)),
+             ("vendors/acme/prints/Fine.json", entry("print", "Acme Fine", {"layers": {"height": 0.1}, "speed": {"walls": 60, "travel": 200}}, 2))])
 acme2 = tar([("vendors/acme/beds/A1.stl", slab(0, 0, 220, 220, -3, 0)), ("vendors/acme/beds/A1.svg", bed_svg),
              ("vendors/acme/models/A1.json", model("Acme One Plus", 0.6)),
              ("vendors/acme/filaments/PLA.json", entry("filament", "Acme PLA", {"machine": {"variables": {"temperature": 215}}, "cooling": {"min_speed": 12}}, 0)),
-             ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}, "speed": {"walls": 170, "travel": 300}}, None)),
-             ("vendors/acme/prints/Fine.json", entry("print", "Acme Fine", {"layers": {"height": 0.1}, "speed": {"walls": 60, "travel": 200}}, None))])
+             ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}, "speed": {"walls": 170, "travel": 300}}, 1)),
+             ("vendors/acme/prints/Fine.json", entry("print", "Acme Fine", {"layers": {"height": 0.1}, "speed": {"walls": 60, "travel": 200}}, 2))])
 bolt = tar([("vendors/bolt/models/B2.json", j({"format": "tisma-pack-model", "version": 2, "technology": "sla",
              "vendor": "Bolt", "model": {"id": "B2", "name": "Bolt Two"}, "default_variant": "default",
              "common": {"settings": {}}, "variants": [{"id": "default", "nozzle": 0, "name": "Bolt Two", "settings": {},
@@ -88,7 +88,9 @@ community = tar([("community/printers/Acme/Acme One.json", j({"vendor": "Acme", 
     value("resin.viscosity", 350, "mPa·s", "community", "https://example.org/forum-grey")]}))])
 knowledge = tar([("knowledge/glossary.json", j({"format": "tisma-knowledge-glossary", "version": 1, "language": "es",
                                                  "sources": [], "terms": []}))])
-compatible = j({"format": "tisma-pack-compatible", "version": 1, "sets": [[0, 1], [2]]})
+compatible = j({"format": "tisma-pack-compatible", "version": 1, "sets": [[0, 1], [2], []]})
+# Set 1 is Bolt's only, yet Acme Standard is the Acme One 0.4's default print: valid for it (rule 12).
+# Set 2 is empty, as 392 entries of the real pack 2026.10.27: taken as every printer, a pack error (BH29).
 evil_path = tar([("vendors/acme/models/A1.json", model("Acme One", 0.6)), ("vendors/acme/../../x.json", b"{}\n")])
 evil_link = tar([("vendors/bolt/models/B2.json", b"{}\n"), ("vendors/bolt/link", ("link", "/etc/passwd"))])
 

@@ -2394,6 +2394,13 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
             items.push_back(TemplateValue::parse(v));
         c.variables[name] = list(std::move(items));
     }
+    // The temperature variables always exist, 0 when the filament lacks them,
+    // so a start macro can be given them (profile_pack.md rules 17 and 18 bis,
+    // BH30).
+    for (const char* name : {"temperature", "first_layer_temperature", "bed_temperature", "first_layer_bed_temperature",
+                             "chamber_temperature", "chamber_minimal_temperature", "idle_temperature"})
+        if (!c.variables.contains(name))
+            c.variables[name] = list({TemplateValue::of(0LL)});
     // The profiles' own parameters (presets.md, rule 21): the material's one
     // per extruder.
     for (const auto& [name, value] : s.printer_parameters)
