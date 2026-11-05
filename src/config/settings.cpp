@@ -3,6 +3,7 @@
 
 #include "config/settings.hpp"
 #include "gcode/dialect.hpp"
+#include "gcode/thumbnail.hpp"
 #include "geom/bead.hpp"
 
 #include <nlohmann/json.hpp>
@@ -2606,7 +2607,7 @@ Settings parse_checked(std::string_view text) {
     });
     read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "between_objects", "volumetric_e",
                                "verbose_comments", "arcs", "progress", "auto_temperatures", "binary", "object_labels",
-                               "toolchange", "custom_template", "corner_smoothing"},
+                               "toolchange", "custom_template", "corner_smoothing", "thumbnails"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "object_labels") {
             s.object_labels = choice<ObjectLabels>(
@@ -2624,6 +2625,17 @@ Settings parse_checked(std::string_view text) {
              : n == "progress"          ? s.gcode_progress
              : n == "auto_temperatures" ? s.auto_temperatures
                                         : s.verbose_comments) = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "thumbnails") {
+            if (!g.at(n).is_string())
+                fail(k, "must be a string");
+            try {
+                parse_thumbnails(g.at(n).get<std::string>());
+            } catch (const std::invalid_argument& e) {
+                fail(k, e.what());
+            }
+            s.gcode_thumbnails = g.at(n).get<std::string>();
             return;
         }
         if (n != "resolution" && n != "corner_smoothing") {
@@ -3271,6 +3283,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"output.post_process", json(s.post_process).dump()},
         {"gcode.auto_temperatures", flag(s.auto_temperatures)},
         {"gcode.binary", flag(s.gcode_binary)},
+        {"gcode.thumbnails", text(s.gcode_thumbnails)},
         {"extrusion.start_gcode", text(s.filament_start_gcode)},
         {"extrusion.end_gcode", text(s.filament_end_gcode)},
         {"machine.corner_speed", speed(s.corner_speed)},
@@ -4061,7 +4074,8 @@ std::string settings_json(const Settings& s) {
           {"progress", s.gcode_progress},
           {"object_labels", object_labels_name(s.object_labels)},
           {"auto_temperatures", s.auto_temperatures},
-          {"binary", s.gcode_binary}}},
+          {"binary", s.gcode_binary},
+          {"thumbnails", s.gcode_thumbnails}}},
         {"changes", changes_json(s.changes)},
     };
     return root.dump(2) + "\n";

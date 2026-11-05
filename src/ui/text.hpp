@@ -1945,6 +1945,7 @@
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \
     X(GcodeArcs, "Arcos G2/G3", "G2/G3 arcs") \
     X(GcodeBinary, "G-code binario (.bgcode)", "Binary G-code (.bgcode)") \
+    X(GcodeThumbnails, "Miniaturas (ancho x alto / formato)", "Thumbnails (width x height / format)") \
     X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
     X(SubJerk, "Tirones y esquinas", "Jerk and corners") \
     X(SkirtMinFilament, "Filamento mínimo", "Minimum filament") \

@@ -78,6 +78,7 @@ add_executable(tisma_tests
   test_lattice.cpp
   test_adhesion.cpp
   test_gcode_check.cpp
+  test_thumbnail.cpp
   test_gcode_preview.cpp
   test_calibration.cpp
   test_determinism.cpp

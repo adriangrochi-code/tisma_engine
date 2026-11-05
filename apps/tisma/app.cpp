@@ -37,6 +37,7 @@
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "device/bambu.hpp"
+#include "gcode/thumbnail.hpp"
 #include "device/bambu_simulator.hpp"
 #include "ui/image_decode.hpp"
 #include "device/gcode_host.hpp"
@@ -1549,6 +1550,8 @@ private:
     std::vector<device::SsdpPrinter> bambu_found_;
     std::vector<int> bambu_busy_ports_;
     bool bambu_searched_ = false, bambu_use_ams_ = true;
+    std::string thumbnails_draft_; // gcode.thumbnails as typed
+    bool thumbnails_editing_ = false;
     std::string bambu_job_name_;
     std::shared_ptr<std::atomic<double>> bambu_sent_ = std::make_shared<std::atomic<double>>(-1.0);
     // The A1 and P1 camera (rule 6): a thread reads the frames, the interface
@@ -1889,7 +1892,7 @@ const std::map<T, const char*>& row_keys() {
         {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
-        {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"},
+        {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"}, {T::GcodeThumbnails, "gcode.thumbnails"},
         {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
         {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
@@ -9165,6 +9168,25 @@ bool App::card_rows(std::string_view id, bool& bed) {
         count(T::PostProcessRow, "output.post_process", s.post_process.size());
     }
     ImGui::EndTable();
+    // The thumbnails, full width (gcode_extras.md, rule 8): kept as typed
+    // while it is wrong, and taken only once it reads.
+    if (id == "gcode_output" && shown("gcode.thumbnails")) {
+        ImGui::TextUnformatted(tr(T::GcodeThumbnails));
+        if (!thumbnails_editing_)
+            thumbnails_draft_ = s.gcode_thumbnails;
+        ImGui::SetNextItemWidth(-9.0f * scale_);
+        ImGui::InputTextWithHint("##thumbnails", "16x16/PNG,220x124/PNG", &thumbnails_draft_);
+        thumbnails_editing_ = ImGui::IsItemActive();
+        try {
+            parse_thumbnails(thumbnails_draft_);
+            if (thumbnails_draft_ != s.gcode_thumbnails) {
+                s.gcode_thumbnails = thumbnails_draft_;
+                changed = true;
+            }
+        } catch (const std::invalid_argument& e) {
+            loc::TextColored(rgb(0xE5484D), "%s", e.what());
+        }
+    }
     // The file's name, full width (gcode_templates.md, rule 15).
     if (id == "output_file" && shown("output.filename_format")) {
         ImGui::TextUnformatted(tr(T::FilenameFormat));

@@ -11164,3 +11164,26 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - **Sin probar:** con un PNG de un paquete real en la interfaz. Lo cubre solo la prueba unitaria.
 
 **Sigue:** lo que sigue del PLAN.
+
+## 2026-11-05 — miniaturas del G-code, parte 1 (gcode_extras.md, regla 8)
+
+- **Ajuste `gcode.thumbnails`:** una lista como `16x16/PNG,32x24/JPG,20x20/QOI`. Lados de 1 a 1024 píxeles; sin
+  formato, vale PNG. Una lista mal escrita se rechaza al cargar los ajustes, diciendo qué elemento está mal.
+  - En el panel va en la tarjeta del G-code de salida, como texto a lo ancho. Mientras el valor está mal, se ve el
+    error en rojo y no se aplica.
+- **`draw_part`:** dibuja la pieza en la CPU, sin la vista 3D, para que sirva también desde la línea de comandos:
+  - vista isométrica, lo más grande que entra, con un margen chico;
+  - sombreada por una luz desde arriba del ojo, con el fondo transparente;
+  - dibujada al doble del tamaño y reducida a la mitad, para suavizar los bordes.
+- **QOI:** se escribe y se lee según su especificación pública.
+- **Pruebas `[thumbnail]`:** la lista y sus errores; el dibujo centrado, con fondo transparente y caras de distinto
+  tono; QOI de ida y vuelta con todas sus operaciones.
+- **Falta:**
+  - cómo van las miniaturas dentro del G-code. Se le preguntó al equipo de fichas por el formato exacto (comentarios,
+    codificación, largo de línea), porque `formats.md`, regla 20, lo deja pendiente;
+  - PNG desde el núcleo;
+  - JPG (necesita un codificador; se anota en THIRD_PARTY antes de usarlo);
+  - el bloque de miniaturas del G-code binario.
+- Decisión del motor, anotada acá: el motor sí las escribe desde la línea de comandos cuando llegue el formato. La
+  prueba X7 cuenta lo que hace Tisma Slicer, y `gcode_firmware.md` pide la miniatura en cuanto el motor pueda dibujarla
+  sin la vista 3D.
