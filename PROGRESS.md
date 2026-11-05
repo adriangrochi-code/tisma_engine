@@ -11067,3 +11067,11 @@ La sesión de fichas laminó un cubo de 20 mm con cada variante FDM del paquete 
 - `ctest` completo pasa.
 - A mano: un G-code de inicio de Ender-3 V3 se lamina, da `START_PRINT EXTRUDER_TEMP=0 CH=0 IDLE=0` y un aviso.
 - **Sin probar con el paquete real:** el equipo del motor no lo lee. Lo vuelve a barrer la sesión de fichas.
+
+## 2026-11-05 — Android: beta 0.1.0-beta.1 para quienes prueban
+
+Pedido del dueño (por la sesión de especificación): una beta esta semana. `versionName` `0.1.0-beta.1`
+(`versionCode` 2), con `dev` mezclado (motor con BH29–BH31; BH32–BH34 y `library` todavía no están en `dev`). El
+actualizador sigue apagado (sin la clave pública del dueño). Notas en castellano: `apps/android/BETA.md`.
+**Firma:** no hay clave de lanzamiento; el APK de CI va firmado con la clave de depuración del ejecutor, que cambia
+entre corridas. Una clave fija es decisión del dueño (dónde se guarda y quién la tiene).
