@@ -10961,3 +10961,36 @@ en GitHub. La CI deja la versión como borrador y el dueño la firma y la public
 sola, un byte cambiado, otra clave y un paquete dañado rechazados. **Sin probar:** contra GitHub de verdad (subir y
 publicar) y en Windows; la primera versión firmada lo prueba.
 
+
+## 2026-11-05 — BH29, BH30, BH31 y la regla 14 del paquete real (spec/next 3d83ac4)
+
+La sesión de fichas laminó un cubo de 20 mm con cada variante FDM del paquete 2026.10.27: 2261 variantes, 1794 bien,
+456 con error de perfil y 11 con error de laminado. Las decisiones están en `profile_pack.md`, reglas 12, 14, 17 y
+18 bis (`check_spec` limpio).
+
+**Hecho:**
+- **BH29 (regla 12):** un conjunto vacío de `compatible.json` cuenta como nulo, o sea todas las impresoras. Al elegir
+  la entrada queda en el registro como error del paquete («points to compatible set #N, which is empty»). El filamento
+  y el perfil de impresión de `defaults` de una variante valen siempre para esa variante y se ofrecen con ella, aunque
+  su conjunto no la nombre.
+- **BH30 (reglas 17 y 18 bis):** `temperature`, `first_layer_temperature`, `bed_temperature`,
+  `first_layer_bed_temperature`, `chamber_temperature`, `chamber_minimal_temperature` e `idle_temperature` existen
+  siempre en el G-code de inicio y fin; valen 0 si el filamento no las trae.
+- **BH31 (regla 18 bis):** si una boquilla se pone a 0 y después viene una macro de la impresora (una orden que no es
+  G, M ni T, como `START_PRINT`), extruir ya no es un error. Queda una nota del chequeo (`GcodeCheck::notes`) que llega
+  como aviso `gcode_check`. Ponerla a 0 después de la macro sigue siendo error.
+- **Regla 14:** el STL de la cama se mueve para que el centro de su caja en XY quede en el centro de la cama y su
+  cara de arriba a la altura 0. No se escala ni se gira. Si mide menos de la mitad de la cama en X o en Y, se dibuja
+  igual y se anota en el registro (`bed_model_place`). El dibujo ya cubría la cama.
+- Prueba de interfaz: `expect-toast` espera hasta 300 cuadros. Con `ctest -j16`, `ui_pack_offline_first_run` falló
+  una vez: la descarga fallida llegaba después de los 30 cuadros.
+
+**Prueba:**
+- `[pack]` (conjunto vacío; los `defaults` valen para la 0.4 y no para la 0.6; aviso del paquete) con el paquete de
+  prueba rehecho: Acme Standard en el conjunto 1, Acme Fine en el conjunto 2, que está vacío.
+- `[gcode]`: las variables en 0, y en el chequeo la nota después de la macro y el error si la boquilla se pone a 0
+  después de ella.
+- `[bed_art]`: la ubicación de la AnkerMake M5.
+- `ctest` completo pasa.
+- A mano: un G-code de inicio de Ender-3 V3 se lamina, da `START_PRINT EXTRUDER_TEMP=0 CH=0 IDLE=0` y un aviso.
+- **Sin probar con el paquete real:** el equipo del motor no lo lee. Lo vuelve a barrer la sesión de fichas.

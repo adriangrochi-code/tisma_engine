@@ -3,6 +3,7 @@
 
 #include "ui/bed_art.hpp"
 
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
@@ -103,4 +104,16 @@ TEST_CASE("bed art: nothing drawn, clear shapes, gradients and bad input give no
     CHECK(bed_svg_art(svg("<rect width='10' height='10' fill='#ff0000'/><rect x='20' width='10' height='10' fill='#ff0000'/>"),
                       0, 0, 100, 100)
               .groups.size() == 1);
+}
+
+TEST_CASE("bed art: a pack's bed model centred on the bed, its top at height 0 (rule 14)", "[ui][bed_art]") {
+    // As the AnkerMake M5's: -127.5..127.5 in X, -147..130 in Y, made around its own centre.
+    const double lo[3] = {-127.5, -147.0, -5.0}, hi[3] = {127.5, 130.0, 0.5};
+    const BedModelPlace p = bed_model_place(lo, hi, 0.0, 0.0, 235.0, 235.0);
+    CHECK(p.dx == Catch::Approx(117.5));
+    CHECK(p.dy == Catch::Approx(117.5 + 8.5));
+    CHECK(p.dz == Catch::Approx(-0.5));
+    CHECK_FALSE(p.small);
+    const double tiny_lo[3] = {0, 0, 0}, tiny_hi[3] = {50, 300, 1};
+    CHECK(bed_model_place(tiny_lo, tiny_hi, 0.0, 0.0, 235.0, 235.0).small); // under half in X: drawn, logged
 }

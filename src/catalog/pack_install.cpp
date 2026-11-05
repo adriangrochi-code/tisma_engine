@@ -98,6 +98,38 @@ std::map<std::string, std::string> read_installed(const fs::path& pack_dir) {
     return out;
 }
 
+// A pack path without its leading "vendors/" (the index and the defaults name
+// files both ways).
+std::string pack_key(const std::string& path) {
+    return path.starts_with("vendors/") ? path.substr(8) : path;
+}
+
+// Every path in a variant's defaults under `key` (a path or a list of them).
+void add_default_paths(const nlohmann::json& defaults, const char* key, std::set<std::string>& out) {
+    if (!defaults.contains(key))
+        return;
+    const nlohmann::json& x = defaults.at(key);
+    if (x.is_string())
+        out.insert(pack_key(x.get<std::string>()));
+    else if (x.is_array())
+        for (const nlohmann::json& y : x)
+            if (y.is_string())
+                out.insert(pack_key(y.get<std::string>()));
+}
+
+// The filament (or resin) and print profiles of the variant's defaults: always
+// valid for it, whatever compatible.json says (rule 12, BH29).
+std::set<std::string> variant_defaults(const nlohmann::json& model, const std::string& variant, bool resin) {
+    std::set<std::string> out;
+    if (model.is_object() && model.contains("variants") && model.at("variants").is_array())
+        for (const nlohmann::json& v : model.at("variants"))
+            if (v.is_object() && v.value("id", "") == variant && v.contains("defaults") && v.at("defaults").is_object()) {
+                add_default_paths(v.at("defaults"), resin ? "resin" : "filament", out);
+                add_default_paths(v.at("defaults"), resin ? "resin_print" : "print", out);
+            }
+    return out;
+}
+
 } // namespace
 
 PackIndex pack_installed(const fs::path& pack_dir) {
@@ -303,6 +335,7 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
                 if (out.print_path.empty())
                     out.print_path = first_path(d, print_key);
             }
+    const std::set<std::string> defaults = variant_defaults(model, variant, out.resin);
     std::vector<std::vector<int>> sets;
     std::string sets_text;
     if (read_all(pack_dir / "compatible.json", sets_text))
@@ -317,7 +350,11 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
         PackEntry entry = parse_pack_entry(text, out.warnings);
         if (entry.profile.kind != kind)
             throw PackError(path + " is not a " + (kind == ProfileKind::Filament ? "filament" : "print") + " profile");
-        if (!pack_compatible(entry.compatible, sets, out.number)) // rule 12, PK7
+        if (entry.compatible && *entry.compatible >= 0 && std::size_t(*entry.compatible) < sets.size() &&
+            sets[std::size_t(*entry.compatible)].empty())
+            out.warnings.push_back("pack error: " + path + " points to compatible set #" + std::to_string(*entry.compatible) +
+                                   ", which is empty; taken as every printer");
+        if (!defaults.contains(pack_key(path)) && !pack_compatible(entry.compatible, sets, out.number)) // rule 12, PK7
             throw PackError(entry.profile.name + " is not for the " + out.printer.name);
         if (entry.resin != out.resin)
             throw PackError(entry.profile.name + (out.resin ? " is not a resin profile, and the " : " is a resin profile, and the ") +
@@ -394,6 +431,18 @@ std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const Pa
         }
     }
     const bool resin = pack_printer_is_resin(index, printer);
+    std::set<std::string> defaults;
+    if (printer >= 0 && printer < int(index.printers.size())) {
+        const std::string& name = index.printers[std::size_t(printer)];
+        const auto hash = name.rfind('#');
+        std::string model_text;
+        const std::string file = name.substr(0, hash);
+        for (const std::string& f : {file, "vendors/" + file})
+            if (hash != std::string::npos && safe_pack_path(f) && read_all(pack_dir / utf8_path(f), model_text)) {
+                defaults = variant_defaults(nlohmann::json::parse(model_text, nullptr, false), name.substr(hash + 1), resin);
+                break;
+            }
+    }
     std::vector<PackFilamentRef> out;
     for (const PackVendor& v : index.vendors) {
         if (v.archive.sha256.empty())
@@ -407,7 +456,7 @@ std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const Pa
             try {
                 std::vector<std::string> ignored;
                 const PackEntry e = parse_pack_entry(text, ignored);
-                if (e.profile.kind == kind && e.resin == resin && pack_compatible(e.compatible, sets, printer))
+                if (e.profile.kind == kind && e.resin == resin && (defaults.contains(pack_key(path)) || pack_compatible(e.compatible, sets, printer)))
                     out.push_back({path, e.profile.name, v.name});
             } catch (const std::exception&) {
             }

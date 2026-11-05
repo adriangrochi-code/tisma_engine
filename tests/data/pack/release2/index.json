@@ -11,8 +11,8 @@
  ],
  "compatible": {
   "name": "compatible.json",
-  "size": 102,
-  "sha256": "83a5d721be3042c315f3ad87726f0b7918eb963bdf809cc3c1761be7ad29e18d"
+  "size": 108,
+  "sha256": "3f623874013cfa17459322fb34f6287b9dcad95b84896d68b08ed0ec295a922e"
  },
  "community": {
   "name": "community.tar.xz",
@@ -38,8 +38,8 @@
    ],
    "archive": {
     "name": "acme.tar.xz",
-    "size": 1080,
-    "sha256": "163a4ad5dd85890aded6a29dbc9f3948d1490b39e37ea43a1bc29a819b469863"
+    "size": 1076,
+    "sha256": "447eeb24d881b0f5633be041f428b4084b9014d944e9f649af0f6753512861b0"
    },
    "models": [
     {

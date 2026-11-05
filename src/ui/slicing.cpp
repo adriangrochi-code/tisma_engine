@@ -251,6 +251,8 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
                 }
                 out.preview_seconds = seconds_since(begin);
             });
+        for (const GcodeProblem& n : out.check.notes)
+            out.warnings.push_back({"gcode_check", -1, 0.0, "G-code line " + std::to_string(n.line) + ": " + n.message, 0.0});
         out.ok = true;
     } catch (const std::exception& e) {
         out.error = e.what();

@@ -29,6 +29,16 @@ struct BedArt {
 // points down). Empty
 // when the SVG cannot be read or draws nothing; gradients and fully clear
 // shapes are left out, partly clear ones drawn solid.
+// Where a pack's bed model goes (profile_pack.md, rule 14): moved by (dx, dy,
+// dz) so that its box's centre in XY is the bed's and its top is at height 0,
+// never scaled or turned. `small` when it is under half the bed in X or Y
+// (drawn anyway; the caller logs it).
+struct BedModelPlace {
+    double dx = 0.0, dy = 0.0, dz = 0.0;
+    bool small = false;
+};
+BedModelPlace bed_model_place(const double lo[3], const double hi[3], double min_x, double min_y, double max_x, double max_y);
+
 BedArt bed_svg_art(std::string_view svg, double min_x, double min_y, double max_x, double max_y, double z = 0.01);
 
 } // namespace tisma::ui
