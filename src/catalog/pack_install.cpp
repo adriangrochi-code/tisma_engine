@@ -145,11 +145,22 @@ std::string print_misfit(const Profile& printer, const PackEntry& print) {
         std::snprintf(text, sizeof text, "made for a %g mm nozzle, not %g mm", print.nozzle, nozzle);
         return text;
     }
+    Settings both;
     try {
-        check_settings(with_profile(with_profile(Settings{}, ProfileKind::Printer, printer.settings), ProfileKind::Print,
-                                    print.profile.settings));
+        both = with_profile(with_profile(Settings{}, ProfileKind::Printer, printer.settings), ProfileKind::Print,
+                            print.profile.settings);
+        check_settings(both);
     } catch (const SettingsError& e) {
         return e.what();
+    }
+    // Without its nozzle, the one it was made for shows in its walls' width:
+    // a profile lays beads of about its nozzle (BH35: 0.82 mm walls of a
+    // 0.8 mm nozzle's profile on a 0.4 mm one passed the slicer's wide range
+    // and printed nothing on a small part). Engine's decision, 2026-11-05.
+    if (print.nozzle <= 0.0 && nozzle > 0.0 && (both.wall_width < 0.75 * nozzle || both.wall_width > 1.5 * nozzle)) {
+        char text[120];
+        std::snprintf(text, sizeof text, "its %g mm walls are made for another nozzle than %g mm", both.wall_width, nozzle);
+        return text;
     }
     return {};
 }

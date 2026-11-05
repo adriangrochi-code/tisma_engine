@@ -373,7 +373,11 @@ TEST_CASE("pack: a variant's defaults always valid for it, an empty set for ever
     // Valid for every printer but offered only where they fit (BH32): Acme
     // Draft is for a 0.6 mm nozzle, Acme Coarse's 0.5 mm layers too thick
     // for a 0.4 mm one.
-    CHECK(names(pack_prints_for(pack, index, 1)) == std::vector<std::string>{"Acme Fine", "Acme Draft", "Acme Coarse"});
+    CHECK(names(pack_prints_for(pack, index, 1)) ==
+          std::vector<std::string>{"Acme Fine", "Acme Draft", "Acme Coarse", "Acme Wide"});
+    // Without a nozzle, Acme Wide's 0.82 mm walls say it is not for 0.4 mm (BH35).
+    CHECK_THROWS_WITH(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.4", "", "vendors/acme/prints/Wide.json"),
+                      Catch::Matchers::ContainsSubstring("made for another nozzle"));
     CHECK_THROWS_WITH(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.4", "", "vendors/acme/prints/Draft.json"),
                       Catch::Matchers::ContainsSubstring("does not fit the") && Catch::Matchers::ContainsSubstring("0.6 mm nozzle"));
     CHECK_THROWS_WITH(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.4", "", "vendors/acme/prints/Coarse.json"),

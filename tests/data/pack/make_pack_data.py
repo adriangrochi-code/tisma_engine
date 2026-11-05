@@ -44,7 +44,9 @@ def entry(kind, name, settings, compatible, vendor="Acme", technology="fff", noz
 # Valid for every printer (the empty set 2) but not fitting each (rule 12, BH32): Draft is made for a 0.6 mm nozzle,
 # Coarse lays 0.5 mm layers, too thick for a 0.4 mm one.
 extra_prints = [("vendors/acme/prints/Draft.json", entry("print", "Acme Draft", {"layers": {"height": 0.3}}, 2, nozzle=0.6)),
-                ("vendors/acme/prints/Coarse.json", entry("print", "Acme Coarse", {"layers": {"height": 0.5}}, 2))]
+                ("vendors/acme/prints/Coarse.json", entry("print", "Acme Coarse", {"layers": {"height": 0.5}}, 2)),
+                # No nozzle given, but 0.82 mm walls: made for a wider nozzle than 0.4 mm (BH35).
+                ("vendors/acme/prints/Wide.json", entry("print", "Acme Wide", {"layers": {"height": 0.24}, "walls": {"width": 0.82}}, 2))]
 
 def slab(x0, y0, x1, y1, z0, z1):
     v = [(x, y, z) for z in (z0, z1) for y in (y0, y1) for x in (x0, x1)]
@@ -115,7 +117,8 @@ def index(version, acme, bolt_data):
                   {"id": "acme", "name": "Acme", "license": "AGPL-3.0-or-later", "origin": "Invented",
                    "printers": ["vendors/acme/models/A1.json#0.4", "vendors/acme/models/A1.json#0.6"],
                    "filaments": ["vendors/acme/filaments/PLA.json"], "prints": ["vendors/acme/prints/Standard.json", "vendors/acme/prints/Fine.json",
-                              "vendors/acme/prints/Draft.json", "vendors/acme/prints/Coarse.json"],
+                              "vendors/acme/prints/Draft.json", "vendors/acme/prints/Coarse.json",
+                              "vendors/acme/prints/Wide.json"],
                    "archive": file("acme.tar.xz", acme),
                    "models": [{"id": "A1", "name": "Acme One", "technology": "fff", "family": "One",
                                "assets": {"bed_model": "vendors/acme/beds/A1.stl", "bed_texture": "vendors/acme/beds/A1.svg"},
