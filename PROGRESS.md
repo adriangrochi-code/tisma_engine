@@ -11460,3 +11460,17 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - En una pieza de pocos triángulos enormes (el soporte de prueba, 48 triángulos), la caché no gana: todo el trazo cae en
   un triángulo, y lo que cuesta es su árbol. Si la pieza del tester es así, falta acortar el recorrido del árbol en
   `paint`.
+
+## 2026-11-05 — soporte en árbol, paso 1 (pedido del dueño: llevar el árbol a la GPU)
+
+- Medido en la esfera de 100 mm (12 640 triángulos, 4 núcleos, segunda de dos corridas):
+  - grilla: laminado 0,38 s, G-code 75 ms;
+  - árbol: laminado 1,05 s, G-code 149 ms.
+- El tiempo de más está en el relleno por capa del árbol, `tree_fill`: unos 700 ms de 730.
+  - El plan de ramas y las áreas: 120 ms.
+  - Dentro del relleno, en tiempo de CPU: segunda pared 50 %, pared 20 %, líneas 18 %, interfaz 7 %.
+- Paso 1 (CPU):
+  - las áreas del árbol se simplifican a 1/8 de cordón;
+  - la segunda pared no se busca cuando ninguna rama llega a ese ancho.
+  - Resultado: árbol 1,05 → 0,71 s de laminado, 149 → 103 ms de G-code. Las pruebas de soporte pasan sin cambios.
+- **Sigue:** paso 2 en GPU (campo de distancias por capa, en `PLAN.md`, «Soporte en árbol y pintura más livianos»).

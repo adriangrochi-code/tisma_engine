@@ -1148,6 +1148,30 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   en paralelo. Gota de 172 080 triángulos: alineada 3,81 → 2,68 s (1,41 → 0,96 veces `nearest`). El G-code es el mismo
   byte a byte. La GPU no rinde acá (ver `PROGRESS.md`)
 
+### Soporte en árbol y pintura más livianos (pedido del dueño, 2026-11-05)
+
+Medido en una esfera de 100 mm (4 núcleos): laminar con árbol tardaba 1,05 s contra 0,38 s con grilla. El 95 % de la
+diferencia está en el relleno de cada capa del árbol (`tree_fill`, unos 700 ms). Son los offsets de Clipper para la
+pared, la segunda pared de las ramas anchas y las líneas.
+- [x] Pintura: la vista se rearma solo en los triángulos que tocó el trazo, y la brocha corta en la mitad de piezas
+  (15,1 → 2,7 ms en 200 trazos).
+- [x] Árbol, paso 1 (CPU): áreas simplificadas a 1/8 de cordón y sin buscar segunda pared cuando ninguna rama es tan
+  ancha. Laminado 1,05 → 0,71 s, G-code 149 → 103 ms.
+- [ ] Árbol, paso 2 (GPU): el relleno de cada capa sale de un campo de distancias.
+  - Las ramas se rasterizan en una grilla de bits por capa (la misma `BitGrid` del soporte en grilla).
+  - Un kernel calcula la distancia euclídea a su borde en dos pasadas separables: columnas, después filas.
+  - La pared es la curva de nivel a medio cordón (marching squares).
+  - La segunda pared va donde la distancia llega a la mitad de `tree_double_wall_diameter`, crecido otra vez.
+  - Lo de adentro es la distancia mayor que un cordón.
+  - Las líneas siguen en la CPU, sobre ese adentro.
+  - La versión de CPU es la referencia: la prueba compara las dos.
+  - Meta: el relleno del árbol por debajo de 150 ms en la esfera.
+- [ ] Árbol, paso 3: las áreas (discos y cascos de las ramas) rasterizadas en la GPU en la misma grilla, sin pasar
+  por Clipper.
+- [ ] Pintura en piezas de pocos triángulos enormes: acortar el recorrido del árbol de cada triángulo en `paint` (hoy
+  rehace el árbol entero del triángulo en cada toque).
+- [ ] Repetir con la pieza del tester (BH37/BH38) cuando llegue.
+
 ### Lo nuevo de OrcaSlicer 2.5 (`docs/spec/features/orca_2_5.md`, pedido del dueño, 2026-10-29)
 
 La ficha sale solo de las notas de la versión y de la wiki públicas de OrcaSlicer (nunca de su código). Cada

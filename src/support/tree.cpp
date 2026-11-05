@@ -462,7 +462,9 @@ std::vector<Polygons> tree_support_areas(const std::vector<Polygons>& regions,
         Polygons area = Clipper2Lib::Union(discs, Clipper2Lib::FillRule::NonZero);
         if (l < regions.size() && !regions[l].empty())
             area = Clipper2Lib::Difference(area, offset(regions[l], params.xy_gap), Clipper2Lib::FillRule::NonZero);
-        out[l] = std::move(area);
+        // An eighth of a bead is finer than any line of it: fewer points for
+        // every offset of the fill, and in the G-code.
+        out[l] = Clipper2Lib::Union(simplify(area, params.bead / 8.0), Clipper2Lib::FillRule::NonZero);
     });
     return out;
 }
@@ -483,7 +485,9 @@ TreeFill tree_fill(const Polygons& area, const Polygons& above, double bead, dou
     Polygons inside = offset(branches, -bead);
     // Where a disc of double_wall fits (a round branch that wide), a second wall.
     if (double_wall > 0.0 && !inside.empty()) {
-        const Polygons wide = offset(offset(branches, -double_wall / 2.0), double_wall / 2.0);
+        // No core that wide, no second wall: the growing back is skipped.
+        const Polygons core = offset(branches, -double_wall / 2.0);
+        const Polygons wide = core.empty() ? Polygons{} : offset(core, double_wall / 2.0);
         if (!wide.empty()) {
             for (const Polygon& ring : offset(wide, -bead * 1.5))
                 if (ring.size() > 2)
