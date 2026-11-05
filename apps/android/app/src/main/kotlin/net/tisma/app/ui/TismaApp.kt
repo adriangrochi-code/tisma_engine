@@ -327,7 +327,8 @@ fun TismaApp(
                     Screen.Parts -> PartsScreen(slice, nav)
                     Screen.Cad -> CadScreen(sliceState, slice, nav)
                     Screen.Calibrate -> CalibrateScreen(slice, nav)
-                    is Screen.SettingsTab -> SettingsTabScreen(top.tab, sliceState, slice, nav)
+                    is Screen.SettingsTab -> SettingsTabScreen(top.tab, sliceState, slice, nav,
+                        header = if (top.tab == "material") ({ FilamentCard(sliceState, slice, nav) }) else null)
                     Screen.Help -> HelpScreen(slice.knowledge(), { k, v -> slice.setValue(k, v) }) { key ->
                         sliceState.layout?.rows?.get(key)?.label ?: key
                     }

@@ -52,6 +52,43 @@ fun PrinterCard(state: SliceState, onClick: () -> Unit) {
     }
 }
 
+/**
+ * The filament at the top of the Material tab (QA AND10): which one the
+ * temperatures come from, a way to choose another (the pack's for that
+ * printer, or the catalog's), and, when the Material settings were changed by
+ * hand, a way back to the filament's own values.
+ */
+@Composable
+fun FilamentCard(state: SliceState, slice: SliceViewModel, nav: Navigator) {
+    val p = state.profile
+    val handChanged = state.layout?.tab("material")?.sections.orEmpty().flatMap { it.subsections }.flatMap { it.rows }
+        .map { it.key }.filter { it in state.settings.changes }
+    Card(modifier = Modifier.fillMaxWidth().testTag("filament_card")) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(stringResource(R.string.profile_filament), style = MaterialTheme.typography.labelLarge)
+            Text(when {
+                p == null -> stringResource(R.string.filament_no_printer)
+                p.filament == null -> stringResource(if (p.pack) R.string.pack_default_filament else R.string.profile_generic_filament)
+                p.pack -> p.filament.substringAfterLast('/').removeSuffix(".json").replace('_', ' ')
+                else -> p.filament
+            }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("filament_name"))
+            Text(stringResource(R.string.filament_temps_from), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = { nav.open(if (p == null && state.packAvailable) Screen.PackWizard else Screen.ProfilePicker) },
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("filament_choose")) {
+                Text(stringResource(if (p == null) R.string.filament_choose_printer else R.string.filament_choose))
+            }
+            if (handChanged.isNotEmpty()) {
+                Text(stringResource(R.string.filament_hand_changed, handChanged.size), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error)
+                AccentTextButton(onClick = { handChanged.forEach { slice.setValue(it, null) } }, modifier = Modifier.testTag("filament_reset")) {
+                    Text(stringResource(R.string.filament_reset))
+                }
+            }
+        }
+    }
+}
+
 /** Picks the printer from the engine's catalog, its nozzle and a filament that fits it (mobile_app.md, rule 11). */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

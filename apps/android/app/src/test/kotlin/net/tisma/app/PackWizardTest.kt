@@ -81,7 +81,8 @@ class PackWizardTest {
             val work = tmp.newFolder("work")
             val data = tmp.newFolder("profiles")
             val slice = SliceViewModel(EngineRunner(exe, work, data), work, saved = settings,
-                pack = ProfilePack(exe, data), packUrl = server.url)
+                pack = ProfilePack(exe, data), packUrl = server.url,
+                loadLayout = { SettingsLayout.parse(File("src/main/assets/settings/layout_en.json").readText()) })
             val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
             val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
             val nav = Navigator()
@@ -145,6 +146,25 @@ class PackWizardTest {
             assertTrue(settings.packWizardDone)
             assertTrue(File(data, "pack/Acme.tar.xz").isFile)
             wait("printer_card")
+            // QA AND10: the Material tab says which filament the temperatures come from, and changes it there.
+            compose.runOnIdle { nav.open(Screen.SettingsTab("material")) }
+            wait("filament_card")
+            compose.onNodeWithTag("filament_name").assertTextEquals("Generic PETG")
+            compose.onNodeWithTag("filament_choose").performClick()
+            wait("pack_filament_Acme PLA")
+            compose.onNodeWithTag("pack_filament_Acme PLA").performClick()
+            compose.onNodeWithTag("pack_done").performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+            wait("filament_card")
+            compose.onNodeWithTag("filament_name").assertTextEquals("Acme PLA")
+            // Material settings changed by hand stay over the filament until put back to its values.
+            val key = slice.state.value.layout!!.tab("material")!!.sections.first().subsections.first().rows.first().key
+            compose.runOnIdle { slice.setValue(key, kotlinx.serialization.json.JsonPrimitive(1)) }
+            wait("filament_reset")
+            compose.onNodeWithTag("filament_reset").performClick()
+            compose.waitUntil(10_000) {
+                org.robolectric.shadows.ShadowLooper.idleMainLooper()
+                key !in slice.state.value.settings.changes
+            }
         } finally {
             server.close()
         }

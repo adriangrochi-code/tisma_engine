@@ -605,4 +605,10 @@
     <string name="library_fea">Strength (FEA)</string>
     <string name="library_export">Export or share (.tismalib)</string>
     <string name="library_delete_entry">Delete the part</string>
+    <string name="filament_no_printer">Choose the printer first</string>
+    <string name="filament_temps_from">The temperatures and cooling come from this filament.</string>
+    <string name="filament_choose_printer">Choose printer and filament</string>
+    <string name="filament_choose">Choose filament</string>
+    <string name="filament_hand_changed">You changed %1$d material settings by hand: they stay over the filament.</string>
+    <string name="filament_reset">Use the filament\'s values</string>
 </resources>

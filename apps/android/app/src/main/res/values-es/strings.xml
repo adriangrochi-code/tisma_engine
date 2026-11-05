@@ -589,4 +589,10 @@
     <string name="library_fea">Resistencia (FEA)</string>
     <string name="library_export">Exportar o compartir (.tismalib)</string>
     <string name="library_delete_entry">Borrar la pieza</string>
+    <string name="filament_no_printer">Elegí primero la impresora</string>
+    <string name="filament_temps_from">Las temperaturas y el enfriamiento salen de este filamento.</string>
+    <string name="filament_choose_printer">Elegir impresora y filamento</string>
+    <string name="filament_choose">Elegir filamento</string>
+    <string name="filament_hand_changed">Cambiaste %1$d ajustes de material a mano: quedan encima del filamento.</string>
+    <string name="filament_reset">Usar los valores del filamento</string>
 </resources>

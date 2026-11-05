@@ -11075,3 +11075,15 @@ Pedido del dueño (por la sesión de especificación): una beta esta semana. `ve
 actualizador sigue apagado (sin la clave pública del dueño). Notas en castellano: `apps/android/BETA.md`.
 **Firma:** no hay clave de lanzamiento; el APK de CI va firmado con la clave de depuración del ejecutor, que cambia
 entre corridas. Una clave fija es decisión del dueño (dónde se guarda y quién la tiene).
+
+## 2026-11-05 — Android: AND10, el filamento en la pestaña Material
+
+Bug del dueño (QA AND10): «no se puede elegir el filamento, hay que poner las temperaturas a mano».
+- Revisado con el paquete real (Creality, PrusaResearch, Elegoo, Orca_BBL y la biblioteca de filamentos): la lista
+  de la app da filamentos propios para las 454 impresoras de esos fabricantes, y `profile --pack --filament` cambia
+  las temperaturas (Ender-3 con Creality PETG: 240/70 °C en lugar de 205/60).
+- Lo que faltaba: la pestaña Material, donde están las temperaturas, no decía de qué filamento salen ni dejaba
+  elegirlo (solo desde la tarjeta de la impresora del plato). Ahora arriba de Material: el filamento, «Elegir
+  filamento» (los del paquete para esa impresora, o el catálogo) y, si hay ajustes de material cambiados a mano,
+  «Usar los valores del filamento» (los cambios a mano quedan encima del filamento, BH27).
+- Prueba: `PackWizardTest` (MA1 + AND10). No probado en un teléfono.
