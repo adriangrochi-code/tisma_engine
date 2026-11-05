@@ -89,8 +89,9 @@ struct Brush {
 };
 // Returns how many triangles changed. With `near`, only those triangles are
 // looked at (the ones a search found near the brush; the rest are too far).
+// With `changed`, the changed triangles are added to it.
 std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& mesh, const Brush& brush,
-                  const std::vector<std::uint32_t>* near = nullptr);
+                  const std::vector<std::uint32_t>* near = nullptr, std::vector<std::uint32_t>* changed = nullptr);
 
 // The painting as bytes for the project file, and back: for each channel the
 // number of painted triangles, then each one's index, the length of its tree

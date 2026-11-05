@@ -1184,6 +1184,8 @@ private:
     int painting_object_ = -1;
     bool painted_ = false;     // the stroke changed something
     bool paint_dirty_ = true;  // the view's copy of the paint is out of date
+    bool paint_stroked_ = false; // a stroke changed some triangles: only those are walked again
+    PaintMeshCache paint_cache_;
     std::optional<float> brush_depth_; // how far ahead of the eye the face under the mouse is
     ImVec2 last_stroke_{0.0f, 0.0f};   // where the stroke's last dab went, on the screen
     std::optional<Vec3> last_dab_;      // and on the model, while the stroke stays on it
@@ -3746,7 +3748,7 @@ bool App::init(std::string& error) {
             Brush brush;
             brush.centre = {b.x, b.y, b.z};
             brush.radius = b.radius;
-            brush.detail = std::max(0.05, b.radius / 8.0);
+            brush.detail = std::max(0.05, b.radius / 6.0);
             brush.mark = b.block ? kPaintBlock : kPaintEnforce;
             paint(objects_[i].painting, channel, placed_meshes_[i], brush);
         }
@@ -11403,7 +11405,7 @@ void App::brush_stroke(std::size_t object, ImVec2 at, bool joined) {
     }
     last_dab_ = c;
     brush.radius = brush_radius_;
-    brush.detail = std::max(0.05, double(brush_radius_) / 8.0);
+    brush.detail = std::max(0.05, double(brush_radius_) / 6.0);
     brush.view = {d.x, d.y, d.z};
     brush.mark = ImGui::GetIO().KeyShift                ? kPaintNone
                  : paint_channel_ == PaintChannel::Fuzzy ? kPaintEnforce
@@ -11413,18 +11415,22 @@ void App::brush_stroke(std::size_t object, ImVec2 at, bool joined) {
     const Vec3f hi{std::max(c.x, from.x) + brush_radius_, std::max(c.y, from.y) + brush_radius_,
                    std::max(c.z, from.z) + brush_radius_};
     const std::vector<std::uint32_t> near = indexes_[object].near(lo, hi);
-    if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush, &near) > 0) {
+    std::vector<std::uint32_t> touched;
+    if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush, &near, &touched) > 0) {
         painted_ = true;
-        paint_dirty_ = true;
+        paint_cache_.touch(object, touched);
+        paint_stroked_ = true;
     }
 }
 
 // The view's copy of the painted pieces of the channel in use.
 void App::update_paint_view() {
-    if (!paint_dirty_)
+    if (!paint_dirty_ && !paint_stroked_)
         return;
-    paint_dirty_ = false;
-    const PaintMesh m = paint_mesh(objects_, placed_meshes_, paint_channel_);
+    if (paint_dirty_) // anything but a stroke: all the paint walked again
+        paint_cache_.reset();
+    paint_dirty_ = paint_stroked_ = false;
+    const PaintMesh m = paint_cache_.build(objects_, placed_meshes_, paint_channel_);
     std::vector<Renderer::PaintGroup> groups;
     for (const PaintMesh::Group& g : m.groups)
         groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_mark_block : theme_.paint_mark_enforce)});

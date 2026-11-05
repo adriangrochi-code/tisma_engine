@@ -28,6 +28,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- Pintar pesa menos: la vista rehace solo los triángulos que tocó el trazo, y la brocha corta en la mitad de piezas.
 - En Windows, abrir y guardar archivos usa los diálogos propios del sistema.
 - Pintar (costura, soportes, piel difusa) arrastrando rápido deja una línea continua y no puntos sueltos, con menos
   trabajo por cuadro.

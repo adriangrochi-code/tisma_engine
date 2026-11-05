@@ -11440,3 +11440,23 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - **Sin probar en Windows:** solo se compiló la parte de Linux. El CI de Windows lo compila.
 - El CI completo de Linux en cd08b5d dio 1089/1090. Falló `ui_device_prints_to_simulator` por tiempo (162 s), con la
   máquina cargada por una compilación en paralelo. Sola pasa en 1,4 s.
+
+## 2026-11-05 — carga de la pintura (pedido del dueño)
+
+- La vista de la pintura se rearmaba entera en cada cuadro de un trazo.
+  - Ahora `PaintMeshCache` guarda las piezas de cada triángulo pintado.
+  - `paint` dice qué triángulos cambió, y solo esos se recorren de nuevo.
+  - El resto se copia, en el mismo orden que antes. La prueba compara con `paint_mesh` después de cada trazo, de un
+    borrado y de un reinicio.
+- La brocha de la app corta hasta radio/6 en vez de radio/8: la mitad de piezas. Eso también aliviana el laminado de lo
+  pintado (BH37).
+- Medido: esfera de 12 640 triángulos, 200 trazos de 2 mm, rearmando la vista después de cada uno:
+
+  | | Antes (r/8, todo) | Caché | r/6, todo | r/6 + caché |
+  |---|---|---|---|---|
+  | Tiempo | 15,1 ms | 6,7 ms | 7,7 ms | 2,7 ms |
+  | Esquinas | 9 984 | 9 984 | 4 635 | 4 635 |
+
+- En una pieza de pocos triángulos enormes (el soporte de prueba, 48 triángulos), la caché no gana: todo el trazo cae en
+  un triángulo, y lo que cuesta es su árbol. Si la pieza del tester es así, falta acortar el recorrido del árbol en
+  `paint`.

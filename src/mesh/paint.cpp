@@ -275,7 +275,7 @@ void for_each_painted(const Painting& painting, PaintChannel channel, std::size_
 }
 
 std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& mesh, const Brush& brush,
-                  const std::vector<std::uint32_t>* near) {
+                  const std::vector<std::uint32_t>* near, std::vector<std::uint32_t>* changed_out) {
     if (!(brush.radius > 0.0) || brush.mark > kPaintMaxMark)
         return 0;
     const Painter painter(brush);
@@ -312,6 +312,8 @@ std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& 
         if (after != before) {
             painting.set_tree(channel, t, std::move(after));
             ++changed;
+            if (changed_out)
+                changed_out->push_back(std::uint32_t(t));
         }
     }
     return changed;
