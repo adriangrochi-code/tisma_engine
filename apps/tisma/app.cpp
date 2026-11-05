@@ -37,6 +37,7 @@
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "device/bambu.hpp"
+#include "gcode/output.hpp"
 #include "gcode/thumbnail.hpp"
 #include "device/bambu_simulator.hpp"
 #include "ui/image_decode.hpp"
@@ -913,7 +914,10 @@ private:
     void host_poll();
     void host_test();
     void host_refresh();
-    void host_send(bool start);
+    void host_send(bool start, std::string name = {}, bool simulate = false);
+    bool host_ready() const; // a network program chosen and tested: the main button sends (devices.md, rule 19)
+    std::string host_default_name() const;
+    void host_upload_dialog();
     void host_command(int what); // 0 pause, 1 resume, 2 cancel
     void bambu_refresh();
     void bambu_send(const std::string& command);
@@ -1561,6 +1565,8 @@ private:
     device::HostStatus host_status_;          // the last state read
     std::string host_job_what_;               // what the running job is, for its message
     bool host_start_ = true;                  // «Start printing» after the upload
+    bool host_dialog_open_ = false;           // the upload dialog, to open next frame
+    std::string host_dialog_name_;
     device::BambuConfig bambu_;               // address, access code (a secret), serial, accepted certificate
     std::unique_ptr<device::BambuSimulator> bambu_sim_;
     std::future<device::BambuStatus> bambu_status_job_;
@@ -9935,9 +9941,17 @@ void App::slice_panel() {
     } else {
         if (!result_->resin && result_->preview.estimated_seconds > 0.0)
             loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(result_->preview.estimated_seconds).c_str());
-        if (button("##export", "tisma_save", tr(result_->resin ? T::ExportGoo : T::Export), true, false, true,
-                   tr(T::ExportTip), button_h))
+        // With a tested network program, the main button sends (devices.md, rule 19); exporting moves to ▲.
+        const bool to_host = host_ready() && !result_->resin && device_can_print();
+        if (to_host) {
+            if (button("##export", "tisma_print", tr(T::SendToPrinter), true, false, !host_job_.valid(), nullptr, button_h)) {
+                host_dialog_name_ = host_default_name();
+                host_dialog_open_ = true;
+            }
+        } else if (button("##export", "tisma_save", tr(result_->resin ? T::ExportGoo : T::Export), true, false, true,
+                          tr(T::ExportTip), button_h)) {
             begin_export();
+        }
         g_menu_rects["export"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                         ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         anchor("send_button");
@@ -9954,6 +9968,8 @@ void App::slice_panel() {
                                           ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
             if (send)
                 device_print();
+            if (to_host && ImGui::MenuItem(tr(T::Export)))
+                begin_export();
             const bool project = ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S");
             g_menu_rects["project"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                              ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
@@ -9962,6 +9978,7 @@ void App::slice_panel() {
             ImGui::EndPopup();
         }
     }
+    host_upload_dialog();
     slice_panel_top_ = ImGui::GetWindowPos().y;
     ImGui::End();
     ImGui::PopStyleColor();
@@ -20829,14 +20846,78 @@ void App::host_refresh() {
     host_status_job_ = std::async(std::launch::async, [h = host_] { return device::host_status(h); });
 }
 
-void App::host_send(bool start) {
+bool App::host_ready() const {
+    return device_host_ && host_tested_ && host_version_.ok && !host_.url.empty();
+}
+
+// The file's name: output.filename_format with the print's time and weight
+// (devices.md, rule 20: «cube20_ABS_18m.gcode»); the model's when it cannot.
+std::string App::host_default_name() const {
+    const std::string fallback = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
+                                 : model_path_.empty()          ? std::string("tisma.gcode")
+                                                                : utf8(model_path_.stem()) + ".gcode";
+    if (!result_ || !result_->model || viewer_)
+        return fallback;
+    GcodeTotals totals;
+    totals.print_seconds = std::max(0.0, result_->preview.estimated_seconds);
+    const std::string mark = "; total filament used [g] = ";
+    if (const std::size_t at = result_->gcode.rfind(mark); at != std::string::npos)
+        totals.grams = std::atof(result_->gcode.c_str() + at + mark.size());
+    try {
+        const std::string name = output_filename(result_->settings, *result_->model, totals);
+        return name.empty() ? fallback : name;
+    } catch (const std::exception&) {
+        return fallback;
+    }
+}
+
+// The upload dialog (devices.md, rule 20).
+void App::host_upload_dialog() {
+    if (host_dialog_open_) {
+        ImGui::OpenPopup("##host_upload");
+        host_dialog_open_ = false;
+    }
+    ImGui::SetNextWindowSize(ImVec2(460.0f * scale_, 0.0f));
+    if (!ImGui::BeginPopupModal("##host_upload", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize))
+        return;
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(tr(T::HostUploadName));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputText("##host_upload_name", &host_dialog_name_);
+    loc::TextDisabled("%s", tr(T::HostUploadSlashes));
+    ImGui::PopTextWrapPos();
+    const bool named = !host_dialog_name_.empty();
+    ImGui::BeginDisabled(!named);
+    if (ImGui::Button(tr(T::HostUpload))) {
+        host_send(false, host_dialog_name_);
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::HostUploadPrint))) {
+        host_send(true, host_dialog_name_);
+        ImGui::CloseCurrentPopup();
+    }
+    if (host_.kind == device::HostKind::Duet) {
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::HostUploadSimulate))) {
+            host_send(false, host_dialog_name_, true);
+            ImGui::CloseCurrentPopup();
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::Cancel)))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::host_send(bool start, std::string name, bool simulate) {
     if (host_job_.valid() || !device_can_print() || host_.url.empty())
         return;
-    const std::string name = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
-                             : model_path_.empty()          ? std::string("tisma.gcode")
-                                                            : utf8(model_path_.stem()) + ".gcode";
+    if (name.empty())
+        name = host_default_name();
     host_job_what_ = name;
-    host_job_ = std::async(std::launch::async, [h = host_, gcode = result_->gcode, name, start] {
+    host_job_ = std::async(std::launch::async, [h = host_, gcode = result_->gcode, name, start, simulate] {
         // The program takes a file: the G-code goes through a temporary one.
         const std::filesystem::path temp =
             std::filesystem::temp_directory_path() / ("tisma_send_" + std::to_string(std::random_device{}()) + ".gcode");
@@ -20846,7 +20927,7 @@ void App::host_send(bool start) {
             if (!f)
                 return device::HostResult{false, "failed", "cannot write a temporary file to send"};
         }
-        device::HostResult r = device::host_upload(h, temp.string(), name, start);
+        device::HostResult r = device::host_upload(h, temp.string(), name, start, simulate);
         std::error_code ignored;
         std::filesystem::remove(temp, ignored);
         return r;

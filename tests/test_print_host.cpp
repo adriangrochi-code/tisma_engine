@@ -552,10 +552,14 @@ TEST_CASE("print host: Duet (RepRapFirmware standalone), session, upload and pri
     REQUIRE(host_pause(host, true).ok);
     CHECK(host_status(host).paused);
     REQUIRE(host_pause(host, false).ok);
+    // Upload and simulate (devices.md, rule 20): M37 with the file.
+    REQUIRE(host_upload(host, g.string(), "sim.gcode", false, true).ok);
+    CHECK(fake.codes.back() == "M37 P\"0:/gcodes/sim.gcode\"");
+    fake.status = "processing";
     // Cancel while printing: paused first, then M0.
     REQUIRE(host_cancel(host).ok);
-    const std::vector<std::string> tail(fake.codes.end() - 4, fake.codes.end());
-    CHECK(tail == std::vector<std::string>{"M25", "M24", "M25", "M0"});
+    const std::vector<std::string> tail(fake.codes.end() - 5, fake.codes.end());
+    CHECK(tail == std::vector<std::string>{"M25", "M24", "M37 P\"0:/gcodes/sim.gcode\"", "M25", "M0"});
     CHECK(fake.sessions == 0); // every session closed
     std::filesystem::remove(g);
 }

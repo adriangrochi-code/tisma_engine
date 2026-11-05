@@ -624,9 +624,9 @@ Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la fic
 - [ ] El servicio local de `tisma` para la app de Android (`docs/MOBILE.md`)
 - [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas. Hechos en
   `src/device/print_host.*` contra simuladores propios: OctoPrint, Moonraker, PrusaLink y Duet (2026-11-05), y en la
-  página de Dispositivo («Programa en la red»: probar, estado, enviar e imprimir, pausar, seguir, cancelar). Faltan el
-  diálogo de envío con nombre (regla 20), «Upload and Simulate» de Duet y la búsqueda por Zeroconf (OctoPrint,
-  Moonraker)
+  página de Dispositivo («Programa en la red»: probar, estado, enviar e imprimir, pausar, seguir, cancelar). También el botón
+  principal «Mandar a la impresora» y el diálogo de envío con nombre, con «Subir y simular» en Duet (reglas 19 y 20).
+  Falta la búsqueda por Zeroconf (OctoPrint, Moonraker)
 - [ ] Probado con una impresora real por USB (necesita al dueño)
 
 ## Estado de P1

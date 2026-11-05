@@ -803,6 +803,11 @@
     X(HostStartPrinting, "Empezar a imprimir", "Start printing") \
     X(HostSend, "Enviar el G-code laminado", "Send sliced G-code") \
     X(HostSent, "%s → %s: subido.", "%s → %s: uploaded.") \
+    X(HostUploadName, "Subir a la impresora con este nombre:", "Upload to Printer Host with the following filename:") \
+    X(HostUploadSlashes, "Usá barras ( / ) para separar carpetas si hace falta.", "Use forward slashes ( / ) as a directory separator if needed.") \
+    X(HostUpload, "Subir", "Upload") \
+    X(HostUploadPrint, "Subir e imprimir", "Upload and Print") \
+    X(HostUploadSimulate, "Subir y simular", "Upload and Simulate") \
     X(HostFailed, "El programa de la impresora contestó con un problema: %s", "The printer's program answered with a problem: %s") \
     X(BambuHelp, "En la impresora: activá el modo «Solo LAN» y el modo desarrollador (Ajustes › Solo LAN). Dirección = la IP de la impresora; código = el código de acceso que muestra ahí. El número de serie se lee de la impresora.", "Bambu Lab: on the printer turn on LAN only mode and Developer mode (Settings > LAN only). Hostname = IP address of the printer, API key = access code shown there. The serial number is read from the printer.") \
     X(BambuSearch, "Buscar en la red", "Browse the network") \

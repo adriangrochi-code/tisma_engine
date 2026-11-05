@@ -11258,3 +11258,16 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   - el botón principal «Enviar a la impresora» (regla 19);
   - la búsqueda por Zeroconf.
   Sin probar con impresoras reales.
+
+## 2026-11-05 — enviar a un programa de red desde el botón principal (devices.md, reglas 19 y 20)
+
+- Con un programa de red elegido y probado, el botón principal pasa a «Mandar a la impresora». «Exportar G-code» queda
+  en el menú ▲.
+- El botón abre el diálogo «Subir a la impresora con este nombre:»:
+  - el nombre es editable y sale de `output.filename_format`, con el tiempo y el peso de la impresión;
+  - la nota de las barras para separar carpetas;
+  - los botones Subir, Subir e imprimir y Cancelar; en Duet, también Subir y simular (`M37 P"…"`).
+- Prueba: el Duet simulado recibe `M37` con el archivo.
+- **Sin probar en la interfaz:** el diálogo, porque la prueba de la interfaz no tiene un programa de red que conteste.
+  Lo cubren las pruebas del cliente.
+- **Falta:** la búsqueda por Zeroconf.

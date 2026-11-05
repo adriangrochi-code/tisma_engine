@@ -50,8 +50,11 @@ struct HostStatus : HostResult {
 };
 
 HostVersion host_version(const HostConfig& host);
-// Uploads the G-code to the program's storage and, with `start`, prints it.
-HostResult host_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start);
+// Uploads the G-code to the program's storage and, with `start`, prints it;
+// with `simulate` (Duet only: M37), the board runs it without moving, to
+// time it (devices.md, rule 20).
+HostResult host_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start,
+                       bool simulate = false);
 HostStatus host_status(const HostConfig& host);
 HostResult host_pause(const HostConfig& host, bool pause); // false: resume
 HostResult host_cancel(const HostConfig& host);

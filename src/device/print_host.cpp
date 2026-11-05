@@ -371,7 +371,8 @@ HostVersion duet_version(const HostConfig& host) {
     return out;
 }
 
-HostResult duet_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start) {
+HostResult duet_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start,
+                       bool simulate) {
     std::ifstream in(path, std::ios::binary);
     if (!in)
         return {false, "failed", "cannot read the G-code to send"};
@@ -394,6 +395,8 @@ HostResult duet_upload(const HostConfig& host, const std::string& path, const st
     const nlohmann::json j = nlohmann::json::parse(answer.body, nullptr, false);
     if (!j.is_object() || j.value("err", 1) != 0)
         return {false, "failed", "the Duet did not keep the file (a check of the upload failed)"};
+    if (simulate)
+        return s.gcode("M37 P\"" + target + "\"");
     if (start)
         return s.gcode("M32 \"" + target + "\"");
     return out;
@@ -544,13 +547,14 @@ HostVersion host_version(const HostConfig& host) {
     return out;
 }
 
-HostResult host_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start) {
+HostResult host_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start,
+                       bool simulate) {
     if (host.kind == HostKind::Moonraker)
         return moonraker_upload(host, path, name, start);
     if (host.kind == HostKind::PrusaLink)
         return prusalink_upload(host, path, name, start);
     if (host.kind == HostKind::Duet)
-        return duet_upload(host, path, name, start);
+        return duet_upload(host, path, name, start, simulate);
     net::Request r = request(host, "POST", "/api/files/local");
     r.timeout_s = std::max(host.timeout_s, 600); // a large file on a slow network
     r.form.push_back({"file", "", path, name, "application/octet-stream"});
