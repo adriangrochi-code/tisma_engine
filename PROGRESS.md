@@ -11282,3 +11282,18 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   completa la dirección (`http://ip:puerto/path`).
 - Prueba `[ssdp]`: la pregunta byte a byte y una respuesta armada a mano con nombres comprimidos.
 - **Falta:** Moonraker (se anuncia solo con su nombre `.local`). Sin probar con una impresora real.
+
+## 2026-11-05 — leer los límites de la impresora, parte 1: el núcleo
+
+- `parse_marlin_limits` lee:
+  - de M115: el nombre del firmware y el área de trabajo, si el firmware tiene el informe de geometría;
+  - de M503: las velocidades máximas (M203), las aceleraciones (M201 y M204 P R T), los tirones o la desviación de
+    unión (M205) y el avance de presión (M900 K), pasando de pulgadas a milímetros si dice G20.
+  - Las líneas de M503 se leen sin depender de su formato exacto, que la documentación no da: cada comando como
+    palabra, con sus parámetros letra-número. Un dato que no llega no se escribe como 0.
+- `parse_klipper_limits` lee los objetos `toolhead` y `configfile` de Moonraker.
+- `apply_limits` llena solo los datos vacíos, o todos si se pide «Leer de la impresora».
+- Error encontrado y arreglado en las pruebas: «max:{» contenía «x:».
+- Prueba `[limits]` con la respuesta de M115 de la documentación de Marlin, un M503 en milímetros y otro en pulgadas,
+  Klipper, y la regla de no pisar lo que escribió la persona.
+- **Sigue:** pedirlos al conectar por USB y por Moonraker, y la lista para aceptarlos en la interfaz.

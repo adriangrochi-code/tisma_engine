@@ -303,6 +303,7 @@ add_library(tisma_core
   src/catalog/pack_install.cpp
   src/catalog/xz.cpp
   src/device/gcode_host.cpp
+  src/device/printer_limits.cpp
   src/device/printer.cpp
   src/device/serial_port.cpp
   src/device/simulator.cpp

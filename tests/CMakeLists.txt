@@ -79,6 +79,7 @@ add_executable(tisma_tests
   test_adhesion.cpp
   test_gcode_check.cpp
   test_thumbnail.cpp
+  test_printer_limits.cpp
   test_gcode_preview.cpp
   test_calibration.cpp
   test_determinism.cpp
