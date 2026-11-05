@@ -11114,3 +11114,37 @@ documentación de la comunidad OpenBambuAPI (`mqtt.md`, `ftp.md`, `video.md`), q
 nada en una pieza chica. El rango del laminado deja anchos de hasta 4 veces la boquilla. Ahora, si el perfil no dice
 su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1,5 veces la de la variante («its
 0.82 mm walls are made for another nozzle than 0.4 mm»). Prueba: Acme Wide en `[pack]`.
+
+## 2026-11-05 — 0.11.0-beta.1 publicada, y mantenimiento de la noche
+
+- **Publicada:** la beta de los probadores salió como pre-release `v0.11.0-beta.1`, con la fusión de dev en alpha
+  (#53, c3516aa).
+  - Archivos: el instalador de Windows (`…-setup-windows-x64.exe`, 48 MB) y los `.zip` de Windows y Linux.
+  - No lleva `updates.json`: no hay clave, así que el actualizador queda apagado.
+  - El paso de NSIS en la CI de Windows funcionó la primera vez.
+- **Antes, el CI de Windows en 9e81a74:** falló en `ssdp.cpp`, porque la macro `max` de `windows.h` rompía
+  `std::max`. Se arregló en 4060e79: `NOMINMAX`, `inet_pton` y tamaños de socket explícitos.
+- **Mantenimiento:**
+  - fuzz de 2000 corridas con la semilla 202611050413: 0 fallas, 19 rechazadas por no imprimibles;
+  - ASan (con fugas) en 4060e79 sobre `[bambu]`, `[pack]`, `[gcode][check]` y `[cli][cloud]`: 54 casos limpios, el
+    código de red nuevo incluido.
+- **Sin probar:** el instalador en un Windows real y Bambu Lab con una impresora real. Los prueba la sesión de fichas
+  y después el dueño.
+
+## 2026-11-05 — cámara de las Bambu Lab en la interfaz
+
+- **Lector de JPEG y PNG:** stb_image 2.30 (MIT), anotado en THIRD_PARTY.md, en créditos y con su licencia. Lo
+  envuelve `src/ui/image_decode.*`: solo JPEG y PNG, desde memoria, hasta 8192 píxeles por lado. Sirve también para
+  las texturas PNG de la cama (regla 14, pendiente).
+- **La cámara como flujo:** `bambu_camera_stream` entrega cada JPEG hasta que se pide parar, la cámara cierra o pasan
+  10 s sin imagen. `bambu_camera` usa esa misma función. El simulador manda un JPEG real de 32×24 cada 50 ms.
+- **Interfaz:** casilla «Cámara» en el panel Bambu Lab. Un hilo lee los cuadros y la interfaz muestra el último.
+  Si la cámara se corta, se dice por qué y que solo las series A1 y P1 la mandan por la red local.
+- **Vulkan:** `VulkanWindow::remove_texture` libera una textura cuando terminan los cuadros en vuelo que la usaban.
+- **Pruebas:**
+  - `decode_image` lee el JPEG del simulador y un PNG de 4×3, y rechaza bytes que no son imagen o están cortados;
+  - `ui_bambu_print` prende la cámara, ve el cuadro de 32×24 y la apaga;
+  - a mano, con Vulkan y la cámara prendida a 20 cuadros por segundo: sin errores.
+- **Sin probar:** con una cámara real.
+
+**Sigue:** la textura PNG de la cama (regla 14) con el mismo lector; después, lo que sigue del PLAN.

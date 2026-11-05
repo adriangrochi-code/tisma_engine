@@ -410,6 +410,15 @@
         "apache-2.0.txt",
         "mbedtls.txt"
       ]
+    },
+    {
+      "name": "stb_image",
+      "version": "2.30",
+      "license": "MIT",
+      "url": "https://github.com/nothings/stb",
+      "notices": [
+        "stb.txt"
+      ]
     }
   ]
 }

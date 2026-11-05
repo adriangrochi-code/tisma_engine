@@ -138,7 +138,15 @@ if(TISMA_BUILD_UI)
     GIT_TAG 239e102ec2c691f2902e20ace2ed36ee4a35cfe6 # no tags; 2026-07-10
     SOURCE_SUBDIR no-cmake
   )
-  FetchContent_MakeAvailable(glfw imgui nanosvg)
+  # stb_image (MIT of its MIT-or-public-domain choice), only its one header:
+  # the JPEG frames of a Bambu Lab printer's camera and PNG pictures.
+  FetchContent_Declare(
+    stb
+    URL https://raw.githubusercontent.com/nothings/stb/d14d46f6b44456eb88beac58cba833a4135d4c89/stb_image.h
+    URL_HASH SHA256=594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3
+    DOWNLOAD_NO_EXTRACT TRUE
+  )
+  FetchContent_MakeAvailable(glfw imgui nanosvg stb)
 endif()
 set(BUILD_SHARED_LIBS ${_tisma_shared})
 
@@ -408,6 +416,7 @@ if(TISMA_BUILD_UI)
     src/ui/scene.cpp
     src/ui/icons.cpp
     src/ui/bed_art.cpp
+    src/ui/image_decode.cpp
     src/ui/png.cpp
     src/ui/text.cpp
     src/ui/setting_guide.cpp
@@ -428,6 +437,7 @@ if(TISMA_BUILD_UI)
     src/ui/session_marks.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
+  target_include_directories(tisma_ui SYSTEM PRIVATE ${stb_SOURCE_DIR})
   target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
   target_compile_definitions(tisma_ui PUBLIC TISMA_UPDATES_KEY="${TISMA_UPDATES_KEY}")
   if(WIN32)

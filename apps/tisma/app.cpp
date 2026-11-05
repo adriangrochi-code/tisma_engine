@@ -38,6 +38,7 @@
 #include "config/settings.hpp"
 #include "device/bambu.hpp"
 #include "device/bambu_simulator.hpp"
+#include "ui/image_decode.hpp"
 #include "device/gcode_host.hpp"
 #include "device/ssdp.hpp"
 #include "device/serial_port.hpp"
@@ -909,6 +910,11 @@ private:
     void bambu_send(const std::string& command);
     void bambu_print_now();
     void bambu_simulate();
+    void bambu_camera_on();
+    void bambu_camera_off();
+    void bambu_camera_view(float width);
+    ImTextureID upload_texture(const Image& image, bool clamp);
+    void drop_texture(ImTextureID id);
     void device_connect(const std::string& port);
     void device_disconnect();
     void device_poll();
@@ -1545,6 +1551,21 @@ private:
     bool bambu_searched_ = false, bambu_use_ams_ = true;
     std::string bambu_job_name_;
     std::shared_ptr<std::atomic<double>> bambu_sent_ = std::make_shared<std::atomic<double>>(-1.0);
+    // The A1 and P1 camera (rule 6): a thread reads the frames, the interface
+    // shows the newest one.
+    struct BambuCamera {
+        std::atomic<bool> stop{false};
+        std::mutex lock;
+        std::string jpeg;   // the newest frame
+        long long frames = 0; // frames received
+        bool ended = false;
+        std::string error;  // why it ended
+    };
+    std::shared_ptr<BambuCamera> bambu_camera_;
+    std::future<void> bambu_camera_job_;
+    ImTextureID bambu_camera_tex_ = 0;
+    int bambu_camera_w_ = 0, bambu_camera_h_ = 0;
+    long long bambu_camera_shown_ = 0; // the frame the texture holds
 
     FileBrowser browser_;
     Purpose purpose_ = Purpose::Open;
@@ -3434,25 +3455,7 @@ bool App::init(std::string& error) {
         if (!renderer_.init(error))
             return false;
     }
-    // A texture for ImGui::Image from RGBA rows, with OpenGL or Vulkan.
-    const auto texture = [&](const Image& image, bool clamp) -> ImTextureID {
-        if (vulkan_)
-            return vk_.add_texture(image.rgba.data(), image.width, image.height);
-        unsigned tex = 0;
-        glGenTextures(1, &tex);
-        glBindTexture(GL_TEXTURE_2D, tex);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        if (clamp) {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        }
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     image.rgba.data());
-        glBindTexture(GL_TEXTURE_2D, 0);
-        return ImTextureID(tex);
-    };
+    const auto texture = [&](const Image& image, bool clamp) { return upload_texture(image, clamp); };
 
     // Icons drawn white at twice their size; the buttons tint them.
     const int icon_pixels = int(std::lround(48.0f * scale_));
@@ -3778,9 +3781,46 @@ void App::apply_theme() {
     vk_view_.set_bed(settings_.bed, look);
 }
 
+// A texture for ImGui::Image from RGBA rows, with OpenGL or Vulkan.
+ImTextureID App::upload_texture(const Image& image, bool clamp) {
+    if (image.width <= 0 || image.height <= 0)
+        return ImTextureID(0);
+    if (vulkan_)
+        return vk_.add_texture(image.rgba.data(), image.width, image.height);
+    if (!gl_loaded_)
+        return ImTextureID(0);
+    unsigned tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    if (clamp) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 image.rgba.data());
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return ImTextureID(tex);
+}
+
+// Frees a texture from upload_texture; it must not be drawn after this.
+void App::drop_texture(ImTextureID id) {
+    if (!id)
+        return;
+    if (vulkan_) {
+        vk_.remove_texture(id);
+    } else if (gl_loaded_) {
+        const auto tex = unsigned(id);
+        glDeleteTextures(1, &tex);
+    }
+}
+
 void App::shutdown() {
     slice_job_.wait();
     device_disconnect();
+    bambu_camera_off();
     // A normal exit: no mark left for the next start (problem_reports.md, rule 10).
     session_file_.close();
     ui::end_session(session_mark_);
@@ -20719,6 +20759,74 @@ void App::bambu_simulate() {
     bambu_.camera_port = bambu_sim_->camera_port();
 }
 
+void App::bambu_camera_on() {
+    if (bambu_camera_job_.valid() || bambu_.host.empty())
+        return;
+    bambu_camera_ = std::make_shared<BambuCamera>();
+    bambu_camera_shown_ = 0;
+    bambu_camera_job_ = std::async(std::launch::async, [c = bambu_, cam = bambu_camera_] {
+        const device::BambuResult r = device::bambu_camera_stream(
+            c,
+            [cam](std::string jpeg) {
+                const std::lock_guard<std::mutex> hold(cam->lock);
+                cam->jpeg = std::move(jpeg);
+                ++cam->frames;
+                return true;
+            },
+            10000, &cam->stop);
+        const std::lock_guard<std::mutex> hold(cam->lock);
+        cam->ended = true;
+        if (!r.ok && !cam->stop)
+            cam->error = r.error;
+    });
+}
+
+void App::bambu_camera_off() {
+    if (bambu_camera_)
+        bambu_camera_->stop = true;
+    if (bambu_camera_job_.valid())
+        bambu_camera_job_.get();
+    bambu_camera_.reset();
+    drop_texture(bambu_camera_tex_);
+    bambu_camera_tex_ = 0;
+    bambu_camera_w_ = bambu_camera_h_ = 0;
+    bambu_camera_shown_ = 0;
+}
+
+// The newest camera frame, `width` wide (rule 6).
+void App::bambu_camera_view(float width) {
+    if (!bambu_camera_)
+        return;
+    std::string jpeg, error;
+    long long frames = 0;
+    bool ended = false;
+    {
+        const std::lock_guard<std::mutex> hold(bambu_camera_->lock);
+        frames = bambu_camera_->frames;
+        ended = bambu_camera_->ended;
+        error = bambu_camera_->error;
+        if (frames != bambu_camera_shown_)
+            jpeg = bambu_camera_->jpeg;
+    }
+    if (!jpeg.empty()) {
+        const Image image = decode_image(jpeg);
+        if (!image.rgba.empty()) {
+            drop_texture(bambu_camera_tex_);
+            bambu_camera_tex_ = upload_texture(image, true);
+            bambu_camera_w_ = image.width;
+            bambu_camera_h_ = image.height;
+        }
+        bambu_camera_shown_ = frames;
+    }
+    if (bambu_camera_tex_ && bambu_camera_w_ > 0)
+        ImGui::Image(ImTextureRef(bambu_camera_tex_),
+                     ImVec2(width, width * float(bambu_camera_h_) / float(bambu_camera_w_)));
+    else if (!ended)
+        loc::TextDisabled("%s", tr(T::BambuCameraWaiting));
+    if (ended)
+        loc::TextColored(rgb(0xE5484D), tr(T::BambuCameraEnded), error.empty() ? "-" : error.c_str());
+}
+
 void App::bambu_refresh() {
     if (bambu_status_job_.valid() || bambu_.host.empty())
         return;
@@ -20803,6 +20911,7 @@ void App::bambu_panel(float field, float button_h) {
     for (const device::SsdpPrinter& p : bambu_found_) {
         const std::string label = (p.name.empty() ? p.id : p.name) + "  " + p.model + "  " + p.address;
         if (ImGui::Selectable(label.c_str(), p.address == bambu_.host)) {
+            bambu_camera_off();
             bambu_sim_.reset();
             bambu_ = device::BambuConfig{};
             bambu_.host = p.address;
@@ -20826,6 +20935,7 @@ void App::bambu_panel(float field, float button_h) {
     bool simulated = bambu_sim_ != nullptr;
     ImGui::BeginDisabled(working);
     if (ImGui::Checkbox(tr(T::BambuSimulated), &simulated)) {
+        bambu_camera_off();
         if (simulated) {
             bambu_simulate();
         } else {
@@ -20863,8 +20973,11 @@ void App::bambu_panel(float field, float button_h) {
     } else if (!st.ok && !st.code.empty()) {
         loc::TextColored(rgb(0xE5484D), tr(T::BambuFailed), st.error.c_str());
     }
-    if (!st.ok)
+    if (!st.ok) {
+        if (bambu_camera_)
+            bambu_camera_off();
         return;
+    }
 
     // The state (devices.md, rule 16: one line; refreshed on request).
     ImGui::Separator();
@@ -20898,6 +21011,17 @@ void App::bambu_panel(float field, float button_h) {
                 loc::Text("%d · %s%s", t.slot + 1, t.type.c_str(), now ? " *" : "");
         }
     }
+
+    // The camera (rule 6: the A1 and P1 series; the X1 has none here).
+    bool camera = bambu_camera_ != nullptr;
+    if (ImGui::Checkbox(tr(T::BambuCamera), &camera)) {
+        if (camera)
+            bambu_camera_on();
+        else
+            bambu_camera_off();
+    }
+    if (camera)
+        bambu_camera_view(std::min(ImGui::GetContentRegionAvail().x, 480.0f * scale_));
 
     // Printing, pausing, stopping.
     ImGui::Separator();
@@ -21757,6 +21881,10 @@ void App::script_input() {
             bambu_refresh();
         } else if (step.key == "print")
             bambu_print_now();
+        else if (step.key == "camera")
+            bambu_camera_on();
+        else if (step.key == "camera-off")
+            bambu_camera_off();
         else if (step.key == "pause" || step.key == "resume" || step.key == "stop")
             bambu_send(step.key);
         else
@@ -21769,7 +21897,7 @@ void App::script_input() {
         } else if (f > 1200) {
             fail_step("no answer from the printer");
         }
-    } else if (step.verb == "expect-bambu") { // state IDLE, code confirm_certificate, trays 4, sent NAME
+    } else if (step.verb == "expect-bambu") { // state IDLE, code confirm_certificate, trays 4, sent NAME, camera WxH
         std::string got;
         if (step.key == "state")
             got = bambu_status_.state;
@@ -21779,12 +21907,14 @@ void App::script_input() {
             got = std::to_string(bambu_status_.trays.size());
         else if (step.key == "sent")
             got = bambu_sim_ && bambu_sim_->files().count(step.value + ".gcode.3mf") ? step.value : "nothing";
+        else if (step.key == "camera") // the size of the frame shown, WxH; "none"
+            got = bambu_camera_tex_ ? std::to_string(bambu_camera_w_) + "x" + std::to_string(bambu_camera_h_) : "none";
         else
             return fail_step("unknown expect-bambu key");
         if (got == step.value) {
             std::printf("ui-script: expect-bambu %s %s: ok\n", step.key.c_str(), step.value.c_str());
             next();
-        } else if (f > 2) {
+        } else if (f > (step.key == "camera" ? 600 : 2)) {
             fail_step("bambu " + step.key + " is «" + got + "», not «" + step.value + "»");
         }
     } else if (step.verb == "cloud-wait") { // until the call to Tisma Cloud is answered (up to 20 s)

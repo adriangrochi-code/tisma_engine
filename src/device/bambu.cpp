@@ -358,8 +358,9 @@ std::string bambu_camera_auth(const std::string& access_code) {
     return p;
 }
 
-BambuFrames bambu_camera(const BambuConfig& config, int frames, int timeout_ms) {
-    BambuFrames out;
+BambuResult bambu_camera_stream(const BambuConfig& config, const std::function<bool(std::string)>& on_frame,
+                                int idle_timeout_ms, const std::atomic<bool>* stop) {
+    BambuResult out;
     std::unique_ptr<net::TlsStream> tls;
     try {
         tls = net::TlsStream::connect(config.host, config.camera_port, config.timeout_ms);
@@ -376,14 +377,23 @@ BambuFrames bambu_camera(const BambuConfig& config, int frames, int timeout_ms) 
         out.error = "the camera's certificate is not the one accepted";
         return out;
     }
-    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    int got = 0;
     try {
         tls->write(bambu_camera_auth(config.access_code));
-        while (int(out.jpegs.size()) < frames) {
-            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(end - std::chrono::steady_clock::now()).count();
-            if (left <= 0)
+        for (;;) {
+            if (stop && stop->load())
                 break;
-            const std::string header = tls->read_exact(16, int(left));
+            // Short waits, so a stop is seen soon; idle_timeout_ms in all.
+            std::string header;
+            for (int waited = 0; header.size() < 16;) {
+                try {
+                    header += tls->read(16 - header.size(), 250);
+                } catch (const net::TlsTimeout&) {
+                    waited += 250;
+                    if ((stop && stop->load()) || waited >= idle_timeout_ms)
+                        throw;
+                }
+            }
             std::uint32_t size = 0;
             for (int i = 3; i >= 0; --i)
                 size = (size << 8) | std::uint8_t(header[std::size_t(i)]);
@@ -392,27 +402,42 @@ BambuFrames bambu_camera(const BambuConfig& config, int frames, int timeout_ms) 
                 out.error = "the camera sent a frame of an impossible size";
                 return out;
             }
-            std::string jpeg = tls->read_exact(size, int(std::max<long long>(left, 1)));
+            std::string jpeg = tls->read_exact(size, std::max(idle_timeout_ms, 1000));
             if (jpeg.size() < 4 || std::uint8_t(jpeg[0]) != 0xFF || std::uint8_t(jpeg[1]) != 0xD8) {
                 out.code = "bad_answer";
                 out.error = "the camera sent something that is not a JPEG";
                 return out;
             }
-            out.jpegs.push_back(std::move(jpeg));
+            ++got;
+            if (!on_frame(std::move(jpeg)))
+                break;
         }
     } catch (const net::TlsTimeout&) {
     } catch (const net::TlsError& e) {
-        if (out.jpegs.empty()) {
+        if (got == 0) {
             out.code = "unauthorized";
             out.error = std::string("the camera closed the connection (wrong access code?): ") + e.what();
             return out;
         }
     }
-    out.ok = !out.jpegs.empty();
-    if (!out.ok) {
+    out.ok = got > 0;
+    if (!out.ok && out.code.empty()) {
         out.code = "timeout";
         out.error = "the camera sent no image in time";
     }
+    return out;
+}
+
+BambuFrames bambu_camera(const BambuConfig& config, int frames, int timeout_ms) {
+    BambuFrames out;
+    const BambuResult r = bambu_camera_stream(
+        config,
+        [&](std::string jpeg) {
+            out.jpegs.push_back(std::move(jpeg));
+            return int(out.jpegs.size()) < frames;
+        },
+        timeout_ms);
+    static_cast<BambuResult&>(out) = r;
     return out;
 }
 

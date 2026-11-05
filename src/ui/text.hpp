@@ -815,6 +815,9 @@
     X(BambuSending, "Enviando: %.0f %%", "Sending: %.0f %%") \
     X(BambuSent, "Enviado: la impresora empieza «%s».", "Sent: the printer starts «%s».") \
     X(BambuStop, "Detener", "Stop") \
+    X(BambuCamera, "Cámara", "Camera") \
+    X(BambuCameraWaiting, "Esperando la imagen de la cámara…", "Waiting for the camera's picture…") \
+    X(BambuCameraEnded, "La cámara se cortó: %s. Solo las series A1 y P1 la mandan por la red local.", "The camera stopped: %s. Only the A1 and P1 series send it on the local network.") \
     X(BambuSerial, "Número de serie: %s", "Serial number: %s") \
     X(BambuNotTested, "Conexión con Bambu Lab nueva: sin probar todavía con una impresora real.", "New Bambu Lab connection: not yet tested with a real printer.") \
     X(BambuBinary, "Esta impresora necesita G-code de texto: apagá el G-code binario en el perfil.", "This printer needs text G-code: turn off binary G-code in the profile.") \
