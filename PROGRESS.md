@@ -11427,3 +11427,16 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - Prueba `[paint]`: la banda de 30 mm tiene el área de un rectángulo más un círculo; dos toques sueltos dejan el medio
   sin pintar. Las pruebas de interfaz de pintura pasan.
 - Sin probar en Windows ni con la pieza del tester.
+
+## 2026-11-05 — BH40: diálogos de Windows para abrir y guardar
+
+- En Windows, `FileBrowser::open` abre el diálogo del sistema (`GetOpenFileNameW`/`GetSaveFileNameW`):
+  - filtro con las extensiones, más «todos los archivos»;
+  - nombre propuesto y extensión agregada si falta;
+  - el sistema pregunta antes de reemplazar un archivo.
+- `draw()` entrega la respuesta una vez, así que el resto de la app no cambia.
+- Las corridas con `--ui-script` o `--screenshot` siguen con el selector dibujado, que es el que prueban.
+- En Linux no cambia nada.
+- **Sin probar en Windows:** solo se compiló la parte de Linux. El CI de Windows lo compila.
+- El CI completo de Linux en cd08b5d dio 1089/1090. Falló `ui_device_prints_to_simulator` por tiempo (162 s), con la
+  máquina cargada por una compilación en paralelo. Sola pasa en 1,4 s.

@@ -3513,6 +3513,9 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    // The system's own Open and Save As dialogs where there are (Windows,
+    // BH40); scripted and screenshot runs keep the drawn one they drive.
+    FileBrowser::use_native(options_.screenshot.empty() && options_.ui_script.empty());
     if (cloud_server_.empty()) // none saved: Tisma Cloud's own (cloud.md, rule 1)
         cloud_server_ = cloud::kDefaultServer;
     if (!options_.cloud_server.empty()) // the server for this run (tests: the mock one)

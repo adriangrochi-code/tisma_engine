@@ -68,6 +68,9 @@ endif()
 
 target_include_directories(tisma PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(tisma PRIVATE tisma_ui tisma_net tisma_bambu tisma_imgui nlohmann_json::nlohmann_json tisma_warnings)
+if(WIN32)
+  target_link_libraries(tisma PRIVATE comdlg32) # the system's Open and Save As dialogs (BH40)
+endif()
 if(MSVC)
   # A windowed program that still starts at main().
   target_link_options(tisma PRIVATE /ENTRY:mainCRTStartup)

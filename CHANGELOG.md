@@ -28,6 +28,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- En Windows, abrir y guardar archivos usa los diálogos propios del sistema.
 - Pintar (costura, soportes, piel difusa) arrastrando rápido deja una línea continua y no puntos sueltos, con menos
   trabajo por cuadro.
 - Mirando desde abajo de la cama (por ejemplo para pintar soportes), la cama ya no tapa la cara de abajo de la pieza:
