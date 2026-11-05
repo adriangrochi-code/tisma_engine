@@ -11474,3 +11474,7 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   - la segunda pared no se busca cuando ninguna rama llega a ese ancho.
   - Resultado: árbol 1,05 → 0,71 s de laminado, 149 → 103 ms de G-code. Las pruebas de soporte pasan sin cambios.
 - **Sigue:** paso 2 en GPU (campo de distancias por capa, en `PLAN.md`, «Soporte en árbol y pintura más livianos»).
+- Paso 2, primera pieza: `squared_distance_inside` (`src/geom/distance.*`), la distancia euclídea exacta de cada pixel
+  al borde en dos pasadas separables (Felzenszwalb y Huttenlocher, 2012), y `at_least` (la región achicada). Prueba
+  `[distance]`: igual a la fuerza bruta en 40 grillas al azar (13 777 comparaciones). Sigue: el kernel de GPU con la
+  misma salida, y `tree_fill` con el campo.

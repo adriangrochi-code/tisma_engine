@@ -1,10 +1,12 @@
 #include "geom/bitgrid.hpp"
+#include "geom/distance.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 using namespace tisma;
@@ -123,4 +125,39 @@ TEST_CASE("bitgrid: outlines along the pixel edges", "[bitgrid]") {
     BitGrid back = grid();
     back.fill(s.outline());
     CHECK(back == s);
+}
+
+TEST_CASE("distance: the exact squared distance to the nearest unset pixel, as brute force finds it", "[bitgrid][distance]") {
+    unsigned seed = 3;
+    for (int round = 0; round < 40; ++round) {
+        const int w = 1 + int(seed % 37), h = 1 + int((seed >> 8) % 29);
+        BitGrid g(0, 0, 1, w, h);
+        for (int j = 0; j < h; ++j)
+            for (int i = 0; i < w; ++i) {
+                seed = seed * 1103515245u + 12345u;
+                if ((seed >> 16) % 10 < unsigned(round % 10)) // from sparse to nearly full
+                    g.set(i, j);
+            }
+        const std::vector<float> d = squared_distance_inside(g);
+        REQUIRE(d.size() == std::size_t(w) * std::size_t(h));
+        for (int j = 0; j < h; ++j)
+            for (int i = 0; i < w; ++i) {
+                // The nearest unset pixel, the ring outside the grid included.
+                long best = std::numeric_limits<long>::max();
+                for (int y = -1; y <= h; ++y)
+                    for (int x = -1; x <= w; ++x) {
+                        const bool outside = x < 0 || y < 0 || x >= w || y >= h;
+                        if (outside || !g.get(x, y))
+                            best = std::min(best, long(x - i) * (x - i) + long(y - j) * (y - j));
+                    }
+                CAPTURE(round, i, j);
+                CHECK(d[std::size_t(j) * std::size_t(w) + std::size_t(i)] == float(g.get(i, j) ? best : 0));
+            }
+    }
+    // The region shrunk by 2 pixels: a 10 x 10 square keeps its middle 6 x 6.
+    BitGrid square(0, 0, 1, 10, 10);
+    for (int j = 0; j < 10; ++j)
+        for (int i = 0; i < 10; ++i)
+            square.set(i, j);
+    CHECK(at_least(square, squared_distance_inside(square), 3.0).count() == 36);
 }
