@@ -27,6 +27,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <cstdio>
 #include <iterator>
 #include <optional>
 #include <ostream>
@@ -37,6 +38,8 @@ namespace tisma {
 
 namespace {
 
+constexpr const char* kTooNewEs = "el proyecto es de una versión más nueva de Tisma: actualizá el programa";
+
 struct NodeArgs {
     std::string project, output, summary;
     bool sandbox = false, no_gpu = false, yes = false;
@@ -46,6 +49,41 @@ struct NodeArgs {
 };
 
 std::optional<std::string> read_whole(const std::filesystem::path& path);
+
+// The engine's reach (slice/printable.cpp): a part wider than twice 2000 mm,
+// taller than 2000 mm, or with a point that is not a number, cannot be
+// placed within 2000 mm of the origin (BH34). Empty when every part fits;
+// else the English reason and, in `es`, the Spanish one. Every command
+// checks it before working, so orient, analyze and aero refuse as slice does.
+std::string reach_problem(const Project& project, std::string& es) {
+    constexpr double kReach = 2000.0;
+    for (const ProjectModel& m : project.models) {
+        double lo[3] = {1e300, 1e300, 1e300}, hi[3] = {-1e300, -1e300, -1e300};
+        bool finite = true;
+        for (const Vec3f& c : m.mesh.corners()) {
+            const double v[3] = {double(c.x), double(c.y), double(c.z)};
+            for (int a = 0; a < 3; ++a) {
+                finite = finite && std::isfinite(v[a]);
+                lo[a] = std::min(lo[a], v[a]), hi[a] = std::max(hi[a], v[a]);
+            }
+        }
+        const double wide = std::max(hi[0] - lo[0], hi[1] - lo[1]), tall = hi[2] - lo[2];
+        if (m.mesh.corners().empty() || (finite && wide <= 2.0 * kReach && tall <= kReach))
+            continue;
+        char text[240];
+        std::snprintf(text, sizeof text,
+                      "%s reaches %.6g mm across and %.6g mm up: the engine works within %.0f mm of the origin",
+                      m.name.c_str(), wide, tall, kReach);
+        char spanish[240];
+        std::snprintf(spanish, sizeof spanish,
+                      "el modelo es demasiado grande (%.6g mm de ancho, %.6g mm de alto): el motor trabaja hasta "
+                      "%.0f mm del origen",
+                      wide, tall, kReach);
+        es = finite ? spanish : "el modelo tiene puntos que no son números";
+        return finite ? std::string(text) : m.name + ": a point of the model is not a number";
+    }
+    return {};
+}
 
 // The project, or a bare model with --config made into one (the phone's
 // request: aero and orient on a model, as analyze takes one). Empty on
@@ -59,6 +97,9 @@ std::string read_input(const NodeArgs& a, Project& project, std::string& code, s
     if (looks_like_project(*data)) {
         try {
             project = read_project(*data);
+        } catch (const ProjectTooNew& e) {
+            code = "project_too_new", es = kTooNewEs;
+            return a.project + ": " + e.what();
         } catch (const std::exception& e) {
             code = "bad_project", es = "el proyecto está dañado o incompleto";
             return a.project + ": " + e.what();
@@ -282,11 +323,15 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     Project project;
     try {
         project = read_project(*data);
+    } catch (const ProjectTooNew& e) {
+        return fail(kExitInput, a.project + ": " + e.what(), "project_too_new", kTooNewEs);
     } catch (const std::exception& e) {
         return fail(kExitInput, a.project + ": " + e.what(), "bad_project", "el proyecto está dañado o incompleto");
     }
     if (project.models.empty())
         return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
+    if (std::string es, why = reach_problem(project, es); !why.empty())
+        return fail(kExitModel, why, "model_too_large", es);
     progress(5);
 
     Settings settings = std::move(project.settings);
@@ -521,6 +566,8 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
         return fail(kExitInput, why, code, es);
     if (project.models.empty())
         return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
+    if (std::string es, why = reach_problem(project, es); !why.empty())
+        return fail(kExitModel, why, "model_too_large", es);
     const std::size_t index = object < 0 ? 0 : std::size_t(object);
     if (index >= project.models.size())
         return fail(kExitInput, "the project has no object " + std::to_string(index) + " (it has " +
@@ -827,6 +874,8 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
         return fail(kExitInput, why, code, es);
     if (project.models.empty())
         return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
+    if (std::string es, why = reach_problem(project, es); !why.empty())
+        return fail(kExitModel, why, "model_too_large", es);
     const std::size_t index = object < 0 ? 0 : std::size_t(object);
     if (index >= project.models.size())
         return fail(kExitInput, "the project has no object " + std::to_string(index) + " (it has " +
@@ -980,6 +1029,8 @@ int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out
         return fail(kExitInput, why, code, es);
     if (project.models.empty())
         return fail(kExitModel, "the project has no models", "no_models", "el proyecto no tiene modelos");
+    if (std::string es, why = reach_problem(project, es); !why.empty())
+        return fail(kExitModel, why, "model_too_large", es);
     const std::size_t index = object < 0 ? 0 : std::size_t(object);
     if (index >= project.models.size())
         return fail(kExitInput, "the project has no object " + std::to_string(index) + " (it has " +

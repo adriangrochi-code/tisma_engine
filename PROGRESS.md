@@ -11017,3 +11017,21 @@ correctos; el error era ofrecer esos perfiles.
   - Acme Coarse, capas de 0,5 mm: solo con la 0.6 y rechazado en la 0.4 por «thicker».
 - `[ui]`, `[gcode]`, `[catalog]` y los ctest `pack` y `ui_` pasan.
 - **Sin probar con el paquete real:** lo vuelve a barrer la sesión de fichas.
+
+## 2026-11-05 — BH33 y BH34: proyectos dañados (barrido de la sesión de fichas)
+
+La sesión de fichas armó 14 proyectos 3MF dañados y corrió `slice` y `orient --sandbox` con cada uno. No hubo cuelgues
+ni el programa se cerró, y los códigos de error fueron los esperados. Encontró dos cosas:
+- **BH33:** un proyecto con `"version": 99` en su JSON se laminaba. Ahora un proyecto de una versión más nueva se
+  rechaza, tanto por el JSON como por el número del archivo propio. Lanza `ProjectTooNew` y los comandos de los nodos
+  dan el código `project_too_new` con «el proyecto es de una versión más nueva de Tisma: actualizá el programa»
+  (`docs/PROJECT.md`, «Errores»).
+- **BH34:** un vértice en x = −4e30 laminaba con el código genérico `slice_failed`, y `orient` lo aceptaba y daba un
+  costo de −1,6e31. Ahora `slice`, `orient`, `analyze` y `aero` comprueban antes de trabajar el alcance del motor:
+  2000 mm del origen, o sea una pieza de hasta 4000 mm de ancho y 2000 mm de alto, y sin puntos que no sean números.
+  Si no cumple, dan el código `model_too_large` con el motivo en `error_es`. El cliente de la nube conoce los dos
+  códigos nuevos.
+
+**Prueba:** `[cli][cloud]`:
+- la versión más nueva en el JSON y en el archivo propio, con `slice` y `orient`;
+- una caja de 5000 mm con los cuatro comandos.

@@ -341,6 +341,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   rechaza: queda un aviso. El modelo de la cama se centra en la placa.
 - **Paquete de perfiles:** un perfil de impresión que vale para todas las impresoras solo se ofrece si su boquilla, su
   altura de capa y sus anchos de línea caben en la impresora elegida.
+- **Proyectos:** uno de una versión más nueva se rechaza con «actualizá el programa». Una pieza fuera del alcance del
+  motor (2000 mm del origen) se rechaza con un mensaje claro también al orientar, analizar y calcular el flujo de aire.
 - Una impresora de resina del paquete (`"technology": "sla"`) quedaba como impresora de filamento.
 - Las velocidades del perfil de impresión del paquete se perdían y se laminaba con las de una Ender-3 (BH27). Ahora
   pasan a la impresora, y cambian al elegir otro perfil de impresión o filamento del paquete; las que cambiaste a mano

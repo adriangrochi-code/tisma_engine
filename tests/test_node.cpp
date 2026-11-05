@@ -544,3 +544,46 @@ TEST_CASE("orient and aero on a bare model with --config, as on a project (the p
     CHECK_THAT(r.err, ContainsSubstring("needs --config"));
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("a project of a newer version: refused with project_too_new (BH33)", "[cli][cloud]") {
+    const auto dir = fresh_dir("node_too_new");
+    const auto summary = dir / "summary.json", gcode = dir / "out.gcode";
+    const std::string bytes = write_project(box_project(100.0, 100.0));
+    // The JSON's version, and the file's own (after "TISMAPRJ").
+    std::string json_newer = bytes;
+    const std::size_t at = json_newer.find("\"version\": 1");
+    REQUIRE(at != std::string::npos);
+    json_newer[at + 11] = '9';
+    std::string file_newer = bytes;
+    file_newer[8] = 2;
+    for (const std::string& data : {json_newer, file_newer}) {
+        CHECK_THROWS_AS(read_project(data), ProjectTooNew);
+        const auto project = dir / "plate.tprj";
+        std::ofstream(project, std::ios::binary) << data;
+        for (const char* command : {"slice", "orient"}) {
+            const Run r = run({command, project.string(), "-o", gcode.string(), "--summary", summary.string(), "--sandbox"});
+            CHECK(r.code == kExitInput);
+            const nlohmann::json j = nlohmann::json::parse(read_text(summary));
+            CHECK(j["code"] == "project_too_new");
+            CHECK_THAT(j["error_es"].get<std::string>(), ContainsSubstring("actualizá el programa"));
+        }
+    }
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("a part beyond the engine's reach: model_too_large on every command (BH34)", "[cli][cloud]") {
+    const auto dir = fresh_dir("node_too_large");
+    const auto project = dir / "plate.3mf", summary = dir / "summary.json", out = dir / "out";
+    Project wide = box_project(100.0, 100.0);
+    wide.models[0].mesh = make_box(5000.0, 5.0, 5.0); // wider than twice 2000 mm
+    save_project(project, wide);
+    for (const char* command : {"slice", "orient", "analyze", "aero"}) {
+        INFO(command);
+        const Run r = run({command, project.string(), "-o", out.string(), "--summary", summary.string(), "--sandbox"});
+        CHECK(r.code == kExitModel);
+        const nlohmann::json j = nlohmann::json::parse(read_text(summary));
+        CHECK(j["code"] == "model_too_large");
+        CHECK_THAT(j["error_es"].get<std::string>(), ContainsSubstring("2000 mm del origen"));
+    }
+    std::filesystem::remove_all(dir);
+}
