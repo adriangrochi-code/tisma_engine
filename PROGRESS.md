@@ -10937,3 +10937,27 @@ descarga en sí ya la prueba `test_pack_fetch` con un servidor simulado.
 **Prueba:** `[calibration]` (forma, áreas a 6,1 y 8,5 mm, G-code verificado, ángulo aplicado, ajustes de impresión) y
 `ui_calibration_bridges` (la pieza laminada; captura mirada). **No probado en una impresora.**
 
+## 2026-11-04 — firmar las versiones con la clave del pendrive (decisión del dueño)
+
+**Decisión del dueño** (por la sesión de fichas): la clave privada Ed25519 vive solo en el pendrive del dueño, nunca
+en GitHub. La CI deja la versión como borrador y el dueño la firma y la publica en su computadora.
+
+**Hecho:**
+- `tools/updates_list.py`: la lista `updates.json` (formato `tisma-updates` 1, el que lee la app de Android) con la
+  versión nueva primero, sus paquetes (sistema y familia según el nombre del archivo, dirección, tamaño, SHA-256) y las
+  firmas vacías; detrás, las versiones de la lista publicada.
+- `tools/sign_release.py`, solo con la biblioteca estándar de Python, `openssl` y `gh`:
+  - `public-key` da la clave pública en 64 hex;
+  - `sign vX` baja el borrador, comprueba tamaño y SHA-256, firma cada paquete y los bytes exactos de la lista
+    (`updates.json.sig`, 64 bytes) y comprueba todo con la clave pública. También rechaza un pendrive equivocado.
+  - Después sube la lista, publica la versión y la pone en la versión `updates`, que leen los programas.
+- `release.yml` deja la versión como borrador con la lista sin firmar. La clave pública entra al compilar desde la
+  variable del repositorio `TISMA_UPDATES_KEY` (`-DTISMA_UPDATES_KEY`, 64 hex). Sin ella, el actualizador queda
+  apagado; el del escritorio todavía no existe.
+- `docs/FIRMAR_VERSIONES.md`: guía para el dueño, en español (crear la clave en Git Bash, dos pendrives, firmar cada
+  versión).
+
+**Prueba:** `sign_release_check` (ctest; se saltea sin openssl 3): la lista, firmar y comprobar con la clave pública
+sola, un byte cambiado, otra clave y un paquete dañado rechazados. **Sin probar:** contra GitHub de verdad (subir y
+publicar) y en Windows; la primera versión firmada lo prueba.
+

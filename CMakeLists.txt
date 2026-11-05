@@ -365,6 +365,17 @@ endif()
 if(TISMA_BUILD_UI)
   # What the interface does without OpenGL (camera, draw data, icons, texts,
   # files, the slicing job): tested with the engine.
+  # The project's Ed25519 public key for the updater (app_updates.md, rule 5;
+  # docs/FIRMAR_VERSIONES.md): 64 hex digits, given at build time. Empty: the
+  # updater stays off.
+  set(TISMA_UPDATES_KEY "" CACHE STRING "The updates' Ed25519 public key, 64 hex digits (empty: no updater)")
+  if(NOT TISMA_UPDATES_KEY STREQUAL "" AND NOT TISMA_UPDATES_KEY MATCHES "^[0-9a-fA-F]+$")
+    message(FATAL_ERROR "TISMA_UPDATES_KEY must be 64 hex digits")
+  endif()
+  string(LENGTH "${TISMA_UPDATES_KEY}" tisma_updates_key_length)
+  if(NOT tisma_updates_key_length EQUAL 0 AND NOT tisma_updates_key_length EQUAL 64)
+    message(FATAL_ERROR "TISMA_UPDATES_KEY must be 64 hex digits")
+  endif()
   add_library(tisma_ui STATIC
     src/ui/camera.cpp
     src/ui/scene.cpp
@@ -391,6 +402,7 @@ if(TISMA_BUILD_UI)
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
   target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
+  target_compile_definitions(tisma_ui PUBLIC TISMA_UPDATES_KEY="${TISMA_UPDATES_KEY}")
   if(WIN32)
     target_link_libraries(tisma_ui PRIVATE shell32) # ShellExecuteW (ui/links)
   endif()

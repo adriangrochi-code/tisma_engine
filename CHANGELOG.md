@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- **Versiones firmadas:** la CI deja cada versión como borrador y el dueño la firma con la clave Ed25519 de su
+  pendrive (`tools/sign_release.py`, guía en `docs/FIRMAR_VERSIONES.md`). Así los programas solo instalan lo que él
+  firmó.
 - **Calibración de puentes y voladizos:** aletas de 20° a 70° y puentes de 10 a 50 mm; la aleta más inclinada que sale
   bien da el ángulo desde el que van los soportes.
 - **Paquete de perfiles, primer arranque:** la primera vez se baja solo la lista de impresoras del paquete; sin red

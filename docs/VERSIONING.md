@@ -79,8 +79,11 @@ El flujo `.github/workflows/release.yml` corre cuando un envío a `alpha` o a `m
 `v<versión>` todavía no existe. También corre si alguien envía esa etiqueta a mano. El flujo:
 - compila y prueba en Windows y en Linux;
 - empaqueta el programa con la licencia, el README, el registro de cambios y la documentación de uso;
-- publica la release con las notas de su sección del CHANGELOG, marcada como pre-release si el número tiene etiqueta;
-- crea la etiqueta `v<versión>` en el commit compilado, salvo que ya la hayan enviado.
+- deja la release como **borrador**, con las notas de su sección del CHANGELOG (pre-release si el número tiene
+  etiqueta) y la lista de actualizaciones `updates.json` sin firmar (`tools/updates_list.py`);
+- el dueño la firma con la clave de su pendrive y la publica (`tools/sign_release.py`, `docs/FIRMAR_VERSIONES.md`;
+  decisión del dueño, 2026-11-04: la clave privada nunca está en GitHub). Al publicarse se crea la etiqueta
+  `v<versión>` en el commit compilado, salvo que ya la hayan enviado.
 
 Las sesiones de trabajo solo pueden enviar a `dev`, ni etiquetas ni otras ramas: por eso es el flujo el que crea la
 etiqueta, y `alpha` avanza fusionando la PR desde GitHub. Si la
