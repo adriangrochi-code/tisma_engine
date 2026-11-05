@@ -161,7 +161,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"adhesion.skirt_layers", N},
             {"adhesion.skirt_min_filament", A},
             {"adhesion.draft_shield", N}}},
-          {"brim", T::SubBrim, {{"adhesion.brim_width", B}, {"adhesion.brim_type", N}, {"adhesion.brim_gap", A}}},
+          {"brim", T::SubBrim, {{"adhesion.brim_width", B}, {"adhesion.brim_type", N}, {"adhesion.brim_gap", N}}},
           {"raft", T::SubRaft,
            {{"adhesion.raft_layers", N},
             {"adhesion.raft_gap", A},

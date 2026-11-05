@@ -28,6 +28,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- La separación entre el borde de adherencia y la pieza ahora se ve en el nivel Normal (antes solo en Avanzado).
 - «Solo desde la cama» ahora también vale para los soportes de árbol (antes salían igual que sin la opción).
 - El G-code de inicio copiado del programa de otro fabricante (por ejemplo Anycubic) ya no falla por los nombres de sus
   variables: se aceptan los de la lista de los G-code del paquete y los índices con una variable adentro

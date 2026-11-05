@@ -11394,3 +11394,10 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - Arreglo: la misma regla corre sobre las áreas del árbol. Una zona (sus islas, unidas capa a capa) que apoya en la
   pieza se quita entera; la que va a la cama queda.
 - Prueba `[bh39]` (SM2 con árbol): estante sobre una losa, sin soporte; una T sobre la cama, con soporte.
+
+## 2026-11-05 — BH42: separación del borde de adherencia
+
+- El ajuste existía (`adhesion.brim_gap`, regla 8 de `skirt_brim_raft.md`) pero solo en el nivel Avanzado, y la app
+  abre en Normal. Ahora está en Normal, al lado del ancho del borde. La lista Básica sigue siendo la de
+  `settings_panel.md`.
+- Prueba en `[layout]`.
