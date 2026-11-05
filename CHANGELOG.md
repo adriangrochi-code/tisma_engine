@@ -14,6 +14,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 Beta para los probadores del dueño: Windows y Linux. Cada paquete es un `.zip`: se descomprime y se abre `tisma`.
 
+**Es el Tisma nuevo, no Tisma Slicer:** un programa hecho desde cero, que va a reemplazar a Tisma Slicer. Se instala
+aparte y no toca la configuración de Tisma Slicer. Los proyectos `.3mf` de Tisma Slicer se abren como modelos: se
+toman las piezas, no los ajustes, y hay que elegir impresora y perfiles.
+
 ### Para probar
 
 - **Impresoras del paquete de perfiles:** en el primer arranque se baja la lista sola. Elegí tu impresora en el
