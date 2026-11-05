@@ -34,7 +34,9 @@
    ],
    "prints": [
     "vendors/acme/prints/Standard.json",
-    "vendors/acme/prints/Fine.json"
+    "vendors/acme/prints/Fine.json",
+    "vendors/acme/prints/Draft.json",
+    "vendors/acme/prints/Coarse.json"
    ],
    "archive": {
     "name": "acme.tar.xz",

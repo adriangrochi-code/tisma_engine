@@ -10994,3 +10994,26 @@ La sesión de fichas laminó un cubo de 20 mm con cada variante FDM del paquete 
 - `ctest` completo pasa.
 - A mano: un G-code de inicio de Ender-3 V3 se lamina, da `START_PRINT EXTRUDER_TEMP=0 CH=0 IDLE=0` y un aviso.
 - **Sin probar con el paquete real:** el equipo del motor no lo lee. Lo vuelve a barrer la sesión de fichas.
+
+## 2026-11-05 — BH32: un perfil de impresión «para todas» se ofrece solo si cabe (spec 6970209)
+
+La sesión de fichas probó 500 combinaciones al azar sobre c07643e: 444 laminaron bien y 56 fallaron. En todas, el
+perfil de impresión venía del conjunto vacío, que ahora vale para todas las impresoras. Los rechazos del motor eran
+correctos; el error era ofrecer esos perfiles.
+
+**Hecho (regla 12):**
+- Un perfil de impresión que vale para todas (`compatible` nulo o un conjunto vacío) que no es de los `defaults` de la
+  variante se ofrece solo si cabe en la impresora:
+  - su `nozzle` del paquete, si lo trae, es la boquilla de la variante;
+  - y pasa el mismo `check_settings` del laminado sobre impresora + perfil, o sea altura de capa y anchos de línea
+    dentro de lo que permiten la impresora y la boquilla.
+- `pack_prints_for` (la lista de la app) los deja fuera. Elegirlo igual (`profile --pack --print …`) da el error
+  «… does not fit the …: <motivo>».
+- `PackEntry::nozzle` se lee del paquete.
+
+**Prueba:**
+- `[pack]` con dos perfiles nuevos del paquete de prueba en el conjunto vacío:
+  - Acme Draft, `nozzle` 0,6: solo con la 0.6;
+  - Acme Coarse, capas de 0,5 mm: solo con la 0.6 y rechazado en la 0.4 por «thicker».
+- `[ui]`, `[gcode]`, `[catalog]` y los ctest `pack` y `ui_` pasan.
+- **Sin probar con el paquete real:** lo vuelve a barrer la sesión de fichas.

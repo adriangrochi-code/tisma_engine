@@ -370,7 +370,15 @@ TEST_CASE("pack: a variant's defaults always valid for it, an empty set for ever
         return out;
     };
     CHECK(names(pack_prints_for(pack, index, 0)) == std::vector<std::string>{"Acme Standard", "Acme Fine"});
-    CHECK(names(pack_prints_for(pack, index, 1)) == std::vector<std::string>{"Acme Fine"});
+    // Valid for every printer but offered only where they fit (BH32): Acme
+    // Draft is for a 0.6 mm nozzle, Acme Coarse's 0.5 mm layers too thick
+    // for a 0.4 mm one.
+    CHECK(names(pack_prints_for(pack, index, 1)) == std::vector<std::string>{"Acme Fine", "Acme Draft", "Acme Coarse"});
+    CHECK_THROWS_WITH(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.4", "", "vendors/acme/prints/Draft.json"),
+                      Catch::Matchers::ContainsSubstring("does not fit the") && Catch::Matchers::ContainsSubstring("0.6 mm nozzle"));
+    CHECK_THROWS_WITH(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.4", "", "vendors/acme/prints/Coarse.json"),
+                      Catch::Matchers::ContainsSubstring("does not fit the") && Catch::Matchers::ContainsSubstring("thicker"));
+    CHECK(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.6", "", "vendors/acme/prints/Coarse.json").print);
     CHECK_THROWS_AS(pack_profiles(pack, index, "vendors/acme/models/A1.json#0.6", "", "vendors/acme/prints/Standard.json"),
                     PackError);
     // Acme Fine points to set 2, empty: offered with every printer, and

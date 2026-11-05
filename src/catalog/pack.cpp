@@ -369,6 +369,8 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
     if (j.contains("compatible") && j.at("compatible").is_number_integer())
         out.compatible = j.at("compatible").get<int>();
     out.generic = j.value("generic", false);
+    if (j.contains("nozzle") && j.at("nozzle").is_number())
+        out.nozzle = j.at("nozzle").get<double>();
     out.license = text(j, "license");
     out.vendor = text(j, "vendor");
     out.origin = text(j, "origin");
