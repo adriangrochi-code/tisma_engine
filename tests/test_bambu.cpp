@@ -6,6 +6,7 @@
 #include "device/bambu.hpp"
 #include "device/ftps.hpp"
 #include "device/mqtt.hpp"
+#include "device/mdns.hpp"
 #include "device/ssdp.hpp"
 #include "io/zip.hpp"
 #include "net/digest.hpp"
@@ -289,4 +290,104 @@ TEST_CASE("Bambu Lab: the A1 and P1 camera (rule 6)", "[bambu]") {
     CHECK(f.jpegs[2].starts_with("\xFF\xD8"));
     c.access_code = "00000000";
     CHECK_FALSE(bambu_camera(c, 1, 3000).ok);
+}
+
+namespace {
+
+// A DNS name as labels (RFC 1035 4.1.2).
+void dns_name(std::vector<std::uint8_t>& out, const std::string& name) {
+    std::size_t start = 0;
+    while (start < name.size()) {
+        std::size_t dot = name.find('.', start);
+        if (dot == std::string::npos)
+            dot = name.size();
+        out.push_back(std::uint8_t(dot - start));
+        out.insert(out.end(), name.begin() + std::ptrdiff_t(start), name.begin() + std::ptrdiff_t(dot));
+        start = dot + 1;
+    }
+    out.push_back(0);
+}
+
+void dns_u16(std::vector<std::uint8_t>& out, unsigned v) {
+    out.push_back(std::uint8_t(v >> 8));
+    out.push_back(std::uint8_t(v));
+}
+
+// A record: name (as given bytes), type, class IN, TTL 120, and its data.
+void dns_rr(std::vector<std::uint8_t>& out, const std::vector<std::uint8_t>& name, unsigned type,
+            const std::vector<std::uint8_t>& data) {
+    out.insert(out.end(), name.begin(), name.end());
+    dns_u16(out, type);
+    dns_u16(out, 0x8001); // IN, cache flush
+    out.insert(out.end(), {0, 0, 0, 120});
+    dns_u16(out, unsigned(data.size()));
+    out.insert(out.end(), data.begin(), data.end());
+}
+
+} // namespace
+
+TEST_CASE("mDNS: the question and an OctoPrint answer (RFC 6762, RFC 6763, RFC 1035)", "[ssdp]") {
+    const std::vector<std::uint8_t> q = mdns_query("_octoprint._tcp.local");
+    // Header: one question; then the name, type PTR (12) and class IN with the QU bit.
+    REQUIRE(q.size() == 12 + 22 + 1 + 4);
+    CHECK(q[5] == 1);
+    CHECK(q[12] == 10);
+    CHECK(std::string(q.begin() + 13, q.begin() + 23) == "_octoprint");
+    CHECK(q[q.size() - 3] == 12);
+    CHECK(q[q.size() - 2] == 0x80);
+
+    // The answer: PTR to the instance, then SRV, TXT and A, with names
+    // compressed by pointers back to the first one.
+    std::vector<std::uint8_t> p = {0, 0, 0x84, 0, 0, 0, 0, 4, 0, 0, 0, 0};
+    const std::size_t service_at = p.size();
+    std::vector<std::uint8_t> service;
+    dns_name(service, "_octoprint._tcp.local");
+    std::vector<std::uint8_t> instance_data = {9, 'O', 'c', 't', 'o', 'P', 'r', 'i', 'n', 't',
+                                               std::uint8_t(0xC0), std::uint8_t(service_at)};
+    dns_rr(p, service, 12, instance_data);
+    const std::size_t instance_at = p.size() - instance_data.size();
+    const std::vector<std::uint8_t> instance_ptr = {std::uint8_t(0xC0), std::uint8_t(instance_at)};
+    std::vector<std::uint8_t> srv = {0, 0, 0, 0, 0x13, 0x88}; // priority, weight, port 5000
+    dns_name(srv, "octopi.local");
+    dns_rr(p, instance_ptr, 33, srv);
+    std::vector<std::uint8_t> txt;
+    for (const std::string e : {"path=/octo", "version=1.10.2", "api=0.1", "Model=Prusa MK3S"}) {
+        txt.push_back(std::uint8_t(e.size()));
+        txt.insert(txt.end(), e.begin(), e.end());
+    }
+    dns_rr(p, instance_ptr, 16, txt);
+    std::vector<std::uint8_t> host;
+    dns_name(host, "octopi.local");
+    dns_rr(p, host, 1, {192, 168, 1, 42});
+
+    const std::vector<MdnsService> found = parse_mdns(p, "_octoprint._tcp.local");
+    REQUIRE(found.size() == 1);
+    CHECK(found[0].instance == "OctoPrint._octoprint._tcp.local");
+    CHECK(found[0].host == "octopi.local");
+    CHECK(found[0].port == 5000);
+    CHECK(found[0].address == "192.168.1.42");
+    CHECK(found[0].txt.at("version") == "1.10.2");
+    CHECK(found[0].txt.at("model") == "Prusa MK3S"); // keys in lower case
+    CHECK(found[0].url() == "http://192.168.1.42:5000/octo");
+    // Another service type: nothing; a cut or looping packet: nothing, no throw.
+    CHECK(parse_mdns(p, "_http._tcp.local").empty());
+    CHECK(parse_mdns(std::vector<std::uint8_t>(p.begin(), p.begin() + 40), "_octoprint._tcp.local").empty());
+    std::vector<std::uint8_t> loop = {0, 0, 0x84, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0xC0, 12};
+    CHECK(parse_mdns(loop, "_octoprint._tcp.local").empty());
+    CHECK(parse_mdns({}, "_octoprint._tcp.local").empty());
+    // Anyone on the network can send a packet: damaged copies of the answer
+    // (bytes changed, cut short) never read past its end (ASan) nor throw.
+    unsigned seed = 11;
+    for (int i = 0; i < 5000; ++i) {
+        std::vector<std::uint8_t> bad = p;
+        for (int k = 0; k < 1 + int(seed % 5); ++k) {
+            seed = seed * 1103515245u + 12345u;
+            bad[(seed >> 8) % bad.size()] = std::uint8_t(seed >> 16);
+        }
+        seed = seed * 1103515245u + 12345u;
+        if (i % 4 == 0)
+            bad.resize(bad.size() - (seed >> 4) % bad.size());
+        for (const MdnsService& s : parse_mdns(bad, "_octoprint._tcp.local"))
+            CHECK(s.url().size() < 4096);
+    }
 }

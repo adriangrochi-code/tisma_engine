@@ -452,7 +452,9 @@ con nombres propios en `docs/CONFIG.md`.
 - [x] Voladizos por ángulo y su proyección hacia abajo (grupo `support`, `src/support/*`: solo las áreas por capa)
 - [x] Soporte en líneas con separación en Z y XY, interfaz densa y base (tipos `Support material` y
   `Support material interface`)
-- [ ] Puentes cortos sin soporte (`max_bridge_length`)
+- [x] Puentes sin soporte (2026-11-05, cerrado según la ficha): un puente no lleva soporte, de cualquier largo,
+  salvo con `support.under_bridges` (`supports_skirt.md`, S10; `BEHAVIOR.md`). `support.free_bridge_length` no cambia
+  el soporte: solo hace que la revisión antes de imprimir avise de un puente más largo.
 - [x] Puente o voladizo punto por punto (`supports_skirt.md`, regla 3, S11; 2026-10-29): la U, los dos pilares y el
   marco sin soporte; un pilar de un lado, uno central, uno en una esquina y la L con soporte; la V de 30°, puente. La
   condición de cruzar los dos apoyos a 60° o más la confirmó el equipo de fichas (llega a la ficha con `aa0c7c3`)
@@ -620,8 +622,17 @@ Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la fic
   o el G-code abierto, pausar, seguir, cancelar, mover y extruir, registro; la impresora simulada para probar sin
   máquina, con una prueba de punta a punta
 - [ ] El servicio local de `tisma` para la app de Android (`docs/MOBILE.md`)
-- [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas
+- [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas. Hechos en
+  `src/device/print_host.*` contra simuladores propios: OctoPrint, Moonraker, PrusaLink y Duet (2026-11-05), y en la
+  página de Dispositivo («Programa en la red»: probar, estado, enviar e imprimir, pausar, seguir, cancelar). También el botón
+  principal «Mandar a la impresora» y el diálogo de envío con nombre, con «Subir y simular» en Duet (reglas 19 y 20).
+  Búsqueda por Zeroconf de OctoPrint hecha (2026-11-05). Falta la de Moonraker (nombres `.local` y su API)
 - [ ] Probado con una impresora real por USB (necesita al dueño)
+- [ ] Leer los límites de la impresora (`printer_connections.md`, reglas 1 a 8): hecho el núcleo (`src/device/printer_limits.*`,
+  2026-11-05: Marlin M115 y M503, Klipper `toolhead` y `configfile`, llenar solo lo vacío). Al conectar por USB ya se
+  piden (M115 y M503) y llenan lo vacío con un aviso. Con Moonraker, al probar
+  la conexión (2026-11-05). Faltan la lista «En el perfil / En la impresora» y el botón «Leer de la impresora» en
+  Límites
 
 ## Estado de P1
 

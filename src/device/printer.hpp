@@ -21,6 +21,9 @@ struct Temperature {
 struct PrinterStatus {
     PrinterState state = PrinterState::Disconnected;
     std::string firmware;                 // what the printer said it runs (M115)
+    // The firmware's whole answers to M115 and M503 when it connected, to
+    // read its limits from (device/printer_limits.hpp); empty when it gave none.
+    std::string m115, m503;
     Temperature nozzle, bed;
     std::array<double, 4> position{};     // X, Y, Z, E as last reported (M114)
     std::string job;                      // the name of what is printing

@@ -20,6 +20,7 @@
 #include "project/project.hpp"
 #include "report/analysis_json.hpp"
 #include "gcode/export.hpp"
+#include "gcode/thumbnail.hpp"
 #include "gcode/output.hpp"
 #include "gcode/template.hpp"
 #include "gcode/writer.hpp"
@@ -736,7 +737,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         err << "error: " << e.what() << "\n";
         return kExitInput;
     }
-    const GcodeExport exported = export_gcode(target, sliced, settings, &warnings);
+    const std::vector<GcodeThumbnail> thumbnails = gcode_thumbnails(stl.mesh, settings, &warnings);
+    const GcodeExport exported = export_gcode(target, sliced, settings, &warnings, thumbnails);
     if (!exported.written) {
         err << "error: " << exported.error << "\n";
         for (const GcodeProblem& p : exported.check.problems)

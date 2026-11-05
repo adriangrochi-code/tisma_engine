@@ -788,6 +788,30 @@
     X(DeviceLog, "Registro", "Log")                                                                                   \
     X(DeviceKindUsb, "USB", "USB") \
     X(DeviceKindBambu, "Bambu Lab (red local)", "Bambu Lab (local network)") \
+    X(DeviceKindHost, "Programa en la red", "Network program") \
+    X(HostKindRow, "Programa", "Program") \
+    X(HostUrl, "Dirección", "Address") \
+    X(HostApiKey, "Clave de API", "API key") \
+    X(HostUser, "Usuario", "User") \
+    X(HostPassword, "Contraseña", "Password") \
+    X(HostBoardPassword, "Contraseña de la placa", "Board password") \
+    X(HostTest, "Probar", "Test") \
+    X(HostTestOk, "La conexión con %s funciona bien.", "Connection to %s works correctly.") \
+    X(HostTestFailed, "No se pudo conectar con %s: %s (%s)", "Could not connect to %s: %s (%s)") \
+    X(HostOpenWeb, "Abrir en el navegador", "Open in browser") \
+    X(HostWebHelp, "La interfaz web de la impresora: cámara, temperaturas, consola y las calibraciones de su firmware (por ejemplo, input shaping en Klipper).", "Web interface of the printer: camera, temperatures, console and the calibrations of its firmware (for example input shaping in Klipper).") \
+    X(HostStartPrinting, "Empezar a imprimir", "Start printing") \
+    X(HostSend, "Enviar el G-code laminado", "Send sliced G-code") \
+    X(HostSent, "%s → %s: subido.", "%s → %s: uploaded.") \
+    X(HostUploadName, "Subir a la impresora con este nombre:", "Upload to Printer Host with the following filename:") \
+    X(HostUploadSlashes, "Usá barras ( / ) para separar carpetas si hace falta.", "Use forward slashes ( / ) as a directory separator if needed.") \
+    X(HostUpload, "Subir", "Upload") \
+    X(HostUploadPrint, "Subir e imprimir", "Upload and Print") \
+    X(HostUploadSimulate, "Subir y simular", "Upload and Simulate") \
+    X(LimitsTaken, "%d datos del perfil tomados de la impresora (%s).", "%d profile values taken from the printer (%s).") \
+    X(LimitsNoBed, "La impresora no informa el tamaño de la cama: escribilo a mano.", "The printer does not report the bed size: type it in.") \
+    X(HostNoneFound, "No apareció ninguno. Revisá que la computadora y la impresora estén en la misma red y que el cortafuegos deje pasar mDNS (UDP 5353). También podés escribir la dirección.", "None found. Check that the computer and the printer are on the same network and that the firewall lets mDNS (UDP 5353) through. You can also type the address.") \
+    X(HostFailed, "El programa de la impresora contestó con un problema: %s", "The printer's program answered with a problem: %s") \
     X(BambuHelp, "En la impresora: activá el modo «Solo LAN» y el modo desarrollador (Ajustes › Solo LAN). Dirección = la IP de la impresora; código = el código de acceso que muestra ahí. El número de serie se lee de la impresora.", "Bambu Lab: on the printer turn on LAN only mode and Developer mode (Settings > LAN only). Hostname = IP address of the printer, API key = access code shown there. The serial number is read from the printer.") \
     X(BambuSearch, "Buscar en la red", "Browse the network") \
     X(BambuSearching, "Buscando impresoras…", "Looking for printers…") \
@@ -815,6 +839,9 @@
     X(BambuSending, "Enviando: %.0f %%", "Sending: %.0f %%") \
     X(BambuSent, "Enviado: la impresora empieza «%s».", "Sent: the printer starts «%s».") \
     X(BambuStop, "Detener", "Stop") \
+    X(BambuCamera, "Cámara", "Camera") \
+    X(BambuCameraWaiting, "Esperando la imagen de la cámara…", "Waiting for the camera's picture…") \
+    X(BambuCameraEnded, "La cámara se cortó: %s. Solo las series A1 y P1 la mandan por la red local.", "The camera stopped: %s. Only the A1 and P1 series send it on the local network.") \
     X(BambuSerial, "Número de serie: %s", "Serial number: %s") \
     X(BambuNotTested, "Conexión con Bambu Lab nueva: sin probar todavía con una impresora real.", "New Bambu Lab connection: not yet tested with a real printer.") \
     X(BambuBinary, "Esta impresora necesita G-code de texto: apagá el G-code binario en el perfil.", "This printer needs text G-code: turn off binary G-code in the profile.") \
@@ -1942,6 +1969,7 @@
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \
     X(GcodeArcs, "Arcos G2/G3", "G2/G3 arcs") \
     X(GcodeBinary, "G-code binario (.bgcode)", "Binary G-code (.bgcode)") \
+    X(GcodeThumbnails, "Miniaturas (ancho x alto / formato)", "Thumbnails (width x height / format)") \
     X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
     X(SubJerk, "Tirones y esquinas", "Jerk and corners") \
     X(SkirtMinFilament, "Filamento mínimo", "Minimum filament") \

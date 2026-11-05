@@ -10,6 +10,29 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Agregado
+
+- Cámara de las impresoras Bambu Lab A1 y P1 en la página Dispositivo: casilla «Cámara». Sin probar con una cámara
+  real.
+- La cama de una impresora del paquete también se dibuja cuando su imagen es PNG, no solo SVG (regla 14).
+- Página Dispositivo: «Programa en la red» para OctoPrint, Klipper (Moonraker), PrusaLink y Duet. Sirve para probar
+  la conexión, ver el estado, enviar el G-code laminado (y empezar a imprimir), pausar, seguir y cancelar, y abrir su
+  interfaz web. Con la conexión probada, el botón principal pasa a «Mandar a la impresora» y abre el diálogo de envío
+  con el nombre editable (en Duet también «Subir y simular»). Con OctoPrint, «Buscar en la red» lo encuentra por
+  Zeroconf. Sin probar con impresoras reales.
+- Miniaturas de la pieza en el G-code binario (`.bgcode`): ajuste `gcode.thumbnails` (por ejemplo `16x16/PNG,220x124/PNG`),
+  en PNG, JPG o QOI, también desde la línea de comandos. En el G-code de texto todavía no: se avisa.
+- Al conectar una impresora por USB se le preguntan sus límites (M115 y M503) y se llenan los datos vacíos del
+  perfil: velocidades y aceleraciones máximas, tirones, tamaño de la cama y avance de presión, con un aviso de
+  cuántos se tomaron. Lo mismo con Klipper (Moonraker) al probar la conexión. Lo que la persona escribió no se toca.
+
+### Arreglado
+
+- Una respuesta dañada de la impresora («inf», «nan») ya no puede escribir un límite infinito en el perfil.
+- Con dos boquillas distintas, la pared con la más fina y alturas de capa por encima de su tope, las piezas de cada
+  extrusor se cortaban en capas distintas de las de la placa y sus paredes quedaban a otra altura (el fuzz, semilla
+  202611050900, corrida 1658).
+
 ## [0.11.0-beta.1] - 2026-11-05
 
 Beta para los probadores del dueño: Windows y Linux. En Windows, el instalador `tisma-engine-0.11.0-beta.1-setup-windows-x64.exe`

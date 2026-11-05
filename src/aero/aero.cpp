@@ -301,16 +301,16 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
                         const int b0[3] = {int(std::floor(g[0])), int(std::floor(g[1])), int(std::floor(g[2]))};
                         double rho = 0.0, u[3] = {0, 0, 0}, weight = 0.0;
                         for (int k = 0; k < 8; ++k) {
-                            const int d[3] = {k & 1, (k >> 1) & 1, (k >> 2) & 1};
-                            const int q[3] = {std::clamp(b0[0] + d[0], 0, wo.nx - 1), std::clamp(b0[1] + d[1], 0, wo.ny - 1),
-                                              std::clamp(b0[2] + d[2], 0, wo.nz - 1)};
+                            const int corner[3] = {k & 1, (k >> 1) & 1, (k >> 2) & 1};
+                            const int q[3] = {std::clamp(b0[0] + corner[0], 0, wo.nx - 1), std::clamp(b0[1] + corner[1], 0, wo.ny - 1),
+                                              std::clamp(b0[2] + corner[2], 0, wo.nz - 1)};
                             const std::size_t wc = (std::size_t(q[2]) * std::size_t(wo.ny) + std::size_t(q[1])) * std::size_t(wo.nx) + std::size_t(q[0]);
                             if (warm->solid[wc])
                                 continue;
                             double w = 1.0;
                             for (int a = 0; a < 3; ++a) {
                                 const double t = g[a] - b0[a];
-                                w *= d[a] ? t : 1.0 - t;
+                                w *= corner[a] ? t : 1.0 - t;
                             }
                             rho += w * warm->flow.mean_density[wc];
                             for (int a = 0; a < 3; ++a)
@@ -348,7 +348,7 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
         if (coarse > 0) {
             std::function<bool(double)> coarse_progress;
             if (progress)
-                coarse_progress = [&](double d) { return progress(d * coarse_share); };
+                coarse_progress = [&](double done) { return progress(done * coarse_share); };
             check = lattice(coarse, coarse_progress, nullptr);
             if (!check->flow.stable && progress) {
                 r.error = "the simulation was stopped or did not stay stable";
@@ -362,7 +362,7 @@ AeroResult analyze(const AeroInput& in, const std::function<bool(double)>& progr
         }
         std::function<bool(double)> fine_progress;
         if (progress)
-            fine_progress = [&](double d) { return progress(coarse_share + d * (1.0 - coarse_share)); };
+            fine_progress = [&](double done) { return progress(coarse_share + done * (1.0 - coarse_share)); };
         const Lattice main = lattice(cells, fine_progress, check && check->flow.stable && in.warm_start ? &*check : nullptr);
         const LbmOptions& o = main.o;
         const V origin = main.origin;

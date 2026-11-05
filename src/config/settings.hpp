@@ -828,6 +828,9 @@ struct Settings {
     ObjectLabels object_labels = ObjectLabels::None;
     // The binary G-code format (gcode_extras.md, rule 9; src/gcode/binary.hpp).
     bool gcode_binary = false;
+    // The pictures of the part at the start of the G-code: «16x16/PNG,32x24/JPG»
+    // (gcode_extras.md, rule 8; src/gcode/thumbnail.hpp). Empty: none.
+    std::string gcode_thumbnails;
     // The printer's firmware reads the whole file first (gcode_firmware.md,
     // rule 7): then the G-code is never binary (binary_output).
     StrictParser strict_parser = StrictParser::None;

@@ -11114,3 +11114,251 @@ documentación de la comunidad OpenBambuAPI (`mqtt.md`, `ftp.md`, `video.md`), q
 nada en una pieza chica. El rango del laminado deja anchos de hasta 4 veces la boquilla. Ahora, si el perfil no dice
 su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1,5 veces la de la variante («its
 0.82 mm walls are made for another nozzle than 0.4 mm»). Prueba: Acme Wide en `[pack]`.
+
+## 2026-11-05 — 0.11.0-beta.1 publicada, y mantenimiento de la noche
+
+- **Publicada:** la beta de los probadores salió como pre-release `v0.11.0-beta.1`, con la fusión de dev en alpha
+  (#53, c3516aa).
+  - Archivos: el instalador de Windows (`…-setup-windows-x64.exe`, 48 MB) y los `.zip` de Windows y Linux.
+  - No lleva `updates.json`: no hay clave, así que el actualizador queda apagado.
+  - El paso de NSIS en la CI de Windows funcionó la primera vez.
+- **Antes, el CI de Windows en 9e81a74:** falló en `ssdp.cpp`, porque la macro `max` de `windows.h` rompía
+  `std::max`. Se arregló en 4060e79: `NOMINMAX`, `inet_pton` y tamaños de socket explícitos.
+- **Mantenimiento:**
+  - fuzz de 2000 corridas con la semilla 202611050413: 0 fallas, 19 rechazadas por no imprimibles;
+  - ASan (con fugas) en 4060e79 sobre `[bambu]`, `[pack]`, `[gcode][check]` y `[cli][cloud]`: 54 casos limpios, el
+    código de red nuevo incluido.
+- **Sin probar:** el instalador en un Windows real y Bambu Lab con una impresora real. Los prueba la sesión de fichas
+  y después el dueño.
+
+## 2026-11-05 — cámara de las Bambu Lab en la interfaz
+
+- **Lector de JPEG y PNG:** stb_image 2.30 (MIT), anotado en THIRD_PARTY.md, en créditos y con su licencia. Lo
+  envuelve `src/ui/image_decode.*`: solo JPEG y PNG, desde memoria, hasta 8192 píxeles por lado. Sirve también para
+  las texturas PNG de la cama (regla 14, pendiente).
+- **La cámara como flujo:** `bambu_camera_stream` entrega cada JPEG hasta que se pide parar, la cámara cierra o pasan
+  10 s sin imagen. `bambu_camera` usa esa misma función. El simulador manda un JPEG real de 32×24 cada 50 ms.
+- **Interfaz:** casilla «Cámara» en el panel Bambu Lab. Un hilo lee los cuadros y la interfaz muestra el último.
+  Si la cámara se corta, se dice por qué y que solo las series A1 y P1 la mandan por la red local.
+- **Vulkan:** `VulkanWindow::remove_texture` libera una textura cuando terminan los cuadros en vuelo que la usaban.
+- **Pruebas:**
+  - `decode_image` lee el JPEG del simulador y un PNG de 4×3, y rechaza bytes que no son imagen o están cortados;
+  - `ui_bambu_print` prende la cámara, ve el cuadro de 32×24 y la apaga;
+  - a mano, con Vulkan y la cámara prendida a 20 cuadros por segundo: sin errores.
+- **Sin probar:** con una cámara real.
+
+**Sigue:** la textura PNG de la cama (regla 14) con el mismo lector; después, lo que sigue del PLAN.
+
+## 2026-11-05 — imagen PNG de la cama (regla 14)
+
+- `bed_image_art` dibuja la imagen PNG de la cama de un perfil del paquete. Se ubica igual que la SVG: lo más grande
+  que entra, centrada, sin estirar.
+- Para que las dos vistas 3D la dibujen como el SVG, la imagen se convierte en rectángulos de color plano:
+  - se parte en celdas, a lo sumo 192 por el lado largo;
+  - cada canal se redondea a 8 niveles;
+  - las celdas casi transparentes se dejan fuera;
+  - cada tramo de un color en una fila es un rectángulo.
+  Decisión del motor: no hace falta una textura en los dos renderizadores. El costo es que las fotos pierden detalle
+  fino y gradientes.
+- Prueba `[bed_art]`: ubicación, partes transparentes, celdas y redondeo de color.
+- **Sin probar:** con un PNG de un paquete real en la interfaz. Lo cubre solo la prueba unitaria.
+
+**Sigue:** lo que sigue del PLAN.
+
+## 2026-11-05 — miniaturas del G-code, parte 1 (gcode_extras.md, regla 8)
+
+- **Ajuste `gcode.thumbnails`:** una lista como `16x16/PNG,32x24/JPG,20x20/QOI`. Lados de 1 a 1024 píxeles; sin
+  formato, vale PNG. Una lista mal escrita se rechaza al cargar los ajustes, diciendo qué elemento está mal.
+  - En el panel va en la tarjeta del G-code de salida, como texto a lo ancho. Mientras el valor está mal, se ve el
+    error en rojo y no se aplica.
+- **`draw_part`:** dibuja la pieza en la CPU, sin la vista 3D, para que sirva también desde la línea de comandos:
+  - vista isométrica, lo más grande que entra, con un margen chico;
+  - sombreada por una luz desde arriba del ojo, con el fondo transparente;
+  - dibujada al doble del tamaño y reducida a la mitad, para suavizar los bordes.
+- **QOI:** se escribe y se lee según su especificación pública.
+- **Pruebas `[thumbnail]`:** la lista y sus errores; el dibujo centrado, con fondo transparente y caras de distinto
+  tono; QOI de ida y vuelta con todas sus operaciones.
+- **Falta:**
+  - cómo van las miniaturas dentro del G-code. Se le preguntó al equipo de fichas por el formato exacto (comentarios,
+    codificación, largo de línea), porque `formats.md`, regla 20, lo deja pendiente;
+  - PNG desde el núcleo;
+  - JPG (necesita un codificador; se anota en THIRD_PARTY antes de usarlo);
+  - el bloque de miniaturas del G-code binario.
+- Decisión del motor, anotada acá: el motor sí las escribe desde la línea de comandos cuando llegue el formato. La
+  prueba X7 cuenta lo que hace Tisma Slicer, y `gcode_firmware.md` pide la miniatura en cuanto el motor pueda dibujarla
+  sin la vista 3D.
+
+## 2026-11-05 — miniaturas del G-code, parte 2: en el G-code binario
+
+- El equipo de fichas confirmó el bloque de miniatura del formato binario: tipo 5, con formato (0 PNG, 1 JPG, 2 QOI),
+  ancho y alto en 16 bits, y la imagen como datos. Va después de los datos de la impresora y antes de los de la
+  impresión.
+- `binary_gcode` escribe esos bloques y `read_binary_gcode` los lee de vuelta.
+- Las miniaturas se hacen desde la pieza en los tres lugares que exportan: la línea de comandos (`slice`), la
+  interfaz y los nodos.
+- El escritor de PNG pasó al núcleo (`src/io/png.*`), así la línea de comandos lo usa sin la interfaz.
+- Avisos:
+  - en un G-code de texto: «the pictures go only in a binary G-code for now»;
+  - una JPG pedida se deja fuera y se avisa.
+- Los textos de ayuda del ajuste y docs/CONFIG.md están al día.
+- **Falta:**
+  - la forma en el G-code de texto (la mide el equipo de fichas);
+  - el codificador JPG;
+  - comprimir el PNG (hoy son bloques sin comprimir: una de 220×124 ocupa unos 110 kB).
+
+## 2026-11-05 — miniaturas del G-code, parte 3: JPG y PNG comprimido
+
+- stb_image_write 1.16 (MIT) anotado en THIRD_PARTY.md y en créditos antes de usarlo, con la licencia leída en ese
+  commit. Va en el núcleo y escribe a memoria.
+- Con él, las miniaturas JPG (sobre fondo blanco, calidad 90) y PNG comprimido. Una PNG de 220×124 bajó de unos
+  110 kB a menos de un cuarto.
+- La prueba `[thumbnail]` pide las tres miniaturas de X7 en un G-code binario y las encuentra.
+- **Falta:** solo la forma en el G-code de texto. La mide el equipo de fichas.
+
+## 2026-11-05 — Duet (RepRapFirmware) por la red
+
+- `print_host` ya maneja Duet en modo autónomo, además de OctoPrint, Moonraker y PrusaLink. Está hecho desde la
+  documentación pública de la API de RepRapFirmware (su wiki, «HTTP requests» y «Object Model Documentation»), no desde
+  su código.
+- Qué hace:
+  - abre una sesión con la contraseña de la placa (`reprap` si no se dio ninguna), con su clave de sesión, y la cierra
+    al terminar;
+  - sube el archivo a `0:/gcodes/` con su CRC-32 y lo empieza con `M32`;
+  - lee el estado del modelo de objetos: estado, archivo, avance, tiempo restante y temperaturas de la boquilla y de
+    la cama;
+  - pausa con `M25` y sigue con `M24`;
+  - cancela con `M0`, pausando antes si el trabajo está imprimiendo, como explicaron los desarrolladores en el foro
+    de Duet.
+- Prueba contra un Duet simulado: versión, contraseña equivocada, subida con CRC, `M32`, estado completo, pausa,
+  reanudación, cancelación y sesiones cerradas.
+- **Falta:** que la página de Dispositivo de la interfaz use estos programas de red, y la búsqueda por Zeroconf. Sin
+  probar con una placa real.
+
+## 2026-11-05 — programas de red en la página Dispositivo
+
+- La página Dispositivo tiene una tercera opción, «Programa en la red», con el programa (OctoPrint, Klipper con
+  Moonraker, PrusaLink o Duet), la dirección y lo que cada uno pide:
+  - clave de API;
+  - en PrusaLink, también usuario y contraseña;
+  - en Duet, la contraseña de la placa.
+- «Probar» (devices.md, regla 14):
+  - contesta «La conexión con Duet funciona bien.» o «No se pudo conectar con Duet: causa (código)»;
+  - si la conexión funciona, guarda la clave y la contraseña en el almacén del sistema, nunca en las preferencias.
+- Con la conexión probada:
+  - una línea de estado con las temperaturas, y el avance si imprime;
+  - «Enviar el G-code laminado», con «Empezar a imprimir» (regla 22);
+  - pausar, seguir y cancelar;
+  - «Abrir en el navegador» (regla 15).
+- Las preferencias guardan el programa, la dirección y el usuario.
+- Prueba `ui_print_host_offline`: un Duet en una dirección donde no hay nada contesta «unreachable» y no ofrece
+  enviar. El cliente de cada programa ya tenía su prueba contra un simulador propio.
+- **Falta:**
+  - el diálogo de envío con el nombre editable (regla 20);
+  - «Subir y simular» de Duet (`M37`);
+  - el botón principal «Enviar a la impresora» (regla 19);
+  - la búsqueda por Zeroconf.
+  Sin probar con impresoras reales.
+
+## 2026-11-05 — enviar a un programa de red desde el botón principal (devices.md, reglas 19 y 20)
+
+- Con un programa de red elegido y probado, el botón principal pasa a «Mandar a la impresora». «Exportar G-code» queda
+  en el menú ▲.
+- El botón abre el diálogo «Subir a la impresora con este nombre:»:
+  - el nombre es editable y sale de `output.filename_format`, con el tiempo y el peso de la impresión;
+  - la nota de las barras para separar carpetas;
+  - los botones Subir, Subir e imprimir y Cancelar; en Duet, también Subir y simular (`M37 P"…"`).
+- Prueba: el Duet simulado recibe `M37` con el archivo.
+- **Sin probar en la interfaz:** el diálogo, porque la prueba de la interfaz no tiene un programa de red que conteste.
+  Lo cubren las pruebas del cliente.
+- **Falta:** la búsqueda por Zeroconf.
+
+## 2026-11-05 — OctoPrint por Zeroconf
+
+- `src/device/mdns.*`: pregunta mDNS por los registros PTR de `_octoprint._tcp.local`, a 224.0.0.251:5353 con el bit
+  QU, para que la respuesta llegue al puerto propio y no haga falta el 5353 de otro programa.
+- Lee las respuestas: PTR, SRV (host y puerto), TXT (`path`, `version`, `model`…) y A (la dirección IPv4), con la
+  compresión de nombres del RFC 1035. Con un paquete dañado o con punteros en bucle no tira nada.
+- En la página Dispositivo, con OctoPrint elegido, «Buscar en la red» lista lo que encuentra durante 4 s; elegir uno
+  completa la dirección (`http://ip:puerto/path`).
+- Prueba `[ssdp]`: la pregunta byte a byte y una respuesta armada a mano con nombres comprimidos.
+- **Falta:** Moonraker (se anuncia solo con su nombre `.local`). Sin probar con una impresora real.
+
+## 2026-11-05 — leer los límites de la impresora, parte 1: el núcleo
+
+- `parse_marlin_limits` lee:
+  - de M115: el nombre del firmware y el área de trabajo, si el firmware tiene el informe de geometría;
+  - de M503: las velocidades máximas (M203), las aceleraciones (M201 y M204 P R T), los tirones o la desviación de
+    unión (M205) y el avance de presión (M900 K), pasando de pulgadas a milímetros si dice G20.
+  - Las líneas de M503 se leen sin depender de su formato exacto, que la documentación no da: cada comando como
+    palabra, con sus parámetros letra-número. Un dato que no llega no se escribe como 0.
+- `parse_klipper_limits` lee los objetos `toolhead` y `configfile` de Moonraker.
+- `apply_limits` llena solo los datos vacíos, o todos si se pide «Leer de la impresora».
+- Error encontrado y arreglado en las pruebas: «max:{» contenía «x:».
+- Prueba `[limits]` con la respuesta de M115 de la documentación de Marlin, un M503 en milímetros y otro en pulgadas,
+  Klipper, y la regla de no pisar lo que escribió la persona.
+- **Sigue:** pedirlos al conectar por USB y por Moonraker, y la lista para aceptarlos en la interfaz.
+
+## 2026-11-05 — mantenimiento (bloque de 8 h, 08:41 UTC)
+
+- **Fuzz de 2000 corridas, semilla 202611050900:** 1 falla y 28 rechazadas por no imprimibles.
+  - La falla: dos boquillas (0,4 y 0,339), las paredes con la fina, alturas de capa por lista que piden más que su
+    tope, y copias con un extrusor cada una. El juego compartido de capas de las piezas (`slice_tools`, `frame.stack`)
+    se planificaba sin el tope de la boquilla de las paredes: 38 capas de 0,4 mm. La placa usaba 40 capas de
+    0,339 mm. Las paredes de cada capa quedaban en otra.
+  - Arreglo: `frame.stack` con los mismos ajustes que la placa (`part_nozzles`).
+  - Prueba nueva en `[nozzles]`: falla con el código anterior y pasa con el arreglo.
+- **Herramienta:** `TISMA_FUZZ_ONLY=n` lamina solo la corrida n del fuzz y sortea las anteriores sin laminarlas. La
+  corrida 1658 se reproduce en 0,2 s en vez de unos 10 minutos.
+- **Prueba intermitente:** `ui_pack_offline_first_run` falló dos veces en la corrida completa y pasa sola.
+  - Causa probable: con la máquina ocupada, el aviso «Sin conexión» vence (6 s) antes de que el script lo busque.
+  - Arreglo: el script guarda los avisos ya mostrados y `expect-toast` también busca entre ellos. No se pudo
+    reproducir la falla a propósito.
+- **Avisos del compilador:** se arreglaron los `-Wshadow` de `gcode/writer.cpp` (barrido hacia adentro) y de
+  `aero/aero.cpp`, y un `-Wconversion` de `cad/sketch.cpp`.
+- **ASan** sobre lo nuevo de la noche (`[thumbnail]`, `[limits]`, `[device][net]`, `[ssdp]`, `[image]`, `[bed_art]`,
+  `[bambu]`): 30 casos, limpio.
+- **Sin medir esta vez:** las fases del banco de pruebas. La máquina estaba cargada con el fuzz y la compilación con
+  ASan, y los números no habrían servido.
+
+## 2026-11-05 — leer los límites de la impresora, parte 2: al conectar por USB
+
+- El anfitrión USB guarda las respuestas enteras de M115 y de un M503 nuevo, que se pide al conectar. Un firmware que
+  no conoce M503 no deja nada.
+- El simulador contesta M115 con el informe de geometría, como en la documentación de Marlin, y M503 con sus límites.
+- Al conectar, la interfaz llena los datos vacíos del perfil (regla 4) con un aviso «N datos del perfil tomados de la
+  impresora (firmware)». Si la cama está vacía y la impresora no informa su tamaño, avisa que hay que escribirlo a mano
+  (regla 6).
+- Pruebas:
+  - `[device]`: el simulador da el área de trabajo y los límites;
+  - `ui_device_limits`: aparece el aviso al conectar.
+- **Falta:** Moonraker (toolhead y configfile al probar la conexión), la lista para aceptar uno por uno lo que difiere,
+  y el botón «Leer de la impresora» en Límites.
+- **Pruebas de la interfaz que fallaban al azar en Linux:** en cada corrida completa, la primera prueba de la interfaz
+  que arrancaba fallaba a veces en 0,3 s con «Failed to open display». La causa es la carrera de `xvfb-run -a`: dos
+  pruebas que arrancan juntas eligen el mismo display.
+  - Arreglo: `tests/xvfb_run.sh` saca el número de display del número de proceso y, si el display no abre, prueba de
+    nuevo (a lo sumo tres veces). Todas las pruebas de la interfaz pasan por ahí.
+  - En Windows no aplica.
+
+## 2026-11-05 — leer los límites de la impresora, parte 3: Klipper por Moonraker
+
+- `host_limits` pide a Moonraker los objetos `toolhead` y `configfile.settings`
+  (`/printer/objects/query?toolhead&configfile=settings`).
+- En la página Dispositivo, cuando «Probar» funciona con Klipper, los datos vacíos del perfil se llenan con el mismo
+  aviso que por USB.
+- Prueba en `[device][net]` contra el Moonraker simulado.
+- **Falta:** la lista «En el perfil / En la impresora» para aceptar uno por uno lo que difiere, y el botón «Leer de la
+  impresora» en Límites. Sin probar con una impresora real.
+
+## 2026-11-05 — mantenimiento (16:41)
+
+- Revisado: `dev` y `main` al día (nada nuevo en `main`); fuzz 2000 corridas con la semilla 202611051641: 0 fallas,
+  26 descartadas por no imprimibles; ASan y UBSan sobre `[limits]`, `[ssdp]`, `[thumbnail]` y `[print_host]`: limpio.
+- Revisión de los lectores que reciben datos de la red o del puerto serie (lo nuevo de la noche):
+  - **Encontrado y arreglado:** los límites de Marlin y Klipper aceptaban «inf», «nan» o «1e999» de una línea dañada
+    y habrían escrito una velocidad o una cama infinitas en el perfil. Ahora solo se toman números finitos.
+  - **Encontrado y arreglado:** un archivo QOI de 22 bytes que dice medir 16384 × 16384 pedía 1 GB antes de fallar.
+    Ahora se rechaza enseguida: cada operación da a lo sumo 62 píxeles.
+  - mDNS: 5000 copias dañadas de una respuesta, sin lecturas fuera del paquete.
+- Pruebas nuevas: copias dañadas de una respuesta mDNS, de un QOI y de M115/M503.
+- No medido: las fases del banco de pruebas (sin cambios en el corte desde la última medición).
