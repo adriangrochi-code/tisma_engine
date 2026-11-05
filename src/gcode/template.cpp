@@ -559,11 +559,28 @@ std::size_t closing(std::string_view text, std::size_t open) {
 std::string render_template(std::string_view text, TemplateContext& context, std::string_view section) {
     const Source src{text, section};
     Variables locals;
-    const std::function<const TemplateValue*(std::string_view)> lookup = [&](std::string_view name) -> const TemplateValue* {
+    Variables converted; // aliases' values in their own type
+    std::function<const TemplateValue*(std::string_view)> lookup;
+    lookup = [&](std::string_view name) -> const TemplateValue* {
         for (const Variables* scope : {&locals, &context.globals, &context.variables})
-            if (const auto it = scope->find(name); it != scope->end())
+            if (const auto it = scope->find(name); it != scope->end()) {
+                if (scope == &context.variables && context.unfilled.contains(name))
+                    context.unfilled_used.emplace(name);
                 return &it->second;
-        return nullptr;
+            }
+        const auto alias = context.aliases.find(name);
+        if (alias == context.aliases.end())
+            return nullptr;
+        const TemplateValue* v = lookup(alias->second.first);
+        if (!v)
+            return nullptr;
+        const char type = alias->second.second;
+        TemplateValue as = *v;
+        if (std::string_view("nibt").find(type) != std::string_view::npos && v->kind == TemplateValue::Kind::List)
+            as = v->list.empty() ? TemplateValue{} : v->list.front();
+        else if (std::string_view("NIBT").find(type) != std::string_view::npos && v->kind != TemplateValue::Kind::List)
+            as = TemplateValue::of(std::vector<TemplateValue>{*v});
+        return &(converted[std::string(name)] = std::move(as));
     };
     // The {if} blocks open: whether the text around them is kept, whether a
     // branch of theirs was taken, and whether the current one is kept.
@@ -578,16 +595,69 @@ std::string render_template(std::string_view text, TemplateContext& context, std
     std::size_t i = 0;
     while (i < text.size()) {
         const char c = text[i];
-        if (c == '[' && i + 1 < text.size() && ident_start(text[i + 1])) { // [name]
+        if (c == '[' && i + 1 < text.size() && ident_start(text[i + 1])) { // [name], [name[index]], [name_index]
             std::size_t j = i + 1;
             while (j < text.size() && ident_char(text[j]))
                 ++j;
+            const std::string_view name = text.substr(i + 1, j - i - 1);
+            // [name[index]]: the index a number or a variable, no sums.
+            std::string_view index;
+            std::size_t index_at = 0;
+            if (j < text.size() && text[j] == '[') {
+                std::size_t k = j + 1;
+                while (k < text.size() && ident_char(text[k]))
+                    ++k;
+                if (k > j + 1 && k + 1 < text.size() && text[k] == ']' && text[k + 1] == ']') {
+                    index = text.substr(j + 1, k - j - 1);
+                    index_at = j + 1;
+                    j = k + 1;
+                }
+            }
             if (j < text.size() && text[j] == ']') {
                 if (kept()) {
-                    const std::string_view name = text.substr(i + 1, j - i - 1);
                     const TemplateValue* v = lookup(name);
+                    // [temperature_0]: the list «temperature», item 0.
+                    if (!v && index.empty()) {
+                        const std::size_t under = name.find_last_of('_');
+                        if (under != std::string_view::npos && under + 1 < name.size() &&
+                            name.find_first_not_of("0123456789", under + 1) == std::string_view::npos) {
+                            if (const TemplateValue* list = lookup(name.substr(0, under))) {
+                                v = list;
+                                index = name.substr(under + 1);
+                                index_at = i + 1 + under + 1;
+                            }
+                        }
+                    }
+                    if (!v && index.empty() && context.verbatim.contains(name)) {
+                        out += text.substr(i, j - i + 1);
+                        i = j + 1;
+                        continue;
+                    }
                     if (!v)
                         src.fail(i + 1, "unknown variable '" + std::string(name) + "'");
+                    if (!index.empty()) {
+                        long long at = 0;
+                        if (index.find_first_not_of("0123456789") == std::string_view::npos) {
+                            std::from_chars(index.data(), index.data() + index.size(), at);
+                        } else {
+                            const TemplateValue* n = lookup(index);
+                            if (!n)
+                                src.fail(index_at, "unknown variable '" + std::string(index) + "'");
+                            if (n->kind == TemplateValue::Kind::Int)
+                                at = n->integer;
+                            else if (n->kind == TemplateValue::Kind::Real && n->real == std::floor(n->real))
+                                at = static_cast<long long>(n->real);
+                            else
+                                src.fail(index_at, "the index '" + std::string(index) + "' is not a whole number");
+                        }
+                        // A single value is a list of one (rule 2).
+                        const std::size_t size = v->kind == TemplateValue::Kind::List ? v->list.size() : 1;
+                        if (at < 0 || static_cast<std::size_t>(at) >= size)
+                            src.fail(index_at, "index " + std::to_string(at) + " out of '" + std::string(name) + "' (" +
+                                                   std::to_string(size) + " values)");
+                        if (v->kind == TemplateValue::Kind::List)
+                            v = &v->list[static_cast<std::size_t>(at)];
+                    }
                     out += template_text(*v);
                 }
                 i = j + 1;

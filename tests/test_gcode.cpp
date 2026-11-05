@@ -2,6 +2,7 @@
 #include "config/settings.hpp"
 #include "gcode/check.hpp"
 #include "gcode/preview.hpp"
+#include "gcode/template.hpp"
 #include "gcode/writer.hpp"
 #include "geom/bead.hpp"
 #include "report/warnings.hpp"
@@ -110,6 +111,43 @@ TEST_CASE("the temperature variables always exist, 0 when the filament lacks the
     s.variables["temp"] = {"210"};
     const std::vector<std::string> lines = lines_of(cube_gcode(s));
     CHECK(std::find(lines.begin(), lines.end(), "START_PRINT CHAMBER=0 MIN=0 IDLE=0") != lines.end());
+}
+
+TEST_CASE("the old [name] form takes the pack's names and an index with a variable in it (BH41, GM5)", "[gcode][bh41]") {
+    Settings s = test_printer();
+    s.variables["first_layer_bed_temperature"] = {"60"};
+    s.variables["first_layer_temperature"] = {"215"};
+    s.variables["temperature"] = {"210"};
+    // Pasted from Anycubic's own program for a Kobra 3.
+    s.start_gcode = "G9111 bedTemp=[first_layer_bed_temperature] extruderTemp=[first_layer_temperature[initial_tool]]\n"
+                    "M104 S[temperature_0]\n;===== [Checks] =====";
+    const std::vector<std::string> lines = lines_of(cube_gcode(s));
+    CHECK(std::find(lines.begin(), lines.end(), "G9111 bedTemp=60 extruderTemp=215") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "M104 S210") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), ";===== [Checks] =====") != lines.end()); // a word in a comment
+}
+
+TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gcode_macros.md rules 5, 9, 10 bis, GM11)",
+          "[gcode][bh41]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"220"};
+    s.variables["first_layer_bed_temperature"] = {"65"};
+    s.bed = {{0, 0}, {250, 0}, {250, 220}, {0, 220}};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // An OrcaSlicer name as the engine's, a list as a list, a single value as the list's first.
+    CHECK(render_template("{nozzle_temperature_initial_layer[0]}", c, "t") == "220");
+    CHECK(render_template("[bed_temperature_initial_layer_single]", c, "t") == "65");
+    CHECK(render_template("{print_bed_max[0]}x{print_bed_max[1]}", c, "t") == "250x220");
+    CHECK(render_template("{printable_height}", c, "t") == render_template("{max_print_height}", c, "t"));
+    // One the engine cannot fill yet: a neutral value, named for the log.
+    CHECK(c.unfilled.contains("curr_bed_type"));
+    CHECK(render_template("[curr_bed_type]", c, "t").empty());
+    CHECK(c.unfilled_used.contains("curr_bed_type"));
+    // An index past the list's end, and one with an unknown variable in it, fail.
+    CHECK_THROWS_AS(render_template("[first_layer_temperature[3]]", c, "t"), TemplateError);
+    CHECK_THROWS_AS(render_template("[first_layer_temperature[no_such]]", c, "t"), TemplateError);
+    // A name that is in no list still fails (rule 5, GM6).
+    CHECK_THROWS_AS(render_template("[no_such_variable]", c, "t"), TemplateError);
 }
 
 TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]") {

@@ -227,6 +227,7 @@ add_library(tisma_core
   src/gcode/arcs.cpp
   src/gcode/corners.cpp
   src/gcode/template.cpp
+  src/gcode/macro_variables.cpp
   src/gcode/output.cpp
   src/gcode/binary.cpp
   src/gcode/scarf.cpp

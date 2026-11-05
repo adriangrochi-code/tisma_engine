@@ -28,6 +28,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- El G-code de inicio copiado del programa de otro fabricante (por ejemplo Anycubic) ya no falla por los nombres de sus
+  variables: se aceptan los de la lista de los G-code del paquete y los índices con una variable adentro
+  (`[first_layer_temperature[initial_tool]]`). Las que el motor todavía no llena van en 0 y se nombran en el registro.
 - Una respuesta dañada de la impresora («inf», «nan») ya no puede escribir un límite infinito en el perfil.
 - Con dos boquillas distintas, la pared con la más fina y alturas de capa por encima de su tope, las piezas de cada
   extrusor se cortaban en capas distintas de las de la placa y sus paredes quedaban a otra altura (el fuzz, semilla

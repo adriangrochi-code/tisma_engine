@@ -9,6 +9,7 @@
 #include "gcode/order.hpp"
 #include "gcode/print_time.hpp"
 #include "gcode/resolution.hpp"
+#include "gcode/macro_variables.hpp"
 #include "gcode/template.hpp"
 #include "gcode/scarf.hpp"
 #include "gcode/travel.hpp"
@@ -2467,6 +2468,8 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     const double first_z = model.layers.empty() ? 0.0 : model.layers.front().top - model.layers.front().bottom;
     c.variables["layer_num"] = TemplateValue::of(0LL);
     c.variables["layer_z"] = c.variables["max_layer_z"] = TemplateValue::of(std::round(first_z * 1000.0) / 1000.0);
+    // The names of the printers' own G-code (gcode_macros.md, rules 7 to 10 bis).
+    add_macro_variables(c, s);
     return c;
 }
 
@@ -4459,6 +4462,17 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << text << "\n";
     if (const std::string text = render_template(s.end_gcode, templates, "machine.end_gcode"); !text.empty())
         out << text << "\n";
+    // Variables of the printer's own G-code the engine cannot fill yet, by
+    // name (gcode_macros.md, rule 9).
+    if (warnings && !templates.unfilled_used.empty()) {
+        std::string names;
+        for (const std::string& name : templates.unfilled_used)
+            names += (names.empty() ? "" : ", ") + name;
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora usa variables que el motor todavía no llena; van en 0, no o "
+                             "vacío: " + names + ".",
+                             double(templates.unfilled_used.size()), "information"});
+    }
     if (s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0)
         out << chamber_gcode(s.flavor, 0.0) << "\n";
     if (dialect.ends_m2)

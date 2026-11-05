@@ -11362,3 +11362,27 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   - mDNS: 5000 copias dañadas de una respuesta, sin lecturas fuera del paquete.
 - Pruebas nuevas: copias dañadas de una respuesta mDNS, de un QOI y de M115/M503.
 - No medido: las fases del banco de pruebas (sin cambios en el corte desde la última medición).
+
+## 2026-11-05 — BH41: variables de los G-code de otros programas (pedido del dueño: BH37–BH44 antes del plan)
+
+- El tester pegó el G-code de inicio del programa de Anycubic para una Kobra 3:
+  `G9111 bedTemp=[first_layer_bed_temperature] extruderTemp=[first_layer_temperature[initial_tool]]`.
+  - En `dev` la primera variable ya salía (BH30).
+  - El índice con una variable adentro quedaba sin reemplazar.
+- Hecho (`gcode_macros.md`, reglas 1, 5, 7 a 10 bis; `gcode_variables.md`, de `spec/next` 650b830):
+  - forma vieja `[nombre[índice]]` (el índice, un número o una variable) y `[nombre_0]` (GM5);
+  - la tabla de las 290 variables de la lista sale de la ficha con `tools/gcode_variables_table.py`;
+  - los nombres de otros programas se buscan como su equivalente al usarlos: `nozzle_temperature_initial_layer[0]` da la
+    temperatura de primera capa (GM11), y `bed_temperature_initial_layer_single` el primer valor de la lista;
+  - lo que el motor sabe por sus ajustes: la cama (`print_bed_min/max/size`), la altura máxima, los límites de la máquina,
+    la retracción, los ventiladores, el modo vaso, la torre de purga;
+  - el resto va en 0, no o vacío. Si el G-code lo usa, el registro lo nombra (aviso de información `gcode_macro`);
+  - las palabras de comentario entre corchetes (`[Checks]`) quedan tal cual;
+  - un nombre que no está en ninguna lista sigue fallando (GM6).
+- Pruebas `[bh41]`: la línea del tester con 60/215 °C, `[temperature_0]`, alias, índice fuera del vector, variable sin
+  llenar.
+- **Falta de `gcode_macros.md`:**
+  - los dialectos `cura` (`{nombre}` solo);
+  - `relative_extrusion` (regla 10 ter);
+  - las opciones de envío de Bambu como variables (regla 12, GM8);
+  - llenar las variables que quedan en 0 (las de Bambu: `curr_bed_type`, las de calibración).
