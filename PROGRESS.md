@@ -10981,3 +10981,8 @@ Decisión del dueño: una biblioteca de modelos propia y local primero (sin cuen
 en la biblioteca de Tisma Cloud (`model_library.md`). Cada modelo guarda el proyecto, los ajustes con que se laminó,
 el G-code con su resumen y su receta, y el análisis de FEA o CFD con su resumen, para reimprimir fácil. Se pidió la
 ficha a la sesión de especificación y se avisó al motor. La app la hace cuando la ficha pase `check_spec`.
+- Ficha recibida: `local_library.md` (spec/next `207bd14`, ML1–ML9). Se propuso al motor un comando `library`, para que
+  el formato viva en un solo lugar y lo usen el escritorio y la app.
+- **Decisión del dueño (05-11-2026):** la biblioteca no guarda G-code. «Imprimir» lamina siempre con la receta, en el
+  teléfono, en el escritorio o en la nube. Se pidió a la sesión de especificación ajustar la ficha (reglas 1, 6, 7, 9 y
+  12; ML1, ML2, ML7 y ML8) y se avisó al motor.
