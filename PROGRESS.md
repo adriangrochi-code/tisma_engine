@@ -11478,3 +11478,6 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   al borde en dos pasadas separables (Felzenszwalb y Huttenlocher, 2012), y `at_least` (la región achicada). Prueba
   `[distance]`: igual a la fuerza bruta en 40 grillas al azar (13 777 comparaciones). Sigue: el kernel de GPU con la
   misma salida, y `tree_fill` con el campo.
+- Paso 2, segunda pieza: el kernel `distance_inside.comp` (`gpu::Context::distance_inside`). Una invocación por
+  columna, después una por fila, con la misma aritmética. Prueba `[gpu][distance]`: los mismos números que la CPU en 12
+  grillas de hasta 150 × 90 (lavapipe). Sigue: `tree_fill` con el campo (paredes y adentro por umbral) y medir.

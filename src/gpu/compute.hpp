@@ -63,6 +63,10 @@ public:
     void support_column(BitGrid& column, std::span<const BitGrid> parts, std::span<const BitGrid> adds,
                         std::span<BitGrid> kept, int radius);
 
+    // GPU version of squared_distance_inside (src/geom/distance.hpp), the
+    // same numbers. Throws std::runtime_error on a Vulkan failure.
+    void distance_inside(const BitGrid& grid, std::vector<float>& out);
+
     struct Impl;
 
 private:

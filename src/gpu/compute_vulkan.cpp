@@ -6,6 +6,7 @@
 
 #include "gpu/shaders/generated/level_ranges.spv.h"
 #include "gpu/shaders/generated/level_segments.spv.h"
+#include "gpu/shaders/generated/distance_inside.spv.h"
 #include "gpu/shaders/generated/support_column.spv.h"
 
 // The device functions only through the context's own table (Functions):
@@ -586,6 +587,33 @@ void Context::support_column(BitGrid& column, std::span<const BitGrid> parts, st
         kept[k] = BitGrid(column.x0(), column.y0(), column.pixel(), column.width(), column.height());
         std::memcpy(kept[k].words().data(), static_cast<const std::byte*>(b_kept.mapped) + k * bytes, bytes);
     }
+}
+
+void Context::distance_inside(const BitGrid& grid, std::vector<float>& out) {
+    const int w = grid.width(), h = grid.height();
+    out.assign(std::size_t(w) * std::size_t(h), 0.0f);
+    if (w == 0 || h == 0)
+        return;
+    const std::size_t pixels = std::size_t(w) * std::size_t(h);
+    const std::size_t bits = grid.words().size() * sizeof(std::uint64_t);
+    Impl::Buffer b_bits, b_column, b_dist, b_vertex, b_bound;
+    impl_->make_buffer(b_bits, bits);
+    impl_->make_buffer(b_column, pixels * sizeof(float));
+    impl_->make_buffer(b_dist, pixels * sizeof(float));
+    impl_->make_buffer(b_vertex, std::size_t(h) * std::size_t(w + 2) * sizeof(std::int32_t));
+    impl_->make_buffer(b_bound, std::size_t(h) * std::size_t(w + 3) * sizeof(float));
+    std::memcpy(b_bits.mapped, grid.words().data(), bits);
+    // Push constants of distance_inside.comp: the columns, then the rows.
+    struct Push {
+        std::uint32_t width, height, stride, mode;
+    };
+    const auto stride = static_cast<std::uint32_t>(2 * grid.words_per_row());
+    const std::array<Push, 2> steps = {Push{std::uint32_t(w), std::uint32_t(h), stride, 0u},
+                                       Push{std::uint32_t(w), std::uint32_t(h), stride, 1u}};
+    const std::array<Impl::Buffer*, 5> bound = {&b_bits, &b_column, &b_dist, &b_vertex, &b_bound};
+    const auto most = static_cast<std::uint32_t>(std::max(w, h));
+    impl_->run_steps(kDistanceInsideSpirv, bound, steps.data(), sizeof(Push), 2u, (most + 63u) / 64u);
+    std::memcpy(out.data(), b_dist.mapped, pixels * sizeof(float));
 }
 
 } // namespace tisma::gpu
