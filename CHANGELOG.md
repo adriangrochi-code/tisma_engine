@@ -14,6 +14,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - Cámara de las impresoras Bambu Lab A1 y P1 en la página Dispositivo: casilla «Cámara». Sin probar con una cámara
   real.
+- La cama de una impresora del paquete también se dibuja cuando su imagen es PNG, no solo SVG (regla 14).
 
 ## [0.11.0-beta.1] - 2026-11-05
 

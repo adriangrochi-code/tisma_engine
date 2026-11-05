@@ -11148,3 +11148,19 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - **Sin probar:** con una cámara real.
 
 **Sigue:** la textura PNG de la cama (regla 14) con el mismo lector; después, lo que sigue del PLAN.
+
+## 2026-11-05 — imagen PNG de la cama (regla 14)
+
+- `bed_image_art` dibuja la imagen PNG de la cama de un perfil del paquete. Se ubica igual que la SVG: lo más grande
+  que entra, centrada, sin estirar.
+- Para que las dos vistas 3D la dibujen como el SVG, la imagen se convierte en rectángulos de color plano:
+  - se parte en celdas, a lo sumo 192 por el lado largo;
+  - cada canal se redondea a 8 niveles;
+  - las celdas casi transparentes se dejan fuera;
+  - cada tramo de un color en una fila es un rectángulo.
+  Decisión del motor: no hace falta una textura en los dos renderizadores. El costo es que las fotos pierden detalle
+  fino y gradientes.
+- Prueba `[bed_art]`: ubicación, partes transparentes, celdas y redondeo de color.
+- **Sin probar:** con un PNG de un paquete real en la interfaz. Lo cubre solo la prueba unitaria.
+
+**Sigue:** lo que sigue del PLAN.

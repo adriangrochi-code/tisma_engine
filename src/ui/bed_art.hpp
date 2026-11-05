@@ -41,4 +41,13 @@ BedModelPlace bed_model_place(const double lo[3], const double hi[3], double min
 
 BedArt bed_svg_art(std::string_view svg, double min_x, double min_y, double max_x, double max_y, double z = 0.01);
 
+// A PNG bed picture (rule 14) the same way: fitted and centred as the SVG,
+// cut into at most `cells` cells along its longer side (each cell the average
+// of its pixels), each colour rounded to 8 levels a channel, and the runs of
+// one colour along a row drawn as one rectangle. Cells less than half opaque
+// are left out. Empty when the picture is empty. `rgba`: width x height
+// pixels, rows from the top (as decode_image gives them).
+BedArt bed_image_art(int width, int height, const std::vector<std::uint8_t>& rgba, double min_x, double min_y, double max_x, double max_y, double z = 0.01,
+                     int cells = 192);
+
 } // namespace tisma::ui

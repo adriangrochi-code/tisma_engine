@@ -2,6 +2,7 @@
 // rule 14; src/ui/bed_art.hpp).
 
 #include "ui/bed_art.hpp"
+#include "ui/icons.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -116,4 +117,55 @@ TEST_CASE("bed art: a pack's bed model centred on the bed, its top at height 0 (
     CHECK_FALSE(p.small);
     const double tiny_lo[3] = {0, 0, 0}, tiny_hi[3] = {50, 300, 1};
     CHECK(bed_model_place(tiny_lo, tiny_hi, 0.0, 0.0, 235.0, 235.0).small); // under half in X: drawn, logged
+}
+
+namespace {
+
+// A picture of w x h pixels, all `rgba`.
+tisma::ui::Image picture(int w, int h, std::uint32_t rgba) {
+    tisma::ui::Image image;
+    image.width = w;
+    image.height = h;
+    for (int i = 0; i < w * h; ++i)
+        image.rgba.insert(image.rgba.end(), {std::uint8_t(rgba >> 24), std::uint8_t(rgba >> 16), std::uint8_t(rgba >> 8),
+                                             std::uint8_t(rgba)});
+    return image;
+}
+
+BedArt art_of(const tisma::ui::Image& i, double min_x, double min_y, double max_x, double max_y, double z = 0.01,
+              int cells = 192) {
+    return bed_image_art(i.width, i.height, i.rgba, min_x, min_y, max_x, max_y, z, cells);
+}
+
+} // namespace
+
+TEST_CASE("bed art: a PNG bed picture, fitted and centred as the SVG (rule 14)", "[ui][bed_art]") {
+    // 4 x 2 red on a 100 x 100 bed: 100 x 50, centred in Y.
+    const BedArt red = art_of(picture(4, 2, 0xFF0000FF), 0, 0, 100, 100);
+    REQUIRE(red.groups.size() == 1);
+    CHECK(red.groups[0].rgb == 0xFF0000);
+    CHECK(red.groups[0].count == 2 * 6); // a run a row: two rectangles
+    CHECK_THAT(area(red, red.groups[0]), WithinAbs(100.0 * 50.0, 1e-3));
+    float lo = 1e9f, hi = -1e9f;
+    for (std::size_t i = 1; i < red.vertices.size(); i += 6)
+        lo = std::min(lo, red.vertices[i]), hi = std::max(hi, red.vertices[i]);
+    CHECK(lo == Catch::Approx(25.0f));
+    CHECK(hi == Catch::Approx(75.0f));
+
+    // The left half clear, the right half white: only the white is drawn.
+    tisma::ui::Image half = picture(4, 4, 0xFFFFFFFF);
+    for (int y = 0; y < 4; ++y)
+        for (int x = 0; x < 2; ++x)
+            half.rgba[(std::size_t(y) * 4 + std::size_t(x)) * 4 + 3] = 0;
+    const BedArt white = art_of(half, 0, 0, 100, 100);
+    REQUIRE(white.groups.size() == 1);
+    CHECK(white.groups[0].rgb == 0xFFFFFF);
+    CHECK_THAT(area(white, white.groups[0]), WithinAbs(50.0 * 100.0, 1e-3));
+
+    // A large picture is cut into at most `cells` cells a side; colours rounded to 8 levels.
+    const BedArt big = art_of(picture(1000, 500, 0x7F3F00FF), 0, 0, 200, 100, 0.01, 100);
+    REQUIRE(big.groups.size() == 1);
+    CHECK(big.groups[0].count == 50 * 6); // 100 x 50 cells, one run a row
+    CHECK(big.groups[0].rgb == 0x6D4900); // 127 -> level 3 (109), 63 -> level 2 (73)
+    CHECK(art_of(tisma::ui::Image{}, 0, 0, 100, 100).groups.empty());
 }

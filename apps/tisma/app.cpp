@@ -5476,8 +5476,14 @@ void App::refresh_bed_extras() {
         }
         std::string lower = bed_texture;
         std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-        if (lower.ends_with(".svg") && read_pack(bed_texture, data))
+        if (lower.ends_with(".svg") && read_pack(bed_texture, data)) {
             art = bed_svg_art(data, min_x, min_y, max_x, max_y);
+        } else if (lower.ends_with(".png") && read_pack(bed_texture, data)) {
+            const Image image = decode_image(data);
+            art = bed_image_art(image.width, image.height, image.rgba, min_x, min_y, max_x, max_y);
+            if (art.groups.empty())
+                log_line("bed texture " + bed_texture + ": not a PNG it can read");
+        }
     }
     renderer_.set_bed_extras(art, model);
     vk_view_.set_bed_extras(art, model);
