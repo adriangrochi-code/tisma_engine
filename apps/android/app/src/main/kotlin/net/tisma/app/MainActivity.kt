@@ -86,8 +86,22 @@ class MainActivity : ComponentActivity() {
                 val runner = EngineRunner(exe, work, packDir)
                 return SliceViewModel(runner, work, loadCatalog = catalog, saved = app.settings,
                     freeMemory = free, loadLayout = layout,
-                    pack = if (runner.available) net.tisma.app.engine.ProfilePack(exe, packDir) else null) as T
+                    pack = if (runner.available) net.tisma.app.engine.ProfilePack(exe, packDir) else null,
+                    library = if (runner.available) libraryOf(app) else null) as T
             }
+        }
+    }
+
+    /** «Mi biblioteca» in the app's own storage (local_library.md, rule 11). */
+    private fun libraryOf(app: TismaApplication) = net.tisma.app.engine.Library(
+        java.io.File(app.applicationInfo.nativeLibraryDir, EngineRunner.FILE_NAME), java.io.File(app.filesDir, "library"))
+
+    private val library: net.tisma.app.engine.LibraryViewModel by viewModels {
+        val app = application as TismaApplication
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                net.tisma.app.engine.LibraryViewModel(libraryOf(app), java.io.File(app.cacheDir, "library")) as T
         }
     }
 
@@ -122,7 +136,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             TismaTheme {
-                TismaApp(cloud, printers, slice, app.settings, nav, updates)
+                TismaApp(cloud, printers, slice, app.settings, nav, updates, library)
             }
         }
     }

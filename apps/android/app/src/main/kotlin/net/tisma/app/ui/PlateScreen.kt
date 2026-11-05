@@ -62,6 +62,8 @@ fun PlateScreen(
     printers: PrintersViewModel,
     signedIn: Boolean,
     nav: Navigator,
+    /** The Engineering section (owner's decision, 05-11-2026): the same part, with FEA, CFD, CAD and parts. */
+    engineering: Boolean = false,
 ) {
     val context = ctx()
     var sendTo by rememberSaveable { mutableStateOf<String?>(null) }
@@ -94,11 +96,11 @@ fun PlateScreen(
     if (wide && state.modelName != null) {
         Row(Modifier.fillMaxSize()) {
             view(Modifier.weight(1.3f).fillMaxHeight().padding(start = 16.dp, top = 16.dp, bottom = 16.dp))
-            Box(Modifier.weight(1f)) { PlateControls(state, slice, printerState, printers, signedIn, nav, sendTo, { sendTo = it }, pick, save, null) }
+            Box(Modifier.weight(1f)) { PlateControls(state, slice, printerState, printers, signedIn, nav, sendTo, { sendTo = it }, pick, save, null, engineering) }
         }
     } else {
         PlateControls(state, slice, printerState, printers, signedIn, nav, sendTo, { sendTo = it }, pick, save,
-            if (state.modelName != null) view else null)
+            if (state.modelName != null) view else null, engineering)
     }
 }
 
@@ -116,8 +118,10 @@ private fun PlateControls(
     pick: androidx.activity.compose.ManagedActivityResultLauncher<Array<String>, Uri?>,
     save: androidx.activity.compose.ManagedActivityResultLauncher<String, Uri?>,
     view: (@Composable (Modifier) -> Unit)?,
+    engineering: Boolean = false,
 ) {
     val context = ctx()
+    if (engineering) { EngineeringControls(state, slice, nav, pick, view); return }
     ScreenColumn {
         PrinterCard(state) { nav.open(Screen.ProfilePicker) }
         view?.invoke(Modifier.fillMaxWidth().height(320.dp))
@@ -163,6 +167,9 @@ private fun PlateControls(
                 }
             }
         }
+        // The Print settings open from here; Material is in the Printer section (owner's decision, 05-11-2026).
+        OutlinedButton(onClick = { nav.open(Screen.SettingsTab("print")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .testTag("plate_print_settings")) { Text(stringResource(R.string.section_print)) }
         if (state.slicing) {
             TismaCard {
                 Text(stringResource(R.string.plate_slicing, state.progress), modifier = Modifier.testTag("plate_progress"))
@@ -188,10 +195,8 @@ private fun PlateControls(
                 AccentTextButton(onClick = { slice.sliceAnyway() }) { Text(stringResource(R.string.mem_try_anyway)) }
             }
         }
-        if (state.modelName != null && state.isProject && state.engineAvailable) EngineeringCard(state, slice)
         state.calibration?.let { CalibrationCard(it, slice) }
         if (state.modelName != null && !state.isProject && state.mesh != null) TransformCard(state, slice)
-        if (state.modelName != null && !state.isProject && state.engineAvailable && state.mesh != null) ModelEngineeringCard(state, slice)
         state.error?.let { e ->
             TismaCard {
                 Text(stringResource(R.string.job_error), style = MaterialTheme.typography.titleMedium)
@@ -245,6 +250,8 @@ private fun PlateControls(
                 }
             }
         }
+        if (state.libraryAvailable && state.modelName != null && !state.isProject &&
+            (state.result != null || state.analysis != null || state.fromLibrary != null)) LibraryCard(state, slice)
         // The cloud stays one tap away (mobile_app.md, rules 12 and 15).
         AccentTextButton(onClick = { nav.open(if (signedIn) Screen.NewJob else Screen.Account) },
             modifier = Modifier.testTag("plate_slice_cloud")) {
@@ -510,6 +517,8 @@ fun Context.sliceNoticeText(n: SliceNotice): String = when (n) {
     SliceNotice.ProfileGone -> getString(R.string.pack_profile_gone)
     is SliceNotice.PackUpdated -> getString(R.string.pack_updated, n.version)
     is SliceNotice.Calibrated -> getString(R.string.cal_applied, calibrationName(n.kind), n.value.toString().removeSuffix(".0"))
+    is SliceNotice.LibrarySaved -> getString(R.string.library_saved, n.name)
+    is SliceNotice.LibraryFailed -> getString(R.string.library_failed, n.message)
     is SliceNotice.KeptChanges -> getString(R.string.profile_kept_changes,
         n.labels.take(3).joinToString(", ") + if (n.labels.size > 3) " (+${n.labels.size - 3})" else "")
 }
@@ -519,3 +528,83 @@ private fun displayName(context: Context, uri: Uri): String? = runCatching {
         if (c.moveToFirst()) c.getString(0) else null
     }
 }.getOrNull()
+
+/**
+ * «Mi biblioteca» on the plate (local_library.md, rules 3 and 7): keep the
+ * part with its recipe and its analysis; for a part from the library, what no
+ * longer matches.
+ */
+@Composable
+private fun LibraryCard(state: SliceState, slice: SliceViewModel) {
+    val lp = state.fromLibrary
+    TismaCard(Modifier.testTag("plate_library")) {
+        Text(stringResource(R.string.library_title), style = MaterialTheme.typography.titleMedium)
+        lp?.let { Text(stringResource(R.string.library_from, it.name), style = MaterialTheme.typography.bodySmall) }
+        lp?.check?.let { c ->
+            if (c.olderEngine) Text(stringResource(R.string.library_older_engine), color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("library_older_engine"))
+            if (c.missingKeys.isNotEmpty()) Text(stringResource(R.string.library_missing_keys, c.missingKeys.joinToString(", ")),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (lp != null && lp.staleAnalyses.isNotEmpty()) {
+            Text(stringResource(R.string.library_analysis_stale), color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("library_analysis_stale"))
+            OutlinedButton(onClick = { slice.analyzeModel() }, enabled = !state.analyzing && !state.slicing,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("library_reanalyze")) {
+                Text(stringResource(R.string.library_reanalyze))
+            }
+        }
+        if (state.result != null || state.analysis != null) {
+            Button(onClick = { slice.saveToLibrary() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("library_save")) {
+                Text(stringResource(R.string.library_save))
+            }
+            if (lp != null) AccentTextButton(onClick = { slice.saveToLibrary(asNew = true) }, modifier = Modifier.testTag("library_save_new")) {
+                Text(stringResource(R.string.library_save_new))
+            }
+        }
+    }
+}
+
+/**
+ * The Engineering section (owner's decision, 05-11-2026): the plate's part in
+ * the 3D view with its analyses (FEA and drag; mobile_app.md, rule 13), and
+ * the CAD and the parts.
+ */
+@Composable
+private fun EngineeringControls(
+    state: SliceState, slice: SliceViewModel, nav: Navigator,
+    pick: androidx.activity.compose.ManagedActivityResultLauncher<Array<String>, Uri?>,
+    view: (@Composable (Modifier) -> Unit)?,
+) {
+    ScreenColumn {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { nav.open(Screen.Cad) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("eng_cad")) {
+                Icon(painterResource(R.drawable.tisma_design), null); Spacer(Modifier.size(8.dp)); Text(stringResource(R.string.more_cad))
+            }
+            OutlinedButton(onClick = { nav.open(Screen.Parts) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("eng_parts")) {
+                Icon(painterResource(R.drawable.tisma_fasteners), null); Spacer(Modifier.size(8.dp)); Text(stringResource(R.string.more_parts))
+            }
+        }
+        view?.invoke(Modifier.fillMaxWidth().height(320.dp))
+        TismaCard {
+            OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, enabled = !state.analyzing,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("eng_open")) {
+                Icon(painterResource(R.drawable.tisma_folder), null)
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.plate_open))
+            }
+            Text(state.modelName ?: stringResource(R.string.eng_no_model), style = MaterialTheme.typography.bodyLarge)
+        }
+        if (!state.engineAvailable) Text(stringResource(R.string.plate_no_engine), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.modelName != null && state.isProject && state.engineAvailable) EngineeringCard(state, slice)
+        if (state.modelName != null && !state.isProject && state.engineAvailable && state.mesh != null) ModelEngineeringCard(state, slice)
+        if (state.libraryAvailable && state.modelName != null && !state.isProject &&
+            (state.analysis != null || state.fromLibrary != null)) LibraryCard(state, slice)
+        state.error?.let { e ->
+            TismaCard {
+                Text(stringResource(R.string.job_error), style = MaterialTheme.typography.titleMedium)
+                Text(e.errorEs.takeIf { ctx().isSpanish() && it.isNotBlank() } ?: e.error, color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}

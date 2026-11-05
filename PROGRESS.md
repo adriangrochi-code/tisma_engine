@@ -10986,3 +10986,26 @@ ficha a la sesión de especificación y se avisó al motor. La app la hace cuand
 - **Decisión del dueño (05-11-2026):** la biblioteca no guarda G-code. «Imprimir» lamina siempre con la receta, en el
   teléfono, en el escritorio o en la nube. Se pidió a la sesión de especificación ajustar la ficha (reglas 1, 6, 7, 9 y
   12; ML1, ML2, ML7 y ML8) y se avisó al motor.
+
+## 2026-11-05 — Android: «Mi biblioteca» (local_library.md) y las secciones nuevas
+
+- **Secciones (decisión del dueño, 05-11-2026, sobre `mobile_app.md`, regla 5):** Biblioteca · Plato · Ingeniería ·
+  Impresora · Más. La app abre en Biblioteca. Ingeniería tiene la pieza en 3D con FEA y arrastre, y el CAD y las
+  piezas (salieron de Más). Los ajustes de Impresión se abren desde el plato; los de Material, desde Impresora.
+- **Mi biblioteca en la app** (`Library.kt`, `LibraryViewModel.kt`, `LibraryScreen.kt`), sobre el comando `library`
+  del motor acordado con su sesión (todavía no está en el motor; mientras tanto la sección lo dice y lleva al plato):
+  - guardar desde el plato después de laminar o analizar (regla 3), con la receta (impresora, filamento, perfil de
+    impresión, cambios a mano) y el análisis; «Guardar como nueva»;
+  - lista con búsqueda (nombre, etiqueta, impresora, material, «con análisis»), orden por fecha o nombre, cuánto ocupa;
+  - abrir en el plato con la receta, «Imprimir» que lamina siempre con la receta (regla 6) y guarda el resumen en ella;
+  - avisos de la regla 7: «Receta de una versión anterior», ajustes que ya no existen, «El análisis no vale para
+    estos ajustes» con «Calcular de nuevo»;
+  - exportar y compartir `.tismalib`, importar (también al compartir con la app), «Reemplazar» o «Guardar como
+    nueva», y el rechazo de archivos inseguros lo hace el motor (ML6);
+  - borrar entrada, receta o análisis con confirmación y «Deshacer» hasta cerrar la app (regla 8).
+  - Ningún G-code se guarda (ML10).
+- Pruebas: `LibraryTest` con un motor de prueba (`fake_library_engine.py`) que responde el contrato: ML1, ML2, ML3/ML4,
+  ML5 (mitad del teléfono), ML6 y ML10. Las de Ingeniería, el panel y la accesibilidad, ajustadas a las secciones nuevas.
+  No probado con el motor real (no tiene `library` todavía) ni en un teléfono.
+- Sigue: cuando el motor tenga `library`, probar con él (y ML5 con el escritorio); la miniatura de 256 × 256 y «La
+  imprimí» con foto; el límite de espacio en Preferencias (regla 12).

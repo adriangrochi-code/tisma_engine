@@ -63,6 +63,10 @@ data class SliceState(
     val case: EngineeringCase = EngineeringCase(),
     /** The last analysis' safety map on the part, and whether the 3D view shows it instead of the part. */
     val stressMap: StressMap? = null,
+    /** The plate's part came from «Mi biblioteca»: its entry, the recipe used and how it still matches (rule 7). */
+    val fromLibrary: LibraryPlate? = null,
+    /** A `.tismalib` opened or shared with the app, for the library to import (rule 10). */
+    val libraryFile: File? = null,
     val showStress: Boolean = false,
     /** The plate's tools: the model's rotation (row-major 3×3, with mirrors) and its scale in %; a tap lays a face down. */
     val rotation: FloatArray = MeshFile.identity3(),
@@ -82,6 +86,8 @@ data class SliceState(
     val designBusy: Boolean = false,
     /** SolidCraft is in this build (Design needs it). */
     val solidcraft: Boolean = false,
+    /** The engine has «Mi biblioteca» (`tisma-engine library`). */
+    val libraryAvailable: Boolean = false,
     /** A calibration test on the plate: its kind, unit, segments (from, to, value) and its settings file. */
     val calibration: Calibrating? = null,
     /** The lightest infill found that holds, in %, to apply to the slice (mobile_app.md, rule 13). */
@@ -124,6 +130,16 @@ sealed interface SliceNotice {
     data class Calibrated(val kind: String, val value: Double) : SliceNotice
     /** Another profile replaced the printer settings, except these, changed by hand (BH27). */
     data class KeptChanges(val labels: List<String>) : SliceNotice
+    /** local_library.md, rule 3: the part was kept in «Mi biblioteca». */
+    data class LibrarySaved(val name: String) : SliceNotice
+    data class LibraryFailed(val message: String) : SliceNotice
+}
+
+/** The plate's part from «Mi biblioteca» (local_library.md, rules 5 to 7). */
+data class LibraryPlate(val entry: String, val name: String, val recipe: String?, val check: Library.Check? = null,
+                        val analyses: List<String> = emptyList()) {
+    /** Rule 7: the analyses that no longer hold with the plate's settings. */
+    val staleAnalyses: List<String> get() = analyses.filter { check?.valid(it) == false }
 }
 
 /** Slicing on the phone with the engine (mobile_app.md, rule 12; MOBILE.md, step 5). */
@@ -143,6 +159,8 @@ class SliceViewModel(
     private val pack: ProfilePack? = null,
     /** The pack's address; null for the published one (tests give their server). */
     private val packUrl: String? = null,
+    /** «Mi biblioteca» (local_library.md), or null when the engine has no `library` commands. */
+    val library: Library? = null,
 ) : ViewModel() {
     private val _state = MutableStateFlow(SliceState(engineAvailable = runner.available,
         profile = saved?.profilePrinter?.let {
@@ -170,6 +188,12 @@ class SliceViewModel(
 
     init {
         runner.stageListener = { stage -> _state.update { it.copy(progressStage = stage) } }
+        library?.let { lib ->
+            viewModelScope.launch {
+                val ok = withContext(io) { lib.available }
+                _state.update { it.copy(libraryAvailable = ok) }
+            }
+        }
         viewModelScope.launch {
             val c = withContext(io) { runCatching { loadCatalog() }.getOrNull() }
             _state.update { it.copy(catalog = c) }
@@ -357,6 +381,8 @@ class SliceViewModel(
     val state: StateFlow<SliceState> = _state.asStateFlow()
     private val cancel = AtomicBoolean(false)
     private var model: File? = null
+    /** The last Engineering run on the plate, to keep it in the library with the part. */
+    private var lastAnalysis: EngineRunner.Analysis? = null
 
     fun dismissNotice() = _state.update { it.copy(notice = null) }
 
@@ -385,6 +411,11 @@ class SliceViewModel(
             _state.update { it.copy(notice = SliceNotice.CannotRead) }
             return@launch
         }
+        // local_library.md, rule 10: a library entry is imported, not put on the plate.
+        if (copied.extension.equals("tismalib", true)) {
+            _state.update { it.copy(libraryFile = copied) }
+            return@launch
+        }
         // QA AND5: a G-code (text or binary) is not a model: it opens in the preview.
         if (withContext(io) { isGcode(copied) }) {
             _state.update { it.copy(gcodeToPreview = copied.path) }
@@ -392,8 +423,9 @@ class SliceViewModel(
         }
         model = copied
         original = null; originalFile = null
+        lastAnalysis = null
         _state.update {
-            it.copy(modelName = name, isProject = copied.extension.equals("3mf", true), result = null, error = null, progress = 0,
+            it.copy(modelName = name, fromLibrary = null, isProject = copied.extension.equals("3mf", true), result = null, error = null, progress = 0,
                 case = it.case.copy(conditions = emptyList()), marking = null, analysis = null,
                 rotation = MeshFile.identity3(), scalePercent = 100f, layFlat = false, calibration = null, stressMap = null, showStress = false)
         }
@@ -403,6 +435,8 @@ class SliceViewModel(
     fun setSettings(s: EngineRunner.SimpleSettings) {
         saveSettings(s)
         _state.update { it.copy(settings = s, result = null) }
+        // local_library.md, rule 7: a part from the library says when the recipe or its analysis no longer matches.
+        if (_state.value.fromLibrary != null) checkLibrary()
     }
 
     /** Slices even when the estimate says the memory may not be enough (the person chose it). */
@@ -439,6 +473,8 @@ class SliceViewModel(
                 }
                 AppLog.line("engine: sliced in ${System.currentTimeMillis() - started} ms")
                 _state.update { it.copy(result = r, progress = 100) }
+                // Rule 6: a part from the library keeps this slice's summary in its recipe (never the G-code).
+                s.fromLibrary?.let { lp -> withContext(io) { keepInLibrary(lp.entry, quiet = true) } }
             } catch (e: EngineRunner.Cancelled) {
                 _state.update { it.copy(notice = SliceNotice.Cancelled) }
             } catch (e: EngineRunner.EngineException) {
@@ -748,6 +784,7 @@ class SliceViewModel(
                     runCatching { StressMap.read(File(r.result.parentFile, "voxels.ply"), mesh.offset) }
                         .onFailure { AppLog.line("engine: no safety map ${it.message}") }.getOrNull()
                 }
+                lastAnalysis = r
                 _state.update { it.copy(analysis = lines, stressMap = map, showStress = map != null) }
             } catch (e: EngineRunner.Cancelled) {
                 _state.update { it.copy(notice = SliceNotice.Cancelled) }
@@ -817,5 +854,111 @@ class SliceViewModel(
 
     override fun onCleared() {
         cancel.set(true)
+    }
+
+    fun libraryFileTaken() = _state.update { it.copy(libraryFile = null) }
+
+    /**
+     * local_library.md, rule 3: keeps the plate's part with the settings it
+     * was sliced with (its recipe) and, if there is one, its analysis. [asNew]
+     * makes another entry even when the part came from the library.
+     */
+    fun saveToLibrary(asNew: Boolean = false, name: String? = null) {
+        val lib = library ?: return
+        val entry = if (asNew) null else state.value.fromLibrary?.entry
+        viewModelScope.launch {
+            val r = withContext(io) { runCatching { keepInLibrary(entry, name = name) } }
+            r.onFailure { AppLog.line("library: save ${it.message}") }
+            _state.update { st ->
+                st.copy(notice = r.getOrNull()?.let { SliceNotice.LibrarySaved(it.name) }
+                    ?: SliceNotice.LibraryFailed(r.exceptionOrNull()?.message ?: "error"))
+            }
+        }
+    }
+
+    /** Saves the plate into [entry] (null: a new one) and makes the plate point at it. */
+    private fun keepInLibrary(entry: String?, name: String? = null, quiet: Boolean = false): Library.Entry? {
+        val lib = library ?: return null
+        val m = model ?: return null
+        val s = state.value
+        val config = runner.writeConfig(s.settings, s.profile)
+        val label = listOfNotNull(s.profile?.let { it.name ?: it.printer.substringAfterLast('/').substringBefore('#') },
+            s.profile?.filament?.substringAfterLast('/')?.removeSuffix(".json")?.replace('_', ' ')).joinToString(" · ")
+        val summary = File(workDir, "summary.json").takeIf { s.result != null && it.isFile }
+        val analysis = lastAnalysis?.takeIf { s.analysis != null }
+        val e = try {
+            lib.save(entry, engineModel(m), config, s.profile, settingsChanges(s.settings), label, workDir, summary,
+                analysis?.result, analysis?.summary, name ?: if (entry == null) s.modelName?.substringBeforeLast('.') else null)
+        } catch (ex: Exception) {
+            if (quiet) { AppLog.line("library: keep ${ex.message}"); return null } else throw ex
+        }
+        val recipe = e.recipes.lastOrNull { it.choice == s.profile }?.id ?: e.recipes.lastOrNull()?.id
+        _state.update { it.copy(fromLibrary = LibraryPlate(e.id, e.name, recipe, it.fromLibrary?.check?.takeIf { _ -> it.fromLibrary?.entry == e.id },
+            e.analyses.map { a -> a.id })) }
+        checkLibrary()
+        return e
+    }
+
+    /** The panel's changes, with the plate's chips, as the recipe keeps them («cambios a mano»). */
+    private fun settingsChanges(st: EngineRunner.SimpleSettings): Map<String, kotlinx.serialization.json.JsonElement> =
+        st.changes + mapOf("layers.height" to kotlinx.serialization.json.JsonPrimitive(st.layerHeight),
+            "support.enabled" to kotlinx.serialization.json.JsonPrimitive(st.supports))
+
+    /**
+     * Rule 5: puts an entry's project on the plate with one of its recipes
+     * (the current printer's if there is one, else the last one used) and
+     * checks it (rule 7). [slice] then slices it at once (rule 6, «Imprimir»).
+     */
+    fun openFromLibrary(entry: Library.Entry, recipe: Library.Recipe? = null, slice: Boolean = false) {
+        val lib = library ?: return
+        val project = File(lib.entryDir(entry.id), "project.3mf")
+        val chosen = recipe ?: entry.recipes.lastOrNull { it.choice?.printer == state.value.profile?.printer }
+            ?: entry.recipes.maxByOrNull { it.modified }
+        viewModelScope.launch {
+            val copied = withContext(io) {
+                runCatching {
+                    File(workDir, "input").deleteRecursively()
+                    val dir = File(workDir, "input").apply { mkdirs() }
+                    project.copyTo(File(dir, "library_${entry.id}.3mf"), overwrite = true)
+                }.getOrNull()
+            }
+            if (copied == null) { _state.update { it.copy(notice = SliceNotice.CannotRead) }; return@launch }
+            model = copied
+            original = null; originalFile = null; lastAnalysis = null
+            // The recipe's printer and its hand changes; the project is a part with these settings, not its own.
+            chosen?.choice?.let { setProfile(it) }
+            chosen?.let { r ->
+                val ch = r.changes
+                setSettings(EngineRunner.SimpleSettings(
+                    (ch["layers.height"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.20,
+                    (ch["support.enabled"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.toBooleanStrictOrNull() ?: false,
+                    ch - setOf("layers.height", "support.enabled")))
+            }
+            _state.update {
+                it.copy(modelName = entry.name, isProject = false, result = null, error = null, progress = 0,
+                    case = it.case.copy(conditions = emptyList()), marking = null, analysis = null,
+                    rotation = MeshFile.identity3(), scalePercent = 100f, layFlat = false, calibration = null,
+                    stressMap = null, showStress = false,
+                    fromLibrary = LibraryPlate(entry.id, entry.name, chosen?.id, null, entry.analyses.map { a -> a.id }))
+            }
+            loadMesh(copied)
+            checkLibrary()
+            if (slice) slice(checkMemory = false)
+        }
+    }
+
+    /** Rule 7: whether the plate's settings still match the recipe, and which analyses still hold. */
+    fun checkLibrary() {
+        val lib = library ?: return
+        val lp = state.value.fromLibrary ?: return
+        val recipe = lp.recipe ?: return
+        val s = state.value
+        viewModelScope.launch {
+            val c = withContext(io) {
+                runCatching { lib.check(lp.entry, recipe, runner.writeConfig(s.settings, s.profile)) }
+                    .onFailure { AppLog.line("library: check ${it.message}") }.getOrNull()
+            }
+            _state.update { st -> st.fromLibrary?.takeIf { it.entry == lp.entry }?.let { st.copy(fromLibrary = it.copy(check = c)) } ?: st }
+        }
     }
 }
