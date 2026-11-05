@@ -7,20 +7,23 @@
 // OctoPrint's REST API (docs.octoprint.org, «REST API») and Moonraker's
 // (moonraker.readthedocs.io, «External API»: server, files, printer) and
 // PrusaLink's published OpenAPI (v1: version, status, files, job), with
-// HTTP Digest (RFC 7616) for its user and password. Own design; see
-// PROVENANCE.md.
+// HTTP Digest (RFC 7616) for its user and password, and Duet's RepRapFirmware
+// in standalone mode (the RepRapFirmware wiki, «HTTP requests» and «Object
+// Model Documentation»: rr_connect, rr_upload, rr_gcode, rr_model,
+// rr_disconnect). Own design; see PROVENANCE.md.
 
 #include <string>
 
 namespace tisma::device {
 
-enum class HostKind { OctoPrint, Moonraker, PrusaLink };
+enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet };
 
 struct HostConfig {
     HostKind kind = HostKind::OctoPrint;
     std::string url;     // http(s)://host[:port], the program's address
     std::string api_key; // a secret: never logged
-    std::string user, password; // PrusaLink's Digest login (a secret too)
+    std::string user, password; // PrusaLink's Digest login, Duet's board password (secrets too;
+                                // Duet: «reprap» when empty, its default)
     int timeout_s = 20;
 };
 
@@ -53,8 +56,8 @@ HostStatus host_status(const HostConfig& host);
 HostResult host_pause(const HostConfig& host, bool pause); // false: resume
 HostResult host_cancel(const HostConfig& host);
 
-// The OctoPrint names to the engine's words for a host kind ("octoprint",
-// "moonraker", "prusalink"); false for another word.
+// The engine's words for a host kind ("octoprint", "moonraker", "prusalink",
+// "duet"); false for another word.
 bool host_kind_from(const std::string& word, HostKind& out);
 
 } // namespace tisma::device

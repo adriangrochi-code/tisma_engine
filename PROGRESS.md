@@ -11214,3 +11214,22 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   110 kB a menos de un cuarto.
 - La prueba `[thumbnail]` pide las tres miniaturas de X7 en un G-code binario y las encuentra.
 - **Falta:** solo la forma en el G-code de texto. La mide el equipo de fichas.
+
+## 2026-11-05 — Duet (RepRapFirmware) por la red
+
+- `print_host` ya maneja Duet en modo autónomo, además de OctoPrint, Moonraker y PrusaLink. Está hecho desde la
+  documentación pública de la API de RepRapFirmware (su wiki, «HTTP requests» y «Object Model Documentation»), no desde
+  su código.
+- Qué hace:
+  - abre una sesión con la contraseña de la placa (`reprap` si no se dio ninguna), con su clave de sesión, y la cierra
+    al terminar;
+  - sube el archivo a `0:/gcodes/` con su CRC-32 y lo empieza con `M32`;
+  - lee el estado del modelo de objetos: estado, archivo, avance, tiempo restante y temperaturas de la boquilla y de
+    la cama;
+  - pausa con `M25` y sigue con `M24`;
+  - cancela con `M0`, pausando antes si el trabajo está imprimiendo, como explicaron los desarrolladores en el foro
+    de Duet.
+- Prueba contra un Duet simulado: versión, contraseña equivocada, subida con CRC, `M32`, estado completo, pausa,
+  reanudación, cancelación y sesiones cerradas.
+- **Falta:** que la página de Dispositivo de la interfaz use estos programas de red, y la búsqueda por Zeroconf. Sin
+  probar con una placa real.

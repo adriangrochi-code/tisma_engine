@@ -622,7 +622,9 @@ Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la fic
   o el G-code abierto, pausar, seguir, cancelar, mover y extruir, registro; la impresora simulada para probar sin
   máquina, con una prueba de punta a punta
 - [ ] El servicio local de `tisma` para la app de Android (`docs/MOBILE.md`)
-- [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas
+- [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas. Hechos en
+  `src/device/print_host.*` contra simuladores propios: OctoPrint, Moonraker, PrusaLink y Duet (2026-11-05). Faltan
+  la página de Dispositivo para ellos y la búsqueda por Zeroconf (OctoPrint, Moonraker)
 - [ ] Probado con una impresora real por USB (necesita al dueño)
 
 ## Estado de P1
