@@ -11333,3 +11333,9 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   - `ui_device_limits`: aparece el aviso al conectar.
 - **Falta:** Moonraker (toolhead y configfile al probar la conexión), la lista para aceptar uno por uno lo que difiere,
   y el botón «Leer de la impresora» en Límites.
+- **Pruebas de la interfaz que fallaban al azar en Linux:** en cada corrida completa, la primera prueba de la interfaz
+  que arrancaba fallaba a veces en 0,3 s con «Failed to open display». La causa es la carrera de `xvfb-run -a`: dos
+  pruebas que arrancan juntas eligen el mismo display.
+  - Arreglo: `tests/xvfb_run.sh` saca el número de display del número de proceso y, si el display no abre, prueba de
+    nuevo (a lo sumo tres veces). Todas las pruebas de la interfaz pasan por ahí.
+  - En Windows no aplica.

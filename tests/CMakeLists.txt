@@ -158,8 +158,11 @@ endif()
 # The whole interface, end to end, where a display can be faked: open a
 # model, slice it, export the checked G-code and draw the preview.
 if(TISMA_BUILD_UI AND NOT WIN32)
-  find_program(TISMA_XVFB_RUN xvfb-run)
-  if(TISMA_XVFB_RUN)
+  find_program(TISMA_XVFB_REAL xvfb-run)
+  if(TISMA_XVFB_REAL)
+    # Through a wrapper without the race of xvfb-run -a (two tests at once
+    # on one display): tests/xvfb_run.sh.
+    set(TISMA_XVFB_RUN ${CMAKE_CURRENT_SOURCE_DIR}/xvfb_run.sh)
     add_test(NAME ui_slice_export_screenshot
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview
