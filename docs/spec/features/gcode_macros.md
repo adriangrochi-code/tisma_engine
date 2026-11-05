@@ -36,10 +36,11 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
    - coincidencia con una expresión regular `=~` y no coincidencia `!~`;
    - paréntesis para agrupar. Precedencia usual: `not` y `-` de un operando, después `*` `/` `%`, `+` `-`,
      comparaciones, `and`, `or`, ternario.
-4. **Funciones:** `min(a, b)`, `max(a, b)`, `int(a)` (corta los decimales), `round(a)`, `digits(a, cifras,
-   decimales=0)` (redondea a esos decimales, agrega ceros a la derecha si faltan y rellena con espacios a la izquierda
-   hasta esa cantidad de caracteres), `zdigits(…)` (igual, rellenando con ceros), `is_nil(variable)` (si la variable no
-   tiene valor).
+4. **Funciones:** `min` y `max` de dos valores; la parte entera, que se escribe con la palabra `int` y corta los
+   decimales; `round`, que redondea a entero; `digits` con un valor, una cantidad de caracteres y, opcional, de
+   decimales (0 si falta): redondea a esos decimales, agrega ceros a la derecha si faltan y rellena con espacios a la
+   izquierda hasta esa cantidad de caracteres; `zdigits`, igual pero rellenando con ceros; `is_nil` de una variable:
+   si no tiene valor.
 5. **Errores:** una sintaxis mal escrita, una variable desconocida o un índice fuera del vector no dejan el G-code
    roto: el laminado falla con el código `gcode_macro` y dice en castellano la línea, la columna y qué pasó
    («G-code de inicio, línea 12: la variable "curr_bed_type" no existe»). Nunca se escribe un G-code a medias.
