@@ -44,6 +44,7 @@
 #include "device/gcode_host.hpp"
 #include "device/mdns.hpp"
 #include "device/print_host.hpp"
+#include "device/printer_limits.hpp"
 #include "device/ssdp.hpp"
 #include "device/serial_port.hpp"
 #include "device/simulator.hpp"
@@ -936,6 +937,7 @@ private:
     void device_print();
     ViewFrame view_frame(int fb_w, int fb_h);
     void settings_changed();
+    void take_printer_limits();
     void bed_changed();
     void place_model();
     void frame_all();
@@ -6010,6 +6012,35 @@ void App::upload_preview() {
     height_range_[0] = buffers.min_height, height_range_[1] = buffers.max_height;
     renderer_.set_preview(buffers);
     vk_view_.set_preview(buffers);
+}
+
+// The profile's empty limits from what the printer said when it connected
+// (printer_connections.md, «Leer los límites de la impresora», rules 1, 4
+// and 6): only the empty ones, with a one-line notice.
+void App::take_printer_limits() {
+    if (!printer_)
+        return;
+    const device::PrinterStatus st = printer_->status();
+    if (st.m115.empty() && st.m503.empty())
+        return;
+    const device::PrinterLimits limits = device::parse_marlin_limits(st.m115, st.m503);
+    const bool bed_was_empty = settings_.bed.empty();
+    const std::vector<std::string> taken = device::apply_limits(settings_, limits, true);
+    if (!taken.empty()) {
+        settings_changed();
+        if (std::find(taken.begin(), taken.end(), "bed") != taken.end())
+            bed_changed();
+        const std::string source = limits.source.empty() ? st.firmware : limits.source;
+        notify(format(tr(T::LimitsTaken), int(taken.size()), source.c_str()));
+        log_line("limits from the printer: " + [&] {
+            std::string names;
+            for (const std::string& n : taken)
+                names += (names.empty() ? "" : ", ") + n;
+            return names;
+        }());
+    }
+    if (bed_was_empty && !limits.has_area)
+        notify(tr(T::LimitsNoBed));
 }
 
 void App::settings_changed() {
@@ -20804,7 +20835,11 @@ void App::device_poll() {
     for (const device::PrinterEvent& e : printer_->take_events()) {
         std::string line;
         switch (e.kind) {
-        case K::Connected: line = format(tr(T::DeviceConnected), e.text.c_str()); notify(line); break;
+        case K::Connected:
+            line = format(tr(T::DeviceConnected), e.text.c_str());
+            notify(line);
+            take_printer_limits();
+            break;
         case K::Started: line = format(tr(T::DevicePrintStarted), e.text.c_str()); break;
         case K::Finished:
             line = format(tr(T::DevicePrintFinished), e.text.c_str());

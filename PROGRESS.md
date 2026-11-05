@@ -11319,3 +11319,17 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   `[bambu]`): 30 casos, limpio.
 - **Sin medir esta vez:** las fases del banco de pruebas. La máquina estaba cargada con el fuzz y la compilación con
   ASan, y los números no habrían servido.
+
+## 2026-11-05 — leer los límites de la impresora, parte 2: al conectar por USB
+
+- El anfitrión USB guarda las respuestas enteras de M115 y de un M503 nuevo, que se pide al conectar. Un firmware que
+  no conoce M503 no deja nada.
+- El simulador contesta M115 con el informe de geometría, como en la documentación de Marlin, y M503 con sus límites.
+- Al conectar, la interfaz llena los datos vacíos del perfil (regla 4) con un aviso «N datos del perfil tomados de la
+  impresora (firmware)». Si la cama está vacía y la impresora no informa su tamaño, avisa que hay que escribirlo a mano
+  (regla 6).
+- Pruebas:
+  - `[device]`: el simulador da el área de trabajo y los límites;
+  - `ui_device_limits`: aparece el aviso al conectar.
+- **Falta:** Moonraker (toolhead y configfile al probar la conexión), la lista para aceptar uno por uno lo que difiere,
+  y el botón «Leer de la impresora» en Límites.

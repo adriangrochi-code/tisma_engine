@@ -569,6 +569,12 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view device --device sim
               --device-print --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_device.png)
+    # The printer's limits read on connecting, into the profile's empty values.
+    add_test(NAME ui_device_limits
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view device --device sim
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/device_limits.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_device_limits.png)
     # A project saved with chosen profiles opens again to the same G-code.
     add_test(NAME ui_project_save
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -838,7 +844,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_project_reopen PROPERTIES FIXTURES_REQUIRED ui_project FIXTURES_SETUP ui_project_b)
     set_tests_properties(ui_project_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_project;ui_project_b")
     set_tests_properties(ui_slice_export_screenshot ui_raytrace_matches_cpu ui_moire_filter_smooths_fine_lines
-                         ui_device_prints_to_simulator ui_project_save ui_project_reopen PROPERTIES
+                         ui_device_prints_to_simulator ui_device_limits ui_project_save ui_project_reopen PROPERTIES
                          ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
   endif()
 endif()

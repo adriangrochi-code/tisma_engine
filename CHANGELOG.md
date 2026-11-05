@@ -10,12 +10,6 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
-### Arreglado
-
-- Con dos boquillas distintas, la pared con la más fina y alturas de capa por encima de su tope, las piezas de cada
-  extrusor se cortaban en capas distintas de las de la placa y sus paredes quedaban a otra altura (el fuzz, semilla
-  202611050900, corrida 1658).
-
 ### Agregado
 
 - Cámara de las impresoras Bambu Lab A1 y P1 en la página Dispositivo: casilla «Cámara». Sin probar con una cámara
@@ -28,6 +22,15 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   Zeroconf. Sin probar con impresoras reales.
 - Miniaturas de la pieza en el G-code binario (`.bgcode`): ajuste `gcode.thumbnails` (por ejemplo `16x16/PNG,220x124/PNG`),
   en PNG, JPG o QOI, también desde la línea de comandos. En el G-code de texto todavía no: se avisa.
+- Al conectar una impresora por USB se le preguntan sus límites (M115 y M503) y se llenan los datos vacíos del
+  perfil: velocidades y aceleraciones máximas, tirones, tamaño de la cama y avance de presión, con un aviso de
+  cuántos se tomaron. Lo que la persona escribió no se toca.
+
+### Arreglado
+
+- Con dos boquillas distintas, la pared con la más fina y alturas de capa por encima de su tope, las piezas de cada
+  extrusor se cortaban en capas distintas de las de la placa y sus paredes quedaban a otra altura (el fuzz, semilla
+  202611050900, corrida 1658).
 
 ## [0.11.0-beta.1] - 2026-11-05
 
