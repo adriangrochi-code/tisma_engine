@@ -788,6 +788,22 @@
     X(DeviceLog, "Registro", "Log")                                                                                   \
     X(DeviceKindUsb, "USB", "USB") \
     X(DeviceKindBambu, "Bambu Lab (red local)", "Bambu Lab (local network)") \
+    X(DeviceKindHost, "Programa en la red", "Network program") \
+    X(HostKindRow, "Programa", "Program") \
+    X(HostUrl, "Dirección", "Address") \
+    X(HostApiKey, "Clave de API", "API key") \
+    X(HostUser, "Usuario", "User") \
+    X(HostPassword, "Contraseña", "Password") \
+    X(HostBoardPassword, "Contraseña de la placa", "Board password") \
+    X(HostTest, "Probar", "Test") \
+    X(HostTestOk, "La conexión con %s funciona bien.", "Connection to %s works correctly.") \
+    X(HostTestFailed, "No se pudo conectar con %s: %s (%s)", "Could not connect to %s: %s (%s)") \
+    X(HostOpenWeb, "Abrir en el navegador", "Open in browser") \
+    X(HostWebHelp, "La interfaz web de la impresora: cámara, temperaturas, consola y las calibraciones de su firmware (por ejemplo, input shaping en Klipper).", "Web interface of the printer: camera, temperatures, console and the calibrations of its firmware (for example input shaping in Klipper).") \
+    X(HostStartPrinting, "Empezar a imprimir", "Start printing") \
+    X(HostSend, "Enviar el G-code laminado", "Send sliced G-code") \
+    X(HostSent, "%s → %s: subido.", "%s → %s: uploaded.") \
+    X(HostFailed, "El programa de la impresora contestó con un problema: %s", "The printer's program answered with a problem: %s") \
     X(BambuHelp, "En la impresora: activá el modo «Solo LAN» y el modo desarrollador (Ajustes › Solo LAN). Dirección = la IP de la impresora; código = el código de acceso que muestra ahí. El número de serie se lee de la impresora.", "Bambu Lab: on the printer turn on LAN only mode and Developer mode (Settings > LAN only). Hostname = IP address of the printer, API key = access code shown there. The serial number is read from the printer.") \
     X(BambuSearch, "Buscar en la red", "Browse the network") \
     X(BambuSearching, "Buscando impresoras…", "Looking for printers…") \

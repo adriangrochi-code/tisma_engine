@@ -41,6 +41,7 @@
 #include "device/bambu_simulator.hpp"
 #include "ui/image_decode.hpp"
 #include "device/gcode_host.hpp"
+#include "device/print_host.hpp"
 #include "device/ssdp.hpp"
 #include "device/serial_port.hpp"
 #include "device/simulator.hpp"
@@ -113,6 +114,7 @@
 #include <atomic>
 #include <csignal>
 #include <optional>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string_view>
@@ -907,6 +909,12 @@ private:
     void device_panel();
     void bambu_panel(float field, float button_h);
     void bambu_poll();
+    void host_panel(float field, float button_h);
+    void host_poll();
+    void host_test();
+    void host_refresh();
+    void host_send(bool start);
+    void host_command(int what); // 0 pause, 1 resume, 2 cancel
     void bambu_refresh();
     void bambu_send(const std::string& command);
     void bambu_print_now();
@@ -1540,6 +1548,19 @@ private:
     // A Bambu Lab printer on the local network (printer_connections.md,
     // «Bambu Lab en red local»; devices.md, rules 11 and 16).
     bool device_bambu_ = false;               // the Device page shows it instead of USB
+    // A program that runs the printer on the network (printer_connections.md,
+    // «Programas que manejan impresoras»; devices.md, rules 14 to 22):
+    // OctoPrint, Moonraker, PrusaLink or Duet. Its key and password are secrets.
+    bool device_host_ = false;
+    device::HostConfig host_;
+    std::future<device::HostVersion> host_test_job_;
+    std::future<device::HostStatus> host_status_job_;
+    std::future<device::HostResult> host_job_;
+    device::HostVersion host_version_;        // the last test
+    bool host_tested_ = false;
+    device::HostStatus host_status_;          // the last state read
+    std::string host_job_what_;               // what the running job is, for its message
+    bool host_start_ = true;                  // «Start printing» after the upload
     device::BambuConfig bambu_;               // address, access code (a secret), serial, accepted certificate
     std::unique_ptr<device::BambuSimulator> bambu_sim_;
     std::future<device::BambuStatus> bambu_status_job_;
@@ -3926,6 +3947,21 @@ void App::load_preferences() {
                 if (const std::optional<std::string> code = cloud::load_secret("bambu:" + bambu_.serial))
                     bambu_.access_code = *code;
         }
+        // The network program: its kind, address and user; the key and
+        // password from the system's store.
+        if (j.contains("print_host") && j["print_host"].is_object()) {
+            const nlohmann::json& h = j["print_host"];
+            device::host_kind_from(h.value("kind", std::string("octoprint")), host_.kind);
+            host_.url = h.value("url", std::string());
+            host_.user = h.value("user", std::string());
+            device_host_ = h.value("chosen", false) && !device_bambu_;
+            if (!host_.url.empty()) {
+                if (const std::optional<std::string> k = cloud::load_secret("host-key:" + host_.url))
+                    host_.api_key = *k;
+                if (const std::optional<std::string> p = cloud::load_secret("host-password:" + host_.url))
+                    host_.password = *p;
+            }
+        }
         ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
         if (const auto ui = j.find("ui"); ui != j.end() && ui->is_object()) {
             graphics_api_ = ui->value("graphics_api", std::string("auto"));
@@ -4027,6 +4063,9 @@ void App::save_preferences() {
         if (!bambu_sim_ && !bambu_.host.empty())
             j["bambu"] = {{"host", bambu_.host}, {"serial", bambu_.serial}, {"certificate", bambu_.pinned_sha256},
                           {"chosen", device_bambu_}};
+        if (!host_.url.empty())
+            j["print_host"] = {{"kind", device::host_kind_word(host_.kind)}, {"url", host_.url}, {"user", host_.user},
+                               {"chosen", device_host_}};
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
         j["packs"]["url"] = pack_url_;
@@ -20777,6 +20816,169 @@ void App::device_print() {
 // en red local»; devices.md, rules 11 and 16): every call runs apart, the
 // page shows the last answer. The access code is a secret: kept in the
 // system's store (cloud/secret_store), never in the preferences or a log.
+void App::host_test() {
+    if (host_test_job_.valid() || host_.url.empty())
+        return;
+    host_tested_ = false;
+    host_test_job_ = std::async(std::launch::async, [h = host_] { return device::host_version(h); });
+}
+
+void App::host_refresh() {
+    if (host_status_job_.valid() || host_.url.empty())
+        return;
+    host_status_job_ = std::async(std::launch::async, [h = host_] { return device::host_status(h); });
+}
+
+void App::host_send(bool start) {
+    if (host_job_.valid() || !device_can_print() || host_.url.empty())
+        return;
+    const std::string name = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
+                             : model_path_.empty()          ? std::string("tisma.gcode")
+                                                            : utf8(model_path_.stem()) + ".gcode";
+    host_job_what_ = name;
+    host_job_ = std::async(std::launch::async, [h = host_, gcode = result_->gcode, name, start] {
+        // The program takes a file: the G-code goes through a temporary one.
+        const std::filesystem::path temp =
+            std::filesystem::temp_directory_path() / ("tisma_send_" + std::to_string(std::random_device{}()) + ".gcode");
+        {
+            std::ofstream f(temp, std::ios::binary);
+            f << gcode;
+            if (!f)
+                return device::HostResult{false, "failed", "cannot write a temporary file to send"};
+        }
+        device::HostResult r = device::host_upload(h, temp.string(), name, start);
+        std::error_code ignored;
+        std::filesystem::remove(temp, ignored);
+        return r;
+    });
+}
+
+void App::host_command(int what) {
+    if (host_job_.valid() || host_.url.empty())
+        return;
+    host_job_what_.clear();
+    host_job_ = std::async(std::launch::async, [h = host_, what] {
+        return what == 2 ? device::host_cancel(h) : device::host_pause(h, what == 0);
+    });
+}
+
+void App::host_poll() {
+    using namespace std::chrono_literals;
+    if (host_test_job_.valid() && host_test_job_.wait_for(0ms) == std::future_status::ready) {
+        host_version_ = host_test_job_.get();
+        host_tested_ = true;
+        const char* name = device::host_kind_name(host_.kind);
+        if (host_version_.ok) {
+            notify(format(tr(T::HostTestOk), name));
+            // Works: keep the secrets in the system's store (devices.md, rule 14 tests without saving).
+            std::string error;
+            if (!host_.api_key.empty())
+                cloud::store_secret("host-key:" + host_.url, host_.api_key, error);
+            if (!host_.password.empty())
+                cloud::store_secret("host-password:" + host_.url, host_.password, error);
+            host_refresh();
+        } else {
+            notify(format(tr(T::HostTestFailed), name, host_version_.error.c_str(), host_version_.code.c_str()), true);
+        }
+    }
+    if (host_status_job_.valid() && host_status_job_.wait_for(0ms) == std::future_status::ready)
+        host_status_ = host_status_job_.get();
+    if (host_job_.valid() && host_job_.wait_for(0ms) == std::future_status::ready) {
+        const device::HostResult r = host_job_.get();
+        if (r.ok && !host_job_what_.empty())
+            notify(format(tr(T::HostSent), host_job_what_.c_str(), host_.url.c_str()));
+        else if (!r.ok)
+            notify(format(tr(T::HostFailed), r.error.c_str()), true);
+        host_refresh();
+    }
+}
+
+void App::host_panel(float field, float button_h) {
+    ImGui::Separator();
+    const bool working = host_test_job_.valid() || host_status_job_.valid() || host_job_.valid();
+    ImGui::BeginDisabled(working);
+    ImGui::SetNextItemWidth(field * 1.4f);
+    if (ImGui::BeginCombo(tr(T::HostKindRow), device::host_kind_name(host_.kind))) {
+        for (const device::HostKind k : {device::HostKind::OctoPrint, device::HostKind::Moonraker, device::HostKind::PrusaLink,
+                                         device::HostKind::Duet})
+            if (ImGui::Selectable(device::host_kind_name(k), k == host_.kind)) {
+                host_.kind = k;
+                host_tested_ = false;
+                host_status_ = {};
+            }
+        ImGui::EndCombo();
+    }
+    ImGui::SetNextItemWidth(field * 1.4f);
+    if (ImGui::InputTextWithHint(tr(T::HostUrl), "http://192.168.1.50", &host_.url))
+        host_tested_ = false;
+    // What each program asks for (devices.md, «Tipos de conexión»).
+    if (host_.kind == device::HostKind::Duet) {
+        ImGui::SetNextItemWidth(field);
+        ImGui::InputText(tr(T::HostBoardPassword), &host_.password, ImGuiInputTextFlags_Password);
+    } else {
+        ImGui::SetNextItemWidth(field);
+        ImGui::InputText(tr(T::HostApiKey), &host_.api_key, ImGuiInputTextFlags_Password);
+        if (host_.kind == device::HostKind::PrusaLink) {
+            ImGui::SetNextItemWidth(field);
+            ImGui::InputText(tr(T::HostUser), &host_.user);
+            ImGui::SetNextItemWidth(field);
+            ImGui::InputText(tr(T::HostPassword), &host_.password, ImGuiInputTextFlags_Password);
+        }
+    }
+    ImGui::EndDisabled();
+    if (button("##host_test", "tisma_printer", tr(T::HostTest), !host_tested_ || !host_version_.ok, false,
+               !working && !host_.url.empty(), nullptr, button_h))
+        host_test();
+    ImGui::SameLine();
+    if (button("##host_web", nullptr, tr(T::HostOpenWeb), false, false, !host_.url.empty(), nullptr, button_h))
+        ui::open_link(host_.url);
+    loc::TextDisabled("%s", tr(T::HostWebHelp));
+    if (working)
+        loc::TextDisabled("%s", tr(T::BambuWorking));
+    if (host_tested_ && !host_version_.ok)
+        loc::TextColored(rgb(0xE5484D), tr(T::HostTestFailed), device::host_kind_name(host_.kind),
+                         host_version_.error.c_str(), host_version_.code.c_str());
+    if (!host_tested_ || !host_version_.ok)
+        return;
+
+    // The state (devices.md, rule 16's one line), refreshed on request.
+    ImGui::Separator();
+    loc::TextDisabled("%s", host_version_.server.c_str());
+    const device::HostStatus& st = host_status_;
+    if (st.ok) {
+        loc::Text(tr(T::BambuState), st.state.c_str(), st.nozzle, st.nozzle_target, st.bed, st.bed_target);
+        if (st.printing) {
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(theme_.accent));
+            ImGui::ProgressBar(float(std::max(0.0, st.progress) / 100.0), ImVec2(-FLT_MIN, 0.0f));
+            ImGui::PopStyleColor();
+            loc::Text("%s: %.0f %%, %s", st.file.c_str(), std::max(0.0, st.progress),
+                      format_duration(std::max(0.0, st.seconds_left)).c_str());
+        }
+    } else if (!st.code.empty()) {
+        loc::TextColored(rgb(0xE5484D), tr(T::HostFailed), st.error.c_str());
+    }
+    if (button("##host_refresh", nullptr, tr(T::BambuRefresh), false, false, !working, nullptr, button_h))
+        host_refresh();
+
+    // Sending, pausing, cancelling (devices.md, rule 22: upload, and print if «Start printing»).
+    ImGui::Separator();
+    if (st.printing) {
+        if (st.paused) {
+            if (button("##host_resume", nullptr, tr(T::DeviceResume), true, false, !working, nullptr, button_h))
+                host_command(1);
+        } else if (button("##host_pause", nullptr, tr(T::DevicePause), false, false, !working, nullptr, button_h)) {
+            host_command(0);
+        }
+        ImGui::SameLine();
+        if (button("##host_cancel", nullptr, tr(T::BambuStop), false, false, !working, nullptr, button_h))
+            host_command(2);
+    } else if (device_can_print()) {
+        ImGui::Checkbox(tr(T::HostStartPrinting), &host_start_);
+        if (button("##host_send", "tisma_print", tr(T::HostSend), true, false, !working, nullptr, button_h))
+            host_send(host_start_);
+    }
+}
+
 void App::bambu_simulate() {
     bambu_sim_ = std::make_unique<device::BambuSimulator>("01S00SIMULATED", "12345678");
     bambu_.host = "127.0.0.1";
@@ -21099,13 +21301,19 @@ void App::device_panel() {
     const float field = 150.0f * scale_;
 
     // USB or a Bambu Lab printer on the network.
-    if (ImGui::RadioButton(tr(T::DeviceKindUsb), !device_bambu_))
-        device_bambu_ = false;
+    if (ImGui::RadioButton(tr(T::DeviceKindUsb), !device_bambu_ && !device_host_))
+        device_bambu_ = device_host_ = false;
     ImGui::SameLine();
     if (ImGui::RadioButton(tr(T::DeviceKindBambu), device_bambu_))
-        device_bambu_ = true;
-    if (device_bambu_) {
-        bambu_panel(field, button_h);
+        device_bambu_ = true, device_host_ = false;
+    ImGui::SameLine();
+    if (ImGui::RadioButton(tr(T::DeviceKindHost), device_host_))
+        device_host_ = true, device_bambu_ = false;
+    if (device_bambu_ || device_host_) {
+        if (device_bambu_)
+            bambu_panel(field, button_h);
+        else
+            host_panel(field, button_h);
         ImGui::PopTextWrapPos();
         ImGui::EndChild();
         ImGui::End();
@@ -21919,6 +22127,40 @@ void App::script_input() {
         else
             return fail_step("unknown bambu step");
         next();
+    } else if (step.verb == "host") { // KIND URL (octoprint, moonraker, prusalink, duet), or test, refresh (Device page)
+        tab_ = Tab::Device;
+        device_host_ = true;
+        device_bambu_ = false;
+        if (step.key == "test")
+            host_test();
+        else if (step.key == "refresh")
+            host_refresh();
+        else if (device::host_kind_from(step.key, host_.kind))
+            host_.url = step.value;
+        else
+            return fail_step("unknown host step");
+        next();
+    } else if (step.verb == "host-wait") { // until the program answered (up to 30 s)
+        if (!host_test_job_.valid() && !host_status_job_.valid() && !host_job_.valid() && f >= 2) {
+            std::printf("ui-script: host-wait: %s %s\n", host_version_.code.c_str(), host_status_.state.c_str());
+            next();
+        } else if (f > 1800) {
+            fail_step("no answer from the printer's program");
+        }
+    } else if (step.verb == "expect-host") { // code CODE, ok yes|no
+        std::string got;
+        if (step.key == "code")
+            got = host_version_.code;
+        else if (step.key == "ok")
+            got = host_tested_ && host_version_.ok ? "yes" : "no";
+        else
+            return fail_step("unknown expect-host key");
+        if (got == step.value) {
+            std::printf("ui-script: expect-host %s %s: ok\n", step.key.c_str(), step.value.c_str());
+            next();
+        } else {
+            fail_step("host " + step.key + " is «" + got + "», not «" + step.value + "»");
+        }
     } else if (step.verb == "bambu-wait") { // until the printer answered (up to 20 s)
         if (!bambu_status_job_.valid() && !bambu_job_.valid() && f >= 2) {
             std::printf("ui-script: bambu-wait: %s %s\n", bambu_status_.state.c_str(), bambu_status_.code.c_str());
@@ -22400,6 +22642,7 @@ void App::frame() {
     poll_jobs();
     device_poll();
     bambu_poll();
+    host_poll();
 
 #ifdef TISMA_VULKAN_WINDOW
     if (vulkan_)

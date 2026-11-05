@@ -502,6 +502,24 @@ bool host_kind_from(const std::string& word, HostKind& out) {
     return true;
 }
 
+const char* host_kind_word(HostKind kind) {
+    switch (kind) {
+    case HostKind::Moonraker: return "moonraker";
+    case HostKind::PrusaLink: return "prusalink";
+    case HostKind::Duet: return "duet";
+    default: return "octoprint";
+    }
+}
+
+const char* host_kind_name(HostKind kind) {
+    switch (kind) {
+    case HostKind::Moonraker: return "Klipper (Moonraker)";
+    case HostKind::PrusaLink: return "PrusaLink";
+    case HostKind::Duet: return "Duet";
+    default: return "OctoPrint";
+    }
+}
+
 HostVersion host_version(const HostConfig& host) {
     if (host.kind == HostKind::Moonraker)
         return moonraker_version(host);

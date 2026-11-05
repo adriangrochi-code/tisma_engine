@@ -11233,3 +11233,28 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   reanudación, cancelación y sesiones cerradas.
 - **Falta:** que la página de Dispositivo de la interfaz use estos programas de red, y la búsqueda por Zeroconf. Sin
   probar con una placa real.
+
+## 2026-11-05 — programas de red en la página Dispositivo
+
+- La página Dispositivo tiene una tercera opción, «Programa en la red», con el programa (OctoPrint, Klipper con
+  Moonraker, PrusaLink o Duet), la dirección y lo que cada uno pide:
+  - clave de API;
+  - en PrusaLink, también usuario y contraseña;
+  - en Duet, la contraseña de la placa.
+- «Probar» (devices.md, regla 14):
+  - contesta «La conexión con Duet funciona bien.» o «No se pudo conectar con Duet: causa (código)»;
+  - si la conexión funciona, guarda la clave y la contraseña en el almacén del sistema, nunca en las preferencias.
+- Con la conexión probada:
+  - una línea de estado con las temperaturas, y el avance si imprime;
+  - «Enviar el G-code laminado», con «Empezar a imprimir» (regla 22);
+  - pausar, seguir y cancelar;
+  - «Abrir en el navegador» (regla 15).
+- Las preferencias guardan el programa, la dirección y el usuario.
+- Prueba `ui_print_host_offline`: un Duet en una dirección donde no hay nada contesta «unreachable» y no ofrece
+  enviar. El cliente de cada programa ya tenía su prueba contra un simulador propio.
+- **Falta:**
+  - el diálogo de envío con el nombre editable (regla 20);
+  - «Subir y simular» de Duet (`M37`);
+  - el botón principal «Enviar a la impresora» (regla 19);
+  - la búsqueda por Zeroconf.
+  Sin probar con impresoras reales.

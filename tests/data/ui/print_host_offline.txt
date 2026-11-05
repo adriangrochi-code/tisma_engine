@@ -1,0 +1,7 @@
+# A network program that does not answer (devices.md, rule 14): «Test» says
+# why, with the cause and its code, and nothing is offered to send.
+host duet http://127.0.0.1:9
+host test
+host-wait
+expect-host ok no
+expect-host code unreachable

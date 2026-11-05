@@ -15,6 +15,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 - Cámara de las impresoras Bambu Lab A1 y P1 en la página Dispositivo: casilla «Cámara». Sin probar con una cámara
   real.
 - La cama de una impresora del paquete también se dibuja cuando su imagen es PNG, no solo SVG (regla 14).
+- Página Dispositivo: «Programa en la red» para OctoPrint, Klipper (Moonraker), PrusaLink y Duet. Sirve para probar
+  la conexión, ver el estado, enviar el G-code laminado (y empezar a imprimir), pausar, seguir y cancelar, y abrir su
+  interfaz web. Sin probar con impresoras reales.
 - Miniaturas de la pieza en el G-code binario (`.bgcode`): ajuste `gcode.thumbnails` (por ejemplo `16x16/PNG,220x124/PNG`),
   en PNG, JPG o QOI, también desde la línea de comandos. En el G-code de texto todavía no: se avisa.
 

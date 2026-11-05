@@ -59,5 +59,9 @@ HostResult host_cancel(const HostConfig& host);
 // The engine's words for a host kind ("octoprint", "moonraker", "prusalink",
 // "duet"); false for another word.
 bool host_kind_from(const std::string& word, HostKind& out);
+// Back: the word host_kind_from reads, and the name a person knows it by
+// («OctoPrint», «Klipper (Moonraker)», «PrusaLink», «Duet»).
+const char* host_kind_word(HostKind kind);
+const char* host_kind_name(HostKind kind);
 
 } // namespace tisma::device
