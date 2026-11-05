@@ -137,7 +137,7 @@ private fun fastenerName(id: String): String = stringResource(when (id) {
 
 /** The FDM calibration tests the engine makes (calibrations.md; `tisma-engine calibration`), in a useful order. */
 val CALIBRATIONS = listOf("first_layer", "temperature", "flow", "retraction", "retraction_speed", "pressure_advance",
-    "max_flow", "speed", "acceleration", "dimensions", "elephant_foot", "fit")
+    "max_flow", "speed", "acceleration", "bridges_overhangs", "dimensions", "elephant_foot", "fit")
 
 /** Kinds whose result is read by eye, with no value to apply (the engine's `calibration apply` refuses them). */
 val CALIBRATIONS_WITHOUT_VALUE = setOf("dimensions", "first_layer", "fit", "elephant_foot")
@@ -147,6 +147,7 @@ fun Context.calibrationName(kind: String): String = getString(when (kind) {
     "retraction" -> R.string.cal_retraction; "retraction_speed" -> R.string.cal_retraction_speed
     "pressure_advance" -> R.string.cal_pressure_advance; "max_flow" -> R.string.cal_max_flow; "speed" -> R.string.cal_speed
     "acceleration" -> R.string.cal_acceleration; "dimensions" -> R.string.cal_dimensions; "elephant_foot" -> R.string.cal_elephant_foot
+    "bridges_overhangs" -> R.string.cal_bridges_overhangs
     else -> R.string.cal_fit
 })
 

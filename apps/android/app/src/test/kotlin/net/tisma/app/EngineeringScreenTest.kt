@@ -46,7 +46,7 @@ class EngineeringScreenTest {
         val slice = SliceViewModel(EngineRunner(exe, work), work, saved = settings)
         val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
         val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
-        val nav = Navigator()
+        val nav = Navigator(net.tisma.app.ui.Section.ENGINEERING)
         compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, nav) } }
         compose.runOnIdle { slice.open("cube.stl") { File("../../../tests/data/cube_ascii.stl").inputStream() } }
         wait("model_engineering")
@@ -84,7 +84,7 @@ class EngineeringScreenTest {
         val slice = SliceViewModel(EngineRunner(File(work, "none"), work), work, saved = settings)
         val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
         val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
-        compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, Navigator()) } }
+        compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, Navigator(net.tisma.app.ui.Section.PLATE)) } }
         compose.runOnIdle { slice.open("cube.stl") { File("../../../tests/data/cube_ascii.stl").inputStream() } }
         wait("transform")
         compose.onNodeWithTag("scale").performScrollTo().performTextReplacement("200")
@@ -118,7 +118,7 @@ class EngineeringScreenTest {
         val slice = SliceViewModel(EngineRunner(exe, work), work, saved = settings)
         val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
         val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
-        compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, Navigator()) } }
+        compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, Navigator(net.tisma.app.ui.Section.ENGINEERING)) } }
         compose.runOnIdle { slice.open("cube.stl") { File("../../../tests/data/cube_ascii.stl").inputStream() } }
         wait("model_engineering")
         val b = slice.state.value.mesh!!.bounds

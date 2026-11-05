@@ -10846,6 +10846,22 @@ vuelta de perfilado.
 - Regla 14, PNG: falta (decisión del dueño, 2026-11-04: SVG por ahora). Para PNG no hay lector en el motor: elegir
   uno permisivo y anotarlo antes de usarlo.
 
+
+## 2026-11-04 — Android: impresora y filamento en el asistente; el APK de CI trae SolidCraft
+
+Pedido del dueño: «tenés que elegir impresora y filamento primero», y que los filamentos salgan del paquete de perfiles.
+- El asistente del primer arranque, después de «Usar esta impresora», pasa al paso de filamento: los del paquete para
+  esa impresora (regla 12: su conjunto de `compatible.json`, los del fabricante primero, después los genéricos), con
+  el fabricante debajo de cada nombre. Antes volvía a la placa y el filamento solo se cambiaba tocando la tarjeta.
+- Regla 13: al instalar, el filamento queda en el primero de `defaults.filament` de la variante.
+- Decisión propia: los fabricantes del índice sin impresoras y con filamentos (bibliotecas de filamentos, hoy
+  `Orca_OrcaFilamentLibrary`, 36 KB) se bajan junto con la impresora elegida, para que estén los genéricos. El motor los
+  planea bien (`pack plan --vendors Anycubic,Orca_OrcaFilamentLibrary`, probado con el índice real).
+- CI de Android (`.github/workflows/android.yml`): baja los artefactos de la última corrida buena de «SolidCraft for
+  Android» y arma el APK con `-Ptisma.solidcraft`; sin artefactos, arma sin SolidCraft y lo avisa.
+- Pruebas: `PackWizardTest` (MA1 con el paso de filamento, el filamento de fábrica y la biblioteca), `ProfilePackTest`.
+  No probado en un teléfono.
+
 ## 2026-11-04 — la cama del paquete en la vista 3D (`profile_pack.md`, regla 14, solo SVG)
 
 **Hecho** (el dueño pidió SVG por ahora):
@@ -10922,6 +10938,24 @@ reemplazo con aviso es lo correcto. BH27 cerrado.
 `ui_pack_print_speeds`, la línea de licencia. **Sin probar:** PK1 contra GitHub de verdad desde la interfaz; la
 descarga en sí ya la prueba `test_pack_fetch` con un servidor simulado.
 
+
+## 2026-11-04 — Android: perfil de impresión del paquete y BH27 (cambios a mano)
+
+Del motor (dev `b8f5906`, BH27): los perfiles de impresión del paquete traen `speed.*`, y `profile --pack` los pone en
+los ajustes de la impresora. Decisión de la sesión de especificación: al elegir otro perfil de impresión o filamento
+del paquete, sus ajustes reemplazan a los actuales, salvo los cambiados a mano, que se mantienen y se avisan.
+- La pantalla del perfil de una impresora del paquete elige filamento y perfil de impresión (regla 12, los
+  compatibles), con «Listo». Al elegir la impresora queda el primero de `defaults.print` (regla 13).
+- `ProfileChoice.print` va a `profile --pack ... --print` (y por ahí a todo lo que corta); se guarda.
+- El panel ya tomaba los valores del perfil nuevo y dejaba encima los cambios a mano; ahora, además, un aviso
+  dice cuáles se mantuvieron.
+- Pruebas: `PackWizardTest` (perfil de impresión por defecto y elegido, aviso de cambios mantenidos, el valor a mano
+  queda y el del perfil nuevo entra). No probado en un teléfono.
+- Regla 15 en la app (después de dev `9ebf378`): la pantalla del perfil de una impresora del paquete muestra
+  `license · origin` de la impresora y de cada filamento y perfil de impresión, con el enlace al repositorio de los
+  perfiles. Las reglas 1 y 3 ya estaban (asistente del primer arranque; sin red, el catálogo incluido). Prueba en
+  `PackWizardTest`.
+
 ## 2026-11-04 — calibración de puentes y voladizos (PLAN, P1)
 
 **Hecho** (diseño propio en `docs/CALIBRATION.md`; ninguna ficha la describe):
@@ -10936,6 +10970,45 @@ descarga en sí ya la prueba `test_pack_fetch` con un servidor simulado.
 
 **Prueba:** `[calibration]` (forma, áreas a 6,1 y 8,5 mm, G-code verificado, ángulo aplicado, ajustes de impresión) y
 `ui_calibration_bridges` (la pieza laminada; captura mirada). **No probado en una impresora.**
+
+- Calibración `bridges_overhangs` en la app (dev `e540e9c`): «Puentes y voladizos» en Calibrar. El motor pone los
+  ajustes propios de la prueba (sin soportes ni arcos) en `--settings`, que la app ya usa para cortar; el ángulo
+  elegido deja `support.threshold_angle` = 90 − ángulo. Prueba con el motor real en `DesignToolsTest`.
+
+## 2026-11-05 — Pedido del dueño: «Mi biblioteca» local (escritorio y Android)
+
+Decisión del dueño: una biblioteca de modelos propia y local primero (sin cuenta ni red), que después se pueda publicar
+en la biblioteca de Tisma Cloud (`model_library.md`). Cada modelo guarda el proyecto, los ajustes con que se laminó,
+el G-code con su resumen y su receta, y el análisis de FEA o CFD con su resumen, para reimprimir fácil. Se pidió la
+ficha a la sesión de especificación y se avisó al motor. La app la hace cuando la ficha pase `check_spec`.
+- Ficha recibida: `local_library.md` (spec/next `207bd14`, ML1–ML9). Se propuso al motor un comando `library`, para que
+  el formato viva en un solo lugar y lo usen el escritorio y la app.
+- **Decisión del dueño (05-11-2026):** la biblioteca no guarda G-code. «Imprimir» lamina siempre con la receta, en el
+  teléfono, en el escritorio o en la nube. Se pidió a la sesión de especificación ajustar la ficha (reglas 1, 6, 7, 9 y
+  12; ML1, ML2, ML7 y ML8) y se avisó al motor.
+
+## 2026-11-05 — Android: «Mi biblioteca» (local_library.md) y las secciones nuevas
+
+- **Secciones (decisión del dueño, 05-11-2026, sobre `mobile_app.md`, regla 5):** Biblioteca · Plato · Ingeniería ·
+  Impresora · Más. La app abre en Biblioteca. Ingeniería tiene la pieza en 3D con FEA y arrastre, y el CAD y las
+  piezas (salieron de Más). Los ajustes de Impresión se abren desde el plato; los de Material, desde Impresora.
+- **Mi biblioteca en la app** (`Library.kt`, `LibraryViewModel.kt`, `LibraryScreen.kt`), sobre el comando `library`
+  del motor acordado con su sesión (todavía no está en el motor; mientras tanto la sección lo dice y lleva al plato):
+  - guardar desde el plato después de laminar o analizar (regla 3), con la receta (impresora, filamento, perfil de
+    impresión, cambios a mano) y el análisis; «Guardar como nueva»;
+  - lista con búsqueda (nombre, etiqueta, impresora, material, «con análisis»), orden por fecha o nombre, cuánto ocupa;
+  - abrir en el plato con la receta, «Imprimir» que lamina siempre con la receta (regla 6) y guarda el resumen en ella;
+  - avisos de la regla 7: «Receta de una versión anterior», ajustes que ya no existen, «El análisis no vale para
+    estos ajustes» con «Calcular de nuevo»;
+  - exportar y compartir `.tismalib`, importar (también al compartir con la app), «Reemplazar» o «Guardar como
+    nueva», y el rechazo de archivos inseguros lo hace el motor (ML6);
+  - borrar entrada, receta o análisis con confirmación y «Deshacer» hasta cerrar la app (regla 8).
+  - Ningún G-code se guarda (ML10).
+- Pruebas: `LibraryTest` con un motor de prueba (`fake_library_engine.py`) que responde el contrato: ML1, ML2, ML3/ML4,
+  ML5 (mitad del teléfono), ML6 y ML10. Las de Ingeniería, el panel y la accesibilidad, ajustadas a las secciones nuevas.
+  No probado con el motor real (no tiene `library` todavía) ni en un teléfono.
+- Sigue: cuando el motor tenga `library`, probar con él (y ML5 con el escritorio); la miniatura de 256 × 256 y «La
+  imprimí» con foto; el límite de espacio en Preferencias (regla 12).
 
 ## 2026-11-04 — firmar las versiones con la clave del pendrive (decisión del dueño)
 
@@ -10994,3 +11067,11 @@ La sesión de fichas laminó un cubo de 20 mm con cada variante FDM del paquete 
 - `ctest` completo pasa.
 - A mano: un G-code de inicio de Ender-3 V3 se lamina, da `START_PRINT EXTRUDER_TEMP=0 CH=0 IDLE=0` y un aviso.
 - **Sin probar con el paquete real:** el equipo del motor no lo lee. Lo vuelve a barrer la sesión de fichas.
+
+## 2026-11-05 — Android: beta 0.1.0-beta.1 para quienes prueban
+
+Pedido del dueño (por la sesión de especificación): una beta esta semana. `versionName` `0.1.0-beta.1`
+(`versionCode` 2), con `dev` mezclado (motor con BH29–BH31; BH32–BH34 y `library` todavía no están en `dev`). El
+actualizador sigue apagado (sin la clave pública del dueño). Notas en castellano: `apps/android/BETA.md`.
+**Firma:** no hay clave de lanzamiento; el APK de CI va firmado con la clave de depuración del ejecutor, que cambia
+entre corridas. Una clave fija es decisión del dueño (dónde se guarda y quién la tiene).

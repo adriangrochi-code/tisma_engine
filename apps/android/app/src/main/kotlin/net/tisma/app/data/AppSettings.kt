@@ -66,6 +66,9 @@ class AppSettings(context: Context) {
     var profilePack: Boolean
         get() = prefs.getBoolean("profile.pack", false)
         set(v) = prefs.edit().putBoolean("profile.pack", v).apply()
+    var profilePrint: String?
+        get() = prefs.getString("profile.print", null)
+        set(v) = prefs.edit().putString("profile.print", v).apply()
     var profileName: String?
         get() = prefs.getString("profile.name", null)
         set(v) = prefs.edit().putString("profile.name", v).apply()

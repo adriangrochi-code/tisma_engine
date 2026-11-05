@@ -127,7 +127,8 @@ fun ProfilePickerScreen(state: SliceState, slice: SliceViewModel, nav: Navigator
  * profile_pack.md, rules 1 to 3 and 11; MA1): the index's printers by vendor,
  * searched by name; a model, then its nozzle (the default variant first);
  * «Use this printer» downloads that vendor, installs it and puts it on the
- * printer card. Without network: the built-in catalog.
+ * printer card, with its default filament; then the filament step (the
+ * pack's filaments for that printer). Without network: the built-in catalog.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -186,7 +187,7 @@ fun PackWizardScreen(state: SliceState, slice: SliceViewModel, nav: Navigator, o
             }
             AccentTextButton(onClick = { chosenFile = null }) { Text(stringResource(R.string.profile_change_printer)) }
             val variant = model.variants.firstOrNull { it.id == variantId }
-            Button(onClick = { if (variant != null) slice.choosePackPrinter(vendor, model, variant) { onDone(); nav.back() } },
+            Button(onClick = { if (variant != null) slice.choosePackPrinter(vendor, model, variant) { onDone(); nav.replace(Screen.ProfilePicker) } },
                 enabled = variant != null && !state.packBusy, modifier = Modifier.fillMaxWidth().testTag("pack_use")) {
                 Text(stringResource(R.string.pack_use))
             }
@@ -195,26 +196,65 @@ fun PackWizardScreen(state: SliceState, slice: SliceViewModel, nav: Navigator, o
 }
 
 /**
- * A pack printer's filament (profile_pack.md, rules 12 and 13): the
- * printer's default first, then the compatible ones, the printer's vendor's
- * before the generic ones. Another printer is chosen in the wizard.
+ * A pack printer's print profile and filament (profile_pack.md, rules 12
+ * and 13): the compatible ones, the printer's vendor's before the generic
+ * ones; the variant's defaults are chosen when the printer is. A new choice
+ * replaces the printer settings, except those changed by hand (BH27).
+ * Another printer is chosen in the wizard.
  */
 @Composable
 private fun PackFilamentPicker(state: SliceState, slice: SliceViewModel, nav: Navigator, choice: EngineRunner.ProfileChoice) {
     androidx.compose.runtime.LaunchedEffect(choice.printer) { slice.loadPackFilaments() }
+    @Composable
+    fun Entry(f: net.tisma.app.engine.ProfilePack.Filament, selected: Boolean, tag: String, onClick: () -> Unit) {
+        Card(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag(tag),
+            colors = if (selected) CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                else CardDefaults.cardColors()) {
+            Column(Modifier.padding(12.dp)) {
+                Text(f.name, style = MaterialTheme.typography.bodyLarge)
+                Text(f.vendor.replace('_', ' '), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Rule 15: its licence and origin in a small line.
+                listOf(f.license, f.origin).filter { it.isNotBlank() }.joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
+                    Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
     Column(Modifier.fillMaxSize().padding(16.dp).testTag("pack_filaments"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(choice.name ?: choice.printer, style = MaterialTheme.typography.titleLarge)
+        if (state.packPrinterLicense.isNotEmpty()) {
+            Text(state.packPrinterLicense, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag("pack_license"))
+        }
+        val uri = androidx.compose.ui.platform.LocalUriHandler.current
+        AccentTextButton(onClick = { runCatching { uri.openUri(net.tisma.app.engine.ProfilePack.REPOSITORY) } }) {
+            Text(stringResource(R.string.pack_repository))
+        }
         AccentTextButton(onClick = { nav.replace(Screen.PackWizard) }) { Text(stringResource(R.string.profile_change_printer)) }
-        Text(stringResource(R.string.profile_filament), style = MaterialTheme.typography.labelLarge)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            item { Text(stringResource(R.string.profile_filament), style = MaterialTheme.typography.labelLarge) }
             item {
-                FilterChip(selected = choice.filament == null, onClick = { slice.setProfile(choice.copy(filament = null)); nav.back() },
+                FilterChip(selected = choice.filament == null, onClick = { slice.setProfile(choice.copy(filament = null)) },
                     label = { Text(stringResource(R.string.pack_default_filament)) }, modifier = Modifier.testTag("pack_filament_default"))
             }
             items(state.packFilaments, key = { it.path }) { f ->
-                FilterChip(selected = choice.filament == f.path, onClick = { slice.setProfile(choice.copy(filament = f.path)); nav.back() },
-                    label = { Text(f.name) }, modifier = Modifier.testTag("pack_filament_" + f.name))
+                Entry(f, choice.filament == f.path, "pack_filament_" + f.name) { slice.setProfile(choice.copy(filament = f.path)) }
             }
+            if (state.packFilaments.isEmpty()) item {
+                Text(stringResource(R.string.pack_no_filaments), color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("pack_no_filaments"))
+            }
+            if (state.packPrints.isNotEmpty()) {
+                item { Text(stringResource(R.string.pack_print_profile), style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(top = 8.dp)) }
+                items(state.packPrints, key = { it.path }) { f ->
+                    Entry(f, choice.print == f.path, "pack_print_" + f.name) { slice.setProfile(choice.copy(print = f.path)) }
+                }
+            }
+        }
+        Button(onClick = { nav.back() }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("pack_done")) {
+            Text(stringResource(R.string.pack_done))
         }
     }
 }

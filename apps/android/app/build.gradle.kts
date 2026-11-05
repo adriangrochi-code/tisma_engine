@@ -24,8 +24,8 @@ android {
         applicationId = "net.tismaservidores.tisma"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.0-beta.1"
         // The project's Ed25519 public key for the updates (app_updates.md, rules 5 and 13), as 64 hex digits:
         // -Ptisma.updatesKey=…; empty until the owner makes the key, and then the updater stays off.
         buildConfigField("String", "UPDATES_KEY", "\"" + (project.findProperty("tisma.updatesKey") as String? ?: "") + "\"")

@@ -37,7 +37,9 @@ class ProfilePack(
     class PackException(message: String) : Exception(message)
 
     /** The pack's printers as its index lists them, before any vendor is downloaded (profile_pack.md, rule 2). */
-    data class Index(val version: String, val vendors: List<Vendor>)
+    data class Index(val version: String, val vendors: List<Vendor>,
+                     /** Vendors with filaments and no printers (filament libraries), installed with every printer. */
+                     val libraries: List<String> = emptyList())
     data class Vendor(val id: String, val name: String, val models: List<Model>)
     data class Model(val name: String, val file: String, val variants: List<Variant>, val defaultVariant: String,
                      /** The bed's 3D model (STL) and picture (SVG or PNG), paths in the pack (rule 14). */
@@ -74,10 +76,27 @@ class ProfilePack(
     /** The index of the installed pack, or the one the wizard downloaded, or null. */
     fun index(): Index? = readIndex(File(dataDir, "pack/index.json")) ?: readIndex(File(dataDir, "index.json"))
 
+    companion object {
+        /** Where the pack's profiles come from (rule 15; src/catalog/pack.hpp, kPackRepository). */
+        const val REPOSITORY = "https://github.com/adriangrochi-code/Tisma-profiles-"
+    }
+
     val installed: Boolean get() = File(dataDir, "pack/index.json").isFile
 
     /** A filament of the installed pack: the path the engine takes with `--filament`, and what the person reads. */
-    data class Filament(val path: String, val name: String, val vendor: String, val generic: Boolean)
+    data class Filament(val path: String, val name: String, val vendor: String, val generic: Boolean,
+                        /** Rule 15: the entry's `license` and `origin`. */
+                        val license: String = "", val origin: String = "")
+
+    /** Rule 15: `license · origin` of a pack file (a model, filament or print), or empty. */
+    fun licenseLine(path: String): String {
+        val o = runCatching { Json.parseToJsonElement(File(File(dataDir, "pack"), path.substringBefore('#')).readText()) as JsonObject }
+            .getOrNull() ?: return ""
+        return line(o)
+    }
+
+    private fun line(o: JsonObject): String = listOf("license", "origin")
+        .mapNotNull { (o[it] as? JsonPrimitive)?.contentOrNull?.takeIf { v -> v.isNotBlank() } }.joinToString(" · ")
 
     /**
      * The installed pack's filaments for [printer] (`<file>#<variant>`), as
@@ -85,7 +104,12 @@ class ProfilePack(
      * holds the printer (none: every printer), the printer's vendor's first,
      * then the generic ones, then the rest.
      */
-    fun filamentsFor(printer: String): List<Filament> {
+    fun filamentsFor(printer: String): List<Filament> = entriesFor(printer, "filaments")
+
+    /** The installed pack's print profiles for [printer], by the same rule 12 as the filaments. */
+    fun printsFor(printer: String): List<Filament> = entriesFor(printer, "prints")
+
+    private fun entriesFor(printer: String, folder: String): List<Filament> {
         val pack = File(dataDir, "pack")
         val index = runCatching { Json.parseToJsonElement(File(pack, "index.json").readText()) as JsonObject }.getOrNull() ?: return emptyList()
         val number = (index["printers"] as? JsonArray)?.indexOfFirst { (it as? JsonPrimitive)?.contentOrNull == printer } ?: -1
@@ -97,16 +121,37 @@ class ProfilePack(
         val printerVendor = printer.removePrefix("vendors/").substringBefore('/')
         val out = ArrayList<Filament>()
         File(pack, "vendors").listFiles()?.sortedBy { it.name }?.forEach { v ->
-            File(v, "filaments").listFiles()?.filter { it.extension == "json" }?.sortedBy { it.name }?.forEach { f ->
+            File(v, folder).listFiles()?.filter { it.extension == "json" }?.sortedBy { it.name }?.forEach { f ->
                 val o = runCatching { Json.parseToJsonElement(f.readText()) as JsonObject }.getOrNull() ?: return@forEach
                 if ((o["technology"] as? JsonPrimitive)?.contentOrNull.let { it != null && it != "fff" }) return@forEach
                 val set = (o["compatible"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull()
                 if (set != null && (number < 0 || sets.getOrNull(set)?.contains(number) != true)) return@forEach
                 val generic = (o["generic"] as? JsonPrimitive)?.contentOrNull == "true"
-                out += Filament("vendors/${v.name}/filaments/${f.name}", f.nameWithoutExtension.replace('_', ' '), v.name, generic)
+                out += Filament("vendors/${v.name}/$folder/${f.name}", f.nameWithoutExtension.replace('_', ' '), v.name, generic,
+                    (o["license"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (o["origin"] as? JsonPrimitive)?.contentOrNull.orEmpty())
             }
         }
         return out.sortedBy { if (it.vendor == printerVendor && !it.generic) 0 else if (it.generic) 1 else 2 }
+    }
+
+    /**
+     * Rule 13: the first filament of the variant's `defaults.filament` in the
+     * installed model file, when it is installed, or null.
+     */
+    fun defaultFilament(printer: String): String? = defaultEntry(printer, "filament")
+
+    /** Rule 13: the first print profile of the variant's `defaults.print`, or null. */
+    fun defaultPrint(printer: String): String? = defaultEntry(printer, "print")
+
+    private fun defaultEntry(printer: String, kind: String): String? {
+        val file = printer.substringBefore('#')
+        val variant = printer.substringAfter('#', "")
+        val o = runCatching { Json.parseToJsonElement(File(File(dataDir, "pack"), file).readText()) as JsonObject }.getOrNull() ?: return null
+        val v = (o["variants"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
+            .firstOrNull { (it["id"] as? JsonPrimitive)?.contentOrNull == variant } ?: return null
+        val path = ((v["defaults"] as? JsonObject)?.get(kind) as? JsonArray)?.firstOrNull()
+            ?.let { (it as? JsonPrimitive)?.contentOrNull } ?: return null
+        return path.takeIf { File(File(dataDir, "pack"), it).isFile }
     }
 
     private fun readIndex(f: File): Index? {
@@ -124,7 +169,10 @@ class ProfilePack(
                     (m["assets"] as? JsonObject)?.s("bed_texture").orEmpty())
             })
         }.filter { it.models.isNotEmpty() }
-        return Index(o.s("pack_version"), vendors)
+        val libraries = o.a("vendors").filter { v ->
+            v.a("models").isEmpty() && ((v["filaments"] as? JsonPrimitive)?.contentOrNull?.toIntOrNull() ?: 0) > 0
+        }.map { it.s("id") }
+        return Index(o.s("pack_version"), vendors, libraries)
     }
 
     /** Updates the pack: [vendors] empty means the installed ones, or all on the first start (MA1). Returns its version. */
