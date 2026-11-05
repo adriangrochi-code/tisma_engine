@@ -3,7 +3,7 @@
 #include "gcode/thumbnail.hpp"
 
 #include "config/settings.hpp"
-#include "io/png.hpp"
+#include "gcode/image_write.hpp"
 
 #include <algorithm>
 #include <array>
@@ -183,16 +183,17 @@ std::vector<GcodeThumbnail> make_thumbnails(const TriangleMesh& mesh, const std:
                                             std::vector<ThumbnailSize>* skipped) {
     std::vector<GcodeThumbnail> out;
     for (const ThumbnailSize& s : sizes) {
-        if (s.format == ThumbnailFormat::Jpg) {
+        const std::vector<std::uint8_t> rgba = draw_part(mesh, s.width, s.height);
+        const std::vector<std::uint8_t> file = s.format == ThumbnailFormat::Qoi   ? encode_qoi(s.width, s.height, rgba.data())
+                                               : s.format == ThumbnailFormat::Jpg ? encode_jpg(s.width, s.height, rgba.data())
+                                                                                  : encode_png_compressed(s.width, s.height, rgba.data());
+        if (file.empty()) {
             if (skipped)
                 skipped->push_back(s);
             continue;
         }
-        const std::vector<std::uint8_t> rgba = draw_part(mesh, s.width, s.height);
-        const std::vector<std::uint8_t> file = s.format == ThumbnailFormat::Qoi
-                                                   ? encode_qoi(s.width, s.height, rgba.data())
-                                                   : encode_png(s.width, s.height, rgba.data());
-        out.push_back({s.format == ThumbnailFormat::Qoi ? 2 : 0, s.width, s.height, std::string(file.begin(), file.end())});
+        const int format = s.format == ThumbnailFormat::Qoi ? 2 : s.format == ThumbnailFormat::Jpg ? 1 : 0;
+        out.push_back({format, s.width, s.height, std::string(file.begin(), file.end())});
     }
     return out;
 }
@@ -217,7 +218,7 @@ std::vector<GcodeThumbnail> gcode_thumbnails(const TriangleMesh& mesh, const Set
     std::vector<GcodeThumbnail> out = make_thumbnails(mesh, sizes, &skipped);
     if (warnings && !skipped.empty())
         warnings->push_back({"thumbnails", -1, 0.0, "gcode.thumbnails: " + thumbnails_text(skipped) +
-                                                        " left out: JPG pictures are not written yet", 0.0});
+                                                        " left out: the picture could not be written", 0.0});
     return out;
 }
 

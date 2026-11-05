@@ -16,7 +16,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   real.
 - La cama de una impresora del paquete también se dibuja cuando su imagen es PNG, no solo SVG (regla 14).
 - Miniaturas de la pieza en el G-code binario (`.bgcode`): ajuste `gcode.thumbnails` (por ejemplo `16x16/PNG,220x124/PNG`),
-  en PNG o QOI, también desde la línea de comandos. En el G-code de texto y en JPG todavía no: se avisa.
+  en PNG, JPG o QOI, también desde la línea de comandos. En el G-code de texto todavía no: se avisa.
 
 ## [0.11.0-beta.1] - 2026-11-05
 

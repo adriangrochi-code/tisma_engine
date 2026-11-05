@@ -110,6 +110,15 @@ if(TISMA_GPU)
   )
   FetchContent_MakeAvailable(volk)
 endif()
+# stb_image_write 1.16 (MIT of its MIT-or-public-domain choice), only its one
+# header, in the core: the G-code thumbnails in JPG and compressed PNG.
+FetchContent_Declare(
+  stb_write
+  URL https://raw.githubusercontent.com/nothings/stb/d14d46f6b44456eb88beac58cba833a4135d4c89/stb_image_write.h
+  URL_HASH SHA256=cbd5f0ad7a9cf4468affb36354a1d2338034f2c12473cf1a8e32053cb6914a05
+  DOWNLOAD_NO_EXTRACT TRUE
+)
+FetchContent_MakeAvailable(stb_write)
 if(TISMA_BUILD_UI)
   # GLFW 3.4 (Zlib), Dear ImGui 1.92.9b (MIT; its Roboto Medium font is
   # Apache-2.0) and nanosvg (Zlib), see THIRD_PARTY.md: the interface only.
@@ -229,6 +238,7 @@ add_library(tisma_core
   src/gcode/cooling.cpp
   src/gcode/print_time.cpp
   src/gcode/thumbnail.cpp
+  src/gcode/image_write.cpp
   src/report/stability.cpp
   src/report/warnings.cpp
   src/slice/printable.cpp
@@ -317,6 +327,7 @@ else()
   target_sources(tisma_core PRIVATE src/gpu/compute_none.cpp)
 endif()
 target_include_directories(tisma_core PUBLIC src)
+target_include_directories(tisma_core SYSTEM PRIVATE ${stb_write_SOURCE_DIR})
 # Kernels must give the same bits on the CPU and the GPU: no fused multiply-add.
 if(NOT MSVC)
   target_compile_options(tisma_core PRIVATE -ffp-contract=off)

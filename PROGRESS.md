@@ -11205,3 +11205,12 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   - la forma en el G-code de texto (la mide el equipo de fichas);
   - el codificador JPG;
   - comprimir el PNG (hoy son bloques sin comprimir: una de 220×124 ocupa unos 110 kB).
+
+## 2026-11-05 — miniaturas del G-code, parte 3: JPG y PNG comprimido
+
+- stb_image_write 1.16 (MIT) anotado en THIRD_PARTY.md y en créditos antes de usarlo, con la licencia leída en ese
+  commit. Va en el núcleo y escribe a memoria.
+- Con él, las miniaturas JPG (sobre fondo blanco, calidad 90) y PNG comprimido. Una PNG de 220×124 bajó de unos
+  110 kB a menos de un cuarto.
+- La prueba `[thumbnail]` pide las tres miniaturas de X7 en un G-code binario y las encuentra.
+- **Falta:** solo la forma en el G-code de texto. La mide el equipo de fichas.

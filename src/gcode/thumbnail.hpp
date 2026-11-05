@@ -2,10 +2,10 @@
 
 // G-code thumbnails (gcode_extras.md, rule 8; formats.md, rule 20): the
 // `gcode.thumbnails` list, a picture of the part drawn on the CPU without the
-// 3D view, and the QOI file of a picture. The PNG and JPG files and the way
-// the pictures go in the G-code come later (the comment format is still being
-// measured). Own design; QOI from its specification (qoiformat.org, version
-// 1.0); see PROVENANCE.md.
+// 3D view, its PNG, JPG (gcode/image_write) or QOI file, and the pictures for
+// a binary G-code. The form in a text G-code comes later (the comment format is
+// still being measured). Own design; QOI from its specification
+// (qoiformat.org, version 1.0); see PROVENANCE.md.
 
 #include "gcode/binary.hpp" // GcodeThumbnail
 #include "mesh/mesh.hpp"
@@ -39,15 +39,15 @@ std::string thumbnails_text(const std::vector<ThumbnailSize>& sizes);
 // the edges are smooth. An empty mesh gives a clear picture.
 std::vector<std::uint8_t> draw_part(const TriangleMesh& mesh, int width, int height);
 
-// The pictures `gcode.thumbnails` asks for, of the part: PNG and QOI files.
-// JPG is left out for now (no writer yet) and named in `skipped`.
+// The pictures `gcode.thumbnails` asks for, of the part: PNG (compressed), JPG
+// (over white) and QOI files. One that cannot be written is named in `skipped`.
 std::vector<GcodeThumbnail> make_thumbnails(const TriangleMesh& mesh, const std::vector<ThumbnailSize>& sizes,
                                             std::vector<ThumbnailSize>* skipped = nullptr);
 
 struct Settings;
 // The thumbnails of the G-code the settings make: those of gcode.thumbnails in
 // a binary G-code. In a text G-code none yet (the comment form is still being
-// measured, formats.md rule 20), said in a warning, as a JPG left out.
+// measured, formats.md rule 20), said in a warning.
 std::vector<GcodeThumbnail> gcode_thumbnails(const TriangleMesh& mesh, const Settings& settings,
                                              std::vector<Warning>* warnings = nullptr);
 

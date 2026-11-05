@@ -2,7 +2,9 @@
 
 #include "config/settings.hpp"
 #include "gcode/binary.hpp"
+#include "gcode/image_write.hpp"
 #include "gcode/thumbnail.hpp"
+#include "io/png.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -104,13 +106,16 @@ TEST_CASE("thumbnails: one block each in a binary G-code, after the printer's me
     s.gcode_thumbnails = "16x16/PNG,32x24/JPG,20x20/QOI";
     std::vector<Warning> warnings;
     const std::vector<GcodeThumbnail> t = gcode_thumbnails(box(20, 10, 5), s, &warnings);
-    REQUIRE(t.size() == 2); // the JPG left out, said in a warning
-    REQUIRE(warnings.size() == 1);
-    CHECK(warnings[0].message.find("32x24/JPG") != std::string::npos);
+    REQUIRE(t.size() == 3);
+    CHECK(warnings.empty());
     CHECK(t[0].format == 0);
     CHECK(t[0].data.substr(1, 3) == "PNG");
-    CHECK(t[1].format == 2);
-    CHECK(t[1].data.substr(0, 4) == "qoif");
+    CHECK(t[1].format == 1);
+    CHECK(t[1].data.substr(0, 3) == "\xFF\xD8\xFF"); // a JPEG's start
+    CHECK(t[1].width == 32);
+    CHECK(t[1].height == 24);
+    CHECK(t[2].format == 2);
+    CHECK(t[2].data.substr(0, 4) == "qoif");
 
     const std::string text = "G28\nG1 X10 Y10\n; estimated printing time = 1m\n; layers.height = 0.2\n";
     const std::string bin = binary_gcode(text, s, t);
@@ -139,4 +144,18 @@ TEST_CASE("thumbnails: one block each in a binary G-code, after the printer's me
     warnings.clear();
     CHECK(gcode_thumbnails(box(20, 10, 5), s, &warnings).empty());
     CHECK(warnings.empty());
+}
+
+TEST_CASE("thumbnails: compressed PNG and JPG, read back by an image reader", "[gcode][thumbnail]") {
+    const std::vector<std::uint8_t> p = draw_part(box(30, 20, 10), 220, 124);
+    const std::vector<std::uint8_t> png = encode_png_compressed(220, 124, p.data());
+    // Deflated: far below the stored PNG of io/png (about 110 kB).
+    CHECK(png.size() < encode_png(220, 124, p.data()).size() / 4);
+    const std::vector<std::uint8_t> jpg = encode_jpg(220, 124, p.data());
+    REQUIRE(jpg.size() > 4);
+    CHECK(jpg[0] == 0xFF);
+    CHECK(jpg[1] == 0xD8);
+    CHECK(jpg[jpg.size() - 2] == 0xFF);
+    CHECK(jpg[jpg.size() - 1] == 0xD9);
+    CHECK(encode_jpg(0, 10, p.data()).empty());
 }

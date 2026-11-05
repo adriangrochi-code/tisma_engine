@@ -419,6 +419,15 @@
       "notices": [
         "stb.txt"
       ]
+    },
+    {
+      "name": "stb_image_write",
+      "version": "1.16",
+      "license": "MIT",
+      "url": "https://github.com/nothings/stb",
+      "notices": [
+        "stb.txt"
+      ]
     }
   ]
 }
