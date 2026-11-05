@@ -28,6 +28,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- «Solo desde la cama» ahora también vale para los soportes de árbol (antes salían igual que sin la opción).
 - El G-code de inicio copiado del programa de otro fabricante (por ejemplo Anycubic) ya no falla por los nombres de sus
   variables: se aceptan los de la lista de los G-code del paquete y los índices con una variable adentro
   (`[first_layer_temperature[initial_tool]]`). Las que el motor todavía no llena van en 0 y se nombran en el registro.

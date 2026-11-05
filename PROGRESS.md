@@ -11386,3 +11386,11 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   - `relative_extrusion` (regla 10 ter);
   - las opciones de envío de Bambu como variables (regla 12, GM8);
   - llenar las variables que quedan en 0 (las de Bambu: `curr_bed_type`, las de calibración).
+
+## 2026-11-05 — BH39: «Solo desde la cama» con soportes de árbol
+
+- La opción solo se aplicaba al soporte en grilla. El árbol (`style = organic`) no pasaba por la regla 2 de
+  `supports_more.md`.
+- Arreglo: la misma regla corre sobre las áreas del árbol. Una zona (sus islas, unidas capa a capa) que apoya en la
+  pieza se quita entera; la que va a la cama queda.
+- Prueba `[bh39]` (SM2 con árbol): estante sobre una losa, sin soporte; una T sobre la cama, con soporte.

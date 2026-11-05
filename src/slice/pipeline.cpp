@@ -1640,6 +1640,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             tp.interface_layers = settings.support_interface_layers;
             const std::vector<Polygons> over = supported_overhangs(out.regions, thickness, sp);
             out.support_areas = tree_support_areas(out.regions, tree_nodes(out.regions, thickness, over, tp), over, tp);
+            // Only from the bed holds for the trees too (supports_more.md rule 2, BH39).
+            if (sp.buildplate_only)
+                keep_from_bed(out.support_areas, out.regions, sp.bottom_gap_layers);
         } else if (settings.support) {
             out.support_areas = support_areas(out.regions, thickness, sp);
         }

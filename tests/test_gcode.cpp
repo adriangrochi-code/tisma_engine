@@ -2381,7 +2381,7 @@ TEST_CASE("support: a gap and interface layers over the part it stands on (suppo
     CHECK(at(model, 7).second > 0);
 }
 
-TEST_CASE("support: from the bed only, a zone that stands on the part goes whole (supports_more.md, rule 2, SM2)", "[gcode][support]") {
+TEST_CASE("support: from the bed only, a zone that stands on the part goes whole (supports_more.md, rule 2, SM2)", "[gcode][support][bh39]") {
     const auto lifted = [](IndexedMesh& m, float x0, float y0, float x1, float y1, float z0, float z1) {
         const auto base = std::uint32_t(m.vertices.size());
         add_box(m, x0, y0, x1, y1, z1 - z0);
@@ -2409,6 +2409,13 @@ TEST_CASE("support: from the bed only, a zone that stands on the part goes whole
     IndexedMesh t;
     add_box(t, 8, 8, 12, 12, 3);
     lifted(t, 0, 0, 20, 20, 3, 4);
+    CHECK(support_layers(slice_model(t, s)) > 5);
+    // The same with organic trees (BH39: the option was ignored for them).
+    s.support_style = SupportStyle::Organic;
+    s.support_buildplate_only = false;
+    CHECK(support_layers(slice_model(shelf, s)) > 5);
+    s.support_buildplate_only = true;
+    CHECK(support_layers(slice_model(shelf, s)) == 0);
     CHECK(support_layers(slice_model(t, s)) > 5);
 }
 

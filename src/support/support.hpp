@@ -73,6 +73,12 @@ std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, 
 std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                     const SupportParams& params);
 
+// support.buildplate_only (supports_more.md, rule 2), on any support's
+// areas (grid or organic): a zone of support (its islands, joined layer to
+// layer where they overlap) that stands on the part anywhere, within
+// bottom_gap layers, is taken out whole, its part on the bed too.
+void keep_from_bed(std::vector<Polygons>& support, const std::vector<Polygons>& regions, int bottom_gap);
+
 // The column's steps over a chunk of layers, on its grid (support_areas):
 // from the chunk's last layer down, the column takes adds[k] and is closed by
 // `radius` pixels when adds[k] has a grid (an overhang above), then loses
