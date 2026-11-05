@@ -10,6 +10,35 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.11.0-beta.1] - 2026-11-05
+
+Beta para los probadores del dueño: Windows y Linux. Cada paquete es un `.zip`: se descomprime y se abre `tisma`.
+
+### Para probar
+
+- **Impresoras del paquete de perfiles:** en el primer arranque se baja la lista sola. Elegí tu impresora en el
+  catálogo, su filamento y su perfil de impresión, y laminá. Mirá que la cama aparezca dibujada en la vista 3D. Probá
+  también con una impresora de resina del paquete.
+- **Calibraciones** (pestaña Calibrar): las torres de temperatura y de retracción, flujo, flujo máximo, aceleración,
+  pata de elefante y la nueva de puentes y voladizos. Aplicá el resultado y fijate que cambie el ajuste.
+- **Ingeniería:** marcá un apoyo y una fuerza, Analizar, mirá el mapa y el veredicto, y después Optimizar. En
+  Aerodinámica, Analizar una pieza.
+- **Diseño:** bocetos con cotas y restricciones, extruir y revolucionar, redondeo, chaflán, agujeros y roscas, y
+  mandar la pieza a la placa.
+- **La nube:** iniciar sesión y laminar o analizar un proyecto en la nube.
+
+### Límites conocidos
+
+- **Actualizaciones automáticas:** esta versión no se actualiza sola. Para pasar a la próxima, bajala a mano.
+- **Instalador:** no hay; cada paquete es un `.zip`. Tampoco hay versión para macOS.
+- **Cama del paquete:** se dibuja el SVG; las imágenes PNG todavía no se muestran.
+- **Paquete de perfiles:** el motor no lee los perfiles del paquete por la regla de sala limpia; los probó por fuera
+  la sesión de fichas (todas las variantes con sus valores por defecto y 500 combinaciones al azar). Con una impresora
+  sin velocidades propias se usan las de una Ender-3 de fábrica, y el laminado lo avisa.
+- **Impresoras reales:** muchas funciones nuevas, como las calibraciones nuevas, los perfiles del paquete y Optimizar,
+  no se probaron en una impresora real.
+- **Todavía no están:** «Mi biblioteca», barrer y recubrir en Diseño, y el actualizador de escritorio.
+
 ### Agregado
 
 - **Versiones firmadas:** la CI deja cada versión como borrador y el dueño la firma con la clave Ed25519 de su
@@ -1687,7 +1716,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.11.0-beta.1...HEAD
+[0.11.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...v0.11.0-beta.1
 [0.10.0-alpha.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...v0.10.0-alpha.3
 [0.10.0-alpha.2]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.2
 [0.9.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...v0.9.0-alpha.1

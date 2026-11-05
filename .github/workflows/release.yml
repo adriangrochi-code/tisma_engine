@@ -11,7 +11,8 @@ name: Release
 #
 # The programs check updates with the project's public key, taken at build
 # time from the repository variable TISMA_UPDATES_KEY (64 hex digits; not a
-# secret). Without it the updater stays off.
+# secret). Without it the updater stays off, and the release is published at
+# once, with no updates.json and nothing to sign.
 #
 # It runs when:
 # - a push to alpha or main changes VERSION (or this workflow) and the tag
@@ -135,7 +136,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Leave the release as a draft, for the owner to sign
+    name: Leave the release as a draft for the owner to sign (published as it is without the key)
     needs: [version, build]
     runs-on: ubuntu-24.04
     permissions:
@@ -161,6 +162,15 @@ jobs:
             where="--verify-tag"
           else
             where="--target $GITHUB_SHA"
+          fi
+          # Without the project's public key the programs are built with the
+          # updater off: nothing to sign, so the release is published as it
+          # is, without updates.json (docs/FIRMAR_VERSIONES.md, «Sin la clave»).
+          if [ -z "${{ vars.TISMA_UPDATES_KEY }}" ]; then
+            gh release create "$TAG" packages/*.zip --title "Tisma engine $version" \
+              --notes-file notes.md $where $prerelease
+            echo "::notice::$TAG published without updates.json: no TISMA_UPDATES_KEY, the updater is off in this build"
+            exit 0
           fi
           # The list the programs read, with this release first and its
           # signatures empty: the published list, if any, is the base.

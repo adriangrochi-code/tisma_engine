@@ -32,6 +32,7 @@ Hitos ya cumplidos, que no se publicaron por separado:
 | 0.7.0 | P1 (empezada): la interfaz `tisma`, calibraciones guiadas, perfiles y proyectos; publicada como 0.7.0-alpha.1 |
 | 0.8.0 | P2 y P3 (empezadas) y más de F5: catálogo y capacidades, altura de capa variable y por zona, Z anti-aliasing, rellenos nuevos, la pestaña Impresora, la revisión profunda; publicada como 0.8.0-alpha.1 |
 | 0.9.0 | Más de F5, P1 y la cobertura: soportes en árbol, OBJ y 3MF, costura en bufanda, modo vaso, el panel de ajustes nuevo, herramientas de la placa y pintura; publicada como 0.9.0-alpha.1 |
+| 0.11.0 | El paquete de perfiles (impresoras, filamentos y resinas descargados, cama en la vista), calibraciones nuevas, Ingeniería con Optimizar, Diseño (D3, D4 y D5b), la nube y las versiones firmadas; publicada como 0.11.0-beta.1 para los probadores |
 | 0.10.0 | Más de P1 y la cobertura: resina, impresoras de cinta, capas curvas, multimaterial, el panel de ajustes con búsqueda y Personalizado, la tarjeta y la página de la impresora, la vista previa completa, créditos, la ayuda con sus datos y tutoriales, cortar, separar, espejar y medir; publicada como 0.10.0-alpha.2 (la alpha.1 no llegó a publicarse: sus pruebas no corrieron en Windows) |
 
 ## Las ramas (decisión del dueño, 2026-10-24)
@@ -79,7 +80,8 @@ El flujo `.github/workflows/release.yml` corre cuando un envío a `alpha` o a `m
 `v<versión>` todavía no existe. También corre si alguien envía esa etiqueta a mano. El flujo:
 - compila y prueba en Windows y en Linux;
 - empaqueta el programa con la licencia, el README, el registro de cambios y la documentación de uso;
-- deja la release como **borrador**, con las notas de su sección del CHANGELOG (pre-release si el número tiene
+- sin la variable `TISMA_UPDATES_KEY` (el actualizador apagado), la publica enseguida, sin `updates.json`;
+- con ella, deja la release como **borrador**, con las notas de su sección del CHANGELOG (pre-release si el número tiene
   etiqueta) y la lista de actualizaciones `updates.json` sin firmar (`tools/updates_list.py`);
 - el dueño la firma con la clave de su pendrive y la publica (`tools/sign_release.py`, `docs/FIRMAR_VERSIONES.md`;
   decisión del dueño, 2026-11-04: la clave privada nunca está en GitHub). Al publicarse se crea la etiqueta

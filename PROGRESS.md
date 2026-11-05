@@ -11035,3 +11035,14 @@ ni el programa se cerró, y los códigos de error fueron los esperados. Encontr�
 **Prueba:** `[cli][cloud]`:
 - la versión más nueva en el JSON y en el archivo propio, con `slice` y `orient`;
 - una caja de 5000 mm con los cuatro comandos.
+
+## 2026-11-05 — beta 0.11.0-beta.1 para los probadores (pedido del dueño)
+
+- `VERSION` pasa a 0.11.0-beta.1. La sección del CHANGELOG suma «Para probar» (impresoras del paquete,
+  calibraciones, Ingeniería con Optimizar, Diseño, nube) y «Límites conocidos» (sin actualización automática,
+  paquetes `.zip` sin instalador, sin macOS, PNG de la cama sin mostrar, muchas funciones sin probar en una impresora).
+- `release.yml`: sin la variable `TISMA_UPDATES_KEY` publica la pre-release directo, sin `updates.json` y sin nada
+  que firmar; el actualizador queda apagado en esa versión. Con la variable, sigue el borrador para firmar.
+  `docs/FIRMAR_VERSIONES.md` lo explica en «Sin la clave».
+- La suite completa (`ctest`) pasa en Linux. `tools/ci_linux.sh` entero no corre en la sesión porque se corta a las
+  2 h; la CI de Windows corre en cada envío.
