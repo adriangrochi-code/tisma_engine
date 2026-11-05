@@ -64,6 +64,14 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
     tipo de placa elegido, si se nivela la cama, si se calibra el flujo y si se hace la calibración de vibraciones;
     esos valores salen de las opciones de impresión (regla 12).
 
+10 bis. **Dialectos** (campo `dialect` del bloque `gcode` del paquete, `profile_pack_format.md`): `prusaslicer` es el
+    lenguaje de arriba con los nombres de la documentación pública de PrusaSlicer; `orcaslicer`, `crealityprint` y
+    `elegooslicer` usan el mismo lenguaje con sus propios nombres de variables, que el motor llena con el valor
+    equivalente; `cura` solo reemplaza `{nombre}` por su valor, sin condiciones ni cuentas. Si el G-code de un
+    dialecto no se puede interpretar, se usa la versión simple del perfil y se avisa en el registro.
+10 ter. **Extrusión:** con el G-code del bloque `gcode`, el motor extruye en relativo o absoluto según
+    `relative_extrusion` de ese bloque.
+
 ## Dónde se usa
 
 11. **Qué G-code:** inicio, fin, antes y después de cada cambio de capa, cambio de herramienta, pausa, y los de inicio
@@ -87,4 +95,6 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 | GM6 | Una variable que no existe | Falla con `gcode_macro`, línea y columna, en castellano; no queda G-code |
 | GM7 | Un `{if}` sin `{endif}` | Falla con `gcode_macro` |
 | GM8 | Una Bambu Lab A1 del paquete con su G-code de inicio original y «nivelar la cama» prendido | El G-code tiene la parte de nivelación y de calibración; con la opción apagada, no |
+| GM10 | Una impresora `cura` con `M82` en su inicio y `relative_extrusion` `false` | Todo el G-code extruye en absoluto |
+| GM11 | Un G-code `orcaslicer` con `nozzle_temperature_initial_layer[0]` y un filamento de 220 °C de primera capa | `220` |
 | GM9 | Todas las impresoras del paquete, cada una con sus G-code originales | Todas laminan; las variables que falten quedan en el registro |

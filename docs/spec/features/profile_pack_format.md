@@ -134,6 +134,31 @@ para las impresoras 5 y 9.
    modelo sin extensión).
 4. Una impresora sin G-code de inicio o de fin usa el del motor para su dialecto.
 
+## G-code de la máquina con macros (`gcode`, desde el 05-11-2026)
+
+1. **Dónde:** cada modelo FFF trae `common.gcode` y cada variante su `gcode`, que va encima (como `settings`). Los
+   filamentos traen el suyo igual. Es el G-code original de la máquina, con macros; el motor lo interpreta según
+   `gcode_macros.md`. `profile.settings.machine.start_gcode` y `end_gcode` siguen siendo la versión simple de arriba.
+2. **Campos:**
+   - `dialect`: `prusaslicer`, `orcaslicer`, `crealityprint`, `elegooslicer` o `cura` (el lenguaje y los nombres de
+     las variables);
+   - `templates`: el G-code por nombre: `start`, `end`, `before_layer_change`, `layer_change`, `toolchange`,
+     `between_objects`, `color_change`, `pause`, `custom`, `timelapse`, `extrusion_role_change`; en filamentos
+     `filament_start` y `filament_end`; en `cura`, `extruder_start` y `extruder_end` son una lista, uno por extrusor
+     (`null` si falta). Solo estos textos tienen macros;
+   - `relative_extrusion`: si ese G-code espera extrusión relativa (`null` si no se sabe). Al usar `templates`, el motor
+     extruye como dice este campo, aunque el perfil diga otra cosa (en `cura` casi siempre `false`, porque su inicio
+     pone `M82`);
+   - `values`: solo en la familia `orcaslicer`: valores de la máquina con los nombres del dialecto, para llenar sus
+     variables;
+   - `expressions`: solo en `cura`, G-code que su programa calcula con un lenguaje de programación: el motor no lo
+     evalúa ni lo usa;
+   - `origin`, `source`, `keys`, `from`: de dónde salió; solo para mostrar.
+3. **Nombres de variables por dialecto:** un G-code `orcaslicer` (y `crealityprint`, `elegooslicer`) usa sus nombres,
+   por ejemplo `nozzle_temperature_initial_layer` por `first_layer_temperature` y
+   `bed_temperature_initial_layer_single` por `first_layer_bed_temperature`. El motor los llena con el mismo valor
+   (lista en `gcode_macros.md`, regla 9).
+
 ## Datos de la comunidad (`community.tar.xz`)
 
 1. **Rutas:** `community/printers/<Fabricante>/<Modelo>.json`, `community/filaments/<Fabricante>/<Nombre>.json`,
