@@ -9,8 +9,8 @@ unsigned: the release workflow makes it, the owner signs it
 
 The list ("format": "tisma-updates", "version": 1) holds the releases, newest
 first. This one goes first, with one entry per package: its system and
-family (from the file name: ...-windows-x64.zip, ...-linux-x64.zip,
-...-windows-x86.zip for the classic family), its download address in the
+family (from the file name, see SYSTEMS: ...-windows-x64.zip, ...-linux-x64.zip,
+...-windows-x86.zip for the legacy family, ....apk), its download address in the
 release, its size and SHA-256, and an empty "signature" that the owner's
 signing fills. The releases of --previous (the list published now) follow,
 without one of the same version. A version with a pre-release label goes to
@@ -31,13 +31,16 @@ import sys
 FORMAT = "tisma-updates"
 FORMAT_VERSION = 1
 
-# File name ending -> (system, family, min_system).
+# File name ending -> (system, family, min_system), as app_updates.md rule 13
+# names them: system windows-x64, windows-x86, linux-x64 or android; family
+# current or legacy (the classic 32-bit Windows one, legacy_windows.md).
 SYSTEMS = [
-    (re.compile(r"-windows-x64\.zip$"), ("windows", "current", "10")),
-    (re.compile(r"-windows-x86\.zip$"), ("windows", "classic", "6.0")),
-    (re.compile(r"-linux-x64\.(zip|AppImage)$"), ("linux", "current", "")),
+    (re.compile(r"-windows-x64\.(zip|exe|msi)$"), ("windows-x64", "current", "10")),
+    (re.compile(r"-windows-x86\.(zip|exe|msi)$"), ("windows-x86", "legacy", "6.0")),
+    (re.compile(r"-linux-x64\.(zip|AppImage)$"), ("linux-x64", "current", "")),
     (re.compile(r"\.apk$"), ("android", "current", "28")),
 ]
+EXPECTED_NAMES = "…-windows-x64.zip/.exe/.msi, …-windows-x86.zip/.exe/.msi, …-linux-x64.zip/.AppImage, ….apk"
 
 
 def fail(message):
@@ -68,14 +71,14 @@ def package_entry(path, url_base):
     return None
 
 
-def make_list(version, tag, repo, notes, packages, previous=None, date=None, generated=None):
+def make_list(version, tag, repo, notes, packages, previous=None, date=None, generated=None, notes_en=None):
     """The list as a dict, this release first."""
     url_base = f"https://github.com/{repo}/releases/download/{tag}/"
     entries = []
     for p in packages:
         e = package_entry(pathlib.Path(p), url_base)
         if e is None:
-            fail(f"{p}: no system for this file name")
+            fail(f"{p}: no system for this file name (expected names: {EXPECTED_NAMES})")
         entries.append(e)
     if not entries:
         fail("no packages")
@@ -83,7 +86,9 @@ def make_list(version, tag, repo, notes, packages, previous=None, date=None, gen
         "version": version,
         "channel": "beta" if "-" in version else "stable",
         "date": date or datetime.date.today().isoformat(),
-        "notes": {"es": notes},
+        # English for the programs in English (rule 13 falls back to it);
+        # the CHANGELOG is Spanish, so its text unless one is given.
+        "notes": {"es": notes, "en": notes_en if notes_en is not None else notes},
         "packages": entries,
     }
     older = []
@@ -110,6 +115,7 @@ def main():
     parser.add_argument("--tag", required=True)
     parser.add_argument("--repo", required=True, help="owner/name on GitHub")
     parser.add_argument("--notes", required=True, help="a file with the release notes (Spanish)")
+    parser.add_argument("--notes-en", help="a file with the release notes in English (by default, the Spanish ones)")
     parser.add_argument("--previous", help="the list published now, if there is one")
     parser.add_argument("--date")
     parser.add_argument("-o", "--output", required=True)
@@ -122,7 +128,8 @@ def main():
         except (OSError, ValueError) as e:
             fail(f"{a.previous}: {e}")
     notes = pathlib.Path(a.notes).read_text(encoding="utf-8").strip()
-    listing = make_list(a.version, a.tag, a.repo, notes, a.packages, previous, a.date)
+    notes_en = pathlib.Path(a.notes_en).read_text(encoding="utf-8").strip() if a.notes_en else None
+    listing = make_list(a.version, a.tag, a.repo, notes, a.packages, previous, a.date, notes_en=notes_en)
     pathlib.Path(a.output).write_bytes(dump(listing))
 
 

@@ -12,6 +12,17 @@ Lo que pasa en cada versión:
 
 Si el borrador no se firma, nadie recibe la actualización: no hay nada que deshacer.
 
+Los paquetes tienen que llamarse así para que la lista sepa de qué sistema es cada uno (`app_updates.md`, regla 13):
+
+| Nombre del archivo termina en | Sistema | Familia |
+|---|---|---|
+| `-windows-x64.zip`, `.exe` o `.msi` | `windows-x64` | `current` |
+| `-windows-x86.zip`, `.exe` o `.msi` | `windows-x86` | `legacy` (Windows viejo, 32 bits) |
+| `-linux-x64.zip` o `.AppImage` | `linux-x64` | `current` |
+| `.apk` | `android` | `current` |
+
+Un archivo con otro nombre (por ejemplo `TismaSetup-1.0.0-x64.exe`) frena la CI con «no system for this file name».
+
 ## Lo que hace falta en la computadora (una vez)
 
 - **Git para Windows**, que trae **Git Bash** y, dentro, `openssl` 3. Todos los comandos de esta guía van en Git Bash.

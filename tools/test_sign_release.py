@@ -53,7 +53,13 @@ class SignRelease(unittest.TestCase):
         new = listing["releases"][0]
         self.assertEqual(new["channel"], "stable")
         systems = {(p["system"], p["family"]) for p in new["packages"]}
-        self.assertEqual(systems, {("windows", "current"), ("linux", "current")})
+        self.assertEqual(systems, {("windows-x64", "current"), ("linux-x64", "current")})  # rule 13's names
+        self.assertEqual(new["notes"], {"es": "Novedades", "en": "Novedades"})
+        old_windows = self.folder / "tisma-engine-1.0.0-windows-x86.zip"
+        old_windows.write_bytes(b"x")
+        self.assertEqual(updates_list.package_entry(old_windows, "")["system"], "windows-x86")
+        self.assertEqual(updates_list.package_entry(old_windows, "")["family"], "legacy")
+        old_windows.unlink()
         for p in new["packages"]:
             self.assertTrue(p["url"].startswith("https://github.com/owner/repo/releases/download/v1.0.0/"))
             self.assertEqual(p["signature"], "")
