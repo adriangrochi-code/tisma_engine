@@ -11349,3 +11349,16 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - Prueba en `[device][net]` contra el Moonraker simulado.
 - **Falta:** la lista «En el perfil / En la impresora» para aceptar uno por uno lo que difiere, y el botón «Leer de la
   impresora» en Límites. Sin probar con una impresora real.
+
+## 2026-11-05 — mantenimiento (16:41)
+
+- Revisado: `dev` y `main` al día (nada nuevo en `main`); fuzz 2000 corridas con la semilla 202611051641: 0 fallas,
+  26 descartadas por no imprimibles; ASan y UBSan sobre `[limits]`, `[ssdp]`, `[thumbnail]` y `[print_host]`: limpio.
+- Revisión de los lectores que reciben datos de la red o del puerto serie (lo nuevo de la noche):
+  - **Encontrado y arreglado:** los límites de Marlin y Klipper aceptaban «inf», «nan» o «1e999» de una línea dañada
+    y habrían escrito una velocidad o una cama infinitas en el perfil. Ahora solo se toman números finitos.
+  - **Encontrado y arreglado:** un archivo QOI de 22 bytes que dice medir 16384 × 16384 pedía 1 GB antes de fallar.
+    Ahora se rechaza enseguida: cada operación da a lo sumo 62 píxeles.
+  - mDNS: 5000 copias dañadas de una respuesta, sin lecturas fuera del paquete.
+- Pruebas nuevas: copias dañadas de una respuesta mDNS, de un QOI y de M115/M503.
+- No medido: las fases del banco de pruebas (sin cambios en el corte desde la última medición).

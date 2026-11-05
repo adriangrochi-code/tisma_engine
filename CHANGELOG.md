@@ -28,6 +28,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- Una respuesta dañada de la impresora («inf», «nan») ya no puede escribir un límite infinito en el perfil.
 - Con dos boquillas distintas, la pared con la más fina y alturas de capa por encima de su tope, las piezas de cada
   extrusor se cortaban en capas distintas de las de la placa y sus paredes quedaban a otra altura (el fuzz, semilla
   202611050900, corrida 1658).
