@@ -40,8 +40,13 @@ táctil:
 
 ## Pantallas
 
-5. **Secciones**, en una barra abajo (o al costado en horizontal): **Placa**, **Impresión**, **Material**,
-   **Impresora** y **Más**. Son las mismas del escritorio (`settings_panel.md`).
+5. **Secciones** (decisión del dueño, 05-11-2026), en una barra abajo (o al costado en horizontal): **Biblioteca**,
+   **Placa**, **Ingeniería**, **Impresora** y **Más**.
+   - La app abre en **Biblioteca** («Mi biblioteca», `local_library.md`).
+   - **Ingeniería** junta el análisis estructural (FEA), el aerodinámico (CFD), Diseño (CAD) y las piezas (engranajes
+     y tornillería).
+   - Los ajustes de **Impresión** se abren desde la Placa; los de **Material**, desde la sección Impresora. Son los
+     mismos paneles del escritorio (`settings_panel.md`).
 6. **Placa:**
    - la cama y el modelo ocupan la pantalla;
    - arriba, la tarjeta de la impresora (`settings_panel.md`, reglas 32 a 36), con dibujos de la impresora, la cama y
