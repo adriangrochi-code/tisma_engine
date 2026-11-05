@@ -28,6 +28,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- Mirando desde abajo de la cama (por ejemplo para pintar soportes), la cama ya no tapa la cara de abajo de la pieza:
+  queda solo la grilla.
 - La separación entre el borde de adherencia y la pieza ahora se ve en el nivel Normal (antes solo en Avanzado).
 - «Solo desde la cama» ahora también vale para los soportes de árbol (antes salían igual que sin la opción).
 - El G-code de inicio copiado del programa de otro fabricante (por ejemplo Anycubic) ya no falla por los nombres de sus

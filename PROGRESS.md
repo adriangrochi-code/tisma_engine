@@ -11401,3 +11401,12 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   abre en Normal. Ahora está en Normal, al lado del ancho del borde. La lista Básica sigue siendo la de
   `settings_panel.md`.
 - Prueba en `[layout]`.
+
+## 2026-11-05 — BH43: la cama no tapa la pieza desde abajo
+
+- Al pintar soportes mirando desde abajo, el plato opaco tapaba la cara de abajo de la pieza.
+- Sin ficha; decisión propia: con el ojo debajo de la cama (z < 0) no se dibujan el plato, el modelo de la cama ni su
+  imagen. La grilla queda. Vale en Vulkan y en OpenGL, pintando o no.
+- Prueba en `[ui]` (`plate_hidden`).
+- Captura OpenGL (xvfb) del soporte de teléfono desde arriba y desde abajo: desde abajo se ve la base por debajo. Sin
+  probar en Vulkan ni en Windows.
