@@ -143,6 +143,38 @@ TEST_CASE("paint: a round brush paints a disc on a large face and erases it agai
     CHECK(p.size(PaintChannel::Support) == 0);
 }
 
+TEST_CASE("paint: a stroke from one dab to the next paints the whole band between them (BH44)", "[paint]") {
+    const TriangleMesh m = box(0, 0, 0, 40, 40, 10);
+    Painting p;
+    Brush brush;
+    brush.radius = 2.0;
+    brush.detail = 0.1;
+    brush.view = {0, 0, -1};
+    brush.stroke = true;
+    brush.from = {5, 20, 10};
+    brush.centre = {35, 20, 10};
+    paint(p, PaintChannel::Seam, m, brush);
+    // A band 30 mm long and 4 wide with round ends: 30 x 4 + pi r2.
+    const double band = 30.0 * 4.0 + std::numbers::pi * 4.0;
+    CHECK_THAT(painted_area(p, PaintChannel::Seam, m, kPaintEnforce), WithinRel(band, 0.03));
+    // Two separate dabs at its ends leave the middle bare.
+    Painting dots;
+    Brush dab = brush;
+    dab.stroke = false;
+    paint(dots, PaintChannel::Seam, m, dab);
+    dab.centre = brush.from;
+    paint(dots, PaintChannel::Seam, m, dab);
+    CHECK_THAT(painted_area(dots, PaintChannel::Seam, m, kPaintEnforce), WithinRel(2.0 * std::numbers::pi * 4.0, 0.03));
+    // A stroke across an edge reaches the side face too, within the radius.
+    Painting edge;
+    Brush across = brush;
+    across.view = {0, 0, 0};
+    across.from = {20, 39, 10};
+    across.centre = {20, 41, 9};
+    paint(edge, PaintChannel::Seam, m, across);
+    CHECK(painted_area(edge, PaintChannel::Seam, m, kPaintEnforce) > 10.0);
+}
+
 TEST_CASE("paint: a brush larger than a triangle marks it whole", "[paint]") {
     const TriangleMesh m = box(0, 0, 0, 10, 10, 10);
     Painting p;

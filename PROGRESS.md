@@ -11410,3 +11410,20 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - Prueba en `[ui]` (`plate_hidden`).
 - Captura OpenGL (xvfb) del soporte de teléfono desde arriba y desde abajo: desde abajo se ve la base por debajo. Sin
   probar en Vulkan ni en Windows.
+
+## 2026-11-05 — BH44: trazo de pintura continuo y menos trabajo por cuadro
+
+- Pintando costura, el trazo quedaba en puntos sueltos y el FPS bajaba al arrastrar.
+- Causa del trazo: el arrastre ponía un toque cada media brocha en la pantalla, con tope de 64 por cuadro. Con brocha
+  chica y 30 FPS, un movimiento rápido pasaba el tope y los toques se separaban.
+- Arreglo:
+  - el motor de pintura tiene una brocha de tramo (`Brush::stroke`): marca lo que está a menos del radio del segmento
+    entre dos toques;
+  - el arrastre pone un toque cada brocha entera (tope 32), unido al anterior si está cerca (hasta 6 radios, para no
+    cruzar hacia una cara de atrás).
+  - Resultado: trazo continuo a cualquier velocidad y unas 4 veces menos toques por cuadro.
+- Medido (banco temporal, sin xvfb, con el CI corriendo al lado, así que con ruido): un toque de 2 mm cuesta ~0,3 ms y
+  rehacer la malla pintada ~0,2 ms.
+- Prueba `[paint]`: la banda de 30 mm tiene el área de un rectángulo más un círculo; dos toques sueltos dejan el medio
+  sin pintar. Las pruebas de interfaz de pintura pasan.
+- Sin probar en Windows ni con la pieza del tester.

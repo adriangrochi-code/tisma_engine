@@ -870,7 +870,7 @@ private:
     void mixing_dialog();
     std::string filament_color(int extruder) const;
     void objects_material_changed();
-    void brush_stroke(std::size_t object, ImVec2 at);
+    void brush_stroke(std::size_t object, ImVec2 at, bool joined = false);
     void brush_drag(std::size_t object);
     void update_paint_view();
     Vec3 mouse_ray() const;
@@ -1186,6 +1186,7 @@ private:
     bool paint_dirty_ = true;  // the view's copy of the paint is out of date
     std::optional<float> brush_depth_; // how far ahead of the eye the face under the mouse is
     ImVec2 last_stroke_{0.0f, 0.0f};   // where the stroke's last dab went, on the screen
+    std::optional<Vec3> last_dab_;      // and on the model, while the stroke stays on it
     bool has_plate_ = false;          // there is a model on the plate
     std::size_t plate_triangles_ = 0; // all of the plate's
     TriangleMesh plate_now() const;
@@ -9716,6 +9717,7 @@ void App::viewport() {
             selected_ = int(hit->object);
             painting_object_ = int(hit->object);
             last_stroke_ = io.MousePos;
+            last_dab_.reset();
             brush_stroke(hit->object, io.MousePos);
         }
     } else if (painting && painting_object_ >= 0 && ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
@@ -11356,9 +11358,11 @@ void App::paint_card(ImVec2 at) {
     ImGui::PopStyleVar(2);
 }
 
-// The stroke from the last dab to the mouse: dabs half a brush apart along
-// the way, so a fast mouse leaves a line and not separate dots (the testers'
-// UI37, the owner's video of 31-10-2026).
+// The stroke from the last dab to the mouse: a point of the model about a
+// brush width apart on the screen along the way, each drawn as a band from
+// the one before (Brush::stroke), so a fast mouse on a slow computer still
+// leaves one line and not separate dots (the testers' UI37 and BH44, the
+// owner's video of 31-10-2026), with few dabs a frame.
 void App::brush_drag(std::size_t object) {
     const ImVec2 to = ImGui::GetIO().MousePos;
     const float dx = to.x - last_stroke_.x, dy = to.y - last_stroke_.y;
@@ -11367,31 +11371,44 @@ void App::brush_drag(std::size_t object) {
     float pixels = 4.0f;
     if (brush_depth_ && view_size_.y > 0.0f)
         pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.lens_fov())) * 0.5f * view_size_.y;
-    const int steps = std::clamp(int(std::ceil(distance / std::max(pixels * 0.5f, 1.0f))), 1, 64);
+    const int steps = std::clamp(int(std::ceil(distance / std::max(pixels * 2.0f, 2.0f))), 1, 32);
     for (int k = 1; k <= steps; ++k) {
         const float t = float(k) / float(steps);
-        brush_stroke(object, ImVec2(last_stroke_.x + dx * t, last_stroke_.y + dy * t));
+        brush_stroke(object, ImVec2(last_stroke_.x + dx * t, last_stroke_.y + dy * t), true);
     }
     last_stroke_ = to;
 }
 
-// Paints the face under a point of the view, on this model only; Shift erases.
-void App::brush_stroke(std::size_t object, ImVec2 at) {
+// Paints the face under a point of the view, on this model only; Shift
+// erases. Joined, the band from the stroke's last dab to it, when that dab
+// is near (not across a jump to a face further back).
+void App::brush_stroke(std::size_t object, ImVec2 at, bool joined) {
     const Vec3 d = ray_at(at), e = camera_.eye();
     const auto hit = pick(placed_meshes_, plate_indexes(), e, d);
-    if (!hit || hit->object != object)
+    if (!hit || hit->object != object) {
+        last_dab_.reset();
         return;
+    }
     Brush brush;
     const Vec3 c = e + d * float(hit->distance);
     brush.centre = {c.x, c.y, c.z};
+    Vec3 from = c;
+    if (joined && last_dab_ && length(c - *last_dab_) <= 6.0f * brush_radius_) {
+        from = *last_dab_;
+        brush.stroke = true;
+        brush.from = {from.x, from.y, from.z};
+    }
+    last_dab_ = c;
     brush.radius = brush_radius_;
     brush.detail = std::max(0.05, double(brush_radius_) / 8.0);
     brush.view = {d.x, d.y, d.z};
     brush.mark = ImGui::GetIO().KeyShift                ? kPaintNone
                  : paint_channel_ == PaintChannel::Fuzzy ? kPaintEnforce
                                                          : paint_mark_;
-    const Vec3f lo{c.x - brush_radius_, c.y - brush_radius_, c.z - brush_radius_};
-    const Vec3f hi{c.x + brush_radius_, c.y + brush_radius_, c.z + brush_radius_};
+    const Vec3f lo{std::min(c.x, from.x) - brush_radius_, std::min(c.y, from.y) - brush_radius_,
+                   std::min(c.z, from.z) - brush_radius_};
+    const Vec3f hi{std::max(c.x, from.x) + brush_radius_, std::max(c.y, from.y) + brush_radius_,
+                   std::max(c.z, from.z) + brush_radius_};
     const std::vector<std::uint32_t> near = indexes_[object].near(lo, hi);
     if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush, &near) > 0) {
         painted_ = true;
