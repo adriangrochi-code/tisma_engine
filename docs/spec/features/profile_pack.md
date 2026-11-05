@@ -78,6 +78,10 @@ Preferencias de la interfaz, no del laminado:
     - un conjunto vacío (`[]`, sin ninguna impresora) se trata como nulo y queda en el registro como error del paquete
       (decisión del equipo de fichas, 05-11-2026: la versión 2026.10.27 trae 392 entradas apuntando a un conjunto
       vacío);
+    - un perfil de impresión que vale para todas (nulo o vacío) se ofrece solo si cabe en la impresora: su `nozzle`, si
+      lo trae, es la boquilla de la variante, y su altura de capa y su ancho de línea están dentro de lo que la
+      impresora y la boquilla permiten (los mismos límites que comprueba el laminado). Los que no caben no se muestran;
+      así nunca se ofrece algo que después no lamina (en 500 combinaciones al azar, 56 fallaban por esto);
     - el filamento y el perfil de impresión de `defaults` de una variante siempre valen para esa variante, aunque
       `compatible.json` no la nombre.
 13. **Por defecto:** al elegir una variante, se eligen el primer filamento de su `defaults.filament` y el perfil de
