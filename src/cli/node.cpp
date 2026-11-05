@@ -13,6 +13,7 @@
 #include "project/engineering_case.hpp"
 #include "gcode/binary.hpp"
 #include "gcode/output.hpp"
+#include "gcode/thumbnail.hpp"
 #include "io/model.hpp"
 #include "io/paths.hpp"
 #include "project/project.hpp"
@@ -391,7 +392,7 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     // Text or binary, as the profile says (gcode.binary).
     const bool written = write_file(a.output, [&](std::ostream& f) {
         if (binary_output(settings))
-            f << binary_gcode(r.gcode, settings);
+            f << binary_gcode(r.gcode, settings, gcode_thumbnails(mesh, settings));
         else
             f << r.gcode;
     });

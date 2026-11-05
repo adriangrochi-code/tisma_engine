@@ -5805,7 +5805,8 @@ void App::export_gcode_to(const std::filesystem::path& path) {
         return;
     }
     std::vector<Warning> warnings;
-    const GcodeExport e = export_gcode(path, *result_->model, result_->settings, &warnings);
+    const std::vector<GcodeThumbnail> thumbnails = gcode_thumbnails(plate_mesh(placed_meshes_), result_->settings, &warnings);
+    const GcodeExport e = export_gcode(path, *result_->model, result_->settings, &warnings, thumbnails);
     if (!e.written) {
         std::vector<std::string> details;
         for (const GcodeProblem& p : e.check.problems)

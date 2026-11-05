@@ -2,6 +2,9 @@
 
 #include "gcode/thumbnail.hpp"
 
+#include "config/settings.hpp"
+#include "io/png.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -173,6 +176,48 @@ std::vector<std::uint8_t> draw_part(const TriangleMesh& mesh, int width, int hei
                 px[k] = std::uint8_t(std::clamp(std::lround(sum[k] / n * 255.0), 0L, 255L));
             px[3] = std::uint8_t(n * 255 / 4);
         }
+    return out;
+}
+
+std::vector<GcodeThumbnail> make_thumbnails(const TriangleMesh& mesh, const std::vector<ThumbnailSize>& sizes,
+                                            std::vector<ThumbnailSize>* skipped) {
+    std::vector<GcodeThumbnail> out;
+    for (const ThumbnailSize& s : sizes) {
+        if (s.format == ThumbnailFormat::Jpg) {
+            if (skipped)
+                skipped->push_back(s);
+            continue;
+        }
+        const std::vector<std::uint8_t> rgba = draw_part(mesh, s.width, s.height);
+        const std::vector<std::uint8_t> file = s.format == ThumbnailFormat::Qoi
+                                                   ? encode_qoi(s.width, s.height, rgba.data())
+                                                   : encode_png(s.width, s.height, rgba.data());
+        out.push_back({s.format == ThumbnailFormat::Qoi ? 2 : 0, s.width, s.height, std::string(file.begin(), file.end())});
+    }
+    return out;
+}
+
+std::vector<GcodeThumbnail> gcode_thumbnails(const TriangleMesh& mesh, const Settings& settings,
+                                             std::vector<Warning>* warnings) {
+    if (settings.gcode_thumbnails.empty())
+        return {};
+    std::vector<ThumbnailSize> sizes;
+    try {
+        sizes = parse_thumbnails(settings.gcode_thumbnails);
+    } catch (const std::invalid_argument&) {
+        return {}; // refused when the settings were read
+    }
+    if (!binary_output(settings)) {
+        if (warnings && !sizes.empty())
+            warnings->push_back({"thumbnails", -1, 0.0,
+                                 "gcode.thumbnails: the pictures go only in a binary G-code for now", 0.0});
+        return {};
+    }
+    std::vector<ThumbnailSize> skipped;
+    std::vector<GcodeThumbnail> out = make_thumbnails(mesh, sizes, &skipped);
+    if (warnings && !skipped.empty())
+        warnings->push_back({"thumbnails", -1, 0.0, "gcode.thumbnails: " + thumbnails_text(skipped) +
+                                                        " left out: JPG pictures are not written yet", 0.0});
     return out;
 }
 

@@ -261,6 +261,7 @@ add_library(tisma_core
   src/io/vtk.cpp
   src/io/ply.cpp
   src/io/stl.cpp
+  src/io/png.cpp
   src/io/checksum.cpp
   src/io/zip.cpp
   src/io/xml.cpp

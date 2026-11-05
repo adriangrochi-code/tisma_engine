@@ -66,14 +66,25 @@
      "Guarda el archivo en el formato binario .bgcode en vez del G-code de texto de siempre. Además de las órdenes, "
      "lleva en bloques aparte los datos de la impresión (impresora, filamento, tiempos, todos los ajustes) y una suma "
      "de control en cada bloque, que deja ver si el archivo llegó dañado.\n\nSolo lo leen las impresoras que aceptan "
-     ".bgcode; las demás no lo entienden. Por ahora no lleva miniaturas y no se comprime. Si el nombre termina en "
+     ".bgcode; las demás no lo entienden. Por ahora no se comprime; lleva las miniaturas que pidas. Si el nombre termina en "
      ".gcode, pasa a .bgcode.\n\nEjemplo: apagado para casi todas las impresoras; encendido solo si el manual de la "
      "tuya dice que lee .bgcode.",
      "Saves the file in the binary .bgcode format instead of the usual text G-code. Besides the instructions, it "
      "holds the print's data in separate blocks (printer, filament, times, every setting) and a checksum in each "
      "block, which shows whether the file arrived damaged.\n\nOnly printers that accept .bgcode can read it; the rest "
-     "do not understand it. For now it has no thumbnails and is not compressed. A name ending in .gcode becomes "
+     "do not understand it. For now it is not compressed; it holds the thumbnails you ask for. A name ending in .gcode becomes "
      ".bgcode.\n\nExample: off for almost every printer; on only if your printer's manual says it reads .bgcode."},
+    {"gcode.thumbnails",
+     "Pequeñas imágenes de la pieza que el archivo lleva al principio, para que la pantalla de la impresora o tu "
+     "programa de impresión muestren qué es antes de abrirlo. Se escriben como ancho x alto / formato, separadas por "
+     "comas; el formato puede ser PNG, JPG o QOI.\n\nCada impresora pide sus tamaños: los dice su manual o su perfil. "
+     "Por ahora van solo en el G-code binario (.bgcode) y las JPG todavía no se escriben; el motor lo avisa.\n\n"
+     "Ejemplo: 16x16/PNG,220x124/PNG para una impresora que muestra una imagen chica y una mediana.",
+     "Small pictures of the part at the start of the file, so the printer's screen or your print program can show "
+     "what it is before opening it. Write them as width x height / format, separated by commas; the format can be "
+     "PNG, JPG or QOI.\n\nEach printer asks for its own sizes: its manual or its profile says them. For now they go "
+     "only in binary G-code (.bgcode) and JPG pictures are not written yet; the engine warns about it.\n\n"
+     "Example: 16x16/PNG,220x124/PNG for a printer that shows a small picture and a medium one."},
     {"gcode.corner_smoothing",
      "En una esquina en punta la impresora tiene que frenar casi del todo, girar y volver a acelerar. Este ajuste "
      "redondea esas esquinas con una curvita que se aparta del vértice como mucho esta distancia, para que pase sin "

@@ -11187,3 +11187,21 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - Decisión del motor, anotada acá: el motor sí las escribe desde la línea de comandos cuando llegue el formato. La
   prueba X7 cuenta lo que hace Tisma Slicer, y `gcode_firmware.md` pide la miniatura en cuanto el motor pueda dibujarla
   sin la vista 3D.
+
+## 2026-11-05 — miniaturas del G-code, parte 2: en el G-code binario
+
+- El equipo de fichas confirmó el bloque de miniatura del formato binario: tipo 5, con formato (0 PNG, 1 JPG, 2 QOI),
+  ancho y alto en 16 bits, y la imagen como datos. Va después de los datos de la impresora y antes de los de la
+  impresión.
+- `binary_gcode` escribe esos bloques y `read_binary_gcode` los lee de vuelta.
+- Las miniaturas se hacen desde la pieza en los tres lugares que exportan: la línea de comandos (`slice`), la
+  interfaz y los nodos.
+- El escritor de PNG pasó al núcleo (`src/io/png.*`), así la línea de comandos lo usa sin la interfaz.
+- Avisos:
+  - en un G-code de texto: «the pictures go only in a binary G-code for now»;
+  - una JPG pedida se deja fuera y se avisa.
+- Los textos de ayuda del ajuste y docs/CONFIG.md están al día.
+- **Falta:**
+  - la forma en el G-code de texto (la mide el equipo de fichas);
+  - el codificador JPG;
+  - comprimir el PNG (hoy son bloques sin comprimir: una de 220×124 ocupa unos 110 kB).

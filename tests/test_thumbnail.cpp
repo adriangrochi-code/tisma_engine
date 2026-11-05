@@ -1,6 +1,7 @@
 // Tests of the G-code thumbnails (src/gcode/thumbnail.hpp; gcode_extras.md, rule 8).
 
 #include "config/settings.hpp"
+#include "gcode/binary.hpp"
 #include "gcode/thumbnail.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -95,4 +96,47 @@ TEST_CASE("thumbnails: QOI files written and read back the same", "[gcode][thumb
     REQUIRE(decode_qoi(encode_qoi(25, 20, mixed.data()), w, h, back));
     CHECK(back == mixed);
     CHECK_FALSE(decode_qoi({'n', 'o', 'p', 'e'}, w, h, back));
+}
+
+TEST_CASE("thumbnails: one block each in a binary G-code, after the printer's metadata", "[gcode][thumbnail][binary]") {
+    Settings s;
+    s.gcode_binary = true;
+    s.gcode_thumbnails = "16x16/PNG,32x24/JPG,20x20/QOI";
+    std::vector<Warning> warnings;
+    const std::vector<GcodeThumbnail> t = gcode_thumbnails(box(20, 10, 5), s, &warnings);
+    REQUIRE(t.size() == 2); // the JPG left out, said in a warning
+    REQUIRE(warnings.size() == 1);
+    CHECK(warnings[0].message.find("32x24/JPG") != std::string::npos);
+    CHECK(t[0].format == 0);
+    CHECK(t[0].data.substr(1, 3) == "PNG");
+    CHECK(t[1].format == 2);
+    CHECK(t[1].data.substr(0, 4) == "qoif");
+
+    const std::string text = "G28\nG1 X10 Y10\n; estimated printing time = 1m\n; layers.height = 0.2\n";
+    const std::string bin = binary_gcode(text, s, t);
+    const BinaryGcode back = read_binary_gcode(bin);
+    CHECK(back.thumbnails == t);
+    CHECK(back.gcode == "G28\nG1 X10 Y10\n");
+    // The order: file, printer, the thumbnails, print, slicer, G-code.
+    const std::size_t printer = bin.find("printer_model="), picture = bin.find("qoif"),
+                      print = bin.find("estimated printing time=");
+    CHECK(printer < picture);
+    CHECK(picture < print);
+    // Each block's parameters: format, width, height (16 bits, little-endian).
+    const std::size_t qoi_block = picture - 14;
+    CHECK(bin[qoi_block] == 5);                 // the thumbnail type
+    CHECK(bin[qoi_block + 8] == 2);             // QOI
+    CHECK(bin[qoi_block + 10] == 20);           // width
+    CHECK(bin[qoi_block + 12] == 20);           // height
+
+    // A text G-code: none yet, said once.
+    s.gcode_binary = false;
+    warnings.clear();
+    CHECK(gcode_thumbnails(box(20, 10, 5), s, &warnings).empty());
+    CHECK(warnings.size() == 1);
+    // Nothing asked: nothing, no warning.
+    s.gcode_thumbnails.clear();
+    warnings.clear();
+    CHECK(gcode_thumbnails(box(20, 10, 5), s, &warnings).empty());
+    CHECK(warnings.empty());
 }
