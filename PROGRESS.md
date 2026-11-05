@@ -11297,3 +11297,25 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - Prueba `[limits]` con la respuesta de M115 de la documentación de Marlin, un M503 en milímetros y otro en pulgadas,
   Klipper, y la regla de no pisar lo que escribió la persona.
 - **Sigue:** pedirlos al conectar por USB y por Moonraker, y la lista para aceptarlos en la interfaz.
+
+## 2026-11-05 — mantenimiento (bloque de 8 h, 08:41 UTC)
+
+- **Fuzz de 2000 corridas, semilla 202611050900:** 1 falla y 28 rechazadas por no imprimibles.
+  - La falla: dos boquillas (0,4 y 0,339), las paredes con la fina, alturas de capa por lista que piden más que su
+    tope, y copias con un extrusor cada una. El juego compartido de capas de las piezas (`slice_tools`, `frame.stack`)
+    se planificaba sin el tope de la boquilla de las paredes: 38 capas de 0,4 mm. La placa usaba 40 capas de
+    0,339 mm. Las paredes de cada capa quedaban en otra.
+  - Arreglo: `frame.stack` con los mismos ajustes que la placa (`part_nozzles`).
+  - Prueba nueva en `[nozzles]`: falla con el código anterior y pasa con el arreglo.
+- **Herramienta:** `TISMA_FUZZ_ONLY=n` lamina solo la corrida n del fuzz y sortea las anteriores sin laminarlas. La
+  corrida 1658 se reproduce en 0,2 s en vez de unos 10 minutos.
+- **Prueba intermitente:** `ui_pack_offline_first_run` falló dos veces en la corrida completa y pasa sola.
+  - Causa probable: con la máquina ocupada, el aviso «Sin conexión» vence (6 s) antes de que el script lo busque.
+  - Arreglo: el script guarda los avisos ya mostrados y `expect-toast` también busca entre ellos. No se pudo
+    reproducir la falla a propósito.
+- **Avisos del compilador:** se arreglaron los `-Wshadow` de `gcode/writer.cpp` (barrido hacia adentro) y de
+  `aero/aero.cpp`, y un `-Wconversion` de `cad/sketch.cpp`.
+- **ASan** sobre lo nuevo de la noche (`[thumbnail]`, `[limits]`, `[device][net]`, `[ssdp]`, `[image]`, `[bed_art]`,
+  `[bambu]`): 30 casos, limpio.
+- **Sin medir esta vez:** las fases del banco de pruebas. La máquina estaba cargada con el fuzz y la compilación con
+  ASan, y los números no habrían servido.

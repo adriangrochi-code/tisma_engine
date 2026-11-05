@@ -1000,7 +1000,11 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         }
         if (!settings.placement_drop_to_bed) // what is under the bed is not printed (placement.md, PL5)
             min_z = std::max(min_z, 0.0f);
-        frame.stack = plan_layer_stack(oriented, min_z, max_z, settings);
+        // With the same settings as the plate's slice_layers above (its
+        // nozzles' layer cap), or the parts land on other layers than the
+        // plate's (fuzzer, seed 202611050900, run 1658: 38 layers of 0.4 mm
+        // under 40 of 0.339 mm, two nozzles and variable heights).
+        frame.stack = plan_layer_stack(oriented, min_z, max_z, part_nozzles(settings, 1).settings);
         frame.centre = {0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     }
     const std::size_t n = out.layers.size();

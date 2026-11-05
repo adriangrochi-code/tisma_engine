@@ -10,6 +10,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Arreglado
+
+- Con dos boquillas distintas, la pared con la más fina y alturas de capa por encima de su tope, las piezas de cada
+  extrusor se cortaban en capas distintas de las de la placa y sus paredes quedaban a otra altura (el fuzz, semilla
+  202611050900, corrida 1658).
+
 ### Agregado
 
 - Cámara de las impresoras Bambu Lab A1 y P1 en la página Dispositivo: casilla «Cámara». Sin probar con una cámara
