@@ -626,7 +626,7 @@ Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la fic
   `src/device/print_host.*` contra simuladores propios: OctoPrint, Moonraker, PrusaLink y Duet (2026-11-05), y en la
   página de Dispositivo («Programa en la red»: probar, estado, enviar e imprimir, pausar, seguir, cancelar). También el botón
   principal «Mandar a la impresora» y el diálogo de envío con nombre, con «Subir y simular» en Duet (reglas 19 y 20).
-  Falta la búsqueda por Zeroconf (OctoPrint, Moonraker)
+  Búsqueda por Zeroconf de OctoPrint hecha (2026-11-05). Falta la de Moonraker (nombres `.local` y su API)
 - [ ] Probado con una impresora real por USB (necesita al dueño)
 
 ## Estado de P1

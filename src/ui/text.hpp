@@ -808,6 +808,7 @@
     X(HostUpload, "Subir", "Upload") \
     X(HostUploadPrint, "Subir e imprimir", "Upload and Print") \
     X(HostUploadSimulate, "Subir y simular", "Upload and Simulate") \
+    X(HostNoneFound, "No apareció ninguno. Revisá que la computadora y la impresora estén en la misma red y que el cortafuegos deje pasar mDNS (UDP 5353). También podés escribir la dirección.", "None found. Check that the computer and the printer are on the same network and that the firewall lets mDNS (UDP 5353) through. You can also type the address.") \
     X(HostFailed, "El programa de la impresora contestó con un problema: %s", "The printer's program answered with a problem: %s") \
     X(BambuHelp, "En la impresora: activá el modo «Solo LAN» y el modo desarrollador (Ajustes › Solo LAN). Dirección = la IP de la impresora; código = el código de acceso que muestra ahí. El número de serie se lee de la impresora.", "Bambu Lab: on the printer turn on LAN only mode and Developer mode (Settings > LAN only). Hostname = IP address of the printer, API key = access code shown there. The serial number is read from the printer.") \
     X(BambuSearch, "Buscar en la red", "Browse the network") \

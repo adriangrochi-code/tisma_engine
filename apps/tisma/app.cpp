@@ -42,6 +42,7 @@
 #include "device/bambu_simulator.hpp"
 #include "ui/image_decode.hpp"
 #include "device/gcode_host.hpp"
+#include "device/mdns.hpp"
 #include "device/print_host.hpp"
 #include "device/ssdp.hpp"
 #include "device/serial_port.hpp"
@@ -1566,6 +1567,9 @@ private:
     std::string host_job_what_;               // what the running job is, for its message
     bool host_start_ = true;                  // «Start printing» after the upload
     bool host_dialog_open_ = false;           // the upload dialog, to open next frame
+    std::future<std::vector<device::MdnsService>> host_search_; // Zeroconf, for OctoPrint
+    std::vector<device::MdnsService> host_found_;
+    bool host_searched_ = false;
     std::string host_dialog_name_;
     device::BambuConfig bambu_;               // address, access code (a secret), serial, accepted certificate
     std::unique_ptr<device::BambuSimulator> bambu_sim_;
@@ -20964,6 +20968,10 @@ void App::host_poll() {
     }
     if (host_status_job_.valid() && host_status_job_.wait_for(0ms) == std::future_status::ready)
         host_status_ = host_status_job_.get();
+    if (host_search_.valid() && host_search_.wait_for(0ms) == std::future_status::ready) {
+        host_found_ = host_search_.get();
+        host_searched_ = true;
+    }
     if (host_job_.valid() && host_job_.wait_for(0ms) == std::future_status::ready) {
         const device::HostResult r = host_job_.get();
         if (r.ok && !host_job_what_.empty())
@@ -20988,6 +20996,29 @@ void App::host_panel(float field, float button_h) {
                 host_status_ = {};
             }
         ImGui::EndCombo();
+    }
+    // OctoPrint announces itself by Zeroconf (printer_connections.md, «Búsqueda en la red»).
+    if (host_.kind == device::HostKind::OctoPrint) {
+        ImGui::BeginDisabled(host_search_.valid());
+        if (ImGui::SmallButton(tr(T::BambuSearch))) {
+            host_searched_ = false;
+            host_search_ = std::async(std::launch::async, [] { return device::mdns_browse("_octoprint._tcp.local", 4000); });
+        }
+        ImGui::EndDisabled();
+        if (host_search_.valid()) {
+            ImGui::SameLine();
+            loc::TextDisabled("%s", tr(T::BambuSearching));
+        }
+        for (const device::MdnsService& m : host_found_) {
+            const auto model = m.txt.find("model");
+            const std::string label = m.instance + (model != m.txt.end() ? "  " + model->second : std::string()) + "  " + m.url();
+            if (ImGui::Selectable(label.c_str(), m.url() == host_.url)) {
+                host_.url = m.url();
+                host_tested_ = false;
+            }
+        }
+        if (host_searched_ && host_found_.empty())
+            loc::TextDisabled("%s", tr(T::HostNoneFound));
     }
     ImGui::SetNextItemWidth(field * 1.4f);
     if (ImGui::InputTextWithHint(tr(T::HostUrl), "http://192.168.1.50", &host_.url))

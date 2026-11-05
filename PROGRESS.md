@@ -11271,3 +11271,14 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - **Sin probar en la interfaz:** el diálogo, porque la prueba de la interfaz no tiene un programa de red que conteste.
   Lo cubren las pruebas del cliente.
 - **Falta:** la búsqueda por Zeroconf.
+
+## 2026-11-05 — OctoPrint por Zeroconf
+
+- `src/device/mdns.*`: pregunta mDNS por los registros PTR de `_octoprint._tcp.local`, a 224.0.0.251:5353 con el bit
+  QU, para que la respuesta llegue al puerto propio y no haga falta el 5353 de otro programa.
+- Lee las respuestas: PTR, SRV (host y puerto), TXT (`path`, `version`, `model`…) y A (la dirección IPv4), con la
+  compresión de nombres del RFC 1035. Con un paquete dañado o con punteros en bucle no tira nada.
+- En la página Dispositivo, con OctoPrint elegido, «Buscar en la red» lista lo que encuentra durante 4 s; elegir uno
+  completa la dirección (`http://ip:puerto/path`).
+- Prueba `[ssdp]`: la pregunta byte a byte y una respuesta armada a mano con nombres comprimidos.
+- **Falta:** Moonraker (se anuncia solo con su nombre `.local`). Sin probar con una impresora real.
