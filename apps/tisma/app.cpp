@@ -942,6 +942,8 @@ private:
     void frame_now();
     void set_tab(Tab tab);
     void notify(std::string text, bool error = false);
+    void remember_toast(const std::string& text);
+    std::vector<std::string> toasts_shown_; // for the scripts' expect-toast
     void fail(T title, std::string message, std::vector<std::string> details = {});
     void load_preferences();
     void save_preferences();
@@ -4131,13 +4133,24 @@ void App::save_preferences() {
     }
 }
 
+// The toasts shown while a script runs, for expect-toast (at most the last 200).
+void App::remember_toast(const std::string& text) {
+    if (script_.empty())
+        return;
+    toasts_shown_.push_back(text);
+    if (toasts_shown_.size() > 200)
+        toasts_shown_.erase(toasts_shown_.begin());
+}
+
 void App::notify(std::string text, bool error) {
     log_line(std::string(error ? "error: " : "") + text);
+    remember_toast(text);
     toasts_.push_back({std::move(text), error, ImGui::GetTime() + kToastSeconds, {}});
 }
 
 // A toast with «Undo», kept twice as long.
 void App::notify_undo(std::string text, std::function<void()> undo) {
+    remember_toast(text);
     toasts_.push_back({std::move(text), false, ImGui::GetTime() + 2.0 * kToastSeconds, std::move(undo)});
 }
 
@@ -22683,6 +22696,13 @@ void App::script_input() {
             return fail_step("the plate has " + std::to_string(objects_.size()) + " models, the last " + last);
         next();
     } else if (step.verb == "expect-toast") { // a toast with this text, within 300 frames (a background job's may be late)
+        // Also one already gone: on a busy machine a toast's 6 s can pass
+        // before the script gets to look (ui_pack_offline_first_run).
+        for (const std::string& shown : toasts_shown_)
+            if (shown.find(step.value) != std::string::npos) {
+                std::printf("ui-script: expect-toast %s: ok\n", step.value.c_str());
+                return next();
+            }
         for (const Toast& toast : toasts_)
             if (toast.text.find(step.value) != std::string::npos) {
                 std::printf("ui-script: expect-toast %s: ok\n", step.value.c_str());

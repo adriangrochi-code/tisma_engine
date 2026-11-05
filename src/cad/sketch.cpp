@@ -367,7 +367,7 @@ Snap snap_point(const Sketch& sketch, const Pt& cursor, const SnapOptions& optio
             if (!e.points.empty()) {
                 add(SnapKind::Center, e.points[0], i, 0);
                 for (std::size_t q = 0; q < 4; ++q) {
-                    const double a = q * std::numbers::pi / 2.0;
+                    const double a = double(q) * std::numbers::pi / 2.0;
                     add(SnapKind::Quadrant, {e.points[0].x + e.radius * std::cos(a), e.points[0].y + e.radius * std::sin(a)}, i, q);
                 }
                 circs.push_back({e.points[0], e.radius, i});

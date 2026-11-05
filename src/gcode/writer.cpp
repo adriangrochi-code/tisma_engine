@@ -4149,14 +4149,14 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             if (wipe_inward && std::strcmp(step.type, "External perimeter") == 0 && l < model.regions.size()) {
                 const std::vector<ToolpathPoint>& last = coasted.size() >= 2 ? coasted : points;
                 if (last.size() >= 2) {
-                    const Point2d a = last[last.size() - 2].p, b = last.back().p;
-                    const double dx = b.x - a.x, dy = b.y - a.y, len = std::hypot(dx, dy);
+                    const Point2d from = last[last.size() - 2].p, to = last.back().p;
+                    const double dx = to.x - from.x, dy = to.y - from.y, len = std::hypot(dx, dy);
                     const double width = last.back().width;
                     const double distance = std::min(width, s.wipe_inward_distance.of(width));
                     if (len > 0.0 && distance > 0.0) {
                         const double off = 0.5 * width;
-                        const Clipper2Lib::Point64 probe{to_units((a.x + b.x) / 2.0 - dy / len * off),
-                                                         to_units((a.y + b.y) / 2.0 + dx / len * off)};
+                        const Clipper2Lib::Point64 probe{to_units((from.x + to.x) / 2.0 - dy / len * off),
+                                                         to_units((from.y + to.y) / 2.0 + dx / len * off)};
                         int inside = 0;
                         for (const Polygon& ring : model.regions[l])
                             if (Clipper2Lib::PointInPolygon(probe, ring) == Clipper2Lib::PointInPolygonResult::IsInside)
