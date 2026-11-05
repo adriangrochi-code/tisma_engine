@@ -24,7 +24,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   en PNG, JPG o QOI, también desde la línea de comandos. En el G-code de texto todavía no: se avisa.
 - Al conectar una impresora por USB se le preguntan sus límites (M115 y M503) y se llenan los datos vacíos del
   perfil: velocidades y aceleraciones máximas, tirones, tamaño de la cama y avance de presión, con un aviso de
-  cuántos se tomaron. Lo que la persona escribió no se toca.
+  cuántos se tomaron. Lo mismo con Klipper (Moonraker) al probar la conexión. Lo que la persona escribió no se toca.
 
 ### Arreglado
 

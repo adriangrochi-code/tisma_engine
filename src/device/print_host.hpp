@@ -14,6 +14,8 @@
 
 #include <string>
 
+#include <nlohmann/json.hpp>
+
 namespace tisma::device {
 
 enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet };
@@ -58,6 +60,15 @@ HostResult host_upload(const HostConfig& host, const std::string& path, const st
 HostStatus host_status(const HostConfig& host);
 HostResult host_pause(const HostConfig& host, bool pause); // false: resume
 HostResult host_cancel(const HostConfig& host);
+
+// The printer's limits as the program knows them (printer_connections.md,
+// «Leer los límites», rule 8): Moonraker's toolhead and configfile objects
+// (GET /printer/objects/query?toolhead&configfile=settings), as JSON; null
+// for the other programs or when the call fails.
+struct HostLimits : HostResult {
+    nlohmann::json toolhead, settings;
+};
+HostLimits host_limits(const HostConfig& host);
 
 // The engine's words for a host kind ("octoprint", "moonraker", "prusalink",
 // "duet"); false for another word.

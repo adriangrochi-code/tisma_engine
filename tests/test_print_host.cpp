@@ -2,6 +2,7 @@
 // OctoPrint's published REST API (printer_connections.md: «se prueban contra
 // un simulador propio»).
 #include "device/print_host.hpp"
+#include "device/printer_limits.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <httplib.h>
@@ -180,6 +181,13 @@ public:
         });
         server_.Get("/printer/objects/query", [this](const httplib::Request& req, httplib::Response& res) {
             std::lock_guard lock(mutex_);
+            if (req.has_param("toolhead")) { // the limits (printer_connections.md, rule 8)
+                res.set_content(R"({"result": {"status": {"toolhead": {"max_velocity": 300, "max_accel": 3000,
+                    "square_corner_velocity": 5, "axis_minimum": [0, 0, -2, 0], "axis_maximum": [235, 235, 250, 0]},
+                    "configfile": {"settings": {"printer": {"max_z_velocity": 15}}}}}})",
+                                "application/json");
+                return;
+            }
             asked = req.has_param("print_stats") && req.has_param("virtual_sdcard") && req.has_param("extruder") &&
                     req.has_param("heater_bed");
             nlohmann::json j{{"result",
@@ -245,6 +253,13 @@ TEST_CASE("print host: Moonraker's API (Klipper), the same calls (printer_connec
     REQUIRE(host_cancel(host).ok);
     CHECK(fake.calls == std::vector<std::string>{"pause", "resume", "cancel"});
     CHECK_FALSE(host_status(host).printing);
+    // The printer's limits, for the profile's empty values.
+    const HostLimits limits = host_limits(host);
+    REQUIRE(limits.ok);
+    const tisma::device::PrinterLimits read = parse_klipper_limits(limits.toolhead, limits.settings);
+    CHECK(read.values.at("max_feed_x") == 300.0);
+    CHECK(read.values.at("max_feed_z") == 15.0);
+    CHECK(read.max_x == 235.0);
     std::filesystem::remove(g);
 }
 

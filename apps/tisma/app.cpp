@@ -938,6 +938,7 @@ private:
     ViewFrame view_frame(int fb_w, int fb_h);
     void settings_changed();
     void take_printer_limits();
+    void take_limits(const device::PrinterLimits& limits, const std::string& firmware);
     void bed_changed();
     void place_model();
     void frame_all();
@@ -1565,6 +1566,7 @@ private:
     std::future<device::HostVersion> host_test_job_;
     std::future<device::HostStatus> host_status_job_;
     std::future<device::HostResult> host_job_;
+    std::future<device::HostLimits> host_limits_job_;
     device::HostVersion host_version_;        // the last test
     bool host_tested_ = false;
     device::HostStatus host_status_;          // the last state read
@@ -6023,14 +6025,17 @@ void App::take_printer_limits() {
     const device::PrinterStatus st = printer_->status();
     if (st.m115.empty() && st.m503.empty())
         return;
-    const device::PrinterLimits limits = device::parse_marlin_limits(st.m115, st.m503);
+    take_limits(device::parse_marlin_limits(st.m115, st.m503), st.firmware);
+}
+
+void App::take_limits(const device::PrinterLimits& limits, const std::string& firmware) {
     const bool bed_was_empty = settings_.bed.empty();
     const std::vector<std::string> taken = device::apply_limits(settings_, limits, true);
     if (!taken.empty()) {
         settings_changed();
         if (std::find(taken.begin(), taken.end(), "bed") != taken.end())
             bed_changed();
-        const std::string source = limits.source.empty() ? st.firmware : limits.source;
+        const std::string source = limits.source.empty() ? firmware : limits.source;
         notify(format(tr(T::LimitsTaken), int(taken.size()), source.c_str()));
         log_line("limits from the printer: " + [&] {
             std::string names;
@@ -21010,12 +21015,20 @@ void App::host_poll() {
             if (!host_.password.empty())
                 cloud::store_secret("host-password:" + host_.url, host_.password, error);
             host_refresh();
+            // Klipper's limits, for the profile's empty values (printer_connections.md, rule 8).
+            if (host_.kind == device::HostKind::Moonraker && !host_limits_job_.valid())
+                host_limits_job_ = std::async(std::launch::async, [h = host_] { return device::host_limits(h); });
         } else {
             notify(format(tr(T::HostTestFailed), name, host_version_.error.c_str(), host_version_.code.c_str()), true);
         }
     }
     if (host_status_job_.valid() && host_status_job_.wait_for(0ms) == std::future_status::ready)
         host_status_ = host_status_job_.get();
+    if (host_limits_job_.valid() && host_limits_job_.wait_for(0ms) == std::future_status::ready) {
+        const device::HostLimits got = host_limits_job_.get();
+        if (got.ok)
+            take_limits(device::parse_klipper_limits(got.toolhead, got.settings), "Klipper");
+    }
     if (host_search_.valid() && host_search_.wait_for(0ms) == std::future_status::ready) {
         host_found_ = host_search_.get();
         host_searched_ = true;

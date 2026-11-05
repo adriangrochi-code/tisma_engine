@@ -630,8 +630,9 @@ Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la fic
 - [ ] Probado con una impresora real por USB (necesita al dueño)
 - [ ] Leer los límites de la impresora (`printer_connections.md`, reglas 1 a 8): hecho el núcleo (`src/device/printer_limits.*`,
   2026-11-05: Marlin M115 y M503, Klipper `toolhead` y `configfile`, llenar solo lo vacío). Al conectar por USB ya se
-  piden (M115 y M503) y llenan lo vacío con un aviso. Faltan Moonraker, la lista «En el perfil / En la impresora» y
-  el botón «Leer de la impresora» en Límites
+  piden (M115 y M503) y llenan lo vacío con un aviso. Con Moonraker, al probar
+  la conexión (2026-11-05). Faltan la lista «En el perfil / En la impresora» y el botón «Leer de la impresora» en
+  Límites
 
 ## Estado de P1
 

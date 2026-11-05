@@ -11339,3 +11339,13 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   - Arreglo: `tests/xvfb_run.sh` saca el número de display del número de proceso y, si el display no abre, prueba de
     nuevo (a lo sumo tres veces). Todas las pruebas de la interfaz pasan por ahí.
   - En Windows no aplica.
+
+## 2026-11-05 — leer los límites de la impresora, parte 3: Klipper por Moonraker
+
+- `host_limits` pide a Moonraker los objetos `toolhead` y `configfile.settings`
+  (`/printer/objects/query?toolhead&configfile=settings`).
+- En la página Dispositivo, cuando «Probar» funciona con Klipper, los datos vacíos del perfil se llenan con el mismo
+  aviso que por USB.
+- Prueba en `[device][net]` contra el Moonraker simulado.
+- **Falta:** la lista «En el perfil / En la impresora» para aceptar uno por uno lo que difiere, y el botón «Leer de la
+  impresora» en Límites. Sin probar con una impresora real.

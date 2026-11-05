@@ -505,6 +505,32 @@ bool host_kind_from(const std::string& word, HostKind& out) {
     return true;
 }
 
+HostLimits host_limits(const HostConfig& host) {
+    HostLimits out;
+    if (host.kind != HostKind::Moonraker) {
+        out.code = "failed";
+        out.error = "this program does not report the printer's limits";
+        return out;
+    }
+    const net::Response r = net::perform(request(host, "GET", "/printer/objects/query?toolhead&configfile=settings"));
+    static_cast<HostResult&>(out) = result_of(r);
+    if (!out.ok)
+        return out;
+    const nlohmann::json j = moonraker_result(r);
+    if (!j.is_object() || !j.contains("status") || !j["status"].is_object()) {
+        out.ok = false;
+        out.code = "bad_answer";
+        out.error = "the printer's program sent no printer objects";
+        return out;
+    }
+    const nlohmann::json& st = j["status"];
+    if (st.contains("toolhead"))
+        out.toolhead = st["toolhead"];
+    if (st.contains("configfile") && st["configfile"].is_object() && st["configfile"].contains("settings"))
+        out.settings = st["configfile"]["settings"];
+    return out;
+}
+
 const char* host_kind_word(HostKind kind) {
     switch (kind) {
     case HostKind::Moonraker: return "moonraker";
