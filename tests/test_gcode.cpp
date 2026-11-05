@@ -102,6 +102,16 @@ TEST_CASE("start and end G-code variables", "[gcode]") {
     CHECK(substitute_variables("[nope] {list[9]} {temp[x]} [ ] {", vars) == "[nope] {list[9]} {temp[x]} [ ] {");
 }
 
+TEST_CASE("the temperature variables always exist, 0 when the filament lacks them (profile_pack.md rule 18 bis, BH30)",
+          "[gcode]") {
+    Settings s = test_printer();
+    s.start_gcode = "M104 S[temp]\nSTART_PRINT CHAMBER={chamber_temperature[0]} MIN={chamber_minimal_temperature[0]} "
+                    "IDLE={idle_temperature[0]}";
+    s.variables["temp"] = {"210"};
+    const std::vector<std::string> lines = lines_of(cube_gcode(s));
+    CHECK(std::find(lines.begin(), lines.end(), "START_PRINT CHAMBER=0 MIN=0 IDLE=0") != lines.end());
+}
+
 TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]") {
     Settings s = test_printer();
     s.infill_solid_below_area = 0.0; // the 10 mm cube's 57.8 mm2 of infill would be all solid (infill.solid_below_area)

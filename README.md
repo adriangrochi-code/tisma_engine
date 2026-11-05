@@ -73,6 +73,37 @@ Los ajustes están en `docs/CONFIG.md`. `--warnings` es opcional y escribe los a
   cada serie de capas seguidas;
 - `gpu_fallback`: la GPU falló y se laminó con la CPU (sin capa: `layer` y `z` son `null`).
 
+Un proyecto guardado por la interfaz se lamina entero, como lo hacen los nodos de Tisma Cloud (ficha `cloud.md`,
+regla 18):
+
+```sh
+build/tisma-engine slice proyecto.3mf -o placa.gcode --summary resumen.json --sandbox
+```
+
+Por la salida estándar va solo una línea `progress N` (0 a 100) cada vez que avanza; los avisos van a la salida de
+errores. El resumen lleva `print_time` («1h 2m 3s»), `print_time_s`, `filament_mm`, `filament_g` (solo si se conoce
+la densidad del filamento) y `layers`, o `error` si falló. `--sandbox` no corre los scripts de posproceso de los
+ajustes; `--no-gpu` lamina con la CPU. En cualquier orden, `--threads <n>` usa como mucho `n` hilos de cálculo.
+
+Para cambiar ajustes del proyecto sin tocar el archivo, en `slice`, `analyze`, `aero` y `orient` de un proyecto:
+- `--config-over <parcial.json>`: un JSON con solo los grupos y claves que cambian, encima de los del proyecto;
+- `--set grupo.clave=valor`: una clave, se puede repetir y va después de `--config-over`. Un número, `true`, `false`,
+  una lista o un objeto se leen como JSON; lo demás, como texto.
+
+Una clave desconocida o un valor fuera de rango es un error (código 2, `bad_settings` en el resumen).
+
+Para el teléfono, que solo corre `tisma-engine`:
+- `part gear|fastener <spec.json> -o <pieza.stl>` arma un engranaje o una pieza de tornillería desde su JSON (el mismo
+  de la pestaña Diseño); `--defaults` da uno para empezar;
+- `calibration <tipo> --config <ajustes.json> --model <pieza.stl> --settings <ajustes.json>` arma la pieza de una
+  calibración y los ajustes con sus cambios por altura, listos para `slice`; con `--start`, `--end`, `--step` y
+  `--segment`, otro rango;
+- `calibration apply <tipo> --value <v> --config … -o …` escribe el valor que salió mejor.
+- `aero` y `orient` también toman un modelo con `--config <ajustes.json>` en lugar de un proyecto.
+- `design new | check <diseño.json> | build <diseño.json> --solidcraft <exe> -o <pieza.stl|.3mf>`: la lógica de la
+  pestaña Diseño con el `solidcraft-cli` que se le indique. Opciones: `--quality`, `--timeline` (la primera operación
+  que falla) y `--save` (el archivo `.sc`).
+
 Códigos de salida: 0 bien; 1 línea de comandos mal escrita; 2 un archivo de entrada falta, está mal o no se puede
 escribir la salida; 3 orden todavía sin hacer; 4 el modelo no se puede imprimir (sin triángulos, ninguna capa cerrada,
 fuera de `machine.bed`, más alto que `machine.max_height`, falda o borde fuera de la cama, o nada que extruir); 5 el

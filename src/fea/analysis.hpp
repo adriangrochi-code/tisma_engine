@@ -1,5 +1,6 @@
 #pragma once
 
+#include "fea/adhesion.hpp"
 #include "fea/elasticity.hpp"
 #include "fea/material.hpp"
 #include "fea/voxels.hpp"
@@ -17,7 +18,8 @@
 
 namespace tisma {
 
-struct StressField; // infill/stress_density.hpp
+struct StressField;  // infill/stress_density.hpp
+struct MeshModifier; // slice/placement.hpp
 
 struct IndexedMesh;
 struct Settings;
@@ -32,7 +34,7 @@ class Context;
 // How fine the voxels are: normal, 2 per line width in the layer and one row
 // per layer; high, 4 per line width and rows about as tall as the voxels are
 // wide (2 per 0.2 mm layer with 0.4 mm lines).
-enum class AnalysisQuality : std::uint8_t { Normal, High };
+enum class AnalysisQuality : std::uint8_t { Normal, High, Extreme };
 // As printed: the sliced toolpaths give every voxel its line direction, and
 // the gaps of sparse infill stay empty (with voxels at most half a line
 // wide). Solid: the whole part, every direction unknown (the layer's average
@@ -45,6 +47,9 @@ enum class PartFace : std::uint8_t { None, Bottom, Top, XMin, XMax, YMin, YMax }
 struct Region {
     Box box;
     PartFace face = PartFace::None;
+    // Triangles marked on the model, or a disc round a point on it: the box
+    // becomes the nodes near them once the voxels are known.
+    std::shared_ptr<const ZoneShape> shape;
 };
 
 struct CaseFixture {
@@ -62,6 +67,7 @@ struct CaseLoad {
 struct AnalysisCase {
     std::string material_id = "bambu-pla-basic"; // a record of fea/materials.hpp
     OrthotropicMaterial material;                 // the record's constants with the case's changes
+    Adhesion adhesion;                            // the factors applied to them (fea/adhesion.hpp), if any
     AnalysisModel model = AnalysisModel::AsPrinted;
     AnalysisQuality quality = AnalysisQuality::Normal;
     double voxel = 0.0;      // mm across x and y; 0: from the quality and the line width
@@ -136,6 +142,12 @@ std::pair<double, int> analysis_resolution(const AnalysisCase& c, const Settings
 // cheap enough to ask before anything else.
 std::size_t analysis_grid_voxels(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c);
 
+// When the case asks for more voxels than max_voxels, the finest voxels that
+// fit: larger voxels across and fewer rows per layer, so a fine quality runs
+// on a large part instead of refusing it (BH24). True when it changed the
+// case (then c.voxel and c.rows_per_layer say what it chose).
+bool fit_voxel_limit(AnalysisCase& c, const IndexedMesh& mesh, const Settings& settings);
+
 // The region's box on these voxels: a face becomes a thin box on the plane of
 // the solid voxels' extent along that axis.
 Box resolve_region(const Region& region, const VoxelGrid& grid);
@@ -146,10 +158,14 @@ Box resolve_region(const Region& region, const VoxelGrid& grid);
 using AnalysisProgress = std::function<void(std::string_view stage, double done)>;
 
 // Slices (as printed) and voxelizes the part, solves, and summarizes. With
-// infill_stress, the slicing's stress-guided infill (docs/INFILL.md).
+// infill_stress, the slicing's stress-guided infill (docs/INFILL.md). With
+// modifiers (model_tools.md, rule 3), their zones are printed and analysed
+// with their own settings (structural_optimization.md, rule 3: infill by
+// zones); the solid model ignores them.
 AnalysisReport run_analysis(const IndexedMesh& mesh, const Settings& settings, const AnalysisCase& c,
                             gpu::Context* gpu = nullptr, const AnalysisProgress& progress = {},
-                            const StressField* infill_stress = nullptr);
+                            const StressField* infill_stress = nullptr,
+                            const std::vector<MeshModifier>* modifiers = nullptr);
 
 // What an analysis would take, without solving: the voxels (slicing as
 // printed to find the gaps), and the memory and time they need.

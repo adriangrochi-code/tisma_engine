@@ -10,8 +10,296 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.11.0-beta.1] - 2026-11-05
+
+Beta para los probadores del dueño: Windows y Linux. En Windows, el instalador `tisma-engine-0.11.0-beta.1-setup-windows-x64.exe`
+(o el `.zip`, para usar sin instalar); en Linux, el `.zip`: se descomprime y se abre `tisma`.
+
+**Es el Tisma nuevo, no Tisma Slicer:** un programa hecho desde cero, que va a reemplazar a Tisma Slicer. Se instala
+aparte y no toca la configuración de Tisma Slicer. Los proyectos `.3mf` de Tisma Slicer se abren como modelos: se
+toman las piezas, no los ajustes, y hay que elegir impresora y perfiles.
+
+### Para probar
+
+- **Impresoras del paquete de perfiles:** en el primer arranque se baja la lista sola. Elegí tu impresora en el
+  catálogo, su filamento y su perfil de impresión, y laminá. Mirá que la cama aparezca dibujada en la vista 3D. Probá
+  también con una impresora de resina del paquete.
+- **Calibraciones** (pestaña Calibrar): las torres de temperatura y de retracción, flujo, flujo máximo, aceleración,
+  pata de elefante y la nueva de puentes y voladizos. Aplicá el resultado y fijate que cambie el ajuste.
+- **Ingeniería:** marcá un apoyo y una fuerza, Analizar, mirá el mapa y el veredicto, y después Optimizar. En
+  Aerodinámica, Analizar una pieza.
+- **Diseño:** bocetos con cotas y restricciones, extruir y revolucionar, redondeo, chaflán, agujeros y roscas, y
+  mandar la pieza a la placa.
+- **La nube:** iniciar sesión y laminar o analizar un proyecto en la nube.
+- **Bambu Lab por la red local** (Impresora conectada › Bambu Lab): con la impresora en modo «Solo LAN» y modo
+  desarrollador, buscala o escribí su IP y su código de acceso, confirmá el certificado, mirá el estado y el AMS, y
+  enviá e imprimí, pausá y detené. Contanos qué modelo tenés y qué pasó: todavía no se probó con una impresora real.
+
+### Límites conocidos
+
+- **Actualizaciones automáticas:** esta versión no se actualiza sola. Para pasar a la próxima, bajala a mano.
+- **macOS:** todavía no hay versión.
+- **Bambu Lab:** la cámara todavía no se ve en el programa; no se elige qué filamento del AMS va con cada color.
+- **Cama del paquete:** se dibuja el SVG; las imágenes PNG todavía no se muestran.
+- **Paquete de perfiles:** el motor no lee los perfiles del paquete por la regla de sala limpia; los probó por fuera
+  la sesión de fichas (todas las variantes con sus valores por defecto y 500 combinaciones al azar). Con una impresora
+  sin velocidades propias se usan las de una Ender-3 de fábrica, y el laminado lo avisa.
+- **Impresoras reales:** muchas funciones nuevas, como las calibraciones nuevas, los perfiles del paquete y Optimizar,
+  no se probaron en una impresora real.
+- **Todavía no están:** «Mi biblioteca», barrer y recubrir en Diseño, y el actualizador de escritorio.
+
 ### Agregado
 
+- **Impresoras Bambu Lab por la red local** (página Impresora conectada › Bambu Lab): las encuentra en la red, se
+  conecta con la dirección y el código de acceso, y pide una sola vez confirmar el certificado de la impresora. Muestra
+  el estado, las temperaturas, el avance y el AMS; envía lo laminado y lo imprime, también desde el AMS; pausa,
+  reanuda y detiene. La impresora tiene que estar en modo «Solo LAN» y modo desarrollador. Hay una impresora Bambu
+  simulada para probar sin máquina. **Sin probar todavía con una impresora real.**
+- **Instalador de Windows** (`tisma-engine-<versión>-setup-windows-x64.exe`): se instala para el usuario, sin pedir
+  permisos de administrador. Agrega Tisma al menú Inicio y, si querés, un acceso directo en el escritorio. Ofrece
+  abrir los `.3mf` y `.stl` con Tisma. El desinstalador quita el programa y deja tus perfiles, preferencias y
+  proyectos. Está en español, o en inglés si Windows está en inglés. El `.zip` sigue estando, para usar sin instalar.
+- **Versiones firmadas:** la CI deja cada versión como borrador y el dueño la firma con la clave Ed25519 de su
+  pendrive (`tools/sign_release.py`, guía en `docs/FIRMAR_VERSIONES.md`). Así los programas solo instalan lo que él
+  firmó.
+- **Calibración de puentes y voladizos:** aletas de 20° a 70° y puentes de 10 a 50 mm; la aleta más inclinada que sale
+  bien da el ángulo desde el que van los soportes.
+- **Paquete de perfiles, primer arranque:** la primera vez se baja solo la lista de impresoras del paquete; sin red
+  aparece un aviso y quedan las impresoras incluidas. Los perfiles del paquete muestran su licencia, su origen y el
+  enlace al repositorio.
+- **La cama de la impresora del paquete** en la vista 3D: su modelo (STL) y su dibujo (SVG) en la placa, en OpenGL y
+  en Vulkan. Los dibujos PNG todavía no se muestran.
+- **Resinas del paquete:** una impresora de resina del paquete elige su resina y su perfil de impresión de resina por
+  defecto, ofrece solo resinas en el catálogo y muestra los **Datos publicados** de la resina.
+- **Datos publicados** también para el filamento del paquete, plegados bajo su perfil en la pestaña Material.
+- `tisma-engine part gear|fastener` y `tisma-engine calibration <tipo>` / `calibration apply`: engranajes, tornillería y
+  las calibraciones de la pestaña Calibrar desde la línea de comandos; `aero` y `orient` sobre un modelo con
+  `--config`; `tisma-engine design new|check|build` con SolidCraft (pedidos de la app de Android).
+- **Datos publicados** en la página de una impresora del paquete: lo que publica la comunidad, con su tipo y su fuente.
+  **Usar este valor** lo aplica, con confirmación cuando no es del fabricante.
+- El paquete libre de perfiles en la interfaz: el catálogo de impresoras muestra sus modelos y agrega uno con su
+  filamento y su perfil de impresión, como perfiles de fábrica. Si hace falta, baja el fabricante en segundo plano.
+  También hay un botón para actualizar el paquete (`docs/CATALOG.md`).
+- Variables nuevas para el G-code de inicio y de fin, las que usa el paquete de perfiles: `layer_count`, la caja de la
+  primera capa número por número (`first_layer_min_x` … `first_layer_size_y`), `travel_speed`, `month`, `day`, `hour`,
+  `minute` y `second`. Antes, una impresora del paquete con `{layer_count}` no laminaba (la app de Android lo encontró).
+- `--set grupo.clave=valor` (se repite) y `--config-over <parcial.json>` en `slice`, `analyze`, `aero` y `orient` de un
+  proyecto: cambios encima de los ajustes del proyecto, sin tocar el archivo (pedido de la app de Android,
+  `mobile_app.md` regla 13).
+- Material › Temperaturas muestra en el nivel Básico la boquilla y la cama de la primera capa (`settings_panel.md`,
+  regla 10). Vacías, son las mismas que en las demás capas. `tisma --settings-layout` da el tipo, la unidad, el
+  mínimo, el máximo y el valor de las temperaturas (pedido de la app de Android).
+- El paquete libre de perfiles en la línea de comandos: `tisma-engine pack plan|install|list` y
+  `profile --pack <carpeta> --printer "<archivo>#<variante>"` (`docs/CATALOG.md`). Comprueba el tamaño y el SHA-256,
+  descomprime de forma segura y cambia el paquete de una sola vez. Para eso, el motor lee `.xz` y tar con código
+  propio, sin bibliotecas nuevas.
+- Impresoras por red: OctoPrint, Moonraker (Klipper) y PrusaLink (con autenticación Digest), en `src/device/print_host.*`.
+- `tisma-engine analyze <proyecto> --mode lightest-infill [--no-zones] [--ribs]` corre en los nodos de la nube y en el
+  teléfono: el relleno uniforme mínimo, por zonas y con nervios, con avance; el resumen da la densidad, el factor, los
+  niveles y las masas, y el resultado las cajas de las zonas con sus ajustes. `resin-structure` sigue sin correr.
+- `tisma --settings-layout FILE [--lang es|en] [--settings-summary ajustes.json]`: el panel de ajustes como JSON
+  (pestañas, tarjetas, grupos con su línea cerrada y cada fila con clave, nivel, nombre, ayuda, tipo, valor por
+  defecto, rango y valor), sin abrir ventana; la aplicación de Android arma con eso sus pantallas.
+- **Estructural: calcular en la nube** (`engineering_panel.md`, regla 10; `cloud.md`, reglas 6 a 10b): con sesión
+  en Tisma Cloud, «Calcular en la nube» manda el análisis como trabajo `fea` y el resultado vuelve a la pieza, con
+  avance y «Cancelar». Lo mismo en Aerodinámica (trabajo `aero`). Un cálculo que el plan no incluye se ve con
+  «Incluido en el plan …».
+- **Estructural: «Optimizar», relleno por zonas y nervios** (`structural_optimization.md`, reglas 3 y 4): «Relleno por
+  zonas» pone más relleno solo donde la tensión lo pide, en 3 niveles escalados juntos hasta que la pieza aguanta, y
+  lo propone si pesa menos que el uniforme; «Nervios» pone relleno en una sola dirección a lo largo de las tensiones y
+  busca otra vez el mínimo; «Refuerzos» engrosa la pieza alrededor de los apoyos y las cargas. «Usar» los agrega
+  como modificadores de la pieza, con un solo deshacer. «Orientación recomendada» compara las capas en Z, X e Y y
+  ofrece «Girar la pieza». «Retícula» busca las barras más finas de una retícula imprimible sin soporte y
+  «Usar la retícula» la pone dentro de la pieza (un volumen nuevo, guardado en el proyecto como celda y diámetro).
+- **Estructural: «Optimizar», relleno mínimo** (`structural_optimization.md`, regla 2): debajo de los resultados,
+  busca el menor relleno con el que la pieza aguanta y lo deja usar con un botón (se puede deshacer).
+- **Estructural en impresoras de cinta** (`engineering_panel.md`, regla 10): «Dirección de impresión» elige Z o la
+  cinta; con la cinta, el análisis toma las capas inclinadas como se imprimen.
+- **Estructural: girar una fuerza arrastrando su flecha** (`engineering_panel.md`, regla 7): el extremo libre de la
+  flecha roja se arrastra en la vista; la fuerza pasa a apuntar desde ahí a su punto (Ctrl+Z la devuelve).
+- **Estructural dice cuánto va a costar el análisis:** junto a la resolución, la memoria y el tiempo aproximados.
+  La pestaña «Análisis» de Impresión 3D se fue: todo lo que mostraba está en Ingeniería, Estructural
+  (`engineering_panel.md`, regla 1).
+- **Estructural: más mapas y la deformación** (`engineering_panel.md`, regla 12): además del factor de seguridad,
+  el mapa de la tensión de von Mises o del desplazamiento, con su escala; y la pieza deformada, exagerada tanto
+  como se elija.
+- **`profile` en la línea de comandos:** escribe los ajustes de una impresora del catálogo con su boquilla y,
+  si se pide, un filamento, listos para `slice --config`.
+- **Errores de la nube con código y texto en español** también en `slice`, `aero` y `orient` (antes solo
+  `analyze`).
+- **Vista como DXF** (`cad_design.md`, regla 20): en Diseño, «Vista como DXF» guarda las aristas de la vista actual
+  como líneas DXF, con las ocultas punteadas en su capa o sin ellas.
+- **Diseño más rápido** (`cad_design.md`, regla 20 bis): el componente de diseño queda abierto mientras se diseña y
+  cada cambio se construye sin volver a arrancarlo. Se cierra tras 10 minutos sin uso; si se cae, se abre de nuevo con
+  el diseño entero y avisa una vez.
+- **DXF y SVG en Diseño** (`cad_design.md`, D5b): «Traer DXF» y «Traer SVG» en el boceto traen líneas, círculos,
+  arcos, polilíneas, elipses, curvas y bloques, en milímetros según las unidades del archivo, como curvas del boceto
+  que se recortan, se acotan y se extruyen; «Exportar DXF» guarda el boceto. Un archivo que no se puede leer avisa con
+  el motivo y no cambia nada.
+- **Orientación automática, menos soporte** (`orientation.md`): en el menú de la placa, «Orientar (menos soporte)»
+  gira el modelo elegido, o todos, a la orientación que menos soporte necesita y mejor se agarra a la cama; nunca
+  queda peor que como estaba. Con una impresora de resina, «Orientar (menor fuerza de despegue)» busca la orientación
+  sin ventosas y con la capa más grande lo más chica posible. Para los nodos de Tisma Cloud, `tisma-engine orient` (`cloud.md`, regla 19c).
+- **Calidad extrema en piezas grandes**: en vez de negarse, el análisis estructural toma los vóxeles más finos que
+  entran en memoria y lo dice.
+- **Rango probable en los análisis** (pedido del dueño: la mayor fiabilidad que dé cada calidad):
+  - Aerodinámica: cada calidad simula también con 2/3 de las celdas, y el resultado da el rango probable del Cd: el
+    error propio del método (12 %, medido) y el cambio con la resolución.
+  - Estructural: el rango del factor de seguridad suma, a la incertidumbre de la adherencia, el cambio con vóxeles del
+    doble de tamaño. La calidad rápida ahora también hace esa verificación.
+  - Los resúmenes para la nube llevan `cd_low` y `cd_high`, y `min_safety_low` y `min_safety_high`.
+
+### Cambiado
+
+- **CFD más rápido**: la simulación termina cuando el arrastre ya se asentó. Entre 0 y 33 % menos pasos en las piezas
+  de validación, con el mismo resultado dentro de 0,5 %.
+- **CFD más fiel**: la presión sobre la pieza sale de la fuerza que el flujo deja en las paredes, en vez de leer la
+  densidad junto a cada cara. Una capa absorbente antes de la salida deja de devolver ondas de presión. Medido a 12
+  celdas: placa de 1,01 a 1,07 (Hoerner 1,17), cubo de 1,007 a 1,042 (Hoerner 1,05).
+- **Adherencia entre capas y entre líneas en el análisis estructural**: la resistencia entre capas (y su rigidez) y la
+  resistencia entre líneas siguen ahora la temperatura de extrusión, la altura de capa frente al ancho de línea, el
+  ventilador y la cámara, con constantes por material ajustadas a ensayos publicados y hojas técnicas. El resultado
+  muestra el rango probable del factor de seguridad según la incertidumbre de la adherencia, qué falla (entre capas,
+  entre líneas o la línea misma) y un aviso si la temperatura es baja o alta para el material. Cambiar la temperatura
+  de extrusión a mano ahora cambia el resultado.
+- **Editar el boceto** (`cad_design.md`, regla 17): recortar, alargar, desfasar, redondear y achaflanar una esquina,
+  simetría, matriz rectangular y polar, mover, copiar, girar y escalar, desde el grupo Editar o con TR, EX, O, F, CHA,
+  MI, AR, M, CO, RO y SC en la línea de comandos. Líneas y arcos sueltos que se tocan punta con punta cierran una
+  región que se puede extruir. Se elige con clic o con una caja: hacia la derecha, ventana (solo lo que queda
+  adentro); hacia la izquierda, cruce (todo lo que toca).
+- **Pestaña Aerodinámica**: dirección, velocidad, calidad y altura de capa; Analizar con avance y Cancelar; arrastre,
+  Cd en presión y rozamiento, fuerza transversal, área frontal, Reynolds y rugosidad; la pieza pintada con la presión o
+  la rugosidad, líneas de corriente coloreadas con la presión y una flecha que muestra de dónde viene el aire.
+- **Calidad extrema** en los análisis estructural (6 vóxeles por ancho de línea) y aerodinámico (48 celdas), y un
+  aviso en los dos paneles de que los resultados son aproximaciones.
+- **Análisis aerodinámico** (`aerodynamics.md`): arrastre separado en presión (lattice Boltzmann D3Q19 con
+  Smagorinsky) y rozamiento (placa plana, con la rugosidad de las capas), fuerza transversal, Reynolds, rugosidad media
+  y mapa por cara. Por ahora desde la línea de comandos: `tisma-engine aero` para los nodos de Tisma Cloud (`cloud.md`,
+  regla 19b).
+- **`analyze` para los nodos de Tisma Cloud** (`cloud.md`, regla 19): analiza un objeto de un proyecto 3MF con
+  `--summary`, `--sandbox`, `--mode`, `--quality`, `--object` e `--instance`; escribe el resultado `.tea` y un resumen
+  con el veredicto.
+- **Mover cuerpo, Partir y Desmoldeo en Diseño:** mover o girar un cuerpo (o una copia), partirlo por un plano y
+  dar ángulo de desmolde a caras elegidas con clic.
+- **Medir en el boceto** (regla 18): distancia, ΔX, ΔY y ángulo entre dos puntos (DI), y área y perímetro de la
+  región bajo un clic, sin sus agujeros (AREA). No agrega cotas.
+- **Roscas en Diseño:** la operación Rosca sobre una cara cilíndrica (M2 a M24, derecha, izquierda o las dos,
+  dibujada o modelada) y el agujero roscado, con la broca de macho de su norma.
+- **Operaciones en Diseño** (`cad_design.md`, regla 7, etapa D4): redondeo, chaflán, vaciado, agujero por norma
+  ISO 273 (M2 a M16, ajuste justo, normal u holgado) o diámetro libre, simetría, patrón circular, patrón en fila y
+  combinar (unir, restar, intersecar), desde el panel o la línea de comandos (`redondeo`, `chaflán`, `vaciado`,
+  `agujero`, `simetría`, `patrón`, `fila`, `combinar`). Las aristas, las caras y los lugares de los agujeros se
+  eligen con clic en la pieza; Enter termina. Cada operación es un paso del historial, con sus medidas y su «fx».
+- **Analizar en Estructural** (`engineering_panel.md`, reglas 6, 9 a 12 y 14; `structural_analysis.md`,
+  «Resultados»): cada fuerza en N o en kg (g = 9,81 m/s²) con su dirección (perpendicular hacia adentro, ±X, ±Y,
+  ±Z o tres números). Analizar corre en segundo plano con su avance y «Cancelar». Al terminar: el veredicto grande
+  (Aguanta, Margen bajo, Fuera de carga, Fuera de temperatura, No aplicable), el factor de seguridad mínimo frente
+  al pedido, el desplazamiento máximo, la masa con su material y los materiales para probar si no aguanta; la pieza
+  pintada con el mapa del factor de seguridad en cinco franjas y el punto crítico marcado. Cambiar una condición,
+  el material o el perfil lo deja en gris con «Desactualizado: analizá de nuevo». El resultado se guarda con la
+  pieza. Las fuerzas se ven como flechas rojas y los puntos y zonas fijas en azul. Los límites de desplazamiento se editan
+  (mm o % de la mayor medida, 1 mm al empezar) y se comprueban: si una zona se mueve más que su límite, el veredicto
+  es «Demasiado flexible». Si la pieza no aguanta, «Probá con» muestra un botón por material que aguantaría; al
+  apretarlo, se elige ese material y se analiza de nuevo. La lista de materiales suma las familias de la tabla
+  («PEI (valores típicos)»...), para los que no tienen un registro medido. La resolución se elige (Rápida: la pieza maciza en unos 20 000
+  vóxeles, sin la comprobación de resolución; Normal; Alta) y el panel dice cuántos vóxeles y de qué tamaño.
+- **La temperatura de trabajo cuenta en el análisis**: la rigidez y la resistencia bajan con `f(T)` de la familia
+  del material (1 hasta 23 °C, 0,5 en la máxima de servicio). Pasada esa máxima, el veredicto es «Fuera de
+  temperatura».
+- **Línea de tiempo editable en Diseño** (`cad_design.md`, regla 8): cada operación del Historial se sube o se
+  baja con sus flechas, se renombra con doble clic, se suprime con el ojo y se borra con ×; la pieza se rehace sola.
+  Una operación que la herramienta de diseño no puede hacer queda en rojo con el motivo; las de antes se construyen
+  y las de después quedan «En espera» hasta que se arregle.
+- **Restricciones y cotas en los bocetos** (`cad_design.md`, regla 5, CD3): Cota (largo de una línea, diámetro de
+  un círculo, radio de un arco o distancia entre dos puntos), horizontal, vertical, paralela, perpendicular, igual,
+  coincidente, concéntrica, tangente, fijo y ángulo, desde la sección Boceto o la línea de comandos (`cota`, `h`,
+  `v`, `fijo`...), eligiendo con un clic o un punto tipeado. Una barra dice los grados de libertad que quedan; lo que
+  queda totalmente definido se dibuja en blanco (negro en el tema claro) y lo que todavía se mueve, en azul. Una
+  restricción que sobra o contradice a otras no se agrega y se avisa. Las cotas se ven en el boceto; cambiar el
+  ancho, el alto o un parámetro atado cambia su cota. Sin herramienta elegida, un punto del boceto se arrastra y el boceto se
+  resuelve en cada cuadro: lo que las cotas fijan se mantiene.
+- **Parámetros en Diseño** (`cad_design.md`, regla 9, CD4): una lista de nombres con su expresión (`ancho = 40
+  mm`, `alto = ancho / 2 + 5`), con unidades (mm, cm, m, in, grados y rad) y los errores dichos en la fila (nombre
+  que no existe, ciclo, largo más ángulo, división por cero). El botón «fx» junto a cada medida la ata a una
+  expresión; al cambiar un parámetro, la pieza se vuelve a construir. Se guardan con el diseño.
+- **Pestaña Estructural en Ingeniería** (`engineering_panel.md`, reglas 1 a 4 y 9): la pieza, el material y los
+  valores de impresión que salen del perfil (o cambiados a mano, sin tocar el perfil), la temperatura de trabajo y
+  Analizar, que dice qué falta. Ingeniería abre en Estructural. Las condiciones se marcan con un clic en la pieza
+  (punto o cara entera; Mayús suma caras), se ocultan o borran desde la lista, con su fuerza en N, y se deshacen con
+  Ctrl+Z.
+- **Análisis sobre un proyecto** (`formats.md`, regla 11 bis, FM25): `tisma-engine analyze proyecto.3mf -o
+  informe.json` analiza la primera pieza con condiciones de Ingeniería, con los ajustes del proyecto y los valores
+  cambiados a mano en el panel. Las zonas son los triángulos marcados y los puntos, discos de su radio. No hace falta
+  `--case`.
+- **Un solo renglón para el relleno no planar** (ficha `zigzag_infill.md`, regla 11): «Relleno no planar» con «No»,
+  «Zigzag en Z» y «Ondas entrelazadas», en lugar de dos casillas con nombres parecidos que juntas daban error. Debajo,
+  solo los ajustes de la opción elegida. La ayuda aclara que la mejora medida en el artículo fue en paredes, no en
+  relleno. Y si el zigzag no entra en ninguna capa (pieza chica o relleno denso), el laminado lo avisa (ZI8).
+- **Más dibujos para las superficies de arriba y de abajo** (pedido del dueño; ficha `infill_patterns.md`, reglas 14
+  a 17): además de monotónico y rectilíneo, líneas monotónicas, rectilíneo alineado (no gira entre capas),
+  concéntrico, Hilbert, espiral de Arquímedes y octograma. Abajo, los que no son líneas cambian solo la capa que toca
+  la cama. El patrón de abajo sigue en el nivel avanzado del panel, en «Arriba y abajo».
+- **Impresoras Anycubic que leen el archivo antes de imprimir** (Kobra 3, Kobra S1, Kobra X; ficha
+  `gcode_firmware.md`, regla 7): el ajuste nuevo `machine.strict_parser` = `anycubic` (en la interfaz, «Lector del
+  firmware» en la tarjeta del firmware) ordena el G-code como el programa de Anycubic: el resumen al principio
+  (`HEADER_BLOCK`), las órdenes entre `EXECUTABLE_BLOCK_START` y `_END`, los objetos sin comillas, los totales y el
+  bloque `statistics` al final, en vez de la lista de ajustes solo lo que lee el firmware (material y temperaturas),
+  y siempre en texto. Los nombres salen de un archivo de
+  Anycubic Slicer Next para la Kobra 3 que mandó el dueño. Falta probarlo en la impresora (FW10) y las miniaturas.
+- **Corte de la vista previa sin el relleno de abajo** (pedido del dueño, 2026-11-03): con las paredes a la vista y
+  la vista cortada en una capa, solo esa capa dibuja su relleno y sus viajes; las de abajo, que las paredes tapan,
+  dibujan el resto. Un cubo de 180 mm al 20 % cortado en la capa 400 pasó de 96 532 a 5101 extrusiones dibujadas y
+  de 2244 a 322 ms por cuadro (renderizador por software); de lejos el relleno ya no parece sólido.
+- **Oclusión sin el relleno** (pedido del dueño, 2026-11-03): la oclusión ambiental (y los rayos de ambiente del
+  trazado de rayos) no se calcula en los píxeles del relleno ralo ni del sólido interno, y el relleno ya no se dibuja
+  en el mapa de sombra de la luz principal: está adentro de las paredes y cargaba la placa de video sin mostrar nada.
+- **`--threads <n>`** en todas las órdenes de la línea de comandos (ficha `cloud.md`, regla 19d): como mucho `n`
+  hilos de cálculo, para que un nodo de la nube reparta sus núcleos. Sale en `--help`, y los nodos lo pasan solos al
+  verlo ahí. El resumen de un laminado deja afuera los gramos si no se conoce la densidad del filamento.
+- **Servidor de Tisma Cloud por defecto**: `https://tismaservidores.net` (ficha `cloud.md`, regla 1). Una dirección
+  guardada gana, y `--cloud-server` cambia la de una ejecución.
+- **Proyecto como 3MF** (ficha `formats.md`, reglas 6 a 11): guardar el proyecto con nombre `.3mf` hace un 3MF
+  estándar, con cada pieza en su lugar, que cualquier programa abre, más los datos del motor en
+  `Metadata/tisma_project.json`. Abrir un `.3mf` así lo abre como proyecto. «Laminar en la nube» manda este paquete:
+  el servidor real solo acepta un 3MF.
+- **Atajos con Ctrl más firmes** (UI48): Ctrl+Z, Ctrl+Y, Ctrl+Mayús+Z, Ctrl+, y Ctrl+P se leen de cada pulsación,
+  así un Ctrl+Z muy rápido no se toma como Z (encuadrar).
+- **Diálogo de Tisma Cloud** (UI47): «Cerrar sesión» en vez de «Salir», y solo la acción que corresponde.
+- **Mis informes** (ficha `problem_reports.md`, regla 11): con la sesión iniciada, el diálogo de Tisma Cloud tiene
+  «Mis informes (N)…», con la fecha, el título y el estado de cada informe propio, el más nuevo primero.
+- **Informar un cierre inesperado** (ficha `problem_reports.md`, regla 10): si el programa se cerró sin su salida
+  normal, al abrirlo de nuevo ofrece informarlo, con «Tisma se cerró» elegido y el registro de la sesión que se cerró.
+  Si se cancela, no se pregunta de nuevo por ese cierre. Nada se manda sin tocar «Mandar».
+- **Tus trabajos en la nube** (ficha `cloud.md`, regla 10): con la sesión iniciada, el diálogo de Tisma Cloud lista
+  los trabajos de la cuenta (`GET /v1/jobs`) con la fecha, si es laminado o análisis, el estado (con el avance si
+  corre y el motivo al pasar el mouse si falló) y los minutos usados.
+- **Chip de Tisma Cloud** en la barra superior (ficha `interface.md`, regla 7): el ícono de persona y «Tisma Cloud»
+  abren el diálogo de la cuenta; en una ventana angosta queda solo el ícono, y si tampoco entra, sigue en Más.
+- **El motor en los nodos de la nube** (ficha `cloud.md`, reglas 18 y 20): `tisma-engine slice <proyecto> -o
+  <salida.gcode> --summary <resumen.json> --sandbox [--no-gpu]` lamina un proyecto guardado por la interfaz (piezas,
+  ubicación, ajustes propios, volúmenes, rangos, pintura y mezclas) sin leer la carpeta de datos del usuario; da
+  líneas `progress N` y un resumen con el tiempo, el filamento en mm y en gramos y las capas, o `error`. El G-code sale
+  de texto o binario según el perfil. Con `--sandbox` no corren los scripts de posproceso.
+- **Laminar en la nube** (Más › «Laminar en la nube»; ficha `cloud.md`, reglas 6 a 9): la placa va como proyecto a
+  Tisma Cloud con la sesión; la barra de estado dice si está en cola o cuánto lleva, con una × para cancelarlo
+  (también en el servidor); el G-code que vuelve se abre en la vista previa como un laminado propio. Sin sesión, abre
+  el diálogo de Tisma Cloud. Un proyecto demasiado grande, parámetros mal y demasiados pedidos tienen su aviso.
+- **Informar un problema** (Más › «Informar un problema…»; ficha `problem_reports.md`): qué pasó, en pocas palabras,
+  los pasos y qué se esperaba; con permiso, la versión, el sistema, la impresora con sus perfiles y el registro de la
+  sesión, que se puede ver antes de mandar. Se manda con o sin cuenta; el aviso dice cuántas veces se informó antes el
+  mismo problema.
+- **Diálogo de Tisma Cloud** (Más › «Tisma Cloud…»; fichas `cloud.md` e `interface.md`): servidor, correo y
+  contraseña; con la sesión abierta, el plan, si está pagado, las horas del mes tal como las manda el servidor y los
+  trabajos a la vez; siempre, los planes públicos con el tuyo marcado y «Pagar o cambiar de plan…», que abre la página
+  de la cuenta en el navegador. La sesión se guarda en el almacén de claves del sistema; una sesión vencida o una
+  cuenta apagada piden entrar de nuevo.
+- **Cliente de Tisma Cloud, primera parte** (ficha `cloud.md`, prioridad del dueño): la conexión propia con el servidor
+  (HTTPS con los certificados del sistema; WinHTTP en Windows, OpenSSL 3 en Linux) y el cliente: entrar y salir, la
+  cuenta y sus horas, los planes públicos, informar un problema y laminar o analizar en la nube (mandar, seguir,
+  cancelar y bajar el resultado). Todavía sin pantallas: llegan con la segunda parte.
+- **Compilaciones diarias** (pedido del dueño, 2026-11-02): `dev` compilado y probado en Windows y Linux una vez por
+  día, publicado como la pre-release `nightly`, que se reemplaza cada vez (`docs/VERSIONING.md`, «Las compilaciones
+  diarias»).
 - **Panel de ajustes plegable** (pedido del dueño, 2026-11-02): «« al lado del buscador lo pliega y la vista toma
   todo el ancho; en Preparar queda arriba a la izquierda, al lado de las herramientas de la placa, un recuadro mínimo
   con tres listas (impresora, filamento y perfil de impresión, sin dibujo ni botones), y su » lo vuelve a abrir. Se
@@ -87,8 +375,75 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   retracción, en %, que se hace quieta después del barrido; se recorta a 100 − `before_wipe`. En el panel, el barrido
   y sus dos partes van en su propia tarjeta, «Barrido».
 
+### Cambiado
+
+- **El proyecto guarda cada pieza en sus coordenadas propias**, con su giro, escala y lugar aparte (en el 3MF, en la
+  transformación de su ítem). Mover o girar una pieza ya no cambia dónde quedan sus condiciones de Ingeniería.
+
 ### Corregido
 
+- **Paquete de perfiles:** un perfil de impresión sin boquilla declarada ya no se ofrece si sus paredes son de otra
+  boquilla (por ejemplo, un perfil de 0,8 mm en una boquilla de 0,4).
+- **Paquete de perfiles:** las variantes que no se podían elegir porque su filamento o su perfil apuntaban a un
+  conjunto de impresoras vacío ahora se eligen. Las macros de inicio reciben las temperaturas de cámara y de espera, en
+  0 si el filamento no las trae. Un G-code de inicio que llama a `START_PRINT` después de apagar la boquilla ya no se
+  rechaza: queda un aviso. El modelo de la cama se centra en la placa.
+- **Paquete de perfiles:** un perfil de impresión que vale para todas las impresoras solo se ofrece si su boquilla, su
+  altura de capa y sus anchos de línea caben en la impresora elegida.
+- **Proyectos:** uno de una versión más nueva se rechaza con «actualizá el programa». Una pieza fuera del alcance del
+  motor (2000 mm del origen) se rechaza con un mensaje claro también al orientar, analizar y calcular el flujo de aire.
+- Una impresora de resina del paquete (`"technology": "sla"`) quedaba como impresora de filamento.
+- Las velocidades del perfil de impresión del paquete se perdían y se laminaba con las de una Ender-3 (BH27). Ahora
+  pasan a la impresora, y cambian al elegir otro perfil de impresión o filamento del paquete; las que cambiaste a mano
+  se mantienen, con un aviso. Se ofrecen todos los perfiles de impresión del paquete para la impresora.
+- `pack plan` con un paquete instalado roto ya no falla: planea todo el paquete otra vez para repararlo.
+- `part gear|fastener` dice qué clave del archivo tiene un valor del tipo equivocado.
+
+- Un filamento sin temperatura de cama aparecía como modificado («1 cambio») apenas se mostraba su panel.
+- La prueba de interfaz del análisis estructural esperaba el veredicto antes de que arrancara el cálculo en una máquina cargada (falla de la CI de Linux).
+- La ayuda de los ajustes ya no nombra documentos internos (`docs/INFILL.md`, «Ficha …md») ni la clave `width` en la de paredes (QA de la app de Android).
+- La fila de variables de la pestaña Impresora se llamaba «Temperatura de boquilla» en la búsqueda y en `--settings-layout`.
+
+- En Estructural, Ctrl+Z deshace también lo que hizo Optimizar en la pieza («Girar la pieza», «Usar …»), no solo
+  las condiciones (UI51); la ayuda de sus botones ya no tapa el resultado (UI52).
+- El control del G-code ya no rechaza las piezas impresas una tras otra cuando una copia termina más alta que la
+  última (otra boquilla, otras capas): el tope de Z sale de la capa más alta, no de la última (búsqueda aleatoria,
+  semilla 20261104).
+- Una expresión de parámetro con miles de paréntesis anidados podía cerrar el programa; ahora es un error.
+- Estructural ya no se pone lento con piezas grandes: «Desactualizado» se calculaba en cada cuadro recorriendo toda
+  la malla (200 ms con 2 millones de triángulos).
+- Una restricción de boceto que solo se cumplía dando vuelta un rectángulo (ancho o alto por cero) se agregaba y
+  después quedaba sin cumplir; ahora se rechaza como contradictoria.
+- **La vista ya no gira sola al hacer clic** después de mover el puntero de golpe (UI50): el cuadro del clic no cuenta
+  como arrastre. Pasaba, a veces, al marcar condiciones en Estructural.
+- **Memoria del análisis con zonas marcadas:** una cara marcada de 200 × 200 mm ocupaba 504 MB; ahora menos de 1 MB,
+  y la búsqueda de los nodos de la zona es 10 veces más rápida.
+- **La interfaz conserva las condiciones de Ingeniería de cada pieza** al abrir y volver a guardar un proyecto, y al
+  espejar la pieza; antes se perdían.
+- **Nombres de ajustes cortados en el panel** (TR25): a 1440 px, 21 nombres quedaban cortados a mitad de palabra y a
+  veces tapaban la ⓘ. Ahora un nombre que no entra termina en «…», se lee entero al pasar el mouse, y la ⓘ siempre se
+  ve; la columna de los nombres es un poco más ancha. «Largo de las transiciones» pasa a «Largo de transición».
+- **Relleno zigzag en Z más rápido de lo que sube la impresora** (BH20, ficha `zigzag_infill.md`, regla 7): el G-code
+  pedía hasta 28 mm/s de Z en el zigzag aunque la máquina diera 5. Ahora la F de cada extrusión que sube o baja queda
+  dentro de `machine.max_feed_z`, y sin ese dato, dentro de los 5 mm/s de una Ender-3 de fábrica, con aviso. El
+  tiempo estimado y el G-code coinciden.
+- **Tisma Cloud sin conexión** (UI49): sin respuesta del servidor, la lista de planes dice «No se pudo conectar con
+  el servidor.» en lugar de «El servidor no mandó planes.», que queda para una lista vacía. Un error del servidor dice
+  su número.
+- **`infill.dense_density` e `infill.combine_max_height` en 0** (BH19): siguen rechazando 0, que no imprime nada o no
+  combina nada, pero el mensaje y `docs/CONFIG.md` ahora dicen «más de 0». El campo de la densidad en la interfaz
+  empieza en 1 % (antes dejaba poner 0, que el laminado rechazaba).
+- **Deshacer en la placa** (reporte UI45 del equipo de fichas): Ctrl+Z vuelve a poner donde estaba la pieza que se
+  movió, giró o escaló (con las manijas, arrastrándola sobre la cama o desde la tarjeta) y Ctrl+Y (o Ctrl+Mayús+Z) lo
+  rehace; un paso por arrastre o por cambio. Antes no había deshacer, y con Ctrl+Z la tecla Z encuadraba la pieza, que
+  parecía agrandarse.
+- La pintura se ve sobre la pieza (reporte UI35 de los probadores): mientras se pinta, la pieza se dibuja gris claro y
+  las marcas en verde y rojo oscuros, con un contraste medido en pantalla de 5,0 en una cara iluminada y 3,0 en una
+  en sombra con oclusión ambiental (antes 1,2 y 1,0). Cada marca muestra su color al lado de su nombre.
+- En una ventana angosta la barra de la vista ya no se sale por la derecha: el botón del modo de imagen queda solo con
+  su ícono y dice el modo en su ayuda (reporte UI42 del equipo de fichas).
+- Diseño sin el componente: una sola línea de error, traducida, y sin el subtítulo «Design» de un diseño sin nombre
+  (reporte TR22 del equipo de fichas).
 - Los ajustes de la interfaz del soporte (capas de abajo, patrón y separación) se ven en el nivel Normal, no solo en
   Avanzado (reporte UI36 de los probadores: no se encontraban). Están en Soportes › Interfaz, con los soportes prendidos.
 - «Volver al tutorial» (antes «Tutorial» en Más) también está arriba del panel de Ayuda (reporte UI33 de los
@@ -1381,7 +1736,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.11.0-beta.1...HEAD
+[0.11.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...v0.11.0-beta.1
 [0.10.0-alpha.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...v0.10.0-alpha.3
 [0.10.0-alpha.2]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.2
 [0.9.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...v0.9.0-alpha.1

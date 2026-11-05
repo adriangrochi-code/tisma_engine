@@ -34,7 +34,9 @@ tiene paredes y relleno.
 ## Resultados
 
 - Desplazamiento de cada vóxel, tensión de von Mises, factor de seguridad, masa de la pieza.
-- Punto crítico: dónde el factor de seguridad es menor.
+- Punto crítico: dónde el factor de seguridad es menor, en las coordenadas propias de la pieza (las mismas con las que el
+  proyecto guarda las condiciones, `formats.md`, regla 11 bis), así el punto es el mismo se analice en la computadora,
+  en la nube o desde un archivo suelto. Si el informe da además la posición en la cama, la nombra aparte.
 - **Veredicto:**
 
   | Veredicto | Cuándo |

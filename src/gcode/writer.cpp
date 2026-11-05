@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <charconv>
 #include <array>
 #include <cstdint>
@@ -56,6 +57,9 @@ namespace {
 // than 0.001 away from one half rounds the same way as the exact value; the
 // rest (near a half, huge, or more than 9 decimals) go to std::to_chars.
 constexpr std::size_t kNumberCapacity = 400; // any finite double with a few decimals
+// A stock Ender-3's Z speed, mm/s (Marlin's example configuration for it), for Z moves
+// when the profile gives no machine.max_feed_z (zigzag_infill.md, rule 7).
+constexpr double kStockZFeed = 5.0;
 std::size_t format_fixed(char* buffer, double v, int decimals) {
     static constexpr double kScale[] = {1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9};
     static constexpr std::uint64_t kDivisor[] = {1,         10,         100,         1000,         10000,
@@ -839,6 +843,9 @@ public:
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
         verbose_ = s.verbose_comments;
+        // How fast Z may move while extruding (zigzag_infill.md, rule 7): the
+        // machine's limit, or a stock Ender-3's 5 mm/s when the profile gives none.
+        z_limit_ = s.max_feed_z > 0.0 ? s.max_feed_z : kStockZFeed;
         // A silent mode: a second estimate with its limits (gcode_extras.md, rule 7).
         if (s.silent_mode)
             silent_.emplace(kinematics_of(silent_settings(s)));
@@ -1503,6 +1510,7 @@ public:
         const double section = !(height_ > 0.0) ? extruded_section(section_, width, height)
                                                 : extruded_section(section_, width, height_) * height / height_;
         feed = melt_feed(feed, width, height);
+        feed = z_limited(feed, length, z_to - z_from);
         const double e = section * length / filament_area_ * flow_ * speed_flow(feed);
         if (bridge_ || tail_)
             other_time_ += length / feed;
@@ -1533,6 +1541,16 @@ public:
         z_now_ = z_to;
     }
 
+    // The feed of a move `length` mm in XY and `dz` in Z, slowed so that Z
+    // goes no faster than z_limit_ (zigzag_infill.md, rule 7, ZI7): the
+    // G-code then asks what the machine does, and the estimate agrees.
+    double z_limited(double feed, double length, double dz) const {
+        const double up = std::abs(dz);
+        if (!(up > 1e-9))
+            return feed;
+        return std::min(feed, z_limit_ * std::hypot(length, up) / up);
+    }
+
     // Coasting (coasting.md, rule 1): a path's end run at its feed with no E;
     // the pressure left in the nozzle lays it. As an extrusion for the
     // layer's time, the slowdown and the wipe that may follow.
@@ -1541,6 +1559,7 @@ public:
         walk(length);
         const double z_to = written(z_value_ - drop_ + to.dz);
         feed = melt_feed(feed, (from.width + to.width) / 2.0, height_);
+        feed = z_limited(feed, length, z_to - z_now_);
         if (bridge_ || tail_)
             other_time_ += length / feed;
         else
@@ -2054,6 +2073,7 @@ private:
     double overhang_ = -1.0;         // the current paths' own fan
     bool weak_ = false;
     double filament_area_ = 1.0;
+    double z_limit_ = 5.0; // mm/s Z may move while extruding
     double e_scale_ = 1.0; // the E written per mm of filament
     double retract_, retract_feed_, lift_, min_travel_;
     double z_feed_; // mm/s of the moves in Z (speeds_accels.md, rule 4); 0: the travel's
@@ -2274,6 +2294,13 @@ std::vector<Warning> capability_warnings(const Settings& s) {
     }
     // Wavy infill asked, with an infill whose lines move from layer to layer
     // or sit too close: it stays flat, and says so.
+    // The zigzag's moves in Z slowed to a stock Z when the profile gives no
+    // limit (zigzag_infill.md, rule 7), said like the other speeds taken.
+    if (s.infill_nonplanar && s.infill_density > 0.0 && wave_params(s) && !(s.max_feed_z > 0.0))
+        add("speed_fallback",
+            "the printer's profile gives no speed for machine.max_feed_z: a stock Ender-3's 5 mm/s limits the zigzag "
+            "infill's moves in Z",
+            kStockZFeed);
     if (s.infill_nonplanar && s.infill_density > 0.0 && !wave_params(s))
         add("nonplanar_ignored",
             std::string("wavy infill needs an infill that repeats layer to layer (aligned_rectilinear, grid, "
@@ -2367,6 +2394,13 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
             items.push_back(TemplateValue::parse(v));
         c.variables[name] = list(std::move(items));
     }
+    // The temperature variables always exist, 0 when the filament lacks them,
+    // so a start macro can be given them (profile_pack.md rules 17 and 18 bis,
+    // BH30).
+    for (const char* name : {"temperature", "first_layer_temperature", "bed_temperature", "first_layer_bed_temperature",
+                             "chamber_temperature", "chamber_minimal_temperature", "idle_temperature"})
+        if (!c.variables.contains(name))
+            c.variables[name] = list({TemplateValue::of(0LL)});
     // The profiles' own parameters (presets.md, rule 21): the material's one
     // per extruder.
     for (const auto& [name, value] : s.printer_parameters)
@@ -2401,6 +2435,18 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     c.variables["first_layer_print_min"] = pair(lo[0], lo[1]);
     c.variables["first_layer_print_max"] = pair(hi[0], hi[1]);
     c.variables["first_layer_print_size"] = pair(hi[0] - lo[0], hi[1] - lo[1]);
+    // The same box one number each, and the other names the profile pack's
+    // start G-code uses (profile_pack_format.md, «G-code de inicio y de fin»,
+    // rule 3).
+    const auto mm3 = [](double v) { return TemplateValue::of(std::round(v * 1000.0) / 1000.0); };
+    c.variables["first_layer_min_x"] = mm3(lo[0]);
+    c.variables["first_layer_min_y"] = mm3(lo[1]);
+    c.variables["first_layer_max_x"] = mm3(hi[0]);
+    c.variables["first_layer_max_y"] = mm3(hi[1]);
+    c.variables["first_layer_size_x"] = mm3(hi[0] - lo[0]);
+    c.variables["first_layer_size_y"] = mm3(hi[1] - lo[1]);
+    c.variables["layer_count"] = c.variables["total_layer_count"];
+    c.variables["travel_speed"] = TemplateValue::of(s.travel_speed);
     const std::time_t now = std::time(nullptr);
     std::tm local{};
 #ifdef _WIN32
@@ -2411,6 +2457,11 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     char stamp[32];
     std::strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", &local);
     c.variables["year"] = TemplateValue::of(static_cast<long long>(local.tm_year + 1900));
+    c.variables["month"] = TemplateValue::of(static_cast<long long>(local.tm_mon + 1));
+    c.variables["day"] = TemplateValue::of(static_cast<long long>(local.tm_mday));
+    c.variables["hour"] = TemplateValue::of(static_cast<long long>(local.tm_hour));
+    c.variables["minute"] = TemplateValue::of(static_cast<long long>(local.tm_min));
+    c.variables["second"] = TemplateValue::of(static_cast<long long>(local.tm_sec));
     c.variables["timestamp"] = TemplateValue::of(std::string(stamp));
     // The layer the templates are at: the first, until a layer change.
     const double first_z = model.layers.empty() ? 0.0 : model.layers.front().top - model.layers.front().bottom;
@@ -2517,7 +2568,79 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         return s.belt_enabled ? belt_gcode(text, s) : curve_gcode(text, *model.curved, s);
     };
     std::ostream& out = s.gcode_progress || curved ? static_cast<std::ostream&>(held) : target;
-    out << "; generated by Tisma engine " << TISMA_VERSION << "\n";
+    // A firmware that reads the whole file first (gcode_firmware.md, rule 7)
+    // gets the blocks its maker's program writes: the summary at the start,
+    // the commands between EXECUTABLE_BLOCK_START and _END, no settings and
+    // no value with ';' in it. The names are those of the owner's Kobra 3
+    // file from Anycubic Slicer Next (FW10, read as a black box).
+    const bool strict = s.strict_parser == StrictParser::Anycubic;
+    // The material as those files name it in paint_info: the filament's type
+    // (PLA when not known, as that firmware takes a missing one) and its
+    // colour from the variable filament_colour ("#RRGGBB"; white when not given).
+    const std::string material_type = [&] {
+        std::string type;
+        for (const char c : s.filament_type)
+            if (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '+' || c == '_')
+                type += c;
+        return type.empty() ? std::string("PLA") : type;
+    }();
+    if (strict && material_type != s.filament_type && warnings)
+        warnings->push_back({"strict_parser", -1, 0.0,
+                             "The filament's type (extrusion.type) is not set: the file names it PLA, and the "
+                             "printer may take the material as PLA",
+                             0.0, "warning"});
+    const std::string paint_info = [&] {
+        const std::string& type = material_type;
+        int rgb[3] = {255, 255, 255};
+        if (const auto it = s.variables.find("filament_colour"); it != s.variables.end() && !it->second.empty()) {
+            const std::string& c = it->second.front();
+            if (c.size() == 7 && c[0] == '#' &&
+                std::all_of(c.begin() + 1, c.end(), [](char x) { return std::isxdigit(static_cast<unsigned char>(x)); }))
+                for (int k = 0; k < 3; ++k)
+                    rgb[k] = std::stoi(c.substr(std::size_t(1 + 2 * k), 2), nullptr, 16);
+        }
+        return "[{\"material_type\":\"" + type + "\",\"paint_color\":[" + std::to_string(rgb[0]) + "," +
+               std::to_string(rgb[1]) + "," + std::to_string(rgb[2]) + "],\"paint_index\":0}]";
+    }();
+    // The height printed: the layers keep the model's own heights.
+    const double top_z = model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom;
+    // The zigzag asked and possible with this pattern, but no layer has room
+    // for a wave (zigzag_infill.md, rule 5, ZI8): a small part or a dense
+    // infill. Said like a pattern that cannot have it (rule 2).
+    if (warnings && s.infill_nonplanar && s.infill_density > 0.0 && wave_params(s)) {
+        const bool waved = std::any_of(model.fills.begin(), model.fills.end(), [](const LayerFill& f) {
+            return std::any_of(f.sparse.begin(), f.sparse.end(), [](const Toolpath& t) {
+                return t.wavy && std::any_of(t.points.begin(), t.points.end(),
+                                             [](const ToolpathPoint& q) { return std::abs(q.dz) > 1e-9; });
+            });
+        });
+        if (!waved) {
+            const std::string part = model.objects.size() == 1 ? model.objects.front().name : std::string("the part");
+            warnings->push_back({"nonplanar_ignored", -1, 0.0,
+                                 "the zigzag in Z does not fit in " + part + ": it is too small or its infill too dense",
+                                 0.0, "warning"});
+        }
+    }
+    if (strict && s.gcode_binary && warnings)
+        warnings->push_back({"strict_parser", -1, 0.0,
+                             "The printer reads only plain G-code (machine.strict_parser): the file is not binary",
+                             0.0, "information"});
+    if (strict) {
+        out << "; HEADER_BLOCK_START\n";
+        out << "; generated by Tisma engine " << TISMA_VERSION << "\n";
+        out << "; total layer number: " << model.layers.size() << "\n";
+        out << "; filament_density: " << trimmed(s.filament_density, 4) << "\n";
+        out << "; filament_diameter: " << trimmed(s.filament_diameter, 4) << "\n";
+        out << "; max_z_height: " << trimmed(top_z, 3) << "\n";
+        out << "; exclude_object: " << (s.object_labels == ObjectLabels::Firmware ? 1 : 0) << "\n";
+        out << "; model_instances: " << std::max<std::size_t>(1, model.objects.size()) << "\n";
+        out << "; paint_info = " << paint_info << "\n";
+        out << "; test_mode: 0\n";
+        out << "; HEADER_BLOCK_END\n\n";
+        out << "; EXECUTABLE_BLOCK_START\n";
+    } else {
+        out << "; generated by Tisma engine " << TISMA_VERSION << "\n";
+    }
     // The dialect of the firmware (gcode_extras.md, rule 6; gcode_firmware.md).
     const Dialect dialect = dialect_of(s.flavor);
     Emitter g(s);
@@ -2549,10 +2672,23 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                  : s.flavor == GcodeFlavor::Klipper                                     ? Labels::Klipper
                                                                                         : Labels::None;
     const auto klipper_name = [&](std::size_t k) {
-        std::string name = model.objects[k].label();
+        const SlicedObject& o = model.objects[k];
+        if (strict) {
+            // As Anycubic's program names them: "<model>_id_<object>_copy_<copy>",
+            // bare, the model's name as it is (with its extension) but for
+            // what would end the value: anything but letters, digits, '.',
+            // '-' and '_' becomes '_'.
+            std::string name = o.name;
+            for (char& c : name)
+                if (!std::isalnum(static_cast<unsigned char>(c)) && c != '.' && c != '-' && c != '_')
+                    c = '_';
+            return (name.empty() ? std::string("object") : name) + "_id_" + std::to_string(o.object) + "_copy_" +
+                   std::to_string(o.instance);
+        }
+        std::string name = o.label();
         std::replace(name.begin(), name.end(), ' ', '_');
         std::replace(name.begin(), name.end(), '.', '_');
-        return name;
+        return "'" + name + "'";
     };
     const auto label_start = [&](std::size_t k) {
         const SlicedObject& o = model.objects[k];
@@ -2561,7 +2697,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         case Labels::M486Named:
             return "M486 S" + std::to_string(k) + "\n";
         case Labels::Klipper:
-            return "EXCLUDE_OBJECT_START NAME='" + klipper_name(k) + "'\n";
+            return "EXCLUDE_OBJECT_START NAME=" + klipper_name(k) + "\n";
         case Labels::OctoPrint:
             return "; printing object " + o.name + " id:" + std::to_string(o.object) + " copy " + std::to_string(o.instance) + "\n";
         case Labels::None:
@@ -2576,7 +2712,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         case Labels::M486Named:
             return std::string("M486 S-1\n");
         case Labels::Klipper:
-            return "EXCLUDE_OBJECT_END NAME='" + klipper_name(k) + "'\n";
+            return "EXCLUDE_OBJECT_END NAME=" + klipper_name(k) + "\n";
         case Labels::OctoPrint:
             return "; stop printing object " + o.name + " id:" + std::to_string(o.object) + " copy " + std::to_string(o.instance) + "\n";
         case Labels::None:
@@ -2599,7 +2735,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     lo[a] = std::min(lo[a], p[a]), hi[a] = std::max(hi[a], p[a]);
                 polygon += (polygon.empty() ? "[" : ",[") + fixed(p[0], 3) + "," + fixed(p[1], 3) + "]";
             }
-            out << "EXCLUDE_OBJECT_DEFINE NAME='" << klipper_name(k) << "' CENTER=" << fixed((lo[0] + hi[0]) / 2.0, 3) << ","
+            out << "EXCLUDE_OBJECT_DEFINE NAME=" << klipper_name(k) << " CENTER=" << fixed((lo[0] + hi[0]) / 2.0, 3) << ","
                 << fixed((lo[1] + hi[1]) / 2.0, 3) << " POLYGON=[" << polygon << "]\n";
         }
     }
@@ -2760,6 +2896,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     }
     if (!start_gcode.empty())
         out << start_gcode << "\n";
+    if (strict) // where the maker's files end the printer's start (FW10)
+        out << "; EXECUTABLE_BLOCK_HEAD\n";
     // E in mm3 on a pellet printer (pellets.md, rule 3, PE4): after the start
     // G-code, the firmware's command for it; Marlin's M200 D S1, and
     // RepRapFirmware's M200 D, whose S came only in 3.5. Not on a filament
@@ -4325,6 +4463,8 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << chamber_gcode(s.flavor, 0.0) << "\n";
     if (dialect.ends_m2)
         out << "M2\n";
+    if (strict)
+        out << "; EXECUTABLE_BLOCK_END\n\n";
     // docs/spec/GCODE_OUTPUT.md, "Tiempos" (the start and end G-code not
     // counted); the same by mode and for the first layer, as hosts read them
     // (gcode_firmware.md, rule 6; print_time.md, rule 7).
@@ -4410,8 +4550,75 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         }
         return line;
     };
-    for (const auto& [key, value] : describe(s))
-        out << "; " << one_line(key) << " = " << one_line(value) << "\n";
+    if (strict) {
+        // No settings: the firmware's reader stops at values it does not
+        // know. The totals as the maker's program closes the file.
+        double lo[2] = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max()}, hi[2] = {-lo[0], -lo[1]};
+        const auto take = [&](const auto& points) {
+            for (const auto& q : points) {
+                const double p[2] = {to_mm(q.x), to_mm(q.y)};
+                for (int a = 0; a < 2; ++a)
+                    lo[a] = std::min(lo[a], p[a]), hi[a] = std::max(hi[a], p[a]);
+            }
+        };
+        if (!model.objects.empty())
+            for (const SlicedObject& o : model.objects)
+                take(o.outline);
+        else
+            for (const Polygons& region : model.regions)
+                for (const auto& polygon : region)
+                    take(polygon);
+        const double size[2] = {hi[0] >= lo[0] ? hi[0] - lo[0] : 0.0, hi[1] >= lo[1] ? hi[1] - lo[1] : 0.0};
+        out << "; total layers count = " << model.layers.size() << "\n\n";
+        out << "; ams_info = begin\n; paint_info = " << paint_info << "\n; ams_info = end\n\n";
+        out << "; statistics = begin\n";
+        out << "; used_filament = " << fixed(g.total_e() / 1000.0, 2) << "\n";
+        out << "; print_time = " << format_duration(g.print_time()) << "\n";
+        out << "; model_size = " << fixed(size[0], 2) << "," << fixed(size[1], 2) << "," << fixed(top_z, 2) << "\n";
+        out << "; total_layers = " << model.layers.size() << "\n";
+        out << "; statistics = end\n\n";
+        // The few settings that firmware reads for its screen and its
+        // filament check (the material and the temperatures; reports in
+        // OrcaSlicer's issue tracker, #16336), one value each, under the
+        // names of the maker's file. A value that is not known is left out.
+        out << "; CONFIG_BLOCK_START = begin\n";
+        const auto first_variable = [&](const char* name) -> std::string {
+            const auto it = s.variables.find(name);
+            if (it == s.variables.end() || it->second.empty())
+                return {};
+            std::string v = it->second.front();
+            return v.find_first_of(";\n\r") == std::string::npos ? v : std::string();
+        };
+        const auto line = [&](const char* name, const std::string& value) {
+            if (!value.empty())
+                out << "; " << name << " = " << value << "\n";
+        };
+        line("filament_type", material_type); // as paint_info names it
+
+        if (s.filament_density > 0.0)
+            line("filament_density", trimmed(s.filament_density, 4));
+        line("filament_diameter", trimmed(s.filament_diameter, 4));
+        line("layer_height", trimmed(s.layer_height, 4));
+        line("initial_layer_print_height", trimmed(s.first_layer_height, 4));
+        line("nozzle_diameter", trimmed(s.nozzle_diameter, 4));
+        const std::string nozzle_temp = first_variable("temperature"), bed_temp = first_variable("bed_temperature");
+        const std::string first_nozzle = first_variable("first_layer_temperature").empty()
+                                             ? nozzle_temp
+                                             : first_variable("first_layer_temperature");
+        const std::string first_bed = first_variable("first_layer_bed_temperature").empty()
+                                          ? bed_temp
+                                          : first_variable("first_layer_bed_temperature");
+        line("nozzle_temperature", nozzle_temp);
+        line("nozzle_temperature_initial_layer", first_nozzle);
+        line("first_layer_height", fixed(s.first_layer_height, 3));
+        line("first_layer_temperature", first_nozzle);
+        line("first_layer_bed_temperature", first_bed);
+        line("bed_temperature", bed_temp);
+        out << "; CONFIG_BLOCK_END = end\n";
+    } else {
+        for (const auto& [key, value] : describe(s))
+            out << "; " << one_line(key) << " = " << one_line(value) << "\n";
+    }
     if (!s.gcode_progress) {
         if (curved)
             target << moved(std::move(held).str());
@@ -4436,7 +4643,14 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         const long now[4] = {share(g.time_at(id), g.print_time()), minutes(g.time_at(id), g.print_time()),
                              share(g.silent_time_at(id), g.silent_time()), minutes(g.silent_time_at(id), g.silent_time())};
         if (now[0] != shown[0] || now[1] != shown[1])
-            target << "M73 P" << now[0] << " R" << now[1] << note;
+            target << "M73 P" << now[0] << " R" << now[1]
+                   // As the maker's files write it for those printers: the
+                   // minutes left in the quiet and the sport modes too (the
+                   // silent mode's when there is one; else the normal's).
+                   << (s.strict_parser == StrictParser::Anycubic
+                           ? " QuietR" + std::to_string(s.silent_mode ? now[3] : now[1]) + " SportR" + std::to_string(now[1])
+                           : std::string())
+                   << note;
         if (silent && (now[2] != shown[2] || now[3] != shown[3]))
             target << "M73 Q" << now[2] << " S" << now[3] << note;
         std::copy(now, now + 4, shown);

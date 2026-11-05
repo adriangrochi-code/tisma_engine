@@ -9,6 +9,7 @@
 #include "ui/presets.hpp"
 #include "ui/plate.hpp"
 #include "ui/scene.hpp"
+#include "ui/session_marks.hpp"
 #include "ui/slicing.hpp"
 #include "ui/setting_guide.hpp"
 #include "ui/settings_layout.hpp"
@@ -1092,4 +1093,77 @@ TEST_CASE("preview: the far-away order stands for every layer uncut when nothing
     CHECK(preview_far(order, 0, 3, some));
     CHECK_FALSE(preview_far(order, 0, 2, some));    // a cut from the top
     CHECK_FALSE(preview_far(order, 0, 3, some, 0)); // the move slider
+}
+
+TEST_CASE("preview: a cut view draws infill only on its top layer (the owner, 2026-11-03)", "[ui][preview]") {
+    // 6 layers, each an outer and an inner wall and 3 lines of sparse infill.
+    PreviewBuffers p;
+    p.layer_extrusions.push_back(0);
+    for (std::uint32_t l = 0; l < 6; ++l) {
+        const float z = 0.2f * float(l + 1);
+        for (const LineKind k : {LineKind::OuterWall, LineKind::InnerWall})
+            p.extrusions.push_back({0, 0, z, 10, 0, z, 0.4f, 0.2f, 30, std::uint32_t(k) | (l << 8)});
+        for (int i = 1; i <= 3; ++i)
+            p.extrusions.push_back(
+                {0, float(i), z, 10, float(i), z, 0.4f, 0.2f, 30, std::uint32_t(LineKind::SparseInfill) | (l << 8)});
+        p.layer_extrusions.push_back(p.extrusions.size());
+    }
+    const PreviewOrders orders = preview_orders(p);
+    CHECK(orders.buried.instances.empty()); // counted in orders.instances
+    REQUIRE(orders.buried.layer_shown.size() == 7);
+    for (std::size_t l = 0; l < 6; ++l)
+        CHECK(orders.buried.layer_shown[l + 1] - orders.buried.layer_shown[l] == 2);
+    const auto total = [](const std::vector<PreviewRange>& d) {
+        std::size_t n = 0;
+        for (const PreviewRange& r : d)
+            n += r.count;
+        return n;
+    };
+    std::uint32_t all = 0;
+    for (const LineKind k : {LineKind::OuterWall, LineKind::InnerWall, LineKind::SparseInfill})
+        all |= 1u << unsigned(k);
+    // Cut at layer 3 (0 to 3): the top layer's 5, and the 2 walls of each of the 3 under it.
+    CHECK(cut_buries(orders, 0, 3, all));
+    CHECK(total(cut_preview_draws(orders, 0, 3, all, 50.0f)) == 5 + 3 * 2);
+    // Without the walls nothing hides the infill: every layer's is drawn (the
+    // ranges hold every kind; the shader leaves out the walls).
+    const std::uint32_t no_walls = 1u << unsigned(LineKind::SparseInfill);
+    CHECK_FALSE(cut_buries(orders, 0, 3, no_walls));
+    CHECK(total(cut_preview_draws(orders, 0, 3, no_walls, 50.0f)) == 4 * 5);
+    // One layer alone: all of it.
+    CHECK_FALSE(cut_buries(orders, 2, 2, all));
+    CHECK(total(cut_preview_draws(orders, 2, 2, all, 50.0f)) == 5);
+    // The same draws as preview_draws when it does not apply.
+    CHECK(total(cut_preview_draws(orders, 0, 3, no_walls, 50.0f)) ==
+          total(preview_draws(orders.full, 0, 3, no_walls, 50.0f)));
+}
+
+TEST_CASE("session marks: a session whose process is gone is found once, with its log (problem_reports.md, rule 10)",
+          "[ui]") {
+    const auto dir = test_temp_dir() / "tisma_test_session_marks";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    // This process's own mark is never a closed session.
+    const ui::SessionMark own = ui::mark_session(dir);
+    REQUIRE(std::filesystem::exists(own.lock));
+    REQUIRE(std::filesystem::exists(own.log));
+    CHECK(ui::process_running(ui::current_process_id()));
+    CHECK_FALSE(ui::closed_session_log(dir));
+    // One of a process that is gone: its log, its last bytes from a line's start.
+    CHECK_FALSE(ui::process_running(2147483000));
+    std::ofstream(dir / "session-2147483000.lock");
+    std::ofstream(dir / "session-2147483000.log", std::ios::binary) << "first line\nsecond line\nthird line\n";
+    std::ofstream(dir / "session-other.lock"); // not a mark: left alone
+    const std::optional<std::string> log = ui::closed_session_log(dir, 16);
+    REQUIRE(log);
+    CHECK(*log == "third line\n");
+    CHECK_FALSE(std::filesystem::exists(dir / "session-2147483000.lock"));
+    CHECK_FALSE(std::filesystem::exists(dir / "session-2147483000.log"));
+    CHECK(std::filesystem::exists(dir / "session-other.lock"));
+    CHECK_FALSE(ui::closed_session_log(dir)); // asked once
+    // A normal exit leaves nothing.
+    ui::end_session(own);
+    CHECK_FALSE(std::filesystem::exists(own.lock));
+    CHECK_FALSE(std::filesystem::exists(own.log));
+    std::filesystem::remove_all(dir);
 }

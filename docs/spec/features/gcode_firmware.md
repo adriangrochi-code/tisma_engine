@@ -82,24 +82,43 @@ Los límites de la máquina (aceleraciones, velocidades y tirones máximos por e
    - Kobra S1, S1 Max y X aceptan solo `.gcode` plano; la Kobra 3 V2 y la 3 Max también `.gcode.3mf` si el firmware lo
      trae ([SimplyPrint, tipos de archivo](https://help.simplyprint.io/en/article/anycubic-kobra-x-kobra-s1-and-kobra-3-connecting-and-which-file-types-work-1r760ze/)).
    - El analizador se cae con la línea `; filament_colour_type = 1;1;1;1` del bloque de configuración que escriben los
-     programas derivados de Bambu Studio ([OrcaSlicer #12444](https://github.com/OrcaSlicer/OrcaSlicer/issues/12444)),
-     y con listas de filamentos separadas por `;` en vez de `=` o `:`
-     ([OrcaSlicer #16336](https://github.com/OrcaSlicer/OrcaSlicer/issues/16336)); la recomendación de esos programas
-     es omitir el bloque de configuración entero (opción «skip config block»).
+     programas derivados de Bambu Studio ([OrcaSlicer #12444](https://github.com/OrcaSlicer/OrcaSlicer/issues/12444)).
+   - El firmware de la Kobra 3 lee el material y las temperaturas de los comentarios del archivo: toma las líneas que
+     empiezan con `; nozzle_temperature =` o `; first_layer_temperature =`, las parte en `=` y se queda con el último
+     valor; las listas de filamentos las espera separadas por `=` o `:`, y con `;` las lee como un solo material que no
+     existe y no deja imprimir ([OrcaSlicer #16336](https://github.com/OrcaSlicer/OrcaSlicer/issues/16336), con enlace
+     al código del firmware).
+   - Con el ACE Pro, archivos con un solo filamento en la lista quedaron en «parsing» y con cuatro imprimieron; en la
+     Kobra S1 se arregló con el firmware 2.7.0.9, en la Kobra 3 no hay arreglo confirmado
+     ([OrcaSlicer #12952](https://github.com/OrcaSlicer/OrcaSlicer/issues/12952), causa sin confirmar).
    - Anycubic Slicer Next es un derivado de OrcaSlicer; OrcaSlicer, ElegooSlicer y Cura traen perfiles de la Kobra S1
      que imprimen ([SimplyPrint, Kobra S1](https://simplyprint.io/compatibility/anycubic-kobra-s1)).
-   Regla: la ficha de la impresora lleva un indicador «el firmware analiza el archivo» (propuesto
-   `machine.strict_parser` = `anycubic`), encendido en los perfiles de esas Kobra. Con él, el motor:
+   - **Archivo de referencia** (el dueño, 03-11-2026): un 3DBenchy en ABS a 0,16 mm para su Kobra 3, exportado con
+     Anycubic Slicer Next 2.0.0.3; medido como caja negra por el equipo del motor, queda fuera del repositorio. En
+     orden: `; HEADER_BLOCK_START` … `; HEADER_BLOCK_END` (con `total layer number:`, `filament_density:`,
+     `filament_diameter:` y `max_z_height:`, con `:`); dos miniaturas PNG (230 × 110 y 512 × 512) en
+     `; THUMBNAIL_BLOCK_START` … `END`; los comandos entre `; EXECUTABLE_BLOCK_START` y `; EXECUTABLE_BLOCK_END`; el
+     inicio `G9111 bedTemp=… extruderTemp=…` (calienta la impresora sola, sin `M190` ni `M109`); `M73 P R QuietR
+     SportR`; objetos sin comillas (`EXCLUDE_OBJECT_DEFINE NAME=3DBenchy_id_0_copy_0`); al final los totales, el
+     `CONFIG_BLOCK` entero (ocho líneas con `;` dentro del valor), `ams_info` y `; statistics = begin … end`.
+   Regla: la ficha de la impresora lleva un indicador «el firmware analiza el archivo» (`machine.strict_parser` =
+   `none` o `anycubic`), encendido en los perfiles de esas Kobra. Con `anycubic`, el motor:
    - escribe `.gcode` plano (no binario, no 3MF) aunque el perfil pida otra cosa, y lo dice en el aviso previo a la
      exportación;
-   - no escribe el bloque de configuración al final del archivo ni ninguna línea cuyo valor tenga `;` adentro;
-   - escribe al principio del archivo los comentarios de resumen que leen esas máquinas con los mismos nombres que
-     el programa de la marca: cantidad total de capas, altura de capa, filamento usado en mm y en g, tiempo estimado,
-     y la miniatura PNG que el perfil pida (`gcode_extras.md`, regla 8);
-   - mantiene las etiquetas de objetos de Klipper (regla 4) y el avance `M73` (regla 5).
-   Lo que falta verificar con una impresora real (prueba FW10): qué líneas exactas exige el analizador. El probador
-   tiene que mandar un archivo del mismo modelo exportado con Anycubic Slicer Next y decir qué modelo de Kobra es;
-   la prueba compara los comentarios del principio de ambos archivos y se imprime el del motor.
+   - escribe el bloque de encabezado (`HEADER_BLOCK`, con los nombres y el `:` del archivo de referencia) y encierra
+     los comandos en `EXECUTABLE_BLOCK_START` … `END`;
+   - en vez del bloque de configuración completo, escribe un `CONFIG_BLOCK` corto, un valor por línea y ninguno con
+     `;` adentro, con lo que lee el firmware: tipo, densidad y diámetro del filamento; altura de capa y de la primera
+     capa; diámetro de la boquilla; temperatura de la boquilla y de la cama, normal y de la primera capa, con los
+     nombres del archivo de referencia (`nozzle_temperature`, `first_layer_temperature`, `bed_temperature`,
+     `first_layer_bed_temperature`, `layer_height`, `first_layer_height`…);
+   - escribe al final `total layers count` y el bloque `statistics` como el archivo de referencia;
+   - nombra los objetos sin comillas y mantiene las etiquetas de Klipper (regla 4) y el avance `M73` (regla 5);
+   - escribe la miniatura PNG que el perfil pida (`gcode_extras.md`, regla 8) cuando el motor pueda dibujarla sin la
+     vista 3D; hasta entonces el archivo va sin miniatura.
+   El inicio con `G9111` va en el G-code de inicio del perfil de la impresora, no lo agrega el indicador.
+   Lo que falta verificar con la impresora (prueba FW10): que la Kobra 3 del dueño imprima el archivo del motor, con y
+   sin el ACE Pro, por #12952.
 
 ## Pruebas
 
@@ -117,4 +136,4 @@ del cubo de 20 mm, con centros en X = 100 y X = 74. Los valores de los límites 
 | FW7 | Klipper con avance; impresión de 7 min 38 s | 107 líneas `M73`, de `P0 R7` a `P100`; al final, `; estimated printing time (normal mode) = 7m 38s` |
 | FW8 | RepRap genérico, `emit`, etiquetas `firmware`, avance, modo silencioso | Sin límites, sin `M486` ni comentarios de objetos y sin error. `M73 P R` sin `Q` ni `S`. `M104 S200` antes del inicio y `M109 S200` después |
 | FW9 | Marlin 1 y Marlin 2, `emit`, aceleraciones 1100 al imprimir, 1200 al retraer y 1300 al viajar | Marlin 1: `M204 S1100 T1200`. Marlin 2: `M204 P1100 R1200 T1300` |
-| FW10 | Perfil Anycubic Kobra S1 (o la Kobra del probador), `strict_parser` = `anycubic`, cubo de 20 mm | Pendiente de medir: archivo `.gcode` plano sin bloque de configuración, sin `;` dentro de valores; los comentarios del principio con los mismos nombres que el archivo de Anycubic Slicer Next del mismo cubo; la impresora lo imprime sin quedarse en «parsing» |
+| FW10 | Perfil Kobra 3, `strict_parser` = `anycubic`, cubo de 20 mm | `.gcode` plano con `HEADER_BLOCK`, `EXECUTABLE_BLOCK` y un `CONFIG_BLOCK` corto sin `;` dentro de valores; los nombres como en el archivo de referencia; la Kobra 3 del dueño lo imprime sin quedarse en «parsing», con y sin el ACE Pro |

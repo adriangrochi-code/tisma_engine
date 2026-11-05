@@ -1,10 +1,16 @@
 #include "cli/cli.hpp"
+#include "config/settings.hpp"
+#include "io/stl.hpp"
+#include "project/project.hpp"
 #include "test_temp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <nlohmann/json.hpp>
+
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -313,6 +319,109 @@ TEST_CASE("analyze errors", "[cli]") {
     }
 }
 
+// The number after `key` on the output ("max_displacement_mm: 0.01").
+static double number_after(const std::string& text, const std::string& key) {
+    const std::size_t at = text.find(key);
+    return at == std::string::npos ? -1.0 : std::stod(text.substr(at + key.size()));
+}
+
+TEST_CASE("analyze on a project uses its parts' Engineering conditions (FM25)", "[cli]") {
+    const auto dir = test_temp_dir();
+    const std::string config = kData + "/settings.json";
+    Project project;
+    project.settings = load_settings(config);
+    ProjectModel model;
+    model.name = "cube_ascii.stl";
+    model.mesh = read_stl(kData + "/cube_ascii.stl").mesh;
+    model.offset = {60.0, 70.0, 0.0};
+    // Held by its bottom, pushed down on its top: the case file's faces, as
+    // triangles marked on the part.
+    float zmin = 1e9f, zmax = -1e9f;
+    for (std::uint32_t t = 0; t < model.mesh.triangle_count(); ++t)
+        for (int k = 0; k < 3; ++k)
+            zmin = std::min(zmin, model.mesh.corner(t, k).z), zmax = std::max(zmax, model.mesh.corner(t, k).z);
+    EngineeringCondition fixed, push;
+    fixed.kind = ConditionKind::FixedZone;
+    push.kind = ConditionKind::ForceZone;
+    push.newtons = 100.0;
+    push.direction = ForceDirection::Axis;
+    push.axis = -3;
+    for (std::uint32_t t = 0; t < model.mesh.triangle_count(); ++t) {
+        bool bottom = true, top = true;
+        for (int k = 0; k < 3; ++k)
+            bottom &= model.mesh.corner(t, k).z == zmin, top &= model.mesh.corner(t, k).z == zmax;
+        if (bottom)
+            fixed.triangles.push_back(t);
+        if (top)
+            push.triangles.push_back(t);
+    }
+    REQUIRE_FALSE(fixed.triangles.empty());
+    REQUIRE_FALSE(push.triangles.empty());
+    model.engineering.conditions = {fixed, push};
+    project.models.push_back(model);
+    const auto file = dir / "tisma_test_engineering.3mf";
+    save_project(file, project);
+
+    const auto case_file = dir / "tisma_test_engineering_case.json";
+    std::ofstream(case_file) << R"({"fixtures": [{"face": "bottom"}], "loads": [{"face": "top", "force": [0, 0, -100]}]})";
+    const auto by_case = dir / "tisma_test_engineering_by_case.json", by_project = dir / "tisma_test_engineering_report.json";
+    const Run a = run({"analyze", kData + "/cube_ascii.stl", "--config", config, "--case", case_file.string(), "-o",
+                       by_case.string()});
+    const Run b = run({"analyze", file.string(), "-o", by_project.string()});
+    REQUIRE(a.code == kExitOk);
+    INFO(b.out << b.err);
+    REQUIRE(b.code == kExitOk);
+    CHECK_THAT(b.out, ContainsSubstring("part: cube_ascii.stl"));
+    CHECK_THAT(b.out, ContainsSubstring("1 fixtures, 1 loads"));
+    CHECK(std::filesystem::exists(by_project));
+    const double da = number_after(a.out, "max_displacement_mm: "), db = number_after(b.out, "max_displacement_mm: ");
+    INFO(da << " " << db);
+    REQUIRE(da > 0.0);
+    CHECK(std::abs(db / da - 1.0) < 0.05); // 1.8 % on 2026-11-03
+
+    // The report says where its points are: on the bed for a project.
+    const auto read_text = [](const std::filesystem::path& path) {
+        std::ifstream in(path);
+        std::stringstream text;
+        text << in.rdbuf();
+        return text.str();
+    };
+    // The critical point in the part's own coordinates (structural_analysis.md),
+    // the same for the loose STL and the project's part moved on the bed; on
+    // the bed apart, as weakest_on_bed.
+    const auto weakest = [&](const std::filesystem::path& path, const char* key) {
+        const nlohmann::json j = nlohmann::json::parse(read_text(path));
+        const nlohmann::json& w = j.at("result").at(key);
+        return std::array<double, 3>{w.at("x").get<double>(), w.at("y").get<double>(), w.at("z").get<double>()};
+    };
+    const std::array<double, 3> wa = weakest(by_case, "weakest"), wb = weakest(by_project, "weakest");
+    for (std::size_t k = 0; k < 3; ++k) {
+        INFO(k << ": " << wa[k] << " " << wb[k]);
+        CHECK(wb[k] >= -0.5);
+        CHECK(wb[k] <= 10.5); // inside the 10 mm cube's own box
+    }
+    const std::array<double, 3> bed = weakest(by_project, "weakest_on_bed");
+    CHECK(std::abs(bed[0] - wb[0] - 60.0) < 1e-6);
+    CHECK(std::abs(bed[1] - wb[1] - 70.0) < 1e-6);
+    CHECK_THAT(read_text(by_project), ContainsSubstring("\"frame\": \"part\""));
+
+    // Without conditions, the project says what is missing.
+    project.models[0].engineering.conditions.clear();
+    save_project(file, project);
+    const Run none = run({"analyze", file.string(), "-o", by_project.string()});
+    CHECK(none.code == kExitInput);
+    CHECK_THAT(none.err, ContainsSubstring("no part of the project has Engineering conditions"));
+    // ...and with --case, the case's conditions and the project's own
+    // settings, no --config needed (the spec team, 2026-11-03).
+    const Run with_case = run({"analyze", file.string(), "--case", case_file.string(), "-o", by_project.string()});
+    INFO(with_case.err);
+    REQUIRE(with_case.code == kExitOk);
+    const double dc = number_after(with_case.out, "max_displacement_mm: ");
+    // The same part, case and settings as the STL's run; only the voxel grid
+    // falls a little apart on the bed (95 779 voxels against 95 780).
+    CHECK(std::abs(dc / da - 1.0) < 0.005);
+}
+
 TEST_CASE("analyze estimates, reports progress and writes the voxel mesh", "[cli]") {
     const auto dir = test_temp_dir();
     const std::string model = kData + "/cube_ascii.stl", config = kData + "/settings.json",
@@ -542,4 +651,113 @@ TEST_CASE("a folder given as the model or the settings says so (the spec team's 
     CHECK(config.code == kExitInput);
     CHECK_THAT(config.err, ContainsSubstring("is a folder, not a settings file"));
     fs::remove_all(dir);
+}
+
+TEST_CASE("slice of a model with --config writes the nodes' summary when asked (Android app, 2026-11-04)", "[cli]") {
+    const auto gcode = test_temp_dir() / "tisma_test_summary.gcode";
+    const auto json = test_temp_dir() / "tisma_test_summary.json";
+    std::filesystem::remove(json);
+    const Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/printer_settings.json", "-o", gcode.string(),
+                       "--summary", json.string()});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    std::ifstream f(json);
+    std::stringstream text;
+    text << f.rdbuf();
+    CHECK_THAT(text.str(), ContainsSubstring("\"print_time_s\""));
+    CHECK_THAT(text.str(), ContainsSubstring("\"filament_mm\""));
+    CHECK_THAT(text.str(), ContainsSubstring("\"layers\""));
+}
+
+TEST_CASE("profile: the settings made from the catalog, ready for slice --config (the Android app's request)", "[cli]") {
+    const auto dir = std::filesystem::temp_directory_path() / "tisma_test_cli_profile";
+    std::filesystem::create_directories(dir);
+    const auto settings = dir / "settings.json", gcode = dir / "out.gcode";
+    // The full name wins over the longer ones that hold it (S1 Plus, S1 Pro).
+    Run r = run({"profile", "--printer", "creality ender-3 s1", "--nozzle", "0.4", "--filament", "Anycubic PLA Basic",
+                 "-o", settings.string()});
+    INFO(r.err);
+    REQUIRE(r.code == 0);
+    std::ifstream in(settings, std::ios::binary);
+    const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const Settings s = parse_settings(text);
+    CHECK(s.nozzle_diameter == 0.4);
+    CHECK(s.max_nozzle_temp == 260.0);
+    r = run({"slice", kData + "/cube_ascii.stl", "--config", settings.string(), "-o", gcode.string()});
+    INFO(r.err);
+    CHECK(r.code == 0);
+    // Without -o, on standard output; without --nozzle, the stock one.
+    r = run({"profile", "--printer", "Creality Ender-3 S1"});
+    CHECK(r.code == 0);
+    CHECK(parse_settings(r.out).nozzle_diameter == 0.4);
+
+    r = run({"profile", "--printer", "Ender-3"});
+    CHECK(r.code == 2);
+    CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("names"));
+    r = run({"profile", "--printer", "Nobody Nothing 9000"});
+    CHECK(r.code == 2);
+    CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("no printer"));
+    r = run({"profile", "--printer", "Creality Ender-3 S1", "--nozzle", "0.8"});
+    CHECK(r.code == 2);
+    CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("takes nozzles of 0.4"));
+    r = run({"profile", "--printer", "Creality Ender-3 S1", "--filament", "Nobody Glue"});
+    CHECK(r.code == 2);
+    r = run({"profile", "--nozzle", "0.4"});
+    CHECK(r.code == 1);
+}
+
+TEST_CASE("part: a gear and a fastener from their spec, as STL, for the phone", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_cli_part";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    for (const std::string kind : {"gear", "fastener"}) {
+        INFO(kind);
+        const Run d = run({"part", kind, "--defaults"});
+        REQUIRE(d.code == kExitOk);
+        const auto spec = dir / (kind + ".json"), stl = dir / (kind + ".stl");
+        std::ofstream(spec) << d.out;
+        const Run r = run({"part", kind, spec.string(), "-o", stl.string()});
+        INFO(r.err);
+        REQUIRE(r.code == kExitOk);
+        const nlohmann::json sizes = nlohmann::json::parse(r.out);
+        CHECK(sizes["triangles"].get<int>() > 100);
+        CHECK(read_stl(stl).mesh.triangle_count() == sizes["triangles"].get<std::size_t>());
+    }
+    // A spec that cannot be made says why.
+    const auto bad = dir / "bad.json";
+    std::ofstream(bad) << R"({"format": "tisma-gear-1", "teeth": 2, "module": 1.5, "width": 8})";
+    const Run r = run({"part", "gear", bad.string(), "-o", (dir / "bad.stl").string()});
+    CHECK(r.code == kExitInput);
+    CHECK_FALSE(r.err.empty());
+    CHECK(run({"part", "spring", "--defaults"}).code == kExitUsage);
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("calibration: the part and its height changes, then the best value written (for the phone)", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_cli_calibration";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "s.json", model = dir / "t.stl", tower = dir / "t.json", applied = dir / "a.json";
+    REQUIRE(run({"profile", "--printer", "Creality Ender-3 V3 SE", "-o", config.string()}).code == kExitOk);
+    Run r = run({"calibration", "retraction", "--config", config.string(), "--start", "0.2", "--end", "1", "--step", "0.4",
+                 "--model", model.string(), "--settings", tower.string()});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    const nlohmann::json j = nlohmann::json::parse(r.out);
+    REQUIRE(j["segments"].size() == 3);
+    CHECK(j["segments"][2]["value"].get<double>() == 1.0);
+    CHECK(read_stl(model).mesh.triangle_count() > 0);
+    CHECK(load_settings(tower).changes.size() >= 2);
+    r = run({"calibration", "apply", "retraction", "--value", "0.6", "--config", tower.string(), "-o", applied.string()});
+    REQUIRE(r.code == kExitOk);
+    const Settings best = load_settings(applied);
+    CHECK(best.retract_length == 0.6);
+    CHECK(best.changes.empty());
+    // A test that sets no value, and a range for one that is not a tower.
+    CHECK(run({"calibration", "apply", "fit", "--value", "0.2", "--config", tower.string(), "-o", applied.string()}).code ==
+          kExitInput);
+    CHECK(run({"calibration", "fit", "--config", config.string(), "--start", "1", "--end", "2", "--step", "1", "--model",
+               model.string(), "--settings", tower.string()}).code == kExitUsage);
+    CHECK(run({"calibration", "nothing", "--config", config.string()}).code == kExitUsage);
+    std::filesystem::remove_all(dir);
 }

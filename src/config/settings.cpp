@@ -440,6 +440,30 @@ const char* object_labels_name(ObjectLabels labels) {
     return labels == ObjectLabels::Firmware ? "firmware" : labels == ObjectLabels::OctoPrint ? "octoprint" : "none";
 }
 
+namespace {
+const std::map<std::string, SurfacePattern>& surface_patterns() {
+    static const std::map<std::string, SurfacePattern> p = {
+        {"monotonic", SurfacePattern::Monotonic},
+        {"rectilinear", SurfacePattern::Rectilinear},
+        {"monotonic_lines", SurfacePattern::MonotonicLines},
+        {"aligned_rectilinear", SurfacePattern::AlignedRectilinear},
+        {"concentric", SurfacePattern::Concentric},
+        {"hilbert", SurfacePattern::Hilbert},
+        {"archimedean", SurfacePattern::Archimedean},
+        {"octagram", SurfacePattern::Octagram}};
+    return p;
+}
+} // namespace
+
+const char* surface_pattern_name(SurfacePattern pattern) {
+    for (const auto& [name, p] : surface_patterns())
+        if (p == pattern)
+            return name.c_str();
+    return "monotonic";
+}
+
+const char* strict_parser_name(StrictParser parser) { return parser == StrictParser::Anycubic ? "anycubic" : "none"; }
+
 const char* top_one_wall_name(TopOneWall where) {
     return where == TopOneWall::Top ? "top" : where == TopOneWall::Topmost ? "topmost" : "none";
 }
@@ -1556,7 +1580,7 @@ Settings parse_checked(std::string_view text) {
                                   "bottom_pattern", "bridge_angle"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "bottom_pattern") {
-            s.monotonic_bottom = choice<bool>(g, n, k, {{"monotonic", true}, {"rectilinear", false}});
+            s.bottom_pattern = choice<SurfacePattern>(g, n, k, surface_patterns());
             return;
         }
         if (n == "bridge_angle") {
@@ -1587,7 +1611,7 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         if (n == "top_pattern") {
-            s.monotonic_top = choice<bool>(g, n, k, {{"monotonic", true}, {"rectilinear", false}});
+            s.top_pattern = choice<SurfacePattern>(g, n, k, surface_patterns());
             return;
         }
         const json& v = g.at(n);
@@ -1661,7 +1685,7 @@ Settings parse_checked(std::string_view text) {
         if (n == "dense_density") {
             const double v = number(g, n, k);
             if (!(v > 0.0) || v > 100.0)
-                fail(k, "must be from 0 to 100");
+                fail(k, "must be more than 0 and at most 100");
             s.infill_dense_density = v;
             return;
         }
@@ -1693,13 +1717,13 @@ Settings parse_checked(std::string_view text) {
                 char* end = nullptr;
                 const double p = std::strtod(t.c_str(), &end);
                 if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0) || p > 1000.0)
-                    fail(k, "must be a number of mm or a percentage of the nozzle like \"100%\"");
+                    fail(k, "must be a number of mm or a percentage of the nozzle like \"100%\", more than 0");
                 s.infill_combine_max_height = {p, true};
                 return;
             }
             const double d = number(g, n, k);
             if (!(d > 0.0) || d > 10.0)
-                fail(k, "must be from 0 to 10 mm, or a percentage of the nozzle");
+                fail(k, "must be more than 0 and at most 10 mm, or a percentage of the nozzle");
             s.infill_combine_max_height = {d, false};
             return;
         }
@@ -1747,7 +1771,7 @@ Settings parse_checked(std::string_view text) {
                 "custom_parameters",
                 "extruders", "extruder_offset", "single_extruder_mmu", "high_flow_nozzle", "display_pixels_x", "display_pixels_y",
                 "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology", "calibrations",
-                "feedstock"},
+                "feedstock", "strict_parser"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "custom_parameters") {
@@ -1914,6 +1938,9 @@ Settings parse_checked(std::string_view text) {
                                                  : s.max_chamber_temp) = d;
                    } else if (n == "flavor") {
                        s.flavor = choice<GcodeFlavor>(g, n, k, flavors());
+                   } else if (n == "strict_parser") {
+                       s.strict_parser = choice<StrictParser>(
+                           g, n, k, {{"none", StrictParser::None}, {"anycubic", StrictParser::Anycubic}});
                    } else if (n == "start_gcode" || n == "end_gcode") {
                        if (!v.is_string())
                            fail(k, "must be a string");
@@ -3145,8 +3172,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"review.max_deflection", num(s.review_max_deflection)},
         {"surfaces.top_layers", std::to_string(s.top_layers)},
         {"surfaces.bottom_layers", std::to_string(s.bottom_layers)},
-        {"surfaces.top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
-        {"surfaces.bottom_pattern", s.monotonic_bottom ? "monotonic" : "rectilinear"},
+        {"surfaces.top_pattern", surface_pattern_name(s.top_pattern)},
+        {"surfaces.bottom_pattern", surface_pattern_name(s.bottom_pattern)},
         {"surfaces.bridge_angle", num(s.bridge_angle)},
         {"surfaces.top_width", num(s.top_width)},
         {"surfaces.solid_width", num(s.solid_width)},
@@ -3214,6 +3241,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.filament_diameter", num(s.filament_diameter)},
         {"machine.relative_extrusion", flag(s.relative_extrusion)},
         {"machine.flavor", flavor},
+        {"machine.strict_parser", strict_parser_name(s.strict_parser)},
         {"machine.start_gcode", text(s.start_gcode)},
         {"machine.end_gcode", text(s.end_gcode)},
         {"machine.max_feed_x", speed(s.max_feed_x)},
@@ -3734,8 +3762,8 @@ std::string settings_json(const Settings& s) {
         {"surfaces",
          {{"top_layers", s.top_layers},
           {"bottom_layers", s.bottom_layers},
-          {"top_pattern", s.monotonic_top ? "monotonic" : "rectilinear"},
-          {"bottom_pattern", s.monotonic_bottom ? "monotonic" : "rectilinear"},
+          {"top_pattern", surface_pattern_name(s.top_pattern)},
+          {"bottom_pattern", surface_pattern_name(s.bottom_pattern)},
           {"bridge_angle", s.bridge_angle},
           {"top_width", s.top_width},
           {"solid_width", s.solid_width},
@@ -3771,6 +3799,7 @@ std::string settings_json(const Settings& s) {
           {"filament_diameter", s.filament_diameter},
           {"relative_extrusion", s.relative_extrusion},
           {"flavor", flavor},
+          {"strict_parser", strict_parser_name(s.strict_parser)},
           {"start_gcode", s.start_gcode},
           {"end_gcode", s.end_gcode},
           {"variables", variables},

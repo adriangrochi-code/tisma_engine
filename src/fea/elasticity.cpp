@@ -141,8 +141,10 @@ ElasticityResult solve(const VoxelGrid& g, const VoxelOperator& op, std::span<co
                         for (const auto& corner : kFace[s])
                             for (int a = 0; a < 3; ++a)
                                 c[a] += corner[a] / 4.0;
-                        if (!load.box.contains(g.x0 + (i + c[0]) * g.hx, g.y0 + (j + c[1]) * g.hy,
-                                               g.z[std::size_t(k)] + c[2] * g.hz(k)))
+                        if (!load.box.contains_face(g.x0 + (i + c[0]) * g.hx, g.y0 + (j + c[1]) * g.hy,
+                                                    g.z[std::size_t(k)] + c[2] * g.hz(k),
+                                                    {double(kNeighbour[s][0]), double(kNeighbour[s][1]),
+                                                     double(kNeighbour[s][2])}))
                             continue;
                         const double area = s < 2 ? g.hy * g.hz(k) : s < 4 ? g.hx * g.hz(k) : g.hx * g.hy;
                         for (const auto& corner : kFace[s])
@@ -400,9 +402,12 @@ AsPrintedResult solve_as_printed(const VoxelGrid& g, const OrthotropicMaterial& 
     out.safety.assign(count, std::numeric_limits<double>::infinity());
     out.peak_safety.assign(count, std::numeric_limits<double>::infinity());
     out.mode.assign(count, FailureMode::None);
+    out.layer_stress.assign(count, {0.0f, 0.0f, 0.0f});
     tbb::parallel_for(std::size_t(0), count, [&](std::size_t v) {
         if (peak[v][6] == 0.0f)
             return;
+        if (sums[v][6] != 0.0f)
+            out.layer_stress[v] = {sums[v][0] / sums[v][6], sums[v][1] / sums[v][6], sums[v][3] / sums[v][6]};
         // In the line's axes: its own direction, or the weakest one.
         const int first = kind_of[v] == kDirections ? 0 : kind_of[v];
         const int last = kind_of[v] == kDirections ? kDirections - 1 : kind_of[v];

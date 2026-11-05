@@ -83,11 +83,14 @@ GcodeExport export_gcode(const std::filesystem::path& path, const SlicedModel& m
     out.bytes = text.size();
     out.check = check_gcode(text, gcode_limits(model, settings));
     out.check_seconds = seconds_since(check_start);
+    if (warnings)
+        for (const GcodeProblem& n : out.check.notes)
+            warnings->push_back({"gcode_check", -1, 0.0, "G-code line " + std::to_string(n.line) + ": " + n.message, 0.0});
 
     std::error_code ec;
     // The binary format (gcode_extras.md, rule 9): from the G-code that passed
     // its check, read back too, and its G-code the same text.
-    if (out.check.ok() && settings.gcode_binary) {
+    if (out.check.ok() && binary_output(settings)) {
         const std::string binary = binary_gcode(text, settings);
         {
             std::ofstream file(part, std::ios::binary | std::ios::trunc);

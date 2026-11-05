@@ -106,13 +106,13 @@ std::optional<GcodeTotals> read_gcode_totals(const std::filesystem::path& gcode)
 std::string output_filename(const Settings& s, const SlicedModel& model, const std::optional<GcodeTotals>& totals) {
     TemplateContext c = template_context(s, model);
     c.variables["fill_density"] = TemplateValue::of(template_text(TemplateValue::of(s.infill_density)) + "%");
-    c.variables["default_output_extension"] = TemplateValue::of(std::string(s.gcode_binary ? ".bgcode" : ".gcode"));
+    c.variables["default_output_extension"] = TemplateValue::of(std::string(binary_output(s) ? ".bgcode" : ".gcode"));
     c.variables["print_time"] = TemplateValue::of(totals ? print_time_text(totals->print_seconds) : std::string("{print_time}"));
     c.variables["total_weight"] =
         totals ? TemplateValue::of(std::round(totals->grams * 100.0) / 100.0) : TemplateValue::of(std::string("{total_weight}"));
     std::string name = render_template(s.filename_format, c, "output.filename_format");
     // A binary G-code is a .bgcode, whatever the format wrote.
-    if (s.gcode_binary && name.ends_with(".gcode"))
+    if (binary_output(s) && name.ends_with(".gcode"))
         name.insert(name.size() - 5, "b");
     return name;
 }

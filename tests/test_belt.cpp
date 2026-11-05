@@ -4,6 +4,7 @@
 #include "gcode/check.hpp"
 #include "gcode/preview.hpp"
 #include "gcode/writer.hpp"
+#include "project/engineering.hpp"
 #include "slice/pipeline.hpp"
 #include "test_printer.hpp"
 
@@ -254,4 +255,31 @@ TEST_CASE("belt printer: the part turned, the axes, the settings", "[belt]") {
     CHECK_FALSE(again.belt_is_z);
     CHECK_THROWS_AS(parse_settings(R"({"belt": {"angle": 5}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"belt": {"enabled": 1}})"), SettingsError);
+}
+
+TEST_CASE("belt: the turn that lays the layers flat, for the structural analysis (engineering_panel.md, rule 10)", "[belt]") {
+    const Settings s = belt(30.0, true);
+    const std::array<double, 9> r = belt_layer_rotation(s);
+    // A rotation: orthonormal rows, determinant +1.
+    const double det = r[0] * (r[4] * r[8] - r[5] * r[7]) - r[1] * (r[3] * r[8] - r[5] * r[6]) + r[2] * (r[3] * r[7] - r[4] * r[6]);
+    CHECK_THAT(det, Catch::Matchers::WithinAbs(1.0, 1e-12));
+    // Across the layers it gives belt_mesh's s: y·sin α + z·cos α.
+    const double y = 7.0, z = 3.0, a = 30.0 * 3.14159265358979323846 / 180.0;
+    CHECK_THAT(r[7] * y + r[8] * z, Catch::Matchers::WithinAbs(y * std::sin(a) + z * std::cos(a), 1e-12));
+    // The conditions turn with the part; a force along -Z becomes three numbers.
+    ProjectEngineering e;
+    EngineeringCondition f;
+    f.kind = ConditionKind::ForcePoint;
+    f.point = {0.0, 7.0, 3.0};
+    f.normal = {0.0, 0.0, 1.0};
+    f.direction = ForceDirection::Axis;
+    f.axis = -3;
+    e.conditions.push_back(f);
+    turn_engineering(e, r);
+    const EngineeringCondition& t = e.conditions[0];
+    CHECK(t.direction == ForceDirection::Vector);
+    CHECK_THAT(t.point[2], Catch::Matchers::WithinAbs(y * std::sin(a) + z * std::cos(a), 1e-12));
+    CHECK_THAT(t.vector[1], Catch::Matchers::WithinAbs(std::sin(a), 1e-12));
+    CHECK_THAT(t.vector[2], Catch::Matchers::WithinAbs(-std::cos(a), 1e-12));
+    CHECK_THAT(t.normal[2], Catch::Matchers::WithinAbs(std::cos(a), 1e-12));
 }

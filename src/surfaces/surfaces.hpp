@@ -14,6 +14,10 @@ struct LayerSurfaces {
     // solid infill (docs/spec/features/surfaces_infill.md, rule 2).
     Polygons top_under;
     Polygons bottom; // solid, over an exposed bottom surface (not already top), resting on what is printed below
+    // The part of bottom that is the bottom surface itself: nothing of this
+    // part's layer below it (the first layer, or over air or another part).
+    // Only there a bottom pattern other than lines applies (infill_patterns.md, rule 17).
+    Polygons bottom_exposed;
     Polygons sparse; // the rest: sparse infill
     Polygons bridge; // solid over nothing printed (see find_bridges)
     double bridge_angle = 0.0; // degrees: the direction of the bridge's lines

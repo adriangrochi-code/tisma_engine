@@ -188,6 +188,20 @@ const Guide kGuides[] = {
      "lifting or warping as it cools.\n\nEach material asks for its own: too cold, the part lifts at the corners; too "
      "hot, the base softens and deforms.\n\nExample: PLA 55 to 65 °C, PETG 70 to 85 °C, ABS 95 to 110 °C. Some beds "
      "do not heat: then it is 0."},
+    {"machine.variables.first_layer_temperature",
+     "La temperatura de la boquilla solo para la primera capa, la que se apoya en la cama. Vacía, es la misma que en "
+     "las demás capas.\n\nUnos grados más que el resto ayudan a que esa capa se pegue bien a la cama; después la "
+     "boquilla vuelve a su temperatura de siempre.\n\nEjemplo: PLA a 210 °C, con 215 °C en la primera capa.",
+     "The nozzle temperature for the first layer only, the one lying on the bed. Empty, it is the same as on the "
+     "other layers.\n\nA few degrees more than the rest help that layer stick to the bed; then the nozzle goes back "
+     "to its usual temperature.\n\nExample: PLA at 210 °C, with 215 °C on the first layer."},
+    {"machine.variables.first_layer_bed_temperature",
+     "La temperatura de la cama mientras se imprime la primera capa. Vacía, es la misma que en las demás capas.\n\n"
+     "Una cama un poco más caliente al empezar ayuda a que la base se pegue; después puede bajar para que la pieza no "
+     "se ablande abajo.\n\nEjemplo: PLA con la cama a 60 °C y 65 °C en la primera capa.",
+     "The bed temperature while the first layer prints. Empty, it is the same as on the other layers.\n\nA slightly "
+     "hotter bed at the start helps the base stick; afterwards it can go down so the bottom of the part does not "
+     "soften.\n\nExample: PLA with the bed at 60 °C and 65 °C on the first layer."},
     {"cooling.fan_min",
      "El ventilador sopla aire sobre el plástico recién puesto para que se endurezca rápido. Este es el mínimo con "
      "el que gira mientras imprime.\n\nMás ventilador da detalles más nítidos, voladizos más prolijos y puentes "

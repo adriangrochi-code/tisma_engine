@@ -1,0 +1,8 @@
+# A server that does not answer: the plans area says the connection
+# failed, not that the server sent no plans (UI49, the spec team's QA).
+menu cloud_chip
+expect-control cloud_window
+cloud-wait
+expect-cloud plans 0
+expect-cloud plans_failure no_connection
+expect-cloud logged no

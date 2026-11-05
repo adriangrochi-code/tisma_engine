@@ -10,6 +10,11 @@ namespace tisma::ui {
 
 struct AppOptions {
     std::vector<std::string> files; // to open at start: models (.stl), projects (.tisma), G-code or settings (.json)
+    // --settings-layout: the settings panel's tabs, cards and rows as JSON
+    // to this file ("-": standard output), no window; with
+    // settings_summary, each card's closed line for those settings.
+    std::string settings_layout;
+    std::string settings_summary;
     int width = 1440, height = 900; // window size, in screen units
     std::string screenshot;         // when set: draw, write the window to this PNG and quit
     std::string view = "prepare";   // the tab for the screenshot: prepare, preview, analysis or calibration
@@ -22,6 +27,10 @@ struct AppOptions {
     std::string catalog;            // "printer" or "filament": open the catalog at start (docs/CATALOG.md)
     std::string catalog_query;      // what to search in it
     std::string solidcraft;         // the solidcraft-cli to use instead of the bundled one (tests)
+    std::string cloud_server;       // the Tisma Cloud server for this run (tests: the mock server)
+    // With screenshot: look for a session that closed unexpectedly and mark this
+    // one, as every start without --screenshot does (problem_reports.md, rule 10).
+    bool crash_check = false;
     bool light = false;             // light theme
     int render = -1;                // RenderMode (0 fast, 1 ambient occlusion, 2 ray tracing); -1: the preference
     int msaa = -1;                  // multisampling samples; -1: the preference
@@ -64,12 +73,15 @@ struct AppOptions {
     bool credits = false;         // with screenshot: More › Credits and sources (credits.md, rule 4)
     std::string help;             // the help panel open at this tab: problems, procedures, glossary, tutorials, calibrations
     std::string knowledge;        // the help's data folder instead of the pack's (knowledge/)
+    std::string pack;             // the profile pack's folder instead of the one beside the preferences
+    std::string pack_url;         // the pack's address instead of packs.url (profile_pack.md; for tests)
     std::string help_open;        // with help: a problem or procedure id opened in it
     std::string tutorial;         // a guided tutorial of the help's data started at its step tutorial_step
     int tutorial_step = 0;
     int ray_samples = 32;           // with screenshot and ray tracing: the samples to wait for
     bool coarse = false;            // with screenshot: draw a large plate as while the view moves (V6)
     std::string pick_catalog_printer; // test hook: the printer card picks this catalog printer ("Vendor Model")
+    std::string pick_pack_printer;    // test hook: this pack printer ("<model file>#<variant>") is added and chosen
     std::string ui_script;          // test hook: steps of input played into the window (App::script_input)
     std::string dump_ui;            // with screenshot: write the setting rows drawn (key, label, value, rectangle) as JSON
     bool view_check = true;         // with screenshot: check the 3D view's picture (no black pixels, few sparkles)

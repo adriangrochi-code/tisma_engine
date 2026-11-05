@@ -202,6 +202,7 @@ std::pair<double, double> calibration_range(CalibrationKind kind) {
     case CalibrationKind::MaxFlow: return {0.5, 1000.0};
     case CalibrationKind::Acceleration: return {100.0, 100000.0};
     case CalibrationKind::ResinExposure: return {0.1, 600.0};
+    case CalibrationKind::BridgesOverhangs: return {5.0, 85.0};
     default: return {-1e9, 1e9};
     }
 }
@@ -436,6 +437,44 @@ CalibrationPrint fit_test(const std::vector<double>& values) {
     return out;
 }
 
+CalibrationPrint bridges_overhangs_test(const std::vector<double>& angles, const std::vector<double>& spans) {
+    CalibrationPrint out;
+    out.kind = "bridges_overhangs";
+    out.unit = "°";
+    constexpr double kFinHeight = 8.0, kFin = 3.0, kFinDepth = 8.0, kPad = 4.0, kGap = 3.0;
+    constexpr double kPillar = 5.0, kPillarHeight = 8.0, kDeck = 1.0, kRow = 6.0, kRowGap = 4.0;
+    // The fins, left to right by angle, in front (y from 0 to -kFinDepth); a
+    // pad in front of each carries its angle.
+    double x = 0.0;
+    for (const double given : angles) {
+        const double a = std::clamp(given, 0.0, 80.0);
+        const double reach = kFinHeight * std::tan(a * std::numbers::pi / 180.0);
+        const std::vector<std::array<double, 2>> section{{x, 0.0}, {x + kFin, 0.0}, {x + kFin + reach, kFinHeight}, {x + reach, kFinHeight}};
+        add_prism(out.mesh, V{0.0, -kFinDepth, 0.0}, V{1.0, 0.0, 0.0}, V{0.0, 0.0, 1.0}, V{0.0, 1.0, 0.0}, section, kFinDepth);
+        const double pad_w = std::max(kFin + 3.0, 6.0);
+        add_box(out.mesh, x - 1.0, -kFinDepth - kPad, 0.0, x - 1.0 + pad_w, -kFinDepth, 4.0);
+        add_label(out.mesh, value_text(a), x - 0.4, 0.5, -kFinDepth - kPad, true, 3.0, 0.6, 0.5);
+        out.segments.push_back({0.0, kFinHeight, a});
+        x += kFin + reach + kGap + 2.0;
+    }
+    // The bridges behind, the shortest in front, centred on the fins' row.
+    const double mid = (x - kGap - 2.0) / 2.0;
+    double y = kRowGap;
+    for (const double given : spans) {
+        const double span = std::clamp(given, 2.0, 200.0);
+        const double x0 = mid - span / 2.0 - kPillar, x1 = mid + span / 2.0 + kPillar;
+        add_box(out.mesh, x0, y, 0.0, x0 + kPillar, y + kRow, kPillarHeight);
+        add_box(out.mesh, x1 - kPillar, y, 0.0, x1, y + kRow, kPillarHeight);
+        add_box(out.mesh, x0, y, kPillarHeight, x1, y + kRow, kPillarHeight + kDeck);
+        add_label(out.mesh, value_text(span), x0 + 0.4, 2.0, y, true, 3.0, 0.6, 0.5);
+        y += kRow + kRowGap;
+    }
+    // Centred on the origin.
+    const BoundingBox box = out.mesh.bounding_box();
+    out.mesh.translate(-(box.min.x + box.max.x) / 2.0f, -(box.min.y + box.max.y) / 2.0f, 0.0f);
+    return out;
+}
+
 double volumetric_flow(const Settings& s, double speed_percent) {
     const double fastest = fastest_extrusion(s);
     return fastest * speed_percent / 100.0 * s.wall_width * s.layer_height * s.flow / 100.0;
@@ -572,6 +611,7 @@ const char* calibration_kind_name(CalibrationKind kind) {
     case CalibrationKind::ElephantFoot: return "elephant_foot";
     case CalibrationKind::ResinExposure: return "resin_exposure";
     case CalibrationKind::ResinMeasure: return "resin_measure";
+    case CalibrationKind::BridgesOverhangs: return "bridges_overhangs";
     }
     return "dimensions";
 }
@@ -585,7 +625,8 @@ std::optional<CalibrationKind> calibration_kind_from_name(std::string_view name)
 
 bool is_tower(CalibrationKind kind) {
     return kind != CalibrationKind::Dimensions && kind != CalibrationKind::FirstLayer && kind != CalibrationKind::Fit &&
-           kind != CalibrationKind::ElephantFoot && kind != CalibrationKind::ResinMeasure;
+           kind != CalibrationKind::ElephantFoot && kind != CalibrationKind::ResinMeasure &&
+           kind != CalibrationKind::BridgesOverhangs;
 }
 
 bool is_resin_calibration(CalibrationKind kind) {
@@ -625,6 +666,14 @@ CalibrationPrint calibration_tower(CalibrationKind kind, double start, double en
     }
 }
 
+Settings calibration_print_settings(CalibrationKind kind, Settings settings) {
+    if (is_resin_calibration(kind))
+        settings.resin_supports = settings.resin_pad = settings.resin_pad_around_object = settings.resin_hollow = false;
+    if (kind == CalibrationKind::BridgesOverhangs)
+        settings.support = settings.arcs = false;
+    return settings;
+}
+
 CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& s) {
     // A short retraction means a direct drive extruder; a long one, a Bowden tube.
     const bool direct = s.retract_length <= 1.5;
@@ -639,6 +688,8 @@ CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& s) 
         return first_layer_test(s);
     case CalibrationKind::Fit:
         return fit_test();
+    case CalibrationKind::BridgesOverhangs:
+        return bridges_overhangs_test();
     case CalibrationKind::ElephantFoot:
         return elephant_foot_test();
     case CalibrationKind::ResinExposure: // calibration_models.md's defaults
@@ -695,6 +746,9 @@ bool apply_calibration(CalibrationKind kind, double value, Settings& s) {
     case CalibrationKind::ElephantFoot:
     case CalibrationKind::ResinMeasure:
         return false;
+    case CalibrationKind::BridgesOverhangs: // the steepest fin that printed clean, from the vertical
+        s.support_angle = 90.0 - value;
+        break;
     case CalibrationKind::ResinExposure: // the band that printed best (resin.md, rule 18)
         s.resin_exposure = value;
         break;

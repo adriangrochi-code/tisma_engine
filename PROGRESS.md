@@ -8692,3 +8692,2425 @@ Prioridad del dueño (por el equipo de fichas): primero Configuración con la p�
 
 **Sigue:** el resto de la etapa B (medición del primer arranque y «Medir de nuevo», bajar el suavizado y la
 resolución de la vista paso a paso, el tope de 30 al laminar); después, el resto de UI27–UI41.
+
+## 2026-11-02 (noche): mantenimiento (bloque de las 16:40)
+
+- **Comprobado:** `tools/ci_linux.sh` en verde con Configuración (854 pruebas, subido cccc0a2); `tisma_fuzz_gcode 2000`
+  con la semilla 202611021: 2000 corridas, 21 rechazadas por no imprimibles, ninguna falla. Las pruebas de interfaz
+  (157) pasan.
+- **Encontrado y corregido:**
+  - la calidad automática tomaba como «mover la cámara» el encuadre del programa al arrancar: en una captura de la
+    línea de comandos con una placa lenta (llvmpipe) la vista salía sin oclusión y la barra decía «sin oclusión al
+    mover». Ahora solo cuenta la cámara que mueve la persona (girar, desplazar, acercar); las capturas usan la calidad
+    pedida (regla 9);
+  - TR22 (equipo de fichas): en Diseño sin el componente, el subtítulo «Design» (el nombre de un diseño sin título) y
+    la segunda línea de error en inglés. Ahora una sola línea traducida; el texto del componente queda en la ayuda de
+    esa línea. Paso de guion nuevo `expect-no-text` (los textos dibujados se guardan solo mientras corre un guion);
+  - UI42 (equipo de fichas): a 900 px la barra de la vista se salía por la derecha y «Oclusión ambiental» quedaba
+    cortado. Si no entra, el botón del modo queda con su ícono. Guiones `view_bar_narrow_es` y `_en` con el paso
+    nuevo `expect-in-view`.
+- **Medido (equipo de fichas, llvmpipe):** vista previa de s200 de 3165 a 2031 ms por cuadro y de 12,2 M a 7,69 M
+  vértices, pero las llamadas de dibujo subieron de 1061 a 1717 (el nivel de detalle por saltos de capa parte los
+  lotes). Queda para el próximo bloque de rendimiento de la vista previa: juntar esos lotes, porque en placas viejas
+  (HD 4000) las llamadas pesan.
+- **No probado:** las capturas en una placa real con la calidad automática; el aviso de la primera vez en Windows.
+
+### UI35: la pintura de soportes se ve poco
+
+- **Medido** (contraste de luminancia de WCAG 2.1, píxeles de la captura con oclusión ambiental, OpenGL, llvmpipe):
+  la marca verde sobre la pieza violeta daba 1,19 en la cara iluminada y 1,02 en la cara en sombra. Solo el tono las
+  separaba; la oclusión oscurece igual a las dos.
+- **Hecho:** con la herramienta Pintar la pieza se dibuja gris claro (E4E2E8) y las marcas en verde oscuro (0E6536) y
+  rojo oscuro (A51E26): 5,02 en la cara iluminada y 2,99 en la sombreada. Las tarjetas de la pintura muestran el color
+  de cada marca. Los colores de los botones y textos no cambian.
+- **No automatizado:** la medición es a mano sobre capturas (`contrast.py` de la sesión); no hay paso de guion que lea
+  píxeles.
+
+### UI31: el ícono a veces no se ve en Windows
+
+- `tisma.exe` ya lleva el ícono (recurso 1, `tisma.ico` con 7 tamaños de 16 a 256 px, revisado) y la ventana lo pone
+  con GLFW. El paquete trae además `tisma-engine.exe`, el programa de línea de comandos, que no tenía ícono: ahora lleva
+  el mismo. **No probado en Windows** (lo compila la CI de Windows). Si el probador lo ve en un acceso directo hecho
+  antes, puede ser la caché de íconos de Windows: pregunto al equipo de fichas en qué archivo o acceso lo vio.
+
+### UI45: deshacer después de arrastrar una manija
+
+- **Encontrado:** la placa no tenía deshacer. Con Ctrl+Z la tecla Z (encuadrar la pieza) podía dispararse, y la pieza
+  parecía tres veces más grande y en otro lugar; la tarjeta, la malla y el laminado seguían de acuerdo entre sí (guion
+  con arrastre, laminado y vuelta a Preparar: 136,92 en los tres).
+- **Hecho:** pila de deshacer de la ubicación de las piezas (hasta 100 pasos): uno por arrastre de manija, por arrastre
+  sobre la cama y por cambio en la tarjeta (un arrastre de deslizador es un paso). Ctrl+Z, y Ctrl+Y o Ctrl+Mayús+Z, en
+  Preparar, salvo mientras un campo de texto tiene el teclado (ahí deshace lo escrito). Los pasos de una placa con
+  otras piezas se descartan. Z ya no encuadra con Ctrl apretado. El paso de guion `key` acepta `ctrl+` y `shift+`.
+  Guion `place_undo`.
+- **Falta:** deshacer agregar, quitar, cortar y pintar (no son de ubicación).
+
+## 2026-11-02 (noche): Tisma Cloud, C1 (decisión del dueño: la nube primero)
+
+- **Capa HTTP propia** (`src/net/`): un pedido y una respuesta, una llamada que bloquea. Windows: WinHTTP (proxy y
+  certificados del sistema). Linux y macOS: cpp-httplib 0.62.0 (MIT, solo la cabecera) sobre OpenSSL 3 del sistema
+  (Apache-2.0), con la verificación del certificado prendida; sin OpenSSL 3, solo `http://`. libcurl quedó afuera: su
+  licencia («curl») no está en la lista permitida de `CLAUDE.md`, y sumarla es decisión del dueño. Multipart y
+  direcciones, escritos a mano.
+- **Cliente** (`src/cloud/client.*`): el código del dueño (excepción de `CLEANROOM.md`, entregado por el equipo de
+  fichas) con la capa nueva en lugar de la `Http` de PrusaSlicer, más `GET /v1/plans` (regla 5a); los errores llevan
+  su código HTTP (401, 413, 422, 429); `run()` pregunta cada 2 s (regla 8) y no reintenta una sesión cerrada.
+- **Pruebas** `[cloud]` (8 casos, 91 comprobaciones) contra un servidor simulado escrito desde la ficha con el servidor
+  de cpp-httplib: entrar, cuenta con horas dadas por el administrador, planes sin sesión, sesión vencida y cuenta
+  apagada (401), 429, informe con y sin cuenta y su 422, un trabajo de `queued` a `done` con el resultado, cancelar
+  también en el servidor, 413 y sin servidor.
+- **Encontrado al probar:** las definiciones de cpp-httplib (con o sin OpenSSL) cambian sus clases; la prueba y la
+  biblioteca las veían distintas y el programa se caía (violación de la regla de una definición). Ahora van en el
+  objetivo de la cabecera, iguales para todos.
+- **Probado a mano:** HTTPS real contra example.com (200). **No probado:** un certificado vencido (el proxy de la
+  sesión contesta 503 antes), la parte de WinHTTP (se compila en la CI de Windows; no hay compilador de Windows acá).
+- **Sigue:** C2 (panel de la cuenta, planes, informar un problema, el token en el almacén de claves, la nube desde
+  la interfaz) y C3 (la línea de comandos de los nodos).
+
+### Tisma Cloud, C2: primer paso (el token como contraseña)
+
+- `src/cloud/secret_store.*` (regla 3): Windows, el Administrador de credenciales; macOS, el llavero con `security`;
+  Linux, el Secret Service con `secret-tool` corrido aparte (libsecret es LGPL: no se enlaza). Sin almacén, el token
+  dura lo que dura el programa. `run_process` puede darle un texto por la entrada estándar (el secreto nunca va entre
+  los argumentos; en macOS `security` lo pide como argumento, anotado como limitación).
+- Prueba `[cloud]` con un `secret-tool` de prueba (`tests/fake_secret_tool.cpp`); en Windows usa el Administrador de
+  credenciales de verdad con un nombre único que borra al terminar. **No probado:** macOS (la prueba se salta).
+- **Sigue en C2:** el diálogo de Tisma Cloud (servidor, correo, contraseña, entrar y salir, horas, planes con el actual
+  marcado, el enlace a la página de pago), el chip de la barra superior, informar un problema y laminar en la nube.
+
+### Tisma Cloud, C2: el diálogo de la cuenta
+
+- Más › «Tisma Cloud…» abre el diálogo (`interface.md`, «Diálogos»): título violeta, qué hace, Servidor, Correo y
+  Contraseña, el estado, y Salir, Cerrar y Entrar. Con sesión: plan y pago, horas del mes (como las manda el servidor:
+  regla 5a), trabajos a la vez. Siempre: los planes públicos (se piden de nuevo al abrir), el actual marcado, y
+  «Pagar o cambiar de plan…» con el `billing_url` de `/v1/health` (`src/ui/links.*`: el navegador del sistema).
+- Una llamada a la vez, fuera del hilo de la interfaz (`std::async`). 401 borra la sesión y pide entrar (CC2, CC15),
+  429 tiene su aviso. El servidor y el correo van en las preferencias (`cloud`); el token, en el almacén de claves.
+- **Pruebas:** guion `cloud` contra el servidor simulado (`tisma_mock_cloud` corre el programa con la dirección del
+  servidor; `--cloud-server`), con el `secret-tool` de prueba: planes sin sesión (CC13), contraseña mala, entrar, horas
+  (CC14), salir. Pasos de guion nuevos: `cloud-field`, `cloud-wait`, `expect-cloud`.
+- **Pregunté al equipo de fichas:** la dirección de fábrica del servidor (hoy el campo empieza vacío) y si el pago va
+  por `billing_url`.
+- **Sigue en C2:** el chip de la barra superior, informar un problema (`problem_reports.md`) y laminar o analizar en la
+  nube desde la interfaz con el avance en la barra de estado.
+
+### Tisma Cloud, C2: informar un problema
+
+- `src/cloud/report.*`: los campos de `POST /v1/reports` (reglas 2 y 3 de `problem_reports.md`): `app` `pc`, el tipo,
+  los textos hasta 10 000 caracteres; con la casilla, `app_version`, `os` (80) y `log` con el programa, el sistema, la
+  impresora y los perfiles arriba y el final del registro (190 000 en total, sin cortar caracteres).
+- El registro de la sesión: cada aviso y cada error con su segundo (`log_line`), los últimos 400 kB.
+- El diálogo (reglas 1 a 9): tipo, pocas palabras, qué pasó, pasos, qué esperabas, el servidor solo si falta, la
+  casilla de adjuntar y «Ver lo que se adjunta» en su propia ventana (el texto exacto: IP5), la línea de la cuenta,
+  Cancelar y Mandar. Sin pocas palabras, el aviso y el cursor al campo (IP2). Bien: aviso de gracias con «se informó N
+  veces antes» (IP6). Mal: queda abierto con el motivo; 429 con su texto (IP7).
+- **Encontrado al probar:** con lo adjunto adentro del diálogo, este crecía hasta sacar «Mandar» de la pantalla a
+  760 px; ahora es una ventana aparte, como dice la ficha.
+- **Pruebas:** `[cloud]` (IP3, IP4, IP8, IP5) y el guion `report` contra el servidor simulado (IP2, IP5, IP6, IP7, CC6).
+- **Falta de esta ficha:** ofrecer informar después de un cierre inesperado (IP9) y «Mis informes» (IP10).
+
+### Tisma Cloud, C2: laminar en la nube desde la interfaz
+
+- Más › «Laminar en la nube»: la placa se guarda como proyecto 3MF temporal (`current_project`, el mismo armado que
+  «Guardar el proyecto») y va con `Client::run` en otro hilo. La barra de estado dice «Nube: mandando el proyecto»,
+  «en cola» o «laminando N %», con una × que cancela también en el servidor (CC4). El resultado (texto o binario, por
+  sus primeros bytes) se abre en la vista previa como un laminado propio (regla 9, CC3), con el tiempo del resumen en el
+  aviso. Sin sesión, abre el diálogo de la cuenta. 401 pide entrar de nuevo; 413, 422 y 429 tienen su aviso (CC5).
+- **Encontrado al probar:** el servidor simulado aceptaba hasta 4 KB y el 3MF de un cubo pesa más: el aviso de proyecto
+  demasiado grande salió bien; el límite del simulado pasó a 1 MB.
+- **Pruebas:** guion `cloud_slice` contra el servidor simulado: sin sesión abre el diálogo, entrar, laminar y
+  cancelar, laminar y ver el G-code en la vista previa.
+- **Falta en C2:** el chip de la barra superior, analizar (FEA) en la nube desde Ingeniería (la llamada es la misma,
+  `kind` `fea` y sus parámetros), la lista de trabajos (`GET /v1/jobs`), ofrecer informar después de un cierre (IP9) y
+  «Mis informes» (IP10). Después, C3 (la línea de comandos de los nodos).
+
+### Tisma Cloud, C3: el motor en los nodos
+
+- `tisma-engine slice <proyecto> -o <salida.gcode> --summary <resumen.json> [--sandbox] [--no-gpu] [--yes]`
+  (`src/cli/node.*`; ficha `cloud.md`, reglas 18 y 20). Se elige solo con `--summary`, `--sandbox` o `--no-gpu`, o
+  con un proyecto sin `--config`; el `slice` de un modelo con `--config` sigue igual.
+- Lee el proyecto y nada más de la máquina. Arma la placa con las mismas funciones que la interfaz:
+  - `project_objects` (abrir un proyecto) y `plate_slice` (lo que va al laminador) están en `src/ui/project_slice.*`;
+  - `apps/tisma/app.cpp` las usa en vez de su propia copia;
+  - `plate.cpp` y `slicing.cpp` pasaron a `tisma_core` porque no usan OpenGL.
+- Salidas:
+  - por la salida estándar, solo `progress N`;
+  - los avisos van a la salida de errores;
+  - el G-code sale de texto o binario según `gcode.binary`;
+  - el resumen lleva `print_time` («1h 2m 3s»), `print_time_s`, `filament_mm`, `filament_g` y `layers`, o `error`
+    con un código distinto de 0.
+- `--sandbox` no corre los scripts de posproceso. Sin él, corren una vez confirmados, como en `slice`.
+- **Pruebas** (`tests/test_node.cpp`, `[cloud]`):
+  - CC10: avance, G-code y las cinco claves;
+  - el binario;
+  - CC11: el script no corre con `--sandbox` y sí sin él;
+  - CC12: una pieza fuera de la cama da un código distinto de 0 y `error`;
+  - lo que no es un proyecto, argumentos de más y no escribir sobre el proyecto.
+- **No medido:** cuánto tarda en un nodo real; solo se probó con el cubo de 20 mm.
+- **Falta en C3:**
+  - `analyze` (los apoyos, las cargas y el material todavía no van en el proyecto);
+  - el proyecto como paquete 3MF (`formats.md`, reglas 6 a 11). Hoy el motor guarda su propio formato, también el
+    que manda «Laminar en la nube» con el nombre `.3mf`;
+  - los proyectos de otros laminadores;
+  - un avance más fino mientras corta (hoy salta de 10 a 85).
+
+### Tisma Cloud, C2: el chip de la barra superior
+
+- `interface.md`, regla 7: un chip con el ícono de persona (`assets/icons/account.svg`, dibujo propio) y «Tisma Cloud»,
+  antes de Abrir. Abre el diálogo de la cuenta.
+  - En una ventana angosta queda solo el ícono; si tampoco entra, no se dibuja y sigue en Más › Tisma Cloud….
+  - Las pestañas cuentan el ícono al decidir si van sin nombre.
+- **Visto en capturas:** completo a 1440 px, solo el ícono a 760 px, sin chip a 640 px. A 640 px, en el primer
+  intento, el ícono tapaba la pestaña Impresora: por eso se oculta.
+- **Pruebas:** el guion `cloud` abre el diálogo con el chip y después por Más.
+
+### Tisma Cloud, C2: la lista de trabajos
+
+- `Client::jobs` (`GET /v1/jobs`, `cloud.md`, regla 10). Lee una lista, `{"jobs": [...]}` o `{"items": [...]}`,
+  porque la ficha no dice la forma. Cada trabajo trae además su tipo y su fecha de creación; un `id` numérico se
+  lee como texto.
+- El diálogo de la cuenta, con sesión, muestra «Tus trabajos»:
+  - fecha, tipo (laminado o análisis), estado y minutos usados;
+  - el avance si corre;
+  - en ámbar si falló, con el motivo al pasar el mouse;
+  - pasadas cinco filas, la tabla se desplaza para que los botones sigan en pantalla.
+  Se pide con la cuenta cada vez que se abre el diálogo.
+- **Pruebas:** `[cloud]` (la lista, el trabajo recién mandado primero, 401 sin sesión); el guion `cloud` (un
+  trabajo después de entrar). El servidor simulado tiene `GET /v1/jobs`.
+- **Falta:** abrir desde la lista el resultado de un trabajo terminado.
+
+### Informar un problema: después de un cierre inesperado (IP9)
+
+- `src/ui/session_marks.*` (`problem_reports.md`, regla 10). Mientras corre, la interfaz deja en la carpeta de las
+  preferencias `session-<id>.lock` y su registro `session-<id>.log`, escrito línea por línea (pasado 1 MB vuelve a
+  empezar desde lo guardado). La salida normal los borra.
+- Al arrancar, una marca cuyo proceso ya no existe es un cierre inesperado:
+  - se abre «Informar un problema» con «Tisma se cerró» elegido y el registro de esa sesión (los últimos 190 000
+    bytes, desde el principio de una línea);
+  - las marcas viejas se borran al leerlas, así que no se pregunta dos veces;
+  - si se cancela, un informe posterior lleva el registro de la sesión actual.
+- Si corren dos ventanas a la vez, la marca de la otra no cuenta porque su proceso existe.
+- Las capturas y las pruebas no dejan marcas, salvo con `--crash-check`.
+- **Pruebas:**
+  - `[ui]`: la marca propia no cuenta; la de un proceso que no existe se encuentra una vez con su registro; la salida
+    normal no deja nada;
+  - el guion `crash_report` (IP9), con una marca plantada en una carpeta de configuración propia.
+- **No probado:** un cierre real del programa en Windows. Los procesos de Windows se prueban solo en la prueba
+  `[ui]`.
+
+### Informar un problema: «Mis informes» (IP10)
+
+- `Client::my_reports` (`GET /v1/me/reports`, `problem_reports.md`, regla 11). Lee una lista, `{"reports": [...]}` o
+  `{"items": [...]}`. Los ordena del más nuevo al más viejo por `created_at`. La versión que lo arregla sale de
+  `fixed_in` o `fixed_version`. (Corregido después con las respuestas del servidor real; ver abajo.)
+- En el diálogo de Tisma Cloud, con sesión, el botón «Mis informes (N)…» abre su propia ventana con la fecha, el
+  título y el estado: nuevo, confirmado, arreglado (con «en X» si viene), no se arregla o repetido. Un estado que no
+  conoce se muestra tal cual. La tabla toma la altura de sus filas, hasta diez.
+- **Pruebas:** `[cloud]` (dos informes, el más nuevo primero, la versión, 401 sin sesión); el guion `cloud` (IP10).
+- **A confirmar con el equipo de fichas:** la forma de la respuesta y los nombres de los estados y de la versión
+  (la ficha no los dice).
+
+### Respuestas del servidor real, UI47 y UI48
+
+- El equipo de fichas leyó el servidor real:
+  - `GET /v1/me/reports` da `{"reports": [...]}`, el más nuevo primero, sin versión que lo arregle. El motor ya no
+    la muestra.
+  - `GET /v1/jobs?limit=N` da `{"jobs": [...]}`. El motor pide `limit=50`.
+  - `POST /v1/jobs` solo acepta un ZIP con `3D/*.model`. «Laminar en la nube» con el proyecto propio falla hoy
+    contra el servidor real: el simulado lo aceptaba. Lo próximo es el proyecto como paquete 3MF (`formats.md`,
+    regla 11). Antes, una pregunta sobre qué conserva `sanitize_project` en el nodo.
+- **UI47:**
+  - «Salir» pasa a «Cerrar sesión»;
+  - el diálogo muestra solo la acción que corresponde: «Entrar» sin sesión, «Cerrar sesión» con sesión;
+  - el guion `cloud` lo comprueba.
+- **UI48:**
+  - Ctrl+Z, Ctrl+Y, Ctrl+Mayús+Z, Ctrl+, y Ctrl+P se deciden con los modificadores que trae cada evento de tecla (el
+    callback de teclas de GLFW, instalado antes que el de ImGui), no con el estado de Ctrl al dibujar;
+  - una Z dentro del medio segundo de un Ctrl+Z no encuadra la pieza;
+  - con XTest (por `ctypes`, en Xvfb) no se reprodujo el fallo, ni con los cuatro eventos juntos ni con 4, 12 o 30 ms
+    entre ellos: el deshacer funcionaba ya, y sigue funcionando por el camino nuevo;
+  - paso de guion nuevo `key-quick` (aprieta y suelta todo en un cuadro), usado en `place_undo`.
+
+### El proyecto como paquete 3MF
+
+- El servidor real solo acepta un ZIP con `3D/*.model` y triángulos. «Laminar en la nube» con el archivo propio del
+  motor fallaba contra él; el servidor simulado lo aceptaba.
+- `write_project_3mf` y `read_project` (`formats.md`, reglas 6 a 11; `docs/PROJECT.md`, «El paquete 3MF»):
+  - un 3MF estándar, con cada modelo como objeto y su corrimiento en el ítem de `<build>`;
+  - más `Metadata/tisma_project.json`: el mismo JSON del archivo propio;
+  - y cada pintura en `Metadata/tisma_paint_<k>.bin`, con el encabezado propio `TPNT` (sin él, una pintura con 23 117
+    triángulos pintados empezaría con «MZ», que el servidor rechaza como programa);
+  - las coordenadas con 9 cifras, para que vuelvan como el mismo `float`.
+- `save_project` escribe el paquete cuando el nombre termina en `.3mf`. Así lo guarda «Laminar en la nube», y el
+  diálogo de guardar ofrece `.3mf` además de `.tisma`.
+- Abrir un `.3mf` con los datos del motor lo abre como proyecto; sin ellos, sigue siendo un modelo.
+- La línea de comandos de los nodos lee los dos formatos.
+- El servidor simulado ahora revisa la subida como el real: si no es un ZIP, 422 «The project is not a 3MF file»;
+  si no tiene modelo, «The 3MF file has no model».
+- **Pruebas:**
+  - `[project]`: la ida y vuelta completa, y que cualquier lector vea la placa;
+  - `[cli][cloud]`: el mismo G-code desde `.tisma` y desde `.3mf`;
+  - `[cloud]`: 422 para lo que no es un 3MF;
+  - `ui_project_3mf_*`: guardar como `.3mf`, abrirlo y obtener el mismo G-code que el proyecto original.
+- El equipo de fichas confirmó que el nodo (`sanitize_project`) copia cada entrada tal cual y no toca
+  `3D/3dmodel.model`. También pasó lo que revisa el servidor: rutas, cifrado, 10 000 entradas, nada que parezca un
+  programa y nada de DOCTYPE.
+
+### El servidor por defecto
+
+- El dueño confirmó el servidor de producción: `https://tismaservidores.net` (`cloud.md`, regla 1; spec/next
+  3c9a5b8). Está en una sola constante, `cloud::kDefaultServer`.
+- Lo que manda, de mayor a menor: `--cloud-server` para una ejecución, la dirección que la persona guardó, y el valor
+  por defecto.
+- **Prueba:** el guion `cloud_default` (sin dirección guardada, el campo trae el servidor de Tisma Cloud). No le pide
+  nada al servidor real.
+
+### Prueba de punta a punta con la nube real, y `--threads`
+
+- El equipo de fichas probó e6b5bf6 contra el servidor y un nodo reales. El proyecto `.3mf` pasó los controles; el
+  nodo corrió `tisma-engine slice … --summary … --sandbox --no-gpu`, el trabajo terminó y el G-code bajó igual que
+  uno local.
+- `--threads <n>` (`cloud.md`, regla 19d), en cualquier orden y con cualquier orden: limita los hilos de TBB con
+  `tbb::global_control`. Sale en `--help`; los nodos leen la ayuda y lo pasan solos al verlo.
+- El resumen deja afuera `filament_g` cuando no se conoce la densidad del filamento: mejor nada que un 0 g falso.
+- **Pruebas:** CC19 (el mismo G-code con `--threads 1`), valores inválidos, la ayuda, sin gramos sin densidad.
+- **No medido:** que el proceso no pase de un núcleo. TBB lo garantiza para su trabajo; los hilos propios del
+  motor, si los hay, no están limitados.
+
+## 2026-11-03
+
+### Oclusión ambiental sin el relleno (pedido del dueño)
+
+- «El relleno está produciendo lag… que no se calcule en el relleno».
+- Lo que cambió:
+  - el G-buffer marca en su alfa los píxeles del relleno ralo y del sólido interno (`LineKind::SparseInfill` y
+    `SolidInfill`);
+  - la pasada de oclusión en pantalla no toma muestras ahí, que es lo caro; queda solo la luz principal;
+  - el trazado de rayos no tira rayos de ambiente ahí;
+  - el relleno ya no se dibuja en el mapa de sombra de la luz principal, porque está adentro de las paredes.
+- La vista Vulkan todavía no tiene oclusión, así que no cambia.
+- **Medido:**
+  - con el renderizador por software del contenedor (llvmpipe), la esfera de prueba cortada en la capa 60 da lo
+    mismo antes y después: 70 a 72 ms por cuadro, el mínimo de tres corridas. Ahí pesa la geometría, no la
+    oclusión;
+  - con una placa de video real no está medido;
+  - las capturas antes y después se ven iguales.
+- **Pruebas:** las 8 de la vista con oclusión, rayos, moiré y sombra pasan.
+
+### «El relleno no respeta el ajuste» (densidad o patrón): lo que se midió
+
+- Con la línea de comandos, un cubo de 30 mm al 5, 20 y 50 % con cuadrícula, giroide y cúbico: el filamento sube con
+  la densidad (2582, 3888 y 6516 mm con cuadrícula), y cada patrón da otra cantidad de líneas.
+- En la interfaz, cambiar la densidad en el panel y laminar de nuevo: 5 % da 2769 mm y 50 % da 6733 mm; el G-code
+  dice `infill.density = 5.0` y `50.0`.
+- Los 17 patrones al 20 %: largos de relleno parecidos, salvo dos casos:
+  - `honeycomb` pone unas 4/3 partes: los tramos a lo largo de la dirección principal se imprimen dos veces, como
+    mide Tisma Slicer (P8, a propósito);
+  - `zigzag` da exactamente el mismo G-code que `rectilinear`.
+- Falta saber qué caso concreto vio el dueño (pieza, patrón, densidad); ya se le preguntó.
+
+### El relleno «no respeta el ajuste»: era la vista previa (pedido del dueño)
+
+- El dueño, con la configuración de fábrica y una pieza grande, vio en la vista previa el relleno como si fuera
+  sólido.
+- **El G-code respeta la densidad y el patrón**, en la línea de comandos y en la interfaz (medido con 5, 10, 20 y 40 %
+  en rectilíneo, grilla, panal y concéntrico). Dos casos son así a propósito, como Tisma Slicer:
+  - el panal deposita ~4/3 de lo pedido, porque los tramos horizontales se recorren dos veces;
+  - el zigzag da el mismo G-code que el rectilíneo.
+- **La causa:** con la vista cortada en una capa se dibujaba el relleno de todas las de abajo. De lejos, las capas
+  apiladas al 20 % se ven por los huecos y parecen macizas; además cargaban la placa sin mostrar nada útil.
+- **Lo que cambió:**
+  - `PreviewOrders::buried` = `without_infill(full)`: cada extrusión menos el relleno ralo y el sólido interno;
+  - `cut_preview_draws`: con las paredes y el relleno a la vista y la vista cortada (`cut_buries`), la capa de arriba
+    sale del orden completo y las de abajo de `buried`;
+  - los viajes, con la misma regla, solo de la capa de arriba (si no, de lejos los viajes de 1 px de todas las capas
+    pintaban la pieza de celeste);
+  - igual en OpenGL y en Vulkan. Con la pieza entera (sin corte) no cambia nada: ahí ya se dejaba afuera lo oculto.
+- **Medido** (cubo de 180 mm, 20 % rectilíneo, capa 400, llvmpipe): 96 532 → 5101 extrusiones dibujadas, 2244 →
+  322 ms por cuadro. No medido en una placa de video real.
+- Prueba nueva: «preview: a cut view draws infill only on its top layer».
+
+## 2026-11-03: mantenimiento (bloque de las 00:40)
+
+- **Comprobado:**
+  - `tools/ci_linux.sh` sobre 4838fa9 (el corte de la vista previa);
+  - `tisma_fuzz_gcode 2000` con la semilla 20261103: 2000 corridas, 24 rechazadas por no imprimibles, ninguna falla
+    (4 min);
+  - `origin/main` no trae nada que `dev` no tenga (solo las uniones de los PR #49, #51 y #52).
+- **Encontrado y corregido** (informe de QA del equipo de fichas sobre 12579b8; UI48 y UI47 sin sesión, verificados
+  por ellos):
+  - BH19: `infill.dense_density` e `infill.combine_max_height` rechazaban 0 diciendo «from 0 to …». 0 no sirve en
+    ninguno de los dos (una capa densa al 0 % no imprime nada; un alto de 0 no combina nada), así que sigue rechazado:
+    el mensaje y `docs/CONFIG.md` dicen ahora «more than 0» / «más de 0», también para `"0%"`. Además el campo de la
+    densidad de la interfaz dejaba poner 0, que el laminado rechazaba: empieza en 1 %. `tools/check_ui_limits.py`: 188
+    rangos, ninguno más angosto;
+  - UI49: sin respuesta del servidor, el diálogo de Tisma Cloud decía «El servidor no mandó planes.». Ahora «No se pudo
+    conectar con el servidor.»; un error HTTP dice su número; la lista vacía conserva el texto anterior. Guion nuevo
+    `ui_script_cloud_unreachable` (servidor en el puerto 9 de la máquina, donde nada escucha) con la clave
+    `expect-cloud plans_failure`.
+- **Nota de QA aceptada:** con `machine.flavor: machinekit` la extrusión va en el eje A (`G92 A0`): es lo buscado.
+- **No probado:** UI49 contra el proxy real (que responde 502 al CONNECT): la capa HTTP lo da como sin respuesta
+  (estado 0) en Linux; en Windows (WinHTTP) no lo comprobé.
+
+### FW10: el G-code para las Kobra que analizan el archivo (archivo del dueño)
+
+- El dueño mandó un G-code de Anycubic Slicer Next 2.0.0.3 para su Kobra 3 (3DBenchy, ABS, 0,16 mm, 1h 15m 4s). Lo
+  comparé como caja negra (solo la salida) para la regla 7 de `gcode_firmware.md`. Lo que trae:
+  - `; HEADER_BLOCK_START` … `END` con `total layer number`, `filament_density`, `filament_diameter` y `max_z_height`;
+  - dos miniaturas PNG (230 × 110 y 512 × 512 «top») en `; THUMBNAIL_BLOCK_START` … `END`;
+  - las órdenes entre `; EXECUTABLE_BLOCK_START` y `; EXECUTABLE_BLOCK_END`; Klipper (`SET_VELOCITY_LIMIT
+    SQUARE_CORNER_VELOCITY`, `M204 S`), `G9111 bedTemp= extruderTemp=` como inicio (calienta solo), `M73 P R` con
+    `QuietR`/`SportR`;
+  - objetos `EXCLUDE_OBJECT_DEFINE NAME=3DBenchy_id_0_copy_0`, sin comillas;
+  - al final los totales, la lista de ajustes (`CONFIG_BLOCK`) y un bloque `; statistics = begin` … `end`.
+- **Hecho:** `machine.strict_parser` (`none` o `anycubic`):
+  - la misma cabecera y el bloque de órdenes; los objetos como `<modelo>_id_<objeto>_copy_<copia>`;
+  - al final `total layers count` y `statistics` (filamento en m, tiempo, tamaño, capas), sin la lista de ajustes
+    (la regla 7 la saca: el analizador se cae con algunos valores);
+  - nunca binario (`binary_output`), con un aviso si el perfil lo pedía;
+  - en la interfaz, «Lector del firmware» en la tarjeta del firmware, con su explicación.
+- Prueba nueva en `test_labels.cpp` (FW10: orden, nombres, sin ajustes, ninguna línea con dos `;`), y la lectura y
+  escritura del ajuste en `test_settings.cpp`.
+- Archivo de prueba para el dueño: cubo de 20 mm en ABS (250/90 °C) con la Kobra 3 y el inicio `G9111`, 35 min.
+- **No probado:** en la impresora (es la prueba FW10). **Falta:** las miniaturas (el motor todavía no las dibuja sin la
+  vista 3D; si la Kobra las exige, es lo primero a revisar) y un perfil de la Kobra 3 en el catálogo.
+- Observación del archivo: con `filament_max_volumetric_speed = 5` mm³/s el perfil ABS de Anycubic limita todo a
+  ~75 mm/s aunque pida 200; el motor hace lo mismo con `extrusion.max_flow` 5 (aviso `flow_limit`).
+- **Qué hace la Kobra 3 con los archivos (pedido del dueño, búsqueda pública):** su firmware (derivado de Klipper)
+  analiza el archivo entero antes de imprimir («parsing») para sacar el resumen, las miniaturas y los datos del
+  material: según los reportes del seguimiento de OrcaSlicer (#16336) lee el tipo de filamento y las temperaturas de
+  los comentarios de ajustes (`; nozzle_temperature =`, `; first_layer_temperature =`), separando los valores por `=`
+  y quedándose con el último; si el material no le cierra, apaga «Imprimir». Se traba en «parsing» con
+  `; filament_colour_type = 1;1;1;1` (#12444) y, con el ACE Pro, con archivos de un solo filamento de OrcaSlicer 2.3.2
+  (#12952; arreglado en la Kobra S1 con el firmware 2.7.0.9, no en la Kobra 3). El archivo de Anycubic cierra su lista
+  de ajustes con `first_layer_height`, `first_layer_temperature`, `first_layer_bed_temperature` y `bed_temperature`.
+  Por eso el modo estricto ya no saca toda la lista: escribe una corta con eso (material, alturas, boquilla y
+  temperaturas), un valor por línea. **Esto se aparta de la regla 7** («no escribe el bloque de configuración»):
+  se lo paso al equipo de fichas.
+- **Tres archivos más del dueño** (cubo XYZ de 20 mm, prueba de tolerancias y cubo Voron, mismos programa, perfil
+  y ABS 0,16): la misma forma en los cuatro y la misma lista de ajustes byte a byte; solo cambian el resumen, el
+  nombre del objeto y los totales. Lo que me había faltado copiar y ahora escribe el modo estricto:
+  - en la cabecera `exclude_object`, `model_instances`, `paint_info` (material y color, en JSON) y `test_mode: 0`;
+  - `; EXECUTABLE_BLOCK_HEAD` después del G-code de inicio;
+  - el bloque `ams_info` al final con el mismo `paint_info`;
+  - el nombre del objeto con su extensión (`XYZ_20mm_Calibration_Cube.stl_id_0_copy_0`): antes la quitaba.
+  - Quedan afuera `project_info` y `flush_multiplier_calculate_by_acnext` (purga entre colores, que el motor no
+    hace en esta impresora).
+- **Tiempo, mismo cubo de 20 mm (125 capas):** Anycubic estima 30m 34s y 1,29 m; el motor, con los valores sacados
+  del archivo, 35m 18s y 1,25 m (el cubo del motor no tiene las letras grabadas). Para el bloque de tiempo
+  (`print_time.md`): falta saber cuánto tarda de verdad la impresora.
+
+## 2026-11-03 (noche): Ingeniería en el proyecto, paso 1
+
+- Ficha: `formats.md` regla 11 bis (spec/next e0f6379, `check_spec.py` limpio), FM23 a FM26.
+- **Hecho:** `ProjectEngineering` por pieza (`src/project/engineering.*`), guardado en el JSON del proyecto (archivo
+  propio y 3MF) bajo `engineering` con su versión:
+  - las condiciones con su tipo y número: puntos con posición, normal y radio en las coordenadas de la pieza; zonas y
+    límites con sus triángulos; fuerzas en N con los kg tipeados aparte y la dirección (normal, eje con signo o
+    vector); límites en mm o %;
+  - solo los valores cambiados a mano (material, temperatura de extrusión, alturas, ancho), la temperatura de
+    trabajo siempre, las opciones de Estructural y las entradas de Aerodinámica;
+  - al abrir: las zonas con triángulos que la malla ya no tiene se quitan con un aviso (`Project::notices`); datos de
+    una versión más nueva o que no se entienden se dejan afuera con un aviso, sin perder la pieza.
+- Pruebas: FM23 y FM24 (sin el resultado todavía) en el archivo propio y en el 3MF, y FM26 con la parte de quitar.
+- **Sigue:** el último resultado como archivo del paquete con su huella; `analyze` sobre el proyecto (FM25).
+
+## 2026-11-03 (noche): dibujos de las superficies (pedido del dueño)
+
+- Ficha: `infill_patterns.md` reglas 14 a 17 y P10 (spec/next 6f59edd, `check_spec.py` limpio). El equipo de fichas
+  lo puso delante de la pestaña Estructural.
+- **Hecho:** `surfaces.top_pattern` y `bottom_pattern` aceptan `monotonic`, `rectilinear`, `monotonic_lines`,
+  `aligned_rectilinear`, `concentric`, `hilbert`, `archimedean` y `octagram` (`SurfacePattern`, en lugar de los dos
+  booleanos):
+  - `monotonic_lines` sale como el `monotonic` del motor, que ya eran líneas sueltas en el mismo sentido;
+  - `aligned_rectilinear`: zigzag al ángulo del relleno en todas las capas;
+  - las curvas: las mismas funciones del relleno, densas (separación de un cordón menos el solape);
+  - abajo, los que no son líneas solo en `bottom_exposed` (lo que no tiene nada de la pieza debajo, nuevo en
+    `LayerSurfaces`); las capas sólidas de encima siguen en zigzag (regla 17).
+- En el panel, los dos con los ocho dibujos; el de abajo queda en el nivel avanzado (la lista básica de la ficha no lo tiene). Por error lo había pasado a básico y subí c033143 con esa prueba fallando; corregido en el commit siguiente.
+- Pruebas: P10 en `test_infill.cpp` (cada dibujo cubre entre 0,9 y 1,15 veces lo que cubren las líneas, el alineado
+  no gira, el concéntrico hace lazos, abajo solo la capa expuesta cambia, los ocho nombres se leen y se escriben).
+  El cubo de prueba se lamina con los ocho dibujos arriba y abajo y su G-code pasa la verificación;
+  `tisma_fuzz_gcode 300` con los dibujos al azar: ninguna falla.
+- **No medido contra P10:** en Tisma Slicer `monotonic` sale en un solo tramo y `monotonic_lines` en 71; el motor da
+  tramos sueltos en los dos. Queda anotado para revisar el `monotonic` de arriba.
+- **QA del modo Anycubic (equipo de fichas, sobre 177eae6), dos notas tomadas:**
+  - sin `extrusion.type`, el bloque de ajustes no traía `filament_type`; ahora lleva el mismo que `paint_info` (PLA si
+    no se sabe) y hay un aviso `strict_parser` que dice que la impresora puede tomarlo como PLA;
+  - `M73` lleva además `QuietR` y `SportR` como los archivos de Anycubic (los minutos del modo silencioso si lo hay;
+    si no, los normales); el verificador del motor los acepta en `M73`.
+
+## 2026-11-03 (noche): BH20, la Z del zigzag (QA del equipo de fichas)
+
+- Ficha: `zigzag_infill.md` regla 7, ZI7 (spec/next 97470fd). Medido por QA en un cubo de 80 mm con `grid` y
+  `nonplanar`: la Z de las extrusiones del zigzag llegaba a 28,3 mm/s, y con `max_feed_z` 5 la estimación pasaba a
+  1 d 10 h pero el G-code seguía pidiendo 28,3.
+- **Hecho:** cada extrusión (y cada tramo de `coast`) que cambia de Z baja su F a `max_feed_z · largo / |dz|`
+  (`Emitter::z_limited`); sin `max_feed_z`, 5 mm/s (la Ender-3 de fábrica, como las otras velocidades que faltan) y
+  un aviso `speed_fallback` que lo dice cuando hay zigzag.
+- Prueba ZI7 en `test_nonplanar.cpp`: el cubo de 30 mm con `grid` ondulado, sin límite, con 2 y con 12 mm/s: la Z
+  más rápida del zigzag queda dentro del límite (con 2 % por el redondeo de las coordenadas) y el aviso sale solo
+  sin límite.
+- De paso: dos `-Wshadow` del bloque de ajustes del modo Anycubic (`nozzle`, `bed`).
+- **Sigue:** ZI8 (aviso cuando no entra ninguna onda), la fila única «Relleno no planar» (regla 11), y después el
+  resultado de Ingeniería en el proyecto.
+- **BH21 (QA de b921288):** `monotonic_lines` daba el mismo G-code que `monotonic`: líneas sueltas pero yendo y
+  viniendo (−45° y 135°), porque el orden de los caminos da vuelta una línea si su otra punta queda más cerca. Ahora
+  sus líneas salen todas hacia el ángulo de la capa y llevan `Toolpath::one_way`, que el orden respeta: en el cubo de
+  prueba, 20 tramos largos a 135° (antes 10 y 10). Prueba en `test_infill.cpp` (P10).
+- De la misma QA, sin cambiar: largos 2,3 % menores que en Tisma Slicer, `monotonic` en tramos sueltos (allá uno solo)
+  y las curvas con menos tramos (menos viajes). Anotado para un bloque de superficies.
+- **ZI8 (regla 5):** con el zigzag pedido y un patrón que lo admite, si ninguna capa tiene una onda (pieza chica o
+  relleno denso), aviso `nonplanar_ignored`: «the zigzag in Z does not fit in <pieza>: it is too small or its infill
+  too dense». El cubo de 10 mm de ZI8 lo da por la línea de comandos; prueba en `test_nonplanar.cpp` (6 mm avisa,
+  30 mm no).
+- **Regla 11:** en el panel, un renglón «Relleno no planar» (No, Zigzag en Z, Ondas entrelazadas) en lugar de las
+  dos casillas; debajo solo los ajustes de la elegida. La ayuda dice que la mejora del artículo fue en paredes de un
+  cordón, no en relleno (pedido del equipo de fichas hasta imprimir ZI12). Los ajustes siguen siendo
+  `infill.nonplanar` e `infill.waves`.
+
+## 2026-11-03 (noche): Ingeniería en el proyecto, paso 2
+
+- **Hecho:** `EngineeringResult` (tipo, huella, informe en JSON) en `ProjectEngineering::results`, guardado aparte
+  como la pintura: un trozo `RSLT` en el archivo propio y `Metadata/tisma_result_<k>.json` en el 3MF (empieza con `{`,
+  nunca con los bytes de un programa); el JSON del proyecto dice tipo, huella y número de archivo.
+- **Huella** (`engineering_fingerprint`, FNV-1a de 64 bits): la malla y los puntos desde la esquina de su caja, en
+  micrómetros (moverla no la cambia, FM24), las condiciones, valores y opciones, y el JSON de los ajustes.
+  `result_stale` dice si quedó «Desactualizado».
+- **Encontrado y corregido:** en el 3MF la malla vuelve ya ubicada en la cama y los puntos de las condiciones quedaban
+  en las coordenadas viejas, fuera de la pieza. Ahora el 3MF guarda cuánto se movió (`engineering_moved`) y al abrir
+  los puntos se mueven igual.
+- Pruebas: FM23 completo (el resultado vuelve igual y sin «Desactualizado» en los dos formatos; cambiar una fuerza lo
+  deja viejo), el punto en el mismo lugar de la pieza también en 3MF, y el archivo del resultado en el 3MF.
+- **Sigue:** paso 3, `analyze` sobre el proyecto con estas condiciones (zonas por triángulos, puntos con radio), FM25.
+
+### TR25: nombres de ajustes cortados (QA del equipo de fichas)
+
+- A 1440 × 900, nivel avanzado: 21 nombres cortados a mitad de palabra sin «…» (el `--dump-ui` ya los marcaba `cut`),
+  y la ⓘ de «Ángulo de las transiciones» tapada a medias (el chequeo no contaba el botón).
+- **Hecho:** `label_cell` reserva el ancho de la ⓘ; un nombre que no entra se acorta por caracteres UTF-8 enteros y
+  termina en «…», con el nombre entero en el globo (junto a la ayuda, si la hay). La columna de nombres pasa de 1,25 a
+  1,5 veces la de valores. El volcado agrega `shortened`; `cut` queda para lo que la columna tapa sin aviso.
+- Medido (1440 × 900, avanzado): ningún nombre cortado; acortados con «…» 28 en castellano y 12 en inglés (con 1,25
+  hubieran sido 47 y 18). Con 1,7 bajan a 19 y 9, pero los valores se cortan más («0,45 mm · Automá»): me quedo en 1,5.
+- Pruebas nuevas `ui_labels_fit_<es|en>_<sección>` (12): fallan si alguna fila tiene `cut`.
+- «Largo de las transiciones» → «Largo de transición», junto a «Margen de transición».
+- **Sigue:** acortar los textos más largos para que entren sin «…» (los 28 en castellano), con el equipo de fichas.
+
+## 2026-11-03 (noche): Ingeniería en el proyecto, paso 3 (primera parte)
+
+- **Hecho:** el análisis acepta condiciones marcadas en la malla:
+  - `SurfaceZone` (`src/fea/zone.*`): muestras sobre los triángulos marcados en una grilla de celdas; un nodo está en
+    la zona si queda a menos de ~un vóxel (0,9 del lado mayor) de una muestra; para un punto, además dentro del radio
+    del disco (los triángulos que se acercan al punto, por el punto más cercano de cada triángulo);
+  - `Box` lleva la zona y `Region` la forma; `resolve_region` arma la zona con el tamaño de los vóxeles y achica la
+    caja a sus bordes;
+  - `add_conditions` (`src/project/engineering_case.*`): fijos y fuerzas de `ProjectEngineering` como fijaciones y
+    cargas del caso; la fuerza en N por la normal hacia adentro (media pesada por área de la zona, o la del punto),
+    un eje con signo o su vector; los límites de desplazamiento todavía no se comprueban (lo dice una nota).
+- **Medido:** la placa de 12 × 4 × 2 mm de las pruebas de análisis, sujeta y empujada con 5 N: por caras del caso y
+  por los triángulos marcados, el desplazamiento máximo difiere 0,3 %; empujada por un punto de 1 mm de radio en la
+  punta hacia adentro (−X), 0,0039 mm contra 0,42 mm al doblarla.
+- **Sigue:** `tisma-engine analyze <proyecto>` con estas condiciones (material y temperatura del proyecto, el
+  resultado guardado de vuelta), FM25.
+
+## 2026-11-03 (noche): Ingeniería en el proyecto, paso 3 (segunda parte)
+
+- **Hecho:** `tisma-engine analyze <proyecto> -o informe.json` (FM25):
+  - toma la primera pieza con alguna condición visible, ubicada donde está en la cama (la malla movida por su
+    posición, y las condiciones con el mismo corrimiento);
+  - usa los ajustes del proyecto (o los de `--config`) y los valores cambiados a mano: material, alturas de capa y
+    ancho de línea (`apply_engineering_overrides`); la temperatura todavía no cambia el material, y un aviso lo dice;
+  - la calidad sale de las opciones de la pestaña Estructural (`engineering_analysis_case`);
+  - sin condiciones, código 2 y el motivo.
+- **Encontrado y corregido:** un cubo empujado arriba por los triángulos marcados se desplazaba 22 % más que con la
+  cara `top` del caso. La zona, de un vóxel de alcance, también tomaba las caras laterales de la última capa (el 8 %
+  del área), y la carga se concentraba en el borde. Ahora cada muestra guarda la normal de su triángulo, y una cara de
+  vóxel recibe carga solo si mira hacia el mismo lado (a menos de 60°: `SurfaceZone::near_facing`,
+  `Box::contains_face`). Las fijaciones siguen tomando nodos, sin filtro.
+- **Medido:** cubo de 10 mm, sujeto abajo y 100 N arriba, vóxeles de 0,225 mm: proyecto contra caso, 1,2 % de
+  diferencia en el desplazamiento máximo (antes 22 %); unos 3,3 s cada análisis.
+- **Sigue:** la pestaña Estructural (EP1 a EP10): marcar, lista, Analizar, mapa, veredicto, y guardar el resultado
+  en el proyecto.
+
+### QA del renglón «Relleno no planar» (equipo de fichas, sobre 791bc8e)
+
+- El renglón tiene ⓘ: la ayuda de `infill.nonplanar` ahora explica los dos tipos, qué mejora (la unión entre
+  capas), que lo medido en el artículo fue en paredes y no en relleno, lo que cuesta (tiempo y tamaño del G-code) y
+  con qué dibujos funciona el zigzag. La búsqueda lo encuentra como «Relleno no planar».
+- La tarjeta pasa de «Relleno ondulado» a «Relleno no planar».
+- «Basado en ZigZagZ (2021)» se muestra solo con el zigzag elegido; las ondas entrelazadas son diseño propio y no
+  muestran crédito.
+- La tarjeta sigue en la sección «No planar» (el equipo de fichas actualiza `settings_panel.md`).
+
+## 2026-11-03 (noche): Ingeniería, paso 4 (pestaña Estructural), primera parte
+
+- **Hecho:** los valores del panel, sin la interfaz todavía (`src/project/engineering_values.*`):
+  - `engineering_values`: material, temperatura de extrusión (la de las capas después de la primera), temperatura
+    de la cama, alturas de capa y ancho de línea del perfil, o el valor cambiado a mano con su marca (el punto
+    violeta); la temperatura de trabajo, 23 °C al empezar;
+  - `material_for_filament`: el registro de la tabla de materiales para cada tipo de filamento (PLA, PLA+, PLA-CF,
+    PETG, PETG-CF, ABS, ASA, PA-CF, PA6-CF, PAHT-CF); otro tipo no tiene material («Elegí un material»);
+  - `analyze_block`: qué apaga Analizar, en orden: material, algo fijo, una fuerza (las ocultas no cuentan);
+  - `analyze <proyecto>` toma ahora el material del tipo de filamento cuando no se cambió a mano.
+- Pruebas: EP1, EP2, EP3, EP5 y EP10 en su parte lógica.
+- **Sigue:** la pestaña Estructural en la interfaz: lista de piezas, herramientas de marcado sobre la vista, lista de
+  condiciones con deshacer, Analizar en segundo plano, mapa y veredicto; y sacar «Análisis» de Impresión 3D.
+- **Encontrado y corregido:** la interfaz perdía los datos de Ingeniería de cada pieza. `PlateObject` no los tenía,
+  así que abrir un proyecto con condiciones y guardarlo de nuevo desde la interfaz las borraba. Ahora la pieza los
+  lleva (`PlateObject::engineering`): al abrir se mueven con la malla, y al guardar van a donde se guarda la malla
+  ubicada; al espejar, también. Para eso, `move_engineering`: los puntos con el mapa de la pieza y las normales con
+  su cofactor, así un espejo o una escala despareja las deja normales. Los números de triángulo, y el eje y el vector
+  de una fuerza (que son del mundo), no cambian. Cortar y dividir hacen piezas nuevas, sin condiciones.
+
+## 2026-11-03 (08:40 UTC): mantenimiento
+
+- **Revisado:** fuzz de G-code con 2000 casos y semilla nueva (20261103084): 0 fallas, 19 rechazados por no
+  imprimibles, 5 min. Además, los cambios de la noche (análisis sobre el proyecto, zonas marcadas, valores del panel,
+  datos de Ingeniería en la placa).
+- **Encontrado y corregido:** una zona marcada guardaba una muestra cada media celda de vóxel sobre cada triángulo.
+  Una sola cara de 200 × 200 mm (dos triángulos) ocupaba 504 MB y tardaba 1,6 s en armarse, y una placa grande con una
+  zona fija y otra de fuerza pasaba el GB. Ahora `SurfaceZone` guarda los triángulos en celdas y mide la distancia
+  exacta a cada uno (`closest_on_triangle`). Las celdas miden al menos el doble del alcance y crecen con el lado medio
+  de los triángulos y con el área (unas 20 000 como mucho).
+- **Medido** (cara de 200 mm, alcance 0,2025 mm, una consulta por nodo de 0,225 mm):
+
+  | | antes | ahora |
+  |---|---|---|
+  | memoria | 504 MB | < 1 MB |
+  | armado | 1631 ms | < 1 ms |
+  | 790 000 consultas | 802 ms | 84 ms |
+  | nodos en la zona | 790 321 | 790 321 |
+
+  Con 50 mm: 31 MB → 0, consultas 45 → 9 ms.
+- Por la distancia exacta, la placa de las pruebas da el mismo desplazamiento por caras del caso que por triángulos
+  marcados (antes 0,3 % de diferencia); el cubo de FM25, 1,8 % (antes 1,2 %).
+- Prueba nueva: `near` contra la distancia a cada triángulo por fuerza bruta, 20 000 puntos al azar sobre una cara de
+  200 mm y sobre un abanico de 60 triángulos chicos.
+
+## 2026-11-03 (mañana): Ingeniería, paso 4 (pestaña Estructural), segunda parte
+
+- **Hecho:** la pestaña **Estructural** en la sección Ingeniería, antes de Diseño (regla 1). Su panel, en la columna
+  izquierda (`structural_panel`):
+  - la lista de piezas de la placa (regla 2);
+  - el material (la lista de la tabla de materiales, o el del tipo de filamento), la temperatura de extrusión, la de
+    la cama (solo se muestra), las alturas de capa y el ancho de línea. Cada valor dice de dónde sale («del perfil
+    PLA»), o lleva el punto violeta y «Volver al del perfil» si se cambió a mano (regla 3);
+  - la temperatura de trabajo, 23 °C al empezar (regla 4);
+  - las condiciones de la pieza, por nombre;
+  - Analizar, fijo al pie del panel, apagado con el motivo debajo (regla 9).
+- Un perfil de filamento sin tipo se lee por su nombre: el nombre entero o su primera palabra («PLA Genérico» es PLA).
+  El perfil de fábrica, «PLA», no tiene tipo y antes quedaba en «Elegí un material».
+- `--view structural` para las capturas, y la prueba guionada `ui_script_structural_tab`, con el paso nuevo
+  `expect-structural` (qué apaga Analizar).
+- Cambiar de Diseño a Estructural vuelve a mostrar la placa.
+- **No probado:** en Windows; con más de una pieza en la placa.
+- **Sigue:** las herramientas de marcado sobre la vista (punto y zona, fijo y fuerza, límite), la lista con ojo,
+  lápiz y cruz, y deshacer; después correr el análisis en segundo plano, con el mapa y el veredicto.
+
+### `analyze <proyecto>`: notas del equipo de fichas (caja negra sobre af7c61e)
+
+- Un proyecto con `--case` y sin `--config` daba el error de uso. Ahora usa el caso y los ajustes del proyecto (la
+  pieza es la primera con condiciones, o la primera de la placa). El mismo cubo, caso y ajustes dan el mismo
+  desplazamiento que el STL, con 0,01 % de diferencia (la grilla de vóxeles cae distinta en la cama: 95 779 vóxeles
+  contra 95 780).
+- El punto crítico va en las coordenadas propias de la pieza (`structural_analysis.md`, spec/next 5783d58): las del
+  archivo, o en las que el proyecto guarda sus condiciones (para un 3MF, lo que su lectura movió la malla queda en
+  `ProjectModel::placed_by`). La misma pieza da el mismo punto suelta o en un proyecto movido en la cama; la posición
+  en la cama va aparte, en `weakest_on_bed`. El informe dice `"frame": "part"`.
+
+### Marcado, primera pieza
+
+- `face_region` (`src/mesh/face_region.*`): la cara que toma un clic en «Zona fija» o «Zona de fuerza» (regla 5, «la
+  parte plana o lisa hasta los bordes marcados»). Recorre los triángulos vecinos mientras el ángulo entre sus normales
+  no pase 20°: el lado de un cubo son sus dos triángulos, la pared de un cilindro de 32 lados es una sola cara, y sus
+  tapas otras dos. Prueba nueva con el cubo y el cilindro.
+- **Sigue:** los botones de las herramientas en el panel, el clic en la vista (la pieza, el triángulo y el punto, en
+  las coordenadas de la pieza), la lista de condiciones con ojo, lápiz y cruz, y deshacer.
+- **Pendiente (equipo de fichas, formats.md 8 y 11 bis en spec/next 13ef0a6):** al guardar, la interfaz escribe cada
+  malla ya ubicada en la cama, con desplazamiento 0, así que el marco de la pieza cambia cada vez que se mueve. Tiene
+  que guardar la malla sin ubicar, en el marco de la pieza, con la posición y el giro en la transformación del
+  `<build>` del 3MF (y en el proyecto propio). Hace falta: transformación completa en `ProjectModel` y en el escritor
+  y lector del 3MF, y que `project_objects` y `current_project` la usen. Prueba FM24: mover la barra 30 mm, girarla
+  90°, guardar y abrir; las condiciones quedan en los mismos lugares de la barra. Los proyectos viejos, con mallas
+  ubicadas, se siguen abriendo.
+
+### FM24: el proyecto guarda la malla sin ubicar (equipo de fichas, formats.md 8 y 11 bis)
+
+- **Hecho:** la interfaz guarda cada pieza en sus coordenadas propias. Su lugar en la cama (giro, escala y posición)
+  va en `ProjectModel::turn` y `offset`; en el 3MF, en la transformación completa del ítem de `<build>`. El lector
+  del 3MF deja la malla en sus coordenadas propias y devuelve esa transformación (`read_3mf_items(..., own_frame)`).
+  `project_objects` la vuelve giro y escala de la placa. Un espejo o una deformación que la placa no representa se
+  aplican a la malla, y las condiciones se mueven con ella.
+  - Los volúmenes, los rangos y las condiciones quedan en las mismas coordenadas, sin moverlos al guardar.
+  - `engineering_moved` se sigue escribiendo para versiones anteriores, pero ya no se usa al leer.
+  - `ProjectModel::placed_by` (de 056c59c) ya no hace falta y se sacó.
+- **Encontrado y corregido** en 056c59c: el punto crítico en coordenadas de la pieza restaba la z más baja, como si
+  el análisis apoyara la pieza en 0; las capas empiezan en la z de la malla. Ahora `analysis_json` recibe la inversa
+  completa de la ubicación (`to_part`), con el giro incluido.
+- `analyze <proyecto>` gira y mueve la malla y las condiciones con la transformación de la pieza.
+- **Prueba FM24:** una barra de 100 mm con un punto de fuerza en la punta, girada 90° y movida a (130, 100), guardada
+  en 3MF y en el archivo propio y abierta de nuevo. Vuelven la misma malla, el mismo punto en la barra, el mismo giro
+  y el mismo lugar, y la punta en la cama donde estaba. La prueba del paquete 3MF ahora espera la malla en sus
+  coordenadas propias.
+- Medido: 865 pruebas en paralelo; falló una vez `ui_script_cloud_slice` (pasa sola: tiempos bajo carga, a vigilar).
+
+### TR26 (equipo de fichas): los dos patrones de Arriba y abajo como par
+
+- «Superficie superior» / «Patrón de abajo» → «Patrón de arriba» / «Patrón de abajo» (en inglés «Top pattern» /
+  «Bottom pattern»), como «Espesor mínimo arriba» / «abajo» justo encima.
+
+### Marcado en la pestaña Estructural (sin terminar)
+
+- **Hecho:**
+  - `add_condition` numera cada condición nueva por su tipo; `condition_label` da su renglón («Zona fija 1 · 1 cara»,
+    «Punto de fuerza 1 · r 5 mm · 50 N hacia −Z»), en castellano y en inglés. Prueba nueva.
+  - En el panel, las seis herramientas (Rotar, Punto fijo, Zona fija, Punto de fuerza, Zona de fuerza, Límite) con la
+    elegida en violeta y una ayuda corta; Esc vuelve a Rotar.
+  - La lista con una casilla para ocultar cada condición, la cruz para borrarla, y la fuerza en N o el radio de un
+    punto.
+  - Deshacer y rehacer de las condiciones con Ctrl+Z y Ctrl+Y.
+  - El clic en la vista con una herramienta: el punto y la normal en las coordenadas de la pieza; una zona, la cara
+    entera (`face_region`); con Mayús, la cara se suma a la última zona de su tipo.
+- **Encontrado y corregido (2026-11-03, mañana):** el clic sí llegaba a la vista. Lo que fallaba era la herramienta,
+  que nunca se elegía: los botones estaban debajo de los valores, fuera de la parte visible del panel a 760 px de
+  alto, y el clic caía fuera de la ventana. Ahora el panel va en este orden: pieza, herramientas, lista de
+  condiciones, material y valores. La prueba guionada marca una zona fija y un punto de fuerza haciendo clic en el
+  cubo, deshace y rehace, y con Rotar (Esc) un clic ya no marca nada (EP5, EP7).
+- **Sigue:** arreglar el clic en la vista y volver a poner en la prueba el marcado, deshacer y rehacer (EP5, EP7);
+  dibujar las condiciones en la vista (regla 7); correr el análisis desde Analizar.
+- **TR27 del equipo de fichas (caja negra de bc4fcd5), hecho el 2026-11-03 por la mañana** (abajo, lo que era):
+  1. los campos del panel escriben «0.20 mm» con punto en castellano: usar el formato de la interfaz (`field_text`);
+  2. el material dice «(sheet V3.0)» en castellano: sacar la versión de la ficha del nombre o traducirla;
+  3. el origen de cada valor se confunde con el valor («del perfil 0.20 mm» bajo «0.45 mm»): nombrar el tipo de perfil
+     y entrecomillar su nombre («del perfil de impresión «0,20 mm»»);
+  4. paredes y relleno del perfil (regla 3) todavía no se muestran;
+  5. la primera vez, Ingeniería abre en Diseño y tiene que abrir en Estructural;
+  6. Aerodinámica (regla 1) llega con A3.
+  Hecho: los campos del panel con coma (`field_text`: alturas, ancho, temperaturas, N y radio); el material sin «(sheet
+  V3.0)»; el origen como «del perfil de impresión «0,20 mm»» y «del perfil de filamento «PLA»»; una línea con paredes,
+  capas sólidas y relleno del perfil de impresión; Ingeniería abre en Estructural la primera vez (las pruebas de
+  Diseño, Tornillería y Engranajes ahora pasan a Diseño primero). Aerodinámica sigue para A3.
+- **Ojo:** Analizar ya se enciende con algo fijo y una fuerza, pero todavía no corre el análisis.
+
+### UI50 y TR28 (equipo de fichas, caja negra de 8aab42c con clics reales)
+
+- **UI50, «la cámara salta al marcar»:** con clics reales de X (un programita propio sobre XTest, en Xvfb) no se
+  reprodujo el salto a la vista de arriba, ni con un clic ni con doble clic, a 1200 × 760. Lo que sí apareció: un
+  doble clic marcaba dos condiciones y además volvía a encuadrar la placa. Ahora, con una herramienta de marcado, el
+  segundo clic de un doble clic no marca nada y no encuadra. Se pidió al equipo de fichas la secuencia exacta.
+- **UI50, la causa (con la secuencia exacta del equipo de fichas):** reproducido con XTest a 1440 × 900, el puntero
+  saltando de «Punto fijo» al cubo y un clic: 1 de 5 corridas con bbff4fc. La órbita usaba
+  `IsMouseDragging(..., 0)`, que ya es verdadero en el cuadro en que se aprieta el botón; si el salto del puntero
+  llegaba en ese mismo cuadro, todo el salto giraba la vista (casi desde arriba). Ahora el cuadro del clic no gira
+  ni desplaza la vista (izquierdo, derecho y medio). Con el arreglo: 8 de 8 corridas sin salto; 79 pruebas de la
+  interfaz pasan. Afectaba también a Preparar con una herramienta de mouse o un programa de pruebas, no solo a
+  Estructural.
+- **TR28:** el globo de «Ingeniería» decía solo lo de Diseño. Ahora: «Analizar y diseñar piezas: estructura, aire y
+  diseño». Los globos de las dos secciones se muestran debajo de la barra de arriba, a la izquierda del botón, sin
+  tapar las pestañas.
+
+## 2026-11-03 — Diseño, D3 primera parte: parámetros (CD4)
+
+**Hecho (pedido del dueño: «Sigamos con el cad»):**
+- `src/cad/parameters.*`: parámetros con nombre y expresión. Las expresiones leen números, unidades (mm, cm, m, in,
+  deg, °, rad), los cuatro operadores, paréntesis, signo y otros parámetros. Cada valor lleva su medida (largo,
+  ángulo o número): largo más ángulo, largo por largo y división por cero son errores, y un número suelto sumado a un
+  largo cuenta como mm. Los parámetros se evalúan en el orden en que dependen unos de otros; un ciclo se nombra.
+- `Feature::bindings`: cada medida de una operación (los tres tamaños de una primitiva, distancia y ángulo de
+  extruir o revolucionar, ancho y alto de un rectángulo, diámetro de un círculo) puede atarse a una expresión.
+  `apply_parameters` pone los valores antes de construir; el guion de SolidCraft se arma sobre una copia. Los
+  parámetros y las ataduras se guardan en el JSON del diseño.
+- Panel Diseño: sección Parámetros (nombre = expresión, el valor debajo o «No da un valor», ×, «Agregar
+  parámetro») y un botón «fx» junto a cada medida, que abre la expresión; Enter la toma y cierra el cuadro.
+- Programas de prueba: tecla `a` (para Ctrl+A).
+
+**Probado:** 2 pruebas nuevas del motor (unidades, orden, errores; CD4 con el sustituto de SolidCraft: una caja
+atada a un parámetro pasa de 24000 a 37500 mm³ al cambiarlo). Prueba de interfaz `ui_script_design_parameters`: caja
+de 20 mm (8000 mm³), «Largo» atado a `p1*3` con `p1 = 10 mm` (12000 mm³), `p1` cambiado a 15 mm (18000 mm³).
+
+**No probado:** con el `solidcraft-cli` real (solo con el sustituto). Las operaciones de un boceto (posición de las
+líneas sueltas) todavía no se atan a parámetros.
+
+
+### D3 segunda parte: restricciones y cotas con grados de libertad (CD3)
+
+**Hecho:**
+- `src/cad/constraints.*`: el boceto como sistema de ecuaciones (cadenas: sus puntos; rectángulo: sus dos esquinas;
+  círculo: centro y radio; arco: centro, inicio y fin con radios iguales). Entran las referencias de D2 (coincidente,
+  punto medio, sobre la curva), los largos tipeados y las restricciones nuevas: horizontal, vertical, paralela,
+  perpendicular, igual (largos o radios), concéntrica, tangente (recta y círculo), coincidente, fijo, largo,
+  distancia, distancia horizontal y vertical, radio, diámetro y ángulo. Se resuelve con pasos de Gauss-Newton de
+  norma mínima (la geometría se mueve lo menos posible); los grados de libertad son las coordenadas menos el rango
+  del jacobiano, y cada entidad sabe si quedó totalmente fija. `add_rule` rechaza lo que sobra (no sube el rango) y
+  lo que contradice (no se puede cumplir), sin tocar el boceto. Se guardan en el JSON del boceto (`rules`).
+- Cambiar el ancho o el alto de un rectángulo, o el diámetro de un círculo, desde su campo o desde un parámetro
+  cambia también su cota y resuelve el boceto; antes de construir, cada boceto se resuelve.
+- Modo boceto: sección Boceto con los grados de libertad (texto y barra; «Totalmente definido» en cero) y los
+  botones de restricciones; en la línea de comandos `cota`, `h`, `v`, `par`, `per`, `igual`, `coi`, `con`, `tan`,
+  `fijo`, `ang`. Se elige con un clic o con un punto tipeado; una cota pide su valor (Enter deja el que tiene). Lo
+  fijado se dibuja en blanco (negro en el tema claro), lo que se mueve en azul, lo elegido en verde, y las cotas con
+  su valor.
+- Programas de prueba: `expect-sketch-dof N`.
+
+**Probado:** 2 pruebas nuevas del motor (CD3: rectángulo 4 grados, con ancho y alto 2, con una esquina fija 0 y
+totalmente definido; lo que sobra, lo que contradice y lo inválido no cambian nada; cadena con horizontal,
+perpendicular e igual moviéndose menos de 1 mm; círculo y arco con diámetro, concéntrica y radio; ida y vuelta por
+JSON; el ancho cambiado por su campo mueve la cota). Prueba de interfaz `ui_script_design_constraints`: 4, 3, 2 y 0
+grados, una horizontal que sobra y una cota de 50 que contradice no cambian nada, y extruido da 24 000 mm³.
+
+**Interpretación de CD3 (pregunta al equipo de fichas):** la ficha dice «con una cota del ancho, sin restricciones
+de posición: 2 grados de libertad». Un rectángulo de dos esquinas tiene 4 (posición x, y, ancho y alto); con solo el
+ancho quedan 3. La prueba usa ancho y alto acotados (2) y después una esquina fija (0).
+
+**No probado:** con el `solidcraft-cli` real (a SolidCraft le llega la geometría ya resuelta, sin las restricciones
+nuevas). Arrastrar puntos del boceto resolviendo en cada cuadro (regla 5) todavía no está: el boceto no se arrastra.
+Faltan las cotas de recta a círculo, entre círculos, de barrido, largo de arco y de ranura, curvatura G2, colineal,
+punto sobre curva a mano, punto medio a mano y simetría.
+
+
+### D3 tercera parte: la línea de tiempo editable (regla 8)
+
+**Hecho:**
+- `cad::build_timeline`: si la herramienta rechaza el diseño, busca la primera operación que falla por bisección
+  sobre los prefijos de la línea de tiempo (log₂ n construcciones más), construye las de antes y devuelve cuál falla
+  y por qué. Una herramienta que falta o no contesta sigue siendo un error de todo el diseño.
+- Historial: flechas para subir y bajar cada operación, doble clic en el nombre para renombrarla (Enter o salir del
+  campo la toma, Esc la deja; un nombre repetido se rechaza con aviso), el ojo y × como antes. La que falla se ve en
+  rojo con el motivo de la herramienta; las de después, en gris con «En espera: falla una operación anterior»; al
+  arreglarla, suprimirla, moverla o borrarla, todo se rehace. «Cuerpos» cuenta solo los construidos. Un boceto en
+  edición se termina antes de mover o borrar.
+- El sustituto de pruebas rechaza el cuerpo que nombre `TISMA_FAKE_SOLIDCRAFT_REFUSE`. Programas de prueba:
+  `expect-design-failed N|none`.
+
+**Probado:** prueba del motor (cuatro cajas, se rechaza la tercera: falla la 3, se construyen 1 y 2, 9000 mm³;
+suprimida, se construyen las otras tres; rechazada la primera, nada). Prueba de interfaz `ui_script_design_timeline`:
+tres cajas, falla «Caja 2», se ve 8000 mm³; subida al primer lugar falla primero y no hay cuerpo; suprimida, 16 000
+mm³; borrada, 16 000 mm³.
+
+Renombrar, con clics y teclas reales de X (XTest, en Xvfb): doble clic en «Caja» abre el campo con el nombre,
+cuatro retrocesos y «Base», Enter, y la fila dice el nombre nuevo. No tiene prueba guionada (el programa de pruebas no
+hace doble clic).
+
+**No probado:** CD6 entero necesita el redondeo (D4).
+
+### Arrastrar el boceto (regla 5)
+
+**Hecho:** sin herramienta elegida, apretar sobre un punto del boceto (dentro de unos 10 píxeles) y arrastrar lo lleva
+al cursor; en cada cuadro el boceto se resuelve con ese punto clavado donde está el cursor, y si las restricciones no
+lo dejan ir ahí, el boceto queda como estaba. Mientras se arrastra, la vista no gira; al soltar no se agrega ningún
+punto. La pieza se rehace al terminar el boceto, como antes.
+
+**Probado:** con eventos reales de X (XTest en Xvfb, 1200 × 760): rectángulo de 40 × 30 con ancho y alto acotados,
+Esc para soltar la herramienta Cota, apretar en la esquina de arriba a la derecha y arrastrar 60 px a la derecha y 40
+hacia arriba: el rectángulo entero se corre, sigue de 40 × 30 con sus cotas, y la vista no gira. Sin prueba guionada
+(el programa de pruebas no arrastra).
+
+**Sigue:** D4 (redondeo, chaflán, vaciado, agujeros por norma, roscas, patrones, simetría, combinar; CD5, CD6
+completo, CD17, CD18) o lo pendiente de Ingeniería (`engineering_panel.md`: fuerzas en N y kg con dirección,
+Analizar que corra con mapa y veredicto, EP1–EP10), según diga el dueño; arrastrar el boceto (regla 5).
+
+## 2026-11-03 — Estructural: Analizar corre, con veredicto, mapa y punto crítico
+
+**Pedido del dueño:** «Sigamos con Estructural» (después de D3 de Diseño). Ficha `engineering_panel.md` (reglas 6, 9
+a 12 y 14) y `structural_analysis.md` («Resultados»), las dos pasan `tools/check_spec.py`.
+
+**Hecho:**
+- Motor, `src/fea/verdict.*`:
+  - la tabla de familias de la ficha (PLA, PETG, ABS, ASA, HIPS, PC, PA, PA-CF, PC-CF, PP, POM, PEI, PEEK, PEKK, PSU,
+    PVDF, TPU): temperatura máxima de servicio, densidad, resistencias; la familia sale de las palabras del nombre
+    del registro o del tipo de filamento;
+  - `f(T)` del punto 5 del método;
+  - el veredicto (elastómero, temperatura, < 1, < pedido, límite) y las sugerencias;
+  - la masa de los vóxeles impresos;
+  - la superficie de vóxeles para el mapa.
+- `engineering_analysis_case` multiplica rigidez y resistencias por `f(T)` con la temperatura de trabajo; con 23 °C
+  no cambia nada. `structural_report_json` agrega al informe el objeto `verdict` (nombre, factor pedido,
+  temperatura, familia, masa, sugerencias, `limits_checked: false`).
+- Panel Estructural:
+  - cada fuerza en N o kg (botón al lado; g = 9,81, con el valor en N debajo) y su dirección (perpendicular hacia
+    adentro, ±X, ±Y, ±Z, tres números);
+  - el factor de seguridad pedido;
+  - Analizar corre en segundo plano con la pieza como está en la cama (sus condiciones movidas con ella y los
+    valores cambiados a mano), barra de avance y «Cancelar» (corta en el próximo aviso de avance);
+  - el resultado arriba: el veredicto grande y en color, el factor mínimo frente al pedido, el desplazamiento
+    máximo, la masa con su familia, «Probá con: …», los avisos si el resultado no sirve;
+  - «Desactualizado: analizá de nuevo» en gris cuando cambia lo que entra en la huella (condiciones, valores,
+    material, perfil, malla). El resultado se guarda en la pieza (`results`), así que se guarda con el proyecto.
+- Vista:
+  - el mapa del factor de seguridad sobre la superficie de vóxeles, en cinco franjas (rojo < 1, amarillo hasta el
+    pedido, verde claro hasta el doble, verde hasta cuatro veces, azul más), con leyenda en el panel;
+  - el punto crítico marcado con su valor;
+  - sin mapa, las fuerzas como flechas rojas del largo de su valor, los puntos como discos (azul fijo, rojo
+    fuerza) y las zonas fijas como un cuadro rayado azul (límites en amarillo).
+- Programas de prueba: `expect-structural-verdict NOMBRE`.
+
+**Probado:**
+- Motor: familias, `f(T)` (0,75 a 39 °C y 0,5 a 55 °C para PLA), los seis veredictos, E10 (PLA a 130 °C: «Fuera de
+  temperatura», sugiere PEI entre otros, todo con servicio ≥ 130 °C), masa de un cubo de 10 mm de PLA = 1,24 g.
+- EP4/EP6 en el motor, con una barra de 40 × 8 × 8 mm de PLA fija en una punta:
+  - 5 N en un punto de la otra punta, hacia −Z (escrito en kg): «Aguanta»;
+  - la masa no pasa la de la barra maciza;
+  - el mínimo del mapa es el mínimo de la pieza;
+  - la misma fuerza repartida en la cara de arriba deja menos desplazamiento;
+  - a 50 °C el módulo es `f(50)` veces el de 23 °C.
+- Prueba de interfaz `ui_script_structural_analyze`: marcar zona fija y punto de fuerza en el cubo, pasar la fuerza
+  a kg, Analizar → «Aguanta», con el mapa; cambiar la unidad de la fuerza → el mapa se va (desactualizado). Captura
+  revisada: veredicto, números con coma, leyenda, punto crítico «49,29».
+
+**No probado / falta:**
+- Falta la deformación exagerada, y los mapas de von Mises y desplazamiento.
+- Falta «Más opciones»: resolución con su tamaño, dirección de impresión y nube.
+- Falta Optimizar.
+- Falta arrastrar la punta de la flecha.
+- La adherencia entre capas según la temperatura de la boquilla (método, punto 6) no está.
+- El análisis corre en CPU (sin GPU) desde la interfaz.
+- EP4 con la barra de 100 × 10 × 10 mm por la interfaz no se probó (el programa de pruebas hace clic solo en el
+  medio de la vista).
+
+**Sigue:** límites de desplazamiento y «Demasiado flexible»; probar un material sugerido con un botón; EP8 guionada;
+Más opciones (resolución); después Optimizar y Aerodinámica (A3).
+
+### Límites de desplazamiento («Demasiado flexible»)
+
+**Hecho:**
+- `check_limits` toma, para cada límite, el mayor desplazamiento de los nodos de la parte que están junto a su zona
+  (las mismas zonas por triángulos que las condiciones) y lo compara con su valor. El valor va en mm o en % de la
+  mayor medida de la pieza.
+- `structural_report_json` con la malla agrega `limits` (nombre, límite, cuánto se mueve, si se pasa) y
+  `limits_checked: true`; si alguno se pasa y la pieza aguanta, el veredicto es «Demasiado flexible».
+- En el panel: cada límite se edita (valor y botón mm/%); en el resultado, una línea por límite, en rojo si se pasa.
+  Un límite nuevo empieza en 1 mm (la ficha no da valor; 0 fallaría con cualquier movimiento).
+- El CLI `analyze` todavía no comprueba los límites (avisa que los comprueba la pestaña Estructural).
+
+**Probado:** barra de 40 × 8 × 8 mm con 5 N en la punta y un límite en la cara libre: con la mitad de lo que se
+mueve, «Demasiado flexible»; con el doble, «Aguanta»; en %, lo mismo que en mm. Las dos pruebas de interfaz de
+Estructural pasan.
+
+### Probar un material sugerido (regla 12)
+
+**Hecho:** el material de una pieza puede ser también una familia de la tabla de la ficha (`family:PEI`), con sus
+valores típicos (`E_xy`, `E_z`, ν, `S_xy`, `S_z`; cortante `S/√3`, propio) y su `f(T)`. La lista de materiales del
+panel las suma debajo de los registros medidos («PEI (valores típicos)»). En el resultado, «Probá con:» pone un botón
+por familia sugerida (hasta seis); al apretarlo se elige y se vuelve a analizar.
+
+**Probado:**
+- Motor: PEI a 130 °C toma los valores de la tabla por su `f(T)` y aguanta la barra; el informe nombra «PEI».
+- Con eventos reales de X (XTest en Xvfb, 1200 × 760):
+  1. cubo con zona fija y punto de fuerza (por guion);
+  2. bajar el panel con la rueda, doble clic en la temperatura de trabajo, «130», Enter, Analizar;
+  3. «Fuera de temperatura», factor mínimo 0,986, «Probá con: PEEK, PEKK, PEI, PSU, PA-CF», el mapa con amarillo y
+     verde junto al punto, punto crítico 0,99;
+  4. apretar PEI: se analiza solo y da «Aguanta», 74,2, masa 1,2 g de PEI.
+- La flecha roja de la fuerza y el cuadro rayado azul de la zona fija se ven en la vista.
+
+### EP8 guionada
+
+Verbos nuevos de los programas de prueba: `save-project RUTA` y `open-project RUTA`. `ui_script_structural_analyze`
+ahora, después de analizar, guarda el proyecto, lo abre, vuelve a Estructural y encuentra el mismo veredicto
+(«Aguanta»), sin «Desactualizado» y con sus condiciones. Abrir un proyecto olvida el mapa de la sesión (se vuelve a
+dibujar al analizar).
+
+### Resolución (regla 10, en parte)
+
+**Hecho:**
+- «Resolución» en el panel:
+  - Rápida: la pieza maciza, unos 20 000 vóxeles con una fila por capa (el vóxel sale de la caja de la pieza y la
+    altura de capa), sin la comprobación de resolución;
+  - Normal: 2 vóxeles por ancho de línea, como impresa;
+  - Alta: 4 vóxeles por ancho de línea.
+- Debajo, «Unos N vóxeles de X mm», contados sobre la caja de la pieza como está en la cama (sin laminar). Se recuenta
+  solo cuando cambia algo que lo afecta.
+- `engineering_analysis_case` recibe la altura de capa; el CLI y la interfaz se la pasan.
+
+**Probado:** la barra de 40 × 8 × 8 mm en Rápida: entre 10 000 y 40 000 vóxeles de la caja, maciza, sin comprobación,
+y el mismo veredicto.
+
+**No probado / falta:** la memoria y el tiempo estimados («284 MB, unos 14 s» de la ficha) no se muestran: el tiempo
+pide laminar. Falta la dirección de impresión y «Calcular en la nube».
+
+## 2026-11-03 (16:40 UTC): mantenimiento
+
+- **Revisado:**
+  - `origin/main` y `origin/dev` sin nada nuevo;
+  - fuzz de G-code con 2000 casos y semilla nueva (20261103170): 0 fallas, 19 rechazados por no imprimibles;
+  - lo nuevo de hoy (parámetros, restricciones, línea de tiempo, Analizar en Estructural) con pruebas al azar
+    nuevas y midiendo lo que corre en cada cuadro;
+  - el CI de Linux de los commits de Estructural corre aparte.
+- **Encontrado y corregido:**
+  1. **Restricciones.** Una prueba al azar nueva (60 bocetos con 8 restricciones al azar cada uno) encontró que
+     resolver podía «dar vuelta» un rectángulo: el ancho o el alto pasaba por cero. Cambiaba entonces qué esquina es
+     cuál, y una restricción que se había cumplido al agregarla dejaba de cumplirse al volver a contar (16 casos).
+     Ahora una solución que da vuelta un rectángulo, o lleva un radio a cero, no cuenta como solución: el boceto queda
+     como estaba y la restricción se rechaza como contradictoria.
+  2. **Estructural con piezas grandes.** El panel volvía a calcular en cada cuadro la huella del resultado (para
+     «Desactualizado»), y la huella recorre toda la malla. Ahora se calcula solo cuando cambia la pieza, la placa,
+     sus datos de Ingeniería o los ajustes.
+- **Medido:**
+
+  | | huella del resultado |
+  |---|---|
+  | 16 000 triángulos | 1,6 ms |
+  | 261 000 | 27 ms |
+  | 1 960 000 | 203 ms (antes en cada cuadro: unos 5 cuadros por segundo; ahora una vez por cambio) |
+
+  El solucionador de restricciones, en una cadena cerrada con horizontales y verticales:
+
+  | puntos | incógnitas | resolver | un paso de arrastre |
+  |---|---|---|---|
+  | 16 | 32 | 0,09 ms | 0,05 ms |
+  | 32 | 64 | 0,24 ms | 0,29 ms |
+  | 64 | 128 | 1,66 ms | 1,53 ms |
+
+- **Pruebas nuevas:**
+  - restricciones al azar (lo agregado se cumple; menos de 60 s);
+  - 20 000 expresiones al azar y 5000 paréntesis anidados: dan un valor o un error, nunca un cuelgue.
+
+## 2026-11-03 — Diseño, D4 primera parte: operaciones sobre los cuerpos (CD5, CD6)
+
+**Hecho** (`cad_design.md`, regla 7, etapa D4; pedido del dueño: «lo más similar a SolidCraft en funcionalidades»):
+- Ocho operaciones nuevas en la sección **Operaciones** del panel y en la línea de comandos: Redondeo, Chaflán,
+  Vaciado, Agujero, Simetría, Patrón circular, Patrón en fila y Combinar (unir, restar, intersecar). Cada una es un
+  paso más del historial, sobre un cuerpo hecho antes, y sale como el comando de SolidCraft de su referencia pública
+  (`solid.fillet`, `solid.chamfer`, `solid.shell`, `solid.hole`, `solid.mirror`, `solid.pattern.circular`,
+  `solid.pattern.rectangular`, `solid.combine`). Un botón queda en gris con «Próximamente» si el SolidCraft
+  instalado no tiene ese comando, y con «Hacé un sólido primero» si no hay cuerpos.
+- Las aristas, las caras y los lugares de los agujeros se eligen con clic en la vista: el rayo del mouse contra la
+  pieza (Möller y Trumbore); para redondeo y chaflán el clic se pega a la arista viva más cercana (normales a más de
+  30°) a menos de 3 mm. Los puntos se marcan en verde; Enter en la línea de comandos vacía, Esc o «Listo» terminan.
+  «Elegir en la vista» vuelve a elegir y «Borrar puntos» los quita.
+- Cada fila del historial muestra el cuerpo, la medida con su «fx» (radio, distancia, espesor, diámetro, ángulo,
+  separación), la norma del agujero (M2 a M16 con ajuste justo, normal u holgado, o diámetro libre) y su
+  profundidad, la cantidad, el eje, la dirección, el plano o los cuerpos con los que combina.
+- Las restricciones del boceto ahora se aplican también al construir de verdad (antes el guion usaba la geometría sin
+  resolver).
+- «Cuerpos» en Medidas ya no cuenta las operaciones.
+
+**Pruebas:** casos del motor «D4 operations as SolidCraft commands» y «CD5 and CD6» (19 casos de CAD pasan); prueba de
+interfaz `design_operations`: caja de 20 mm, vaciado cerrado (3904 mm³), agujero M5 normal pasante elegido en la cara
+de arriba (7525,6 mm³), redondeo de 2 mm tipeado y elegido en una arista (7508,3 mm³) y una fila de tres (22 524
+mm³). La prueba `design_timeline` hace la segunda caja desde la línea de comandos (el panel ahora es más alto).
+
+**No probado:** con el `solidcraft-cli` real (las pruebas usan el sustituto); la elección con el mouse real (la
+prueba elige los puntos por coordenadas, con el mismo código que el clic).
+
+**Sigue:** la edición del boceto (regla 17: recortar, desfasar, simetría y patrones del boceto; CD17, CD18), roscas;
+después CFD (A3) y la línea de comandos de la nube.
+
+## 2026-11-03 — Diseño: edición del boceto (regla 17; CD17, CD18) y un arreglo del CI
+
+**Hecho** (`cad_design.md`, regla 17):
+- Motor nuevo `src/cad/sketch_edit.*`, geometría plana propia sobre las entidades del boceto:
+  - **recortar** (TR): se quita el tramo bajo el clic entre los cruces de cada lado; una línea o un círculo que nada
+    cruza se borra entero; un rectángulo recortado pasa a cadena, un círculo a arco y una cadena cortada al medio, a
+    dos;
+  - **alargar** (EX): el extremo de una cadena abierta va hasta la curva más cercana hacia adelante;
+  - **desfasar** (O): una copia a la distancia pedida, del lado del clic (círculo y arco concéntricos, rectángulo más
+    grande o más chico, cadena con cada tramo corrido y las esquinas en inglete);
+  - **chaflán** (CHA) de una esquina de cadena o de rectángulo; la región sigue cerrada;
+  - **simetría** (MI), **matriz** rectangular y polar (AR; una vuelta entera reparte el ángulo, una parte pone la
+    última copia en su final), **mover**, **copiar**, **girar** y **escalar** con punto base;
+  - **selección** por ventana (arrastrando hacia la derecha, solo lo que queda adentro) y por cruce (hacia la
+    izquierda, todo lo que toca), además del clic.
+  - Lo que una edición deja sin cumplir (las restricciones y cotas de una entidad que cambió) se quita; mover deja las
+    que no dependen del lugar.
+- En la interfaz: un grupo **Editar** en la sección Boceto y los alias de la regla 12 en la línea de comandos (TR,
+  EX, O, CHA, MI, AR, M, CO, RO, SC, y sus nombres en los dos idiomas). Cada herramienta pide sus datos paso a paso,
+  con el valor de antes entre `< >` (Enter lo toma). Lo elegido se pinta en violeta; la caja de selección, azul si es
+  ventana y verde si es cruce; al mover o copiar, las entidades siguen al puntero.
+- **Arreglo (CI):** el analizador de expresiones de los parámetros se quedaba sin pila con 5000 paréntesis anidados
+  bajo el sanitizador de direcciones (lo encontró la prueba de mantenimiento). Ahora más de 200 niveles es un error.
+
+**Pruebas:** 9 casos nuevos del motor, entre ellos CD17 y CD18, y 300 secuencias al azar de ediciones: ninguna deja
+una regla sobre una entidad que cambió, ni puntos no finitos. Prueba de interfaz `design_sketch_edit`: CD17 (dos líneas
+cruzadas, TR y clic en un extremo: queda en 10, 10), CD18 (clic en un círculo, AR polar en el origen, 6 en 360°:
+seis círculos a 60°) y un desfase de 2 mm del lado del clic. `design_constraints` elige «Fijo» con la palabra `fijo`
+(el panel ahora es más alto y el botón queda fuera de la vista).
+
+**Después, en el mismo bloque:** **redondear** esquinas del boceto (F, `redondear`): un arco tangente a los dos lados;
+la cadena se abre en la esquina y el arco la une. Para que eso siga siendo una región, los perfiles ahora también se
+arman con **cadenas abiertas y arcos que se tocan punta con punta** (regla 6, `joined_loops`), dibujados en cualquier
+orden y sentido. El sustituto de SolidCraft une las piezas igual. Prueba de interfaz `design_sketch_fillet`: un
+rectángulo de 20 × 10 con las dos esquinas de arriba redondeadas a 5 mm, extruido 20 mm, da 3785,4 mm³. **No probado**
+con el `solidcraft-cli` real: no se sabe todavía si arma el perfil con piezas sueltas que se tocan sin una restricción
+de coincidencia.
+
+**Medido y arreglado:** la prueba «EP4 y EP6» de Estructural tardaba unos 26 minutos bajo ASan (de 70 a 100 s sin
+él). Ahora analiza en calidad rápida, que alcanza para lo que comprueba: 6 s sin ASan.
+
+**Roscas** (regla 7, «roscas modeladas»), también en este bloque:
+- operación **Rosca** sobre una cara cilíndrica elegida con clic: designación (M2 a M24), sentido (derecha, izquierda o
+  las dos), largo (0: toda la cara) y «Rosca modelada» (si no, queda dibujada). Sale como `solid.thread` de la
+  referencia pública de SolidCraft (`face`, `designation`, `hand`, `length`, `modeled`); palabras `rosca`, `roscar`;
+- el **Agujero** por norma puede ser **roscado**: va con la broca de macho y su rosca (`solid.hole` con `thread`,
+  `hand`, `modeled`) en lugar de la holgura.
+- Pruebas: los comandos y el guardado; con el sustituto, un M5 roscado quita la broca de 4,2 mm (5 − 0,8, paso
+  grueso de ISO 261) y una rosca con una designación que no conoce queda marcada en rojo sin perder el cilindro.
+  **No probado:** la rosca modelada de verdad (el sustituto no corta el filete) y el `solidcraft-cli` real.
+
+**Medir** (regla 18), también en este bloque: «Medir distancia» (DI: dos puntos; la distancia, ΔX, ΔY y el ángulo) y
+«Medir área» (AREA: un clic dentro de una región; el área y el perímetro, sin los agujeros que tiene adentro y con sus
+bordes). No agrega cotas. Los arcos de los perfiles sueltos se toman ahora en tramos de medio grado (antes 3,75°), así
+el área sale bien a 0,001 mm². Prueba en `design_sketch_fillet` con un verbo nuevo, `expect-command-message`.
+
+**Mover cuerpo, Partir y Desmoldeo** (regla 7), también en este bloque: mover y girar un cuerpo, o una copia
+(`solid.move` con `translate`, `axis`, `angle`, `copy`); partirlo por un plano XY, XZ o YZ corrido una distancia
+(`solid.split_body`; con el plano como `{origin, normal}` cuando está corrido); inclinar caras elegidas con clic
+respecto de un plano neutro (`solid.draft`). Palabras `mover`, `partir`, `desmoldeo`. El sustituto mueve y copia de
+verdad, comprueba que el plano cruce el cuerpo y que el ángulo esté entre 0 y 89°, pero no parte ni inclina.
+**No probado:** con el `solidcraft-cli` real.
+
+**Sigue:** CFD (A3) y la línea de comandos de la nube (prioridad del equipo de fichas), salvo que el dueño pida más
+de Diseño; en Diseño quedan barrer y recubrir (piden elegir varios bocetos y curvas) y texto (regla 10).
+
+## 2026-11-03 — Nube: `analyze` de los nodos (cloud.md, regla 19)
+
+El dueño decidió, por el equipo de fichas, «Hagamos la 1»: primero el CFD y la nube, después Diseño. Diseño quedó en
+un punto limpio (todo con pruebas y en commits).
+
+**Hecho:**
+- `tisma-engine analyze <proyecto.3mf> -o <resultado.tea> --summary <resumen.json> --sandbox --mode <modo> --quality
+  <calidad> --object <n> --instance <n> [--solid] [--no-zones] [--ribs] [--no-gpu] [--threads <n>]`, como en la
+  regla 19 de `cloud.md` (rama `spec/next`):
+  - la pieza es el objeto `n` del proyecto, contado desde 0 como el proyecto los guarda; cada objeto tiene una sola
+    ubicación, la 0. Los apoyos, las cargas y el material salen del proyecto;
+  - el `.tea` es un JSON del motor: `format` «tisma-engineering-result», `version` 1, `kind` «structural», `object`,
+    `instance`, `part`, `fingerprint` y el `report` como lo guarda la pestaña Estructural;
+  - el resumen: `verdict`, `min_safety`, `required_safety`, `max_displacement_mm`, `mass_g`, `family` y `voxels`, o
+    `error`. Avance `progress N` y códigos de salida como `slice`;
+  - `--quality ultra` corre como `high` (con un aviso) y `--solid` toma la pieza maciza. `--no-zones` y `--ribs`
+    se aceptan; solo cambian los modos que optimizan;
+  - los modos `lightest-infill` y `resin-structure` responden con `error` y código 3 (sin implementar todavía).
+- El cálculo de dónde queda la pieza en la cama (`placed_part`) es uno solo para `analyze` con y sin nodo.
+
+**Pruebas:** el resumen y el `.tea` de un bloque de 20 mm con 50 N encima (aguanta), `--solid`, y los errores: objeto
+o ubicación que no existen, un modo sin implementar, una calidad desconocida y una pieza sin apoyos ni cargas.
+
+**Falta:** abrir el `.tea` en Ingeniería desde la interfaz, y `orient` (regla 19c, que pide la orientación automática
+de `orientation.md`, que el motor todavía no tiene).
+
+**Sigue:** el CFD (A3) y `aero` (regla 19b); `orient` cuando esté la orientación automática.
+
+## 2026-11-03 — A3, CFD: motor del análisis aerodinámico y `aero` de los nodos (cloud.md, regla 19b)
+
+**Hecho** (`aerodynamics.md`):
+- `src/aero/lbm.*`: lattice Boltzmann D3Q19 con colisión BGK (Qian, d'Humières y Lallemand, 1992) y la viscosidad de
+  submalla de Smagorinsky (1963) en el tiempo de relajación (forma de Hou, Sterling, Chen y Doolen, 1996). El aire en
+  +x: velocidad fija en la entrada, gradiente nulo en la salida, laterales periódicos y rebote a mitad de camino en las
+  celdas sólidas. Paralelo por capas con oneTBB; las celdas del interior sin vecinos sólidos van por un camino rápido.
+- `src/aero/aero.*`: la pieza girada para que el aire vaya en +x y pasada a vóxeles del tamaño de la celda; dominio de
+  1,5 tamaños frontales adelante y a los lados y 3 atrás; Reynolds simulado limitado a 40 × las celdas; la presión media
+  del último tercio integrada sobre las caras (Cp por cara); rozamiento por correlaciones de placa plana (Blasius,
+  turbulento liso y totalmente rugoso de Schlichting, con la media exacta de cada tramo desde el borde de ataque) en
+  pedazos de unos 2 mm, sin las caras que miran aguas abajo; rugosidad por cara de la altura de capa y la normal en Z
+  (Ra = máx(0,05 h, h |n_z| / 4), ks = 4 Ra); área frontal por la sombra en un raster de 400 × 400. Calidades:
+  «solo rozamiento» (no simula), rápida 16, normal 24 y alta 32 celdas.
+- `tisma-engine aero <proyecto.3mf> -o <resultado.taero> --summary <resumen.json> --sandbox --object <n> --instance
+  <n> --quality <calidad> --speed <m/s> --direction <eje | x,y,z> [--threads <n>] [--no-gpu]`, como la regla 19b: el
+  resumen con `drag_n`, `cd`, `cd_pressure`, `cd_friction`, `reynolds` y `reynolds_simulated`, o `error`; el `.taero`
+  es el JSON del resultado (Cp y Ra por cara incluidos) con el objeto, la ubicación y la pieza.
+
+**Medido** (a 12 celdas, la prueba `aero_drag_coefficients`, que corre en los builds optimizados; 4 núcleos compartidos
+con el CI):
+
+| Caso | Cd del motor | Tisma | Referencia |
+|---|---|---|---|
+| AE1, placa cuadrada de frente | 1,00 | 1,16 | 1,17 a 1,2 (Hoerner) |
+| AE2, cubo de frente | 1,07 | 1,13 | 1,05 (Hoerner) |
+| AE3, el cubo con el aire en −Y | 1,07 | igual | simetría |
+| AE4, prisma 3:1 romo | 1,04 | 1,06 | — |
+| AE4, con nariz piramidal | 0,25 | 0,34 | la nariz baja el arrastre |
+
+AE5 (rozamiento laminar de un prisma 6:1) da a menos de 5 % de Blasius; AE6 (prisma a 45°) da Ra medio entre 15 y 35 µm
+y más rozamiento que el mismo prisma derecho. Velocidad del cálculo: unos 6 millones de celdas por paso y segundo con
+la máquina compartida, lenta para el Benchy de referencia (5 minutos en calidad normal); queda optimizarla y llevarla a
+la GPU.
+
+**No hecho todavía:** la pestaña Aerodinámica de la interfaz (reglas 15 y 16 de `engineering_panel.md`), abrir el
+`.taero`, la versión en GPU, y la medición contra el Benchy.
+
+**Sigue:** la pestaña Aerodinámica.
+
+## 2026-11-03 — Pestaña Aerodinámica, líneas de corriente, calidades extremas e investigación de adherencia
+
+**Hecho:**
+- **Pestaña Aerodinámica** en Ingeniería (`engineering_panel.md`, reglas 15 y 16):
+  - entradas: la pieza, la dirección del aire (±X, ±Y, ±Z o la de la vista), la velocidad, la calidad y la altura
+    de capa (la del perfil, o cambiada a mano);
+  - Analizar corre en segundo plano, con avance y Cancelar;
+  - resultados: arrastre en N, Cd separado en presión y rozamiento, fuerza transversal, área frontal, Reynolds real y
+    simulado, rugosidad media y su parte en el rozamiento;
+  - la pieza pintada con el coeficiente de presión (seis franjas de −1,5 a 1) o con la rugosidad;
+  - una flecha azul grande muestra de dónde viene el aire;
+  - el resultado se guarda con la pieza y queda «Desactualizado» si cambia algo de lo que depende. Cada análisis tiene
+    ahora su propia huella: cambiar la velocidad del aire ya no deja desactualizado el estructural, ni al revés.
+  - «Calcular en la nube» queda apagado («Próximamente»).
+- **Líneas de corriente** (pedido del dueño): la simulación promedia también la velocidad en su último tercio. Desde
+  una grilla de 11 × 11 puntos delante de la pieza se siguen las líneas por ese flujo medio (pasos de Heun de media
+  celda), cada punto con el Cp de donde pasa. Se dibujan sobre la vista con los mismos colores del mapa, se pueden
+  apagar y van en el `.taero`.
+- **Calidades rápida, media, alta y extrema** en los dos análisis (pedido del dueño). Estructural: extrema son
+  6 vóxeles por ancho de línea; el «ultra» de la nube corre como extrema. Aerodinámica: extrema son 48 celdas;
+  «solo rozamiento» sigue.
+- **Aviso de aproximación** arriba de los dos paneles: «Es una aproximación: sirve para comparar diseños, materiales y
+  orientaciones, no reemplaza un ensayo ni un cálculo profesional.»
+- **Investigación** (pedido del dueño, con cuatro agentes en paralelo, solo papers, hojas técnicas y foros): en
+  `docs/research/` quedan cuatro informes con citas y cada número marcado como medido o estimado:
+  - adherencia entre capas: Z/XY por material, curvas con la temperatura, modelos de soldadura y un modelo propuesto
+    para el motor;
+  - adherencia entre cordones: modelo ortotrópico con fracción unida y calidad de la unión;
+  - hojas técnicas de unos 60 productos de Bambu, Prusament, Polymaker, BASF, Kimya, 3DXTech y Victrex, con XY y Z;
+  - optimizaciones de CFD y FEA: TRT, fuerza por intercambio de momento, Bouzidi, Esoteric Pull, distancias críticas,
+    hexaedros de modos incompatibles, multigrid sin matriz y precisión mixta.
+
+**Pruebas de interfaz:** el verbo `menu` ahora hace que el panel lleve el control a la vista antes del clic (el panel de
+Estructural, más alto con el aviso, dejaba un botón fuera de la vista). `aerodynamics`: la dirección −Y, solo rozamiento, Analizar, los resultados y el mapa de
+rugosidad. La simulación, las líneas de corriente y el mapa de presión se miraron en una captura con una grilla de
+10 celdas: el cubo da Cd 1,21. Ninguna prueba automática corre todavía la simulación en la interfaz.
+
+**Sigue:** la adherencia entre capas y entre cordones en el FEA, con el material y la temperatura de extrusión (modelo
+de los informes, constantes de las hojas técnicas); después, las optimizaciones de más impacto del CFD (TRT, fuerza
+por intercambio de momento) y la GPU.
+
+## 2026-11-03 — Adherencia entre capas y entre líneas en el FEA
+
+**Hecho** (pedido del dueño: «tener en cuenta para el FEA la adherencia entre capas y entre paredes junto con el
+material y temperatura de extrusión basada en datos medidos junto con hoja de especificaciones de fabricantes»):
+- `src/fea/adhesion.*`: el modelo de nivel A de `docs/research/interlayer_adhesion.md` §5. Para cada familia con datos
+  (PLA, PETG, ABS, ASA, PC, PA, PA-CF, PC-CF, PEI, PEEK, TPU) da factores sobre las constantes del material, relativos
+  a las condiciones de sus fuentes (capa de 0,2 mm, línea de 0,42 mm, temperatura en el medio del rango de la familia):
+  - entre capas, resistencia por la curva de curado con la temperatura (subida a la potencia p hasta T_opt, pérdida
+    por degradación sobre T_hot), el tiempo de capa con el ventilador, la cámara (amorfos) y la altura de capa sobre el
+    ancho de línea; acotada entre r_min y r_max del material; la rigidez E3, G13, G23 baja menos (85 % sin curado);
+  - entre líneas, la calidad de unión de `bead_adhesion.md` §5.2: −1,5 %/°C por debajo de la referencia (mínimo 0,6),
+    plana 20 °C por encima, después −1 %/°C;
+  - la incertidumbre 1σ: ±25 % entre capas en los amorfos comunes, ±50 % en PEI, PEEK y PC-CF; ±30 a 50 % entre
+    líneas; ±50 % cuando la temperatura está fuera de rango o el material no tiene datos.
+- El caso de análisis toma la temperatura de extrusión (la cambiada a mano o la del perfil), la altura de capa y el
+  ancho de línea (los del panel), el ventilador máximo y la cámara cuando la impresora calienta una. Ya no sale la nota
+  «la temperatura cambiada a mano todavía no cambia el material».
+- El informe (`.tea` incluido) lleva `adhesion`: factores, temperatura usada y de referencia, qué falla en el vóxel más
+  débil y el rango del factor de seguridad. El panel Estructural lo muestra debajo del factor de seguridad, en gris, y
+  en ámbar si la temperatura es baja o alta para el material.
+- Corregida una prueba que esperaba la lista de calidades sin «extreme».
+
+**Pruebas:** `[adhesion]` (5 casos: sin cambios en la referencia; las curvas de temperatura contra Rivera-López y
+CNC Kitchen; altura de capa, paredes simples, tiempo de capa, cámara, PEEK caliente; el material y la banda; el caso
+leído del perfil y de lo cambiado a mano) y el informe de PEI en `[analysis]`.
+
+**No medido:** no hay ensayo propio; las constantes son las estimaciones de los informes. El tiempo de capa todavía
+no llega al análisis (sale del laminado) y las paredes simples no se distinguen por zona.
+
+**Sigue:** las optimizaciones de más impacto del CFD (TRT, fuerza por intercambio de momento) y la GPU; después
+`orient` (regla 19c).
+
+**Nube (informe del equipo de especificaciones, 2026-11-03):**
+- BH23: `analyze --quality extreme` se acepta; `ultra` sigue como su nombre anterior.
+- TR29: el resumen de un error lleva, además de `error` en inglés, un `code` estable (`bad_mode`, `bad_quality`,
+  `not_in_cloud`, `needs_conditions`, `no_valid_result`, `usage`, `error`) y `error_es` con el texto en castellano
+  para los errores que puede ver un usuario.
+- BH22, revisado: sin `--quality`, `analyze` sobre el proyecto guardado por la interfaz da lo mismo que Analizar
+  (cubo de 10 mm: seguridad 49,55, 1,2 g, 0,000419 mm). Con `--quality fast` la pieza se analiza entera sólida, como
+  pide la calidad Rápida (`structural_analysis.md`, «Resolución»): 1,24 g. La diferencia del informe venía de pedir
+  `fast` a un proyecto que la interfaz analizó en media.- Regla 19a (`cloud.md` de spec/next, pasó `check_spec`) y CC20: la lista de trabajos del diálogo de la nube y el
+  aviso de un trabajo fallido muestran, en castellano, el `error_es` del resumen; si no hay, un texto por su `code`;
+  si no, el `error` en inglés (`cloud::job_error`).
+
+## 2026-11-03 — La fiabilidad más alta que dé cada calidad (CFD y FEA)
+
+**Pedido del dueño:** «Busquemos la fiabilidad sea lo más alta alcanzable en cada preset».
+
+**CFD**, probado con las recetas de `docs/research/cfd_fea_optimizations.md`, medido con AE1 a AE4 a 12 celdas. La
+tabla da el Cd de presión, de la fuerza en las paredes y sin corrección por bloqueo:
+
+| Variante | Placa (Hoerner 1,17) | Cubo (1,05) | Prisma 3:1 (Tisma 1,06) | Prisma con punta (Tisma 0,34) |
+|---|---|---|---|---|
+| BGK, sin esponja (antes) | 1,010 | 1,007 | 0,936 | 0,366 |
+| BGK, con esponja (ahora) | **1,072** | **1,042** | **0,980** | 0,409 |
+| TRT Λ = 3/16, con esponja | 0,638 | 0,441 | 0,665 | 0,418 |
+| Smagorinsky 0,10 | inestable | inestable | inestable | inestable |
+
+- **Fuerza por intercambio de momento:** la presión sale de los enlaces que rebotan. La parte de presión es el
+  equilibrio en reposo de cada enlace. Coincide con la lectura anterior en las caras (placa 1,010 contra 0,986) y es
+  coherente con la pared. El mapa por cara sigue saliendo de la densidad junto a la cara.
+- **Capa absorbente** de medio tamaño de pieza antes de la salida: queda, por la tabla.
+- **TRT**: queda como opción apagada. A la viscosidad del análisis (τ a menos de 0,01 de 1/2) la tasa impar es
+  casi 0, y el cubo cayó a 0,44.
+- **Maskell**: no se aplica. Con un bloqueo de 6,2 % bajaría el cubo a 0,87; el bloqueo y la disipación de
+  Smagorinsky se compensan. La fracción de bloqueo queda en el resultado.
+- **Verificación de resolución:** cada calidad simula también con 2/3 de las celdas, con un quinto más de tiempo.
+- **Rango probable del Cd:** ±1σ, con el error propio del método (12 %, el promedio de las diferencias de la tabla) y
+  el cambio con la resolución, en cuadratura. A calidad «solo rozamiento» es el 15 % de las correlaciones, y avisa
+  que falta la presión.
+- El rango se ve en la pestaña Aerodinámica y va en el `.taero` y en el resumen de `aero` (`cd_low`, `cd_high`).
+
+**FEA:**
+- El rango del factor de seguridad suma en cuadratura la incertidumbre de la adherencia y el cambio con vóxeles del
+  doble de tamaño (la verificación de resolución que ya existía). La calidad rápida ahora también la hace: un octavo
+  más de tiempo.
+- El resumen de `analyze` lleva `min_safety_low` y `min_safety_high`.
+- El promedio sobre la distancia crítica (Taylor 2007) ya estaba en el factor de seguridad.
+
+**Sigue, por impacto según la investigación:**
+- CFD: paredes de Bouzidi (con q desde la malla), el arranque de grueso a fino y la parada temprana cuando el Cd
+  converge;
+- FEA: hexaedros de modos incompatibles, contra el bloqueo por corte en paredes de 2 vóxeles;
+- después, la GPU.
+- BH24 (equipo de especificaciones, prueba de punta a punta de la nube): la calidad extrema de un cubo de 20 mm pedía
+  10,7 millones de vóxeles y se negaba. Ahora `fit_voxel_limit` toma los vóxeles más finos que entran en `max_voxels`
+  (más anchos y menos filas por capa), en Analizar, en su estimación y en `analyze` de la nube. El resumen dice
+  `voxel_mm` y `voxel_capped`. Si igual no entra, el error tiene `code` `too_large` y texto en castellano.
+- `ui_script_cloud_slice` falló una vez en la etapa ASan del CI, con la máquina cargada: no apareció el aviso de
+  «cancelado». Causa: el botón «x» para cancelar quedaba a la derecha del texto de estado, que cambia de ancho
+  («Enviando», «En cola», «Calculando 40 %»), y se movía entre el cuadro que guarda su lugar y el del clic. Ahora va
+  antes del texto y no se mueve; también es mejor para una persona.
+
+## 2026-11-04 — Orientación automática, «menos material de soporte» (FDM) y `orient` en la nube
+
+**Hecho** (`orientation.md`, reglas 1 a 6; `cloud.md`, reglas 10c y 19c; pasó `check_spec`):
+- `src/mesh/orient.*`: candidatas = la orientación actual y cada cara de la envolvente convexa apoyada en la cama;
+  costo = volumen de soporte (caras más horizontales que `support.angle_limit`, 45° si es automático, por su área
+  proyectada y la altura hasta la pieza de abajo o la cama, por rayos en una jerarquía de cajas armada una vez) menos
+  el área apoyada × 1 mm; se evitan las que tocan la cama con menos de 10 mm²; empate, la más baja. Al final, girada
+  en Z para que su caja mínima en XY quede apaisada. Nunca peor que como estaba.
+- Interfaz: «Orientar (menos soporte)» en el menú de la placa (clic derecho), sobre el modelo elegido o todos, con
+  deshacer y un aviso de cuántos giró.
+- `tisma-engine orient <proyecto.3mf> -o <orientacion.json> --summary <resumen.json> --sandbox --object --instance`:
+  el JSON lleva `rotation` (3 × 3 por filas, en los ejes de la cama, después de la colocación), `cost`,
+  `cost_before`, `support_mm3`, `bed_area_mm2` y `candidates`; el resumen, `cost`, `cost_before` y `candidates`.
+
+**Pruebas:** `[orient]` (OR1: el hongo queda con el sombrero en la cama, Z de la pieza −1; OR2: la barra queda
+acostada y a lo largo de X; un cubo no cambia; la rotación es ortonormal; una losa flotante pide su área × altura),
+`orient` de la línea de comandos sobre un proyecto, y el menú en `ui_script_plate_menu`. En el hongo, el costo de
+antes da 16 811 contra 16 656 a mano: el muestreo de las caras en pedazos.
+
+**Falta:** el método de resina, «menor fuerza de despegue» (reglas 7 a 9, OR3 y OR4), que necesita laminar cada
+candidata y el detector de ventosas; recordar el método y la precisión por tecnología.
+
+**Sigue:** resina en `orient`; después Diseño (D4: barrido, transición, texto).
+
+## HANDOFF (2026-11-04) — para la sesión nueva del motor
+
+**Estado de `dev`:** todo lo de esta sesión está en `dev` hasta a862c86 (orientación) más este traspaso. CI: el
+`tools/ci_linux.sh` completo pasó la etapa principal en fd1ed33 (966/966); clang y ASan corrían cuando se empujó
+(regla nueva del dueño: control rápido por push, CI completo en segundo plano). Si ASan encontró algo, va primero.
+
+**Cómo compilar y probar:**
+- `cmake -S . -B build-next -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build-next`;
+- pruebas: `build-next/tests/tisma_tests "[tag]"` (tags útiles: `[aero]`, `[adhesion]`, `[analysis]`, `[orient]`,
+  `[cloud]`, `[cli]`), y los guiones de interfaz con `ctest -R ui_script_<nombre>` en el directorio de compilación;
+- `[.aero-full]` (AE1 a AE4, unos 15 min) corre solo en compilaciones optimizadas como `aero_drag_coefficients`;
+- CI completo: `tools/ci_linux.sh` (normal, clang, ASan; más de una hora con 4 núcleos).
+
+**Reglas nuevas del dueño (2026-11-04), ahora en CLAUDE.md:**
+- control rápido por push (compilar y las pruebas que toca el cambio); el CI completo con ASan en segundo plano o cada
+  pocas horas, y lo que encuentre se arregla primero;
+- seguir la hoja de ruta sin desvíos; ante una duda, elegir lo que dicen la hoja de ruta y las fichas, anotarlo aquí y
+  seguir; las impresiones reales no son condición: «no probado en impresora»;
+- mensajes cortos entre sesiones; bloques programados sin trabajo terminan en una línea;
+- el dueño decidió no renovar la sesión del motor (2026-11-04); las demás reglas están en CLAUDE.md.
+
+**Hoja de ruta (orden del dueño, 2026-11-04):**
+1. Nube: `orient` (hecho para FDM; falta resina, reglas 7 a 9, OR3 y OR4), BH24 (hecho), verificación de resolución
+   del CFD (hecha).
+2. Ingeniería: terminar EP1 a EP10 (`engineering_panel.md`) y acelerar el CFD: parada temprana cuando el Cd converge
+   y arranque de grueso a fino (`docs/research/cfd_fea_optimizations.md` §2.5).
+3. Diseño: D4 (barrido, transición entre perfiles, texto), después D5b (DXF/SVG).
+4. Después, el orden de PLAN.md.
+
+**Abierto y decisiones recientes:**
+- CFD: BGK con capa absorbente y presión por intercambio de momento; TRT queda apagada (empeoró el cubo); Maskell no
+  se aplica. Rango del Cd: 12 % del método más el cambio con 2/3 de las celdas. Medidas en la entrada «La fiabilidad
+  más alta que dé cada calidad».
+- FEA: adherencia entre capas y entre líneas (`src/fea/adhesion.*`); rango del factor de seguridad con la
+  adherencia y el error de vóxel; `fit_voxel_limit` para calidades finas en piezas grandes. Falta el tiempo de capa
+  real en la adherencia y los hexaedros de modos incompatibles.
+- Nube: los errores de `analyze`, `slice`, `aero` y `orient` llevan `code` y `error_es`.
+- La sesión de la app Android (session_01QadJfKGJU2WtuAunZW5p9B) va a pedir la API en C del motor
+  (`mobile_app.md`, regla 2): acordarla con ella.
+- Equipo de fichas: session_015csYE6YXftDTgfC23i81xG (mensajes por send_message, con el pie de Claude Code).
+
+## 2026-11-04 — Orientación para resina, «menor fuerza de despegue»
+
+**Hecho** (`orientation.md`, reglas 7 a 9):
+- `orient_least_peel` en `src/mesh/orient.*`. Candidatas: sobre la plataforma, las caras de la envolvente; levantada
+  en soportes, 200 direcciones en una red de Fibonacci; más la orientación actual.
+- Preselección: se quedan las `max(4, 16 · precisión)` mejores por el costo de soporte de la regla 4, con el ángulo
+  crítico de los soportes de resina.
+- Elección: cada una se lamina entera, con capas de `max(altura de capa, alto / 400)`; gana la de menos ventosas
+  (`find_cups`) y, entre esas, la de capa más grande más chica.
+- El método sale de la impresora (resina o FDM) en el menú de la placa y en `orient`. En resina, el JSON lleva
+  además `cups`, `cups_before` y las capas más grandes, y el `cost` es `1e6 · ventosas + capa más grande`.
+- La precisión queda en 0,75, el valor por defecto de la ficha. Decisión: el ajuste `orient.precision` y recordarlo
+  por tecnología quedan para el panel de ajustes, que no está en este ítem de la hoja de ruta.
+
+**Pruebas:** OR3 (vaso con soportes: 0 ventosas, Z de la pieza < 0,5; 13 candidatas laminadas), OR4 (vaso sobre la
+plataforma: queda de costado) y `orient` en resina desde la línea de comandos.
+
+**Sigue (hoja de ruta):** Ingeniería EP1 a EP10 y el CFD más rápido (parada temprana, de grueso a fino).
+
+## 2026-11-04 — CFD más rápido: parada temprana (y arranque de grueso a fino, medido y apagado); EP9
+
+**Hecho** (hoja de ruta, punto 2; `docs/research/cfd_fea_optimizations.md` §2.5):
+- **Parada temprana:** el arrastre de presión se sigue en ventanas de un cuarto de pasada del flujo; después de 1,5
+  pasadas, cuando cuatro ventanas seguidas coinciden dentro de 1 % (rápida), 0,5 % (media) o 0,3 % (alta y extrema),
+  se promedian dos ventanas más y la simulación termina. El resultado dice `stopped_early`.
+- **Arranque de grueso a fino:** la corrida de verificación (2/3 de las celdas) va ahora primero; su flujo medio
+  puede iniciar la fina (Skordos 1993). Queda **apagado**: medido, ahorra poco y mueve el Cd de un flujo inestable.
+- **EP9** (`engineering_panel.md`): cubo de 20 mm, aire en +X a 10 m/s, calidad rápida: Cd entre 0,8 y 1,3 y la cara
+  de adelante en la franja roja (Cp ≥ 0,66). Está en `[.aero-full]`. Con eso, EP1 a EP10 tienen todos su prueba.
+
+**Medido** (a 12 celdas en AE1 a AE4, a 16 en EP9; pasos y Cd de presión):
+
+| Caso | Antes | Parada temprana | Más arranque de grueso a fino |
+|---|---|---|---|
+| Placa | 3360 · 1,072 | 3360 · 1,072 (no corta: desprende vórtices) | 3360 · 1,095 |
+| Cubo | 3960 · 1,042 | **2970** · 1,037 | 2640 · 1,047 |
+| Prisma 3:1 | 5400 · 0,980 | **3600** · 0,975 | 3600 · 0,982 |
+| Prisma con punta | 5400 · 0,409 | **4500** · 0,408 | 4500 · 0,410 |
+| EP9, cubo rápida | — | 5280 · 1,111 (Cd total 1,157) | 5280 · 1,216 |
+
+La parada temprana ahorra entre 0 y 33 % de los pasos sin mover el Cd más de 0,5 %. El arranque en caliente ahorra
+otro 10 % en el cubo, pero cambió 9 % el Cd de EP9, cuyo flujo no se asienta.
+
+**Sigue (hoja de ruta):** Diseño D4 (barrido, transición, texto), después D5b (DXF/SVG). Pedido de la app de
+Android, en cola después de este ítem: `--summary` también para `slice <modelo> --config`.
+- Pedido de la app de Android (2026-11-04): `slice <modelo> --config <ajustes> -o <salida> --summary <resumen.json>`
+  escribe el mismo resumen que la nube (`print_time`, `print_time_s`, `filament_mm`, `layers`, `filament_g`). Un modelo
+  con `--config` va siempre por el laminado común, aunque lleve `--summary`.
+
+## 2026-11-04 — Diseño D5b: DXF y SVG de entrada y salida
+
+**D4 revisado:** las pruebas de la etapa (CD5, CD17, CD18) ya estaban. El barrido y el recubrimiento (regla 7) no
+están en ninguna etapa de la ficha; quedan para cuando SolidCraft los publique en su interfaz.
+
+**Hecho** (reglas 19 bis y 20; pasó `check_spec`):
+- `src/cad/sketch_io.*`: el lector de DXF ASCII trae líneas, círculos, arcos, polilíneas con `bulge`, elipses,
+  splines (de Boor, racionales con pesos) y bloques con escala, giro y matrices, en mm según `$INSUNITS`. Deja afuera,
+  con una nota, el espacio papel, el texto y los puntos.
+- El lector de SVG trae path (M, L, H, V, C, S, Q, T, A, Z, absolutos y relativos), rect, circle, ellipse, line,
+  polyline y polygon, con las transformaciones de sus grupos, el `viewBox` y el ancho en mm, y la y hacia arriba.
+- El escritor de DXF R12 en mm: líneas, cadenas y rectángulos como POLYLINE; círculos y arcos como tales; la
+  construcción en su capa.
+- **Decisión:** la ficha nombra `sketch.insert_dxf` y `sketch.insert_svg` de SolidCraft. El motor lee los archivos
+  él mismo, así lo traído son curvas propias del boceto que se recortan y se acotan como pide la regla. Anotado en
+  PROVENANCE.
+- Interfaz: «Traer DXF», «Traer SVG» y «Exportar DXF» en el panel del boceto. Lo traído se suma al boceto; si el
+  archivo no se lee, avisa el motivo y no cambia nada.
+
+**Pruebas:** CD22 (DXF en pulgadas: rectángulo de 1016 × 508 mm y círculo de 254 mm; el boceto tiene región), CD23
+(un contorno SVG cerrado), CD24 (línea, arco y círculo a DXF y de vuelta, dentro de 0,001 mm; un arco horario sale
+igual), bulges, bloques en matriz, espacio papel, archivos rotos y arcos, curvas y transformaciones SVG. Los botones,
+en `ui_script_design_sketch_edit`; el selector de archivos no se prueba desde el guion.
+
+**Falta de D5b:** CD25 (la sesión `solidcraft-cli mcp` abierta, regla 20 bis) y la vista como DXF de líneas
+(`file.export_view_dxf`).
+
+**Sigue:** CD25, después el orden de PLAN.md.
+
+
+## 2026-11-04 — Diseño CD25: SolidCraft abierto mientras se diseña
+
+**Hecho** (regla 20 bis; pasó `check_spec`):
+- `ChildProcess` en `src/cad/process.*`: un proceso hijo con stdin, stdout y stderr por tuberías y un hilo lector por
+  tubería; Windows (CreateProcessW) y POSIX (posix_spawn).
+- `SolidCraftSession`: `solidcraft-cli mcp` (JSON-RPC 2.0 por stdio, MCP 2025-06-18). Cada construcción es
+  `new_design`, `batch` (el guion con la exportación, `rollback`), `measure` y `save`. Si el proceso murió, se abre de
+  nuevo y se manda el guion entero (dos intentos); `BuildResult::session_restarted` lo marca.
+- La app guarda una sesión por binario, la pasa al trabajo de construcción, la cierra tras 600 s sin uso (solo cuando
+  no corre una construcción) y avisa una vez si se reinició. Sin sesión, `build_design` sigue con un proceso por
+  construcción.
+
+**Pruebas:** CD25 con el SolidCraft falso en modo `mcp`: 20 construcciones con un solo arranque y el mismo volumen;
+el proceso muere, la siguiente construcción lo reabre (`restarts == 1`); el cierre por inactividad. Pasan las pruebas
+de diseño de la interfaz. **Sin probar** con el `solidcraft-cli` real (no está en este entorno).
+
+**Arreglo (7c6229b):** parar la sesión ya no se cuelga si el componente dejó procesos propios con las tuberías
+abiertas (lectores con `poll` en POSIX y `CancelSynchronousIo` en Windows). Prueba con `sh` que deja un `sleep`.
+
+## 2026-11-04 — Diseño D5b: la vista como DXF (`file.export_view_dxf`)
+
+**Hecho** (regla 20; pasó `check_spec`):
+- `src/cad/view_dxf.*`: las aristas del dibujo (bordes, pliegues de más de 30° y siluetas) de la malla del diseño,
+  proyectadas según la cámara. Cada arista se parte en tramos visibles y ocultos con un rayo hacia el ojo.
+- DXF R12 con las capas VISIBLE (continua) y HIDDEN (punteada, 3 y 1,5 mm).
+- Interfaz: «Vista como DXF» y «Ocultas punteadas» en el panel de Diseño.
+- **Decisión:** el motor dibuja la vista él mismo, con la malla del diseño (proyección ortogonal aunque la cámara
+  esté en perspectiva).
+
+**Pruebas:** un cubo de frente (40 mm vistos, 40 ocultos) y desde una esquina (9 aristas vistas, 3 ocultas); sin
+ocultas no sale ninguna; nuestro lector lee el DXF. Un cilindro desde arriba (borde de arriba visto, el de abajo
+oculto, sin líneas de facetas) y de costado (siluetas y la mitad delantera de los bordes). El botón, en
+`ui_script_design_tab`.
+
+**Decisión sobre la regla 19 bis:** los puntos y el texto de un DXF se siguen dejando afuera con una nota. El boceto
+no tiene puntos sueltos, y el texto llega con D5.
+
+**D5b terminado.** **Sigue:** el orden de PLAN.md.
+
+## 2026-11-04 — Nube: códigos de error en slice, aero y orient; `profile` para la app de Android
+
+**Hecho:**
+- `slice`, `aero` y `orient` escriben en el resumen `code` y, para los errores que ve una persona, `error_es`, igual
+  que `analyze`. Códigos: cannot_read, not_a_project, bad_project, no_models, no_object, no_instance, bad_settings,
+  not_in_cloud, vase_objects, slice_failed, gcode_check, aero_failed, empty_part, bad_quality, bad_speed y
+  bad_direction. `cloud::job_error` tiene el texto de cada uno por si falta `error_es`.
+- `tisma-engine profile --printer ... [--nozzle] [--filament] -o ajustes.json`: los ajustes del catálogo para
+  `slice --config` (pedido de la app de Android). Documentado en `docs/CATALOG.md`.
+
+**Pruebas:** TR29 de slice, aero y orient (objeto que no está, velocidad y dirección malas, archivo que no es
+proyecto); `profile` (nombre completo frente a los que lo contienen, nombre ambiguo, impresora, boquilla y filamento
+que no están, y el resultado lamina un cubo con `slice --config`).
+
+**Sigue:** el orden de PLAN.md.
+
+## 2026-11-04 — Estructural: mapas de von Mises y desplazamiento, deformación exagerada (regla 12)
+
+**Decisión de orden:** terminado D5b, PLAN.md no nombra un ítem siguiente único; tomé lo que falta de la pestaña
+Estructural en el orden de su lista (deformación exagerada y los otros mapas), que es lo más cercano a lo terminado.
+
+**Hecho** (`engineering_panel.md`, regla 12; pasó `check_spec`):
+- `voxel_surface` recibe además el desplazamiento de los nodos y da el de cada esquina.
+- La pestaña guarda por triángulo el factor, la tensión de von Mises y el movimiento, y pinta el mapa elegido:
+  factor de seguridad (sus cinco franjas), von Mises o desplazamiento (cinco franjas iguales de 0 al máximo, azul a
+  rojo), con la escala abajo.
+- «Ver la deformación exagerada» con un deslizador logarítmico (× 1 a × 100 000); al principio el mayor movimiento
+  se ve como un décimo de la pieza.
+
+**Pruebas:** EP4 en el motor (el mayor movimiento en las esquinas de afuera es el de la barra; un campo u = (0, 0, z)
+llega igual a cada esquina); `ui_script_structural_analyze` cambia de mapa, ve las escalas y prende la deformación.
+Mirado en una captura: el cubo empujado arriba se ve hundido y en rojo arriba.
+
+**Sigue (Estructural):** Más opciones (memoria y tiempo, dirección de impresión, nube), Optimizar, arrastrar la punta
+de la flecha y sacar «Análisis» de Impresión 3D.
+
+## 2026-11-04 — Estructural: memoria y tiempo; «Análisis» fuera de Impresión 3D (reglas 1 y 10, EP1)
+
+**Hecho:**
+- «Más opciones» de Estructural muestra, junto a la resolución y los vóxeles, la memoria y el tiempo aproximados
+  (`estimate_analysis` en segundo plano; si cambia algo mientras corre, el último pedido arranca al terminar).
+- La pestaña «Análisis» de Impresión 3D se fue (regla 1, EP1): lo único que mostraba (vóxeles, memoria y tiempo por
+  calidad) está ahora en Estructural. `--view analysis`, el consejo de la pestaña, el tutorial de Ingeniería y su
+  ancla llevan a Estructural. Se borraron `analysis_panel`, la estimación de vóxeles de la app y `Tab::Analysis`;
+  `estimate_voxels` (en `src/ui/slicing.*`) queda para quien lo use.
+
+**Pruebas:** `ui_script_structural_tab` ve «vóxeles de», después «Memoria: unos», y que Impresión 3D no tiene
+`tab_analysis`. Pasan las pruebas de interfaz de Estructural, Diseño, Aerodinámica, tutoriales y capturas.
+`ui_script_structural_analyze` falló una vez en una tanda de 55 pruebas en paralelo y pasó en las tres corridas
+siguientes; sin el mensaje de esa vez. Queda anotado para el CI completo.
+
+**Sigue (Estructural):** dirección de impresión y nube en Más opciones, Optimizar, arrastrar la punta de la flecha.
+
+## 2026-11-04 — Estructural: arrastrar la flecha de una fuerza (regla 7)
+
+**Hecho:** el extremo libre de cada flecha de fuerza lleva un punto que se arrastra. Al soltarlo, la fuerza queda
+como «Tres números», apuntando desde el puntero (en el plano por su punto, de frente a la cámara) hacia su punto.
+Deshacer la vuelve atrás; mientras se arrastra, la vista no gira. **Decisión:** la ficha dice «arrastrar la punta»,
+pero la punta dibujada está sobre la pieza (es donde actúa la fuerza); se arrastra el otro extremo, que es lo que
+cambia la dirección sin mover el punto.
+
+**Pruebas:** `ui_script_structural_tab` arrastra `structural_arrow_2`, ve el campo de tres números y lo ve irse con
+Ctrl+Z. Pasan las pruebas de interfaz de Estructural y Aerodinámica.
+
+**Sigue (Estructural):** Más opciones (dirección de impresión, nube) y Optimizar.
+
+## 2026-11-04 — Estructural: dirección de impresión (Z o cinta, regla 10)
+
+**Hecho:**
+- «Dirección de impresión» en Más opciones: Z, o «Cinta (capas a α°)» si la impresora elegida es de cinta (si no,
+  apagada; un proyecto con «belt» en una impresora común avisa que se analiza en Z).
+- Con la cinta, `start_structural` gira la pieza y sus condiciones con `belt_layer_rotation` (capas planas) y
+  `turn_engineering` (puntos, normales y direcciones; un eje pasa a tres números). El análisis corre con
+  `belt.enabled` apagado y el mapa, los desplazamientos y el punto crítico vuelven girados. Los puntos del informe
+  usan la vuelta compuesta.
+
+**Pruebas:** en el motor, el giro es una rotación (det 1) y da la `s` de `belt_mesh`; las condiciones giran y una
+fuerza en −Z queda en (0, sin α, −cos α). En la interfaz, el selector está en Estructural. **Sin probar de punta a
+punta en la app con una impresora de cinta** (el guion no tiene cómo elegir una impresora de cinta); queda para un
+verbo de guion o la prueba del dueño.
+
+**Sigue (Estructural):** «Calcular en la nube» y Optimizar.
+
+## 2026-11-04 — Optimizar, regla 2: relleno mínimo uniforme (motor)
+
+**Hecho** (`structural_optimization.md`, reglas 1 y 2; pasó `check_spec`):
+- `report_verdict`: el veredicto del informe (factor pedido, temperatura, familia, límites) como función.
+- `lightest_infill`: el menor relleno entero que «Aguanta», por bisección: el 100 % primero (si no aguanta, se
+  informa sin buscar), después mitades; a lo sumo 8 análisis, con avance y cancelación por el aviso de avance.
+- **Decisión:** con la calidad Rápida el análisis toma la pieza maciza y el relleno no cuenta; la búsqueda no corre
+  y lo dice (`solid`).
+
+**Medido** (calidad media, PLA, voladizo con fuerza en la punta): barra de 24 × 6 × 6 mm con 20 N → **71 %**
+(aguanta con factor 2,03; al 70 % no), 40 s; barra de 16 × 4 × 4 mm con 10,5 N → 1 %, 11 s (las paredes llevan casi
+todo); con 11 N ni el 100 % alcanza.
+
+**Pruebas:** la de la regla 2 comprueba que aguanta en la densidad encontrada y no un punto por debajo, que el avance
+solo crece y llega a 1, que con Rápida no busca, y que con 20 000 N no la encuentra en un solo análisis.
+
+**Sigue:** «Optimizar» en el panel de Estructural (botón Relleno mínimo, resultado y «Aplicar»), después las demás
+reglas (zonas, nervios, refuerzos, retícula, orientación) y «Calcular en la nube».
+
+## 2026-11-04 — Optimizar en el panel de Estructural (regla 13)
+
+**Hecho:** «Optimizar», plegado debajo de los resultados, con «Relleno mínimo que aguanta»: corre `lightest_infill`
+en segundo plano con barra de avance y «Cancelar», y dice el resultado: «Aguanta con N % de relleno (factor F)» con
+«Usar N % de relleno» (se deshace desde el aviso), «Ni con 100 %…» o que con Rápida no se busca. Verbo de guion
+`expect-optimize` (found, none, solid, cancelled, error).
+
+**Pruebas:** `ui_script_structural_analyze` abre Optimizar, empieza la búsqueda, la cancela y ve el botón de nuevo
+(22 s). La búsqueda completa en la interfaz tomó 61 s con el cubo de 10 mm (8 análisis, dio 0 %): quedó afuera del
+guion por el tiempo bajo ASan; la búsqueda la prueba el motor. **Sin probar en el guion:** el botón «Usar» y su
+deshacer (necesitan una búsqueda completa).
+
+**Sigue:** el resto de Optimizar (zonas, nervios, refuerzos, retícula, orientación) y «Calcular en la nube».
+
+## 2026-11-04 — Estructural: «Calcular en la nube» (regla 10)
+
+**Hecho:** casilla «Calcular en la nube» bajo Analizar (apagada y gris sin sesión, con el motivo al pasar el mouse).
+Prendida, el botón dice «Analizar en la nube» y manda el proyecto como trabajo `fea` (`mode` analyze, la calidad, el
+objeto y la copia 0), con estado, avance y «Cancelar»; el `.tea` que vuelve deja el informe con la pieza, con la
+huella tomada al mandar. El resultado de la nube no trae vóxeles: se ven el veredicto y los números, no el mapa.
+Errores como en el laminado en la nube (sesión vencida, 413, 422, 429, texto del trabajo).
+
+**Pruebas:** `ui_script_cloud_structural` con el servidor de prueba (que ahora contesta un `.tea` a los trabajos
+`fea`): inicia sesión, marca, prende la nube, analiza y ve «Aguanta». Pasan las de nube y Estructural.
+**Candado por plan (regla 10b), hecho después:** `cloud::Plan` lee `classes`; `plan_includes` y `plans_with`. Si el
+plan de la cuenta no tiene `fea`, la casilla queda apagada y abajo dice «Incluido en el plan …» con los planes que lo
+tienen; al tocarlo abre la ventana de la cuenta. Un plan sin `classes` (servidor viejo) o que no está en la lista
+cuenta como incluido: el servidor decide (402). Probado en `test_cloud` con el servidor de prueba (Free solo
+`slice`, Maker todo); **sin guion de interfaz** del candado (la cuenta de prueba es Maker).
+
+**Laminar en la nube** también lleva el candado: con un plan sin `slice`, la entrada del menú dice «… — Incluido en el
+plan …» y abre la cuenta en vez de mandar. **Aerodinámica en la nube**, hecho después: el mismo camino generalizado (`start_cloud_engineering("aerodynamics")`):
+trabajo `aero` con `object`, `instance`, `quality`, `speed` y `direction` (el eje sin «+», o tres números con la
+dirección de la vista); el `.taero` queda como el resultado de la pieza (sin mapa, como en Estructural). Casilla,
+candado por plan (`aero`) y avance como en Estructural. `ui_script_cloud_structural` sigue a Aerodinámica: analiza en
+la nube y `expect-aero 1` ve el arrastre del servidor de prueba.
+
+**Sigue:** el resto de Optimizar (relleno por zonas, regla 3).
+
+## 2026-11-04 — Optimizar, regla 3 (relleno por zonas), paso A: el análisis con modificadores
+
+**Hecho:** `run_analysis` recibe modificadores (`MeshModifier`, model_tools.md regla 3) y el laminado del modelo
+como se imprime los usa; así cada zona se analiza con su propio relleno (lo que la regla 3 pide para el análisis de
+las mallas de las zonas). El modelo macizo los ignora.
+
+**Prueba:** barra de 24 × 6 × 6 mm de PLA con 20 N en la punta y relleno 0 %: con un modificador al 100 % en la mitad
+empotrada, el factor sube más del 20 % y el desplazamiento baja (5,8 s).
+
+**Sigue (regla 3):** paso B, las celdas (3 vóxeles, mínimo 3 mm) con su densidad `ρ · utilización^(1/nS)`, en 3
+niveles como cajas modificadoras unidas en filas; paso C, la bisección del factor común y la comparación con el
+uniforme; paso D, en el panel.
+
+## 2026-11-04 — Optimizar, regla 3, paso B: las zonas
+
+**Hecho:** `infill_zones(informe, densidad, pedido, patrón, escala)` parte la pieza en celdas de 3 vóxeles (al menos
+3 mm); cada vóxel pide `densidad · (pedido / factor)^(1/nS)` (como mucho 100 %, `nS` del patrón:
+`infill_strength_exponent`) y la celda el máximo de los suyos. Las celdas caen en 3 niveles por tercios; cada nivel va
+al máximo de sus celdas por la escala común, y sus celdas vecinas en X se unen en una caja modificadora
+(`{"infill": {"density": N}}`, «zone L»). Arreglados dos avisos `-Wshadow`.
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N y relleno uniforme 50 %: niveles crecientes y ≤ 100, la zona más densa
+junto al empotramiento, con escala 0,5 nunca pide más.
+
+**Sigue (regla 3):** paso C, la bisección de la escala común hasta que aguante, la comparación con el uniforme y el
+análisis final con las zonas; paso D, en el panel.
+
+## 2026-11-04 — Optimizar, regla 3, paso C: la escala común
+
+**Hecho:** `zoned_infill(malla, colocada, ajustes, caso, ingeniería, densidad_uniforme)` analiza la pieza con el
+relleno uniforme, saca las zonas y busca la escala común: prueba la escala 1 y después 5 mitades (entre 0 y 1 si
+aguanta; entre 1 y la que lleva el nivel más bajo al 100 % si no). Cada prueba es un análisis con las zonas tal como
+se imprimen: el objeto al nivel más bajo y los dos más densos como cajas modificadoras. Se queda con la escala más
+chica que aguanta y compara la masa (por vóxeles) con la del uniforme: `lighter` solo si pesa menos (lo que la regla
+pide para proponerla). Como mucho 7 análisis, con avance.
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N desde el 50 % uniforme: niveles 28/48/73 %, 0,877 g contra 0,880 g,
+7 análisis (31 s con 4 hilos). La masa por vóxeles cambia poco en una barra tan fina (casi todo es pared y piel); la
+prueba pide como mucho un 5 % más y que `lighter` coincida con la comparación.
+
+**Sigue (regla 3):** paso D, en el panel Optimizar (después del uniforme: zonas, masa contra el uniforme, «Usar» pone
+el relleno del objeto y los modificadores, con deshacer).
+
+## 2026-11-04 — Optimizar, regla 3, paso D: «Relleno por zonas» en el panel
+
+**Hecho:** en Optimizar, debajo de «Relleno mínimo», el botón «Relleno por zonas» corre el mismo trabajo en segundo
+plano: el uniforme (primera mitad de la barra) y después `zoned_infill` (segunda mitad), con Cancelar. El resultado
+dice los tres niveles, el factor y la masa contra la del uniforme; si no queda más liviano lo dice y no propone nada.
+«Usar las zonas» pone el relleno propio de la pieza al nivel más bajo y agrega una caja modificadora por zona
+(`volume_for_bed_box`, `src/ui/plate.*`: la caja de la cama llevada al marco del modelo, aunque esté escalado o
+girado; con un giro y escalas distintas no hay caja que quepa y lo avisa). Un solo deshacer quita todo.
+
+**Prueba:** `test_plate` (la caja vuelve a caer donde estaba con escala, con giro de ángulos rectos y escala pareja, y
+se rechaza con giro de 30° y escalas distintas); `ui_script_structural_analyze` arranca y cancela la búsqueda por
+zonas. **Sin probar en la interfaz:** «Usar las zonas» y su deshacer (la búsqueda completa tarda más de un minuto en
+el guion).
+
+**Sigue:** regla 4 de structural_optimization.md (nervios: relleno a lo largo de las tensiones).
+
+## 2026-11-04 — Optimizar, regla 4 (nervios), paso A: los grupos por ángulo
+
+**Hecho:** `solve_as_printed` guarda por vóxel la tensión promediada en el plano de la capa (σxx, σyy, τxy:
+`layer_stress`). `infill_ribs(informe)` calcula en cada vóxel las tensiones principales, la dirección de la mayor y
+`a`; cada celda (las mismas que la regla 3, ahora en una clase compartida `Cells`) promedia `a · (cos 2θ, sin 2θ)`
+pesado por el índice de rotura (1 / factor); quedan las celdas con al menos el 20 % del índice máximo y
+direccionalidad ≥ 0,5, agrupadas por ángulo en pasos de 15°; cada grupo son cajas modificadoras con relleno
+`aligned_rectilinear` (una sola dirección, todas las capas) a su ángulo, la densidad sin tocar.
+
+**Prueba:** barra de 24 × 6 × 6 mm traccionada a lo largo de X: 31 celdas a 0° y 1 a 165°; la misma a lo largo de Y:
+30 a 90° y 2 a 75° (junto al empotramiento y la carga la tensión se abre).
+
+**Sigue (regla 4):** paso B, la búsqueda doble del relleno mínimo (sin nervios, después con ellos, solo si queda más
+liviano); necesita la regla 5 (el relleno en una sola dirección en el análisis: E_T y G ∝ ρ², resistencias a lo
+ancho 0,3 · ρ^1,5) para que el análisis vea la ventaja; después, en el panel.
+
+## 2026-11-04 — Optimizar, regla 4 (nervios), paso B: la segunda búsqueda; regla 5
+
+**Decisión (regla 5):** el análisis «como se imprime» con calidad normal o alta modela cada línea del relleno con su
+dirección (vóxeles de media línea, material ortótropo girado a la línea), así que el relleno en una sola dirección ya
+es más rígido y resistente a lo largo que a lo ancho por su geometría. Los factores homogeneizados de la regla 5
+(ρ, ρ², 0,3 · ρ^1,5) solo harían falta con vóxeles más gruesos que los huecos, que hoy se analizan macizos (aviso
+`coarse_voxels`); quedan para cuando exista ese modelo.
+
+**Hecho:** `ribbed_infill(…, densidad)` analiza a la densidad uniforme mínima, saca los nervios, comprueba que con
+ellos aguanta a esa densidad y busca por bisección la menor que aguanta con ellos (como mucho 9 análisis, con
+avance). `lighter` solo si baja la densidad.
+
+**Prueba:** barra de 24 × 6 × 6 mm traccionada a 175 N, PLA, factor pedido 2: al 30 % el factor pasa de 2,26 a 2,36
+con los nervios, y el mínimo con nervios es 26 % (factor 2,12), 7 análisis (la ficha, O4: 31 % → 27 %). La prueba
+tarda ~70 s sola (2 min 20 s con el CI de Linux corriendo al lado).
+
+**Sigue (regla 4):** en el panel Optimizar, «Nervios» después del uniforme; «Usar» pone la densidad y agrega las
+zonas con relleno en una dirección, con deshacer.
+
+## 2026-11-04 — Optimizar, regla 4, paso C: «Nervios» en el panel
+
+**Hecho:** en Optimizar, el botón «Nervios» corre el uniforme (primera mitad de la barra) y después `ribbed_infill`
+(segunda mitad), con Cancelar. El resultado da la densidad con nervios contra la del uniforme, cuántas zonas y a qué
+ángulos; si no bajan el relleno, o no hay zonas que trabajen en una dirección, lo dice. «Usar los nervios» pone la
+densidad propia de la pieza y agrega las zonas como cajas modificadoras con relleno en una dirección
+(`volume_for_bed_box`); un solo deshacer quita todo.
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda con nervios. **Sin probar en la interfaz:**
+«Usar los nervios» y su deshacer (la búsqueda completa tarda más de un minuto en el guion).
+
+**Sigue:** regla 6 de structural_optimization.md (refuerzos).
+
+## 2026-11-04 — Optimizar, regla 6 (refuerzos), paso A: la zona
+
+**Hecho:** `reinforcement_zone(informe, caso, ajustes, radio)` toma las celdas de 2 mm con parte de la pieza cuyo
+centro está a menos del radio de una cara fija o de una carga (la superficie marcada, o la caja de la región; el
+radio por defecto es 2 × el de la carga más grande, al menos 5 mm) y las da como cajas modificadoras unidas en filas
+a lo largo de X, con 2 perímetros más y relleno del 40 % (nunca menos que el de la pieza).
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N en la punta (disco de 3 mm), relleno 15 %: radio 6 mm, 64 celdas junto
+al empotramiento y la carga y ninguna en el medio; el factor pasa de 1,56 a 2,15 con el mismo relleno (la ficha,
+O5: de 2,63 a 2,90). 22 s.
+
+**Sigue (regla 6):** paso B, el relleno uniforme más liviano del resto con la zona puesta, comparado con el mejor sin
+ella; después, en el panel.
+
+## 2026-11-04 — mantenimiento (08:41 UTC)
+
+**Revisado:** `origin/main` ya estaba en `dev`; `tools/ci_linux.sh` sobre `dc87386`; búsqueda aleatoria de G-code con
+semilla nueva (`tisma_fuzz_gcode 2000 20261104`, 5 min 19 s); los cambios recientes de Optimizar.
+
+**Encontrado y arreglado:**
+- Fuzz, corrida 1308: tres copias impresas una tras otra, la del medio con otra boquilla y otras capas, termina a Z
+  5,938 y la última a 5,875; el control tomaba el tope de Z de la última capa y rechazaba el G-code (Z 6,092 > 6,029).
+  Ahora toma la capa más alta (`gcode_limits`). Prueba: «check limits: the highest layer, not the last». Con la misma
+  semilla: 2000 corridas, 0 fallas. También afectaba la exportación desde la interfaz (el mismo control).
+- «Usar las zonas» y «Usar los nervios» ponían las cajas donde estaba la pieza en la cama al usarlas, no al buscar:
+  si se movía o giraba entre medio, las zonas quedaban corridas. Ahora el resultado guarda la colocación del momento
+  de la búsqueda (`volume_for_bed_box` con el mapa dado) y no hace nada si la malla cambió.
+- CI de Linux: gcc y clang pasan 990/990; la etapa con ASan se cortó por disco lleno (compilaciones viejas en
+  `/home/user/tisma_engine/build-*`, 7 GB borrados). Se corre otra vez.
+
+## 2026-11-04 — Optimizar, regla 6, paso B: la búsqueda con el refuerzo
+
+**Hecho:** `lightest_infill` acepta modificadores. `reinforced_infill(…, densidad)` analiza a la densidad uniforme
+mínima, saca la zona de refuerzo, busca el relleno uniforme más liviano del resto con la zona puesta y compara la
+masa (por vóxeles) con la de la pieza sin la zona; `lighter` solo si pesa menos. Como mucho 10 análisis, con avance.
+
+**Prueba:** la barra de 24 × 6 × 6 mm con 20 N: con la zona, el resto aguanta al 0 % (factor 2,15), pero pesa 0,925 g
+contra 0,788 g al 30 % sin ella: no se propone. 9 análisis, 65 s (con el CI de Linux al lado).
+
+**Pendiente:** la búsqueda arranca en el 100 % con la zona al 40 %, que ahí es menos que la pieza (la regla pide
+nunca menos); como la búsqueda baja, el resultado no cambia salvo en piezas que necesitan más del 40 %.
+
+**Sigue (regla 6):** «Refuerzos» en el panel Optimizar.
+
+## 2026-11-04 — Optimizar, regla 6, paso C: «Refuerzos» en el panel
+
+**Hecho:** el botón «Refuerzos» corre el uniforme y después `reinforced_infill`, con Cancelar; el resultado da el
+radio, la densidad del resto, el factor y la masa contra la de sin refuerzos, o que no queda más liviano. «Usar los
+refuerzos» pone la densidad y agrega la zona como cajas modificadoras (2 perímetros más, 40 %), con un solo deshacer
+(`apply_boxes`, el mismo camino que las zonas y los nervios).
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda con refuerzos; `[ui]` (los textos en los dos
+idiomas con los mismos campos). **Sin probar en la interfaz:** «Usar los refuerzos» y su deshacer.
+
+**Sigue:** regla 7 de structural_optimization.md (lattice), regla 8 (orientación recomendada).
+
+## 2026-11-04 — Optimizar, regla 8 (orientación recomendada), paso A
+
+**Hecho:** `recommended_orientation(colocada, ajustes, ingeniería, filamento)` analiza la pieza tres veces: con las
+capas en Z (como está), en X y en Y (`layers_along`: un cuarto de vuelta que lleva ese eje a Z; las condiciones giran
+con `turn_engineering`). Recomienda la de mayor factor si supera en más de un 5 % al de Z. Con avance.
+
+**Prueba:** barra de 24 × 6 × 6 mm, empotrada en X = 0, 20 N hacia abajo en la punta: factor 1,60 con capas en Z,
+2,27 en X, 1,90 en Y; recomienda X. 31 s.
+
+**Pendiente, a revisar:** se esperaba que la barra parada (capas a lo ancho, en X) fuera la más débil, porque la
+flexión separa las capas. Puede ser el modelo (la resistencia entre capas del PLA, o la tensión de la esquina del
+empotramiento que manda en Z) o el giro de la carga o de las caras fijas. La prueba solo comprueba el contrato; antes
+del panel hay que mirar el modo de rotura y dónde está el mínimo en cada orientación.
+
+**Revisado (10:25 UTC):** el giro está bien: la carga queda (20, 0, 0) con capas en X y (0, 20, 0) con capas en Y,
+el empotramiento abajo, una fijación y una carga en cada caso. Lo que manda cambia: con capas en Z, la unión entre
+líneas en la esquina de arriba del empotramiento (1,60); con capas en X, la unión entre capas (2,27); en Y, otra vez
+entre líneas (1,90). O sea, para este PLA el modelo da la unión entre líneas más débil que la unión entre capas, y por
+eso la barra parada sale más fuerte. No es un error del giro sino del modelo de adherencia (factores entre líneas y
+entre capas, `fea/adhesion`): pregunta de comportamiento para el equipo de fichas (¿qué relación entre las dos
+resistencias espera la ficha para PLA?).
+
+**Sigue:** esa respuesta; después «Orientación» en el panel Optimizar (recomendación y «Girar» la pieza con deshacer).
+
+## 2026-11-04 — regla 8: por qué la barra parada sale más fuerte (10:50 UTC)
+
+**Revisado (las tres comprobaciones del equipo de fichas):**
+1. El giro está bien: con capas en X, la flexión es σzz en el sistema de la capa y la rotura es «entre capas»; la
+   tensión en el plano de la capa es casi nula (0,3 MPa) y la de von Mises 11,3 MPa a 3 mm del empotramiento, la de
+   la viga (M c / I = 420 · 3 / 108 = 11,7 MPa).
+2. La esquina del empotramiento no decide el orden: lejos de ella (≥ 2 mm) los factores son Z 2,21 (a lo largo de
+   la línea), X 2,70 (entre capas), Y 2,58 (a lo largo de la línea).
+3. La adherencia solo toca Z: factor 0,993 a 205 °C.
+
+**Causa:** el material del caso es «Bambu Lab PLA Basic», que trae Z medida (31 MPa) contra XY 35 MPa; según
+`docs/MATERIALS.md` Zt toma la Z medida y solo usa 0,65 · Xt cuando falta, así que Zt = 30,8 ≈ Yt = 31 ≈ 0,88 · Xt.
+Con esa hoja la unión entre capas casi no es más débil, y la barra acostada carga más sus pieles finas (15,2 MPa
+contra 11,3 parada). El equipo de fichas lee la regla como 0,65 · Xt siempre: pregunta enviada; hasta su respuesta
+queda como está (decisión: seguir `docs/MATERIALS.md`).
+
+**Respuesta del equipo de fichas (10:51 UTC):** se mantiene la Z medida cuando la hoja la trae (0,65 · Xt solo si
+falta); el orden de la regla 8 sigue a los datos y el hallazgo queda cerrado. Para el panel: cuando la recomendación
+pare la pieza, decir que la resistencia entre capas viene de la hoja del fabricante y que una impresión real puede
+ser más débil entre capas.
+
+**Sigue:** «Orientación» en el panel Optimizar con esa nota; la retícula (regla 7).
+
+## 2026-11-04 — Optimizar, regla 8, paso B: «Orientación recomendada» en el panel
+
+**Hecho:** el botón corre `recommended_orientation` en el trabajo de Optimizar (sin buscar relleno), con Cancelar. El
+resultado da los tres factores; si una orientación mejora más de un 5 %, la propone con la nota del equipo de fichas
+(la resistencia entre capas viene de la hoja del fabricante; revisar los voladizos) y «Girar la pieza», que compone
+el cuarto de vuelta con el giro de la pieza, con deshacer. Las condiciones están en el marco del modelo, así que
+giran con ella.
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda; `test_plate`: el giro deja la barra de
+24 mm parada (capas en X) o de costado (capas en Y), apoyada en la cama. **Sin probar en la interfaz:** «Girar la
+pieza» y su deshacer.
+
+**Sigue:** la retícula (regla 7).
+
+## 2026-11-04 — Optimizar, regla 7 (retícula), paso A: la geometría
+
+**Hecho:** `src/mesh/lattice.*`: `lattice_bars(lo, hi, a)` da las barras de las celdas cúbicas de lado `a` que llenan
+la caja (las 4 aristas verticales y las 2 diagonales de cada cara lateral, cada barra una sola vez entre celdas
+vecinas); `lattice_mesh(barras, diámetro)` las hace prismas cerrados de 6 lados, hacia afuera, que se solapan en los
+nodos; `lattice_density(diámetro, a) = π(1 + 4√2)(r/a)²`.
+
+**Prueba (O6):** una celda: 12 barras, ninguna con menos de 45° de inclinación; cada prisma cerrado (cada arista en
+dos triángulos) con el volumen de un hexágono por su largo; 2 × 2 × 1 celdas: 33 barras compartidas; la densidad.
+
+**Sigue (regla 7):** paso B, las barras que tocan la pieza, recortadas a ella, como zona maciza con el relleno de la
+pieza al 0 %; paso C, el análisis homogéneo por celda (exponente 1,5) y la búsqueda del diámetro (0,9 a 3 mm, después
+por celda); paso D, en el panel.
+
+## 2026-11-04 — Optimizar, regla 7, paso B: la retícula en la pieza
+
+**Hecho:** `inside_mesh` (paridad de los cruces de un rayo vertical, con un corrimiento mínimo para no pasar por
+aristas) y `bars_touching` (una barra se queda si alguno de 5 puntos suyos está dentro de la pieza; el laminado
+recorta lo de afuera, así llegan a las paredes). `lattice_modifier(pieza, celda, diámetro)`: la retícula sobre la caja
+de la pieza, sus barras que la tocan, como zona maciza (modificador al 100 %); la pieza va al 0 %.
+
+**Prueba:** `[lattice]` (punto dentro y fuera; ninguna barra entera más allá de la pieza); barra de 24 × 6 × 6 mm a
+0 % con 20 N: con la retícula de celda 3 mm y barras de 1,2 mm se imprimen 76 585 vóxeles contra 61 244, se deforma
+menos y el factor pasa de 1,50 a 1,65 (5,6 s).
+
+**Sigue (regla 7):** paso C, la búsqueda del diámetro uniforme (0,9 a 3 mm, por bisección, analizando la retícula
+como se imprime) y después por celda; paso D, en el panel. Decisión: el análisis usa la retícula impresa (vóxeles de
+media línea), no el material homogéneo de la ficha (ρ, exponente 1,5), igual que con los nervios: el homogéneo queda
+para vóxeles gruesos.
+
+## 2026-11-04 — Optimizar, regla 7, paso C: el diámetro uniforme
+
+**Hecho:** `lightest_lattice`: la pieza al 0 % con la retícula; prueba 3 mm (si no aguanta, no hay retícula), después
+0,9 mm, y busca por bisección hasta 0,05 mm el diámetro más fino que aguanta (como mucho 8 análisis, con avance). La
+celda es un tercio del lado más chico de la pieza, entre 3 y 10 mm (`lattice_cell_for`; decisión propia, la ficha no
+la fija).
+
+**Prueba:** barra de 24 × 6 × 6 mm con 20 N: barras de 2,74 mm en celdas de 3 mm, factor 2,00, 1,008 g, 8 análisis
+(28 s). En una barra tan fina la retícula casi la llena: la prueba de la ficha (O7, cubo de 30 mm, 6000 N) daría
+celdas de 10 mm.
+
+**Sigue (regla 7):** el diámetro por celda (sección proporcional a la utilización, escalado en conjunto) y
+«Retícula» en el panel.
+
+## 2026-11-04 — Optimizar, regla 7, paso D: «Retícula» en el panel (sin «Usar»)
+
+**Hecho:** el botón «Retícula» corre `lightest_lattice` en el trabajo de Optimizar, con Cancelar, y muestra el
+diámetro, la celda, el factor y la masa, o que ni con 3 mm aguanta.
+
+**Prueba:** `ui_script_structural_analyze` arranca y cancela la búsqueda; `[ui]`.
+
+**Falta:** «Usar la retícula»: los volúmenes de una pieza son cajas o cilindros (`PlateVolume`), y la retícula es una
+malla. Hace falta un volumen con malla propia (guardado en el proyecto 3MF como una malla modificadora más) antes de
+poder aplicarla. También falta el diámetro por celda. Siguiente: el volumen con malla.
+
+## 2026-11-04 — Optimizar, regla 7, paso E: el volumen de retícula y «Usar la retícula»
+
+**Hecho:** un volumen nuevo de la pieza, `PlateVolume::Shape::Lattice` (celda y diámetro): su malla son las barras
+que tocan la pieza **donde está en la cama** (`lattice_in` sobre la pieza colocada), así las barras quedan verticales
+y a 45° aunque la pieza esté girada. El proyecto lo guarda como `"shape": "lattice"` con `"cell"` y `"diameter"` (no
+la malla) y lo lee de vuelta; el laminado del proyecto lo usa como cualquier modificador. «Usar la retícula» pone la
+pieza al 0 % y agrega el volumen al 100 %, con un solo deshacer. En la vista 3D no se dibuja su contorno (miles de
+caras).
+
+**Prueba:** `test_project` (ida y vuelta de la celda y el diámetro), `test_plate` (las barras sobre un cubo girado
+30°, dentro de su caja, con aristas verticales), `[lattice]`, `[ui]`, `ui_script_structural_analyze`. **Sin probar en
+la interfaz:** «Usar la retícula» y su deshacer; la ventana de ajustes del objeto todavía muestra lugar y tamaño para
+este volumen aunque no los usa.
+
+**Pendiente:** el diámetro por celda (regla 7, segunda búsqueda); `bars_touching` recorría todas las caras por cada
+punto: arreglado el mismo día con una grilla de columnas en XY (el rayo vertical solo mira las caras de su casilla;
+prueba: las mismas barras que la prueba simple sobre una esfera de 4608 caras).
+
+## 2026-11-04 — Optimizar, regla 7, paso F: el diámetro por barra (motor)
+
+**Hecho:** `graded_lattice(…, uniforme)`: del análisis con las barras uniformes, la utilización (pedido / factor) peor
+a menos de media celda del medio de cada barra; cada barra `d = k √(u / u_máx)` entre 0,9 y 3 mm, y `k` por
+bisección (6 mitades entre 0,9 y 3) hasta que aguanta. `lighter` solo si pesa menos que la uniforme. `lattice_mesh`
+acepta un diámetro por barra. Como mucho 8 análisis.
+
+**Prueba:** en la barra de 24 × 6 × 6 mm la uniforme ya pide 2,74 mm y ningún reparto aguanta (no se propone); la
+prueba comprueba el contrato (47 s la prueba entera de la retícula). La prueba de la ficha (O8, voladizo de 90 × 20 ×
+20 mm, de 1,0 a 2,5 mm y −30 %) queda para el banco de pruebas: es grande para la prueba unitaria.
+
+**Falta:** guardar y usar el diámetro por barra (el volumen de retícula guarda un solo diámetro) y mostrarlo en el
+panel.
+
+## 2026-11-04 — UI51 y UI52 (prueba de interfaz del equipo de fichas sobre 0f4951d)
+
+**UI51 (arreglado):** en Estructural, Ctrl+Z deshacía solo las condiciones, así que después de «Girar la pieza» el
+primer Ctrl+Z quitaba la fuerza. Ahora los pasos de Ctrl+Z de Ingeniería guardan también el giro, los ajustes y los
+volúmenes de la pieza cuando Optimizar los cambia (`remember_part`: «Girar la pieza», «Usar» de zonas, nervios,
+refuerzos y retícula), y Ctrl+Y los rehace. Prueba en `ui_script_structural_analyze`: la orientación del cubo hasta
+el final, «Girar la pieza» (giro en X 90°) y Ctrl+Z (0°).
+
+**UI52 (arreglado):** la ayuda de los botones de Optimizar tapaba la línea del resultado cuando el mouse quedaba
+sobre el botón; ahora sale con la demora de siempre y no mientras se muestra un resultado de esa pieza.
+
+## 2026-11-04 — el panel de ajustes como datos para el teléfono
+
+**Hecho (pedido de la sesión de Android, `mobile_app.md` regla 7):** `tisma --settings-layout FILE|-` escribe, sin
+abrir ventana, las pestañas (print, material, printer), sus tarjetas (id, título, icono), los grupos (id, título,
+línea cerrada) y cada fila: clave, nivel (basic, normal, advanced), nombre, ayuda, tipo, valor por defecto, rango y
+valor. `--lang` elige el idioma de los títulos y nombres; `--settings-summary ajustes.json` toma de ahí los valores y
+las líneas cerradas. Está en `tisma` y no en `tisma-engine` porque los nombres de las filas viven en la interfaz.
+
+**Prueba:** `ui_settings_layout` (ctest). 3 pestañas (7, 6 y 5 tarjetas), 438 filas. **Falta:** la ayuda y el tipo
+salen de `docs/CONFIG.md`, que está en español, también con `--lang en`; las opciones de las listas van dentro del
+rango como texto (no como lista aparte).
+
+## 2026-11-04 — `analyze --mode lightest-infill` en los nodos (pedido de Android; CC20)
+
+**Hecho:** el nodo de análisis corre el modo `lightest-infill` de `cloud.md` (regla 6, `params.mode`, con `zones` y
+`ribs`): `lightest_infill`, después `zoned_infill` (salvo `--no-zones`) y `ribbed_infill` (con `--ribs`), el avance
+repartido entre las búsquedas. El resumen da `mode`, `solid`, `found`, `density`, `min_safety`, `required_safety`,
+`analyses` y, si corrieron, `zones` (encontrado, más liviano, niveles, masas) y `ribs` (encontrado, más liviano,
+densidad, ángulos); el resultado (`-o`, `kind` = `lightest-infill`) agrega las cajas de zonas y nervios cuando
+convienen (mín., máx. sobre la cama y sus ajustes). `resin-structure` sigue con `not_in_cloud`, así que CC20 queda para
+ese modo.
+
+**Prueba:** `test_node` (con calidad rápida la pieza se analiza maciza: `solid`, sin búsqueda; `resin-structure` da
+`not_in_cloud` con `error_es`). **Sin probar desde la línea de comandos:** la búsqueda completa con calidad normal
+(las funciones del motor tienen sus pruebas). **Falta:** devolver el proyecto con los cambios aplicados (`-o
+proyecto.3mf`), que necesita pasar las cajas a volúmenes de la pieza fuera de la interfaz.
+
+## 2026-11-04 — conexiones de red: OctoPrint (motor)
+
+**Hecho:** `src/device/print_host.*` (en `tisma_net`): `host_version` (prueba la dirección y la clave de API),
+`host_upload` (sube el G-code a `/api/files/local` y, si se pide, lo elige e imprime), `host_status` (estado, archivo,
+avance, tiempo restante y temperaturas; sin impresora conectada al programa, 409, da el estado sin temperaturas),
+`host_pause` (pausa o sigue) y `host_cancel`. Los errores llevan un código estable (`unreachable`, `unauthorized`,
+`not_connected`, `bad_answer`, `failed`); la clave nunca se escribe en mensajes. Desde la documentación pública de la
+API REST de OctoPrint.
+
+**Prueba:** `test_print_host` contra un OctoPrint simulado (servidor de cpp-httplib): clave buena y mala, dirección
+sin respuesta, subida y comienzo (nombre y contenido del archivo), estado con temperaturas, pausa, seguir y cancelar,
+y el 409 sin impresora. **Sin probar:** contra un OctoPrint real.
+
+**Moonraker (Klipper), el mismo día:** `HostKind::Moonraker`: `/server/info`, `/server/files/upload` (raíz `gcodes`,
+`print`), `/printer/objects/query` (print_stats, virtual_sdcard, extruder, heater_bed) y `/printer/print/pause`,
+`resume`, `cancel`; prueba contra un Moonraker simulado.
+
+**PrusaLink, el mismo día:** `HostKind::PrusaLink` con usuario y contraseña por Digest (`src/net/digest.*`: MD5 de la
+RFC 1321 y Digest de la RFC 7616, probados con los ejemplos de las RFC; `net::Response` trae ahora la cabecera
+`WWW-Authenticate`, en cpp-httplib y en WinHTTP): versión, subida con `PUT /api/v1/files/usb/<nombre>` y
+`Print-After-Upload`, estado (`/api/v1/status`, el nombre largo del archivo de `/api/v1/job`), pausar, seguir y
+detener por el id del trabajo (sin trabajo: `conflict`). Prueba contra un PrusaLink simulado que exige Digest.
+**Sin probar:** la cabecera de WinHTTP (solo compila en el CI de Windows) y contra una impresora real.
+
+**Sigue:** Duet con el mismo contrato (la sesión de Android ofreció notas de
+comportamiento de los cuatro); después en la página Dispositivos.
+
+## 2026-11-04 — paquete libre de perfiles, paso 1 (`profile_pack.md`, ficha `profile_pack_format.md`)
+
+**Hecho:** `src/catalog/pack.*` (en `tisma_core`): `parse_pack_index` (formato y versión; una versión mayor no se carga,
+PF1), `pack_plan` (lista de archivos a bajar con URL, ruta, tamaño y SHA-256, solo los que cambiaron o faltan),
+`sha256_hex` (FIPS 180-4), `safe_pack_path` (solo `vendors/<id>/`, `community/`, `knowledge/`; nada absoluto ni con
+`..`, PF3), `pack_printer_profile` (`common.settings` con la variante encima, claves desconocidas descartadas con
+aviso; `original*` nunca se lee, PF4 y PF6), `parse_pack_entry`, `parse_pack_compatible` y `pack_compatible` (PF5).
+Decisión: la descarga la hace quien llama (la app de Android la hace ella misma); el motor da el plan y verifica.
+
+**Prueba:** `tests/test_pack.cpp` con un paquete inventado: ejemplos de FIPS, PF1, plan, rutas, PF4, PF6, PF5.
+
+**Sigue:** descomprimir `.tar.xz` (falta elegir la biblioteca: xz-embedded, 0BSD, a revisar y anotar en
+`THIRD_PARTY.md` antes de usarla) y leer tar; después `pack plan`, `pack install --from`, `pack list` en la línea de
+comandos y `profile --pack`.
+
+## 2026-11-04 — paquete libre de perfiles, paso 2: `.xz`, tar, instalación y línea de comandos
+
+**Decisión:** xz-embedded es 0BSD, que no está en la lista de licencias permitidas (`tools/check_licenses.py`).
+Cambiar esa lista le toca al dueño. Por eso el motor tiene su propio lector de `.xz` (LZMA2) y de tar, hecho desde las
+especificaciones públicas (ver PROVENANCE). No hay biblioteca nueva.
+
+**Hecho:**
+- `src/catalog/xz.*`:
+  - `xz_decompress`: varios flujos, relleno, CRC32, CRC64 y SHA-256, índice y pie verificados, con tope de salida;
+  - `tar_read`: ustar, pax y nombres largos de GNU; los enlaces se informan aparte.
+- `src/catalog/pack_install.cpp`:
+  - `pack_install`: verifica tamaño y SHA-256; revisa cada entrada antes de escribir (regla 5: ruta insegura, enlace
+    o más de 50 MB descartan el archivo entero); conserva lo anterior de lo descartado y de lo no bajado; arma
+    `pack.new` y cambia con un renombre (regla 7);
+  - `installed.json` guarda lo instalado de verdad, así un archivo rechazado se vuelve a pedir.
+- `pack_installed` para el plan.
+- Línea de comandos (`src/cli/pack_cli.*`, `docs/CATALOG.md`): `pack plan`, `pack install`, `pack list` y
+  `profile --pack … --printer "<archivo>#<variante>"`, con el filamento y el perfil de impresión por defecto de la
+  variante (regla 13) y el filtro de compatibles (PK7).
+
+**Prueba:**
+- `test_xz`: 8 archivos hechos con `xz` (CRC64, SHA-256, CRC32 en bloques, sin chequeo, lc/lp/pb distintos, dos
+  flujos, tar pax y GNU), dañados, cortados, tope de salida, y 900 bytes cambiados al azar.
+- Aparte, 24 000 archivos dañados con ASan y UBSan, sin hallazgos.
+- `test_pack`, con el paquete inventado de `tests/data/pack`: primera instalación, actualización de un solo
+  fabricante (PK12), byte cambiado y descarga cortada (PF2, PK3, PK14), ruta `..` y enlace (PF3, PK4), versión 3
+  (PF1, PK5), y la línea de comandos (PK6, PK7).
+- A mano: el perfil del paquete lamina un cubo con código 0 y `M104 S210` del filamento.
+
+**Velocidad:** 200 KB por archivo de prueba en unos ms. No se midió con el paquete real de 32 MB.
+
+**Sin probar:** contra el paquete real publicado. Por sala limpia no se lee: lo puede probar el equipo de fichas como
+caja negra.
+
+**Sigue:** `knowledge --data`, los datos de la comunidad en el panel (reglas 22–24), y el paquete en el asistente de
+la interfaz (PK1, PK2).
+
+**El mismo día, paso 3, la descarga para la interfaz (`src/catalog/pack_fetch.*`, en `tisma_net`):**
+- `pack_fetch` baja los archivos del plan y sigue hasta 5 redirecciones. GitHub responde con 302 en
+  `releases/latest/download`. Para eso, `net::Response` trae ahora `location`, en cpp-httplib y en WinHTTP.
+- `pack_update` hace todo junto: el índice primero, el plan contra lo instalado, los fabricantes elegidos más los
+  instalados (o todos), y después `pack_install`.
+- `pack_newer` dice si hay una versión publicada más nueva (regla 19).
+- La línea de comandos del motor sigue sin red: los nodos corren aislados.
+- **Prueba** (`test_pack_fetch`, con un servidor simulado que responde con redirección): primer arranque sin
+  fabricantes (PK1), con uno elegido, actualización que pide solo el fabricante cambiado (PK12; el servidor no tiene
+  el otro), y sin conexión (PK2: no cambia nada).
+- **Sin probar:** contra GitHub de verdad, y la cabecera `Location` de WinHTTP, que solo compila en el CI de Windows.
+- **Sigue:** el paquete en la interfaz: asistente, lista de impresoras, aviso de versión nueva.
+- **Plan para la interfaz** (decisión según `profile_pack.md`, reglas 1, 2, 9, 13 y 19; próximo bloque):
+  - el catálogo de impresoras suma los modelos del paquete instalado, agrupados por fabricante, con una variante por
+    boquilla en una sola fila (PK15);
+  - al agregar uno, se arman su perfil de impresora y los de `defaults` como perfiles de fábrica, que no se pueden
+    sobrescribir (regla 9, PK11);
+  - las impresoras elegidas del paquete se guardan en las preferencias (`packs.printers`) y se vuelven a armar al abrir;
+  - «Actualizar perfiles» corre `pack_update` en segundo plano, con avance;
+  - al abrir, como mucho una vez por día, `pack_newer` (regla 19).
+
+**Fechas del dueño (2026-11-04, por la sesión de fichas):**
+- beta cerrada en diciembre de 2026, con lo que esté listo; sirve para arreglar cada error que aparezca;
+- versión 1.0 en la segunda semana de enero de 2027;
+- las pruebas en hardware corren aparte y no frenan el software.
+El orden del roadmap se planifica con esas fechas.
+
+## 2026-11-04 — el paquete de perfiles en la interfaz (`profile_pack.md`, paso 4)
+
+**Hecho:**
+- `pack_profiles` y `find_pack_models` en `src/catalog/`. La línea de comandos y la interfaz arman igual la impresora
+  con sus valores por defecto.
+- En el catálogo de impresoras, la sección «Paquete libre de perfiles»: una fila por modelo, la boquilla, la licencia y
+  el origen. **Agregar** (o **Bajar y agregar**, en segundo plano) elige la impresora, el filamento y el perfil de
+  impresión, como perfiles de fábrica.
+- Las impresoras elegidas quedan en `packs.printers`. Hay botones para bajar la lista y para actualizar el paquete.
+- Opciones nuevas: `--pack` y `--pick-pack-printer`.
+- Variables de plantilla que pide la ficha para el G-code del paquete: `layer_count`, la caja de la primera capa,
+  `travel_speed`, mes, día, hora, minuto y segundo. La app de Android encontró `{layer_count}` con el paquete real.
+- `--set` y `--config-over` en los comandos de proyecto (pedido de Android).
+- La ayuda de los ajustes ya no nombra documentos internos (QA).
+
+**Prueba:**
+- `ui_pack_install`, `ui_pack_printer_picked` (elige «Acme One 0.4 · Acme PLA · Acme Standard») y `ui_pack_catalog`
+  (captura).
+- `[pack]`, con la búsqueda y los valores por defecto.
+- Un error encontrado al probar: elegir la impresora desde la tarjeta de impresora rompía la memoria (`bad_alloc`)
+  porque la tarjeta guarda punteros a las listas. El gancho de prueba ahora corre al empezar el cuadro.
+
+**Sin probar:** la descarga real desde la interfaz contra GitHub.
+
+**Sigue:**
+- el aviso «Este perfil ya no está en el paquete» (regla 20);
+- los datos de la comunidad (reglas 22 a 24).
+
+**El mismo día:** el aviso de versión nueva al abrir, como mucho una vez por día (regla 19, `pack_newer` en segundo
+plano). **Sin probar:** contra una versión publicada de verdad.
+
+**El mismo día:** el catálogo de filamentos ofrece los del paquete que sirven para la impresora del paquete elegida
+(regla 12, PK7; `pack_filaments_for`). Prueba: `[pack]` y `ui_pack_filaments` (captura).
+
+**El mismo día, datos de la comunidad (reglas 22 a 24), núcleo:**
+- `parse_community`, `pack_community` (busca por grupo, fabricante y nombre) y `community_fills_alone` (regla 24).
+- `pack community` en la línea de comandos.
+- Las rutas del paquete se leen como UTF-8 también en Windows.
+- Prueba: `[pack]`, con datos inventados en el paquete de prueba.
+- Después, la sección «Datos publicados» en la página de la impresora, con distintivos, fuentes y **Usar este valor**
+  (los que no son del fabricante piden confirmación). Prueba: `ui_pack_published` (aplica un dato del fabricante y lo
+  verifica). **Falta:** la misma sección para el material y la resina.
+
+**El mismo día, más:**
+- Regla 20: copia de las impresoras del paquete elegidas. Si el paquete deja de tenerlas, siguen elegidas con el aviso.
+  Prueba: `ui_pack_gone`.
+- Pedidos de la app de Android, en la línea de comandos:
+  - `part gear|fastener` (STL y `--defaults`);
+  - `calibration <tipo>` y `calibration apply`;
+  - `aero` y `orient` sobre un modelo con `--config`.
+  - Pruebas en `[cli]`.
+- Corregida una prueba de interfaz que fallaba por tiempos en la CI de Linux (`ui_script_structural_analyze`).
+- «Datos publicados» del filamento del paquete, en la pestaña Material (prueba: `ui_pack_published_material`). **Falta:**
+  la resina.
+- `design new|check|build` en la línea de comandos, con SolidCraft (pedido de Android). Probado solo con el SolidCraft
+  falso.
+- Corregido: mostrar la fila de una temperatura vacía la escribía como 0 y marcaba el perfil como cambiado.
+- Resinas del paquete (reglas 10, 12, 13 y 23):
+  - un perfil `resin` o `resin_print` se lee como perfil de material o de impresión (las claves de la resina ya son de
+    esos tipos);
+  - una impresora de resina toma `defaults.resin` y `defaults.resin_print`, y el catálogo le ofrece solo resinas;
+  - una resina en una impresora de filamento, o al revés, se rechaza;
+  - «Datos publicados» de la resina en la pestaña Material;
+  - corregido: la impresora `sla` del paquete quedaba como de filamento; ahora su perfil lleva
+    `machine.technology = msla`.
+  - Pruebas: `[pack]` (dos casos nuevos) y `ui_pack_published_resin`. Probado solo con el paquete inventado de prueba.
+
+## 2026-11-04 — mantenimiento (16:41 UTC)
+
+**Revisado:** `origin/main` ya estaba en `dev`; el merge de la app de Android (#55) no toca el motor y pasa
+`check_licenses.py`. Fuzz de G-code con semilla nueva (`tisma_fuzz_gcode 2000 202611041705`, 5 min 17 s): 0 fallas, 25
+rechazados por no imprimibles. Entradas raras en los comandos nuevos para el teléfono (`pack`, `profile --pack`,
+`part`, `calibration`, `orient`). Sin avisos del compilador en los archivos tocados estos días.
+
+**Encontrado y arreglado:**
+- `pack plan` con un `index.json` instalado roto terminaba con error, y el paquete no se podía reparar desde el plan.
+  Ahora avisa y planea todo el paquete otra vez (`pack install` ya se recuperaba). Prueba en `[pack]`.
+- El error de `tisma-engine pack` sin subcomando no nombraba `community`.
+- `part gear|fastener` con un valor de otro tipo mostraba el texto de la biblioteca JSON
+  (`[json.exception.type_error.302] …`) sin decir qué clave. Ahora dice, por ejemplo, `"teeth" must be a whole number`,
+  y `not valid JSON` o `not a gear` (`src/cad/spec_json.hpp`). Pruebas en `[gears]` y `[fasteners]`.
+- `pack community` con `../` en el nombre ya devolvía vacío: no hacía falta cambio.
+
+**Medido** (esfera de 1 millón de triángulos, `slice` completo, 4 núcleos, máquina libre, 7 corridas alternadas de
+cada uno): el motor del 2026-10-29 (`725633f`) tarda 1,63 a 1,95 s (mediana 1,83) y el de hoy 1,74 a 1,91 s (mediana
+1,83). No hay regresión: los 1,45 a 1,60 s anotados el 29 eran otra máquina. El corte es 1,23 a 1,39 s de cada corrida
+(`slice_ms`); escribir, 0,26 s; el control, 0,05 s. No se tocó nada: no hay una ganancia medible a la vista sin otra
+vuelta de perfilado.
+
+**CI:**
+- `tools/ci_linux.sh` sobre `222fd59`: gcc 1041/1041. La etapa con ASan se cortó a las 2 horas (límite de la sesión),
+  sin fallas hasta la prueba 649 de 1040.
+- ASan sobre `4176d0a`, solo lo tocado (paquete, xz, créditos, engranajes, tornillería, línea de comandos, calibración,
+  nodos, diseño, plantillas, ayuda): 140/140.
+- Windows en `dev`: el merge de Android (#55, `9e4ff3d`) rompió la prueba de créditos CR2. Una nota en
+  `THIRD_PARTY.md` quedó en medio de la tabla de bibliotecas y cortó nanosvg, cpp-httplib y OpenSSL. Se movió debajo de
+  la tabla (`4176d0a`); Windows en verde.
+
+**Sigue (paquete de perfiles, lo que falta en el escritorio):**
+- Regla 14, PNG: falta (decisión del dueño, 2026-11-04: SVG por ahora). Para PNG no hay lector en el motor: elegir
+  uno permisivo y anotarlo antes de usarlo.
+
+## 2026-11-04 — la cama del paquete en la vista 3D (`profile_pack.md`, regla 14, solo SVG)
+
+**Hecho** (el dueño pidió SVG por ahora):
+- `src/ui/bed_art.*`: `bed_svg_art` lee el SVG con nanosvg. Las curvas se siguen a una décima de milímetro. Los rellenos
+  usan su regla (no nula o par-impar), los trazos se ensanchan con Clipper2 y `triangulate_polygon` llena el resultado.
+  Sale como triángulos de color plano. A cada forma se le quita lo que se pinta después, así los triángulos nunca se
+  superponen y no pelean en profundidad.
+- El dibujo va en el rectángulo más grande de su forma que entra en la caja de la cama, centrado, sin estirar (su
+  borde de arriba hacia y máxima). Así lo dibuja la app de Android. Los degradados y lo transparente no se dibujan; lo
+  semitransparente, sólido.
+- Las dos vistas, OpenGL y Vulkan, dibujan el `bed_model` (STL) en el color de la placa y encima el dibujo, adelantado
+  en profundidad como la pintura sobre una pieza. No hacen sombra.
+- La interfaz lo rehace al cambiar de impresora o de cama.
+- El paquete de prueba trae una cama de 220 × 220 con un STL y un SVG (cuadrado, círculo y un trazo).
+
+**Prueba:** `[bed_art]`: área y color de un rectángulo, la y invertida, agujero par-impar, trazo de 2 mm, círculo,
+formas superpuestas, entradas malas. En pantalla: `ui_pack_printer_picked` (OpenGL) y la misma corrida con
+`--graphics vulkan` (lavapipe) dan el mismo dibujo; capturas mirados a mano.
+
+**Decisión** (igual que la app de Android): el dibujo no escribe profundidad, así que la grilla y los ejes se ven
+encima. En Vulkan es una canalización nueva, `Decal`: la de la pintura sin escribir profundidad.
+
+**Sin probar:** con los SVG del paquete real (no se leen, sala limpia); se puede pedir a la sesión de fichas como caja
+negra.
+
+## 2026-11-04 — BH27: las velocidades del perfil de impresión del paquete se perdían
+
+**Reporte** (sesión de fichas, caja negra con el paquete real): `profile --pack` con la MK4S dejaba todo el grupo
+`speed` en nulo. Al laminar avisaba «no speed for speed.walls … using a stock Ender-3's», y un cubo de 20 mm tardaba
+14 min 54 s. Lo mismo con AnkerMake M5/M5C, MINI y XL.
+
+**Causa:** los perfiles de impresión del paquete son de la versión 1, con las velocidades adentro, como las guardan
+otros programas. Al leer un perfil de impresión de la versión 1, el motor saca `speed`, porque las velocidades son de la
+impresora (decisión del dueño, 2026-10-26).
+
+**Arreglo:** `parse_pack_entry` pasa los ajustes de impresora que trae una entrada de impresión o de filamento (las
+velocidades, `cooling.min_speed`) a `PackEntry::printer_settings`, en lugar de perderlos. `pack_profiles` los pone sobre
+el perfil de la impresora: primero los del filamento, después los del de impresión. Un ajuste de otro tipo se deja
+afuera con un aviso. Sirve para la línea de comandos, la app y el escritorio.
+
+**Prueba:** `[pack]`. El perfil de impresión de prueba trae `speed.walls` 170 y `speed.travel` 300 (versión 1), y el
+filamento `cooling.min_speed` 12; la impresora sale con 170, 300 (sobre los 150 propios) y 12.
+
+**Al cambiar de perfil** (decisión de la sesión de fichas, va a `profile_pack.md`): al elegir otro perfil de
+impresión o filamento del paquete, los ajustes de impresora que trae reemplazan a los actuales, como en la primera
+elección. Los que la persona cambió a mano se quedan, con el aviso «Se mantuvieron tus cambios en …». En la interfaz:
+- los ajustes que trae cada entrada se cuentan como parte de su perfil (`saved_settings`), así que no aparecen como
+  cambios;
+- el escritorio ofrece todos los perfiles de impresión del paquete que sirven para cada impresora del paquete elegida
+  (regla 12, `pack_prints_for`), no solo el de la variante.
+
+Prueba: `ui_pack_print_speeds` (Acme Standard → Acme Fine → velocidad de viaje a mano → Acme Standard) y los verbos de
+guion `choose-profile` y `set`.
+
+**Con el paquete real** (sesión de fichas, caja negra sobre `b8f5906`), sin aviso:
+- MK4S: paredes a 170, el cubo en 12 min 04 s (antes 14 min 54 s);
+- M5C: 200; MINI: 140; XL: 170.
+
+La AnkerMake M5 todavía avisa por `speed.first_layer`: su perfil de impresión no la trae. Es un dato del paquete, y el
+reemplazo con aviso es lo correcto. BH27 cerrado.
+
+## 2026-11-04 — primer arranque con el paquete (reglas 1 y 3, PK1, PK2) y licencia en el panel (regla 15)
+
+**Hecho:**
+- Primer arranque sin paquete instalado: la interfaz baja el índice en segundo plano, sin preguntar, y la barra de
+  estado muestra el avance. El catálogo del asistente suma los modelos del paquete al llegar (regla 1, PK1).
+- Sin red: el aviso «Sin conexión: se muestran las impresoras incluidas; el resto se descarga cuando haya red», en
+  lugar de un error. El catálogo propio sigue (regla 3, PK2).
+- Opción `--pack-url` para las pruebas (en lugar de `packs.url`).
+- Regla 15: bajo la fila de un perfil del paquete (impresora, filamento o impresión), una línea chica con su licencia,
+  su origen y el enlace al repositorio del paquete.
+
+**Prueba:** `ui_pack_offline_first_run` (sin red: el catálogo propio y el aviso, captura mirada). En
+`ui_pack_print_speeds`, la línea de licencia. **Sin probar:** PK1 contra GitHub de verdad desde la interfaz; la
+descarga en sí ya la prueba `test_pack_fetch` con un servidor simulado.
+
+## 2026-11-04 — calibración de puentes y voladizos (PLAN, P1)
+
+**Hecho** (diseño propio en `docs/CALIBRATION.md`; ninguna ficha la describe):
+- `bridges_overhangs_test`: seis aletas inclinadas de 20° a 70° y cinco puentes de 10 a 50 mm, con los valores en
+  relieve.
+- Elegir la aleta más inclinada que salió bien pone `support.threshold_angle = 90° − ángulo`.
+- `calibration_print_settings` junta los ajustes con que se imprime cada prueba: las de resina sin soportes, base ni
+  vaciado (antes solo en la interfaz); esta sin soportes ni arcos. La línea de comandos (`calibration <tipo>`) ahora
+  también los usa.
+- En la pestaña Calibrar va con las aletas como botones para elegir; sin el editor de rango, que es de las torres.
+  Está en `--calibration` y en la tarjeta de la impresora.
+
+**Prueba:** `[calibration]` (forma, áreas a 6,1 y 8,5 mm, G-code verificado, ángulo aplicado, ajustes de impresión) y
+`ui_calibration_bridges` (la pieza laminada; captura mirada). **No probado en una impresora.**
+
+## 2026-11-04 — firmar las versiones con la clave del pendrive (decisión del dueño)
+
+**Decisión del dueño** (por la sesión de fichas): la clave privada Ed25519 vive solo en el pendrive del dueño, nunca
+en GitHub. La CI deja la versión como borrador y el dueño la firma y la publica en su computadora.
+
+**Hecho:**
+- `tools/updates_list.py`: la lista `updates.json` (formato `tisma-updates` 1, el que lee la app de Android) con la
+  versión nueva primero, sus paquetes (sistema y familia según el nombre del archivo, dirección, tamaño, SHA-256) y las
+  firmas vacías; detrás, las versiones de la lista publicada.
+- `tools/sign_release.py`, solo con la biblioteca estándar de Python, `openssl` y `gh`:
+  - `public-key` da la clave pública en 64 hex;
+  - `sign vX` baja el borrador, comprueba tamaño y SHA-256, firma cada paquete y los bytes exactos de la lista
+    (`updates.json.sig`, 64 bytes) y comprueba todo con la clave pública. También rechaza un pendrive equivocado.
+  - Después sube la lista, publica la versión y la pone en la versión `updates`, que leen los programas.
+- `release.yml` deja la versión como borrador con la lista sin firmar. La clave pública entra al compilar desde la
+  variable del repositorio `TISMA_UPDATES_KEY` (`-DTISMA_UPDATES_KEY`, 64 hex). Sin ella, el actualizador queda
+  apagado; el del escritorio todavía no existe.
+- `docs/FIRMAR_VERSIONES.md`: guía para el dueño, en español (crear la clave en Git Bash, dos pendrives, firmar cada
+  versión).
+
+**Prueba:** `sign_release_check` (ctest; se saltea sin openssl 3): la lista, firmar y comprobar con la clave pública
+sola, un byte cambiado, otra clave y un paquete dañado rechazados. **Sin probar:** contra GitHub de verdad (subir y
+publicar) y en Windows; la primera versión firmada lo prueba.
+
+
+## 2026-11-05 — BH29, BH30, BH31 y la regla 14 del paquete real (spec/next 3d83ac4)
+
+La sesión de fichas laminó un cubo de 20 mm con cada variante FDM del paquete 2026.10.27: 2261 variantes, 1794 bien,
+456 con error de perfil y 11 con error de laminado. Las decisiones están en `profile_pack.md`, reglas 12, 14, 17 y
+18 bis (`check_spec` limpio).
+
+**Hecho:**
+- **BH29 (regla 12):** un conjunto vacío de `compatible.json` cuenta como nulo, o sea todas las impresoras. Al elegir
+  la entrada queda en el registro como error del paquete («points to compatible set #N, which is empty»). El filamento
+  y el perfil de impresión de `defaults` de una variante valen siempre para esa variante y se ofrecen con ella, aunque
+  su conjunto no la nombre.
+- **BH30 (reglas 17 y 18 bis):** `temperature`, `first_layer_temperature`, `bed_temperature`,
+  `first_layer_bed_temperature`, `chamber_temperature`, `chamber_minimal_temperature` e `idle_temperature` existen
+  siempre en el G-code de inicio y fin; valen 0 si el filamento no las trae.
+- **BH31 (regla 18 bis):** si una boquilla se pone a 0 y después viene una macro de la impresora (una orden que no es
+  G, M ni T, como `START_PRINT`), extruir ya no es un error. Queda una nota del chequeo (`GcodeCheck::notes`) que llega
+  como aviso `gcode_check`. Ponerla a 0 después de la macro sigue siendo error.
+- **Regla 14:** el STL de la cama se mueve para que el centro de su caja en XY quede en el centro de la cama y su
+  cara de arriba a la altura 0. No se escala ni se gira. Si mide menos de la mitad de la cama en X o en Y, se dibuja
+  igual y se anota en el registro (`bed_model_place`). El dibujo ya cubría la cama.
+- Prueba de interfaz: `expect-toast` espera hasta 300 cuadros. Con `ctest -j16`, `ui_pack_offline_first_run` falló
+  una vez: la descarga fallida llegaba después de los 30 cuadros.
+
+**Prueba:**
+- `[pack]` (conjunto vacío; los `defaults` valen para la 0.4 y no para la 0.6; aviso del paquete) con el paquete de
+  prueba rehecho: Acme Standard en el conjunto 1, Acme Fine en el conjunto 2, que está vacío.
+- `[gcode]`: las variables en 0, y en el chequeo la nota después de la macro y el error si la boquilla se pone a 0
+  después de ella.
+- `[bed_art]`: la ubicación de la AnkerMake M5.
+- `ctest` completo pasa.
+- A mano: un G-code de inicio de Ender-3 V3 se lamina, da `START_PRINT EXTRUDER_TEMP=0 CH=0 IDLE=0` y un aviso.
+- **Sin probar con el paquete real:** el equipo del motor no lo lee. Lo vuelve a barrer la sesión de fichas.
+
+## 2026-11-05 — BH32: un perfil de impresión «para todas» se ofrece solo si cabe (spec 6970209)
+
+La sesión de fichas probó 500 combinaciones al azar sobre c07643e: 444 laminaron bien y 56 fallaron. En todas, el
+perfil de impresión venía del conjunto vacío, que ahora vale para todas las impresoras. Los rechazos del motor eran
+correctos; el error era ofrecer esos perfiles.
+
+**Hecho (regla 12):**
+- Un perfil de impresión que vale para todas (`compatible` nulo o un conjunto vacío) que no es de los `defaults` de la
+  variante se ofrece solo si cabe en la impresora:
+  - su `nozzle` del paquete, si lo trae, es la boquilla de la variante;
+  - y pasa el mismo `check_settings` del laminado sobre impresora + perfil, o sea altura de capa y anchos de línea
+    dentro de lo que permiten la impresora y la boquilla.
+- `pack_prints_for` (la lista de la app) los deja fuera. Elegirlo igual (`profile --pack --print …`) da el error
+  «… does not fit the …: <motivo>».
+- `PackEntry::nozzle` se lee del paquete.
+
+**Prueba:**
+- `[pack]` con dos perfiles nuevos del paquete de prueba en el conjunto vacío:
+  - Acme Draft, `nozzle` 0,6: solo con la 0.6;
+  - Acme Coarse, capas de 0,5 mm: solo con la 0.6 y rechazado en la 0.4 por «thicker».
+- `[ui]`, `[gcode]`, `[catalog]` y los ctest `pack` y `ui_` pasan.
+- **Sin probar con el paquete real:** lo vuelve a barrer la sesión de fichas.
+
+## 2026-11-05 — BH33 y BH34: proyectos dañados (barrido de la sesión de fichas)
+
+La sesión de fichas armó 14 proyectos 3MF dañados y corrió `slice` y `orient --sandbox` con cada uno. No hubo cuelgues
+ni el programa se cerró, y los códigos de error fueron los esperados. Encontró dos cosas:
+- **BH33:** un proyecto con `"version": 99` en su JSON se laminaba. Ahora un proyecto de una versión más nueva se
+  rechaza, tanto por el JSON como por el número del archivo propio. Lanza `ProjectTooNew` y los comandos de los nodos
+  dan el código `project_too_new` con «el proyecto es de una versión más nueva de Tisma: actualizá el programa»
+  (`docs/PROJECT.md`, «Errores»).
+- **BH34:** un vértice en x = −4e30 laminaba con el código genérico `slice_failed`, y `orient` lo aceptaba y daba un
+  costo de −1,6e31. Ahora `slice`, `orient`, `analyze` y `aero` comprueban antes de trabajar el alcance del motor:
+  2000 mm del origen, o sea una pieza de hasta 4000 mm de ancho y 2000 mm de alto, y sin puntos que no sean números.
+  Si no cumple, dan el código `model_too_large` con el motivo en `error_es`. El cliente de la nube conoce los dos
+  códigos nuevos.
+
+**Prueba:** `[cli][cloud]`:
+- la versión más nueva en el JSON y en el archivo propio, con `slice` y `orient`;
+- una caja de 5000 mm con los cuatro comandos.
+
+## 2026-11-05 — beta 0.11.0-beta.1 para los probadores (pedido del dueño)
+
+- `VERSION` pasa a 0.11.0-beta.1. La sección del CHANGELOG suma «Para probar» (impresoras del paquete,
+  calibraciones, Ingeniería con Optimizar, Diseño, nube) y «Límites conocidos» (sin actualización automática,
+  paquetes `.zip` sin instalador, sin macOS, PNG de la cama sin mostrar, muchas funciones sin probar en una impresora).
+- `release.yml`: sin la variable `TISMA_UPDATES_KEY` publica la pre-release directo, sin `updates.json` y sin nada
+  que firmar; el actualizador queda apagado en esa versión. Con la variable, sigue el borrador para firmar.
+  `docs/FIRMAR_VERSIONES.md` lo explica en «Sin la clave».
+- La suite completa (`ctest`) pasa en Linux. `tools/ci_linux.sh` entero no corre en la sesión porque se corta a las
+  2 h; la CI de Windows corre en cada envío.
+
+## 2026-11-05 — Bambu Lab en red local, primera parte (pedido del dueño para la beta)
+
+**Pedido del dueño** (por la sesión de fichas): la beta de esta semana necesita la conexión con Bambu Lab, porque
+los probadores venían de Tisma Slicer, que la tenía. Fuentes: `printer_connections.md` («Bambu Lab en red local»,
+«Búsqueda en la red») y `devices.md`, reglas 11 y 16, todas con `check_spec` limpio. El protocolo sale de la
+documentación de la comunidad OpenBambuAPI (`mqtt.md`, `ftp.md`, `video.md`), que la ficha cita; no se leyó código.
+
+**Hecho:**
+- **TLS:** Mbed TLS 3.6.2 LTS (Apache-2.0, en `THIRD_PARTY.md`), igual en Windows y Linux (`src/net/tls.*`).
+  - Cliente TLS 1.2 que da el SHA-256 y el nombre (CN) del certificado y puede reanudar la sesión de otra conexión.
+  - Servidor con certificado propio firmado por sí mismo, para el simulador.
+- **MQTT 3.1.1 propio** (`src/device/mqtt.*`): paquetes según la norma, lector por partes y cliente.
+- **FTPS implícito** (`src/device/ftps.*`): USER/PASS, PBSZ 0, PROT P, TYPE I, PASV y STOR, con la conexión de datos
+  reanudando la sesión TLS (regla 5).
+- **Descubrimiento SSDP** (`src/device/ssdp.*`) en UDP 1990 y 2021:
+  - lectura tolerante, porque la forma exacta se mide con una impresora real;
+  - aviso si otro programa ocupa el puerto.
+- **Bambu** (`src/device/bambu.*`):
+  - **Certificado:** el número de serie se lee del certificado. La primera vez se pide confirmar su huella y no se
+    manda el código de acceso hasta que la persona acepta; después se exige la misma huella.
+  - **Estado:** `pushall`, con temperaturas, avance, capa y AMS, juntando los reportes parciales de las P1.
+  - **Comandos:** `pause`, `resume` y `stop` con QoS 1.
+  - **Imprimir:** paquete `.gcode.3mf` con `Metadata/plate_1.gcode` y su MD5, subido por FTPS y empezado con
+    `project_file` (`use_ams`, `ams_mapping`).
+  - **Cámara A1/P1:** paquete de 80 bytes y lectura de los JPEG, solo en el motor; la interfaz todavía no la muestra.
+- **Simulador propio** (`src/device/bambu_simulator.hpp`): MQTT, FTPS y cámara. Se usa en las pruebas y en la
+  interfaz, como la impresora USB simulada.
+- **Interfaz** (página Impresora conectada):
+  - elegir USB o Bambu Lab, buscar en la red, dirección y código de acceso, confirmar el certificado;
+  - estado en una línea con el AMS, «Imprimir desde el AMS», Enviar e imprimir, pausa, reanudar y detener;
+  - la impresora y su certificado quedan en las preferencias; el código va al almacén de secretos del sistema.
+
+**Prueba:**
+- `[bambu]`, 8 casos contra el simulador: paquetes MQTT, puerto PASV, SSDP real por UDP, certificado,
+  `unauthorized`, `unreachable`, reportes parciales, impresión con AMS y sesión reanudada, comandos y cámara.
+- `ui_bambu_print`: el guion completo en la interfaz.
+
+**Sin probar con una impresora real** (lo confirma el dueño en la beta):
+- la forma de los anuncios SSDP;
+- los estados distintos de IDLE (RUNNING, PAUSE, FINISH, FAILED, PREPARE);
+- el `url` (`ftp:///<archivo>`) y el `md5` (el del paquete) de `project_file`;
+- `ams_mapping`;
+- si FTPS y la cámara usan el mismo certificado que MQTT; si no, se acepta el mismo número de serie en el nombre.
+
+**Falta:** ver la cámara en la interfaz (necesita leer JPEG), y elegir el AMS por filamento.
+
+## 2026-11-05 — instalador de Windows y BH35
+
+**Instalador de Windows (pedido del dueño):** los probadores tenían instalador con Tisma Slicer.
+- `packaging/windows/tisma.nsi`, con NSIS (zlib/libpng; compresión zlib, sin las partes bzip2 ni LZMA).
+- Se instala por usuario en `%LOCALAPPDATA%\Programs\Tisma`, sin permisos de administrador (`app_updates.md`,
+  regla 7).
+- Acceso en el menú Inicio; acceso en el escritorio, opcional.
+- Abrir `.3mf` y `.stl` con Tisma: ofrecido y marcado; se registra por usuario y se avisa al Explorador.
+- Aparece en «Aplicaciones instaladas».
+- El desinstalador quita el programa y deja `%APPDATA%\Tisma` (perfiles, preferencias; regla 9). Las asociaciones
+  se quitan solo si siguen apuntando a Tisma.
+- Textos en español, o en inglés con Windows en inglés.
+- El flujo de releases lo arma en Windows después del `.zip`: `tisma-engine-<versión>-setup-windows-x64.exe`.
+- `installer_script_check` (ctest, donde hay `makensis`) arma el script sobre un paquete de mentira, con los avisos
+  tratados como errores.
+- **Sin probar instalando en Windows:** solo se armó el instalador en Linux (makensis 3.09).
+
+**BH35 (decisión del motor):** dos perfiles de 0,8 mm sin `nozzle` pasaban en boquillas de 0,4 y 0,5 y no laminaban
+nada en una pieza chica. El rango del laminado deja anchos de hasta 4 veces la boquilla. Ahora, si el perfil no dice
+su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1,5 veces la de la variante («its
+0.82 mm walls are made for another nozzle than 0.4 mm»). Prueba: Acme Wide en `[pack]`.

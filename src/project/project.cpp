@@ -4,7 +4,9 @@
 #include "project/project.hpp"
 
 #include "config/profiles.hpp"
+#include "io/model.hpp"
 #include "io/stl.hpp"
+#include "io/zip.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -12,6 +14,7 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <sstream>
 
 namespace tisma {
@@ -64,18 +67,36 @@ double number(const ordered_json& j, const std::string& what) {
     return j.get<double>();
 }
 
+// A painting in a 3MF: Metadata/tisma_paint_<k>.bin, "TPNT", the version
+// (32 bits) and painting_to_bytes. The header keeps the file from starting
+// like a program, which the server refuses (a count of 23117 is "MZ").
+constexpr std::string_view kPaintMagic = "TPNT";
+constexpr std::uint32_t kPaintVersion = 1;
+
+std::string paint_entry(std::size_t k) { return "Metadata/tisma_paint_" + std::to_string(k) + ".bin"; }
+// An Engineering result in a 3MF (formats.md, rule 11 bis): its report's JSON.
+std::string result_entry(std::size_t k) { return "Metadata/tisma_result_" + std::to_string(k) + ".json"; }
+
+constexpr std::string_view kProjectEntry = "Metadata/tisma_project.json";
+
 } // namespace
 
-std::string write_project(const Project& project) {
+// The project's JSON: settings, profiles, each model's data ("mesh": its
+// number among the meshes, "painting": among the paintings), mixes and
+// calibration. With `offsets` false every model's offset is written as 0
+// (a 3MF carries it in its build item).
+static ordered_json project_json(const Project& project, bool offsets) {
     ordered_json profiles = ordered_json::object();
     for (const ProfileKind kind : kProfileKinds)
         if (const std::string& name = project.profiles[std::size_t(kind)]; !name.empty())
             profiles[std::string(profile_kind_name(kind))] = name;
     ordered_json models = ordered_json::array();
-    std::size_t paintings = 0;
+    std::size_t paintings = 0, results = 0;
     for (std::size_t i = 0; i < project.models.size(); ++i) {
         const ProjectModel& m = project.models[i];
-        models.push_back({{"name", m.name}, {"mesh", i}, {"offset", m.offset}});
+        models.push_back({{"name", m.name}, {"mesh", i}, {"offset", offsets ? m.offset : std::array<double, 3>{}}});
+        if (offsets && m.turn != std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1})
+            models.back()["turn"] = m.turn;
         if (!m.painting.empty())
             models.back()["painting"] = paintings++;
         if (m.extruder != 1)
@@ -88,9 +109,13 @@ std::string write_project(const Project& project) {
             models.back()["settings"] = ordered_json::parse(m.settings);
         for (const ProjectVolume& v : m.volumes) {
             ordered_json item = {{"kind", v.negative ? "negative" : "modifier"},
-                                 {"shape", v.cylinder ? "cylinder" : "box"},
+                                 {"shape", v.lattice ? "lattice" : v.cylinder ? "cylinder" : "box"},
                                  {"offset", v.offset},
                                  {"size", v.size}};
+            if (v.lattice) {
+                item["cell"] = v.lattice_cell;
+                item["diameter"] = v.lattice_diameter;
+            }
             if (v.turn != std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1})
                 item["turn"] = v.turn;
             if (!v.settings.empty())
@@ -103,6 +128,20 @@ std::string write_project(const Project& project) {
                 item["settings"] = ordered_json::parse(r.settings);
             models.back()["ranges"].push_back(std::move(item));
         }
+        if (!m.engineering.empty()) {
+            models.back()["engineering"] = ordered_json::parse(engineering_json(m.engineering));
+            // In a 3MF the mesh goes out placed: the conditions' points, in
+            // the part's own coordinates, move with it when read (FM24).
+            // Read by older versions, which placed a 3MF's mesh and moved
+            // the points with it.
+            if (!offsets && m.offset != std::array<double, 3>{})
+                models.back()["engineering_moved"] = m.offset;
+        }
+        // Each last result in its own part of the package, in order: an RSLT
+        // chunk, or Metadata/tisma_result_<k>.json.
+        for (const EngineeringResult& r : m.engineering.results)
+            models.back()["engineering_results"].push_back(
+                {{"kind", r.kind}, {"fingerprint", r.fingerprint}, {"file", results++}});
     }
     ordered_json root = {
         {"format", "tisma-project"},
@@ -121,7 +160,11 @@ std::string write_project(const Project& project) {
         root["calibration"] = {
             {"kind", project.calibration->kind}, {"unit", project.calibration->unit}, {"segments", segments}};
     }
+    return root;
+}
 
+std::string write_project(const Project& project) {
+    const ordered_json root = project_json(project, true);
     std::string out(kMagic);
     put_le(out, kVersion, 4);
     put_chunk(out, "JSON", root.dump(2));
@@ -130,45 +173,26 @@ std::string write_project(const Project& project) {
     for (const ProjectModel& m : project.models)
         if (!m.painting.empty())
             put_chunk(out, "PNT ", painting_to_bytes(m.painting));
+    for (const ProjectModel& m : project.models)
+        for (const EngineeringResult& r : m.engineering.results)
+            put_chunk(out, "RSLT", r.report);
     return out;
 }
 
-static Project read_project_checked(std::string_view data) {
-    if (data.size() < kMagic.size() + 4 || data.substr(0, kMagic.size()) != kMagic)
-        fail("not a project file");
-    const auto version = get_le(data, kMagic.size(), 4);
-    if (version > kVersion)
-        fail("version " + std::to_string(version) + " is newer than this program reads");
+// Where a project's meshes and paintings are: the MESH and PNT chunks of the
+// engine's own file, or the build items and the paint files of a 3MF.
+struct ProjectParts {
+    std::size_t meshes = 0, paintings = 0, results = 0;
+    std::function<TriangleMesh(std::size_t)> mesh;    // throws StlError or ModelError
+    std::function<std::string(std::size_t)> painting; // its bytes (painting_to_bytes)
+    std::function<std::string(std::size_t)> result;   // an Engineering result's report
+    // A 3MF's build items: each mesh's turn and offset on the bed, the mesh
+    // left in the part's own coordinates (formats.md, rules 8 and 11 bis).
+    std::vector<std::array<double, 9>> turns;
+    std::vector<std::array<double, 3>> offsets;
+};
 
-    std::string_view json_text;
-    bool has_json = false;
-    std::vector<std::string_view> meshes, paintings;
-    for (std::size_t at = kMagic.size() + 4; at < data.size();) {
-        if (data.size() - at < 12)
-            fail("cut short in a chunk header");
-        const std::string_view tag = data.substr(at, 4);
-        const std::uint64_t size = get_le(data, at + 4, 8);
-        at += 12;
-        if (size > data.size() - at)
-            fail("the " + std::string(tag) + " chunk is cut short");
-        const std::string_view bytes = data.substr(at, std::size_t(size));
-        at += std::size_t(size);
-        if (!has_json && tag != "JSON")
-            fail("the first chunk must be JSON");
-        if (tag == "JSON") {
-            if (has_json)
-                fail("more than one JSON chunk");
-            json_text = bytes;
-            has_json = true;
-        } else if (tag == "MESH") {
-            meshes.push_back(bytes);
-        } else if (tag == "PNT ") {
-            paintings.push_back(bytes);
-        }
-    }
-    if (!has_json)
-        fail("no JSON chunk");
-
+static Project project_from_json(std::string_view json_text, const ProjectParts& source) {
     if (!json_depth_ok(json_text))
         fail("the JSON chunk is nested more than 64 levels deep");
     ordered_json root;
@@ -179,6 +203,14 @@ static Project read_project_checked(std::string_view data) {
     }
     if (!root.is_object() || root.value("format", std::string()) != "tisma-project")
         fail("\"format\" must be \"tisma-project\"");
+    // A newer version is refused, as in the binary file (BH33).
+    if (root.contains("version")) {
+        const ordered_json& v = root.at("version");
+        if (!v.is_number_integer() || v.get<long long>() < 1)
+            fail("\"version\" must be a whole number from 1");
+        if (v.get<long long>() > static_cast<long long>(kVersion))
+            throw ProjectTooNew("project: version " + std::to_string(v.get<long long>()) + " is newer than this program reads");
+    }
 
     Project p;
     try {
@@ -204,14 +236,14 @@ static Project read_project_checked(std::string_view data) {
         // Each model has its own MESH chunk (write_project): one chunk named
         // by many models multiplied its memory (300 references to a 20 000
         // triangle chunk took 200 MB from a 3 kB larger file).
-        std::vector<bool> used(meshes.size(), false), painted(paintings.size(), false);
+        std::vector<bool> used(source.meshes, false), painted(source.paintings, false);
         for (std::size_t i = 0; i < models.size(); ++i) {
             const ordered_json& m = models[i];
             const std::string what = "models[" + std::to_string(i) + "]";
             if (!m.is_object() || !m.contains("mesh") || !m.at("mesh").is_number_unsigned())
                 fail(what + ".mesh: must be the number of a MESH chunk");
             const auto index = m.at("mesh").get<std::size_t>();
-            if (index >= meshes.size())
+            if (index >= source.meshes)
                 fail(what + ".mesh: there is no MESH chunk " + std::to_string(index));
             if (used[index])
                 fail(what + ".mesh: MESH chunk " + std::to_string(index) + " belongs to another model");
@@ -219,8 +251,8 @@ static Project read_project_checked(std::string_view data) {
             ProjectModel model;
             model.name = m.value("name", std::string());
             try {
-                model.mesh = parse_stl(meshes[index]).mesh;
-            } catch (const StlError& e) {
+                model.mesh = source.mesh(index);
+            } catch (const std::runtime_error& e) { // the mesh's StlError or ModelError
                 fail(what + ": " + e.what());
             }
             if (m.contains("offset")) {
@@ -230,15 +262,26 @@ static Project read_project_checked(std::string_view data) {
                 for (std::size_t k = 0; k < 3; ++k)
                     model.offset[k] = number(o[k], what + ".offset");
             }
+            if (m.contains("turn")) {
+                const ordered_json& t = m.at("turn");
+                if (!t.is_array() || t.size() != 9)
+                    fail(what + ".turn: must be 9 numbers, by rows");
+                for (std::size_t k = 0; k < 9; ++k)
+                    model.turn[k] = number(t[k], what + ".turn");
+            }
+            if (index < source.turns.size()) { // a 3MF: its build item's
+                model.turn = source.turns[index];
+                model.offset = source.offsets[index];
+            }
             if (m.contains("painting")) {
-                if (!m.at("painting").is_number_unsigned() || m.at("painting").get<std::size_t>() >= paintings.size())
+                if (!m.at("painting").is_number_unsigned() || m.at("painting").get<std::size_t>() >= source.paintings)
                     fail(what + ".painting: must be the number of a PNT chunk");
                 const auto k = m.at("painting").get<std::size_t>();
                 if (painted[k])
                     fail(what + ".painting: PNT chunk " + std::to_string(k) + " belongs to another model");
                 painted[k] = true;
                 try {
-                    model.painting = painting_from_bytes(paintings[k], model.mesh.triangle_count());
+                    model.painting = painting_from_bytes(source.painting(k), model.mesh.triangle_count());
                 } catch (const std::invalid_argument& e) {
                     fail(what + ".painting: " + e.what());
                 }
@@ -288,10 +331,20 @@ static Project read_project_checked(std::string_view data) {
                         fail(at + ": must be an object");
                     ProjectVolume volume;
                     const std::string kind = v.value("kind", std::string("modifier")), shape = v.value("shape", std::string("box"));
-                    if ((kind != "modifier" && kind != "negative") || (shape != "box" && shape != "cylinder"))
-                        fail(at + ": kind must be modifier or negative, shape box or cylinder");
+                    if ((kind != "modifier" && kind != "negative") || (shape != "box" && shape != "cylinder" && shape != "lattice"))
+                        fail(at + ": kind must be modifier or negative, shape box, cylinder or lattice");
                     volume.negative = kind == "negative";
                     volume.cylinder = shape == "cylinder";
+                    volume.lattice = shape == "lattice";
+                    if (volume.lattice) {
+                        const auto positive = [&](const char* key) {
+                            if (!v.contains(key) || !v.at(key).is_number() || !(v.at(key).get<double>() > 0.0))
+                                fail(at + "." + key + ": a lattice needs a number above 0");
+                            return v.at(key).get<double>();
+                        };
+                        volume.lattice_cell = positive("cell");
+                        volume.lattice_diameter = positive("diameter");
+                    }
                     volume.offset = three(v, "offset", at);
                     volume.size = three(v, "size", at);
                     if (v.contains("turn")) {
@@ -328,6 +381,39 @@ static Project read_project_checked(std::string_view data) {
                     model.ranges.push_back(std::move(range));
                 }
             }
+            // Engineering data (rule 11 bis): what this program does not read
+            // is left out with a notice, never the part.
+            if (m.contains("engineering")) {
+                try {
+                    model.engineering = engineering_from_json(m.at("engineering").dump());
+                    // "engineering_moved" is for older versions, which
+                    // placed a 3MF's mesh; here the mesh and the points stay
+                    // in the part's own coordinates.
+                    if (const std::size_t dropped = drop_conditions_beyond(model.engineering, model.mesh.triangle_count()))
+                        p.notices.push_back(model.name + ": " + std::to_string(dropped) +
+                                            " Engineering condition(s) no longer fit the mesh and were removed");
+                } catch (const EngineeringError& e) {
+                    p.notices.push_back(model.name + ": its Engineering data was not read (" + e.what() + ")");
+                }
+            }
+            if (m.contains("engineering_results")) {
+                const ordered_json& list = m.at("engineering_results");
+                bool ok = list.is_array();
+                std::vector<EngineeringResult> results;
+                for (std::size_t k = 0; ok && k < list.size(); ++k) {
+                    const ordered_json& r = list[k];
+                    ok = r.is_object() && r.contains("kind") && r.at("kind").is_string() && r.contains("fingerprint") &&
+                         r.at("fingerprint").is_string() && r.contains("file") && r.at("file").is_number_unsigned() &&
+                         r.at("file").get<std::size_t>() < source.results;
+                    if (ok)
+                        results.push_back({r.at("kind").get<std::string>(), r.at("fingerprint").get<std::string>(),
+                                           source.result(r.at("file").get<std::size_t>())});
+                }
+                if (ok)
+                    model.engineering.results = std::move(results);
+                else
+                    p.notices.push_back(model.name + ": its last analysis results were not read");
+            }
             p.models.push_back(std::move(model));
         }
     }
@@ -362,8 +448,121 @@ static Project read_project_checked(std::string_view data) {
     return p;
 }
 
+static Project read_project_checked(std::string_view data) {
+    if (data.size() < kMagic.size() + 4 || data.substr(0, kMagic.size()) != kMagic)
+        fail("not a project file");
+    const auto version = get_le(data, kMagic.size(), 4);
+    if (version > kVersion)
+        throw ProjectTooNew("project: version " + std::to_string(version) + " is newer than this program reads");
+
+    std::string_view json_text;
+    bool has_json = false;
+    std::vector<std::string_view> meshes, paintings, results;
+    for (std::size_t at = kMagic.size() + 4; at < data.size();) {
+        if (data.size() - at < 12)
+            fail("cut short in a chunk header");
+        const std::string_view tag = data.substr(at, 4);
+        const std::uint64_t size = get_le(data, at + 4, 8);
+        at += 12;
+        if (size > data.size() - at)
+            fail("the " + std::string(tag) + " chunk is cut short");
+        const std::string_view bytes = data.substr(at, std::size_t(size));
+        at += std::size_t(size);
+        if (!has_json && tag != "JSON")
+            fail("the first chunk must be JSON");
+        if (tag == "JSON") {
+            if (has_json)
+                fail("more than one JSON chunk");
+            json_text = bytes;
+            has_json = true;
+        } else if (tag == "MESH") {
+            meshes.push_back(bytes);
+        } else if (tag == "PNT ") {
+            paintings.push_back(bytes);
+        } else if (tag == "RSLT") {
+            results.push_back(bytes);
+        }
+    }
+    if (!has_json)
+        fail("no JSON chunk");
+
+    ProjectParts source;
+    source.meshes = meshes.size();
+    source.paintings = paintings.size();
+    source.mesh = [&](std::size_t i) { return parse_stl(meshes[i]).mesh; };
+    source.painting = [&](std::size_t i) { return std::string(paintings[i]); };
+    source.results = results.size();
+    source.result = [&](std::size_t i) { return std::string(results[i]); };
+    return project_from_json(json_text, source);
+}
+
+std::string write_project_3mf(const Project& project) {
+    const ordered_json root = project_json(project, false);
+    std::vector<ThreeMfObject> objects;
+    std::vector<ZipEntryToWrite> extra{{std::string(kProjectEntry), root.dump(1)}};
+    for (const ProjectModel& m : project.models) {
+        objects.push_back({m.name, &m.mesh, m.offset, m.turn});
+        if (!m.painting.empty()) {
+            std::string bytes(kPaintMagic);
+            put_le(bytes, kPaintVersion, 4);
+            bytes += painting_to_bytes(m.painting);
+            extra.push_back({paint_entry(extra.size() - 1), std::move(bytes)});
+        }
+    }
+    std::size_t results = 0;
+    for (const ProjectModel& m : project.models)
+        for (const EngineeringResult& r : m.engineering.results)
+            extra.push_back({result_entry(results++), r.report});
+    return write_3mf_objects(objects, std::move(extra));
+}
+
+// A 3MF with the engine's data: each build item, placed, is a model's mesh;
+// the JSON says the rest (formats.md, rule 11).
+static Project read_project_3mf(std::string_view data) {
+    std::optional<std::string> json_text;
+    std::vector<ThreeMfItem> items;
+    std::vector<std::string> paintings; // Metadata/tisma_paint_0.bin, 1, ... while they are there
+    std::vector<std::string> results;   // Metadata/tisma_result_0.json, 1, ... likewise
+    try {
+        items = read_3mf_items(data, &json_text, kProjectEntry, true);
+        const ZipArchive zip(data);
+        for (const ZipArchive::Entry* e; (e = zip.find(paint_entry(paintings.size())));) {
+            const std::string bytes = zip.read(*e);
+            const std::string what = paint_entry(paintings.size());
+            if (bytes.size() < 8 || !bytes.starts_with(kPaintMagic))
+                fail(what + ": not a painting");
+            if (get_le(bytes, 4, 4) > kPaintVersion)
+                fail(what + ": newer than this program reads");
+            paintings.push_back(bytes.substr(8));
+        }
+        for (const ZipArchive::Entry* e; (e = zip.find(result_entry(results.size())));)
+            results.push_back(zip.read(*e));
+    } catch (const ModelError& e) {
+        fail(e.what());
+    } catch (const ZipError& e) {
+        fail(std::string("3MF: ") + e.what());
+    }
+    if (!json_text)
+        fail("this 3MF has no Tisma project data (" + std::string(kProjectEntry) +
+             "): projects of other slicers are not read yet");
+    ProjectParts source;
+    source.meshes = items.size();
+    source.paintings = paintings.size();
+    source.mesh = [&](std::size_t i) { return std::move(items[i].mesh); };
+    source.painting = [&](std::size_t i) { return paintings[i]; };
+    for (const ThreeMfItem& item : items) {
+        source.turns.push_back(item.turn);
+        source.offsets.push_back(item.offset);
+    }
+    source.results = results.size();
+    source.result = [&](std::size_t i) { return results[i]; };
+    return project_from_json(*json_text, source);
+}
+
 Project read_project(std::string_view data) {
     try {
+        if (looks_like_zip(data))
+            return read_project_3mf(data);
         return read_project_checked(data);
     } catch (const nlohmann::json::exception& e) {
         fail(std::string("not a valid project: ") + e.what());
@@ -371,7 +570,9 @@ Project read_project(std::string_view data) {
 }
 
 void save_project(const std::filesystem::path& path, const Project& project) {
-    const std::string bytes = write_project(project);
+    std::string ext = text_of(path.extension());
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+    const std::string bytes = ext == ".3mf" ? write_project_3mf(project) : write_project(project);
     std::filesystem::path temporary = path;
     temporary += ".tmp";
     {
@@ -385,6 +586,34 @@ void save_project(const std::filesystem::path& path, const Project& project) {
     if (ec) {
         std::filesystem::remove(temporary, ec);
         fail("cannot write '" + text_of(path) + "'");
+    }
+}
+
+bool looks_like_project(std::string_view data) {
+    if (data.starts_with(kMagic))
+        return true;
+    if (!looks_like_zip(data))
+        return false;
+    try {
+        return ZipArchive(data).find(kProjectEntry) != nullptr;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool is_project_file(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    char head[8] = {};
+    in.read(head, sizeof head);
+    const std::string_view start(head, std::size_t(in.gcount()));
+    if (start.starts_with(kMagic))
+        return true;
+    if (!start.starts_with("PK"))
+        return false;
+    try {
+        return looks_like_project(read_file(path));
+    } catch (const ProjectError&) {
+        return false;
     }
 }
 

@@ -277,11 +277,11 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(parse_settings(R"({"gcode": {"corner_smoothing": 0.02}})").corner_smoothing == 0.02);
     const Settings sf = parse_settings(R"({"surfaces": {"bottom_pattern": "rectilinear", "bridge_angle": 30},
                                           "infill": {"before_walls": true, "max_link": 20}})");
-    CHECK_FALSE(sf.monotonic_bottom);
+    CHECK(sf.bottom_pattern == SurfacePattern::Rectilinear);
     CHECK(sf.bridge_angle == 30.0);
     CHECK(sf.infill_before_walls);
     CHECK(sf.infill_max_link == 20.0);
-    CHECK(Settings{}.monotonic_bottom);
+    CHECK(Settings{}.bottom_pattern == SurfacePattern::Monotonic);
     CHECK(Settings{}.infill_max_link == 50.0);
     CHECK_THROWS(parse_settings(R"({"gcode": {"corner_smoothing": 0.1}})"));
     const Settings cal = parse_settings(R"({"calibration": {"mode": "temperature", "start": 230, "step": -5, "end": 210,
@@ -392,6 +392,18 @@ TEST_CASE("bad settings name the key", "[settings]") {
     CHECK(parse_settings(R"({"infill": {"pattern": "gyroid"}})").infill_pattern == InfillPattern::Gyroid);
     CHECK_THROWS_WITH(parse_settings(R"({"infill": {"density": 120}})"), ContainsSubstring("infill.density: must be from 0 to 100"));
     CHECK_THROWS_WITH(parse_settings(R"({"infill": {"pattern": "voronoi"}})"), ContainsSubstring("infill.pattern: must be one of"));
+    // gcode_firmware.md, rule 7: read, written back and read the same.
+    const Settings strict = parse_settings(R"({"machine": {"strict_parser": "anycubic"}})");
+    CHECK(strict.strict_parser == StrictParser::Anycubic);
+    CHECK(parse_settings(settings_json(strict)).strict_parser == StrictParser::Anycubic);
+    CHECK(parse_settings("{}").strict_parser == StrictParser::None);
+    CHECK_THROWS_WITH(parse_settings(R"({"machine": {"strict_parser": "bambu"}})"),
+                      ContainsSubstring("machine.strict_parser: must be one of"));
+    // BH19: 0 is refused, and the message says so (as docs/CONFIG.md does).
+    CHECK_THROWS_WITH(parse_settings(R"({"infill": {"dense_density": 0}})"), ContainsSubstring("more than 0"));
+    CHECK(parse_settings(R"({"infill": {"dense_density": 0.01}})").infill_dense_density == 0.01);
+    CHECK_THROWS_WITH(parse_settings(R"({"infill": {"combine_max_height": 0}})"), ContainsSubstring("more than 0"));
+    CHECK_THROWS_WITH(parse_settings(R"({"infill": {"combine_max_height": "0%"}})"), ContainsSubstring("more than 0"));
 }
 
 TEST_CASE("fill modes on overlapping and nested squares", "[settings]") {

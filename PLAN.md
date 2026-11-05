@@ -400,6 +400,11 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
   en cada uno; la dirección de cada vóxel tomada del laminado real (`src/fea/as_printed.*`); el solver con una matriz
   por dirección (pasos de 5°); criterio de Tsai–Wu, mapa del factor de seguridad y modo de falla (cordón, unión entre
   cordones, unión entre capas); la pieza con los huecos del relleno ralo cuando hay 4 vóxeles por ancho de línea
+- [x] **Adherencia según cómo se imprime** (pedido del dueño, 2026-11-03; `src/fea/adhesion.*`): la resistencia y la
+  rigidez entre capas y la resistencia entre líneas cambian con el material, la temperatura de extrusión, la altura de
+  capa sobre el ancho de línea, el ventilador y la cámara (modelo de `docs/research/`); el resultado muestra el rango
+  probable del factor de seguridad (±1σ) y avisa cuando la temperatura es baja o alta para el material
+  - [ ] el tiempo de capa real (sale del laminado) y paredes simples por zona; nivel B con la historia térmica
 - [x] Base de materiales (pedido del dueño): literatura (Song 2017, Casavola 2016, Cantrell 2017, Ahn 2002), hojas
   técnicas de Bambu Lab (11 materiales) y eSUN (2), y ensayos de CNC Kitchen (6); cada número con su fuente y reglas
   escritas para lo que falta (`src/fea/materials.*`, `docs/MATERIALS.md`)
@@ -642,7 +647,7 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   velocidad
 - [x] Calibraciones estándar, tercera tanda: tope de flujo volumétrico (`machine.max_flow`), resonancias (el motor
   escribe la aceleración: `M204`, `SET_VELOCITY_LIMIT`), pata de elefante (`slicing.first_layer_shrink`)
-- [ ] Calibraciones estándar que faltan: puentes y voladizos
+- [x] Calibraciones estándar que faltan: puentes y voladizos (2026-11-04, `docs/CALIBRATION.md`)
 - [ ] App móvil de Android para seguir la impresión (pedido del dueño, 2026-10-24). Decidido: la opción 1 (seguir
   la impresión, no la interfaz entera), solo por WiFi (el USB es de la PC), con la estética de la app de Prusa
   (EasyPrint) como caja negra; después, Device en el escritorio. El plan y el orden de trabajo están en `docs/MOBILE.md` (P6)
@@ -963,8 +968,21 @@ Con el PR #23 (2026-10-26):
     corte, y la vista previa de la interfaz muestra la pieza sobre la cinta. Falta que el visor dibuje el alto del
     cordón perpendicular a la capa inclinada (hoy va vertical, y la cara lateral se ve con huecos)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
-- [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
-  (la API de C) e `INTEGRATION.md`
+- [ ] **Tisma Cloud en la 1.0** (decisión del dueño, 02-11-2026: «lo antes posible», antes que el resto de
+  UI27–UI41), ficha `cloud.md`:
+  - [x] C1 (2026-11-02): la capa HTTP propia (`src/net/`: WinHTTP en Windows, cpp-httplib y OpenSSL 3 en Linux y
+    macOS) y el cliente (`src/cloud/client.*`, código del dueño sin la capa HTTP de PrusaSlicer, más `/v1/plans`),
+    probados contra un servidor simulado (CC1 a CC6, CC13 a CC15 del lado del cliente);
+  - [ ] C2: el panel de la cuenta (hecho 2026-11-02, con el chip de la barra superior) (entrar, horas, planes con el actual marcado, el enlace a la página de pago),
+    informar un problema, el token en el almacén de claves del sistema (regla 3), laminar y analizar en la nube desde
+    la interfaz con su avance en la barra de estado;
+  - [ ] C3: la línea de comandos de los nodos (reglas 18 a 21: `slice` y `analyze` con `--summary`, `--sandbox`,
+    líneas `progress`; CC10 a CC12). Hecho (2026-11-02): `slice` de un proyecto guardado por el motor (CC10 a CC12),
+    con el mismo armado de la placa que la interfaz. Falta: `analyze` (los apoyos, las cargas y el material tienen
+    que ir en el proyecto primero), los proyectos de otros laminadores (`formats.md`, regla 18) y un avance más fino
+    durante el corte. El proyecto como paquete 3MF (`formats.md`, reglas 6 a 11), hecho el 2026-11-02;
+  - [ ] después: el puente de impresoras (reglas 12 a 17), la biblioteca de modelos y Thingiverse
+- [ ] `printer_connections.md` (F9), `mobile_app.md` (la API de C) e `INTEGRATION.md`
 - [ ] **Ajustes de las fichas que el motor no lee** (medición del equipo de fichas, 2026-10-28, `dev` 32d74be;
   `docs/spec/qa/2026-10-28-ajustes.md` en `spec/next` cc8d580, `tools/check_spec.py` limpio): lee 368 de 479 claves
   del laminado. Faltan, por grupo: `fins` 20, `support` 13, `waam` 10 (después de la primera versión), `walls` 9,
@@ -1185,8 +1203,9 @@ Diseño es una pestaña más de la misma ventana; nunca otro programa.
 
 Etapas (regla 24): D1 (hecha el 2026-11-02: pestaña, panel, línea de comandos, primitivas, mandar a la placa y
 volver a editar; CD1, CD1b, CD7, CD19, CD20, CD21), D2 (hecha el 2026-11-02: bocetos en un plano, coordenadas
-tipeadas, entrada junto al cursor, referencias, ortogonal y polar, extruir y revolucionar; CD2, CD10, CD13 a CD16), D3 (restricciones, parámetros, línea de tiempo), D4 (redondeos, agujeros, roscas,
-patrones, booleanas), D5 (STEP e IGES, mallas, texto, proyecto, medidas).
+tipeadas, entrada junto al cursor, referencias, ortogonal y polar, extruir y revolucionar; CD2, CD10, CD13 a CD16), D3 (hecha el 2026-11-03: parámetros, CD4; restricciones y cotas con grados de libertad, CD3; línea de tiempo editable, regla 8, con la parte de CD6 que no necesita redondeo; arrastrar puntos del boceto resolviendo en cada cuadro), D4 (primera parte hecha el 2026-11-03: redondeo, chaflán,
+vaciado, agujeros por ISO 273, simetría, patrón circular y en fila, combinar; CD5 y CD6 completo; edición del boceto de la regla 17, CD17 y CD18,
+hecha el 2026-11-03, con perfiles de tramos y arcos sueltos; roscas y agujeros roscados, hechos el 2026-11-03; medir del boceto, regla 18, hecho el 2026-11-03; mover, partir y desmoldeo, hechos el 2026-11-03; faltan barrer y recubrir), D5 (STEP e IGES, mallas, texto, proyecto, medidas); D5b (DXF y SVG al boceto, el boceto y la vista a DXF, SolidCraft abierto como sesión: hecho el 2026-11-04).
 
 La ficha de comportamiento (`cad_design.md`) la escribe el equipo de fichas.
 
@@ -1198,6 +1217,26 @@ Ingeniería (el dueño pide «una solución de AutoCAD bastante completa» para 
 tuercas de mano, separadores, engranajes rectos y helicoidales (hechos el 2026-11-02), después cremalleras, poleas,
 insertos y bisagras; y
 roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tablas).
+
+**Ingeniería en el proyecto y pestañas de análisis** (orden del equipo de fichas, 2026-11-02;
+`engineering_panel.md` EP1 a EP10, `formats.md` regla 11 bis, FM23 a FM26):
+1. los datos de Ingeniería por pieza en el proyecto (condiciones, valores a mano, opciones): **hecho el 2026-11-03**
+   (`src/project/engineering.*`);
+2. el último resultado como archivo propio del paquete, con su huella (malla, condiciones, ajustes) para saber si
+   quedó viejo: **hecho el 2026-11-03**;
+3. `analyze` sobre el proyecto con esas condiciones (FM25), zonas por triángulos y puntos con radio en el caso:
+   **hecho el 2026-11-03** (`tisma-engine analyze proyecto.3mf -o informe.json`); falta guardar el resultado en el
+   proyecto, que lo hace la pestaña Estructural;
+4. la pestaña Estructural (marcar, lista, Analizar, mapa, veredicto) y sacar «Análisis» de Impresión 3D: empezado
+   el 2026-11-03 con los valores del panel (`src/project/engineering_values.*`: del perfil o a mano, material por
+   tipo de filamento, qué apaga Analizar) y la pestaña Estructural con la pieza, los valores, la temperatura de
+   trabajo y Analizar; marcar en la vista y la lista con deshacer (2026-11-03); fuerzas en N o kg con dirección,
+   Analizar en segundo plano con avance y Cancelar, veredicto, masa, sugerencias, mapa del factor de seguridad,
+   punto crítico, «Desactualizado» y el resultado guardado con la pieza; límites de desplazamiento y «Demasiado
+   flexible»; botón para probar cada material sugerido, con las familias de la tabla como material (2026-11-03).
+   Deformación exagerada y los mapas de von Mises y desplazamiento, hechos el 2026-11-04; la memoria y el tiempo en Más opciones y «Análisis» fuera de Impresión 3D, hechos el 2026-11-04. Arrastrar la flecha de una fuerza, hecho el 2026-11-04. La dirección de impresión (Z o cinta), hecha el 2026-11-04. Optimizar con el relleno mínimo uniforme con el relleno por zonas, con nervios y con refuerzos, y la orientación recomendada, hechos el 2026-11-04. «Calcular en la nube» con su candado por plan, hecho el 2026-11-04. Faltan:,
+   el resto de Optimizar (retícula);
+5. la pestaña Aerodinámica, con A3 (CFD).
 
 ## Avance
 

@@ -163,6 +163,85 @@ Los materiales que se ofrecen, en el catálogo y en la lista de perfiles de Fila
 
 `--catalog printer|filament` y `--catalog-search TEXTO` abren el catálogo en las capturas.
 
+## Desde la línea de comandos
+
+`tisma-engine profile --printer "<marca> <modelo>" [--nozzle <mm>] [--filament "<marca> <nombre>"] -o <ajustes.json>`
+escribe los ajustes que arma el motor con el catálogo (el perfil de la impresora para esa boquilla y, si se nombra, el
+del filamento; lo demás, los valores por defecto). Es el mismo documento que lee `slice --config`. Lo pidió la app de
+Android, para no repetir la lógica en Kotlin.
+
+- El nombre completo gana sobre los que lo contienen; si no, vale el único que tenga todas las palabras.
+- Sin `--nozzle`, la boquilla de fábrica. Sin `-o`, a la salida estándar.
+- Una impresora, filamento o boquilla que no está, o un nombre que alcanza a varios: código de salida 2 y el motivo
+  en stderr.
+
+### El paquete libre de perfiles
+
+El paquete (ficha `profile_pack.md`) vive en `<carpeta>/pack`. El motor no baja nada: quien lo llama (la interfaz, la
+app del teléfono) baja los archivos que pide el plan a una carpeta y el motor los instala desde ahí.
+
+1. `tisma-engine pack plan --data <carpeta>` da la lista de descargas en JSON (`downloads`: `url`, `name`, `size`,
+   `sha256`). Sin `--index`, solo el índice. Con `--index <index.json bajado>`, el resto: `compatible.json`,
+   `community.tar.xz`, `knowledge.tar.xz` y cada fabricante. Solo entran los fabricantes cuyo archivo cambió. Sin
+   `--vendors a,b`, los instalados, o todos si no hay ninguno. `--url` cambia la dirección de la última versión.
+2. `tisma-engine pack install --data <carpeta> --from <carpeta con lo bajado>`:
+   - compara cada archivo con el tamaño y el SHA-256 del índice;
+   - descomprime cada `.tar.xz` en memoria y revisa cada entrada antes de escribir nada;
+   - una ruta insegura, un enlace o un archivo de más de 50 MB descartan el archivo entero;
+   - lo descartado y lo que no se bajó quedan como estaban;
+   - arma el paquete nuevo al lado y lo cambia con un solo renombre;
+   - escribe líneas `progress:` en stderr y el informe en JSON (`installed`, `kept`, `discarded`, `warnings`);
+   - un índice de versión más nueva no cambia nada (código 2).
+3. `tisma-engine pack list --data <carpeta>` da los fabricantes, sus modelos y variantes, cada una con su nombre de
+   impresora `<archivo>#<variante>`.
+4. `tisma-engine pack community --data <carpeta> --printer|--filament|--resin "<fabricante>/<nombre>"` da los datos
+   publicados por la comunidad (reglas 22 a 24). Cada uno trae `key`, `value`, `unit`, `kind` (`official`, `measured`
+   o `community`), `conditions` y `source`; los de clave o tipo desconocidos se dejan afuera. Solo un dato `official`
+   puede llenar solo un ajuste vacío. Los demás necesitan que la persona confirme (PK13).
+5. `tisma-engine profile --pack <carpeta> --printer "<archivo>#<variante>" [--filament <ruta>] [--print <ruta>]`
+   escribe los ajustes de esa impresora del paquete, igual que `profile --printer`.
+   - Sin `--filament` ni `--print`, usa los de `defaults` de la variante.
+   - Un filamento que no es para esa impresora (`compatible.json`) da código 2.
+
+### El paquete en la interfaz
+
+- El catálogo de impresoras suma, bajo «Paquete libre de perfiles», los modelos del paquete instalado que coinciden con
+  la búsqueda, agrupados por fabricante. Cada modelo es una fila, con sus boquillas en una lista (PK15).
+- La ficha muestra la tecnología, la boquilla, y la licencia y el origen en una línea chica (regla 15).
+- **Agregar a mis perfiles**, con el fabricante ya bajado: arma la impresora de esa boquilla y su filamento y su perfil de
+  impresión por defecto, y los elige (reglas 9 y 13). Si el fabricante no está, el botón dice **Bajar y agregar**:
+  baja ese fabricante en segundo plano y después la agrega.
+- Los perfiles del paquete son de fábrica: no se guardan encima, como los propios del motor (regla 9).
+- Se guarda una copia de cada impresora del paquete elegida (`pack_profiles.json`, junto a la carpeta `pack`). Si una
+  actualización la quita del paquete, sigue elegida desde esa copia con el aviso «Este perfil ya no está en el
+  paquete» (regla 20).
+- Con una impresora del paquete elegida, el catálogo de filamentos suma los filamentos del paquete que sirven para ella,
+  según `compatible.json` (regla 12, PK7). Los agregados quedan en `packs.filaments`.
+- Las impresoras elegidas se guardan en las preferencias (`packs.printers`) y se vuelven a armar al abrir.
+  `packs.url` cambia de dónde se baja.
+- Al abrir, como mucho una vez por día, se busca si hay una versión publicada más nueva (regla 19). Si la hay, aparece
+  el aviso «Hay perfiles nuevos». `packs.check_updates` en falso lo apaga; `packs.checked` guarda cuándo se buscó.
+- Sin paquete instalado, el catálogo ofrece **Bajar la lista de impresoras del paquete**. Con uno, **Actualizar el
+  paquete** baja solo lo que cambió.
+- Con una impresora del paquete elegida, su página tiene la sección **Datos publicados** (reglas 23 y 24). Cada dato de
+  la comunidad aparece con su distintivo («Fabricante», «Medido» o «Sugerido»), su valor y unidad, sus condiciones y
+  el enlace a la fuente (en un video, con el minuto). **Usar este valor** cambia el ajuste: los del fabricante en el
+  momento y los demás después de una confirmación (PK13). El filamento o la resina del paquete elegidos tienen la misma
+  sección, plegada bajo su perfil en la pestaña Material.
+- Una impresora de resina del paquete (modelo con `"technology": "sla"`) queda con `machine.technology = msla`, elige
+  su primera resina (`defaults.resin`) y su perfil de impresión de resina (`defaults.resin_print`), y el catálogo le
+  ofrece solo resinas. Una resina en una impresora de filamento, o al revés, se rechaza.
+- Una impresora del paquete con `assets.bed_model` (STL) y `assets.bed_texture` (SVG) muestra en la vista 3D su cama:
+  el modelo en el color de la placa y el dibujo, con su forma, centrado en la caja de la cama y con la grilla encima
+  (regla 14). Un dibujo PNG todavía no
+  se muestra.
+- El primer arranque baja la lista del paquete solo, en segundo plano (regla 1). Sin red, aviso «Sin conexión…» y el
+  catálogo propio (regla 3). Bajo la fila de un perfil del paquete van su licencia, su origen y el enlace al
+  repositorio (regla 15).
+- `tisma --pack-url URL` baja el paquete de otra dirección (pruebas).
+- `tisma --pack CARPETA` usa otro paquete, también en las capturas. `--pick-pack-printer "<archivo>#<variante>"`
+  agrega y elige una impresora del paquete; es para las pruebas.
+
 ## Cómo se arman los datos
 
 1. **Recolección:** se buscan las páginas oficiales de cada fabricante y se anotan los números con la URL y una cita

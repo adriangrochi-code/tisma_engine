@@ -18,7 +18,7 @@ constexpr const char* kUsage =
     "             [--moire on|off] [--device PORT|sim [--device-print]] [--color VIEW]\n"
     "             [--calibration dimensions|first_layer|temperature|flow|retraction|retraction_speed|\n"
     "                            pressure_advance|speed|fit|max_flow|acceleration|elephant_foot|\n"
-    "                            resin_exposure|resin_measure|extruder]\n"
+    "                            resin_exposure|resin_measure|bridges_overhangs|extruder]\n"
     "             [--profile printer|filament|print=NAME]...\n"
     "             [--catalog printer|filament [--catalog-search TEXT]]\n"
     "             [--screenshot out.png [--size WIDTHxHEIGHT] [--view prepare|preview|design|analysis|calibration|device]\n"
@@ -55,6 +55,11 @@ constexpr const char* kUsage =
     "more than a million triangles as while the view moves: its coarse copy.\n"
     "--draw-stats prints each frame's OpenGL draw calls and the vertices they ask\n"
     "for, the 3D view's and the panels' apart.\n"
+    "--settings-layout FILE writes the settings panel as JSON (tabs, cards, groups\n"
+    "with their closed line, and each row's key, level, name, help, type, default,\n"
+    "range and value; - for the standard output) and exits without a window;\n"
+    "--settings-summary SETTINGS.json takes the values and closed lines from\n"
+    "those settings, --lang the language.\n"
     "--dump-ui writes, with --screenshot, every setting row drawn: its key,\n"
     "label, value, rectangle and whether its label is cut.\n"
     "--first-run starts as on the first run: the printer's catalog, then the\n"
@@ -89,6 +94,10 @@ int main(int argc, char** argv) {
         if (arg == "--help" || arg == "-h") {
             std::fputs(kUsage, stdout);
             return 0;
+        } else if (arg == "--settings-layout") {
+            options.settings_layout = value();
+        } else if (arg == "--settings-summary") {
+            options.settings_summary = value();
         } else if (arg == "--version") {
             std::printf("tisma %s\n", TISMA_VERSION);
             return 0;
@@ -106,8 +115,8 @@ int main(int argc, char** argv) {
         } else if (arg == "--view") {
             options.view = value();
             if (options.view != "prepare" && options.view != "preview" && options.view != "design" &&
-                options.view != "analysis" && options.view != "calibration" && options.view != "device") {
-                std::fprintf(stderr, "error: --view must be prepare, preview, design, analysis, calibration or device\n");
+                options.view != "structural" && options.view != "aerodynamics" && options.view != "analysis" && options.view != "calibration" && options.view != "device") {
+                std::fprintf(stderr, "error: --view must be prepare, preview, design, structural, analysis, calibration or device\n");
                 return 2;
             }
         } else if (arg == "--layer") {
@@ -161,6 +170,10 @@ int main(int argc, char** argv) {
             options.credits = true;
         } else if (arg == "--knowledge") {
             options.knowledge = value();
+        } else if (arg == "--pack") {
+            options.pack = value();
+        } else if (arg == "--pack-url") {
+            options.pack_url = value();
         } else if (arg == "--tutorial") {
             // ID or ID,STEP (from 1): a guided tutorial of the help's data on screen.
             const std::string t = value();
@@ -288,8 +301,14 @@ int main(int argc, char** argv) {
             options.ui_script = value();
         } else if (arg == "--solidcraft") {
             options.solidcraft = value();
+        } else if (arg == "--crash-check") {
+            options.crash_check = true;
+        } else if (arg == "--cloud-server") {
+            options.cloud_server = value();
         } else if (arg == "--pick-catalog-printer") {
             options.pick_catalog_printer = value();
+        } else if (arg == "--pick-pack-printer") {
+            options.pick_pack_printer = value();
         } else if (arg == "--no-view-check") {
             options.view_check = false;
         } else if (arg == "--compare-view") {
@@ -326,7 +345,7 @@ int main(int argc, char** argv) {
             if (c != "extruder" && !tisma::calibration_kind_from_name(c)) {
                 std::fprintf(stderr, "error: --calibration must be dimensions, first_layer, temperature, flow, retraction, "
                                      "retraction_speed, pressure_advance, speed, fit, max_flow, acceleration, "
-                                     "elephant_foot, resin_exposure, resin_measure or extruder\n");
+                                     "elephant_foot, resin_exposure, resin_measure, bridges_overhangs or extruder\n");
                 return 2;
             }
         } else if (arg == "--light") {

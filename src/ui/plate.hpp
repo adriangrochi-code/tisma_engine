@@ -1,5 +1,6 @@
 #pragma once
 
+#include "project/engineering.hpp"
 #include "config/settings.hpp"
 #include "mesh/mesh.hpp"
 #include "mesh/paint.hpp"
@@ -38,11 +39,16 @@ struct Placement {
 // scaled, turned and set on the bed with the model.
 struct PlateVolume {
     enum class Kind { Modifier, Negative } kind = Kind::Modifier;
-    enum class Shape { Box, Cylinder } shape = Shape::Box;
+    // Lattice (structural_optimization.md, rule 7): the support-free lattice
+    // of cells of side lattice_cell and bars of lattice_diameter over the
+    // part where it stands on the bed, bars vertical whatever its turn; its
+    // place and size are the part's.
+    enum class Shape { Box, Cylinder, Lattice } shape = Shape::Box;
     std::array<double, 3> offset{0.0, 0.0, 0.0}; // mm: its box's centre in X and Y, its bottom in Z
     std::array<double, 3> size{10.0, 10.0, 10.0}; // mm
     std::string settings{};
     Rotation turn = kNoRotation; // its own turn in the model's frame, about its centre
+    double lattice_cell = 0.0, lattice_diameter = 0.0; // mm, for a lattice
     friend bool operator==(const PlateVolume&, const PlateVolume&) = default;
 };
 // A height range of an object (model_tools.md, rule 6): from and to over its
@@ -76,6 +82,9 @@ struct PlateObject {
     std::string design_file{};
     std::string fastener{}; // a part of the Fasteners tab: its spec (cad::fastener_json)
     int design_id = 0;
+    // Its Engineering data (engineering_panel.md, rule 17): conditions in
+    // the frame and triangles of `mesh`.
+    ProjectEngineering engineering{};
 };
 
 // The painting of a model carried onto another mesh of the same part (a
@@ -113,6 +122,20 @@ Affine between(const Affine& from, const Affine& to);
 // along its axes; a mirror leaves it turned, not mirrored (a box and a
 // cylinder are their own mirror images).
 PlateVolume carried_volume(const PlateVolume& volume, const BoundingBox& from, const Affine& map, const BoundingBox& to);
+
+// A box modifier with these settings that volume_mesh sets down on the bed
+// as the box from `lo` to `hi` (bed axes, mm): the zones of
+// structural_optimization.md, rule 3. None when the model's map turns the
+// bed's axes into ones that are not square to each other (a turn with
+// unequal scales), where no turned box fits.
+std::optional<PlateVolume> volume_for_bed_box(const PlateObject& object, const TriangleMesh& placed,
+                                              const std::array<double, 3>& lo, const std::array<double, 3>& hi,
+                                              const std::string& settings);
+// The same with the model's map to the bed given (as placing gave it when
+// the box was found: the volume then follows the model wherever it moved).
+std::optional<PlateVolume> volume_for_bed_box(const PlateObject& object, const Affine& to_bed,
+                                              const std::array<double, 3>& lo, const std::array<double, 3>& hi,
+                                              const std::string& settings);
 
 // r turned by `degrees` about the bed's axis 0 (X), 1 (Y) or 2 (Z).
 Rotation rotated(const Rotation& r, int axis, double degrees);

@@ -450,18 +450,21 @@
      "extreme overhangs; lower, it curves more areas.\n\nExample: 45°, the default; 35 to 40° if your printer "
      "struggles with overhangs; 50 to 55° if it handles them well."},
     {"infill.nonplanar",
-     "Relleno ondulado: las líneas del relleno suben y bajan mientras avanzan, igual en todas las capas, así cada capa "
-     "se acomoda dentro de la de abajo y la unión entre capas queda inclinada. Estudios publicados midieron bastante "
-     "más resistencia en esa dirección, que es la más débil de una pieza impresa.\n\nSolo funciona con dibujos que se "
-     "repiten capa a capa (grilla, triángulos, panal); con el de líneas que giran no ondula. Tarda bastante más, "
-     "porque el eje vertical es lento, y el archivo es mucho más grande.\n\nEjemplo: prendelo con relleno en grilla "
-     "para una pieza que van a tirar hacia arriba, como un gancho colgante.",
-     "Wavy infill: the infill lines rise and fall as they go, the same in every layer, so each layer settles into the "
-     "one below and the bond between layers is slanted. Published studies measured much more strength in that "
-     "direction, which is the weakest in a printed part.\n\nIt only works with patterns that repeat layer after layer "
-     "(grid, triangles, honeycomb); with the line pattern that turns, nothing waves. It takes much longer, because the "
-     "vertical axis is slow, and the file is much larger.\n\nExample: turn it on with grid infill for a part that will "
-     "be pulled upward, like a hanging hook."},
+     "Relleno no planar: el relleno sube y baja en vez de quedar plano, así cada capa se acomoda dentro de la de abajo "
+     "y mejora la unión entre capas, que es la dirección más débil de una pieza impresa.\n\nZigzag en Z: cada línea "
+     "sube y baja como un diente de sierra, igual en todas las capas. Solo funciona con dibujos que se repiten capa a "
+     "capa (grilla, triángulos, estrellas, panal, alineado, concéntrico). Ondas entrelazadas: el relleno sube y baja "
+     "como un cartón de huevos.\n\nEl artículo del zigzag midió un 62 por ciento más de "
+     "resistencia en Z, pero en paredes de un cordón, no en relleno. Cuesta tiempo, porque el eje vertical es lento, "
+     "y el archivo es mucho más grande.\n\nEjemplo: zigzag con relleno en grilla para una pieza que van a tirar "
+     "hacia arriba, como un gancho colgante.",
+     "Nonplanar infill: the infill rises and falls instead of staying flat, so each layer settles into the one below "
+     "and the bond between layers improves, which is the weakest direction of a printed part.\n\nZigzag in Z: each "
+     "line rises and falls like a saw tooth, the same in every layer. It only works with patterns that repeat layer "
+     "after layer (grid, triangles, stars, honeycomb, aligned, concentric). Interlocking waves: the infill rises and "
+     "falls like an egg crate.\n\nThe zigzag paper measured 62 percent more strength in Z, but on "
+     "single-bead walls, not on infill. It costs time, because the vertical axis is slow, and the file is much "
+     "larger.\n\nExample: zigzag with grid infill for a part that will be pulled upward, like a hanging hook."},
     {"infill.nonplanar_amplitude",
      "Solo cuenta con el relleno ondulado prendido. Es la altura de la onda, de lo más bajo a lo más alto, en "
      "porcentaje de la altura de capa.\n\nMás alta, más encaje entre capas, pero más subida y bajada, que es lento. El "

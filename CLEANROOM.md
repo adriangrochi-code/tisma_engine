@@ -18,6 +18,9 @@ El código fuente de:
 - **la historia de `imported/` y `docs/tisma/` en este repositorio** (commits `4768a57` y `759eccd`): ahí se copió código
   de Tisma Slicer y se sacó el 24-10-2026 (decisión del dueño: todo pasa por fichas). No se lee con `git log`,
   `git show` ni de ninguna otra forma;
+- **el repositorio del servidor** (`adriangrochi-code/tisma-cloud`, decisión del dueño del 04-11-2026): guarda código
+  abierto (herramientas de escaneo 3D, también GPL) y por eso se separó del motor. Lo trabaja otra sesión. La sesión del motor no lo clona, no lo abre y no lo busca. Lo que haga
+  falta del servidor llega como ficha (por ejemplo `cloud.md`) o como prueba de caja negra contra su API;
 - ArcWelderLib, Marlin, Klipper, RepRapFirmware y cualquier otro código GPL o AGPL;
 - el slicer no planar de Ahlers et al. (una rama GPLv3 de Slic3r);
 - el código publicado junto con los artículos de laminado no planar y de varios ejes (por ejemplo S3_DeformFDM o
@@ -86,6 +89,26 @@ protocolos y datos de los fabricantes.
 
 - Cada módulo anota en `PROVENANCE.md` de dónde sale: el artículo y la sección, la especificación, o «diseño propio».
 - La historia de commits es la prueba de procedencia: no se reescribe ni se aplasta.
+
+### Excepción del dueño: el cliente de Tisma Cloud
+
+Decisión del dueño (02-11-2026): «la conexión al Tisma Cloud es código nuestro, así que podemos usarlo tranquilamente».
+Es la única excepción a «nunca como código» de la sección Fichas, y tiene este alcance:
+
+1. **Qué entra:** solo el cliente de Tisma Cloud de Tisma Slicer, los archivos `src/slic3r/Utils/TismaCloud.hpp` y
+   `src/slic3r/Utils/TismaCloud.cpp` (unas 400 líneas). Su historia de commits tiene un solo autor, la cuenta del
+   dueño; el dueño, como titular, relicencia esas líneas con la licencia del motor.
+2. **Qué no entra:**
+   - la capa HTTP que ese cliente usa, que es de PrusaSlicer (AGPL): se reemplaza por la del motor;
+   - las ventanas y diálogos de la nube de Tisma Slicer, hechos con su biblioteca de ventanas: la interfaz la dibuja el
+     motor según `cloud.md`;
+   - cualquier otro archivo de Tisma Slicer, aunque lo haya escrito el equipo del dueño.
+3. **El servidor de Tisma Cloud** no entra al motor: es un programa aparte, propietario del dueño, y el motor le habla
+   por la red (`cloud.md`).
+4. **Procedencia:** el commit que lo trae lo dice en su mensaje y `PROVENANCE.md` anota «código del dueño: cliente de
+   Tisma Cloud de Tisma Slicer, relicenciado por el dueño el 02-11-2026, sin la capa HTTP de PrusaSlicer».
+5. **Antes de copiarlo:** se revisa la historia de esos dos archivos para confirmar que el único autor sigue siendo
+   el dueño; si apareciera otro, ese archivo vuelve a pasar como ficha.
 
 ## Paso de información entre los dos equipos
 

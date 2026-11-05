@@ -101,6 +101,17 @@ CalibrationPrint first_layer_test(const Settings& settings);
 // together need. Each block carries its clearance on the front.
 CalibrationPrint fit_test(const std::vector<double>& values = {0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5});
 
+// Bridges and overhangs (docs/CALIBRATION.md): in front, a row of fins 8 mm
+// tall that lean `angles` degrees from the vertical towards +X, each on a pad
+// with its angle on the front; behind, bridges of `spans` mm between two
+// pillars 8 mm tall, each span on its left pillar. The steepest fin that
+// prints clean is the angle the supports start from (apply_calibration: a
+// face more than 90 - angle from the horizontal needs no support); the
+// bridges show how long a span prints without them. The fins are the
+// segments, by angle.
+CalibrationPrint bridges_overhangs_test(const std::vector<double>& angles = {20, 30, 40, 50, 60, 70},
+                                        const std::vector<double>& spans = {10, 20, 30, 40, 50});
+
 // The volumetric flow, mm3/s, of the fastest extrusion when every feed is at
 // `speed_percent` (the speed tower's segments): the fastest speed (capped by
 // speed.max) times the line's width and the layer's height, with the flow.
@@ -134,11 +145,14 @@ enum class CalibrationKind {
     // Resin (resin.md, rules 16 to 19): the exposure tower and the measuring block.
     ResinExposure,
     ResinMeasure,
+    // Bridges and overhangs (docs/CALIBRATION.md, «Siguientes»).
+    BridgesOverhangs,
 };
-inline constexpr int kCalibrationKinds = 14;
+inline constexpr int kCalibrationKinds = 15;
 // "dimensions", "temperature", "retraction", "flow", "speed",
 // "retraction_speed", "pressure_advance", "first_layer", "fit", "max_flow",
-// "acceleration", "elephant_foot", "resin_exposure", "resin_measure".
+// "acceleration", "elephant_foot", "resin_exposure", "resin_measure",
+// "bridges_overhangs".
 const char* calibration_kind_name(CalibrationKind kind);
 std::optional<CalibrationKind> calibration_kind_from_name(std::string_view name);
 // Whether the kind is a tower of segments, each trying a value from a range.
@@ -150,6 +164,11 @@ bool is_resin_calibration(CalibrationKind kind);
 // over the base; `segment` is the band's height.
 CalibrationPrint resin_exposure_tower(double start, double end, double step, double segment = 2.0);
 CalibrationPrint automatic_calibration(CalibrationKind kind, const Settings& settings);
+// The settings a test prints with, from the ones in use: the resin tests on
+// the platform, without supports, pad or hollowing (calibration_models.md,
+// "Resina"); the bridges and overhangs test without supports or arcs in
+// overhangs, with nothing under them.
+Settings calibration_print_settings(CalibrationKind kind, Settings settings);
 // A tower of its kind with this range (the ranges an interface lets the user
 // change); empty for kinds that are not towers.
 CalibrationPrint calibration_tower(CalibrationKind kind, double start, double end, double step, double segment);

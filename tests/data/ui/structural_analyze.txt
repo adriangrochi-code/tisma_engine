@@ -1,0 +1,112 @@
+# Analizar in Structural (engineering_panel.md, rules 6, 9, 11, 12 and 14;
+# EP4, EP7): the cube held by its top face and pushed down on it (10 N, the
+# default, along the face's normal, into the part). Analizar runs in the
+# background and gives the verdict, the map and the critical point; the
+# force in kg keeps its newtons; changing the force leaves the result out of
+# date, and the map goes.
+menu mode_engineering
+expect-control tab_structural
+menu tab_structural
+expect-control structural_tool_fixed_zone
+menu structural_tool_fixed_zone
+click-model
+menu structural_tool_force_point
+click-model
+expect-structural none
+key escape
+expect-control structural_force_unit_1
+menu structural_force_unit_1
+expect-control structural_force_direction_1
+menu structural_analyze
+expect-structural-verdict holds
+expect-control structural_verdict
+expect-control structural_show_map
+# The adhesion it was given and the safety factor's likely range (the
+# owner's request, 2026-11-03).
+expect-text Adherencia a
+expect-text Rango probable
+# Rule 12: the map of von Mises or of the displacement, with its scale, and
+# the deformed shape with how much it is exaggerated.
+expect-control structural_map_kind_1
+menu structural_map_kind_1
+expect-text MPa
+menu structural_map_kind_2
+expect-text mm
+expect-control structural_deformed
+menu structural_deformed
+expect-control structural_exaggerate
+menu structural_map_kind_0
+expect-text Rojo: menos de 1
+# Optimizar (rule 13; structural_optimization.md, rule 2): the search for
+# the lowest uniform infill starts in the background and Cancelar stops it
+# (the search itself, several analyses, is tested in the engine).
+menu structural_deformed
+menu structural_optimize
+expect-control structural_lightest_infill
+menu structural_lightest_infill
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_lightest_infill
+# By zones (rule 3): the same job, started and cancelled the same way.
+expect-control structural_zoned_infill
+menu structural_zoned_infill
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_zoned_infill
+# With ribs (rule 4): the same.
+menu structural_ribs
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_ribs
+# With reinforcements (rule 6): the same.
+menu structural_reinforce
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_reinforce
+# The orientation (rule 8): the same.
+menu structural_orientation
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_orientation
+# The lattice (rule 7): the same.
+menu structural_lattice
+expect-control structural_optimize_cancel
+menu structural_optimize_cancel
+expect-optimize cancelled
+expect-control structural_lattice
+# UI51: the recommended orientation run to the end turns the part, and
+# Ctrl+Z in Structural turns it back (not the conditions).
+menu structural_orientation
+expect-optimize orientation
+expect-control structural_orientation_apply
+menu structural_orientation_apply
+wait 10
+expect-place turn_x 89..91
+key ctrl+z
+wait 10
+expect-place turn_x -1..1
+expect-control structural_lattice
+menu structural_force_unit_1
+wait 20
+expect-no-control structural_show_map
+expect-structural-verdict holds
+# EP8: saved with its conditions and last result, then opened again: the
+# same verdict, still up to date (its map is drawn again on Analizar).
+menu structural_force_unit_1
+wait 20
+expect-control structural_show_map
+save-project structural_ep8.3mf
+open-project structural_ep8.3mf
+wait 30
+menu mode_engineering
+expect-control tab_structural
+menu tab_structural
+expect-control structural_verdict
+expect-no-text Desactualizado: analizá de nuevo
+expect-structural-verdict holds
+expect-control structural_condition_remove_1

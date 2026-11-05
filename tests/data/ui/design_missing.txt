@@ -4,6 +4,10 @@ menu mode_engineering
 menu tab_design
 expect-control design_missing
 expect-control design_needs_solid
+# One line, in the chosen language: no component's English and no untitled
+# design's name under the title (the spec team's TR22).
+expect-no-text the design component is not here
+expect-no-text Design
 menu mode_print
 expect-control tab_prepare
 slice

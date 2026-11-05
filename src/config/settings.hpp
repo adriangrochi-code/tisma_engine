@@ -19,6 +19,9 @@ public:
 
 enum class FillMode { Union, EvenOdd, FillHoles };
 enum class GpuMode { Auto, Off };
+// The pattern of the top surface and of the bottom one (surfaces.top_pattern,
+// surfaces.bottom_pattern; infill_patterns.md, rules 14 to 17).
+enum class SurfacePattern { Monotonic, Rectilinear, MonotonicLines, AlignedRectilinear, Concentric, Hilbert, Archimedean, Octagram };
 enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram };
 // The firmware the G-code is for. Past Marlin, Klipper and RepRap, the old
 // dialects of gcode_extras.md (rule 6): Repetier and Smoothie as RepRap, and
@@ -63,6 +66,10 @@ enum class SlowdownLogic { Uniform, ConsistentSurface };
 enum class WallGenerator { Variable, Fixed };
 // How the G-code names each object (gcode_firmware.md, rule 4).
 enum class ObjectLabels { None, OctoPrint, Firmware };
+// A firmware that reads the whole file before printing and refuses what it
+// does not know (gcode_firmware.md, rule 7): the G-code is laid out as its
+// maker's own program writes it.
+enum class StrictParser { None, Anycubic };
 // Where a top surface keeps only its outer wall (walls_extra.md, rule 10).
 enum class TopOneWall { None, Top, Topmost };
 
@@ -258,8 +265,10 @@ struct Settings {
     int bottom_layers = 3;   // solid layers over each bottom surface
     double top_min_thickness = 0.0;    // mm: more top solid layers until they add up to this (0: off)
     double bottom_min_thickness = 0.0; // mm: likewise over the bottom surfaces
-    bool monotonic_top = true; // top surfaces: monotonic lines (true) or zig-zags (false)
-    bool monotonic_bottom = true; // bottom surfaces too (surfaces.bottom_pattern, surfaces_infill.md)
+    // The top surface's pattern, and the bottom one's (surfaces_infill.md;
+    // infill_patterns.md, rules 14 to 17).
+    SurfacePattern top_pattern = SurfacePattern::Monotonic;
+    SurfacePattern bottom_pattern = SurfacePattern::Monotonic;
     double bridge_angle = 0.0;    // degrees, the bridges' lines (surfaces.bridge_angle); 0: by the bridge
     // Line widths of their own, mm; 0: from the nozzle, not the walls
     // (surfaces_infill.md, I9).
@@ -819,6 +828,9 @@ struct Settings {
     ObjectLabels object_labels = ObjectLabels::None;
     // The binary G-code format (gcode_extras.md, rule 9; src/gcode/binary.hpp).
     bool gcode_binary = false;
+    // The printer's firmware reads the whole file first (gcode_firmware.md,
+    // rule 7): then the G-code is never binary (binary_output).
+    StrictParser strict_parser = StrictParser::None;
     // The temperatures the start G-code does not set itself, written round it
     // (gcode_templates.md, rule 10; gcode_firmware.md, rule 1).
     bool auto_temperatures = true;
@@ -883,6 +895,7 @@ std::string settings_json(const Settings& settings);
 
 // The name of an infill pattern in the settings ("rectilinear", "grid"...).
 const char* infill_pattern_name(InfillPattern pattern);
+const char* surface_pattern_name(SurfacePattern pattern);
 
 // The name of a flavor in the settings ("marlin", "no_extrusion"...).
 const char* flavor_name(GcodeFlavor flavor);
@@ -894,6 +907,10 @@ const char* limits_usage_name(LimitsUsage usage);
 const char* draft_shield_name(DraftShield shield);
 const char* top_one_wall_name(TopOneWall where);
 const char* object_labels_name(ObjectLabels labels);
+const char* strict_parser_name(StrictParser parser);
+// Whether the G-code goes out binary: gcode.binary, unless the printer's
+// firmware reads only plain G-code (machine.strict_parser).
+inline bool binary_output(const Settings& s) { return s.gcode_binary && s.strict_parser == StrictParser::None; }
 const char* brim_type_name(BrimType type);
 
 // The machine's limits by name, as machine.silent names them: max_feed_x to

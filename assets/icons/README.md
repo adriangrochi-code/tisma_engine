@@ -35,3 +35,4 @@ of `assets/brand/icons/`: 24×24, one gray (`#808080`) that the interface recolo
 | `section_limits` | Printer, Limits (a gauge at its end) |
 | `section_gcode` | Printer, G-code (code brackets) |
 | `help` | The help panel (a question mark in a circle, 2026-10-27) |
+| `account` | The Tisma Cloud chip of the top bar (a person, 2026-11-02) |

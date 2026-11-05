@@ -1,0 +1,8 @@
+# A pack resin printer: its default resin and resin print profile, and the
+# resin's «Datos publicados» (profile_pack.md, rules 13 and 23): the maker's
+# exposure used.
+wait 4
+expect resin.exposure 3.5
+expect resin.layer_height 0.03
+use-published-material 0
+expect resin.exposure 2.2

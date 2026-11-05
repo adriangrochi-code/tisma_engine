@@ -1,0 +1,17 @@
+# BH27 (profile_pack.md): a pack print profile's speeds come with it. Picking
+# another one brings its speeds, but a speed changed by hand stays, with a
+# notice.
+wait 4
+expect speed.walls 170
+expect speed.travel 300
+choose-profile print Acme Fine
+expect speed.walls 60
+expect speed.travel 200
+expect layers.height 0.1
+set speed.travel 250
+choose-profile print Acme Standard
+expect speed.walls 170
+expect speed.travel 250
+expect-toast Se mantuvieron tus cambios
+wait 2
+expect-text Licencia AGPL-3.0-or-later · origen Invented

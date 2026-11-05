@@ -114,6 +114,11 @@ void parse_line(std::string_view raw, ParsedLine& out, std::vector<Parameter>& p
     out.first = std::uint32_t(parameters.size());
     for (std::size_t k = 1; k < count; ++k) {
         const std::string_view w = words[k];
+        // M73's minutes left in the quiet and sport modes, as the Anycubic
+        // Kobra files write them (gcode_firmware.md, rule 7).
+        if (out.kind == 'M' && out.code == 73 &&
+            ((w.starts_with("QuietR") && number(w.substr(6))) || (w.starts_with("SportR") && number(w.substr(6)))))
+            continue;
         const char letter = w.front();
         const std::optional<double> v = letter >= 'A' && letter <= 'Z' ? number(w.substr(1)) : std::nullopt;
         if (!v) {
@@ -255,6 +260,15 @@ private:
         if (!p.readable) {
             if (!custom_)
                 problem("unreadable command '" + std::string(p.head) + "'");
+            else if (kind != 'G' && kind != 'M' && kind != 'T')
+                // A printer macro (START_PRINT...) may heat a nozzle set to 0
+                // before it (rule 18 bis): extruding then is only a note.
+                for (std::size_t k = 0; k < cold_.size(); ++k)
+                    if (cold_[k]) {
+                        if (macro_heats_.size() <= k)
+                            macro_heats_.resize(k + 1, false);
+                        macro_heats_[k] = true;
+                    }
             return; // the user's own G-code may hold anything
         }
         if (!p.unreadable.empty()) {
@@ -302,6 +316,8 @@ private:
                 if (cold_.size() <= k)
                     cold_.resize(k + 1, false);
                 cold_[k] = *s < 1.0;
+                if (k < macro_heats_.size())
+                    macro_heats_[k] = false; // set again after the macro: it holds
             }
         }
         else if (kind == 'M' && n == 106 && !custom_) {
@@ -458,9 +474,15 @@ private:
             out_.stats.filament += de;
             if (retracted_ > 1e-9)
                 problem("extrudes while the filament is retracted");
-            if (tool_ < cold_.size() && cold_[tool_] && !cold_told_) {
-                problem("extrudes with the nozzle's heater set to 0");
-                cold_told_ = true;
+            if (tool_ < cold_.size() && cold_[tool_]) {
+                if (tool_ < macro_heats_.size() && macro_heats_[tool_]) {
+                    if (!cold_noted_)
+                        out_.notes.push_back({line_, "extrudes with the nozzle's heater set to 0 (a printer macro may heat it)"});
+                    cold_noted_ = true;
+                } else if (!cold_told_) {
+                    problem("extrudes with the nozzle's heater set to 0");
+                    cold_told_ = true;
+                }
             }
             // The wipe tower down under the layer (rule 11): anywhere from the
             // bed up to the layer, as thick as the layer.
@@ -614,6 +636,8 @@ private:
     std::size_t tool_ = 0;        // the extruder printing, from 0
     std::vector<bool> cold_;      // each extruder's heater set to 0 (M104 or M109 S0)
     bool cold_told_ = false;      // that problem said once
+    bool cold_noted_ = false;     // and that note
+    std::vector<bool> macro_heats_; // set to 0 before a printer macro, which may heat it: only a note
     std::vector<double> pulled_;  // each extruder's filament pulled back when it left
     bool tool_back_ = false;      // the tool came back from a change: its own extra
     bool tower_ = false;          // in the wipe tower's lines
@@ -680,7 +704,13 @@ GcodeLimits gcode_limits(const SlicedModel& model, const Settings& given) {
     // Heights count from the part's bottom, which rests on the bed (write_gcode).
     // A ramping lift climbs to travel.max_lift (retraction_travel.md, rule 5).
     const double lift = s.ramping_lift && s.travel_slope > 0.0 && s.max_lift > 0.0 ? s.max_lift : s.retract_lift;
-    limits.max_z = (model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom) + lift;
+    // The highest layer, not the last: with objects one after another
+    // (sequential.md) each has its own stack, and with other nozzles
+    // (multimaterial.md) a copy's layers can end higher than the last one's.
+    double highest = 0.0;
+    for (const Layer& layer : model.layers)
+        highest = std::max(highest, layer.top);
+    limits.max_z = (model.layers.empty() ? 0.0 : highest - model.layers.front().bottom) + lift;
     // machine.z_offset moves every Z (gcode_extras.md, rule 5), below the bed too.
     limits.max_z += std::max(0.0, s.z_offset);
     limits.min_z = std::min(0.0, s.z_offset);

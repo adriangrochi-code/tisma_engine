@@ -75,6 +75,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 | Solape del relleno con las paredes | `surfaces_infill.md` | ✔ |
 | Relleno denso bajo las superficies de arriba (Tisma) | `dense_infill.md` | ✔ |
 | Relleno ondulado entrelazado (Tisma) | `interlock_infill.md` | ✔ |
+| Relleno en zigzag en Z (propio del motor, ZigZagZ) | `zigzag_infill.md` | ✔ |
 | Planchado: arriba, solo la de más arriba o todas las sólidas; flujo, separación, velocidad | `ironing.md` | ✔ |
 | Proporción de flujo de los puentes | `speeds_accels.md` | ✔ |
 
@@ -292,7 +293,7 @@ Los nombres son descripciones, no los nombres internos de Tisma Slicer.
 
 | Función | Ficha | Estado |
 |---|---|---|
-| Análisis estructural, optimización, aerodinámica | `structural_analysis.md`, `structural_optimization.md`, `aerodynamics.md` | ✔ |
+| Análisis estructural, optimización, aerodinámica | `structural_analysis.md`, `structural_optimization.md`, `aerodynamics.md`, `engineering_panel.md` | ✔ |
 | Capas no planares y sus modos | `nonplanar.md`, `nonplanar_modes.md` | ✔ |
 | Calibraciones y sus piezas | `calibrations.md`, `calibration_models.md` | ✔ |
 | Revisión antes de imprimir y estabilidad | `print_review.md`, `stability.md` | ✔ |

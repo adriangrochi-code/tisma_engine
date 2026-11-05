@@ -419,12 +419,14 @@
     {"surfaces.bottom_pattern",
      "Es el dibujo de las superficies de abajo, las que quedan mirando hacia la cama, como la base de la pieza. "
      "Monótono (de fábrica): líneas sueltas, todas en el mismo sentido y en orden, sin volver sobre lo ya hecho. "
-     "Zigzag: una línea que va y vuelve sin cortarse.\n\nEl monótono deja una superficie más pareja, sin cambios de "
+     "Zigzag: una línea que va y vuelve sin cortarse. Los demás (alineado, concéntrico, Hilbert, espiral, octograma) "
+     "cambian solo la capa que toca la cama.\n\nEl monótono deja una superficie más pareja, sin cambios de "
      "brillo; el zigzag hace menos cortes y viajes, y suele ser algo más rápido.\n\nEjemplo: monótono si la base de la "
      "pieza se va a ver; zigzag para una pieza que va a quedar apoyada.",
      "It is the pattern of the bottom surfaces, the ones facing the bed, like the base of the part. Monotonic (the "
      "default): separate lines, all in the same direction and in order, never going back over finished work. Zigzag: "
-     "one line going back and forth without breaking.\n\nMonotonic leaves a more even surface, with no changes in "
+     "one line going back and forth without breaking. The others (aligned, concentric, Hilbert, spiral, octagram) "
+     "change only the layer that touches the bed.\n\nMonotonic leaves a more even surface, with no changes in "
      "shine; zigzag makes fewer breaks and travel moves, and is usually a little faster.\n\nExample: monotonic if the "
      "bottom of the part will be seen; zigzag for a part that will sit on it."},
     {"surfaces.bridge_angle",

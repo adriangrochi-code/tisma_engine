@@ -20,6 +20,10 @@ struct SettingDoc {
 // "| `a`, `b` |"). Marks are taken out of the text (see plain_text).
 std::map<std::string, SettingDoc> parse_setting_docs(std::string_view markdown);
 
+// A setting's meaning without the parentheses that only point at a document
+// of the repository ("(docs/INFILL.md)").
+std::string without_doc_references(const std::string& text);
+
 // Markdown's inline marks taken out: `code` and **bold** keep their text,
 // [text](link) keeps the text.
 std::string plain_text(std::string_view markdown);

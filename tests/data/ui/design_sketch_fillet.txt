@@ -1,0 +1,42 @@
+# A sketch corner rounded (cad_design.md, rule 17) stays a region (rule 6):
+# a 20 x 10 rectangle with both top corners rounded 5 mm, extruded 20 mm:
+# (200 - 2 x 25 (1 - pi/4)) x 20 = 3785.4 mm3. Two arcs and the two pieces
+# of the outline between them. Measured (rule 18) before: the region's area
+# and a distance, nothing added to the sketch.
+menu mode_engineering
+menu tab_design
+menu design_sketch
+menu design_plane_xy
+expect-control sketch_edit_fillet
+menu design_command
+type REC
+key enter
+type 0,0
+key enter
+type 20,10
+key enter
+expect-sketch-entities 1
+type F
+key enter
+type 5
+key enter
+sketch-point 20 10
+sketch-point 0 10
+expect-sketch-entities 4
+type AREA
+key enter
+sketch-point 10 5
+expect-command-message Área 189,27 mm²
+type DI
+key enter
+type 0,0
+key enter
+type 3,4
+key enter
+expect-command-message Distancia 5 mm
+expect-sketch-entities 4
+key escape
+type E
+key enter
+key enter
+expect-design 3785.4

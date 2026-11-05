@@ -94,7 +94,7 @@ TEST_CASE("printer card: the nozzles of a catalog printer (rule 21)", "[ui][prin
 TEST_CASE("printer card: the calibrations a printer has made (rule 38, SP29, SP30)", "[ui][printer]") {
     Settings s;
     const std::vector<CalibrationKind> fdm = printer_calibrations(s);
-    CHECK(fdm.size() == 12);
+    CHECK(fdm.size() == 13); // with bridges and overhangs
     CHECK(fdm.front() == CalibrationKind::Dimensions);
     CHECK(std::none_of(fdm.begin(), fdm.end(), [](CalibrationKind k) { return is_resin_calibration(k); }));
     s.machine_technology = MachineTechnology::Msla;

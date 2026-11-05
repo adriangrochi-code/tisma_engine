@@ -92,6 +92,7 @@ struct Component {
 };
 
 struct Object {
+    std::string name;
     bool printed = true; // type model or solidsupport
     std::vector<Vec3f> vertices;
     std::vector<std::array<std::uint32_t, 3>> triangles;
@@ -156,6 +157,7 @@ ModelPart parse_model_part(std::string_view text) {
         } else if (name == "object") {
             const std::uint32_t id = parse_index(need("id"), xml, "object id");
             object = &part.objects[id];
+            object->name = XmlReader::decode(xml.attribute("name").value_or(""));
             const std::string_view type = xml.attribute("type").value_or("model");
             object->printed = type == "model" || type == "solidsupport";
         } else if (name == "component" && object) {
@@ -344,6 +346,125 @@ ModelFile parse_3mf(std::string_view data) {
     if (out.mesh.empty())
         throw ModelError("3MF: nothing on the build plate to print");
     return out;
+}
+
+std::vector<ThreeMfItem> read_3mf_items(std::string_view data, std::optional<std::string>* extra, std::string_view extra_name,
+                                        bool own_frame) {
+    std::vector<ThreeMfItem> items;
+    try {
+        Package package(data);
+        if (extra)
+            *extra = package.read(extra_name);
+        const std::string root = package.root();
+        const ModelPart& model = package.part(root);
+        const std::map<std::uint32_t, std::vector<Volume>> no_volumes;
+        for (const Item& item : model.build) {
+            if (!item.printable)
+                continue;
+            ModelFile one;
+            Builder builder{package, no_volumes, root, model.scale, one};
+            const std::string path = item.what.path.empty() ? root : item.what.path;
+            const Transform& t = item.what.transform;
+            builder.emit(path, item.what.id, own_frame ? kIdentity : t, 0);
+            const ModelPart& part = package.part(path);
+            const auto found = part.objects.find(item.what.id);
+            ThreeMfItem out{found != part.objects.end() ? found->second.name : std::string(), std::move(one.mesh)};
+            if (own_frame) {
+                // 3MF's row vector times the matrix: bed x = x t0 + y t3 + z t6 + t9.
+                for (std::size_t r = 0; r < 3; ++r) {
+                    for (std::size_t c = 0; c < 3; ++c)
+                        out.turn[3 * r + c] = t[3 * c + r];
+                    out.offset[r] = t[9 + r] * model.scale;
+                }
+            }
+            items.push_back(std::move(out));
+        }
+    } catch (const ZipError& e) {
+        throw ModelError(std::string("3MF: ") + e.what());
+    } catch (const XmlError& e) {
+        throw ModelError(std::string("3MF: ") + e.what());
+    }
+    return items;
+}
+
+namespace {
+
+std::string xml_escaped(std::string_view text) {
+    std::string out;
+    for (const char c : text)
+        out += c == '&' ? "&amp;" : c == '<' ? "&lt;" : c == '>' ? "&gt;" : c == '"' ? "&quot;" : std::string(1, c);
+    return out;
+}
+
+// An object's <mesh>: the corners welded by their exact coordinates, each
+// written with the digits that give the same float back.
+void append_mesh(std::string& model, const TriangleMesh& mesh) {
+    std::vector<Vec3f> vertices;
+    std::vector<std::size_t> index(mesh.corners().size());
+    std::map<std::tuple<float, float, float>, std::size_t> seen;
+    for (std::size_t i = 0; i < mesh.corners().size(); ++i) {
+        const Vec3f& v = mesh.corners()[i];
+        const auto [it, added] = seen.emplace(std::make_tuple(v.x, v.y, v.z), vertices.size());
+        if (added)
+            vertices.push_back(v);
+        index[i] = it->second;
+    }
+    model += "   <mesh>\n    <vertices>\n";
+    char line[160];
+    for (const Vec3f& v : vertices) {
+        std::snprintf(line, sizeof line, "     <vertex x=\"%.9g\" y=\"%.9g\" z=\"%.9g\"/>\n", double(v.x), double(v.y), double(v.z));
+        model += line;
+    }
+    model += "    </vertices>\n    <triangles>\n";
+    for (std::size_t i = 0; i + 2 < index.size(); i += 3) {
+        std::snprintf(line, sizeof line, "     <triangle v1=\"%zu\" v2=\"%zu\" v3=\"%zu\"/>\n", index[i], index[i + 1], index[i + 2]);
+        model += line;
+    }
+    model += "    </triangles>\n   </mesh>\n";
+}
+
+} // namespace
+
+std::string write_3mf_objects(const std::vector<ThreeMfObject>& objects, std::vector<ZipEntryToWrite> extra) {
+    std::string model = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                        "<model unit=\"millimeter\" xml:lang=\"en-US\" "
+                        "xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\">\n"
+                        " <metadata name=\"Application\">Tisma</metadata>\n <resources>\n";
+    for (std::size_t i = 0; i < objects.size(); ++i) {
+        model += "  <object id=\"" + std::to_string(i + 1) + "\" type=\"model\" name=\"" + xml_escaped(objects[i].name) + "\">\n";
+        append_mesh(model, *objects[i].mesh);
+        model += "  </object>\n";
+    }
+    model += " </resources>\n <build>\n";
+    char line[512];
+    for (std::size_t i = 0; i < objects.size(); ++i) {
+        const auto& o = objects[i].offset;
+        const auto& a = objects[i].turn; // by rows; 3MF wants its transpose (row vectors)
+        if (o == std::array<double, 3>{0.0, 0.0, 0.0} && a == std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1})
+            std::snprintf(line, sizeof line, "  <item objectid=\"%zu\"/>\n", i + 1);
+        else
+            std::snprintf(line, sizeof line,
+                          "  <item objectid=\"%zu\" transform=\"%.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g "
+                          "%.9g %.9g %.9g\"/>\n",
+                          i + 1, a[0], a[3], a[6], a[1], a[4], a[7], a[2], a[5], a[8], o[0], o[1], o[2]);
+        model += line;
+    }
+    model += " </build>\n</model>\n";
+    std::string types = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                        "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">\n"
+                        " <Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>\n"
+                        " <Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/>\n"
+                        " <Default Extension=\"json\" ContentType=\"application/json\"/>\n"
+                        "</Types>\n";
+    const std::string rels = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                             "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\n"
+                             " <Relationship Target=\"/3D/3dmodel.model\" Id=\"rel0\" "
+                             "Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/>\n"
+                             "</Relationships>\n";
+    std::vector<ZipEntryToWrite> entries{{"[Content_Types].xml", std::move(types)}, {"_rels/.rels", rels}, {"3D/3dmodel.model", std::move(model)}};
+    for (ZipEntryToWrite& e : extra)
+        entries.push_back(std::move(e));
+    return write_zip_stored(entries);
 }
 
 std::string write_3mf(const TriangleMesh& mesh, std::string_view name) {

@@ -1,0 +1,6 @@
+# A pack printer the pack no longer has stays chosen from its kept copy, with
+# a notice (profile_pack.md, rule 20). The test pack is a copy: its model file
+# is taken out.
+wait 4
+pack-remove vendors/acme/models/A1.json
+expect-toast ya no está en el paquete

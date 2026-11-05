@@ -2,11 +2,13 @@
 
 #include "fea/material.hpp"
 #include "fea/voxels.hpp"
+#include "fea/zone.hpp"
 
 #include <array>
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -21,8 +23,18 @@ struct Material {
 struct Box {
     double min[3] = {-1e300, -1e300, -1e300};
     double max[3] = {1e300, 1e300, 1e300};
+    // A part of the surface marked on the model (formats.md, rule 11 bis):
+    // only what is in the box and near it.
+    std::shared_ptr<const SurfaceZone> zone;
     bool contains(double x, double y, double z) const {
-        return x >= min[0] && x <= max[0] && y >= min[1] && y <= max[1] && z >= min[2] && z <= max[2];
+        return x >= min[0] && x <= max[0] && y >= min[1] && y <= max[1] && z >= min[2] && z <= max[2] &&
+               (!zone || zone->near(x, y, z));
+    }
+    // A boundary face of the voxels, its centre and outward normal: in the
+    // box, and facing as the marked surface near it does.
+    bool contains_face(double x, double y, double z, const std::array<double, 3>& normal) const {
+        return x >= min[0] && x <= max[0] && y >= min[1] && y <= max[1] && z >= min[2] && z <= max[2] &&
+               (!zone || zone->near_facing(x, y, z, normal));
     }
 };
 
@@ -108,6 +120,10 @@ struct AsPrintedResult {
     // voxel's own without a window); +infinity for empty or unstressed voxels.
     std::vector<double> safety;
     std::vector<FailureMode> mode; // per voxel: what gives way first at that safety factor
+    // Per voxel, the averaged stress in the layer's plane, global axes: σxx,
+    // σyy and τxy, MPa (0 for empty voxels): where the infill's lines should
+    // run (structural_optimization.md, rule 4).
+    std::vector<std::array<float, 3>> layer_stress;
     double min_safety = std::numeric_limits<double>::infinity();
     std::size_t weakest = 0; // the voxel with min_safety
     // From each voxel's own stress. Where linear elasticity has no finite

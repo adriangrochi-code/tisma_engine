@@ -172,6 +172,22 @@ TEST_CASE("G-code check: every kind of damage is caught", "[gcode][check]") {
         INFO(problems_of(c));
         CHECK(c.ok());
     }
+    {
+        // After a printer macro (START_PRINT) the printer may heat the nozzle
+        // itself: a note, not a failure (profile_pack.md, rule 18 bis, BH31).
+        Settings m = s;
+        m.start_gcode = "M140 S0\nM104 S0\nSTART_PRINT EXTRUDER_TEMP=215\nG28";
+        const Output macro = slice_and_write(cube(), m);
+        const GcodeCheck c = check_gcode(macro.gcode, macro.limits);
+        INFO(problems_of(c));
+        CHECK(c.ok());
+        REQUIRE(c.notes.size() == 1);
+        CHECK_THAT(c.notes[0].message, ContainsSubstring("heater set to 0"));
+        // Set to 0 after the macro, it is a problem again.
+        std::string g = macro.gcode;
+        g.insert(g.find(";LAYER_CHANGE\n;Z:1.000"), "M104 S0\n");
+        CHECK_THAT(problems_of(check_gcode(g, macro.limits)), ContainsSubstring("heater set to 0"));
+    }
 }
 
 TEST_CASE("G-code check: read in chunks, each problem on its own line", "[gcode][check]") {
@@ -410,4 +426,16 @@ TEST_CASE("G-code check: a part below or above z = 0 prints from the bed up", "[
         // The same G-code as the part on the bed, height changes included.
         CHECK(o.gcode == on_bed.gcode);
     }
+}
+
+TEST_CASE("check limits: the highest layer, not the last (fuzz seed 20261104, run 1308)", "[gcode][check]") {
+    // Copies one after another, the middle one with other layers (another
+    // nozzle): its top is above the last copy's.
+    SlicedModel model;
+    model.layers = {{0.0, 0.2}, {0.2, 5.875}, {0.0, 0.2}, {0.2, 5.938}, {0.0, 0.2}, {0.2, 5.875}};
+    Settings s;
+    s.retract_lift = 0.15;
+    s.ramping_lift = false;
+    const GcodeLimits limits = gcode_limits(model, s);
+    CHECK(limits.max_z >= 5.938 + 0.15 - 1e-9);
 }
