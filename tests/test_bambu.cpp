@@ -15,6 +15,9 @@
 #include <nlohmann/json.hpp>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
@@ -119,7 +122,7 @@ TEST_CASE("SSDP: a printer's announcement read, and heard on a UDP port", "[bamb
     to.sin_port = htons(kPort);
     to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     for (int i = 0; i < 2; ++i)
-        sendto(s, notify.data(), int(notify.size()), 0, reinterpret_cast<sockaddr*>(&to), sizeof to);
+        sendto(s, notify.data(), int(notify.size()), 0, reinterpret_cast<sockaddr*>(&to), int(sizeof to));
 #ifdef _WIN32
     closesocket(s);
 #else

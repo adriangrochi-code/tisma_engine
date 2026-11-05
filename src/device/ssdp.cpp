@@ -4,6 +4,9 @@
 #include "device/ssdp.hpp"
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
@@ -108,16 +111,16 @@ SsdpListen ssdp_listen(int ms, const std::vector<int>& ports) {
         address.sin_addr.s_addr = htonl(INADDR_ANY);
         // Not shared on purpose: a port another program holds is reported
         // (rule 5), not stolen.
-        if (bind(s, reinterpret_cast<sockaddr*>(&address), sizeof address) != 0) {
+        if (bind(s, reinterpret_cast<sockaddr*>(&address), int(sizeof address)) != 0) {
             out.busy_ports.push_back(port);
             close_socket(s);
             continue;
         }
         // The SSDP multicast group too (UPnP 1.1, section 1.1.2).
         ip_mreq group{};
-        group.imr_multiaddr.s_addr = inet_addr("239.255.255.250");
+        inet_pton(AF_INET, "239.255.255.250", &group.imr_multiaddr);
         group.imr_interface.s_addr = htonl(INADDR_ANY);
-        setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, reinterpret_cast<const char*>(&group), sizeof group);
+        setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, reinterpret_cast<const char*>(&group), int(sizeof group));
         sockets.push_back(s);
     }
     const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
@@ -140,8 +143,8 @@ SsdpListen ssdp_listen(int ms, const std::vector<int>& ports) {
                 continue;
             char buffer[2048];
             sockaddr_in from{};
-            socklen_t length = sizeof from;
-            const auto n = recvfrom(s, buffer, sizeof buffer, 0, reinterpret_cast<sockaddr*>(&from), &length);
+            socklen_t length = socklen_t(sizeof from);
+            const auto n = recvfrom(s, buffer, int(sizeof buffer), 0, reinterpret_cast<sockaddr*>(&from), &length);
             if (n <= 0)
                 continue;
             char ip[INET_ADDRSTRLEN] = {};

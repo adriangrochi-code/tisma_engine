@@ -17,6 +17,9 @@
 #include <psa/crypto.h>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #else
@@ -310,7 +313,7 @@ TlsListener::TlsListener(const std::string& cn) : impl_(std::make_unique<Impl>()
     if (const int r = mbedtls_net_bind(&m.listen, "127.0.0.1", "0", MBEDTLS_NET_PROTO_TCP))
         throw TlsError(why("TLS listen", r));
     sockaddr_in address{};
-    socklen_t length = sizeof address;
+    socklen_t length = socklen_t(sizeof address);
 #ifdef _WIN32
     if (getsockname(static_cast<SOCKET>(m.listen.fd), reinterpret_cast<sockaddr*>(&address), &length) != 0)
 #else

@@ -26,7 +26,7 @@ std::string packet(int type, int flags, const std::string& body) {
     out += char((type << 4) | (flags & 0x0F));
     std::size_t n = body.size();
     do {
-        unsigned char byte = n % 128;
+        unsigned char byte = static_cast<unsigned char>(n % 128);
         n /= 128;
         if (n > 0)
             byte |= 0x80;
