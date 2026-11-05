@@ -375,4 +375,19 @@ TEST_CASE("mDNS: the question and an OctoPrint answer (RFC 6762, RFC 6763, RFC 1
     std::vector<std::uint8_t> loop = {0, 0, 0x84, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0xC0, 12};
     CHECK(parse_mdns(loop, "_octoprint._tcp.local").empty());
     CHECK(parse_mdns({}, "_octoprint._tcp.local").empty());
+    // Anyone on the network can send a packet: damaged copies of the answer
+    // (bytes changed, cut short) never read past its end (ASan) nor throw.
+    unsigned seed = 11;
+    for (int i = 0; i < 5000; ++i) {
+        std::vector<std::uint8_t> bad = p;
+        for (int k = 0; k < 1 + int(seed % 5); ++k) {
+            seed = seed * 1103515245u + 12345u;
+            bad[(seed >> 8) % bad.size()] = std::uint8_t(seed >> 16);
+        }
+        seed = seed * 1103515245u + 12345u;
+        if (i % 4 == 0)
+            bad.resize(bad.size() - (seed >> 4) % bad.size());
+        for (const MdnsService& s : parse_mdns(bad, "_octoprint._tcp.local"))
+            CHECK(s.url().size() < 4096);
+    }
 }

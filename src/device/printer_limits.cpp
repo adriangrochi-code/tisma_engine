@@ -2,6 +2,8 @@
 
 #include "device/printer_limits.hpp"
 
+#include <cmath>
+
 #include "config/settings.hpp"
 
 #include <nlohmann/json.hpp>
@@ -26,7 +28,7 @@ std::map<char, double> parameters(const std::string& line, std::size_t after) {
             continue;
         char* end = nullptr;
         const double v = std::strtod(word.c_str() + 1, &end);
-        if (end != word.c_str() + 1)
+        if (end != word.c_str() + 1 && std::isfinite(v)) // «inf», «nan» or «1e999» on a damaged line: left out
             out[char(std::toupper(static_cast<unsigned char>(word[0])))] = v;
     }
     return out;
@@ -53,7 +55,7 @@ bool area_value(const std::string& text, std::size_t from, std::size_t to, const
     for (std::size_t at = text.find(k, from); at != std::string::npos && at < to; at = text.find(k, at + 1)) {
         if (at > 0 && (text[at - 1] == '{' || text[at - 1] == ',')) {
             out = std::strtod(text.c_str() + at + k.size(), nullptr);
-            return true;
+            return std::isfinite(out);
         }
     }
     return false;
@@ -170,10 +172,10 @@ PrinterLimits parse_klipper_limits(const nlohmann::json& toolhead, const nlohman
         if (j.is_number())
             out_v = j.get<double>();
         else if (j.is_string())
-            out_v = std::atof(j.get<std::string>().c_str());
+            out_v = std::strtod(j.get<std::string>().c_str(), nullptr);
         else
             return false;
-        return true;
+        return std::isfinite(out_v);
     };
     if (config(settings, "printer", "max_z_velocity", v) && v > 0.0)
         out.values["max_feed_z"] = v;

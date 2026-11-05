@@ -7,6 +7,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include <nlohmann/json.hpp>
 
+#include <cmath>
+
 using namespace tisma;
 using namespace tisma::device;
 
@@ -86,4 +88,41 @@ TEST_CASE("printer limits: only the empty values are filled by themselves (rule 
     // «Leer de la impresora» takes everything.
     CHECK(apply_limits(s, l, false) == std::vector<std::string>{"max_feed_x"});
     CHECK(s.max_feed_x == 500.0);
+}
+
+TEST_CASE("printer limits: damaged answers give no endless or odd values", "[device][limits]") {
+    // A damaged serial line: «inf», «nan» and an overflow are left out.
+    const PrinterLimits l = parse_marlin_limits("area:{work:{min:{x:0,y:0,z:0},max:{x:inf,y:200,z:200}}}",
+                                                "echo:  M203 Xinf Y1e999 Znan E25.00\necho:  M900 Knan\n");
+    CHECK_FALSE(l.has_area);
+    CHECK(l.values.size() == 1);
+    CHECK(l.values.at("max_feed_e") == 25.0);
+    CHECK_FALSE(l.has_pressure_advance);
+    nlohmann::json settings = {{"printer", {{"max_z_velocity", "inf"}, {"max_z_accel", "100"}}}};
+    const PrinterLimits k = parse_klipper_limits(nlohmann::json::object(), settings);
+    CHECK(k.values.count("max_feed_z") == 0);
+    CHECK(k.values.at("max_accel_z") == 100.0);
+
+    // Random damage to a good answer: finite values only, and no throw.
+    const std::string m115 = "FIRMWARE_NAME:Marlin 2.1.3 (x)\narea:{full:{min:{x:-5,y:-10,z:0},max:{x:240,y:240,z:260}}}\nok\n";
+    const std::string m503 = "echo:  G21\necho:  M203 X500.00 Y500.00 Z5.00 E25.00\necho:  M201 X500 Y500 Z100 E5000\n"
+                             "echo:  M204 P500 R1000 T1500\necho:  M205 J0.08\necho:  M900 K0.04\nok\n";
+    const char alphabet[] = "0123456789.-+eEinfaXYZK:{},; \nM";
+    unsigned seed = 5;
+    for (int i = 0; i < 3000; ++i) {
+        std::string a = m115, b = m503;
+        for (int k2 = 0; k2 < 3; ++k2) {
+            seed = seed * 1103515245u + 12345u;
+            a[(seed >> 8) % a.size()] = alphabet[(seed >> 20) % (sizeof alphabet - 1)];
+            seed = seed * 1103515245u + 12345u;
+            b[(seed >> 8) % b.size()] = alphabet[(seed >> 20) % (sizeof alphabet - 1)];
+        }
+        const PrinterLimits r = parse_marlin_limits(a, b);
+        for (const auto& [name, value] : r.values)
+            CHECK((std::isfinite(value) && value > 0.0));
+        if (r.has_area)
+            CHECK((std::isfinite(r.max_x) && std::isfinite(r.min_x) && r.max_x > r.min_x));
+        Settings s;
+        apply_limits(s, r, false);
+    }
 }

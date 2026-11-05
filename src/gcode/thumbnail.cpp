@@ -299,8 +299,12 @@ bool decode_qoi(const std::vector<std::uint8_t>& file, int& width, int& height, 
     const std::uint32_t w = get32(4), h = get32(8);
     if (w == 0 || h == 0 || w > 16384 || h > 16384 || (file[12] != 3 && file[12] != 4))
         return false;
-    width = int(w), height = int(h);
     const std::size_t count = std::size_t(w) * h;
+    // One operation gives at most 62 pixels (a run): a short file with a huge
+    // size in its header is damaged, and is not given the memory it asks for.
+    if (count > (file.size() - 8 - 14) * 62)
+        return false;
+    width = int(w), height = int(h);
     rgba.assign(count * 4, 0);
     std::array<Px, 64> seen{};
     for (Px& p : seen)

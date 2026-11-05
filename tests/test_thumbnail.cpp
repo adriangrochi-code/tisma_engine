@@ -98,6 +98,24 @@ TEST_CASE("thumbnails: QOI files written and read back the same", "[gcode][thumb
     REQUIRE(decode_qoi(encode_qoi(25, 20, mixed.data()), w, h, back));
     CHECK(back == mixed);
     CHECK_FALSE(decode_qoi({'n', 'o', 'p', 'e'}, w, h, back));
+    // A header that asks for 16384 x 16384 in a 22-byte file: refused before
+    // the gigabyte is taken.
+    std::vector<std::uint8_t> huge = {'q', 'o', 'i', 'f', 0, 0, 0x40, 0, 0, 0, 0x40, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 1};
+    CHECK_FALSE(decode_qoi(huge, w, h, back));
+    // Damaged files (bytes changed, cut short): false or a whole image, never
+    // a read past the end (ASan).
+    for (int i = 0; i < 3000; ++i) {
+        std::vector<std::uint8_t> bad = file;
+        seed = seed * 1103515245u + 12345u;
+        for (int k = 0; k < 1 + int(seed % 4); ++k) {
+            seed = seed * 1103515245u + 12345u;
+            bad[(seed >> 8) % bad.size()] = std::uint8_t(seed >> 16);
+        }
+        if (i % 3 == 0)
+            bad.resize(bad.size() - (seed >> 4) % bad.size());
+        if (decode_qoi(bad, w, h, back))
+            CHECK(back.size() == std::size_t(w) * std::size_t(h) * 4);
+    }
 }
 
 TEST_CASE("thumbnails: one block each in a binary G-code, after the printer's metadata", "[gcode][thumbnail][binary]") {
