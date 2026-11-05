@@ -11092,3 +11092,25 @@ documentación de la comunidad OpenBambuAPI (`mqtt.md`, `ftp.md`, `video.md`), q
 - si FTPS y la cámara usan el mismo certificado que MQTT; si no, se acepta el mismo número de serie en el nombre.
 
 **Falta:** ver la cámara en la interfaz (necesita leer JPEG), y elegir el AMS por filamento.
+
+## 2026-11-05 — instalador de Windows y BH35
+
+**Instalador de Windows (pedido del dueño):** los probadores tenían instalador con Tisma Slicer.
+- `packaging/windows/tisma.nsi`, con NSIS (zlib/libpng; compresión zlib, sin las partes bzip2 ni LZMA).
+- Se instala por usuario en `%LOCALAPPDATA%\Programs\Tisma`, sin permisos de administrador (`app_updates.md`,
+  regla 7).
+- Acceso en el menú Inicio; acceso en el escritorio, opcional.
+- Abrir `.3mf` y `.stl` con Tisma: ofrecido y marcado; se registra por usuario y se avisa al Explorador.
+- Aparece en «Aplicaciones instaladas».
+- El desinstalador quita el programa y deja `%APPDATA%\Tisma` (perfiles, preferencias; regla 9). Las asociaciones
+  se quitan solo si siguen apuntando a Tisma.
+- Textos en español, o en inglés con Windows en inglés.
+- El flujo de releases lo arma en Windows después del `.zip`: `tisma-engine-<versión>-setup-windows-x64.exe`.
+- `installer_script_check` (ctest, donde hay `makensis`) arma el script sobre un paquete de mentira, con los avisos
+  tratados como errores.
+- **Sin probar instalando en Windows:** solo se armó el instalador en Linux (makensis 3.09).
+
+**BH35 (decisión del motor):** dos perfiles de 0,8 mm sin `nozzle` pasaban en boquillas de 0,4 y 0,5 y no laminaban
+nada en una pieza chica. El rango del laminado deja anchos de hasta 4 veces la boquilla. Ahora, si el perfil no dice
+su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1,5 veces la de la variante («its
+0.82 mm walls are made for another nozzle than 0.4 mm»). Prueba: Acme Wide en `[pack]`.

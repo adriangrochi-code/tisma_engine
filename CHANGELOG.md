@@ -10,17 +10,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
-### Agregado
-
-- **Impresoras Bambu Lab por la red local** (página Impresora conectada › Bambu Lab): las encuentra en la red, se
-  conecta con la dirección y el código de acceso, y pide una sola vez confirmar el certificado de la impresora. Muestra
-  el estado, las temperaturas, el avance y el AMS; envía lo laminado y lo imprime, también desde el AMS; pausa,
-  reanuda y detiene. La impresora tiene que estar en modo «Solo LAN» y modo desarrollador. Hay una impresora Bambu
-  simulada para probar sin máquina. **Sin probar todavía con una impresora real.**
-
 ## [0.11.0-beta.1] - 2026-11-05
 
-Beta para los probadores del dueño: Windows y Linux. Cada paquete es un `.zip`: se descomprime y se abre `tisma`.
+Beta para los probadores del dueño: Windows y Linux. En Windows, el instalador `tisma-engine-0.11.0-beta.1-setup-windows-x64.exe`
+(o el `.zip`, para usar sin instalar); en Linux, el `.zip`: se descomprime y se abre `tisma`.
 
 **Es el Tisma nuevo, no Tisma Slicer:** un programa hecho desde cero, que va a reemplazar a Tisma Slicer. Se instala
 aparte y no toca la configuración de Tisma Slicer. Los proyectos `.3mf` de Tisma Slicer se abren como modelos: se
@@ -38,11 +31,15 @@ toman las piezas, no los ajustes, y hay que elegir impresora y perfiles.
 - **Diseño:** bocetos con cotas y restricciones, extruir y revolucionar, redondeo, chaflán, agujeros y roscas, y
   mandar la pieza a la placa.
 - **La nube:** iniciar sesión y laminar o analizar un proyecto en la nube.
+- **Bambu Lab por la red local** (Impresora conectada › Bambu Lab): con la impresora en modo «Solo LAN» y modo
+  desarrollador, buscala o escribí su IP y su código de acceso, confirmá el certificado, mirá el estado y el AMS, y
+  enviá e imprimí, pausá y detené. Contanos qué modelo tenés y qué pasó: todavía no se probó con una impresora real.
 
 ### Límites conocidos
 
 - **Actualizaciones automáticas:** esta versión no se actualiza sola. Para pasar a la próxima, bajala a mano.
-- **Instalador:** no hay; cada paquete es un `.zip`. Tampoco hay versión para macOS.
+- **macOS:** todavía no hay versión.
+- **Bambu Lab:** la cámara todavía no se ve en el programa; no se elige qué filamento del AMS va con cada color.
 - **Cama del paquete:** se dibuja el SVG; las imágenes PNG todavía no se muestran.
 - **Paquete de perfiles:** el motor no lee los perfiles del paquete por la regla de sala limpia; los probó por fuera
   la sesión de fichas (todas las variantes con sus valores por defecto y 500 combinaciones al azar). Con una impresora
@@ -53,6 +50,15 @@ toman las piezas, no los ajustes, y hay que elegir impresora y perfiles.
 
 ### Agregado
 
+- **Impresoras Bambu Lab por la red local** (página Impresora conectada › Bambu Lab): las encuentra en la red, se
+  conecta con la dirección y el código de acceso, y pide una sola vez confirmar el certificado de la impresora. Muestra
+  el estado, las temperaturas, el avance y el AMS; envía lo laminado y lo imprime, también desde el AMS; pausa,
+  reanuda y detiene. La impresora tiene que estar en modo «Solo LAN» y modo desarrollador. Hay una impresora Bambu
+  simulada para probar sin máquina. **Sin probar todavía con una impresora real.**
+- **Instalador de Windows** (`tisma-engine-<versión>-setup-windows-x64.exe`): se instala para el usuario, sin pedir
+  permisos de administrador. Agrega Tisma al menú Inicio y, si querés, un acceso directo en el escritorio. Ofrece
+  abrir los `.3mf` y `.stl` con Tisma. El desinstalador quita el programa y deja tus perfiles, preferencias y
+  proyectos. Está en español, o en inglés si Windows está en inglés. El `.zip` sigue estando, para usar sin instalar.
 - **Versiones firmadas:** la CI deja cada versión como borrador y el dueño la firma con la clave Ed25519 de su
   pendrive (`tools/sign_release.py`, guía en `docs/FIRMAR_VERSIONES.md`). Así los programas solo instalan lo que él
   firmó.
@@ -376,6 +382,8 @@ toman las piezas, no los ajustes, y hay que elegir impresora y perfiles.
 
 ### Corregido
 
+- **Paquete de perfiles:** un perfil de impresión sin boquilla declarada ya no se ofrece si sus paredes son de otra
+  boquilla (por ejemplo, un perfil de 0,8 mm en una boquilla de 0,4).
 - **Paquete de perfiles:** las variantes que no se podían elegir porque su filamento o su perfil apuntaban a un
   conjunto de impresoras vacío ahora se eligen. Las macros de inicio reciben las temperaturas de cámara y de espera, en
   0 si el filamento no las trae. Un G-code de inicio que llama a `START_PRINT` después de apagar la boquilla ya no se
