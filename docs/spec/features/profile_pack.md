@@ -75,6 +75,11 @@ Preferencias de la interfaz, no del laminado:
     - un filamento o un perfil de impresión se ofrecen solo con las impresoras de su conjunto de `compatible.json`;
     - con `compatible` nulo, con todas;
     - los genéricos (`generic`) van después de los del fabricante de la impresora.
+    - un conjunto vacío (`[]`, sin ninguna impresora) se trata como nulo y queda en el registro como error del paquete
+      (decisión del equipo de fichas, 05-11-2026: la versión 2026.10.27 trae 392 entradas apuntando a un conjunto
+      vacío);
+    - el filamento y el perfil de impresión de `defaults` de una variante siempre valen para esa variante, aunque
+      `compatible.json` no la nombre.
 13. **Por defecto:** al elegir una variante, se eligen el primer filamento de su `defaults.filament` y el perfil de
     `defaults.print` (en resina, `defaults.resin` y `defaults.resin_print`).
 13 bis. **Ajustes de impresora que trae un perfil** (decisión del equipo de fichas, 04-11-2026, BH27): un perfil de
@@ -121,6 +126,11 @@ Preferencias de la interfaz, no del laminado:
 18. **Sin G-code de inicio:** cerca de 4 de cada 10 impresoras del paquete no traen G-code de inicio o de fin, porque
     el de origen usaba un lenguaje de macros. El motor usa entonces el suyo para el dialecto
     (`gcode_firmware.md`) y el panel de la impresora muestra «G-code de inicio genérico: revisalo antes de imprimir».
+18 bis. **G-code de inicio con macros de la impresora** (decisión del equipo de fichas, 05-11-2026): un G-code de inicio
+    que llama a una macro de la impresora (una orden que no es G, M ni T, como `START_PRINT` o `PRINT_START` de
+    Klipper) calienta en la impresora, así que la comprobación del G-code no falla por extruir con la temperatura en
+    0 después de esa macro: lo deja como aviso. Todas las variables de la regla 17 existen siempre, con 0 si el
+    filamento no las trae, para que una macro las pueda recibir.
 
 ### Actualizaciones
 
