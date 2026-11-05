@@ -362,6 +362,33 @@ else()
   target_link_libraries(tisma_net PRIVATE tisma_httplib)
 endif()
 
+# Bambu Lab printers on the local network (printer_connections.md, «Bambu Lab
+# en red local»): TLS for MQTT, FTPS and the camera through Mbed TLS 3.6 LTS
+# (Apache-2.0 of its dual licence; THIRD_PARTY.md), the same on every system.
+# Its release archive carries the generated files, so no Python is needed.
+set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+set(GEN_FILES OFF CACHE BOOL "" FORCE)
+set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
+set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "" FORCE)
+set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "" FORCE)
+set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  mbedtls
+  URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.2/mbedtls-3.6.2.tar.bz2
+  URL_HASH SHA256=8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(mbedtls)
+add_library(tisma_bambu STATIC src/net/tls.cpp src/device/mqtt.cpp src/device/ftps.cpp src/device/bambu.cpp
+  src/device/ssdp.cpp)
+target_include_directories(tisma_bambu PUBLIC src)
+target_link_libraries(tisma_bambu PUBLIC tisma_core tisma_net PRIVATE mbedtls mbedx509 mbedcrypto nlohmann_json::nlohmann_json
+  tisma_warnings Threads::Threads)
+if(WIN32)
+  target_link_libraries(tisma_bambu PUBLIC ws2_32 PRIVATE bcrypt)
+endif()
+
 if(TISMA_BUILD_UI)
   # What the interface does without OpenGL (camera, draw data, icons, texts,
   # files, the slicing job): tested with the engine.

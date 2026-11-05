@@ -400,6 +400,16 @@
         "solidcraft-notice.txt",
         "apache-2.0.txt"
       ]
+    },
+    {
+      "name": "Mbed TLS",
+      "version": "3.6.2",
+      "license": "Apache-2.0",
+      "url": "https://github.com/Mbed-TLS/mbedtls",
+      "notices": [
+        "apache-2.0.txt",
+        "mbedtls.txt"
+      ]
     }
   ]
 }

@@ -10,6 +10,14 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Agregado
+
+- **Impresoras Bambu Lab por la red local** (página Impresora conectada › Bambu Lab): las encuentra en la red, se
+  conecta con la dirección y el código de acceso, y pide una sola vez confirmar el certificado de la impresora. Muestra
+  el estado, las temperaturas, el avance y el AMS; envía lo laminado y lo imprime, también desde el AMS; pausa,
+  reanuda y detiene. La impresora tiene que estar en modo «Solo LAN» y modo desarrollador. Hay una impresora Bambu
+  simulada para probar sin máquina. **Sin probar todavía con una impresora real.**
+
 ## [0.11.0-beta.1] - 2026-11-05
 
 Beta para los probadores del dueño: Windows y Linux. Cada paquete es un `.zip`: se descomprime y se abre `tisma`.

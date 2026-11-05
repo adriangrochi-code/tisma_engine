@@ -11046,3 +11046,49 @@ ni el programa se cerró, y los códigos de error fueron los esperados. Encontr�
   `docs/FIRMAR_VERSIONES.md` lo explica en «Sin la clave».
 - La suite completa (`ctest`) pasa en Linux. `tools/ci_linux.sh` entero no corre en la sesión porque se corta a las
   2 h; la CI de Windows corre en cada envío.
+
+## 2026-11-05 — Bambu Lab en red local, primera parte (pedido del dueño para la beta)
+
+**Pedido del dueño** (por la sesión de fichas): la beta de esta semana necesita la conexión con Bambu Lab, porque
+los probadores venían de Tisma Slicer, que la tenía. Fuentes: `printer_connections.md` («Bambu Lab en red local»,
+«Búsqueda en la red») y `devices.md`, reglas 11 y 16, todas con `check_spec` limpio. El protocolo sale de la
+documentación de la comunidad OpenBambuAPI (`mqtt.md`, `ftp.md`, `video.md`), que la ficha cita; no se leyó código.
+
+**Hecho:**
+- **TLS:** Mbed TLS 3.6.2 LTS (Apache-2.0, en `THIRD_PARTY.md`), igual en Windows y Linux (`src/net/tls.*`).
+  - Cliente TLS 1.2 que da el SHA-256 y el nombre (CN) del certificado y puede reanudar la sesión de otra conexión.
+  - Servidor con certificado propio firmado por sí mismo, para el simulador.
+- **MQTT 3.1.1 propio** (`src/device/mqtt.*`): paquetes según la norma, lector por partes y cliente.
+- **FTPS implícito** (`src/device/ftps.*`): USER/PASS, PBSZ 0, PROT P, TYPE I, PASV y STOR, con la conexión de datos
+  reanudando la sesión TLS (regla 5).
+- **Descubrimiento SSDP** (`src/device/ssdp.*`) en UDP 1990 y 2021:
+  - lectura tolerante, porque la forma exacta se mide con una impresora real;
+  - aviso si otro programa ocupa el puerto.
+- **Bambu** (`src/device/bambu.*`):
+  - **Certificado:** el número de serie se lee del certificado. La primera vez se pide confirmar su huella y no se
+    manda el código de acceso hasta que la persona acepta; después se exige la misma huella.
+  - **Estado:** `pushall`, con temperaturas, avance, capa y AMS, juntando los reportes parciales de las P1.
+  - **Comandos:** `pause`, `resume` y `stop` con QoS 1.
+  - **Imprimir:** paquete `.gcode.3mf` con `Metadata/plate_1.gcode` y su MD5, subido por FTPS y empezado con
+    `project_file` (`use_ams`, `ams_mapping`).
+  - **Cámara A1/P1:** paquete de 80 bytes y lectura de los JPEG, solo en el motor; la interfaz todavía no la muestra.
+- **Simulador propio** (`src/device/bambu_simulator.hpp`): MQTT, FTPS y cámara. Se usa en las pruebas y en la
+  interfaz, como la impresora USB simulada.
+- **Interfaz** (página Impresora conectada):
+  - elegir USB o Bambu Lab, buscar en la red, dirección y código de acceso, confirmar el certificado;
+  - estado en una línea con el AMS, «Imprimir desde el AMS», Enviar e imprimir, pausa, reanudar y detener;
+  - la impresora y su certificado quedan en las preferencias; el código va al almacén de secretos del sistema.
+
+**Prueba:**
+- `[bambu]`, 8 casos contra el simulador: paquetes MQTT, puerto PASV, SSDP real por UDP, certificado,
+  `unauthorized`, `unreachable`, reportes parciales, impresión con AMS y sesión reanudada, comandos y cámara.
+- `ui_bambu_print`: el guion completo en la interfaz.
+
+**Sin probar con una impresora real** (lo confirma el dueño en la beta):
+- la forma de los anuncios SSDP;
+- los estados distintos de IDLE (RUNNING, PAUSE, FINISH, FAILED, PREPARE);
+- el `url` (`ftp:///<archivo>`) y el `md5` (el del paquete) de `project_file`;
+- `ams_mapping`;
+- si FTPS y la cámara usan el mismo certificado que MQTT; si no, se acepta el mismo número de serie en el nombre.
+
+**Falta:** ver la cámara en la interfaz (necesita leer JPEG), y elegir el AMS por filamento.

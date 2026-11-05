@@ -93,6 +93,7 @@ add_executable(tisma_tests
   test_fasteners.cpp
   test_gears.cpp
   test_cloud.cpp
+  test_bambu.cpp
   test_pack.cpp
   test_xz.cpp
   test_pack_fetch.cpp
@@ -108,7 +109,7 @@ target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SOLIDCRAFT="$<TARGET_F
 # nlohmann/json reads the analysis report back.
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
 # The cloud client, and cpp-httplib's server for its mock server (test_cloud.cpp).
-target_link_libraries(tisma_tests PRIVATE tisma_net tisma_httplib)
+target_link_libraries(tisma_tests PRIVATE tisma_net tisma_httplib tisma_bambu)
 # A stand-in for libsecret's secret-tool (the token's store on Linux).
 add_executable(tisma_fake_secret_tool fake_secret_tool.cpp)
 add_dependencies(tisma_tests tisma_fake_secret_tool)
@@ -269,6 +270,15 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/pack_print_speeds.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_print_speeds.png)
     set_tests_properties(ui_pack_print_speeds PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # A Bambu Lab printer on the network, against the simulated one.
+    add_test(NAME ui_bambu_print
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/bambu_print.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_bambu_print.png)
+    set_tests_properties(ui_bambu_print PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
     # Nothing listens on port 9 (discard) here: the download fails at once.
@@ -869,4 +879,13 @@ if(Python3_Interpreter_FOUND)
       ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300 PASS_REGULAR_EXPRESSION "the box tree was made ahead"
       FAIL_REGULAR_EXPRESSION "error: ")
   endif()
+endif()
+
+# The Windows installer's script builds (NSIS; packaging/windows/tisma.nsi),
+# where makensis is installed.
+find_program(TISMA_MAKENSIS makensis PATHS "C:/Program Files (x86)/NSIS")
+if(TISMA_MAKENSIS)
+  add_test(NAME installer_script_check
+    COMMAND ${CMAKE_COMMAND} -DMAKENSIS=${TISMA_MAKENSIS} -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/installer_check -P ${CMAKE_CURRENT_SOURCE_DIR}/check_installer.cmake)
 endif()

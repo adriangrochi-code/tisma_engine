@@ -786,6 +786,38 @@
     X(DeviceStep, "Paso", "Step")                                                                                     \
     X(DeviceFan, "Ventilador", "Fan")                                                                                 \
     X(DeviceLog, "Registro", "Log")                                                                                   \
+    X(DeviceKindUsb, "USB", "USB") \
+    X(DeviceKindBambu, "Bambu Lab (red local)", "Bambu Lab (local network)") \
+    X(BambuHelp, "En la impresora: activá el modo «Solo LAN» y el modo desarrollador (Ajustes › Solo LAN). Dirección = la IP de la impresora; código = el código de acceso que muestra ahí. El número de serie se lee de la impresora.", "Bambu Lab: on the printer turn on LAN only mode and Developer mode (Settings > LAN only). Hostname = IP address of the printer, API key = access code shown there. The serial number is read from the printer.") \
+    X(BambuSearch, "Buscar en la red", "Browse the network") \
+    X(BambuSearching, "Buscando impresoras…", "Looking for printers…") \
+    X(BambuNoneFound, "No apareció ninguna. Revisá que la computadora y la impresora estén en la misma red, que el cortafuegos deje pasar UDP 1990 y 2021 y, en Windows, que la red no esté marcada como «Pública». También podés escribir la dirección.", "None found. Check that the computer and the printer are on the same network, that the firewall lets UDP 1990 and 2021 through and, on Windows, that the network is not marked «Public». You can also type the address.") \
+    X(BambuPortBusy, "Otro programa está escuchando las impresoras Bambu Lab; cerralo o agregá la impresora por su dirección.", "Another program is listening for Bambu Lab printers; close it or add the printer by its address.") \
+    X(BambuHost, "Dirección (IP)", "Address (IP)") \
+    X(BambuCode, "Código de acceso", "Access code") \
+    X(BambuSimulated, "Impresora Bambu Lab simulada", "Simulated Bambu Lab printer") \
+    X(BambuConnect, "Conectar", "Connect") \
+    X(BambuRefresh, "Actualizar estado", "Refresh state") \
+    X(BambuWorking, "Hablando con la impresora…", "Talking to the printer…") \
+    X(BambuConfirm, "Es la primera vez con esta impresora. Número de serie: %s. Huella del certificado: %s. ¿Es tu impresora?", "This is the first time with this printer. Serial number: %s. Certificate fingerprint: %s. Is it your printer?") \
+    X(BambuAccept, "Sí, es mía", "Yes, it is mine") \
+    X(BambuCertChanged, "El certificado de la impresora cambió desde que lo aceptaste. Si cambiaste la impresora o su firmware, aceptalo de nuevo; si no, alguien puede estar en el medio.", "The printer's certificate changed since you accepted it. If you changed the printer or its firmware, accept it again; otherwise someone may be in between.") \
+    X(BambuAcceptAgain, "Aceptar el certificado nuevo", "Accept the new certificate") \
+    X(BambuUnauthorized, "La impresora rechazó el código de acceso.", "The printer refused the access code.") \
+    X(BambuUnreachable, "No se pudo llegar a la impresora: %s", "Cannot reach the printer: %s") \
+    X(BambuFailed, "La impresora contestó con un problema: %s", "The printer answered with a problem: %s") \
+    X(BambuState, "%s · boquilla %.0f / %.0f °C · cama %.0f / %.0f °C", "%s · nozzle %.0f / %.0f °C · bed %.0f / %.0f °C") \
+    X(BambuJob, "%s: %.0f %%, capa %d de %d, faltan %s", "%s: %.0f %%, layer %d of %d, %s left") \
+    X(BambuAms, "AMS", "AMS") \
+    X(BambuEmptySlot, "vacío", "empty") \
+    X(BambuUseAms, "Imprimir desde el AMS", "Print from the AMS") \
+    X(BambuPrint, "Enviar e imprimir", "Send and print") \
+    X(BambuSending, "Enviando: %.0f %%", "Sending: %.0f %%") \
+    X(BambuSent, "Enviado: la impresora empieza «%s».", "Sent: the printer starts «%s».") \
+    X(BambuStop, "Detener", "Stop") \
+    X(BambuSerial, "Número de serie: %s", "Serial number: %s") \
+    X(BambuNotTested, "Conexión con Bambu Lab nueva: sin probar todavía con una impresora real.", "New Bambu Lab connection: not yet tested with a real printer.") \
+    X(BambuBinary, "Esta impresora necesita G-code de texto: apagá el G-code binario en el perfil.", "This printer needs text G-code: turn off binary G-code in the profile.") \
     X(DeviceConnected, "Impresora conectada: %s", "Printer connected: %s")                                            \
     X(DevicePrintStarted, "Imprimiendo %s", "Printing %s")                                                            \
     X(DevicePrintFinished, "Terminó la impresión de %s", "%s finished printing")                                      \
