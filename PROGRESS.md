@@ -10974,3 +10974,10 @@ del paquete, sus ajustes reemplazan a los actuales, salvo los cambiados a mano, 
 - Calibración `bridges_overhangs` en la app (dev `e540e9c`): «Puentes y voladizos» en Calibrar. El motor pone los
   ajustes propios de la prueba (sin soportes ni arcos) en `--settings`, que la app ya usa para cortar; el ángulo
   elegido deja `support.threshold_angle` = 90 − ángulo. Prueba con el motor real en `DesignToolsTest`.
+
+## 2026-11-05 — Pedido del dueño: «Mi biblioteca» local (escritorio y Android)
+
+Decisión del dueño: una biblioteca de modelos propia y local primero (sin cuenta ni red), que después se pueda publicar
+en la biblioteca de Tisma Cloud (`model_library.md`). Cada modelo guarda el proyecto, los ajustes con que se laminó,
+el G-code con su resumen y su receta, y el análisis de FEA o CFD con su resumen, para reimprimir fácil. Se pidió la
+ficha a la sesión de especificación y se avisó al motor. La app la hace cuando la ficha pase `check_spec`.
