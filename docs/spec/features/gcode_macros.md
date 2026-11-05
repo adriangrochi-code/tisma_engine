@@ -59,7 +59,7 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
    paquete, su tipo (número, texto, sí/no, vector), en qué G-code está disponible (inicio, fin, cambio de capa, cambio
    de herramienta, pausa) y su significado. El motor llena todas las de esa tabla; una variable que el motor todavía
    no sabe llenar se avisa en el registro con su nombre y se marca «sin probar» en el panel de la impresora. La lista
-   pasa a esta ficha cuando la publique la sesión del paquete.
+   está en `gcode_variables.md`.
 10. **Variables de las impresoras Bambu Lab:** además de las de temperatura y de la cama, sus G-code de inicio usan el
     tipo de placa elegido, si se nivela la cama, si se calibra el flujo y si se hace la calibración de vibraciones;
     esos valores salen de las opciones de impresión (regla 12).
