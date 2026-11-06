@@ -524,3 +524,21 @@ TEST_CASE("pack: the machine's G-code with macros, the variant's over common.gco
     // A bad dialect is not a profile.
     CHECK_THROWS_AS(parse_settings(R"({"machine": {"macros": {"dialect": "slic3r"}}})"), SettingsError);
 }
+
+TEST_CASE("pack: a filament's own G-code with macros in place of the simple one", "[pack][macros]") {
+    std::vector<std::string> warnings;
+    const PackEntry pla = parse_pack_entry(R"({"format": "tisma-pack-entry", "version": 2, "technology": "fff",
+        "profile": {"format": "tisma-profile", "version": 1, "kind": "filament", "name": "Acme PLA",
+                    "settings": {"extrusion": {"start_gcode": "; simple"}}},
+        "gcode": {"dialect": "orcaslicer", "templates": {"filament_start": "M900 K{pressure_advance[0]}",
+                                                         "filament_end": null}}})",
+                                           warnings);
+    CHECK(pla.profile.settings.filament_start_gcode == "M900 K{pressure_advance[0]}");
+    CHECK(pla.profile.settings.filament_end_gcode.empty());
+    const PackEntry cura = parse_pack_entry(R"({"format": "tisma-pack-entry", "version": 2, "technology": "fff",
+        "profile": {"format": "tisma-profile", "version": 1, "kind": "filament", "name": "Acme PLA",
+                    "settings": {"extrusion": {"start_gcode": "; simple"}}},
+        "gcode": {"dialect": "cura", "templates": {"filament_start": "M104 S{material_print_temperature}"}}})",
+                                            warnings);
+    CHECK(cura.profile.settings.filament_start_gcode == "; simple");
+}

@@ -368,6 +368,19 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
         if (extrusion.empty())
             profile["settings"].erase("extrusion");
     }
+    // A filament's own G-code with macros (profile_pack_format.md, «G-code de
+    // la máquina con macros», rule 1): filament_start and filament_end in
+    // place of the simple ones. The engine's language reads every dialect but
+    // cura's, whose {name} texts are left to the simple version.
+    if (kind == "filament" && j.contains("gcode") && j.at("gcode").is_object()) {
+        const json& g = j.at("gcode");
+        const std::string dialect = text(g, "dialect");
+        if (!dialect.empty() && dialect != "cura" && g.contains("templates") && g.at("templates").is_object())
+            for (const auto& [from, to] : {std::pair<const char*, const char*>{"filament_start", "start_gcode"},
+                                           {"filament_end", "end_gcode"}})
+                if (g.at("templates").contains(from) && g.at("templates").at(from).is_string())
+                    profile["settings"]["extrusion"][to] = g.at("templates").at(from);
+    }
     if (kind == "resin" || kind == "resin_print") {
         profile["kind"] = kind == "resin" ? "filament" : "print";
         out.resin = true;

@@ -11546,7 +11546,10 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 `ui_script_structural_analyze`, que se pasó del tiempo con ASan bajo carga (compilaba al mismo tiempo); solo pasa en
 156 s.
 
-**Falta:** el `gcode` de los filamentos (`filament_start`/`filament_end` con su dialecto), `timelapse` y
+**Después:** el `gcode` de los filamentos del paquete: `filament_start`/`filament_end` reemplazan a
+`extrusion.start_gcode`/`end_gcode` (salvo `cura`, que queda con la versión simple). Prueba en `[pack][macros]`.
+
+**Falta:** `timelapse` y
 `extrusion_role_change` (sin lugar en el escritor todavía), `extruder_start`/`extruder_end` de los demás extrusores,
 y GM9 (todas las impresoras del paquete con sus G-code), que necesita el paquete real con el bloque `gcode`. Sin
 probar en una impresora.
