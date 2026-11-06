@@ -11099,3 +11099,10 @@ Regla del dueño (06-11, por la sesión de especificación): sin tiempo libre; a
   no dice sus valores.
 - Pruebas: `BambuTest` (valores por defecto y los elegidos en el pedido). La pantalla no tiene prueba automática.
   No probado con una Bambu real.
+- `mobile_app.md`, lo que quedaba:
+  - regla 12, el costo en el resultado: gramos × `extrusion.cost` (precio por kg del Material). Con los filamentos
+    del paquete sale 0: `profile --pack` no pasa el `cost_per_kg` del filamento a `extrusion.cost` (avisado al
+    motor). Prueba: `PlateCostTest`.
+  - regla 6, Archivo: la información de la pieza (medidas y triángulos) y «Quitar de la placa».
+  - **Bloqueado:** regla 10, abrir STEP (el motor dice «STEP files are not supported yet»). Regla 15, Google y Google
+    Play: decisiones del dueño. Regla 9, la biblioteca de Tisma Cloud: espera el servidor.

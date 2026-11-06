@@ -600,4 +600,7 @@
     <string name="bambu_flow">Calibrar el flujo</string>
     <string name="bambu_vibration">Calibrar las vibraciones</string>
     <string name="bambu_timelapse">Grabar un timelapse</string>
+    <string name="plate_cost">Costo del filamento</string>
+    <string name="plate_info">%1$s mm · %2$d triángulos</string>
+    <string name="plate_remove">Quitar de la placa</string>
 </resources>

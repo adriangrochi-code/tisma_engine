@@ -137,6 +137,15 @@ private fun PlateControls(
             }
             Text(state.modelName ?: stringResource(R.string.plate_no_model), style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.testTag("plate_model"))
+            // Rule 6, «Archivo»: the part's size and triangles, and taking it off the plate.
+            state.mesh?.takeIf { state.modelName != null }?.let { m ->
+                val b = m.bounds
+                Text(stringResource(R.string.plate_info, String.format(Locale.getDefault(), "%.1f × %.1f × %.1f", b[3] - b[0], b[4] - b[1], b[5] - b[2]),
+                    m.triangles), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("plate_info"))
+            }
+            if (state.modelName != null) AccentTextButton(onClick = { slice.removeModel() }, enabled = !state.slicing && !state.analyzing,
+                modifier = Modifier.testTag("plate_remove")) { Text(stringResource(R.string.plate_remove)) }
             if (state.modelName != null && state.isProject) {
                 Text(stringResource(R.string.plate_project_settings), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -216,6 +225,10 @@ private fun PlateControls(
                         (r.filamentG?.let { g -> String.format(Locale.getDefault(), " · %.1f g", g) } ?: ""))
                 }
                 r.layers?.let { Labeled(R.string.plate_layers, it.toString()) }
+                // mobile_app.md, rule 12: the cost, from the filament's price per kg (Material, extrusion.cost).
+                plateCost(r.filamentG, state.value("extrusion.cost"))?.let { c ->
+                    Labeled(R.string.plate_cost, String.format(Locale.getDefault(), "%.2f", c), Modifier.testTag("plate_cost"))
+                }
                 OutlinedButton(onClick = { nav.open(Screen.Preview(r.gcode.path)) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_preview")) {
                     Text(stringResource(R.string.preview_open))
@@ -626,4 +639,11 @@ private fun EngineeringControls(
             }
         }
     }
+}
+
+/** The print's filament cost: grams × the price per kg, or null without both. */
+internal fun plateCost(grams: Double?, pricePerKg: kotlinx.serialization.json.JsonElement?): Double? {
+    val price = (pricePerKg as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return null
+    if (grams == null || grams <= 0 || price <= 0) return null
+    return grams / 1000 * price
 }

@@ -961,4 +961,14 @@ class SliceViewModel(
             _state.update { st -> st.fromLibrary?.takeIf { it.entry == lp.entry }?.let { st.copy(fromLibrary = it.copy(check = c)) } ?: st }
         }
     }
+
+    /** mobile_app.md, rule 6: «Quitar» takes the part off the plate. */
+    fun removeModel() {
+        model = null; original = null; originalFile = null; lastAnalysis = null
+        _state.update {
+            it.copy(modelName = null, isProject = false, mesh = null, result = null, error = null, progress = 0, analysis = null,
+                case = it.case.copy(conditions = emptyList()), marking = null, calibration = null, stressMap = null,
+                showStress = false, fromLibrary = null, rotation = MeshFile.identity3(), scalePercent = 100f, layFlat = false)
+        }
+    }
 }

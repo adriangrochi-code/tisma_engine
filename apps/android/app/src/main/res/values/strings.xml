@@ -616,4 +616,7 @@
     <string name="bambu_flow">Calibrate the flow</string>
     <string name="bambu_vibration">Calibrate vibrations</string>
     <string name="bambu_timelapse">Record a timelapse</string>
+    <string name="plate_cost">Filament cost</string>
+    <string name="plate_info">%1$s mm · %2$d triangles</string>
+    <string name="plate_remove">Remove from the plate</string>
 </resources>
