@@ -11758,3 +11758,7 @@ arquitecturas pesaba 36 MB, casi todo dex sin achicar (28 MB) y dos copias del m
   depuración: una beta se prueba en un emulador antes de entregarla (pedido a la sesión de especificación).
 - CI sube aparte: `tisma-android-phone-apk`, `tisma-android-phone-beta-apk`, `tisma-android-emulator-apk` y el
   universal (`tisma-android-debug-apk`, como antes).
+- Accesibilidad y textos: la prueba de nombres de los controles (regla 9) cubre ahora Material (con la tarjeta del
+  filamento), CAD, Ayuda y Piezas en Ingeniería, y `LibraryTest` la corre en la lista y en el detalle de una pieza:
+  todos con nombre. En castellano no falta ningún texto (los iguales a los ingleses son nombres: Material, Normal,
+  OctoPrint…), y no hay textos visibles escritos en el código.

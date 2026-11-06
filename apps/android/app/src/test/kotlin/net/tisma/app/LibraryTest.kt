@@ -1,6 +1,7 @@
 package net.tisma.app
 
 import android.content.Context
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -77,6 +78,21 @@ class LibraryTest {
         compose.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
     }
 
+    /** accessibility_touch.md, rule 9: no control without a name on the screen shown. */
+    private fun assertAllNamed(screen: String) {
+        val clickable = androidx.compose.ui.test.SemanticsMatcher("clickable") {
+            it.config.getOrNull(androidx.compose.ui.semantics.SemanticsActions.OnClick) != null
+        }
+        val missing = compose.onAllNodes(clickable).fetchSemanticsNodes().filter { n ->
+            val c = n.config
+            c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text).isNullOrEmpty() &&
+                c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription).isNullOrEmpty() &&
+                c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.EditableText)?.text.isNullOrEmpty() &&
+                !(c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.ToggleableState) != null && n.children.isNotEmpty())
+        }.map { it.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag) ?: it.boundsInRoot.toString() }
+        assertTrue(missing.isEmpty(), "$screen: controls without a name: $missing")
+    }
+
     @Test
     fun `ML1 ML2 ML10 a sliced part is kept with its recipe, printed again by slicing, and no G-code is stored`() {
         val context: Context = ApplicationProvider.getApplicationContext()
@@ -124,11 +140,14 @@ class LibraryTest {
         // The list, then «Imprimir» from the entry: it slices again with the recipe (rule 6).
         compose.runOnIdle { nav.select(Section.LIBRARY) }
         wait("library_item_cube")
+        assertAllNamed("library list")
         // Rule 12: over the limit it warns, and deletes nothing on its own.
         wait("library_full")
         assertEquals(1, library.list().size)
         compose.onNodeWithTag("library_item_cube").performClick()
         wait("library_print_1")
+        // accessibility_touch.md, rule 9: every control of the entry has a name.
+        assertAllNamed("library entry")
         // Rule 1, «La imprimí» with a note.
         compose.onNodeWithTag("library_printed").performScrollTo().performClick()
         compose.onNodeWithTag("library_printed_note").performScrollTo().performTextInput("Salió bien")
