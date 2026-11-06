@@ -146,6 +146,15 @@ fun LibraryScreen(lib: LibraryViewModel, slice: SliceViewModel, nav: Navigator, 
 @Composable
 private fun EntryDetail(entry: Library.Entry, lib: LibraryViewModel, slice: SliceViewModel, nav: Navigator) {
     var confirm by remember { mutableStateOf<Triple<String?, String?, String>?>(null) }
+    // Rule 1, «La imprimí»: a note and, if wanted, a photo of the print.
+    var printing by remember { mutableStateOf(false) }
+    var note by rememberSaveable { mutableStateOf("") }
+    var photo by remember { mutableStateOf<File?>(null) }
+    val context = LocalContext.current
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) photo = copyIn(context, uri, "library/photo", "photo.jpg")
+    }
+
     confirm?.let { (recipe, analysis, what) ->
         AlertDialog(onDismissRequest = { confirm = null }, title = { Text(stringResource(R.string.library_delete_ask, what)) },
             confirmButton = { TextButton(onClick = { lib.delete(entry.id, recipe, analysis); confirm = null },
@@ -191,6 +200,28 @@ private fun EntryDetail(entry: Library.Entry, lib: LibraryViewModel, slice: Slic
             }
         }
         item {
+            Text(stringResource(R.string.library_printed_title), style = MaterialTheme.typography.labelLarge)
+            entry.printed.forEach { p ->
+                Text(listOf(p.date, p.note).filter { it.isNotBlank() }.joinToString(" · ") +
+                    (if (p.photo.isNotBlank()) " · 📷" else ""), style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.testTag("library_printed_line"))
+            }
+            if (!printing) OutlinedButton(onClick = { printing = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                .testTag("library_printed")) { Text(stringResource(R.string.library_printed)) }
+            else TismaCard {
+                OutlinedTextField(note, { note = it }, label = { Text(stringResource(R.string.library_printed_note)) },
+                    modifier = Modifier.fillMaxWidth().testTag("library_printed_note"))
+                OutlinedButton(onClick = { pickPhoto.launch(arrayOf("image/*")) }, modifier = Modifier.testTag("library_printed_photo")) {
+                    Text(stringResource(if (photo == null) R.string.library_printed_add_photo else R.string.library_printed_photo_added))
+                }
+                Row {
+                    Button(onClick = { lib.printed(entry.id, photo, note); printing = false; note = ""; photo = null },
+                        modifier = Modifier.testTag("library_printed_save")) { Text(stringResource(R.string.pref_save)) }
+                    TextButton(onClick = { printing = false }) { Text(stringResource(R.string.cancel)) }
+                }
+            }
+        }
+        item {
             if (entry.recipes.isEmpty()) OutlinedButton(onClick = { slice.openFromLibrary(entry); lib.close(); nav.select(Section.PLATE) },
                 modifier = Modifier.fillMaxWidth().testTag("library_open")) { Text(stringResource(R.string.library_open)) }
             OutlinedButton(onClick = { lib.export(entry.id) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("library_export")) {
@@ -221,12 +252,12 @@ private fun time(s: Double): String {
     return if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min"
 }
 
-/** A picked `.tismalib` copied where the engine can read it. */
-private fun copyIn(context: android.content.Context, uri: Uri): File? = runCatching {
+/** A picked file (a `.tismalib`, a photo) copied where the engine can read it. */
+private fun copyIn(context: android.content.Context, uri: Uri, folder: String = "library/import", fallback: String = "entry.tismalib"): File? = runCatching {
     val name = context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
         if (c.moveToFirst()) c.getString(0) else null
-    } ?: "entry.tismalib"
-    val dir = File(context.cacheDir, "library/import").apply { deleteRecursively(); mkdirs() }
+    } ?: fallback
+    val dir = File(context.cacheDir, folder).apply { deleteRecursively(); mkdirs() }
     val f = File(dir, name.substringAfterLast('/').replace(Regex("[^A-Za-z0-9._ -]"), "_"))
     context.contentResolver.openInputStream(uri)?.use { i -> f.outputStream().use { i.copyTo(it) } } ?: return null
     f

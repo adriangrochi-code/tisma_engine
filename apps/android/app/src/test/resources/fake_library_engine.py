@@ -155,6 +155,17 @@ def library(args):
         e["id"] = target
         write(lib, e)
         out(e)
+    if cmd == "printed":
+        eid = opt(args, "--entry")
+        e = read(lib, eid)
+        photo = ""
+        if opt(args, "--photo"):
+            os.makedirs(os.path.join(lib, eid, "photos"), exist_ok=True)
+            photo = "photos/%d%s" % (len(e.get("printed", [])) + 1, os.path.splitext(opt(args, "--photo"))[1])
+            shutil.copyfile(opt(args, "--photo"), os.path.join(lib, eid, photo))
+        e.setdefault("printed", []).append({"date": opt(args, "--date", ""), "photo": photo, "note": opt(args, "--note", "")})
+        write(lib, e)
+        out(e)
     if cmd == "delete":
         eid = opt(args, "--entry")
         if opt(args, "--recipe"):

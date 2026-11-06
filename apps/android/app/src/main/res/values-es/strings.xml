@@ -612,4 +612,9 @@
     <string name="camera_bambu_certificate">El certificado de la cámara no es el que se guardó para esta impresora. Si cambiaste la impresora, volvé a agregarla.</string>
     <string name="camera_bambu_no_images">La cámara se conectó pero no manda imágenes. Revisá que la cámara esté prendida en la impresora.</string>
     <string name="event_stopped_state">%1$s · la impresora dice: %2$s</string>
+    <string name="library_printed">La imprimí</string>
+    <string name="library_printed_title">Impresiones</string>
+    <string name="library_printed_note">Nota (cómo salió)</string>
+    <string name="library_printed_add_photo">Agregar una foto</string>
+    <string name="library_printed_photo_added">Foto elegida</string>
 </resources>

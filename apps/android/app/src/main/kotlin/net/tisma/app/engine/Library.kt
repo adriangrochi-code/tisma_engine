@@ -42,8 +42,11 @@ class Library(private val engine: File, val dir: File) {
 
     data class Analysis(val id: String, val kind: String, val file: String, val summary: JsonObject)
 
+    /** Rule 1, «La imprimí»: when, an optional photo (in the entry's photos/) and a note. */
+    data class Printed(val date: String, val photo: String, val note: String)
+
     data class Entry(val id: String, val name: String, val tags: List<String>, val notes: String,
-                     val recipes: List<Recipe>, val analyses: List<Analysis>)
+                     val recipes: List<Recipe>, val analyses: List<Analysis>, val printed: List<Printed> = emptyList())
 
     /** Rule 7: whether the recipe still matches, and which analyses still hold. */
     data class Check(val sameSettings: Boolean, val olderEngine: Boolean, val missingKeys: List<String>,
@@ -99,6 +102,14 @@ class Library(private val engine: File, val dir: File) {
             })
     }
 
+    /** Rule 1: «La imprimí», with the date, an optional photo and a note. */
+    fun printed(entry: String, date: String, photo: File? = null, note: String = ""): Entry {
+        val args = mutableListOf("library", "printed", "--dir", dir.path, "--entry", entry, "--date", date)
+        photo?.takeIf { it.isFile }?.let { args += listOf("--photo", it.path) }
+        if (note.isNotBlank()) args += listOf("--note", note)
+        return entry(json(run(args)))
+    }
+
     fun export(entry: String, out: File): File {
         run(listOf("library", "export", "--dir", dir.path, "--entry", entry, "-o", out.path))
         return out
@@ -143,6 +154,7 @@ class Library(private val engine: File, val dir: File) {
         (o["analyses"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().map { a ->
             Analysis(a.s("id"), a.s("kind"), a.s("file"), (a["summary"] as? JsonObject) ?: JsonObject(emptyMap()))
         },
+        (o["printed"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().map { p -> Printed(p.s("date"), p.s("photo"), p.s("note")) },
     )
 
     private fun run(args: List<String>): String {

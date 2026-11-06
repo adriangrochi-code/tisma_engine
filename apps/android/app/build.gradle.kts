@@ -59,7 +59,11 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
         // The Bambu Lab mock's TLS under Robolectric reads java.net internals (the camera test, CM2).
-        unitTests.all { it.jvmArgs("--add-opens", "java.base/java.net=ALL-UNNAMED") }
+        // Arguments to the engine's process in UTF-8, as on Android (a note «Salió bien», local_library.md rule 1).
+        unitTests.all {
+            it.jvmArgs("--add-opens", "java.base/java.net=ALL-UNNAMED")
+            it.environment("LC_ALL", "C.UTF-8")
+        }
     }
 }
 

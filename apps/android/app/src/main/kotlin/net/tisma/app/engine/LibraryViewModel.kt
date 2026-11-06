@@ -87,6 +87,14 @@ class LibraryViewModel(
 
     fun cancelImport() = _state.update { it.copy(exists = null) }
 
+    /** Rule 1, «La imprimí»: today, with an optional photo and a note. */
+    fun printed(id: String, photo: File?, note: String) = work {
+        val date = java.time.LocalDate.now().toString()
+        val e = library.printed(id, date, photo, note)
+        val l = library.list()
+        _state.update { it.copy(entry = e, items = l) }
+    }
+
     /** Rule 8: deletes an entry, a recipe or an analysis; a copy is kept to undo it until the app closes. */
     fun delete(id: String, recipe: String? = null, analysis: String? = null) = work {
         val copy = library.export(id, File(File(workDir, "undo").apply { mkdirs() }, "$id-${System.nanoTime()}.tismalib"))

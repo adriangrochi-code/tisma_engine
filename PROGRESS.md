@@ -11135,3 +11135,7 @@ Pedido de la sesión de especificación (en la PC el dueño no ve la cámara de 
 - Pruebas de interfaz de lo nuevo (Robolectric): `BambuSendTest` (desde el plato, con la Bambu simulada: apagar
   nivelación y prender timelapse llega al `project_file`), además de `BambuPlateTest`, `PackWizardTest` (AND10) y
   `LibraryTest`. En el emulador las prueba la sesión de especificación.
+- «La imprimí» (regla 1) en el detalle de una pieza de Mi biblioteca: nota y foto opcional, con
+  `library printed --date --photo --note` (contrato aceptado por el motor, que está haciendo el comando `library`).
+  Las pruebas de la app corren con `LC_ALL=C.UTF-8`, como Android pasa los argumentos (una nota con acentos).
+  Prueba en `LibraryTest`.

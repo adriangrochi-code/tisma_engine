@@ -126,6 +126,12 @@ class LibraryTest {
         assertEquals(1, library.list().size)
         compose.onNodeWithTag("library_item_cube").performClick()
         wait("library_print_1")
+        // Rule 1, «La imprimí» with a note.
+        compose.onNodeWithTag("library_printed").performScrollTo().performClick()
+        compose.onNodeWithTag("library_printed_note").performScrollTo().performTextInput("Salió bien")
+        compose.onNodeWithTag("library_printed_save").performScrollTo().performClick()
+        wait("library_printed_line")
+        assertEquals("Salió bien", library.show(lp.entry).printed.single().note)
         File(work, "summary.json").delete()
         compose.onNodeWithTag("library_print_1").performScrollTo().performClick()
         // Sliced again: the summary is written anew (the G-code is not kept in the library).
