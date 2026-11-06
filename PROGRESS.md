@@ -11094,9 +11094,10 @@ Regla del dueño (06-11, por la sesión de especificación): sin tiempo libre; a
 - Al mandar a una Bambu Lab desde el plato: «Nivelar la cama», «Calibrar el flujo» (prendidas por defecto),
   «Calibrar las vibraciones» y «Grabar un timelapse». Van en el pedido `project_file` por MQTT
   (`PrintOptions` en el módulo de impresoras; las demás impresoras las ignoran).
-- **Falta** (esperando al motor): que vayan también como variables al G-code de inicio y que un cambio vuelva a
-  laminar; se preguntaron las claves de ajustes a la sesión del motor. La placa queda «auto» en el pedido: la ficha
-  no dice sus valores.
+- Corrección de la ficha (spec `fda7ff8`): solo la **placa** va al G-code de inicio (`curr_bed_type`); las demás
+  opciones van solo en el pedido y no vuelven a laminar. La placa se elige en el plato con una impresora Bambu Lab
+  («La que detecte la impresora» o una de las seis de la ficha) y va como `bambu.plate` en los ajustes (clave del
+  motor); cambiarla pide laminar de nuevo. Prueba: `BambuPlateTest`.
 - Pruebas: `BambuTest` (valores por defecto y los elegidos en el pedido). La pantalla no tiene prueba automática.
   No probado con una Bambu real.
 - `mobile_app.md`, lo que quedaba:

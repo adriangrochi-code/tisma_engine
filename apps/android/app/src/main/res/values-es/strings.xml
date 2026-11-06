@@ -605,4 +605,6 @@
     <string name="plate_remove">Quitar de la placa</string>
     <string name="pref_library_cap">Límite de Mi biblioteca (MB)</string>
     <string name="library_full">Mi biblioteca pasó el límite de %1$d MB. No se borra nada solo: mirá cuánto ocupa cada pieza y elegí qué borrar.</string>
+    <string name="bambu_plate">Placa de la cama</string>
+    <string name="bambu_plate_auto">La que detecte la impresora</string>
 </resources>

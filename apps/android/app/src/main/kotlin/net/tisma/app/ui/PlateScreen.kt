@@ -165,6 +165,20 @@ private fun PlateControls(
                     Switch(state.settings.supports, { slice.setSettings(state.settings.copy(supports = it)) },
                         enabled = !state.slicing, modifier = Modifier.named(stringResource(R.string.plate_supports)))
                 }
+                // gcode_macros.md, rule 12: a Bambu Lab's plate goes into its start G-code (curr_bed_type), so it is a
+                // slicing setting; the other options are chosen when sending.
+                if (isBambu(state.profile)) {
+                    Text(stringResource(R.string.bambu_plate), style = MaterialTheme.typography.labelLarge)
+                    val plate = (state.value("bambu.plate") as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        (listOf("") + BAMBU_PLATES).forEach { name ->
+                            FilterChip(selected = plate == name, enabled = !state.slicing,
+                                onClick = { slice.setValue("bambu.plate", if (name.isEmpty()) null else kotlinx.serialization.json.JsonPrimitive(name)) },
+                                label = { Text(name.ifEmpty { stringResource(R.string.bambu_plate_auto) }) },
+                                modifier = Modifier.testTag("bambu_plate_" + name.ifEmpty { "auto" }))
+                        }
+                    }
+                }
                 // Copies of the model, which the engine arranges on the bed.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.plate_copies), modifier = Modifier.weight(1f))
@@ -647,3 +661,10 @@ internal fun plateCost(grams: Double?, pricePerKg: kotlinx.serialization.json.Js
     if (grams == null || grams <= 0 || price <= 0) return null
     return grams / 1000 * price
 }
+
+/** The plates a Bambu Lab's start G-code knows (gcode_macros.md, rule 12); none chosen is «auto». */
+val BAMBU_PLATES = listOf("Cool Plate", "Engineering Plate", "High Temp Plate", "Textured PEI Plate", "Supertack Plate", "Textured Cool Plate")
+
+/** A printer of Bambu Lab's (the pack's `Orca_BBL` vendor, or its name). */
+internal fun isBambu(p: net.tisma.app.engine.EngineRunner.ProfileChoice?): Boolean =
+    p != null && (p.printer.contains("/BBL/") || p.printer.contains("Orca_BBL") || (p.name ?: p.printer).contains("Bambu", ignoreCase = true))
