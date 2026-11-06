@@ -1166,7 +1166,8 @@ pared, la segunda pared de las ramas anchas y las líneas.
     2,6 s contra 1,4 s de los offsets de Clipper, porque cada capa usa una grilla de toda la caja de sus ramas, casi
     vacía, y una segunda transformada para la segunda pared.
   - Conectada, haría el árbol más lento aun con la transformada gratis. Para que pague:
-    - una grilla por isla (por rama), no por capa;
+    - [x] una grilla por isla (por rama), no por capa (2026-11-06): en la esfera de 100 mm el laminado con el campo
+      pasa a 1,39 s contra 1,11 s con los offsets (antes 2,9 contra 1,44 s), con la transformada en la CPU;
     - marching squares y los umbrales también en la GPU;
     - la segunda pared desde el mismo campo.
   - Hasta entonces el laminado usa los offsets (paso 1).
