@@ -4,7 +4,9 @@
 
 #include "catalog/pack.hpp"
 #include "config/settings.hpp"
+#include "io/model.hpp"
 #include "io/zip.hpp"
+#include "project/project.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -209,7 +211,22 @@ json library_save(const fs::path& dir, const LibrarySave& r) {
     if (r.name)
         e["name"] = *r.name;
     const fs::path folder = dir / e.at("id").get<std::string>();
-    copy_in(r.model, folder / "project.3mf", "project");
+    // The project as a 3MF package (rule 1): a bare STL or OBJ, as the phone's
+    // plate holds it, becomes one, with the settings it was sliced with.
+    const std::string model = read_file(r.model, "model");
+    if (looks_like_zip(model)) {
+        write_file(folder / "project.3mf", model);
+    } else {
+        Project project;
+        try {
+            ModelFile file = parse_model(model, r.model.extension().string());
+            project.settings = parse_settings(settings);
+            project.models.push_back({r.model.stem().string(), std::move(file.mesh)});
+        } catch (const std::exception& e) {
+            fail("input", std::string("the model cannot be read: ") + e.what(), "no se puede leer el modelo");
+        }
+        write_file(folder / "project.3mf", write_project_3mf(project));
+    }
     if (r.thumb)
         copy_in(*r.thumb, folder / "thumb.png", "picture");
     // The same printer, nozzle, filament and print profile: that recipe again.
