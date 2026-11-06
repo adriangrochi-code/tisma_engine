@@ -139,7 +139,9 @@ catch_discover_tests(tisma_tests PROPERTIES SKIP_RETURN_CODE 4)
 # lattice at a useful size: too slow for the debug build with the sanitizers.
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_test(NAME aero_drag_coefficients COMMAND tisma_tests "[aero-full]")
-  set_tests_properties(aero_drag_coefficients PROPERTIES TIMEOUT 1800)
+  # It takes every core for minutes: the simulated print, whose window
+  # renders in software, does not run beside it (it starved past its timeout).
+  set_tests_properties(aero_drag_coefficients PROPERTIES TIMEOUT 1800 RESOURCE_LOCK all_cores)
 endif()
 
 # The random search for G-code the checker rejects (tests/fuzz_gcode.cpp); a
@@ -573,6 +575,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view device --device sim
               --device-print --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_device.png)
+    set_tests_properties(ui_device_prints_to_simulator PROPERTIES RESOURCE_LOCK all_cores)
     # The printer's limits read on connecting, into the profile's empty values.
     add_test(NAME ui_device_limits
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
