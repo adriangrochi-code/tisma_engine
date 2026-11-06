@@ -160,7 +160,7 @@ class Library(private val engine: File, val dir: File) {
     private fun run(args: List<String>): String {
         dir.mkdirs()
         val err = File(dir.parentFile ?: dir, "library.err")
-        val p = ProcessBuilder(listOf(engine.path) + args).redirectError(err).start()
+        val p = engineProcess(listOf(engine.path) + args, dir.parentFile ?: dir).redirectError(err).start()
         p.outputStream.close()
         val out = p.inputStream.bufferedReader().readText()
         if (!p.waitFor(5, TimeUnit.MINUTES)) { p.destroyForcibly(); throw LibraryException("The engine took too long") }

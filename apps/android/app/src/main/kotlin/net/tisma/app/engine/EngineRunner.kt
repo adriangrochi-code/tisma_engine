@@ -127,7 +127,7 @@ class EngineRunner(
         } else mutableListOf(executable.path, "profile", "--printer", choice.printer,
             "--nozzle", choice.nozzle.toString(), "-o", out.path).also { a -> choice.filament?.let { a += listOf("--filament", it) } }
         return runCatching {
-            val p = ProcessBuilder(args).directory(workDir).redirectErrorStream(true).start()
+            val p = engineProcess(args, workDir).directory(workDir).redirectErrorStream(true).start()
             p.outputStream.close()
             p.inputStream.readBytes()
             if (!p.waitFor(30, TimeUnit.SECONDS)) { p.destroyForcibly(); return null }
@@ -204,7 +204,7 @@ class EngineRunner(
     private fun capture(args: List<String>, timeoutS: Long = 120): String {
         workDir.mkdirs()
         val err = File(workDir, "engine.err").apply { delete() }
-        val p = ProcessBuilder(listOf(executable.path) + args).directory(workDir).redirectError(err).start()
+        val p = engineProcess(listOf(executable.path) + args, workDir).directory(workDir).redirectError(err).start()
         p.outputStream.close()
         val out = p.inputStream.bufferedReader().readText()
         if (!p.waitFor(timeoutS, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The engine took too long", "", -1) }
@@ -321,8 +321,8 @@ class EngineRunner(
         val f = File(workDir, "design.json").apply { writeText(doc.json().toString()) }
         val out = File(workDir, "design.stl").apply { delete() }
         val err = File(workDir, "engine.err").apply { delete() }
-        val p = ProcessBuilder(listOf(executable.path, "design", "build", f.path, "--solidcraft", solidcraft.path, "-o", out.path,
-            "--quality", quality, "--timeline")).directory(workDir).redirectError(err).start()
+        val p = engineProcess(listOf(executable.path, "design", "build", f.path, "--solidcraft", solidcraft.path, "-o", out.path,
+            "--quality", quality, "--timeline"), workDir).directory(workDir).redirectError(err).start()
         p.outputStream.close()
         val text = p.inputStream.bufferedReader().readText()
         if (!p.waitFor(300, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The design took too long", "", -1) }
@@ -361,7 +361,7 @@ class EngineRunner(
         out.delete()
         summary?.delete()
         val stderr = File(workDir, "engine.err")
-        val process = ProcessBuilder(listOf(executable.path) + args)
+        val process = engineProcess(listOf(executable.path) + args, workDir)
             .directory(workDir)
             .redirectError(stderr)
             .start()
@@ -411,4 +411,13 @@ class EngineRunner(
         /** The engine's file inside the app: Android unpacks it with the native libraries. */
         const val FILE_NAME = "libtisma_engine.so"
     }
+}
+
+/**
+ * A process of the engine with its own temporary folder (QA AND12): Android has no /tmp, and the engine (and
+ * SolidCraft through it) asks the system for one, so `TMPDIR` points inside [base], made if missing.
+ */
+internal fun engineProcess(command: List<String>, base: File): ProcessBuilder = ProcessBuilder(command).also { pb ->
+    val tmp = File(base, "tmp").apply { mkdirs() }
+    pb.environment()["TMPDIR"] = tmp.path
 }

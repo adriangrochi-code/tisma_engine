@@ -296,7 +296,8 @@ private fun PlateControls(
                 }
             }
         }
-        if (state.libraryAvailable && state.modelName != null && !state.isProject &&
+        // A 3MF project too (QA, 06-11-2026): the engine keeps it as the entry's project.3mf as it is.
+        if (state.libraryAvailable && state.modelName != null &&
             (state.result != null || state.analysis != null || state.fromLibrary != null)) LibraryCard(state, slice)
         // The cloud stays one tap away (mobile_app.md, rules 12 and 15).
         AccentTextButton(onClick = { nav.open(if (signedIn) Screen.NewJob else Screen.Account) },

@@ -11762,3 +11762,15 @@ arquitecturas pesaba 36 MB, casi todo dex sin achicar (28 MB) y dos copias del m
   filamento), CAD, Ayuda y Piezas en Ingeniería, y `LibraryTest` la corre en la lista y en el detalle de una pieza:
   todos con nombre. En castellano no falta ningún texto (los iguales a los ingleses son nombres: Material, Normal,
   OctoPrint…), y no hay textos visibles escritos en el código.
+
+## 2026-11-06 — Android: AND12 (carpeta temporal del motor) y la biblioteca con proyectos 3MF
+
+Smoke del beta R8 x86_64 (`cb4a0e3`) por la sesión de especificación: sin cierres ni errores de R8 en asistente,
+3MF, laminar, vista previa, Material, Más y la lista de la Biblioteca.
+- **AND12:** Diseño → Box → Build daba «cannot make a temporary folder» (volumen 0). En Android no hay `/tmp`, y el
+  motor (para SolidCraft) le pide al sistema la carpeta temporal. Ahora cada proceso del motor (corte, perfil,
+  análisis, diseño, paquete, biblioteca) recibe `TMPDIR` dentro de la carpeta de la app, creada si falta
+  (`engineProcess`). Prueba: `EngineRunnerTest` AND12.
+- «Guardar en la biblioteca» no aparecía después de laminar un 3MF: la tarjeta del plato dejaba afuera los proyectos.
+  El motor guarda el 3MF tal cual como `project.3mf`, así que ahora también se ofrece. No hay prueba automática con
+  un 3MF.

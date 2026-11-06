@@ -250,7 +250,7 @@ class ProfilePack(
     private fun run(args: List<String>): String {
         dataDir.mkdirs()
         val err = File(dataDir, "pack.err")
-        val p = ProcessBuilder(listOf(engine.path) + args).redirectError(err).start()
+        val p = engineProcess(listOf(engine.path) + args, dataDir).redirectError(err).start()
         p.outputStream.close()
         val out = p.inputStream.bufferedReader().readText()
         if (!p.waitFor(10, TimeUnit.MINUTES)) { p.destroyForcibly(); throw PackException("The engine took too long") }
