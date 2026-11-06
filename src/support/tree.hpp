@@ -1,5 +1,6 @@
 #pragma once
 
+#include "geom/bitgrid.hpp"
 #include "geom/polygons.hpp"
 #include "perimeters/sites.hpp"
 
@@ -68,5 +69,18 @@ struct TreeFill {
 };
 TreeFill tree_fill(const Polygons& area, const Polygons& above, double bead, double spacing, double double_wall,
                    double angle);
+
+// The same fill from a distance field (PLAN.md, «Soporte en árbol y pintura
+// más livianos», step 2), so that the GPU can do the heavy part for every
+// layer at once: the branches (the area less the interface) on a grid of a
+// quarter of a bead a pixel (tree_branch_grid), each pixel's squared
+// distance to their edge (squared_distance_inside, or the GPU's
+// distance_inside), and from it the wall at half a bead, the second wall
+// where a branch is double_wall wide, and the inside a bead in, as levels of
+// the distance instead of offsets of polygons. Own design.
+BitGrid tree_branch_grid(const Polygons& area, const Polygons& above, double bead);
+TreeFill tree_fill_field(const Polygons& area, const Polygons& above, const BitGrid& grid,
+                         const std::vector<float>& squared, double bead, double spacing, double double_wall,
+                         double angle);
 
 } // namespace tisma

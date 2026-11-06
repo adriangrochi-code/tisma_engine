@@ -3,7 +3,9 @@
 
 #include "geom/distance.hpp"
 
+#include <cmath>
 #include <limits>
+#include <unordered_map>
 
 namespace tisma {
 namespace {
@@ -97,6 +99,89 @@ BitGrid at_least(const BitGrid& grid, const std::vector<float>& squared, double 
         for (int i = 0; i < grid.width(); ++i)
             if (squared[std::size_t(j) * std::size_t(grid.width()) + std::size_t(i)] >= limit)
                 out.set(i, j);
+    return out;
+}
+
+Polygons distance_level(const BitGrid& grid, const std::vector<float>& squared, double pixels) {
+    const int w = grid.width(), h = grid.height();
+    if (w == 0 || h == 0)
+        return {};
+    // The distance to the edge at a pixel centre: half a pixel less than to
+    // the nearest unset centre; unset pixels and the outside, -1/2.
+    const auto value = [&](int i, int j) -> double {
+        if (i < 0 || j < 0 || i >= w || j >= h)
+            return -0.5;
+        const float d = squared[std::size_t(j) * std::size_t(w) + std::size_t(i)];
+        return d > 0.0f ? std::sqrt(double(d)) - 0.5 : -0.5;
+    };
+    const double p = double(grid.pixel());
+    const auto x_of = [&](double i) { return double(grid.x0()) + (i + 0.5) * p; };
+    const auto y_of = [&](double j) { return double(grid.y0()) + (j + 0.5) * p; };
+    // Edges between centres, each once: (i, j) to (i + 1, j) and (i, j) to
+    // (i, j + 1), i and j from -1.
+    const auto edge_id = [&](int i, int j, bool vertical) {
+        return (std::int64_t(j + 1) * std::int64_t(w + 2) + std::int64_t(i + 1)) * 2 + (vertical ? 1 : 0);
+    };
+    struct Segment {
+        Clipper2Lib::Point64 from;
+        std::int64_t to = 0;
+        bool used = false;
+    };
+    std::unordered_map<std::int64_t, Segment> by_start;
+    for (int j = -1; j < h; ++j)
+        for (int i = -1; i < w; ++i) {
+            // The cell's corners counter-clockwise (y up), and its edges after them.
+            const int ci[4] = {i, i + 1, i + 1, i}, cj[4] = {j, j, j + 1, j + 1};
+            double v[4];
+            bool in[4];
+            for (int k = 0; k < 4; ++k) {
+                v[k] = value(ci[k], cj[k]);
+                in[k] = v[k] >= pixels;
+            }
+            if (in[0] == in[1] && in[1] == in[2] && in[2] == in[3])
+                continue;
+            const std::int64_t ids[4] = {edge_id(i, j, false), edge_id(i + 1, j, true), edge_id(i, j + 1, false),
+                                         edge_id(i, j, true)};
+            Clipper2Lib::Point64 at[4];
+            for (int k = 0; k < 4; ++k) {
+                const int n = (k + 1) % 4;
+                if (in[k] == in[n])
+                    continue;
+                const double t = (pixels - v[k]) / (v[n] - v[k]);
+                at[k] = {std::llround(x_of(ci[k] + t * (ci[n] - ci[k]))), std::llround(y_of(cj[k] + t * (cj[n] - cj[k])))};
+            }
+            // Each crossing from inside to outside (going round the cell) to
+            // the next from outside to inside: the inside on the left.
+            for (int k = 0; k < 4; ++k) {
+                if (!(in[k] && !in[(k + 1) % 4]))
+                    continue;
+                for (int s = 1; s < 4; ++s) {
+                    const int e = (k + s) % 4;
+                    if (!in[e] && in[(e + 1) % 4]) {
+                        by_start[ids[k]] = Segment{at[k], ids[e], false};
+                        break;
+                    }
+                }
+            }
+        }
+    // The segments joined end to start into closed rings.
+    Polygons out;
+    for (auto& [start, first] : by_start) {
+        if (first.used)
+            continue;
+        Polygon ring;
+        std::int64_t at = start;
+        for (std::size_t guard = 0; guard <= by_start.size(); ++guard) {
+            const auto it = by_start.find(at);
+            if (it == by_start.end() || it->second.used)
+                break;
+            it->second.used = true;
+            ring.push_back(it->second.from);
+            at = it->second.to;
+        }
+        if (ring.size() > 2)
+            out.push_back(std::move(ring));
+    }
     return out;
 }
 

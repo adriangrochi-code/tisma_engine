@@ -20,4 +20,11 @@ std::vector<float> squared_distance_inside(const BitGrid& grid);
 // many pixels, as a grid of the same size.
 BitGrid at_least(const BitGrid& grid, const std::vector<float>& squared, double pixels);
 
+// The region shrunk by `pixels`, as polygons along the level of the
+// distance to the region's edge (the edge half a pixel past the last set
+// centre): marching squares over the pixel centres, each crossing placed by
+// linear interpolation, so the outline is smooth and not the pixels'
+// stairs. Outer boundaries counter-clockwise, holes clockwise. Own code.
+Polygons distance_level(const BitGrid& grid, const std::vector<float>& squared, double pixels);
+
 } // namespace tisma

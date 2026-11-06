@@ -11502,3 +11502,12 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   `material` con `density` y `cost_per_kg` (`profile_pack_format.md`, entradas, regla 4), y el motor no lo leía.
 - Arreglo: `parse_pack_entry` los pasa a `extrusion.density` y `extrusion.cost` cuando el perfil no trae los suyos.
 - Prueba en `[pack]`.
+- Paso 2, tercera pieza:
+  - `distance_level` (marching squares sobre el campo, interpolado entre centros de pixel): el contorno de la región
+    achicada sale liso y no en escalera. Un disco de 5 mm achicado 1 mm da el área a menos de 2 % y el largo a menos
+    de 2 %.
+  - `tree_fill_field`, el relleno del árbol desde el campo: pared a medio cordón, segunda pared donde entra
+    `tree_double_wall_diameter`, adentro a un cordón.
+  - Prueba `[field]`: igual a `tree_fill` (Clipper) en cinco formas: rama fina, tronco, dos unidas, varias, bajo la
+    pieza. Mismas paredes; largos a menos de 4 % las paredes y 8 % el total.
+  - Sigue: la transformada de todas las capas en una sola llamada a la GPU, el uso en el pipeline y la medición.

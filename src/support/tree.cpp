@@ -3,6 +3,7 @@
 
 #include "support/tree.hpp"
 
+#include "geom/distance.hpp"
 #include "infill/rectilinear.hpp"
 
 #include <oneapi/tbb/parallel_for.h>
@@ -494,6 +495,75 @@ TreeFill tree_fill(const Polygons& area, const Polygons& above, double bead, dou
                     out.support.push_back(ring_path(ring, bead));
             inside = Clipper2Lib::Union(Clipper2Lib::Difference(inside, offset(wide, -bead), Clipper2Lib::FillRule::NonZero),
                                         offset(wide, -bead * 2.0), Clipper2Lib::FillRule::NonZero);
+        }
+    }
+    for (Toolpath& t : rectilinear_fill(inside, spacing, angle, bead, true))
+        out.support.push_back(std::move(t));
+    return out;
+}
+
+namespace {
+
+// A quarter of a bead a pixel: the walls' places within an eighth of a bead.
+constexpr int kTreePixelsPerBead = 4;
+
+// The pixels of `a` that are also in `b` (grids of one size).
+BitGrid both(const BitGrid& a, const BitGrid& b) {
+    BitGrid outside = a;
+    outside.subtract(b);
+    BitGrid out = a;
+    out.subtract(outside);
+    return out;
+}
+
+} // namespace
+
+BitGrid tree_branch_grid(const Polygons& area, const Polygons& above, double bead) {
+    const Polygons branches = above.empty() ? area : Clipper2Lib::Difference(area, above, Clipper2Lib::FillRule::NonZero);
+    if (branches.empty())
+        return {};
+    const Clipper2Lib::Rect64 box = Clipper2Lib::GetBounds(branches);
+    const std::int64_t pixel = std::max<std::int64_t>(to_units(bead / kTreePixelsPerBead), 1);
+    const int margin = 2;
+    BitGrid grid(box.left - margin * pixel, box.top - margin * pixel, pixel,
+                 int((box.right - box.left) / pixel) + 2 * margin + 1, int((box.bottom - box.top) / pixel) + 2 * margin + 1);
+    grid.fill(branches);
+    return grid;
+}
+
+TreeFill tree_fill_field(const Polygons& area, const Polygons& above, const BitGrid& grid,
+                         const std::vector<float>& squared, double bead, double spacing, double double_wall,
+                         double angle) {
+    TreeFill out;
+    if (area.empty())
+        return out;
+    // The interface as in tree_fill: dense lines, no wall (rule 17).
+    if (!above.empty()) {
+        const Polygons dense = Clipper2Lib::Intersect(area, above, Clipper2Lib::FillRule::NonZero);
+        if (!dense.empty())
+            out.interface = rectilinear_fill(dense, bead, angle + 45.0, bead, true);
+    }
+    if (grid.width() == 0)
+        return out;
+    const double px = to_mm(grid.pixel());
+    // The region shrunk by `mm`, from a grid and its field.
+    const auto level = [&](const BitGrid& g, const std::vector<float>& d, double mm) { return distance_level(g, d, mm / px); };
+    for (const Polygon& ring : level(grid, squared, bead / 2.0))
+        if (ring.size() > 2)
+            out.support.push_back(ring_path(ring, bead));
+    Polygons inside = level(grid, squared, bead);
+    if (double_wall > 0.0 && !inside.empty()) {
+        // Where a disc of double_wall fits, grown back by its radius: a second wall.
+        BitGrid core = at_least(grid, squared, double_wall / 2.0 / px + 0.5);
+        if (!core.empty()) {
+            core.dilate(int(std::lround(double_wall / 2.0 / px)));
+            const BitGrid wide = both(core, grid);
+            const std::vector<float> d_wide = squared_distance_inside(wide);
+            for (const Polygon& ring : level(wide, d_wide, bead * 1.5))
+                if (ring.size() > 2)
+                    out.support.push_back(ring_path(ring, bead));
+            inside = Clipper2Lib::Union(Clipper2Lib::Difference(inside, level(wide, d_wide, bead), Clipper2Lib::FillRule::NonZero),
+                                        level(wide, d_wide, bead * 2.0), Clipper2Lib::FillRule::NonZero);
         }
     }
     for (Toolpath& t : rectilinear_fill(inside, spacing, angle, bead, true))

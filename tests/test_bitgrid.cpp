@@ -161,3 +161,37 @@ TEST_CASE("distance: the exact squared distance to the nearest unset pixel, as b
             square.set(i, j);
     CHECK(at_least(square, squared_distance_inside(square), 3.0).count() == 36);
 }
+
+TEST_CASE("distance: the level of the distance is a smooth outline of the shrunk region", "[bitgrid][distance]") {
+    // A disc of 5 mm on pixels of 0.1 mm, shrunk by 1 mm: a disc of 4 mm,
+    // counter-clockwise, its area within 2 % (a quarter of a pixel off at
+    // most) and its outline not stairs.
+    const std::int64_t pixel = to_units(0.1);
+    BitGrid g(to_units(-6.0), to_units(-6.0), pixel, 120, 120);
+    Polygon disc;
+    for (int k = 0; k < 256; ++k) {
+        const double a = 2.0 * std::numbers::pi * k / 256;
+        disc.push_back({to_units(5.0 * std::cos(a)), to_units(5.0 * std::sin(a))});
+    }
+    g.fill({disc});
+    const Polygons ring = distance_level(g, squared_distance_inside(g), 10.0);
+    REQUIRE(ring.size() == 1);
+    const double area = Clipper2Lib::Area(ring.front()) / double(kUnitsPerMm) / double(kUnitsPerMm);
+    CHECK_THAT(area, Catch::Matchers::WithinRel(std::numbers::pi * 16.0, 0.02));
+    double length = 0.0;
+    for (std::size_t i = 0; i < ring.front().size(); ++i) {
+        const auto& a = ring.front()[i];
+        const auto& b = ring.front()[(i + 1) % ring.front().size()];
+        length += std::hypot(double(b.x - a.x), double(b.y - a.y)) / double(kUnitsPerMm);
+    }
+    CHECK_THAT(length, Catch::Matchers::WithinRel(2.0 * std::numbers::pi * 4.0, 0.02)); // stairs would be 4/pi longer
+    // A ring with a hole: the hole clockwise.
+    BitGrid frame(0, 0, 1, 20, 20);
+    for (int j = 0; j < 20; ++j)
+        for (int i = 0; i < 20; ++i)
+            if (i < 6 || i >= 14 || j < 6 || j >= 14)
+                frame.set(i, j);
+    const Polygons both_ways = distance_level(frame, squared_distance_inside(frame), 1.0);
+    REQUIRE(both_ways.size() == 2);
+    CHECK((Clipper2Lib::Area(both_ways[0]) > 0) != (Clipper2Lib::Area(both_ways[1]) > 0));
+}

@@ -1,6 +1,7 @@
 #include "support/support.hpp"
 #include "gcode/order.hpp"
 #include "support/tree.hpp"
+#include "geom/distance.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -248,3 +249,53 @@ TEST_CASE("tree support: tips no closer than two beads, however the settings ask
     CHECK(nodes[0].size() < tips.size()); // they still join on the way down
 }
 
+
+TEST_CASE("tree support: the fill from a distance field is the same as from offsets (PLAN.md, GPU step 2)",
+          "[support][tree][field]") {
+    const auto disc = [](double x, double y, double r) {
+        Polygon p;
+        const int sides = std::clamp(int(std::ceil(2.0 * 3.14159265358979 * r / 0.4)), 12, 64);
+        for (int k = 0; k < sides; ++k) {
+            const double a = 2.0 * 3.14159265358979 * k / sides;
+            p.push_back({to_units(x + r * std::cos(a)), to_units(y + r * std::sin(a))});
+        }
+        return p;
+    };
+    const auto length = [](const std::vector<Toolpath>& paths, bool closed_only) {
+        double sum = 0.0;
+        for (const Toolpath& t : paths) {
+            if (closed_only && !t.closed)
+                continue;
+            for (std::size_t i = 1; i < t.points.size(); ++i)
+                sum += std::hypot(t.points[i].p.x - t.points[i - 1].p.x, t.points[i].p.y - t.points[i - 1].p.y);
+        }
+        return sum;
+    };
+    const auto closed = [](const std::vector<Toolpath>& paths) {
+        return std::count_if(paths.begin(), paths.end(), [](const Toolpath& t) { return t.closed; });
+    };
+    struct Case {
+        const char* name;
+        Polygons area, above;
+    };
+    const std::vector<Case> cases = {
+        {"thin branch", {disc(0, 0, 1.0)}, {}},
+        {"trunk", {disc(0, 0, 3.0)}, {}},
+        {"two joined", Clipper2Lib::Union(Polygons{disc(0, 0, 2.0), disc(3, 0, 2.0)}, Clipper2Lib::FillRule::NonZero), {}},
+        {"many", Clipper2Lib::Union(Polygons{disc(0, 0, 1.0), disc(10, 0, 1.5), disc(20, 5, 2.5), disc(30, 0, 4.0)},
+                                    Clipper2Lib::FillRule::NonZero),
+         {}},
+        {"under the part", {disc(0, 0, 3.0)}, {disc(2, 0, 1.5)}},
+    };
+    for (const Case& c : cases) {
+        CAPTURE(c.name);
+        const TreeFill a = tree_fill(c.area, c.above, 0.4, 2.5, 3.0, 0.0);
+        const BitGrid grid = tree_branch_grid(c.area, c.above, 0.4);
+        const TreeFill b = tree_fill_field(c.area, c.above, grid, squared_distance_inside(grid), 0.4, 2.5, 3.0, 0.0);
+        CHECK(closed(b.support) == closed(a.support));
+        // Walls within a few percent; the lines inside within a line or two.
+        CHECK_THAT(length(b.support, true), WithinAbs(length(a.support, true), 0.04 * length(a.support, true) + 0.2));
+        CHECK_THAT(length(b.support, false), WithinAbs(length(a.support, false), 0.08 * length(a.support, false) + 1.0));
+        CHECK(length(b.interface, false) == length(a.interface, false));
+    }
+}
