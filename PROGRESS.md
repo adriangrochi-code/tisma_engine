@@ -11715,3 +11715,7 @@ arreglado en 9d8dc76 y subido.
 **Falta:** el límite de espacio (regla 12, ML7) y la biblioteca en la interfaz de escritorio.
 
 **Sigue:** avisar a Android; después PLAN.md.
+- Mi biblioteca contra el motor real (dev `e057b99`, `library`): `LibraryTest` usa el motor de `TISMA_HOST_ENGINE`
+  si está. Pasan ML3/ML4 (check) y ML5/ML6 (exportar, importar, «ya existe», archivo inseguro). ML1 falla: `save`
+  copia `--model` tal cual a `project.3mf`, y el plato tiene un STL; al «Imprimir» el motor dice «3MF: not a ZIP
+  package». Se pidió al motor que convierta a paquete 3MF al guardar (regla 1). Con el motor de prueba, todo pasa.

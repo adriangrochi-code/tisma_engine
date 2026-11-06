@@ -51,7 +51,10 @@ class LibraryTest {
     @get:Rule
     val tmp = TemporaryFolder()
 
-    private fun engine(): File = tmp.newFile("engine.py").apply {
+    /** The real engine when TISMA_HOST_ENGINE names a host build (its `library` commands), else the stand-in. */
+    private fun engine(): File = System.getenv("TISMA_HOST_ENGINE")?.let(::File)?.takeIf { it.canExecute() } ?: fake()
+
+    private fun fake(): File = tmp.newFile("engine.py").apply {
         writeBytes(LibraryTest::class.java.getResourceAsStream("/fake_library_engine.py")!!.readBytes())
         setExecutable(true)
     }
