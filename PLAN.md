@@ -1184,8 +1184,9 @@ pared, la segunda pared de las ramas anchas y las líneas.
   - Meta: el relleno del árbol por debajo de 150 ms en la esfera.
 - [ ] Árbol, paso 3: las áreas (discos y cascos de las ramas) rasterizadas en la GPU en la misma grilla, sin pasar
   por Clipper.
-- [ ] Pintura en piezas de pocos triángulos enormes: acortar el recorrido del árbol de cada triángulo en `paint` (hoy
-  rehace el árbol entero del triángulo en cada toque).
+- [x] Pintura en piezas de pocos triángulos enormes (2026-11-06): medido, no hace falta. En un cubo de 100 mm de 12
+  triángulos, 200 trazos de 2 mm tardan 16 ms (0,08 ms cada uno) y rearmar la vista, 0,07 ms (3461 piezas). Queda la
+  prueba oculta `[.bench]` en `tests/test_paint.cpp`.
 - [ ] Repetir con la pieza del tester (BH37/BH38) cuando llegue.
 
 ### Lo nuevo de OrcaSlicer 2.5 (`docs/spec/features/orca_2_5.md`, pedido del dueño, 2026-10-29)
