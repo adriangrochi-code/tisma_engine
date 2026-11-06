@@ -22987,7 +22987,11 @@ void App::frame() {
 
     // Screenshot mode: once everything asked for is ready, read the frame back.
     if (!options_.screenshot.empty()) {
-        ++frames_;
+        // An analysis or a slice in the background is waited for by its own
+        // step (and by the test's timeout), not by the frame count: under the
+        // sanitizers they take far more frames than on a plain build.
+        if (!structural_job_.running() && !slice_job_.running())
+            ++frames_;
         // A preview waits for its slice, unless the slice failed (the error is the picture then).
         const bool slice_pending =
             (options_.view == "preview" || options_.device_print) && has_plate_ && !result_ && error_title_.empty();
