@@ -259,7 +259,7 @@ private fun PlateControls(
                     Text(stringResource(R.string.plate_send_to), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ready.forEach { p ->
-                            FilterChip(selected = sendTo == p.id, onClick = { setSendTo(p.id) }, label = { Text(p.name) })
+                            FilterChip(selected = sendTo == p.id, onClick = { setSendTo(p.id) }, label = { Text(p.name) }, modifier = Modifier.testTag("send_to_" + p.name))
                         }
                     }
                     // gcode_macros.md, rule 12: what a Bambu Lab does before printing, chosen when sending.
@@ -270,13 +270,13 @@ private fun PlateControls(
                     val bambu = ready.firstOrNull { it.id == sendTo }?.kind == net.tisma.printers.PrinterKind.BAMBU
                     if (bambu) {
                         Text(stringResource(R.string.bambu_options), style = MaterialTheme.typography.labelLarge)
-                        listOf(Triple(R.string.bambu_leveling, leveling) { v: Boolean -> leveling = v },
-                            Triple(R.string.bambu_flow, flow) { v: Boolean -> flow = v },
-                            Triple(R.string.bambu_vibration, vibration) { v: Boolean -> vibration = v },
-                            Triple(R.string.bambu_timelapse, timelapse) { v: Boolean -> timelapse = v }).forEach { (label, on, set) ->
+                        listOf(Triple("leveling", R.string.bambu_leveling, leveling to { v: Boolean -> leveling = v }),
+                            Triple("flow", R.string.bambu_flow, flow to { v: Boolean -> flow = v }),
+                            Triple("vibration", R.string.bambu_vibration, vibration to { v: Boolean -> vibration = v }),
+                            Triple("timelapse", R.string.bambu_timelapse, timelapse to { v: Boolean -> timelapse = v })).forEach { (tag, label, value) ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(stringResource(label), modifier = Modifier.weight(1f))
-                                Switch(on, set, modifier = Modifier.named(stringResource(label)))
+                                Switch(value.first, value.second, modifier = Modifier.testTag("bambu_option_$tag").named(stringResource(label)))
                             }
                         }
                     }

@@ -11132,3 +11132,6 @@ Pedido de la sesión de especificación (en la PC el dueño no ve la cámara de 
   impresión hacia ese estado avisa como al pasar a lista: terminada si el avance llegó a 99 %, detenida si no, con la
   palabra de la impresora tal cual (sin adivinar nombres, `printer_connections.md`, regla 5). Un `print_error`
   durante la impresión sigue siendo «falló». Prueba: `PrintEventsTest`. No probado con una impresora real.
+- Pruebas de interfaz de lo nuevo (Robolectric): `BambuSendTest` (desde el plato, con la Bambu simulada: apagar
+  nivelación y prender timelapse llega al `project_file`), además de `BambuPlateTest`, `PackWizardTest` (AND10) y
+  `LibraryTest`. En el emulador las prueba la sesión de especificación.
