@@ -4,7 +4,7 @@ Versión de prueba para quienes la prueban con el dueño. Se instala a mano (APK
 
 ## Cómo instalar
 
-1. Bajá el APK que te pasaron (el de teléfono, `app-arm64-v8a-debug.apk`) y abrilo en el teléfono.
+1. Bajá el APK que te pasaron (el de teléfono, `app-arm64-v8a-beta.apk`) y abrilo en el teléfono.
 2. Si Android lo pide, permití instalar apps de esa fuente.
 3. Si ya tenías otra versión de prueba y Android dice que la firma no coincide, desinstalala primero y volvé a
    instalar. Esta beta se firma con una clave de prueba: cada versión puede pedir lo mismo hasta que haya una clave
@@ -30,14 +30,17 @@ Las actualizaciones automáticas están apagadas en esta beta. Cada versión nue
    prueba, elegí el valor que salió mejor y mirá que llegue a los ajustes.
 8. **Impresoras:** agregá la tuya en la red (o por dirección) y mandá un laminado a imprimir.
 9. **Tisma Cloud** (en Más): entrar con la cuenta, mandar un trabajo, ver su estado.
-10. **Reportar un problema** (en Más): si algo falla, mandalo desde ahí; va con el registro de la app.
+10. **Bambu Lab:** en el plato, «Placa de la cama»; al mandar, nivelar la cama y calibrar el flujo (prendidas) y
+    vibraciones y timelapse; en la página de la impresora, la cámara de la A1 y la P1, y el aviso al terminar.
+11. **Reportar un problema** (en Más): si algo falla, mandalo desde ahí; va con el registro de la app.
 
 ## Límites conocidos
 
 - **No medido en teléfonos reales:** los tiempos y la memoria se midieron en emuladores y computadoras.
 - **Ingeniería puede tardar:** un análisis de una pieza grande puede tardar varios minutos en el teléfono. Si va a
   tardar más de un minuto, la app lo avisa antes y ofrece un cálculo rápido.
-- **Mi biblioteca todavía no funciona:** la sección está, pero espera el motor que viene. Hasta entonces te lleva al
-  plato.
+- **Mi biblioteca** es nueva: guardá una pieza después de laminarla o analizarla, buscala en la lista, «Imprimir»
+  la vuelve a laminar con su receta (no se guarda G-code), «La imprimí» guarda una nota y una foto, y se puede
+  exportar y compartir como `.tismalib`.
 - **El CAD** usa SolidCraft dentro de la app; no se probó en teléfonos reales.
 - Ninguna impresión real se hizo con esta beta todavía: revisá el G-code antes de imprimir algo grande.
