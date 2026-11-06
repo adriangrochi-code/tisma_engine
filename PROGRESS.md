@@ -11732,3 +11732,6 @@ arreglado en 9d8dc76 y subido.
   `tree_fill_field` las recorre. Medido en la esfera de 100 mm (sphere.stl, `tree/organic.json`, 3 corridas):
   laminado 1,11 s con los offsets contra 1,39 s con el campo (antes de esto, 2,9 contra 1,44 s). Sigue sin conectar.
   Faltan la segunda pared desde el mismo campo y marching squares en la GPU.
+- Con dev `80e738d` (`library save` convierte STL/OBJ en un proyecto 3MF): `LibraryTest` pasa entero con el motor
+  real (ML1, ML2, ML3/ML4, ML5/ML6, ML10). La prueba usaba `perimeters.count`, que no es una clave del motor; ahora
+  `walls.count`. El APK de CI ya trae el motor con `library`. No probado en un teléfono.

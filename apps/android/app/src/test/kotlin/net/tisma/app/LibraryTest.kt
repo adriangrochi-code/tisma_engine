@@ -144,7 +144,7 @@ class LibraryTest {
         assertFalse(slice.state.value.fromLibrary!!.check!!.olderEngine)
 
         // ML2: another setting is a change from the recipe; the next slice keeps its summary in the same entry.
-        compose.runOnIdle { slice.setValue("perimeters.count", kotlinx.serialization.json.JsonPrimitive(4)) }
+        compose.runOnIdle { slice.setValue("walls.count", kotlinx.serialization.json.JsonPrimitive(4)) }
         idle { slice.state.value.fromLibrary?.check?.sameSettings == false }
         assertEquals(1, library.list().size)
         assertFalse(libDir.walk().any { it.extension in setOf("gcode", "bgcode", "gz") })
