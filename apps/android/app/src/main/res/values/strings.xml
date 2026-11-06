@@ -623,4 +623,8 @@
     <string name="library_full">My library is over its %1$d MB limit. Nothing is deleted on its own: see what each part takes and choose what to delete.</string>
     <string name="bambu_plate">Bed plate</string>
     <string name="bambu_plate_auto">The one the printer detects</string>
+    <string name="camera_bambu_network">The camera does not answer (port 6000). The A1 and P1 serve it there when they are on and on the same network. The X1, P2S and H2 use another stream (RTSP) the phone does not show yet.</string>
+    <string name="camera_bambu_auth">The camera refused the access code. Check it on the printer\'s screen (Network › LAN mode) and save it again.</string>
+    <string name="camera_bambu_certificate">The camera\'s certificate is not the one saved for this printer. If you changed printers, add it again.</string>
+    <string name="camera_bambu_no_images">The camera connected but sends no images. Check that the camera is on in the printer.</string>
 </resources>

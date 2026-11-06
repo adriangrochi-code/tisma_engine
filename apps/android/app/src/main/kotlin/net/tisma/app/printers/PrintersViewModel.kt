@@ -47,6 +47,8 @@ sealed interface CameraView {
     data object Connecting : CameraView
     data object None : CameraView
     data class Failed(val reason: String) : CameraView
+    /** A Bambu Lab camera that failed, with what to check (QA BH36: say clearly why it is not seen). */
+    data class BambuFailed(val kind: PrinterException.Kind, val detail: String) : CameraView
     /** The last image, as JPEG bytes. */
     class Image(val jpeg: ByteArray) : CameraView
 }
@@ -186,7 +188,8 @@ class PrintersViewModel(
         }
         val url = camera?.snapshotUrl?.takeIf { it.isNotBlank() }
         if (url == null) {
-            setCamera(id, CameraView.None)
+            // A camera that sends its own images (Bambu Lab A1 and P1, printer_connections.md, Bambu Lab rule 6).
+            if (p.kind == net.tisma.printers.PrinterKind.BAMBU) followFrames(id, p) else setCamera(id, CameraView.None)
             return
         }
         try {
@@ -202,6 +205,26 @@ class PrintersViewModel(
         } finally {
             // Images live only while they are shown.
             _state.update { it.copy(cameras = it.cameras - id) }
+        }
+    }
+
+    private suspend fun followFrames(id: String, p: PrinterConfig) {
+        try {
+            withContext(io) {
+                connection(p).cameraFrames()?.use { frames ->
+                    while (currentCoroutineContext().isActive) {
+                        val jpeg = frames.next()
+                        setCamera(id, CameraView.Image(jpeg))
+                    }
+                } ?: setCamera(id, CameraView.None)
+            }
+        } catch (e: PrinterException) {
+            AppLog.line("printer: camera ${e.kind} ${e.detail}")
+            setCamera(id, CameraView.BambuFailed(e.kind, e.detail))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Images live only while they are shown.
+            _state.update { it.copy(cameras = it.cameras - id) }
+            throw e
         }
     }
 

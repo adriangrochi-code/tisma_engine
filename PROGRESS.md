@@ -11113,3 +11113,16 @@ Regla del dueño (06-11, por la sesión de especificación): sin tiempo libre; a
   plano, de atrás hacia adelante) y va con `library save --thumb`. Prueba en `LibraryTest` (que sea un PNG y la lista
   lo muestre); el dibujo no se miró a ojo.
 - Sigue en la biblioteca: «La imprimí» con foto y nota (se propuso `library printed` al motor).
+
+## 2026-11-06 — Android: la cámara de las Bambu Lab A1 y P1 (printer_connections.md, regla 6 de Bambu Lab)
+
+Pedido de la sesión de especificación (en la PC el dueño no ve la cámara de su A1 mini, BH36).
+- `BambuConnection.cameraFrames()`: TLS al puerto 6000 con el certificado guardado de la impresora, el ingreso de
+  80 bytes (cabecera de 16 con tamaño 0x40 y tipo 0x3000, `bblp` y el código de acceso en 32 bytes cada uno) y las
+  imágenes JPEG, cada una tras una cabecera de 16 bytes con su tamaño (según la página de video de OpenBambuAPI, que
+  cita la ficha). Se revisa que cada imagen empiece en FF D8 y termine en FF D9.
+- La página de la impresora la muestra en vivo. Si falla, dice qué revisar: sin respuesta en el puerto 6000 (y que
+  las X1, P2S y H2 usan RTSP, que el teléfono todavía no muestra), código de acceso rechazado, certificado distinto,
+  o conectada sin imágenes.
+- `MockBambu` tiene la cámara; pruebas: `BambuTest` BL6 y `PrintersTest` CM2 (imágenes, y el código equivocado).
+  Las pruebas de la app abren `java.net` a Robolectric (el TLS del simulador lo necesita). No probado con una A1 real.

@@ -58,6 +58,8 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // The Bambu Lab mock's TLS under Robolectric reads java.net internals (the camera test, CM2).
+        unitTests.all { it.jvmArgs("--add-opens", "java.base/java.net=ALL-UNNAMED") }
     }
 }
 

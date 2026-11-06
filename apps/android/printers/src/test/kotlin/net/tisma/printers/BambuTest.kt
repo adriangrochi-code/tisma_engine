@@ -67,6 +67,23 @@ class BambuTest {
     }
 
     @Test
+    fun `BL6 the A1 and P1 camera logs in with the access code and gives JPEG images one after another`() {
+        val c = connect()
+        c.test()
+        c.cameraFrames().use { f ->
+            val a = f.next(); val b = f.next()
+            assertTrue(a[0] == 0xFF.toByte() && a[1] == 0xD8.toByte())
+            assertTrue(String(a).contains("frame 0") && String(b).contains("frame 1"))
+        }
+        assertEquals("bblp" to printer.accessCode, printer.cameraLogins.last())
+        // A wrong code: the camera closes before any image, which is said as an access code problem.
+        val bad = BambuConnection.of(printer.url, "00000000", c.seenFingerprint)
+        val e = assertFailsWith<PrinterException> { bad.cameraFrames().use { it.next() } }
+        assertEquals(PrinterException.Kind.AUTH, e.kind)
+        c.close()
+    }
+
+    @Test
     fun `BL2 a wrong access code is a clear authentication error`() {
         val e = assertFailsWith<PrinterException> { connect("00000000").test() }
         assertEquals(PrinterException.Kind.AUTH, e.kind)

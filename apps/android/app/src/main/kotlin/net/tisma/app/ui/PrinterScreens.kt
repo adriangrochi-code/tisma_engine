@@ -288,6 +288,12 @@ private fun CameraBox(id: String, state: PrintersState, printers: PrintersViewMo
             CameraView.Connecting -> Text(stringResource(R.string.camera_connecting), color = MaterialTheme.colorScheme.onSurfaceVariant)
             CameraView.None -> Text(stringResource(R.string.camera_none), color = MaterialTheme.colorScheme.onSurfaceVariant)
             is CameraView.Failed -> Text(stringResource(R.string.camera_failed, view.reason), color = MaterialTheme.colorScheme.error)
+            is CameraView.BambuFailed -> Text(stringResource(when (view.kind) {
+                net.tisma.printers.PrinterException.Kind.NETWORK -> R.string.camera_bambu_network
+                net.tisma.printers.PrinterException.Kind.AUTH -> R.string.camera_bambu_auth
+                net.tisma.printers.PrinterException.Kind.CERTIFICATE -> R.string.camera_bambu_certificate
+                else -> R.string.camera_bambu_no_images
+            }), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("camera_bambu_failed"))
             is CameraView.Image -> {
                 val bitmap = androidx.compose.runtime.remember(view) {
                     android.graphics.BitmapFactory.decodeByteArray(view.jpeg, 0, view.jpeg.size)?.asImageBitmap()

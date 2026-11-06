@@ -37,6 +37,12 @@ interface PrinterConnection {
     /** The camera's addresses, if the printer has one. */
     fun camera(): Camera?
 
+    /**
+     * A camera that sends its images itself instead of by address (Bambu Lab A1 and P1, printer_connections.md,
+     * Bambu Lab rule 6), or null.
+     */
+    fun cameraFrames(): CameraFrames? = null
+
     /** Whether the controls below work over this connection. */
     val hasControls: Boolean get() = true
 
@@ -98,6 +104,11 @@ data class PrinterStatus(
 )
 
 data class Camera(val streamUrl: String, val snapshotUrl: String)
+
+/** Images one after another from a printer's camera; [next] waits for the next JPEG. */
+interface CameraFrames : java.io.Closeable {
+    fun next(): ByteArray
+}
 
 /** A request to a printer failed. */
 class PrinterException(val kind: Kind, val detail: String, cause: Throwable? = null) : Exception(detail, cause) {

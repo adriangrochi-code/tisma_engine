@@ -607,4 +607,8 @@
     <string name="library_full">Mi biblioteca pasó el límite de %1$d MB. No se borra nada solo: mirá cuánto ocupa cada pieza y elegí qué borrar.</string>
     <string name="bambu_plate">Placa de la cama</string>
     <string name="bambu_plate_auto">La que detecte la impresora</string>
+    <string name="camera_bambu_network">La cámara no responde (puerto 6000). Las A1 y P1 la dan ahí si están prendidas y en la misma red. Las X1, P2S y H2 usan otra transmisión (RTSP) que el teléfono todavía no muestra.</string>
+    <string name="camera_bambu_auth">La cámara rechazó el código de acceso. Revisalo en la pantalla de la impresora (Red › Modo LAN) y guardalo de nuevo.</string>
+    <string name="camera_bambu_certificate">El certificado de la cámara no es el que se guardó para esta impresora. Si cambiaste la impresora, volvé a agregarla.</string>
+    <string name="camera_bambu_no_images">La cámara se conectó pero no manda imágenes. Revisá que la cámara esté prendida en la impresora.</string>
 </resources>
