@@ -79,9 +79,12 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
     `layer_z` solo en el cambio de capa).
 12. **Opciones al mandar a una Bambu Lab** (como en el programa del fabricante): nivelación de la cama, calibración de
     flujo, calibración de vibraciones, timelapse y la placa de la cama. Se eligen en la ventana de envío (por defecto:
-    nivelación y calibración de flujo prendidas), van como variables al G-code de inicio y en el pedido de impresión
-    por la red (`printer_connections.md`, «Bambu Lab en red local»). El G-code se lamina de nuevo si cambian, porque
-    cambian el inicio.
+    nivelación y calibración de flujo prendidas), van en el pedido de impresión por la red (`printer_connections.md`, «Bambu Lab en red local»). El G-code de inicio de las Bambu no tiene
+    variables para nivelar ni calibrar: trae las dos partes siempre y la impresora decide si las corre según lo que
+    dice el pedido (marcas que el firmware consulta con `M1002`). Solo la placa entra al G-code, como `curr_bed_type`,
+    con estos textos: `Cool Plate`, `Engineering Plate`, `High Temp Plate`, `Textured PEI Plate`, `Supertack Plate` y
+    `Textured Cool Plate` (el de la A1 compara con `Textured PEI Plate`). Cambiar la placa lamina de nuevo; cambiar las
+    demás opciones no.
 
 ## Pruebas
 
@@ -94,7 +97,7 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 | GM5 | `[temperature_0]` con 210 °C | `210` |
 | GM6 | Una variable que no existe | Falla con `gcode_macro`, línea y columna, en castellano; no queda G-code |
 | GM7 | Un `{if}` sin `{endif}` | Falla con `gcode_macro` |
-| GM8 | Una Bambu Lab A1 del paquete con su G-code de inicio original y «nivelar la cama» prendido | El G-code tiene la parte de nivelación y de calibración; con la opción apagada, no |
+| GM8 | Una Bambu Lab A1 del paquete con su G-code de inicio original, «nivelar la cama» prendido y luego apagado | El G-code es el mismo y tiene la parte de nivelación; el pedido de red dice nivelar en el primer caso y no en el segundo. Con placa «Textured PEI Plate» sale la parte propia de esa placa |
 | GM10 | Una impresora `cura` con `M82` en su inicio y `relative_extrusion` `false` | Todo el G-code extruye en absoluto |
 | GM11 | Un G-code `orcaslicer` con `nozzle_temperature_initial_layer[0]` y un filamento de 220 °C de primera capa | `220` |
 | GM9 | Todas las impresoras del paquete, cada una con sus G-code originales | Todas laminan; las variables que falten quedan en el registro |
