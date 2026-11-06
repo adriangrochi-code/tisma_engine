@@ -11735,3 +11735,14 @@ arreglado en 9d8dc76 y subido.
 - Con dev `80e738d` (`library save` convierte STL/OBJ en un proyecto 3MF): `LibraryTest` pasa entero con el motor
   real (ML1, ML2, ML3/ML4, ML5/ML6, ML10). La prueba usaba `perimeters.count`, que no es una clave del motor; ahora
   `walls.count`. El APK de CI ya trae el motor con `library`. No probado en un teléfono.
+
+## 2026-11-06 — Android: AND11, temperaturas vacías en Material en una instalación nueva
+
+QA AND11 (APK `42171193144`, emulador sin red, catálogo incluido: Anycubic Kobra 2 con Anycubic ABS): la tarjeta del
+filamento decía «Anycubic ABS», pero las cuatro temperaturas estaban vacías.
+- Causa: `EngineRunner.profile()` corría el motor con su carpeta de trabajo (`cache/engine`) sin crearla. En una
+  instalación nueva, antes de laminar nada, esa carpeta no existe, el proceso no arranca y el perfil se toma como
+  vacío. Además, el laminado usaba entonces los valores por defecto del motor («no se usó el perfil»).
+- Arreglo: crear la carpeta. Con el motor real: 514 valores, boquilla 260 °C, cama 90 °C, primera capa igual que la
+  boquilla. Prueba: `MaterialTempsTest` (carpeta nueva; con el motor real si está, si no con uno de prueba).
+- «Agregar impresora» ahora nombra también Bambu Lab (modo LAN).

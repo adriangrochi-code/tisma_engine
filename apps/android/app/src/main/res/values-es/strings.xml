@@ -160,7 +160,7 @@
     <string name="code_no_valid_result">No se encontró un resultado válido.</string>
     <string name="code_usage">El servidor llamó mal al motor.</string>
 
-    <string name="printers_empty">Todavía no hay impresoras. Agregá una impresora Klipper (Moonraker), OctoPrint, Prusa (PrusaLink) o Duet de tu red.</string>
+    <string name="printers_empty">Todavía no hay impresoras. Agregá una impresora de tu red: Bambu Lab (modo LAN), Klipper (Moonraker), OctoPrint, Prusa (PrusaLink) o Duet.</string>
     <string name="printer_add">Agregar una impresora</string>
     <string name="printer_state_unknown">…</string>
     <string name="printer_state_offline">Desconectada</string>

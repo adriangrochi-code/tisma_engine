@@ -117,6 +117,8 @@ class EngineRunner(
      * the engine's defaults and says so.
      */
     fun profile(choice: ProfileChoice): JsonObject? {
+        // QA AND11: on a fresh install the working folder is not there yet, and the engine would not even start.
+        workDir.mkdirs()
         val out = File(workDir, "profile.json").apply { delete() }
         val args = if (choice.pack && packDir != null) {
             // The pack's variant with its own default filament and print profile (docs/CATALOG.md).

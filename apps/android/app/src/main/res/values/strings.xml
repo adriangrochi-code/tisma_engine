@@ -174,7 +174,7 @@
     <string name="code_usage">The server called the engine the wrong way.</string>
 
     <!-- Printers on the network (printer_connections.md, MOBILE.md) -->
-    <string name="printers_empty">No printers yet. Add a Klipper (Moonraker), OctoPrint, Prusa (PrusaLink) or Duet printer on your network.</string>
+    <string name="printers_empty">No printers yet. Add a printer on your network: Bambu Lab (LAN mode), Klipper (Moonraker), OctoPrint, Prusa (PrusaLink) or Duet.</string>
     <string name="printer_add">Add a printer</string>
     <string name="printer_state_unknown">…</string>
     <string name="printer_state_offline">Disconnected</string>
