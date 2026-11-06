@@ -18,15 +18,20 @@ layout(push_constant) uniform Params {
     uint height; // rows
     uint stride; // 32-bit words in a row
     uint mode;
+    // Where this grid starts in the buffers (several grids in one run).
+    uint bits_at;   // in 32-bit words
+    uint pixel_at;  // in pixels: Column and Dist
+    uint vertex_at; // in values: Vertex
+    uint bound_at;  // in values: Bound
 } params;
 
-bool get(uint i, uint j) { return ((bits[j * params.stride + i / 32u] >> (i % 32u)) & 1u) != 0u; }
+bool get(uint i, uint j) { return ((bits[params.bits_at + j * params.stride + i / 32u] >> (i % 32u)) & 1u) != 0u; }
 
 // Row j's height of parabola q: 0 just past either end, else the column's square.
 float height_of(uint j, int q, int n) {
     if (q == 0 || q == n - 1)
         return 0.0;
-    float c = column[j * params.width + uint(q - 1)];
+    float c = column[params.pixel_at + j * params.width + uint(q - 1)];
     return c * c;
 }
 
@@ -38,12 +43,12 @@ void main() {
         float run = 0.0;
         for (uint j = 0u; j < params.height; ++j) {
             run = get(id, j) ? run + 1.0 : 0.0;
-            column[j * params.width + id] = run;
+            column[params.pixel_at + j * params.width + id] = run;
         }
         run = 0.0;
         for (uint j = params.height; j-- > 0u;) {
             run = get(id, j) ? run + 1.0 : 0.0;
-            uint at = j * params.width + id;
+            uint at = params.pixel_at + j * params.width + id;
             column[at] = min(column[at], run);
         }
         return;
@@ -52,7 +57,7 @@ void main() {
         return;
     uint j = id;
     int n = int(params.width) + 2;
-    uint vb = j * uint(n), zb = j * uint(n + 1);
+    uint vb = params.vertex_at + j * uint(n), zb = params.bound_at + j * uint(n + 1);
     int k = -1;
     for (int q = 0; q < n; ++q) {
         float fq = height_of(j, q, n);
@@ -81,6 +86,6 @@ void main() {
         int p = vertex[vb + uint(at)];
         float d = float(q - p);
         uint i = uint(q - 1);
-        dist[j * params.width + i] = get(i, j) ? d * d + height_of(j, p, n) : 0.0;
+        dist[params.pixel_at + j * params.width + i] = get(i, j) ? d * d + height_of(j, p, n) : 0.0;
     }
 }

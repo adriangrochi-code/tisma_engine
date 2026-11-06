@@ -590,30 +590,64 @@ void Context::support_column(BitGrid& column, std::span<const BitGrid> parts, st
 }
 
 void Context::distance_inside(const BitGrid& grid, std::vector<float>& out) {
-    const int w = grid.width(), h = grid.height();
-    out.assign(std::size_t(w) * std::size_t(h), 0.0f);
-    if (w == 0 || h == 0)
+    std::vector<std::vector<float>> all;
+    distance_inside(std::span<const BitGrid>(&grid, 1), all);
+    out = std::move(all.front());
+}
+
+void Context::distance_inside(std::span<const BitGrid> grids, std::vector<std::vector<float>>& out) {
+    out.assign(grids.size(), {});
+    // Each grid's place in the shared buffers.
+    struct Push {
+        std::uint32_t width, height, stride, mode, bits_at, pixel_at, vertex_at, bound_at;
+    };
+    std::vector<Push> steps;
+    std::size_t bits = 0, pixels = 0, vertices = 0, bounds = 0;
+    std::uint32_t most = 1;
+    for (const BitGrid& g : grids) {
+        if (g.width() == 0 || g.height() == 0) {
+            steps.push_back({}); // a placeholder: no work
+            steps.back().width = 0;
+            continue;
+        }
+        const auto w = std::uint32_t(g.width()), h = std::uint32_t(g.height());
+        const Push base{w, h, std::uint32_t(2 * g.words_per_row()), 0u, std::uint32_t(bits), std::uint32_t(pixels),
+                        std::uint32_t(vertices), std::uint32_t(bounds)};
+        steps.push_back(base);
+        bits += 2 * g.words().size();
+        pixels += std::size_t(w) * h;
+        vertices += std::size_t(h) * (w + 2);
+        bounds += std::size_t(h) * (w + 3);
+        most = std::max({most, w, h});
+    }
+    if (pixels == 0)
         return;
-    const std::size_t pixels = std::size_t(w) * std::size_t(h);
-    const std::size_t bits = grid.words().size() * sizeof(std::uint64_t);
     Impl::Buffer b_bits, b_column, b_dist, b_vertex, b_bound;
-    impl_->make_buffer(b_bits, bits);
+    impl_->make_buffer(b_bits, bits * sizeof(std::uint32_t));
     impl_->make_buffer(b_column, pixels * sizeof(float));
     impl_->make_buffer(b_dist, pixels * sizeof(float));
-    impl_->make_buffer(b_vertex, std::size_t(h) * std::size_t(w + 2) * sizeof(std::int32_t));
-    impl_->make_buffer(b_bound, std::size_t(h) * std::size_t(w + 3) * sizeof(float));
-    std::memcpy(b_bits.mapped, grid.words().data(), bits);
-    // Push constants of distance_inside.comp: the columns, then the rows.
-    struct Push {
-        std::uint32_t width, height, stride, mode;
-    };
-    const auto stride = static_cast<std::uint32_t>(2 * grid.words_per_row());
-    const std::array<Push, 2> steps = {Push{std::uint32_t(w), std::uint32_t(h), stride, 0u},
-                                       Push{std::uint32_t(w), std::uint32_t(h), stride, 1u}};
+    impl_->make_buffer(b_vertex, vertices * sizeof(std::int32_t));
+    impl_->make_buffer(b_bound, bounds * sizeof(float));
+    std::vector<Push> run;
+    for (std::size_t k = 0; k < grids.size(); ++k) {
+        if (steps[k].width == 0)
+            continue;
+        std::memcpy(static_cast<std::uint32_t*>(b_bits.mapped) + steps[k].bits_at, grids[k].words().data(),
+                    grids[k].words().size() * sizeof(std::uint64_t));
+        Push columns = steps[k], rows = steps[k];
+        columns.mode = 0u, rows.mode = 1u;
+        run.push_back(columns);
+        run.push_back(rows);
+    }
     const std::array<Impl::Buffer*, 5> bound = {&b_bits, &b_column, &b_dist, &b_vertex, &b_bound};
-    const auto most = static_cast<std::uint32_t>(std::max(w, h));
-    impl_->run_steps(kDistanceInsideSpirv, bound, steps.data(), sizeof(Push), 2u, (most + 63u) / 64u);
-    std::memcpy(out.data(), b_dist.mapped, pixels * sizeof(float));
+    impl_->run_steps(kDistanceInsideSpirv, bound, run.data(), sizeof(Push), std::uint32_t(run.size()), (most + 63u) / 64u);
+    for (std::size_t k = 0; k < grids.size(); ++k) {
+        if (steps[k].width == 0)
+            continue;
+        const std::size_t n = std::size_t(grids[k].width()) * std::size_t(grids[k].height());
+        out[k].resize(n);
+        std::memcpy(out[k].data(), static_cast<const float*>(b_dist.mapped) + steps[k].pixel_at, n * sizeof(float));
+    }
 }
 
 } // namespace tisma::gpu

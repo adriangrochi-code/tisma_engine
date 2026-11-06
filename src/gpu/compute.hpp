@@ -66,6 +66,9 @@ public:
     // GPU version of squared_distance_inside (src/geom/distance.hpp), the
     // same numbers. Throws std::runtime_error on a Vulkan failure.
     void distance_inside(const BitGrid& grid, std::vector<float>& out);
+    // The same for many grids in one run (every layer's at once): out[k] is
+    // grids[k]'s.
+    void distance_inside(std::span<const BitGrid> grids, std::vector<std::vector<float>>& out);
 
     struct Impl;
 

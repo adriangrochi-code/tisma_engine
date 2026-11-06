@@ -210,6 +210,7 @@ TEST_CASE("supports with the GPU are the CPU's", "[gpu]") {
 TEST_CASE("the distance transform on the GPU gives the CPU's numbers", "[gpu][distance]") {
     gpu::Context& ctx = require_context();
     unsigned seed = 9;
+    std::vector<BitGrid> all;
     for (int round = 0; round < 12; ++round) {
         // From a few pixels to wider than a 64-bit word and taller than a group.
         const int w = 1 + int(seed % 150), h = 1 + int((seed >> 8) % 90);
@@ -226,5 +227,16 @@ TEST_CASE("the distance transform on the GPU gives the CPU's numbers", "[gpu][di
         ctx.distance_inside(g, gpu_out);
         CAPTURE(round, w, h);
         CHECK(gpu_out == squared_distance_inside(g));
+        all.push_back(g);
+        if (round == 5)
+            all.emplace_back(); // an empty grid among them
+    }
+    // All of them in one run, as every layer's at once.
+    std::vector<std::vector<float>> batch;
+    ctx.distance_inside(std::span<const BitGrid>(all), batch);
+    REQUIRE(batch.size() == all.size());
+    for (std::size_t k = 0; k < all.size(); ++k) {
+        CAPTURE(k);
+        CHECK(batch[k] == squared_distance_inside(all[k]));
     }
 }

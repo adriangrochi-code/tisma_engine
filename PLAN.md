@@ -1157,7 +1157,19 @@ pared, la segunda pared de las ramas anchas y las líneas.
   (15,1 → 2,7 ms en 200 trazos).
 - [x] Árbol, paso 1 (CPU): áreas simplificadas a 1/8 de cordón y sin buscar segunda pared cuando ninguna rama es tan
   ancha. Laminado 1,05 → 0,71 s, G-code 149 → 103 ms.
-- [ ] Árbol, paso 2 (GPU): el relleno de cada capa sale de un campo de distancias.
+- [ ] Árbol, paso 2 (GPU): el relleno de cada capa sale de un campo de distancias. **Hecho, pero sin conectar
+  (2026-11-06):**
+  - la transformada exacta en CPU y en GPU, también para todas las capas en una sola llamada;
+  - `distance_level` (marching squares);
+  - `tree_fill_field`, igual a `tree_fill` en las pruebas.
+  - Medido en la esfera: la transformada de todas las capas, 250–300 ms en CPU. Lo demás de la ruta tarda unos
+    2,6 s contra 1,4 s de los offsets de Clipper, porque cada capa usa una grilla de toda la caja de sus ramas, casi
+    vacía, y una segunda transformada para la segunda pared.
+  - Conectada, haría el árbol más lento aun con la transformada gratis. Para que pague:
+    - una grilla por isla (por rama), no por capa;
+    - marching squares y los umbrales también en la GPU;
+    - la segunda pared desde el mismo campo.
+  - Hasta entonces el laminado usa los offsets (paso 1).
   - Las ramas se rasterizan en una grilla de bits por capa (la misma `BitGrid` del soporte en grilla).
   - Un kernel calcula la distancia euclídea a su borde en dos pasadas separables: columnas, después filas.
   - La pared es la curva de nivel a medio cordón (marching squares).

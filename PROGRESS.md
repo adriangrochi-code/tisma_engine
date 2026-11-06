@@ -11511,3 +11511,14 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   - Prueba `[field]`: igual a `tree_fill` (Clipper) en cinco formas: rama fina, tronco, dos unidas, varias, bajo la
     pieza. Mismas paredes; largos a menos de 4 % las paredes y 8 % el total.
   - Sigue: la transformada de todas las capas en una sola llamada a la GPU, el uso en el pipeline y la medición.
+- Paso 2, cuarta pieza:
+  - `Context::distance_inside` para muchas grillas en una sola llamada (las desplazamientos van en las constantes de
+    cada paso). Prueba `[gpu][distance]`: 12 grillas y una vacía, iguales a la CPU.
+  - Probé conectarlo al laminado, en la esfera de 100 mm, con el CI al lado:
+    - las dos rutas dan el mismo soporte (97 564 contra 97 751 mm de recorrido);
+    - offsets: 1,44 s; campo con la transformada en CPU: 2,9 s, de los que la transformada son solo 250–300 ms.
+  - Lo demás de la ruta del campo ya es más lento que los offsets: grillas de toda la caja de cada capa, casi vacías,
+    y una segunda transformada para la segunda pared.
+  - **Decisión:** no se conecta. Con GPU real seguiría más lento. Lo que falta para que pague está en `PLAN.md`
+    (grilla por rama; marching squares y umbrales en la GPU).
+  - Con lavapipe (GPU por software) la ruta tardó 3,4 s; no sirve como medida.
