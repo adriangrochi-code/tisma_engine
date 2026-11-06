@@ -627,4 +627,5 @@
     <string name="camera_bambu_auth">The camera refused the access code. Check it on the printer\'s screen (Network › LAN mode) and save it again.</string>
     <string name="camera_bambu_certificate">The camera\'s certificate is not the one saved for this printer. If you changed printers, add it again.</string>
     <string name="camera_bambu_no_images">The camera connected but sends no images. Check that the camera is on in the printer.</string>
+    <string name="event_stopped_state">%1$s · the printer says: %2$s</string>
 </resources>

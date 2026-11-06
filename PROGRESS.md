@@ -11126,3 +11126,9 @@ Pedido de la sesión de especificación (en la PC el dueño no ve la cámara de 
   o conectada sin imágenes.
 - `MockBambu` tiene la cámara; pruebas: `BambuTest` BL6 y `PrintersTest` CM2 (imágenes, y el código equivocado).
   Las pruebas de la app abren `java.net` a Robolectric (el TLS del simulador lo necesita). No probado con una A1 real.
+- Estado en vivo y aviso al terminar o fallar con una Bambu Lab: el estado ya llegaba por MQTT y el servicio de
+  vigilancia ya avisaba, pero solo conocía `RUNNING`, `PAUSE` e `IDLE`. Cualquier otro (los que la impresora mande al
+  terminar o fallar, que ninguna especificación nombra) quedaba en «ocupada» y no avisaba. Ahora salir de la
+  impresión hacia ese estado avisa como al pasar a lista: terminada si el avance llegó a 99 %, detenida si no, con la
+  palabra de la impresora tal cual (sin adivinar nombres, `printer_connections.md`, regla 5). Un `print_error`
+  durante la impresión sigue siendo «falló». Prueba: `PrintEventsTest`. No probado con una impresora real.
