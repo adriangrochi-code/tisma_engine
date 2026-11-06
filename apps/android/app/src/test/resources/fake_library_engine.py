@@ -59,7 +59,8 @@ def library(args):
             entries.append({"id": eid, "name": e["name"], "tags": e.get("tags", []),
                             "printers": sorted({r["recipe"].get("label", "") for r in e["recipes"]} - {""}),
                             "materials": [], "recipes": len(e["recipes"]), "analyses": len(e["analyses"]),
-                            "bytes": size(os.path.join(lib, eid)), "modified": e.get("modified", ""), "thumb": None})
+                            "bytes": size(os.path.join(lib, eid)), "modified": e.get("modified", ""),
+                            "thumb": "thumb.png" if os.path.isfile(os.path.join(lib, eid, "thumb.png")) else None})
         out({"entries": entries})
     if cmd == "show":
         out(read(lib, opt(args, "--entry")))
@@ -78,6 +79,8 @@ def library(args):
             d = os.path.join(lib, eid)
             e = read(lib, eid)
         shutil.copyfile(opt(args, "--model"), os.path.join(d, "project.3mf"))
+        if opt(args, "--thumb"):
+            shutil.copyfile(opt(args, "--thumb"), os.path.join(d, "thumb.png"))
         with open(opt(args, "--recipe")) as f:
             recipe = json.load(f)
         key = lambda r: tuple(r.get(k) for k in ("printer", "nozzle", "filament", "print"))

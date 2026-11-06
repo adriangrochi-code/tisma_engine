@@ -886,9 +886,13 @@ class SliceViewModel(
             s.profile?.filament?.substringAfterLast('/')?.removeSuffix(".json")?.replace('_', ' ')).joinToString(" · ")
         val summary = File(workDir, "summary.json").takeIf { s.result != null && it.isFile }
         val analysis = lastAnalysis?.takeIf { s.analysis != null }
+        // Rule 1: the part's 256 × 256 picture, drawn from its triangles.
+        val thumb = s.mesh?.let { mesh -> runCatching { Thumbnail.write(mesh, File(workDir, "thumb.png")) }
+            .onFailure { AppLog.line("library: thumbnail ${it.message}") }.getOrNull() }
         val e = try {
             lib.save(entry, engineModel(m), config, s.profile, settingsChanges(s.settings), label, workDir, summary,
-                analysis?.result, analysis?.summary, name ?: if (entry == null) s.modelName?.substringBeforeLast('.') else null)
+                analysis?.result, analysis?.summary, name ?: if (entry == null) s.modelName?.substringBeforeLast('.') else null,
+                thumb)
         } catch (ex: Exception) {
             if (quiet) { AppLog.line("library: keep ${ex.message}"); return null } else throw ex
         }

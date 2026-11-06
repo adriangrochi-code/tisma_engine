@@ -11108,5 +11108,7 @@ Regla del dueño (06-11, por la sesión de especificación): sin tiempo libre; a
     Play: decisiones del dueño. Regla 9, la biblioteca de Tisma Cloud: espera el servidor.
 - `local_library.md`, regla 12: el límite de Mi biblioteca en Preferencias (500 MB por defecto en el teléfono). Al
   pasarlo, la lista lo avisa y no borra nada sola. Prueba en `LibraryTest`.
-- Sigue en la biblioteca: la miniatura de 256 × 256 y «La imprimí» con foto (necesitan argumentos del comando
-  `library` del motor, todavía no acordados).
+- La miniatura de 256 × 256 (regla 1): `Thumbnail.kt` la dibuja desde los triángulos (vista en ángulo, sombreado
+  plano, de atrás hacia adelante) y va con `library save --thumb`. Prueba en `LibraryTest` (que sea un PNG y la lista
+  lo muestre); el dibujo no se miró a ojo.
+- Sigue en la biblioteca: «La imprimí» con foto y nota (se propuso `library printed` al motor).

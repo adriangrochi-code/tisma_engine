@@ -110,6 +110,12 @@ class LibraryTest {
         assertEquals(50, entry.recipes[0].layers)
         assertTrue(File(libDir, "${lp.entry}/project.3mf").isFile)
         assertTrue(File(libDir, "${lp.entry}/recipes/1/settings.json").isFile)
+        // The 256 × 256 picture of the part (rule 1), and the list shows it.
+        val thumb = File(libDir, "${lp.entry}/thumb.png")
+        assertTrue(thumb.isFile)
+        val head = thumb.readBytes().copyOf(8)
+        assertTrue(head.copyOfRange(1, 4).contentEquals("PNG".toByteArray()), "a PNG")
+        assertEquals(thumb, library.list().single().thumb)
         assertFalse(libDir.walk().any { it.extension in setOf("gcode", "bgcode", "gz") }, "G-code in the library")
 
         // The list, then «Imprimir» from the entry: it slices again with the recipe (rule 6).
