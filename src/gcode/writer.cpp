@@ -979,7 +979,10 @@ public:
         double& pulled = pulled_[std::size_t(std::clamp(tool_, 0, int(pulled_.size()) - 1))];
         if (firmware_) {
             retract(0.0);
-            pulled = retracted_ ? retract_ : 0.0;
+            // A G10 still out stays the leaving tool's until its G11, even when
+            // the length is 0 now (a change by height set the one it pulled
+            // with; fuzzer seed 6112026, run 1728).
+            pulled = retracted_ ? std::max(retract_, 1e-6) : 0.0;
         } else {
             const double now = retracted_ ? retracted_amount_ : 0.0;
             if (length > now + 1e-9) {

@@ -10,6 +10,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Corregido
+
+- Con la retracción del firmware (G10/G11) y varios extrusores, una herramienta que se iba con la retracción hecha
+  cuando un cambio por altura dejaba el largo en 0 volvía sin G11 y extruía con el filamento retraído.
+
 ### Agregado
 
 - Mi biblioteca (`tisma-engine library`): guardar piezas con su proyecto, recetas por impresora y análisis,

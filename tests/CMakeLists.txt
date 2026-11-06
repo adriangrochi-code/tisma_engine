@@ -149,6 +149,11 @@ endif()
 add_executable(tisma_fuzz_gcode fuzz_gcode.cpp)
 target_link_libraries(tisma_fuzz_gcode PRIVATE tisma_core tisma_warnings)
 add_test(NAME fuzz_gcode_smoke COMMAND tisma_fuzz_gcode 12 7)
+# Fuzzer cases that failed once, sliced alone (TISMA_FUZZ_ONLY): seed 6112026,
+# run 1728, a firmware G10 left out by a tool when a change by height set the
+# length back to 0, and never undone (2026-11-06).
+add_test(NAME fuzz_gcode_6112026_1728 COMMAND tisma_fuzz_gcode 2000 6112026)
+set_tests_properties(fuzz_gcode_6112026_1728 PROPERTIES ENVIRONMENT "TISMA_FUZZ_ONLY=1728")
 
 # The settings panel as data for the phone (mobile_app.md, rule 7): no window,
 # so it runs everywhere the interface builds.

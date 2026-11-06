@@ -11592,3 +11592,16 @@ arreglado en 9d8dc76 y subido.
 - Árbol, paso 2: perfil con callgrind de la ruta del campo (pruebas `[field]`): `distance_level` era lo más caro
   (23 %). Ahora clasifica cada pixel una vez sin raíz y une los segmentos con un vector ordenado: 20,4 → 12,3 M
   instrucciones. Sigue sin conectar.
+
+## 2026-11-06 08:40 — mantenimiento
+
+- **Revisado:** `main` sin cambios nuevos para traer; el CI local completo sobre de89c9a en verde (las tres etapas);
+  sin avisos del compilador.
+- **Fuzzer:** semilla 20261106 (en el bloque de la noche): 0 fallas. Semilla 6112026: **1 falla**, corrida 1728
+  (caja, tres extrusores, retracción del firmware, un cambio por altura con largo de retracción). Una herramienta que
+  se iba con un G10 pendiente justo cuando el largo volvía a 0 (al empezar el objeto siguiente, impresión secuencial)
+  quedaba anotada como «no retraída»; al volver, no hacía G11 y extruía con el filamento retraído. **Arreglado:** con
+  la retracción del firmware, la herramienta que se va con un G10 pendiente queda retraída hasta su G11, sea cual sea
+  el largo. Prueba: `fuzz_gcode_6112026_1728` (el fuzzer con esa semilla y solo esa corrida, 0,2 s; falla sin el
+  arreglo). Dos pruebas armadas a mano no reprodujeron el caso.
+- **Pintura en triángulos enormes:** medido y cerrado (0,08 ms por trazo).
