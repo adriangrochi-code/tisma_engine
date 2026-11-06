@@ -11746,3 +11746,15 @@ filamento decía «Anycubic ABS», pero las cuatro temperaturas estaban vacías.
 - Arreglo: crear la carpeta. Con el motor real: 514 valores, boquilla 260 °C, cama 90 °C, primera capa igual que la
   boquilla. Prueba: `MaterialTempsTest` (carpeta nueva; con el motor real si está, si no con uno de prueba).
 - «Agregar impresora» ahora nombra también Bambu Lab (modo LAN).
+
+## 2026-11-06 — Android: tamaño del APK
+
+Medido sin SolidCraft (con él suma unos 20 MB por arquitectura, comprimido): el APK de depuración con las dos
+arquitecturas pesaba 36 MB, casi todo dex sin achicar (28 MB) y dos copias del motor.
+- **Un APK por arquitectura** (`splits.abi`): `app-arm64-v8a-debug.apk` para teléfonos (33 MB), `app-x86_64` para
+  emuladores y el universal. Con SolidCraft, el de teléfono deja afuera la otra copia (unos 20 MB menos).
+- **Tipo `beta`** para quienes prueban: R8 achica y optimiza (`proguard-android-optimize.txt`), firmado con la clave de
+  depuración hasta que exista la del dueño. arm64: **7,0 MB** sin SolidCraft (contra 33 MB). Las pruebas corren sobre
+  depuración: una beta se prueba en un emulador antes de entregarla (pedido a la sesión de especificación).
+- CI sube aparte: `tisma-android-phone-apk`, `tisma-android-phone-beta-apk`, `tisma-android-emulator-apk` y el
+  universal (`tisma-android-debug-apk`, como antes).

@@ -35,6 +35,27 @@ android {
         release {
             isMinifyEnabled = false
         }
+        // For testers: shrunk by R8 (the arm64 APK goes from about 33 MB to 9 MB, without SolidCraft) and signed
+        // with the debug key until the owner's release key exists. The tests run on debug: a beta is smoke-tested
+        // on an emulator before it is handed out.
+        create("beta") {
+            initWith(getByName("release"))
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
+    }
+
+    // One APK per architecture, as well as the one with both: phones only need arm64-v8a, which leaves out the
+    // other copy of the engine and of SolidCraft (about half the APK); x86_64 is for emulators.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = true
+        }
     }
 
     compileOptions {

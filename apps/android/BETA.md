@@ -4,7 +4,7 @@ Versión de prueba para quienes la prueban con el dueño. Se instala a mano (APK
 
 ## Cómo instalar
 
-1. Bajá el APK que te pasaron y abrilo en el teléfono.
+1. Bajá el APK que te pasaron (el de teléfono, `app-arm64-v8a-debug.apk`) y abrilo en el teléfono.
 2. Si Android lo pide, permití instalar apps de esa fuente.
 3. Si ya tenías otra versión de prueba y Android dice que la firma no coincide, desinstalala primero y volvé a
    instalar. Esta beta se firma con una clave de prueba: cada versión puede pedir lo mismo hasta que haya una clave
