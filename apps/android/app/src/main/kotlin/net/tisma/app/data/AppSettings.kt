@@ -23,6 +23,11 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putBoolean(CLOUD_PREFER, value).apply()
 
     /** «Buscar impresoras en la red» (printer_connections.md, «Búsqueda en la red», rule 1). */
+    /** «Mi biblioteca»'s size limit in MB (local_library.md, rule 12: 500 MB on the phone). Nothing is deleted on its own. */
+    var libraryCapMb: Int
+        get() = prefs.getInt("library.cap_mb", 500)
+        set(value) = prefs.edit().putInt("library.cap_mb", value).apply()
+
     var searchNetwork: Boolean
         get() = prefs.getBoolean(SEARCH_NETWORK, true)
         set(value) = prefs.edit().putBoolean(SEARCH_NETWORK, value).apply()

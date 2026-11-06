@@ -300,7 +300,7 @@ fun TismaApp(
                         Section.PLATE -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav)
                         Section.ENGINEERING -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav,
                             engineering = true)
-                        Section.LIBRARY -> if (library != null && sliceState.libraryAvailable) LibraryScreen(library, slice, nav)
+                        Section.LIBRARY -> if (library != null && sliceState.libraryAvailable) LibraryScreen(library, slice, nav, settings.libraryCapMb)
                             else LibraryUnavailable(nav)
                         else -> SectionHome(nav.section, state.signedIn, state.email, nav, updates?.let { u -> {
                             // Rule 1: «Buscar actualizaciones» in More.

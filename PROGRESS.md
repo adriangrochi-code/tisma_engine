@@ -11106,3 +11106,7 @@ Regla del dueño (06-11, por la sesión de especificación): sin tiempo libre; a
   - regla 6, Archivo: la información de la pieza (medidas y triángulos) y «Quitar de la placa».
   - **Bloqueado:** regla 10, abrir STEP (el motor dice «STEP files are not supported yet»). Regla 15, Google y Google
     Play: decisiones del dueño. Regla 9, la biblioteca de Tisma Cloud: espera el servidor.
+- `local_library.md`, regla 12: el límite de Mi biblioteca en Preferencias (500 MB por defecto en el teléfono). Al
+  pasarlo, la lista lo avisa y no borra nada sola. Prueba en `LibraryTest`.
+- Sigue en la biblioteca: la miniatura de 256 × 256 y «La imprimí» con foto (necesitan argumentos del comando
+  `library` del motor, todavía no acordados).

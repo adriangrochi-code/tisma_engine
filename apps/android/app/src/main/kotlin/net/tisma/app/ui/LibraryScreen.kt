@@ -59,7 +59,7 @@ import java.util.Locale
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun LibraryScreen(lib: LibraryViewModel, slice: SliceViewModel, nav: Navigator) {
+fun LibraryScreen(lib: LibraryViewModel, slice: SliceViewModel, nav: Navigator, capMb: Int = 500) {
     val state by lib.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     LaunchedEffect(Unit) { lib.refresh() }
@@ -115,6 +115,9 @@ fun LibraryScreen(lib: LibraryViewModel, slice: SliceViewModel, nav: Navigator) 
         // Rule 12: how much it takes.
         Text(stringResource(R.string.library_size, size(state.totalBytes)), style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Rule 12: at the limit nothing is deleted on its own; the sizes are shown so the person chooses.
+        if (state.totalBytes > capMb.toLong() * 1024 * 1024) Text(stringResource(R.string.library_full, capMb),
+            color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("library_full"))
         val shown = state.shown
         if (shown.isEmpty() && !state.busy) Text(stringResource(if (state.items.isEmpty()) R.string.library_empty else R.string.library_none_found),
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("library_empty"))

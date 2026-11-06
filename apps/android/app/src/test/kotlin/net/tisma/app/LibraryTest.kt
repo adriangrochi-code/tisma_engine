@@ -88,6 +88,7 @@ class LibraryTest {
         val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
         val nav = Navigator()
         settings.packWizardDone = true
+        settings.libraryCapMb = 0 // rule 12: any entry is over this limit, to see the warning
         compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, nav, library = lib) } }
         // The app starts in the library (owner's decision, 05-11-2026); empty at first.
         idle { slice.state.value.libraryAvailable }
@@ -114,6 +115,9 @@ class LibraryTest {
         // The list, then «Imprimir» from the entry: it slices again with the recipe (rule 6).
         compose.runOnIdle { nav.select(Section.LIBRARY) }
         wait("library_item_cube")
+        // Rule 12: over the limit it warns, and deletes nothing on its own.
+        wait("library_full")
+        assertEquals(1, library.list().size)
         compose.onNodeWithTag("library_item_cube").performClick()
         wait("library_print_1")
         File(work, "summary.json").delete()

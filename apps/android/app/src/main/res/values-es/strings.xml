@@ -603,4 +603,6 @@
     <string name="plate_cost">Costo del filamento</string>
     <string name="plate_info">%1$s mm · %2$d triángulos</string>
     <string name="plate_remove">Quitar de la placa</string>
+    <string name="pref_library_cap">Límite de Mi biblioteca (MB)</string>
+    <string name="library_full">Mi biblioteca pasó el límite de %1$d MB. No se borra nada solo: mirá cuánto ocupa cada pieza y elegí qué borrar.</string>
 </resources>
