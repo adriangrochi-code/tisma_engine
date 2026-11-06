@@ -2,6 +2,7 @@
 // OctoPrint's published REST API (printer_connections.md: «se prueban contra
 // un simulador propio»).
 #include "device/print_host.hpp"
+#include "device/printer_limits.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <httplib.h>
@@ -180,6 +181,13 @@ public:
         });
         server_.Get("/printer/objects/query", [this](const httplib::Request& req, httplib::Response& res) {
             std::lock_guard lock(mutex_);
+            if (req.has_param("toolhead")) { // the limits (printer_connections.md, rule 8)
+                res.set_content(R"({"result": {"status": {"toolhead": {"max_velocity": 300, "max_accel": 3000,
+                    "square_corner_velocity": 5, "axis_minimum": [0, 0, -2, 0], "axis_maximum": [235, 235, 250, 0]},
+                    "configfile": {"settings": {"printer": {"max_z_velocity": 15}}}}}})",
+                                "application/json");
+                return;
+            }
             asked = req.has_param("print_stats") && req.has_param("virtual_sdcard") && req.has_param("extruder") &&
                     req.has_param("heater_bed");
             nlohmann::json j{{"result",
@@ -245,6 +253,13 @@ TEST_CASE("print host: Moonraker's API (Klipper), the same calls (printer_connec
     REQUIRE(host_cancel(host).ok);
     CHECK(fake.calls == std::vector<std::string>{"pause", "resume", "cancel"});
     CHECK_FALSE(host_status(host).printing);
+    // The printer's limits, for the profile's empty values.
+    const HostLimits limits = host_limits(host);
+    REQUIRE(limits.ok);
+    const tisma::device::PrinterLimits read = parse_klipper_limits(limits.toolhead, limits.settings);
+    CHECK(read.values.at("max_feed_x") == 300.0);
+    CHECK(read.values.at("max_feed_z") == 15.0);
+    CHECK(read.max_x == 235.0);
     std::filesystem::remove(g);
 }
 
@@ -405,6 +420,161 @@ TEST_CASE("print host: PrusaLink's API with Digest, upload and print, state, pau
     HostKind k;
     CHECK(host_kind_from("prusalink", k));
     CHECK(k == HostKind::PrusaLink);
-    CHECK_FALSE(host_kind_from("duet", k));
+    CHECK(host_kind_from("duet", k));
+    CHECK(k == HostKind::Duet);
+    CHECK_FALSE(host_kind_from("repetier", k));
+    std::filesystem::remove(g);
+}
+
+namespace {
+
+// A Duet in standalone mode, from the RepRapFirmware wiki («HTTP requests»,
+// «Object Model Documentation»): a password, a session key, rr_upload with
+// a CRC32, rr_gcode, and the object model's state, job, heat and tools.
+class FakeDuet {
+public:
+    FakeDuet() {
+        server_.Get("/rr_connect", [this](const httplib::Request& req, httplib::Response& res) {
+            std::lock_guard lock(mutex_);
+            if (req.get_param_value("password") != "secret") {
+                res.set_content(R"({"err": 1})", "application/json");
+                return;
+            }
+            ++sessions;
+            res.set_content(R"({"err": 0, "sessionTimeout": 8000, "boardType": "duet3mini5plus", "sessionKey": 4711})",
+                            "application/json");
+        });
+        server_.Get("/rr_disconnect", [this](const httplib::Request&, httplib::Response& res) {
+            std::lock_guard lock(mutex_);
+            --sessions;
+            res.set_content(R"({"err": 0})", "application/json");
+        });
+        const auto keyed = [](const httplib::Request& req, httplib::Response& res) {
+            if (req.get_header_value("X-Session-Key") != "4711") {
+                res.status = 401;
+                return false;
+            }
+            return true;
+        };
+        server_.Post("/rr_upload", [this, keyed](const httplib::Request& req, httplib::Response& res) {
+            if (!keyed(req, res))
+                return;
+            std::lock_guard lock(mutex_);
+            name = req.get_param_value("name");
+            crc = req.get_param_value("crc32");
+            body = req.body;
+            res.set_content(R"({"err": 0})", "application/json");
+        });
+        server_.Get("/rr_gcode", [this, keyed](const httplib::Request& req, httplib::Response& res) {
+            if (!keyed(req, res))
+                return;
+            std::lock_guard lock(mutex_);
+            const std::string g = req.get_param_value("gcode");
+            codes.push_back(g);
+            if (g.rfind("M32", 0) == 0)
+                status = "processing";
+            else if (g == "M25")
+                status = "paused";
+            else if (g == "M24")
+                status = "processing";
+            else if (g == "M0")
+                status = "idle";
+            res.set_content(R"({"buff": 255})", "application/json");
+        });
+        server_.Get("/rr_model", [this, keyed](const httplib::Request& req, httplib::Response& res) {
+            if (!keyed(req, res))
+                return;
+            std::lock_guard lock(mutex_);
+            const std::string key = req.get_param_value("key");
+            nlohmann::json result;
+            if (key == "boards[0]")
+                result = {{"firmwareName", "RepRapFirmware"}, {"firmwareVersion", "3.5.2"}, {"name", "Duet 3 Mini 5+"}};
+            else if (key == "state")
+                result = {{"status", status}};
+            else if (key == "job")
+                result = {{"file", {{"fileName", "0:/gcodes/cube.gcode"}, {"size", 2000}}},
+                          {"filePosition", 500},
+                          {"timesLeft", {{"file", 900}, {"slicer", nullptr}}}};
+            else if (key == "heat")
+                result = {{"bedHeaters", {0, -1}},
+                          {"heaters", {{{"current", 59.5}, {"active", 60}}, {{"current", 210.2}, {"active", 215}}}}};
+            else if (key == "tools")
+                result = {{{"number", 0}, {"heaters", {1}}}};
+            res.set_content(nlohmann::json{{"key", key}, {"flags", req.get_param_value("flags")}, {"result", result}}.dump(),
+                            "application/json");
+        });
+        port_ = server_.bind_to_any_port("127.0.0.1");
+        thread_ = std::thread([this] { server_.listen_after_bind(); });
+        server_.wait_until_ready();
+    }
+    ~FakeDuet() {
+        server_.stop();
+        thread_.join();
+    }
+    std::string url() const { return "http://127.0.0.1:" + std::to_string(port_); }
+
+    std::mutex mutex_;
+    std::string name, crc, body, status = "idle";
+    std::vector<std::string> codes;
+    int sessions = 0;
+
+private:
+    httplib::Server server_;
+    std::thread thread_;
+    int port_ = 0;
+};
+
+} // namespace
+
+TEST_CASE("print host: Duet (RepRapFirmware standalone), session, upload and print, state, pause and cancel "
+          "(printer_connections.md)",
+          "[device][net]") {
+    FakeDuet fake;
+    HostConfig host;
+    host.kind = HostKind::Duet;
+    host.url = fake.url();
+    host.password = "secret";
+    const HostVersion v = host_version(host);
+    INFO(v.error);
+    REQUIRE(v.ok);
+    CHECK(v.server == "RepRapFirmware 3.5.2 (Duet 3 Mini 5+)");
+    HostConfig wrong = host;
+    wrong.password = "nope";
+    CHECK(host_version(wrong).code == "unauthorized");
+
+    const std::filesystem::path g = std::filesystem::temp_directory_path() / "tisma_print_host_d.gcode";
+    std::ofstream(g, std::ios::binary) << "G28\n";
+    REQUIRE(host_upload(host, g.string(), "cube.gcode", true).ok);
+    CHECK(fake.name == "0:/gcodes/cube.gcode");
+    CHECK(fake.body == "G28\n");
+    CHECK(fake.crc == "f722db83"); // CRC-32 of «G28\n»
+    REQUIRE_FALSE(fake.codes.empty());
+    CHECK(fake.codes.back() == "M32 \"0:/gcodes/cube.gcode\"");
+
+    const HostStatus s = host_status(host);
+    INFO(s.error);
+    REQUIRE(s.ok);
+    CHECK(s.printing);
+    CHECK_FALSE(s.paused);
+    CHECK(s.file == "0:/gcodes/cube.gcode");
+    CHECK(s.progress == 25.0);
+    CHECK(s.seconds_left == 900.0); // no slicer estimate: the file's
+    CHECK(s.nozzle == 210.2);
+    CHECK(s.nozzle_target == 215.0);
+    CHECK(s.bed == 59.5);
+    CHECK(s.bed_target == 60.0);
+
+    REQUIRE(host_pause(host, true).ok);
+    CHECK(host_status(host).paused);
+    REQUIRE(host_pause(host, false).ok);
+    // Upload and simulate (devices.md, rule 20): M37 with the file.
+    REQUIRE(host_upload(host, g.string(), "sim.gcode", false, true).ok);
+    CHECK(fake.codes.back() == "M37 P\"0:/gcodes/sim.gcode\"");
+    fake.status = "processing";
+    // Cancel while printing: paused first, then M0.
+    REQUIRE(host_cancel(host).ok);
+    const std::vector<std::string> tail(fake.codes.end() - 5, fake.codes.end());
+    CHECK(tail == std::vector<std::string>{"M25", "M24", "M37 P\"0:/gcodes/sim.gcode\"", "M25", "M0"});
+    CHECK(fake.sessions == 0); // every session closed
     std::filesystem::remove(g);
 }

@@ -51,6 +51,47 @@ double triangle_distance2(const P& p, const P& a, const P& b, const P& c) {
     return std::min({segment_distance2(p, a, b), segment_distance2(p, b, c), segment_distance2(p, c, a)});
 }
 
+// The squared distance between segments p0p1 and q0q1: the closest points
+// are found on the two lines and pulled back onto the segments, one end at a
+// time (each in turn clamped, the other then recomputed).
+double segments_distance2(const P& p0, const P& p1, const P& q0, const P& q1) {
+    const P u = sub(p1, p0), v = sub(q1, q0), w = sub(p0, q0);
+    const double uu = dot(u, u), vv = dot(v, v), uv = dot(u, v), uw = dot(u, w), vw = dot(v, w);
+    if (uu <= 0.0)
+        return segment_distance2(p0, q0, q1);
+    if (vv <= 0.0)
+        return segment_distance2(q0, p0, p1);
+    const double det = uu * vv - uv * uv;
+    double s = det > 1e-12 * uu * vv ? std::clamp((uv * vw - vv * uw) / det, 0.0, 1.0) : 0.0;
+    double t = (uv * s + vw) / vv;
+    if (t < 0.0) {
+        t = 0.0;
+        s = std::clamp(-uw / uu, 0.0, 1.0);
+    } else if (t > 1.0) {
+        t = 1.0;
+        s = std::clamp((uv - uw) / uu, 0.0, 1.0);
+    }
+    const P d{w.x + s * u.x - t * v.x, w.y + s * u.y - t * v.y, w.z + s * u.z - t * v.z};
+    return dot(d, d);
+}
+
+// The squared distance between segment p0p1 and triangle abc: 0 when the
+// segment goes through it; else the nearest of its ends to the triangle and
+// of the triangle's sides to it.
+double segment_triangle_distance2(const P& p0, const P& p1, const P& a, const P& b, const P& c) {
+    const P n = cross(sub(b, a), sub(c, a));
+    const double h0 = dot(sub(p0, a), n), h1 = dot(sub(p1, a), n);
+    if (dot(n, n) > 0.0 && ((h0 <= 0.0 && h1 >= 0.0) || (h0 >= 0.0 && h1 <= 0.0)) && h0 != h1) {
+        const double t = h0 / (h0 - h1);
+        const P q{p0.x + t * (p1.x - p0.x), p0.y + t * (p1.y - p0.y), p0.z + t * (p1.z - p0.z)};
+        if (dot(cross(sub(b, a), sub(q, a)), n) >= 0.0 && dot(cross(sub(c, b), sub(q, b)), n) >= 0.0 &&
+            dot(cross(sub(a, c), sub(q, c)), n) >= 0.0)
+            return 0.0;
+    }
+    return std::min({triangle_distance2(p0, a, b, c), triangle_distance2(p1, a, b, c), segments_distance2(p0, p1, a, b),
+                     segments_distance2(p0, p1, b, c), segments_distance2(p0, p1, c, a)});
+}
+
 // The end of the subtree that starts at `pos`; throws on a cut-off tree.
 std::size_t skip(const Painting::Tree& tree, std::size_t pos, int depth = 0) {
     if (pos >= tree.size() || depth > kMaxDepth)
@@ -66,8 +107,8 @@ std::size_t skip(const Painting::Tree& tree, std::size_t pos, int depth = 0) {
 class Painter {
 public:
     explicit Painter(const Brush& brush)
-        : brush_(brush), centre_(to_p(brush.centre)), r2_(brush.radius * brush.radius),
-          detail2_(std::max(brush.detail, 1e-3) * std::max(brush.detail, 1e-3)) {}
+        : brush_(brush), centre_(to_p(brush.centre)), from_(brush.stroke ? to_p(brush.from) : to_p(brush.centre)),
+          r2_(brush.radius * brush.radius), detail2_(std::max(brush.detail, 1e-3) * std::max(brush.detail, 1e-3)) {}
 
     // Paints the node of `in` at pos (moving pos past it) on triangle abc.
     void node(const Painting::Tree& in, std::size_t& pos, const P& a, const P& b, const P& c, int depth,
@@ -78,7 +119,7 @@ public:
         }
         const std::size_t start = pos;
         pos = skip(in, pos);
-        if (triangle_distance2(centre_, a, b, c) > r2_) { // untouched: kept as it was
+        if (far(a, b, c)) { // untouched: kept as it was
             out.insert(out.end(), in.begin() + std::ptrdiff_t(start), in.begin() + std::ptrdiff_t(pos));
             return;
         }
@@ -95,11 +136,11 @@ public:
 
     // Paints a piece that has one mark, m, all over.
     void leaf(std::uint8_t m, const P& a, const P& b, const P& c, int depth, Painting::Tree& out) const {
-        if (m == brush_.mark || triangle_distance2(centre_, a, b, c) > r2_) {
+        if (m == brush_.mark || far(a, b, c)) {
             out.push_back(m);
             return;
         }
-        const auto inside = [&](const P& p) { const P d = sub(p, centre_); return dot(d, d) <= r2_; };
+        const auto inside = [&](const P& p) { return segment_distance2(p, from_, centre_) <= r2_; };
         if (inside(a) && inside(b) && inside(c)) { // a ball holds the triangle of its corners
             out.push_back(brush_.mark);
             return;
@@ -121,6 +162,11 @@ public:
     }
 
 private:
+    // Whether triangle abc lies wholly out of the brush.
+    bool far(const P& a, const P& b, const P& c) const {
+        return (brush_.stroke ? segment_triangle_distance2(from_, centre_, a, b, c) : triangle_distance2(centre_, a, b, c)) > r2_;
+    }
+
     // Four children with one mark become one leaf again.
     static void merge(Painting::Tree& out, std::size_t at) {
         if (out.size() == at + 4 && out[at] != Painting::kSplit && out[at] == out[at + 1] && out[at] == out[at + 2] &&
@@ -132,7 +178,7 @@ private:
     }
 
     const Brush& brush_;
-    P centre_;
+    P centre_, from_;
     double r2_, detail2_;
 };
 
@@ -229,12 +275,16 @@ void for_each_painted(const Painting& painting, PaintChannel channel, std::size_
 }
 
 std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& mesh, const Brush& brush,
-                  const std::vector<std::uint32_t>* near) {
+                  const std::vector<std::uint32_t>* near, std::vector<std::uint32_t>* changed_out) {
     if (!(brush.radius > 0.0) || brush.mark > kPaintMaxMark)
         return 0;
     const Painter painter(brush);
-    const P centre = to_p(brush.centre), view = to_p(brush.view);
+    const P view = to_p(brush.view);
     const double r = brush.radius;
+    // The box of what the brush reaches: the stroke's two ends.
+    const P end = to_p(brush.centre), start = brush.stroke ? to_p(brush.from) : end;
+    const P lo{std::min(start.x, end.x), std::min(start.y, end.y), std::min(start.z, end.z)};
+    const P hi{std::max(start.x, end.x), std::max(start.y, end.y), std::max(start.z, end.z)};
     std::size_t changed = 0;
     const std::size_t count = near ? near->size() : mesh.triangle_count();
     for (std::size_t k = 0; k < count; ++k) {
@@ -243,9 +293,9 @@ std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& 
             continue;
         const P a = to_p(mesh.corner(t, 0)), b = to_p(mesh.corner(t, 1)), c = to_p(mesh.corner(t, 2));
         // Far from the brush, or facing away from the eye.
-        if (std::min({a.x, b.x, c.x}) > centre.x + r || std::max({a.x, b.x, c.x}) < centre.x - r ||
-            std::min({a.y, b.y, c.y}) > centre.y + r || std::max({a.y, b.y, c.y}) < centre.y - r ||
-            std::min({a.z, b.z, c.z}) > centre.z + r || std::max({a.z, b.z, c.z}) < centre.z - r)
+        if (std::min({a.x, b.x, c.x}) > hi.x + r || std::max({a.x, b.x, c.x}) < lo.x - r ||
+            std::min({a.y, b.y, c.y}) > hi.y + r || std::max({a.y, b.y, c.y}) < lo.y - r ||
+            std::min({a.z, b.z, c.z}) > hi.z + r || std::max({a.z, b.z, c.z}) < lo.z - r)
             continue;
         if (dot(cross(sub(b, a), sub(c, a)), view) > 0.0)
             continue;
@@ -262,6 +312,8 @@ std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& 
         if (after != before) {
             painting.set_tree(channel, t, std::move(after));
             ++changed;
+            if (changed_out)
+                changed_out->push_back(std::uint32_t(t));
         }
     }
     return changed;

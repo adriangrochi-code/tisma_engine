@@ -2,6 +2,7 @@
 #include "config/settings.hpp"
 #include "gcode/check.hpp"
 #include "gcode/preview.hpp"
+#include "gcode/template.hpp"
 #include "gcode/writer.hpp"
 #include "geom/bead.hpp"
 #include "report/warnings.hpp"
@@ -110,6 +111,51 @@ TEST_CASE("the temperature variables always exist, 0 when the filament lacks the
     s.variables["temp"] = {"210"};
     const std::vector<std::string> lines = lines_of(cube_gcode(s));
     CHECK(std::find(lines.begin(), lines.end(), "START_PRINT CHAMBER=0 MIN=0 IDLE=0") != lines.end());
+}
+
+TEST_CASE("the old [name] form takes the pack's names and an index with a variable in it (BH41, GM5)", "[gcode][bh41]") {
+    Settings s = test_printer();
+    s.variables["first_layer_bed_temperature"] = {"60"};
+    s.variables["first_layer_temperature"] = {"215"};
+    s.variables["temperature"] = {"210"};
+    // Pasted from Anycubic's own program for a Kobra 3.
+    s.start_gcode = "G9111 bedTemp=[first_layer_bed_temperature] extruderTemp=[first_layer_temperature[initial_tool]]\n"
+                    "M104 S[temperature_0]\n;===== [Checks] =====";
+    const std::vector<std::string> lines = lines_of(cube_gcode(s));
+    CHECK(std::find(lines.begin(), lines.end(), "G9111 bedTemp=60 extruderTemp=215") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "M104 S210") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), ";===== [Checks] =====") != lines.end()); // a word in a comment
+}
+
+TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gcode_macros.md rules 5, 9, 10 bis, GM11)",
+          "[gcode][bh41]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"220"};
+    s.variables["first_layer_bed_temperature"] = {"65"};
+    s.bed = {{0, 0}, {250, 0}, {250, 220}, {0, 220}};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // An OrcaSlicer name as the engine's, a list as a list, a single value as the list's first.
+    CHECK(render_template("{nozzle_temperature_initial_layer[0]}", c, "t") == "220");
+    CHECK(render_template("[bed_temperature_initial_layer_single]", c, "t") == "65");
+    CHECK(render_template("{print_bed_max[0]}x{print_bed_max[1]}", c, "t") == "250x220");
+    CHECK(render_template("{printable_height}", c, "t") == render_template("{max_print_height}", c, "t"));
+    // One the engine cannot fill yet: a neutral value, named for the log.
+    CHECK(c.unfilled.contains("curr_bed_type"));
+    CHECK(render_template("[curr_bed_type]", c, "t").empty());
+    CHECK(c.unfilled_used.contains("curr_bed_type"));
+    // An index past the list's end, and one with an unknown variable in it, fail.
+    CHECK_THROWS_AS(render_template("[first_layer_temperature[3]]", c, "t"), TemplateError);
+    CHECK_THROWS_AS(render_template("[first_layer_temperature[99999999999999999999]]", c, "t"), TemplateError);
+    CHECK_THROWS_AS(render_template("[first_layer_temperature_99999999999999999999]", c, "t"), TemplateError);
+    CHECK_THROWS_AS(render_template("[first_layer_temperature[no_such]]", c, "t"), TemplateError);
+    // The plate chosen for a Bambu Lab printer fills curr_bed_type (rule 12).
+    Settings bambu = s;
+    bambu.bambu_plate = "Textured PEI Plate";
+    TemplateContext bc = template_context(bambu, SlicedModel{});
+    CHECK(render_template("{if curr_bed_type==\"Textured PEI Plate\"}textured{endif}", bc, "t") == "textured");
+    CHECK_FALSE(bc.unfilled.contains("curr_bed_type"));
+    // A name that is in no list still fails (rule 5, GM6).
+    CHECK_THROWS_AS(render_template("[no_such_variable]", c, "t"), TemplateError);
 }
 
 TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]") {
@@ -2343,7 +2389,7 @@ TEST_CASE("support: a gap and interface layers over the part it stands on (suppo
     CHECK(at(model, 7).second > 0);
 }
 
-TEST_CASE("support: from the bed only, a zone that stands on the part goes whole (supports_more.md, rule 2, SM2)", "[gcode][support]") {
+TEST_CASE("support: from the bed only, a zone that stands on the part goes whole (supports_more.md, rule 2, SM2)", "[gcode][support][bh39]") {
     const auto lifted = [](IndexedMesh& m, float x0, float y0, float x1, float y1, float z0, float z1) {
         const auto base = std::uint32_t(m.vertices.size());
         add_box(m, x0, y0, x1, y1, z1 - z0);
@@ -2371,6 +2417,13 @@ TEST_CASE("support: from the bed only, a zone that stands on the part goes whole
     IndexedMesh t;
     add_box(t, 8, 8, 12, 12, 3);
     lifted(t, 0, 0, 20, 20, 3, 4);
+    CHECK(support_layers(slice_model(t, s)) > 5);
+    // The same with organic trees (BH39: the option was ignored for them).
+    s.support_style = SupportStyle::Organic;
+    s.support_buildplate_only = false;
+    CHECK(support_layers(slice_model(shelf, s)) > 5);
+    s.support_buildplate_only = true;
+    CHECK(support_layers(slice_model(shelf, s)) == 0);
     CHECK(support_layers(slice_model(t, s)) > 5);
 }
 
@@ -2627,4 +2680,84 @@ TEST_CASE("filament per mm from the bead's rounded section (gcode_motion.md, rul
             CHECK_THAT(x.e / x.length(), Catch::Matchers::WithinAbs(0.033849, 0.00002));
         }
     CHECK(walls >= 8);
+}
+
+namespace {
+// The E values of the G1 moves, in order.
+std::vector<double> e_values(const std::string& gcode) {
+    std::vector<double> out;
+    for (const std::string& line : lines_of(gcode)) {
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        const std::size_t at = line.find(" E");
+        if (at != std::string::npos)
+            out.push_back(std::atof(line.c_str() + at + 2));
+    }
+    return out;
+}
+} // namespace
+
+TEST_CASE("a cura printer's own G-code: only {name}, and the extrusion its start expects (GM10, rule 10 ter)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"210"};
+    s.relative_extrusion = true; // the profile says relative, the machine's G-code absolute
+    s.machine_macros.dialect = "cura";
+    s.machine_macros.templates["start"] =
+        "M82 ;absolute\nM104 S{material_print_temperature}\nG1 Z{no_such_cura_name}\n{if x}[kept]";
+    s.machine_macros.relative_extrusion = false;
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s, &warnings);
+    const std::string g = out.str();
+    const std::vector<std::string> lines = lines_of(g);
+    CHECK(std::find(lines.begin(), lines.end(), "M104 S210") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "G1 Z{no_such_cura_name}") != lines.end()); // left as written
+    CHECK(std::find(lines.begin(), lines.end(), "{if x}[kept]") != lines.end());           // no conditions in cura
+    CHECK(g.find("M83") == std::string::npos);
+    // Absolute: the same E as the profile set to absolute.
+    Settings absolute = test_printer();
+    absolute.relative_extrusion = false;
+    const std::vector<double> e = e_values(g);
+    REQUIRE(e.size() > 10);
+    CHECK(e == e_values(cube_gcode(absolute)));
+    // Not the simple version: only the log's note of the name left as written.
+    for (const Warning& w : warnings)
+        if (w.kind == "gcode_macro") {
+            CHECK(w.severity == "information");
+            CHECK_THAT(w.message, Catch::Matchers::ContainsSubstring("no_such_cura_name"));
+        }
+}
+
+TEST_CASE("an orcaslicer printer's own G-code with its names and machine values (GM11, rule 10 bis)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"220"};
+    s.start_gcode = "; the simple start";
+    s.machine_macros.dialect = "orcaslicer";
+    s.machine_macros.templates["start"] = "M109 S{nozzle_temperature_initial_layer[0]}\n; model {printer_model}";
+    s.machine_macros.values["printer_model"] = {"Bambu Lab A1"};
+    const std::vector<std::string> lines = lines_of(cube_gcode(s));
+    CHECK(std::find(lines.begin(), lines.end(), "M109 S220") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "; model Bambu Lab A1") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "; the simple start") == lines.end());
+}
+
+TEST_CASE("a machine G-code the engine cannot read: the simple version, with a warning (rule 10 bis)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.start_gcode = "; the simple start";
+    s.machine_macros.dialect = "prusaslicer";
+    s.machine_macros.templates["start"] = "{if layer_height > 0}no end";
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s, &warnings);
+    const std::vector<std::string> lines = lines_of(out.str());
+    CHECK(std::find(lines.begin(), lines.end(), "; the simple start") != lines.end());
+    CHECK(std::count(lines.begin(), lines.end(), "no end") == 0);
+    CHECK(std::any_of(warnings.begin(), warnings.end(), [](const Warning& w) {
+        return w.kind == "gcode_macro" && w.message.find("prusaslicer") != std::string::npos;
+    }));
 }

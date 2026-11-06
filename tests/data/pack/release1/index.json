@@ -34,12 +34,15 @@
    ],
    "prints": [
     "vendors/acme/prints/Standard.json",
-    "vendors/acme/prints/Fine.json"
+    "vendors/acme/prints/Fine.json",
+    "vendors/acme/prints/Draft.json",
+    "vendors/acme/prints/Coarse.json",
+    "vendors/acme/prints/Wide.json"
    ],
    "archive": {
     "name": "acme.tar.xz",
-    "size": 1072,
-    "sha256": "3414393aa74e98726ec83a56ae91eed85fc6cabddb2a70e99e85f2caf209d8c0"
+    "size": 1188,
+    "sha256": "4232278c7173ca436aabef98c80ec4a70f9ee9cdce060dd42675d4303c2ed789"
    },
    "models": [
     {

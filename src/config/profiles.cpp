@@ -134,6 +134,10 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
             return ProfileKind::Filament;
         return ProfileKind::Printer;
     }
+    // The options of a print sent to a Bambu Lab printer (gcode_macros.md,
+    // rule 12) are that printer's.
+    if (group == "bambu")
+        return ProfileKind::Printer;
     // Every speed is the printer's (owner's decision, 2026-10-26).
     if (group == "retraction" || group == "gcode" || group == "speed" || (group == "cooling" && key == "min_speed") ||
         group == "mmu")

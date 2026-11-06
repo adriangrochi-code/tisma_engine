@@ -1,0 +1,6 @@
+# The printer's limits on connecting (printer_connections.md, «Leer los
+# límites de la impresora», rules 1 and 4): the simulated printer answers M115
+# with its work area and M503 with its limits; the profile's empty values are
+# filled, with a one-line notice.
+wait 30
+expect-toast taken from the printer

@@ -400,6 +400,34 @@
         "solidcraft-notice.txt",
         "apache-2.0.txt"
       ]
+    },
+    {
+      "name": "Mbed TLS",
+      "version": "3.6.2",
+      "license": "Apache-2.0",
+      "url": "https://github.com/Mbed-TLS/mbedtls",
+      "notices": [
+        "apache-2.0.txt",
+        "mbedtls.txt"
+      ]
+    },
+    {
+      "name": "stb_image",
+      "version": "2.30",
+      "license": "MIT",
+      "url": "https://github.com/nothings/stb",
+      "notices": [
+        "stb.txt"
+      ]
+    },
+    {
+      "name": "stb_image_write",
+      "version": "1.16",
+      "license": "MIT",
+      "url": "https://github.com/nothings/stb",
+      "notices": [
+        "stb.txt"
+      ]
     }
   ]
 }

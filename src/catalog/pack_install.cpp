@@ -2,11 +2,14 @@
 // (profile_pack.md, rules 4, 5, 7, 8, 20 and 21). Own design.
 #include "catalog/pack.hpp"
 #include "catalog/xz.hpp"
+#include "config/settings.hpp"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstdio>
 #include <fstream>
 #include <map>
 #include <set>
@@ -128,6 +131,43 @@ std::set<std::string> variant_defaults(const nlohmann::json& model, const std::s
                 add_default_paths(v.at("defaults"), resin ? "resin_print" : "print", out);
             }
     return out;
+}
+
+// Why a print profile valid for every printer (compatible null or an empty
+// set) does not fit this one, or empty when it fits (rule 12, BH32): its
+// nozzle, when given, is the variant's, and its layer height and line widths
+// pass the slicer's own check against the printer and its nozzle.
+std::string print_misfit(const Profile& printer, const PackEntry& print) {
+    const double nozzle = printer.settings.nozzle_diameter;
+    if (print.nozzle > 0.0 && std::abs(print.nozzle - nozzle) > 1e-6)
+    {
+        char text[80];
+        std::snprintf(text, sizeof text, "made for a %g mm nozzle, not %g mm", print.nozzle, nozzle);
+        return text;
+    }
+    Settings both;
+    try {
+        both = with_profile(with_profile(Settings{}, ProfileKind::Printer, printer.settings), ProfileKind::Print,
+                            print.profile.settings);
+        check_settings(both);
+    } catch (const SettingsError& e) {
+        return e.what();
+    }
+    // Without its nozzle, the one it was made for shows in its walls' width:
+    // a profile lays beads of about its nozzle (BH35: 0.82 mm walls of a
+    // 0.8 mm nozzle's profile on a 0.4 mm one passed the slicer's wide range
+    // and printed nothing on a small part). Engine's decision, 2026-11-05.
+    if (print.nozzle <= 0.0 && nozzle > 0.0 && (both.wall_width < 0.75 * nozzle || both.wall_width > 1.5 * nozzle)) {
+        char text[120];
+        std::snprintf(text, sizeof text, "its %g mm walls are made for another nozzle than %g mm", both.wall_width, nozzle);
+        return text;
+    }
+    return {};
+}
+
+// A compatible set that holds no printer counts as none (rule 12).
+bool for_every_printer(const PackEntry& e, const std::vector<std::vector<int>>& sets) {
+    return !e.compatible || (*e.compatible >= 0 && std::size_t(*e.compatible) < sets.size() && sets[std::size_t(*e.compatible)].empty());
 }
 
 } // namespace
@@ -356,6 +396,9 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
                                    ", which is empty; taken as every printer");
         if (!defaults.contains(pack_key(path)) && !pack_compatible(entry.compatible, sets, out.number)) // rule 12, PK7
             throw PackError(entry.profile.name + " is not for the " + out.printer.name);
+        if (kind == ProfileKind::Print && !out.resin && !defaults.contains(pack_key(path)) && for_every_printer(entry, sets))
+            if (const std::string why = print_misfit(out.printer, entry); !why.empty()) // rule 12, BH32
+                throw PackError(entry.profile.name + " does not fit the " + out.printer.name + ": " + why);
         if (entry.resin != out.resin)
             throw PackError(entry.profile.name + (out.resin ? " is not a resin profile, and the " : " is a resin profile, and the ") +
                             out.printer.name + (out.resin ? " is a resin printer" : " is not a resin printer"));
@@ -432,6 +475,7 @@ std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const Pa
     }
     const bool resin = pack_printer_is_resin(index, printer);
     std::set<std::string> defaults;
+    std::optional<Profile> printer_profile; // for the fit of a print profile valid for every printer (BH32)
     if (printer >= 0 && printer < int(index.printers.size())) {
         const std::string& name = index.printers[std::size_t(printer)];
         const auto hash = name.rfind('#');
@@ -440,6 +484,13 @@ std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const Pa
         for (const std::string& f : {file, "vendors/" + file})
             if (hash != std::string::npos && safe_pack_path(f) && read_all(pack_dir / utf8_path(f), model_text)) {
                 defaults = variant_defaults(nlohmann::json::parse(model_text, nullptr, false), name.substr(hash + 1), resin);
+                if (kind == ProfileKind::Print && !resin) {
+                    try {
+                        std::vector<std::string> ignored;
+                        printer_profile = pack_printer_profile(model_text, name.substr(hash + 1), ignored);
+                    } catch (const std::exception&) {
+                    }
+                }
                 break;
             }
     }
@@ -456,7 +507,9 @@ std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const Pa
             try {
                 std::vector<std::string> ignored;
                 const PackEntry e = parse_pack_entry(text, ignored);
-                if (e.profile.kind == kind && e.resin == resin && (defaults.contains(pack_key(path)) || pack_compatible(e.compatible, sets, printer)))
+                if (e.profile.kind == kind && e.resin == resin && (defaults.contains(pack_key(path)) ||
+                     (pack_compatible(e.compatible, sets, printer) &&
+                      !(printer_profile && for_every_printer(e, sets) && !print_misfit(*printer_profile, e).empty()))))
                     out.push_back({path, e.profile.name, v.name});
             } catch (const std::exception&) {
             }

@@ -1,3 +1,4 @@
+#include "geom/distance.hpp"
 #include "gpu/compute.hpp"
 #include "io/stl.hpp"
 #include "slice/layers.hpp"
@@ -204,4 +205,38 @@ TEST_CASE("supports with the GPU are the CPU's", "[gpu]") {
         CHECK(on_gpu[l] == on_cpu[l]);
     }
     CHECK(area_mm2(on_cpu[5]) > 50.0);
+}
+
+TEST_CASE("the distance transform on the GPU gives the CPU's numbers", "[gpu][distance]") {
+    gpu::Context& ctx = require_context();
+    unsigned seed = 9;
+    std::vector<BitGrid> all;
+    for (int round = 0; round < 12; ++round) {
+        // From a few pixels to wider than a 64-bit word and taller than a group.
+        const int w = 1 + int(seed % 150), h = 1 + int((seed >> 8) % 90);
+        BitGrid g(0, 0, 1, w, h);
+        for (int j = 0; j < h; ++j)
+            for (int i = 0; i < w; ++i) {
+                seed = seed * 1103515245u + 12345u;
+                // Discs and noise: long runs, so distances grow well past 1.
+                const int dx = i - w / 2, dy = j - h / 2;
+                if (dx * dx + dy * dy < (w * h) / 6 || (seed >> 16) % 10 < unsigned(round % 6))
+                    g.set(i, j);
+            }
+        std::vector<float> gpu_out;
+        ctx.distance_inside(g, gpu_out);
+        CAPTURE(round, w, h);
+        CHECK(gpu_out == squared_distance_inside(g));
+        all.push_back(g);
+        if (round == 5)
+            all.emplace_back(); // an empty grid among them
+    }
+    // All of them in one run, as every layer's at once.
+    std::vector<std::vector<float>> batch;
+    ctx.distance_inside(std::span<const BitGrid>(all), batch);
+    REQUIRE(batch.size() == all.size());
+    for (std::size_t k = 0; k < all.size(); ++k) {
+        CAPTURE(k);
+        CHECK(batch[k] == squared_distance_inside(all[k]));
+    }
 }

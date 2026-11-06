@@ -152,6 +152,27 @@ struct CalibrationDate {
     friend bool operator==(const CalibrationDate&, const CalibrationDate&) = default;
 };
 
+// The machine's own G-code with macros, from the profile pack
+// (profile_pack_format.md, «G-code de la máquina con macros»; gcode_macros.md,
+// rules 10 bis and 10 ter): used as written in place of the simple version.
+struct MachineMacros {
+    // prusaslicer, orcaslicer, crealityprint, elegooslicer or cura; empty: none.
+    std::string dialect;
+    // start, end, before_layer_change, layer_change, toolchange,
+    // between_objects, color_change, pause, custom, timelapse,
+    // extrusion_role_change: the G-code by name.
+    std::map<std::string, std::string> templates;
+    // cura: one per extruder, empty where the pack has none.
+    std::vector<std::string> extruder_start, extruder_end;
+    // Whether that G-code expects relative extrusion; unset: not known.
+    std::optional<bool> relative_extrusion;
+    // The orcaslicer family: the machine's values by the dialect's names, as
+    // machine.variables (one value, or one per extruder, as text).
+    std::map<std::string, std::vector<std::string>> values;
+    bool empty() const { return dialect.empty(); }
+    friend bool operator==(const MachineMacros&, const MachineMacros&) = default;
+};
+
 struct Settings {
     double layer_height = 0.2;
     double first_layer_height = 0.2;
@@ -333,6 +354,7 @@ struct Settings {
     bool relative_extrusion = false;
     GcodeFlavor flavor = GcodeFlavor::RepRap;
     std::string start_gcode, end_gcode;
+    MachineMacros machine_macros; // machine.macros
     // Not a setting: the input file's name without its folder and extension,
     // for the templates' input_filename_base (gcode_templates.md, rule 7).
     std::string input_name;
@@ -828,6 +850,17 @@ struct Settings {
     ObjectLabels object_labels = ObjectLabels::None;
     // The binary G-code format (gcode_extras.md, rule 9; src/gcode/binary.hpp).
     bool gcode_binary = false;
+    // The pictures of the part at the start of the G-code: «16x16/PNG,32x24/JPG»
+    // (gcode_extras.md, rule 8; src/gcode/thumbnail.hpp). Empty: none.
+    std::string gcode_thumbnails;
+    // The options of a print sent to a Bambu Lab printer (gcode_macros.md,
+    // rule 12): the bed levelled, the flow and the vibrations calibrated, a
+    // timelapse, and the plate (the macro variable curr_bed_type; empty: the
+    // printer's own choice). They go in the network request, and the plate
+    // also to the start G-code.
+    bool bambu_bed_leveling = true, bambu_flow_calibration = true, bambu_vibration_calibration = false,
+         bambu_timelapse = false;
+    std::string bambu_plate;
     // The printer's firmware reads the whole file first (gcode_firmware.md,
     // rule 7): then the G-code is never binary (binary_output).
     StrictParser strict_parser = StrictParser::None;

@@ -33,10 +33,20 @@ def model(name, nozzle_diameter):
                             "settings": {"machine": {"nozzle_diameter": nozzle_diameter}}}],
               "license": "AGPL-3.0-or-later", "origin": "Invented"})
 
-def entry(kind, name, settings, compatible, vendor="Acme", technology="fff"):
-    return j({"format": "tisma-pack-entry", "version": 2, "technology": technology, "vendor": vendor,
-              "profile": {"format": "tisma-profile", "version": 1, "kind": kind, "name": name, "settings": settings},
-              "compatible": compatible, "generic": False, "license": "AGPL-3.0-or-later", "origin": "Invented"})
+def entry(kind, name, settings, compatible, vendor="Acme", technology="fff", nozzle=None):
+    e = {"format": "tisma-pack-entry", "version": 2, "technology": technology, "vendor": vendor,
+         "profile": {"format": "tisma-profile", "version": 1, "kind": kind, "name": name, "settings": settings},
+         "compatible": compatible, "generic": False, "license": "AGPL-3.0-or-later", "origin": "Invented"}
+    if nozzle is not None:
+        e["nozzle"] = nozzle
+    return j(e)
+
+# Valid for every printer (the empty set 2) but not fitting each (rule 12, BH32): Draft is made for a 0.6 mm nozzle,
+# Coarse lays 0.5 mm layers, too thick for a 0.4 mm one.
+extra_prints = [("vendors/acme/prints/Draft.json", entry("print", "Acme Draft", {"layers": {"height": 0.3}}, 2, nozzle=0.6)),
+                ("vendors/acme/prints/Coarse.json", entry("print", "Acme Coarse", {"layers": {"height": 0.5}}, 2)),
+                # No nozzle given, but 0.82 mm walls: made for a wider nozzle than 0.4 mm (BH35).
+                ("vendors/acme/prints/Wide.json", entry("print", "Acme Wide", {"layers": {"height": 0.24}, "walls": {"width": 0.82}}, 2))]
 
 def slab(x0, y0, x1, y1, z0, z1):
     v = [(x, y, z) for z in (z0, z1) for y in (y0, y1) for x in (x0, x1)]
@@ -56,12 +66,12 @@ acme1 = tar([("vendors/acme/beds/A1.stl", slab(0, 0, 220, 220, -3, 0)), ("vendor
              ("vendors/acme/models/A1.json", model("Acme One", 0.6)),
              ("vendors/acme/filaments/PLA.json", entry("filament", "Acme PLA", {"machine": {"variables": {"temperature": 210}}, "cooling": {"min_speed": 12}}, 0)),
              ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}, "speed": {"walls": 170, "travel": 300}}, 1)),
-             ("vendors/acme/prints/Fine.json", entry("print", "Acme Fine", {"layers": {"height": 0.1}, "speed": {"walls": 60, "travel": 200}}, 2))])
+             ("vendors/acme/prints/Fine.json", entry("print", "Acme Fine", {"layers": {"height": 0.1}, "speed": {"walls": 60, "travel": 200}}, 2))] + extra_prints)
 acme2 = tar([("vendors/acme/beds/A1.stl", slab(0, 0, 220, 220, -3, 0)), ("vendors/acme/beds/A1.svg", bed_svg),
              ("vendors/acme/models/A1.json", model("Acme One Plus", 0.6)),
              ("vendors/acme/filaments/PLA.json", entry("filament", "Acme PLA", {"machine": {"variables": {"temperature": 215}}, "cooling": {"min_speed": 12}}, 0)),
              ("vendors/acme/prints/Standard.json", entry("print", "Acme Standard", {"layers": {"height": 0.16}, "speed": {"walls": 170, "travel": 300}}, 1)),
-             ("vendors/acme/prints/Fine.json", entry("print", "Acme Fine", {"layers": {"height": 0.1}, "speed": {"walls": 60, "travel": 200}}, 2))])
+             ("vendors/acme/prints/Fine.json", entry("print", "Acme Fine", {"layers": {"height": 0.1}, "speed": {"walls": 60, "travel": 200}}, 2))] + extra_prints)
 bolt = tar([("vendors/bolt/models/B2.json", j({"format": "tisma-pack-model", "version": 2, "technology": "sla",
              "vendor": "Bolt", "model": {"id": "B2", "name": "Bolt Two"}, "default_variant": "default",
              "common": {"settings": {}}, "variants": [{"id": "default", "nozzle": 0, "name": "Bolt Two", "settings": {},
@@ -106,7 +116,9 @@ def index(version, acme, bolt_data):
               "vendors": [
                   {"id": "acme", "name": "Acme", "license": "AGPL-3.0-or-later", "origin": "Invented",
                    "printers": ["vendors/acme/models/A1.json#0.4", "vendors/acme/models/A1.json#0.6"],
-                   "filaments": ["vendors/acme/filaments/PLA.json"], "prints": ["vendors/acme/prints/Standard.json", "vendors/acme/prints/Fine.json"],
+                   "filaments": ["vendors/acme/filaments/PLA.json"], "prints": ["vendors/acme/prints/Standard.json", "vendors/acme/prints/Fine.json",
+                              "vendors/acme/prints/Draft.json", "vendors/acme/prints/Coarse.json",
+                              "vendors/acme/prints/Wide.json"],
                    "archive": file("acme.tar.xz", acme),
                    "models": [{"id": "A1", "name": "Acme One", "technology": "fff", "family": "One",
                                "assets": {"bed_model": "vendors/acme/beds/A1.stl", "bed_texture": "vendors/acme/beds/A1.svg"},

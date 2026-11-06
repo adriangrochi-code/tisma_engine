@@ -166,6 +166,15 @@ void SimulatedPrinter::handle(const std::string& line) {
         reply("ok");
     } else if (code == "M115") {
         reply("FIRMWARE_NAME:TismaSim 1.0 SOURCE_CODE_URL:none PROTOCOL_VERSION:1.0 MACHINE_TYPE:Simulated");
+        // The geometry report as Marlin's documentation of M115 shows it.
+        reply("area:{full:{min:{x:0,y:0,z:0},max:{x:220,y:220,z:250}},work:{min:{x:0,y:0,z:0},max:{x:220,y:220,z:250}}}");
+        reply("ok");
+    } else if (code == "M503") { // the limits in use (printer_connections.md, «Leer los límites»)
+        reply("echo:  G21 ; Units in mm");
+        reply("echo:  M203 X300.00 Y300.00 Z10.00 E60.00");
+        reply("echo:  M201 X2000.00 Y2000.00 Z200.00 E5000.00");
+        reply("echo:  M204 P1500.00 R1500.00 T2000.00");
+        reply("echo:  M205 B20000.00 S0.00 T0.00 J0.05");
         reply("ok");
     } else if (code == "M105") {
         std::lock_guard lock(mutex_);

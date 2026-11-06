@@ -23,6 +23,13 @@ Los paquetes tienen que llamarse así para que la lista sepa de qué sistema es 
 
 Un archivo con otro nombre (por ejemplo `TismaSetup-1.0.0-x64.exe`) frena la CI con «no system for this file name».
 
+## Sin la clave
+
+Mientras la variable `TISMA_UPDATES_KEY` no exista en GitHub, los programas se arman con el actualizador apagado. En
+ese caso la CI publica la versión directamente, sin `updates.json` y sin nada que firmar: no hace falta el pendrive.
+Quien la usa se actualiza a mano, bajando la versión nueva. Cuando pongas la clave pública (paso 5 de abajo), las
+versiones siguientes vuelven a quedar como borrador para firmar.
+
 ## Lo que hace falta en la computadora (una vez)
 
 - **Git para Windows**, que trae **Git Bash** y, dentro, `openssl` 3. Todos los comandos de esta guía van en Git Bash.

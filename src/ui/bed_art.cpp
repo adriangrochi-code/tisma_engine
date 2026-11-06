@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <map>
 #include <string>
 
 #ifdef _MSC_VER
@@ -217,6 +218,82 @@ BedArt bed_svg_art(std::string_view svg, double min_x, double min_y, double max_
         add_regions(art, regions, map);
     }
     nsvgDelete(image);
+    return art;
+}
+
+BedArt bed_image_art(int width, int height, const std::vector<std::uint8_t>& rgba, double min_x, double min_y,
+                     double max_x, double max_y, double z, int cells) {
+    BedArt art;
+    const struct {
+        int width, height;
+        const std::vector<std::uint8_t>& rgba;
+    } image{width, height, rgba};
+    if (image.width <= 0 || image.height <= 0 || image.rgba.size() < std::size_t(image.width) * std::size_t(image.height) * 4 ||
+        max_x <= min_x || max_y <= min_y || cells <= 0)
+        return art;
+    // The cells: the picture cut evenly, never more cells than pixels.
+    const int step = std::max(1, (std::max(image.width, image.height) + cells - 1) / cells);
+    const int cw = (image.width + step - 1) / step, ch = (image.height + step - 1) / step;
+    // Each cell's colour (0xRRGGBB, 8 levels a channel), or -1 when mostly clear.
+    std::vector<std::int64_t> colour(std::size_t(cw) * ch, -1);
+    for (int cy = 0; cy < ch; ++cy)
+        for (int cx = 0; cx < cw; ++cx) {
+            double sum[4] = {0, 0, 0, 0};
+            int n = 0;
+            for (int y = cy * step; y < std::min(image.height, (cy + 1) * step); ++y)
+                for (int x = cx * step; x < std::min(image.width, (cx + 1) * step); ++x) {
+                    const std::uint8_t* px = &image.rgba[(std::size_t(y) * image.width + x) * 4];
+                    const double a = px[3];
+                    for (int c = 0; c < 3; ++c)
+                        sum[c] += px[c] * a; // weighted by opacity, so clear pixels add no colour
+                    sum[3] += a;
+                    ++n;
+                }
+            if (n == 0 || sum[3] < 0.5 * 255.0 * n)
+                continue;
+            std::uint32_t rgb = 0;
+            for (int c = 0; c < 3; ++c) {
+                const double v = sum[c] / sum[3];                       // 0 to 255
+                const int level = std::clamp(int(std::lround(v / 255.0 * 7.0)), 0, 7);
+                rgb = (rgb << 8) | std::uint32_t(std::lround(level * 255.0 / 7.0));
+            }
+            colour[std::size_t(cy) * cw + cx] = rgb;
+        }
+    // Fitted as the SVG: the largest rectangle of the picture's shape, centred,
+    // its top row towards max_y.
+    const double scale = std::min((max_x - min_x) / image.width, (max_y - min_y) / image.height);
+    const double left = min_x + 0.5 * ((max_x - min_x) - image.width * scale);
+    const double top = max_y - 0.5 * ((max_y - min_y) - image.height * scale);
+    const double cell = step * scale;
+    const double right_edge = left + image.width * scale, bottom_edge = top - image.height * scale;
+    // The runs, gathered by colour so that each colour is one group.
+    std::map<std::uint32_t, std::vector<float>> by_colour;
+    for (int cy = 0; cy < ch; ++cy)
+        for (int cx = 0; cx < cw;) {
+            const std::int64_t c = colour[std::size_t(cy) * cw + cx];
+            int end = cx + 1;
+            while (end < cw && colour[std::size_t(cy) * cw + end] == c)
+                ++end;
+            if (c >= 0) {
+                const float x0 = float(left + cx * cell), x1 = float(std::min(right_edge, left + end * cell));
+                const float y0 = float(top - cy * cell), y1 = float(std::max(bottom_edge, top - (cy + 1) * cell));
+                std::vector<float>& v = by_colour[std::uint32_t(c)];
+                const float zf = float(z);
+                // Two triangles, counter-clockwise seen from above.
+                for (const auto& [x, y] : {std::pair{x0, y1}, std::pair{x1, y1}, std::pair{x1, y0}, std::pair{x0, y1},
+                                           std::pair{x1, y0}, std::pair{x0, y0}})
+                    v.insert(v.end(), {x, y, zf, 0.0f, 0.0f, 1.0f});
+            }
+            cx = end;
+        }
+    for (const auto& [rgb, v] : by_colour) {
+        BedArt::Group g;
+        g.rgb = rgb;
+        g.first = std::uint32_t(art.vertices.size() / 6);
+        g.count = std::uint32_t(v.size() / 6);
+        art.vertices.insert(art.vertices.end(), v.begin(), v.end());
+        art.groups.push_back(g);
+    }
     return art;
 }
 

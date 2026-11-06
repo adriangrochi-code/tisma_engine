@@ -101,7 +101,13 @@ inline Dialect dialect_of(GcodeFlavor flavor) {
 }
 
 // Whether E is relative in the G-code: as asked, unless the dialect has no
-// M82 and M83 (MakerWare and Sailfish), where it is absolute.
-inline bool relative_e(const Settings& s) { return s.relative_extrusion && dialect_of(s.flavor).e_mode; }
+// M82 and M83 (MakerWare and Sailfish), where it is absolute. With the
+// machine's own G-code from the pack, as that G-code expects when known
+// (gcode_macros.md, rule 10 ter).
+inline bool relative_e(const Settings& s) {
+    const MachineMacros& m = s.machine_macros;
+    const bool own = !m.empty() && (!m.templates.empty() || !m.extruder_start.empty() || !m.extruder_end.empty());
+    return (own && m.relative_extrusion ? *m.relative_extrusion : s.relative_extrusion) && dialect_of(s.flavor).e_mode;
+}
 
 } // namespace tisma

@@ -25,6 +25,13 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+// A project saved by a newer version of the program (docs/PROJECT.md,
+// «Errores»): the program must be updated to read it.
+class ProjectTooNew : public ProjectError {
+public:
+    using ProjectError::ProjectError;
+};
+
 // A modifier or negative volume added to a model, a box or a cylinder placed
 // from the model's box (the centre in X and Y, the bottom in Z), and a height
 // range of it (model_tools.md, rules 2, 3 and 6).

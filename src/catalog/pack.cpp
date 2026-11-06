@@ -57,6 +57,7 @@ const std::set<std::string>& known_keys() {
         for (const auto& [key, value] : describe(Settings{}))
             k.insert(key);
         k.insert("machine.variables");
+        k.insert("machine.macros");
         return k;
     }();
     return keys;
@@ -298,6 +299,35 @@ Profile pack_printer_profile(std::string_view model_json, const std::string& var
             for (const auto& [key, value] : keys.items())
                 settings[group][key] = value; // the variant's over common, key by key
         }
+    // The machine's G-code with macros (profile_pack_format.md, «G-code de la
+    // máquina con macros»): the variant's over common.gcode, key by key, and
+    // inside templates and values name by name.
+    {
+        json block = json::object();
+        const auto merge = [&](const json& from) {
+            if (!from.is_object())
+                return;
+            for (const auto& [key, value] : from.items()) {
+                if ((key == "templates" || key == "values") && value.is_object() && block.contains(key) &&
+                    block.at(key).is_object())
+                    for (const auto& [name, item] : value.items())
+                        block[key][name] = item;
+                else
+                    block[key] = value;
+            }
+        };
+        if (j.contains("common") && j.at("common").is_object() && j.at("common").contains("gcode"))
+            merge(j.at("common").at("gcode"));
+        if (chosen->contains("gcode"))
+            merge(chosen->at("gcode"));
+        if (block.contains("dialect") && block.at("dialect").is_string()) {
+            json macros = json::object();
+            for (const char* key : {"dialect", "templates", "relative_extrusion", "values"})
+                if (block.contains(key))
+                    macros[key] = block.at(key);
+            settings["machine"]["macros"] = std::move(macros);
+        }
+    }
     // The model's technology is the printer's, unless its settings say it:
     // an "sla" model is a resin printer (machine.technology "msla").
     const std::string technology = text(j, "technology");
@@ -327,6 +357,30 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
     const std::string where = text(profile, "name");
     profile["settings"] = known_settings(profile.contains("settings") ? profile.at("settings") : json::object(), where, warnings);
     const std::string kind = text(profile, "kind");
+    // A filament's material (profile_pack_format.md, entries, rule 4): its
+    // density and price per kg, when the profile does not give them.
+    if (kind == "filament" && j.contains("material") && j.at("material").is_object()) {
+        const json& m = j.at("material");
+        json& extrusion = profile["settings"]["extrusion"];
+        for (const auto& [from, to] : {std::pair<const char*, const char*>{"density", "density"}, {"cost_per_kg", "cost"}})
+            if (m.contains(from) && m.at(from).is_number() && m.at(from).get<double>() > 0.0 && !extrusion.contains(to))
+                extrusion[to] = m.at(from).get<double>();
+        if (extrusion.empty())
+            profile["settings"].erase("extrusion");
+    }
+    // A filament's own G-code with macros (profile_pack_format.md, «G-code de
+    // la máquina con macros», rule 1): filament_start and filament_end in
+    // place of the simple ones. The engine's language reads every dialect but
+    // cura's, whose {name} texts are left to the simple version.
+    if (kind == "filament" && j.contains("gcode") && j.at("gcode").is_object()) {
+        const json& g = j.at("gcode");
+        const std::string dialect = text(g, "dialect");
+        if (!dialect.empty() && dialect != "cura" && g.contains("templates") && g.at("templates").is_object())
+            for (const auto& [from, to] : {std::pair<const char*, const char*>{"filament_start", "start_gcode"},
+                                           {"filament_end", "end_gcode"}})
+                if (g.at("templates").contains(from) && g.at("templates").at(from).is_string())
+                    profile["settings"]["extrusion"][to] = g.at("templates").at(from);
+    }
     if (kind == "resin" || kind == "resin_print") {
         profile["kind"] = kind == "resin" ? "filament" : "print";
         out.resin = true;
@@ -369,6 +423,8 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
     if (j.contains("compatible") && j.at("compatible").is_number_integer())
         out.compatible = j.at("compatible").get<int>();
     out.generic = j.value("generic", false);
+    if (j.contains("nozzle") && j.at("nozzle").is_number())
+        out.nozzle = j.at("nozzle").get<double>();
     out.license = text(j, "license");
     out.vendor = text(j, "vendor");
     out.origin = text(j, "origin");

@@ -98,6 +98,7 @@ struct PackEntry {
     Profile profile;
     std::optional<int> compatible; // a set of compatible.json; none: every printer
     bool generic = false;
+    double nozzle = 0.0; // a print profile's nozzle, when all its printers use one; 0: not given
     std::string license, origin;
     std::string vendor; // the entry's maker, as the community data names it
     // A resin ("resin") or resin print ("resin_print") profile: the engine

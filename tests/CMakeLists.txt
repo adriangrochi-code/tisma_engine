@@ -78,6 +78,8 @@ add_executable(tisma_tests
   test_lattice.cpp
   test_adhesion.cpp
   test_gcode_check.cpp
+  test_thumbnail.cpp
+  test_printer_limits.cpp
   test_gcode_preview.cpp
   test_calibration.cpp
   test_determinism.cpp
@@ -93,7 +95,9 @@ add_executable(tisma_tests
   test_fasteners.cpp
   test_gears.cpp
   test_cloud.cpp
+  test_bambu.cpp
   test_pack.cpp
+  test_library.cpp
   test_xz.cpp
   test_pack_fetch.cpp
   test_print_host.cpp
@@ -108,7 +112,7 @@ target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SOLIDCRAFT="$<TARGET_F
 # nlohmann/json reads the analysis report back.
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
 # The cloud client, and cpp-httplib's server for its mock server (test_cloud.cpp).
-target_link_libraries(tisma_tests PRIVATE tisma_net tisma_httplib)
+target_link_libraries(tisma_tests PRIVATE tisma_net tisma_httplib tisma_bambu)
 # A stand-in for libsecret's secret-tool (the token's store on Linux).
 add_executable(tisma_fake_secret_tool fake_secret_tool.cpp)
 add_dependencies(tisma_tests tisma_fake_secret_tool)
@@ -120,7 +124,7 @@ target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURR
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)
   target_sources(tisma_tests PRIVATE test_ui.cpp test_bed_art.cpp test_raytrace.cpp test_plate.cpp test_help.cpp test_credits.cpp test_assistant.cpp
-    test_system_info.cpp)
+    test_system_info.cpp test_image_decode.cpp)
   target_link_libraries(tisma_tests PRIVATE tisma_ui)
   target_compile_definitions(tisma_tests PRIVATE TISMA_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets"
                                                  TISMA_DOCS_DIR="${PROJECT_SOURCE_DIR}/docs"
@@ -135,7 +139,9 @@ catch_discover_tests(tisma_tests PROPERTIES SKIP_RETURN_CODE 4)
 # lattice at a useful size: too slow for the debug build with the sanitizers.
 if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_test(NAME aero_drag_coefficients COMMAND tisma_tests "[aero-full]")
-  set_tests_properties(aero_drag_coefficients PROPERTIES TIMEOUT 1800)
+  # It takes every core for minutes: the simulated print, whose window
+  # renders in software, does not run beside it (it starved past its timeout).
+  set_tests_properties(aero_drag_coefficients PROPERTIES TIMEOUT 1800 RESOURCE_LOCK all_cores)
 endif()
 
 # The random search for G-code the checker rejects (tests/fuzz_gcode.cpp); a
@@ -155,8 +161,11 @@ endif()
 # The whole interface, end to end, where a display can be faked: open a
 # model, slice it, export the checked G-code and draw the preview.
 if(TISMA_BUILD_UI AND NOT WIN32)
-  find_program(TISMA_XVFB_RUN xvfb-run)
-  if(TISMA_XVFB_RUN)
+  find_program(TISMA_XVFB_REAL xvfb-run)
+  if(TISMA_XVFB_REAL)
+    # Through a wrapper without the race of xvfb-run -a (two tests at once
+    # on one display): tests/xvfb_run.sh.
+    set(TISMA_XVFB_RUN ${CMAKE_CURRENT_SOURCE_DIR}/xvfb_run.sh)
     add_test(NAME ui_slice_export_screenshot
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview
@@ -269,6 +278,24 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/pack_print_speeds.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_print_speeds.png)
     set_tests_properties(ui_pack_print_speeds PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # A Bambu Lab printer on the network, against the simulated one.
+    add_test(NAME ui_bambu_print
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/bambu_print.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_bambu_print.png)
+    set_tests_properties(ui_bambu_print PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # A network program (Duet here) that does not answer: «Test» says why.
+    add_test(NAME ui_print_host_offline
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/print_host_offline.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_print_host_offline.png)
+    set_tests_properties(ui_print_host_offline PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
     # Nothing listens on port 9 (discard) here: the download fails at once.
@@ -548,6 +575,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view device --device sim
               --device-print --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_device.png)
+    set_tests_properties(ui_device_prints_to_simulator PROPERTIES RESOURCE_LOCK all_cores)
+    # The printer's limits read on connecting, into the profile's empty values.
+    add_test(NAME ui_device_limits
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view device --device sim
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/device_limits.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_device_limits.png)
     # A project saved with chosen profiles opens again to the same G-code.
     add_test(NAME ui_project_save
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -817,7 +851,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_project_reopen PROPERTIES FIXTURES_REQUIRED ui_project FIXTURES_SETUP ui_project_b)
     set_tests_properties(ui_project_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_project;ui_project_b")
     set_tests_properties(ui_slice_export_screenshot ui_raytrace_matches_cpu ui_moire_filter_smooths_fine_lines
-                         ui_device_prints_to_simulator ui_project_save ui_project_reopen PROPERTIES
+                         ui_device_prints_to_simulator ui_device_limits ui_project_save ui_project_reopen PROPERTIES
                          ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
   endif()
 endif()
@@ -869,4 +903,13 @@ if(Python3_Interpreter_FOUND)
       ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300 PASS_REGULAR_EXPRESSION "the box tree was made ahead"
       FAIL_REGULAR_EXPRESSION "error: ")
   endif()
+endif()
+
+# The Windows installer's script builds (NSIS; packaging/windows/tisma.nsi),
+# where makensis is installed.
+find_program(TISMA_MAKENSIS makensis PATHS "C:/Program Files (x86)/NSIS")
+if(TISMA_MAKENSIS)
+  add_test(NAME installer_script_check
+    COMMAND ${CMAKE_COMMAND} -DMAKENSIS=${TISMA_MAKENSIS} -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/installer_check -P ${CMAKE_CURRENT_SOURCE_DIR}/check_installer.cmake)
 endif()

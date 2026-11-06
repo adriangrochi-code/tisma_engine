@@ -505,6 +505,10 @@ int main(int argc, char** argv) {
         // settings go to TISMA_FUZZ_DUMP before it is sliced (one that hangs).
         if (const char* only = std::getenv("TISMA_FUZZ_RUN"); only && std::atoi(only) == run)
             dump(run, mesh, s, {});
+        // With TISMA_FUZZ_ONLY set to a run's number, only that run is sliced:
+        // the ones before it only draw their numbers (the same sequence).
+        if (const char* only = std::getenv("TISMA_FUZZ_ONLY"); only && std::atoi(only) != run)
+            continue;
         try {
             const SlicedModel model =
                 slice_model(mesh, s, nullptr, nullptr, nullptr, objects.empty() ? nullptr : &objects, &mixes);

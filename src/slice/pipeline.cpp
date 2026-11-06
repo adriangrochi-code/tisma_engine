@@ -1000,7 +1000,11 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         }
         if (!settings.placement_drop_to_bed) // what is under the bed is not printed (placement.md, PL5)
             min_z = std::max(min_z, 0.0f);
-        frame.stack = plan_layer_stack(oriented, min_z, max_z, settings);
+        // With the same settings as the plate's slice_layers above (its
+        // nozzles' layer cap), or the parts land on other layers than the
+        // plate's (fuzzer, seed 202611050900, run 1658: 38 layers of 0.4 mm
+        // under 40 of 0.339 mm, two nozzles and variable heights).
+        frame.stack = plan_layer_stack(oriented, min_z, max_z, part_nozzles(settings, 1).settings);
         frame.centre = {0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     }
     const std::size_t n = out.layers.size();
@@ -1636,6 +1640,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             tp.interface_layers = settings.support_interface_layers;
             const std::vector<Polygons> over = supported_overhangs(out.regions, thickness, sp);
             out.support_areas = tree_support_areas(out.regions, tree_nodes(out.regions, thickness, over, tp), over, tp);
+            // Only from the bed holds for the trees too (supports_more.md rule 2, BH39).
+            if (sp.buildplate_only)
+                keep_from_bed(out.support_areas, out.regions, sp.bottom_gap_layers);
         } else if (settings.support) {
             out.support_areas = support_areas(out.regions, thickness, sp);
         }

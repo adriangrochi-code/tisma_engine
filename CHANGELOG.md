@@ -12,6 +12,98 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- Mi biblioteca (`tisma-engine library`): guardar piezas con su proyecto, recetas por impresora y análisis,
+  revisar si una receta o un análisis siguen valiendo, «La imprimí», exportar e importar `.tismalib`. Sin G-code.
+- G-code original de cada impresora del paquete (`machine.macros`, bloque `gcode`): dialectos PrusaSlicer, OrcaSlicer,
+  Creality Print, Elegoo Slicer y Cura; la extrusión relativa o absoluta que espera ese G-code; si no se puede
+  interpretar, se usa la versión simple con un aviso. Sin probar en una impresora.
+- Opciones al mandar a una Bambu Lab (`bambu.*`): nivelar la cama, calibrar el flujo y las vibraciones, timelapse y la
+  placa. Van en el pedido de impresión, y la placa también al G-code de inicio (`curr_bed_type`).
+- Cámara de las impresoras Bambu Lab A1 y P1 en la página Dispositivo: casilla «Cámara». Sin probar con una cámara
+  real.
+- La cama de una impresora del paquete también se dibuja cuando su imagen es PNG, no solo SVG (regla 14).
+- Página Dispositivo: «Programa en la red» para OctoPrint, Klipper (Moonraker), PrusaLink y Duet. Sirve para probar
+  la conexión, ver el estado, enviar el G-code laminado (y empezar a imprimir), pausar, seguir y cancelar, y abrir su
+  interfaz web. Con la conexión probada, el botón principal pasa a «Mandar a la impresora» y abre el diálogo de envío
+  con el nombre editable (en Duet también «Subir y simular»). Con OctoPrint, «Buscar en la red» lo encuentra por
+  Zeroconf. Sin probar con impresoras reales.
+- Miniaturas de la pieza en el G-code binario (`.bgcode`): ajuste `gcode.thumbnails` (por ejemplo `16x16/PNG,220x124/PNG`),
+  en PNG, JPG o QOI, también desde la línea de comandos. En el G-code de texto todavía no: se avisa.
+- Al conectar una impresora por USB se le preguntan sus límites (M115 y M503) y se llenan los datos vacíos del
+  perfil: velocidades y aceleraciones máximas, tirones, tamaño de la cama y avance de presión, con un aviso de
+  cuántos se tomaron. Lo mismo con Klipper (Moonraker) al probar la conexión. Lo que la persona escribió no se toca.
+
+### Arreglado
+
+- Los filamentos del paquete de perfiles traen su densidad y su precio por kilo (antes quedaban en 0 y el costo de la
+  impresión no se veía).
+- El soporte en árbol se lamina un tercio más rápido y escribe menos G-code (sus áreas, sin puntos más finos que un
+  octavo de cordón).
+- Pintar pesa menos: la vista rehace solo los triángulos que tocó el trazo, y la brocha corta en la mitad de piezas.
+- En Windows, abrir y guardar archivos usa los diálogos propios del sistema.
+- Pintar (costura, soportes, piel difusa) arrastrando rápido deja una línea continua y no puntos sueltos, con menos
+  trabajo por cuadro.
+- Mirando desde abajo de la cama (por ejemplo para pintar soportes), la cama ya no tapa la cara de abajo de la pieza:
+  queda solo la grilla.
+- La separación entre el borde de adherencia y la pieza ahora se ve en el nivel Normal (antes solo en Avanzado).
+- «Solo desde la cama» ahora también vale para los soportes de árbol (antes salían igual que sin la opción).
+- El G-code de inicio copiado del programa de otro fabricante (por ejemplo Anycubic) ya no falla por los nombres de sus
+  variables: se aceptan los de la lista de los G-code del paquete y los índices con una variable adentro
+  (`[first_layer_temperature[initial_tool]]`). Las que el motor todavía no llena van en 0 y se nombran en el registro.
+- Una respuesta dañada de la impresora («inf», «nan») ya no puede escribir un límite infinito en el perfil.
+- Con dos boquillas distintas, la pared con la más fina y alturas de capa por encima de su tope, las piezas de cada
+  extrusor se cortaban en capas distintas de las de la placa y sus paredes quedaban a otra altura (el fuzz, semilla
+  202611050900, corrida 1658).
+
+## [0.11.0-beta.1] - 2026-11-05
+
+Beta para los probadores del dueño: Windows y Linux. En Windows, el instalador `tisma-engine-0.11.0-beta.1-setup-windows-x64.exe`
+(o el `.zip`, para usar sin instalar); en Linux, el `.zip`: se descomprime y se abre `tisma`.
+
+**Es el Tisma nuevo, no Tisma Slicer:** un programa hecho desde cero, que va a reemplazar a Tisma Slicer. Se instala
+aparte y no toca la configuración de Tisma Slicer. Los proyectos `.3mf` de Tisma Slicer se abren como modelos: se
+toman las piezas, no los ajustes, y hay que elegir impresora y perfiles.
+
+### Para probar
+
+- **Impresoras del paquete de perfiles:** en el primer arranque se baja la lista sola. Elegí tu impresora en el
+  catálogo, su filamento y su perfil de impresión, y laminá. Mirá que la cama aparezca dibujada en la vista 3D. Probá
+  también con una impresora de resina del paquete.
+- **Calibraciones** (pestaña Calibrar): las torres de temperatura y de retracción, flujo, flujo máximo, aceleración,
+  pata de elefante y la nueva de puentes y voladizos. Aplicá el resultado y fijate que cambie el ajuste.
+- **Ingeniería:** marcá un apoyo y una fuerza, Analizar, mirá el mapa y el veredicto, y después Optimizar. En
+  Aerodinámica, Analizar una pieza.
+- **Diseño:** bocetos con cotas y restricciones, extruir y revolucionar, redondeo, chaflán, agujeros y roscas, y
+  mandar la pieza a la placa.
+- **La nube:** iniciar sesión y laminar o analizar un proyecto en la nube.
+- **Bambu Lab por la red local** (Impresora conectada › Bambu Lab): con la impresora en modo «Solo LAN» y modo
+  desarrollador, buscala o escribí su IP y su código de acceso, confirmá el certificado, mirá el estado y el AMS, y
+  enviá e imprimí, pausá y detené. Contanos qué modelo tenés y qué pasó: todavía no se probó con una impresora real.
+
+### Límites conocidos
+
+- **Actualizaciones automáticas:** esta versión no se actualiza sola. Para pasar a la próxima, bajala a mano.
+- **macOS:** todavía no hay versión.
+- **Bambu Lab:** la cámara todavía no se ve en el programa; no se elige qué filamento del AMS va con cada color.
+- **Cama del paquete:** se dibuja el SVG; las imágenes PNG todavía no se muestran.
+- **Paquete de perfiles:** el motor no lee los perfiles del paquete por la regla de sala limpia; los probó por fuera
+  la sesión de fichas (todas las variantes con sus valores por defecto y 500 combinaciones al azar). Con una impresora
+  sin velocidades propias se usan las de una Ender-3 de fábrica, y el laminado lo avisa.
+- **Impresoras reales:** muchas funciones nuevas, como las calibraciones nuevas, los perfiles del paquete y Optimizar,
+  no se probaron en una impresora real.
+- **Todavía no están:** «Mi biblioteca», barrer y recubrir en Diseño, y el actualizador de escritorio.
+
+### Agregado
+
+- **Impresoras Bambu Lab por la red local** (página Impresora conectada › Bambu Lab): las encuentra en la red, se
+  conecta con la dirección y el código de acceso, y pide una sola vez confirmar el certificado de la impresora. Muestra
+  el estado, las temperaturas, el avance y el AMS; envía lo laminado y lo imprime, también desde el AMS; pausa,
+  reanuda y detiene. La impresora tiene que estar en modo «Solo LAN» y modo desarrollador. Hay una impresora Bambu
+  simulada para probar sin máquina. **Sin probar todavía con una impresora real.**
+- **Instalador de Windows** (`tisma-engine-<versión>-setup-windows-x64.exe`): se instala para el usuario, sin pedir
+  permisos de administrador. Agrega Tisma al menú Inicio y, si querés, un acceso directo en el escritorio. Ofrece
+  abrir los `.3mf` y `.stl` con Tisma. El desinstalador quita el programa y deja tus perfiles, preferencias y
+  proyectos. Está en español, o en inglés si Windows está en inglés. El `.zip` sigue estando, para usar sin instalar.
 - **Versiones firmadas:** la CI deja cada versión como borrador y el dueño la firma con la clave Ed25519 de su
   pendrive (`tools/sign_release.py`, guía en `docs/FIRMAR_VERSIONES.md`). Así los programas solo instalan lo que él
   firmó.
@@ -335,10 +427,16 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- **Paquete de perfiles:** un perfil de impresión sin boquilla declarada ya no se ofrece si sus paredes son de otra
+  boquilla (por ejemplo, un perfil de 0,8 mm en una boquilla de 0,4).
 - **Paquete de perfiles:** las variantes que no se podían elegir porque su filamento o su perfil apuntaban a un
   conjunto de impresoras vacío ahora se eligen. Las macros de inicio reciben las temperaturas de cámara y de espera, en
   0 si el filamento no las trae. Un G-code de inicio que llama a `START_PRINT` después de apagar la boquilla ya no se
   rechaza: queda un aviso. El modelo de la cama se centra en la placa.
+- **Paquete de perfiles:** un perfil de impresión que vale para todas las impresoras solo se ofrece si su boquilla, su
+  altura de capa y sus anchos de línea caben en la impresora elegida.
+- **Proyectos:** uno de una versión más nueva se rechaza con «actualizá el programa». Una pieza fuera del alcance del
+  motor (2000 mm del origen) se rechaza con un mensaje claro también al orientar, analizar y calcular el flujo de aire.
 - Una impresora de resina del paquete (`"technology": "sla"`) quedaba como impresora de filamento.
 - Las velocidades del perfil de impresión del paquete se perdían y se laminaba con las de una Ender-3 (BH27). Ahora
   pasan a la impresora, y cambian al elegir otro perfil de impresión o filamento del paquete; las que cambiaste a mano
@@ -1683,7 +1781,8 @@ Fase F0, el esqueleto. Hito interno, sin release publicada.
 - Licencia PolyForm Noncommercial 1.0.0.
 - Reglas de sala limpia, `THIRD_PARTY.md` y `PROVENANCE.md`.
 
-[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...HEAD
+[Sin publicar]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.11.0-beta.1...HEAD
+[0.11.0-beta.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.3...v0.11.0-beta.1
 [0.10.0-alpha.3]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.10.0-alpha.2...v0.10.0-alpha.3
 [0.10.0-alpha.2]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.9.0-alpha.1...v0.10.0-alpha.2
 [0.9.0-alpha.1]: https://github.com/adriangrochi-code/tisma_engine/compare/v0.8.0-alpha.1...v0.9.0-alpha.1

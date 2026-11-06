@@ -145,6 +145,48 @@ TEST_CASE("plate: a click picks the nearest model and its face", "[plate]") {
     CHECK_THAT(both.signed_volume(), WithinAbs(3000.0, 1e-3));
 }
 
+TEST_CASE("plate: the kept paint view walks again only the touched triangles, and equals the whole one (BH44)",
+          "[plate][paint]") {
+    std::vector<PlateObject> objects = {{"a", box(0, 0, 0, 10, 10, 10), {}, {}}, {"b", box(0, 0, 0, 20, 10, 5), {}, {}}};
+    objects[0].place.x = 50, objects[0].place.y = 50;
+    objects[1].place.x = 100, objects[1].place.y = 50;
+    const std::vector<TriangleMesh> placed = {placed_mesh(objects[0]), placed_mesh(objects[1])};
+    PaintMeshCache cache;
+    CHECK(cache.build(objects, placed, PaintChannel::Seam).vertices.empty());
+    const auto same = [&](const PaintMesh& a, const PaintMesh& b) {
+        REQUIRE(a.groups.size() == b.groups.size());
+        for (std::size_t g = 0; g < a.groups.size(); ++g) {
+            CHECK(a.groups[g].mark == b.groups[g].mark);
+            CHECK(a.groups[g].first == b.groups[g].first);
+            CHECK(a.groups[g].count == b.groups[g].count);
+        }
+        CHECK(a.vertices == b.vertices);
+    };
+    // Strokes on both models, then a block over one and an erase: after each,
+    // the kept view (told only the changed triangles) is the whole one.
+    const struct {
+        std::size_t object;
+        Vec3f centre;
+        std::uint8_t mark;
+    } strokes[] = {{1, {100, 50, 5}, kPaintEnforce}, {0, {50, 50, 10}, kPaintEnforce}, {1, {102, 50, 5}, kPaintBlock},
+                   {0, {50, 50, 10}, kPaintNone}};
+    for (const auto& st : strokes) {
+        Brush brush;
+        brush.centre = st.centre;
+        brush.radius = 3.0;
+        brush.view = {0, 0, -1};
+        brush.mark = st.mark;
+        std::vector<std::uint32_t> touched;
+        paint(objects[st.object].painting, PaintChannel::Seam, placed[st.object], brush, nullptr, &touched);
+        CHECK_FALSE(touched.empty());
+        cache.touch(st.object, touched);
+        same(cache.build(objects, placed, PaintChannel::Seam), paint_mesh(objects, placed, PaintChannel::Seam));
+    }
+    // After a reset, everything again: the same.
+    cache.reset();
+    same(cache.build(objects, placed, PaintChannel::Seam), paint_mesh(objects, placed, PaintChannel::Seam));
+}
+
 TEST_CASE("plate: the paint follows each model, and the plate joins it in order", "[plate][paint]") {
     std::vector<PlateObject> objects = {{"a", box(0, 0, 0, 10, 10, 10), {}, {}}, {"b", box(0, 0, 0, 20, 10, 5), {}, {}}};
     objects[0].place.x = 50, objects[0].place.y = 50;

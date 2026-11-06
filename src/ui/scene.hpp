@@ -66,6 +66,11 @@ std::vector<LineVertex> bed_lines(const BedPolygon& bed, const BedLook& look);
 // point, right for convex beds.
 std::vector<float> bed_triangles(const BedPolygon& bed);
 
+// Whether the plate, the bed's model and its picture are left out, so the
+// part's underside shows: with the eye under the bed (z < 0), as when its
+// bottom faces are painted for support (BH43). The grid stays. Own design.
+inline bool plate_hidden(Vec3 eye) { return eye.z < 0.0f; }
+
 // One extrusion of the preview, as the 3D view's shader reads it: the move's
 // two ends, its width and height, its feed, and its kind and layer packed in
 // one integer (kind in the low 8 bits). Where the bead goes on into the next

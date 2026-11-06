@@ -10,6 +10,14 @@ namespace tisma {
 
 struct Settings;
 
+// A picture for the G-code (gcode_extras.md, rule 8): its image file's bytes.
+struct GcodeThumbnail {
+    int format = 0; // 0 PNG, 1 JPG, 2 QOI: the binary format's numbers
+    int width = 0, height = 0;
+    std::string data;
+    friend bool operator==(const GcodeThumbnail&, const GcodeThumbnail&) = default;
+};
+
 // The CRC-32 of IEEE 802.3 (reflected polynomial 0xEDB88320, starting and
 // ending with all bits flipped), continued from `crc` when given.
 std::uint32_t crc32(std::string_view bytes, std::uint32_t crc = 0);
@@ -23,14 +31,17 @@ std::uint32_t crc32(std::string_view bytes, std::uint32_t crc = 0);
 // (the closing summary: filament used, estimated times), the slicer's (every
 // "; key = value" setting line), then the G-code in blocks of 64 KiB at most,
 // cut at line ends. Metadata is INI text (key=value lines, parameter 0), the
-// G-code is not encoded (parameter 0). Thumbnails are not written yet.
-// `text` is a G-code as write_gcode makes it. Own design.
-std::string binary_gcode(std::string_view text, const Settings& settings);
+// G-code is not encoded (parameter 0). The thumbnails go after the printer's
+// metadata, one block each, with three 16-bit parameters: the format, the width
+// and the height. `text` is a G-code as write_gcode makes it. Own design.
+std::string binary_gcode(std::string_view text, const Settings& settings,
+                         const std::vector<GcodeThumbnail>& thumbnails = {});
 
 // A binary G-code read back: its metadata and its G-code joined.
 struct BinaryGcode {
     std::vector<std::pair<std::string, std::string>> file, printer, print, slicer;
     std::string gcode;
+    std::vector<GcodeThumbnail> thumbnails;
 };
 
 // Reads a binary G-code; throws std::runtime_error on a wrong header, an

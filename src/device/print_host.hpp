@@ -7,20 +7,25 @@
 // OctoPrint's REST API (docs.octoprint.org, «REST API») and Moonraker's
 // (moonraker.readthedocs.io, «External API»: server, files, printer) and
 // PrusaLink's published OpenAPI (v1: version, status, files, job), with
-// HTTP Digest (RFC 7616) for its user and password. Own design; see
-// PROVENANCE.md.
+// HTTP Digest (RFC 7616) for its user and password, and Duet's RepRapFirmware
+// in standalone mode (the RepRapFirmware wiki, «HTTP requests» and «Object
+// Model Documentation»: rr_connect, rr_upload, rr_gcode, rr_model,
+// rr_disconnect). Own design; see PROVENANCE.md.
 
 #include <string>
 
+#include <nlohmann/json.hpp>
+
 namespace tisma::device {
 
-enum class HostKind { OctoPrint, Moonraker, PrusaLink };
+enum class HostKind { OctoPrint, Moonraker, PrusaLink, Duet };
 
 struct HostConfig {
     HostKind kind = HostKind::OctoPrint;
     std::string url;     // http(s)://host[:port], the program's address
     std::string api_key; // a secret: never logged
-    std::string user, password; // PrusaLink's Digest login (a secret too)
+    std::string user, password; // PrusaLink's Digest login, Duet's board password (secrets too;
+                                // Duet: «reprap» when empty, its default)
     int timeout_s = 20;
 };
 
@@ -47,14 +52,30 @@ struct HostStatus : HostResult {
 };
 
 HostVersion host_version(const HostConfig& host);
-// Uploads the G-code to the program's storage and, with `start`, prints it.
-HostResult host_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start);
+// Uploads the G-code to the program's storage and, with `start`, prints it;
+// with `simulate` (Duet only: M37), the board runs it without moving, to
+// time it (devices.md, rule 20).
+HostResult host_upload(const HostConfig& host, const std::string& path, const std::string& name, bool start,
+                       bool simulate = false);
 HostStatus host_status(const HostConfig& host);
 HostResult host_pause(const HostConfig& host, bool pause); // false: resume
 HostResult host_cancel(const HostConfig& host);
 
-// The OctoPrint names to the engine's words for a host kind ("octoprint",
-// "moonraker", "prusalink"); false for another word.
+// The printer's limits as the program knows them (printer_connections.md,
+// «Leer los límites», rule 8): Moonraker's toolhead and configfile objects
+// (GET /printer/objects/query?toolhead&configfile=settings), as JSON; null
+// for the other programs or when the call fails.
+struct HostLimits : HostResult {
+    nlohmann::json toolhead, settings;
+};
+HostLimits host_limits(const HostConfig& host);
+
+// The engine's words for a host kind ("octoprint", "moonraker", "prusalink",
+// "duet"); false for another word.
 bool host_kind_from(const std::string& word, HostKind& out);
+// Back: the word host_kind_from reads, and the name a person knows it by
+// («OctoPrint», «Klipper (Moonraker)», «PrusaLink», «Duet»).
+const char* host_kind_word(HostKind kind);
+const char* host_kind_name(HostKind kind);
 
 } // namespace tisma::device

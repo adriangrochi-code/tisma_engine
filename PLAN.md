@@ -452,7 +452,9 @@ con nombres propios en `docs/CONFIG.md`.
 - [x] Voladizos por ángulo y su proyección hacia abajo (grupo `support`, `src/support/*`: solo las áreas por capa)
 - [x] Soporte en líneas con separación en Z y XY, interfaz densa y base (tipos `Support material` y
   `Support material interface`)
-- [ ] Puentes cortos sin soporte (`max_bridge_length`)
+- [x] Puentes sin soporte (2026-11-05, cerrado según la ficha): un puente no lleva soporte, de cualquier largo,
+  salvo con `support.under_bridges` (`supports_skirt.md`, S10; `BEHAVIOR.md`). `support.free_bridge_length` no cambia
+  el soporte: solo hace que la revisión antes de imprimir avise de un puente más largo.
 - [x] Puente o voladizo punto por punto (`supports_skirt.md`, regla 3, S11; 2026-10-29): la U, los dos pilares y el
   marco sin soporte; un pilar de un lado, uno central, uno en una esquina y la L con soporte; la V de 30°, puente. La
   condición de cruzar los dos apoyos a 60° o más la confirmó el equipo de fichas (llega a la ficha con `aa0c7c3`)
@@ -620,8 +622,17 @@ Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la fic
   o el G-code abierto, pausar, seguir, cancelar, mover y extruir, registro; la impresora simulada para probar sin
   máquina, con una prueba de punta a punta
 - [ ] El servicio local de `tisma` para la app de Android (`docs/MOBILE.md`)
-- [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas
+- [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas. Hechos en
+  `src/device/print_host.*` contra simuladores propios: OctoPrint, Moonraker, PrusaLink y Duet (2026-11-05), y en la
+  página de Dispositivo («Programa en la red»: probar, estado, enviar e imprimir, pausar, seguir, cancelar). También el botón
+  principal «Mandar a la impresora» y el diálogo de envío con nombre, con «Subir y simular» en Duet (reglas 19 y 20).
+  Búsqueda por Zeroconf de OctoPrint hecha (2026-11-05). Falta la de Moonraker (nombres `.local` y su API)
 - [ ] Probado con una impresora real por USB (necesita al dueño)
+- [ ] Leer los límites de la impresora (`printer_connections.md`, reglas 1 a 8): hecho el núcleo (`src/device/printer_limits.*`,
+  2026-11-05: Marlin M115 y M503, Klipper `toolhead` y `configfile`, llenar solo lo vacío). Al conectar por USB ya se
+  piden (M115 y M503) y llenan lo vacío con un aviso. Con Moonraker, al probar
+  la conexión (2026-11-05). Faltan la lista «En el perfil / En la impresora» y el botón «Leer de la impresora» en
+  Límites
 
 ## Estado de P1
 
@@ -1136,6 +1147,42 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   una etapa en paralelo antes del plan, y en el plan solo queda elegir, capa tras capa. Los viajes también se planean
   en paralelo. Gota de 172 080 triángulos: alineada 3,81 → 2,68 s (1,41 → 0,96 veces `nearest`). El G-code es el mismo
   byte a byte. La GPU no rinde acá (ver `PROGRESS.md`)
+
+### Soporte en árbol y pintura más livianos (pedido del dueño, 2026-11-05)
+
+Medido en una esfera de 100 mm (4 núcleos): laminar con árbol tardaba 1,05 s contra 0,38 s con grilla. El 95 % de la
+diferencia está en el relleno de cada capa del árbol (`tree_fill`, unos 700 ms). Son los offsets de Clipper para la
+pared, la segunda pared de las ramas anchas y las líneas.
+- [x] Pintura: la vista se rearma solo en los triángulos que tocó el trazo, y la brocha corta en la mitad de piezas
+  (15,1 → 2,7 ms en 200 trazos).
+- [x] Árbol, paso 1 (CPU): áreas simplificadas a 1/8 de cordón y sin buscar segunda pared cuando ninguna rama es tan
+  ancha. Laminado 1,05 → 0,71 s, G-code 149 → 103 ms.
+- [ ] Árbol, paso 2 (GPU): el relleno de cada capa sale de un campo de distancias. **Hecho, pero sin conectar
+  (2026-11-06):**
+  - la transformada exacta en CPU y en GPU, también para todas las capas en una sola llamada;
+  - `distance_level` (marching squares);
+  - `tree_fill_field`, igual a `tree_fill` en las pruebas.
+  - Medido en la esfera: la transformada de todas las capas, 250–300 ms en CPU. Lo demás de la ruta tarda unos
+    2,6 s contra 1,4 s de los offsets de Clipper, porque cada capa usa una grilla de toda la caja de sus ramas, casi
+    vacía, y una segunda transformada para la segunda pared.
+  - Conectada, haría el árbol más lento aun con la transformada gratis. Para que pague:
+    - una grilla por isla (por rama), no por capa;
+    - marching squares y los umbrales también en la GPU;
+    - la segunda pared desde el mismo campo.
+  - Hasta entonces el laminado usa los offsets (paso 1).
+  - Las ramas se rasterizan en una grilla de bits por capa (la misma `BitGrid` del soporte en grilla).
+  - Un kernel calcula la distancia euclídea a su borde en dos pasadas separables: columnas, después filas.
+  - La pared es la curva de nivel a medio cordón (marching squares).
+  - La segunda pared va donde la distancia llega a la mitad de `tree_double_wall_diameter`, crecido otra vez.
+  - Lo de adentro es la distancia mayor que un cordón.
+  - Las líneas siguen en la CPU, sobre ese adentro.
+  - La versión de CPU es la referencia: la prueba compara las dos.
+  - Meta: el relleno del árbol por debajo de 150 ms en la esfera.
+- [ ] Árbol, paso 3: las áreas (discos y cascos de las ramas) rasterizadas en la GPU en la misma grilla, sin pasar
+  por Clipper.
+- [ ] Pintura en piezas de pocos triángulos enormes: acortar el recorrido del árbol de cada triángulo en `paint` (hoy
+  rehace el árbol entero del triángulo en cada toque).
+- [ ] Repetir con la pieza del tester (BH37/BH38) cuando llegue.
 
 ### Lo nuevo de OrcaSlicer 2.5 (`docs/spec/features/orca_2_5.md`, pedido del dueño, 2026-10-29)
 

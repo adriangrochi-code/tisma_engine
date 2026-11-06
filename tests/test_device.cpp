@@ -1,3 +1,4 @@
+#include "device/printer_limits.hpp"
 #include "device/gcode_host.hpp"
 #include "device/serial_port.hpp"
 #include "device/simulator.hpp"
@@ -125,6 +126,12 @@ TEST_CASE("device: the host prints a job to the simulated printer, line by line,
     REQUIRE(host.connect());
     REQUIRE(within(5000ms, [&] { return host.status().state == PrinterState::Idle; }));
     CHECK_THAT(host.status().firmware, ContainsSubstring("TismaSim"));
+    // M115 and M503 kept for the profile's limits (printer_connections.md, rule 2).
+    CHECK_THAT(host.status().m115, ContainsSubstring("area:{"));
+    CHECK_THAT(host.status().m503, ContainsSubstring("M203 X300.00"));
+    const PrinterLimits limits = parse_marlin_limits(host.status().m115, host.status().m503);
+    CHECK(limits.max_x == 220.0);
+    CHECK(limits.values.at("max_feed_z") == 10.0);
     {
         const std::vector<PrinterEvent> events = host.take_events();
         REQUIRE(!events.empty());

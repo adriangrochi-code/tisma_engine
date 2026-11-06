@@ -203,6 +203,14 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
     }
     if (!root.is_object() || root.value("format", std::string()) != "tisma-project")
         fail("\"format\" must be \"tisma-project\"");
+    // A newer version is refused, as in the binary file (BH33).
+    if (root.contains("version")) {
+        const ordered_json& v = root.at("version");
+        if (!v.is_number_integer() || v.get<long long>() < 1)
+            fail("\"version\" must be a whole number from 1");
+        if (v.get<long long>() > static_cast<long long>(kVersion))
+            throw ProjectTooNew("project: version " + std::to_string(v.get<long long>()) + " is newer than this program reads");
+    }
 
     Project p;
     try {
@@ -445,7 +453,7 @@ static Project read_project_checked(std::string_view data) {
         fail("not a project file");
     const auto version = get_le(data, kMagic.size(), 4);
     if (version > kVersion)
-        fail("version " + std::to_string(version) + " is newer than this program reads");
+        throw ProjectTooNew("project: version " + std::to_string(version) + " is newer than this program reads");
 
     std::string_view json_text;
     bool has_json = false;

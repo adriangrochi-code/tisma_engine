@@ -71,6 +71,8 @@ std::string job_error(const Job& job, bool spanish) {
         {"cannot_read", "no se puede leer el proyecto"},
         {"not_a_project", "el archivo no es un proyecto de Tisma"},
         {"bad_project", "el proyecto está dañado o incompleto"},
+        {"project_too_new", "el proyecto es de una versión más nueva de Tisma: actualizá el programa"},
+        {"model_too_large", "el modelo es demasiado grande o está demasiado lejos: el motor trabaja hasta 2000 mm del origen"},
         {"no_models", "el proyecto no tiene modelos"},
         {"no_object", "el proyecto no tiene ese objeto"},
         {"no_instance", "ese objeto no tiene esa copia"},

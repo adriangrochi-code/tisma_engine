@@ -880,3 +880,31 @@ TEST_CASE("extruders: each extruder's parts keep their combined infill", "[extru
     CHECK_THAT(sparse[0], WithinAbs(sparse[1], 0.2 * sparse[1]));
     CHECK(text.find(";HEIGHT:0.400\n") != std::string::npos);
 }
+
+TEST_CASE("nozzles: each extruder's parts on the plate's own layers, with a layer cap and variable heights",
+          "[extruders][nozzles]") {
+    // The fuzzer's seed 202611050900, run 1658: two nozzles (0.4, 0.34), the
+    // walls with the finer, the layer heights from a list above its cap, two
+    // objects with an extruder each. The parts were cut on layers planned without the
+    // cap (0.4 mm) and laid on the plate's capped ones (0.34 mm): the walls
+    // of a layer printed at another layer's height.
+    Settings s = base();
+    s.nozzle_diameters = {0.4, 0.34};
+    s.layer_height = 0.16;
+    s.first_layer_height = 0.2;
+    s.layer_heights = {{1.0, 0.45}}; // from 1 mm up, 0.45 mm asked: more than either nozzle allows
+    s.walls_staggered = true;        // the raised loops are half a layer: off the layer, the check sees it
+    s.extruder_walls = 2;            // the walls' nozzle (the finer) sets the layers' cap
+    const Plate p = two_colours();
+    const SlicedModel model = slice_model(weld_exact(p.mesh), s, nullptr, nullptr, nullptr, &p.objects);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string() : std::to_string(check.problems.front().line) + ": " +
+                                                       check.problems.front().message));
+    CHECK(check.ok());
+    // Every layer of the plate has walls of both objects (both 10 mm tall).
+    const Shown seen = shown(out.str());
+    REQUIRE(seen.layers.count("External perimeter"));
+    CHECK(seen.layers.at("External perimeter").size() == model.layers.size());
+}

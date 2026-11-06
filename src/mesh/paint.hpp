@@ -74,17 +74,24 @@ void for_each_painted(const Painting& painting, PaintChannel channel, std::size_
 // (pointing the same way, when it is not zero) are left alone, so a brush on
 // the front of a thin wall does not paint its back. `mesh` is the model as
 // placed: the trees do not depend on where it is.
+//
+// With `stroke`, the brush is drawn from `from` to `centre`: what lies within
+// `radius` of that segment gets the mark, so a stroke stays one line however
+// far the mouse moved between two frames (BH44).
 struct Brush {
     Vec3f centre;
     double radius = 2.0;
     double detail = 0.25;
     Vec3f view{0.0f, 0.0f, 0.0f};
     std::uint8_t mark = kPaintEnforce;
+    bool stroke = false;
+    Vec3f from{0.0f, 0.0f, 0.0f};
 };
 // Returns how many triangles changed. With `near`, only those triangles are
 // looked at (the ones a search found near the brush; the rest are too far).
+// With `changed`, the changed triangles are added to it.
 std::size_t paint(Painting& painting, PaintChannel channel, const TriangleMesh& mesh, const Brush& brush,
-                  const std::vector<std::uint32_t>* near = nullptr);
+                  const std::vector<std::uint32_t>* near = nullptr, std::vector<std::uint32_t>* changed = nullptr);
 
 // The painting as bytes for the project file, and back: for each channel the
 // number of painted triangles, then each one's index, the length of its tree

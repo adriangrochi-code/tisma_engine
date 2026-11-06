@@ -7,6 +7,7 @@
 #include "ui/math.hpp"
 
 #include <array>
+#include <map>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -172,6 +173,29 @@ struct PaintMesh {
 };
 PaintMesh paint_mesh(const std::vector<PlateObject>& objects, const std::vector<TriangleMesh>& placed,
                      PaintChannel channel);
+
+// The same, kept between strokes: each painted triangle's pieces are walked
+// again only when a stroke changed it (touch), and the rest are copied, so a
+// long stroke on a part with much paint costs the triangles it reaches and
+// not all the paint (the testers' BH44). Anything else that changes the
+// paint, the plate or the channel calls reset(). Own design.
+class PaintMeshCache {
+public:
+    void reset() { objects_.clear(); }
+    void touch(std::size_t object, const std::vector<std::uint32_t>& triangles);
+    PaintMesh build(const std::vector<PlateObject>& objects, const std::vector<TriangleMesh>& placed, PaintChannel channel);
+
+private:
+    struct Piece {
+        std::vector<float> vertices;     // 18 floats a piece: three corners of position and normal
+        std::vector<std::uint8_t> marks; // one a piece
+    };
+    struct Object {
+        std::map<std::uint32_t, Piece> triangles; // the painted ones
+        std::vector<std::uint32_t> stale;         // touched since the last build
+    };
+    std::vector<Object> objects_; // empty: everything to walk again
+};
 
 // The size of the box of the model, scaled and turned (mm).
 std::array<double, 3> placed_size(const PlateObject& object);

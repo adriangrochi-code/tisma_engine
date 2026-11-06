@@ -786,6 +786,65 @@
     X(DeviceStep, "Paso", "Step")                                                                                     \
     X(DeviceFan, "Ventilador", "Fan")                                                                                 \
     X(DeviceLog, "Registro", "Log")                                                                                   \
+    X(DeviceKindUsb, "USB", "USB") \
+    X(DeviceKindBambu, "Bambu Lab (red local)", "Bambu Lab (local network)") \
+    X(DeviceKindHost, "Programa en la red", "Network program") \
+    X(HostKindRow, "Programa", "Program") \
+    X(HostUrl, "Dirección", "Address") \
+    X(HostApiKey, "Clave de API", "API key") \
+    X(HostUser, "Usuario", "User") \
+    X(HostPassword, "Contraseña", "Password") \
+    X(HostBoardPassword, "Contraseña de la placa", "Board password") \
+    X(HostTest, "Probar", "Test") \
+    X(HostTestOk, "La conexión con %s funciona bien.", "Connection to %s works correctly.") \
+    X(HostTestFailed, "No se pudo conectar con %s: %s (%s)", "Could not connect to %s: %s (%s)") \
+    X(HostOpenWeb, "Abrir en el navegador", "Open in browser") \
+    X(HostWebHelp, "La interfaz web de la impresora: cámara, temperaturas, consola y las calibraciones de su firmware (por ejemplo, input shaping en Klipper).", "Web interface of the printer: camera, temperatures, console and the calibrations of its firmware (for example input shaping in Klipper).") \
+    X(HostStartPrinting, "Empezar a imprimir", "Start printing") \
+    X(HostSend, "Enviar el G-code laminado", "Send sliced G-code") \
+    X(HostSent, "%s → %s: subido.", "%s → %s: uploaded.") \
+    X(HostUploadName, "Subir a la impresora con este nombre:", "Upload to Printer Host with the following filename:") \
+    X(HostUploadSlashes, "Usá barras ( / ) para separar carpetas si hace falta.", "Use forward slashes ( / ) as a directory separator if needed.") \
+    X(HostUpload, "Subir", "Upload") \
+    X(HostUploadPrint, "Subir e imprimir", "Upload and Print") \
+    X(HostUploadSimulate, "Subir y simular", "Upload and Simulate") \
+    X(LimitsTaken, "%d datos del perfil tomados de la impresora (%s).", "%d profile values taken from the printer (%s).") \
+    X(LimitsNoBed, "La impresora no informa el tamaño de la cama: escribilo a mano.", "The printer does not report the bed size: type it in.") \
+    X(HostNoneFound, "No apareció ninguno. Revisá que la computadora y la impresora estén en la misma red y que el cortafuegos deje pasar mDNS (UDP 5353). También podés escribir la dirección.", "None found. Check that the computer and the printer are on the same network and that the firewall lets mDNS (UDP 5353) through. You can also type the address.") \
+    X(HostFailed, "El programa de la impresora contestó con un problema: %s", "The printer's program answered with a problem: %s") \
+    X(BambuHelp, "En la impresora: activá el modo «Solo LAN» y el modo desarrollador (Ajustes › Solo LAN). Dirección = la IP de la impresora; código = el código de acceso que muestra ahí. El número de serie se lee de la impresora.", "Bambu Lab: on the printer turn on LAN only mode and Developer mode (Settings > LAN only). Hostname = IP address of the printer, API key = access code shown there. The serial number is read from the printer.") \
+    X(BambuSearch, "Buscar en la red", "Browse the network") \
+    X(BambuSearching, "Buscando impresoras…", "Looking for printers…") \
+    X(BambuNoneFound, "No apareció ninguna. Revisá que la computadora y la impresora estén en la misma red, que el cortafuegos deje pasar UDP 1990 y 2021 y, en Windows, que la red no esté marcada como «Pública». También podés escribir la dirección.", "None found. Check that the computer and the printer are on the same network, that the firewall lets UDP 1990 and 2021 through and, on Windows, that the network is not marked «Public». You can also type the address.") \
+    X(BambuPortBusy, "Otro programa está escuchando las impresoras Bambu Lab; cerralo o agregá la impresora por su dirección.", "Another program is listening for Bambu Lab printers; close it or add the printer by its address.") \
+    X(BambuHost, "Dirección (IP)", "Address (IP)") \
+    X(BambuCode, "Código de acceso", "Access code") \
+    X(BambuSimulated, "Impresora Bambu Lab simulada", "Simulated Bambu Lab printer") \
+    X(BambuConnect, "Conectar", "Connect") \
+    X(BambuRefresh, "Actualizar estado", "Refresh state") \
+    X(BambuWorking, "Hablando con la impresora…", "Talking to the printer…") \
+    X(BambuConfirm, "Es la primera vez con esta impresora. Número de serie: %s. Huella del certificado: %s. ¿Es tu impresora?", "This is the first time with this printer. Serial number: %s. Certificate fingerprint: %s. Is it your printer?") \
+    X(BambuAccept, "Sí, es mía", "Yes, it is mine") \
+    X(BambuCertChanged, "El certificado de la impresora cambió desde que lo aceptaste. Si cambiaste la impresora o su firmware, aceptalo de nuevo; si no, alguien puede estar en el medio.", "The printer's certificate changed since you accepted it. If you changed the printer or its firmware, accept it again; otherwise someone may be in between.") \
+    X(BambuAcceptAgain, "Aceptar el certificado nuevo", "Accept the new certificate") \
+    X(BambuUnauthorized, "La impresora rechazó el código de acceso.", "The printer refused the access code.") \
+    X(BambuUnreachable, "No se pudo llegar a la impresora: %s", "Cannot reach the printer: %s") \
+    X(BambuFailed, "La impresora contestó con un problema: %s", "The printer answered with a problem: %s") \
+    X(BambuState, "%s · boquilla %.0f / %.0f °C · cama %.0f / %.0f °C", "%s · nozzle %.0f / %.0f °C · bed %.0f / %.0f °C") \
+    X(BambuJob, "%s: %.0f %%, capa %d de %d, faltan %s", "%s: %.0f %%, layer %d of %d, %s left") \
+    X(BambuAms, "AMS", "AMS") \
+    X(BambuEmptySlot, "vacío", "empty") \
+    X(BambuUseAms, "Imprimir desde el AMS", "Print from the AMS") \
+    X(BambuPrint, "Enviar e imprimir", "Send and print") \
+    X(BambuSending, "Enviando: %.0f %%", "Sending: %.0f %%") \
+    X(BambuSent, "Enviado: la impresora empieza «%s».", "Sent: the printer starts «%s».") \
+    X(BambuStop, "Detener", "Stop") \
+    X(BambuCamera, "Cámara", "Camera") \
+    X(BambuCameraWaiting, "Esperando la imagen de la cámara…", "Waiting for the camera's picture…") \
+    X(BambuCameraEnded, "La cámara se cortó: %s. Solo las series A1 y P1 la mandan por la red local.", "The camera stopped: %s. Only the A1 and P1 series send it on the local network.") \
+    X(BambuSerial, "Número de serie: %s", "Serial number: %s") \
+    X(BambuNotTested, "Conexión con Bambu Lab nueva: sin probar todavía con una impresora real.", "New Bambu Lab connection: not yet tested with a real printer.") \
+    X(BambuBinary, "Esta impresora necesita G-code de texto: apagá el G-code binario en el perfil.", "This printer needs text G-code: turn off binary G-code in the profile.") \
     X(DeviceConnected, "Impresora conectada: %s", "Printer connected: %s")                                            \
     X(DevicePrintStarted, "Imprimiendo %s", "Printing %s")                                                            \
     X(DevicePrintFinished, "Terminó la impresión de %s", "%s finished printing")                                      \
@@ -1910,6 +1969,7 @@
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \
     X(GcodeArcs, "Arcos G2/G3", "G2/G3 arcs") \
     X(GcodeBinary, "G-code binario (.bgcode)", "Binary G-code (.bgcode)") \
+    X(GcodeThumbnails, "Miniaturas (ancho x alto / formato)", "Thumbnails (width x height / format)") \
     X(FlavorNoExtrusion, "Sin extrusión (solo movimientos)", "No extrusion (moves only)") \
     X(SubJerk, "Tirones y esquinas", "Jerk and corners") \
     X(SkirtMinFilament, "Filamento mínimo", "Minimum filament") \

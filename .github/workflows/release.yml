@@ -11,7 +11,8 @@ name: Release
 #
 # The programs check updates with the project's public key, taken at build
 # time from the repository variable TISMA_UPDATES_KEY (64 hex digits; not a
-# secret). Without it the updater stays off.
+# secret). Without it the updater stays off, and the release is published at
+# once, with no updates.json and nothing to sign.
 #
 # It runs when:
 # - a push to alpha or main changes VERSION (or this workflow) and the tag
@@ -128,14 +129,28 @@ jobs:
                sc/*/share/doc/solidcraft/NOTICE sc/*/share/doc/solidcraft/THIRD-PARTY-LICENSES.txt "$package/solidcraft/"
           fi
           cmake -E tar cf "$package.zip" --format=zip "$package"
+          # Windows: the installer too (packaging/windows/tisma.nsi; NSIS,
+          # zlib/libpng licence), per user, with its shortcuts and file types.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            nsis="$(command -v makensis || true)"
+            if [ -z "$nsis" ]; then
+              [ -x "/c/Program Files (x86)/NSIS/makensis.exe" ] || choco install nsis -y --no-progress
+              nsis="/c/Program Files (x86)/NSIS/makensis.exe"
+            fi
+            "$nsis" -V2 -DVERSION="$(cat VERSION)" -DSOURCE="$(cygpath -w "$PWD/$package")" \
+              -DOUTFILE="$(cygpath -w "$PWD/tisma-engine-$(cat VERSION)-setup-windows-x64.exe")" \
+              -DICON="$(cygpath -w "$PWD/assets/brand/app/tisma.ico")" packaging/windows/tisma.nsi
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: tisma-engine-*.zip
+          path: |
+            tisma-engine-*.zip
+            tisma-engine-*.exe
           if-no-files-found: error
 
   publish:
-    name: Leave the release as a draft, for the owner to sign
+    name: Leave the release as a draft for the owner to sign (published as it is without the key)
     needs: [version, build]
     runs-on: ubuntu-24.04
     permissions:
@@ -162,11 +177,20 @@ jobs:
           else
             where="--target $GITHUB_SHA"
           fi
+          # Without the project's public key the programs are built with the
+          # updater off: nothing to sign, so the release is published as it
+          # is, without updates.json (docs/FIRMAR_VERSIONES.md, «Sin la clave»).
+          if [ -z "${{ vars.TISMA_UPDATES_KEY }}" ]; then
+            gh release create "$TAG" packages/* --title "Tisma engine $version" \
+              --notes-file notes.md $where $prerelease
+            echo "::notice::$TAG published without updates.json: no TISMA_UPDATES_KEY, the updater is off in this build"
+            exit 0
+          fi
           # The list the programs read, with this release first and its
           # signatures empty: the published list, if any, is the base.
           gh release download updates --pattern updates.json --dir previous 2>/dev/null || true
           python3 tools/updates_list.py --version "$version" --tag "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --notes notes.md --previous previous/updates.json -o updates.json packages/*.zip
-          gh release create "$TAG" packages/*.zip updates.json --draft --title "Tisma engine $version" \
+            --notes notes.md --previous previous/updates.json -o updates.json packages/*
+          gh release create "$TAG" packages/* updates.json --draft --title "Tisma engine $version" \
             --notes-file notes.md $where $prerelease
           echo "::notice::$TAG is a draft: sign it and publish it with tools/sign_release.py (docs/FIRMAR_VERSIONES.md)"

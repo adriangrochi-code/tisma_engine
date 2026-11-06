@@ -36,7 +36,16 @@
 #include "config/analysis_case.hpp"
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
+#include "device/bambu.hpp"
+#include "gcode/output.hpp"
+#include "gcode/thumbnail.hpp"
+#include "device/bambu_simulator.hpp"
+#include "ui/image_decode.hpp"
 #include "device/gcode_host.hpp"
+#include "device/mdns.hpp"
+#include "device/print_host.hpp"
+#include "device/printer_limits.hpp"
+#include "device/ssdp.hpp"
 #include "device/serial_port.hpp"
 #include "device/simulator.hpp"
 #include "fea/analysis.hpp"
@@ -108,6 +117,7 @@
 #include <atomic>
 #include <csignal>
 #include <optional>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string_view>
@@ -860,7 +870,7 @@ private:
     void mixing_dialog();
     std::string filament_color(int extruder) const;
     void objects_material_changed();
-    void brush_stroke(std::size_t object, ImVec2 at);
+    void brush_stroke(std::size_t object, ImVec2 at, bool joined = false);
     void brush_drag(std::size_t object);
     void update_paint_view();
     Vec3 mouse_ray() const;
@@ -900,6 +910,26 @@ private:
     void check_moire(int fb_w, int fb_h);
     // The Device page (docs/DEVICE.md).
     void device_panel();
+    void bambu_panel(float field, float button_h);
+    void bambu_poll();
+    void host_panel(float field, float button_h);
+    void host_poll();
+    void host_test();
+    void host_refresh();
+    void host_send(bool start, std::string name = {}, bool simulate = false);
+    bool host_ready() const; // a network program chosen and tested: the main button sends (devices.md, rule 19)
+    std::string host_default_name() const;
+    void host_upload_dialog();
+    void host_command(int what); // 0 pause, 1 resume, 2 cancel
+    void bambu_refresh();
+    void bambu_send(const std::string& command);
+    void bambu_print_now();
+    void bambu_simulate();
+    void bambu_camera_on();
+    void bambu_camera_off();
+    void bambu_camera_view(float width);
+    ImTextureID upload_texture(const Image& image, bool clamp);
+    void drop_texture(ImTextureID id);
     void device_connect(const std::string& port);
     void device_disconnect();
     void device_poll();
@@ -907,12 +937,16 @@ private:
     void device_print();
     ViewFrame view_frame(int fb_w, int fb_h);
     void settings_changed();
+    void take_printer_limits();
+    void take_limits(const device::PrinterLimits& limits, const std::string& firmware);
     void bed_changed();
     void place_model();
     void frame_all();
     void frame_now();
     void set_tab(Tab tab);
     void notify(std::string text, bool error = false);
+    void remember_toast(const std::string& text);
+    std::vector<std::string> toasts_shown_; // for the scripts' expect-toast
     void fail(T title, std::string message, std::vector<std::string> details = {});
     void load_preferences();
     void save_preferences();
@@ -1150,8 +1184,11 @@ private:
     int painting_object_ = -1;
     bool painted_ = false;     // the stroke changed something
     bool paint_dirty_ = true;  // the view's copy of the paint is out of date
+    bool paint_stroked_ = false; // a stroke changed some triangles: only those are walked again
+    PaintMeshCache paint_cache_;
     std::optional<float> brush_depth_; // how far ahead of the eye the face under the mouse is
     ImVec2 last_stroke_{0.0f, 0.0f};   // where the stroke's last dab went, on the screen
+    std::optional<Vec3> last_dab_;      // and on the model, while the stroke stays on it
     bool has_plate_ = false;          // there is a model on the plate
     std::size_t plate_triangles_ = 0; // all of the plate's
     TriangleMesh plate_now() const;
@@ -1521,6 +1558,58 @@ private:
     bool device_print_sent_ = false;         // with --device-print: the job was started
     bool device_print_done_ = false;         // and it finished (or failed)
 
+    // A Bambu Lab printer on the local network (printer_connections.md,
+    // «Bambu Lab en red local»; devices.md, rules 11 and 16).
+    bool device_bambu_ = false;               // the Device page shows it instead of USB
+    // A program that runs the printer on the network (printer_connections.md,
+    // «Programas que manejan impresoras»; devices.md, rules 14 to 22):
+    // OctoPrint, Moonraker, PrusaLink or Duet. Its key and password are secrets.
+    bool device_host_ = false;
+    device::HostConfig host_;
+    std::future<device::HostVersion> host_test_job_;
+    std::future<device::HostStatus> host_status_job_;
+    std::future<device::HostResult> host_job_;
+    std::future<device::HostLimits> host_limits_job_;
+    device::HostVersion host_version_;        // the last test
+    bool host_tested_ = false;
+    device::HostStatus host_status_;          // the last state read
+    std::string host_job_what_;               // what the running job is, for its message
+    bool host_start_ = true;                  // «Start printing» after the upload
+    bool host_dialog_open_ = false;           // the upload dialog, to open next frame
+    std::future<std::vector<device::MdnsService>> host_search_; // Zeroconf, for OctoPrint
+    std::vector<device::MdnsService> host_found_;
+    bool host_searched_ = false;
+    std::string host_dialog_name_;
+    device::BambuConfig bambu_;               // address, access code (a secret), serial, accepted certificate
+    std::unique_ptr<device::BambuSimulator> bambu_sim_;
+    std::future<device::BambuStatus> bambu_status_job_;
+    std::future<device::BambuResult> bambu_job_;   // a command or a print
+    std::future<device::SsdpListen> bambu_search_;
+    device::BambuStatus bambu_status_;        // the last state read
+    device::BambuResult bambu_result_;        // the last command's or print's answer
+    std::vector<device::SsdpPrinter> bambu_found_;
+    std::vector<int> bambu_busy_ports_;
+    bool bambu_searched_ = false, bambu_use_ams_ = true;
+    std::string thumbnails_draft_; // gcode.thumbnails as typed
+    bool thumbnails_editing_ = false;
+    std::string bambu_job_name_;
+    std::shared_ptr<std::atomic<double>> bambu_sent_ = std::make_shared<std::atomic<double>>(-1.0);
+    // The A1 and P1 camera (rule 6): a thread reads the frames, the interface
+    // shows the newest one.
+    struct BambuCamera {
+        std::atomic<bool> stop{false};
+        std::mutex lock;
+        std::string jpeg;   // the newest frame
+        long long frames = 0; // frames received
+        bool ended = false;
+        std::string error;  // why it ended
+    };
+    std::shared_ptr<BambuCamera> bambu_camera_;
+    std::future<void> bambu_camera_job_;
+    ImTextureID bambu_camera_tex_ = 0;
+    int bambu_camera_w_ = 0, bambu_camera_h_ = 0;
+    long long bambu_camera_shown_ = 0; // the frame the texture holds
+
     FileBrowser browser_;
     Purpose purpose_ = Purpose::Open;
     std::filesystem::path last_folder_;
@@ -1843,7 +1932,7 @@ const std::map<T, const char*>& row_keys() {
         {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
-        {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"},
+        {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"}, {T::GcodeThumbnails, "gcode.thumbnails"},
         {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
         {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
@@ -3409,25 +3498,7 @@ bool App::init(std::string& error) {
         if (!renderer_.init(error))
             return false;
     }
-    // A texture for ImGui::Image from RGBA rows, with OpenGL or Vulkan.
-    const auto texture = [&](const Image& image, bool clamp) -> ImTextureID {
-        if (vulkan_)
-            return vk_.add_texture(image.rgba.data(), image.width, image.height);
-        unsigned tex = 0;
-        glGenTextures(1, &tex);
-        glBindTexture(GL_TEXTURE_2D, tex);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        if (clamp) {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        }
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     image.rgba.data());
-        glBindTexture(GL_TEXTURE_2D, 0);
-        return ImTextureID(tex);
-    };
+    const auto texture = [&](const Image& image, bool clamp) { return upload_texture(image, clamp); };
 
     // Icons drawn white at twice their size; the buttons tint them.
     const int icon_pixels = int(std::lround(48.0f * scale_));
@@ -3444,6 +3515,9 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    // The system's own Open and Save As dialogs where there are (Windows,
+    // BH40); scripted and screenshot runs keep the drawn one they drive.
+    FileBrowser::use_native(options_.screenshot.empty() && options_.ui_script.empty());
     if (cloud_server_.empty()) // none saved: Tisma Cloud's own (cloud.md, rule 1)
         cloud_server_ = cloud::kDefaultServer;
     if (!options_.cloud_server.empty()) // the server for this run (tests: the mock one)
@@ -3674,7 +3748,7 @@ bool App::init(std::string& error) {
             Brush brush;
             brush.centre = {b.x, b.y, b.z};
             brush.radius = b.radius;
-            brush.detail = std::max(0.05, b.radius / 8.0);
+            brush.detail = std::max(0.05, b.radius / 6.0);
             brush.mark = b.block ? kPaintBlock : kPaintEnforce;
             paint(objects_[i].painting, channel, placed_meshes_[i], brush);
         }
@@ -3753,9 +3827,46 @@ void App::apply_theme() {
     vk_view_.set_bed(settings_.bed, look);
 }
 
+// A texture for ImGui::Image from RGBA rows, with OpenGL or Vulkan.
+ImTextureID App::upload_texture(const Image& image, bool clamp) {
+    if (image.width <= 0 || image.height <= 0)
+        return ImTextureID(0);
+    if (vulkan_)
+        return vk_.add_texture(image.rgba.data(), image.width, image.height);
+    if (!gl_loaded_)
+        return ImTextureID(0);
+    unsigned tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    if (clamp) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 image.rgba.data());
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return ImTextureID(tex);
+}
+
+// Frees a texture from upload_texture; it must not be drawn after this.
+void App::drop_texture(ImTextureID id) {
+    if (!id)
+        return;
+    if (vulkan_) {
+        vk_.remove_texture(id);
+    } else if (gl_loaded_) {
+        const auto tex = unsigned(id);
+        glDeleteTextures(1, &tex);
+    }
+}
+
 void App::shutdown() {
     slice_job_.wait();
     device_disconnect();
+    bambu_camera_off();
     // A normal exit: no mark left for the next start (problem_reports.md, rule 10).
     session_file_.close();
     ui::end_session(session_mark_);
@@ -3846,6 +3957,33 @@ void App::load_preferences() {
         moire_ = j.value("moire_filter", true);
         device_port_ = j.value("device_port", std::string("sim"));
         device_baud_ = j.value("device_baud", 115200);
+        // The Bambu Lab printer: its address, serial and accepted
+        // certificate; its access code from the system's store.
+        if (j.contains("bambu") && j["bambu"].is_object()) {
+            const nlohmann::json& b = j["bambu"];
+            bambu_.host = b.value("host", std::string());
+            bambu_.serial = b.value("serial", std::string());
+            bambu_.pinned_sha256 = b.value("certificate", std::string());
+            device_bambu_ = b.value("chosen", false);
+            if (!bambu_.serial.empty())
+                if (const std::optional<std::string> code = cloud::load_secret("bambu:" + bambu_.serial))
+                    bambu_.access_code = *code;
+        }
+        // The network program: its kind, address and user; the key and
+        // password from the system's store.
+        if (j.contains("print_host") && j["print_host"].is_object()) {
+            const nlohmann::json& h = j["print_host"];
+            device::host_kind_from(h.value("kind", std::string("octoprint")), host_.kind);
+            host_.url = h.value("url", std::string());
+            host_.user = h.value("user", std::string());
+            device_host_ = h.value("chosen", false) && !device_bambu_;
+            if (!host_.url.empty()) {
+                if (const std::optional<std::string> k = cloud::load_secret("host-key:" + host_.url))
+                    host_.api_key = *k;
+                if (const std::optional<std::string> p = cloud::load_secret("host-password:" + host_.url))
+                    host_.password = *p;
+            }
+        }
         ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
         if (const auto ui = j.find("ui"); ui != j.end() && ui->is_object()) {
             graphics_api_ = ui->value("graphics_api", std::string("auto"));
@@ -3944,6 +4082,12 @@ void App::save_preferences() {
         j["moire_filter"] = moire_;
         j["device_port"] = device_port_;
         j["device_baud"] = device_baud_;
+        if (!bambu_sim_ && !bambu_.host.empty())
+            j["bambu"] = {{"host", bambu_.host}, {"serial", bambu_.serial}, {"certificate", bambu_.pinned_sha256},
+                          {"chosen", device_bambu_}};
+        if (!host_.url.empty())
+            j["print_host"] = {{"kind", device::host_kind_word(host_.kind)}, {"url", host_.url}, {"user", host_.user},
+                               {"chosen", device_host_}};
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
         j["packs"]["url"] = pack_url_;
@@ -3999,13 +4143,24 @@ void App::save_preferences() {
     }
 }
 
+// The toasts shown while a script runs, for expect-toast (at most the last 200).
+void App::remember_toast(const std::string& text) {
+    if (script_.empty())
+        return;
+    toasts_shown_.push_back(text);
+    if (toasts_shown_.size() > 200)
+        toasts_shown_.erase(toasts_shown_.begin());
+}
+
 void App::notify(std::string text, bool error) {
     log_line(std::string(error ? "error: " : "") + text);
+    remember_toast(text);
     toasts_.push_back({std::move(text), error, ImGui::GetTime() + kToastSeconds, {}});
 }
 
 // A toast with «Undo», kept twice as long.
 void App::notify_undo(std::string text, std::function<void()> undo) {
+    remember_toast(text);
     toasts_.push_back({std::move(text), false, ImGui::GetTime() + 2.0 * kToastSeconds, std::move(undo)});
 }
 
@@ -5396,8 +5551,14 @@ void App::refresh_bed_extras() {
         }
         std::string lower = bed_texture;
         std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return char(std::tolower(c)); });
-        if (lower.ends_with(".svg") && read_pack(bed_texture, data))
+        if (lower.ends_with(".svg") && read_pack(bed_texture, data)) {
             art = bed_svg_art(data, min_x, min_y, max_x, max_y);
+        } else if (lower.ends_with(".png") && read_pack(bed_texture, data)) {
+            const Image image = decode_image(data);
+            art = bed_image_art(image.width, image.height, image.rgba, min_x, min_y, max_x, max_y);
+            if (art.groups.empty())
+                log_line("bed texture " + bed_texture + ": not a PNG it can read");
+        }
     }
     renderer_.set_bed_extras(art, model);
     vk_view_.set_bed_extras(art, model);
@@ -5716,7 +5877,8 @@ void App::export_gcode_to(const std::filesystem::path& path) {
         return;
     }
     std::vector<Warning> warnings;
-    const GcodeExport e = export_gcode(path, *result_->model, result_->settings, &warnings);
+    const std::vector<GcodeThumbnail> thumbnails = gcode_thumbnails(plate_mesh(placed_meshes_), result_->settings, &warnings);
+    const GcodeExport e = export_gcode(path, *result_->model, result_->settings, &warnings, thumbnails);
     if (!e.written) {
         std::vector<std::string> details;
         for (const GcodeProblem& p : e.check.problems)
@@ -5858,6 +6020,38 @@ void App::upload_preview() {
     height_range_[0] = buffers.min_height, height_range_[1] = buffers.max_height;
     renderer_.set_preview(buffers);
     vk_view_.set_preview(buffers);
+}
+
+// The profile's empty limits from what the printer said when it connected
+// (printer_connections.md, «Leer los límites de la impresora», rules 1, 4
+// and 6): only the empty ones, with a one-line notice.
+void App::take_printer_limits() {
+    if (!printer_)
+        return;
+    const device::PrinterStatus st = printer_->status();
+    if (st.m115.empty() && st.m503.empty())
+        return;
+    take_limits(device::parse_marlin_limits(st.m115, st.m503), st.firmware);
+}
+
+void App::take_limits(const device::PrinterLimits& limits, const std::string& firmware) {
+    const bool bed_was_empty = settings_.bed.empty();
+    const std::vector<std::string> taken = device::apply_limits(settings_, limits, true);
+    if (!taken.empty()) {
+        settings_changed();
+        if (std::find(taken.begin(), taken.end(), "bed") != taken.end())
+            bed_changed();
+        const std::string source = limits.source.empty() ? firmware : limits.source;
+        notify(format(tr(T::LimitsTaken), int(taken.size()), source.c_str()));
+        log_line("limits from the printer: " + [&] {
+            std::string names;
+            for (const std::string& n : taken)
+                names += (names.empty() ? "" : ", ") + n;
+            return names;
+        }());
+    }
+    if (bed_was_empty && !limits.has_area)
+        notify(tr(T::LimitsNoBed));
 }
 
 void App::settings_changed() {
@@ -9079,6 +9273,25 @@ bool App::card_rows(std::string_view id, bool& bed) {
         count(T::PostProcessRow, "output.post_process", s.post_process.size());
     }
     ImGui::EndTable();
+    // The thumbnails, full width (gcode_extras.md, rule 8): kept as typed
+    // while it is wrong, and taken only once it reads.
+    if (id == "gcode_output" && shown("gcode.thumbnails")) {
+        ImGui::TextUnformatted(tr(T::GcodeThumbnails));
+        if (!thumbnails_editing_)
+            thumbnails_draft_ = s.gcode_thumbnails;
+        ImGui::SetNextItemWidth(-9.0f * scale_);
+        ImGui::InputTextWithHint("##thumbnails", "16x16/PNG,220x124/PNG", &thumbnails_draft_);
+        thumbnails_editing_ = ImGui::IsItemActive();
+        try {
+            parse_thumbnails(thumbnails_draft_);
+            if (thumbnails_draft_ != s.gcode_thumbnails) {
+                s.gcode_thumbnails = thumbnails_draft_;
+                changed = true;
+            }
+        } catch (const std::invalid_argument& e) {
+            loc::TextColored(rgb(0xE5484D), "%s", e.what());
+        }
+    }
     // The file's name, full width (gcode_templates.md, rule 15).
     if (id == "output_file" && shown("output.filename_format")) {
         ImGui::TextUnformatted(tr(T::FilenameFormat));
@@ -9509,6 +9722,7 @@ void App::viewport() {
             selected_ = int(hit->object);
             painting_object_ = int(hit->object);
             last_stroke_ = io.MousePos;
+            last_dab_.reset();
             brush_stroke(hit->object, io.MousePos);
         }
     } else if (painting && painting_object_ >= 0 && ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
@@ -9787,9 +10001,17 @@ void App::slice_panel() {
     } else {
         if (!result_->resin && result_->preview.estimated_seconds > 0.0)
             loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(result_->preview.estimated_seconds).c_str());
-        if (button("##export", "tisma_save", tr(result_->resin ? T::ExportGoo : T::Export), true, false, true,
-                   tr(T::ExportTip), button_h))
+        // With a tested network program, the main button sends (devices.md, rule 19); exporting moves to ▲.
+        const bool to_host = host_ready() && !result_->resin && device_can_print();
+        if (to_host) {
+            if (button("##export", "tisma_print", tr(T::SendToPrinter), true, false, !host_job_.valid(), nullptr, button_h)) {
+                host_dialog_name_ = host_default_name();
+                host_dialog_open_ = true;
+            }
+        } else if (button("##export", "tisma_save", tr(result_->resin ? T::ExportGoo : T::Export), true, false, true,
+                          tr(T::ExportTip), button_h)) {
             begin_export();
+        }
         g_menu_rects["export"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                         ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         anchor("send_button");
@@ -9806,6 +10028,8 @@ void App::slice_panel() {
                                           ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
             if (send)
                 device_print();
+            if (to_host && ImGui::MenuItem(tr(T::Export)))
+                begin_export();
             const bool project = ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S");
             g_menu_rects["project"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                              ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
@@ -9814,6 +10038,7 @@ void App::slice_panel() {
             ImGui::EndPopup();
         }
     }
+    host_upload_dialog();
     slice_panel_top_ = ImGui::GetWindowPos().y;
     ImGui::End();
     ImGui::PopStyleColor();
@@ -11138,9 +11363,11 @@ void App::paint_card(ImVec2 at) {
     ImGui::PopStyleVar(2);
 }
 
-// The stroke from the last dab to the mouse: dabs half a brush apart along
-// the way, so a fast mouse leaves a line and not separate dots (the testers'
-// UI37, the owner's video of 31-10-2026).
+// The stroke from the last dab to the mouse: a point of the model about a
+// brush width apart on the screen along the way, each drawn as a band from
+// the one before (Brush::stroke), so a fast mouse on a slow computer still
+// leaves one line and not separate dots (the testers' UI37 and BH44, the
+// owner's video of 31-10-2026), with few dabs a frame.
 void App::brush_drag(std::size_t object) {
     const ImVec2 to = ImGui::GetIO().MousePos;
     const float dx = to.x - last_stroke_.x, dy = to.y - last_stroke_.y;
@@ -11149,44 +11376,61 @@ void App::brush_drag(std::size_t object) {
     float pixels = 4.0f;
     if (brush_depth_ && view_size_.y > 0.0f)
         pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.lens_fov())) * 0.5f * view_size_.y;
-    const int steps = std::clamp(int(std::ceil(distance / std::max(pixels * 0.5f, 1.0f))), 1, 64);
+    const int steps = std::clamp(int(std::ceil(distance / std::max(pixels * 2.0f, 2.0f))), 1, 32);
     for (int k = 1; k <= steps; ++k) {
         const float t = float(k) / float(steps);
-        brush_stroke(object, ImVec2(last_stroke_.x + dx * t, last_stroke_.y + dy * t));
+        brush_stroke(object, ImVec2(last_stroke_.x + dx * t, last_stroke_.y + dy * t), true);
     }
     last_stroke_ = to;
 }
 
-// Paints the face under a point of the view, on this model only; Shift erases.
-void App::brush_stroke(std::size_t object, ImVec2 at) {
+// Paints the face under a point of the view, on this model only; Shift
+// erases. Joined, the band from the stroke's last dab to it, when that dab
+// is near (not across a jump to a face further back).
+void App::brush_stroke(std::size_t object, ImVec2 at, bool joined) {
     const Vec3 d = ray_at(at), e = camera_.eye();
     const auto hit = pick(placed_meshes_, plate_indexes(), e, d);
-    if (!hit || hit->object != object)
+    if (!hit || hit->object != object) {
+        last_dab_.reset();
         return;
+    }
     Brush brush;
     const Vec3 c = e + d * float(hit->distance);
     brush.centre = {c.x, c.y, c.z};
+    Vec3 from = c;
+    if (joined && last_dab_ && length(c - *last_dab_) <= 6.0f * brush_radius_) {
+        from = *last_dab_;
+        brush.stroke = true;
+        brush.from = {from.x, from.y, from.z};
+    }
+    last_dab_ = c;
     brush.radius = brush_radius_;
-    brush.detail = std::max(0.05, double(brush_radius_) / 8.0);
+    brush.detail = std::max(0.05, double(brush_radius_) / 6.0);
     brush.view = {d.x, d.y, d.z};
     brush.mark = ImGui::GetIO().KeyShift                ? kPaintNone
                  : paint_channel_ == PaintChannel::Fuzzy ? kPaintEnforce
                                                          : paint_mark_;
-    const Vec3f lo{c.x - brush_radius_, c.y - brush_radius_, c.z - brush_radius_};
-    const Vec3f hi{c.x + brush_radius_, c.y + brush_radius_, c.z + brush_radius_};
+    const Vec3f lo{std::min(c.x, from.x) - brush_radius_, std::min(c.y, from.y) - brush_radius_,
+                   std::min(c.z, from.z) - brush_radius_};
+    const Vec3f hi{std::max(c.x, from.x) + brush_radius_, std::max(c.y, from.y) + brush_radius_,
+                   std::max(c.z, from.z) + brush_radius_};
     const std::vector<std::uint32_t> near = indexes_[object].near(lo, hi);
-    if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush, &near) > 0) {
+    std::vector<std::uint32_t> touched;
+    if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush, &near, &touched) > 0) {
         painted_ = true;
-        paint_dirty_ = true;
+        paint_cache_.touch(object, touched);
+        paint_stroked_ = true;
     }
 }
 
 // The view's copy of the painted pieces of the channel in use.
 void App::update_paint_view() {
-    if (!paint_dirty_)
+    if (!paint_dirty_ && !paint_stroked_)
         return;
-    paint_dirty_ = false;
-    const PaintMesh m = paint_mesh(objects_, placed_meshes_, paint_channel_);
+    if (paint_dirty_) // anything but a stroke: all the paint walked again
+        paint_cache_.reset();
+    paint_dirty_ = paint_stroked_ = false;
+    const PaintMesh m = paint_cache_.build(objects_, placed_meshes_, paint_channel_);
     std::vector<Renderer::PaintGroup> groups;
     for (const PaintMesh::Group& g : m.groups)
         groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_mark_block : theme_.paint_mark_enforce)});
@@ -20622,7 +20866,11 @@ void App::device_poll() {
     for (const device::PrinterEvent& e : printer_->take_events()) {
         std::string line;
         switch (e.kind) {
-        case K::Connected: line = format(tr(T::DeviceConnected), e.text.c_str()); notify(line); break;
+        case K::Connected:
+            line = format(tr(T::DeviceConnected), e.text.c_str());
+            notify(line);
+            take_printer_limits();
+            break;
         case K::Started: line = format(tr(T::DevicePrintStarted), e.text.c_str()); break;
         case K::Finished:
             line = format(tr(T::DevicePrintFinished), e.text.c_str());
@@ -20664,6 +20912,579 @@ void App::device_print() {
     printer_->start_print(result_->gcode, name);
 }
 
+// A Bambu Lab printer on the local network (printer_connections.md, «Bambu Lab
+// en red local»; devices.md, rules 11 and 16): every call runs apart, the
+// page shows the last answer. The access code is a secret: kept in the
+// system's store (cloud/secret_store), never in the preferences or a log.
+void App::host_test() {
+    if (host_test_job_.valid() || host_.url.empty())
+        return;
+    host_tested_ = false;
+    host_test_job_ = std::async(std::launch::async, [h = host_] { return device::host_version(h); });
+}
+
+void App::host_refresh() {
+    if (host_status_job_.valid() || host_.url.empty())
+        return;
+    host_status_job_ = std::async(std::launch::async, [h = host_] { return device::host_status(h); });
+}
+
+bool App::host_ready() const {
+    return device_host_ && host_tested_ && host_version_.ok && !host_.url.empty();
+}
+
+// The file's name: output.filename_format with the print's time and weight
+// (devices.md, rule 20: «cube20_ABS_18m.gcode»); the model's when it cannot.
+std::string App::host_default_name() const {
+    const std::string fallback = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
+                                 : model_path_.empty()          ? std::string("tisma.gcode")
+                                                                : utf8(model_path_.stem()) + ".gcode";
+    if (!result_ || !result_->model || viewer_)
+        return fallback;
+    GcodeTotals totals;
+    totals.print_seconds = std::max(0.0, result_->preview.estimated_seconds);
+    const std::string mark = "; total filament used [g] = ";
+    if (const std::size_t at = result_->gcode.rfind(mark); at != std::string::npos)
+        totals.grams = std::atof(result_->gcode.c_str() + at + mark.size());
+    try {
+        const std::string name = output_filename(result_->settings, *result_->model, totals);
+        return name.empty() ? fallback : name;
+    } catch (const std::exception&) {
+        return fallback;
+    }
+}
+
+// The upload dialog (devices.md, rule 20).
+void App::host_upload_dialog() {
+    if (host_dialog_open_) {
+        ImGui::OpenPopup("##host_upload");
+        host_dialog_open_ = false;
+    }
+    ImGui::SetNextWindowSize(ImVec2(460.0f * scale_, 0.0f));
+    if (!ImGui::BeginPopupModal("##host_upload", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize))
+        return;
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(tr(T::HostUploadName));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputText("##host_upload_name", &host_dialog_name_);
+    loc::TextDisabled("%s", tr(T::HostUploadSlashes));
+    ImGui::PopTextWrapPos();
+    const bool named = !host_dialog_name_.empty();
+    ImGui::BeginDisabled(!named);
+    if (ImGui::Button(tr(T::HostUpload))) {
+        host_send(false, host_dialog_name_);
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::HostUploadPrint))) {
+        host_send(true, host_dialog_name_);
+        ImGui::CloseCurrentPopup();
+    }
+    if (host_.kind == device::HostKind::Duet) {
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::HostUploadSimulate))) {
+            host_send(false, host_dialog_name_, true);
+            ImGui::CloseCurrentPopup();
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::Cancel)))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::host_send(bool start, std::string name, bool simulate) {
+    if (host_job_.valid() || !device_can_print() || host_.url.empty())
+        return;
+    if (name.empty())
+        name = host_default_name();
+    host_job_what_ = name;
+    host_job_ = std::async(std::launch::async, [h = host_, gcode = result_->gcode, name, start, simulate] {
+        // The program takes a file: the G-code goes through a temporary one.
+        const std::filesystem::path temp =
+            std::filesystem::temp_directory_path() / ("tisma_send_" + std::to_string(std::random_device{}()) + ".gcode");
+        {
+            std::ofstream f(temp, std::ios::binary);
+            f << gcode;
+            if (!f)
+                return device::HostResult{false, "failed", "cannot write a temporary file to send"};
+        }
+        device::HostResult r = device::host_upload(h, temp.string(), name, start, simulate);
+        std::error_code ignored;
+        std::filesystem::remove(temp, ignored);
+        return r;
+    });
+}
+
+void App::host_command(int what) {
+    if (host_job_.valid() || host_.url.empty())
+        return;
+    host_job_what_.clear();
+    host_job_ = std::async(std::launch::async, [h = host_, what] {
+        return what == 2 ? device::host_cancel(h) : device::host_pause(h, what == 0);
+    });
+}
+
+void App::host_poll() {
+    using namespace std::chrono_literals;
+    if (host_test_job_.valid() && host_test_job_.wait_for(0ms) == std::future_status::ready) {
+        host_version_ = host_test_job_.get();
+        host_tested_ = true;
+        const char* name = device::host_kind_name(host_.kind);
+        if (host_version_.ok) {
+            notify(format(tr(T::HostTestOk), name));
+            // Works: keep the secrets in the system's store (devices.md, rule 14 tests without saving).
+            std::string error;
+            if (!host_.api_key.empty())
+                cloud::store_secret("host-key:" + host_.url, host_.api_key, error);
+            if (!host_.password.empty())
+                cloud::store_secret("host-password:" + host_.url, host_.password, error);
+            host_refresh();
+            // Klipper's limits, for the profile's empty values (printer_connections.md, rule 8).
+            if (host_.kind == device::HostKind::Moonraker && !host_limits_job_.valid())
+                host_limits_job_ = std::async(std::launch::async, [h = host_] { return device::host_limits(h); });
+        } else {
+            notify(format(tr(T::HostTestFailed), name, host_version_.error.c_str(), host_version_.code.c_str()), true);
+        }
+    }
+    if (host_status_job_.valid() && host_status_job_.wait_for(0ms) == std::future_status::ready)
+        host_status_ = host_status_job_.get();
+    if (host_limits_job_.valid() && host_limits_job_.wait_for(0ms) == std::future_status::ready) {
+        const device::HostLimits got = host_limits_job_.get();
+        if (got.ok)
+            take_limits(device::parse_klipper_limits(got.toolhead, got.settings), "Klipper");
+    }
+    if (host_search_.valid() && host_search_.wait_for(0ms) == std::future_status::ready) {
+        host_found_ = host_search_.get();
+        host_searched_ = true;
+    }
+    if (host_job_.valid() && host_job_.wait_for(0ms) == std::future_status::ready) {
+        const device::HostResult r = host_job_.get();
+        if (r.ok && !host_job_what_.empty())
+            notify(format(tr(T::HostSent), host_job_what_.c_str(), host_.url.c_str()));
+        else if (!r.ok)
+            notify(format(tr(T::HostFailed), r.error.c_str()), true);
+        host_refresh();
+    }
+}
+
+void App::host_panel(float field, float button_h) {
+    ImGui::Separator();
+    const bool working = host_test_job_.valid() || host_status_job_.valid() || host_job_.valid();
+    ImGui::BeginDisabled(working);
+    ImGui::SetNextItemWidth(field * 1.4f);
+    if (ImGui::BeginCombo(tr(T::HostKindRow), device::host_kind_name(host_.kind))) {
+        for (const device::HostKind k : {device::HostKind::OctoPrint, device::HostKind::Moonraker, device::HostKind::PrusaLink,
+                                         device::HostKind::Duet})
+            if (ImGui::Selectable(device::host_kind_name(k), k == host_.kind)) {
+                host_.kind = k;
+                host_tested_ = false;
+                host_status_ = {};
+            }
+        ImGui::EndCombo();
+    }
+    // OctoPrint announces itself by Zeroconf (printer_connections.md, «Búsqueda en la red»).
+    if (host_.kind == device::HostKind::OctoPrint) {
+        ImGui::BeginDisabled(host_search_.valid());
+        if (ImGui::SmallButton(tr(T::BambuSearch))) {
+            host_searched_ = false;
+            host_search_ = std::async(std::launch::async, [] { return device::mdns_browse("_octoprint._tcp.local", 4000); });
+        }
+        ImGui::EndDisabled();
+        if (host_search_.valid()) {
+            ImGui::SameLine();
+            loc::TextDisabled("%s", tr(T::BambuSearching));
+        }
+        for (const device::MdnsService& m : host_found_) {
+            const auto model = m.txt.find("model");
+            const std::string label = m.instance + (model != m.txt.end() ? "  " + model->second : std::string()) + "  " + m.url();
+            if (ImGui::Selectable(label.c_str(), m.url() == host_.url)) {
+                host_.url = m.url();
+                host_tested_ = false;
+            }
+        }
+        if (host_searched_ && host_found_.empty())
+            loc::TextDisabled("%s", tr(T::HostNoneFound));
+    }
+    ImGui::SetNextItemWidth(field * 1.4f);
+    if (ImGui::InputTextWithHint(tr(T::HostUrl), "http://192.168.1.50", &host_.url))
+        host_tested_ = false;
+    // What each program asks for (devices.md, «Tipos de conexión»).
+    if (host_.kind == device::HostKind::Duet) {
+        ImGui::SetNextItemWidth(field);
+        ImGui::InputText(tr(T::HostBoardPassword), &host_.password, ImGuiInputTextFlags_Password);
+    } else {
+        ImGui::SetNextItemWidth(field);
+        ImGui::InputText(tr(T::HostApiKey), &host_.api_key, ImGuiInputTextFlags_Password);
+        if (host_.kind == device::HostKind::PrusaLink) {
+            ImGui::SetNextItemWidth(field);
+            ImGui::InputText(tr(T::HostUser), &host_.user);
+            ImGui::SetNextItemWidth(field);
+            ImGui::InputText(tr(T::HostPassword), &host_.password, ImGuiInputTextFlags_Password);
+        }
+    }
+    ImGui::EndDisabled();
+    if (button("##host_test", "tisma_printer", tr(T::HostTest), !host_tested_ || !host_version_.ok, false,
+               !working && !host_.url.empty(), nullptr, button_h))
+        host_test();
+    ImGui::SameLine();
+    if (button("##host_web", nullptr, tr(T::HostOpenWeb), false, false, !host_.url.empty(), nullptr, button_h))
+        ui::open_link(host_.url);
+    loc::TextDisabled("%s", tr(T::HostWebHelp));
+    if (working)
+        loc::TextDisabled("%s", tr(T::BambuWorking));
+    if (host_tested_ && !host_version_.ok)
+        loc::TextColored(rgb(0xE5484D), tr(T::HostTestFailed), device::host_kind_name(host_.kind),
+                         host_version_.error.c_str(), host_version_.code.c_str());
+    if (!host_tested_ || !host_version_.ok)
+        return;
+
+    // The state (devices.md, rule 16's one line), refreshed on request.
+    ImGui::Separator();
+    loc::TextDisabled("%s", host_version_.server.c_str());
+    const device::HostStatus& st = host_status_;
+    if (st.ok) {
+        loc::Text(tr(T::BambuState), st.state.c_str(), st.nozzle, st.nozzle_target, st.bed, st.bed_target);
+        if (st.printing) {
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(theme_.accent));
+            ImGui::ProgressBar(float(std::max(0.0, st.progress) / 100.0), ImVec2(-FLT_MIN, 0.0f));
+            ImGui::PopStyleColor();
+            loc::Text("%s: %.0f %%, %s", st.file.c_str(), std::max(0.0, st.progress),
+                      format_duration(std::max(0.0, st.seconds_left)).c_str());
+        }
+    } else if (!st.code.empty()) {
+        loc::TextColored(rgb(0xE5484D), tr(T::HostFailed), st.error.c_str());
+    }
+    if (button("##host_refresh", nullptr, tr(T::BambuRefresh), false, false, !working, nullptr, button_h))
+        host_refresh();
+
+    // Sending, pausing, cancelling (devices.md, rule 22: upload, and print if «Start printing»).
+    ImGui::Separator();
+    if (st.printing) {
+        if (st.paused) {
+            if (button("##host_resume", nullptr, tr(T::DeviceResume), true, false, !working, nullptr, button_h))
+                host_command(1);
+        } else if (button("##host_pause", nullptr, tr(T::DevicePause), false, false, !working, nullptr, button_h)) {
+            host_command(0);
+        }
+        ImGui::SameLine();
+        if (button("##host_cancel", nullptr, tr(T::BambuStop), false, false, !working, nullptr, button_h))
+            host_command(2);
+    } else if (device_can_print()) {
+        ImGui::Checkbox(tr(T::HostStartPrinting), &host_start_);
+        if (button("##host_send", "tisma_print", tr(T::HostSend), true, false, !working, nullptr, button_h))
+            host_send(host_start_);
+    }
+}
+
+void App::bambu_simulate() {
+    bambu_sim_ = std::make_unique<device::BambuSimulator>("01S00SIMULATED", "12345678");
+    bambu_.host = "127.0.0.1";
+    bambu_.access_code = "12345678";
+    bambu_.serial.clear();
+    bambu_.pinned_sha256.clear();
+    bambu_.mqtt_port = bambu_sim_->mqtt_port();
+    bambu_.ftps_port = bambu_sim_->ftps_port();
+    bambu_.camera_port = bambu_sim_->camera_port();
+}
+
+void App::bambu_camera_on() {
+    if (bambu_camera_job_.valid() || bambu_.host.empty())
+        return;
+    bambu_camera_ = std::make_shared<BambuCamera>();
+    bambu_camera_shown_ = 0;
+    bambu_camera_job_ = std::async(std::launch::async, [c = bambu_, cam = bambu_camera_] {
+        const device::BambuResult r = device::bambu_camera_stream(
+            c,
+            [cam](std::string jpeg) {
+                const std::lock_guard<std::mutex> hold(cam->lock);
+                cam->jpeg = std::move(jpeg);
+                ++cam->frames;
+                return true;
+            },
+            10000, &cam->stop);
+        const std::lock_guard<std::mutex> hold(cam->lock);
+        cam->ended = true;
+        if (!r.ok && !cam->stop)
+            cam->error = r.error;
+    });
+}
+
+void App::bambu_camera_off() {
+    if (bambu_camera_)
+        bambu_camera_->stop = true;
+    if (bambu_camera_job_.valid())
+        bambu_camera_job_.get();
+    bambu_camera_.reset();
+    drop_texture(bambu_camera_tex_);
+    bambu_camera_tex_ = 0;
+    bambu_camera_w_ = bambu_camera_h_ = 0;
+    bambu_camera_shown_ = 0;
+}
+
+// The newest camera frame, `width` wide (rule 6).
+void App::bambu_camera_view(float width) {
+    if (!bambu_camera_)
+        return;
+    std::string jpeg, error;
+    long long frames = 0;
+    bool ended = false;
+    {
+        const std::lock_guard<std::mutex> hold(bambu_camera_->lock);
+        frames = bambu_camera_->frames;
+        ended = bambu_camera_->ended;
+        error = bambu_camera_->error;
+        if (frames != bambu_camera_shown_)
+            jpeg = bambu_camera_->jpeg;
+    }
+    if (!jpeg.empty()) {
+        const Image image = decode_image(jpeg);
+        if (!image.rgba.empty()) {
+            drop_texture(bambu_camera_tex_);
+            bambu_camera_tex_ = upload_texture(image, true);
+            bambu_camera_w_ = image.width;
+            bambu_camera_h_ = image.height;
+        }
+        bambu_camera_shown_ = frames;
+    }
+    if (bambu_camera_tex_ && bambu_camera_w_ > 0)
+        ImGui::Image(ImTextureRef(bambu_camera_tex_),
+                     ImVec2(width, width * float(bambu_camera_h_) / float(bambu_camera_w_)));
+    else if (!ended)
+        loc::TextDisabled("%s", tr(T::BambuCameraWaiting));
+    if (ended)
+        loc::TextColored(rgb(0xE5484D), tr(T::BambuCameraEnded), error.empty() ? "-" : error.c_str());
+}
+
+void App::bambu_refresh() {
+    if (bambu_status_job_.valid() || bambu_.host.empty())
+        return;
+    bambu_status_job_ = std::async(std::launch::async, [c = bambu_] { return device::bambu_status(c); });
+}
+
+void App::bambu_send(const std::string& command) {
+    if (bambu_job_.valid())
+        return;
+    bambu_job_name_.clear();
+    bambu_job_ = std::async(std::launch::async, [c = bambu_, command] { return device::bambu_command(c, command); });
+}
+
+void App::bambu_print_now() {
+    if (bambu_job_.valid() || !device_can_print())
+        return;
+    device::BambuPrint job;
+    job.name = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.stem())
+               : model_path_.empty()          ? std::string("tisma")
+                                              : utf8(model_path_.stem());
+    job.gcode = result_->gcode;
+    job.use_ams = bambu_use_ams_;
+    // The send options (gcode_macros.md, rule 12), from the bambu.* settings.
+    job.bed_leveling = settings_.bambu_bed_leveling;
+    job.flow_calibration = settings_.bambu_flow_calibration;
+    job.vibration_calibration = settings_.bambu_vibration_calibration;
+    job.timelapse = settings_.bambu_timelapse;
+    job.bed_type = settings_.bambu_plate;
+    bambu_job_name_ = job.name;
+    bambu_sent_->store(0.0);
+    bambu_job_ = std::async(std::launch::async, [c = bambu_, job = std::move(job), sent = bambu_sent_] {
+        return device::bambu_print(c, job, [sent](std::size_t done, std::size_t all) {
+            sent->store(all ? 100.0 * double(done) / double(all) : 0.0);
+        });
+    });
+}
+
+void App::bambu_poll() {
+    using namespace std::chrono_literals;
+    if (bambu_search_.valid() && bambu_search_.wait_for(0ms) == std::future_status::ready) {
+        const device::SsdpListen found = bambu_search_.get();
+        bambu_found_ = found.printers;
+        bambu_busy_ports_ = found.busy_ports;
+        bambu_searched_ = true;
+    }
+    if (bambu_status_job_.valid() && bambu_status_job_.wait_for(0ms) == std::future_status::ready) {
+        bambu_status_ = bambu_status_job_.get();
+        if (bambu_status_.ok) {
+            // Remembered: the printer and its certificate in the
+            // preferences, the access code in the system's store.
+            bambu_.serial = bambu_status_.serial;
+            std::string error;
+            if (!bambu_sim_)
+                cloud::store_secret("bambu:" + bambu_.serial, bambu_.access_code, error);
+            save_preferences();
+        } else {
+            device_log_.push_back("Bambu Lab: " + bambu_status_.code);
+        }
+    }
+    if (bambu_job_.valid() && bambu_job_.wait_for(0ms) == std::future_status::ready) {
+        bambu_result_ = bambu_job_.get();
+        bambu_sent_->store(-1.0);
+        if (bambu_result_.ok && !bambu_job_name_.empty())
+            notify(format(tr(T::BambuSent), bambu_job_name_.c_str()));
+        else if (!bambu_result_.ok)
+            notify(format(tr(T::BambuFailed), bambu_result_.error.c_str()), true);
+        bambu_refresh();
+    }
+}
+
+void App::bambu_panel(float field, float button_h) {
+    ImGui::Separator();
+    loc::TextDisabled("%s", tr(T::BambuHelp));
+    loc::TextDisabled("%s", tr(T::BambuNotTested));
+    const bool working = bambu_status_job_.valid() || bambu_job_.valid();
+
+    // Finding it (printer_connections.md, «Búsqueda en la red»).
+    ImGui::BeginDisabled(bambu_search_.valid());
+    if (ImGui::SmallButton(tr(T::BambuSearch))) {
+        bambu_searched_ = false;
+        bambu_search_ = std::async(std::launch::async, [] { return device::ssdp_listen(6000); });
+    }
+    ImGui::EndDisabled();
+    if (bambu_search_.valid()) {
+        ImGui::SameLine();
+        loc::TextDisabled("%s", tr(T::BambuSearching));
+    }
+    for (const device::SsdpPrinter& p : bambu_found_) {
+        const std::string label = (p.name.empty() ? p.id : p.name) + "  " + p.model + "  " + p.address;
+        if (ImGui::Selectable(label.c_str(), p.address == bambu_.host)) {
+            bambu_camera_off();
+            bambu_sim_.reset();
+            bambu_ = device::BambuConfig{};
+            bambu_.host = p.address;
+            bambu_.serial = p.id;
+            if (const std::optional<std::string> code = cloud::load_secret("bambu:" + p.id))
+                bambu_.access_code = *code;
+        }
+    }
+    if (!bambu_busy_ports_.empty())
+        loc::TextColored(rgb(0xE5484D), "%s", tr(T::BambuPortBusy));
+    else if (bambu_searched_ && bambu_found_.empty())
+        loc::TextDisabled("%s", tr(T::BambuNoneFound));
+
+    // The address and the access code.
+    ImGui::BeginDisabled(working || bambu_sim_ != nullptr);
+    ImGui::SetNextItemWidth(field * 1.4f);
+    ImGui::InputText(tr(T::BambuHost), &bambu_.host);
+    ImGui::SetNextItemWidth(field);
+    ImGui::InputText(tr(T::BambuCode), &bambu_.access_code, ImGuiInputTextFlags_Password);
+    ImGui::EndDisabled();
+    bool simulated = bambu_sim_ != nullptr;
+    ImGui::BeginDisabled(working);
+    if (ImGui::Checkbox(tr(T::BambuSimulated), &simulated)) {
+        bambu_camera_off();
+        if (simulated) {
+            bambu_simulate();
+        } else {
+            bambu_sim_.reset();
+            bambu_ = device::BambuConfig{};
+        }
+        bambu_status_ = {};
+    }
+    ImGui::EndDisabled();
+    const bool known = bambu_status_.ok;
+    if (button("##bambu_connect", "tisma_printer", tr(known ? T::BambuRefresh : T::BambuConnect), !known, false,
+               !working && !bambu_.host.empty() && !bambu_.access_code.empty(), nullptr, button_h))
+        bambu_refresh();
+    if (working)
+        loc::TextDisabled("%s", tr(T::BambuWorking));
+
+    // The certificate, once (rule 4).
+    const device::BambuStatus& st = bambu_status_;
+    if (st.code == "confirm_certificate" || st.code == "certificate_changed") {
+        ImGui::Separator();
+        if (st.code == "certificate_changed")
+            loc::TextColored(rgb(0xE5484D), "%s", tr(T::BambuCertChanged));
+        loc::Text(tr(T::BambuConfirm), st.serial.c_str(), st.sha256.c_str());
+        if (button("##bambu_accept", nullptr, tr(st.code == "confirm_certificate" ? T::BambuAccept : T::BambuAcceptAgain),
+                   true, false, !working, nullptr, button_h)) {
+            bambu_.pinned_sha256 = st.sha256;
+            bambu_.serial = st.serial;
+            bambu_status_ = {};
+            bambu_refresh();
+        }
+    } else if (st.code == "unauthorized") {
+        loc::TextColored(rgb(0xE5484D), "%s", tr(T::BambuUnauthorized));
+    } else if (st.code == "unreachable" || st.code == "timeout") {
+        loc::TextColored(rgb(0xE5484D), tr(T::BambuUnreachable), st.error.c_str());
+    } else if (!st.ok && !st.code.empty()) {
+        loc::TextColored(rgb(0xE5484D), tr(T::BambuFailed), st.error.c_str());
+    }
+    if (!st.ok) {
+        if (bambu_camera_)
+            bambu_camera_off();
+        return;
+    }
+
+    // The state (devices.md, rule 16: one line; refreshed on request).
+    ImGui::Separator();
+    loc::TextDisabled(tr(T::BambuSerial), st.serial.c_str());
+    loc::Text(tr(T::BambuState), st.state.c_str(), st.nozzle, st.nozzle_target, st.bed, st.bed_target);
+    if (st.printing || st.paused) {
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(theme_.accent));
+        ImGui::ProgressBar(float(std::max(0.0, st.progress) / 100.0), ImVec2(-FLT_MIN, 0.0f));
+        ImGui::PopStyleColor();
+        loc::Text(tr(T::BambuJob), st.job.c_str(), std::max(0.0, st.progress), st.layer, st.layers,
+                  format_duration(std::max(0.0, st.minutes_left) * 60.0).c_str());
+    }
+    if (!st.trays.empty()) {
+        loc::Text("%s", tr(T::BambuAms));
+        for (const device::BambuTray& t : st.trays) {
+            const float r = ImGui::GetTextLineHeight() * 0.35f;
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            std::uint32_t colour = 0x8B8D98;
+            if (t.color.size() == 6)
+                colour = std::uint32_t(std::strtoul(t.color.c_str(), nullptr, 16));
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(at.x + r, at.y + ImGui::GetTextLineHeight() * 0.5f), r,
+                                                        ImGui::GetColorU32(rgb(colour)));
+            ImGui::Dummy(ImVec2(r * 2.0f, ImGui::GetTextLineHeight()));
+            ImGui::SameLine(0, 6.0f * scale_);
+            const bool now = st.tray_now == t.ams * 4 + t.slot;
+            if (t.type.empty())
+                loc::TextDisabled("%d · %s", t.slot + 1, tr(T::BambuEmptySlot));
+            else if (t.remain >= 0)
+                loc::Text("%d · %s · %d %%%s", t.slot + 1, t.type.c_str(), t.remain, now ? " *" : "");
+            else
+                loc::Text("%d · %s%s", t.slot + 1, t.type.c_str(), now ? " *" : "");
+        }
+    }
+
+    // The camera (rule 6: the A1 and P1 series; the X1 has none here).
+    bool camera = bambu_camera_ != nullptr;
+    if (ImGui::Checkbox(tr(T::BambuCamera), &camera)) {
+        if (camera)
+            bambu_camera_on();
+        else
+            bambu_camera_off();
+    }
+    if (camera)
+        bambu_camera_view(std::min(ImGui::GetContentRegionAvail().x, 480.0f * scale_));
+
+    // Printing, pausing, stopping.
+    ImGui::Separator();
+    if (st.printing || st.paused) {
+        if (st.paused) {
+            if (button("##bambu_resume", nullptr, tr(T::DeviceResume), true, false, !working, nullptr, button_h))
+                bambu_send("resume");
+        } else if (button("##bambu_pause", nullptr, tr(T::DevicePause), false, false, !working, nullptr, button_h)) {
+            bambu_send("pause");
+        }
+        ImGui::SameLine();
+        if (button("##bambu_stop", nullptr, tr(T::BambuStop), false, false, !working, nullptr, button_h))
+            bambu_send("stop");
+    } else if (device_can_print()) {
+        ImGui::Checkbox(tr(T::BambuUseAms), &bambu_use_ams_);
+        if (settings_.gcode_binary)
+            loc::TextColored(rgb(0xE5484D), "%s", tr(T::BambuBinary));
+        if (button("##bambu_print", "tisma_print", tr(T::BambuPrint), true, false, !working && !settings_.gcode_binary, nullptr,
+                   button_h))
+            bambu_print_now();
+    } else {
+        loc::TextDisabled("%s", tr(T::DeviceNothingToPrint));
+    }
+    if (const double sent = bambu_sent_->load(); sent >= 0.0)
+        loc::TextDisabled(tr(T::BambuSending), sent);
+}
+
 void App::device_panel() {
     const float margin = 12.0f * scale_;
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
@@ -20683,6 +21504,28 @@ void App::device_panel() {
     loc::TextDisabled("%s", tr(T::DeviceHint));
     const float button_h = 30.0f * scale_;
     const float field = 150.0f * scale_;
+
+    // USB or a Bambu Lab printer on the network.
+    if (ImGui::RadioButton(tr(T::DeviceKindUsb), !device_bambu_ && !device_host_))
+        device_bambu_ = device_host_ = false;
+    ImGui::SameLine();
+    if (ImGui::RadioButton(tr(T::DeviceKindBambu), device_bambu_))
+        device_bambu_ = true, device_host_ = false;
+    ImGui::SameLine();
+    if (ImGui::RadioButton(tr(T::DeviceKindHost), device_host_))
+        device_host_ = true, device_bambu_ = false;
+    if (device_bambu_ || device_host_) {
+        if (device_bambu_)
+            bambu_panel(field, button_h);
+        else
+            host_panel(field, button_h);
+        ImGui::PopTextWrapPos();
+        ImGui::EndChild();
+        ImGui::End();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+        return;
+    }
 
     const device::PrinterStatus s = printer_ ? printer_->status() : device::PrinterStatus{};
     using State = device::PrinterState;
@@ -21466,6 +22309,90 @@ void App::script_input() {
         }
         else if (f > 1200)
             fail_step("no answer");
+    } else if (step.verb == "bambu") { // sim, connect, accept, print, pause, resume, stop (on the Device page)
+        tab_ = Tab::Device;
+        device_bambu_ = true;
+        if (step.key == "sim")
+            bambu_simulate();
+        else if (step.key == "connect")
+            bambu_refresh();
+        else if (step.key == "accept") {
+            bambu_.pinned_sha256 = bambu_status_.sha256;
+            bambu_.serial = bambu_status_.serial;
+            bambu_status_ = {};
+            bambu_refresh();
+        } else if (step.key == "print")
+            bambu_print_now();
+        else if (step.key == "camera")
+            bambu_camera_on();
+        else if (step.key == "camera-off")
+            bambu_camera_off();
+        else if (step.key == "pause" || step.key == "resume" || step.key == "stop")
+            bambu_send(step.key);
+        else
+            return fail_step("unknown bambu step");
+        next();
+    } else if (step.verb == "host") { // KIND URL (octoprint, moonraker, prusalink, duet), or test, refresh (Device page)
+        tab_ = Tab::Device;
+        device_host_ = true;
+        device_bambu_ = false;
+        if (step.key == "test")
+            host_test();
+        else if (step.key == "refresh")
+            host_refresh();
+        else if (device::host_kind_from(step.key, host_.kind))
+            host_.url = step.value;
+        else
+            return fail_step("unknown host step");
+        next();
+    } else if (step.verb == "host-wait") { // until the program answered (up to 30 s)
+        if (!host_test_job_.valid() && !host_status_job_.valid() && !host_job_.valid() && f >= 2) {
+            std::printf("ui-script: host-wait: %s %s\n", host_version_.code.c_str(), host_status_.state.c_str());
+            next();
+        } else if (f > 1800) {
+            fail_step("no answer from the printer's program");
+        }
+    } else if (step.verb == "expect-host") { // code CODE, ok yes|no
+        std::string got;
+        if (step.key == "code")
+            got = host_version_.code;
+        else if (step.key == "ok")
+            got = host_tested_ && host_version_.ok ? "yes" : "no";
+        else
+            return fail_step("unknown expect-host key");
+        if (got == step.value) {
+            std::printf("ui-script: expect-host %s %s: ok\n", step.key.c_str(), step.value.c_str());
+            next();
+        } else {
+            fail_step("host " + step.key + " is «" + got + "», not «" + step.value + "»");
+        }
+    } else if (step.verb == "bambu-wait") { // until the printer answered (up to 20 s)
+        if (!bambu_status_job_.valid() && !bambu_job_.valid() && f >= 2) {
+            std::printf("ui-script: bambu-wait: %s %s\n", bambu_status_.state.c_str(), bambu_status_.code.c_str());
+            next();
+        } else if (f > 1200) {
+            fail_step("no answer from the printer");
+        }
+    } else if (step.verb == "expect-bambu") { // state IDLE, code confirm_certificate, trays 4, sent NAME, camera WxH
+        std::string got;
+        if (step.key == "state")
+            got = bambu_status_.state;
+        else if (step.key == "code")
+            got = bambu_status_.code;
+        else if (step.key == "trays")
+            got = std::to_string(bambu_status_.trays.size());
+        else if (step.key == "sent")
+            got = bambu_sim_ && bambu_sim_->files().count(step.value + ".gcode.3mf") ? step.value : "nothing";
+        else if (step.key == "camera") // the size of the frame shown, WxH; "none"
+            got = bambu_camera_tex_ ? std::to_string(bambu_camera_w_) + "x" + std::to_string(bambu_camera_h_) : "none";
+        else
+            return fail_step("unknown expect-bambu key");
+        if (got == step.value) {
+            std::printf("ui-script: expect-bambu %s %s: ok\n", step.key.c_str(), step.value.c_str());
+            next();
+        } else if (f > (step.key == "camera" ? 600 : 2)) {
+            fail_step("bambu " + step.key + " is «" + got + "», not «" + step.value + "»");
+        }
     } else if (step.verb == "cloud-wait") { // until the call to Tisma Cloud is answered (up to 20 s)
         if (!cloud_job_.valid() && f >= 2) {
             std::printf("ui-script: cloud-wait: %s\n", cloud_status_.c_str());
@@ -21849,6 +22776,13 @@ void App::script_input() {
             return fail_step("the plate has " + std::to_string(objects_.size()) + " models, the last " + last);
         next();
     } else if (step.verb == "expect-toast") { // a toast with this text, within 300 frames (a background job's may be late)
+        // Also one already gone: on a busy machine a toast's 6 s can pass
+        // before the script gets to look (ui_pack_offline_first_run).
+        for (const std::string& shown : toasts_shown_)
+            if (shown.find(step.value) != std::string::npos) {
+                std::printf("ui-script: expect-toast %s: ok\n", step.value.c_str());
+                return next();
+            }
         for (const Toast& toast : toasts_)
             if (toast.text.find(step.value) != std::string::npos) {
                 std::printf("ui-script: expect-toast %s: ok\n", step.value.c_str());
@@ -21919,6 +22853,8 @@ void App::frame() {
         }
     poll_jobs();
     device_poll();
+    bambu_poll();
+    host_poll();
 
 #ifdef TISMA_VULKAN_WINDOW
     if (vulkan_)
@@ -22051,7 +22987,11 @@ void App::frame() {
 
     // Screenshot mode: once everything asked for is ready, read the frame back.
     if (!options_.screenshot.empty()) {
-        ++frames_;
+        // An analysis, a slice or a print on the printer is waited for by its
+        // own step (and by the test's timeout), not by the frame count: under
+        // the sanitizers or a loaded machine they take far more frames.
+        if (!structural_job_.running() && !slice_job_.running() && !(options_.device_print && !device_print_done_))
+            ++frames_;
         // A preview waits for its slice, unless the slice failed (the error is the picture then).
         const bool slice_pending =
             (options_.view == "preview" || options_.device_print) && has_plate_ && !result_ && error_title_.empty();

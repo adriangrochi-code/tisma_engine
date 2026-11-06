@@ -204,6 +204,9 @@ TEST_CASE("ui: the bed's grid follows its polygon", "[ui]") {
     CHECK(majors == 1); // x = 50
     CHECK(rect.back().argb == look.outline);
     CHECK(bed_triangles({{0, 0}, {100, 0}, {100, 50}, {0, 50}}).size() == 18);
+    // From under the bed the plate is left out, so the part's underside shows (BH43).
+    CHECK(plate_hidden(Vec3{50, 25, -40}));
+    CHECK_FALSE(plate_hidden(Vec3{50, 25, 40}));
 
     // An L-shaped bed: the line y = 75 only crosses the left arm.
     const BedPolygon l = {{0, 0}, {100, 0}, {100, 50}, {50, 50}, {50, 100}, {0, 100}};

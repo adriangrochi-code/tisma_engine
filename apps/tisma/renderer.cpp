@@ -1412,7 +1412,9 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_TRUE);
-    if (plate_.count > 0 && !casters) {
+    // From under the bed, no plate: the part's underside shows (BH43).
+    const bool under = plate_hidden(f.eye);
+    if (plate_.count > 0 && !casters && !under) {
         // Pushed back a little so the grid, and the first layer, draw over it.
         glEnable(GL_POLYGON_OFFSET_FILL);
         glPolygonOffset(1.0f, 1.0f);
@@ -1425,7 +1427,7 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
     // A pack printer's bed (rule 14): its model in the plate's colour, then its
     // picture pulled towards the eye in depth, as the paint over a model, so
     // it wins over the plate and the model's top. Neither casts a shadow.
-    if ((bed_model_.count > 0 || bed_art_.count > 0) && !casters) {
+    if ((bed_model_.count > 0 || bed_art_.count > 0) && !casters && !under) {
         lit_uniforms(p_.mesh, f, vp, gbuffer, visibility);
         uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
         uniform(p_.mesh, "u_model", identity());
