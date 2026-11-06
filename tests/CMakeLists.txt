@@ -340,6 +340,9 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${script}.png)
       set_tests_properties(ui_script_${script} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     endforeach()
+    # The analysis takes every core and, under ASan, about 160 s alone: more
+    # time, and not beside the full drag test.
+    set_tests_properties(ui_script_structural_analyze PROPERTIES TIMEOUT 900 RESOURCE_LOCK all_cores)
     # The setting rows as JSON (--dump-ui), for the spec team's text checks.
     add_test(NAME ui_dump_rows
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
