@@ -85,6 +85,10 @@ struct BambuPrint {
     // ams_mapping (not tested on hardware); empty: the printer decides.
     std::vector<int> ams_mapping;
     bool timelapse = false, bed_leveling = true;
+    // The calibrations before printing and the plate (gcode_macros.md, rule
+    // 12; bambu.* settings); an empty plate: "auto", the printer's choice.
+    bool flow_calibration = true, vibration_calibration = false;
+    std::string bed_type;
 };
 
 // The package the printer prints: a 3MF with Metadata/plate_1.gcode and its

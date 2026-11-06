@@ -831,6 +831,14 @@ struct Settings {
     // The pictures of the part at the start of the G-code: «16x16/PNG,32x24/JPG»
     // (gcode_extras.md, rule 8; src/gcode/thumbnail.hpp). Empty: none.
     std::string gcode_thumbnails;
+    // The options of a print sent to a Bambu Lab printer (gcode_macros.md,
+    // rule 12): the bed levelled, the flow and the vibrations calibrated, a
+    // timelapse, and the plate (the macro variable curr_bed_type; empty: the
+    // printer's own choice). They go in the network request, and the plate
+    // also to the start G-code.
+    bool bambu_bed_leveling = true, bambu_flow_calibration = true, bambu_vibration_calibration = false,
+         bambu_timelapse = false;
+    std::string bambu_plate;
     // The printer's firmware reads the whole file first (gcode_firmware.md,
     // rule 7): then the G-code is never binary (binary_output).
     StrictParser strict_parser = StrictParser::None;

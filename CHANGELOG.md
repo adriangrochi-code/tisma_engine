@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- Opciones al mandar a una Bambu Lab (`bambu.*`): nivelar la cama, calibrar el flujo y las vibraciones, timelapse y la
+  placa. Van en el pedido de impresión, y la placa también al G-code de inicio (`curr_bed_type`).
 - Cámara de las impresoras Bambu Lab A1 y P1 en la página Dispositivo: casilla «Cámara». Sin probar con una cámara
   real.
 - La cama de una impresora del paquete también se dibuja cuando su imagen es PNG, no solo SVG (regla 14).

@@ -11481,3 +11481,17 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
 - Paso 2, segunda pieza: el kernel `distance_inside.comp` (`gpu::Context::distance_inside`). Una invocación por
   columna, después una por fila, con la misma aritmética. Prueba `[gpu][distance]`: los mismos números que la CPU en 12
   grillas de hasta 150 × 90 (lavapipe). Sigue: `tree_fill` con el campo (paredes y adentro por umbral) y medir.
+
+## 2026-11-06 — opciones de envío a Bambu Lab (gcode_macros.md, regla 12)
+
+- Grupo de ajustes `bambu`, acordado con la sesión de Android, que manda los valores en `--config-over`:
+  - `bed_leveling` (sí), `flow_calibration` (sí), `vibration_calibration` (no), `timelapse` (no);
+  - `plate` (vacío: la elige la impresora).
+- Van en el pedido `project_file` (antes, flujo y vibraciones iban siempre en «no» y la placa en «auto»).
+- La placa llena `curr_bed_type`, la única de estas que la lista de variables tiene para el G-code.
+- Pregunté a la sesión de fichas:
+  - si el G-code de la A1 cambia con las otras opciones por alguna variable (GM8 mira el texto), o si lo decide la
+    impresora con el pedido;
+  - los nombres de las placas.
+- Pruebas: `[bambu]` (el pedido con las opciones y con los valores por defecto) y `[bh41]` (`curr_bed_type`).
+- Sin probar con una impresora real.

@@ -19,6 +19,9 @@ TEST_CASE("settings panel: every setting has a section, a card and a level (SP1)
         // The command line's: the interface has tools, and each object its menu.
         if (key.starts_with("placement.") || key.starts_with("transform.") || key.starts_with("object."))
             continue;
+        // The send window's options (gcode_macros.md, rule 12), chosen when sending.
+        if (key.starts_with("bambu."))
+            continue;
         const std::optional<SettingPlace> place = setting_place(key);
         REQUIRE(place);
         CHECK(place->section != nullptr);

@@ -145,7 +145,15 @@ TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gco
     CHECK(c.unfilled_used.contains("curr_bed_type"));
     // An index past the list's end, and one with an unknown variable in it, fail.
     CHECK_THROWS_AS(render_template("[first_layer_temperature[3]]", c, "t"), TemplateError);
+    CHECK_THROWS_AS(render_template("[first_layer_temperature[99999999999999999999]]", c, "t"), TemplateError);
+    CHECK_THROWS_AS(render_template("[first_layer_temperature_99999999999999999999]", c, "t"), TemplateError);
     CHECK_THROWS_AS(render_template("[first_layer_temperature[no_such]]", c, "t"), TemplateError);
+    // The plate chosen for a Bambu Lab printer fills curr_bed_type (rule 12).
+    Settings bambu = s;
+    bambu.bambu_plate = "Textured PEI Plate";
+    TemplateContext bc = template_context(bambu, SlicedModel{});
+    CHECK(render_template("{if curr_bed_type==\"Textured PEI Plate\"}textured{endif}", bc, "t") == "textured");
+    CHECK_FALSE(bc.unfilled.contains("curr_bed_type"));
     // A name that is in no list still fails (rule 5, GM6).
     CHECK_THROWS_AS(render_template("[no_such_variable]", c, "t"), TemplateError);
 }

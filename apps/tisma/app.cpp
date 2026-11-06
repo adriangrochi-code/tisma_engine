@@ -21279,6 +21279,12 @@ void App::bambu_print_now() {
                                               : utf8(model_path_.stem());
     job.gcode = result_->gcode;
     job.use_ams = bambu_use_ams_;
+    // The send options (gcode_macros.md, rule 12), from the bambu.* settings.
+    job.bed_leveling = settings_.bambu_bed_leveling;
+    job.flow_calibration = settings_.bambu_flow_calibration;
+    job.vibration_calibration = settings_.bambu_vibration_calibration;
+    job.timelapse = settings_.bambu_timelapse;
+    job.bed_type = settings_.bambu_plate;
     bambu_job_name_ = job.name;
     bambu_sent_->store(0.0);
     bambu_job_ = std::async(std::launch::async, [c = bambu_, job = std::move(job), sent = bambu_sent_] {

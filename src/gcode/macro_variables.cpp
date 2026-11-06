@@ -78,6 +78,9 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
     set("enable_pressure_advance", list_of(TemplateValue::of(s.pressure_advance > 0.0)));
     set("filament_type", list_of(TemplateValue::of(s.filament_type)));
     set("spiral_vase", TemplateValue::of(s.vase));
+    // The plate chosen to send to a Bambu Lab printer (gcode_macros.md, rule 12).
+    if (!s.bambu_plate.empty())
+        set("curr_bed_type", TemplateValue::of(s.bambu_plate));
     set("has_wipe_tower", TemplateValue::of(s.wipe_tower));
     set("standby_temperature_delta", whole(s.standby_delta));
     set("max_fan_speed", list_of(whole(s.fan_max)));

@@ -287,10 +287,10 @@ json bambu_project_file(const BambuPrint& job, const std::string& file, const st
                   {"url", "ftp:///" + file},
                   {"md5", package_md5},
                   {"timelapse", job.timelapse},
-                  {"bed_type", "auto"},
+                  {"bed_type", job.bed_type.empty() ? std::string("auto") : job.bed_type},
                   {"bed_levelling", job.bed_leveling},
-                  {"flow_cali", false},
-                  {"vibration_cali", false},
+                  {"flow_cali", job.flow_calibration},
+                  {"vibration_cali", job.vibration_calibration},
                   {"layer_inspect", false},
                   {"ams_mapping", mapping},
                   {"use_ams", job.use_ams}}}};

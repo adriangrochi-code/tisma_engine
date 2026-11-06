@@ -853,7 +853,7 @@ Settings parse_checked(std::string_view text) {
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
-            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
+            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" || group == "bambu" ||
             group == "fuzzy" || group == "vase" || group == "cad" || group == "placement" || group == "transform" || group == "arcs" ||
             group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
@@ -2455,6 +2455,21 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
         s.gpu = choice<GpuMode>(g, n, k, {{"auto", GpuMode::Auto}, {"off", GpuMode::Off}});
     });
+    read_group(root, "bambu", {"bed_leveling", "flow_calibration", "vibration_calibration", "timelapse", "plate"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "plate") {
+                       if (!g.at(n).is_string())
+                           fail(k, "must be a string");
+                       s.bambu_plate = g.at(n).get<std::string>();
+                       return;
+                   }
+                   if (!g.at(n).is_boolean())
+                       fail(k, "must be true or false");
+                   (n == "bed_leveling"       ? s.bambu_bed_leveling
+                    : n == "flow_calibration" ? s.bambu_flow_calibration
+                    : n == "timelapse"        ? s.bambu_timelapse
+                                              : s.bambu_vibration_calibration) = g.at(n).get<bool>();
+               });
     read_group(root, "zaa", {"enabled", "min_thickness", "raise"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "min_thickness") {
             const double v = number(g, n, k);
@@ -3480,6 +3495,11 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.slowdown_logic", s.slowdown_logic == SlowdownLogic::Uniform ? "uniform" : "consistent_surface"},
         {"cooling.transition_distance", num(s.transition_distance)},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
+        {"bambu.bed_leveling", s.bambu_bed_leveling ? "true" : "false"},
+        {"bambu.flow_calibration", s.bambu_flow_calibration ? "true" : "false"},
+        {"bambu.vibration_calibration", s.bambu_vibration_calibration ? "true" : "false"},
+        {"bambu.timelapse", s.bambu_timelapse ? "true" : "false"},
+        {"bambu.plate", text(s.bambu_plate)},
         {"zaa.enabled", s.zaa ? "true" : "false"},
         {"zaa.min_thickness", num(s.zaa_min_thickness)},
         {"zaa.raise", s.zaa_raise ? "true" : "false"},
@@ -3987,6 +4007,12 @@ std::string settings_json(const Settings& s) {
           {"slowdown_logic", s.slowdown_logic == SlowdownLogic::Uniform ? "uniform" : "consistent_surface"},
           {"transition_distance", s.transition_distance}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
+        {"bambu",
+         {{"bed_leveling", s.bambu_bed_leveling},
+          {"flow_calibration", s.bambu_flow_calibration},
+          {"vibration_calibration", s.bambu_vibration_calibration},
+          {"timelapse", s.bambu_timelapse},
+          {"plate", s.bambu_plate}}},
         {"zaa", {{"enabled", s.zaa}, {"min_thickness", s.zaa_min_thickness}, {"raise", s.zaa_raise}}},
         {"fuzzy",
          {{"mode", fuzzy_mode_name(s.fuzzy_mode)},

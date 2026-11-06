@@ -233,6 +233,11 @@ TEST_CASE("Bambu Lab: print from the AMS, uploaded by FTPS with the TLS session 
     CHECK(p["md5"] == net::md5_hex(package));
     CHECK(p["use_ams"] == true);
     CHECK(p["ams_mapping"] == nlohmann::json::array({-1, -1, -1, -1, 2}));
+    // The send options' defaults (gcode_macros.md, rule 12): levelling and flow on.
+    CHECK(p["bed_levelling"] == true);
+    CHECK(p["flow_cali"] == true);
+    CHECK(p["vibration_cali"] == false);
+    CHECK(p["bed_type"] == "auto");
     CHECK(sim.state()["gcode_state"] == "PREPARE");
     // The data connection resumed the control connection's session.
     FtpsConfig f;
@@ -390,4 +395,19 @@ TEST_CASE("mDNS: the question and an OctoPrint answer (RFC 6762, RFC 6763, RFC 1
         for (const MdnsService& s : parse_mdns(bad, "_octoprint._tcp.local"))
             CHECK(s.url().size() < 4096);
     }
+}
+
+TEST_CASE("bambu: the send options go in the print request (gcode_macros.md, rule 12)", "[bambu]") {
+    BambuPrint job;
+    job.flow_calibration = false;
+    job.vibration_calibration = true;
+    job.bed_leveling = false;
+    job.timelapse = true;
+    job.bed_type = "Textured PEI Plate";
+    const nlohmann::json p = bambu_project_file(job, "a.gcode.3mf", "00", 1)["print"];
+    CHECK(p["flow_cali"] == false);
+    CHECK(p["vibration_cali"] == true);
+    CHECK(p["bed_levelling"] == false);
+    CHECK(p["timelapse"] == true);
+    CHECK(p["bed_type"] == "Textured PEI Plate");
 }

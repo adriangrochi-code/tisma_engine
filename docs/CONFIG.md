@@ -715,6 +715,19 @@ Va en el perfil de impresión.
 |---|---|---|---|---|
 | `gpu` | texto | `"auto"` | `auto`, `off` | `auto` usa la GPU si hay una (Vulkan); `off` usa solo la CPU |
 
+### `bambu`
+
+Opciones de una impresión que se manda a una Bambu Lab (ficha `gcode_macros.md`, regla 12): van en el pedido de
+impresión por la red y, la placa, también al G-code de inicio. Cambiarlas vuelve a laminar.
+
+| Clave | Tipo | Por defecto | Rango | Significado |
+|---|---|---|---|---|
+| `bed_leveling` | sí/no | `true` | | Nivelar la cama antes de imprimir |
+| `flow_calibration` | sí/no | `true` | | Calibrar el flujo antes de imprimir |
+| `vibration_calibration` | sí/no | `false` | | Calibrar las vibraciones antes de imprimir |
+| `timelapse` | sí/no | `false` | | Grabar un timelapse |
+| `plate` | texto | `""` | | La placa de la cama, como la compara el G-code de inicio (variable `curr_bed_type`); vacío: la elige la impresora |
+
 ### `zaa`
 
 Z anti-aliasing (`docs/ZAA.md`, ficha `docs/spec/features/z_antialiasing.md`): las extrusiones que se ven arriba

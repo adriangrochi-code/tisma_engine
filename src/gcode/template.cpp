@@ -11,6 +11,7 @@
 #include <functional>
 #include <optional>
 #include <regex>
+#include <system_error>
 #include <utility>
 
 namespace tisma {
@@ -638,7 +639,8 @@ std::string render_template(std::string_view text, TemplateContext& context, std
                     if (!index.empty()) {
                         long long at = 0;
                         if (index.find_first_not_of("0123456789") == std::string_view::npos) {
-                            std::from_chars(index.data(), index.data() + index.size(), at);
+                            if (std::from_chars(index.data(), index.data() + index.size(), at).ec != std::errc())
+                                src.fail(index_at, "the index " + std::string(index) + " is too large");
                         } else {
                             const TemplateValue* n = lookup(index);
                             if (!n)
