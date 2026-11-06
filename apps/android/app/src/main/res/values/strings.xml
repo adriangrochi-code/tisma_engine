@@ -611,4 +611,9 @@
     <string name="filament_choose">Choose filament</string>
     <string name="filament_hand_changed">You changed %1$d material settings by hand: they stay over the filament.</string>
     <string name="filament_reset">Use the filament\'s values</string>
+    <string name="bambu_options">Before printing</string>
+    <string name="bambu_leveling">Level the bed</string>
+    <string name="bambu_flow">Calibrate the flow</string>
+    <string name="bambu_vibration">Calibrate vibrations</string>
+    <string name="bambu_timelapse">Record a timelapse</string>
 </resources>

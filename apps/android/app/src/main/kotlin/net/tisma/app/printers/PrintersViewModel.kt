@@ -230,13 +230,18 @@ class PrintersViewModel(
     fun cancel(id: String) = command(id) { it.cancel() }
 
     /** Uploads a G-code to a printer and starts it if [start] (MA7). */
-    fun upload(id: String, name: String, length: Long, start: Boolean, open: () -> InputStream?) {
+    fun upload(id: String, name: String, length: Long, start: Boolean, open: () -> InputStream?) =
+        upload(id, name, length, start, net.tisma.printers.PrintOptions(), open)
+
+    /** The same with the Bambu Lab print options (gcode_macros.md, rule 12); other printers ignore them. */
+    fun upload(id: String, name: String, length: Long, start: Boolean, options: net.tisma.printers.PrintOptions,
+               open: () -> InputStream?) {
         val p = state.value.printers.firstOrNull { it.id == id } ?: return
         _state.update { it.copy(uploading = true) }
         viewModelScope.launch {
             try {
                 withContext(io) {
-                    connection(p).upload(name, length, start) {
+                    connection(p).upload(name, length, start, options) {
                         open() ?: throw java.io.IOException("Cannot read $name")
                     }
                 }

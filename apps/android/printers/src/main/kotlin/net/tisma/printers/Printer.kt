@@ -27,6 +27,13 @@ interface PrinterConnection {
     /** Uploads a G-code and, if [start], starts printing it. */
     fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream)
 
+    /**
+     * The same with the print options a printer takes when it starts (gcode_macros.md, rule 12: Bambu Lab's
+     * levelling, calibrations and timelapse). The others ignore them.
+     */
+    fun upload(name: String, length: Long, start: Boolean, options: PrintOptions, open: () -> InputStream) =
+        upload(name, length, start, open)
+
     /** The camera's addresses, if the printer has one. */
     fun camera(): Camera?
 
@@ -154,3 +161,14 @@ fun PrinterConfig.connect(secret: String?, http: net.tisma.cloud.Http = net.tism
         PrinterKind.DUET -> DuetConnection(url, secret.orEmpty().ifEmpty { "reprap" }, http)
         PrinterKind.BAMBU -> BambuConnection.of(url, secret.orEmpty(), certSha256.ifBlank { null })
     }
+
+/**
+ * What a Bambu Lab does before printing (gcode_macros.md, rule 12; printer_connections.md, «Bambu Lab en red
+ * local»): by default it levels the bed and calibrates the flow.
+ */
+data class PrintOptions(
+    val bedLeveling: Boolean = true,
+    val flowCalibration: Boolean = true,
+    val vibrationCalibration: Boolean = false,
+    val timelapse: Boolean = false,
+)

@@ -235,10 +235,29 @@ private fun PlateControls(
                             FilterChip(selected = sendTo == p.id, onClick = { setSendTo(p.id) }, label = { Text(p.name) })
                         }
                     }
+                    // gcode_macros.md, rule 12: what a Bambu Lab does before printing, chosen when sending.
+                    var leveling by rememberSaveable { mutableStateOf(true) }
+                    var flow by rememberSaveable { mutableStateOf(true) }
+                    var vibration by rememberSaveable { mutableStateOf(false) }
+                    var timelapse by rememberSaveable { mutableStateOf(false) }
+                    val bambu = ready.firstOrNull { it.id == sendTo }?.kind == net.tisma.printers.PrinterKind.BAMBU
+                    if (bambu) {
+                        Text(stringResource(R.string.bambu_options), style = MaterialTheme.typography.labelLarge)
+                        listOf(Triple(R.string.bambu_leveling, leveling) { v: Boolean -> leveling = v },
+                            Triple(R.string.bambu_flow, flow) { v: Boolean -> flow = v },
+                            Triple(R.string.bambu_vibration, vibration) { v: Boolean -> vibration = v },
+                            Triple(R.string.bambu_timelapse, timelapse) { v: Boolean -> timelapse = v }).forEach { (label, on, set) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(label), modifier = Modifier.weight(1f))
+                                Switch(on, set, modifier = Modifier.named(stringResource(label)))
+                            }
+                        }
+                    }
                     Button(
                         onClick = {
                             val id = sendTo ?: return@Button
-                            printers.upload(id, r.gcode.name, r.gcode.length(), true) { r.gcode.inputStream() }
+                            printers.upload(id, r.gcode.name, r.gcode.length(), true,
+                                net.tisma.printers.PrintOptions(leveling, flow, vibration, timelapse)) { r.gcode.inputStream() }
                         },
                         enabled = sendTo != null && !printerState.uploading,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_send"),

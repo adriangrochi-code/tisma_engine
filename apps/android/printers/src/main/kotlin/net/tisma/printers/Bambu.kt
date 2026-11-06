@@ -137,7 +137,10 @@ class BambuConnection(
     override fun resume() = printCommand("resume", { put("param", "") })
     override fun cancel() = printCommand("stop", { put("param", "") })
 
-    override fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream) {
+    override fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream) =
+        upload(name, length, start, PrintOptions(), open)
+
+    override fun upload(name: String, length: Long, start: Boolean, options: PrintOptions, open: () -> InputStream) {
         client()
         val gcode = open().use { it.readBytes() }
         val base = name.substringAfterLast('/').removeSuffix(".gcode").removeSuffix(".3mf")
@@ -150,8 +153,8 @@ class BambuConnection(
             put("subtask_name", base)
             put("url", "ftp:///$remote")
             put("md5", md5(gcode))
-            put("timelapse", false); put("bed_type", "auto"); put("bed_levelling", true)
-            put("flow_cali", false); put("vibration_cali", false); put("layer_inspect", false)
+            put("timelapse", options.timelapse); put("bed_type", "auto"); put("bed_levelling", options.bedLeveling)
+            put("flow_cali", options.flowCalibration); put("vibration_cali", options.vibrationCalibration); put("layer_inspect", false)
             put("ams_mapping", ""); put("use_ams", false)
         })
     }

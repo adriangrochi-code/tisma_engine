@@ -11087,3 +11087,15 @@ Bug del dueño (QA AND10): «no se puede elegir el filamento, hay que poner las 
   filamento» (los del paquete para esa impresora, o el catálogo) y, si hay ajustes de material cambiados a mano,
   «Usar los valores del filamento» (los cambios a mano quedan encima del filamento, BH27).
 - Prueba: `PackWizardTest` (MA1 + AND10). No probado en un teléfono.
+
+## 2026-11-06 — Android: opciones de envío a una Bambu Lab (gcode_macros.md, regla 12)
+
+Regla del dueño (06-11, por la sesión de especificación): sin tiempo libre; al terminar, el siguiente ítem.
+- Al mandar a una Bambu Lab desde el plato: «Nivelar la cama», «Calibrar el flujo» (prendidas por defecto),
+  «Calibrar las vibraciones» y «Grabar un timelapse». Van en el pedido `project_file` por MQTT
+  (`PrintOptions` en el módulo de impresoras; las demás impresoras las ignoran).
+- **Falta** (esperando al motor): que vayan también como variables al G-code de inicio y que un cambio vuelva a
+  laminar; se preguntaron las claves de ajustes a la sesión del motor. La placa queda «auto» en el pedido: la ficha
+  no dice sus valores.
+- Pruebas: `BambuTest` (valores por defecto y los elegidos en el pedido). La pantalla no tiene prueba automática.
+  No probado con una Bambu real.

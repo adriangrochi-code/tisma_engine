@@ -595,4 +595,9 @@
     <string name="filament_choose">Elegir filamento</string>
     <string name="filament_hand_changed">Cambiaste %1$d ajustes de material a mano: quedan encima del filamento.</string>
     <string name="filament_reset">Usar los valores del filamento</string>
+    <string name="bambu_options">Antes de imprimir</string>
+    <string name="bambu_leveling">Nivelar la cama</string>
+    <string name="bambu_flow">Calibrar el flujo</string>
+    <string name="bambu_vibration">Calibrar las vibraciones</string>
+    <string name="bambu_timelapse">Grabar un timelapse</string>
 </resources>

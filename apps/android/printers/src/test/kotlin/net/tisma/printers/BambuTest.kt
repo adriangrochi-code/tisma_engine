@@ -33,6 +33,11 @@ class BambuTest {
         val pf = printer.commands.single { it["command"].toString() == "\"project_file\"" }
         assertEquals("\"ftp:///cube.gcode.3mf\"", pf["url"].toString())
         assertEquals("\"Metadata/plate_1.gcode\"", pf["param"].toString())
+        // gcode_macros.md, rule 12: by default the bed is levelled and the flow calibrated.
+        assertEquals("true", pf["bed_levelling"].toString())
+        assertEquals("true", pf["flow_cali"].toString())
+        assertEquals("false", pf["vibration_cali"].toString())
+        assertEquals("false", pf["timelapse"].toString())
         Thread.sleep(200)
         val s = c.status()
         assertEquals(PrinterState.PRINTING, s.state)
@@ -45,6 +50,17 @@ class BambuTest {
         assertEquals(PrinterState.PRINTING, c.status().state)
         c.cancel(); Thread.sleep(200)
         assertEquals(PrinterState.READY, c.status().state)
+        // The options chosen when sending go in the print command.
+        c.upload("cube2.gcode", gcode.size.toLong(), start = true,
+            options = PrintOptions(bedLeveling = false, flowCalibration = false, vibrationCalibration = true, timelapse = true)) { gcode.inputStream() }
+        val deadline = System.currentTimeMillis() + 5_000
+        while (printer.commands.count { it["command"].toString() == "\"project_file\"" } < 2 && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        val pf2 = printer.commands.last { it["command"].toString() == "\"project_file\"" }
+        assertEquals("false", pf2["bed_levelling"].toString())
+        assertEquals("false", pf2["flow_cali"].toString())
+        assertEquals("true", pf2["vibration_cali"].toString())
+        assertEquals("true", pf2["timelapse"].toString())
+        c.cancel(); Thread.sleep(200)
         c.setTemperature(Heater.NOZZLE, 200.0); Thread.sleep(200)
         assertEquals(200.0, c.status().nozzle?.target)
         c.close()
