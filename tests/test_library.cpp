@@ -116,7 +116,7 @@ TEST_CASE("library: check says when the analysis no longer holds (ML3, ML4) and 
     CHECK(c.at("analyses")[0].at("changed") == json::array({"infill.density"}));
 }
 
-TEST_CASE("library: «La imprimí», delete, export and import; unsafe files refused whole (ML5, ML6)", "[library]") {
+TEST_CASE("library: printed, delete, export and import; unsafe files refused whole (ML5, ML6)", "[library]") {
     const fs::path lib = fresh("lib3"), in = fresh("lib3_in"), other = fresh("lib3_other");
     const Files f = files(in);
     const json e = library_save(lib, {std::nullopt, f.model, f.settings, f.recipe, f.summary, f.analysis,
