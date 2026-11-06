@@ -286,12 +286,20 @@ TEST_CASE("tree support: the fill from a distance field is the same as from offs
                                     Clipper2Lib::FillRule::NonZero),
          {}},
         {"under the part", {disc(0, 0, 3.0)}, {disc(2, 0, 1.5)}},
+        {"ring", Clipper2Lib::Difference(Polygons{disc(0, 0, 5.0)}, Polygons{disc(0, 0, 3.0)}, Clipper2Lib::FillRule::NonZero),
+         {}},
     };
+    // A grid for each island, holes with their island.
+    CHECK(tree_branch_grids(cases[3].area, {}, 0.4).size() == 4);
+    CHECK(tree_branch_grids(cases[5].area, {}, 0.4).size() == 1);
     for (const Case& c : cases) {
         CAPTURE(c.name);
         const TreeFill a = tree_fill(c.area, c.above, 0.4, 2.5, 3.0, 0.0);
-        const BitGrid grid = tree_branch_grid(c.area, c.above, 0.4);
-        const TreeFill b = tree_fill_field(c.area, c.above, grid, squared_distance_inside(grid), 0.4, 2.5, 3.0, 0.0);
+        const std::vector<BitGrid> grids = tree_branch_grids(c.area, c.above, 0.4);
+        std::vector<std::vector<float>> fields;
+        for (const BitGrid& g : grids)
+            fields.push_back(squared_distance_inside(g));
+        const TreeFill b = tree_fill_field(c.area, c.above, grids, fields, 0.4, 2.5, 3.0, 0.0);
         CHECK(closed(b.support) == closed(a.support));
         // Walls within a few percent; the lines inside within a line or two.
         CHECK_THAT(length(b.support, true), WithinAbs(length(a.support, true), 0.04 * length(a.support, true) + 0.2));

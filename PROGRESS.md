@@ -11719,3 +11719,16 @@ arreglado en 9d8dc76 y subido.
   si está. Pasan ML3/ML4 (check) y ML5/ML6 (exportar, importar, «ya existe», archivo inseguro). ML1 falla: `save`
   copia `--model` tal cual a `project.3mf`, y el plato tiene un STL; al «Imprimir» el motor dice «3MF: not a ZIP
   package». Se pidió al motor que convierta a paquete 3MF al guardar (regla 1). Con el motor de prueba, todo pasa.
+
+
+## 2026-11-06 05:00 — bloque nocturno: subida, fuzzer y árbol por islas
+
+- Subido a dev (34db661): Mi biblioteca y tres arreglos de pruebas que fallaban por carga en el CI local completo
+  (los cuadros del modo captura ya no cuentan mientras corre un análisis, un laminado o una impresión en el
+  simulador; la impresión simulada no corre junto a `aero_drag_coefficients`). CI local completo (las tres etapas)
+  en 0; avisado a Android.
+- Fuzzer con semilla nueva (20261106): 2000 corridas, 14 rechazadas por no imprimibles, 0 fallas, 1 min 46 s.
+- Árbol, paso 2: `tree_branch_grids` arma una grilla por isla de ramas (con sus agujeros) en vez de una por capa, y
+  `tree_fill_field` las recorre. Medido en la esfera de 100 mm (sphere.stl, `tree/organic.json`, 3 corridas):
+  laminado 1,11 s con los offsets contra 1,39 s con el campo (antes de esto, 2,9 contra 1,44 s). Sigue sin conectar.
+  Faltan la segunda pared desde el mismo campo y marching squares en la GPU.

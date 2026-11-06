@@ -4,6 +4,7 @@
 #include "geom/polygons.hpp"
 #include "perimeters/sites.hpp"
 
+#include <span>
 #include <vector>
 
 namespace tisma {
@@ -77,10 +78,12 @@ TreeFill tree_fill(const Polygons& area, const Polygons& above, double bead, dou
 // distance to their edge (squared_distance_inside, or the GPU's
 // distance_inside), and from it the wall at half a bead, the second wall
 // where a branch is double_wall wide, and the inside a bead in, as levels of
-// the distance instead of offsets of polygons. Own design.
-BitGrid tree_branch_grid(const Polygons& area, const Polygons& above, double bead);
-TreeFill tree_fill_field(const Polygons& area, const Polygons& above, const BitGrid& grid,
-                         const std::vector<float>& squared, double bead, double spacing, double double_wall,
+// the distance instead of offsets of polygons. A grid for each island of
+// branches, as large as that island: a layer's branches are far apart, and a
+// grid of the whole layer is nearly empty. Own design.
+std::vector<BitGrid> tree_branch_grids(const Polygons& area, const Polygons& above, double bead);
+TreeFill tree_fill_field(const Polygons& area, const Polygons& above, std::span<const BitGrid> grids,
+                         std::span<const std::vector<float>> squared, double bead, double spacing, double double_wall,
                          double angle);
 
 } // namespace tisma

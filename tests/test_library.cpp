@@ -2,6 +2,7 @@
 #include "config/settings.hpp"
 #include "io/zip.hpp"
 #include "library/library.hpp"
+#include "project/project.hpp"
 #include "test_printer.hpp"
 #include "test_temp.hpp"
 
@@ -50,7 +51,7 @@ struct Files {
 Files files(const fs::path& in) {
     Settings s = test_printer();
     s.infill_density = 20.0;
-    return {put(in / "p.3mf", "PK fake project"),
+    return {put(in / "p.3mf", write_zip_stored({{"3D/3dmodel.model", "fake project"}})),
             put(in / "s.json", settings_json(s)),
             put(in / "r.json", R"({"printer":"Acme One","nozzle":0.4,"filament":"PLA","print":"0.2 mm","label":"Acme One"})"),
             put(in / "sum.json", R"({"print_time_s":720,"filament_mm":2500,"filament_g":7.4,"layers":50})"),
@@ -72,7 +73,7 @@ TEST_CASE("library: save, the same recipe replaced, list and show; no G-code kep
     CHECK(e.at("recipes")[0].at("summary").at("filament_m") == 2.5);
     CHECK(e.at("analyses")[0].at("kind") == "fea");
     const std::string id = e.at("id");
-    CHECK(slurp(lib / id / "project.3mf") == "PK fake project");
+    CHECK(slurp(lib / id / "project.3mf") == slurp(f.model)); // a 3MF is kept as it is
     CHECK(fs::exists(lib / id / "recipes" / "1" / "settings.json"));
     // The same printer, nozzle, filament and print: the recipe again, not a second.
     r.entry = id;
@@ -115,7 +116,7 @@ TEST_CASE("library: check says when the analysis no longer holds (ML3, ML4) and 
     CHECK(c.at("analyses")[0].at("changed") == json::array({"infill.density"}));
 }
 
-TEST_CASE("library: «La imprimí», delete, export and import; unsafe files refused whole (ML5, ML6)", "[library]") {
+TEST_CASE("library: printed, delete, export and import; unsafe files refused whole (ML5, ML6)", "[library]") {
     const fs::path lib = fresh("lib3"), in = fresh("lib3_in"), other = fresh("lib3_other");
     const Files f = files(in);
     const json e = library_save(lib, {std::nullopt, f.model, f.settings, f.recipe, f.summary, f.analysis,
@@ -157,6 +158,16 @@ TEST_CASE("library on the command line: save, list and errors as JSON", "[librar
                  f.settings.string(), "--recipe", f.recipe.string(), "--thumb", f.thumb.string(), "--name", "Cube"},
                 out) == 0);
     CHECK(json::parse(out).at("recipes")[0].at("engine") == TISMA_VERSION);
+    // A bare STL becomes a 3MF project (rule 1) that opens as one.
+    REQUIRE(run({"library", "save", "--dir", lib.string(), "--new", "--model",
+                 (fs::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").string(), "--config", f.settings.string(),
+                 "--recipe", f.recipe.string()},
+                out) == 0);
+    const std::string id = json::parse(out).at("id");
+    const Project p = read_project(slurp(lib / id / "project.3mf"));
+    REQUIRE(p.models.size() == 1);
+    CHECK(p.models[0].name == "cube_ascii");
+    CHECK(p.models[0].mesh.triangle_count() == 12);
     REQUIRE(run({"library", "list", "--dir", lib.string()}, out) == 0);
     CHECK(json::parse(out).at("entries")[0].at("name") == "Cube");
     CHECK(run({"library", "show", "--dir", lib.string(), "--entry", "nope"}, out) == 2);
