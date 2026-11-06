@@ -327,6 +327,17 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
     const std::string where = text(profile, "name");
     profile["settings"] = known_settings(profile.contains("settings") ? profile.at("settings") : json::object(), where, warnings);
     const std::string kind = text(profile, "kind");
+    // A filament's material (profile_pack_format.md, entries, rule 4): its
+    // density and price per kg, when the profile does not give them.
+    if (kind == "filament" && j.contains("material") && j.at("material").is_object()) {
+        const json& m = j.at("material");
+        json& extrusion = profile["settings"]["extrusion"];
+        for (const auto& [from, to] : {std::pair<const char*, const char*>{"density", "density"}, {"cost_per_kg", "cost"}})
+            if (m.contains(from) && m.at(from).is_number() && m.at(from).get<double>() > 0.0 && !extrusion.contains(to))
+                extrusion[to] = m.at(from).get<double>();
+        if (extrusion.empty())
+            profile["settings"].erase("extrusion");
+    }
     if (kind == "resin" || kind == "resin_print") {
         profile["kind"] = kind == "resin" ? "filament" : "print";
         out.resin = true;

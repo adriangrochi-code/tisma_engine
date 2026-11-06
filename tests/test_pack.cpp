@@ -136,6 +136,21 @@ TEST_CASE("pack: entries and compatible printers (PF5)", "[pack]") {
     // An empty set is taken as null (rule 12, BH29): every printer.
     const auto with_empty = parse_pack_compatible(R"({"format": "tisma-pack-compatible", "version": 1, "sets": [[0], []]})");
     CHECK(pack_compatible(1, with_empty, 5));
+    // A filament's material gives its density and price per kg (entries,
+    // rule 4); the profile's own win. The Android app saw a cost of 0.
+    const PackEntry petg = parse_pack_entry(R"({"format": "tisma-pack-entry", "version": 2, "technology": "fff",
+        "profile": {"format": "tisma-profile", "version": 1, "kind": "filament", "name": "Acme PETG", "settings": {}},
+        "material": {"type": "PETG", "density": 1.27, "cost_per_kg": 30.0}, "compatible": null})",
+                                            warnings);
+    CHECK(petg.profile.settings.filament_density == 1.27);
+    CHECK(petg.profile.settings.filament_cost == 30.0);
+    const PackEntry own = parse_pack_entry(R"({"format": "tisma-pack-entry", "version": 2, "technology": "fff",
+        "profile": {"format": "tisma-profile", "version": 1, "kind": "filament", "name": "Acme PETG+",
+                    "settings": {"extrusion": {"cost": 45}}},
+        "material": {"density": 1.27, "cost_per_kg": 30.0}})",
+                                           warnings);
+    CHECK(own.profile.settings.filament_cost == 45.0);
+    CHECK(own.profile.settings.filament_density == 1.27);
 }
 
 // ---------------------------------------------------------------------------

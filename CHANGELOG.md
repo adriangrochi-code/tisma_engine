@@ -30,6 +30,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Arreglado
 
+- Los filamentos del paquete de perfiles traen su densidad y su precio por kilo (antes quedaban en 0 y el costo de la
+  impresión no se veía).
 - El soporte en árbol se lamina un tercio más rápido y escribe menos G-code (sus áreas, sin puntos más finos que un
   octavo de cordón).
 - Pintar pesa menos: la vista rehace solo los triángulos que tocó el trazo, y la brocha corta en la mitad de piezas.

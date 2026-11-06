@@ -11495,3 +11495,10 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   - los nombres de las placas.
 - Pruebas: `[bambu]` (el pedido con las opciones y con los valores por defecto) y `[bh41]` (`curr_bed_type`).
 - Sin probar con una impresora real.
+
+## 2026-11-06 — costo y densidad de los filamentos del paquete (reporte de la app de Android)
+
+- `profile --pack` con un filamento del paquete daba `extrusion.cost` 0 y `extrusion.density` 0. La entrada trae
+  `material` con `density` y `cost_per_kg` (`profile_pack_format.md`, entradas, regla 4), y el motor no lo leía.
+- Arreglo: `parse_pack_entry` los pasa a `extrusion.density` y `extrusion.cost` cuando el perfil no trae los suyos.
+- Prueba en `[pack]`.
