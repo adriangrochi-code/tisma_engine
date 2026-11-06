@@ -3,6 +3,10 @@
 
 #include "geom/distance.hpp"
 
+#include <cstdint>
+
+#include <algorithm>
+
 #include <cmath>
 #include <limits>
 #include <unordered_map>
@@ -114,6 +118,21 @@ Polygons distance_level(const BitGrid& grid, const std::vector<float>& squared, 
         const float d = squared[std::size_t(j) * std::size_t(w) + std::size_t(i)];
         return d > 0.0f ? std::sqrt(double(d)) - 0.5 : -0.5;
     };
+    // Which centres are in, each once and without a square root: for a level
+    // above -1/2, value >= pixels is d >= (pixels + 1/2)^2.
+    const std::size_t row = std::size_t(w) + 2;
+    std::vector<std::uint8_t> inside(row * (std::size_t(h) + 2), 0);
+    if (pixels <= -0.5) {
+        std::fill(inside.begin(), inside.end(), 1);
+    } else {
+        const double limit = (pixels + 0.5) * (pixels + 0.5);
+        for (int j = 0; j < h; ++j)
+            for (int i = 0; i < w; ++i) {
+                const float d = squared[std::size_t(j) * std::size_t(w) + std::size_t(i)];
+                inside[std::size_t(j + 1) * row + std::size_t(i + 1)] = d > 0.0f && double(d) >= limit;
+            }
+    }
+    const auto is_in = [&](int i, int j) { return inside[std::size_t(j + 1) * row + std::size_t(i + 1)] != 0; };
     const double p = double(grid.pixel());
     const auto x_of = [&](double i) { return double(grid.x0()) + (i + 0.5) * p; };
     const auto y_of = [&](double j) { return double(grid.y0()) + (j + 0.5) * p; };
@@ -123,23 +142,22 @@ Polygons distance_level(const BitGrid& grid, const std::vector<float>& squared, 
         return (std::int64_t(j + 1) * std::int64_t(w + 2) + std::int64_t(i + 1)) * 2 + (vertical ? 1 : 0);
     };
     struct Segment {
+        std::int64_t start = 0, to = 0;
         Clipper2Lib::Point64 from;
-        std::int64_t to = 0;
-        bool used = false;
     };
-    std::unordered_map<std::int64_t, Segment> by_start;
+    std::vector<Segment> segments;
     for (int j = -1; j < h; ++j)
         for (int i = -1; i < w; ++i) {
             // The cell's corners counter-clockwise (y up), and its edges after them.
             const int ci[4] = {i, i + 1, i + 1, i}, cj[4] = {j, j, j + 1, j + 1};
-            double v[4];
             bool in[4];
-            for (int k = 0; k < 4; ++k) {
-                v[k] = value(ci[k], cj[k]);
-                in[k] = v[k] >= pixels;
-            }
+            for (int k = 0; k < 4; ++k)
+                in[k] = is_in(ci[k], cj[k]);
             if (in[0] == in[1] && in[1] == in[2] && in[2] == in[3])
                 continue;
+            double v[4];
+            for (int k = 0; k < 4; ++k)
+                v[k] = value(ci[k], cj[k]);
             const std::int64_t ids[4] = {edge_id(i, j, false), edge_id(i + 1, j, true), edge_id(i, j + 1, false),
                                          edge_id(i, j, true)};
             Clipper2Lib::Point64 at[4];
@@ -158,26 +176,31 @@ Polygons distance_level(const BitGrid& grid, const std::vector<float>& squared, 
                 for (int s = 1; s < 4; ++s) {
                     const int e = (k + s) % 4;
                     if (!in[e] && in[(e + 1) % 4]) {
-                        by_start[ids[k]] = Segment{at[k], ids[e], false};
+                        segments.push_back({ids[k], ids[e], at[k]});
                         break;
                     }
                 }
             }
         }
-    // The segments joined end to start into closed rings.
+    // The segments joined end to start into closed rings (sorted by where
+    // they start, found by halving).
+    std::sort(segments.begin(), segments.end(), [](const Segment& a, const Segment& b) { return a.start < b.start; });
+    std::vector<bool> used(segments.size(), false);
+    const auto find = [&](std::int64_t start) -> std::ptrdiff_t {
+        const auto it = std::lower_bound(segments.begin(), segments.end(), start,
+                                         [](const Segment& s, std::int64_t v) { return s.start < v; });
+        return it != segments.end() && it->start == start ? it - segments.begin() : -1;
+    };
     Polygons out;
-    for (auto& [start, first] : by_start) {
-        if (first.used)
+    for (std::size_t first = 0; first < segments.size(); ++first) {
+        if (used[first])
             continue;
         Polygon ring;
-        std::int64_t at = start;
-        for (std::size_t guard = 0; guard <= by_start.size(); ++guard) {
-            const auto it = by_start.find(at);
-            if (it == by_start.end() || it->second.used)
-                break;
-            it->second.used = true;
-            ring.push_back(it->second.from);
-            at = it->second.to;
+        std::ptrdiff_t at = std::ptrdiff_t(first);
+        for (std::size_t guard = 0; guard <= segments.size() && at >= 0 && !used[std::size_t(at)]; ++guard) {
+            used[std::size_t(at)] = true;
+            ring.push_back(segments[std::size_t(at)].from);
+            at = find(segments[std::size_t(at)].to);
         }
         if (ring.size() > 2)
             out.push_back(std::move(ring));

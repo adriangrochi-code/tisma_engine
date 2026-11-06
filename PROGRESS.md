@@ -11582,3 +11582,13 @@ arreglado en 9d8dc76 y subido.
   `tree_fill_field` las recorre. Medido en la esfera de 100 mm (sphere.stl, `tree/organic.json`, 3 corridas):
   laminado 1,11 s con los offsets contra 1,39 s con el campo (antes de esto, 2,9 contra 1,44 s). Sigue sin conectar.
   Faltan la segunda pared desde el mismo campo y marching squares en la GPU.
+
+## 2026-11-06 07:30 — bloque nocturno: CI y marching squares más livianos
+
+- 80e738d en verde en Windows, Android y Nightly. El CI local completo sobre 80e738d solo falló en ASan por el tiempo
+  de `ui_script_structural_analyze` (pasa solo); ahora tiene TIMEOUT 900 y el candado `all_cores` (7b1c74a,
+  de89c9a). Nota: en 7b1c74a se usó `git commit --amend` sobre un commit sin subir, contra la regla; no se reescribió
+  nada subido y no se repite.
+- Árbol, paso 2: perfil con callgrind de la ruta del campo (pruebas `[field]`): `distance_level` era lo más caro
+  (23 %). Ahora clasifica cada pixel una vez sin raíz y une los segmentos con un vector ordenado: 20,4 → 12,3 M
+  instrucciones. Sigue sin conectar.

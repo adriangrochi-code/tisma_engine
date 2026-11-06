@@ -1168,6 +1168,9 @@ pared, la segunda pared de las ramas anchas y las líneas.
   - Conectada, haría el árbol más lento aun con la transformada gratis. Para que pague:
     - [x] una grilla por isla (por rama), no por capa (2026-11-06): en la esfera de 100 mm el laminado con el campo
       pasa a 1,39 s contra 1,11 s con los offsets (antes 2,9 contra 1,44 s), con la transformada en la CPU;
+    - [x] `distance_level` sin raíces para clasificar y sin tabla hash (2026-11-06): medido con callgrind en las
+      pruebas `[field]`, 20,4 → 12,3 M instrucciones; la ruta del campo, 51,8 → 43,2 M contra 19,5 M de los
+      offsets. Lo que queda: la transformada (15 %), las líneas (compartidas con los offsets) y la segunda pared;
     - marching squares y los umbrales también en la GPU;
     - la segunda pared desde el mismo campo.
   - Hasta entonces el laminado usa los offsets (paso 1).
