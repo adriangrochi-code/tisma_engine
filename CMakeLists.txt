@@ -303,6 +303,7 @@ add_library(tisma_core
   src/catalog/catalog.cpp
   src/catalog/pack.cpp
   src/catalog/pack_install.cpp
+  src/library/library.cpp
   src/catalog/xz.cpp
   src/device/gcode_host.cpp
   src/device/printer_limits.cpp
@@ -322,6 +323,7 @@ add_library(tisma_core
   src/cli/part_cli.cpp
   src/cli/calibration_cli.cpp
   src/cli/design_cli.cpp
+  src/cli/library_cli.cpp
 )
 if(TISMA_GPU)
   target_sources(tisma_core PRIVATE src/gpu/compute_vulkan.cpp)

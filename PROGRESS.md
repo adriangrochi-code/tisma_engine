@@ -11555,3 +11555,18 @@ y GM9 (todas las impresoras del paquete con sus G-code), que necesita el paquete
 probar en una impresora.
 
 **Sigue:** GM9 con el paquete real cuando lo tenga; después PLAN.md.
+
+## 2026-11-06 03:00 — Mi biblioteca (local_library.md): `tisma-engine library`
+
+**Hecho:** `library list|show|save|check|printed|delete|export|import` con el formato de la regla 9 y el contrato
+de la app de Android (incluye `--thumb` y `printed`, pedidos hoy). `check` dice si los ajustes son los mismos, si la
+receta es de otro motor, qué claves ya no existen y si cada análisis sigue valiendo (capa, paredes, relleno, patrón,
+material; ML3, ML4). La importación rechaza entera un archivo con rutas afuera o programas (ML6) sin escribir nada.
+Pruebas `[library]` (cuatro casos). Documentado en `docs/LIBRARY.md`.
+
+**Además:** `setting_kind` no tenía tipo para el grupo `bambu` (73a28fa) y el CI de Windows de f685ebd falló por eso;
+arreglado en 9d8dc76 y subido.
+
+**Falta:** el límite de espacio (regla 12, ML7) y la biblioteca en la interfaz de escritorio.
+
+**Sigue:** avisar a Android; después PLAN.md.

@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- Mi biblioteca (`tisma-engine library`): guardar piezas con su proyecto, recetas por impresora y análisis,
+  revisar si una receta o un análisis siguen valiendo, «La imprimí», exportar e importar `.tismalib`. Sin G-code.
 - G-code original de cada impresora del paquete (`machine.macros`, bloque `gcode`): dialectos PrusaSlicer, OrcaSlicer,
   Creality Print, Elegoo Slicer y Cura; la extrusión relativa o absoluta que espera ese G-code; si no se puede
   interpretar, se usa la versión simple con un aviso. Sin probar en una impresora.
