@@ -11605,3 +11605,20 @@ arreglado en 9d8dc76 y subido.
   el largo. Prueba: `fuzz_gcode_6112026_1728` (el fuzzer con esa semilla y solo esa corrida, 0,2 s; falla sin el
   arreglo). Dos pruebas armadas a mano no reprodujeron el caso.
 - **Pintura en triángulos enormes:** medido y cerrado (0,08 ms por trazo).
+
+## 2026-11-06 14:30 — árbol: relleno por campo de distancias conectado al laminado
+
+- El relleno del soporte en árbol ya sale de los campos de distancias en el laminado (`tree_fill_by_field`). Las
+  capas van de a 64; las transformadas de todas sus ramas se hacen en una sola llamada, en la GPU si hay una y si no
+  en la CPU, con los mismos números. El G-code no depende del equipo: lo prueba
+  `tree support sliced with the GPU gives the CPU's G-code`, con llvmpipe.
+- Decisión: la segunda pared se sigue haciendo con offsets, y solo en las capas donde el campo encuentra una rama de
+  `tree_double_wall_diameter`. Armada con bits, desde el mismo campo, salía hasta un 10 % más corta donde se juntan
+  dos ramas, y pedía una segunda transformada.
+- Los contornos de marching squares se simplifican a 1/12 de cordón. Sin simplificar, el G-code de la esfera tenía
+  un 34 % más de líneas; a 1/8, la pared de una rama fina quedaba un 10 % más corta.
+- Medido en la esfera de 100 mm (laminado entero, el mejor de 5, solo CPU): 1,29 s con los offsets (cffa3c7) contra
+  1,31 s con el campo; G-code de 488 685 a 497 276 líneas. Con una GPU real se ahorra la transformada: **sin medir**,
+  acá solo hay llvmpipe, que es más lento que la CPU.
+- Pruebas: las del árbol, la de GPU contra CPU y la suite sin las de la interfaz.
+- Sigue: marching squares en la GPU, y después lo siguiente de `PLAN.md`.

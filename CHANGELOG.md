@@ -10,6 +10,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Cambiado
+
+- El relleno del soporte en árbol sale de campos de distancias calculados para muchas capas a la vez, en la GPU si
+  hay una. Sin GPU tarda lo mismo que antes; el G-code es el mismo con GPU o sin ella.
+
 ### Corregido
 
 - Con la retracción del firmware (G10/G11) y varios extrusores, una herramienta que se iba con la retracción hecha
