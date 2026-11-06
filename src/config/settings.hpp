@@ -152,6 +152,27 @@ struct CalibrationDate {
     friend bool operator==(const CalibrationDate&, const CalibrationDate&) = default;
 };
 
+// The machine's own G-code with macros, from the profile pack
+// (profile_pack_format.md, «G-code de la máquina con macros»; gcode_macros.md,
+// rules 10 bis and 10 ter): used as written in place of the simple version.
+struct MachineMacros {
+    // prusaslicer, orcaslicer, crealityprint, elegooslicer or cura; empty: none.
+    std::string dialect;
+    // start, end, before_layer_change, layer_change, toolchange,
+    // between_objects, color_change, pause, custom, timelapse,
+    // extrusion_role_change: the G-code by name.
+    std::map<std::string, std::string> templates;
+    // cura: one per extruder, empty where the pack has none.
+    std::vector<std::string> extruder_start, extruder_end;
+    // Whether that G-code expects relative extrusion; unset: not known.
+    std::optional<bool> relative_extrusion;
+    // The orcaslicer family: the machine's values by the dialect's names, as
+    // machine.variables (one value, or one per extruder, as text).
+    std::map<std::string, std::vector<std::string>> values;
+    bool empty() const { return dialect.empty(); }
+    friend bool operator==(const MachineMacros&, const MachineMacros&) = default;
+};
+
 struct Settings {
     double layer_height = 0.2;
     double first_layer_height = 0.2;
@@ -333,6 +354,7 @@ struct Settings {
     bool relative_extrusion = false;
     GcodeFlavor flavor = GcodeFlavor::RepRap;
     std::string start_gcode, end_gcode;
+    MachineMacros machine_macros; // machine.macros
     // Not a setting: the input file's name without its folder and extension,
     // for the templates' input_filename_base (gcode_templates.md, rule 7).
     std::string input_name;

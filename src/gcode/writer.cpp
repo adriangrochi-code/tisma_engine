@@ -2470,7 +2470,64 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     c.variables["layer_z"] = c.variables["max_layer_z"] = TemplateValue::of(std::round(first_z * 1000.0) / 1000.0);
     // The names of the printers' own G-code (gcode_macros.md, rules 7 to 10 bis).
     add_macro_variables(c, s);
+    // The machine's G-code from the pack (gcode_macros.md, rule 10 bis): cura
+    // only replaces {name}; the orcaslicer family's machine values fill the
+    // names the engine cannot.
+    if (s.machine_macros.dialect == "cura")
+        c.braces_only = true;
+    for (const auto& [name, values] : s.machine_macros.values) {
+        if (c.variables.contains(name) && !c.unfilled.contains(name))
+            continue;
+        std::vector<TemplateValue> items;
+        for (const std::string& v : values)
+            items.push_back(TemplateValue::parse(v));
+        c.variables[name] = items.size() == 1 ? items.front() : TemplateValue::of(std::move(items));
+        c.unfilled.erase(name);
+    }
     return c;
+}
+
+// The settings with the machine's own G-code from the pack in place of the
+// simple version (gcode_macros.md, rules 10 bis, 10 ter and 11): each
+// template where the engine runs one, and the extrusion it expects.
+Settings with_machine_macros(const Settings& given) {
+    Settings s = given;
+    const MachineMacros& m = given.machine_macros;
+    const std::pair<const char*, std::string*> places[] = {
+        {"start", &s.start_gcode},
+        {"end", &s.end_gcode},
+        {"before_layer_change", &s.gcode_before_layer},
+        {"layer_change", &s.gcode_after_layer},
+        {"toolchange", &s.gcode_toolchange},
+        {"between_objects", &s.gcode_between_objects},
+        {"color_change", &s.gcode_color_change},
+        {"pause", &s.gcode_pause},
+        {"custom", &s.gcode_custom_template},
+    };
+    for (const auto& [name, place] : places)
+        if (const auto it = m.templates.find(name); it != m.templates.end())
+            *place = it->second;
+    // cura: the first extruder's own start and end, before the filament's.
+    const auto join = [](const std::string& a, const std::string& b) {
+        return a.empty() ? b : b.empty() ? a : a + "\n" + b;
+    };
+    if (!m.extruder_start.empty())
+        s.filament_start_gcode = join(m.extruder_start.front(), s.filament_start_gcode);
+    if (!m.extruder_end.empty())
+        s.filament_end_gcode = join(m.extruder_end.front(), s.filament_end_gcode);
+    if (m.relative_extrusion)
+        s.relative_extrusion = *m.relative_extrusion;
+    // Rendered once: the templates are in place now.
+    s.machine_macros.templates.clear();
+    s.machine_macros.extruder_start.clear();
+    s.machine_macros.extruder_end.clear();
+    return s;
+}
+
+bool uses_machine_macros(const Settings& s) {
+    return !s.machine_macros.empty() &&
+           (!s.machine_macros.templates.empty() || !s.machine_macros.extruder_start.empty() ||
+            !s.machine_macros.extruder_end.empty());
 }
 
 std::string toolchange_template_error(const Settings& s) {
@@ -2554,6 +2611,30 @@ std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
 }
 
 void write_gcode(std::ostream& target, const SlicedModel& model, const Settings& given, std::vector<Warning>* warnings) {
+    // The machine's own G-code from the pack: written whole first, so that a
+    // template the engine cannot read leaves no half G-code; then the simple
+    // version, with a warning in the log (gcode_macros.md, rule 10 bis).
+    if (uses_machine_macros(given)) {
+        std::ostringstream whole;
+        std::vector<Warning> notes;
+        try {
+            write_gcode(whole, model, with_machine_macros(given), warnings ? &notes : nullptr);
+        } catch (const TemplateError& e) {
+            Settings plain = given;
+            plain.machine_macros = {};
+            if (warnings)
+                warnings->push_back({"gcode_macro", -1, 0.0,
+                                     "The printer's own G-code (" + given.machine_macros.dialect +
+                                         ") could not be read: the simple start and end G-code are used. " + e.what(),
+                                     0.0, "warning"});
+            write_gcode(target, model, plain, warnings);
+            return;
+        }
+        if (warnings)
+            warnings->insert(warnings->end(), notes.begin(), notes.end());
+        target << whole.view();
+        return;
+    }
     // The filament's own retraction and travel values in place of the
     // printer's (retraction_travel.md, rule 10).
     std::optional<Settings> resolved;

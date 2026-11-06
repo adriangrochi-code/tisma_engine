@@ -57,7 +57,12 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
         set("print_bed_min", pair(lo[0], lo[1]));
         set("print_bed_max", pair(hi[0], hi[1]));
         set("print_bed_size", pair(hi[0] - lo[0], hi[1] - lo[1]));
+        // cura's names for the bed (gcode_variables.md, «cura»).
+        set("machine_width", number(hi[0] - lo[0]));
+        set("machine_depth", number(hi[1] - lo[1]));
     }
+    set("machine_height", number(s.max_height));
+    set("infill_sparse_density", number(s.infill_density));
     const std::pair<const char*, double> limits[] = {
         {"machine_max_feedrate_x", s.max_feed_x},      {"machine_max_feedrate_y", s.max_feed_y},
         {"machine_max_feedrate_z", s.max_feed_z},      {"machine_max_feedrate_e", s.max_feed_e},

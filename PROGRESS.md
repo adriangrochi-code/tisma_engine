@@ -11522,3 +11522,33 @@ su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1
   - **Decisión:** no se conecta. Con GPU real seguiría más lento. Lo que falta para que pague está en `PLAN.md`
     (grilla por rama; marching squares y umbrales en la GPU).
   - Con lavapipe (GPU por software) la ruta tardó 3,4 s; no sirve como medida.
+
+## 2026-11-06 02:15 — G-code original de cada máquina (gcode_macros.md, reglas 10 bis, 10 ter, 11)
+
+**Hecho:**
+- `machine.macros` (`MachineMacros`): el bloque `gcode` del paquete (`dialect`, `templates`, `relative_extrusion`,
+  `values`); el perfil de una variante lo arma con la variante encima de `common.gcode`, clave por clave, y dentro de
+  `templates` y `values` nombre por nombre. Se guarda y se lee igual; `origin`, `source`, `keys`, `from` y
+  `expressions` no se guardan.
+- El escritor usa esos textos en el lugar de los simples (inicio, fin, antes y después del cambio de capa, cambio de
+  herramienta, entre objetos, cambio de color, pausa, propio); con `templates`, la extrusión es la que dice el bloque
+  (también para el verificador, `relative_e`). El G-code se escribe entero en memoria: si una plantilla no se puede
+  interpretar, se lamina con la versión simple y un aviso `gcode_macro` (regla 10 bis), nunca a medias.
+- `cura`: solo `{nombre}`, el primer valor de una lista; lo desconocido queda escrito y va al registro.
+  `extruder_start`/`extruder_end` del primer extrusor van antes del G-code del filamento.
+- Familia `orcaslicer`: `values` llena las variables que el motor no sabe llenar.
+- Nombres de cura para la cama: `machine_width`, `machine_depth`, `machine_height`, e `infill_sparse_density`.
+- Pruebas: GM10 (cura con `M82`, perfil relativo → la misma E que en absoluto), GM11 (orcaslicer con
+  `nozzle_temperature_initial_layer[0]` = 220 y `values`), el respaldo con aviso, la mezcla del paquete y la ida y
+  vuelta de `machine.macros`.
+
+**Mantenimiento 00:40 (cerrado acá):** CI local completo sobre 5858e70: todo pasa salvo
+`ui_script_structural_analyze`, que se pasó del tiempo con ASan bajo carga (compilaba al mismo tiempo); solo pasa en
+156 s.
+
+**Falta:** el `gcode` de los filamentos (`filament_start`/`filament_end` con su dialecto), `timelapse` y
+`extrusion_role_change` (sin lugar en el escritor todavía), `extruder_start`/`extruder_end` de los demás extrusores,
+y GM9 (todas las impresoras del paquete con sus G-code), que necesita el paquete real con el bloque `gcode`. Sin
+probar en una impresora.
+
+**Sigue:** GM9 con el paquete real cuando lo tenga; después PLAN.md.

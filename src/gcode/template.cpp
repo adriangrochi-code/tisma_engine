@@ -583,6 +583,35 @@ std::string render_template(std::string_view text, TemplateContext& context, std
             as = TemplateValue::of(std::vector<TemplateValue>{*v});
         return &(converted[std::string(name)] = std::move(as));
     };
+    // The cura dialect (gcode_macros.md, rule 10 bis): {name} is replaced by
+    // its value (a list's first: one value per extruder there), and nothing
+    // else is read; a name the engine does not know stays as written.
+    if (context.braces_only) {
+        std::string out;
+        std::size_t i = 0;
+        while (i < text.size()) {
+            if (text[i] == '{' && i + 1 < text.size() && ident_start(text[i + 1])) {
+                std::size_t j = i + 1;
+                while (j < text.size() && ident_char(text[j]))
+                    ++j;
+                if (j < text.size() && text[j] == '}') {
+                    const std::string_view name = text.substr(i + 1, j - i - 1);
+                    if (const TemplateValue* v = lookup(name)) {
+                        out += template_text(v->kind == TemplateValue::Kind::List
+                                                 ? (v->list.empty() ? TemplateValue{} : v->list.front())
+                                                 : *v);
+                    } else {
+                        context.unfilled_used.emplace(name);
+                        out.append(text.substr(i, j + 1 - i));
+                    }
+                    i = j + 1;
+                    continue;
+                }
+            }
+            out += text[i++];
+        }
+        return out;
+    }
     // The {if} blocks open: whether the text around them is kept, whether a
     // branch of theirs was taken, and whether the current one is kept.
     struct Branch {

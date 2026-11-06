@@ -52,6 +52,8 @@ struct TemplateContext {
     // [word]s in other programs' G-code that are not variables (a comment's
     // «[Checks]»): kept as written.
     std::set<std::string, std::less<>> verbatim;
+    // The cura dialect: only {name} is replaced (gcode_macros.md, rule 10 bis).
+    bool braces_only = false;
 };
 
 // Renders a template (gcode_templates.md, rules 1 to 8):

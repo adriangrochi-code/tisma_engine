@@ -57,6 +57,7 @@ const std::set<std::string>& known_keys() {
         for (const auto& [key, value] : describe(Settings{}))
             k.insert(key);
         k.insert("machine.variables");
+        k.insert("machine.macros");
         return k;
     }();
     return keys;
@@ -298,6 +299,35 @@ Profile pack_printer_profile(std::string_view model_json, const std::string& var
             for (const auto& [key, value] : keys.items())
                 settings[group][key] = value; // the variant's over common, key by key
         }
+    // The machine's G-code with macros (profile_pack_format.md, «G-code de la
+    // máquina con macros»): the variant's over common.gcode, key by key, and
+    // inside templates and values name by name.
+    {
+        json block = json::object();
+        const auto merge = [&](const json& from) {
+            if (!from.is_object())
+                return;
+            for (const auto& [key, value] : from.items()) {
+                if ((key == "templates" || key == "values") && value.is_object() && block.contains(key) &&
+                    block.at(key).is_object())
+                    for (const auto& [name, item] : value.items())
+                        block[key][name] = item;
+                else
+                    block[key] = value;
+            }
+        };
+        if (j.contains("common") && j.at("common").is_object() && j.at("common").contains("gcode"))
+            merge(j.at("common").at("gcode"));
+        if (chosen->contains("gcode"))
+            merge(chosen->at("gcode"));
+        if (block.contains("dialect") && block.at("dialect").is_string()) {
+            json macros = json::object();
+            for (const char* key : {"dialect", "templates", "relative_extrusion", "values"})
+                if (block.contains(key))
+                    macros[key] = block.at(key);
+            settings["machine"]["macros"] = std::move(macros);
+        }
+    }
     // The model's technology is the printer's, unless its settings say it:
     // an "sla" model is a resin printer (machine.technology "msla").
     const std::string technology = text(j, "technology");

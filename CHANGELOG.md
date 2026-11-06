@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- G-code original de cada impresora del paquete (`machine.macros`, bloque `gcode`): dialectos PrusaSlicer, OrcaSlicer,
+  Creality Print, Elegoo Slicer y Cura; la extrusión relativa o absoluta que espera ese G-code; si no se puede
+  interpretar, se usa la versión simple con un aviso. Sin probar en una impresora.
 - Opciones al mandar a una Bambu Lab (`bambu.*`): nivelar la cama, calibrar el flujo y las vibraciones, timelapse y la
   placa. Van en el pedido de impresión, y la placa también al G-code de inicio (`curr_bed_type`).
 - Cámara de las impresoras Bambu Lab A1 y P1 en la página Dispositivo: casilla «Cámara». Sin probar con una cámara

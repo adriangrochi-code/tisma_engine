@@ -2681,3 +2681,83 @@ TEST_CASE("filament per mm from the bead's rounded section (gcode_motion.md, rul
         }
     CHECK(walls >= 8);
 }
+
+namespace {
+// The E values of the G1 moves, in order.
+std::vector<double> e_values(const std::string& gcode) {
+    std::vector<double> out;
+    for (const std::string& line : lines_of(gcode)) {
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        const std::size_t at = line.find(" E");
+        if (at != std::string::npos)
+            out.push_back(std::atof(line.c_str() + at + 2));
+    }
+    return out;
+}
+} // namespace
+
+TEST_CASE("a cura printer's own G-code: only {name}, and the extrusion its start expects (GM10, rule 10 ter)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"210"};
+    s.relative_extrusion = true; // the profile says relative, the machine's G-code absolute
+    s.machine_macros.dialect = "cura";
+    s.machine_macros.templates["start"] =
+        "M82 ;absolute\nM104 S{material_print_temperature}\nG1 Z{no_such_cura_name}\n{if x}[kept]";
+    s.machine_macros.relative_extrusion = false;
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s, &warnings);
+    const std::string g = out.str();
+    const std::vector<std::string> lines = lines_of(g);
+    CHECK(std::find(lines.begin(), lines.end(), "M104 S210") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "G1 Z{no_such_cura_name}") != lines.end()); // left as written
+    CHECK(std::find(lines.begin(), lines.end(), "{if x}[kept]") != lines.end());           // no conditions in cura
+    CHECK(g.find("M83") == std::string::npos);
+    // Absolute: the same E as the profile set to absolute.
+    Settings absolute = test_printer();
+    absolute.relative_extrusion = false;
+    const std::vector<double> e = e_values(g);
+    REQUIRE(e.size() > 10);
+    CHECK(e == e_values(cube_gcode(absolute)));
+    // Not the simple version: only the log's note of the name left as written.
+    for (const Warning& w : warnings)
+        if (w.kind == "gcode_macro") {
+            CHECK(w.severity == "information");
+            CHECK_THAT(w.message, Catch::Matchers::ContainsSubstring("no_such_cura_name"));
+        }
+}
+
+TEST_CASE("an orcaslicer printer's own G-code with its names and machine values (GM11, rule 10 bis)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"220"};
+    s.start_gcode = "; the simple start";
+    s.machine_macros.dialect = "orcaslicer";
+    s.machine_macros.templates["start"] = "M109 S{nozzle_temperature_initial_layer[0]}\n; model {printer_model}";
+    s.machine_macros.values["printer_model"] = {"Bambu Lab A1"};
+    const std::vector<std::string> lines = lines_of(cube_gcode(s));
+    CHECK(std::find(lines.begin(), lines.end(), "M109 S220") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "; model Bambu Lab A1") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "; the simple start") == lines.end());
+}
+
+TEST_CASE("a machine G-code the engine cannot read: the simple version, with a warning (rule 10 bis)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.start_gcode = "; the simple start";
+    s.machine_macros.dialect = "prusaslicer";
+    s.machine_macros.templates["start"] = "{if layer_height > 0}no end";
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s, &warnings);
+    const std::vector<std::string> lines = lines_of(out.str());
+    CHECK(std::find(lines.begin(), lines.end(), "; the simple start") != lines.end());
+    CHECK(std::count(lines.begin(), lines.end(), "no end") == 0);
+    CHECK(std::any_of(warnings.begin(), warnings.end(), [](const Warning& w) {
+        return w.kind == "gcode_macro" && w.message.find("prusaslicer") != std::string::npos;
+    }));
+}

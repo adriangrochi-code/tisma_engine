@@ -496,3 +496,31 @@ TEST_CASE("pack: community data by printer, with its kind and source (rules 22 t
     CHECK(pack_community(pack, "printers", "..", "x").empty());
     CHECK(pack_community(pack, "secrets", "Acme", "Acme One").empty());
 }
+
+TEST_CASE("pack: the machine's G-code with macros, the variant's over common.gcode (profile_pack_format.md)",
+          "[pack][macros]") {
+    const char* model = R"({
+ "format": "tisma-pack-model", "version": 2, "technology": "fff", "vendor": "Acme",
+ "model": {"id": "A1", "name": "Acme One"}, "default_variant": "0.4",
+ "common": {"settings": {"machine": {"start_gcode": "G28"}},
+            "gcode": {"dialect": "orcaslicer", "relative_extrusion": true,
+                      "templates": {"start": "G28 ; common", "end": "M84"},
+                      "values": {"printer_model": "Acme One"},
+                      "origin": "Invented", "source": "x", "keys": ["a"], "from": "y"}},
+ "variants": [{"id": "0.4", "name": "Acme One 0.4", "settings": {},
+               "gcode": {"templates": {"start": "G28 ; 0.4"}, "relative_extrusion": null}}]})";
+    std::vector<std::string> warnings;
+    const Profile p = pack_printer_profile(model, "", warnings);
+    CHECK(warnings.empty());
+    const MachineMacros& m = p.settings.machine_macros;
+    CHECK(m.dialect == "orcaslicer");
+    CHECK(m.templates.at("start") == "G28 ; 0.4"); // the variant's
+    CHECK(m.templates.at("end") == "M84");         // common's
+    CHECK_FALSE(m.relative_extrusion);             // the variant does not know
+    CHECK(m.values.at("printer_model") == std::vector<std::string>{"Acme One"});
+    CHECK(p.settings.start_gcode == "G28"); // the simple version stays
+    // Saved and read back the same.
+    CHECK(parse_settings(settings_json(p.settings)).machine_macros == m);
+    // A bad dialect is not a profile.
+    CHECK_THROWS_AS(parse_settings(R"({"machine": {"macros": {"dialect": "slic3r"}}})"), SettingsError);
+}
