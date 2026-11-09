@@ -79,6 +79,17 @@ class OrbitCamera {
         distance = (distance / factor).coerceIn(5.0, 5000.0)
     }
 
+    /**
+     * mobile_app.md, rule 6: a double tap zooms in at the point touched (at [xPx], [yPx] on a view [widthPx] by
+     * [heightPx]). Zooming scales what is around the centre by [factor]; dragging the scene first by
+     * (point − centre)·(1/factor − 1) keeps the touched point under the finger.
+     */
+    fun zoomAt(xPx: Float, yPx: Float, widthPx: Int, heightPx: Int, factor: Float) {
+        val k = 1f / factor - 1f
+        pan((xPx - widthPx / 2f) * k, (yPx - heightPx / 2f) * k, heightPx)
+        zoom(factor)
+    }
+
     /** Moves the target in the view's plane by pixels on a view [heightPx] high. */
     fun pan(dxPx: Float, dyPx: Float, heightPx: Int) {
         val perPx = 2 * distance * tan(Math.toRadians(22.5)) / max(1, heightPx)
@@ -578,7 +589,7 @@ fun Plate3D(
             modifier = Modifier.matchParentSize()
                 .pointerInput(Unit) {
                     detectTapGestures(
-                        onDoubleTap = { camera.zoom(1.6f); holder[0]?.requestRender() },
+                        onDoubleTap = { at -> camera.zoomAt(at.x, at.y, size.width, size.height, 1.6f); holder[0]?.requestRender() },
                         onTap = { at ->
                             val pick = pickNow.value ?: return@detectTapGestures
                             val x = 2f * at.x / size.width - 1f

@@ -11912,3 +11912,12 @@ millón de triángulos. Un teléfono de gama media no llegaba y la app mandaba a
 Unos 85 MB fijos y 90 bytes por triángulo. Nuevo cálculo: 128 MB + 300 bytes por triángulo (más de tres veces lo
 medido, por más hilos en el teléfono y piezas con más recorridos): un millón pide unos 414 MB. Prueba: `MemoryTest`.
 No medido en un teléfono (gama baja: queda para las pruebas con teléfonos reales).
+
+## 2026-11-09 — Android: doble toque acerca en ese punto (mobile_app.md, regla 6)
+
+El doble toque en la vista 3D del plato acercaba al centro; la regla dice «acerca en ese punto». `OrbitCamera.zoomAt`
+mueve la vista antes de acercar para que el punto tocado quede bajo el dedo. Prueba: `OrbitZoomTest` (un punto a la
+profundidad del centro queda en el mismo píxel, a menos de 2 px). Las pruebas de interfaz en el emulador no se pueden
+correr acá (no hay KVM): las hace la sesión de especificación.
+- Pendiente de la ficha, no del teléfono: la regla 10 pide abrir modelos «desde un enlace de un sitio de modelos», pero
+  ninguna ficha define el enlace (esquema o dirección); se preguntó.
