@@ -1229,6 +1229,7 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
   (OR24 a OR28), y `--inspect-paint` en el laminado de un proyecto.
 - [ ] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
   puentes; la balsa solo necesita la prueba OR15.
+  Hecho (2026-11-09): regla 15 (prueba OR15) y regla 17 (`cooling.first_layer_fan`, OR17).
 - O7 y O8 van con sus fichas de interfaz.
 
 ### Espacio de diseño CAD con SolidCraft (pedido del dueño, 2026-10-29, por el equipo de fichas)

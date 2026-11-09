@@ -753,6 +753,7 @@ struct Settings {
     // The fan up step by step until this layer (counted from 1) after the
     // ones without fan (cooling_more.md, rule 1); 0: at once.
     int full_fan_layer = 0;
+    double first_layer_fan = -1.0; // %: the first layer's exact fan (orca_2_5.md, rule 17); -1: off
     // The fan of the walls by how much of their bead rests on the layer below
     // (cooling_more.md, rules 3 and 4): overhang_fans[k] with 0, 25, 50 and
     // 75 % held, in a straight line between, down to 0 with all of it; never

@@ -1932,6 +1932,7 @@
     X(FanBridges, "Ventilador en puentes", "Fan on bridges") \
     X(FanOffLayers, "Capas sin ventilador", "Layers without fan") \
     X(FullFanLayer, "Ventilador completo desde la capa", "Full fan from layer") \
+    X(FirstLayerFan, "Ventilador de la primera capa", "First layer fan") \
     X(CoolingEnabled, "Enfriamiento automático", "Automatic cooling") \
     X(MinSpeed, "Velocidad mínima", "Minimum speed") \
     X(PressureAdvance, "Avance de presión", "Pressure advance") \

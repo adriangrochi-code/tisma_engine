@@ -42,6 +42,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- `cooling.first_layer_fan`: un ventilador exacto para la primera capa, desde el que sube el resto.
+
 - Línea de comandos: `--strict`, apoyar una cara en la cama (`--ground-largest-face` y otras), `--inspect-mesh`,
   `--export-statistics`, `--export-settings`, `--align-to-y-axis` e `--inspect-paint` (en un proyecto).
 

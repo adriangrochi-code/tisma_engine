@@ -11767,3 +11767,12 @@ arreglado en 9d8dc76 y subido.
 - Módulo nuevo `src/mesh/inspect.*` con sus pruebas (OR25, OR26) y las de la línea de comandos (OR24 a OR28).
 - `--inspect-paint` en `slice <proyecto>`: el área pintada en mm² por canal (soporte, costura, piel difusa, color) y
   por marca (forzar, bloquear, extrusor).
+
+## 2026-11-09 — orca_2_5.md O3, reglas 15 y 17
+
+- Regla 17 (OR17): `cooling.first_layer_fan` (−1 apagado, o 0 a 100 %): el ventilador exacto de la primera capa,
+  también en sus puentes, solo con `fan_off_layers` en 0; con `full_fan_layer` la subida arranca desde ese valor
+  (20 % en la capa 1, 46,7 % y 73,3 % en la 2 y la 3, el valor normal en la 4). En la ficha de enfriamiento, con su
+  ayuda.
+- Regla 15 (OR15): la balsa ya lo hacía; prueba con expansión 1,5 y 2 más en la primera capa (3,5 mm).
+- Sigue: reglas 14 (orejas de borde), 16 (soporte chico más lento) y 18 (piel difusa sin puentes).

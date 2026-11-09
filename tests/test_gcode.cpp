@@ -1503,6 +1503,15 @@ TEST_CASE("raft: support under the part, which goes up by it and the gap (skirt_
     // interface 1.5; half a bead in from each.
     CHECK_THAT(layers["0.200"].reach, Catch::Matchers::WithinAbs(4.5 - 0.2, 0.25));
     CHECK_THAT(layers["0.800"].reach, Catch::Matchers::WithinAbs(1.5 - 0.2, 0.25));
+    // OR15 (orca_2_5.md, rule 15): expansion 1.5 and 2 more on the first layer: 3.5 mm.
+    {
+        Settings or15 = s;
+        or15.raft_expansion = 1.5;
+        or15.raft_first_layer_expansion = 2.0;
+        std::map<std::string, RaftLayer> l15 = raft_layers(gcode(or15));
+        CHECK_THAT(l15["0.200"].reach, Catch::Matchers::WithinAbs(3.5 - 0.2, 0.25));
+        CHECK_THAT(l15["0.800"].reach, Catch::Matchers::WithinAbs(1.5 - 0.2, 0.25));
+    }
     // R6: the first layer's lines by its density.
     Settings sparse = s;
     sparse.raft_first_layer_density = 50.0;
@@ -2241,6 +2250,29 @@ TEST_CASE("cooling: the fan up step by step to cooling.full_fan_layer (cooling_m
     s.full_fan_layer = 0; // without it: the whole value from layer 4
     f = fans(s);
     CHECK(f[3] == "M106 S102");
+    // The first layer's own fan (orca_2_5.md, rule 17, OR17): 20 % on layer 1,
+    // then up to the normal value on layer 4; only with no layers off.
+    s.fan_min = s.fan_max = 100.0;
+    s.fan_off_layers = 0;
+    s.full_fan_layer = 4;
+    s.first_layer_fan = 20.0;
+    f = fans(s);
+    CHECK(f[0] == "M106 S51");  // 20 %
+    CHECK(f[1] == "M106 S119"); // 20 + 80 / 3 = 46.7 %
+    CHECK(f[2] == "M106 S187"); // 73.3 %
+    CHECK(f[3] == "M106 S255");
+    s.first_layer_fan = 0.0; // exactly off on layer 1, and from 0 up
+    f = fans(s);
+    CHECK(f[0] == "M107");
+    CHECK(f[1] == "M106 S85");
+    s.fan_off_layers = 1; // with layers off, the setting does nothing
+    s.first_layer_fan = 20.0;
+    f = fans(s);
+    CHECK(f[0] == "M107");
+    s.fan_off_layers = 3;
+    s.first_layer_fan = -1.0;
+    s.full_fan_layer = 0;
+    s.fan_min = s.fan_max = 40.0;
     // Cooling off: no fan by the layer's time and no slowing down.
     s.cooling_enabled = false;
     s.fan_always = false;

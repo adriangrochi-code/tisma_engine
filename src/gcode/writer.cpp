@@ -4610,10 +4610,20 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                                                  Slowdown{}),
                                                       s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
                                                       s.fan_always);
+        // The first layer's own fan (orca_2_5.md, rule 17): exact, over the
+        // rest, only with no layers off; the ramp to full_fan_layer then
+        // starts from it.
+        const bool first_fan = s.first_layer_fan >= 0.0 && s.fan_off_layers == 0 && !a.fan;
         if (const double n = double(local(l) + 1), off = double(std::max(s.fan_off_layers, 0)), full = double(s.full_fan_layer);
-            !a.fan && full > off && n > off && n < full)
+            first_fan && n == 1.0) {
+            fan = s.first_layer_fan;
+        } else if (first_fan && full > 1.0 && n < full) {
+            fan = s.first_layer_fan + (fan - s.first_layer_fan) * (n - 1.0) / (full - 1.0);
+        } else if (!a.fan && full > off && n > off && n < full) {
             fan *= (n - off) / (full - off);
-        g.settle_fan(fan, a.fan || fan_off ? fan : s.fan_bridges, !a.fan && !fan_off);
+        }
+        const bool exact = first_fan && local(l) == 0;
+        g.settle_fan(fan, a.fan || fan_off || exact ? fan : s.fan_bridges, !a.fan && !fan_off && !exact);
         const double seconds = g.end_layer();
         if (l == 0)
             first_layer = {seconds, g.last_silent_layer()};

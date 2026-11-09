@@ -2505,7 +2505,7 @@ Settings parse_checked(std::string_view text) {
                });
     read_group(root, "cooling",
                {"min_layer_time", "min_speed", "fan_min", "fan_max", "fan_below_time", "fan_always", "fan_bridges",
-                "fan_off_layers", "keep_outer_speed", "enabled", "full_fan_layer", "dynamic_overhang_fan",
+                "fan_off_layers", "keep_outer_speed", "enabled", "full_fan_layer", "first_layer_fan", "dynamic_overhang_fan",
                 "overhang_fan_0", "overhang_fan_1", "overhang_fan_2", "overhang_fan_3", "slowdown_logic", "transition_distance"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    if (n == "slowdown_logic") {
@@ -2521,6 +2521,13 @@ Settings parse_checked(std::string_view text) {
                         : n == "enabled"              ? s.cooling_enabled
                         : n == "dynamic_overhang_fan" ? s.dynamic_overhang_fan
                                                       : s.keep_outer_speed) = g.at(n).get<bool>();
+                       return;
+                   }
+                   if (n == "first_layer_fan") { // -1: off, else a percentage
+                       const double d = number(g, n, k);
+                       if (d != -1.0 && !(d >= 0.0 && d <= 100.0))
+                           fail(k, "must be -1 (off) or a percentage from 0 to 100");
+                       s.first_layer_fan = d;
                        return;
                    }
                    if (n == "fan_off_layers" || n == "full_fan_layer") {
@@ -3594,6 +3601,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.fan_bridges", num(s.fan_bridges)},
         {"cooling.fan_off_layers", std::to_string(s.fan_off_layers)},
         {"cooling.full_fan_layer", std::to_string(s.full_fan_layer)},
+        {"cooling.first_layer_fan", num(s.first_layer_fan)},
         {"cooling.dynamic_overhang_fan", s.dynamic_overhang_fan ? "true" : "false"},
         {"cooling.overhang_fan_0", num(s.overhang_fans[0])},
         {"cooling.overhang_fan_1", num(s.overhang_fans[1])},
@@ -4115,6 +4123,7 @@ std::string settings_json(const Settings& s) {
           {"fan_bridges", s.fan_bridges},
           {"fan_off_layers", s.fan_off_layers},
           {"full_fan_layer", s.full_fan_layer},
+          {"first_layer_fan", s.first_layer_fan},
           {"dynamic_overhang_fan", s.dynamic_overhang_fan},
           {"overhang_fan_0", s.overhang_fans[0]},
           {"overhang_fan_1", s.overhang_fans[1]},
