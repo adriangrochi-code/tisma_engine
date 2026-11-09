@@ -2417,6 +2417,28 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
         c.variables["print_" + name] = TemplateValue::parse(value);
     // The print's own (gcode_templates.md, rule 7).
     c.variables["total_layer_count"] = TemplateValue::of(static_cast<long long>(model.layers.size()));
+    // Bambu Lab's (gcode_macros.md, rule 10 quater): the highest Z printed and
+    // the first layer's centre (the wipe tower is not in the part's regions);
+    // with nothing sliced, the bed's centre.
+    if (!model.layers.empty())
+        c.variables["max_print_z"] = TemplateValue::of(std::round(model.layers.back().top * 1000.0) / 1000.0);
+    {
+        std::optional<std::array<double, 2>> centre;
+        if (!model.regions.empty() && !model.regions.front().empty()) {
+            const Clipper2Lib::Rect64 b = Clipper2Lib::GetBounds(model.regions.front());
+            centre = std::array<double, 2>{to_mm((b.left + b.right) / 2), to_mm((b.top + b.bottom) / 2)};
+        } else if (!s.bed.empty()) {
+            std::array<double, 2> lo = s.bed.front(), hi = s.bed.front();
+            for (const auto& p : s.bed)
+                for (int a = 0; a < 2; ++a)
+                    lo[a] = std::min(lo[a], p[a]), hi[a] = std::max(hi[a], p[a]);
+            centre = std::array<double, 2>{(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0};
+        }
+        if (centre)
+            c.variables["first_layer_center_no_wipe_tower"] =
+                list({TemplateValue::of(std::round((*centre)[0] * 1000.0) / 1000.0),
+                      TemplateValue::of(std::round((*centre)[1] * 1000.0) / 1000.0)});
+    }
     c.variables["num_extruders"] = TemplateValue::of(1LL);
     c.variables["initial_extruder"] = c.variables["initial_tool"] = TemplateValue::of(0LL);
     c.variables["is_extruder_used"] = list({TemplateValue::of(true)});
@@ -4559,6 +4581,15 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                              "El G-code de la impresora usa velocidades que los ajustes no dan; van con un caudal "
                              "seguro de 8 mm³/s: " + names + ".",
                              double(templates.estimated_used.size()), "warning"});
+    }
+    if (warnings && !templates.index_clamped.empty()) {
+        std::string names;
+        for (const std::string& name : templates.index_clamped)
+            names += (names.empty() ? "" : ", ") + name;
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora lee listas más allá de su último valor; se usó el último: " +
+                                 names + ".",
+                             double(templates.index_clamped.size()), "warning"});
     }
     if (warnings && templates.zero_feeds > 0)
         warnings->push_back({"gcode_macro", -1, 0.0,

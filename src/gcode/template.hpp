@@ -62,6 +62,9 @@ struct TemplateContext {
     // (rule 10 quater; 0: left as it is), and counted.
     double zero_feed = 0.0;
     int zero_feeds = 0;
+    // Lists read past their end, which gave their last value (rule 10
+    // quater), for the log.
+    std::set<std::string, std::less<>> index_clamped;
 };
 
 // Renders a template (gcode_templates.md, rules 1 to 8):

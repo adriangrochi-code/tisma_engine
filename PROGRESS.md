@@ -11650,3 +11650,9 @@ arreglado en 9d8dc76 y subido.
 - Prueba propia (GM12, sin el G-code de Bambu, que no se lee por la sala limpia): las mismas construcciones,
   velocidades calculadas desde esas variables y un `F0` escrito tal cual. **No probado** con el G-code real de la A1,
   X1C, P1S ni A1 mini: lo repite el equipo de fichas.
+- BH45 ampliado (spec/next ffead48; medición de la sesión de perfiles: de 56 variantes Bambu, 8 laminaban con su G-code,
+  20 no se leían por un índice fuera de lista y 28 fallaban por F0): se llenan las variables propias de las Bambu Lab
+  de la regla 10 quater (`first_non_support_filaments`, `first_layer_center_no_wipe_tower`, `max_print_z`, los
+  `*_id`, `filament_ids`, `curr_y_acceleration_limit` y las de cámara, vitrificación y ventilador adicional), y un
+  índice pasado el final de una lista da su último valor, con aviso, en vez de cortar. **No probado** con el paquete:
+  lo corre la sesión de perfiles con `validate.py --macros`.

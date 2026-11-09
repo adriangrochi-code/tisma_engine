@@ -19,7 +19,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - El G-code de inicio original de una impresora Bambu Lab pegado en el de la máquina hacía fallar el laminado con
   «F0»: las velocidades que ese G-code calcula (`outer_wall_volumetric_speed`, `flush_volumetric_speeds` y otras)
-  ahora salen de los ajustes, y un `F0` que quede se escribe con la velocidad de viaje, con aviso (BH45).
+  ahora salen de los ajustes, y un `F0` que quede se escribe con la velocidad de viaje, con aviso (BH45). También se llenan las variables propias de las Bambu Lab
+  (`first_layer_center_no_wipe_tower`, `first_non_support_filaments`, `max_print_z` y otras), y una lista leída más
+  allá de su último valor da el último, con aviso, en vez de cortar.
 - Con la retracción del firmware (G10/G11) y varios extrusores, una herramienta que se iba con la retracción hecha
   cuando un cambio por altura dejaba el largo en 0 volvía sin G11 y extruía con el filamento retraído.
 

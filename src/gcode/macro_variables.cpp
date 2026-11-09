@@ -140,8 +140,20 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
     for (const char* name : {"flush_temperatures", "nozzle_temperature_range_high", "nozzle_temperature_range_low"})
         if (nozzle > 0.0)
             set(name, list_of(whole(nozzle)));
-    for (const char* name : {"initial_no_support_extruder", "initial_extruder"})
+    for (const char* name : {"initial_no_support_extruder", "initial_extruder", "initial_filament_id",
+                             "initial_no_support_filament_id", "initial_nozzle_id", "current_filament_id"})
         set(name, TemplateValue::of(0LL));
+    // The rest of Bambu Lab's, measured with the profile pack (rule 10 quater).
+    set("first_non_support_filaments", list_of(TemplateValue::of(0LL)));
+    set("filament_ids", list_of(TemplateValue::of(std::string())));
+    set("curr_y_acceleration_limit", number(s.max_accel_y));
+    set("nozzle_diameter_at_nozzle_id", list_of(number(s.nozzle_diameter)));
+    set("overall_chamber_temperature", whole(s.chamber_temperature));
+    set("min_vitrification_temperature", TemplateValue::of(0LL));
+    set("temperature_vitrification", list_of(TemplateValue::of(0LL)));
+    set("hold_chamber_temp_for_flat_print", TemplateValue::of(false));
+    set("additional_fan_full_speed_layer", list_of(TemplateValue::of(0LL)));
+    set("close_additional_fan_first_x_layers", list_of(TemplateValue::of(0LL)));
 
     // The rest of the list.
     for (const MacroVariable& m : kVariables) {

@@ -143,8 +143,12 @@ TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gco
     CHECK(c.unfilled.contains("curr_bed_type"));
     CHECK(render_template("[curr_bed_type]", c, "t").empty());
     CHECK(c.unfilled_used.contains("curr_bed_type"));
-    // An index past the list's end, and one with an unknown variable in it, fail.
-    CHECK_THROWS_AS(render_template("[first_layer_temperature[3]]", c, "t"), TemplateError);
+    // An index past the list's end gives its last value, named for the log
+    // (rule 10 quater, BH45); one too large to read, or with an unknown
+    // variable in it, fails.
+    CHECK(render_template("[first_layer_temperature[3]]", c, "t") == "220");
+    CHECK(render_template("{first_layer_temperature[2] + 1}", c, "t") == "221");
+    CHECK(c.index_clamped.contains("first_layer_temperature"));
     CHECK_THROWS_AS(render_template("[first_layer_temperature[99999999999999999999]]", c, "t"), TemplateError);
     CHECK_THROWS_AS(render_template("[first_layer_temperature_99999999999999999999]", c, "t"), TemplateError);
     CHECK_THROWS_AS(render_template("[first_layer_temperature[no_such]]", c, "t"), TemplateError);
@@ -2810,5 +2814,32 @@ TEST_CASE("a machine's G-code speeds come from the settings, never F0 (gcode_mac
     CHECK(bare_out.str().find("G1 E10 F480") != std::string::npos);
     CHECK(std::any_of(bare_warnings.begin(), bare_warnings.end(), [](const Warning& w) {
         return w.kind == "gcode_macro" && w.message.find("filament_max_volumetric_speed") != std::string::npos;
+    }));
+}
+
+TEST_CASE("Bambu Lab's own variables are filled, and a list read past its end gives its last value (rule 10 quater)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.max_accel_y = 9000.0;
+    s.bed = {{0, 0}, {256, 0}, {256, 256}, {0, 256}};
+    s.start_gcode = "; centre {first_layer_center_no_wipe_tower[0]},{first_layer_center_no_wipe_tower[1]}\n"
+                    "; top {max_print_z} filament {first_non_support_filaments[initial_no_support_extruder]} "
+                    "second {first_non_support_filaments[1]}\n"
+                    "; y {curr_y_acceleration_limit} vitrification {min_vitrification_temperature} "
+                    "hold {hold_chamber_temp_for_flat_print} id \"{filament_ids[0]}\"";
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    const SlicedModel model = slice_model(m, s);
+    write_gcode(out, model, s, &warnings);
+    const std::string text = out.str();
+    CHECK(text.find("; top 10 filament 0 second 0") != std::string::npos);
+    CHECK(text.find("; y 9000 vitrification 0 hold false id \"\"") != std::string::npos);
+    // The cube's first layer, wherever the test printer puts it.
+    const std::size_t at = text.find("; centre ");
+    REQUIRE(at != std::string::npos);
+    CHECK(text.substr(at, 12) != "; centre 0,0");
+    CHECK(std::any_of(warnings.begin(), warnings.end(), [](const Warning& w) {
+        return w.kind == "gcode_macro" && w.message.find("first_non_support_filaments") != std::string::npos;
     }));
 }

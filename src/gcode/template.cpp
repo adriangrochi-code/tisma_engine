@@ -12,6 +12,7 @@
 #include <functional>
 #include <optional>
 #include <regex>
+#include <set>
 #include <system_error>
 #include <utility>
 
@@ -120,6 +121,9 @@ bool ident_char(char c) { return ident_start(c) || (c >= '0' && c <= '9') || c =
 struct Source {
     std::string_view text;
     std::string_view section;
+    // Lists read past their end, which give their last value instead
+    // (gcode_macros.md, rule 10 quater): named here for the log.
+    std::set<std::string, std::less<>>* clamped = nullptr;
 
     [[noreturn]] void fail(std::size_t at, const std::string& message) const {
         at = std::min(at, text.size());
@@ -429,9 +433,14 @@ private:
                     src_.fail(index_at, "'" + name + "' has one value: index 0 only");
                 return *v;
             }
-            if (index.integer < 0 || std::size_t(index.integer) >= v->list.size())
+            if (index.integer < 0 || v->list.empty())
                 src_.fail(index_at, "index " + std::to_string(index.integer) + " is out of '" + name + "' (" +
                                          std::to_string(v->list.size()) + " values)");
+            if (std::size_t(index.integer) >= v->list.size()) { // past the end: the last value
+                if (src_.clamped)
+                    src_.clamped->insert(name);
+                return v->list.back();
+            }
             return v->list[std::size_t(index.integer)];
         }
         return *v;
@@ -614,7 +623,7 @@ std::string render_template(std::string_view text, TemplateContext& context, std
 namespace {
 
 std::string render_raw(std::string_view text, TemplateContext& context, std::string_view section) {
-    const Source src{text, section};
+    const Source src{text, section, &context.index_clamped};
     Variables locals;
     Variables converted; // aliases' values in their own type
     std::function<const TemplateValue*(std::string_view)> lookup;
@@ -741,9 +750,13 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
                         }
                         // A single value is a list of one (rule 2).
                         const std::size_t size = v->kind == TemplateValue::Kind::List ? v->list.size() : 1;
-                        if (at < 0 || static_cast<std::size_t>(at) >= size)
+                        if (at < 0 || size == 0)
                             src.fail(index_at, "index " + std::to_string(at) + " out of '" + std::string(name) + "' (" +
                                                    std::to_string(size) + " values)");
+                        if (static_cast<std::size_t>(at) >= size) { // past the end: the last value
+                            context.index_clamped.emplace(name);
+                            at = static_cast<decltype(at)>(size - 1);
+                        }
                         if (v->kind == TemplateValue::Kind::List)
                             v = &v->list[static_cast<std::size_t>(at)];
                     }
