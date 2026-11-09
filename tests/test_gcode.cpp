@@ -2878,3 +2878,33 @@ TEST_CASE("a RepRapFirmware macro (M98) may heat a nozzle set to 0 before it: on
     CHECK_NOTHROW(write_gcode(out, model, s));
     CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
 }
+
+TEST_CASE("a machine's own G-code comes out as written, but for what is evaluated (gcode_macros.md 10 quinquies, GM13, "
+          "GM14)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"215"};
+    s.machine_macros.dialect = "prusaslicer";
+    s.machine_macros.values["nozzle_high_flow"] = {"0"};
+    // Lines with nothing to evaluate: spaces, tabs, comments, blank lines,
+    // odd commands and words in brackets that are not variables.
+    const std::string plain = "  G28   ; home all [Checks]\n"
+                              "\tM862.3 P \"MK4\" ; printer model check\n"
+                              "\n"
+                              "M862.1 P0.4 F0\n"
+                              "M900 K0.05;no space\n"
+                              "G1 Z5 F720   \n"
+                              "; ünïcode comment\n"
+                              "M117 Starting...";
+    s.machine_macros.templates["start"] = plain + "\nM104 S{temperature[0]} ; evaluated\nM862.1 P0.4 F{(nozzle_high_flow[0] ? 1 : 0)}";
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s);
+    const std::string text = out.str();
+    // GM13: every plain line, in the same order, byte for byte.
+    CHECK(text.find(plain + "\nM104 S215 ; evaluated\n") != std::string::npos);
+    // GM14: Prusa's nozzle check keeps its F0 (no high-flow nozzle).
+    CHECK(text.find("\nM862.1 P0.4 F0\n") != std::string::npos);
+    CHECK(text.find("M862.1 P0.4 F1") == std::string::npos);
+    CHECK(text.find("M862.1 P0.4 F10") == std::string::npos);
+}

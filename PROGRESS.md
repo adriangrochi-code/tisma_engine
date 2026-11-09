@@ -11674,3 +11674,7 @@ arreglado en 9d8dc76 y subido.
   cambio de `F0` también tocaba la `F` de comandos que no mueven (el `M862.1 F…` de Prusa, que marca la boquilla de
   alto flujo). Ahora solo cambia en G0 a G3. Los `values` del dialecto prusaslicer ya se usaban (probado con
   `printer_notes`). Queda `~nombre` dentro de `one_of` (2 variantes INDX): pregunta al equipo de fichas.
+- Regla 10 quinquies (spec/next 2a28242, pedido del dueño: «los gcode tienen que ser los originales»): pruebas GM13
+  (las líneas sin construcciones salen byte por byte, en orden: espacios, tabulaciones, comentarios, líneas vacías,
+  `[Checks]`, texto con tildes) y GM14 (`M862.1 … F{…}` sin alto flujo queda `F0`). El aviso de un G-code que no se
+  puede leer ya nombra la construcción (el mensaje del error de la plantilla).
