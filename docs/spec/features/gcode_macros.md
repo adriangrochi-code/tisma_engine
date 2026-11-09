@@ -78,7 +78,24 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
     - `flush_volumetric_speeds[i]` y `filament_max_volumetric_speed[i]`: el caudal máximo del filamento i (mm³/s);
     - `flush_temperatures[i]`, `nozzle_temperature_range_high[i]`: la temperatura del filamento i;
     - `initial_no_support_extruder`, `initial_extruder`: el extrusor que empieza;
-    - las de `gcode_variables.md` con equivalente: el valor del equivalente.
+    - las de `gcode_variables.md` con equivalente: el valor del equivalente;
+    - del G-code de las Bambu Lab (medido con el paquete, 09-11-2026):
+      - `filament_max_volumetric_speed[i]`: `extrusion.max_flow` del filamento i (ya viene en el paquete);
+      - `first_non_support_filaments`: una lista con un valor por extrusor, el número del primer filamento que no es
+        de soporte (con uno solo, `[0]`);
+      - `first_layer_center_no_wipe_tower`: el centro `[x, y]` de la caja de la primera capa sin la torre de purga;
+      - `initial_filament_id`, `initial_no_support_filament_id`, `initial_nozzle_id`, `current_filament_id`: el número
+        del filamento o la boquilla que empieza (0 con uno solo);
+      - `filament_ids`: una lista de textos, uno por filamento (vacíos si el perfil no da uno);
+      - `curr_y_acceleration_limit`: la aceleración máxima en Y de la impresora;
+      - `max_print_z`: la Z más alta que se imprime;
+      - `nozzle_diameter_at_nozzle_id`: el diámetro de la boquilla;
+      - `overall_chamber_temperature`: la mayor temperatura de cámara de los filamentos (0 sin cámara);
+      - `min_vitrification_temperature`, `temperature_vitrification[i]`: la de transición vítrea del filamento si el
+        paquete la trae; si no, 0;
+      - `hold_chamber_temp_for_flat_print`: no;
+      - `additional_fan_full_speed_layer`, `close_additional_fan_first_x_layers`: del filamento si los trae; si no, 0.
+    Un índice fuera de una lista de estas no corta: toma el último valor, con aviso.
     Una variable de velocidad o temperatura que el motor no sabe calcular toma un valor seguro (el caudal o la
     temperatura del filamento) en vez de 0, con aviso. Un `F0` dentro de un G-code de la máquina se escribe como `F`
     con la velocidad de viaje del perfil y avisa; nunca rechaza el laminado.
