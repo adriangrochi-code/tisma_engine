@@ -2867,6 +2867,14 @@ TEST_CASE("the profile pack's machine G-code: what its full run found (BH45, thi
     CHECK(render_template("{e_retracted = (0, 0)}{e_retracted[1] = 1.5 * 2}{e_retracted[1]}", c, "t") == "3");
     CHECK(render_template("{temperature[0] = 230}{temperature[0]}", c, "t") == "230");
     CHECK(render_template("{1 == 1}", c, "t") == "true");
+    // ~name: a variable's text as a regular expression in one_of() (the CORE
+    // One INDX's dock fan): the whole value matches.
+    CHECK(render_template("{global low_temp_types = \"PLA|PVA|BVOH|FLEX|TPU|TPE|PVB\"}", c, "t").empty());
+    for (const auto& [type, yes] : std::vector<std::pair<std::string, bool>>{
+             {"PLA", true}, {"TPU", true}, {"PETG", false}, {"PC", false}, {"ASA", false}, {"PLAX", false}})
+        CHECK(render_template("{one_of(\"" + type + "\", ~low_temp_types)}", c, "t") == (yes ? "true" : "false"));
+    CHECK_THROWS_WITH(render_template("{one_of(\"PLA\", ~layer_height)}", c, "t"),
+                      Catch::Matchers::ContainsSubstring("'~layer_height' is not a text"));
 }
 
 TEST_CASE("a RepRapFirmware macro (M98) may heat a nozzle set to 0 before it: only a note", "[gcode][check]") {

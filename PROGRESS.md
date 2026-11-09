@@ -11678,3 +11678,6 @@ arreglado en 9d8dc76 y subido.
   (las líneas sin construcciones salen byte por byte, en orden: espacios, tabulaciones, comentarios, líneas vacías,
   `[Checks]`, texto con tildes) y GM14 (`M862.1 … F{…}` sin alto flujo queda `F0`). El aviso de un G-code que no se
   puede leer ya nombra la construcción (el mensaje del error de la plantilla).
+- `~nombre` en `one_of` (Prusa CORE One INDX, comportamiento del equipo de fichas): el texto de la variable como
+  expresión regular, verdadero si el valor coincide entero (PLA, TPU sí; PETG, PC, ASA no). Si la variable no es
+  texto, el error lo nombra. Con esto, las 2261 variantes FFF del paquete deberían leer todo su G-code.

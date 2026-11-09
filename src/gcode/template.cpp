@@ -118,6 +118,9 @@ bool ident_start(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z
 bool ident_char(char c) { return ident_start(c) || (c >= '0' && c <= '9') || c == '.'; }
 
 // The template being rendered, for the errors' line and mark.
+// What marks a text as a regular expression from ~name (one_of() only).
+constexpr char kPatternMark = '\x01';
+
 struct Source {
     std::string_view text;
     std::string_view section;
@@ -410,6 +413,19 @@ private:
                 src_.fail(at, "a number that cannot be read");
             return v;
         }
+        // ~name: the variable's text as a regular expression, for one_of()
+        // (the OrcaSlicer family's G-code; gcode_macros.md, rule 10 quater).
+        if (take("~")) {
+            const std::size_t name_at = at_;
+            const std::string pattern_of = identifier();
+            const TemplateValue* p = pattern_of.empty() ? nullptr : lookup_(pattern_of);
+            if (!p)
+                src_.fail(name_at, "'~' takes a variable holding a regular expression");
+            const TemplateValue& text = one(*p);
+            if (text.kind != Kind::Text)
+                src_.fail(name_at, "'~" + pattern_of + "' is not a text (a regular expression is expected)");
+            return TemplateValue::of(std::string(1, kPatternMark) + text.text);
+        }
         const std::string name = identifier();
         if (name.empty())
             src_.fail(at, "a value is expected");
@@ -516,8 +532,18 @@ private:
             if (args.size() < 2)
                 src_.fail(at, "one_of() takes a value and what it may be");
             for (std::size_t i = 1; i < args.size(); ++i) {
+                const TemplateValue& option = one(args[i]);
+                if (option.kind == Kind::Text && option.text.starts_with(kPatternMark)) { // ~name: the whole value matches
+                    try {
+                        if (std::regex_match(template_text(one(args[0])), std::regex(option.text.substr(1))))
+                            return TemplateValue::of(true);
+                    } catch (const std::regex_error&) {
+                        src_.fail(where[i], "the regular expression in one_of() cannot be read");
+                    }
+                    continue;
+                }
                 const bool same = numeric(args[0]) && numeric(args[i]) ? real_of(args[0]) == real_of(args[i])
-                                                                       : template_text(one(args[0])) == template_text(one(args[i]));
+                                                                       : template_text(one(args[0])) == template_text(option);
                 if (same)
                     return TemplateValue::of(true);
             }
