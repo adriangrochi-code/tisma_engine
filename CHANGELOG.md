@@ -43,8 +43,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 ### Agregado
 
 - Tiempo de preparación en la estimación: el calentamiento (con la velocidad de calentamiento de la boquilla y de la
-  cama, claves nuevas en la máquina), ir al origen, nivelar y las esperas, sumados al total y dichos aparte en el G-code y en la
-  interfaz.
+  cama, claves nuevas en la máquina), ir al origen, nivelar y las esperas, sumados al total y dichos
+  aparte en el G-code y en la interfaz.
 
 - Al abrir un 3MF de otro programa (PrusaSlicer, OrcaSlicer, Bambu Studio, Creality Print, Elegoo Slicer, Anycubic,
   Cura), un aviso dice de qué programa es y cuántas piezas trae; sus ajustes todavía no se traen.
