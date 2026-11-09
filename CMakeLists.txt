@@ -185,6 +185,7 @@ add_library(tisma_core
   src/mesh/mesh.cpp
   src/mesh/indexed_mesh.cpp
   src/mesh/face_region.cpp
+  src/mesh/inspect.cpp
   src/mesh/shapes.cpp
   src/mesh/lattice.cpp
   src/mesh/orient.cpp

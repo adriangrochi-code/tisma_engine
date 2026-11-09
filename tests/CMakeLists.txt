@@ -41,6 +41,7 @@ add_executable(tisma_tests
   test_corners.cpp
   test_gcode_arcs.cpp
   test_firmware.cpp
+  test_inspect.cpp
   test_template.cpp
   test_binary.cpp
   test_retraction.cpp

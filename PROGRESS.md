@@ -11753,3 +11753,16 @@ arreglado en 9d8dc76 y subido.
 - Regla 23 (OR23): ya se cumplía; prueba nueva con dos filamentos (200/240 °C) donde solo el 2 imprime: el inicio
   calienta a 240 °C, con varios extrusores y con MMU. Pregunta al equipo de fichas: el motor calienta al empezar a
   `temperature`, no a `first_layer_temperature` (la cama sí usa la de la primera capa).
+
+## 2026-11-09 — orca_2_5.md O6: la línea de comandos
+
+- `slice` gana:
+  - `--strict`: un aviso (no los informativos) es error, sin G-code, código 4; el archivo de avisos los lista todos;
+  - `--ground-largest-face`, `--ground-face-normal X,Y,Z` y `--ground-face-point X,Y,Z`: la cara va contra la cama
+    antes de las transformaciones (la cara plana más grande: triángulos en un mismo plano, con sus áreas sumadas);
+  - `--inspect-mesh`: tamaño, volumen, triángulos, si está cerrada, aristas abiertas y partes, en JSON;
+  - `--export-statistics`: por placa (una en la línea de comandos), tiempo, filamento por extrusor (mm, cm³, g,
+    costo) y capas; `--export-settings`: los ajustes resueltos. Los tres aceptan `-` para la salida estándar;
+  - `--align-to-y-axis`: las copias en una columna a lo largo de Y.
+- Módulo nuevo `src/mesh/inspect.*` con sus pruebas (OR25, OR26) y las de la línea de comandos (OR24 a OR28).
+- Queda: `--inspect-paint` (lo pintado por tipo).

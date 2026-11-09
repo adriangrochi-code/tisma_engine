@@ -42,6 +42,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- Línea de comandos: `--strict`, apoyar una cara en la cama (`--ground-largest-face` y otras), `--inspect-mesh`,
+  `--export-statistics`, `--export-settings` y `--align-to-y-axis`.
+
 - `regex_replace` en las plantillas, las partes del tiempo (`print_time_hour` y otras) en el nombre del archivo y
   `gcode.skip_config_block` para sacar el bloque de ajustes del final del G-code.
 
