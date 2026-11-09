@@ -111,7 +111,9 @@ class OctoPrintConnection(url: String, apiKey: String, http: Http) : PrinterConn
         val stream = absolute(webcam.str("streamUrl"))
         val snapshot = absolute(webcam.str("snapshotUrl"))
         if (stream.isBlank() && snapshot.isBlank()) return null
-        return Camera(stream, snapshot)
+        // OctoPrint's webcam settings: flipH, flipV and rotate90 (90° counter-clockwise, so 270° clockwise).
+        return Camera(stream, snapshot, webcam.str("flipH") == "true", webcam.str("flipV") == "true",
+            if (webcam.str("rotate90") == "true") 270 else 0)
     }
 
     private fun absolute(u: String): String {

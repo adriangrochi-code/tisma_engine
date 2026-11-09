@@ -11884,3 +11884,14 @@ Smoke del beta R8 x86_64 (`cb4a0e3`) por la sesión de especificación: sin cier
     La prueba ahora para los modelos antes.
   - `LibraryTest` ML1: dos llamadas al motor se pisaban el mismo archivo de errores (`library.err`): una lo borraba
     mientras la otra lo leía. Ahora cada llamada tiene el suyo (biblioteca, paquete y las cortas del motor).
+
+## 2026-11-09 — Android: cámaras de Klipper y OctoPrint con giro y espejo
+
+Hoja de ruta (pedido del dueño por la sesión de especificación): lo que falte de `printer_connections.md` en el
+teléfono. Estado, cámara y mandar ya estaban para OctoPrint, Klipper, PrusaLink y Duet; faltaba la regla de
+«Cámara de la impresora» de mostrar la cámara «con giro y rotación».
+- Klipper: `flip_horizontal`, `flip_vertical` y `rotation` de `/server/webcams/list`; OctoPrint: `flipH`, `flipV` y
+  `rotate90` (90° al revés de las agujas, o sea 270° a favor) de sus ajustes. La imagen se da vuelta y se gira antes de
+  mostrarla (una cámara montada al revés se ve derecha; a 90° se cambian ancho y alto).
+- PrusaLink sigue sin cámara local (la ficha: «sin transmisión local documentada»): «Sin cámara».
+- Pruebas: `PrinterConnectionTest` CM1 (los simuladores con cámara espejada y girada) y `CameraTurnTest`.

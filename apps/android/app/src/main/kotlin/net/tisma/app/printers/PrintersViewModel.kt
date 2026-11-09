@@ -50,7 +50,9 @@ sealed interface CameraView {
     /** A Bambu Lab camera that failed, with what to check (QA BH36: say clearly why it is not seen). */
     data class BambuFailed(val kind: PrinterException.Kind, val detail: String) : CameraView
     /** The last image, as JPEG bytes. */
-    class Image(val jpeg: ByteArray) : CameraView
+    class Image(val jpeg: ByteArray, val flipHorizontal: Boolean = false, val flipVertical: Boolean = false,
+                /** Clockwise degrees, as the printer's camera settings say. */
+                val rotation: Int = 0) : CameraView
 }
 
 sealed interface PrinterNotice {
@@ -195,7 +197,8 @@ class PrintersViewModel(
         try {
             while (currentCoroutineContext().isActive) {
                 val view = try {
-                    CameraView.Image(withContext(io) { net.tisma.printers.Snapshot.fetch(url) })
+                    CameraView.Image(withContext(io) { net.tisma.printers.Snapshot.fetch(url) },
+                        camera.flipHorizontal, camera.flipVertical, camera.rotation)
                 } catch (e: PrinterException) {
                     CameraView.Failed(e.detail)
                 }

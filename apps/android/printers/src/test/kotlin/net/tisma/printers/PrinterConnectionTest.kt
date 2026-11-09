@@ -139,6 +139,12 @@ class PrinterConnectionTest {
         val oc = assertNotNull(OctoPrintConnection(o.url, "test-key", UrlConnectionHttp).camera())
         assertEquals(o.url + "/webcam/?action=stream", oc.streamUrl)
         assertEquals(o.url + "/snapshot.jpg", oc.snapshotUrl)
+        assertEquals(false, oc.flipHorizontal); assertEquals(0, oc.rotation)
+        // How the camera is mounted (printer_connections.md, «Cámara de la impresora»).
+        m.cameraFlipped = true; m.cameraRotation = 270
+        MoonrakerConnection(m.url, null, UrlConnectionHttp).camera()!!.let { assertTrue(it.flipHorizontal); assertEquals(270, it.rotation) }
+        o.cameraFlipped = true; o.cameraRotation = 270
+        OctoPrintConnection(o.url, "test-key", UrlConnectionHttp).camera()!!.let { assertTrue(it.flipHorizontal); assertEquals(270, it.rotation) }
         o.hasCamera = false
         assertNull(OctoPrintConnection(o.url, "test-key", UrlConnectionHttp).camera())
         m.hasCamera = false

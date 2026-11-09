@@ -103,7 +103,15 @@ data class PrinterStatus(
     val message: String = "",
 )
 
-data class Camera(val streamUrl: String, val snapshotUrl: String)
+data class Camera(
+    val streamUrl: String,
+    val snapshotUrl: String,
+    /** How the image is turned as the printer's settings say (Moonraker webcams, OctoPrint's webcam settings). */
+    val flipHorizontal: Boolean = false,
+    val flipVertical: Boolean = false,
+    /** Clockwise degrees: 0, 90, 180 or 270. */
+    val rotation: Int = 0,
+)
 
 /** Images one after another from a printer's camera; [next] waits for the next JPEG. */
 interface CameraFrames : java.io.Closeable {
