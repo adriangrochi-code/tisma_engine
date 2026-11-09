@@ -279,6 +279,7 @@ add_library(tisma_core
   src/io/xml.cpp
   src/io/model.cpp
   src/io/threemf.cpp
+  src/io/project_import.cpp
   src/io/paths.cpp
   src/cad/design.cpp
   src/cad/sketch.cpp

@@ -11622,3 +11622,14 @@ arreglado en 9d8dc76 y subido.
   acá solo hay llvmpipe, que es más lento que la CPU.
 - Pruebas: las del árbol, la de GPU contra CPU y la suite sin las de la interfaz.
 - Sigue: marching squares en la GPU, y después lo siguiente de `PLAN.md`.
+
+## 2026-11-09 07:20 — bloque nocturno: abrir proyectos de otros programas (regla 1)
+
+- La sesión estuvo parada del 06-11 a la tarde al 09-11 a la mañana (reinicios del proceso); los bloques de esos días
+  no corrieron. 2b6ab4b quedó en verde en Windows, Android y Nightly.
+- Fuzzer con semilla nueva (20261109): 2000 corridas, 13 rechazadas por no imprimibles, 0 fallas.
+- Ficha nueva `project_import.md` (spec/next 90c1414, `check_spec` limpio): regla 1 hecha. `project_source` reconoce
+  la familia (PrusaSlicer, OrcaSlicer, Cura) por los archivos del paquete y el programa por `Application`; lo demás es
+  un 3MF del estándar (regla 2). Pruebas `[import]` (3 casos).
+- Sigue: reglas 3–5 y 9 (mallas, tipos de parte, placas, diálogo), que piden los archivos de muestra del equipo de
+  fichas.

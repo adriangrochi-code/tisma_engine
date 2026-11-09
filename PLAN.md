@@ -1297,6 +1297,19 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
    el resto de Optimizar (retícula);
 5. la pestaña Aerodinámica, con A3 (CFD).
 
+### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
+
+Prioridad alta, después del árbol en GPU. Primero las reglas 1 a 5 y la 9.
+- [x] Regla 1: reconocer el programa por los archivos del paquete (familia PrusaSlicer, familia OrcaSlicer, Cura) y
+  nombrarlo por el campo `Application` (`project_source`, `src/io/project_import.*`, 2026-11-09); regla 2: lo que
+  no se reconoce es un 3MF del estándar.
+- [ ] Reglas 3 y 4: mallas, partes y tipos de parte de cada familia (falta medir los archivos de muestra que genera el
+  equipo de fichas).
+- [ ] Regla 5: placas a camas.
+- [ ] Regla 9: el diálogo al abrir.
+- [ ] Reglas 6 a 8, 11 y 12: ajustes con la tabla de traducción del paquete de perfiles (la hace la sesión de perfiles).
+- [ ] Regla 10: pintura, cuando haya archivos de muestra (PI6 a PI8).
+
 ## Avance
 
 Cada bloque de trabajo anota en `PROGRESS.md`:

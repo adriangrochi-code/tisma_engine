@@ -98,6 +98,7 @@ add_executable(tisma_tests
   test_bambu.cpp
   test_pack.cpp
   test_library.cpp
+  test_project_import.cpp
   test_xz.cpp
   test_pack_fetch.cpp
   test_print_host.cpp
