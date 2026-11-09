@@ -72,6 +72,17 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 10 ter. **Extrusión:** con el G-code del bloque `gcode`, el motor extruye en relativo o absoluto según
     `relative_extrusion` de ese bloque.
 
+10 quater. **Variables calculadas** (urgente, BH45): las que el G-code de una máquina usa para velocidades no pueden
+    quedar en 0. El motor las calcula de sus ajustes:
+    - `outer_wall_volumetric_speed`: velocidad de la pared externa × ancho de línea × altura de capa (mm³/s);
+    - `flush_volumetric_speeds[i]` y `filament_max_volumetric_speed[i]`: el caudal máximo del filamento i (mm³/s);
+    - `flush_temperatures[i]`, `nozzle_temperature_range_high[i]`: la temperatura del filamento i;
+    - `initial_no_support_extruder`, `initial_extruder`: el extrusor que empieza;
+    - las de `gcode_variables.md` con equivalente: el valor del equivalente.
+    Una variable de velocidad o temperatura que el motor no sabe calcular toma un valor seguro (el caudal o la
+    temperatura del filamento) en vez de 0, con aviso. Un `F0` dentro de un G-code de la máquina se escribe como `F`
+    con la velocidad de viaje del perfil y avisa; nunca rechaza el laminado.
+
 ## Dónde se usa
 
 11. **Qué G-code:** inicio, fin, antes y después de cada cambio de capa, cambio de herramienta, pausa, y los de inicio
@@ -100,4 +111,5 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 | GM8 | Una Bambu Lab A1 del paquete con su G-code de inicio original, «nivelar la cama» prendido y luego apagado | El G-code es el mismo y tiene la parte de nivelación; el pedido de red dice nivelar en el primer caso y no en el segundo. Con placa «Textured PEI Plate» sale la parte propia de esa placa |
 | GM10 | Una impresora `cura` con `M82` en su inicio y `relative_extrusion` `false` | Todo el G-code extruye en absoluto |
 | GM11 | Un G-code `orcaslicer` con `nozzle_temperature_initial_layer[0]` y un filamento de 220 °C de primera capa | `220` |
+| GM12 | G-code de inicio original de la Bambu Lab A1 pegado en el G-code de inicio, filamento PLA | Lamina; ninguna línea con `F0`; las velocidades calculadas de los ajustes |
 | GM9 | Todas las impresoras del paquete, cada una con sus G-code originales | Todas laminan; las variables que falten quedan en el registro |
