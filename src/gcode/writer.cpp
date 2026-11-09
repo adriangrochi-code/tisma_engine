@@ -3626,6 +3626,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         if (l < model.seam_block.size())
             painted.block = &model.seam_block[l];
         // over: the feed of what lies over a bridge (solid infill).
+        // The fills' kinds, as the G-code names them.
+        const char* const fill_type[7] = {"Solid infill",    "Top solid infill", "Bridge infill",
+                                          "Gap fill",        "Internal infill",  "Support material",
+                                          "Support material interface"};
         // A closed wall shorter than kSmallLoop, the outer one too, at
         // speed.small_loops (gcode_motion.md, rule 3).
         const auto small_loop = [&](const Toolpath& t) {
@@ -3637,6 +3641,18 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                      t.points[(k + 1) % t.points.size()].p.y - t.points[k].p.y);
             return length < kSmallLoop;
         };
+        // A support extrusion no longer than 2 pi speed.small_support_threshold
+        // goes at speed.small_support, or that share of its own speed
+        // (orca_2_5.md, rule 16); a threshold of 0 turns it off.
+        const auto small_support = [&](const Toolpath& t) {
+            if (!(s.small_support_threshold > 0.0) || !(s.small_support_speed.value > 0.0) || t.points.size() < 2)
+                return false;
+            double length = 0.0;
+            const std::size_t n = t.points.size(), segments = t.closed ? n : n - 1;
+            for (std::size_t k = 0; k < segments; ++k)
+                length += std::hypot(t.points[(k + 1) % n].p.x - t.points[k].p.x, t.points[(k + 1) % n].p.y - t.points[k].p.y);
+            return length <= 2.0 * std::numbers::pi * s.small_support_threshold + 1e-9;
+        };
         auto group = [&](const std::vector<Toolpath>& paths, const char* type, double group_feed, SeamMode seam,
                          bool walls = false, std::span<const std::vector<std::size_t>* const> candidates = {},
                          double over = 0.0) {
@@ -3644,9 +3660,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                                         walls && !painted.empty() ? &painted : nullptr, candidates);
             std::vector<Pending> typed;
             typed.reserve(ordered.size());
+            const bool support_kind = type == fill_type[5] || type == fill_type[6];
             for (Toolpath& t : ordered) {
-                const double feed =
-                    walls && small_loop(t) ? speed(s.small_loop_speed.of(s.wall_speed)) : group_feed;
+                const double feed = walls && small_loop(t) ? speed(s.small_loop_speed.of(s.wall_speed))
+                                    : support_kind && small_support(t)
+                                        ? speed(s.small_support_speed.of(fill_speed[type == fill_type[5] ? 5 : 6]))
+                                        : group_feed;
                 if (over > 0.0 && over_bridge && !in_thick) {
                     for (WallPiece& piece : wall_pieces(t, *over_bridge, *nowhere, 0.0, true))
                         typed.push_back({std::move(piece.path), type, piece.overhang ? over : feed});
@@ -3722,9 +3741,6 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // 3): the one the layer below ended with first, the rest in order;
         // what any extruder may print goes with the first.
         const std::vector<int>& order = tool_plan.order[l];
-        const char* const fill_type[7] = {"Solid infill",    "Top solid infill", "Bridge infill",
-                                          "Gap fill",        "Internal infill",  "Support material",
-                                          "Support material interface"};
         int label_now = -1;
         // The wipe tower (multi_extruder.md, rules 10 to 12): on a layer with
         // no change, and on the first, its brim, outline and fill first, by

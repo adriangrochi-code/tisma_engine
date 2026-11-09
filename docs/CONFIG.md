@@ -283,6 +283,8 @@ velocidad máxima conocida no pasa de ella en ninguna de las de respaldo.
 | `top_solid_infill` | número | — (del perfil de la impresora; respaldo 40) | Superficies superiores |
 | `support` | número | — (del perfil de la impresora; respaldo 40) | Soporte e interfaz |
 | `support_interface` | número o texto | — (sin valor: `support`) | Interfaz del soporte, en mm/s o un porcentaje de `support` como `"50%"` (ficha `supports_more.md`, regla 13, SM11) |
+| `small_support` | número o texto | — (sin valor: apagado) | Velocidad de las extrusiones chicas del soporte, en mm/s o un porcentaje de la del soporte o la interfaz que les toca, como `"50%"` (ficha `orca_2_5.md`, regla 16) |
+| `small_support_threshold` | número | 0 | 0 a 100 | Radio en mm: una extrusión de soporte de largo hasta 2π × este valor va a `small_support`. 0: apagado |
 | `travel` | número | — (del perfil de la impresora; respaldo 180) | Viajes |
 | `first_layer` | número | — (del perfil de la impresora; respaldo 25) | Tope de la primera capa |
 | `max` | número | — (del perfil de la impresora; sin respaldo) | Tope de toda extrusión; sin valor, ninguno |

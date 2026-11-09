@@ -2959,3 +2959,87 @@ TEST_CASE("gcode: no settings block with gcode.skip_config_block (orca_2_5.md, r
     CHECK(without.find("; estimated printing time = ") != std::string::npos); // the totals stay
     CHECK(parse_settings(R"({"gcode": {"skip_config_block": true}})").gcode_skip_config_block);
 }
+
+TEST_CASE("support: small extrusions at speed.small_support (orca_2_5.md, rule 16, OR16)", "[gcode][support]") {
+    IndexedMesh m;
+    add_box(m, 4, 4, 6, 6, 2);
+    const auto base = std::uint32_t(m.vertices.size());
+    add_box(m, 0, 0, 10, 10, 1);
+    for (std::size_t v = base; v < m.vertices.size(); ++v)
+        m.vertices[v].z += 2.0f;
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    s.support_speed = 40.0;
+    s.support_interface_speed = {};
+    s.gcode_resolution = 0.0;
+    s.min_layer_time = 0.0;      // no slowing down for cooling
+    s.first_layer_speed = 100.0; // nor on the first layer
+    s.speed_max_flow = 0.0;
+    // Each support path (extrusions between two moves that do not extrude)
+    // with its length and its feeds.
+    struct Path {
+        double length = 0.0;
+        std::set<long> feeds;
+    };
+    const auto paths = [&](const Settings& settings) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, settings), settings);
+        std::vector<Path> found;
+        bool support = false, open = false;
+        double x = 0, y = 0;
+        long feed = 0;
+        for (const std::string& line : lines_of(out.str())) {
+            if (line.rfind(";TYPE:", 0) == 0) {
+                support = line.rfind(";TYPE:Support material", 0) == 0;
+                open = false;
+            }
+            if (line.rfind("G1 ", 0) != 0 && line.rfind("G0 ", 0) != 0)
+                continue;
+            const auto word = [&](char c) -> std::optional<double> {
+                const std::size_t at = line.find(std::string(" ") + c);
+                if (at == std::string::npos)
+                    return std::nullopt;
+                return std::atof(line.c_str() + at + 2);
+            };
+            const double nx = word('X').value_or(x), ny = word('Y').value_or(y);
+            if (const auto f = word('F'))
+                feed = std::lround(*f);
+            const bool extrudes = word('E') && *word('E') > 0.0 && (nx != x || ny != y);
+            if (extrudes && support) {
+                if (!open)
+                    found.push_back({}), open = true;
+                found.back().length += std::hypot(nx - x, ny - y);
+                found.back().feeds.insert(feed);
+            } else if (nx != x || ny != y) {
+                open = false;
+            }
+            x = nx, y = ny;
+        }
+        return found;
+    };
+    // Off: every support path at 40 mm/s.
+    for (const Path& p : paths(s))
+        CHECK(p.feeds == std::set<long>{2400});
+    s.small_support_threshold = 2.0; // up to 12.57 mm
+    s.small_support_speed = {20.0, false};
+    std::size_t small = 0, large = 0;
+    for (const Path& p : paths(s)) {
+        INFO("length " << p.length);
+        if (p.length < 12.4) {
+            CHECK(p.feeds == std::set<long>{1200});
+            ++small;
+        } else if (p.length > 12.7) {
+            CHECK(p.feeds == std::set<long>{2400});
+            ++large;
+        }
+    }
+    CHECK(small > 0);
+    CHECK(large > 0);
+    // As a share of the support's own speed.
+    s.small_support_speed = {25.0, true};
+    for (const Path& p : paths(s))
+        if (p.length < 12.4)
+            CHECK(p.feeds == std::set<long>{600});
+    CHECK(parse_settings(R"({"speed": {"small_support": "50%", "small_support_threshold": 2}})").small_support_speed.percent);
+}

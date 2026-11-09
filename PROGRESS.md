@@ -11775,4 +11775,7 @@ arreglado en 9d8dc76 y subido.
   (20 % en la capa 1, 46,7 % y 73,3 % en la 2 y la 3, el valor normal en la 4). En la ficha de enfriamiento, con su
   ayuda.
 - Regla 15 (OR15): la balsa ya lo hacía; prueba con expansión 1,5 y 2 más en la primera capa (3,5 mm).
-- Sigue: reglas 14 (orejas de borde), 16 (soporte chico más lento) y 18 (piel difusa sin puentes).
+- Regla 16 (OR16): `speed.small_support` (mm/s o % de la velocidad del soporte o de la interfaz) y
+  `speed.small_support_threshold` (un radio; 0 apagado): una extrusión de soporte de largo hasta 2π × el umbral va
+  más despacio. En la ficha de velocidades de relleno y soporte, con su ayuda.
+- Sigue: reglas 14 (orejas de borde) y 18 (piel difusa sin puentes).

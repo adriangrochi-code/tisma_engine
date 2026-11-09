@@ -601,6 +601,11 @@ struct Settings {
     double gap_fill_speed = 0.0;    // gap fill (speed.solid_infill)
     Speed over_bridges_speed;       // solid infill right over a bridge, or a share of solid_infill (speed.solid_infill)
     Speed small_loop_speed;         // closed walls shorter than kSmallLoop, or a share of walls (their own)
+    // Support extrusions up to 2 pi small_support_threshold long (mm, a
+    // radius; 0: off) at small_support_speed, or a share of their own
+    // (orca_2_5.md, rule 16).
+    Speed small_support_speed;
+    double small_support_threshold = 0.0;
     Speed support_interface_speed;  // the support's interface, or a share of speed.support; not set: speed.support
     Speed first_layer_infill_speed; // the first layer's solid infill, past speed.first_layer, or a share of
                                     // solid_infill (speed.first_layer)

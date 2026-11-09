@@ -2113,7 +2113,7 @@ Settings parse_checked(std::string_view text) {
                {"walls", "outer_wall", "infill", "solid_infill", "top_solid_infill", "support", "travel", "first_layer", "max",
                 "bridges", "gap_fill", "over_bridges", "first_layer_infill", "travel_z", "dynamic_overhangs", "overhang_0",
                 "overhang_1", "overhang_2", "overhang_3", "flow_slope_up", "flow_slope_down", "first_layer_over_raft",
-                "support_interface", "small_loops", "max_flow"},
+                "support_interface", "small_loops", "max_flow", "small_support", "small_support_threshold"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "flow_slope_up" || n == "flow_slope_down") { // not a speed: 0 is free
@@ -2121,6 +2121,13 @@ Settings parse_checked(std::string_view text) {
                        if (!(d >= 0.0 && d <= 1000.0))
                            fail(k, "must be from 0 to 1000 mm3/s2");
                        (n == "flow_slope_up" ? s.flow_slope_up : s.flow_slope_down) = d;
+                       return;
+                   }
+                   if (n == "small_support_threshold") { // a radius, mm; 0: off (orca_2_5.md, rule 16)
+                       const double d = number(g, n, k);
+                       if (!(d >= 0.0 && d <= 100.0))
+                           fail(k, "must be from 0 (off) to 100 mm");
+                       s.small_support_threshold = d;
                        return;
                    }
                    if (n == "max_flow") { // mm3/s, not a speed: 0 is no cap (gcode_motion.md, rule 4)
@@ -2143,6 +2150,7 @@ Settings parse_checked(std::string_view text) {
                                         : n == "first_layer_infill" ? &s.first_layer_infill_speed
                                         : n == "first_layer_over_raft" ? &s.first_layer_over_raft
                                         : n == "support_interface" ? &s.support_interface_speed
+                                        : n == "small_support"      ? &s.small_support_speed
                                         : n.rfind("overhang_", 0) == 0
                                             ? &s.overhang_speeds[std::size_t(n.back() - '0')]
                                             : nullptr;
@@ -3493,6 +3501,8 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.over_bridges", share(s.over_bridges_speed)},
         {"speed.small_loops", share(s.small_loop_speed)},
         {"speed.support_interface", share(s.support_interface_speed)},
+        {"speed.small_support", share(s.small_support_speed)},
+        {"speed.small_support_threshold", num(s.small_support_threshold)},
         {"speed.first_layer_infill", share(s.first_layer_infill_speed)},
         {"speed.travel_z", speed(s.travel_z_speed)},
         {"speed.first_layer_over_raft", share(s.first_layer_over_raft)},
@@ -4026,6 +4036,8 @@ std::string settings_json(const Settings& s) {
           {"over_bridges", share(s.over_bridges_speed)},
           {"small_loops", share(s.small_loop_speed)},
           {"support_interface", share(s.support_interface_speed)},
+          {"small_support", share(s.small_support_speed)},
+          {"small_support_threshold", s.small_support_threshold},
           {"first_layer_infill", share(s.first_layer_infill_speed)},
           {"travel_z", speed(s.travel_z_speed)},
           {"first_layer_over_raft", share(s.first_layer_over_raft)},

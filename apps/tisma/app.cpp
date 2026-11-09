@@ -1900,7 +1900,8 @@ const std::map<T, const char*>& row_keys() {
         {T::SpeedMaxFlow, "speed.max_flow"},
         {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
         {T::SpeedSmallLoops, "speed.small_loops"},
-        {T::SpeedSupportInterface, "speed.support_interface"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
+        {T::SpeedSupportInterface, "speed.support_interface"}, {T::SpeedSmallSupport, "speed.small_support"},
+        {T::SmallSupportThreshold, "speed.small_support_threshold"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
         {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
         {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
         {T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed"},
@@ -8558,6 +8559,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SpeedInfill, "speed.infill", s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedSupport, "speed.support", s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         share_row(T::SpeedSupportInterface, "speed.support_interface", s.support_interface_speed);
+        share_row(T::SpeedSmallSupport, "speed.small_support", s.small_support_speed);
+        mm(T::SmallSupportThreshold, "speed.small_support_threshold", s.small_support_threshold, 0.0, 100.0,
+           s.small_support_threshold > 0.0 ? "%.1f mm" : tr(T::NotSet), 0.05f);
     } else if (id == "travel") {
         mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue),
