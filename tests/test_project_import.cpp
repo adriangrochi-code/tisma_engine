@@ -7,6 +7,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -110,4 +113,23 @@ TEST_CASE("project import: an OrcaSlicer-family package, its meshes in 3D/Object
     const BoundingBox box = items[0].mesh.bounding_box();
     CHECK(box.min.x == 100.0f); // placed by its build item
     CHECK(box.max.y == 60.0f);
+}
+
+TEST_CASE("project import: the spec team's PrusaSlicer 2.7.2 sample (PI2, its part so far)", "[import]") {
+    // docs/spec/samples/project_import/pi2_prusaslicer.3mf (spec/next 2c763a7),
+    // saved by PrusaSlicer's command line: one 30 x 10 x 15 mm box.
+    std::ifstream in(std::filesystem::path(TISMA_TEST_DATA_DIR) / "formats" / "pi2_prusaslicer.3mf", std::ios::binary);
+    REQUIRE(in);
+    const std::string package((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const ProjectSource source = project_source(package);
+    CHECK(source.family == ProjectFamily::PrusaSlicer);
+    CHECK(source.application == "PrusaSlicer-2.7.2");
+    CHECK(source.program == "PrusaSlicer");
+    const std::vector<ThreeMfItem> items = read_3mf_items(package);
+    REQUIRE(items.size() == 1);
+    CHECK(items[0].mesh.triangle_count() == 12);
+    const BoundingBox box = items[0].mesh.bounding_box();
+    CHECK(box.max.x - box.min.x == 30.0f);
+    CHECK(box.max.y - box.min.y == 10.0f);
+    CHECK(box.max.z - box.min.z == 15.0f);
 }

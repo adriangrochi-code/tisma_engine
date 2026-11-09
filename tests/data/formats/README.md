@@ -10,3 +10,6 @@ Made by `make.py` (own script; `python3 -I make.py` in this folder), for `tests/
   mm block through the middle, and a closed 10 × 10 × 4 mm hole from Z 3 to 7.
 - `*.deflate`: raw DEFLATE streams (dynamic, fixed, stored, run-length, a match 23 000 bytes back, empty) of data the
   test makes again with the same generator, compressed with Python's zlib module.
+- `pi2_prusaslicer.3mf`: not made by `make.py`. The spec team's sample for `project_import.md`
+  (`docs/spec/samples/project_import/`, spec/next 2c763a7): a 30 × 10 × 15 mm box of their own, saved by PrusaSlicer
+  2.7.2's command line used as a black box, free for the engine's tests.

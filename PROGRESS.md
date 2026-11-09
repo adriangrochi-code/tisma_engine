@@ -11681,3 +11681,11 @@ arreglado en 9d8dc76 y subido.
 - `~nombre` en `one_of` (Prusa CORE One INDX, comportamiento del equipo de fichas): el texto de la variable como
   expresión regular, verdadero si el valor coincide entero (PLA, TPU sí; PETG, PC, ASA no). Si la variable no es
   texto, el error lo nombra. Con esto, las 2261 variantes FFF del paquete deberían leer todo su G-code.
+
+## 2026-11-09 15:45 — project_import.md: la muestra de PrusaSlicer
+
+- Hoja de ruta del dueño (por el equipo de fichas): 1) `project_import.md`, 2) BH37/BH38 cuando llegue la pieza, 3)
+  PLAN.md hacia la beta cerrada de diciembre.
+- La muestra del equipo de fichas (`pi2_prusaslicer.3mf`, PrusaSlicer 2.7.2 por línea de comandos) pasa a
+  `tests/data/formats/` con su prueba: familia PrusaSlicer, `Application` PrusaSlicer-2.7.2, una caja de
+  30 × 10 × 15 mm. El README de la muestra dice dos objetos; el archivo trae uno (avisado).
