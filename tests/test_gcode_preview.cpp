@@ -184,6 +184,12 @@ TEST_CASE("the preview reads the estimated printing time", "[gcode][preview]") {
     CHECK(parse_duration("1x") == -1);
     CHECK(read_gcode_preview("G1 X1\n; estimated printing time = 1h 0m 2s\n").estimated_seconds == 3602);
     CHECK(read_gcode_preview("G1 X1\n").estimated_seconds == -1);
+    // The preparation apart (print_time.md, rule 14), part of the total.
+    const GcodePreview prepared =
+        read_gcode_preview("G1 X1\n; estimated printing time = 1h 4m 0s\n; estimated preparation time = 6m 0s\n");
+    CHECK(prepared.estimated_seconds == 3840);
+    CHECK(prepared.preparation_seconds == 360);
+    CHECK(read_gcode_preview("G1 X1\n").preparation_seconds == 0);
 }
 
 TEST_CASE("line kinds have names and ids", "[gcode][preview]") {

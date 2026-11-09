@@ -821,8 +821,8 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   esquinas (`square_corner_velocity` como desviación de unión) y `minimum_cruise_ratio` (0,5); Marlin con tirón o
   desviación, RepRapFirmware con tirón. Reglas 10 y 14 (PT7): `machine.heat_rate_nozzle`/`heat_rate_bed` (°C/s),
   `home_time` y `probe_time`; el calentamiento de cada espera, `G28`, `G29` y `G4` suman a la preparación, que el G-code
-  dice aparte (`; estimated preparation time`). Quedan: cambios de herramienta como preparación, mostrarla en la
-  interfaz, y las reglas 11 y 15 (aprender de la impresora)
+  dice aparte (`; estimated preparation time`). La interfaz la muestra («1 h 4 min (impresión 58 min, preparación 6 min)» y una
+  fila en la leyenda). Quedan: cambios de herramienta como preparación y las reglas 11 y 15 (aprender de la impresora)
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
   escalar a medida, cortar, separar y copias en grilla. Hecho (2026-10-27): el grupo `transform` de la línea de
   comandos (escala o «N%», encajar en una caja, giros, corte horizontal con las dos mitades cerradas, separar en piezas

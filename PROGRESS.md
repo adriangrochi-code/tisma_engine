@@ -11738,3 +11738,6 @@ arreglado en 9d8dc76 y subido.
   pasaban a 1 min 16 s con un `G4 S60`). La tanda de tiempo se cierra después del inicio. Con prueba.
 - CI local completo en 70ea09a: gcc y clang 1121/1121; ASan cortado por el límite de una hora (se corre de nuevo).
 - No medido: el banco de velocidad (CPU ocupada por el CI y el fuzz; los números no servirían).
+- Regla 14 en la interfaz: junto al botón de laminar, «Tiempo estimado: 1h 4m 0s (impresión 58m 0s, preparación
+  6m 0s)» cuando hay preparación, y una fila «Preparación» en la leyenda de la vista previa. Probado: lectura del
+  comentario; la pantalla no se miró (sin captura).

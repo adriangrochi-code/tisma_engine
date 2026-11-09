@@ -1068,6 +1068,8 @@
     X(LayerOf, "Capa %d de %d  ·  Z %.2f mm", "Layer %d of %d  ·  Z %.2f mm")                                         \
     X(OnlyThisLayer, "Solo esta capa", "This layer only")                                                             \
     X(EstimatedTime, "Tiempo estimado", "Estimated time")                                                             \
+    X(PreparationTime, "Preparación", "Preparation") \
+    X(TimeSplit, "%s (impresión %s, preparación %s)", "%s (printing %s, preparation %s)") \
     X(FilamentUsed, "Filamento", "Filament")                                                                          \
     X(Layers, "Capas", "Layers")                                                                                      \
     X(Lines, "Líneas", "Lines")                                                                                       \

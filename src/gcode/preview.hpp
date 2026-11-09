@@ -88,6 +88,7 @@ struct GcodePreview {
     double extruded = 0.0;  // mm of extruding path
     double travelled = 0.0; // mm of travel path
     double estimated_seconds = -1.0; // from "; estimated printing time = 1h 7m 36s"; -1 when absent
+    double preparation_seconds = 0.0; // from "; estimated preparation time = …" (print_time.md, rule 14), part of the above
     std::size_t lines = 0;
     std::size_t arcs = 0; // G2/G3 moves (with I and J, drawn along their circle)
     std::array<std::size_t, kLineKinds> kind_moves{}; // extrusions per kind (travels for Travel)

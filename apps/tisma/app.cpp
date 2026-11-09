@@ -10022,7 +10022,17 @@ void App::slice_panel() {
         anchor("slice_button");
     } else {
         if (!result_->resin && result_->preview.estimated_seconds > 0.0)
-            loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(result_->preview.estimated_seconds).c_str());
+        {
+            const GcodePreview& p = result_->preview;
+            if (p.preparation_seconds > 0.0) // «1 h 4 min (impresión 58 min, preparación 6 min)», rule 14
+                loc::TextDisabled("%s: %s", tr(T::EstimatedTime),
+                                  format(tr(T::TimeSplit), format_duration(p.estimated_seconds).c_str(),
+                                         format_duration(p.estimated_seconds - p.preparation_seconds).c_str(),
+                                         format_duration(p.preparation_seconds).c_str())
+                                      .c_str());
+            else
+                loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(p.estimated_seconds).c_str());
+        }
         // With a tested network program, the main button sends (devices.md, rule 19); exporting moves to ▲.
         const bool to_host = host_ready() && !result_->resin && device_can_print();
         if (to_host) {
@@ -12210,6 +12220,8 @@ void App::preview_panels() {
         };
         if (p.estimated_seconds >= 0.0)
             line(tr(T::EstimatedTime), format_duration(p.estimated_seconds));
+        if (p.preparation_seconds > 0.0) // heating, homing, waits (print_time.md, rule 14)
+            line(tr(T::PreparationTime), format_duration(p.preparation_seconds));
         if (legend_full_) { // folded: the time only
             if (p.first_layer_seconds > 0.0)
                 line(tr(T::FirstLayerTime), format_duration(p.first_layer_seconds));
