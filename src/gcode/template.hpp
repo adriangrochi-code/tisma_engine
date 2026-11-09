@@ -54,6 +54,14 @@ struct TemplateContext {
     std::set<std::string, std::less<>> verbatim;
     // The cura dialect: only {name} is replaced (gcode_macros.md, rule 10 bis).
     bool braces_only = false;
+    // Speed and temperature variables the engine could not work out from the
+    // settings and gave a safe value instead of 0 (gcode_macros.md, rule 10
+    // quater), and those a template used, for the log.
+    std::set<std::string, std::less<>> estimated, estimated_used;
+    // A feed of 0 in a rendered line (F0) is written as this one, mm/min
+    // (rule 10 quater; 0: left as it is), and counted.
+    double zero_feed = 0.0;
+    int zero_feeds = 0;
 };
 
 // Renders a template (gcode_templates.md, rules 1 to 8):

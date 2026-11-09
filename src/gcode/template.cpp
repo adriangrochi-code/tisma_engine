@@ -5,6 +5,7 @@
 #include "gcode/template.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
@@ -557,7 +558,62 @@ std::size_t closing(std::string_view text, std::size_t open) {
 
 } // namespace
 
+namespace {
+
+std::string render_raw(std::string_view text, TemplateContext& context, std::string_view section);
+
+// Each F word of value 0 outside comments (F0, F0.0) becomes F<feed>
+// (gcode_macros.md, rule 10 quater): a machine's own G-code with a speed
+// variable the engine left at 0 must not stop the print.
+std::string without_zero_feeds(std::string text, TemplateContext& context) {
+    if (context.zero_feed <= 0.0)
+        return text;
+    std::string out;
+    out.reserve(text.size());
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string::npos)
+            end = text.size();
+        std::string line = text.substr(start, end - start);
+        const std::size_t comment = std::min(line.find(';'), line.size());
+        for (std::size_t i = 0; i < comment; ++i) {
+            if ((line[i] != 'F' && line[i] != 'f') || (i > 0 && line[i - 1] != ' ' && line[i - 1] != '\t'))
+                continue;
+            std::size_t j = i + 1;
+            while (j < comment && (std::isdigit(static_cast<unsigned char>(line[j])) || line[j] == '.' || line[j] == '-' ||
+                                   line[j] == '+'))
+                ++j;
+            if (j == i + 1 || (j < comment && line[j] != ' ' && line[j] != '\t' && line[j] != '\r'))
+                continue;
+            const std::string number = line.substr(i + 1, j - i - 1);
+            char* end_of = nullptr;
+            const double v = std::strtod(number.c_str(), &end_of);
+            if (end_of != number.c_str() + number.size() || v != 0.0)
+                continue;
+            const std::string feed = std::to_string(std::llround(context.zero_feed));
+            line.replace(i + 1, j - i - 1, feed);
+            ++context.zero_feeds;
+            i += feed.size();
+        }
+        out += line;
+        if (end == text.size())
+            break;
+        out += '\n';
+        start = end + 1;
+    }
+    return out;
+}
+
+} // namespace
+
 std::string render_template(std::string_view text, TemplateContext& context, std::string_view section) {
+    return without_zero_feeds(render_raw(text, context, section), context);
+}
+
+namespace {
+
+std::string render_raw(std::string_view text, TemplateContext& context, std::string_view section) {
     const Source src{text, section};
     Variables locals;
     Variables converted; // aliases' values in their own type
@@ -567,6 +623,8 @@ std::string render_template(std::string_view text, TemplateContext& context, std
             if (const auto it = scope->find(name); it != scope->end()) {
                 if (scope == &context.variables && context.unfilled.contains(name))
                     context.unfilled_used.emplace(name);
+                if (scope == &context.variables && context.estimated.contains(name))
+                    context.estimated_used.emplace(name);
                 return &it->second;
             }
         const auto alias = context.aliases.find(name);
@@ -763,5 +821,7 @@ std::string render_template(std::string_view text, TemplateContext& context, std
         src.fail(open.back().at, "an {if} without its {endif}");
     return out;
 }
+
+} // namespace
 
 } // namespace tisma

@@ -2473,6 +2473,9 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     c.variables["layer_z"] = c.variables["max_layer_z"] = TemplateValue::of(std::round(first_z * 1000.0) / 1000.0);
     // The names of the printers' own G-code (gcode_macros.md, rules 7 to 10 bis).
     add_macro_variables(c, s);
+    // An F0 left in a machine's G-code moves at the travel speed (gcode_macros.md,
+    // rule 10 quater): the profile's, else 100 mm/s.
+    c.zero_feed = 60.0 * (s.travel_speed > 0.0 ? s.travel_speed : 100.0);
     // The machine's G-code from the pack (gcode_macros.md, rule 10 bis): cura
     // only replaces {name}; the orcaslicer family's machine values fill the
     // names the engine cannot.
@@ -4548,6 +4551,21 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << text << "\n";
     // Variables of the printer's own G-code the engine cannot fill yet, by
     // name (gcode_macros.md, rule 9).
+    if (warnings && !templates.estimated_used.empty()) {
+        std::string names;
+        for (const std::string& name : templates.estimated_used)
+            names += (names.empty() ? "" : ", ") + name;
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora usa velocidades que los ajustes no dan; van con un caudal "
+                             "seguro de 8 mm³/s: " + names + ".",
+                             double(templates.estimated_used.size()), "warning"});
+    }
+    if (warnings && templates.zero_feeds > 0)
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora pedía velocidad 0 (F0) en " +
+                                 std::to_string(templates.zero_feeds) +
+                                 " líneas; van con la velocidad de viaje del perfil.",
+                             double(templates.zero_feeds), "warning"});
     if (warnings && !templates.unfilled_used.empty()) {
         std::string names;
         for (const std::string& name : templates.unfilled_used)

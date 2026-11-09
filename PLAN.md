@@ -1305,7 +1305,7 @@ Prioridad alta, después del árbol en GPU. Primero las reglas 1 a 5 y la 9.
   no se reconoce es un 3MF del estándar.
 - [ ] Reglas 3 y 4: mallas, partes y tipos de parte de cada familia. Las mallas en `3D/Objects` de la familia Orca ya se
   leen (extensión de producción, `formats.md` regla 18; prueba del 2026-11-09). Falta medir los archivos de muestra que genera el
-  equipo de fichas).
+  equipo de fichas.
 - [ ] Regla 5: placas a camas.
 - [ ] Regla 9: el diálogo al abrir.
 - [ ] Reglas 6 a 8, 11 y 12: ajustes con la tabla de traducción del paquete de perfiles (la hace la sesión de perfiles).

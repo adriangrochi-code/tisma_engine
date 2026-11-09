@@ -2761,3 +2761,54 @@ TEST_CASE("a machine G-code the engine cannot read: the simple version, with a w
         return w.kind == "gcode_macro" && w.message.find("prusaslicer") != std::string::npos;
     }));
 }
+
+TEST_CASE("a machine's G-code speeds come from the settings, never F0 (gcode_macros.md rule 10 quater, GM12, BH45)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"215"};
+    s.wall_speed = 60.0;
+    s.outer_wall_speed = {50.0, false};
+    s.filament_max_flow = 21.0;
+    s.travel_speed = 200.0;
+    // Speeds computed from a machine's own variables, as a printer's start
+    // G-code does, and an F0 written as it is.
+    s.start_gcode = "G1 E10 F{outer_wall_volumetric_speed/(24/20)*60}\n"
+                    "G0 X128 E8 F{flush_volumetric_speeds[initial_no_support_extruder]/2.4053*60}\n"
+                    "M109 S{flush_temperatures[initial_no_support_extruder]}\n"
+                    "M620.1 E F0 T{nozzle_temperature_range_high[initial_no_support_extruder]}\n"
+                    "G1 X5 F0.0 ; F0 in a comment stays";
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s, &warnings);
+    const std::vector<std::string> lines = lines_of(out.str());
+    for (const std::string& line : lines) {
+        const std::string code = line.substr(0, line.find(';'));
+        CAPTURE(line);
+        CHECK(code.find(" F0 ") == std::string::npos);
+        CHECK(!code.ends_with(" F0"));
+        CHECK(!code.ends_with(" F0.0"));
+    }
+    // 50 mm/s × the outer bead × 0.2 mm, under the filament's 21 mm³/s.
+    const double outer = 50.0 * auto_wall_width(s.nozzle_diameter) * s.layer_height;
+    const auto has_prefix = [&](const std::string& prefix) {
+        return std::any_of(lines.begin(), lines.end(), [&](const std::string& l) { return l.starts_with(prefix); });
+    };
+    CHECK(has_prefix("G1 E10 F" + template_text(TemplateValue::of(std::round(outer * 1000.0) / 1000.0 / (24 / 20) * 60))));
+    CHECK(has_prefix("G0 X128 E8 F523"));          // 21 / 2.4053 × 60
+    CHECK(has_prefix("M109 S215"));
+    CHECK(has_prefix("M620.1 E F12000 T215"));      // travel speed, mm/min
+    CHECK(has_prefix("G1 X5 F12000 ; F0 in a comment stays"));
+    CHECK(std::any_of(warnings.begin(), warnings.end(),
+                      [](const Warning& w) { return w.kind == "gcode_macro" && w.message.find("F0") != std::string::npos; }));
+    // Without any flow in the settings: a safe one, named.
+    Settings bare = test_printer();
+    bare.start_gcode = "G1 E10 F{filament_max_volumetric_speed[0]*60}";
+    std::vector<Warning> bare_warnings;
+    std::ostringstream bare_out;
+    write_gcode(bare_out, slice_model(m, bare), bare, &bare_warnings);
+    CHECK(bare_out.str().find("G1 E10 F480") != std::string::npos);
+    CHECK(std::any_of(bare_warnings.begin(), bare_warnings.end(), [](const Warning& w) {
+        return w.kind == "gcode_macro" && w.message.find("filament_max_volumetric_speed") != std::string::npos;
+    }));
+}

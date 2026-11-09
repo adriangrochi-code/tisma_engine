@@ -11633,3 +11633,20 @@ arreglado en 9d8dc76 y subido.
   un 3MF del estándar (regla 2). Pruebas `[import]` (3 casos).
 - Sigue: reglas 3–5 y 9 (mallas, tipos de parte, placas, diálogo), que piden los archivos de muestra del equipo de
   fichas.
+
+## 2026-11-09 11:40 — BH45: el G-code de inicio de una A1 con F0
+
+- Urgente del dueño, por el equipo de fichas: el G-code de inicio original de la Bambu A1 pegado en
+  `machine.start_gcode` hacía fallar el laminado («feed rate F0 is not positive»). `outer_wall_volumetric_speed` y
+  `flush_volumetric_speeds[initial_no_support_extruder]` quedaban en 0.
+- Arreglado según `gcode_macros.md`, regla 10 quater (spec/next 0aca4aa):
+  - el motor calcula las velocidades: la pared externa (velocidad × ancho × capa, sin pasar el caudal del filamento),
+    `flush_volumetric_speeds` y `filament_max_volumetric_speed` (el caudal del filamento, del cabezal o de la
+    impresión);
+  - sin ningún caudal en los ajustes, 8 mm³/s con aviso;
+  - las temperaturas salen de `machine.variables` (`flush_temperatures`, `nozzle_temperature_range_*`);
+  - un `F0` que quede en el G-code de la máquina, fuera de los comentarios, se escribe con la velocidad de viaje del
+    perfil (100 mm/s si no tiene), con aviso.
+- Prueba propia (GM12, sin el G-code de Bambu, que no se lee por la sala limpia): las mismas construcciones,
+  velocidades calculadas desde esas variables y un `F0` escrito tal cual. **No probado** con el G-code real de la A1,
+  X1C, P1S ni A1 mini: lo repite el equipo de fichas.
