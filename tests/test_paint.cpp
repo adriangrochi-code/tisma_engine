@@ -10,7 +10,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <numbers>
 #include <regex>
 #include <sstream>
@@ -443,4 +445,41 @@ TEST_CASE("paint: the slicer follows painted support and seams", "[paint]") {
     }
     CHECK(outer >= 90);
     CHECK(on_seam == outer);
+}
+
+// Not run by default: strokes on a part of a few huge triangles (PLAN.md,
+// «Pintura en piezas de pocos triángulos enormes»).
+TEST_CASE("paint bench: 200 strokes on a 100 mm cube of 12 triangles", "[.bench]") {
+    TriangleMesh cube;
+    const float s = 100.0f;
+    const Vec3f v[8] = {{0, 0, 0}, {s, 0, 0}, {s, s, 0}, {0, s, 0}, {0, 0, s}, {s, 0, s}, {s, s, s}, {0, s, s}};
+    const int f[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                          {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+    for (const auto& t : f)
+        cube.add_triangle(v[t[0]], v[t[1]], v[t[2]]);
+    Painting p;
+    Brush b;
+    b.radius = 2.0;
+    b.detail = b.radius / 6.0;
+    b.stroke = true;
+    const auto t0 = std::chrono::steady_clock::now();
+    for (int i = 0; i < 200; ++i) {
+        const float x = 10.0f + 0.4f * float(i), y = 50.0f + 20.0f * std::sin(0.05f * float(i));
+        b.from = b.centre;
+        b.centre = {x, y, s};
+        if (i == 0)
+            b.from = b.centre;
+        paint(p, PaintChannel::Support, cube, b);
+    }
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    std::printf("200 strokes on 12 triangles: %.1f ms (%.2f ms a stroke)\n", ms, ms / 200.0);
+    // The view's rebuild of the touched triangles after a stroke.
+    const auto t1 = std::chrono::steady_clock::now();
+    std::size_t pieces = 0;
+    for (std::size_t t = 0; t < cube.triangle_count(); ++t)
+        for_each_painted(p, PaintChannel::Support, t, cube.corner(t, 0), cube.corner(t, 1), cube.corner(t, 2),
+                         [&](const Vec3f&, const Vec3f&, const Vec3f&, std::uint8_t) { ++pieces; });
+    std::printf("walk: %zu pieces, %.2f ms\n", pieces,
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count());
+    CHECK(ms > 0.0);
 }

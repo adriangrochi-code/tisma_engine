@@ -86,4 +86,19 @@ TreeFill tree_fill_field(const Polygons& area, const Polygons& above, std::span<
                          std::span<const std::vector<float>> squared, double bead, double spacing, double double_wall,
                          double angle);
 
+// tree_fill_field in two steps, so that the fields of many layers can be
+// computed at once in between: from the branches' fields, the walls half a
+// bead in, the inside a bead in, and whether a branch is double_wall wide;
+// then the interface, the second wall (by offsets, where one is that wide)
+// and the lines.
+struct TreeFieldWalls {
+    std::vector<Toolpath> walls;
+    Polygons inside;
+    bool wide = false;
+};
+TreeFieldWalls tree_field_walls(std::span<const BitGrid> grids, std::span<const std::vector<float>> squared, double bead,
+                                double double_wall);
+TreeFill tree_field_finish(const Polygons& area, const Polygons& above, TreeFieldWalls walls, double bead,
+                           double spacing, double double_wall, double angle);
+
 } // namespace tisma

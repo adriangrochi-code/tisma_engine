@@ -1157,8 +1157,8 @@ pared, la segunda pared de las ramas anchas y las líneas.
   (15,1 → 2,7 ms en 200 trazos).
 - [x] Árbol, paso 1 (CPU): áreas simplificadas a 1/8 de cordón y sin buscar segunda pared cuando ninguna rama es tan
   ancha. Laminado 1,05 → 0,71 s, G-code 149 → 103 ms.
-- [ ] Árbol, paso 2 (GPU): el relleno de cada capa sale de un campo de distancias. **Hecho, pero sin conectar
-  (2026-11-06):**
+- [x] Árbol, paso 2 (GPU): el relleno de cada capa sale de un campo de distancias. **Conectado al laminado
+  (2026-11-06).** Lo que se hizo:
   - la transformada exacta en CPU y en GPU, también para todas las capas en una sola llamada;
   - `distance_level` (marching squares);
   - `tree_fill_field`, igual a `tree_fill` en las pruebas.
@@ -1168,9 +1168,19 @@ pared, la segunda pared de las ramas anchas y las líneas.
   - Conectada, haría el árbol más lento aun con la transformada gratis. Para que pague:
     - [x] una grilla por isla (por rama), no por capa (2026-11-06): en la esfera de 100 mm el laminado con el campo
       pasa a 1,39 s contra 1,11 s con los offsets (antes 2,9 contra 1,44 s), con la transformada en la CPU;
-    - marching squares y los umbrales también en la GPU;
-    - la segunda pared desde el mismo campo.
-  - Hasta entonces el laminado usa los offsets (paso 1).
+    - [x] `distance_level` sin raíces para clasificar y sin tabla hash (2026-11-06): medido con callgrind en las
+      pruebas `[field]`, 20,4 → 12,3 M instrucciones; la ruta del campo, 51,8 → 43,2 M contra 19,5 M de los
+      offsets. Lo que queda: la transformada (15 %), las líneas (compartidas con los offsets) y la segunda pared;
+    - conectado (2026-11-06): el laminado junta las capas de a 64 y hace en una sola llamada las transformadas de
+      todas sus ramas, en la GPU si hay una; si no, en la CPU, con los mismos números, así que el G-code no depende
+      del equipo. Los contornos se simplifican a 1/12 de cordón (a 1/8, como las áreas, la pared de una rama fina
+      quedaba un 10 % más corta). La segunda pared se sigue haciendo con offsets, solo en las capas donde el campo
+      encuentra una rama tan ancha: hecha con bits (el núcleo engordado) salía hasta un 10 % más corta donde se juntan
+      dos ramas, y pedía una segunda transformada;
+    - medido en la esfera de 100 mm (laminado entero, el mejor de 5, solo CPU): 1,29 s con los offsets (cffa3c7)
+      contra 1,31 s con el campo; G-code de 488 685 a 497 276 líneas. Con una GPU real se ahorra la transformada
+      (250–300 ms de CPU en total, repartidos entre los núcleos): sin medir, acá solo hay llvmpipe;
+    - queda: marching squares y los umbrales en la GPU, y la meta de 150 ms para el relleno del árbol.
   - Las ramas se rasterizan en una grilla de bits por capa (la misma `BitGrid` del soporte en grilla).
   - Un kernel calcula la distancia euclídea a su borde en dos pasadas separables: columnas, después filas.
   - La pared es la curva de nivel a medio cordón (marching squares).
@@ -1181,8 +1191,9 @@ pared, la segunda pared de las ramas anchas y las líneas.
   - Meta: el relleno del árbol por debajo de 150 ms en la esfera.
 - [ ] Árbol, paso 3: las áreas (discos y cascos de las ramas) rasterizadas en la GPU en la misma grilla, sin pasar
   por Clipper.
-- [ ] Pintura en piezas de pocos triángulos enormes: acortar el recorrido del árbol de cada triángulo en `paint` (hoy
-  rehace el árbol entero del triángulo en cada toque).
+- [x] Pintura en piezas de pocos triángulos enormes (2026-11-06): medido, no hace falta. En un cubo de 100 mm de 12
+  triángulos, 200 trazos de 2 mm tardan 16 ms (0,08 ms cada uno) y rearmar la vista, 0,07 ms (3461 piezas). Queda la
+  prueba oculta `[.bench]` en `tests/test_paint.cpp`.
 - [ ] Repetir con la pieza del tester (BH37/BH38) cuando llegue.
 
 ### Lo nuevo de OrcaSlicer 2.5 (`docs/spec/features/orca_2_5.md`, pedido del dueño, 2026-10-29)
@@ -1285,6 +1296,20 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
    Deformación exagerada y los mapas de von Mises y desplazamiento, hechos el 2026-11-04; la memoria y el tiempo en Más opciones y «Análisis» fuera de Impresión 3D, hechos el 2026-11-04. Arrastrar la flecha de una fuerza, hecho el 2026-11-04. La dirección de impresión (Z o cinta), hecha el 2026-11-04. Optimizar con el relleno mínimo uniforme con el relleno por zonas, con nervios y con refuerzos, y la orientación recomendada, hechos el 2026-11-04. «Calcular en la nube» con su candado por plan, hecho el 2026-11-04. Faltan:,
    el resto de Optimizar (retícula);
 5. la pestaña Aerodinámica, con A3 (CFD).
+
+### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
+
+Prioridad alta, después del árbol en GPU. Primero las reglas 1 a 5 y la 9.
+- [x] Regla 1: reconocer el programa por los archivos del paquete (familia PrusaSlicer, familia OrcaSlicer, Cura) y
+  nombrarlo por el campo `Application` (`project_source`, `src/io/project_import.*`, 2026-11-09); regla 2: lo que
+  no se reconoce es un 3MF del estándar.
+- [ ] Reglas 3 y 4: mallas, partes y tipos de parte de cada familia. Las mallas en `3D/Objects` de la familia Orca ya se
+  leen (extensión de producción, `formats.md` regla 18; prueba del 2026-11-09). Falta medir los archivos de muestra que genera el
+  equipo de fichas.
+- [ ] Regla 5: placas a camas.
+- [ ] Regla 9: el diálogo al abrir.
+- [ ] Reglas 6 a 8, 11 y 12: ajustes con la tabla de traducción del paquete de perfiles (la hace la sesión de perfiles).
+- [ ] Regla 10: pintura, cuando haya archivos de muestra (PI6 a PI8).
 
 ## Avance
 

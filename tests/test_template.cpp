@@ -105,7 +105,7 @@ TEST_CASE("templates: errors name the section, the line and the column (rule 8, 
     CHECK_THROWS_WITH(render("{endif}"), ContainsSubstring("{endif} without its {if}"));
     CHECK_THROWS_WITH(render("{1 +}"), ContainsSubstring("a value is expected"));
     CHECK_THROWS_WITH(render("{foo(1)}"), ContainsSubstring("unknown function 'foo'"));
-    CHECK_THROWS_WITH(render("{temperature[3]}"), ContainsSubstring("index 3 is out of 'temperature'"));
+    CHECK_THROWS_WITH(render("{temperature[-1]}"), ContainsSubstring("index -1 is out of 'temperature'"));
     CHECK_THROWS_WITH(render("{1 / 0}"), ContainsSubstring("division by zero"));
     CHECK_THROWS_WITH(render("{ {"), ContainsSubstring("a { without its }"));
     CHECK_THROWS_WITH(render("{if 1 +}{endif}"), ContainsSubstring("a value is expected"));

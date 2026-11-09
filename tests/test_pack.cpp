@@ -542,3 +542,20 @@ TEST_CASE("pack: a filament's own G-code with macros in place of the simple one"
                                             warnings);
     CHECK(cura.profile.settings.filament_start_gcode == "; simple");
 }
+
+TEST_CASE("pack: a filament's values in the program it comes from fill the machine's G-code variables", "[pack][macros]") {
+    std::vector<std::string> warnings;
+    const PackEntry pla = parse_pack_entry(R"({"format": "tisma-pack-entry", "version": 2, "technology": "fff",
+        "profile": {"format": "tisma-profile", "version": 1, "kind": "filament", "name": "Acme PLA",
+                    "settings": {"machine": {"variables": {"temperature": [215]}}}},
+        "source_values": {"dialect": "orcaslicer", "preset": "Acme PLA @BBL",
+                          "values": {"temperature_vitrification": [55], "required_nozzle_HRC": "3",
+                                     "temperature": [999], "hold": true}}})",
+                                           warnings);
+    const auto& v = pla.profile.settings.variables;
+    REQUIRE(v.contains("temperature_vitrification"));
+    CHECK(v.at("temperature_vitrification") == std::vector<std::string>{"55"});
+    CHECK(v.at("required_nozzle_HRC") == std::vector<std::string>{"3"});
+    CHECK(v.at("temperature") == std::vector<std::string>{"215"}); // the profile's own wins
+    CHECK(v.at("hold") == std::vector<std::string>{"true"});
+}

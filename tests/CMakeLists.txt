@@ -98,6 +98,7 @@ add_executable(tisma_tests
   test_bambu.cpp
   test_pack.cpp
   test_library.cpp
+  test_project_import.cpp
   test_xz.cpp
   test_pack_fetch.cpp
   test_print_host.cpp
@@ -149,6 +150,11 @@ endif()
 add_executable(tisma_fuzz_gcode fuzz_gcode.cpp)
 target_link_libraries(tisma_fuzz_gcode PRIVATE tisma_core tisma_warnings)
 add_test(NAME fuzz_gcode_smoke COMMAND tisma_fuzz_gcode 12 7)
+# Fuzzer cases that failed once, sliced alone (TISMA_FUZZ_ONLY): seed 6112026,
+# run 1728, a firmware G10 left out by a tool when a change by height set the
+# length back to 0, and never undone (2026-11-06).
+add_test(NAME fuzz_gcode_6112026_1728 COMMAND tisma_fuzz_gcode 2000 6112026)
+set_tests_properties(fuzz_gcode_6112026_1728 PROPERTIES ENVIRONMENT "TISMA_FUZZ_ONLY=1728")
 
 # The settings panel as data for the phone (mobile_app.md, rule 7): no window,
 # so it runs everywhere the interface builds.
@@ -438,6 +444,9 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${script}.png)
       set_tests_properties(ui_script_${script} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     endforeach()
+    # The analysis takes every core and, under ASan, about 160 s alone: more
+    # time, and not beside the full drag test.
+    set_tests_properties(ui_script_structural_analyze PROPERTIES TIMEOUT 900 RESOURCE_LOCK all_cores)
     # The timeline (rule 8): the stand-in refuses the body «Caja 2».
     add_test(NAME ui_script_design_timeline
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

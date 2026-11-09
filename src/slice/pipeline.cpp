@@ -16,6 +16,8 @@
 #include "slice/belt.hpp"
 #include "slice/painted.hpp"
 #include "support/support.hpp"
+#include "geom/distance.hpp"
+#include "gpu/compute.hpp"
 #include "support/tree.hpp"
 #include "surfaces/bridges.hpp"
 #include "perimeters/fixed.hpp"
@@ -1255,6 +1257,74 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     return out;
 }
 
+namespace {
+
+// The squared distances inside many grids at once: on the GPU when there is
+// one, on the CPU (the same numbers) when there is none or Vulkan fails.
+std::vector<std::vector<float>> distances_inside(std::span<const BitGrid> grids, gpu::Context* gpu) {
+    std::vector<std::vector<float>> out;
+    if (grids.empty())
+        return out;
+    if (gpu)
+        try {
+            gpu->distance_inside(grids, out);
+            return out;
+        } catch (const std::runtime_error&) {
+        }
+    out.assign(grids.size(), {});
+    tbb::parallel_for(std::size_t(0), grids.size(), [&](std::size_t k) { out[k] = squared_distance_inside(grids[k]); });
+    return out;
+}
+
+// The organic tree's fill of every layer with an area (tree_width > 0) from
+// distance fields (tree_fill_field), the fields of a chunk of layers in one
+// GPU run.
+// In chunks, so that the fields of a tall model do not all sit in memory.
+void tree_fill_by_field(SlicedModel& out, const std::vector<Polygons>& above, const std::vector<double>& width,
+                        const Settings& settings, gpu::Context* gpu) {
+    constexpr std::size_t kChunk = 64;
+    const std::size_t n = width.size();
+    for (std::size_t first = 0; first < n; first += kChunk) {
+        const std::size_t last = std::min(n, first + kChunk), count = last - first;
+        // Each layer's grids, one after the other in `grids`; layer k's from start[k].
+        std::vector<std::vector<BitGrid>> own(count);
+        tbb::parallel_for(first, last, [&](std::size_t l) {
+            if (width[l] > 0.0)
+                own[l - first] = tree_branch_grids(out.support_areas[l], above[l], width[l]);
+        });
+        std::vector<std::size_t> start(count + 1, 0);
+        for (std::size_t k = 0; k < count; ++k)
+            start[k + 1] = start[k] + own[k].size();
+        std::vector<BitGrid> grids;
+        grids.reserve(start[count]);
+        for (std::vector<BitGrid>& g : own)
+            for (BitGrid& b : g)
+                grids.push_back(std::move(b));
+        const std::vector<std::vector<float>> fields = distances_inside(grids, gpu);
+        std::vector<TreeFieldWalls> walls(count);
+        tbb::parallel_for(first, last, [&](std::size_t l) {
+            const std::size_t k = l - first;
+            if (width[l] > 0.0)
+                walls[k] = tree_field_walls(std::span<const BitGrid>(grids).subspan(start[k], start[k + 1] - start[k]),
+                                            std::span<const std::vector<float>>(fields).subspan(start[k], start[k + 1] - start[k]),
+                                            width[l], settings.tree_double_wall_diameter);
+        });
+        tbb::parallel_for(first, last, [&](std::size_t l) {
+            const std::size_t k = l - first;
+            if (width[l] <= 0.0)
+                return;
+            // Interface lines at 45 and 135 degrees in turn (supports_more.md, rule 17).
+            TreeFill tf = tree_field_finish(out.support_areas[l], above[l], std::move(walls[k]), width[l],
+                                            settings.support_spacing, settings.tree_double_wall_diameter,
+                                            (l % 2 == 0) ? 0.0 : 90.0);
+            out.fills[l].support = std::move(tf.support);
+            out.fills[l].support_interface = std::move(tf.interface);
+        });
+    }
+}
+
+} // namespace
+
 SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& given, gpu::Context* gpu,
                          const StressField* stress, const Painting* painting, const PartFrame* frame, int tool,
                          const IndexedMesh* negative) {
@@ -1908,6 +1978,12 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                          a.top_under == b.top_under && a.bottom == b.bottom && a.sparse == b.sparse &&
                          a.bridge == b.bridge;
         });
+    // The tree's fill comes from distance fields (PLAN.md, «Soporte en árbol
+    // y pintura más livianos», step 2), the layers' fields computed together
+    // below, on the GPU when there is one: the same numbers either way.
+    const bool tree_by_field = settings.support_style == SupportStyle::Organic;
+    std::vector<Polygons> tree_above(tree_by_field ? out.layers.size() : 0);
+    std::vector<double> tree_width(tree_by_field ? out.layers.size() : 0, 0.0);
     tbb::parallel_for(std::size_t(0), out.layers.size(),
                       [&](std::size_t l) {
                           if (repeats[l])
@@ -1995,12 +2071,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                                : settings.support_width.value <= 0.0 ? settings.wall_width
                                                : settings.support_width.percent ? settings.support_width.value / 100.0 * h
                                                                                 : settings.support_width.value;
-                          if (settings.support_style == SupportStyle::Organic) {
-                              // Interface lines at 45 and 135 degrees in turn (supports_more.md, rule 17).
-                              TreeFill tf = tree_fill(out.support_areas[l], above, width, settings.support_spacing,
-                                                      settings.tree_double_wall_diameter, (l % 2 == 0) ? 0.0 : 90.0);
-                              out.fills[l].support = std::move(tf.support);
-                              out.fills[l].support_interface = std::move(tf.interface);
+                          if (settings.support_style == SupportStyle::Organic) { // filled below, every layer's field at once
+                              tree_above[l] = std::move(above);
+                              tree_width[l] = width;
                               return;
                           }
                           // The base in lines along support.line_angle, support.spacing
@@ -2020,6 +2093,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           }
                           out.fills[l].support_interface = support_interface(interface, contact, settings, bead, width);
                       });
+    if (tree_by_field)
+        tree_fill_by_field(out, tree_above, tree_width, settings, gpu);
     for (std::size_t l = period; l < out.layers.size(); ++l)
         if (repeats[l]) {
             out.fills[l] = out.fills[l - period];

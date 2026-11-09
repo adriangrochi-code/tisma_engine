@@ -96,6 +96,76 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
     if (const auto z = v.find("layer_z"); z != v.end())
         set("toolchange_z", z->second);
 
+    // Speeds and temperatures a machine's G-code computes from (gcode_macros.md,
+    // rule 10 quater, BH45): worked out from the settings, never 0. One the
+    // settings do not give takes a safe value, named in the log.
+    const auto first_number = [&](const char* name) {
+        const auto it = v.find(name);
+        if (it == v.end())
+            return 0.0;
+        const TemplateValue& x = it->second.kind == TemplateValue::Kind::List
+                                     ? (it->second.list.empty() ? TemplateValue{} : it->second.list.front())
+                                     : it->second;
+        return x.kind == TemplateValue::Kind::Real ? x.real : x.kind == TemplateValue::Kind::Int ? double(x.integer) : 0.0;
+    };
+    const auto estimate = [&](const char* name, TemplateValue value) {
+        if (v.contains(name))
+            return;
+        v[name] = std::move(value);
+        c.estimated.insert(name);
+    };
+    // The filament's flow, mm3/s: its own cap, else the hot end's, else the
+    // print's; none, a safe one for any common hot end and filament.
+    constexpr double kSafeFlow = 8.0;
+    const double flow = s.filament_max_flow > 0.0  ? s.filament_max_flow
+                        : s.machine_max_flow > 0.0 ? s.machine_max_flow
+                        : s.speed_max_flow > 0.0   ? s.speed_max_flow
+                                                   : 0.0;
+    for (const char* name : {"flush_volumetric_speeds", "filament_max_volumetric_speed"}) {
+        if (flow > 0.0)
+            set(name, list_of(number(flow)));
+        else
+            estimate(name, list_of(number(kSafeFlow)));
+    }
+    const double outer_speed = s.outer_wall_speed.of(s.wall_speed);
+    const double outer_width = s.outer_wall_width > 0.0 ? s.outer_wall_width : auto_wall_width(s.nozzle_diameter);
+    if (const double outer = outer_speed * outer_width * s.layer_height; outer > 0.0)
+        set("outer_wall_volumetric_speed", number(flow > 0.0 ? std::min(outer, flow) : outer));
+    else
+        estimate("outer_wall_volumetric_speed", number(flow > 0.0 ? flow : kSafeFlow));
+    // The filament's temperature, from machine.variables.
+    double nozzle = first_number("temperature");
+    if (nozzle <= 0.0)
+        nozzle = first_number("first_layer_temperature");
+    for (const char* name : {"flush_temperatures", "nozzle_temperature_range_high", "nozzle_temperature_range_low"})
+        if (nozzle > 0.0)
+            set(name, list_of(whole(nozzle)));
+    for (const char* name : {"initial_no_support_extruder", "initial_extruder", "initial_filament_id",
+                             "initial_no_support_filament_id", "initial_nozzle_id", "current_filament_id"})
+        set(name, TemplateValue::of(0LL));
+    // The tool a filament's G-code runs for (PrusaSlicer's), the hot ends
+    // and the filament map of the OrcaSlicer family (1-based), measured with
+    // the profile pack; Cura's print_temperature is the filament's.
+    set("filament_extruder_id", TemplateValue::of(0LL));
+    for (const char* name : {"initial_no_support_hotend", "current_hotend", "first_non_support_hotend"})
+        set(name, TemplateValue::of(0LL));
+    set("filament_map", list_of(TemplateValue::of(1LL)));
+    set("first_filaments", list_of(TemplateValue::of(0LL)));
+    set("total_toolchanges", TemplateValue::of(0LL));
+    if (nozzle > 0.0)
+        set("print_temperature", whole(nozzle));
+    // The rest of Bambu Lab's, measured with the profile pack (rule 10 quater).
+    set("first_non_support_filaments", list_of(TemplateValue::of(0LL)));
+    set("filament_ids", list_of(TemplateValue::of(std::string())));
+    set("curr_y_acceleration_limit", number(s.max_accel_y));
+    set("nozzle_diameter_at_nozzle_id", list_of(number(s.nozzle_diameter)));
+    set("overall_chamber_temperature", whole(s.chamber_temperature));
+    set("min_vitrification_temperature", TemplateValue::of(0LL));
+    set("temperature_vitrification", list_of(TemplateValue::of(0LL)));
+    set("hold_chamber_temp_for_flat_print", TemplateValue::of(false));
+    set("additional_fan_full_speed_layer", list_of(TemplateValue::of(0LL)));
+    set("close_additional_fan_first_x_layers", list_of(TemplateValue::of(0LL)));
+
     // The rest of the list.
     for (const MacroVariable& m : kVariables) {
         const std::string name(m.name);

@@ -10,6 +10,25 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Cambiado
+
+- El relleno del soporte en árbol sale de campos de distancias calculados para muchas capas a la vez, en la GPU si
+  hay una. Sin GPU tarda lo mismo que antes; el G-code es el mismo con GPU o sin ella.
+
+### Corregido
+
+- El G-code de inicio original de una impresora Bambu Lab pegado en el de la máquina hacía fallar el laminado con
+  «F0»: las velocidades que ese G-code calcula (`outer_wall_volumetric_speed`, `flush_volumetric_speeds` y otras)
+  ahora salen de los ajustes, y un `F0` que quede se escribe con la velocidad de viaje, con aviso (BH45). También se llenan las variables propias de las Bambu Lab
+  (`first_layer_center_no_wipe_tower`, `first_non_support_filaments`, `max_print_z` y otras), y una lista leída más
+  allá de su último valor da el último, con aviso, en vez de cortar. Con la corrida del paquete entero: el G-code
+  de los filamentos de Prusa (`filament_extruder_id`), `print_temperature` de Cura, la forma
+  `[nombre_[índice]]`, `random()`, el mapa de filamentos de la familia OrcaSlicer, y `M98` de RepRapFirmware como
+  macro que puede calentar; varias sentencias por bloque y asignaciones (`{x[1] = …}`) en las plantillas. El cambio
+  de `F0` solo toca movimientos (G0 a G3): la `F` de otros comandos queda como está.
+- Con la retracción del firmware (G10/G11) y varios extrusores, una herramienta que se iba con la retracción hecha
+  cuando un cambio por altura dejaba el largo en 0 volvía sin G11 y extruía con el filamento retraído.
+
 ### Agregado
 
 - Mi biblioteca (`tisma-engine library`): guardar piezas con su proyecto, recetas por impresora y análisis,

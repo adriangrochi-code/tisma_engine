@@ -979,7 +979,10 @@ public:
         double& pulled = pulled_[std::size_t(std::clamp(tool_, 0, int(pulled_.size()) - 1))];
         if (firmware_) {
             retract(0.0);
-            pulled = retracted_ ? retract_ : 0.0;
+            // A G10 still out stays the leaving tool's until its G11, even when
+            // the length is 0 now (a change by height set the one it pulled
+            // with; fuzzer seed 6112026, run 1728).
+            pulled = retracted_ ? std::max(retract_, 1e-6) : 0.0;
         } else {
             const double now = retracted_ ? retracted_amount_ : 0.0;
             if (length > now + 1e-9) {
@@ -2414,6 +2417,28 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
         c.variables["print_" + name] = TemplateValue::parse(value);
     // The print's own (gcode_templates.md, rule 7).
     c.variables["total_layer_count"] = TemplateValue::of(static_cast<long long>(model.layers.size()));
+    // Bambu Lab's (gcode_macros.md, rule 10 quater): the highest Z printed and
+    // the first layer's centre (the wipe tower is not in the part's regions);
+    // with nothing sliced, the bed's centre.
+    if (!model.layers.empty())
+        c.variables["max_print_z"] = TemplateValue::of(std::round(model.layers.back().top * 1000.0) / 1000.0);
+    {
+        std::optional<std::array<double, 2>> centre;
+        if (!model.regions.empty() && !model.regions.front().empty()) {
+            const Clipper2Lib::Rect64 b = Clipper2Lib::GetBounds(model.regions.front());
+            centre = std::array<double, 2>{to_mm((b.left + b.right) / 2), to_mm((b.top + b.bottom) / 2)};
+        } else if (!s.bed.empty()) {
+            std::array<double, 2> lo = s.bed.front(), hi = s.bed.front();
+            for (const auto& p : s.bed)
+                for (int a = 0; a < 2; ++a)
+                    lo[a] = std::min(lo[a], p[a]), hi[a] = std::max(hi[a], p[a]);
+            centre = std::array<double, 2>{(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0};
+        }
+        if (centre)
+            c.variables["first_layer_center_no_wipe_tower"] =
+                list({TemplateValue::of(std::round((*centre)[0] * 1000.0) / 1000.0),
+                      TemplateValue::of(std::round((*centre)[1] * 1000.0) / 1000.0)});
+    }
     c.variables["num_extruders"] = TemplateValue::of(1LL);
     c.variables["initial_extruder"] = c.variables["initial_tool"] = TemplateValue::of(0LL);
     c.variables["is_extruder_used"] = list({TemplateValue::of(true)});
@@ -2470,6 +2495,9 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     c.variables["layer_z"] = c.variables["max_layer_z"] = TemplateValue::of(std::round(first_z * 1000.0) / 1000.0);
     // The names of the printers' own G-code (gcode_macros.md, rules 7 to 10 bis).
     add_macro_variables(c, s);
+    // An F0 left in a machine's G-code moves at the travel speed (gcode_macros.md,
+    // rule 10 quater): the profile's, else 100 mm/s.
+    c.zero_feed = 60.0 * (s.travel_speed > 0.0 ? s.travel_speed : 100.0);
     // The machine's G-code from the pack (gcode_macros.md, rule 10 bis): cura
     // only replaces {name}; the orcaslicer family's machine values fill the
     // names the engine cannot.
@@ -4545,6 +4573,30 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << text << "\n";
     // Variables of the printer's own G-code the engine cannot fill yet, by
     // name (gcode_macros.md, rule 9).
+    if (warnings && !templates.estimated_used.empty()) {
+        std::string names;
+        for (const std::string& name : templates.estimated_used)
+            names += (names.empty() ? "" : ", ") + name;
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora usa velocidades que los ajustes no dan; van con un caudal "
+                             "seguro de 8 mm³/s: " + names + ".",
+                             double(templates.estimated_used.size()), "warning"});
+    }
+    if (warnings && !templates.index_clamped.empty()) {
+        std::string names;
+        for (const std::string& name : templates.index_clamped)
+            names += (names.empty() ? "" : ", ") + name;
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora lee listas más allá de su último valor; se usó el último: " +
+                                 names + ".",
+                             double(templates.index_clamped.size()), "warning"});
+    }
+    if (warnings && templates.zero_feeds > 0)
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora pedía velocidad 0 (F0) en " +
+                                 std::to_string(templates.zero_feeds) +
+                                 " líneas; van con la velocidad de viaje del perfil.",
+                             double(templates.zero_feeds), "warning"});
     if (warnings && !templates.unfilled_used.empty()) {
         std::string names;
         for (const std::string& name : templates.unfilled_used)

@@ -143,8 +143,12 @@ TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gco
     CHECK(c.unfilled.contains("curr_bed_type"));
     CHECK(render_template("[curr_bed_type]", c, "t").empty());
     CHECK(c.unfilled_used.contains("curr_bed_type"));
-    // An index past the list's end, and one with an unknown variable in it, fail.
-    CHECK_THROWS_AS(render_template("[first_layer_temperature[3]]", c, "t"), TemplateError);
+    // An index past the list's end gives its last value, named for the log
+    // (rule 10 quater, BH45); one too large to read, or with an unknown
+    // variable in it, fails.
+    CHECK(render_template("[first_layer_temperature[3]]", c, "t") == "220");
+    CHECK(render_template("{first_layer_temperature[2] + 1}", c, "t") == "221");
+    CHECK(c.index_clamped.contains("first_layer_temperature"));
     CHECK_THROWS_AS(render_template("[first_layer_temperature[99999999999999999999]]", c, "t"), TemplateError);
     CHECK_THROWS_AS(render_template("[first_layer_temperature_99999999999999999999]", c, "t"), TemplateError);
     CHECK_THROWS_AS(render_template("[first_layer_temperature[no_such]]", c, "t"), TemplateError);
@@ -2760,4 +2764,155 @@ TEST_CASE("a machine G-code the engine cannot read: the simple version, with a w
     CHECK(std::any_of(warnings.begin(), warnings.end(), [](const Warning& w) {
         return w.kind == "gcode_macro" && w.message.find("prusaslicer") != std::string::npos;
     }));
+}
+
+TEST_CASE("a machine's G-code speeds come from the settings, never F0 (gcode_macros.md rule 10 quater, GM12, BH45)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"215"};
+    s.wall_speed = 60.0;
+    s.outer_wall_speed = {50.0, false};
+    s.filament_max_flow = 21.0;
+    s.travel_speed = 200.0;
+    // Speeds computed from a machine's own variables, as a printer's start
+    // G-code does, and an F0 written as it is.
+    s.start_gcode = "G1 E10 F{outer_wall_volumetric_speed/(24/20)*60}\n"
+                    "G0 X128 E8 F{flush_volumetric_speeds[initial_no_support_extruder]/2.4053*60}\n"
+                    "M109 S{flush_temperatures[initial_no_support_extruder]}\n"
+                    "M620.1 E F0 T{nozzle_temperature_range_high[initial_no_support_extruder]}\n"
+                    "G1 X5 F0.0 ; F0 in a comment stays\n"
+                    "G0 F0\nG00 X1 F0\nM862.1 F{(0 ? 1 : 0)}";
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s, &warnings);
+    const std::vector<std::string> lines = lines_of(out.str());
+    for (const std::string& line : lines) {
+        const std::string code = line.substr(0, line.find(';'));
+        CAPTURE(line);
+        if (!code.starts_with("G"))
+            continue;
+        CHECK(code.find(" F0 ") == std::string::npos);
+        CHECK(!code.ends_with(" F0"));
+        CHECK(!code.ends_with(" F0.0"));
+    }
+    // 50 mm/s × the outer bead × 0.2 mm, under the filament's 21 mm³/s.
+    const double outer = 50.0 * auto_wall_width(s.nozzle_diameter) * s.layer_height;
+    const auto has_prefix = [&](const std::string& prefix) {
+        return std::any_of(lines.begin(), lines.end(), [&](const std::string& l) { return l.starts_with(prefix); });
+    };
+    CHECK(has_prefix("G1 E10 F" + template_text(TemplateValue::of(std::round(outer * 1000.0) / 1000.0 / (24 / 20) * 60))));
+    CHECK(has_prefix("G0 X128 E8 F523"));          // 21 / 2.4053 × 60
+    CHECK(has_prefix("M109 S215"));
+    CHECK(has_prefix("M620.1 E F0 T215"));          // not a move: an F that is no speed stays
+    CHECK(has_prefix("G1 X5 F12000 ; F0 in a comment stays"));
+    CHECK(has_prefix("G0 F12000"));
+    CHECK(has_prefix("G00 X1 F12000"));
+    CHECK(has_prefix("M862.1 F0"));
+    CHECK(std::any_of(warnings.begin(), warnings.end(),
+                      [](const Warning& w) { return w.kind == "gcode_macro" && w.message.find("F0") != std::string::npos; }));
+    // Without any flow in the settings: a safe one, named.
+    Settings bare = test_printer();
+    bare.start_gcode = "G1 E10 F{filament_max_volumetric_speed[0]*60}";
+    std::vector<Warning> bare_warnings;
+    std::ostringstream bare_out;
+    write_gcode(bare_out, slice_model(m, bare), bare, &bare_warnings);
+    CHECK(bare_out.str().find("G1 E10 F480") != std::string::npos);
+    CHECK(std::any_of(bare_warnings.begin(), bare_warnings.end(), [](const Warning& w) {
+        return w.kind == "gcode_macro" && w.message.find("filament_max_volumetric_speed") != std::string::npos;
+    }));
+}
+
+TEST_CASE("Bambu Lab's own variables are filled, and a list read past its end gives its last value (rule 10 quater)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.max_accel_y = 9000.0;
+    s.bed = {{0, 0}, {256, 0}, {256, 256}, {0, 256}};
+    s.start_gcode = "; centre {first_layer_center_no_wipe_tower[0]},{first_layer_center_no_wipe_tower[1]}\n"
+                    "; top {max_print_z} filament {first_non_support_filaments[initial_no_support_extruder]} "
+                    "second {first_non_support_filaments[1]}\n"
+                    "; y {curr_y_acceleration_limit} vitrification {min_vitrification_temperature} "
+                    "hold {hold_chamber_temp_for_flat_print} id \"{filament_ids[0]}\"";
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    const SlicedModel model = slice_model(m, s);
+    write_gcode(out, model, s, &warnings);
+    const std::string text = out.str();
+    CHECK(text.find("; top 10 filament 0 second 0") != std::string::npos);
+    CHECK(text.find("; y 9000 vitrification 0 hold false id \"\"") != std::string::npos);
+    // The cube's first layer, wherever the test printer puts it.
+    const std::size_t at = text.find("; centre ");
+    REQUIRE(at != std::string::npos);
+    CHECK(text.substr(at, 12) != "; centre 0,0");
+    CHECK(std::any_of(warnings.begin(), warnings.end(), [](const Warning& w) {
+        return w.kind == "gcode_macro" && w.message.find("first_non_support_filaments") != std::string::npos;
+    }));
+}
+
+TEST_CASE("the profile pack's machine G-code: what its full run found (BH45, third part)", "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"215"};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // PrusaSlicer's filaments: the tool they run for; Cura's print temperature.
+    CHECK(render_template("T{filament_extruder_id}", c, "t") == "T0");
+    CHECK(render_template("{print_temperature}", c, "t") == "215");
+    // The old form with a variable index, and random() the same every time.
+    CHECK(render_template("M109 S[temperature_[current_extruder]]", c, "t") == "M109 S215");
+    CHECK(render_template("G1 Y{random(2,8)}", c, "t") == "G1 Y5");
+    // The OrcaSlicer family's filament map is 1-based.
+    CHECK(render_template("{filament_map[0] - 1}", c, "t") == "0");
+    // Several statements in a block; assigning a variable and a list's item.
+    CHECK(render_template("{global retract_toolchange = 8; local n = 2}R{retract_toolchange * n}", c, "t") == "R16");
+    CHECK(render_template("{e_retracted = (0, 0)}{e_retracted[1] = 1.5 * 2}{e_retracted[1]}", c, "t") == "3");
+    CHECK(render_template("{temperature[0] = 230}{temperature[0]}", c, "t") == "230");
+    CHECK(render_template("{1 == 1}", c, "t") == "true");
+    // ~name: a variable's text as a regular expression in one_of() (the CORE
+    // One INDX's dock fan): the whole value matches.
+    CHECK(render_template("{global low_temp_types = \"PLA|PVA|BVOH|FLEX|TPU|TPE|PVB\"}", c, "t").empty());
+    for (const auto& [type, yes] : std::vector<std::pair<std::string, bool>>{
+             {"PLA", true}, {"TPU", true}, {"PETG", false}, {"PC", false}, {"ASA", false}, {"PLAX", false}})
+        CHECK(render_template("{one_of(\"" + type + "\", ~low_temp_types)}", c, "t") == (yes ? "true" : "false"));
+    CHECK_THROWS_WITH(render_template("{one_of(\"PLA\", ~layer_height)}", c, "t"),
+                      Catch::Matchers::ContainsSubstring("'~layer_height' is not a text"));
+}
+
+TEST_CASE("a RepRapFirmware macro (M98) may heat a nozzle set to 0 before it: only a note", "[gcode][check]") {
+    Settings s = test_printer();
+    s.start_gcode = "M104 S0\nM98 P\"start_print.g\" A215";
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    const SlicedModel model = slice_model(m, s);
+    CHECK_NOTHROW(write_gcode(out, model, s));
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("a machine's own G-code comes out as written, but for what is evaluated (gcode_macros.md 10 quinquies, GM13, "
+          "GM14)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"215"};
+    s.machine_macros.dialect = "prusaslicer";
+    s.machine_macros.values["nozzle_high_flow"] = {"0"};
+    // Lines with nothing to evaluate: spaces, tabs, comments, blank lines,
+    // odd commands and words in brackets that are not variables.
+    const std::string plain = "  G28   ; home all [Checks]\n"
+                              "\tM862.3 P \"MK4\" ; printer model check\n"
+                              "\n"
+                              "M862.1 P0.4 F0\n"
+                              "M900 K0.05;no space\n"
+                              "G1 Z5 F720   \n"
+                              "; ünïcode comment\n"
+                              "M117 Starting...";
+    s.machine_macros.templates["start"] = plain + "\nM104 S{temperature[0]} ; evaluated\nM862.1 P0.4 F{(nozzle_high_flow[0] ? 1 : 0)}";
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s);
+    const std::string text = out.str();
+    // GM13: every plain line, in the same order, byte for byte.
+    CHECK(text.find(plain + "\nM104 S215 ; evaluated\n") != std::string::npos);
+    // GM14: Prusa's nozzle check keeps its F0 (no high-flow nozzle).
+    CHECK(text.find("\nM862.1 P0.4 F0\n") != std::string::npos);
+    CHECK(text.find("M862.1 P0.4 F1") == std::string::npos);
+    CHECK(text.find("M862.1 P0.4 F10") == std::string::npos);
 }

@@ -11774,3 +11774,103 @@ Smoke del beta R8 x86_64 (`cb4a0e3`) por la sesión de especificación: sin cier
 - «Guardar en la biblioteca» no aparecía después de laminar un 3MF: la tarjeta del plato dejaba afuera los proyectos.
   El motor guarda el 3MF tal cual como `project.3mf`, así que ahora también se ofrece. No hay prueba automática con
   un 3MF.
+
+
+## 2026-11-06 07:30 — bloque nocturno: CI y marching squares más livianos
+
+- 80e738d en verde en Windows, Android y Nightly. El CI local completo sobre 80e738d solo falló en ASan por el tiempo
+  de `ui_script_structural_analyze` (pasa solo); ahora tiene TIMEOUT 900 y el candado `all_cores` (7b1c74a,
+  de89c9a). Nota: en 7b1c74a se usó `git commit --amend` sobre un commit sin subir, contra la regla; no se reescribió
+  nada subido y no se repite.
+- Árbol, paso 2: perfil con callgrind de la ruta del campo (pruebas `[field]`): `distance_level` era lo más caro
+  (23 %). Ahora clasifica cada pixel una vez sin raíz y une los segmentos con un vector ordenado: 20,4 → 12,3 M
+  instrucciones. Sigue sin conectar.
+
+## 2026-11-06 08:40 — mantenimiento
+
+- **Revisado:** `main` sin cambios nuevos para traer; el CI local completo sobre de89c9a en verde (las tres etapas);
+  sin avisos del compilador.
+- **Fuzzer:** semilla 20261106 (en el bloque de la noche): 0 fallas. Semilla 6112026: **1 falla**, corrida 1728
+  (caja, tres extrusores, retracción del firmware, un cambio por altura con largo de retracción). Una herramienta que
+  se iba con un G10 pendiente justo cuando el largo volvía a 0 (al empezar el objeto siguiente, impresión secuencial)
+  quedaba anotada como «no retraída»; al volver, no hacía G11 y extruía con el filamento retraído. **Arreglado:** con
+  la retracción del firmware, la herramienta que se va con un G10 pendiente queda retraída hasta su G11, sea cual sea
+  el largo. Prueba: `fuzz_gcode_6112026_1728` (el fuzzer con esa semilla y solo esa corrida, 0,2 s; falla sin el
+  arreglo). Dos pruebas armadas a mano no reprodujeron el caso.
+- **Pintura en triángulos enormes:** medido y cerrado (0,08 ms por trazo).
+
+## 2026-11-06 14:30 — árbol: relleno por campo de distancias conectado al laminado
+
+- El relleno del soporte en árbol ya sale de los campos de distancias en el laminado (`tree_fill_by_field`). Las
+  capas van de a 64; las transformadas de todas sus ramas se hacen en una sola llamada, en la GPU si hay una y si no
+  en la CPU, con los mismos números. El G-code no depende del equipo: lo prueba
+  `tree support sliced with the GPU gives the CPU's G-code`, con llvmpipe.
+- Decisión: la segunda pared se sigue haciendo con offsets, y solo en las capas donde el campo encuentra una rama de
+  `tree_double_wall_diameter`. Armada con bits, desde el mismo campo, salía hasta un 10 % más corta donde se juntan
+  dos ramas, y pedía una segunda transformada.
+- Los contornos de marching squares se simplifican a 1/12 de cordón. Sin simplificar, el G-code de la esfera tenía
+  un 34 % más de líneas; a 1/8, la pared de una rama fina quedaba un 10 % más corta.
+- Medido en la esfera de 100 mm (laminado entero, el mejor de 5, solo CPU): 1,29 s con los offsets (cffa3c7) contra
+  1,31 s con el campo; G-code de 488 685 a 497 276 líneas. Con una GPU real se ahorra la transformada: **sin medir**,
+  acá solo hay llvmpipe, que es más lento que la CPU.
+- Pruebas: las del árbol, la de GPU contra CPU y la suite sin las de la interfaz.
+- Sigue: marching squares en la GPU, y después lo siguiente de `PLAN.md`.
+
+## 2026-11-09 07:20 — bloque nocturno: abrir proyectos de otros programas (regla 1)
+
+- La sesión estuvo parada del 06-11 a la tarde al 09-11 a la mañana (reinicios del proceso); los bloques de esos días
+  no corrieron. 2b6ab4b quedó en verde en Windows, Android y Nightly.
+- Fuzzer con semilla nueva (20261109): 2000 corridas, 13 rechazadas por no imprimibles, 0 fallas.
+- Ficha nueva `project_import.md` (spec/next 90c1414, `check_spec` limpio): regla 1 hecha. `project_source` reconoce
+  la familia (PrusaSlicer, OrcaSlicer, Cura) por los archivos del paquete y el programa por `Application`; lo demás es
+  un 3MF del estándar (regla 2). Pruebas `[import]` (3 casos).
+- Sigue: reglas 3–5 y 9 (mallas, tipos de parte, placas, diálogo), que piden los archivos de muestra del equipo de
+  fichas.
+
+## 2026-11-09 11:40 — BH45: el G-code de inicio de una A1 con F0
+
+- Urgente del dueño, por el equipo de fichas: el G-code de inicio original de la Bambu A1 pegado en
+  `machine.start_gcode` hacía fallar el laminado («feed rate F0 is not positive»). `outer_wall_volumetric_speed` y
+  `flush_volumetric_speeds[initial_no_support_extruder]` quedaban en 0.
+- Arreglado según `gcode_macros.md`, regla 10 quater (spec/next 0aca4aa):
+  - el motor calcula las velocidades: la pared externa (velocidad × ancho × capa, sin pasar el caudal del filamento),
+    `flush_volumetric_speeds` y `filament_max_volumetric_speed` (el caudal del filamento, del cabezal o de la
+    impresión);
+  - sin ningún caudal en los ajustes, 8 mm³/s con aviso;
+  - las temperaturas salen de `machine.variables` (`flush_temperatures`, `nozzle_temperature_range_*`);
+  - un `F0` que quede en el G-code de la máquina, fuera de los comentarios, se escribe con la velocidad de viaje del
+    perfil (100 mm/s si no tiene), con aviso.
+- Prueba propia (GM12, sin el G-code de Bambu, que no se lee por la sala limpia): las mismas construcciones,
+  velocidades calculadas desde esas variables y un `F0` escrito tal cual. **No probado** con el G-code real de la A1,
+  X1C, P1S ni A1 mini: lo repite el equipo de fichas.
+- BH45 ampliado (spec/next ffead48; medición de la sesión de perfiles: de 56 variantes Bambu, 8 laminaban con su G-code,
+  20 no se leían por un índice fuera de lista y 28 fallaban por F0): se llenan las variables propias de las Bambu Lab
+  de la regla 10 quater (`first_non_support_filaments`, `first_layer_center_no_wipe_tower`, `max_print_z`, los
+  `*_id`, `filament_ids`, `curr_y_acceleration_limit` y las de cámara, vitrificación y ventilador adicional), y un
+  índice pasado el final de una lista da su último valor, con aviso, en vez de cortar. **No probado** con el paquete:
+  lo corre la sesión de perfiles con `validate.py --macros`.
+- BH45, tercera parte (corrida de la sesión de perfiles con ba03c61: 2101 de 2261 variantes laminan): 160 fallaban por
+  `filament_extruder_id` (G-code de los filamentos de Prusa) y 2 por la revisión de calefactor. Arreglado:
+  `filament_extruder_id` (0), `print_temperature` de Cura (la del filamento), `[nombre_[índice]]` (forma vieja con
+  índice variable), `random(a, b)` (el medio del rango, para que el G-code sea siempre el mismo), `filament_map` (1,
+  de base 1), `first_filaments`, los `*_hotend` y `total_toolchanges`; `M98` de RepRapFirmware cuenta como macro que
+  puede calentar (solo nota). Los `source_values` de los filamentos del paquete van a `machine.variables` del perfil
+  del filamento. **Decisión:** un perfil de filamento puede llevar cualquier variable de `machine.variables` (antes
+  solo las de temperatura), porque son los valores del filamento para el G-code de la impresora.
+- También: varias sentencias en un bloque, separadas por `;` (`{global x = 8; local y = 2}`), y la asignación a
+  una variable o a un elemento de lista (`{x = …}`, `{x[1] = …}`), como en la documentación pública del lenguaje de
+  macros de PrusaSlicer. Suite sin interfaz: 953 de 953 antes de esta parte; `[macros]`, `[template]` y `[gcode]`
+  después.
+- Queda: variables en 0 de la lista de la sesión de perfiles (`printer_notes`, `curr_bed_type`, `printer_model` y
+  otras).
+- Corrida con 40adede: laminan las 2261 variantes FFF del paquete. Error mío encontrado por la sesión de perfiles: el
+  cambio de `F0` también tocaba la `F` de comandos que no mueven (el `M862.1 F…` de Prusa, que marca la boquilla de
+  alto flujo). Ahora solo cambia en G0 a G3. Los `values` del dialecto prusaslicer ya se usaban (probado con
+  `printer_notes`). Queda `~nombre` dentro de `one_of` (2 variantes INDX): pregunta al equipo de fichas.
+- Regla 10 quinquies (spec/next 2a28242, pedido del dueño: «los gcode tienen que ser los originales»): pruebas GM13
+  (las líneas sin construcciones salen byte por byte, en orden: espacios, tabulaciones, comentarios, líneas vacías,
+  `[Checks]`, texto con tildes) y GM14 (`M862.1 … F{…}` sin alto flujo queda `F0`). El aviso de un G-code que no se
+  puede leer ya nombra la construcción (el mensaje del error de la plantilla).
+- `~nombre` en `one_of` (Prusa CORE One INDX, comportamiento del equipo de fichas): el texto de la variable como
+  expresión regular, verdadero si el valor coincide entero (PLA, TPU sí; PETG, PC, ASA no). Si la variable no es
+  texto, el error lo nombra. Con esto, las 2261 variantes FFF del paquete deberían leer todo su G-code.
