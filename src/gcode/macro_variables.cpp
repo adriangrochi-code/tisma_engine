@@ -143,6 +143,17 @@ void add_macro_variables(TemplateContext& c, const Settings& s) {
     for (const char* name : {"initial_no_support_extruder", "initial_extruder", "initial_filament_id",
                              "initial_no_support_filament_id", "initial_nozzle_id", "current_filament_id"})
         set(name, TemplateValue::of(0LL));
+    // The tool a filament's G-code runs for (PrusaSlicer's), the hot ends
+    // and the filament map of the OrcaSlicer family (1-based), measured with
+    // the profile pack; Cura's print_temperature is the filament's.
+    set("filament_extruder_id", TemplateValue::of(0LL));
+    for (const char* name : {"initial_no_support_hotend", "current_hotend", "first_non_support_hotend"})
+        set(name, TemplateValue::of(0LL));
+    set("filament_map", list_of(TemplateValue::of(1LL)));
+    set("first_filaments", list_of(TemplateValue::of(0LL)));
+    set("total_toolchanges", TemplateValue::of(0LL));
+    if (nozzle > 0.0)
+        set("print_temperature", whole(nozzle));
     // The rest of Bambu Lab's, measured with the profile pack (rule 10 quater).
     set("first_non_support_filaments", list_of(TemplateValue::of(0LL)));
     set("filament_ids", list_of(TemplateValue::of(std::string())));

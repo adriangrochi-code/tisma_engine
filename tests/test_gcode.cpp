@@ -2843,3 +2843,32 @@ TEST_CASE("Bambu Lab's own variables are filled, and a list read past its end gi
         return w.kind == "gcode_macro" && w.message.find("first_non_support_filaments") != std::string::npos;
     }));
 }
+
+TEST_CASE("the profile pack's machine G-code: what its full run found (BH45, third part)", "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"215"};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // PrusaSlicer's filaments: the tool they run for; Cura's print temperature.
+    CHECK(render_template("T{filament_extruder_id}", c, "t") == "T0");
+    CHECK(render_template("{print_temperature}", c, "t") == "215");
+    // The old form with a variable index, and random() the same every time.
+    CHECK(render_template("M109 S[temperature_[current_extruder]]", c, "t") == "M109 S215");
+    CHECK(render_template("G1 Y{random(2,8)}", c, "t") == "G1 Y5");
+    // The OrcaSlicer family's filament map is 1-based.
+    CHECK(render_template("{filament_map[0] - 1}", c, "t") == "0");
+    // Several statements in a block; assigning a variable and a list's item.
+    CHECK(render_template("{global retract_toolchange = 8; local n = 2}R{retract_toolchange * n}", c, "t") == "R16");
+    CHECK(render_template("{e_retracted = (0, 0)}{e_retracted[1] = 1.5 * 2}{e_retracted[1]}", c, "t") == "3");
+    CHECK(render_template("{temperature[0] = 230}{temperature[0]}", c, "t") == "230");
+    CHECK(render_template("{1 == 1}", c, "t") == "true");
+}
+
+TEST_CASE("a RepRapFirmware macro (M98) may heat a nozzle set to 0 before it: only a note", "[gcode][check]") {
+    Settings s = test_printer();
+    s.start_gcode = "M104 S0\nM98 P\"start_print.g\" A215";
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    const SlicedModel model = slice_model(m, s);
+    CHECK_NOTHROW(write_gcode(out, model, s));
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}

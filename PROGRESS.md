@@ -11656,3 +11656,17 @@ arreglado en 9d8dc76 y subido.
   `*_id`, `filament_ids`, `curr_y_acceleration_limit` y las de cámara, vitrificación y ventilador adicional), y un
   índice pasado el final de una lista da su último valor, con aviso, en vez de cortar. **No probado** con el paquete:
   lo corre la sesión de perfiles con `validate.py --macros`.
+- BH45, tercera parte (corrida de la sesión de perfiles con ba03c61: 2101 de 2261 variantes laminan): 160 fallaban por
+  `filament_extruder_id` (G-code de los filamentos de Prusa) y 2 por la revisión de calefactor. Arreglado:
+  `filament_extruder_id` (0), `print_temperature` de Cura (la del filamento), `[nombre_[índice]]` (forma vieja con
+  índice variable), `random(a, b)` (el medio del rango, para que el G-code sea siempre el mismo), `filament_map` (1,
+  de base 1), `first_filaments`, los `*_hotend` y `total_toolchanges`; `M98` de RepRapFirmware cuenta como macro que
+  puede calentar (solo nota). Los `source_values` de los filamentos del paquete van a `machine.variables` del perfil
+  del filamento. **Decisión:** un perfil de filamento puede llevar cualquier variable de `machine.variables` (antes
+  solo las de temperatura), porque son los valores del filamento para el G-code de la impresora.
+- También: varias sentencias en un bloque, separadas por `;` (`{global x = 8; local y = 2}`), y la asignación a
+  una variable o a un elemento de lista (`{x = …}`, `{x[1] = …}`), como en la documentación pública del lenguaje de
+  macros de PrusaSlicer. Suite sin interfaz: 953 de 953 antes de esta parte; `[macros]`, `[template]` y `[gcode]`
+  después.
+- Queda: variables en 0 de la lista de la sesión de perfiles (`printer_notes`, `curr_bed_type`, `printer_model` y
+  otras).

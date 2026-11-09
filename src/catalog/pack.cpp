@@ -381,6 +381,39 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
                 if (g.at("templates").contains(from) && g.at("templates").at(from).is_string())
                     profile["settings"]["extrusion"][to] = g.at("templates").at(from);
     }
+    // A filament's values in the program it comes from, by that program's
+    // names (profile_pack_format.md, source_values): the variables of a
+    // machine's own G-code that the engine has no setting for
+    // (temperature_vitrification...), as machine.variables, under any the
+    // profile already sets.
+    if (kind == "filament" && j.contains("source_values") && j.at("source_values").is_object() &&
+        j.at("source_values").contains("values") && j.at("source_values").at("values").is_object()) {
+        json& variables = profile["settings"]["machine"]["variables"];
+        if (!variables.is_object())
+            variables = json::object();
+        for (const auto& [name, value] : j.at("source_values").at("values").items()) {
+            if (variables.contains(name) || name.empty() || name.find_first_of("[]\n") != std::string::npos)
+                continue;
+            if (value.is_array()) {
+                json list = json::array();
+                for (const json& item : value)
+                    if (item.is_number() || item.is_string())
+                        list.push_back(item);
+                    else if (item.is_boolean())
+                        list.push_back(item.get<bool>() ? "true" : "false");
+                if (!list.empty())
+                    variables[name] = list;
+            } else if (value.is_number() || value.is_string()) {
+                variables[name] = value;
+            } else if (value.is_boolean()) {
+                variables[name] = value.get<bool>() ? "true" : "false";
+            }
+        }
+        if (variables.empty())
+            profile["settings"]["machine"].erase("variables");
+        if (profile["settings"]["machine"].empty())
+            profile["settings"].erase("machine");
+    }
     if (kind == "resin" || kind == "resin_print") {
         profile["kind"] = kind == "resin" ? "filament" : "print";
         out.resin = true;

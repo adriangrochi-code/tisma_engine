@@ -474,6 +474,15 @@ private:
             const bool first = name == "min" ? number(0) <= number(1) : number(0) >= number(1);
             return one(first ? args[0] : args[1]);
         }
+        if (name == "random") {
+            // random(a, b): the same G-code every time (orca_2_5.md, rule 19),
+            // so the middle of the range, whole when both ends are.
+            count(2, 2);
+            const double mid = (number(0) + number(1)) / 2.0;
+            if (args[0].kind == Kind::Int && args[1].kind == Kind::Int)
+                return TemplateValue::of(static_cast<long long>(std::floor(mid)));
+            return TemplateValue::of(mid);
+        }
         if (name == "int") {
             count(1, 1);
             return TemplateValue::of(static_cast<long long>(std::trunc(number(0))));
@@ -713,6 +722,10 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
             if (j < text.size() && text[j] == ']') {
                 if (kept()) {
                     const TemplateValue* v = lookup(name);
+                    // [temperature_[current_extruder]]: the old form with a
+                    // variable index, the list «temperature».
+                    if (!v && !index.empty() && name.size() > 1 && name.back() == '_')
+                        v = lookup(name.substr(0, name.size() - 1));
                     // [temperature_0]: the list «temperature», item 0.
                     if (!v && index.empty()) {
                         const std::size_t under = name.find_last_of('_');
@@ -784,7 +797,6 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
         const auto word = [&](std::string_view w) {
             return block.substr(0, w.size()) == w && (block.size() == w.size() || !ident_char(block[w.size()]));
         };
-        Expression e(src, begin, end, lookup);
         if (word("if")) {
             Expression cond(src, begin + 2, end, lookup);
             bool yes = false;
@@ -816,17 +828,110 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
             if (open.empty())
                 src.fail(i, "an {endif} without its {if}");
             open.pop_back();
-        } else if (word("local") || word("global")) {
-            const bool global = word("global");
-            Expression assignment(src, begin + (global ? 6 : 5), end, lookup);
-            if (kept()) {
-                auto [name, value] = assignment.assignment();
-                (global ? context.globals : locals)[name] = std::move(value);
-            }
         } else if (kept()) {
             if (block.empty())
                 src.fail(i, "an empty {}");
-            out += template_text(e.whole());
+            // Statements apart by ';' (outside texts and brackets): local and
+            // global ones, assignments to a variable or a list's item
+            // (name = …, name[i] = …), and expressions, whose values are
+            // written (PrusaSlicer's documented macro language).
+            std::vector<std::pair<std::size_t, std::size_t>> statements;
+            {
+                std::size_t from = begin;
+                int depth = 0;
+                char quote = 0;
+                for (std::size_t k = begin; k < end; ++k) {
+                    const char ch = text[k];
+                    if (quote) {
+                        if (ch == '\\')
+                            ++k;
+                        else if (ch == quote)
+                            quote = 0;
+                    } else if (ch == '"') {
+                        quote = ch;
+                    } else if (ch == '(' || ch == '[') {
+                        ++depth;
+                    } else if ((ch == ')' || ch == ']') && depth > 0) {
+                        --depth;
+                    } else if (ch == ';' && depth == 0) {
+                        statements.emplace_back(from, k);
+                        from = k + 1;
+                    }
+                }
+                statements.emplace_back(from, end);
+            }
+            for (auto [a, b] : statements) {
+                while (a < b && (text[a] == ' ' || text[a] == '\t' || text[a] == '\n' || text[a] == '\r'))
+                    ++a;
+                while (b > a && (text[b - 1] == ' ' || text[b - 1] == '\t' || text[b - 1] == '\n' || text[b - 1] == '\r'))
+                    --b;
+                if (a == b)
+                    continue;
+                const std::string_view st = text.substr(a, b - a);
+                const auto starts = [&](std::string_view w) {
+                    return st.substr(0, w.size()) == w && (st.size() == w.size() || !ident_char(st[w.size()]));
+                };
+                if (starts("local") || starts("global")) {
+                    const bool global = starts("global");
+                    Expression assignment(src, a + (global ? 6 : 5), b, lookup);
+                    auto [name, value] = assignment.assignment();
+                    (global ? context.globals : locals)[name] = std::move(value);
+                    continue;
+                }
+                // name = … or name[index] = … (not ==)
+                std::size_t k = 0;
+                while (k < st.size() && ident_char(st[k]))
+                    ++k;
+                std::size_t index_from = 0, index_to = 0;
+                std::size_t eq = k;
+                if (k > 0 && ident_start(st[0])) {
+                    while (eq < st.size() && st[eq] == ' ')
+                        ++eq;
+                    if (eq < st.size() && st[eq] == '[') {
+                        int d = 0;
+                        std::size_t m = eq;
+                        for (; m < st.size(); ++m) {
+                            if (st[m] == '[')
+                                ++d;
+                            else if (st[m] == ']' && --d == 0)
+                                break;
+                        }
+                        index_from = eq + 1;
+                        index_to = m;
+                        eq = m + 1;
+                        while (eq < st.size() && st[eq] == ' ')
+                            ++eq;
+                    }
+                }
+                if (k > 0 && ident_start(st[0]) && eq < st.size() && st[eq] == '=' &&
+                    (eq + 1 >= st.size() || st[eq + 1] != '=')) {
+                    const std::string name(st.substr(0, k));
+                    TemplateValue value = Expression(src, a + eq + 1, b, lookup).whole();
+                    TemplateValue* target = nullptr;
+                    if (const auto it = locals.find(name); it != locals.end())
+                        target = &it->second;
+                    else if (const auto g = context.globals.find(name); g != context.globals.end())
+                        target = &g->second;
+                    else if (const TemplateValue* known = lookup(name))
+                        target = &(locals[name] = *known);
+                    else
+                        src.fail(a, "unknown variable '" + name + "'");
+                    if (index_to > index_from) {
+                        const TemplateValue at = Expression(src, a + index_from, a + index_to, lookup).whole();
+                        if (at.kind != TemplateValue::Kind::Int || at.integer < 0 || at.integer > 1000)
+                            src.fail(a + index_from, "an index must be a whole number from 0");
+                        if (target->kind != TemplateValue::Kind::List)
+                            *target = TemplateValue::of(std::vector<TemplateValue>{*target});
+                        if (target->list.size() <= std::size_t(at.integer))
+                            target->list.resize(std::size_t(at.integer) + 1, target->list.empty() ? value : target->list.back());
+                        target->list[std::size_t(at.integer)] = std::move(value);
+                    } else {
+                        *target = std::move(value);
+                    }
+                    continue;
+                }
+                out += template_text(Expression(src, a, b, lookup).whole());
+            }
         }
         i = close + 1;
     }
