@@ -1851,7 +1851,8 @@ Settings parse_checked(std::string_view text) {
                {"nozzle_diameter", "filament_diameter", "relative_extrusion", "flavor", "start_gcode", "end_gcode", "variables",
                 "max_feed_x", "max_feed_y", "max_feed_z", "max_feed_e", "acceleration", "travel_acceleration", "corner_speed",
                 "bed", "max_height", "max_flow", "max_nozzle_temp", "max_bed_temp", "max_chamber_temp", "enclosed",
-                "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset", "max_accel_x", "max_accel_y",
+                "hardened_nozzle", "min_layer_height", "max_layer_height", "z_offset", "heat_rate_nozzle", "heat_rate_bed",
+                "home_time", "probe_time", "max_accel_x", "max_accel_y",
                 "max_accel_z", "max_accel_e", "retract_acceleration", "jerk_x", "jerk_y", "jerk_z", "jerk_e",
                 "junction_deviation", "min_extrude_feed", "min_travel_feed", "limits_usage", "silent_mode", "silent",
                 "custom_parameters",
@@ -1991,6 +1992,20 @@ Settings parse_checked(std::string_view text) {
                        if (!(d >= 0.0))
                            fail(k, "must not be negative");
                        *limit_named(s, n) = d;
+                       return;
+                   }
+                   if (n == "heat_rate_nozzle" || n == "heat_rate_bed") {
+                       const double d = number(g, n, k);
+                       if (!(d >= 0.0 && d <= 50.0))
+                           fail(k, "must be from 0 (not known) to 50 degrees C per second");
+                       (n == "heat_rate_nozzle" ? s.heat_rate_nozzle : s.heat_rate_bed) = d;
+                       return;
+                   }
+                   if (n == "home_time" || n == "probe_time") {
+                       const double d = number(g, n, k);
+                       if (!(d >= 0.0 && d <= 3600.0))
+                           fail(k, "must be from 0 to 3600 s");
+                       (n == "home_time" ? s.home_time : s.probe_time) = d;
                        return;
                    }
                    if (n == "z_offset") {
@@ -3621,6 +3636,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"gcode.verbose_comments", flag(s.verbose_comments)},
         {"gcode.arcs", flag(s.gcode_arcs)},
         {"machine.z_offset", num(s.z_offset)},
+        {"machine.heat_rate_nozzle", num(s.heat_rate_nozzle)},
+        {"machine.heat_rate_bed", num(s.heat_rate_bed)},
+        {"machine.home_time", num(s.home_time)},
+        {"machine.probe_time", num(s.probe_time)},
         {"extrusion.chamber_min_temperature", num(s.chamber_min_temperature)},
         {"extrusion.density", num(s.filament_density)},
         {"extrusion.cost", num(s.filament_cost)},
@@ -3957,6 +3976,10 @@ std::string settings_json(const Settings& s) {
           {"min_layer_height", s.min_layer_height},
           {"max_layer_height", s.max_layer_height},
           {"z_offset", s.z_offset},
+          {"heat_rate_nozzle", s.heat_rate_nozzle},
+          {"heat_rate_bed", s.heat_rate_bed},
+          {"home_time", s.home_time},
+          {"probe_time", s.probe_time},
           {"extruders", s.extruders},
           {"extruder_offset", s.extruder_offset},
           {"single_extruder_mmu", s.single_extruder_mmu},

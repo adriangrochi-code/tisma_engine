@@ -437,6 +437,11 @@ const std::vector<SectionLayout>& printer_layout() {
             {"machine.max_feed_z", N},
             {"machine.max_feed_e", N},
             {"machine.corner_speed", N}}},
+          {"preparation", T::SubPreparation,
+           {{"machine.heat_rate_nozzle", A},
+            {"machine.heat_rate_bed", A},
+            {"machine.home_time", A},
+            {"machine.probe_time", A}}},
           {"accelerations", T::SubAccel,
            {{"machine.acceleration", N},
             {"machine.travel_acceleration", N},
@@ -831,6 +836,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "speeds")
         return std::min(s.max_feed_x, s.max_feed_y) > 0.0
                    ? format(T::SumFeeds, speed_text(std::min(s.max_feed_x, s.max_feed_y)).c_str())
+                   : std::string(tr(T::NotSet));
+    if (id == "preparation") // the heating rates, or «Sin dato»
+        return s.heat_rate_nozzle > 0.0 || s.heat_rate_bed > 0.0
+                   ? number(s.heat_rate_nozzle) + " / " + number(s.heat_rate_bed) + " °C/s"
                    : std::string(tr(T::NotSet));
     if (id == "accelerations")
         return format(T::SumAccel, number(s.acceleration, 0).c_str());

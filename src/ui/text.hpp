@@ -1705,6 +1705,7 @@
     X(SubNozzle, "Boquilla", "Nozzle") \
     X(SubExtruder, "Extrusor", "Extruder") \
     X(SubSpeedLimits, "Velocidades", "Speeds") \
+    X(SubPreparation, "Preparación", "Preparation") \
     X(SubAccel, "Aceleraciones", "Accelerations") \
     X(SubMaxTemps, "Temperaturas máximas", "Maximum temperatures") \
     X(SubFirmware, "Firmware", "Firmware") \
@@ -2364,6 +2365,10 @@
     X(MaxFeedZ, "Velocidad máxima en Z", "Maximum speed in Z") \
     X(MaxFeedE, "Velocidad máxima del extrusor", "Maximum extruder speed") \
     X(CornerSpeed, "Velocidad en esquinas", "Corner speed") \
+    X(HeatRateNozzle, "Calentamiento de la boquilla", "Nozzle heating rate") \
+    X(HeatRateBed, "Calentamiento de la cama", "Bed heating rate") \
+    X(HomeTime, "Tiempo de ir al origen (G28)", "Homing time (G28)") \
+    X(ProbeTime, "Tiempo de nivelar (G29)", "Levelling time (G29)") \
     X(AccelerationRow, "Aceleración", "Acceleration") \
     X(TravelAcceleration, "Aceleración en viajes", "Travel acceleration") \
     X(MaxNozzleTemp, "Boquilla máxima", "Nozzle maximum") \

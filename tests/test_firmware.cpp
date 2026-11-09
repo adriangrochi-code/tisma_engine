@@ -426,3 +426,29 @@ TEST_CASE("time: each firmware's corners give its own time (print_time.md, rule 
     k.start_gcode = "G28 ; home\nSET_VELOCITY_LIMIT MINIMUM_CRUISE_RATIO=0";
     CHECK(estimate(gcode_of(k), "printing time") < base);
 }
+
+TEST_CASE("time: heating, homing and levelling as preparation, shown apart (print_time.md, rules 10 and 14, PT7)", "[time]") {
+    Settings s = firmware_printer(GcodeFlavor::Marlin);
+    s.variables["temperature"] = {"200"};
+    s.variables["bed_temperature"] = {"60"};
+    s.start_gcode = "G28 ; home\nG29";
+    const std::string plain = gcode_of(s);
+    const double base = estimate(plain, "printing time");
+    CHECK(plain.find("; estimated preparation time") == std::string::npos); // nothing known: nothing apart
+    s.heat_rate_nozzle = 2.0; // 25 to 200 C: 87.5 s
+    s.heat_rate_bed = 1.0;    // 25 to 60 C: 35 s
+    s.home_time = 10.0;
+    s.probe_time = 40.0;
+    const std::string timed = gcode_of(s);
+    CHECK_THAT(estimate(timed, "printing time"), WithinAbs(base + 87.5 + 35.0 + 10.0 + 40.0, 1.5));
+    CHECK_THAT(estimate(timed, "preparation time"), WithinAbs(87.5 + 35.0 + 10.0 + 40.0, 1.0));
+    // A start that heats itself: the engine adds no temperatures (so no bed),
+    // and a second wait at the same temperature heats nothing more.
+    s.start_gcode = "G28 ; home\nG29\nM109 S200\nM109 S200\nG4 S5";
+    CHECK_THAT(estimate(gcode_of(s), "preparation time"), WithinAbs(87.5 + 10.0 + 40.0 + 5.0, 1.0));
+    // Klipper's own wait.
+    s.flavor = GcodeFlavor::Klipper;
+    s.auto_temperatures = false;
+    s.start_gcode = "M140 S60\nTEMPERATURE_WAIT SENSOR=heater_bed MINIMUM=60";
+    CHECK_THAT(estimate(gcode_of(s), "preparation time"), WithinAbs(35.0, 1.0));
+}

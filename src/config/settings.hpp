@@ -350,6 +350,11 @@ struct Settings {
     // nozzle_diameter, which is the first's.
     std::vector<double> nozzle_diameters;
     double z_offset = 0.0;          // mm added to every Z of the part (gcode_extras.md, rule 5)
+    // The preparation in the time estimate (print_time.md, rules 10 and 14):
+    // how fast the nozzle and the bed heat, in degrees C per second (0: not
+    // known, the heating not counted), and the seconds a G28 and a G29 take.
+    double heat_rate_nozzle = 0.0, heat_rate_bed = 0.0;
+    double home_time = 0.0, probe_time = 0.0;
     double filament_diameter = 1.75; // mm
     bool relative_extrusion = false;
     GcodeFlavor flavor = GcodeFlavor::RepRap;

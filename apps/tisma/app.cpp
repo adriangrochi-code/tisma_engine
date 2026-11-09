@@ -1932,7 +1932,8 @@ const std::map<T, const char*>& row_keys() {
         {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::SpreadCount, "walls.spread_count"}, {T::TransitionLength, "walls.transition_length"}, {T::TransitionAngle, "walls.transition_angle"}, {T::TransitionMargin, "walls.transition_margin"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
         {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
-        {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
+        {T::ZOffset, "machine.z_offset"}, {T::HeatRateNozzle, "machine.heat_rate_nozzle"},
+        {T::HeatRateBed, "machine.heat_rate_bed"}, {T::HomeTime, "machine.home_time"}, {T::ProbeTime, "machine.probe_time"}, {T::VolumetricE, "gcode.volumetric_e"},
         {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"}, {T::GcodeThumbnails, "gcode.thumbnails"},
         {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
@@ -8971,7 +8972,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::RetractSpeed, "retraction.speed", s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
         mm(T::UnretractSpeed, "retraction.unretract_speed", s.unretract_speed, 0.0, 1000.0,
            s.unretract_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue), 0.5f);
-        mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, 0.0, 10.0, "%.2f mm", 0.01f);
+        mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, -50.0, 1000.0, "%.2f mm", 0.01f);
         flag(T::RetractLayerChange, "retraction.on_layer_change", s.retract_layer_change);
         flag(T::FirmwareRetraction, "retraction.firmware", s.firmware_retraction);
     } else if (id == "wipe") {
@@ -9199,9 +9200,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::SingleExtruderMmu, "machine.single_extruder_mmu", s.single_extruder_mmu);
         for (const auto& [label, key, list, top] :
              {std::tuple{T::ToolchangeLength, "retraction.toolchange_length", &s.toolchange_length, 200.0},
-              std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 10.0}}) {
-            if (list->size() == 1)
-                mm(label, key, list->front(), 0.0, top, "%.2f mm", 0.01f);
+              std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 1000.0}}) {
+            if (list->size() == 1) // the extra may be negative (less back)
+                mm(label, key, list->front(), top > 200.0 ? -50.0 : 0.0, top, "%.2f mm", 0.01f);
             else
                 count(label, key, list->size());
         }
@@ -9216,6 +9217,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         top(T::MaxFeedZ, "machine.max_feed_z", s.max_feed_z, 500.0);
         top(T::MaxFeedE, "machine.max_feed_e", s.max_feed_e, 500.0);
         mm(T::CornerSpeed, "machine.corner_speed", s.corner_speed, 0.0, 100.0, "%.1f mm/s", 0.1f);
+    } else if (id == "preparation") {
+        // The preparation in the time estimate (print_time.md, rules 10 and 14).
+        mm(T::HeatRateNozzle, "machine.heat_rate_nozzle", s.heat_rate_nozzle, 0.0, 50.0,
+           s.heat_rate_nozzle > 0.0 ? "%.1f °C/s" : tr(T::NotSet), 0.05f);
+        mm(T::HeatRateBed, "machine.heat_rate_bed", s.heat_rate_bed, 0.0, 50.0,
+           s.heat_rate_bed > 0.0 ? "%.2f °C/s" : tr(T::NotSet), 0.01f);
+        mm(T::HomeTime, "machine.home_time", s.home_time, 0.0, 3600.0, "%.0f s", 0.5f);
+        mm(T::ProbeTime, "machine.probe_time", s.probe_time, 0.0, 3600.0, "%.0f s", 0.5f);
     } else if (id == "accelerations") {
         mm(T::AccelerationRow, "machine.acceleration", s.acceleration, 0.0, 100000.0, "%.0f mm/s²", 10.0f);
         mm(T::TravelAcceleration, "machine.travel_acceleration", s.travel_acceleration, 0.0, 100000.0, "%.0f mm/s²",

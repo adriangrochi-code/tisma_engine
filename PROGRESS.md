@@ -11718,3 +11718,10 @@ arreglado en 9d8dc76 y subido.
   90°. Sin tirones. `minimum_cruise_ratio` (0,5 por defecto, o el de `SET_VELOCITY_LIMIT`) baja el tope de los
   movimientos cortos: la velocidad que se alcanza en la parte que no navega. El mismo G-code da otro tiempo en Marlin y
   en Klipper.
+- Reglas 10 y 14 (PT7): claves nuevas `machine.heat_rate_nozzle` y `heat_rate_bed` (°C/s, 0 = no se sabe),
+  `home_time` y `probe_time` (s), con su ayuda y su ficha nueva Límites › Preparación. Cada `M109`/`M190`/`M116` y el
+  `TEMPERATURE_WAIT` de Klipper suman el tiempo de subir desde la última temperatura alcanzada (25 °C al empezar);
+  `G28`, `G29` y `G4` también. Todo eso es preparación: está en el total y el G-code lo dice aparte
+  (`; estimated preparation time = …`). Los comandos de temperatura que escribe el motor al empezar también se leen.
+- Sigue: mostrar la preparación en la interfaz, cambios de herramienta como preparación, reglas 11 y 15 (aprender de
+  la impresora).

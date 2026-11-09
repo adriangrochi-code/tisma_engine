@@ -39,6 +39,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- Tiempo de preparación en la estimación: el calentamiento (con la velocidad de calentamiento de la boquilla y de la
+  cama, claves nuevas en la máquina), ir al origen, nivelar y las esperas, sumados al total y dichos aparte en el G-code.
+
 - Al abrir un 3MF de otro programa (PrusaSlicer, OrcaSlicer, Bambu Studio, Creality Print, Elegoo Slicer, Anycubic,
   Cura), un aviso dice de qué programa es y cuántas piezas trae; sus ajustes todavía no se traen.
 - Mi biblioteca (`tisma-engine library`): guardar piezas con su proyecto, recetas por impresora y análisis,

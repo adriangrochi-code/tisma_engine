@@ -851,6 +851,8 @@ public:
         filament_area_ = std::numbers::pi * r * r;
         verbose_ = s.verbose_comments;
         rrf_ = s.flavor == GcodeFlavor::RepRapFirmware;
+        heat_rate_nozzle_ = s.heat_rate_nozzle, heat_rate_bed_ = s.heat_rate_bed;
+        home_time_ = s.home_time, probe_time_ = s.probe_time;
         // How fast Z may move while extruding (zigzag_infill.md, rule 7): the
         // machine's limit, or a stock Ender-3's 5 mm/s when the profile gives none.
         z_limit_ = s.max_feed_z > 0.0 ? s.max_feed_z : kStockZFeed;
@@ -1135,6 +1137,19 @@ public:
     // rules 8, 9 and 13): its waits (G4 S seconds, G4 P milliseconds) count,
     // and the accelerations it sets (M204 S, P and T; Klipper's
     // SET_VELOCITY_LIMIT ACCEL) hold for the moves after it.
+    // Time that is not printing (print_time.md, rule 14): counted in the
+    // estimate and shown apart.
+    void preparation(double seconds) {
+        if (!(seconds > 0.0))
+            return;
+        time_.dwell(seconds);
+        if (silent_)
+            silent_->dwell(seconds);
+        other_time_ += seconds;
+        preparation_ += seconds;
+    }
+    double preparation_time() const { return preparation_; }
+
     void machine_gcode(std::string_view lines) {
         std::size_t at = 0;
         while (at < lines.size()) {
@@ -1165,18 +1180,50 @@ public:
             const auto command = [&](std::string_view name) {
                 return line.starts_with(name) && (line.size() == name.size() || line[name.size()] == ' ' || line[name.size()] == '\t' || line[name.size()] == '\r');
             };
+            // Heating to a temperature waited for, from the last one reached
+            // (print_time.md, rule 10): with no rate known, not counted.
+            const auto heat_to = [&](double& now, double target, double rate) {
+                if (target > now && rate > 0.0)
+                    preparation((target - now) / rate);
+                if (target > 0.0)
+                    now = target;
+            };
+            const auto target = [&]() -> std::optional<double> {
+                if (const auto r = value("R"))
+                    return r;
+                return value("S");
+            };
             if (command("G4") || command("G04")) {
                 double wait = 0.0;
                 if (const auto ms = value("P"))
                     wait += *ms / 1000.0;
                 if (const auto sec = value("S"))
                     wait += *sec;
-                if (wait > 0.0) {
-                    time_.dwell(wait);
-                    if (silent_)
-                        silent_->dwell(wait);
-                    other_time_ += wait;
+                preparation(wait);
+            } else if (command("G28")) {
+                preparation(home_time_);
+            } else if (command("G29")) {
+                preparation(probe_time_);
+            } else if (command("M104") || command("M109")) {
+                if (const auto c = target(); c && *c > 0.0) {
+                    nozzle_target_ = *c;
+                    if (command("M109"))
+                        heat_to(nozzle_now_, *c, heat_rate_nozzle_);
                 }
+            } else if (command("M140") || command("M190")) {
+                if (const auto c = target(); c && *c > 0.0) {
+                    bed_target_ = *c;
+                    if (command("M190"))
+                        heat_to(bed_now_, *c, heat_rate_bed_);
+                }
+            } else if (command("M116")) { // RepRapFirmware: every heater
+                heat_to(bed_now_, bed_target_, heat_rate_bed_);
+                heat_to(nozzle_now_, nozzle_target_, heat_rate_nozzle_);
+            } else if (command("TEMPERATURE_WAIT")) { // Klipper
+                if (const auto c = value("MINIMUM="); c && line.find("heater_bed") != std::string_view::npos)
+                    heat_to(bed_now_, *c, heat_rate_bed_);
+                else if (c && line.find("extruder") != std::string_view::npos)
+                    heat_to(nozzle_now_, *c, heat_rate_nozzle_);
             } else if (command("M204")) {
                 double print = accel_print_, travel = accel_travel_;
                 if (const auto both = value("S"))
@@ -2193,6 +2240,9 @@ private:
     bool marlin_;
     double accel_print_, accel_travel_;
     bool rrf_ = false; // RepRapFirmware: M203 in mm/min
+    // The preparation (print_time.md, rules 10 and 14): heaters from 25 C.
+    double heat_rate_nozzle_ = 0.0, heat_rate_bed_ = 0.0, home_time_ = 0.0, probe_time_ = 0.0;
+    double nozzle_now_ = 25.0, bed_now_ = 25.0, nozzle_target_ = 0.0, bed_target_ = 0.0, preparation_ = 0.0;
     double travel_accel_, short_travel_accel_; // asked for travels; 0: none
     double retracted_amount_ = 0.0; // the E the last retraction pulled back (none with G10)
     // retraction_travel.md: the push back's feed (0: the retraction's) and
@@ -3079,9 +3129,15 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // The bed first, waited for, then the nozzle set (gcode_templates.md, rule 10, T10).
     const bool heat = s.auto_temperatures && !sets_temperature(start_gcode);
     const bool heat_nozzle = heat && nozzle > 0.0;
+    // What the start writes, as the time estimate reads it too (its heating
+    // and waits, print_time.md, rules 8 to 10 and 14).
+    const auto start_text = [&](const std::string& text) {
+        out << text;
+        g.machine_gcode(text);
+    };
     if (heat && bed > 0.0)
-        out << (dialect.wait == Dialect::Wait::None ? "M140 " : "M190 ") << dialect.temperature << std::lround(bed)
-            << "\n";
+        start_text(std::string(dialect.wait == Dialect::Wait::None ? "M140 " : "M190 ") + dialect.temperature +
+                   std::to_string(std::lround(bed)) + "\n");
     // Several extruders: each one used set, then waited for after the start
     // (ME1); with extruders.ooze_prevention, the ones that wait at their
     // temperature plus extruders.standby_delta, and only the first waited
@@ -3127,11 +3183,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     if (heat && s.extruders > 1) {
         for (int e = 1; e <= kMaxExtruders; ++e)
             if (tools_used[std::size_t(e)] && value_of("temperature", std::size_t(e - 1)) > 0.0)
-                out << nozzle_gcode(false, e,
-                                    s.ooze_prevention && e != initial_tool ? standby(e)
-                                                                           : value_of("temperature", std::size_t(e - 1)));
+                start_text(nozzle_gcode(false, e,
+                                        s.ooze_prevention && e != initial_tool ? standby(e)
+                                                                               : value_of("temperature", std::size_t(e - 1))));
     } else if (heat_nozzle) {
-        out << nozzle_gcode(false, 0, nozzle);
+        start_text(nozzle_gcode(false, 0, nozzle));
     }
     if (!start_gcode.empty()) {
         out << start_gcode << "\n";
@@ -3155,9 +3211,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         for (int e = 1; e <= kMaxExtruders; ++e)
             if (tools_used[std::size_t(e)] && value_of("temperature", std::size_t(e - 1)) > 0.0 &&
                 (!s.ooze_prevention || e == initial_tool))
-                out << nozzle_gcode(true, e, value_of("temperature", std::size_t(e - 1)));
+                start_text(nozzle_gcode(true, e, value_of("temperature", std::size_t(e - 1))));
     } else if (heat_nozzle && dialect.wait != Dialect::Wait::None) {
-        out << nozzle_gcode(true, 0, nozzle);
+        start_text(nozzle_gcode(true, 0, nozzle));
     }
     // Several extruders: the change's G-code to the first one too, from
     // none (rule 6), and its T unless that G-code has it.
@@ -4751,6 +4807,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     out << "; estimated first layer printing time (normal mode) = " << format_duration(first_layer[0]) << "\n";
     if (s.silent_mode)
         out << "; estimated first layer printing time (silent mode) = " << format_duration(first_layer[1]) << "\n";
+    // The preparation apart (print_time.md, rule 14): waits, heating, homing and levelling.
+    if (g.preparation_time() > 0.0)
+        out << "; estimated preparation time = " << format_duration(g.preparation_time()) << "\n";
     // The filament, its weight and cost (gcode_extras.md, rule 1).
     {
         const double r = s.filament_diameter / 2.0;
