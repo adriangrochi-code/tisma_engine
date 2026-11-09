@@ -17,6 +17,8 @@ import net.tisma.cloud.CloudException
 import net.tisma.cloud.JobRequest
 import net.tisma.cloud.JobStatus
 import net.tisma.cloud.ProblemReport
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.cancel
 import net.tisma.mockcloud.MockCloud
 import org.junit.After
 import org.junit.Before
@@ -49,13 +51,20 @@ class CloudViewModelTest {
         secrets = KeystoreSecretStore(context) { testKey }
     }
 
+    /** The models made by a test: their polling is stopped before the main dispatcher is put back. */
+    private val models = mutableListOf<CloudViewModel>()
+
     @After
     fun stop() {
+        // A model that still polls would read Dispatchers.Main while resetMain sets it, and kotlinx-coroutines-test
+        // fails the test with «used concurrently with setting it» (seen now and then on GitHub's runner).
+        models.forEach { it.viewModelScope.cancel() }
+        Thread.sleep(50)
         server.stop()
         Dispatchers.resetMain()
     }
 
-    private fun model() = CloudViewModel(settings, secrets, "Test phone (Android)", pollMs = 5)
+    private fun model() = CloudViewModel(settings, secrets, "Test phone (Android)", pollMs = 5).also { models += it }
 
     private fun signedIn(email: String = "ana@example.com") = model().also { vm ->
         vm.signIn(email, "password1")
