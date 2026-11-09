@@ -138,7 +138,10 @@ PackIndex parse_pack_index(std::string_view text_in) {
         out.community = file_of(j.at("community"));
     if (j.contains("translation_archive"))
         out.translation_archive = file_of(j.at("translation_archive"));
-    out.translation = strings(j, "translation");
+    if (j.contains("translation") && j.at("translation").is_object())
+        for (const auto& [dialect, path] : j.at("translation").items())
+            if (path.is_string())
+                out.translation[dialect] = path.get<std::string>();
     if (j.contains("vendors") && j.at("vendors").is_array())
         for (const json& v : j.at("vendors")) {
             if (!v.is_object())

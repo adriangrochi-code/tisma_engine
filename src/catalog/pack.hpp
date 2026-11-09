@@ -13,6 +13,7 @@
 #include <functional>
 #include <optional>
 #include <stdexcept>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -61,10 +62,10 @@ struct PackIndex {
     std::vector<std::string> printers; // "<model file>#<variant>": a printer's number is its place here
     PackFile compatible, community;
     // The settings' translation table (profile_pack_format.md, «Tabla de
-    // traducción»; project_import.md, rule 11): its archive, and the paths of
-    // translation/<dialect>.json inside it. Empty in older packs.
+    // traducción»; project_import.md, rule 11): its archive, and by dialect
+    // the path of translation/<dialect>.json inside it. Empty in older packs.
     PackFile translation_archive;
-    std::vector<std::string> translation;
+    std::map<std::string, std::string> translation;
 };
 
 // Throws PackError: not a pack index, or a version newer than this program

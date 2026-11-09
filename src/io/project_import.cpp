@@ -3,6 +3,8 @@
 #include "io/xml.hpp"
 #include "io/zip.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -89,6 +91,97 @@ ProjectSource project_source(std::string_view package) {
         case ProjectFamily::Cura: out.program = "Cura"; break;
         case ProjectFamily::Standard: break;
         }
+    return out;
+}
+
+TranslationTable parse_translation(std::string_view text) {
+    using json = nlohmann::json;
+    json j;
+    try {
+        j = json::parse(text);
+    } catch (const json::exception& e) {
+        throw TranslationError(std::string("translation table: ") + e.what());
+    }
+    if (!j.is_object() || j.value("format", "") != "tisma-pack-translation")
+        throw TranslationError("translation table: \"format\" must be \"tisma-pack-translation\"");
+    if (!j.contains("version") || !j.at("version").is_number_integer() || j.at("version").get<int>() > 1)
+        throw TranslationError("translation table: a version this program does not read");
+    TranslationTable out;
+    out.dialect = j.value("dialect", "");
+    if (!j.contains("kinds") || !j.at("kinds").is_object())
+        return out;
+    for (const auto& [kind, rows] : j.at("kinds").items()) {
+        if (!rows.is_object())
+            continue;
+        auto& table = out.kinds[kind];
+        for (const auto& [key, row] : rows.items()) {
+            if (!row.is_object())
+                continue;
+            TranslationRow r;
+            if (row.contains("engine") && row.at("engine").is_string())
+                r.engine = row.at("engine").get<std::string>();
+            const std::string group = row.contains("group") && row.at("group").is_string() ? row.at("group").get<std::string>() : "";
+            r.group = group == "translated" ? SettingGroup::Translated
+                      : group == "similar"  ? SettingGroup::Similar
+                                            : SettingGroup::None;
+            if (r.engine.empty())
+                r.group = SettingGroup::None;
+            table[key] = r;
+            if (row.contains("with") && row.at("with").is_array())
+                for (const json& w : row.at("with"))
+                    if (w.is_string() && !table.count(w.get<std::string>()))
+                        table[w.get<std::string>()] = r;
+        }
+    }
+    return out;
+}
+
+std::string translation_dialect(const ProjectSource& source) {
+    const std::string app = lower(source.application + " " + source.program);
+    switch (source.family) {
+    case ProjectFamily::PrusaSlicer:
+        return "prusaslicer";
+    case ProjectFamily::OrcaSlicer:
+        if (app.find("creality") != std::string::npos)
+            return "crealityprint";
+        if (app.find("elegoo") != std::string::npos)
+            return "elegooslicer";
+        return "orcaslicer";
+    case ProjectFamily::Cura:
+        return "cura";
+    case ProjectFamily::Standard:
+        break;
+    }
+    return "";
+}
+
+SettingSort sort_settings(const TranslationTable& table, const std::vector<std::pair<std::string, std::string>>& settings) {
+    SettingSort out;
+    // A project's settings are one list: look the key up in each kind, the
+    // print's first.
+    static constexpr std::array<std::string_view, 6> kOrder = {"print", "filament", "printer",
+                                                               "resin_print", "resin", "resin_printer"};
+    for (const auto& [key, value] : settings) {
+        SettingGroup group = SettingGroup::None;
+        bool found = false;
+        for (const std::string_view kind : kOrder) {
+            const auto k = table.kinds.find(std::string(kind));
+            if (k == table.kinds.end())
+                continue;
+            if (const auto row = k->second.find(key); row != k->second.end()) {
+                group = row->second.group, found = true;
+                break;
+            }
+        }
+        if (!found)
+            for (const auto& [kind, rows] : table.kinds)
+                if (const auto row = rows.find(key); row != rows.end()) {
+                    group = row->second.group;
+                    break;
+                }
+        (group == SettingGroup::Translated ? out.translated : group == SettingGroup::Similar ? out.similar : out.none) += 1;
+        out.detail.emplace_back(key, group);
+    }
     return out;
 }
 

@@ -134,3 +134,67 @@ TEST_CASE("project import: the spec team's PrusaSlicer 2.7.2 sample (PI2, its pa
     CHECK(box.max.y - box.min.y == 10.0f);
     CHECK(box.max.z - box.min.z == 15.0f);
 }
+
+namespace {
+
+// Rows as the profile pack writes them (profiles/next 8e2e5f0, given by the
+// pack's session as data).
+const char* kPrusaTable = R"({"format": "tisma-pack-translation", "version": 1, "dialect": "prusaslicer", "kinds": {
+ "print": {
+  "layer_height": {"engine": "layers.height", "group": "translated", "conversion": {"how": "number"}},
+  "first_layer_height": {"engine": "layers.first_height", "group": "translated",
+                         "conversion": {"how": "percent_of", "base": "layers.height"}},
+  "external_perimeter_extrusion_width": {"engine": "walls.outer_width", "group": "similar",
+                                         "conversion": {"how": "absolute_only"}, "note": "in mm"},
+  "thin_walls": {"engine": null, "group": "none"}},
+ "filament": {
+  "extrusion_multiplier": {"engine": "extrusion.flow", "group": "translated", "conversion": {"how": "factor", "factor": 100}}},
+ "printer": {
+  "gcode_flavor": {"engine": "machine.flavor", "group": "similar", "conversion": {"how": "map", "values": {"marlin2": "marlin"}}},
+  "start_gcode": {"engine": "machine.start_gcode, machine.end_gcode", "group": "translated",
+                  "conversion": {"how": "rule", "rule": "gcode_template"}, "with": ["end_gcode"]}}}})";
+
+} // namespace
+
+TEST_CASE("project import: the pack's table sorts a project's settings into the three groups (rules 6, 9 and 11)",
+          "[project_import]") {
+    const TranslationTable table = parse_translation(kPrusaTable);
+    CHECK(table.dialect == "prusaslicer");
+    REQUIRE(table.kinds.size() == 3);
+    CHECK(table.kinds.at("print").at("layer_height").engine == "layers.height");
+    CHECK(table.kinds.at("print").at("thin_walls").group == SettingGroup::None);
+    const SettingSort sort = sort_settings(table, {{"layer_height", "0.2"},
+                                                   {"first_layer_height", "0.2"},
+                                                   {"external_perimeter_extrusion_width", "0.45"},
+                                                   {"thin_walls", "0"},
+                                                   {"extrusion_multiplier", "1"},
+                                                   {"gcode_flavor", "marlin2"},
+                                                   {"start_gcode", "G28"},
+                                                   {"end_gcode", "M84"},
+                                                   {"post_process", "script.py"}});
+    CHECK(sort.translated == 5); // layer heights, flow, start and end G-code
+    CHECK(sort.similar == 2);    // outer wall width, flavor
+    CHECK(sort.none == 2);       // thin walls, and a key the table does not have
+    REQUIRE(sort.detail.size() == 9);
+    CHECK(sort.detail.back() == std::pair<std::string, SettingGroup>{"post_process", SettingGroup::None});
+    // Not a table, or a newer one.
+    CHECK_THROWS_AS(parse_translation(R"({"format": "other", "version": 1})"), TranslationError);
+    CHECK_THROWS_AS(parse_translation(R"({"format": "tisma-pack-translation", "version": 2})"), TranslationError);
+    CHECK_THROWS_AS(parse_translation("not json"), TranslationError);
+}
+
+TEST_CASE("project import: each program's table", "[project_import]") {
+    ProjectSource s;
+    CHECK(translation_dialect(s).empty());
+    s.family = ProjectFamily::PrusaSlicer;
+    CHECK(translation_dialect(s) == "prusaslicer");
+    s.family = ProjectFamily::OrcaSlicer;
+    s.application = "BambuStudio-01.10";
+    CHECK(translation_dialect(s) == "orcaslicer");
+    s.application = "Creality Print 6.0";
+    CHECK(translation_dialect(s) == "crealityprint");
+    s.application = "ElegooSlicer-1.1";
+    CHECK(translation_dialect(s) == "elegooslicer");
+    s.family = ProjectFamily::Cura;
+    CHECK(translation_dialect(s) == "cura");
+}

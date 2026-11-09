@@ -566,12 +566,14 @@ TEST_CASE("pack: the translation table's archive is named, planned and unpacked 
     std::string text = kIndex;
     text.replace(text.find(" \"vendors\""), 0,
                  " \"translation_archive\": {\"name\": \"translation.tar.xz\", \"size\": 77, \"sha256\": \"EE55\"},\n"
-                 " \"translation\": [\"translation/prusaslicer.json\", \"translation/orcaslicer.json\"],\n");
+                 " \"translation\": {\"prusaslicer\": \"translation/prusaslicer.json\", \"orcaslicer\": "
+                 "\"translation/orcaslicer.json\"},\n");
     const PackIndex index = parse_pack_index(text);
     CHECK(index.translation_archive.name == "translation.tar.xz");
     CHECK(index.translation_archive.size == 77);
     CHECK(index.translation_archive.sha256 == "ee55");
-    CHECK(index.translation == std::vector<std::string>{"translation/prusaslicer.json", "translation/orcaslicer.json"});
+    CHECK(index.translation.size() == 2);
+    CHECK(index.translation.at("orcaslicer") == "translation/orcaslicer.json");
     const auto plan = pack_plan(&index, "", {"acme"});
     CHECK(std::count_if(plan.begin(), plan.end(), [](const PackDownload& d) {
               return d.name == "translation.tar.xz" && d.size == 77 && d.sha256 == "ee55";

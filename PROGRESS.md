@@ -11817,3 +11817,10 @@ arreglado en 9d8dc76 y subido.
   espera la tabla de traducción del paquete de perfiles (regla 11), que todavía no viene en el paquete, y muestras de
   la familia OrcaSlicer para contar las placas: hasta entonces el aviso dice las piezas y que los ajustes no se traen
   (decisión: seguir la regla 12 mientras no haya tabla).
+- Tabla de traducción (profile_pack_format.md; project_import.md, reglas 6, 9 y 11): el paquete baja y descomprime
+  `translation.tar.xz` cuando el índice lo nombra (`translation_archive`, y `translation` por dialecto);
+  `parse_translation` lee `translation/<dialecto>.json` (formato `tisma-pack-translation` 1) y `sort_settings`
+  reparte los ajustes de un proyecto en traducidos, parecidos y sin equivalente (una clave que la tabla no tiene va a
+  «sin equivalente»; las claves de `with` van con su fila). Pruebas con filas reales que dio la sesión del paquete
+  (profiles/next 8e2e5f0). Falta: leer los ajustes del proyecto (`Metadata/Slic3r_PE.config`,
+  `project_settings.config`), que espera muestras con ajustes (la pi2 no los trae), y el diálogo de la regla 9.
