@@ -12,6 +12,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- La piel difusa no se aplica donde la pared externa cuelga sobre nada (sale lisa, como un puente).
+
 - `machine.min_layer_height` y `max_layer_height` acotan solo la altura variable y el soporte, no la altura de capa ni
   la primera capa. `restart_extra` acepta de −50 a 1000 mm; las velocidades de la MMU, 0 (paso que no se usa); y
   `limits_usage = emit` con Klipper escribe solo lo que Klipper toma, en vez de dar error.

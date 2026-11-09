@@ -1488,8 +1488,6 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             // rounded corners add vertices that every later step would carry
             // (the speed report's V9).
             out.walls[l].infill = simplify(out.walls[l].infill, settings.simplify_tolerance);
-            fuzz_walls(out.walls[l].toolpaths, out.regions[l], fuzzy,
-                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l);
         } else
             out.walls[l].infill = out.regions[l];
     });
@@ -1518,11 +1516,24 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             if (!walls)
                 return;
             walls->infill = simplify(walls->infill, settings.simplify_tolerance);
-            fuzz_walls(walls->toolpaths, out.regions[l], fuzzy,
-                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l);
             out.walls[l] = std::move(*walls);
         });
     }
+    // Fuzzy skin (fuzzy_skin.md), once every layer's region is known: an
+    // outer wall that hangs over nothing (outside the layer below, half a
+    // bead past its edge) stays smooth, as a bridge (orca_2_5.md, rule 18).
+    if (settings.wall_count > 0)
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
+            if (!fuzzed(l) || out.regions[l].empty())
+                return;
+            Polygons air;
+            if (l > 0)
+                air = Clipper2Lib::Difference(out.regions[l], offset(out.regions[l - 1], 0.5 * settings.wall_width),
+                                              Clipper2Lib::FillRule::NonZero);
+            fuzz_walls(out.walls[l].toolpaths, out.regions[l], fuzzy,
+                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l,
+                       air.empty() ? nullptr : &air);
+        });
     for (std::size_t n : open)
         out.open_contours += n;
     out.cut_away = std::size_t(std::count(cut_away.begin(), cut_away.end(), 1));

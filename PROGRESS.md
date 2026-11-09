@@ -11778,4 +11778,7 @@ arreglado en 9d8dc76 y subido.
 - Regla 16 (OR16): `speed.small_support` (mm/s o % de la velocidad del soporte o de la interfaz) y
   `speed.small_support_threshold` (un radio; 0 apagado): una extrusión de soporte de largo hasta 2π × el umbral va
   más despacio. En la ficha de velocidades de relleno y soporte, con su ayuda.
-- Sigue: reglas 14 (orejas de borde) y 18 (piel difusa sin puentes).
+- Regla 18 (OR18): la piel difusa deja lisa la pared externa donde cuelga sobre nada (fuera de la capa de abajo,
+  medio cordón más allá de su borde). La piel difusa pasó a un paso propio, después de tener todas las regiones (antes
+  iba dentro del cálculo en paralelo de las paredes, donde la capa de abajo no estaba lista).
+- Sigue: regla 14 (orejas de borde).
