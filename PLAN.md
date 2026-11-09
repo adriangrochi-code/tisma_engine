@@ -1227,11 +1227,11 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
   Hecho (2026-11-09): `--strict`, `--ground-largest-face`/`--ground-face-normal`/`--ground-face-point`,
   `--inspect-mesh`, `--export-statistics`, `--export-settings` (con `-`, la salida estándar) y `--align-to-y-axis`
   (OR24 a OR28), y `--inspect-paint` en el laminado de un proyecto.
-- [ ] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
+- [x] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
   puentes; la balsa solo necesita la prueba OR15.
   Hecho (2026-11-09): regla 15 (prueba OR15), regla 16 (`speed.small_support` y `small_support_threshold`, OR16) y
-  regla 17 (`cooling.first_layer_fan`, OR17) y regla 18 (piel difusa lisa sobre el aire, OR18). Queda la regla 14
-  (orejas de borde).
+  regla 17 (`cooling.first_layer_fan`, OR17), regla 18 (piel difusa lisa sobre el aire, OR18) y regla 14 (orejas de
+  borde, OR14). Faltan las orejas pintadas.
 - O7 y O8 van con sus fichas de interfaz.
 
 ### Espacio de diseño CAD con SolidCraft (pedido del dueño, 2026-10-29, por el equipo de fichas)

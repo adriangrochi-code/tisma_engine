@@ -2307,8 +2307,22 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "adhesion",
                {"skirt_loops", "skirt_distance", "skirt_layers", "brim_width", "raft_layers", "raft_gap", "raft_expansion",
                 "raft_first_layer_density", "raft_first_layer_expansion", "skirt_min_filament", "draft_shield", "brim_type",
-                "brim_gap"},
+                "brim_gap", "brim_ears", "brim_ears_max_angle", "brim_ears_detection_length", "brim_ears_outer_only"},
                [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "brim_ears" || n == "brim_ears_outer_only") {
+                       if (!g.at(n).is_boolean())
+                           fail(k, "must be true or false");
+                       (n == "brim_ears" ? s.brim_ears : s.brim_ears_outer_only) = g.at(n).get<bool>();
+                       return;
+                   }
+                   if (n == "brim_ears_max_angle" || n == "brim_ears_detection_length") {
+                       const double d = number(g, n, k);
+                       const double top = n == "brim_ears_max_angle" ? 180.0 : 100.0;
+                       if (!(d >= 0.0 && d <= top))
+                           fail(k, n == "brim_ears_max_angle" ? "must be from 0 to 180 degrees" : "must be from 0 to 100 mm");
+                       (n == "brim_ears_max_angle" ? s.brim_ears_max_angle : s.brim_ears_detection_length) = d;
+                       return;
+                   }
                    if (n == "draft_shield") {
                        s.draft_shield = choice<DraftShield>(g, n, k,
                                                             {{"disabled", DraftShield::Disabled},
@@ -3566,6 +3580,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"adhesion.draft_shield", json(draft_shield_name(s.draft_shield)).dump()},
         {"adhesion.brim_type", json(brim_type_name(s.brim_type)).dump()},
         {"adhesion.brim_gap", num(s.brim_gap)},
+        {"adhesion.brim_ears", flag(s.brim_ears)},
+        {"adhesion.brim_ears_max_angle", num(s.brim_ears_max_angle)},
+        {"adhesion.brim_ears_detection_length", num(s.brim_ears_detection_length)},
+        {"adhesion.brim_ears_outer_only", flag(s.brim_ears_outer_only)},
         {"adhesion.raft_layers", std::to_string(s.raft_layers)},
         {"adhesion.raft_gap", num(s.raft_gap)},
         {"adhesion.raft_expansion", num(s.raft_expansion)},
@@ -4086,6 +4104,10 @@ std::string settings_json(const Settings& s) {
           {"draft_shield", draft_shield_name(s.draft_shield)},
           {"brim_type", brim_type_name(s.brim_type)},
           {"brim_gap", s.brim_gap},
+          {"brim_ears", s.brim_ears},
+          {"brim_ears_max_angle", s.brim_ears_max_angle},
+          {"brim_ears_detection_length", s.brim_ears_detection_length},
+          {"brim_ears_outer_only", s.brim_ears_outer_only},
           {"raft_layers", s.raft_layers},
           {"raft_gap", s.raft_gap},
           {"raft_expansion", s.raft_expansion},

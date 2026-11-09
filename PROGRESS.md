@@ -11781,4 +11781,7 @@ arreglado en 9d8dc76 y subido.
 - Regla 18 (OR18): la piel difusa deja lisa la pared externa donde cuelga sobre nada (fuera de la capa de abajo,
   medio cordón más allá de su borde). La piel difusa pasó a un paso propio, después de tener todas las regiones (antes
   iba dentro del cálculo en paralelo de las paredes, donde la capa de abajo no estaba lista).
-- Sigue: regla 14 (orejas de borde).
+- Regla 14 (OR14): orejas de borde (`adhesion.brim_ears`, `brim_ears_max_angle` 125°, `brim_ears_detection_length`
+  1 mm, `brim_ears_outer_only`): las vueltas del borde recortadas a discos de radio separación + ancho en las
+  esquinas filosas del contorno simplificado (las de afuera y, salvo «solo afuera», las de los agujeros). En la ficha
+  del borde, con su ayuda. Faltan las orejas pintadas (no hay canal de pintura para eso todavía).

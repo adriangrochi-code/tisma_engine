@@ -64,6 +64,10 @@ AdhesionShape adhesion_shape(const Settings& s) {
     a.brim_width = s.brim_width;
     a.brim_type = s.brim_type;
     a.brim_gap = s.brim_gap;
+    a.ears = s.brim_ears;
+    a.ears_max_angle = s.brim_ears_max_angle;
+    a.ears_detection = s.brim_ears_detection_length;
+    a.ears_outer_only = s.brim_ears_outer_only;
     a.skirt_loops = s.skirt_layers > 0 || s.draft_shield == DraftShield::Enabled ? s.skirt_loops : 0;
     a.skirt_distance = s.skirt_distance;
     a.shield = s.draft_shield != DraftShield::Disabled;
@@ -86,10 +90,96 @@ double skirt_offset(const AdhesionShape& a, double spacing, int k) {
 
 } // namespace
 
+namespace {
+
+// Brim ears (orca_2_5.md, rule 14): discs of gap + width round each sharp
+// corner, the outer contours' and, unless outer only, the holes'. A corner
+// is sharp when the angle inside the shape it bounds (the part for an outer
+// contour, the hole for a hole) is under the maximum, and it points out of
+// that shape.
+Polygons ear_discs(const Polygons& region, const AdhesionShape& a, bool outers, bool holes) {
+    Polygons discs;
+    const double radius = a.brim_gap + a.brim_width;
+    const Polygons shapes = a.ears_detection > 0.0 ? simplify(region, a.ears_detection) : region;
+    for (const Polygon& p : shapes) {
+        const bool outer = Clipper2Lib::Area(p) > 0.0;
+        if ((outer && !outers) || (!outer && !holes) || p.size() < 3)
+            continue;
+        const std::size_t n = p.size();
+        for (std::size_t i = 0; i < n; ++i) {
+            const auto& prev = p[(i + n - 1) % n];
+            const auto& at = p[i];
+            const auto& next = p[(i + 1) % n];
+            const double ux = to_mm(prev.x) - to_mm(at.x), uy = to_mm(prev.y) - to_mm(at.y);
+            const double vx = to_mm(next.x) - to_mm(at.x), vy = to_mm(next.y) - to_mm(at.y);
+            const double lu = std::hypot(ux, uy), lv = std::hypot(vx, vy);
+            if (!(lu > 0.0) || !(lv > 0.0))
+                continue;
+            // Convex for the shape it bounds: a left turn on a counter-clockwise
+            // outer contour, a right turn on a clockwise hole.
+            const double turn = (to_mm(at.x) - to_mm(prev.x)) * vy - (to_mm(at.y) - to_mm(prev.y)) * vx;
+            if (outer ? turn <= 0.0 : turn >= 0.0)
+                continue;
+            const double angle = std::acos(std::clamp((ux * vx + uy * vy) / (lu * lv), -1.0, 1.0)) * 180.0 / std::numbers::pi;
+            if (!(angle < a.ears_max_angle))
+                continue;
+            Polygon disc;
+            constexpr int kSides = 48;
+            for (int k = 0; k < kSides; ++k) {
+                const double t = 2.0 * std::numbers::pi * k / kSides;
+                disc.push_back({static_cast<std::int64_t>(std::llround(at.x + radius * std::cos(t) * kUnitsPerMm)),
+                                static_cast<std::int64_t>(std::llround(at.y + radius * std::sin(t) * kUnitsPerMm))});
+            }
+            discs.push_back(std::move(disc));
+        }
+    }
+    return Clipper2Lib::Union(discs, Clipper2Lib::FillRule::NonZero);
+}
+
+// The parts of the closed loops inside the ears, as open paths.
+void add_ear_pieces(const Polygons& loops, const Polygons& ears, double bead, int index, std::vector<Toolpath>& out) {
+    if (loops.empty() || ears.empty())
+        return;
+    Polygons open;
+    for (const Polygon& p : loops) {
+        Polygon closed = p;
+        closed.push_back(p.front());
+        open.push_back(std::move(closed));
+    }
+    Clipper2Lib::Clipper64 clipper;
+    clipper.AddOpenSubject(open);
+    clipper.AddClip(ears);
+    Polygons inside, pieces;
+    clipper.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, inside, pieces);
+    for (const Polygon& piece : pieces) {
+        if (piece.size() < 2)
+            continue;
+        Toolpath t = loop_of(piece, bead, index);
+        t.closed = false;
+        out.push_back(std::move(t));
+    }
+}
+
+} // namespace
+
 std::vector<Toolpath> brim_loops(const Polygons& region, const AdhesionShape& a, double bead, double height) {
     std::vector<Toolpath> out;
     const double spacing = loop_spacing(bead, height);
     const int count = brim_count(a.brim_width, spacing);
+    if (a.ears && a.brim_width > 0.0 && a.brim_type != BrimType::None) {
+        const bool holes = !a.ears_outer_only;
+        const Polygons outer_ears = outer_brim(a) ? ear_discs(region, a, true, false) : Polygons{};
+        const Polygons hole_ears = holes ? ear_discs(region, a, false, true) : Polygons{};
+        for (int k = 0; k < count; ++k) {
+            const double offset = a.brim_gap + spacing * (k + 0.5);
+            Polygons outer_loops, hole_loops;
+            for (const Polygon& p : grown(region, offset))
+                (Clipper2Lib::Area(p) > 0.0 ? outer_loops : hole_loops).push_back(p);
+            add_ear_pieces(outer_loops, outer_ears, bead, -1 - k, out);
+            add_ear_pieces(hole_loops, hole_ears, bead, -1 - k, out);
+        }
+        return out;
+    }
     // With a shield, no brim loop under a skirt loop: one whose bead the
     // skirt's axis falls in (rule 4, B3).
     const auto under_skirt = [&](double offset) {

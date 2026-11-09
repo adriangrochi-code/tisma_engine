@@ -1974,7 +1974,9 @@ const std::map<T, const char*>& row_keys() {
         {T::SkirtMinFilament, "adhesion.skirt_min_filament"}, {T::AutoTemperatures, "gcode.auto_temperatures"},
         {T::FilamentStartGcode, "extrusion.start_gcode"}, {T::FilamentEndGcode, "extrusion.end_gcode"},
         {T::FilenameFormat, "output.filename_format"}, {T::PostProcessRow, "output.post_process"}, {T::DraftShieldRow, "adhesion.draft_shield"},
-        {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"},
+        {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"}, {T::BrimEars, "adhesion.brim_ears"},
+        {T::BrimEarsMaxAngle, "adhesion.brim_ears_max_angle"}, {T::BrimEarsDetection, "adhesion.brim_ears_detection_length"},
+        {T::BrimEarsOuterOnly, "adhesion.brim_ears_outer_only"},
         {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
@@ -8691,6 +8693,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {BrimType::OuterAndInner, tr(T::BrimBoth)},
                             {BrimType::None, tr(T::BrimNone)}});
         mm(T::BrimGap, "adhesion.brim_gap", s.brim_gap, 0.0, 100.0, "%.2f mm", 0.01f);
+        flag(T::BrimEars, "adhesion.brim_ears", s.brim_ears);
+        mm(T::BrimEarsMaxAngle, "adhesion.brim_ears_max_angle", s.brim_ears_max_angle, 0.0, 180.0, "%.0f°", 0.5f);
+        mm(T::BrimEarsDetection, "adhesion.brim_ears_detection_length", s.brim_ears_detection_length, 0.0, 100.0, "%.2f mm",
+           0.01f);
+        flag(T::BrimEarsOuterOnly, "adhesion.brim_ears_outer_only", s.brim_ears_outer_only);
     } else if (id == "raft") {
         whole(T::RaftLayers, "adhesion.raft_layers", s.raft_layers, 0, 100);
         mm(T::RaftGap, "adhesion.raft_gap", s.raft_gap, 0.0, 100.0, "%.2f mm", 0.01f);

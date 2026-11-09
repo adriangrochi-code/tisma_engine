@@ -3043,3 +3043,68 @@ TEST_CASE("support: small extrusions at speed.small_support (orca_2_5.md, rule 1
             CHECK(p.feeds == std::set<long>{600});
     CHECK(parse_settings(R"({"speed": {"small_support": "50%", "small_support_threshold": 2}})").small_support_speed.percent);
 }
+
+TEST_CASE("brim: ears at the sharp corners only (orca_2_5.md, rule 14, OR14)", "[gcode][brim]") {
+    // A 20 mm square with an 8 mm square hole in the middle.
+    const auto square = [](double x0, double y0, double x1, double y1, bool hole) {
+        Polygon p{{std::llround(x0 * kUnitsPerMm), std::llround(y0 * kUnitsPerMm)},
+                  {std::llround(x1 * kUnitsPerMm), std::llround(y0 * kUnitsPerMm)},
+                  {std::llround(x1 * kUnitsPerMm), std::llround(y1 * kUnitsPerMm)},
+                  {std::llround(x0 * kUnitsPerMm), std::llround(y1 * kUnitsPerMm)}};
+        if (hole)
+            std::reverse(p.begin(), p.end());
+        return p;
+    };
+    const Polygons region{square(0, 0, 20, 20, false), square(6, 6, 14, 14, true)};
+    AdhesionShape a;
+    a.brim_width = 3.0;
+    a.ears = true;
+    a.ears_max_angle = 125.0;
+    a.ears_outer_only = true;
+    const std::vector<Toolpath> ears = brim_loops(region, a, 0.45, 0.2);
+    REQUIRE_FALSE(ears.empty());
+    // Every piece near an outer corner, outside the part, none in the hole.
+    std::set<int> corners;
+    for (const Toolpath& t : ears) {
+        CHECK_FALSE(t.closed);
+        for (const ToolpathPoint& p : t.points) {
+            const double cx = p.p.x < 10.0 ? 0.0 : 20.0, cy = p.p.y < 10.0 ? 0.0 : 20.0;
+            CHECK(std::hypot(p.p.x - cx, p.p.y - cy) <= 3.0 + 1e-6);
+            CHECK_FALSE((p.p.x > 0.0 && p.p.x < 20.0 && p.p.y > 0.0 && p.p.y < 20.0));
+            corners.insert(int(cx > 0.0) * 2 + int(cy > 0.0));
+        }
+    }
+    CHECK(corners.size() == 4);
+    // Without outer only: ears in the hole's corners too.
+    a.ears_outer_only = false;
+    bool in_hole = false;
+    for (const Toolpath& t : brim_loops(region, a, 0.45, 0.2))
+        for (const ToolpathPoint& p : t.points)
+            in_hole = in_hole || (p.p.x > 6.0 && p.p.x < 14.0 && p.p.y > 6.0 && p.p.y < 14.0);
+    CHECK(in_hole);
+    // An angle of 0: no ears; and less brim than the whole one.
+    a.ears_max_angle = 0.0;
+    CHECK(brim_loops(region, a, 0.45, 0.2).empty());
+    a.ears_max_angle = 125.0;
+    a.ears_outer_only = true;
+    const auto length = [](const std::vector<Toolpath>& paths) {
+        double total = 0.0;
+        for (const Toolpath& t : paths)
+            for (std::size_t i = 0; i + 1 < t.points.size() + (t.closed ? 1 : 0); ++i) {
+                const Point2d& p = t.points[i].p;
+                const Point2d& q = t.points[(i + 1) % t.points.size()].p;
+                total += std::hypot(q.x - p.x, q.y - p.y);
+            }
+        return total;
+    };
+    AdhesionShape whole = a;
+    whole.ears = false;
+    CHECK(length(brim_loops(region, a, 0.45, 0.2)) < 0.6 * length(brim_loops(region, whole, 0.45, 0.2)));
+    // An octagon's corners (135 degrees) get none at 125.
+    Polygon octagon;
+    for (int k = 0; k < 8; ++k)
+        octagon.push_back({std::llround(10.0 * std::cos(k * std::numbers::pi / 4.0) * kUnitsPerMm),
+                           std::llround(10.0 * std::sin(k * std::numbers::pi / 4.0) * kUnitsPerMm)});
+    CHECK(brim_loops(Polygons{octagon}, a, 0.45, 0.2).empty());
+    CHECK_FALSE(parse_settings(R"({"adhesion": {"brim_ears": true, "brim_ears_max_angle": 90}})").brim_ears_outer_only);
+}

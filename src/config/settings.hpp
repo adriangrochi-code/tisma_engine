@@ -686,6 +686,11 @@ struct Settings {
     DraftShield draft_shield = DraftShield::Disabled;
     BrimType brim_type = BrimType::Outer;
     double brim_gap = 0.0; // mm
+    // Brim ears (orca_2_5.md, rule 14): discs at the sharp corners instead of the whole brim.
+    bool brim_ears = false;
+    double brim_ears_max_angle = 125.0;      // degrees
+    double brim_ears_detection_length = 1.0; // mm; 0: the contour as it is
+    bool brim_ears_outer_only = false;
     // The raft (skirt_brim_raft.md, rules 9 to 14): raft_layers of support
     // under the whole part, which goes up by them and raft_gap; 0: none.
     int raft_layers = 0;

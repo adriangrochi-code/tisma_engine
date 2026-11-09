@@ -2002,6 +2002,10 @@
     X(BrimBoth, "Afuera y en los agujeros", "Outside and in the holes") \
     X(BrimNone, "Ninguno", "None") \
     X(BrimGap, "Separación del borde", "Brim gap") \
+    X(BrimEars, "Orejas de borde", "Brim ears") \
+    X(BrimEarsMaxAngle, "Ángulo máximo de las orejas", "Brim ears max angle") \
+    X(BrimEarsDetection, "Detección de las esquinas", "Ear corner detection") \
+    X(BrimEarsOuterOnly, "Orejas solo afuera", "Ears outside only") \
     X(SubSilent, "Modo silencioso", "Silent mode") \
     X(RetractAcceleration, "Aceleración al retraer", "Retraction acceleration") \
     X(MaxAccelX, "Aceleración máxima en X", "Maximum acceleration in X") \
