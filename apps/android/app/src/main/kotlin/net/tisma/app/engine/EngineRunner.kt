@@ -203,17 +203,22 @@ class EngineRunner(
     /** Runs a short engine command; its output, or an [EngineException] with stderr's last line. */
     private fun capture(args: List<String>, timeoutS: Long = 120): String {
         workDir.mkdirs()
-        val err = File(workDir, "engine.err").apply { delete() }
-        val p = engineProcess(listOf(executable.path) + args, workDir).directory(workDir).redirectError(err).start()
-        p.outputStream.close()
-        val out = p.inputStream.bufferedReader().readText()
-        if (!p.waitFor(timeoutS, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The engine took too long", "", -1) }
-        if (p.exitValue() != 0) {
-            val e = err.takeIf { it.isFile }?.readText().orEmpty().lines().filter { it.isNotBlank() && !it.startsWith("progress") }
-                .lastOrNull()?.removePrefix("error: ").orEmpty()
-            throw EngineException("error", e.ifBlank { "The engine stopped (exit code ${p.exitValue()})" }, "", p.exitValue())
+        // Its own file per call: calls can overlap (a check while a slice runs).
+        val err = File.createTempFile("engine", ".err", workDir)
+        try {
+            val p = engineProcess(listOf(executable.path) + args, workDir).directory(workDir).redirectError(err).start()
+            p.outputStream.close()
+            val out = p.inputStream.bufferedReader().readText()
+            if (!p.waitFor(timeoutS, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The engine took too long", "", -1) }
+            if (p.exitValue() != 0) {
+                val e = runCatching { err.readText() }.getOrDefault("").lines().filter { it.isNotBlank() && !it.startsWith("progress") }
+                    .lastOrNull()?.removePrefix("error: ").orEmpty()
+                throw EngineException("error", e.ifBlank { "The engine stopped (exit code ${p.exitValue()})" }, "", p.exitValue())
+            }
+            return out
+        } finally {
+            err.delete()
         }
-        return out
     }
 
     private fun json(text: String): JsonObject =
@@ -320,7 +325,7 @@ class EngineRunner(
         workDir.mkdirs()
         val f = File(workDir, "design.json").apply { writeText(doc.json().toString()) }
         val out = File(workDir, "design.stl").apply { delete() }
-        val err = File(workDir, "engine.err").apply { delete() }
+        val err = File.createTempFile("engine", ".err", workDir)
         val p = engineProcess(listOf(executable.path, "design", "build", f.path, "--solidcraft", solidcraft.path, "-o", out.path,
             "--quality", quality, "--timeline"), workDir).directory(workDir).redirectError(err).start()
         p.outputStream.close()

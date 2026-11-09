@@ -159,12 +159,13 @@ class Library(private val engine: File, val dir: File) {
 
     private fun run(args: List<String>): String {
         dir.mkdirs()
-        val err = File(dir.parentFile ?: dir, "library.err")
+        // Its own file per call: two calls can overlap (a save and the check after it).
+        val err = File.createTempFile("library", ".err", dir.parentFile ?: dir)
         val p = engineProcess(listOf(engine.path) + args, dir.parentFile ?: dir).redirectError(err).start()
         p.outputStream.close()
         val out = p.inputStream.bufferedReader().readText()
         if (!p.waitFor(5, TimeUnit.MINUTES)) { p.destroyForcibly(); throw LibraryException("The engine took too long") }
-        val e = err.takeIf { it.isFile }?.readText().orEmpty().lines().filter { it.isNotBlank() }.lastOrNull()?.removePrefix("error: ")
+        val e = runCatching { err.readText() }.getOrDefault("").lines().filter { it.isNotBlank() }.lastOrNull()?.removePrefix("error: ")
         err.delete()
         if (p.exitValue() != 0) {
             val answer = runCatching { Json.parseToJsonElement(out) as JsonObject }.getOrNull()

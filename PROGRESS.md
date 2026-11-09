@@ -11874,3 +11874,13 @@ Smoke del beta R8 x86_64 (`cb4a0e3`) por la sesión de especificación: sin cier
 - `~nombre` en `one_of` (Prusa CORE One INDX, comportamiento del equipo de fichas): el texto de la variable como
   expresión regular, verdadero si el valor coincide entero (PLA, TPU sí; PETG, PC, ASA no). Si la variable no es
   texto, el error lo nombra. Con esto, las 2261 variantes FFF del paquete deberían leer todo su G-code.
+
+## 2026-11-09 — Android: dev `70f9335` (G-code original de cada máquina) y dos carreras en las pruebas
+
+- Unido dev `70f9335`: el motor usa el G-code original de cada impresora del paquete (2261/2261), para probar con la
+  A1 mini del dueño.
+- CI de GitHub, dos fallas intermitentes:
+  - `CloudViewModelTest` CC2: un modelo seguía consultando y leía `Dispatchers.Main` mientras `resetMain` lo cambiaba.
+    La prueba ahora para los modelos antes.
+  - `LibraryTest` ML1: dos llamadas al motor se pisaban el mismo archivo de errores (`library.err`): una lo borraba
+    mientras la otra lo leía. Ahora cada llamada tiene el suyo (biblioteca, paquete y las cortas del motor).
