@@ -100,6 +100,13 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
     temperatura del filamento) en vez de 0, con aviso. Un `F0` dentro de un G-code de la máquina se escribe como `F`
     con la velocidad de viaje del perfil y avisa; nunca rechaza el laminado.
 
+10 quinquies. **El G-code de la máquina sale tal cual** (pedido del dueño, 09-11-2026): fuera de lo que evalúa el
+    lenguaje (las construcciones de la regla 1), el motor no cambia ninguna línea, comando, parámetro, comentario ni
+    espacio del G-code de la máquina. La única excepción es la de la regla 10 quater: un `F0` como velocidad de un
+    movimiento (`G0` a `G3`); en cualquier otro comando (por ejemplo `M862.x`, donde `F` no es una velocidad) se deja
+    como está. Un G-code de la máquina que el motor no puede leer no se cambia por el genérico sin avisar: el aviso
+    dice qué construcción no entendió.
+
 ## Dónde se usa
 
 11. **Qué G-code:** inicio, fin, antes y después de cada cambio de capa, cambio de herramienta, pausa, y los de inicio
@@ -129,4 +136,6 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 | GM10 | Una impresora `cura` con `M82` en su inicio y `relative_extrusion` `false` | Todo el G-code extruye en absoluto |
 | GM11 | Un G-code `orcaslicer` con `nozzle_temperature_initial_layer[0]` y un filamento de 220 °C de primera capa | `220` |
 | GM12 | G-code de inicio original de la Bambu Lab A1 pegado en el G-code de inicio, filamento PLA | Lamina; ninguna línea con `F0`; las velocidades calculadas de los ajustes |
+| GM13 | Cada G-code de máquina del paquete, comparado línea por línea con el texto original | Toda línea sin construcciones sale igual, en el mismo orden; las líneas con construcciones solo cambian en lo evaluado |
+| GM14 | El inicio de una Prusa con `M862.1 ... F{(nozzle_high_flow[0] ? 1 : 0)}` sin alto flujo | `F0` queda en `M862.1` |
 | GM9 | Todas las impresoras del paquete, cada una con sus G-code originales | Todas laminan; las variables que falten quedan en el registro |
