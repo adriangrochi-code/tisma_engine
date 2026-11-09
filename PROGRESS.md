@@ -11692,3 +11692,12 @@ arreglado en 9d8dc76 y subido.
 - Regla 9 (parte): al abrir un 3MF de otro programa, la interfaz avisa «Proyecto de <programa>: N piezas. Sus ajustes
   todavía no se traen: se usan los de Tisma»; uno sin programa conocido, el aviso de la regla 2. `project_source`
   cuenta las piezas (los ítems del modelo raíz). Prueba `ui_project_import_prusaslicer` con la muestra.
+
+## 2026-11-09 — print_time.md: esperas y aceleraciones del G-code de la máquina
+
+- Reglas 8, 9 y 13: un `G4 P<ms>` o `G4 S<s>` del G-code de inicio, de cambio de capa o propio suma su espera al
+  tiempo (normal y silencioso); `M204 S/P/T` y `SET_VELOCITY_LIMIT ACCEL=` cambian la aceleración de los movimientos
+  que siguen. Prueba en `test_firmware.cpp`: `G4 S60` suma 60 s (±1,5), `G4 P30000` 30 s, `M204 S100` alarga el
+  tiempo, lo mismo con Klipper.
+- Sigue: reglas 10 (calentar), 12 (esquinas por firmware) y 14 (preparación aparte), PT8; `project_import.md`
+  reglas 3 a 8 cuando lleguen las muestras.

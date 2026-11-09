@@ -53,6 +53,13 @@ public:
         k_.travel_acceleration = travel;
     }
 
+    // A wait (G4) after the moves added so far: the machine stops for it
+    // (print_time.md, rule 9). Added to the batch's time when it is flushed.
+    void dwell(double seconds) {
+        if (seconds > 0.0)
+            pending_dwell_ += seconds;
+    }
+
     double total() const { return total_; }
 
     // A mark between the moves added so far and the next ones: once they are
@@ -69,6 +76,7 @@ private:
     Kinematics k_;
     std::vector<Move> moves_;
     double total_ = 0.0;
+    double pending_dwell_ = 0.0;
     std::vector<std::pair<std::size_t, std::size_t>> pending_marks_; // (mark, moves before it) of this batch
     std::vector<double> mark_times_;
 };

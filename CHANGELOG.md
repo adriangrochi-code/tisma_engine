@@ -17,6 +17,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- La estimación del tiempo cuenta las esperas `G4` y los cambios de aceleración (`M204`, `SET_VELOCITY_LIMIT`) que
+  trae el G-code de la máquina.
+
 - El G-code de inicio original de una impresora Bambu Lab pegado en el de la máquina hacía fallar el laminado con
   «F0»: las velocidades que ese G-code calcula (`outer_wall_volumetric_speed`, `flush_volumetric_speeds` y otras)
   ahora salen de los ajustes, y un `F0` que quede se escribe con la velocidad de viaje, con aviso (BH45). También se llenan las variables propias de las Bambu Lab

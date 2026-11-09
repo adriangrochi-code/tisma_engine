@@ -55,11 +55,14 @@ std::size_t PrintTime::mark() {
 
 double PrintTime::flush() {
     const std::size_t n = moves_.size();
+    const double waits = pending_dwell_;
+    pending_dwell_ = 0.0;
     if (n == 0) {
         for (const auto& [mark, before] : pending_marks_)
             mark_times_[mark] = total_;
         pending_marks_.clear();
-        return 0.0;
+        total_ += waits;
+        return waits;
     }
     const bool jerks = k_.jerk[0] > 0.0 || k_.jerk[1] > 0.0 || k_.jerk[2] > 0.0 || k_.jerk[3] > 0.0;
     // junction[i]: the speed between move i - 1 and move i; at rest at both ends.
@@ -107,6 +110,7 @@ double PrintTime::flush() {
         mark_times_[pending_marks_[next_mark].first] = total_ + t;
     pending_marks_.clear();
     moves_.clear();
+    t += waits;
     total_ += t;
     return t;
 }

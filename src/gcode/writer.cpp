@@ -1119,6 +1119,73 @@ public:
     void set_flow(double factor) { flow_ = factor; }
     void set_forced_flow(double flow) { forced_flow_ = flow; }
 
+    // What a machine's own G-code does to the print time (print_time.md,
+    // rules 8, 9 and 13): its waits (G4 S seconds, G4 P milliseconds) count,
+    // and the accelerations it sets (M204 S, P and T; Klipper's
+    // SET_VELOCITY_LIMIT ACCEL) hold for the moves after it.
+    void machine_gcode(std::string_view lines) {
+        std::size_t at = 0;
+        while (at < lines.size()) {
+            std::size_t end = lines.find('\n', at);
+            if (end == std::string_view::npos)
+                end = lines.size();
+            std::string_view line = lines.substr(at, end - at);
+            at = end + 1;
+            line = line.substr(0, line.find(';'));
+            const std::size_t first = line.find_first_not_of(" \t");
+            if (first == std::string_view::npos)
+                continue;
+            line.remove_prefix(first);
+            // The words after the command: (letter, number).
+            const auto value = [&](std::string_view word_start) -> std::optional<double> {
+                std::size_t k = line.find(word_start);
+                while (k != std::string_view::npos && k > 0 && line[k - 1] != ' ' && line[k - 1] != '\t')
+                    k = line.find(word_start, k + 1);
+                if (k == std::string_view::npos)
+                    return std::nullopt;
+                const std::string number(line.substr(k + word_start.size(), line.find_first_of(" \t\r", k) - k - word_start.size()));
+                char* stop = nullptr;
+                const double v = std::strtod(number.c_str(), &stop);
+                if (number.empty() || stop != number.c_str() + number.size())
+                    return std::nullopt;
+                return v;
+            };
+            const auto command = [&](std::string_view name) {
+                return line.starts_with(name) && (line.size() == name.size() || line[name.size()] == ' ' || line[name.size()] == '\t' || line[name.size()] == '\r');
+            };
+            if (command("G4") || command("G04")) {
+                double wait = 0.0;
+                if (const auto ms = value("P"))
+                    wait += *ms / 1000.0;
+                if (const auto sec = value("S"))
+                    wait += *sec;
+                if (wait > 0.0) {
+                    time_.dwell(wait);
+                    if (silent_)
+                        silent_->dwell(wait);
+                    other_time_ += wait;
+                }
+            } else if (command("M204")) {
+                double print = accel_print_, travel = accel_travel_;
+                if (const auto both = value("S"))
+                    print = travel = *both;
+                if (const auto p = value("P"))
+                    print = *p;
+                if (const auto t = value("T"))
+                    travel = *t;
+                if (print > 0.0 && travel > 0.0) {
+                    accel_print_ = print, accel_travel_ = travel;
+                    time_.set_accelerations(print, travel);
+                }
+            } else if (command("SET_VELOCITY_LIMIT")) {
+                if (const auto a = value("ACCEL="); a && *a > 0.0) {
+                    accel_print_ = accel_travel_ = *a;
+                    time_.set_accelerations(*a, *a);
+                }
+            }
+        }
+    }
+
     // Lines written as they are (a temperature, the user's G-code of a change),
     // as user G-code; then the type before comes back, so the engine's own
     // moves that follow (a travel that retracts) are not taken for the user's.
@@ -1130,6 +1197,7 @@ public:
         text_ += lines;
         if (lines.back() != '\n')
             text_ += '\n';
+        machine_gcode(lines);
         if (user)
             resync();
         if (before && std::string_view(before) != "Custom")
@@ -1233,6 +1301,7 @@ public:
             text_ += text;
             if (text.back() != '\n')
                 text_ += '\n';
+            machine_gcode(text);
             if (was && std::string_view(was) != "Custom")
                 type(was);
         };
@@ -3006,8 +3075,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     } else if (heat_nozzle) {
         out << nozzle_gcode(false, 0, nozzle);
     }
-    if (!start_gcode.empty())
+    if (!start_gcode.empty()) {
         out << start_gcode << "\n";
+        g.machine_gcode(start_gcode); // its waits and accelerations (print_time.md, rules 8 and 9)
+    }
     if (strict) // where the maker's files end the printer's start (FW10)
         out << "; EXECUTABLE_BLOCK_HEAD\n";
     // E in mm3 on a pellet printer (pellets.md, rule 3, PE4): after the start

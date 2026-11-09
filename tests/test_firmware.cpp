@@ -348,3 +348,21 @@ TEST_CASE("time: marks give the time up to them", "[time]") {
     CHECK_THAT(t.time_at(middle), WithinRel(first / 2.0, 1e-9)); // two equal moves through a straight junction
     CHECK(t.time_at(end) == t.total());
 }
+
+TEST_CASE("time: waits and acceleration changes in the machine G-code (print_time.md, rules 8, 9 and 13)", "[time]") {
+    Settings s = firmware_printer(GcodeFlavor::Marlin);
+    const double base = estimate(gcode_of(s), "printing time");
+    Settings wait = s;
+    wait.start_gcode = "G28 ; home\nG4 S60 ; wait";
+    CHECK_THAT(estimate(gcode_of(wait), "printing time"), WithinAbs(base + 60.0, 1.5));
+    wait.start_gcode = "G28 ; home\nG4 P30000\nG4 ; no time given";
+    CHECK_THAT(estimate(gcode_of(wait), "printing time"), WithinAbs(base + 30.0, 1.5));
+    Settings slow = s;
+    slow.start_gcode = "G28 ; home\nM204 S100";
+    CHECK(estimate(gcode_of(slow), "printing time") > base + 5.0);
+    slow.flavor = GcodeFlavor::Klipper;
+    slow.start_gcode = "G28 ; home\nSET_VELOCITY_LIMIT ACCEL=100";
+    Settings klipper = s;
+    klipper.flavor = GcodeFlavor::Klipper;
+    CHECK(estimate(gcode_of(slow), "printing time") > estimate(gcode_of(klipper), "printing time") + 5.0);
+}
