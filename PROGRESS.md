@@ -11713,3 +11713,8 @@ arreglado en 9d8dc76 y subido.
   4) `limits_usage = emit` con Klipper se permite: solo `M204 S` y `SET_VELOCITY_LIMIT ACCEL VELOCITY`, con un aviso
      informativo; el tiempo usa todos los límites.
   Cada una con su prueba.
+- Regla 12 (PT8): en Klipper, la velocidad de una esquina sale de `square_corner_velocity` (el `corner_speed` de la
+  máquina) como una desviación de unión que depende de la aceleración: d = v² · (√2 − 1) / a, que da esa velocidad a
+  90°. Sin tirones. `minimum_cruise_ratio` (0,5 por defecto, o el de `SET_VELOCITY_LIMIT`) baja el tope de los
+  movimientos cortos: la velocidad que se alcanza en la parte que no navega. El mismo G-code da otro tiempo en Marlin y
+  en Klipper.

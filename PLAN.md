@@ -817,7 +817,9 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   Hecho (2026-11-09): las esperas `G4` (P en ms, S en s) y los `M204` / `SET_VELOCITY_LIMIT ACCEL=` del G-code de
   la máquina (inicio, cambio de capa y los propios) cuentan en el tiempo y cambian la aceleración de lo que sigue
   (reglas 8, 9 y 13), y también `M201`, `M203` (mm/min en RepRapFirmware), `M205` (tirones y `J`), `M566`, `M220` y
-  `SET_VELOCITY_LIMIT VELOCITY=` / `SQUARE_CORNER_VELOCITY=`. Quedan las reglas 10 (calentar), 12 (esquinas por firmware), 14 (preparación aparte) y PT8
+  `SET_VELOCITY_LIMIT VELOCITY=` / `SQUARE_CORNER_VELOCITY=` / `MINIMUM_CRUISE_RATIO=`. Regla 12 y PT8: Klipper con sus
+  esquinas (`square_corner_velocity` como desviación de unión) y `minimum_cruise_ratio` (0,5); Marlin con tirón o
+  desviación, RepRapFirmware con tirón. Quedan las reglas 10 (calentar) y 14 (preparación aparte)
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
   escalar a medida, cortar, separar y copias en grilla. Hecho (2026-10-27): el grupo `transform` de la línea de
   comandos (escala o «N%», encajar en una caja, giros, corte horizontal con las dos mitades cerradas, separar en piezas

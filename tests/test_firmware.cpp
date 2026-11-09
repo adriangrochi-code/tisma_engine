@@ -399,3 +399,30 @@ TEST_CASE("time: M201, M203, M205, M220 and SET_VELOCITY_LIMIT in the machine G-
     klipper.flavor = GcodeFlavor::Klipper;
     CHECK(with("SET_VELOCITY_LIMIT VELOCITY=20", GcodeFlavor::Klipper) > estimate(gcode_of(klipper), "printing time") + 10.0);
 }
+
+TEST_CASE("time: each firmware's corners give its own time (print_time.md, rule 12, PT8)", "[time]") {
+    // The same G-code, timed by each firmware's corners.
+    Settings s = firmware_printer(GcodeFlavor::Marlin);
+    s.jerk_x = s.jerk_y = 8.0;
+    const auto time_of = [&](GcodeFlavor flavor) {
+        Settings c = s;
+        c.flavor = flavor;
+        return estimate(gcode_of(c), "printing time");
+    };
+    const double marlin = time_of(GcodeFlavor::Marlin), klipper = time_of(GcodeFlavor::Klipper),
+                 reprap = time_of(GcodeFlavor::RepRapFirmware);
+    INFO("marlin " << marlin << " klipper " << klipper << " reprap " << reprap);
+    CHECK(std::abs(marlin - klipper) > 1.0);
+    // Klipper: a lower square corner velocity and a higher minimum cruise ratio are slower.
+    Settings k = s;
+    k.flavor = GcodeFlavor::Klipper;
+    k.corner_speed = 5.0;
+    const double base = estimate(gcode_of(k), "printing time");
+    k.corner_speed = 1.0;
+    CHECK(estimate(gcode_of(k), "printing time") > base);
+    k.corner_speed = 5.0;
+    k.start_gcode = "G28 ; home\nSET_VELOCITY_LIMIT MINIMUM_CRUISE_RATIO=0.9";
+    CHECK(estimate(gcode_of(k), "printing time") > base);
+    k.start_gcode = "G28 ; home\nSET_VELOCITY_LIMIT MINIMUM_CRUISE_RATIO=0";
+    CHECK(estimate(gcode_of(k), "printing time") < base);
+}

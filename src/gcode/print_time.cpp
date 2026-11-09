@@ -9,11 +9,16 @@
 
 namespace tisma {
 
-double move_time(double length, double v0, double v1, double feed, double a) {
+double move_time(double length, double v0, double v1, double feed, double a, double cruise_ratio) {
     if (length <= 0.0)
         return 0.0;
     if (!(a > 0.0))
         return length / feed;
+    // A part of the move kept for cruising: the top speed reachable in the
+    // rest, sped up and slowed down evenly.
+    if (cruise_ratio > 0.0)
+        feed = std::max(std::min(feed, std::sqrt(a * (1.0 - cruise_ratio) * length + 0.5 * (v0 * v0 + v1 * v1))),
+                        std::max(v0, v1));
     const double accelerate = (feed * feed - v0 * v0) / (2.0 * a);
     const double decelerate = (feed * feed - v1 * v1) / (2.0 * a);
     if (accelerate + decelerate <= length) // reaches the feed: trapezoid
@@ -72,13 +77,20 @@ double PrintTime::flush() {
         const Move& b = moves_[i];
         const double lower = std::min(a.feed, b.feed);
         const double cosine = a.ux * b.ux + a.uy * b.uy + a.uz * b.uz; // 0 when either is E alone
-        if (k_.junction_deviation > 0.0) {
-            // The corner rounded by a circle that keeps junction_deviation from
+        const double accel = std::min(a.acceleration, b.acceleration);
+        // Klipper: the deviation that gives corner_speed at 90 degrees, where
+        // sin(45) / (1 - sin(45)) = 1 / (sqrt(2) - 1).
+        const double deviation = k_.klipper ? (accel > 0.0 ? k_.corner_speed * k_.corner_speed * (std::sqrt(2.0) - 1.0) / accel : 0.0)
+                                            : k_.junction_deviation;
+        if (deviation > 0.0) {
+            // The corner rounded by a circle that keeps the deviation from
             // it: sin(a/2) of the angle a between the moves, from its cosine.
             const double sine = std::sqrt(std::max(0.0, 0.5 * (1.0 + cosine)));
             const double r = sine >= 1.0 - 1e-9 ? std::numeric_limits<double>::infinity()
-                                                : k_.junction_deviation * sine / (1.0 - sine);
-            junction[i] = std::min(lower, std::sqrt(std::min(a.acceleration, b.acceleration) * r));
+                                                : deviation * sine / (1.0 - sine);
+            junction[i] = std::min(lower, std::sqrt(accel * r));
+        } else if (k_.klipper) {
+            junction[i] = 0.0; // a square corner velocity of 0: stops at every corner
         } else if (jerks) {
             // Each axis changes its speed at once by its jerk at most.
             const double da[4] = {a.ux - b.ux, a.uy - b.uy, a.uz - b.uz, a.ue - b.ue};
@@ -104,7 +116,8 @@ double PrintTime::flush() {
     for (std::size_t i = 0; i < n; ++i) {
         for (; next_mark < pending_marks_.size() && pending_marks_[next_mark].second <= i; ++next_mark)
             mark_times_[pending_marks_[next_mark].first] = total_ + t;
-        t += move_time(moves_[i].length, junction[i], junction[i + 1], moves_[i].feed, moves_[i].acceleration);
+        t += move_time(moves_[i].length, junction[i], junction[i + 1], moves_[i].feed, moves_[i].acceleration,
+                       k_.klipper ? k_.min_cruise_ratio : 0.0);
     }
     for (; next_mark < pending_marks_.size(); ++next_mark)
         mark_times_[pending_marks_[next_mark].first] = total_ + t;

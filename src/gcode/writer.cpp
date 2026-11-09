@@ -805,6 +805,12 @@ Kinematics kinematics_of(const Settings& s) {
                  s.acceleration,
                  s.travel_acceleration,
                  s.corner_speed};
+    // Klipper's own corners (print_time.md, rule 12): its documented default
+    // minimum_cruise_ratio is 0.5.
+    if (s.flavor == GcodeFlavor::Klipper) {
+        k.klipper = true;
+        k.min_cruise_ratio = 0.5;
+    }
     if (s.limits_usage == LimitsUsage::Ignore)
         return k;
     k.retract_acceleration = s.retract_acceleration;
@@ -1192,6 +1198,8 @@ public:
                     time_.limits().max_feed[0] = time_.limits().max_feed[1] = *v;
                 if (const auto c = value("SQUARE_CORNER_VELOCITY="); c && *c >= 0.0)
                     time_.limits().corner_speed = *c;
+                if (const auto r = value("MINIMUM_CRUISE_RATIO="); r && *r >= 0.0 && *r < 1.0)
+                    time_.limits().min_cruise_ratio = *r;
             } else if (command("M220")) {
                 if (const auto percent = value("S"); percent && *percent > 0.0) {
                     time_.set_speed_factor(*percent / 100.0);

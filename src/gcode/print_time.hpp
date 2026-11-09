@@ -19,6 +19,12 @@ struct Kinematics {
     double jerk[4] = {0.0, 0.0, 0.0, 0.0};      // mm/s per axis a junction changes at once
     double junction_deviation = 0.0;            // mm; in place of the jerk and corner_speed
     double min_extrude_feed = 0.0, min_travel_feed = 0.0; // mm/s
+    // Klipper's corners (print_time.md, rule 12): corner_speed is its
+    // square_corner_velocity, turned into a junction deviation by each
+    // move's acceleration, and no jerks; min_cruise_ratio of a move's length
+    // is kept at its top speed, which caps short moves.
+    bool klipper = false;
+    double min_cruise_ratio = 0.0;
 };
 
 // Print time from textbook kinematics (own design): every move has a
@@ -92,7 +98,7 @@ private:
 
 // The time of a move of length mm that enters at v0, leaves at v1 and runs at
 // most at feed, with acceleration a (v0 and v1 reachable from each other).
-double move_time(double length, double v0, double v1, double feed, double a);
+double move_time(double length, double v0, double v1, double feed, double a, double cruise_ratio = 0.0);
 
 // "1h 7m 36s", "7m 36s", "36s" (docs/spec/GCODE_OUTPUT.md, "Tiempos"); days as "2d 1h 0m 5s".
 std::string format_duration(double seconds);
