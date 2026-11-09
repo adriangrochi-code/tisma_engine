@@ -4221,9 +4221,26 @@ void App::load_model(const std::filesystem::path& path) {
             std::ifstream in(path, std::ios::binary);
             const std::string package((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
             const ProjectSource source = project_source(package);
-            if (!source.program.empty() && source.program != "Tisma Slicer")
+            if (!source.program.empty() && source.program != "Tisma Slicer") {
                 notify(source.items > 1 ? format(tr(T::ProjectFromProgram), source.program.c_str(), source.items)
                                         : format(tr(T::ProjectFromProgramOne), source.program.c_str()));
+                // Its settings by the pack's translation table, when it has
+                // one for this program (rules 6, 9 and 11).
+                if (pack_index_)
+                    if (const auto path = pack_index_->translation.find(translation_dialect(source));
+                        path != pack_index_->translation.end()) {
+                        std::ifstream table_in(pack_dir() / std::filesystem::path(std::u8string(path->second.begin(), path->second.end())), std::ios::binary);
+                        const std::string table((std::istreambuf_iterator<char>(table_in)), std::istreambuf_iterator<char>());
+                        try {
+                            if (const auto own = project_settings(package); !table.empty() && !own.empty()) {
+                                const SettingSort sort = sort_settings(parse_translation(table), own);
+                                notify(format(tr(T::ProjectSettingsSorted), sort.translated, sort.similar, sort.none));
+                            }
+                        } catch (const TranslationError&) {
+                            // A table this program cannot read: the notice above stands.
+                        }
+                    }
+            }
             else if (source.program.empty() && source.application.find("Tisma") == std::string::npos)
                 notify(tr(T::ProjectFromUnknown));
         }

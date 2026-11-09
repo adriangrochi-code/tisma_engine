@@ -13,3 +13,6 @@ Made by `make.py` (own script; `python3 -I make.py` in this folder), for `tests/
 - `pi2_prusaslicer.3mf`: not made by `make.py`. The spec team's sample for `project_import.md`
   (`docs/spec/samples/project_import/`, spec/next 2c763a7): a 30 × 10 × 15 mm box of their own, saved by PrusaSlicer
   2.7.2's command line used as a black box, free for the engine's tests.
+- `pi4_prusaslicer_parts.3mf`: not made by `make.py`. The spec team's sample (spec/next ca6b4a6): an object of
+  their own with a part, a modifier, a negative volume and a support blocker, saved from PrusaSlicer 2.7.2's
+  interface (used as a black box) with all its settings in `Metadata/Slic3r_PE.config`; free for the engine's tests.

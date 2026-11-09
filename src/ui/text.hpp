@@ -1229,6 +1229,8 @@
       "Project from %s: %d parts. Its settings are not brought in yet: Tisma's are used")                              \
     X(ProjectFromProgramOne, "Proyecto de %s: 1 pieza. Sus ajustes todavía no se traen: se usan los de Tisma",          \
       "Project from %s: 1 part. Its settings are not brought in yet: Tisma's are used")                                 \
+    X(ProjectSettingsSorted, "Ajustes del proyecto: %d traducidos, %d parecidos, %d sin equivalente (todavía no se aplican)", \
+      "Project settings: %d translated, %d similar, %d without equivalent (not applied yet)")                    \
     X(ProjectFromUnknown, "Proyecto de un programa desconocido: se abrieron las piezas, sin sus ajustes",             \
       "Project from an unknown program: the parts were opened, without their settings")                               \
     X(ViewerOnly, "Vista de un G-code abierto: no se puede volver a laminar", "Viewing an opened G-code file: it cannot be sliced again") \

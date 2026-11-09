@@ -198,3 +198,34 @@ TEST_CASE("project import: each program's table", "[project_import]") {
     s.family = ProjectFamily::Cura;
     CHECK(translation_dialect(s) == "cura");
 }
+
+TEST_CASE("project import: a PrusaSlicer project's own settings, and how many the table brings (rules 6 and 9, pi4)",
+          "[project_import]") {
+    std::ifstream in(std::filesystem::path(TISMA_TEST_DATA_DIR) / "formats" / "pi4_prusaslicer_parts.3mf", std::ios::binary);
+    REQUIRE(in);
+    const std::string package((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    CHECK(project_source(package).family == ProjectFamily::PrusaSlicer);
+    const auto settings = project_settings(package);
+    CHECK(settings.size() == 327);
+    const auto find = [&](const std::string& key) {
+        for (const auto& [k, v] : settings)
+            if (k == key)
+                return v;
+        return std::string("(none)");
+    };
+    CHECK(find("layer_height") == "0.2");
+    CHECK(find("first_layer_height") == "0.2");
+    CHECK(find("end_gcode").starts_with("{if layer_z < max_print_height}"));
+    // The generator's comment is not a setting.
+    CHECK(find("generated") == "(none)");
+    const SettingSort sort = sort_settings(parse_translation(kPrusaTable), settings);
+    CHECK(sort.translated + sort.similar + sort.none == 327);
+    // With the rows above: layer and first layer height, flow, start and end
+    // G-code translated; outer wall width and flavor similar; the rest without.
+    CHECK(sort.translated == 5);
+    CHECK(sort.similar == 2);
+    CHECK(sort.none == 320);
+    // A standard 3MF has none.
+    std::ifstream box(std::filesystem::path(TISMA_TEST_DATA_DIR) / "formats" / "box.3mf", std::ios::binary);
+    CHECK(project_settings(std::string((std::istreambuf_iterator<char>(box)), std::istreambuf_iterator<char>())).empty());
+}

@@ -11824,3 +11824,9 @@ arreglado en 9d8dc76 y subido.
   «sin equivalente»; las claves de `with` van con su fila). Pruebas con filas reales que dio la sesión del paquete
   (profiles/next 8e2e5f0). Falta: leer los ajustes del proyecto (`Metadata/Slic3r_PE.config`,
   `project_settings.config`), que espera muestras con ajustes (la pi2 no los trae), y el diálogo de la regla 9.
+- Regla 9 (parte): `project_settings` lee los ajustes de un proyecto PrusaSlicer (`; clave = valor` de
+  `Metadata/Slic3r_PE.config`; muestra pi4 del equipo de especificación, spec/next ca6b4a6: 327 ajustes). Al abrir
+  el proyecto, si el paquete instalado tiene la tabla de ese programa, un segundo aviso dice «Ajustes del proyecto: A
+  traducidos, B parecidos, C sin equivalente (todavía no se aplican)». Sin probar en la interfaz con un paquete que
+  traiga la tabla (el paquete de prueba no la tiene todavía). Falta: aplicar los ajustes (reglas 6 y 8), el diálogo
+  con «Ver detalle» y la elección de impresora, y las partes de pi4 (regla 4).

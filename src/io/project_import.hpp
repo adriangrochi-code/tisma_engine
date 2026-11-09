@@ -63,6 +63,12 @@ struct SettingSort {
     int translated = 0, similar = 0, none = 0;
     std::vector<std::pair<std::string, SettingGroup>> detail;
 };
+// The project's own settings, as saved (rule 6): for the PrusaSlicer family
+// the "; key = value" lines of Metadata/Slic3r_PE.config, in order. Empty for
+// the other families until their samples are measured, or with no settings.
+// Throws ZipError when the package is not a readable ZIP.
+std::vector<std::pair<std::string, std::string>> project_settings(std::string_view package);
+
 SettingSort sort_settings(const TranslationTable& table, const std::vector<std::pair<std::string, std::string>>& settings);
 
 } // namespace tisma

@@ -136,6 +136,39 @@ TranslationTable parse_translation(std::string_view text) {
     return out;
 }
 
+std::vector<std::pair<std::string, std::string>> project_settings(std::string_view package) {
+    const ZipArchive zip(package);
+    std::vector<std::pair<std::string, std::string>> out;
+    const ZipArchive::Entry* config = zip.find("Metadata/Slic3r_PE.config");
+    if (!config)
+        return out;
+    const std::string text = zip.read(*config);
+    std::size_t start = 0;
+    while (start < text.size()) {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string::npos)
+            end = text.size();
+        std::string_view line(text.data() + start, end - start);
+        start = end + 1;
+        if (!line.empty() && line.back() == '\r')
+            line.remove_suffix(1);
+        // "; key = value": a key of lowercase letters, digits and underscores.
+        if (!line.starts_with("; "))
+            continue;
+        line.remove_prefix(2);
+        const std::size_t eq = line.find(" = ");
+        const std::size_t bare = line.size() >= 2 && line.ends_with(" =") ? line.size() - 2 : std::string_view::npos;
+        const std::size_t cut = eq != std::string_view::npos ? eq : bare;
+        if (cut == std::string_view::npos || cut == 0)
+            continue;
+        const std::string_view key = line.substr(0, cut);
+        if (!std::all_of(key.begin(), key.end(), [](char c) { return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'; }))
+            continue;
+        out.emplace_back(std::string(key), cut + 3 <= line.size() ? std::string(line.substr(cut + 3)) : std::string());
+    }
+    return out;
+}
+
 std::string translation_dialect(const ProjectSource& source) {
     const std::string app = lower(source.application + " " + source.program);
     switch (source.family) {
