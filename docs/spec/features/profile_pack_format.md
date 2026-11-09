@@ -159,6 +159,22 @@ para las impresoras 5 y 9.
    `bed_temperature_initial_layer_single` por `first_layer_bed_temperature`. El motor los llena con el mismo valor
    (lista en `gcode_macros.md`, regla 9).
 
+## Tabla de traducción (`translation.tar.xz`, desde el 09-11-2026)
+
+1. **Dónde:** `translation/<dialecto>.json` para `prusaslicer`, `orcaslicer`, `crealityprint`, `elegooslicer` y
+   `cura`, en `translation.tar.xz`; `index.json` lo nombra en `translation` (rutas) y `translation_archive` (nombre,
+   tamaño y SHA-256). La usa `project_import.md`, regla 11.
+2. **Una fila por clave de origen:** `engine` (la clave del motor o `null`), `group` (`translated`, `similar` o
+   `none`) y `conversion`, de uno de estos tipos: `number`, `flag`, `factor`, `map` (valor a valor), `percent_of`
+   (con `base`, otra clave), `first_item` (primer valor de una lista), `number_strip_percent`, `number_or_percent`,
+   `absolute_only`, `at_least`, `points` y `rule` (una regla con nombre, documentada en el `FORMAT.md` del paquete).
+3. **En los dialectos que no son `prusaslicer`:** además `prusaslicer` (el nombre equivalente), `seen` (en cuántos
+   perfiles coincide) y `prusaslicer_values` (mapa de valores, si cambian).
+4. **Es la misma traducción** con que el paquete convierte los perfiles: un proyecto y un perfil del mismo programa
+   dan los mismos ajustes del motor.
+5. **Cobertura** (09-11-2026, claves de origen / con clave del motor): prusaslicer 806 / 88; orcaslicer 881 / 57;
+   crealityprint 509 / 35; elegooslicer 90 / 0; cura 739 / 3.
+
 ## Datos de la comunidad (`community.tar.xz`)
 
 1. **Rutas:** `community/printers/<Fabricante>/<Modelo>.json`, `community/filaments/<Fabricante>/<Nombre>.json`,
