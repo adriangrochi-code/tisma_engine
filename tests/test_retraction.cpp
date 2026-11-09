@@ -811,3 +811,13 @@ TEST_CASE("coasting: each wall's and infill's last retraction.coast mm with no E
         e_with += std::max(m.e, 0.0);
     CHECK(e_with < e_plain);
 }
+
+TEST_CASE("retraction: the restart extra may be negative or long (spec team, 2026-11-09)", "[retraction]") {
+    CHECK(parse_settings(R"({"extrusion": {"retraction": {"restart_extra": -0.8}}})").filament_retraction.at(
+              "retraction.restart_extra") == -0.8);
+    CHECK(parse_settings(R"({"retraction": {"restart_extra": -0.05}})").restart_extra == -0.05);
+    CHECK(parse_settings(R"({"retraction": {"restart_extra": 40}})").restart_extra == 40.0);
+    CHECK(parse_settings(R"({"retraction": {"toolchange_restart_extra": [-0.8, 12]}})").toolchange_restart_extra.size() == 2);
+    CHECK_THROWS_AS(parse_settings(R"({"retraction": {"restart_extra": -60}})"), SettingsError);
+    CHECK_THROWS_AS(parse_settings(R"({"retraction": {"toolchange_restart_extra": 1200}})"), SettingsError);
+}

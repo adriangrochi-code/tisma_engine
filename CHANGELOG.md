@@ -12,13 +12,17 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- `machine.min_layer_height` y `max_layer_height` acotan solo la altura variable y el soporte, no la altura de capa ni
+  la primera capa. `restart_extra` acepta de −50 a 1000 mm; las velocidades de la MMU, 0 (paso que no se usa); y
+  `limits_usage = emit` con Klipper escribe solo lo que Klipper toma, en vez de dar error.
+
 - El relleno del soporte en árbol sale de campos de distancias calculados para muchas capas a la vez, en la GPU si
   hay una. Sin GPU tarda lo mismo que antes; el G-code es el mismo con GPU o sin ella.
 
 ### Corregido
 
 - La estimación del tiempo cuenta las esperas `G4` y los cambios de aceleración (`M204`, `SET_VELOCITY_LIMIT`) que
-  trae el G-code de la máquina.
+  trae el G-code de la máquina, y los límites que cambia (`M201`, `M203`, `M205`, `M566`, `M220`).
 
 - El G-code de inicio original de una impresora Bambu Lab pegado en el de la máquina hacía fallar el laminado con
   «F0»: las velocidades que ese G-code calcula (`outer_wall_volumetric_speed`, `flush_volumetric_speeds` y otras)

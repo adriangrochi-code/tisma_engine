@@ -4,6 +4,7 @@
 #include "gcode/print_time.hpp"
 #include "gcode/writer.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "report/warnings.hpp"
 #include "slice/pipeline.hpp"
 #include "test_printer.hpp"
 
@@ -11,6 +12,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -141,7 +143,19 @@ TEST_CASE("firmware: Klipper takes its limits from its configuration (FW4); gene
           "[firmware]") {
     Settings klipper = firmware_printer(GcodeFlavor::Klipper);
     klipper.limits_usage = LimitsUsage::Emit;
-    CHECK_THROWS_WITH(check_settings(klipper), ContainsSubstring("machine.limits_usage: Klipper"));
+    // Allowed: only what Klipper takes (M204, SET_VELOCITY_LIMIT), with a note.
+    CHECK_NOTHROW(check_settings(klipper));
+    {
+        std::vector<Warning> notes;
+        std::ostringstream out;
+        write_gcode(out, slice_model(cube(), klipper), klipper, &notes);
+        const std::string g = out.str();
+        CHECK(g.find("M201") == std::string::npos);
+        CHECK(g.find("M203") == std::string::npos);
+        CHECK(g.find("M205") == std::string::npos);
+        CHECK(g.find("\nSET_VELOCITY_LIMIT ACCEL=1500 VELOCITY=500\n") != std::string::npos);
+        CHECK(std::any_of(notes.begin(), notes.end(), [](const Warning& w) { return w.kind == "limits_klipper"; }));
+    }
     Settings reprap = firmware_printer(GcodeFlavor::RepRap);
     reprap.limits_usage = LimitsUsage::Emit;
     reprap.gcode_progress = true;
@@ -365,4 +379,23 @@ TEST_CASE("time: waits and acceleration changes in the machine G-code (print_tim
     Settings klipper = s;
     klipper.flavor = GcodeFlavor::Klipper;
     CHECK(estimate(gcode_of(slow), "printing time") > estimate(gcode_of(klipper), "printing time") + 5.0);
+}
+
+TEST_CASE("time: M201, M203, M205, M220 and SET_VELOCITY_LIMIT in the machine G-code (print_time.md, rule 13)", "[time]") {
+    Settings s = firmware_printer(GcodeFlavor::Marlin);
+    const double base = estimate(gcode_of(s), "printing time");
+    const auto with = [&](const std::string& start, GcodeFlavor flavor = GcodeFlavor::Marlin) {
+        Settings c = s;
+        c.flavor = flavor;
+        c.start_gcode = "G28 ; home\n" + start;
+        return estimate(gcode_of(c), "printing time");
+    };
+    CHECK(with("M220 S50") > base * 1.3);
+    CHECK(with("M203 X20 Y20") > base + 10.0);
+    CHECK(with("M201 X100 Y100") > base + 10.0);
+    // RepRapFirmware's M203 is in mm/min: X1200 is the same 20 mm/s.
+    CHECK_THAT(with("M203 X1200 Y1200", GcodeFlavor::RepRapFirmware), WithinAbs(with("M203 X20 Y20"), 2.0));
+    Settings klipper = s;
+    klipper.flavor = GcodeFlavor::Klipper;
+    CHECK(with("SET_VELOCITY_LIMIT VELOCITY=20", GcodeFlavor::Klipper) > estimate(gcode_of(klipper), "printing time") + 10.0);
 }

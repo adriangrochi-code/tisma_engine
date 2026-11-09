@@ -11699,5 +11699,17 @@ arreglado en 9d8dc76 y subido.
   tiempo (normal y silencioso); `M204 S/P/T` y `SET_VELOCITY_LIMIT ACCEL=` cambian la aceleración de los movimientos
   que siguen. Prueba en `test_firmware.cpp`: `G4 S60` suma 60 s (±1,5), `G4 P30000` 30 s, `M204 S100` alarga el
   tiempo, lo mismo con Klipper.
+- Regla 13 completa: `M201` (aceleración por eje), `M203` (avance por eje; en RepRapFirmware en mm/min), `M205`
+  (tirones, `J` la desviación de unión), `M566` (tirones en mm/min), `M220` (porcentaje de velocidad) y
+  `SET_VELOCITY_LIMIT VELOCITY=` / `SQUARE_CORNER_VELOCITY=`. En Marlin 1 la `T` de `M204` es de retracción y no se
+  toma como de viaje. Prueba propia con cada comando.
 - Sigue: reglas 10 (calentar), 12 (esquinas por firmware) y 14 (preparación aparte), PT8; `project_import.md`
   reglas 3 a 8 cuando lleguen las muestras.
+- Decisiones del equipo de fichas (2026-11-09), con lo que encontró la sesión del paquete:
+  1) `machine.min_layer_height` y `max_layer_height` acotan solo la altura variable y el soporte: una primera capa
+     de 0,3 con máximo 0,25 vale (antes fallaban 962 perfiles);
+  2) `restart_extra` y `toolchange_restart_extra` de −50 a 1000 mm (también el del filamento);
+  3) las velocidades de carga, descarga y enfriamiento de la MMU aceptan 0: ese paso se salta;
+  4) `limits_usage = emit` con Klipper se permite: solo `M204 S` y `SET_VELOCITY_LIMIT ACCEL VELOCITY`, con un aviso
+     informativo; el tiempo usa todos los límites.
+  Cada una con su prueba.

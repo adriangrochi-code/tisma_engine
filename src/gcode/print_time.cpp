@@ -30,7 +30,7 @@ void PrintTime::add(double dx, double dy, double dz, double de, double feed, boo
     // No slower than the machine moves at all, and no axis faster than its
     // limit: the feed shrinks with the worst one, and so does the acceleration.
     const double d[4] = {dx, dy, dz, de};
-    double v = std::max(feed, extruding ? k_.min_extrude_feed : k_.min_travel_feed);
+    double v = std::max(feed * speed_factor_, extruding ? k_.min_extrude_feed : k_.min_travel_feed);
     double a = extruding ? k_.acceleration
                : xyz > 0.0 || !(k_.retract_acceleration > 0.0) ? k_.travel_acceleration
                                                                : k_.retract_acceleration;

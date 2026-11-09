@@ -844,6 +844,7 @@ public:
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
         verbose_ = s.verbose_comments;
+        rrf_ = s.flavor == GcodeFlavor::RepRapFirmware;
         // How fast Z may move while extruding (zigzag_infill.md, rule 7): the
         // machine's limit, or a stock Ender-3's 5 mm/s when the profile gives none.
         z_limit_ = s.max_feed_z > 0.0 ? s.max_feed_z : kStockZFeed;
@@ -893,7 +894,10 @@ public:
               const MmuSwap& mmu) {
         const char* was = type_;
         type("Custom");
+        // A speed of 0 is a step not used (the filament's settings, «no se usa»): skipped.
         const auto push = [&](double amount, double speed, const char* note, std::optional<Point2d> to = std::nullopt) {
+            if (!(speed > 0.0))
+                return;
             e_ = relative_ ? amount : e_ + amount;
             move("G1", to ? std::optional<double>(to->x) : std::nullopt, to ? std::optional<double>(to->y) : std::nullopt,
                  std::nullopt, e_, speed, {}, {}, note);
@@ -919,6 +923,8 @@ public:
         for (int k = 0; k < mmu.cooling_moves; ++k) {
             const double v = mmu.cooling_moves > 1 ? mmu.cool_from + (mmu.cool_to - mmu.cool_from) * k / (mmu.cooling_moves - 1)
                                                    : mmu.cool_from;
+            if (!(v > 0.0))
+                continue;
             for (const double sign : {1.0, -1.0}) {
                 if (mmu.across) {
                     // The head along the line, as long as the filament's move takes.
@@ -1171,7 +1177,7 @@ public:
                     print = travel = *both;
                 if (const auto p = value("P"))
                     print = *p;
-                if (const auto t = value("T"))
+                if (const auto t = value("T"); t && marlin_) // Marlin 1: T is for retractions
                     travel = *t;
                 if (print > 0.0 && travel > 0.0) {
                     accel_print_ = print, accel_travel_ = travel;
@@ -1182,6 +1188,30 @@ public:
                     accel_print_ = accel_travel_ = *a;
                     time_.set_accelerations(*a, *a);
                 }
+                if (const auto v = value("VELOCITY="); v && *v > 0.0)
+                    time_.limits().max_feed[0] = time_.limits().max_feed[1] = *v;
+                if (const auto c = value("SQUARE_CORNER_VELOCITY="); c && *c >= 0.0)
+                    time_.limits().corner_speed = *c;
+            } else if (command("M220")) {
+                if (const auto percent = value("S"); percent && *percent > 0.0) {
+                    time_.set_speed_factor(*percent / 100.0);
+                    if (silent_)
+                        silent_->set_speed_factor(*percent / 100.0);
+                }
+            } else if (command("M201") || command("M203") || command("M205") || command("M566")) {
+                // Per axis: M201 accelerations (mm/s2), M203 feeds and M566
+                // jerks (mm/s; mm/min in RepRapFirmware, and always for M566),
+                // M205 jerks (mm/s) and its J the junction deviation (mm).
+                Kinematics& k = time_.limits();
+                const bool per_minute = command("M566") || (command("M203") && rrf_);
+                double* axis = command("M201") ? k.max_accel : command("M203") ? k.max_feed : k.jerk;
+                static constexpr const char* kAxes[4] = {"X", "Y", "Z", "E"};
+                for (int i = 0; i < 4; ++i)
+                    if (const auto v = value(kAxes[i]); v && *v >= 0.0)
+                        axis[i] = per_minute ? *v / 60.0 : *v;
+                if (command("M205"))
+                    if (const auto j = value("J"); j && *j >= 0.0)
+                        k.junction_deviation = *j;
             }
         }
     }
@@ -2154,6 +2184,7 @@ private:
     // printing and T for travels, or M204 S for both; as last set.
     bool marlin_;
     double accel_print_, accel_travel_;
+    bool rrf_ = false; // RepRapFirmware: M203 in mm/min
     double travel_accel_, short_travel_accel_; // asked for travels; 0: none
     double retracted_amount_ = 0.0; // the E the last retraction pulled back (none with G10)
     // retraction_travel.md: the push back's feed (0: the retraction's) and
@@ -2408,6 +2439,19 @@ std::string acceleration_gcode(GcodeFlavor flavor, double print, double travel) 
 
 std::string machine_limits_gcode(const Settings& s) {
     const Dialect d = dialect_of(s.flavor);
+    // Klipper keeps its limits in its own configuration: only what it takes
+    // from the G-code, the accelerations and the speed.
+    if (s.flavor == GcodeFlavor::Klipper) {
+        std::string out = "M204 S" + trimmed(s.acceleration, 2) + "\n";
+        std::string limit = "SET_VELOCITY_LIMIT";
+        if (s.acceleration > 0.0)
+            limit += " ACCEL=" + trimmed(s.acceleration, 2);
+        if (const double v = std::min(s.max_feed_x, s.max_feed_y); v > 0.0)
+            limit += " VELOCITY=" + trimmed(v, 2);
+        if (limit.size() > std::strlen("SET_VELOCITY_LIMIT"))
+            out += limit + "\n";
+        return out;
+    }
     if (d.limits == Dialect::Limits::None)
         return {};
     const bool rrf = d.limits == Dialect::Limits::RepRapFirmware;
@@ -2770,6 +2814,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                              "The filament's type (extrusion.type) is not set: the file names it PLA, and the "
                              "printer may take the material as PLA",
                              0.0, "warning"});
+    // Klipper keeps the rest of its limits in its own configuration.
+    if (s.flavor == GcodeFlavor::Klipper && s.limits_usage == LimitsUsage::Emit && warnings)
+        warnings->push_back({"limits_klipper", -1, 0.0,
+                             "Klipper takes its limits from its own configuration: the G-code only sets the "
+                             "acceleration and the speed (M204, SET_VELOCITY_LIMIT); the time estimate uses all of them",
+                             0.0, "info"});
     const std::string paint_info = [&] {
         const std::string& type = material_type;
         int rgb[3] = {255, 255, 255};

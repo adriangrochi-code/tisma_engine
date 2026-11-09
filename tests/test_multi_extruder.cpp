@@ -908,3 +908,19 @@ TEST_CASE("nozzles: each extruder's parts on the plate's own layers, with a laye
     REQUIRE(seen.layers.count("External perimeter"));
     CHECK(seen.layers.at("External perimeter").size() == model.layers.size());
 }
+
+TEST_CASE("wipe tower: an MMU speed of 0 is a step not used (spec team, 2026-11-09)", "[extruders][tower]") {
+    const Settings read = parse_settings(
+        R"({"extrusion": {"loading_speed": 0, "unloading_speed": 0, "cooling_initial_speed": 0, "cooling_final_speed": 0}})");
+    CHECK(read.loading_speed == 0.0);
+    CHECK(read.cooling_final_speed == 0.0);
+    CHECK_THROWS_AS(parse_settings(R"({"extrusion": {"loading_speed": -1}})"), SettingsError);
+    Settings s = tower_base(true);
+    s.verbose_comments = true; // the moves' notes
+    const std::string with = gcode_of(two_colours(), s);
+    s.cooling_initial_speed = s.cooling_final_speed = 0.0;
+    const std::string without = gcode_of(two_colours(), s);
+    CHECK(with.find("cool the tip") != std::string::npos);
+    CHECK(without.find("cool the tip") == std::string::npos);
+    CHECK(without.find("\nT1\n") != std::string::npos);
+}

@@ -2190,13 +2190,15 @@ Settings parse_checked(std::string_view text) {
                    // A tool change's (multi_extruder.md, rule 5): one value for
                    // every extruder, or a list by extruder.
                    if (n == "toolchange_length" || n == "toolchange_restart_extra") {
-                       const double top = n == "toolchange_length" ? 200.0 : 10.0;
-                       const std::string what = "must be a length from 0 to " + std::to_string(int(top)) +
-                                                " mm, or a list of them by extruder";
+                       // The extra may be negative (less back) and long (pellets).
+                       const double low = n == "toolchange_length" ? 0.0 : -50.0;
+                       const double top = n == "toolchange_length" ? 200.0 : 1000.0;
+                       const std::string what = "must be a length from " + std::to_string(int(low)) + " to " +
+                                                std::to_string(int(top)) + " mm, or a list of them by extruder";
                        const json& v = g.at(n);
                        std::vector<double> list;
                        for (const json& x : v.is_array() ? v : json::array({v})) {
-                           if (!x.is_number() || !(x.get<double>() >= 0.0 && x.get<double>() <= top))
+                           if (!x.is_number() || !(x.get<double>() >= low && x.get<double>() <= top))
                                fail(k, what);
                            list.push_back(x.get<double>());
                        }
@@ -2237,10 +2239,12 @@ Settings parse_checked(std::string_view text) {
                        const double d = number(g, n, k);
                        const double top = n == "unretract_speed"                      ? 1000.0
                                           : n == "before_wipe" || n == "after_wipe" ? 100.0
-                                          : n == "restart_extra"                    ? 10.0
+                                          : n == "restart_extra"                    ? 1000.0
                                                                                     : 10000.0;
-                       if (!(d >= 0.0 && d <= top))
-                           fail(k, "must be from 0 to " + std::to_string(int(top)));
+                       // The extra may be negative: less filament comes back.
+                       const double low = n == "restart_extra" ? -50.0 : 0.0;
+                       if (!(d >= low && d <= top))
+                           fail(k, "must be from " + std::to_string(int(low)) + " to " + std::to_string(int(top)));
                        (n == "unretract_speed" ? s.unretract_speed
                         : n == "restart_extra" ? s.restart_extra
                         : n == "before_wipe"   ? s.before_wipe
@@ -2852,8 +2856,9 @@ Settings parse_checked(std::string_view text) {
             n == "unload_time") {
             const double d = number(g, n, k);
             const bool speed = n.find("speed") != std::string::npos;
-            if (!(speed ? d > 0.0 && d <= 1000.0 : d >= 0.0 && d <= 1000.0))
-                fail(k, speed ? "must be more than 0 and at most 1000 mm/s" : "must be from 0 to 1000 s");
+            // A speed of 0: the step is not used.
+            if (!(d >= 0.0 && d <= 1000.0))
+                fail(k, speed ? "must be from 0 (not used) to 1000 mm/s" : "must be from 0 to 1000 s");
             (n == "loading_speed"           ? s.loading_speed
              : n == "loading_speed_start"   ? s.loading_speed_start
              : n == "unloading_speed"       ? s.unloading_speed
@@ -2895,7 +2900,8 @@ Settings parse_checked(std::string_view text) {
                     s.filament_retraction.erase(key);
                 } else if (value.is_boolean()) {
                     s.filament_retraction[key] = value.get<bool>() ? 1.0 : 0.0;
-                } else if (value.is_number() && value.get<double>() >= 0.0 && value.get<double>() <= 1000.0) {
+                } else if (value.is_number() && value.get<double>() >= (key == "retraction.restart_extra" ? -50.0 : 0.0) &&
+                           value.get<double>() <= 1000.0) { // the extra may be negative: less comes back
                     s.filament_retraction[key] = value.get<double>();
                 } else {
                     fail(k + "." + name, "must be a number from 0 to 1000, true or false");
@@ -4219,7 +4225,10 @@ void check_settings(const Settings& s) {
         throw SettingsError(text);
     }
     const double nozzle = s.nozzle_diameter;
-    double top = s.max_layer_height > 0.0 ? std::min(s.max_layer_height, nozzle) : nozzle;
+    // machine.max_layer_height and min_layer_height bound the variable layer
+    // height and the support's own layers only; the layer height and the
+    // first layer only by the nozzle.
+    double top = nozzle;
     // Different nozzles (multimaterial.md, rule 2): each lays at most 75 %
     // of its diameter, and every layer may hold any extruder's lines but
     // the coarse one's combined infill.
@@ -4236,22 +4245,13 @@ void check_settings(const Settings& s) {
         if (h > top + 1e-9) {
             std::snprintf(text, sizeof text,
                           several ? "%s: %.3g mm is thicker than %.3g mm, the most this printer lays (75 %% of the "
-                                    "finest nozzle, machine.nozzle_diameter, or machine.max_layer_height)"
-                                  : "%s: %.3g mm is thicker than %.3g mm, the most this printer lays (the nozzle, or "
-                                    "machine.max_layer_height)",
+                                    "finest nozzle, machine.nozzle_diameter)"
+                                  : "%s: %.3g mm is thicker than %.3g mm, the most this printer lays (the nozzle, "
+                                    "machine.nozzle_diameter)",
                           key, h, top);
             throw SettingsError(text);
         }
-        if (s.min_layer_height > 0.0 && h < s.min_layer_height - 1e-9) {
-            std::snprintf(text, sizeof text, "%s: %.3g mm is thinner than machine.min_layer_height (%.3g mm)", key, h,
-                          s.min_layer_height);
-            throw SettingsError(text);
-        }
     }
-    // Klipper takes its limits from its own configuration (gcode_firmware.md, rule 2, FW4).
-    if (s.flavor == GcodeFlavor::Klipper && s.limits_usage == LimitsUsage::Emit)
-        throw SettingsError("machine.limits_usage: Klipper takes the machine's limits from its own configuration; they "
-                            "cannot be written in the G-code (emit)");
     // Vase mode lays one wall in a spiral: nothing can stand under it
     // (vase_mode.md, rule 2).
     if (s.vase && s.support)

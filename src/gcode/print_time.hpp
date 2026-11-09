@@ -55,6 +55,14 @@ public:
 
     // A wait (G4) after the moves added so far: the machine stops for it
     // (print_time.md, rule 9). Added to the batch's time when it is flushed.
+    // The limits the machine G-code changes on the way (M201, M203, M205,
+    // SET_VELOCITY_LIMIT; print_time.md, rule 13): they hold from the next batch.
+    Kinematics& limits() { return k_; }
+    // M220: the feeds of the moves that follow, times this factor.
+    void set_speed_factor(double factor) {
+        if (factor > 0.0)
+            speed_factor_ = factor;
+    }
     void dwell(double seconds) {
         if (seconds > 0.0)
             pending_dwell_ += seconds;
@@ -77,6 +85,7 @@ private:
     std::vector<Move> moves_;
     double total_ = 0.0;
     double pending_dwell_ = 0.0;
+    double speed_factor_ = 1.0;
     std::vector<std::pair<std::size_t, std::size_t>> pending_marks_; // (mark, moves before it) of this batch
     std::vector<double> mark_times_;
 };
