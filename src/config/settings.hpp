@@ -237,6 +237,13 @@ struct Settings {
     // avoid_curled_overhangs (rule 9) are read and kept: Tisma Slicer added no
     // wall on the spec's parts, and the second was not measured.
     bool staggered_inner_seams = false;
+    // Round holes as polygons with flat sides (orca_2_5.md, rule 5): how far a
+    // hole may stray from its circle (mm or % of the radius), a turn each
+    // layer, and the most sides.
+    bool polyholes = false;
+    Speed polyhole_margin{20.0, true};
+    bool polyhole_twist = false;
+    int polyhole_max_edges = 50;
     // The odd inner loops half a layer up (walls.staggered, staggered_perimeters.md).
     bool walls_staggered = false;
     TopOneWall top_one_wall = TopOneWall::None;

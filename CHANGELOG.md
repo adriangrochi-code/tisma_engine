@@ -46,6 +46,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- Agujeros como polígonos (`walls.polyholes`, `polyhole_margin`, `polyhole_twist`, `polyhole_max_edges`): un
+  agujero redondo sale con pocos lados planos que tocan su círculo, para que mida lo pedido.
 - `cooling.first_layer_fan`: un ventilador exacto para la primera capa, desde el que sube el resto.
 - `speed.small_support`: las extrusiones chicas del soporte más despacio (hasta 2π × `speed.small_support_threshold`).
 - Orejas de borde (`adhesion.brim_ears`): solo discos de borde en las esquinas filosas.

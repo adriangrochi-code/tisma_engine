@@ -1050,7 +1050,8 @@ Settings parse_checked(std::string_view text) {
                 "scarf_entire_loop", "scarf_max_segment", "scarf_inner", "detect_overhangs", "min_line_width", "seam_gap",
                 "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "staggered", "top_one_wall",
                 "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
-                "spread_count", "transition_length", "transition_angle", "transition_margin"},
+                "spread_count", "transition_length", "transition_angle", "transition_margin", "polyholes", "polyhole_margin",
+                "polyhole_twist", "polyhole_max_edges"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -1062,11 +1063,38 @@ Settings parse_checked(std::string_view text) {
                 g, n, k, {{"none", TopOneWall::None}, {"top", TopOneWall::Top}, {"topmost", TopOneWall::Topmost}});
             return;
         }
+        if (n == "polyhole_margin") { // mm, or % of the hole's radius
+            const json& v = g.at(n);
+            const std::string what = "must be more than 0 mm, or a percentage of the hole's radius like \"20%\"";
+            if (v.is_string()) {
+                const std::string t = v.get<std::string>();
+                char* end = nullptr;
+                const double p = std::strtod(t.c_str(), &end);
+                if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0) || p > 1000.0)
+                    fail(k, what);
+                s.polyhole_margin = {p, true};
+            } else {
+                const double d = number(g, n, k);
+                if (!(d > 0.0 && d <= 100.0))
+                    fail(k, what);
+                s.polyhole_margin = {d, false};
+            }
+            return;
+        }
+        if (n == "polyhole_max_edges") {
+            const json& v = g.at(n);
+            if (!v.is_number_integer() || v.get<long long>() < 3 || v.get<long long>() > 1000)
+                fail(k, "must be a whole number from 3 to 1000");
+            s.polyhole_max_edges = static_cast<int>(v.get<long long>());
+            return;
+        }
         if (n == "staggered_inner_seams" || n == "staggered" || n == "first_layer_one_wall" || n == "extra_if_needed" ||
-            n == "avoid_curled_overhangs" || n == "extra_on_overhangs") {
+            n == "avoid_curled_overhangs" || n == "extra_on_overhangs" || n == "polyholes" || n == "polyhole_twist") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             (n == "extra_on_overhangs"     ? s.extra_on_overhangs
+             : n == "polyholes"             ? s.polyholes
+             : n == "polyhole_twist"        ? s.polyhole_twist
              : n == "staggered_inner_seams" ? s.staggered_inner_seams
              : n == "staggered"             ? s.walls_staggered
              : n == "first_layer_one_wall" ? s.first_layer_one_wall
@@ -3565,6 +3593,10 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.clockwise", flag(s.walls_clockwise)},
         {"walls.outer_first", flag(s.walls_outer_first)},
         {"walls.staggered_inner_seams", flag(s.staggered_inner_seams)},
+        {"walls.polyholes", flag(s.polyholes)},
+        {"walls.polyhole_margin", s.polyhole_margin.percent ? num(s.polyhole_margin.value) + "%" : num(s.polyhole_margin.value)},
+        {"walls.polyhole_twist", flag(s.polyhole_twist)},
+        {"walls.polyhole_max_edges", std::to_string(s.polyhole_max_edges)},
         {"walls.staggered", flag(s.walls_staggered)},
         {"walls.top_one_wall", top_one_wall_name(s.top_one_wall)},
         {"walls.first_layer_one_wall", flag(s.first_layer_one_wall)},
@@ -3792,6 +3824,11 @@ std::string settings_json(const Settings& s) {
           {"clockwise", s.walls_clockwise},
           {"outer_first", s.walls_outer_first},
           {"staggered_inner_seams", s.staggered_inner_seams},
+          {"polyholes", s.polyholes},
+          {"polyhole_margin", s.polyhole_margin.percent ? ordered_json(json(s.polyhole_margin.value).dump() + "%")
+                                                        : ordered_json(s.polyhole_margin.value)},
+          {"polyhole_twist", s.polyhole_twist},
+          {"polyhole_max_edges", s.polyhole_max_edges},
           {"staggered", s.walls_staggered},
           {"top_one_wall", top_one_wall_name(s.top_one_wall)},
           {"first_layer_one_wall", s.first_layer_one_wall},

@@ -1708,6 +1708,7 @@
     X(SubExtruder, "Extrusor", "Extruder") \
     X(SubSpeedLimits, "Velocidades", "Speeds") \
     X(SubPreparation, "Preparación", "Preparation") \
+    X(SubPolyholes, "Agujeros redondos", "Round holes") \
     X(SubAccel, "Aceleraciones", "Accelerations") \
     X(SubMaxTemps, "Temperaturas máximas", "Maximum temperatures") \
     X(SubFirmware, "Firmware", "Firmware") \
@@ -2334,6 +2335,10 @@
     X(BeforeWipe, "Retracción antes del barrido", "Retraction before the wipe") \
     X(AfterWipe, "Retracción después del barrido", "Retraction after the wipe") \
     X(WipeInward, "Barrer hacia adentro", "Wipe inward") \
+    X(Polyholes, "Agujeros como polígonos", "Holes as polygons") \
+    X(PolyholeMargin, "Cuánto se aparta del círculo", "How far from the circle") \
+    X(PolyholeTwist, "Girar el polígono en cada capa", "Turn the polygon each layer") \
+    X(PolyholeMaxEdges, "Lados como máximo", "Most sides") \
     X(WipeInwardDistance, "Cuánto se corre el barrido", "How far the wipe moves in") \
     X(FirmwareRetraction, "Retracción del firmware (G10/G11)", "Firmware retraction (G10/G11)") \
     X(LiftAbove, "Saltar solo por encima de", "Lift only above") \

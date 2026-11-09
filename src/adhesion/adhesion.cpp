@@ -127,8 +127,8 @@ Polygons ear_discs(const Polygons& region, const AdhesionShape& a, bool outers, 
             constexpr int kSides = 48;
             for (int k = 0; k < kSides; ++k) {
                 const double t = 2.0 * std::numbers::pi * k / kSides;
-                disc.push_back({static_cast<std::int64_t>(std::llround(at.x + radius * std::cos(t) * kUnitsPerMm)),
-                                static_cast<std::int64_t>(std::llround(at.y + radius * std::sin(t) * kUnitsPerMm))});
+                disc.push_back({static_cast<std::int64_t>(std::llround(double(at.x) + radius * std::cos(t) * kUnitsPerMm)),
+                                static_cast<std::int64_t>(std::llround(double(at.y) + radius * std::sin(t) * kUnitsPerMm))});
             }
             discs.push_back(std::move(disc));
         }

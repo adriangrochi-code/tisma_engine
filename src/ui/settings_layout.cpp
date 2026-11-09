@@ -66,6 +66,11 @@ const std::vector<SectionLayout>& print_layout() {
             {"walls.extra_if_needed", A},
             {"walls.extra_on_overhangs", A},
             {"walls.avoid_curled_overhangs", A}}},
+          {"polyholes", T::SubPolyholes,
+           {{"walls.polyholes", A},
+            {"walls.polyhole_margin", A},
+            {"walls.polyhole_twist", A},
+            {"walls.polyhole_max_edges", A}}},
           {"top_bottom", T::SubTopBottom,
            {{"surfaces.top_layers", B},
             {"surfaces.bottom_layers", B},
@@ -641,6 +646,8 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
         return format(T::SumWallsMore, int(s.staggered_inner_seams) + int(s.walls_staggered) + int(s.top_one_wall != TopOneWall::None) +
                                            int(s.first_layer_one_wall) + int(s.extra_if_needed) +
                                            int(s.extra_on_overhangs) + int(s.avoid_curled_overhangs));
+    if (id == "polyholes")
+        return s.polyholes ? tr(T::SumOn) : tr(T::SumOff);
     if (id == "top_bottom")
         return format(T::SumTopBottom, s.top_layers, s.bottom_layers);
     if (id == "infill")

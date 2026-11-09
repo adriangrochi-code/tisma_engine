@@ -199,6 +199,7 @@ add_library(tisma_core
   src/geom/bitgrid.cpp
   src/geom/distance.cpp
   src/geom/polygons.cpp
+  src/geom/polyholes.cpp
   src/config/settings.cpp
   src/config/profiles.cpp
   src/slice/painted.cpp

@@ -11793,3 +11793,12 @@ arreglado en 9d8dc76 y subido.
   empezar la segunda capa M104 a `temperature` y M140 a `bed_temperature`, solo si son distintas y si no hay cambios de
   temperatura por altura. Un valor 0 en la de primera capa toma la normal. Pruebas en test_gcode y
   test_multi_extruder. Suite completa: 964 casos pasan.
+
+### 2026-11-09 — polyholes (orca_2_5.md, regla 5, OR5)
+
+- `src/geom/polyholes.*`: un agujero convexo de más de 8 puntos dentro de `walls.polyhole_margin` de su círculo
+  (mm o % del radio), que dura dos capas o está en la primera, pasa a un polígono circunscrito de ~2 lados por mm de
+  diámetro con boquilla de 0,4 (3 a `polyhole_max_edges`); con `polyhole_twist`, cinco orientaciones que se repiten.
+  En el pipeline va después de tener todas las regiones; las paredes se rehacen. Ficha «Agujeros redondos» en la
+  interfaz, con su ayuda. Pruebas `[polyholes]` (OR5: 3, 10 y 30 mm → 6, 20 y 50 lados; tubo laminado → 20).
+- Falta de O1: paredes sin apoyo al final (regla 3) y costura precisa (regla 4).
