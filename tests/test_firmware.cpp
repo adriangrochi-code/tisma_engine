@@ -452,3 +452,13 @@ TEST_CASE("time: heating, homing and levelling as preparation, shown apart (prin
     s.start_gcode = "M140 S60\nTEMPERATURE_WAIT SENSOR=heater_bed MINIMUM=60";
     CHECK_THAT(estimate(gcode_of(s), "preparation time"), WithinAbs(35.0, 1.0));
 }
+
+TEST_CASE("time: the start's preparation is not the first layer's time (print_time.md, rule 14)", "[time]") {
+    Settings s = firmware_printer(GcodeFlavor::Marlin);
+    const std::string plain = gcode_of(s);
+    s.start_gcode = "G28 ; home\nG4 S60";
+    const std::string waits = gcode_of(s);
+    CHECK_THAT(estimate(waits, "first layer printing time (normal mode)"),
+               WithinAbs(estimate(plain, "first layer printing time (normal mode)"), 0.5));
+    CHECK_THAT(estimate(waits, "printing time"), WithinAbs(estimate(plain, "printing time") + 60.0, 1.5));
+}

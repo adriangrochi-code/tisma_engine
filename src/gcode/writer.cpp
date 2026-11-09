@@ -3223,7 +3223,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     }
     // The filament's own start, after the printer's (rule 9).
     if (const std::string text = render_template(s.filament_start_gcode, templates, "extrusion.start_gcode"); !text.empty())
-        out << text << "\n";
+        start_text(text + "\n");
+    // The start's time (its waits and heating) closed apart, so the first
+    // layer's time is only the first layer (print_time.md, rule 14).
+    g.end_layer();
     // How far an arc may stray from the path (gcode.resolution; with every
     // point kept, a thousandth).
     const double arc_tolerance = s.gcode_resolution > 0.0 ? s.gcode_resolution : 0.001;
