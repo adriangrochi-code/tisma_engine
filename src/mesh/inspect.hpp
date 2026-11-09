@@ -4,6 +4,7 @@
 // (docs/spec/features/orca_2_5.md, rules 25 and 26).
 
 #include "mesh/mesh.hpp"
+#include "mesh/paint.hpp"
 
 #include <array>
 #include <cstddef>
@@ -26,6 +27,11 @@ struct MeshInspection {
 };
 MeshInspection inspect_mesh(const TriangleMesh& mesh);
 std::string inspection_json(const MeshInspection& inspection);
+
+// What --inspect-paint writes (rule 26): by channel (support, seam, fuzzy,
+// color) the painted area in mm2 of each mark (enforce and block; enforce
+// for fuzzy skin; the extruder for colours), as JSON.
+std::string paint_inspection_json(const TriangleMesh& mesh, const Painting& painting);
 
 // The outward normal of the largest flat face (rule 25): the triangles in one
 // plane (normals within about 0.5 degrees, the plane within 0.01 mm), their

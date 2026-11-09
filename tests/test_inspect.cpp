@@ -68,3 +68,17 @@ TEST_CASE("inspect: the largest flat face goes on the bed (rule 25, OR25)", "[in
     const TriangleMesh same = laid_on_face(l, {0.0, 0.0, -1.0});
     CHECK(same.corners() == l.corners());
 }
+
+TEST_CASE("inspect: what is painted, by kind (rule 26, --inspect-paint)", "[inspect]") {
+    TriangleMesh cube;
+    add_box(cube, 0, 0, 0, 20, 20, 20); // each triangle 200 mm2
+    Painting p;
+    CHECK(paint_inspection_json(cube, p) == R"({"support": {}, "seam": {}, "fuzzy": {}, "color": {}})");
+    p.set_tree(PaintChannel::Support, 0, {kPaintEnforce});
+    p.set_tree(PaintChannel::Support, 1, {kPaintBlock});
+    p.set_tree(PaintChannel::Color, 2, {2});
+    // A triangle split in four, one quarter fuzzy.
+    p.set_tree(PaintChannel::Fuzzy, 3, {Painting::kSplit, kPaintEnforce, kPaintNone, kPaintNone, kPaintNone});
+    CHECK(paint_inspection_json(cube, p) ==
+          R"({"support": {"enforce": 200, "block": 200}, "seam": {}, "fuzzy": {"enforce": 50}, "color": {"extruder_2": 200}})");
+}

@@ -587,3 +587,20 @@ TEST_CASE("a part beyond the engine's reach: model_too_large on every command (B
     }
     std::filesystem::remove_all(dir);
 }
+
+TEST_CASE("slice of a project: --inspect-paint writes what is painted (orca_2_5.md, rule 26)", "[cli][cloud]") {
+    const auto dir = fresh_dir("tisma_test_node_paint");
+    Project p = box_project(100.0, 100.0);
+    p.models.front().painting.set_tree(PaintChannel::Seam, 0, {kPaintEnforce});
+    const auto project = dir / "plate.tisma";
+    save_project(project, p);
+    const auto gcode = dir / "plate.gcode", summary = dir / "summary.json", paint = dir / "paint.json";
+    const Run r = run({"slice", project.string(), "-o", gcode.string(), "--summary", summary.string(), "--inspect-paint",
+                       paint.string()});
+    INFO(r.err);
+    REQUIRE(r.code == kExitOk);
+    const nlohmann::json j = nlohmann::json::parse(read_text(paint));
+    CHECK(j["seam"]["enforce"].get<double>() > 0.0);
+    CHECK(j["support"].empty());
+    std::filesystem::remove_all(dir);
+}

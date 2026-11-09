@@ -100,6 +100,38 @@ std::string inspection_json(const MeshInspection& m) {
     return s.str();
 }
 
+std::string paint_inspection_json(const TriangleMesh& mesh, const Painting& painting) {
+    const std::pair<PaintChannel, const char*> channels[] = {
+        {PaintChannel::Support, "support"}, {PaintChannel::Seam, "seam"}, {PaintChannel::Fuzzy, "fuzzy"},
+        {PaintChannel::Color, "color"}};
+    std::ostringstream s;
+    s << "{";
+    bool first_channel = true;
+    for (const auto& [channel, name] : channels) {
+        std::map<std::uint8_t, double> area;
+        const std::size_t n = std::min(painting.size(channel), mesh.triangle_count());
+        for (std::size_t t = 0; t < n; ++t)
+            for_each_painted(painting, channel, t, mesh.corner(t, 0), mesh.corner(t, 1), mesh.corner(t, 2),
+                             [&](const Vec3f& a, const Vec3f& b, const Vec3f& c, std::uint8_t mark) {
+                                 area[mark] += 0.5 * length(cross(minus(at(b), at(a)), minus(at(c), at(a))));
+                             });
+        s << (first_channel ? "" : ", ") << "\"" << name << "\": {";
+        first_channel = false;
+        bool first = true;
+        for (const auto& [mark, mm2] : area) {
+            const std::string key = channel == PaintChannel::Color ? "extruder_" + std::to_string(mark)
+                                    : mark == kPaintEnforce   ? std::string("enforce")
+                                    : mark == kPaintBlock     ? std::string("block")
+                                                              : "mark_" + std::to_string(mark);
+            s << (first ? "" : ", ") << "\"" << key << "\": " << number(mm2);
+            first = false;
+        }
+        s << "}";
+    }
+    s << "}";
+    return s.str();
+}
+
 std::optional<std::array<double, 3>> largest_flat_face(const TriangleMesh& mesh) {
     // Planes by their normal (to about 0.5 degrees) and offset (0.01 mm).
     constexpr double kNormalStep = 0.01, kOffsetStep = 0.01;

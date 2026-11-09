@@ -11765,4 +11765,5 @@ arreglado en 9d8dc76 y subido.
     costo) y capas; `--export-settings`: los ajustes resueltos. Los tres aceptan `-` para la salida estándar;
   - `--align-to-y-axis`: las copias en una columna a lo largo de Y.
 - Módulo nuevo `src/mesh/inspect.*` con sus pruebas (OR25, OR26) y las de la línea de comandos (OR24 a OR28).
-- Queda: `--inspect-paint` (lo pintado por tipo).
+- `--inspect-paint` en `slice <proyecto>`: el área pintada en mm² por canal (soporte, costura, piel difusa, color) y
+  por marca (forzar, bloquear, extrusor).

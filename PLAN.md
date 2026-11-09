@@ -1223,10 +1223,10 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
   `/patrón/` en las plantillas, `print_time_day`/`hour`/`minute`/`sec`/`total_sec` en el nombre del archivo y
   `gcode.skip_config_block`. Regla 23 (OR23): ya se cumplía (la boquilla y la cama del primer filamento que imprime);
   ahora con prueba, con varios extrusores y con MMU.
-- [ ] O6 (reglas 24 a 28): `--strict`, apoyar la pieza, inspeccionar, estadísticas, copias a lo largo de Y.
+- [x] O6 (reglas 24 a 28): `--strict`, apoyar la pieza, inspeccionar, estadísticas, copias a lo largo de Y.
   Hecho (2026-11-09): `--strict`, `--ground-largest-face`/`--ground-face-normal`/`--ground-face-point`,
   `--inspect-mesh`, `--export-statistics`, `--export-settings` (con `-`, la salida estándar) y `--align-to-y-axis`
-  (OR24 a OR28). Queda `--inspect-paint`.
+  (OR24 a OR28), y `--inspect-paint` en el laminado de un proyecto.
 - [ ] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
   puentes; la balsa solo necesita la prueba OR15.
 - O7 y O8 van con sus fichas de interfaz.
