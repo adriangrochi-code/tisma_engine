@@ -311,3 +311,24 @@ TEST_CASE("templates: the output file's name, before and after the G-code (rule 
     CHECK(totals->grams > 1.0);
     std::filesystem::remove(path);
 }
+
+TEST_CASE("templates: regex_replace and the print time's parts (orca_2_5.md, rules 20 and 21, OR20 and OR21)",
+          "[template]") {
+    TemplateContext c;
+    c.variables["input_filename_base"] = TemplateValue::of(std::string("parte_v3"));
+    CHECK(render_template("{regex_replace(input_filename_base, /_v\\d+$/, \"\")}.gcode", c, "test") == "parte.gcode");
+    // Groups as $1, a pattern from a text, and a / inside the pattern.
+    CHECK(render_template("{regex_replace(\"a-b\", /(\\w)-(\\w)/, \"$2-$1\")}", c, "test") == "b-a");
+    CHECK(render_template("{regex_replace(\"x.stl\", \"\\\\.stl$\", \"\")}", c, "test") == "x");
+    CHECK(render_template("{regex_replace(\"a/b\", /\\//, \"_\")}", c, "test") == "a_b");
+    CHECK_THROWS_WITH(render_template("{regex_replace(\"a\", /(/, \"\")}", c, "test"),
+                      ContainsSubstring("regular expression in regex_replace"));
+    CHECK_THROWS_WITH(render_template("{regex_replace(\"a\", /a, \"\")}", c, "test"), ContainsSubstring("closing /"));
+
+    Settings s = printer();
+    s.filename_format = "{print_time_hour}:{print_time_minute}:{print_time_sec}_{print_time_total_sec}_{print_time_day}";
+    const SlicedModel model = slice_model(cube(), s);
+    CHECK(output_filename(s, model, GcodeTotals{3725.0, 0.0}) == "1:2:5_3725_0");
+    CHECK(output_filename(s, model, std::nullopt) ==
+          "{print_time_hour}:{print_time_minute}:{print_time_sec}_{print_time_total_sec}_{print_time_day}");
+}

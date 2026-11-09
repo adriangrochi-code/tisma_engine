@@ -42,6 +42,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- `regex_replace` en las plantillas, las partes del tiempo (`print_time_hour` y otras) en el nombre del archivo y
+  `gcode.skip_config_block` para sacar el bloque de ajustes del final del G-code.
+
 - Tiempo de preparación en la estimación: el calentamiento (con la velocidad de calentamiento de la boquilla y de la
   cama, claves nuevas en la máquina), ir al origen, nivelar y las esperas, sumados al total y dichos
   aparte en el G-code y en la interfaz.

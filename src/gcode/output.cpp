@@ -108,6 +108,18 @@ std::string output_filename(const Settings& s, const SlicedModel& model, const s
     c.variables["fill_density"] = TemplateValue::of(template_text(TemplateValue::of(s.infill_density)) + "%");
     c.variables["default_output_extension"] = TemplateValue::of(std::string(binary_output(s) ? ".bgcode" : ".gcode"));
     c.variables["print_time"] = TemplateValue::of(totals ? print_time_text(totals->print_seconds) : std::string("{print_time}"));
+    // Its parts (orca_2_5.md, rule 21): days, hours, minutes and seconds, and
+    // the whole in seconds; without totals they stay as written.
+    {
+        const long long total = totals ? std::llround(totals->print_seconds) : 0;
+        const std::pair<const char*, long long> parts[] = {{"print_time_day", total / 86400},
+                                                           {"print_time_hour", total / 3600 % 24},
+                                                           {"print_time_minute", total / 60 % 60},
+                                                           {"print_time_sec", total % 60},
+                                                           {"print_time_total_sec", total}};
+        for (const auto& [name, value] : parts)
+            c.variables[name] = totals ? TemplateValue::of(value) : TemplateValue::of("{" + std::string(name) + "}");
+    }
     c.variables["total_weight"] =
         totals ? TemplateValue::of(std::round(totals->grams * 100.0) / 100.0) : TemplateValue::of(std::string("{total_weight}"));
     std::string name = render_template(s.filename_format, c, "output.filename_format");

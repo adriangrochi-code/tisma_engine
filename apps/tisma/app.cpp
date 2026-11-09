@@ -1934,7 +1934,7 @@ const std::map<T, const char*>& row_keys() {
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
         {T::ZOffset, "machine.z_offset"}, {T::HeatRateNozzle, "machine.heat_rate_nozzle"},
         {T::HeatRateBed, "machine.heat_rate_bed"}, {T::HomeTime, "machine.home_time"}, {T::ProbeTime, "machine.probe_time"}, {T::VolumetricE, "gcode.volumetric_e"},
-        {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"}, {T::GcodeThumbnails, "gcode.thumbnails"},
+        {T::VerboseComments, "gcode.verbose_comments"}, {T::SkipConfigBlock, "gcode.skip_config_block"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"}, {T::GcodeThumbnails, "gcode.thumbnails"},
         {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
         {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
@@ -9293,6 +9293,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::AutoTemperatures, "gcode.auto_temperatures", s.auto_temperatures);
     } else if (id == "output_file") {
         count(T::PostProcessRow, "output.post_process", s.post_process.size());
+        flag(T::SkipConfigBlock, "gcode.skip_config_block", s.gcode_skip_config_block);
     }
     ImGui::EndTable();
     // The thumbnails, full width (gcode_extras.md, rule 8): kept as typed

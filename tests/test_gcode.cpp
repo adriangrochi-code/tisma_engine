@@ -2916,3 +2916,14 @@ TEST_CASE("a machine's own G-code comes out as written, but for what is evaluate
     CHECK(text.find("M862.1 P0.4 F1") == std::string::npos);
     CHECK(text.find("M862.1 P0.4 F10") == std::string::npos);
 }
+
+TEST_CASE("gcode: no settings block with gcode.skip_config_block (orca_2_5.md, rule 22, OR22)", "[gcode]") {
+    Settings s = test_printer();
+    const std::string with = cube_gcode(s);
+    CHECK(with.find("; layers.height = ") != std::string::npos);
+    s.gcode_skip_config_block = true;
+    const std::string without = cube_gcode(s);
+    CHECK(without.find("; layers.height = ") == std::string::npos);
+    CHECK(without.find("; estimated printing time = ") != std::string::npos); // the totals stay
+    CHECK(parse_settings(R"({"gcode": {"skip_config_block": true}})").gcode_skip_config_block);
+}

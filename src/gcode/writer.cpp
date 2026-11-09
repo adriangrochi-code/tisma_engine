@@ -4958,7 +4958,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         line("first_layer_bed_temperature", first_bed);
         line("bed_temperature", bed_temp);
         out << "; CONFIG_BLOCK_END = end\n";
-    } else {
+    } else if (!s.gcode_skip_config_block) { // for firmware that rejects those lines (orca_2_5.md, rule 22)
         for (const auto& [key, value] : describe(s))
             out << "; " << one_line(key) << " = " << one_line(value) << "\n";
     }

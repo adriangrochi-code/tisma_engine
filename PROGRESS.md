@@ -11741,3 +11741,13 @@ arreglado en 9d8dc76 y subido.
 - Regla 14 en la interfaz: junto al botón de laminar, «Tiempo estimado: 1h 4m 0s (impresión 58m 0s, preparación
   6m 0s)» cuando hay preparación, y una fila «Preparación» en la leyenda de la vista previa. Probado: lectura del
   comentario; la pantalla no se miró (sin captura).
+
+## 2026-11-09 — orca_2_5.md O5, reglas 20 a 22
+
+- `regex_replace(texto, /patrón/, reemplazo)` en el lenguaje de las plantillas, con grupos `$1`; el patrón puede ser
+  un literal `/…/` (con `\/` para una barra) o un texto. Errores con la marca: patrón que no se lee, `/` sin cerrar.
+- Partes del tiempo en el nombre del archivo: `print_time_day`, `print_time_hour`, `print_time_minute`,
+  `print_time_sec` y `print_time_total_sec` (OR21: 1:2:5 y 3725); sin el total quedan escritas tal cual.
+- `gcode.skip_config_block`: el G-code sin el bloque de ajustes del final (los totales quedan); en la ficha «Archivo de
+  salida», con su ayuda.
+- Sigue: regla 23 (temperaturas de la primera capa según los filamentos usados).

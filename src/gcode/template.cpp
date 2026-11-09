@@ -413,6 +413,23 @@ private:
                 src_.fail(at, "a number that cannot be read");
             return v;
         }
+        // /pattern/: a regular expression written in place, for
+        // regex_replace() and one_of() (orca_2_5.md, rule 20). A \/ is a /.
+        if (c == '/') {
+            std::string pattern;
+            std::size_t j = at_ + 1;
+            for (; j < end_ && src_.text[j] != '/'; ++j) {
+                if (src_.text[j] == '\\' && j + 1 < end_ && src_.text[j + 1] == '/')
+                    ++j;
+                else if (src_.text[j] == '\\' && j + 1 < end_)
+                    pattern += src_.text[j++];
+                pattern += src_.text[j];
+            }
+            if (j >= end_)
+                src_.fail(at, "a regular expression without its closing /");
+            at_ = j + 1;
+            return TemplateValue::of(std::string(1, kPatternMark) + pattern);
+        }
         // ~name: the variable's text as a regular expression, for one_of()
         // (the OrcaSlicer family's G-code; gcode_macros.md, rule 10 quater).
         if (take("~")) {
@@ -548,6 +565,19 @@ private:
                     return TemplateValue::of(true);
             }
             return TemplateValue::of(false);
+        }
+        if (name == "regex_replace") { // (text, /pattern/, replacement with $1 for the groups), rule 20
+            count(3, 3);
+            const TemplateValue& pattern = one(args[1]);
+            std::string expression = template_text(pattern);
+            if (pattern.kind == Kind::Text && pattern.text.starts_with(kPatternMark))
+                expression.erase(0, 1);
+            try {
+                return TemplateValue::of(std::regex_replace(template_text(one(args[0])), std::regex(expression),
+                                                            template_text(one(args[2]))));
+            } catch (const std::regex_error&) {
+                src_.fail(where[1], "the regular expression in regex_replace() cannot be read");
+            }
         }
         if (name == "size" || name == "empty") {
             count(1, 1);

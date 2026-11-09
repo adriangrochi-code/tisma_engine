@@ -1976,6 +1976,7 @@
     X(ZOffset, "Desfase de Z", "Z offset") \
     X(VolumetricE, "E volumétrica", "Volumetric E") \
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \
+    X(SkipConfigBlock, "Sin el bloque de ajustes", "No settings block") \
     X(GcodeArcs, "Arcos G2/G3", "G2/G3 arcs") \
     X(GcodeBinary, "G-code binario (.bgcode)", "Binary G-code (.bgcode)") \
     X(GcodeThumbnails, "Miniaturas (ancho x alto / formato)", "Thumbnails (width x height / format)") \

@@ -2727,7 +2727,7 @@ Settings parse_checked(std::string_view text) {
         s.post_process = std::move(scripts);
     });
     read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "between_objects", "volumetric_e",
-                               "verbose_comments", "arcs", "progress", "auto_temperatures", "binary", "object_labels",
+                               "verbose_comments", "arcs", "progress", "auto_temperatures", "binary", "object_labels", "skip_config_block",
                                "toolchange", "custom_template", "corner_smoothing", "thumbnails"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "object_labels") {
@@ -2737,11 +2737,12 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         if (n == "volumetric_e" || n == "verbose_comments" || n == "arcs" || n == "progress" || n == "auto_temperatures" ||
-            n == "binary") {
+            n == "binary" || n == "skip_config_block") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             (n == "volumetric_e"        ? s.volumetric_e
              : n == "binary"            ? s.gcode_binary
+             : n == "skip_config_block" ? s.gcode_skip_config_block
              : n == "arcs"              ? s.gcode_arcs
              : n == "progress"          ? s.gcode_progress
              : n == "auto_temperatures" ? s.auto_temperatures
@@ -3634,6 +3635,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"gcode.between_objects", text(s.gcode_between_objects)},
         {"gcode.volumetric_e", flag(s.volumetric_e)},
         {"gcode.verbose_comments", flag(s.verbose_comments)},
+        {"gcode.skip_config_block", flag(s.gcode_skip_config_block)},
         {"gcode.arcs", flag(s.gcode_arcs)},
         {"machine.z_offset", num(s.z_offset)},
         {"machine.heat_rate_nozzle", num(s.heat_rate_nozzle)},
@@ -4212,6 +4214,7 @@ std::string settings_json(const Settings& s) {
           {"toolchange", s.gcode_toolchange},
           {"volumetric_e", s.volumetric_e},
           {"verbose_comments", s.verbose_comments},
+          {"skip_config_block", s.gcode_skip_config_block},
           {"arcs", s.gcode_arcs},
           {"progress", s.gcode_progress},
           {"object_labels", object_labels_name(s.object_labels)},

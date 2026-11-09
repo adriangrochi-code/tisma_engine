@@ -846,6 +846,7 @@ struct Settings {
     bool volumetric_e = false;
     // Every line the engine writes says what it does in a comment (gcode_extras.md, rule 12).
     bool verbose_comments = false;
+    bool gcode_skip_config_block = false; // no settings block at the end (orca_2_5.md, rule 22)
     // Runs of a path that follow a circle within gcode_resolution become G2
     // and G3 (gcode_extras.md, rule 10).
     bool gcode_arcs = false;
