@@ -11750,4 +11750,6 @@ arreglado en 9d8dc76 y subido.
   `print_time_sec` y `print_time_total_sec` (OR21: 1:2:5 y 3725); sin el total quedan escritas tal cual.
 - `gcode.skip_config_block`: el G-code sin el bloque de ajustes del final (los totales quedan); en la ficha «Archivo de
   salida», con su ayuda.
-- Sigue: regla 23 (temperaturas de la primera capa según los filamentos usados).
+- Regla 23 (OR23): ya se cumplía; prueba nueva con dos filamentos (200/240 °C) donde solo el 2 imprime: el inicio
+  calienta a 240 °C, con varios extrusores y con MMU. Pregunta al equipo de fichas: el motor calienta al empezar a
+  `temperature`, no a `first_layer_temperature` (la cama sí usa la de la primera capa).

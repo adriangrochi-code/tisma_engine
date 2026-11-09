@@ -924,3 +924,19 @@ TEST_CASE("wipe tower: an MMU speed of 0 is a step not used (spec team, 2026-11-
     CHECK(without.find("cool the tip") == std::string::npos);
     CHECK(without.find("\nT1\n") != std::string::npos);
 }
+
+TEST_CASE("extruders: the first layer's nozzle temperature is that of the filament that prints it (orca_2_5.md, rule 23, OR23)",
+          "[extruders]") {
+    for (const bool mmu : {false, true}) {
+        Settings s = base();
+        s.single_extruder_mmu = mmu;
+        if (mmu)
+            s.wipe_tower = true, s.relative_extrusion = true;
+        s.variables["temperature"] = {"200", "240"};
+        const std::string text = gcode_of(cube(2), s); // only filament 2 prints
+        const std::size_t layer = text.find(";LAYER_CHANGE");
+        INFO("mmu " << mmu << "\n" << text.substr(0, std::min<std::size_t>(layer, 1500)));
+        CHECK(text.find("S240") < layer);
+        CHECK(text.find("S200") > layer);
+    }
+}

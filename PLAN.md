@@ -1217,11 +1217,12 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
   sin apoyo al final, modificadores de costura precisa, polyholes.
 - [ ] O2 (reglas 7 a 13 bis): expansión de la superficie de arriba, orden y ángulo fijo arriba y abajo, gyroid y TPMS
   adaptativos, relleno suavizado, separado por pieza, de varias líneas, espiral hacia adentro.
-- [ ] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera
+- [x] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera
   capa según los filamentos usados.
   Hecho (2026-11-09): reglas 20 a 22 (OR20 a OR22): `regex_replace(texto, /patrón/, reemplazo)` con `$1`, el literal
   `/patrón/` en las plantillas, `print_time_day`/`hour`/`minute`/`sec`/`total_sec` en el nombre del archivo y
-  `gcode.skip_config_block`. Queda la regla 23.
+  `gcode.skip_config_block`. Regla 23 (OR23): ya se cumplía (la boquilla y la cama del primer filamento que imprime);
+  ahora con prueba, con varios extrusores y con MMU.
 - [ ] O6 (reglas 24 a 28): `--strict`, apoyar la pieza, inspeccionar, estadísticas, copias a lo largo de Y.
 - [ ] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
   puentes; la balsa solo necesita la prueba OR15.
