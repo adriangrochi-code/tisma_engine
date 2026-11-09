@@ -1,0 +1,2 @@
+wait 2
+expect-toast Proyecto de un programa desconocido: se abrieron las piezas, sin sus ajustes

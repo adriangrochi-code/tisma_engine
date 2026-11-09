@@ -11812,3 +11812,8 @@ arreglado en 9d8dc76 y subido.
   tallo de 5: las vueltas del ala después del relleno; el tallo igual que antes) y escalón (la vuelta que cuelga
   queda antes del relleno). El fuzz varía `polyholes`, `polyhole_twist` y `unsupported_last`.
 - Falta de O1: la costura precisa (regla 4), que necesita los modificadores auxiliares en el proyecto.
+- project_import PI1: prueba de interfaz `ui_project_import_standard` (el 3MF del estándar de una caja abre la caja con
+  el aviso de programa desconocido). La regla 9 completa (A traducidos, B parecidos, C sin equivalente, M placas)
+  espera la tabla de traducción del paquete de perfiles (regla 11), que todavía no viene en el paquete, y muestras de
+  la familia OrcaSlicer para contar las placas: hasta entonces el aviso dice las piezas y que los ajustes no se traen
+  (decisión: seguir la regla 12 mientras no haya tabla).

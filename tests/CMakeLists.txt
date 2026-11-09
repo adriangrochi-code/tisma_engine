@@ -244,6 +244,14 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/project_import.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_import_prusaslicer.png)
     set_tests_properties(ui_project_import_prusaslicer PROPERTIES TIMEOUT 300)
+    # PI1: a standard 3MF with a box and no program's data opens the box, with
+    # the unknown program's notice (project_import.md, rule 2).
+    add_test(NAME ui_project_import_standard
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/formats/box.3mf --lang es --light --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/project_import_standard.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_import_standard.png)
+    set_tests_properties(ui_project_import_standard PROPERTIES TIMEOUT 300)
     # The pack printer's «Datos publicados», and a maker's value used (rules 23 and 24).
     add_test(NAME ui_pack_published
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
