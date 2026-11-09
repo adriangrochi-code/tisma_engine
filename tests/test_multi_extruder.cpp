@@ -940,3 +940,24 @@ TEST_CASE("extruders: the first layer's nozzle temperature is that of the filame
         CHECK(text.find("S200") > layer);
     }
 }
+
+TEST_CASE("extruders: each one heats to its first layer's temperature, then to its own (spec team, 2026-11-09)",
+          "[extruders]") {
+    Settings s = base();
+    s.extruder_walls = 1;
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 3;
+    s.extruder_infill = s.extruder_solid_infill = 2;
+    s.variables["temperature"] = {"205", "225"};
+    s.variables["first_layer_temperature"] = {"215", "235"};
+    const std::string text = gcode_of(cube(1), s);
+    const std::size_t first = text.find(";LAYER_CHANGE"), second = text.find(";LAYER_CHANGE", first + 1),
+                      third = text.find(";LAYER_CHANGE", second + 1);
+    const std::string start = text.substr(0, first), layer2 = text.substr(second, third - second);
+    INFO(start);
+    CHECK(start.find("S215 T0") != std::string::npos);
+    CHECK(start.find("S235 T1") != std::string::npos);
+    CHECK(start.find("S205") == std::string::npos);
+    CHECK(layer2.find("M104 S205 T0") != std::string::npos);
+    CHECK(layer2.find("M104 S225 T1") != std::string::npos);
+}

@@ -3121,16 +3121,25 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // The bed's first-layer temperature: with several extruders that of
     // extruders.bed_temperature_from, or of the first to print (rule 4).
     const int bed_tool = s.bed_temperature_from > 0 ? s.bed_temperature_from : initial_tool;
+    // The first layer's temperatures, else the print's (the spec team's
+    // black-box measure, 2026-11-09: the start heats to them and the second
+    // layer changes to the print's).
+    const auto first_layer_value = [&](const char* first, const char* rest, std::size_t extruder) {
+        const double v = value_of(first, extruder);
+        return v > 0.0 ? v : value_of(rest, extruder);
+    };
     // A temperature change at Z 0 (a temperature test's first band,
     // calibrations.md, rule 2) is the one waited for at the start.
-    double start_nozzle = value_of("temperature");
+    double start_nozzle = first_layer_value("first_layer_temperature", "temperature", 0);
+    bool nozzle_changes = false;
     for (const HeightChange& c : s.changes)
-        if (c.z <= 1e-9 && c.temperature)
-            start_nozzle = *c.temperature;
+        if (c.temperature) {
+            nozzle_changes = true;
+            if (c.z <= 1e-9)
+                start_nozzle = *c.temperature;
+        }
     const double nozzle = start_nozzle,
-                 bed = s.extruders > 1 && value_of("first_layer_bed_temperature", std::size_t(bed_tool - 1)) > 0.0
-                           ? value_of("first_layer_bed_temperature", std::size_t(bed_tool - 1))
-                           : value_of("bed_temperature", std::size_t(std::max(bed_tool - 1, 0)));
+                 bed = first_layer_value("first_layer_bed_temperature", "bed_temperature", std::size_t(std::max(bed_tool - 1, 0)));
     // The bed first, waited for, then the nozzle set (gcode_templates.md, rule 10, T10).
     const bool heat = s.auto_temperatures && !sets_temperature(start_gcode);
     const bool heat_nozzle = heat && nozzle > 0.0;
@@ -3189,8 +3198,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         for (int e = 1; e <= kMaxExtruders; ++e)
             if (tools_used[std::size_t(e)] && value_of("temperature", std::size_t(e - 1)) > 0.0)
                 start_text(nozzle_gcode(false, e,
-                                        s.ooze_prevention && e != initial_tool ? standby(e)
-                                                                               : value_of("temperature", std::size_t(e - 1))));
+                                        s.ooze_prevention && e != initial_tool
+                                            ? standby(e)
+                                            : first_layer_value("first_layer_temperature", "temperature", std::size_t(e - 1))));
     } else if (heat_nozzle) {
         start_text(nozzle_gcode(false, 0, nozzle));
     }
@@ -3216,7 +3226,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         for (int e = 1; e <= kMaxExtruders; ++e)
             if (tools_used[std::size_t(e)] && value_of("temperature", std::size_t(e - 1)) > 0.0 &&
                 (!s.ooze_prevention || e == initial_tool))
-                start_text(nozzle_gcode(true, e, value_of("temperature", std::size_t(e - 1))));
+                start_text(nozzle_gcode(true, e, first_layer_value("first_layer_temperature", "temperature", std::size_t(e - 1))));
     } else if (heat_nozzle && dialect.wait != Dialect::Wait::None) {
         start_text(nozzle_gcode(true, 0, nozzle));
     }
@@ -4297,7 +4307,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // The bed for the rest of the print, from the second layer
         // (multi_extruder.md, rule 4): that of extruders.bed_temperature_from,
         // or of the first extruder to print on that layer.
-        if (s.extruders > 1 && l == 1) {
+        if (l == 1 && heat) {
             int first = g.tool();
             for (const Step& st : steps)
                 if (st.type && st.tool > 0) {
@@ -4308,6 +4318,20 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             const double rest = value_of("bed_temperature", std::size_t(from - 1));
             if (rest > 0.0 && std::lround(rest) != std::lround(bed))
                 g.custom(std::string("M140 ") + dialect.temperature + std::to_string(std::lround(rest)) + "\n");
+            // Each extruder used from its first layer's temperature to the
+            // print's, when they differ, without waiting (a temperature test
+            // sets its own bands).
+            if (!nozzle_changes)
+                for (int e = 1; e <= std::max(s.extruders, 1); ++e) {
+                    if (s.extruders > 1 && !tools_used[std::size_t(e)])
+                        continue;
+                    if (s.ooze_prevention && s.extruders > 1 && e != g.tool())
+                        continue; // a standby one keeps its own temperature
+                    const double start = first_layer_value("first_layer_temperature", "temperature", std::size_t(e - 1));
+                    const double print = value_of("temperature", std::size_t(e - 1));
+                    if (print > 0.0 && std::lround(print) != std::lround(start))
+                        g.custom(nozzle_gcode(false, s.extruders > 1 ? e : 0, print));
+                }
         }
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);

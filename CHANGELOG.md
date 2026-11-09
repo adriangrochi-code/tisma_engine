@@ -25,6 +25,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 - La preparación del inicio (esperas y calentamiento) ya no se suma al tiempo de la primera capa.
 - Un `restart_extra` negativo más largo que lo retraído ya no retrae de nuevo al volver.
+- La primera capa se imprime a `first_layer_temperature` y `first_layer_bed_temperature` (cada extrusor con la suya);
+  al empezar la segunda capa pasa a `temperature` y `bed_temperature` (M104/M140 sin esperar), solo si son distintas.
 
 - La estimación del tiempo cuenta las esperas `G4` y los cambios de aceleración (`M204`, `SET_VELOCITY_LIMIT`) que
   trae el G-code de la máquina, y los límites que cambia (`M201`, `M203`, `M205`, `M566`, `M220`).

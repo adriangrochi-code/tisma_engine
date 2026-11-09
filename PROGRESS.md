@@ -11785,3 +11785,11 @@ arreglado en 9d8dc76 y subido.
   1 mm, `brim_ears_outer_only`): las vueltas del borde recortadas a discos de radio separación + ancho en las
   esquinas filosas del contorno simplificado (las de afuera y, salvo «solo afuera», las de los agujeros). En la ficha
   del borde, con su ayuda. Faltan las orejas pintadas (no hay canal de pintura para eso todavía).
+
+### 2026-11-09 — temperaturas de la primera capa (pedido del equipo de especificación)
+
+- Error corregido: la primera capa usaba `temperature`. Ahora, si el inicio no calienta, antes del G-code de inicio va
+  la cama con `first_layer_bed_temperature` y la boquilla con `first_layer_temperature` (cada extrusor la suya); al
+  empezar la segunda capa M104 a `temperature` y M140 a `bed_temperature`, solo si son distintas y si no hay cambios de
+  temperatura por altura. Un valor 0 en la de primera capa toma la normal. Pruebas en test_gcode y
+  test_multi_extruder. Suite completa: 964 casos pasan.

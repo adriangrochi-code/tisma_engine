@@ -3108,3 +3108,36 @@ TEST_CASE("brim: ears at the sharp corners only (orca_2_5.md, rule 14, OR14)", "
     CHECK(brim_loops(Polygons{octagon}, a, 0.45, 0.2).empty());
     CHECK_FALSE(parse_settings(R"({"adhesion": {"brim_ears": true, "brim_ears_max_angle": 90}})").brim_ears_outer_only);
 }
+
+TEST_CASE("temperatures: the first layer's at the start, the print's from the second layer (spec team, 2026-11-09)",
+          "[gcode]") {
+    Settings s = test_printer();
+    s.start_gcode = "G28 ; home";
+    s.variables["temperature"] = {"205"};
+    s.variables["first_layer_temperature"] = {"215"};
+    s.variables["bed_temperature"] = {"60"};
+    s.variables["first_layer_bed_temperature"] = {"65"};
+    std::string g = cube_gcode(s);
+    const std::size_t first = g.find(";LAYER_CHANGE"), second = g.find(";LAYER_CHANGE", first + 1),
+                      third = g.find(";LAYER_CHANGE", second + 1);
+    REQUIRE(third != std::string::npos);
+    const std::string start = g.substr(0, first), layer2 = g.substr(second, third - second);
+    CHECK(start.find("M190 S65\n") != std::string::npos);
+    CHECK(start.find("M104 S215\n") != std::string::npos);
+    CHECK(start.find("M109 S215\n") != std::string::npos);
+    CHECK(start.find("S205") == std::string::npos);
+    CHECK(layer2.find("M104 S205\n") != std::string::npos);
+    CHECK(layer2.find("M140 S60\n") != std::string::npos);
+    // The same values: no change on the second layer.
+    s.variables["first_layer_temperature"] = {"205"};
+    s.variables["first_layer_bed_temperature"] = {"60"};
+    g = cube_gcode(s);
+    const std::size_t f2 = g.find(";LAYER_CHANGE");
+    CHECK(g.find("M104", f2) == std::string::npos);
+    CHECK(g.find("M140", f2) == std::string::npos);
+    // A start that heats itself: nothing written by the engine.
+    s.start_gcode = "M109 S[first_layer_temperature]";
+    s.variables["first_layer_temperature"] = {"215"};
+    g = cube_gcode(s);
+    CHECK(g.find("M104 S205") == std::string::npos);
+}
