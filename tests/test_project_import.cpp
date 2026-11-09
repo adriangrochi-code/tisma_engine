@@ -1,6 +1,7 @@
 // Projects of other programs (docs/spec/features/project_import.md): which
 // program saved a 3MF (rule 1), and a standard 3MF otherwise (rule 2).
 
+#include "io/model.hpp"
 #include "io/project_import.hpp"
 #include "io/zip.hpp"
 
@@ -70,4 +71,43 @@ TEST_CASE("project import: a 3MF of an unknown program is a standard one (rule 2
 
 TEST_CASE("project import: a file that is not a ZIP is refused", "[import]") {
     CHECK_THROWS_AS(project_source("solid cube\nendsolid\n"), ZipError);
+}
+
+TEST_CASE("project import: an OrcaSlicer-family package, its meshes in 3D/Objects (rule 3)", "[import]") {
+    // The layout of the 3MF Production Extension: the root model's object is
+    // made of components whose mesh is in another model file of the package.
+    const std::string cube =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<model unit=\"millimeter\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\">\n"
+        " <resources><object id=\"1\" type=\"model\"><mesh><vertices>"
+        "<vertex x=\"0\" y=\"0\" z=\"0\"/><vertex x=\"10\" y=\"0\" z=\"0\"/><vertex x=\"10\" y=\"10\" z=\"0\"/>"
+        "<vertex x=\"0\" y=\"10\" z=\"0\"/><vertex x=\"0\" y=\"0\" z=\"10\"/><vertex x=\"10\" y=\"0\" z=\"10\"/>"
+        "<vertex x=\"10\" y=\"10\" z=\"10\"/><vertex x=\"0\" y=\"10\" z=\"10\"/></vertices><triangles>"
+        "<triangle v1=\"0\" v2=\"2\" v3=\"1\"/><triangle v1=\"0\" v2=\"3\" v3=\"2\"/>"
+        "<triangle v1=\"4\" v2=\"5\" v3=\"6\"/><triangle v1=\"4\" v2=\"6\" v3=\"7\"/>"
+        "<triangle v1=\"0\" v2=\"1\" v3=\"5\"/><triangle v1=\"0\" v2=\"5\" v3=\"4\"/>"
+        "<triangle v1=\"1\" v2=\"2\" v3=\"6\"/><triangle v1=\"1\" v2=\"6\" v3=\"5\"/>"
+        "<triangle v1=\"2\" v2=\"3\" v3=\"7\"/><triangle v1=\"2\" v2=\"7\" v3=\"6\"/>"
+        "<triangle v1=\"3\" v2=\"0\" v3=\"4\"/><triangle v1=\"3\" v2=\"4\" v3=\"7\"/>"
+        "</triangles></mesh></object></resources>\n <build/>\n</model>\n";
+    const std::string root =
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<model unit=\"millimeter\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" "
+        "xmlns:p=\"http://schemas.microsoft.com/3dmanufacturing/production/2015/06\">\n"
+        " <metadata name=\"Application\">BambuStudio-01.10.00</metadata>\n"
+        " <resources><object id=\"2\" type=\"model\"><components>"
+        "<component p:path=\"/3D/Objects/object_1.model\" objectid=\"1\" transform=\"1 0 0 0 1 0 0 0 1 0 0 0\"/>"
+        "</components></object></resources>\n"
+        " <build><item objectid=\"2\" transform=\"1 0 0 0 1 0 0 0 1 100 50 0\"/></build>\n</model>\n";
+    const std::string package = write_zip_stored({{"3D/3dmodel.model", root},
+                                                  {"3D/Objects/object_1.model", cube},
+                                                  {"Metadata/project_settings.config", "{}"},
+                                                  {"Metadata/model_settings.config", "<config/>"}});
+    CHECK(project_source(package).family == ProjectFamily::OrcaSlicer);
+    const std::vector<ThreeMfItem> items = read_3mf_items(package);
+    REQUIRE(items.size() == 1);
+    CHECK(items[0].mesh.triangle_count() == 12);
+    const BoundingBox box = items[0].mesh.bounding_box();
+    CHECK(box.min.x == 100.0f); // placed by its build item
+    CHECK(box.max.y == 60.0f);
 }

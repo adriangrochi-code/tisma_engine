@@ -1303,7 +1303,8 @@ Prioridad alta, después del árbol en GPU. Primero las reglas 1 a 5 y la 9.
 - [x] Regla 1: reconocer el programa por los archivos del paquete (familia PrusaSlicer, familia OrcaSlicer, Cura) y
   nombrarlo por el campo `Application` (`project_source`, `src/io/project_import.*`, 2026-11-09); regla 2: lo que
   no se reconoce es un 3MF del estándar.
-- [ ] Reglas 3 y 4: mallas, partes y tipos de parte de cada familia (falta medir los archivos de muestra que genera el
+- [ ] Reglas 3 y 4: mallas, partes y tipos de parte de cada familia. Las mallas en `3D/Objects` de la familia Orca ya se
+  leen (extensión de producción, `formats.md` regla 18; prueba del 2026-11-09). Falta medir los archivos de muestra que genera el
   equipo de fichas).
 - [ ] Regla 5: placas a camas.
 - [ ] Regla 9: el diálogo al abrir.
