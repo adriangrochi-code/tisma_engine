@@ -21,6 +21,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- La preparación del inicio (esperas y calentamiento) ya no se suma al tiempo de la primera capa.
+- Un `restart_extra` negativo más largo que lo retraído ya no retrae de nuevo al volver.
+
 - La estimación del tiempo cuenta las esperas `G4` y los cambios de aceleración (`M204`, `SET_VELOCITY_LIMIT`) que
   trae el G-code de la máquina, y los límites que cambia (`M201`, `M203`, `M205`, `M566`, `M220`).
 - La estimación del tiempo en Klipper usa sus esquinas (`square_corner_velocity`) y su `minimum_cruise_ratio`.

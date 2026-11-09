@@ -11725,3 +11725,16 @@ arreglado en 9d8dc76 y subido.
   (`; estimated preparation time = …`). Los comandos de temperatura que escribe el motor al empezar también se leen.
 - Sigue: mostrar la preparación en la interfaz, cambios de herramienta como preparación, reglas 11 y 15 (aprender de
   la impresora).
+
+## 2026-11-09 16:41 — mantenimiento
+
+- Revisado: `origin/main` y `origin/dev` sin cambios nuevos; sin otra sesión trabajando en `dev`.
+- Fuzz del G-code (2000 corridas, semilla 911202611), ahora también con extras de vuelta negativos, velocidades de
+  MMU en 0, `emit` con Klipper y los ajustes de preparación: 2 fallas. Era un error mío de hoy: un barrido que había
+  retraído 0,29 mm seguido de un `restart_extra` de −0,39 escribía una «vuelta» de −0,098 mm (otra retracción). La
+  vuelta ahora es max(0, retraído + extra); sin nada que devolver no se escribe y el chequeo acepta el filamento corto.
+  Con prueba. Segunda corrida de 2000 (semilla 1109202617): 0 fallas.
+- Encontrado a mano: la preparación del inicio (esperas, calentamiento) caía en el tiempo de la primera capa (16 s
+  pasaban a 1 min 16 s con un `G4 S60`). La tanda de tiempo se cierra después del inicio. Con prueba.
+- CI local completo en 70ea09a: gcc y clang 1121/1121; ASan cortado por el límite de una hora (se corre de nuevo).
+- No medido: el banco de velocidad (CPU ocupada por el CI y el fuzz; los números no servirían).
