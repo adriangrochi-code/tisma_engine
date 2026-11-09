@@ -633,4 +633,14 @@
     <string name="library_printed_note">Note (how it came out)</string>
     <string name="library_printed_add_photo">Add a photo</string>
     <string name="library_printed_photo_added">Photo chosen</string>
+    <string name="site_open">Open %1$s from %2$s?</string>
+    <string name="site_open_yes">Open</string>
+    <string name="site_allow_and_open">Allow and open</string>
+    <string name="site_allow_hint">Downloads from supported websites are off. «Allow and open» turns them on (changed in Preferences).</string>
+    <string name="site_not_https">The link is not secure (https): nothing is downloaded.</string>
+    <string name="site_not_listed">That site is not a supported one (Printables and Thingiverse).</string>
+    <string name="site_kind">Only STL, OBJ, 3MF, STEP or a ZIP with one of them open.</string>
+    <string name="site_bad_link">The link cannot be read.</string>
+    <string name="site_failed">The model could not be downloaded: %1$s</string>
+    <string name="pref_site_downloads">Allow downloads from supported websites</string>
 </resources>

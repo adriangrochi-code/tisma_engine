@@ -24,6 +24,11 @@ class AppSettings(context: Context) {
 
     /** «Buscar impresoras en la red» (printer_connections.md, «Búsqueda en la red», rule 1). */
     /** «Mi biblioteca»'s size limit in MB (local_library.md, rule 12: 500 MB on the phone). Nothing is deleted on its own. */
+    /** preferences.md, «Allow downloads from supported websites»: models from a site's link (mobile_app.md rule 10). Off at first. */
+    var allowSiteDownloads: Boolean
+        get() = prefs.getBoolean("site.downloads", false)
+        set(value) = prefs.edit().putBoolean("site.downloads", value).apply()
+
     var libraryCapMb: Int
         get() = prefs.getInt("library.cap_mb", 500)
         set(value) = prefs.edit().putInt("library.cap_mb", value).apply()

@@ -617,4 +617,14 @@
     <string name="library_printed_note">Nota (cómo salió)</string>
     <string name="library_printed_add_photo">Agregar una foto</string>
     <string name="library_printed_photo_added">Foto elegida</string>
+    <string name="site_open">¿Abrir %1$s de %2$s?</string>
+    <string name="site_open_yes">Abrir</string>
+    <string name="site_allow_and_open">Permitir y abrir</string>
+    <string name="site_allow_hint">Las descargas de sitios compatibles están apagadas. «Permitir y abrir» las prende (se cambia en Preferencias).</string>
+    <string name="site_not_https">El enlace no es seguro (https): no se baja.</string>
+    <string name="site_not_listed">Ese sitio no está entre los compatibles (Printables y Thingiverse).</string>
+    <string name="site_kind">Solo se abren STL, OBJ, 3MF, STEP o un ZIP con uno de ellos.</string>
+    <string name="site_bad_link">El enlace no se puede leer.</string>
+    <string name="site_failed">No se pudo bajar el modelo: %1$s</string>
+    <string name="pref_site_downloads">Permitir descargas de sitios compatibles</string>
 </resources>

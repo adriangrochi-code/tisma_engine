@@ -11921,3 +11921,16 @@ profundidad del centro queda en el mismo píxel, a menos de 2 px). Las pruebas d
 correr acá (no hay KVM): las hace la sesión de especificación.
 - Pendiente de la ficha, no del teléfono: la regla 10 pide abrir modelos «desde un enlace de un sitio de modelos», pero
   ninguna ficha define el enlace (esquema o dirección); se preguntó.
+
+## 2026-11-09 — Android: abrir modelos desde un sitio (mobile_app.md, regla 10)
+
+Decisión de la sesión de especificación (como Tisma Slicer): `tisma://open?file=<URL https codificada>` y
+`prusaslicer://open?file=…` (el botón «Abrir en PrusaSlicer» de Printables).
+- `SiteLink.kt`: solo https, solo printables.com, media/files.printables.com, thingiverse.com y cdn.thingiverse.com
+  (con o sin `www.`; una redirección tiene que seguir en https y en la lista), máximo 200 MB (lo que diga el servidor
+  y lo que llegue), solo STL, OBJ, 3MF, STEP o un ZIP con uno (se toma el primero, por su nombre solo, sin carpetas).
+- Antes de bajar: «¿Abrir <archivo> de <sitio>?». Con «Permitir descargas de sitios compatibles» apagado (por defecto,
+  en Preferencias), el diálogo ofrece «Permitir y abrir». Un enlace rechazado dice por qué.
+- STEP se baja pero todavía no abre (el motor no lo lee).
+- Pruebas: `SiteLinkTest` (enlaces aceptados y rechazados, el ZIP con una ruta `../`, y el enlace hasta el plato con
+  una descarga de prueba). No probado con Printables real ni en un teléfono.

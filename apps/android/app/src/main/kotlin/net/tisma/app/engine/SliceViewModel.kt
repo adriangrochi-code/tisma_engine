@@ -65,6 +65,9 @@ data class SliceState(
     val stressMap: StressMap? = null,
     /** The plate's part came from «Mi biblioteca»: its entry, the recipe used and how it still matches (rule 7). */
     val fromLibrary: LibraryPlate? = null,
+    /** A model site's link waiting for «Open <file> from <site>?» (mobile_app.md, rule 10). */
+    val siteLink: SiteLink.Request? = null,
+    val siteDownloading: Boolean = false,
     /** A `.tismalib` opened or shared with the app, for the library to import (rule 10). */
     val libraryFile: File? = null,
     val showStress: Boolean = false,
@@ -133,6 +136,8 @@ sealed interface SliceNotice {
     /** local_library.md, rule 3: the part was kept in «Mi biblioteca». */
     data class LibrarySaved(val name: String) : SliceNotice
     data class LibraryFailed(val message: String) : SliceNotice
+    /** A model site's link that cannot be opened (rule 10), or its download that failed. */
+    data class SiteRefused(val reason: SiteLink.Reason?, val detail: String = "") : SliceNotice
 }
 
 /** The plate's part from «Mi biblioteca» (local_library.md, rules 5 to 7). */
@@ -973,6 +978,31 @@ class SliceViewModel(
             it.copy(modelName = null, isProject = false, mesh = null, result = null, error = null, progress = 0, analysis = null,
                 case = it.case.copy(conditions = emptyList()), marking = null, calibration = null, stressMap = null,
                 showStress = false, fromLibrary = null, rotation = MeshFile.identity3(), scalePercent = 100f, layFlat = false)
+        }
+    }
+
+    /** mobile_app.md, rule 10: a model site's link; it waits for the person's yes before anything is downloaded. */
+    fun linkOpened(link: String) {
+        when (val p = SiteLink.parse(link)) {
+            is SiteLink.Parsed.Ok -> _state.update { it.copy(siteLink = p.request) }
+            is SiteLink.Parsed.Refused -> _state.update { it.copy(notice = SliceNotice.SiteRefused(p.reason)) }
+        }
+    }
+
+    fun cancelSiteLink() = _state.update { it.copy(siteLink = null) }
+
+    /** The person said yes: download (https, listed sites, at most 200 MB) and put the model on the plate. */
+    fun acceptSiteLink(download: (SiteLink.Request, File) -> File = { r, d -> SiteLink.download(r, d) }) {
+        val r = state.value.siteLink ?: return
+        _state.update { it.copy(siteLink = null, siteDownloading = true) }
+        viewModelScope.launch {
+            val f = withContext(io) { runCatching { download(r, File(workDir, "download")) } }
+            _state.update { it.copy(siteDownloading = false) }
+            f.onFailure { e ->
+                AppLog.line("site: ${e.message}")
+                _state.update { it.copy(notice = SliceNotice.SiteRefused((e as? SiteLink.DownloadException)?.reason, e.message ?: "")) }
+            }
+            f.getOrNull()?.let { file -> open(file.name) { file.inputStream() } }
         }
     }
 }
