@@ -1961,9 +1961,14 @@ private:
         // A tool back from a change: its own extra (multi_extruder.md, rule 5).
         const double extra = tool_back_ ? tool_restart_ : restart_extra_;
         tool_back_ = false;
-        const double back = retracted_amount_ + extra;
+        // A negative extra brings less back, never less than nothing: with
+        // only part of the length retracted (a wipe's), the filament stays
+        // short and no move is written.
+        const double back = std::max(0.0, retracted_amount_ + extra);
+        count_e(back - retracted_amount_);
+        if (back <= 1e-9)
+            return;
         e_ = relative_ ? back : e_ + back;
-        count_e(extra);
         move("G1", std::nullopt, std::nullopt, std::nullopt, e_, feed, {}, {}, "unretract");
         other_time_ += back / feed;
     }

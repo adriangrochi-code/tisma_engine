@@ -821,3 +821,21 @@ TEST_CASE("retraction: the restart extra may be negative or long (spec team, 202
     CHECK_THROWS_AS(parse_settings(R"({"retraction": {"restart_extra": -60}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"retraction": {"toolchange_restart_extra": 1200}})"), SettingsError);
 }
+
+TEST_CASE("retraction: a negative restart extra longer than the retraction brings nothing back (fuzz, 2026-11-09)",
+          "[retraction]") {
+    for (const bool wipe : {false, true}) {
+        Settings s = base();
+        s.retract_length = 1.5;
+        s.restart_extra = -2.0; // more than any retraction: the return would be negative
+        s.wipe = wipe;
+        s.verbose_comments = true;
+        const std::string g = gcode_of(tube(10.0, 6.0, 2.0), s); // checked inside
+        CHECK(g.find("; unretract") == std::string::npos);
+        // A partial one: the return is the retraction less 0.5 mm.
+        s.restart_extra = -0.5;
+        const std::string partial = gcode_of(tube(10.0, 6.0, 2.0), s);
+        if (!wipe)
+            CHECK(partial.find("G1 E1.00000 F") != std::string::npos);
+    }
+}

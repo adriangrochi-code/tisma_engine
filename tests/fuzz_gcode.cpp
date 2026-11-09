@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
         s.relative_extrusion = pick(2) == 0;
         if (pick(3) == 0) { // retraction and travel options (retraction_travel.md)
             s.unretract_speed = pick(2) == 0 ? uni(5, 80) : 0.0;
-            s.restart_extra = pick(2) == 0 ? uni(0, 1) : 0.0;
+            s.restart_extra = pick(2) == 0 ? uni(-0.5, 1) : 0.0; // negative: less back (2026-11-09)
             s.retract_layer_change = pick(2) == 0;
             s.firmware_retraction = pick(4) == 0;
             s.wipe = !s.firmware_retraction && pick(2) == 0;
@@ -317,8 +317,6 @@ int main(int argc, char** argv) {
                                              GcodeFlavor::MarlinLegacy, GcodeFlavor::RepRapFirmware}[std::size_t(pick(5))];
         if (pick(4) == 0) { // the firmware's limits, a silent mode, M73
             s.limits_usage = std::array{LimitsUsage::TimeOnly, LimitsUsage::Emit, LimitsUsage::Ignore}[std::size_t(pick(3))];
-            if (s.flavor == GcodeFlavor::Klipper && s.limits_usage == LimitsUsage::Emit)
-                s.limits_usage = LimitsUsage::TimeOnly;
             s.max_accel_x = s.max_accel_y = pick(2) == 0 ? uni(200, 5000) : 0.0;
             s.retract_acceleration = pick(2) == 0 ? uni(200, 5000) : 0.0;
             s.jerk_x = s.jerk_y = pick(2) == 0 ? uni(1, 20) : 0.0;
@@ -328,6 +326,10 @@ int main(int argc, char** argv) {
             if (s.silent_mode)
                 s.silent_limits = {{"acceleration", uni(100, 1000)}, {"max_feed_x", uni(50, 200)}};
             s.gcode_progress = pick(2) == 0;
+            // The preparation (print_time.md, rules 10 and 14).
+            s.heat_rate_nozzle = pick(2) == 0 ? uni(0.5, 5) : 0.0;
+            s.heat_rate_bed = pick(2) == 0 ? uni(0.1, 2) : 0.0;
+            s.home_time = pick(2) == 0 ? uni(0, 30) : 0.0;
             s.variables["temperature"] = {std::to_string(int(uni(180, 260)))};
         }
         s.machine_max_flow = pick(3) == 0 ? uni(2, 30) : 0.0;
@@ -387,7 +389,7 @@ int main(int argc, char** argv) {
             s.ooze_prevention = pick(3) == 0;
             s.standby_delta = -uni(0, 40);
             s.toolchange_length = {uni(0, 12), uni(0, 12)};
-            s.toolchange_restart_extra = {uni(0, 2)};
+            s.toolchange_restart_extra = {uni(-0.5, 2)};
             s.interface_shells = pick(2) == 0;
             // Mixed colours (color_mixing.md): a blend, or a gradient, for some copies.
             if (pick(3) == 0) {
@@ -435,6 +437,8 @@ int main(int argc, char** argv) {
                 s.wipe_tower = true;
                 s.relative_extrusion = true;
                 s.single_extruder_mmu = pick(2) == 0;
+                if (pick(3) == 0) // a step not used (2026-11-09)
+                    s.cooling_initial_speed = s.cooling_final_speed = s.loading_speed = 0.0;
                 s.wipe_tower_x = uni(80, 100), s.wipe_tower_y = uni(80, 100);
                 s.wipe_tower_rotation = pick(2) == 0 ? 0.0 : uni(-90, 90);
                 s.wipe_tower_width = uni(20, 60);
