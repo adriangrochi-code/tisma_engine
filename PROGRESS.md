@@ -11802,3 +11802,13 @@ arreglado en 9d8dc76 y subido.
   En el pipeline va después de tener todas las regiones; las paredes se rehacen. Ficha «Agujeros redondos» en la
   interfaz, con su ayuda. Pruebas `[polyholes]` (OR5: 3, 10 y 30 mm → 6, 20 y 50 lados; tubo laminado → 20).
 - Falta de O1: paredes sin apoyo al final (regla 3) y costura precisa (regla 4).
+
+### 2026-11-09 — paredes sin apoyo al final (orca_2_5.md, regla 3, OR3)
+
+- `walls.unsupported_last`: en el escritor, por isla, una vuelta sin ningún punto sobre la capa de abajo va después
+  de las paredes si toca una vuelta sostenida (o anclada a través de otras), de adentro hacia afuera; si no toca
+  nada, en una segunda pasada después del relleno de la isla (que incluye los puentes). Con el relleno antes de las
+  paredes, igual. En la ficha «Más paredes», con su ayuda. Pruebas `[unsupported]`: sombrero (ala de 15 mm sobre un
+  tallo de 5: las vueltas del ala después del relleno; el tallo igual que antes) y escalón (la vuelta que cuelga
+  queda antes del relleno). El fuzz varía `polyholes`, `polyhole_twist` y `unsupported_last`.
+- Falta de O1: la costura precisa (regla 4), que necesita los modificadores auxiliares en el proyecto.

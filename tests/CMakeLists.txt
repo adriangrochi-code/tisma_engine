@@ -43,6 +43,7 @@ add_executable(tisma_tests
   test_firmware.cpp
   test_inspect.cpp
   test_polyholes.cpp
+  test_unsupported_walls.cpp
   test_template.cpp
   test_binary.cpp
   test_retraction.cpp

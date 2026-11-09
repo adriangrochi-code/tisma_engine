@@ -177,6 +177,7 @@ Picture picture_for(std::string_view key) {
         {"walls.transition_margin", Picture::Walls},
         {"walls.staggered_inner_seams", Picture::Seam},
         {"walls.polyholes", Picture::Walls},
+        {"walls.unsupported_last", Picture::Walls},
         {"walls.polyhole_margin", Picture::Walls},
         {"walls.polyhole_twist", Picture::Walls},
         {"walls.polyhole_max_edges", Picture::Walls},

@@ -241,6 +241,8 @@ struct Settings {
     // hole may stray from its circle (mm or % of the radius), a turn each
     // layer, and the most sides.
     bool polyholes = false;
+    // Loops with nothing under them printed last (orca_2_5.md, rule 3).
+    bool unsupported_last = false;
     Speed polyhole_margin{20.0, true};
     bool polyhole_twist = false;
     int polyhole_max_edges = 50;

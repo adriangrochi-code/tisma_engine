@@ -342,6 +342,16 @@
      "line.\n\nAvoiding those small jumps gives more even walls. As measured, the margin's size does not move that "
      "cut-off: what matters is whether it is 0 or not.\n\nExample: leave it at 25 %, the default; set it to 0 only if "
      "you want even the smallest change to add a line."},
+    {"walls.unsupported_last",
+     "Cuando una vuelta de pared queda entera sobre el aire (nada de ella tiene pieza debajo), se imprime al "
+     "final: después de las paredes que la sostienen si toca alguna, y si no toca nada, después del relleno de su "
+     "capa, que le sirve de apoyo. Así la vuelta se apoya en algo en vez de colgar.\n\nSirve en voladizos y en "
+     "bordes que salen de golpe, como el ala de un sombrero.\n\nEjemplo: encendido si las primeras vueltas de un "
+     "voladizo se caen o se enrulan.",
+     "When a wall loop lies wholly over the air (nothing of it has the part below), it is printed last: after the "
+     "walls that hold it if it touches one, and if it touches nothing, after its layer's infill, which then holds "
+     "it. The loop rests on something instead of hanging.\n\nIt helps on overhangs and edges that stick out at "
+     "once, like a hat's brim.\n\nExample: on if the first loops of an overhang fall or curl."},
     {"walls.polyholes",
      "Un agujero redondo se imprime como un polígono de pocos lados planos, más o menos dos por cada mm de "
      "diámetro con boquilla de 0,4. Los lados quedan tocando el círculo del agujero, así que el agujero sale de la "

@@ -1214,7 +1214,7 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
   quedan dos pruebas (`[determinism]`): una T con soportes en árbol y relleno lightning, y dos objetos en dos
   extrusores con etiquetas M486, piel difusa y arcos.
 - [ ] O1 (reglas 1 a 5): limpiar hacia adentro (hecha, 2026-11-02), retracción después del barrido (hecha), paredes
-  sin apoyo al final, modificadores de costura precisa, polyholes (hecha, 2026-11-09, OR5).
+  sin apoyo al final (hecha, 2026-11-09, OR3), modificadores de costura precisa, polyholes (hecha, 2026-11-09, OR5).
 - [ ] O2 (reglas 7 a 13 bis): expansión de la superficie de arriba, orden y ángulo fijo arriba y abajo, gyroid y TPMS
   adaptativos, relleno suavizado, separado por pieza, de varias líneas, espiral hacia adentro.
 - [x] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera

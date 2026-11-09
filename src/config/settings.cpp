@@ -1051,7 +1051,7 @@ Settings parse_checked(std::string_view text) {
                 "min_detail", "generator", "gap_fill", "clockwise", "outer_first", "staggered_inner_seams", "staggered", "top_one_wall",
                 "first_layer_one_wall", "extra_if_needed", "avoid_curled_overhangs", "extra_on_overhangs", "outer_width",
                 "spread_count", "transition_length", "transition_angle", "transition_margin", "polyholes", "polyhole_margin",
-                "polyhole_twist", "polyhole_max_edges"},
+                "polyhole_twist", "polyhole_max_edges", "unsupported_last"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "generator") {
             s.wall_generator =
@@ -1089,11 +1089,12 @@ Settings parse_checked(std::string_view text) {
             return;
         }
         if (n == "staggered_inner_seams" || n == "staggered" || n == "first_layer_one_wall" || n == "extra_if_needed" ||
-            n == "avoid_curled_overhangs" || n == "extra_on_overhangs" || n == "polyholes" || n == "polyhole_twist") {
+            n == "avoid_curled_overhangs" || n == "extra_on_overhangs" || n == "polyholes" || n == "polyhole_twist" || n == "unsupported_last") {
             if (!g.at(n).is_boolean())
                 fail(k, "must be true or false");
             (n == "extra_on_overhangs"     ? s.extra_on_overhangs
              : n == "polyholes"             ? s.polyholes
+             : n == "unsupported_last"      ? s.unsupported_last
              : n == "polyhole_twist"        ? s.polyhole_twist
              : n == "staggered_inner_seams" ? s.staggered_inner_seams
              : n == "staggered"             ? s.walls_staggered
@@ -3594,6 +3595,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"walls.outer_first", flag(s.walls_outer_first)},
         {"walls.staggered_inner_seams", flag(s.staggered_inner_seams)},
         {"walls.polyholes", flag(s.polyholes)},
+        {"walls.unsupported_last", flag(s.unsupported_last)},
         {"walls.polyhole_margin", s.polyhole_margin.percent ? num(s.polyhole_margin.value) + "%" : num(s.polyhole_margin.value)},
         {"walls.polyhole_twist", flag(s.polyhole_twist)},
         {"walls.polyhole_max_edges", std::to_string(s.polyhole_max_edges)},
@@ -3825,6 +3827,7 @@ std::string settings_json(const Settings& s) {
           {"outer_first", s.walls_outer_first},
           {"staggered_inner_seams", s.staggered_inner_seams},
           {"polyholes", s.polyholes},
+          {"unsupported_last", s.unsupported_last},
           {"polyhole_margin", s.polyhole_margin.percent ? ordered_json(json(s.polyhole_margin.value).dump() + "%")
                                                         : ordered_json(s.polyhole_margin.value)},
           {"polyhole_twist", s.polyhole_twist},

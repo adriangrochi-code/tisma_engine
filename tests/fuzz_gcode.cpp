@@ -164,6 +164,9 @@ int main(int argc, char** argv) {
             s.top_one_wall = std::array{TopOneWall::None, TopOneWall::Top, TopOneWall::Topmost}[std::size_t(pick(3))];
             s.first_layer_one_wall = pick(3) == 0;
             s.extra_on_overhangs = pick(3) == 0;
+            s.polyholes = pick(3) == 0;
+            s.polyhole_twist = pick(2) == 0;
+            s.unsupported_last = pick(3) == 0;
             if (pick(3) == 0) // the filament's own values
                 s.filament_retraction = {{"retraction.length", pick(3) == 0 ? 0.0 : uni(0.2, 4)},
                                          {"retraction.lift", uni(0, 0.6)},
@@ -562,6 +565,8 @@ int main(int argc, char** argv) {
                 std::printf("  arcs %d overlap %.1f speed %.1f max %.2f\n", int(s.arcs), s.arcs_overlap, s.arcs_speed,
                             s.arcs_max_distance);
                 std::printf("  support under bridges %d\n", int(s.support_under_bridges));
+                std::printf("  polyholes %d twist %d unsupported last %d\n", int(s.polyholes), int(s.polyhole_twist),
+                            int(s.unsupported_last));
                 std::printf("  flavor %d flow caps %.1f %.1f accel %.0f %.0f chamber %.0f/%.0f changes", int(s.flavor),
                             s.machine_max_flow, s.filament_max_flow, s.acceleration, s.travel_acceleration,
                             s.chamber_temperature, s.max_chamber_temp);

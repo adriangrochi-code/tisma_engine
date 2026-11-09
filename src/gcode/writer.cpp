@@ -125,6 +125,79 @@ std::string fixed_number(double v, int decimals) { return fixed(v, decimals); }
 
 namespace {
 
+// walls.unsupported_last (orca_2_5.md, rule 3): each wall loop's turn, by its
+// index: 0 with the walls; 1 after them, inside out, when nothing of it lies
+// over the layer below (`below`) but it touches a loop that is held (held
+// directly, or through another such loop); 2 after the layer's fills, when it
+// touches nothing held. Own design.
+std::map<int, std::vector<char>> unsupported_turns(const std::map<int, std::vector<Toolpath>, std::greater<int>>& walls,
+                                                   const Polygons& below) {
+    struct Loop {
+        int index;
+        std::size_t k;
+        const Toolpath* t;
+        char turn = 2;
+    };
+    std::vector<Loop> loops;
+    std::map<int, std::vector<char>> turns;
+    for (const auto& [index, paths] : walls) {
+        turns[index].assign(paths.size(), 0);
+        for (std::size_t k = 0; k < paths.size(); ++k)
+            loops.push_back({index, k, &paths[k]});
+    }
+    // Held: some point over the layer below (inside an odd number of its paths).
+    const auto over = [&](const Point2d& p) {
+        const Clipper2Lib::Point64 q{to_units(p.x), to_units(p.y)};
+        int inside = 0;
+        for (const Polygon& path : below)
+            if (Clipper2Lib::PointInPolygon(q, path) != Clipper2Lib::PointInPolygonResult::IsOutside)
+                ++inside;
+        return inside % 2 == 1;
+    };
+    bool any_free = false;
+    for (Loop& loop : loops) {
+        bool held = false;
+        for (const ToolpathPoint& p : loop.t->points)
+            if (over(p.p)) {
+                held = true;
+                break;
+            }
+        loop.turn = held ? 0 : 2;
+        any_free = any_free || !held;
+    }
+    if (!any_free)
+        return {};
+    // Two loops touch when some point of one is within their half widths (and
+    // a little) of the other's line.
+    const auto touch = [](const Toolpath& a, const Toolpath& b) {
+        const std::size_t n = b.points.size();
+        for (const ToolpathPoint& p : a.points)
+            for (std::size_t j = 0; j + (b.closed ? 0 : 1) < n; ++j) {
+                const ToolpathPoint& u = b.points[j];
+                const ToolpathPoint& v = b.points[(j + 1) % n];
+                const double dx = v.p.x - u.p.x, dy = v.p.y - u.p.y, l2 = dx * dx + dy * dy;
+                const double t = l2 > 0.0 ? std::clamp(((p.p.x - u.p.x) * dx + (p.p.y - u.p.y) * dy) / l2, 0.0, 1.0) : 0.0;
+                const double d = std::hypot(p.p.x - (u.p.x + t * dx), p.p.y - (u.p.y + t * dy));
+                if (d <= 0.55 * (p.width + u.width) + 1e-6)
+                    return true;
+            }
+        return false;
+    };
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (Loop& loop : loops)
+            if (loop.turn == 2)
+                for (const Loop& other : loops)
+                    if (other.turn != 2 && touch(*loop.t, *other.t)) {
+                        loop.turn = 1, grew = true;
+                        break;
+                    }
+    }
+    for (const Loop& loop : loops)
+        turns[loop.index][loop.k] = loop.turn;
+    return turns;
+}
+
 // The stretches of a wall whose bead lies wholly off the layer below
 // (walls_extra.md, rule 8), by each piece's middle in `hanging`, and of those
 // the ones in `on_support`, which fill the support's Z gap `gap`
@@ -4027,12 +4100,35 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 --left[current];
                 const std::size_t first_step = steps.size();
                 const Island& i = islands[next];
-                auto walls = [&](int index, const std::vector<Toolpath>& paths) {
+                // walls.unsupported_last (orca_2_5.md, rule 3): each loop's turn.
+                const std::map<int, std::vector<char>> turns =
+                    s.unsupported_last && l > 0 && l - 1 < model.regions.size()
+                        ? unsupported_turns(i.walls, model.regions[l - 1])
+                        : std::map<int, std::vector<char>>{};
+                auto walls = [&](int index, const std::vector<Toolpath>& paths, char turn = 0) {
                     const bool outer = index == 0;
                     const auto found = i.candidates.find(index);
-                    group(paths, outer ? "External perimeter" : "Perimeter",
-                          speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true,
-                          found == i.candidates.end() ? std::span<const std::vector<std::size_t>* const>{} : found->second);
+                    std::span<const std::vector<std::size_t>* const> candidates =
+                        found == i.candidates.end() ? std::span<const std::vector<std::size_t>* const>{} : found->second;
+                    const auto feed = speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed);
+                    const char* type = outer ? "External perimeter" : "Perimeter";
+                    const auto own = turns.find(index);
+                    if (own == turns.end()) {
+                        if (turn == 0)
+                            group(paths, type, feed, s.seam, true, candidates);
+                        return;
+                    }
+                    std::vector<Toolpath> kept;
+                    std::vector<const std::vector<std::size_t>*> kept_candidates;
+                    for (std::size_t k = 0; k < paths.size(); ++k)
+                        if (own->second[k] == turn) {
+                            kept.push_back(paths[k]);
+                            if (k < candidates.size())
+                                kept_candidates.push_back(candidates[k]);
+                        }
+                    if (kept_candidates.size() != kept.size())
+                        kept_candidates.clear();
+                    group(kept, type, feed, s.seam, true, kept_candidates);
                 };
                 if (s.zaa) {
                     for (const auto& [index, paths] : i.walls)
@@ -4063,12 +4159,22 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 else
                     for (const auto& [index, paths] : i.walls)
                         walls(index, paths);
+                // The loops held only through other loops, after the walls that
+                // hold them, inside out (orca_2_5.md, rule 3).
+                if (!turns.empty())
+                    for (const auto& [index, paths] : i.walls)
+                        walls(index, paths, 1);
                 // The loops over an overhang, from its outline in, after the walls
                 // they hang from (walls_extra.md, rule 5).
                 for (Toolpath t : i.overhang_walls)
                     lay(std::move(t), "Overhang perimeter", speed(bridge_feed));
                 if (!s.infill_before_walls)
                     fills();
+                // The loops that touch nothing held: a second pass of walls,
+                // after the fills (and the layer's bridges) they rest on.
+                if (!turns.empty())
+                    for (const auto& [index, paths] : i.walls)
+                        walls(index, paths, 2);
                 // Ironing, in the same layer after the island's fills (ironing.md, rule 1).
                 group(i.ironing, "Ironing", speed(s.ironing_speed), SeamMode::Nearest);
                 flush();

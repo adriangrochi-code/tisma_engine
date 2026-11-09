@@ -1998,7 +1998,7 @@ const std::map<T, const char*>& row_keys() {
         {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
         {T::WallsOuterFirst, "walls.outer_first"},
         {T::FilamentRetractionRow, "extrusion.retraction"},
-        {T::Polyholes, "walls.polyholes"}, {T::PolyholeMargin, "walls.polyhole_margin"},
+        {T::Polyholes, "walls.polyholes"}, {T::UnsupportedLast, "walls.unsupported_last"}, {T::PolyholeMargin, "walls.polyhole_margin"},
         {T::PolyholeTwist, "walls.polyhole_twist"}, {T::PolyholeMaxEdges, "walls.polyhole_max_edges"},
         {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::WallsStaggered, "walls.staggered"}, {T::TopOneWallRow, "walls.top_one_wall"},
         {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
@@ -8438,6 +8438,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::ExtraIfNeeded, "walls.extra_if_needed", s.extra_if_needed);
         flag(T::ExtraOnOverhangs, "walls.extra_on_overhangs", s.extra_on_overhangs);
         flag(T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs", s.avoid_curled_overhangs);
+        flag(T::UnsupportedLast, "walls.unsupported_last", s.unsupported_last);
     } else if (id == "polyholes") {
         // Round holes as polygons (orca_2_5.md, rule 5).
         flag(T::Polyholes, "walls.polyholes", s.polyholes);

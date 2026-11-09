@@ -2336,6 +2336,7 @@
     X(AfterWipe, "Retracción después del barrido", "Retraction after the wipe") \
     X(WipeInward, "Barrer hacia adentro", "Wipe inward") \
     X(Polyholes, "Agujeros como polígonos", "Holes as polygons") \
+    X(UnsupportedLast, "Paredes sin apoyo al final", "Unsupported walls last") \
     X(PolyholeMargin, "Cuánto se aparta del círculo", "How far from the circle") \
     X(PolyholeTwist, "Girar el polígono en cada capa", "Turn the polygon each layer") \
     X(PolyholeMaxEdges, "Lados como máximo", "Most sides") \
