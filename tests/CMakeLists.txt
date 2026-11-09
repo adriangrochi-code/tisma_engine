@@ -233,6 +233,14 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_pack_filaments PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
+    # Another program's 3MF project: which program, its parts, and that its
+    # settings stay out for now (project_import.md, rules 1, 2 and 9).
+    add_test(NAME ui_project_import_prusaslicer
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/formats/pi2_prusaslicer.3mf --lang es --light --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/project_import.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_import_prusaslicer.png)
+    set_tests_properties(ui_project_import_prusaslicer PROPERTIES TIMEOUT 300)
     # The pack printer's «Datos publicados», and a maker's value used (rules 23 and 24).
     add_test(NAME ui_pack_published
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

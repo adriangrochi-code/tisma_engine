@@ -11689,3 +11689,6 @@ arreglado en 9d8dc76 y subido.
 - La muestra del equipo de fichas (`pi2_prusaslicer.3mf`, PrusaSlicer 2.7.2 por línea de comandos) pasa a
   `tests/data/formats/` con su prueba: familia PrusaSlicer, `Application` PrusaSlicer-2.7.2, una caja de
   30 × 10 × 15 mm. El README de la muestra dice dos objetos; el archivo trae uno (avisado).
+- Regla 9 (parte): al abrir un 3MF de otro programa, la interfaz avisa «Proyecto de <programa>: N piezas. Sus ajustes
+  todavía no se traen: se usan los de Tisma»; uno sin programa conocido, el aviso de la regla 2. `project_source`
+  cuenta las piezas (los ítems del modelo raíz). Prueba `ui_project_import_prusaslicer` con la muestra.

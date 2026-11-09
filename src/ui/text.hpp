@@ -1223,6 +1223,12 @@
     X(FlowRow, "Flujo", "Flow")                                                                                       \
     X(FlowTip, "El porcentaje del volumen que se extruye en todas las líneas; lo ajusta la calibración de flujo", "The percentage of the volume every line extrudes; the flow calibration sets it") \
     X(GcodeOpened, "G-code abierto: %s", "G-code opened: %s")                                                         \
+    X(ProjectFromProgram, "Proyecto de %s: %d piezas. Sus ajustes todavía no se traen: se usan los de Tisma",          \
+      "Project from %s: %d parts. Its settings are not brought in yet: Tisma's are used")                              \
+    X(ProjectFromProgramOne, "Proyecto de %s: 1 pieza. Sus ajustes todavía no se traen: se usan los de Tisma",          \
+      "Project from %s: 1 part. Its settings are not brought in yet: Tisma's are used")                                 \
+    X(ProjectFromUnknown, "Proyecto de un programa desconocido: se abrieron las piezas, sin sus ajustes",             \
+      "Project from an unknown program: the parts were opened, without their settings")                               \
     X(ViewerOnly, "Vista de un G-code abierto: no se puede volver a laminar", "Viewing an opened G-code file: it cannot be sliced again") \
     X(Details, "Detalles", "Details")                                                                                 \
     X(Close, "Cerrar", "Close")                                                                                       \

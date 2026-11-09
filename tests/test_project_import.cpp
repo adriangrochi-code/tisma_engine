@@ -125,6 +125,7 @@ TEST_CASE("project import: the spec team's PrusaSlicer 2.7.2 sample (PI2, its pa
     CHECK(source.family == ProjectFamily::PrusaSlicer);
     CHECK(source.application == "PrusaSlicer-2.7.2");
     CHECK(source.program == "PrusaSlicer");
+    CHECK(source.items == 1);
     const std::vector<ThreeMfItem> items = read_3mf_items(package);
     REQUIRE(items.size() == 1);
     CHECK(items[0].mesh.triangle_count() == 12);

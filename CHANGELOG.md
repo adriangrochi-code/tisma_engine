@@ -31,6 +31,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- Al abrir un 3MF de otro programa (PrusaSlicer, OrcaSlicer, Bambu Studio, Creality Print, Elegoo Slicer, Anycubic,
+  Cura), un aviso dice de qué programa es y cuántas piezas trae; sus ajustes todavía no se traen.
 - Mi biblioteca (`tisma-engine library`): guardar piezas con su proyecto, recetas por impresora y análisis,
   revisar si una receta o un análisis siguen valiendo, «La imprimí», exportar e importar `.tismalib`. Sin G-code.
 - G-code original de cada impresora del paquete (`machine.macros`, bloque `gcode`): dialectos PrusaSlicer, OrcaSlicer,

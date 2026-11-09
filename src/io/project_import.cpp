@@ -25,8 +25,9 @@ bool starts_with_folder(std::string_view name, std::string_view folder) {
 }
 
 // The value of <metadata name="Application"> in the model, looked for where
-// the metadata is: before the resources, in the first part of the file.
-std::string application_of(const ZipArchive& zip) {
+// the metadata is: before the resources, in the first part of the file; and
+// the number of its build items.
+std::string application_of(const ZipArchive& zip, int& items) {
     const ZipArchive::Entry* model = zip.find("3D/3dmodel.model");
     if (!model)
         for (const ZipArchive::Entry& e : zip.entries())
@@ -37,6 +38,9 @@ std::string application_of(const ZipArchive& zip) {
     if (!model)
         return {};
     const std::string text = zip.read(*model);
+    for (std::size_t at = text.find("<item"); at != std::string::npos; at = text.find("<item", at + 5))
+        if (at + 5 < text.size() && (text[at + 5] == ' ' || text[at + 5] == '\t' || text[at + 5] == '\n' || text[at + 5] == '/'))
+            ++items;
     const std::string_view head = std::string_view(text).substr(0, 1 << 16);
     const std::size_t key = head.find("name=\"Application\"");
     if (key == std::string_view::npos)
@@ -59,7 +63,7 @@ ProjectSource project_source(std::string_view package) {
     else if (std::any_of(zip.entries().begin(), zip.entries().end(),
                          [](const ZipArchive::Entry& e) { return starts_with_folder(e.name, "cura/"); }))
         out.family = ProjectFamily::Cura;
-    out.application = application_of(zip);
+    out.application = application_of(zip, out.items);
     // A known program's name in the metadata, as the dialog shows it.
     static constexpr std::array<std::pair<std::string_view, std::string_view>, 9> known = {{
         {"tisma", "Tisma Slicer"},

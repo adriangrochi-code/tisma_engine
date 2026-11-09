@@ -55,6 +55,7 @@
 #include "gcode/print_time.hpp"
 #include "gcode/writer.hpp"
 #include "io/model.hpp"
+#include "io/project_import.hpp"
 #include "io/stl.hpp"
 #include "mesh/shapes.hpp"
 #include "mesh/orient.hpp"
@@ -4208,6 +4209,18 @@ void App::load_model(const std::filesystem::path& path) {
         }
         calibration_.reset();
         use_mesh(std::move(stl.mesh), path, Tab::Prepare);
+        // Another program's project (project_import.md, rules 1, 2 and 9):
+        // which one, its parts, and that its settings stay out for now.
+        if (lower_extension(path) == ".3mf") {
+            std::ifstream in(path, std::ios::binary);
+            const std::string package((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            const ProjectSource source = project_source(package);
+            if (!source.program.empty() && source.program != "Tisma Slicer")
+                notify(source.items > 1 ? format(tr(T::ProjectFromProgram), source.program.c_str(), source.items)
+                                        : format(tr(T::ProjectFromProgramOne), source.program.c_str()));
+            else if (source.program.empty() && source.application.find("Tisma") == std::string::npos)
+                notify(tr(T::ProjectFromUnknown));
+        }
     } catch (const std::exception& e) {
         fail(T::CannotOpen, e.what());
     }

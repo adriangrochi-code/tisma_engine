@@ -22,6 +22,8 @@ struct ProjectSource {
     // program's name for the dialog (rule 9): a known name found in it, or
     // the family's when the metadata names none.
     std::string application, program;
+    // The build items of the root model: the parts the dialog counts (rule 9).
+    int items = 0;
 };
 
 // Throws ZipError when the package is not a readable ZIP.

@@ -1307,7 +1307,9 @@ Prioridad alta, después del árbol en GPU. Primero las reglas 1 a 5 y la 9.
   leen (extensión de producción, `formats.md` regla 18; prueba del 2026-11-09). Falta medir los archivos de muestra que genera el
   equipo de fichas.
 - [ ] Regla 5: placas a camas.
-- [ ] Regla 9: el diálogo al abrir.
+- [ ] Regla 9: el diálogo al abrir. Por ahora un aviso al abrir el 3MF de otro programa (2026-11-09): «Proyecto de
+  <programa>: N piezas. Sus ajustes todavía no se traen», o el de programa desconocido (regla 2). Falta el diálogo
+  completo con los ajustes traducidos, parecidos y sin equivalente, y «Usar la impresora del proyecto».
 - [ ] Reglas 6 a 8, 11 y 12: ajustes con la tabla de traducción del paquete de perfiles (la hace la sesión de perfiles).
 - [ ] Regla 10: pintura, cuando haya archivos de muestra (PI6 a PI8).
 
