@@ -1,8 +1,10 @@
 #pragma once
 
+#include "geom/bitgrid.hpp"
 #include "geom/polygons.hpp"
 #include "perimeters/sites.hpp"
 
+#include <span>
 #include <vector>
 
 namespace tisma {
@@ -68,5 +70,35 @@ struct TreeFill {
 };
 TreeFill tree_fill(const Polygons& area, const Polygons& above, double bead, double spacing, double double_wall,
                    double angle);
+
+// The same fill from a distance field (PLAN.md, «Soporte en árbol y pintura
+// más livianos», step 2), so that the GPU can do the heavy part for every
+// layer at once: the branches (the area less the interface) on a grid of a
+// quarter of a bead a pixel (tree_branch_grid), each pixel's squared
+// distance to their edge (squared_distance_inside, or the GPU's
+// distance_inside), and from it the wall at half a bead, the second wall
+// where a branch is double_wall wide, and the inside a bead in, as levels of
+// the distance instead of offsets of polygons. A grid for each island of
+// branches, as large as that island: a layer's branches are far apart, and a
+// grid of the whole layer is nearly empty. Own design.
+std::vector<BitGrid> tree_branch_grids(const Polygons& area, const Polygons& above, double bead);
+TreeFill tree_fill_field(const Polygons& area, const Polygons& above, std::span<const BitGrid> grids,
+                         std::span<const std::vector<float>> squared, double bead, double spacing, double double_wall,
+                         double angle);
+
+// tree_fill_field in two steps, so that the fields of many layers can be
+// computed at once in between: from the branches' fields, the walls half a
+// bead in, the inside a bead in, and whether a branch is double_wall wide;
+// then the interface, the second wall (by offsets, where one is that wide)
+// and the lines.
+struct TreeFieldWalls {
+    std::vector<Toolpath> walls;
+    Polygons inside;
+    bool wide = false;
+};
+TreeFieldWalls tree_field_walls(std::span<const BitGrid> grids, std::span<const std::vector<float>> squared, double bead,
+                                double double_wall);
+TreeFill tree_field_finish(const Polygons& area, const Polygons& above, TreeFieldWalls walls, double bead,
+                           double spacing, double double_wall, double angle);
 
 } // namespace tisma

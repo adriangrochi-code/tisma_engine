@@ -136,6 +136,21 @@ TEST_CASE("pack: entries and compatible printers (PF5)", "[pack]") {
     // An empty set is taken as null (rule 12, BH29): every printer.
     const auto with_empty = parse_pack_compatible(R"({"format": "tisma-pack-compatible", "version": 1, "sets": [[0], []]})");
     CHECK(pack_compatible(1, with_empty, 5));
+    // A filament's material gives its density and price per kg (entries,
+    // rule 4); the profile's own win. The Android app saw a cost of 0.
+    const PackEntry petg = parse_pack_entry(R"({"format": "tisma-pack-entry", "version": 2, "technology": "fff",
+        "profile": {"format": "tisma-profile", "version": 1, "kind": "filament", "name": "Acme PETG", "settings": {}},
+        "material": {"type": "PETG", "density": 1.27, "cost_per_kg": 30.0}, "compatible": null})",
+                                            warnings);
+    CHECK(petg.profile.settings.filament_density == 1.27);
+    CHECK(petg.profile.settings.filament_cost == 30.0);
+    const PackEntry own = parse_pack_entry(R"({"format": "tisma-pack-entry", "version": 2, "technology": "fff",
+        "profile": {"format": "tisma-profile", "version": 1, "kind": "filament", "name": "Acme PETG+",
+                    "settings": {"extrusion": {"cost": 45}}},
+        "material": {"density": 1.27, "cost_per_kg": 30.0}})",
+                                           warnings);
+    CHECK(own.profile.settings.filament_cost == 45.0);
+    CHECK(own.profile.settings.filament_density == 1.27);
 }
 
 // ---------------------------------------------------------------------------
@@ -480,4 +495,50 @@ TEST_CASE("pack: community data by printer, with its kind and source (rules 22 t
     CHECK(pack_community(pack, "printers", "Acme", "Nobody").empty());
     CHECK(pack_community(pack, "printers", "..", "x").empty());
     CHECK(pack_community(pack, "secrets", "Acme", "Acme One").empty());
+}
+
+TEST_CASE("pack: the machine's G-code with macros, the variant's over common.gcode (profile_pack_format.md)",
+          "[pack][macros]") {
+    const char* model = R"({
+ "format": "tisma-pack-model", "version": 2, "technology": "fff", "vendor": "Acme",
+ "model": {"id": "A1", "name": "Acme One"}, "default_variant": "0.4",
+ "common": {"settings": {"machine": {"start_gcode": "G28"}},
+            "gcode": {"dialect": "orcaslicer", "relative_extrusion": true,
+                      "templates": {"start": "G28 ; common", "end": "M84"},
+                      "values": {"printer_model": "Acme One"},
+                      "origin": "Invented", "source": "x", "keys": ["a"], "from": "y"}},
+ "variants": [{"id": "0.4", "name": "Acme One 0.4", "settings": {},
+               "gcode": {"templates": {"start": "G28 ; 0.4"}, "relative_extrusion": null}}]})";
+    std::vector<std::string> warnings;
+    const Profile p = pack_printer_profile(model, "", warnings);
+    CHECK(warnings.empty());
+    const MachineMacros& m = p.settings.machine_macros;
+    CHECK(m.dialect == "orcaslicer");
+    CHECK(m.templates.at("start") == "G28 ; 0.4"); // the variant's
+    CHECK(m.templates.at("end") == "M84");         // common's
+    CHECK_FALSE(m.relative_extrusion);             // the variant does not know
+    CHECK(m.values.at("printer_model") == std::vector<std::string>{"Acme One"});
+    CHECK(p.settings.start_gcode == "G28"); // the simple version stays
+    // Saved and read back the same.
+    CHECK(parse_settings(settings_json(p.settings)).machine_macros == m);
+    // A bad dialect is not a profile.
+    CHECK_THROWS_AS(parse_settings(R"({"machine": {"macros": {"dialect": "slic3r"}}})"), SettingsError);
+}
+
+TEST_CASE("pack: a filament's own G-code with macros in place of the simple one", "[pack][macros]") {
+    std::vector<std::string> warnings;
+    const PackEntry pla = parse_pack_entry(R"({"format": "tisma-pack-entry", "version": 2, "technology": "fff",
+        "profile": {"format": "tisma-profile", "version": 1, "kind": "filament", "name": "Acme PLA",
+                    "settings": {"extrusion": {"start_gcode": "; simple"}}},
+        "gcode": {"dialect": "orcaslicer", "templates": {"filament_start": "M900 K{pressure_advance[0]}",
+                                                         "filament_end": null}}})",
+                                           warnings);
+    CHECK(pla.profile.settings.filament_start_gcode == "M900 K{pressure_advance[0]}");
+    CHECK(pla.profile.settings.filament_end_gcode.empty());
+    const PackEntry cura = parse_pack_entry(R"({"format": "tisma-pack-entry", "version": 2, "technology": "fff",
+        "profile": {"format": "tisma-profile", "version": 1, "kind": "filament", "name": "Acme PLA",
+                    "settings": {"extrusion": {"start_gcode": "; simple"}}},
+        "gcode": {"dialect": "cura", "templates": {"filament_start": "M104 S{material_print_temperature}"}}})",
+                                            warnings);
+    CHECK(cura.profile.settings.filament_start_gcode == "; simple");
 }

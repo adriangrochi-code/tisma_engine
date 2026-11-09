@@ -18,5 +18,7 @@ void Context::level_segments_by_triangle(const IndexedMesh&, std::span<const flo
                                          std::span<const std::uint32_t>, std::span<const std::uint32_t>,
                                          std::vector<std::uint32_t>&, std::vector<LevelSegment>&) {}
 void Context::support_column(BitGrid&, std::span<const BitGrid>, std::span<const BitGrid>, std::span<BitGrid>, int) {}
+void Context::distance_inside(const BitGrid&, std::vector<float>&) {}
+void Context::distance_inside(std::span<const BitGrid>, std::vector<std::vector<float>>&) {}
 
 } // namespace tisma::gpu

@@ -3,6 +3,7 @@
 
 #include "config/settings.hpp"
 #include "gcode/dialect.hpp"
+#include "gcode/thumbnail.hpp"
 #include "geom/bead.hpp"
 
 #include <nlohmann/json.hpp>
@@ -201,6 +202,91 @@ Settings parse_checked(std::string_view text);
 
 // A flat object of numbers, texts and true/false (presets.md, rule 22), each
 // value as the templates read it.
+
+// machine.macros (profile_pack_format.md, «G-code de la máquina con macros»).
+// The fields only shown (origin, source, keys, from) and cura's expressions,
+// which the engine never runs, are not kept.
+MachineMacros read_machine_macros(const json& v, const std::string& k) {
+    MachineMacros m;
+    if (v.is_null())
+        return m;
+    if (!v.is_object())
+        fail(k, "must be an object");
+    if (!v.contains("dialect") || !v.at("dialect").is_string())
+        fail(k + ".dialect", "must be prusaslicer, orcaslicer, crealityprint, elegooslicer or cura");
+    m.dialect = v.at("dialect").get<std::string>();
+    if (m.dialect != "prusaslicer" && m.dialect != "orcaslicer" && m.dialect != "crealityprint" &&
+        m.dialect != "elegooslicer" && m.dialect != "cura")
+        fail(k + ".dialect", "must be prusaslicer, orcaslicer, crealityprint, elegooslicer or cura");
+    if (v.contains("templates") && !v.at("templates").is_null()) {
+        const json& t = v.at("templates");
+        if (!t.is_object())
+            fail(k + ".templates", "must be an object of name: G-code");
+        for (const auto& [name, text] : t.items()) {
+            if (name == "extruder_start" || name == "extruder_end") {
+                if (!text.is_array())
+                    fail(k + ".templates." + name, "must be a list of G-code, one per extruder");
+                auto& list = name == "extruder_start" ? m.extruder_start : m.extruder_end;
+                for (const json& item : text) {
+                    if (!item.is_null() && !item.is_string())
+                        fail(k + ".templates." + name, "must be a list of G-code or null");
+                    list.push_back(item.is_string() ? item.get<std::string>() : std::string());
+                }
+            } else if (text.is_string()) {
+                m.templates[name] = text.get<std::string>();
+            } else if (!text.is_null()) {
+                fail(k + ".templates." + name, "must be G-code text");
+            }
+        }
+    }
+    if (v.contains("relative_extrusion") && !v.at("relative_extrusion").is_null()) {
+        if (!v.at("relative_extrusion").is_boolean())
+            fail(k + ".relative_extrusion", "must be true, false or null");
+        m.relative_extrusion = v.at("relative_extrusion").get<bool>();
+    }
+    if (v.contains("values") && !v.at("values").is_null()) {
+        if (!v.at("values").is_object())
+            fail(k + ".values", "must be an object of name: value");
+        const auto as_text = [](const json& x) {
+            return x.is_string() ? x.get<std::string>() : x.is_null() ? std::string() : x.dump();
+        };
+        for (const auto& [name, value] : v.at("values").items()) {
+            std::vector<std::string> list;
+            if (value.is_array())
+                for (const json& item : value)
+                    list.push_back(as_text(item));
+            else
+                list.push_back(as_text(value));
+            m.values[name] = std::move(list);
+        }
+    }
+    return m;
+}
+
+nlohmann::ordered_json machine_macros_json(const MachineMacros& m) {
+    using nlohmann::ordered_json;
+    ordered_json templates = ordered_json::object();
+    for (const auto& [name, text] : m.templates)
+        templates[name] = text;
+    const auto per_extruder = [](const std::vector<std::string>& list) {
+        ordered_json out = ordered_json::array();
+        for (const std::string& t : list)
+            out.push_back(t.empty() ? ordered_json() : ordered_json(t));
+        return out;
+    };
+    if (!m.extruder_start.empty())
+        templates["extruder_start"] = per_extruder(m.extruder_start);
+    if (!m.extruder_end.empty())
+        templates["extruder_end"] = per_extruder(m.extruder_end);
+    ordered_json values = ordered_json::object();
+    for (const auto& [name, list] : m.values)
+        values[name] = list.size() == 1 ? ordered_json(list.front()) : ordered_json(list);
+    return {{"dialect", m.dialect},
+            {"templates", templates},
+            {"relative_extrusion", m.relative_extrusion ? ordered_json(*m.relative_extrusion) : ordered_json()},
+            {"values", values}};
+}
+
 std::map<std::string, std::string> flat_parameters(const json& value, const std::string& key) {
     if (!value.is_object())
         fail(key, "must be a flat object of name: number, text or true/false");
@@ -852,7 +938,7 @@ Settings parse_checked(std::string_view text) {
     for (const auto& [group, value] : root.items()) {
         if (group == "layers" || group == "slicing" || group == "walls" || group == "surfaces" || group == "infill" ||
             group == "machine" || group == "speed" || group == "retraction" || group == "cooling" || group == "adhesion" || group == "support" ||
-            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" ||
+            group == "compute" || group == "compensation" || group == "extrusion" || group == "changes" || group == "zaa" || group == "gcode" || group == "bambu" ||
             group == "fuzzy" || group == "vase" || group == "cad" || group == "placement" || group == "transform" || group == "arcs" ||
             group == "review" ||
             group == "sequential" || group == "extruders" || group == "wipe_tower" || group == "mmu" ||
@@ -1771,7 +1857,7 @@ Settings parse_checked(std::string_view text) {
                 "custom_parameters",
                 "extruders", "extruder_offset", "single_extruder_mmu", "high_flow_nozzle", "display_pixels_x", "display_pixels_y",
                 "display_width", "display_height", "display_mirror_x", "display_mirror_y", "technology", "calibrations",
-                "feedstock", "strict_parser"},
+                "feedstock", "strict_parser", "macros"},
                [&](const json& g, const std::string& n, const std::string& k) {
                    const json& v = g.at(n);
                    if (n == "custom_parameters") {
@@ -1945,6 +2031,8 @@ Settings parse_checked(std::string_view text) {
                        if (!v.is_string())
                            fail(k, "must be a string");
                        (n == "start_gcode" ? s.start_gcode : s.end_gcode) = v.get<std::string>();
+                   } else if (n == "macros") {
+                       s.machine_macros = read_machine_macros(v, k);
                    } else if (n == "variables") {
                        if (!v.is_object())
                            fail(k, "must be an object of name: value or [values]");
@@ -2454,6 +2542,21 @@ Settings parse_checked(std::string_view text) {
     read_group(root, "compute", {"gpu"}, [&](const json& g, const std::string& n, const std::string& k) {
         s.gpu = choice<GpuMode>(g, n, k, {{"auto", GpuMode::Auto}, {"off", GpuMode::Off}});
     });
+    read_group(root, "bambu", {"bed_leveling", "flow_calibration", "vibration_calibration", "timelapse", "plate"},
+               [&](const json& g, const std::string& n, const std::string& k) {
+                   if (n == "plate") {
+                       if (!g.at(n).is_string())
+                           fail(k, "must be a string");
+                       s.bambu_plate = g.at(n).get<std::string>();
+                       return;
+                   }
+                   if (!g.at(n).is_boolean())
+                       fail(k, "must be true or false");
+                   (n == "bed_leveling"       ? s.bambu_bed_leveling
+                    : n == "flow_calibration" ? s.bambu_flow_calibration
+                    : n == "timelapse"        ? s.bambu_timelapse
+                                              : s.bambu_vibration_calibration) = g.at(n).get<bool>();
+               });
     read_group(root, "zaa", {"enabled", "min_thickness", "raise"}, [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "min_thickness") {
             const double v = number(g, n, k);
@@ -2606,7 +2709,7 @@ Settings parse_checked(std::string_view text) {
     });
     read_group(root, "gcode", {"resolution", "color_change", "pause", "before_layer", "after_layer", "between_objects", "volumetric_e",
                                "verbose_comments", "arcs", "progress", "auto_temperatures", "binary", "object_labels",
-                               "toolchange", "custom_template", "corner_smoothing"},
+                               "toolchange", "custom_template", "corner_smoothing", "thumbnails"},
                [&](const json& g, const std::string& n, const std::string& k) {
         if (n == "object_labels") {
             s.object_labels = choice<ObjectLabels>(
@@ -2624,6 +2727,17 @@ Settings parse_checked(std::string_view text) {
              : n == "progress"          ? s.gcode_progress
              : n == "auto_temperatures" ? s.auto_temperatures
                                         : s.verbose_comments) = g.at(n).get<bool>();
+            return;
+        }
+        if (n == "thumbnails") {
+            if (!g.at(n).is_string())
+                fail(k, "must be a string");
+            try {
+                parse_thumbnails(g.at(n).get<std::string>());
+            } catch (const std::invalid_argument& e) {
+                fail(k, e.what());
+            }
+            s.gcode_thumbnails = g.at(n).get<std::string>();
             return;
         }
         if (n != "resolution" && n != "corner_smoothing") {
@@ -3271,6 +3385,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"output.post_process", json(s.post_process).dump()},
         {"gcode.auto_temperatures", flag(s.auto_temperatures)},
         {"gcode.binary", flag(s.gcode_binary)},
+        {"gcode.thumbnails", text(s.gcode_thumbnails)},
         {"extrusion.start_gcode", text(s.filament_start_gcode)},
         {"extrusion.end_gcode", text(s.filament_end_gcode)},
         {"machine.corner_speed", speed(s.corner_speed)},
@@ -3467,6 +3582,11 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"cooling.slowdown_logic", s.slowdown_logic == SlowdownLogic::Uniform ? "uniform" : "consistent_surface"},
         {"cooling.transition_distance", num(s.transition_distance)},
         {"compute.gpu", s.gpu == GpuMode::Auto ? "auto" : "off"},
+        {"bambu.bed_leveling", s.bambu_bed_leveling ? "true" : "false"},
+        {"bambu.flow_calibration", s.bambu_flow_calibration ? "true" : "false"},
+        {"bambu.vibration_calibration", s.bambu_vibration_calibration ? "true" : "false"},
+        {"bambu.timelapse", s.bambu_timelapse ? "true" : "false"},
+        {"bambu.plate", text(s.bambu_plate)},
         {"zaa.enabled", s.zaa ? "true" : "false"},
         {"zaa.min_thickness", num(s.zaa_min_thickness)},
         {"zaa.raise", s.zaa_raise ? "true" : "false"},
@@ -3572,7 +3692,7 @@ std::string settings_json(const Settings& s) {
         acceleration[n] = *acceleration_of(s, n);
     // A speed not set is null: the printer's profile gives it (docs/CONFIG.md).
     const auto speed = [](double v) { return v > 0.0 ? ordered_json(v) : ordered_json(nullptr); };
-    const ordered_json root = {
+    ordered_json root = {
         {"layers",
          {{"height", s.layer_height},
           {"first_height", s.first_layer_height},
@@ -3974,6 +4094,12 @@ std::string settings_json(const Settings& s) {
           {"slowdown_logic", s.slowdown_logic == SlowdownLogic::Uniform ? "uniform" : "consistent_surface"},
           {"transition_distance", s.transition_distance}}},
         {"compute", {{"gpu", s.gpu == GpuMode::Auto ? "auto" : "off"}}},
+        {"bambu",
+         {{"bed_leveling", s.bambu_bed_leveling},
+          {"flow_calibration", s.bambu_flow_calibration},
+          {"vibration_calibration", s.bambu_vibration_calibration},
+          {"timelapse", s.bambu_timelapse},
+          {"plate", s.bambu_plate}}},
         {"zaa", {{"enabled", s.zaa}, {"min_thickness", s.zaa_min_thickness}, {"raise", s.zaa_raise}}},
         {"fuzzy",
          {{"mode", fuzzy_mode_name(s.fuzzy_mode)},
@@ -4061,9 +4187,12 @@ std::string settings_json(const Settings& s) {
           {"progress", s.gcode_progress},
           {"object_labels", object_labels_name(s.object_labels)},
           {"auto_temperatures", s.auto_temperatures},
-          {"binary", s.gcode_binary}}},
+          {"binary", s.gcode_binary},
+          {"thumbnails", s.gcode_thumbnails}}},
         {"changes", changes_json(s.changes)},
     };
+    if (!s.machine_macros.empty())
+        root["machine"]["macros"] = machine_macros_json(s.machine_macros);
     return root.dump(2) + "\n";
 }
 

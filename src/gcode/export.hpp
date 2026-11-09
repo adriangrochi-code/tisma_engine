@@ -1,5 +1,6 @@
 #pragma once
 
+#include "gcode/binary.hpp"
 #include "gcode/check.hpp"
 #include "report/warnings.hpp"
 
@@ -30,7 +31,8 @@ struct GcodeExport {
 // With gcode.binary, the G-code that passed is written in the binary format
 // (binary_gcode) and read back before it gets its name.
 // warnings, when given, gets the writer's warnings (as write_gcode).
+// thumbnails go in a binary G-code (gcode_thumbnails).
 GcodeExport export_gcode(const std::filesystem::path& path, const SlicedModel& model, const Settings& settings,
-                         std::vector<Warning>* warnings = nullptr);
+                         std::vector<Warning>* warnings = nullptr, const std::vector<GcodeThumbnail>& thumbnails = {});
 
 } // namespace tisma

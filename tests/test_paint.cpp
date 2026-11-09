@@ -10,7 +10,9 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
+#include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <numbers>
 #include <regex>
 #include <sstream>
@@ -141,6 +143,38 @@ TEST_CASE("paint: a round brush paints a disc on a large face and erases it agai
     paint(p, PaintChannel::Support, m, erase);
     CHECK(p.empty());
     CHECK(p.size(PaintChannel::Support) == 0);
+}
+
+TEST_CASE("paint: a stroke from one dab to the next paints the whole band between them (BH44)", "[paint]") {
+    const TriangleMesh m = box(0, 0, 0, 40, 40, 10);
+    Painting p;
+    Brush brush;
+    brush.radius = 2.0;
+    brush.detail = 0.1;
+    brush.view = {0, 0, -1};
+    brush.stroke = true;
+    brush.from = {5, 20, 10};
+    brush.centre = {35, 20, 10};
+    paint(p, PaintChannel::Seam, m, brush);
+    // A band 30 mm long and 4 wide with round ends: 30 x 4 + pi r2.
+    const double band = 30.0 * 4.0 + std::numbers::pi * 4.0;
+    CHECK_THAT(painted_area(p, PaintChannel::Seam, m, kPaintEnforce), WithinRel(band, 0.03));
+    // Two separate dabs at its ends leave the middle bare.
+    Painting dots;
+    Brush dab = brush;
+    dab.stroke = false;
+    paint(dots, PaintChannel::Seam, m, dab);
+    dab.centre = brush.from;
+    paint(dots, PaintChannel::Seam, m, dab);
+    CHECK_THAT(painted_area(dots, PaintChannel::Seam, m, kPaintEnforce), WithinRel(2.0 * std::numbers::pi * 4.0, 0.03));
+    // A stroke across an edge reaches the side face too, within the radius.
+    Painting edge;
+    Brush across = brush;
+    across.view = {0, 0, 0};
+    across.from = {20, 39, 10};
+    across.centre = {20, 41, 9};
+    paint(edge, PaintChannel::Seam, m, across);
+    CHECK(painted_area(edge, PaintChannel::Seam, m, kPaintEnforce) > 10.0);
 }
 
 TEST_CASE("paint: a brush larger than a triangle marks it whole", "[paint]") {
@@ -411,4 +445,41 @@ TEST_CASE("paint: the slicer follows painted support and seams", "[paint]") {
     }
     CHECK(outer >= 90);
     CHECK(on_seam == outer);
+}
+
+// Not run by default: strokes on a part of a few huge triangles (PLAN.md,
+// «Pintura en piezas de pocos triángulos enormes»).
+TEST_CASE("paint bench: 200 strokes on a 100 mm cube of 12 triangles", "[.bench]") {
+    TriangleMesh cube;
+    const float s = 100.0f;
+    const Vec3f v[8] = {{0, 0, 0}, {s, 0, 0}, {s, s, 0}, {0, s, 0}, {0, 0, s}, {s, 0, s}, {s, s, s}, {0, s, s}};
+    const int f[12][3] = {{0, 2, 1}, {0, 3, 2}, {4, 5, 6}, {4, 6, 7}, {0, 1, 5}, {0, 5, 4},
+                          {1, 2, 6}, {1, 6, 5}, {2, 3, 7}, {2, 7, 6}, {3, 0, 4}, {3, 4, 7}};
+    for (const auto& t : f)
+        cube.add_triangle(v[t[0]], v[t[1]], v[t[2]]);
+    Painting p;
+    Brush b;
+    b.radius = 2.0;
+    b.detail = b.radius / 6.0;
+    b.stroke = true;
+    const auto t0 = std::chrono::steady_clock::now();
+    for (int i = 0; i < 200; ++i) {
+        const float x = 10.0f + 0.4f * float(i), y = 50.0f + 20.0f * std::sin(0.05f * float(i));
+        b.from = b.centre;
+        b.centre = {x, y, s};
+        if (i == 0)
+            b.from = b.centre;
+        paint(p, PaintChannel::Support, cube, b);
+    }
+    const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    std::printf("200 strokes on 12 triangles: %.1f ms (%.2f ms a stroke)\n", ms, ms / 200.0);
+    // The view's rebuild of the touched triangles after a stroke.
+    const auto t1 = std::chrono::steady_clock::now();
+    std::size_t pieces = 0;
+    for (std::size_t t = 0; t < cube.triangle_count(); ++t)
+        for_each_painted(p, PaintChannel::Support, t, cube.corner(t, 0), cube.corner(t, 1), cube.corner(t, 2),
+                         [&](const Vec3f&, const Vec3f&, const Vec3f&, std::uint8_t) { ++pieces; });
+    std::printf("walk: %zu pieces, %.2f ms\n", pieces,
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count());
+    CHECK(ms > 0.0);
 }

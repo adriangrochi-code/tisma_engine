@@ -10,6 +10,61 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+### Cambiado
+
+- El relleno del soporte en árbol sale de campos de distancias calculados para muchas capas a la vez, en la GPU si
+  hay una. Sin GPU tarda lo mismo que antes; el G-code es el mismo con GPU o sin ella.
+
+### Corregido
+
+- Con la retracción del firmware (G10/G11) y varios extrusores, una herramienta que se iba con la retracción hecha
+  cuando un cambio por altura dejaba el largo en 0 volvía sin G11 y extruía con el filamento retraído.
+
+### Agregado
+
+- Mi biblioteca (`tisma-engine library`): guardar piezas con su proyecto, recetas por impresora y análisis,
+  revisar si una receta o un análisis siguen valiendo, «La imprimí», exportar e importar `.tismalib`. Sin G-code.
+- G-code original de cada impresora del paquete (`machine.macros`, bloque `gcode`): dialectos PrusaSlicer, OrcaSlicer,
+  Creality Print, Elegoo Slicer y Cura; la extrusión relativa o absoluta que espera ese G-code; si no se puede
+  interpretar, se usa la versión simple con un aviso. Sin probar en una impresora.
+- Opciones al mandar a una Bambu Lab (`bambu.*`): nivelar la cama, calibrar el flujo y las vibraciones, timelapse y la
+  placa. Van en el pedido de impresión, y la placa también al G-code de inicio (`curr_bed_type`).
+- Cámara de las impresoras Bambu Lab A1 y P1 en la página Dispositivo: casilla «Cámara». Sin probar con una cámara
+  real.
+- La cama de una impresora del paquete también se dibuja cuando su imagen es PNG, no solo SVG (regla 14).
+- Página Dispositivo: «Programa en la red» para OctoPrint, Klipper (Moonraker), PrusaLink y Duet. Sirve para probar
+  la conexión, ver el estado, enviar el G-code laminado (y empezar a imprimir), pausar, seguir y cancelar, y abrir su
+  interfaz web. Con la conexión probada, el botón principal pasa a «Mandar a la impresora» y abre el diálogo de envío
+  con el nombre editable (en Duet también «Subir y simular»). Con OctoPrint, «Buscar en la red» lo encuentra por
+  Zeroconf. Sin probar con impresoras reales.
+- Miniaturas de la pieza en el G-code binario (`.bgcode`): ajuste `gcode.thumbnails` (por ejemplo `16x16/PNG,220x124/PNG`),
+  en PNG, JPG o QOI, también desde la línea de comandos. En el G-code de texto todavía no: se avisa.
+- Al conectar una impresora por USB se le preguntan sus límites (M115 y M503) y se llenan los datos vacíos del
+  perfil: velocidades y aceleraciones máximas, tirones, tamaño de la cama y avance de presión, con un aviso de
+  cuántos se tomaron. Lo mismo con Klipper (Moonraker) al probar la conexión. Lo que la persona escribió no se toca.
+
+### Arreglado
+
+- Los filamentos del paquete de perfiles traen su densidad y su precio por kilo (antes quedaban en 0 y el costo de la
+  impresión no se veía).
+- El soporte en árbol se lamina un tercio más rápido y escribe menos G-code (sus áreas, sin puntos más finos que un
+  octavo de cordón).
+- Pintar pesa menos: la vista rehace solo los triángulos que tocó el trazo, y la brocha corta en la mitad de piezas.
+- En Windows, abrir y guardar archivos usa los diálogos propios del sistema.
+- Pintar (costura, soportes, piel difusa) arrastrando rápido deja una línea continua y no puntos sueltos, con menos
+  trabajo por cuadro.
+- Mirando desde abajo de la cama (por ejemplo para pintar soportes), la cama ya no tapa la cara de abajo de la pieza:
+  queda solo la grilla.
+- La separación entre el borde de adherencia y la pieza ahora se ve en el nivel Normal (antes solo en Avanzado).
+- «Solo desde la cama» ahora también vale para los soportes de árbol (antes salían igual que sin la opción).
+- El G-code de inicio copiado del programa de otro fabricante (por ejemplo Anycubic) ya no falla por los nombres de sus
+  variables: se aceptan los de la lista de los G-code del paquete y los índices con una variable adentro
+  (`[first_layer_temperature[initial_tool]]`). Las que el motor todavía no llena van en 0 y se nombran en el registro.
+- Una respuesta dañada de la impresora («inf», «nan») ya no puede escribir un límite infinito en el perfil.
+- Con dos boquillas distintas, la pared con la más fina y alturas de capa por encima de su tope, las piezas de cada
+  extrusor se cortaban en capas distintas de las de la placa y sus paredes quedaban a otra altura (el fuzz, semilla
+  202611050900, corrida 1658).
+
 ## [0.11.0-beta.1] - 2026-11-05
 
 Beta para los probadores del dueño: Windows y Linux. En Windows, el instalador `tisma-engine-0.11.0-beta.1-setup-windows-x64.exe`

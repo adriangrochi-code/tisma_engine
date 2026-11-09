@@ -280,6 +280,65 @@ PaintMesh paint_mesh(const std::vector<PlateObject>& objects, const std::vector<
     return out;
 }
 
+void PaintMeshCache::touch(std::size_t object, const std::vector<std::uint32_t>& triangles) {
+    if (object < objects_.size())
+        objects_[object].stale.insert(objects_[object].stale.end(), triangles.begin(), triangles.end());
+}
+
+PaintMesh PaintMeshCache::build(const std::vector<PlateObject>& objects, const std::vector<TriangleMesh>& placed,
+                                PaintChannel channel) {
+    const std::size_t n = std::min(objects.size(), placed.size());
+    // One triangle's pieces, walked again.
+    const auto walk_one = [&](std::size_t i, std::size_t t, Piece& piece) {
+        piece.vertices.clear();
+        piece.marks.clear();
+        const TriangleMesh& m = placed[i];
+        const Vec3 nrm = triangle_normal(m, t);
+        for_each_painted(objects[i].painting, channel, t, m.corner(t, 0), m.corner(t, 1), m.corner(t, 2),
+                         [&](const Vec3f& a, const Vec3f& b, const Vec3f& c, std::uint8_t mark) {
+                             for (const Vec3f* q : {&a, &b, &c})
+                                 piece.vertices.insert(piece.vertices.end(), {q->x, q->y, q->z, nrm.x, nrm.y, nrm.z});
+                             piece.marks.push_back(std::min<std::uint8_t>(mark, kPaintMaxMark));
+                         });
+    };
+    if (objects_.size() != n) { // everything again
+        objects_.assign(n, Object{});
+        for (std::size_t i = 0; i < n; ++i) {
+            const std::size_t count = std::min(objects[i].painting.size(channel), placed[i].triangle_count());
+            for (std::size_t t = 0; t < count; ++t)
+                if (!objects[i].painting.tree(channel, t).empty())
+                    walk_one(i, t, objects_[i].triangles[std::uint32_t(t)]);
+        }
+    }
+    for (std::size_t i = 0; i < n; ++i) {
+        Object& o = objects_[i];
+        for (const std::uint32_t t : o.stale) {
+            const bool painted = t < objects[i].painting.size(channel) && t < placed[i].triangle_count() &&
+                                 !objects[i].painting.tree(channel, t).empty();
+            if (painted)
+                walk_one(i, t, o.triangles[t]);
+            else
+                o.triangles.erase(t);
+        }
+        o.stale.clear();
+    }
+    // Each mark's pieces together, as paint_mesh gives them.
+    std::vector<std::vector<float>> by_mark(kPaintMaxMark + 1);
+    for (const Object& o : objects_)
+        for (const auto& [t, piece] : o.triangles)
+            for (std::size_t k = 0; k < piece.marks.size(); ++k)
+                by_mark[piece.marks[k]].insert(by_mark[piece.marks[k]].end(), piece.vertices.begin() + std::ptrdiff_t(18 * k),
+                                               piece.vertices.begin() + std::ptrdiff_t(18 * (k + 1)));
+    PaintMesh out;
+    for (std::size_t mark = 1; mark < by_mark.size(); ++mark) {
+        if (by_mark[mark].empty())
+            continue;
+        out.groups.push_back({std::uint8_t(mark), out.vertices.size() / 6, by_mark[mark].size() / 6});
+        out.vertices.insert(out.vertices.end(), by_mark[mark].begin(), by_mark[mark].end());
+    }
+    return out;
+}
+
 std::array<double, 3> placed_size(const PlateObject& object) {
     if (object.mesh.empty())
         return {0.0, 0.0, 0.0};

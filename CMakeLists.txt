@@ -110,6 +110,15 @@ if(TISMA_GPU)
   )
   FetchContent_MakeAvailable(volk)
 endif()
+# stb_image_write 1.16 (MIT of its MIT-or-public-domain choice), only its one
+# header, in the core: the G-code thumbnails in JPG and compressed PNG.
+FetchContent_Declare(
+  stb_write
+  URL https://raw.githubusercontent.com/nothings/stb/d14d46f6b44456eb88beac58cba833a4135d4c89/stb_image_write.h
+  URL_HASH SHA256=cbd5f0ad7a9cf4468affb36354a1d2338034f2c12473cf1a8e32053cb6914a05
+  DOWNLOAD_NO_EXTRACT TRUE
+)
+FetchContent_MakeAvailable(stb_write)
 if(TISMA_BUILD_UI)
   # GLFW 3.4 (Zlib), Dear ImGui 1.92.9b (MIT; its Roboto Medium font is
   # Apache-2.0) and nanosvg (Zlib), see THIRD_PARTY.md: the interface only.
@@ -138,7 +147,15 @@ if(TISMA_BUILD_UI)
     GIT_TAG 239e102ec2c691f2902e20ace2ed36ee4a35cfe6 # no tags; 2026-07-10
     SOURCE_SUBDIR no-cmake
   )
-  FetchContent_MakeAvailable(glfw imgui nanosvg)
+  # stb_image (MIT of its MIT-or-public-domain choice), only its one header:
+  # the JPEG frames of a Bambu Lab printer's camera and PNG pictures.
+  FetchContent_Declare(
+    stb
+    URL https://raw.githubusercontent.com/nothings/stb/d14d46f6b44456eb88beac58cba833a4135d4c89/stb_image.h
+    URL_HASH SHA256=594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3
+    DOWNLOAD_NO_EXTRACT TRUE
+  )
+  FetchContent_MakeAvailable(glfw imgui nanosvg stb)
 endif()
 set(BUILD_SHARED_LIBS ${_tisma_shared})
 
@@ -179,6 +196,7 @@ add_library(tisma_core
   src/slice/variable_layers.cpp
   src/slice/zaa.cpp
   src/geom/bitgrid.cpp
+  src/geom/distance.cpp
   src/geom/polygons.cpp
   src/config/settings.cpp
   src/config/profiles.cpp
@@ -210,6 +228,7 @@ add_library(tisma_core
   src/gcode/arcs.cpp
   src/gcode/corners.cpp
   src/gcode/template.cpp
+  src/gcode/macro_variables.cpp
   src/gcode/output.cpp
   src/gcode/binary.cpp
   src/gcode/scarf.cpp
@@ -220,6 +239,8 @@ add_library(tisma_core
   src/gcode/travel.cpp
   src/gcode/cooling.cpp
   src/gcode/print_time.cpp
+  src/gcode/thumbnail.cpp
+  src/gcode/image_write.cpp
   src/report/stability.cpp
   src/report/warnings.cpp
   src/slice/printable.cpp
@@ -252,6 +273,7 @@ add_library(tisma_core
   src/io/vtk.cpp
   src/io/ply.cpp
   src/io/stl.cpp
+  src/io/png.cpp
   src/io/checksum.cpp
   src/io/zip.cpp
   src/io/xml.cpp
@@ -281,8 +303,10 @@ add_library(tisma_core
   src/catalog/catalog.cpp
   src/catalog/pack.cpp
   src/catalog/pack_install.cpp
+  src/library/library.cpp
   src/catalog/xz.cpp
   src/device/gcode_host.cpp
+  src/device/printer_limits.cpp
   src/device/printer.cpp
   src/device/serial_port.cpp
   src/device/simulator.cpp
@@ -299,6 +323,7 @@ add_library(tisma_core
   src/cli/part_cli.cpp
   src/cli/calibration_cli.cpp
   src/cli/design_cli.cpp
+  src/cli/library_cli.cpp
 )
 if(TISMA_GPU)
   target_sources(tisma_core PRIVATE src/gpu/compute_vulkan.cpp)
@@ -307,6 +332,7 @@ else()
   target_sources(tisma_core PRIVATE src/gpu/compute_none.cpp)
 endif()
 target_include_directories(tisma_core PUBLIC src)
+target_include_directories(tisma_core SYSTEM PRIVATE ${stb_write_SOURCE_DIR})
 # Kernels must give the same bits on the CPU and the GPU: no fused multiply-add.
 if(NOT MSVC)
   target_compile_options(tisma_core PRIVATE -ffp-contract=off)
@@ -381,7 +407,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(mbedtls)
 add_library(tisma_bambu STATIC src/net/tls.cpp src/device/mqtt.cpp src/device/ftps.cpp src/device/bambu.cpp
-  src/device/ssdp.cpp)
+  src/device/ssdp.cpp src/device/mdns.cpp)
 target_include_directories(tisma_bambu PUBLIC src)
 target_link_libraries(tisma_bambu PUBLIC tisma_core tisma_net PRIVATE mbedtls mbedx509 mbedcrypto nlohmann_json::nlohmann_json
   tisma_warnings Threads::Threads)
@@ -408,6 +434,7 @@ if(TISMA_BUILD_UI)
     src/ui/scene.cpp
     src/ui/icons.cpp
     src/ui/bed_art.cpp
+    src/ui/image_decode.cpp
     src/ui/png.cpp
     src/ui/text.cpp
     src/ui/setting_guide.cpp
@@ -428,6 +455,7 @@ if(TISMA_BUILD_UI)
     src/ui/session_marks.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
+  target_include_directories(tisma_ui SYSTEM PRIVATE ${stb_SOURCE_DIR})
   target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
   target_compile_definitions(tisma_ui PUBLIC TISMA_UPDATES_KEY="${TISMA_UPDATES_KEY}")
   if(WIN32)

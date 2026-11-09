@@ -273,15 +273,15 @@ TEST_CASE("templates in the G-code: automatic temperatures (rule 10, T10)", "[te
 
 TEST_CASE("templates in the G-code: an error fails the export (rule 8, T7)", "[template][gcode]") {
     Settings s = printer();
-    s.start_gcode = "G28\nM104 S{print_time}";
+    s.start_gcode = "G28\nM104 S{no_such_variable}";
     const SlicedModel model = slice_model(cube(), s);
     std::ostringstream out;
-    CHECK_THROWS_WITH(write_gcode(out, model, s), ContainsSubstring("machine.start_gcode, line 2: unknown variable 'print_time'"));
+    CHECK_THROWS_WITH(write_gcode(out, model, s), ContainsSubstring("machine.start_gcode, line 2: unknown variable 'no_such_variable'"));
     const std::filesystem::path path = test_temp_dir() / "tisma_template_error.gcode";
     std::filesystem::remove(path);
     const GcodeExport exported = export_gcode(path, model, s);
     CHECK_FALSE(exported.written);
-    CHECK_THAT(exported.error, ContainsSubstring("unknown variable 'print_time'"));
+    CHECK_THAT(exported.error, ContainsSubstring("unknown variable 'no_such_variable'"));
     CHECK_FALSE(std::filesystem::exists(path));
     // A template in a layer change names its section.
     s.start_gcode = "G28";

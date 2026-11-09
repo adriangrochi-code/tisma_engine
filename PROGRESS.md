@@ -11114,3 +11114,511 @@ documentación de la comunidad OpenBambuAPI (`mqtt.md`, `ftp.md`, `video.md`), q
 nada en una pieza chica. El rango del laminado deja anchos de hasta 4 veces la boquilla. Ahora, si el perfil no dice
 su boquilla, no se ofrece cuando el ancho de sus paredes no está entre 0,75 y 1,5 veces la de la variante («its
 0.82 mm walls are made for another nozzle than 0.4 mm»). Prueba: Acme Wide en `[pack]`.
+
+## 2026-11-05 — 0.11.0-beta.1 publicada, y mantenimiento de la noche
+
+- **Publicada:** la beta de los probadores salió como pre-release `v0.11.0-beta.1`, con la fusión de dev en alpha
+  (#53, c3516aa).
+  - Archivos: el instalador de Windows (`…-setup-windows-x64.exe`, 48 MB) y los `.zip` de Windows y Linux.
+  - No lleva `updates.json`: no hay clave, así que el actualizador queda apagado.
+  - El paso de NSIS en la CI de Windows funcionó la primera vez.
+- **Antes, el CI de Windows en 9e81a74:** falló en `ssdp.cpp`, porque la macro `max` de `windows.h` rompía
+  `std::max`. Se arregló en 4060e79: `NOMINMAX`, `inet_pton` y tamaños de socket explícitos.
+- **Mantenimiento:**
+  - fuzz de 2000 corridas con la semilla 202611050413: 0 fallas, 19 rechazadas por no imprimibles;
+  - ASan (con fugas) en 4060e79 sobre `[bambu]`, `[pack]`, `[gcode][check]` y `[cli][cloud]`: 54 casos limpios, el
+    código de red nuevo incluido.
+- **Sin probar:** el instalador en un Windows real y Bambu Lab con una impresora real. Los prueba la sesión de fichas
+  y después el dueño.
+
+## 2026-11-05 — cámara de las Bambu Lab en la interfaz
+
+- **Lector de JPEG y PNG:** stb_image 2.30 (MIT), anotado en THIRD_PARTY.md, en créditos y con su licencia. Lo
+  envuelve `src/ui/image_decode.*`: solo JPEG y PNG, desde memoria, hasta 8192 píxeles por lado. Sirve también para
+  las texturas PNG de la cama (regla 14, pendiente).
+- **La cámara como flujo:** `bambu_camera_stream` entrega cada JPEG hasta que se pide parar, la cámara cierra o pasan
+  10 s sin imagen. `bambu_camera` usa esa misma función. El simulador manda un JPEG real de 32×24 cada 50 ms.
+- **Interfaz:** casilla «Cámara» en el panel Bambu Lab. Un hilo lee los cuadros y la interfaz muestra el último.
+  Si la cámara se corta, se dice por qué y que solo las series A1 y P1 la mandan por la red local.
+- **Vulkan:** `VulkanWindow::remove_texture` libera una textura cuando terminan los cuadros en vuelo que la usaban.
+- **Pruebas:**
+  - `decode_image` lee el JPEG del simulador y un PNG de 4×3, y rechaza bytes que no son imagen o están cortados;
+  - `ui_bambu_print` prende la cámara, ve el cuadro de 32×24 y la apaga;
+  - a mano, con Vulkan y la cámara prendida a 20 cuadros por segundo: sin errores.
+- **Sin probar:** con una cámara real.
+
+**Sigue:** la textura PNG de la cama (regla 14) con el mismo lector; después, lo que sigue del PLAN.
+
+## 2026-11-05 — imagen PNG de la cama (regla 14)
+
+- `bed_image_art` dibuja la imagen PNG de la cama de un perfil del paquete. Se ubica igual que la SVG: lo más grande
+  que entra, centrada, sin estirar.
+- Para que las dos vistas 3D la dibujen como el SVG, la imagen se convierte en rectángulos de color plano:
+  - se parte en celdas, a lo sumo 192 por el lado largo;
+  - cada canal se redondea a 8 niveles;
+  - las celdas casi transparentes se dejan fuera;
+  - cada tramo de un color en una fila es un rectángulo.
+  Decisión del motor: no hace falta una textura en los dos renderizadores. El costo es que las fotos pierden detalle
+  fino y gradientes.
+- Prueba `[bed_art]`: ubicación, partes transparentes, celdas y redondeo de color.
+- **Sin probar:** con un PNG de un paquete real en la interfaz. Lo cubre solo la prueba unitaria.
+
+**Sigue:** lo que sigue del PLAN.
+
+## 2026-11-05 — miniaturas del G-code, parte 1 (gcode_extras.md, regla 8)
+
+- **Ajuste `gcode.thumbnails`:** una lista como `16x16/PNG,32x24/JPG,20x20/QOI`. Lados de 1 a 1024 píxeles; sin
+  formato, vale PNG. Una lista mal escrita se rechaza al cargar los ajustes, diciendo qué elemento está mal.
+  - En el panel va en la tarjeta del G-code de salida, como texto a lo ancho. Mientras el valor está mal, se ve el
+    error en rojo y no se aplica.
+- **`draw_part`:** dibuja la pieza en la CPU, sin la vista 3D, para que sirva también desde la línea de comandos:
+  - vista isométrica, lo más grande que entra, con un margen chico;
+  - sombreada por una luz desde arriba del ojo, con el fondo transparente;
+  - dibujada al doble del tamaño y reducida a la mitad, para suavizar los bordes.
+- **QOI:** se escribe y se lee según su especificación pública.
+- **Pruebas `[thumbnail]`:** la lista y sus errores; el dibujo centrado, con fondo transparente y caras de distinto
+  tono; QOI de ida y vuelta con todas sus operaciones.
+- **Falta:**
+  - cómo van las miniaturas dentro del G-code. Se le preguntó al equipo de fichas por el formato exacto (comentarios,
+    codificación, largo de línea), porque `formats.md`, regla 20, lo deja pendiente;
+  - PNG desde el núcleo;
+  - JPG (necesita un codificador; se anota en THIRD_PARTY antes de usarlo);
+  - el bloque de miniaturas del G-code binario.
+- Decisión del motor, anotada acá: el motor sí las escribe desde la línea de comandos cuando llegue el formato. La
+  prueba X7 cuenta lo que hace Tisma Slicer, y `gcode_firmware.md` pide la miniatura en cuanto el motor pueda dibujarla
+  sin la vista 3D.
+
+## 2026-11-05 — miniaturas del G-code, parte 2: en el G-code binario
+
+- El equipo de fichas confirmó el bloque de miniatura del formato binario: tipo 5, con formato (0 PNG, 1 JPG, 2 QOI),
+  ancho y alto en 16 bits, y la imagen como datos. Va después de los datos de la impresora y antes de los de la
+  impresión.
+- `binary_gcode` escribe esos bloques y `read_binary_gcode` los lee de vuelta.
+- Las miniaturas se hacen desde la pieza en los tres lugares que exportan: la línea de comandos (`slice`), la
+  interfaz y los nodos.
+- El escritor de PNG pasó al núcleo (`src/io/png.*`), así la línea de comandos lo usa sin la interfaz.
+- Avisos:
+  - en un G-code de texto: «the pictures go only in a binary G-code for now»;
+  - una JPG pedida se deja fuera y se avisa.
+- Los textos de ayuda del ajuste y docs/CONFIG.md están al día.
+- **Falta:**
+  - la forma en el G-code de texto (la mide el equipo de fichas);
+  - el codificador JPG;
+  - comprimir el PNG (hoy son bloques sin comprimir: una de 220×124 ocupa unos 110 kB).
+
+## 2026-11-05 — miniaturas del G-code, parte 3: JPG y PNG comprimido
+
+- stb_image_write 1.16 (MIT) anotado en THIRD_PARTY.md y en créditos antes de usarlo, con la licencia leída en ese
+  commit. Va en el núcleo y escribe a memoria.
+- Con él, las miniaturas JPG (sobre fondo blanco, calidad 90) y PNG comprimido. Una PNG de 220×124 bajó de unos
+  110 kB a menos de un cuarto.
+- La prueba `[thumbnail]` pide las tres miniaturas de X7 en un G-code binario y las encuentra.
+- **Falta:** solo la forma en el G-code de texto. La mide el equipo de fichas.
+
+## 2026-11-05 — Duet (RepRapFirmware) por la red
+
+- `print_host` ya maneja Duet en modo autónomo, además de OctoPrint, Moonraker y PrusaLink. Está hecho desde la
+  documentación pública de la API de RepRapFirmware (su wiki, «HTTP requests» y «Object Model Documentation»), no desde
+  su código.
+- Qué hace:
+  - abre una sesión con la contraseña de la placa (`reprap` si no se dio ninguna), con su clave de sesión, y la cierra
+    al terminar;
+  - sube el archivo a `0:/gcodes/` con su CRC-32 y lo empieza con `M32`;
+  - lee el estado del modelo de objetos: estado, archivo, avance, tiempo restante y temperaturas de la boquilla y de
+    la cama;
+  - pausa con `M25` y sigue con `M24`;
+  - cancela con `M0`, pausando antes si el trabajo está imprimiendo, como explicaron los desarrolladores en el foro
+    de Duet.
+- Prueba contra un Duet simulado: versión, contraseña equivocada, subida con CRC, `M32`, estado completo, pausa,
+  reanudación, cancelación y sesiones cerradas.
+- **Falta:** que la página de Dispositivo de la interfaz use estos programas de red, y la búsqueda por Zeroconf. Sin
+  probar con una placa real.
+
+## 2026-11-05 — programas de red en la página Dispositivo
+
+- La página Dispositivo tiene una tercera opción, «Programa en la red», con el programa (OctoPrint, Klipper con
+  Moonraker, PrusaLink o Duet), la dirección y lo que cada uno pide:
+  - clave de API;
+  - en PrusaLink, también usuario y contraseña;
+  - en Duet, la contraseña de la placa.
+- «Probar» (devices.md, regla 14):
+  - contesta «La conexión con Duet funciona bien.» o «No se pudo conectar con Duet: causa (código)»;
+  - si la conexión funciona, guarda la clave y la contraseña en el almacén del sistema, nunca en las preferencias.
+- Con la conexión probada:
+  - una línea de estado con las temperaturas, y el avance si imprime;
+  - «Enviar el G-code laminado», con «Empezar a imprimir» (regla 22);
+  - pausar, seguir y cancelar;
+  - «Abrir en el navegador» (regla 15).
+- Las preferencias guardan el programa, la dirección y el usuario.
+- Prueba `ui_print_host_offline`: un Duet en una dirección donde no hay nada contesta «unreachable» y no ofrece
+  enviar. El cliente de cada programa ya tenía su prueba contra un simulador propio.
+- **Falta:**
+  - el diálogo de envío con el nombre editable (regla 20);
+  - «Subir y simular» de Duet (`M37`);
+  - el botón principal «Enviar a la impresora» (regla 19);
+  - la búsqueda por Zeroconf.
+  Sin probar con impresoras reales.
+
+## 2026-11-05 — enviar a un programa de red desde el botón principal (devices.md, reglas 19 y 20)
+
+- Con un programa de red elegido y probado, el botón principal pasa a «Mandar a la impresora». «Exportar G-code» queda
+  en el menú ▲.
+- El botón abre el diálogo «Subir a la impresora con este nombre:»:
+  - el nombre es editable y sale de `output.filename_format`, con el tiempo y el peso de la impresión;
+  - la nota de las barras para separar carpetas;
+  - los botones Subir, Subir e imprimir y Cancelar; en Duet, también Subir y simular (`M37 P"…"`).
+- Prueba: el Duet simulado recibe `M37` con el archivo.
+- **Sin probar en la interfaz:** el diálogo, porque la prueba de la interfaz no tiene un programa de red que conteste.
+  Lo cubren las pruebas del cliente.
+- **Falta:** la búsqueda por Zeroconf.
+
+## 2026-11-05 — OctoPrint por Zeroconf
+
+- `src/device/mdns.*`: pregunta mDNS por los registros PTR de `_octoprint._tcp.local`, a 224.0.0.251:5353 con el bit
+  QU, para que la respuesta llegue al puerto propio y no haga falta el 5353 de otro programa.
+- Lee las respuestas: PTR, SRV (host y puerto), TXT (`path`, `version`, `model`…) y A (la dirección IPv4), con la
+  compresión de nombres del RFC 1035. Con un paquete dañado o con punteros en bucle no tira nada.
+- En la página Dispositivo, con OctoPrint elegido, «Buscar en la red» lista lo que encuentra durante 4 s; elegir uno
+  completa la dirección (`http://ip:puerto/path`).
+- Prueba `[ssdp]`: la pregunta byte a byte y una respuesta armada a mano con nombres comprimidos.
+- **Falta:** Moonraker (se anuncia solo con su nombre `.local`). Sin probar con una impresora real.
+
+## 2026-11-05 — leer los límites de la impresora, parte 1: el núcleo
+
+- `parse_marlin_limits` lee:
+  - de M115: el nombre del firmware y el área de trabajo, si el firmware tiene el informe de geometría;
+  - de M503: las velocidades máximas (M203), las aceleraciones (M201 y M204 P R T), los tirones o la desviación de
+    unión (M205) y el avance de presión (M900 K), pasando de pulgadas a milímetros si dice G20.
+  - Las líneas de M503 se leen sin depender de su formato exacto, que la documentación no da: cada comando como
+    palabra, con sus parámetros letra-número. Un dato que no llega no se escribe como 0.
+- `parse_klipper_limits` lee los objetos `toolhead` y `configfile` de Moonraker.
+- `apply_limits` llena solo los datos vacíos, o todos si se pide «Leer de la impresora».
+- Error encontrado y arreglado en las pruebas: «max:{» contenía «x:».
+- Prueba `[limits]` con la respuesta de M115 de la documentación de Marlin, un M503 en milímetros y otro en pulgadas,
+  Klipper, y la regla de no pisar lo que escribió la persona.
+- **Sigue:** pedirlos al conectar por USB y por Moonraker, y la lista para aceptarlos en la interfaz.
+
+## 2026-11-05 — mantenimiento (bloque de 8 h, 08:41 UTC)
+
+- **Fuzz de 2000 corridas, semilla 202611050900:** 1 falla y 28 rechazadas por no imprimibles.
+  - La falla: dos boquillas (0,4 y 0,339), las paredes con la fina, alturas de capa por lista que piden más que su
+    tope, y copias con un extrusor cada una. El juego compartido de capas de las piezas (`slice_tools`, `frame.stack`)
+    se planificaba sin el tope de la boquilla de las paredes: 38 capas de 0,4 mm. La placa usaba 40 capas de
+    0,339 mm. Las paredes de cada capa quedaban en otra.
+  - Arreglo: `frame.stack` con los mismos ajustes que la placa (`part_nozzles`).
+  - Prueba nueva en `[nozzles]`: falla con el código anterior y pasa con el arreglo.
+- **Herramienta:** `TISMA_FUZZ_ONLY=n` lamina solo la corrida n del fuzz y sortea las anteriores sin laminarlas. La
+  corrida 1658 se reproduce en 0,2 s en vez de unos 10 minutos.
+- **Prueba intermitente:** `ui_pack_offline_first_run` falló dos veces en la corrida completa y pasa sola.
+  - Causa probable: con la máquina ocupada, el aviso «Sin conexión» vence (6 s) antes de que el script lo busque.
+  - Arreglo: el script guarda los avisos ya mostrados y `expect-toast` también busca entre ellos. No se pudo
+    reproducir la falla a propósito.
+- **Avisos del compilador:** se arreglaron los `-Wshadow` de `gcode/writer.cpp` (barrido hacia adentro) y de
+  `aero/aero.cpp`, y un `-Wconversion` de `cad/sketch.cpp`.
+- **ASan** sobre lo nuevo de la noche (`[thumbnail]`, `[limits]`, `[device][net]`, `[ssdp]`, `[image]`, `[bed_art]`,
+  `[bambu]`): 30 casos, limpio.
+- **Sin medir esta vez:** las fases del banco de pruebas. La máquina estaba cargada con el fuzz y la compilación con
+  ASan, y los números no habrían servido.
+
+## 2026-11-05 — leer los límites de la impresora, parte 2: al conectar por USB
+
+- El anfitrión USB guarda las respuestas enteras de M115 y de un M503 nuevo, que se pide al conectar. Un firmware que
+  no conoce M503 no deja nada.
+- El simulador contesta M115 con el informe de geometría, como en la documentación de Marlin, y M503 con sus límites.
+- Al conectar, la interfaz llena los datos vacíos del perfil (regla 4) con un aviso «N datos del perfil tomados de la
+  impresora (firmware)». Si la cama está vacía y la impresora no informa su tamaño, avisa que hay que escribirlo a mano
+  (regla 6).
+- Pruebas:
+  - `[device]`: el simulador da el área de trabajo y los límites;
+  - `ui_device_limits`: aparece el aviso al conectar.
+- **Falta:** Moonraker (toolhead y configfile al probar la conexión), la lista para aceptar uno por uno lo que difiere,
+  y el botón «Leer de la impresora» en Límites.
+- **Pruebas de la interfaz que fallaban al azar en Linux:** en cada corrida completa, la primera prueba de la interfaz
+  que arrancaba fallaba a veces en 0,3 s con «Failed to open display». La causa es la carrera de `xvfb-run -a`: dos
+  pruebas que arrancan juntas eligen el mismo display.
+  - Arreglo: `tests/xvfb_run.sh` saca el número de display del número de proceso y, si el display no abre, prueba de
+    nuevo (a lo sumo tres veces). Todas las pruebas de la interfaz pasan por ahí.
+  - En Windows no aplica.
+
+## 2026-11-05 — leer los límites de la impresora, parte 3: Klipper por Moonraker
+
+- `host_limits` pide a Moonraker los objetos `toolhead` y `configfile.settings`
+  (`/printer/objects/query?toolhead&configfile=settings`).
+- En la página Dispositivo, cuando «Probar» funciona con Klipper, los datos vacíos del perfil se llenan con el mismo
+  aviso que por USB.
+- Prueba en `[device][net]` contra el Moonraker simulado.
+- **Falta:** la lista «En el perfil / En la impresora» para aceptar uno por uno lo que difiere, y el botón «Leer de la
+  impresora» en Límites. Sin probar con una impresora real.
+
+## 2026-11-05 — mantenimiento (16:41)
+
+- Revisado: `dev` y `main` al día (nada nuevo en `main`); fuzz 2000 corridas con la semilla 202611051641: 0 fallas,
+  26 descartadas por no imprimibles; ASan y UBSan sobre `[limits]`, `[ssdp]`, `[thumbnail]` y `[print_host]`: limpio.
+- Revisión de los lectores que reciben datos de la red o del puerto serie (lo nuevo de la noche):
+  - **Encontrado y arreglado:** los límites de Marlin y Klipper aceptaban «inf», «nan» o «1e999» de una línea dañada
+    y habrían escrito una velocidad o una cama infinitas en el perfil. Ahora solo se toman números finitos.
+  - **Encontrado y arreglado:** un archivo QOI de 22 bytes que dice medir 16384 × 16384 pedía 1 GB antes de fallar.
+    Ahora se rechaza enseguida: cada operación da a lo sumo 62 píxeles.
+  - mDNS: 5000 copias dañadas de una respuesta, sin lecturas fuera del paquete.
+- Pruebas nuevas: copias dañadas de una respuesta mDNS, de un QOI y de M115/M503.
+- No medido: las fases del banco de pruebas (sin cambios en el corte desde la última medición).
+
+## 2026-11-05 — BH41: variables de los G-code de otros programas (pedido del dueño: BH37–BH44 antes del plan)
+
+- El tester pegó el G-code de inicio del programa de Anycubic para una Kobra 3:
+  `G9111 bedTemp=[first_layer_bed_temperature] extruderTemp=[first_layer_temperature[initial_tool]]`.
+  - En `dev` la primera variable ya salía (BH30).
+  - El índice con una variable adentro quedaba sin reemplazar.
+- Hecho (`gcode_macros.md`, reglas 1, 5, 7 a 10 bis; `gcode_variables.md`, de `spec/next` 650b830):
+  - forma vieja `[nombre[índice]]` (el índice, un número o una variable) y `[nombre_0]` (GM5);
+  - la tabla de las 290 variables de la lista sale de la ficha con `tools/gcode_variables_table.py`;
+  - los nombres de otros programas se buscan como su equivalente al usarlos: `nozzle_temperature_initial_layer[0]` da la
+    temperatura de primera capa (GM11), y `bed_temperature_initial_layer_single` el primer valor de la lista;
+  - lo que el motor sabe por sus ajustes: la cama (`print_bed_min/max/size`), la altura máxima, los límites de la máquina,
+    la retracción, los ventiladores, el modo vaso, la torre de purga;
+  - el resto va en 0, no o vacío. Si el G-code lo usa, el registro lo nombra (aviso de información `gcode_macro`);
+  - las palabras de comentario entre corchetes (`[Checks]`) quedan tal cual;
+  - un nombre que no está en ninguna lista sigue fallando (GM6).
+- Pruebas `[bh41]`: la línea del tester con 60/215 °C, `[temperature_0]`, alias, índice fuera del vector, variable sin
+  llenar.
+- **Falta de `gcode_macros.md`:**
+  - los dialectos `cura` (`{nombre}` solo);
+  - `relative_extrusion` (regla 10 ter);
+  - las opciones de envío de Bambu como variables (regla 12, GM8);
+  - llenar las variables que quedan en 0 (las de Bambu: `curr_bed_type`, las de calibración).
+
+## 2026-11-05 — BH39: «Solo desde la cama» con soportes de árbol
+
+- La opción solo se aplicaba al soporte en grilla. El árbol (`style = organic`) no pasaba por la regla 2 de
+  `supports_more.md`.
+- Arreglo: la misma regla corre sobre las áreas del árbol. Una zona (sus islas, unidas capa a capa) que apoya en la
+  pieza se quita entera; la que va a la cama queda.
+- Prueba `[bh39]` (SM2 con árbol): estante sobre una losa, sin soporte; una T sobre la cama, con soporte.
+
+## 2026-11-05 — BH42: separación del borde de adherencia
+
+- El ajuste existía (`adhesion.brim_gap`, regla 8 de `skirt_brim_raft.md`) pero solo en el nivel Avanzado, y la app
+  abre en Normal. Ahora está en Normal, al lado del ancho del borde. La lista Básica sigue siendo la de
+  `settings_panel.md`.
+- Prueba en `[layout]`.
+
+## 2026-11-05 — BH43: la cama no tapa la pieza desde abajo
+
+- Al pintar soportes mirando desde abajo, el plato opaco tapaba la cara de abajo de la pieza.
+- Sin ficha; decisión propia: con el ojo debajo de la cama (z < 0) no se dibujan el plato, el modelo de la cama ni su
+  imagen. La grilla queda. Vale en Vulkan y en OpenGL, pintando o no.
+- Prueba en `[ui]` (`plate_hidden`).
+- Captura OpenGL (xvfb) del soporte de teléfono desde arriba y desde abajo: desde abajo se ve la base por debajo. Sin
+  probar en Vulkan ni en Windows.
+
+## 2026-11-05 — BH44: trazo de pintura continuo y menos trabajo por cuadro
+
+- Pintando costura, el trazo quedaba en puntos sueltos y el FPS bajaba al arrastrar.
+- Causa del trazo: el arrastre ponía un toque cada media brocha en la pantalla, con tope de 64 por cuadro. Con brocha
+  chica y 30 FPS, un movimiento rápido pasaba el tope y los toques se separaban.
+- Arreglo:
+  - el motor de pintura tiene una brocha de tramo (`Brush::stroke`): marca lo que está a menos del radio del segmento
+    entre dos toques;
+  - el arrastre pone un toque cada brocha entera (tope 32), unido al anterior si está cerca (hasta 6 radios, para no
+    cruzar hacia una cara de atrás).
+  - Resultado: trazo continuo a cualquier velocidad y unas 4 veces menos toques por cuadro.
+- Medido (banco temporal, sin xvfb, con el CI corriendo al lado, así que con ruido): un toque de 2 mm cuesta ~0,3 ms y
+  rehacer la malla pintada ~0,2 ms.
+- Prueba `[paint]`: la banda de 30 mm tiene el área de un rectángulo más un círculo; dos toques sueltos dejan el medio
+  sin pintar. Las pruebas de interfaz de pintura pasan.
+- Sin probar en Windows ni con la pieza del tester.
+
+## 2026-11-05 — BH40: diálogos de Windows para abrir y guardar
+
+- En Windows, `FileBrowser::open` abre el diálogo del sistema (`GetOpenFileNameW`/`GetSaveFileNameW`):
+  - filtro con las extensiones, más «todos los archivos»;
+  - nombre propuesto y extensión agregada si falta;
+  - el sistema pregunta antes de reemplazar un archivo.
+- `draw()` entrega la respuesta una vez, así que el resto de la app no cambia.
+- Las corridas con `--ui-script` o `--screenshot` siguen con el selector dibujado, que es el que prueban.
+- En Linux no cambia nada.
+- **Sin probar en Windows:** solo se compiló la parte de Linux. El CI de Windows lo compila.
+- El CI completo de Linux en cd08b5d dio 1089/1090. Falló `ui_device_prints_to_simulator` por tiempo (162 s), con la
+  máquina cargada por una compilación en paralelo. Sola pasa en 1,4 s.
+
+## 2026-11-05 — carga de la pintura (pedido del dueño)
+
+- La vista de la pintura se rearmaba entera en cada cuadro de un trazo.
+  - Ahora `PaintMeshCache` guarda las piezas de cada triángulo pintado.
+  - `paint` dice qué triángulos cambió, y solo esos se recorren de nuevo.
+  - El resto se copia, en el mismo orden que antes. La prueba compara con `paint_mesh` después de cada trazo, de un
+    borrado y de un reinicio.
+- La brocha de la app corta hasta radio/6 en vez de radio/8: la mitad de piezas. Eso también aliviana el laminado de lo
+  pintado (BH37).
+- Medido: esfera de 12 640 triángulos, 200 trazos de 2 mm, rearmando la vista después de cada uno:
+
+  | | Antes (r/8, todo) | Caché | r/6, todo | r/6 + caché |
+  |---|---|---|---|---|
+  | Tiempo | 15,1 ms | 6,7 ms | 7,7 ms | 2,7 ms |
+  | Esquinas | 9 984 | 9 984 | 4 635 | 4 635 |
+
+- En una pieza de pocos triángulos enormes (el soporte de prueba, 48 triángulos), la caché no gana: todo el trazo cae en
+  un triángulo, y lo que cuesta es su árbol. Si la pieza del tester es así, falta acortar el recorrido del árbol en
+  `paint`.
+
+## 2026-11-05 — soporte en árbol, paso 1 (pedido del dueño: llevar el árbol a la GPU)
+
+- Medido en la esfera de 100 mm (12 640 triángulos, 4 núcleos, segunda de dos corridas):
+  - grilla: laminado 0,38 s, G-code 75 ms;
+  - árbol: laminado 1,05 s, G-code 149 ms.
+- El tiempo de más está en el relleno por capa del árbol, `tree_fill`: unos 700 ms de 730.
+  - El plan de ramas y las áreas: 120 ms.
+  - Dentro del relleno, en tiempo de CPU: segunda pared 50 %, pared 20 %, líneas 18 %, interfaz 7 %.
+- Paso 1 (CPU):
+  - las áreas del árbol se simplifican a 1/8 de cordón;
+  - la segunda pared no se busca cuando ninguna rama llega a ese ancho.
+  - Resultado: árbol 1,05 → 0,71 s de laminado, 149 → 103 ms de G-code. Las pruebas de soporte pasan sin cambios.
+- **Sigue:** paso 2 en GPU (campo de distancias por capa, en `PLAN.md`, «Soporte en árbol y pintura más livianos»).
+- Paso 2, primera pieza: `squared_distance_inside` (`src/geom/distance.*`), la distancia euclídea exacta de cada pixel
+  al borde en dos pasadas separables (Felzenszwalb y Huttenlocher, 2012), y `at_least` (la región achicada). Prueba
+  `[distance]`: igual a la fuerza bruta en 40 grillas al azar (13 777 comparaciones). Sigue: el kernel de GPU con la
+  misma salida, y `tree_fill` con el campo.
+- Paso 2, segunda pieza: el kernel `distance_inside.comp` (`gpu::Context::distance_inside`). Una invocación por
+  columna, después una por fila, con la misma aritmética. Prueba `[gpu][distance]`: los mismos números que la CPU en 12
+  grillas de hasta 150 × 90 (lavapipe). Sigue: `tree_fill` con el campo (paredes y adentro por umbral) y medir.
+
+## 2026-11-06 — opciones de envío a Bambu Lab (gcode_macros.md, regla 12)
+
+- Grupo de ajustes `bambu`, acordado con la sesión de Android, que manda los valores en `--config-over`:
+  - `bed_leveling` (sí), `flow_calibration` (sí), `vibration_calibration` (no), `timelapse` (no);
+  - `plate` (vacío: la elige la impresora).
+- Van en el pedido `project_file` (antes, flujo y vibraciones iban siempre en «no» y la placa en «auto»).
+- La placa llena `curr_bed_type`, la única de estas que la lista de variables tiene para el G-code.
+- Pregunté a la sesión de fichas:
+  - si el G-code de la A1 cambia con las otras opciones por alguna variable (GM8 mira el texto), o si lo decide la
+    impresora con el pedido;
+  - los nombres de las placas.
+- Pruebas: `[bambu]` (el pedido con las opciones y con los valores por defecto) y `[bh41]` (`curr_bed_type`).
+- Sin probar con una impresora real.
+
+## 2026-11-06 — costo y densidad de los filamentos del paquete (reporte de la app de Android)
+
+- `profile --pack` con un filamento del paquete daba `extrusion.cost` 0 y `extrusion.density` 0. La entrada trae
+  `material` con `density` y `cost_per_kg` (`profile_pack_format.md`, entradas, regla 4), y el motor no lo leía.
+- Arreglo: `parse_pack_entry` los pasa a `extrusion.density` y `extrusion.cost` cuando el perfil no trae los suyos.
+- Prueba en `[pack]`.
+- Paso 2, tercera pieza:
+  - `distance_level` (marching squares sobre el campo, interpolado entre centros de pixel): el contorno de la región
+    achicada sale liso y no en escalera. Un disco de 5 mm achicado 1 mm da el área a menos de 2 % y el largo a menos
+    de 2 %.
+  - `tree_fill_field`, el relleno del árbol desde el campo: pared a medio cordón, segunda pared donde entra
+    `tree_double_wall_diameter`, adentro a un cordón.
+  - Prueba `[field]`: igual a `tree_fill` (Clipper) en cinco formas: rama fina, tronco, dos unidas, varias, bajo la
+    pieza. Mismas paredes; largos a menos de 4 % las paredes y 8 % el total.
+  - Sigue: la transformada de todas las capas en una sola llamada a la GPU, el uso en el pipeline y la medición.
+- Paso 2, cuarta pieza:
+  - `Context::distance_inside` para muchas grillas en una sola llamada (las desplazamientos van en las constantes de
+    cada paso). Prueba `[gpu][distance]`: 12 grillas y una vacía, iguales a la CPU.
+  - Probé conectarlo al laminado, en la esfera de 100 mm, con el CI al lado:
+    - las dos rutas dan el mismo soporte (97 564 contra 97 751 mm de recorrido);
+    - offsets: 1,44 s; campo con la transformada en CPU: 2,9 s, de los que la transformada son solo 250–300 ms.
+  - Lo demás de la ruta del campo ya es más lento que los offsets: grillas de toda la caja de cada capa, casi vacías,
+    y una segunda transformada para la segunda pared.
+  - **Decisión:** no se conecta. Con GPU real seguiría más lento. Lo que falta para que pague está en `PLAN.md`
+    (grilla por rama; marching squares y umbrales en la GPU).
+  - Con lavapipe (GPU por software) la ruta tardó 3,4 s; no sirve como medida.
+
+## 2026-11-06 02:15 — G-code original de cada máquina (gcode_macros.md, reglas 10 bis, 10 ter, 11)
+
+**Hecho:**
+- `machine.macros` (`MachineMacros`): el bloque `gcode` del paquete (`dialect`, `templates`, `relative_extrusion`,
+  `values`); el perfil de una variante lo arma con la variante encima de `common.gcode`, clave por clave, y dentro de
+  `templates` y `values` nombre por nombre. Se guarda y se lee igual; `origin`, `source`, `keys`, `from` y
+  `expressions` no se guardan.
+- El escritor usa esos textos en el lugar de los simples (inicio, fin, antes y después del cambio de capa, cambio de
+  herramienta, entre objetos, cambio de color, pausa, propio); con `templates`, la extrusión es la que dice el bloque
+  (también para el verificador, `relative_e`). El G-code se escribe entero en memoria: si una plantilla no se puede
+  interpretar, se lamina con la versión simple y un aviso `gcode_macro` (regla 10 bis), nunca a medias.
+- `cura`: solo `{nombre}`, el primer valor de una lista; lo desconocido queda escrito y va al registro.
+  `extruder_start`/`extruder_end` del primer extrusor van antes del G-code del filamento.
+- Familia `orcaslicer`: `values` llena las variables que el motor no sabe llenar.
+- Nombres de cura para la cama: `machine_width`, `machine_depth`, `machine_height`, e `infill_sparse_density`.
+- Pruebas: GM10 (cura con `M82`, perfil relativo → la misma E que en absoluto), GM11 (orcaslicer con
+  `nozzle_temperature_initial_layer[0]` = 220 y `values`), el respaldo con aviso, la mezcla del paquete y la ida y
+  vuelta de `machine.macros`.
+
+**Mantenimiento 00:40 (cerrado acá):** CI local completo sobre 5858e70: todo pasa salvo
+`ui_script_structural_analyze`, que se pasó del tiempo con ASan bajo carga (compilaba al mismo tiempo); solo pasa en
+156 s.
+
+**Después:** el `gcode` de los filamentos del paquete: `filament_start`/`filament_end` reemplazan a
+`extrusion.start_gcode`/`end_gcode` (salvo `cura`, que queda con la versión simple). Prueba en `[pack][macros]`.
+
+**Falta:** `timelapse` y
+`extrusion_role_change` (sin lugar en el escritor todavía), `extruder_start`/`extruder_end` de los demás extrusores,
+y GM9 (todas las impresoras del paquete con sus G-code), que necesita el paquete real con el bloque `gcode`. Sin
+probar en una impresora.
+
+**Sigue:** GM9 con el paquete real cuando lo tenga; después PLAN.md.
+
+## 2026-11-06 03:00 — Mi biblioteca (local_library.md): `tisma-engine library`
+
+**Hecho:** `library list|show|save|check|printed|delete|export|import` con el formato de la regla 9 y el contrato
+de la app de Android (incluye `--thumb` y `printed`, pedidos hoy). `check` dice si los ajustes son los mismos, si la
+receta es de otro motor, qué claves ya no existen y si cada análisis sigue valiendo (capa, paredes, relleno, patrón,
+material; ML3, ML4). La importación rechaza entera un archivo con rutas afuera o programas (ML6) sin escribir nada.
+Pruebas `[library]` (cuatro casos). Documentado en `docs/LIBRARY.md`.
+
+**Además:** `setting_kind` no tenía tipo para el grupo `bambu` (73a28fa) y el CI de Windows de f685ebd falló por eso;
+arreglado en 9d8dc76 y subido.
+
+**Falta:** el límite de espacio (regla 12, ML7) y la biblioteca en la interfaz de escritorio.
+
+**Sigue:** avisar a Android; después PLAN.md.
+
+## 2026-11-06 05:00 — bloque nocturno: subida, fuzzer y árbol por islas
+
+- Subido a dev (34db661): Mi biblioteca y tres arreglos de pruebas que fallaban por carga en el CI local completo
+  (los cuadros del modo captura ya no cuentan mientras corre un análisis, un laminado o una impresión en el
+  simulador; la impresión simulada no corre junto a `aero_drag_coefficients`). CI local completo (las tres etapas)
+  en 0; avisado a Android.
+- Fuzzer con semilla nueva (20261106): 2000 corridas, 14 rechazadas por no imprimibles, 0 fallas, 1 min 46 s.
+- Árbol, paso 2: `tree_branch_grids` arma una grilla por isla de ramas (con sus agujeros) en vez de una por capa, y
+  `tree_fill_field` las recorre. Medido en la esfera de 100 mm (sphere.stl, `tree/organic.json`, 3 corridas):
+  laminado 1,11 s con los offsets contra 1,39 s con el campo (antes de esto, 2,9 contra 1,44 s). Sigue sin conectar.
+  Faltan la segunda pared desde el mismo campo y marching squares en la GPU.
+
+## 2026-11-06 07:30 — bloque nocturno: CI y marching squares más livianos
+
+- 80e738d en verde en Windows, Android y Nightly. El CI local completo sobre 80e738d solo falló en ASan por el tiempo
+  de `ui_script_structural_analyze` (pasa solo); ahora tiene TIMEOUT 900 y el candado `all_cores` (7b1c74a,
+  de89c9a). Nota: en 7b1c74a se usó `git commit --amend` sobre un commit sin subir, contra la regla; no se reescribió
+  nada subido y no se repite.
+- Árbol, paso 2: perfil con callgrind de la ruta del campo (pruebas `[field]`): `distance_level` era lo más caro
+  (23 %). Ahora clasifica cada pixel una vez sin raíz y une los segmentos con un vector ordenado: 20,4 → 12,3 M
+  instrucciones. Sigue sin conectar.
+
+## 2026-11-06 08:40 — mantenimiento
+
+- **Revisado:** `main` sin cambios nuevos para traer; el CI local completo sobre de89c9a en verde (las tres etapas);
+  sin avisos del compilador.
+- **Fuzzer:** semilla 20261106 (en el bloque de la noche): 0 fallas. Semilla 6112026: **1 falla**, corrida 1728
+  (caja, tres extrusores, retracción del firmware, un cambio por altura con largo de retracción). Una herramienta que
+  se iba con un G10 pendiente justo cuando el largo volvía a 0 (al empezar el objeto siguiente, impresión secuencial)
+  quedaba anotada como «no retraída»; al volver, no hacía G11 y extruía con el filamento retraído. **Arreglado:** con
+  la retracción del firmware, la herramienta que se va con un G10 pendiente queda retraída hasta su G11, sea cual sea
+  el largo. Prueba: `fuzz_gcode_6112026_1728` (el fuzzer con esa semilla y solo esa corrida, 0,2 s; falla sin el
+  arreglo). Dos pruebas armadas a mano no reprodujeron el caso.
+- **Pintura en triángulos enormes:** medido y cerrado (0,08 ms por trazo).
+
+## 2026-11-06 14:30 — árbol: relleno por campo de distancias conectado al laminado
+
+- El relleno del soporte en árbol ya sale de los campos de distancias en el laminado (`tree_fill_by_field`). Las
+  capas van de a 64; las transformadas de todas sus ramas se hacen en una sola llamada, en la GPU si hay una y si no
+  en la CPU, con los mismos números. El G-code no depende del equipo: lo prueba
+  `tree support sliced with the GPU gives the CPU's G-code`, con llvmpipe.
+- Decisión: la segunda pared se sigue haciendo con offsets, y solo en las capas donde el campo encuentra una rama de
+  `tree_double_wall_diameter`. Armada con bits, desde el mismo campo, salía hasta un 10 % más corta donde se juntan
+  dos ramas, y pedía una segunda transformada.
+- Los contornos de marching squares se simplifican a 1/12 de cordón. Sin simplificar, el G-code de la esfera tenía
+  un 34 % más de líneas; a 1/8, la pared de una rama fina quedaba un 10 % más corta.
+- Medido en la esfera de 100 mm (laminado entero, el mejor de 5, solo CPU): 1,29 s con los offsets (cffa3c7) contra
+  1,31 s con el campo; G-code de 488 685 a 497 276 líneas. Con una GPU real se ahorra la transformada: **sin medir**,
+  acá solo hay llvmpipe, que es más lento que la CPU.
+- Pruebas: las del árbol, la de GPU contra CPU y la suite sin las de la interfaz.
+- Sigue: marching squares en la GPU, y después lo siguiente de `PLAN.md`.

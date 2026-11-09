@@ -106,8 +106,18 @@ struct VulkanWindow::Impl {
         VkDeviceMemory memory = VK_NULL_HANDLE;
         VkImageView view = VK_NULL_HANDLE;
         VkDescriptorSet set = VK_NULL_HANDLE;
+        long long retired = -1; // the frame remove_texture was called in; -1: in use
     };
     std::vector<Texture> textures;
+    long long drawn = 0; // frames drawn so far
+
+    void destroy(Texture& t) {
+        if (imgui && t.set)
+            ImGui_ImplVulkan_RemoveTexture(t.set);
+        vkDestroyImageView(device, t.view, nullptr);
+        vkDestroyImage(device, t.image, nullptr);
+        vkFreeMemory(device, t.memory, nullptr);
+    }
 
     std::uint32_t memory_type(std::uint32_t bits, VkMemoryPropertyFlags flags) const {
         for (std::uint32_t i = 0; i < memory.memoryTypeCount; ++i)
@@ -446,13 +456,8 @@ struct VulkanWindow::Impl {
         shared = {};
         if (device) {
             vkDeviceWaitIdle(device);
-            for (Texture& t : textures) {
-                if (imgui && t.set)
-                    ImGui_ImplVulkan_RemoveTexture(t.set);
-                vkDestroyImageView(device, t.view, nullptr);
-                vkDestroyImage(device, t.image, nullptr);
-                vkFreeMemory(device, t.memory, nullptr);
-            }
+            for (Texture& t : textures)
+                destroy(t);
             textures.clear();
             if (imgui)
                 ImGui_ImplVulkan_Shutdown();
@@ -590,6 +595,14 @@ ImTextureID VulkanWindow::add_texture(const std::uint8_t* rgba, int width, int h
     }
 }
 
+void VulkanWindow::remove_texture(ImTextureID id) {
+    if (!impl_ || !id)
+        return;
+    for (Impl::Texture& t : impl_->textures)
+        if (ImTextureID(t.set) == id && t.retired < 0)
+            t.retired = impl_->drawn;
+}
+
 const VulkanDevice* VulkanWindow::device() const { return impl_->device ? &impl_->shared : nullptr; }
 
 void VulkanWindow::frame(ImDrawData* draw, const float clear[3], bool keep,
@@ -606,6 +619,14 @@ void VulkanWindow::frame(ImDrawData* draw, const float clear[3], bool keep,
     }
     Impl::Frame& f = v.frames[std::size_t(v.current)];
     vkWaitForFences(v.device, 1, &f.done, VK_TRUE, UINT64_MAX);
+    // Textures removed kFrames frames ago: the last frame that drew them is
+    // done (the fence above), so they can go.
+    std::erase_if(v.textures, [&](Impl::Texture& t) {
+        if (t.retired < 0 || v.drawn - t.retired < kFrames)
+            return false;
+        v.destroy(t);
+        return true;
+    });
     std::uint32_t index = 0;
     VkResult r = vkAcquireNextImageKHR(v.device, v.swapchain, UINT64_MAX, f.acquired, VK_NULL_HANDLE, &index);
     if (r == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -688,6 +709,7 @@ void VulkanWindow::frame(ImDrawData* draw, const float clear[3], bool keep,
     pi.pImageIndices = &index;
     r = vkQueuePresentKHR(v.queue, &pi);
     v.current = (v.current + 1) % kFrames;
+    ++v.drawn;
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR)
         v.make_swapchain();
 }
@@ -750,6 +772,7 @@ bool VulkanWindow::init_imgui(std::string& error) {
 }
 void VulkanWindow::shutdown() {}
 ImTextureID VulkanWindow::add_texture(const std::uint8_t*, int, int) { return ImTextureID(0); }
+void VulkanWindow::remove_texture(ImTextureID) {}
 void VulkanWindow::frame(ImDrawData*, const float[3], bool, const std::function<void(void*, int)>&) {}
 const VulkanDevice* VulkanWindow::device() const { return nullptr; }
 std::vector<std::uint8_t> VulkanWindow::read_back(int& width, int& height) {

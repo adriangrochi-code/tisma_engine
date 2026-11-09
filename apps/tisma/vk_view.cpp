@@ -850,7 +850,9 @@ struct VulkanView::Impl {
         push(draw);
         vkCmdDraw(c, 3, 1, 0, 0);
 
-        if (plate_count > 0) {
+        // From under the bed, no plate: the part's underside shows (BH43).
+        const bool under = plate_hidden(f.eye);
+        if (plate_count > 0 && !under) {
             draw = {};
             copy(draw.colour, f.plate);
             bind(Plate, &plate_v);
@@ -859,14 +861,14 @@ struct VulkanView::Impl {
         }
         // A pack printer's bed (profile_pack.md, rule 14): its model in the
         // plate's colour, then its picture pulled forward as the paint is.
-        if (bed_model_count > 0) {
+        if (bed_model_count > 0 && !under) {
             draw = {};
             copy(draw.colour, f.plate);
             bind(Mesh, &bed_model_v);
             push(draw);
             vkCmdDraw(c, bed_model_count, 1, 0, 0);
         }
-        if (bed_art_count > 0) {
+        if (bed_art_count > 0 && !under) {
             draw = {};
             bind(Decal, &bed_art_v); // writes no depth: the grid still draws over it
             for (const BedArt::Group& g : bed_art_groups) {

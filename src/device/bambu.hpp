@@ -16,6 +16,7 @@
 // ams_mapping) is marked «not tested on hardware» where it is used. Own
 // design; see PROVENANCE.md.
 
+#include <atomic>
 #include <functional>
 #include <string>
 #include <vector>
@@ -84,6 +85,10 @@ struct BambuPrint {
     // ams_mapping (not tested on hardware); empty: the printer decides.
     std::vector<int> ams_mapping;
     bool timelapse = false, bed_leveling = true;
+    // The calibrations before printing and the plate (gcode_macros.md, rule
+    // 12; bambu.* settings); an empty plate: "auto", the printer's choice.
+    bool flow_calibration = true, vibration_calibration = false;
+    std::string bed_type;
 };
 
 // The package the printer prints: a 3MF with Metadata/plate_1.gcode and its
@@ -104,6 +109,11 @@ struct BambuFrames : BambuResult {
     std::vector<std::string> jpegs;
 };
 BambuFrames bambu_camera(const BambuConfig& config, int frames, int timeout_ms);
+// The camera as a stream: `on_frame` gets each JPEG, and the stream ends when
+// it returns false, `stop` turns true, the camera closes, or no frame comes
+// for idle_timeout_ms.
+BambuResult bambu_camera_stream(const BambuConfig& config, const std::function<bool(std::string)>& on_frame,
+                                int idle_timeout_ms = 10000, const std::atomic<bool>* stop = nullptr);
 
 // The printer's words to the engine's: «Bambu Lab: on the printer turn on LAN
 // only mode…» (devices.md, rule 11).
