@@ -31,4 +31,12 @@ class MemoryTest {
         assertEquals(net.tisma.app.engine.MemoryEstimate.needed(12), need)
         assertFalse(vm.state.value.slicing)
     }
+
+    @Test
+    fun `a million triangles fit a mid-range phone, as measured with margin`() {
+        // Measured peak on 09-11-2026: 167 MB for a million triangles, 270 MB for two million with supports.
+        val million = net.tisma.app.engine.MemoryEstimate.needed(1_000_000)
+        assert(million in 300L * 1024 * 1024..512L * 1024 * 1024) { "$million" }
+        assert(net.tisma.app.engine.MemoryEstimate.needed(2_000_000) > 270L * 1024 * 1024 * 2)
+    }
 }

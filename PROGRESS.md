@@ -11895,3 +11895,20 @@ teléfono. Estado, cámara y mandar ya estaban para OctoPrint, Klipper, PrusaLin
   mostrarla (una cámara montada al revés se ve derecha; a 90° se cambian ancho y alto).
 - PrusaLink sigue sin cámara local (la ficha: «sin transmisión local documentada»): «Sin cámara».
 - Pruebas: `PrinterConnectionTest` CM1 (los simuladores con cámara espejada y girada) y `CameraTurnTest`.
+
+## 2026-11-09 — Android: memoria al laminar piezas grandes (rendimiento en gama baja)
+
+`MemoryEstimate` (MA9) usaba valores de diseño sin medir: 150 MB + 3000 bytes por triángulo, o sea 3,1 GB para un
+millón de triángulos. Un teléfono de gama media no llegaba y la app mandaba a la nube piezas que sí podía laminar.
+
+| Pieza (esfera, motor del host, 4 hilos) | Pico de memoria | Tiempo |
+|---|---|---|
+| 100 000 triángulos | 95 MB | 0,9 s |
+| 500 000 | 142 MB | 0,7 s |
+| 1 000 000 | 167 MB | 0,8 s |
+| 1 000 000, soportes y relleno 40 % | 183 MB | 0,9 s |
+| 2 000 000, soportes y relleno 40 % | 270 MB | 1,2 s |
+
+Unos 85 MB fijos y 90 bytes por triángulo. Nuevo cálculo: 128 MB + 300 bytes por triángulo (más de tres veces lo
+medido, por más hilos en el teléfono y piezas con más recorridos): un millón pide unos 414 MB. Prueba: `MemoryTest`.
+No medido en un teléfono (gama baja: queda para las pruebas con teléfonos reales).
