@@ -11670,3 +11670,7 @@ arreglado en 9d8dc76 y subido.
   después.
 - Queda: variables en 0 de la lista de la sesión de perfiles (`printer_notes`, `curr_bed_type`, `printer_model` y
   otras).
+- Corrida con 40adede: laminan las 2261 variantes FFF del paquete. Error mío encontrado por la sesión de perfiles: el
+  cambio de `F0` también tocaba la `F` de comandos que no mueven (el `M862.1 F…` de Prusa, que marca la boquilla de
+  alto flujo). Ahora solo cambia en G0 a G3. Los `values` del dialecto prusaslicer ya se usaban (probado con
+  `printer_notes`). Queda `~nombre` dentro de `one_of` (2 variantes INDX): pregunta al equipo de fichas.

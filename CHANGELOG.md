@@ -24,7 +24,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   allá de su último valor da el último, con aviso, en vez de cortar. Con la corrida del paquete entero: el G-code
   de los filamentos de Prusa (`filament_extruder_id`), `print_temperature` de Cura, la forma
   `[nombre_[índice]]`, `random()`, el mapa de filamentos de la familia OrcaSlicer, y `M98` de RepRapFirmware como
-  macro que puede calentar; varias sentencias por bloque y asignaciones (`{x[1] = …}`) en las plantillas.
+  macro que puede calentar; varias sentencias por bloque y asignaciones (`{x[1] = …}`) en las plantillas. El cambio
+  de `F0` solo toca movimientos (G0 a G3): la `F` de otros comandos queda como está.
 - Con la retracción del firmware (G10/G11) y varios extrusores, una herramienta que se iba con la retracción hecha
   cuando un cambio por altura dejaba el largo en 0 volvía sin G11 y extruía con el filamento retraído.
 

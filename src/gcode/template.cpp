@@ -595,7 +595,19 @@ std::string without_zero_feeds(std::string text, TemplateContext& context) {
             end = text.size();
         std::string line = text.substr(start, end - start);
         const std::size_t comment = std::min(line.find(';'), line.size());
-        for (std::size_t i = 0; i < comment; ++i) {
+        // Moves only (G0 to G3): elsewhere an F is no speed (Prusa's M862.1 F
+        // is a check of the nozzle's kind).
+        std::size_t w = line.find_first_not_of(" \t");
+        bool move = false;
+        if (w != std::string::npos && (line[w] == 'G' || line[w] == 'g')) {
+            std::size_t d = w + 1;
+            while (d < comment && line[d] == '0')
+                ++d;
+            const bool digit = d < comment && line[d] >= '1' && line[d] <= '3';
+            const std::size_t after = digit ? d + 1 : d;
+            move = (digit || (d > w + 1)) && (after >= comment || line[after] == ' ' || line[after] == '\t');
+        }
+        for (std::size_t i = 0; move && i < comment; ++i) {
             if ((line[i] != 'F' && line[i] != 'f') || (i > 0 && line[i - 1] != ' ' && line[i - 1] != '\t'))
                 continue;
             std::size_t j = i + 1;

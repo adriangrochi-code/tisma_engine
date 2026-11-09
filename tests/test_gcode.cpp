@@ -2780,7 +2780,8 @@ TEST_CASE("a machine's G-code speeds come from the settings, never F0 (gcode_mac
                     "G0 X128 E8 F{flush_volumetric_speeds[initial_no_support_extruder]/2.4053*60}\n"
                     "M109 S{flush_temperatures[initial_no_support_extruder]}\n"
                     "M620.1 E F0 T{nozzle_temperature_range_high[initial_no_support_extruder]}\n"
-                    "G1 X5 F0.0 ; F0 in a comment stays";
+                    "G1 X5 F0.0 ; F0 in a comment stays\n"
+                    "G0 F0\nG00 X1 F0\nM862.1 F{(0 ? 1 : 0)}";
     std::vector<Warning> warnings;
     std::ostringstream out;
     const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
@@ -2789,6 +2790,8 @@ TEST_CASE("a machine's G-code speeds come from the settings, never F0 (gcode_mac
     for (const std::string& line : lines) {
         const std::string code = line.substr(0, line.find(';'));
         CAPTURE(line);
+        if (!code.starts_with("G"))
+            continue;
         CHECK(code.find(" F0 ") == std::string::npos);
         CHECK(!code.ends_with(" F0"));
         CHECK(!code.ends_with(" F0.0"));
@@ -2801,8 +2804,11 @@ TEST_CASE("a machine's G-code speeds come from the settings, never F0 (gcode_mac
     CHECK(has_prefix("G1 E10 F" + template_text(TemplateValue::of(std::round(outer * 1000.0) / 1000.0 / (24 / 20) * 60))));
     CHECK(has_prefix("G0 X128 E8 F523"));          // 21 / 2.4053 × 60
     CHECK(has_prefix("M109 S215"));
-    CHECK(has_prefix("M620.1 E F12000 T215"));      // travel speed, mm/min
+    CHECK(has_prefix("M620.1 E F0 T215"));          // not a move: an F that is no speed stays
     CHECK(has_prefix("G1 X5 F12000 ; F0 in a comment stays"));
+    CHECK(has_prefix("G0 F12000"));
+    CHECK(has_prefix("G00 X1 F12000"));
+    CHECK(has_prefix("M862.1 F0"));
     CHECK(std::any_of(warnings.begin(), warnings.end(),
                       [](const Warning& w) { return w.kind == "gcode_macro" && w.message.find("F0") != std::string::npos; }));
     // Without any flow in the settings: a safe one, named.
