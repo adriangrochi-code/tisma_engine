@@ -9,6 +9,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Impresión secuencial: una sola falda alrededor de todos los objetos, impresa una vez al principio.
 - Un bloqueador de soporte pintado en parte de una cara ya no deja soporte bajo su borde (el margen del soporte
   entraba 1,6 mm en la zona bloqueada).
 - El modo vaso ya no se niega a laminar cuando la placa tiene otro modelo marcado como no imprimible.

@@ -827,6 +827,26 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                                     o.wipe_into_infill, o.wipe_into_object};
                 append_object(out, std::move(part), std::move(object));
             }
+            // One skirt round them all, printed once, with the first object's
+            // first layer (sequential.md, rule 5); a draft shield, which goes
+            // up to the top, stays round each object.
+            if (out.objects.size() > 1 && settings.draft_shield != DraftShield::Enabled) {
+                Polygons first_layers;
+                bool raft = false;
+                for (const SlicedObject& o : out.objects) {
+                    const Polygons& r = out.regions[o.first_layer];
+                    first_layers.insert(first_layers.end(), r.begin(), r.end());
+                    raft = raft || o.raft_layers > 0;
+                }
+                first_layers = Clipper2Lib::Union(first_layers, Clipper2Lib::FillRule::NonZero);
+                AdhesionShape shape = adhesion_shape(settings);
+                if (raft)
+                    shape.brim_width = 0.0; // no brim on a raft (skirt_brim_raft.md, rule 9)
+                const Layer& first = out.layers[out.objects.front().first_layer];
+                out.objects.front().skirt = skirt_loops(first_layers, shape, first_bead(settings), first.top - first.bottom);
+                for (std::size_t k = 1; k < out.objects.size(); ++k)
+                    out.objects[k].skirt.clear();
+            }
             if (!out.objects.empty()) { // the skirt and brim of the first, for what reads them from the model
                 out.skirt = out.objects.front().skirt;
                 out.brim = out.objects.front().brim;

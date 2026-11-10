@@ -12551,3 +12551,14 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   costura, retracción y viaje, varios objetos y secuencial, modelos extremos (diminutos, enormes, paredes finas, no
   cerrados, normales invertidas, fuera de la cama), ida y vuelta del 3MF, unidades, medidas del G-code frente al
   modelo. Cada hallazgo con una prueba que falle sin el arreglo; resumen corto cada hora.
+
+## 2026-11-10 21:10 — búsqueda profunda: falda única en la impresión secuencial
+
+- `sequential.md`, regla 5 (cambiada el 27-10 a «una sola falda rodea todos los objetos y se imprime una vez, al
+  principio», SQ6): cada objeto seguía llevando su propia falda; la prueba se había escrito con la versión anterior.
+  Ahora una sola falda alrededor de las primeras capas de todos los objetos, con la primera capa del primero (sin borde
+  si alguno lleva balsa); con `draft_shield`, que sube hasta arriba, cada objeto conserva la suya. Prueba
+  `[sequential]` actualizada (una falda, que rodea los dos objetos, antes de la primera pieza); falla sin el arreglo.
+- Revisado sin hallazgos: normales invertidas (todas o la mitad de las caras) dan el mismo G-code byte a byte; las
+  medidas de las paredes externas coinciden con el modelo (20,00 y 4,00 mm); paredes de 0,3 y 0,6 mm y un cubo de
+  0,8 mm; el paso al siguiente objeto (regla 3).

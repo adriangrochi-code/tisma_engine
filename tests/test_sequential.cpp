@@ -280,7 +280,8 @@ TEST_CASE("sequential: objects that the head or the X axis would hit are refused
     CHECK(unprintable_reason(sliced(close, s), s).empty());
 }
 
-TEST_CASE("sequential: each object has its own first layers, skirt and stability (rules 1 and 5)", "[sequential]") {
+TEST_CASE("sequential: each object has its own first layers and stability; one skirt round all (rules 1 and 5, SQ6)",
+          "[sequential]") {
     Settings s = base();
     s.sequential = true;
     s.skirt_loops = 1;
@@ -288,17 +289,28 @@ TEST_CASE("sequential: each object has its own first layers, skirt and stability
     const Plate plate = copies(box(0, 0, 20, 20, 10), 2, s);
     const SlicedModel model = sliced(plate, s);
     REQUIRE(model.objects.size() == 2);
-    CHECK_FALSE(model.objects[0].skirt.empty());
-    CHECK_FALSE(model.objects[1].skirt.empty());
+    // One skirt, with the first object, round both (rule 5, SQ6).
+    REQUIRE_FALSE(model.objects[0].skirt.empty());
+    CHECK(model.objects[1].skirt.empty());
+    double lo = 1e9, hi = -1e9;
+    for (const Toolpath& t : model.objects[0].skirt)
+        for (const auto& q : t.points)
+            lo = std::min(lo, q.p.x), hi = std::max(hi, q.p.x);
+    double object_lo = 1e9, object_hi = -1e9;
+    for (const Vec3f& v : plate.mesh.corners()) // both objects
+        object_lo = std::min(object_lo, double(v.x)), object_hi = std::max(object_hi, double(v.x));
+    CHECK(lo < object_lo);
+    CHECK(hi > object_hi);
     // No part hangs in the air: the second object stands on the bed.
     for (const Warning& w : stability_warnings(model, s))
         CHECK(w.kind != "stability_air");
     const std::string text = gcode_of(model, s);
-    // Two skirts, one at each object's first layer.
+    // One skirt, printed once, before the first object's part.
     std::size_t skirts = 0;
     for (std::size_t at = text.find(";TYPE:Skirt/Brim"); at != std::string::npos; at = text.find(";TYPE:Skirt/Brim", at + 1))
         ++skirts;
-    CHECK(skirts == 2);
+    CHECK(skirts == 1);
+    CHECK(text.find(";TYPE:Skirt/Brim") < text.find(";TYPE:External perimeter"));
     // Vase mode: several objects only one after another.
     s.vase = true;
     s.skirt_loops = 0;
