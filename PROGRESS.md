@@ -12194,3 +12194,39 @@ QA; bundle id `net.tismaservidores.tisma`).
   plano; el aviso de fin de impresión (`PrintWatchService`) sí debe seguir.
 - 5faf263: la búsqueda de impresoras en la red (NSD) seguía con la app en segundo plano y su hilo de sondeo nunca se
   cerraba. Ahora corre solo con la lista a la vista (`WhileVisible`) y `stop()` cierra el hilo (`DiscoveryLifecycleTest`).
+
+## 2026-11-10 — Android: auditoría contra `mobile_app.md` (pedido del dueño: lo que falta o no hace nada)
+
+| Regla | Elemento | Estado |
+|---|---|---|
+| 5 | Secciones abajo | Está (Biblioteca · Placa · Ingeniería · Impresora · Más, decisión del dueño 10-11) |
+| 6 | Tarjeta de la impresora en la Placa | Está |
+| 6 | Dibujos de impresora, cama y boquilla (`settings_panel.md` 34 a 36) | **Falta** (un ícono genérico) |
+| 6 | Ícono de conexión en la tarjeta (`settings_panel.md` 42) | **Faltaba** → hecho (8631052) |
+| 6 | «Laminar», resultado, guardar, mandar | Está |
+| 6 | Compartir el G-code | **Faltaba** → hecho |
+| 6 | Gestos (girar, mover, pellizcar, doble toque), «Encuadrar», vistas 3D/arriba/frente/izq/der/atrás | Está |
+| 6 | Tiras: Archivo (abrir, información, quitar), Vista, Ingeniería, Laminar | Está |
+| 7 | Impresión y Material con niveles Básico/Normal/Avanzado/Personalizada | Está |
+| 8 | Impresora: Conexión y Calibración | Está |
+| 9 | Más: cuenta, biblioteca, ayuda, informar, preferencias, créditos | Está |
+| 10 | Abrir STL, 3MF, OBJ; compartir con Tisma; enlaces de sitios | Está |
+| 10 | Abrir STEP | **Falta** (espera al motor) |
+| 11 | Paquete de perfiles y asistente | Está |
+| 12 | Laminar con avance y cancelar, aviso de memoria, tiempo, m, g, costo, vista previa | Está |
+| 13 | Ingeniería: caras, cargas, material, factor de seguridad | Está |
+| 13 | Temperatura en Ingeniería | **Falta** (el motor aún no la usa: `docs/ANALYSIS.md`) |
+| 13 | Analizar con mapa; relleno mínimo y aplicarlo | Está |
+| 14 | Bambu, Klipper, OctoPrint (+ PrusaLink, Duet), búsqueda, enviar, pausar, seguir, parar, cámara | Está |
+| 14 | Códigos cifrados con el Keystore | Está (MA8) |
+| 15 | Cuenta de Tisma Cloud, laminar y analizar en la nube | Está |
+| 15 | Entrar con Google; pagar con Google Play | **Falta** (decisión del dueño pendiente) |
+| 15 | Impresoras remotas de los puentes | **Falta** |
+| 16 | Ayuda sin conexión (problemas, procedimientos, glosario, materiales, calibraciones) | Está |
+| 16 | Tutoriales del primer uso adaptados al teléfono | **Falta** |
+| 17 | Teclado numérico | Está (todos los campos numéricos) |
+| — | Textos con número («1 recetas», «1 archivos») | **Mal** → corregidos con plurales |
+
+Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`PluralsTest`) y el ícono de conexión
+(`ConnectionIconTest`). Siguiente, en orden: dibujos de impresora/cama/boquilla, impresoras remotas de los puentes
+(falta la ficha de la ruta), tutoriales del primer uso.
