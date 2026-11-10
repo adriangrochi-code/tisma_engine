@@ -86,6 +86,9 @@ struct PlateObject {
     // Its Engineering data (engineering_panel.md, rule 17): conditions in
     // the frame and triangles of `mesh`.
     ProjectEngineering engineering{};
+    // The file it was read from, for Reload from Disk (interface.md, «Más»);
+    // empty for a shape, a design or a project's model.
+    std::string source{};
 };
 
 // The painting of a model carried onto another mesh of the same part (a

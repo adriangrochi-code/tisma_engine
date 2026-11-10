@@ -1753,6 +1753,10 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(CopyMenu, "Copiar", "Copy") \
+    X(PasteMenu, "Pegar", "Paste") \
+    X(ReloadMenu, "Recargar desde el disco", "Reload from Disk") \
+    X(Reloaded, "Recargado desde el disco: %s", "Reloaded from disk: %s") \
     X(ImportModelMenu, "Importar STL/3MF/OBJ…", "Import STL/3MF/OBJ…") \
     X(ImportConfigMenu, "Importar la configuración…", "Import Config…") \
     X(ImportProjectConfigMenu, "Importar la configuración de un proyecto…", "Import Config from Project…") \

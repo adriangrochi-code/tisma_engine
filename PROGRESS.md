@@ -12370,3 +12370,7 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   y volver a importarla; configuración afuera y adentro; configuración de un proyecto). Scripts: verbo `choose-file`.
 - Pendiente de Archivo: importar STL en pulgadas, SLA, ZIP, paquetes de configuración, exportar con soportes,
   trayectorias OBJ, convertir G-code binario/ASCII, SD, reparar STL.
+- **Paso 3 (Editar):** Copiar (Ctrl+C) y Pegar (Ctrl+V) del modelo elegido, en la placa y no mientras un campo de
+  texto tiene el teclado; Recargar desde el disco (F5): el modelo elegido, o todos, leído otra vez de su archivo, en
+  su lugar (cada pieza recuerda su archivo en `PlateObject::source`; la pintura queda si tiene los mismos triángulos).
+  Prueba `ui_script_edit_copy_reload`. Queda: Seleccionar todo (hace falta elegir varias piezas), Ajustes de la placa.

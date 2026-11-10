@@ -1782,6 +1782,10 @@ private:
     void remember_project(const std::filesystem::path& path);
     void new_project(); // an empty plate, no project file (Ctrl+N)
     void delete_all();  // every model off the plate (Ctrl+Del)
+    std::optional<PlateObject> clipboard_; // Copy (Ctrl+C) and Paste (Ctrl+V) on the plate
+    void paste();
+    bool can_reload() const;
+    void reload_from_disk(); // F5: the chosen model, or every one, read again from its file
 
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
@@ -4284,6 +4288,8 @@ void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab
     ++revision_.model;
     objects_.clear();
     objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    if (std::error_code ec; std::filesystem::is_regular_file(name, ec))
+        objects_.back().source = utf8(std::filesystem::absolute(name, ec));
     fire("model_added");
     selected_ = 0;
     tool_ = PlateTool::Select;
@@ -4419,6 +4425,8 @@ void App::add_mesh(TriangleMesh mesh, const std::filesystem::path& name) {
         return;
     }
     objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    if (std::error_code ec; std::filesystem::is_regular_file(name, ec))
+        objects_.back().source = utf8(std::filesystem::absolute(name, ec));
     fire("model_added");
     selected_ = int(objects_.size()) - 1;
     arrange_plate();
@@ -4767,6 +4775,49 @@ void App::remember_project(const std::filesystem::path& path) {
     recent_projects_.insert(recent_projects_.begin(), full);
     if (recent_projects_.size() > 10)
         recent_projects_.resize(10);
+}
+
+// Paste (Ctrl+V): the copied model once more on the plate, chosen, and the
+// plate arranged.
+void App::paste() {
+    if (!clipboard_ || calibration_ || viewer_)
+        return;
+    objects_.push_back(*clipboard_);
+    selected_ = int(objects_.size()) - 1;
+    arrange_plate();
+}
+
+bool App::can_reload() const {
+    for (std::size_t i = 0; i < objects_.size(); ++i)
+        if (!objects_[i].source.empty() && (selected_ < 0 || int(i) == selected_))
+            return true;
+    return false;
+}
+
+// Reload from Disk (F5): each model read again from its file, where it is
+// placed; its painting stays only if the triangles are as many as before.
+void App::reload_from_disk() {
+    std::string done;
+    for (std::size_t i = 0; i < objects_.size(); ++i) {
+        PlateObject& o = objects_[i];
+        if (o.source.empty() || (selected_ >= 0 && int(i) != selected_))
+            continue;
+        try {
+            ModelFile file = read_model(from_utf8(o.source));
+            if (file.mesh.empty())
+                throw std::runtime_error(o.source + ": the file has no triangles");
+            if (file.mesh.triangle_count() != o.mesh.triangle_count())
+                o.painting = {};
+            o.mesh = std::move(file.mesh);
+            done += (done.empty() ? "" : ", ") + o.name;
+        } catch (const std::exception& e) {
+            fail(T::CannotOpen, e.what());
+        }
+    }
+    if (done.empty())
+        return;
+    plate_changed();
+    notify(format(tr(T::Reloaded), done.c_str()));
 }
 
 // Every model off the plate, and the preview with them.
@@ -16826,6 +16877,12 @@ void App::more_menu() {
             delete_selected();
         if (item("delete_all", tr(T::DeleteAllMenu), "Ctrl+Del", on_plate && !objects_.empty()))
             delete_all();
+        if (item("copy", tr(T::CopyMenu), "Ctrl+C", on_plate && chosen))
+            clipboard_ = objects_[std::size_t(selected_)];
+        if (item("paste", tr(T::PasteMenu), "Ctrl+V", on_plate && clipboard_.has_value()))
+            paste();
+        if (item("reload", tr(T::ReloadMenu), "F5", on_plate && can_reload()))
+            reload_from_disk();
         if (item("undo", tr(T::Undo), "Ctrl+Z", on_plate && !place_undo_.empty()))
             undo_place(false);
         if (item("redo", tr(T::Redo), "Ctrl+Y", on_plate && !place_redo_.empty()))
@@ -20982,6 +21039,17 @@ void App::layout() {
     if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput &&
         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
         delete_all();
+    // Copy, Paste and Reload on the plate, not while a text field has the
+    // keys (it copies and pastes its own text).
+    if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput && no_popup()) {
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_RouteGlobal) && selected_ >= 0 &&
+            selected_ < int(objects_.size()))
+            clipboard_ = objects_[std::size_t(selected_)];
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_V, ImGuiInputFlags_RouteGlobal))
+            paste();
+        if (ImGui::Shortcut(ImGuiKey_F5, ImGuiInputFlags_RouteGlobal))
+            reload_from_disk();
+    }
     // Export G-code… is Ctrl+G and Send G-code… Ctrl+Shift+G (interface.md,
     // «Más»); Ctrl+E is kept for Export Config….
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_G, ImGuiInputFlags_RouteGlobal) && result_ && result_->ok && !viewer_ &&
@@ -22359,6 +22427,11 @@ void App::script_input() {
     const auto key_named = [](std::string_view name) {
         if (name.size() == 1 && name[0] >= 'a' && name[0] <= 'z') // any letter
             return ImGuiKey(int(ImGuiKey_A) + (name[0] - 'a'));
+        if (name.size() >= 2 && name[0] == 'f' && name.substr(1).find_first_not_of("0123456789") == std::string_view::npos) {
+            const int n = std::atoi(std::string(name.substr(1)).c_str());
+            if (n >= 1 && n <= 12)
+                return ImGuiKey(int(ImGuiKey_F1) + n - 1);
+        }
         return name == "enter" ? ImGuiKey_Enter : name == "escape" ? ImGuiKey_Escape : name == "tab" ? ImGuiKey_Tab
                : name == "backspace"                               ? ImGuiKey_Backspace
                : name == "delete"                                  ? ImGuiKey_Delete
@@ -23031,6 +23104,8 @@ void App::script_input() {
         if (!browser_.is_open())
             return f >= 30 ? fail_step("no file browser is open") : void();
         browser_.close();
+        if (ImGui::GetCurrentContext()->OpenPopupStack.Size > 0) // its modal too, as its own buttons close it
+            ImGui::ClosePopupToLevel(0, true);
         file_chosen(std::filesystem::absolute(step.key));
         next();
     } else if (step.verb == "save-project") { // writes the plate as a project to KEY (relative to the working folder)
