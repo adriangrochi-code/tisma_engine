@@ -12663,6 +12663,14 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   apagaba la boquilla activa (`M104 T0 S0`) antes de imprimir. Ahora se quitan los comandos de temperatura a una
   herramienta negativa, y si el cambio deja en 0 la boquilla que va a imprimir, se calienta de nuevo y se espera.
   El resto del G-code de la máquina sale igual. Prueba `[extruders]` BH49, que falla sin el arreglo.
+- Pedido del dueño (2026-11-10): la clave de firma se crea sola al enchufar el pendrive, la primera vez, y después
+  queda bloqueada. `python tools/sign_release.py create-key`, o doble clic en `tools/crear_clave_pendrive.bat`:
+  espera un pendrive nuevo, crea `tisma/clave.pem` (nunca pisa una que ya esté), espera 2 min un segundo pendrive
+  para la copia, pone `TISMA_UPDATES_KEY` en GitHub con `gh` y firma los borradores pendientes, sin preguntar. El
+  bloqueo: la clave pública queda en `%APPDATA%\tisma\clave_bloqueada.txt` y en GitHub; con cualquiera de las dos,
+  no crea otra y solo acepta un pendrive con esa clave. Guía en `docs/FIRMAR_VERSIONES.md`. Pruebas en
+  `tools/test_sign_release.py` (9, con pendrives simulados y un `gh` simulado). No probado en Windows: la detección
+  de unidades (`GetLogicalDrives`) y la búsqueda de openssl en la carpeta de Git solo se probaron en Linux.
 - BH50 (perfiles; 12 G-code de inicio de Bambu X1): una lista de dos o más valores sin índice en una cuenta o una
   comparación (`{if outer_wall_acceleration > 0}`) fallaba, y la máquina caía en la versión simple. Ahora vale su único
   valor o el del extrusor en uso (gcode_macros.md regla 10 bis bis, GM15), también en la forma antigua `[a]`; y un texto

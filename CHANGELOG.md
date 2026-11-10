@@ -9,6 +9,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Firma de versiones: la clave se crea sola al enchufar el pendrive (`tools/crear_clave_pendrive.bat`), con copia en
+  un segundo pendrive, la clave pública en GitHub y los borradores firmados; después queda bloqueada.
+- Macros: una lista por extrusor y los números escritos como texto valen como número en cuentas y comparaciones
+  (G-code de inicio de las Bambu X1).
 - Dos extrusores con G-code de máquina: sin `T-1` y sin apagar la boquilla activa al empezar.
 - Relleno `honeycomb_3d` (panal 3D).
 - Macros: bloques de sentencias con `if … then … endif` (cambios de herramienta de las Prusa XL y Snapmaker U1).
