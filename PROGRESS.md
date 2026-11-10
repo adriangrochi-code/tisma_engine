@@ -12234,3 +12234,6 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   impresión, y un error que no fuera de impresora (dirección mala, conexión cortada) lo cortaba dejando su aviso
   fijo en pantalla. Ahora una impresora callada deja de contar a las 20 vueltas (5 min) y el servicio siempre se
   cierra (`PrintWatcherTest`).
+- 559b192: si marcar «recibida» una pieza escaneada fallaba por la red, la vez siguiente se guardaba otra vez en Mi
+  biblioteca (duplicada). Ahora el teléfono recuerda las guardadas sin confirmar y solo reintenta la marca. Una huella
+  en mayúsculas rechazaba todas, y una bajada a medias quedaba en disco (`ScansTest`).
