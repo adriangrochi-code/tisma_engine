@@ -521,6 +521,10 @@ private:
             count(1, 1);
             return TemplateValue::of(static_cast<long long>(std::trunc(number(0))));
         }
+        if (name == "ceil") { // up to the next whole number (gcode_macros.md, rule 4, GM16)
+            count(1, 1);
+            return TemplateValue::of(static_cast<long long>(std::ceil(number(0))));
+        }
         if (name == "round") { // halves up
             count(1, 1);
             return TemplateValue::of(static_cast<long long>(std::floor(number(0) + 0.5)));

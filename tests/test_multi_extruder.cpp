@@ -961,3 +961,43 @@ TEST_CASE("extruders: each one heats to its first layer's temperature, then to i
     CHECK(layer2.find("M104 S205 T0") != std::string::npos);
     CHECK(layer2.find("M104 S225 T1") != std::string::npos);
 }
+
+TEST_CASE("extruders: each nozzle's own filament temperature, never 0 (multi_extruder.md, rule 8 bis, ME13)", "[extruders]") {
+    // PLA 210 and PETG 240, a part of each: extruder 1 (T1) at 240 before it
+    // first extrudes; with one temperature only, the second takes the first's.
+    for (const bool one_value : {false, true})
+        for (const bool own_start : {false, true}) {
+        Settings s = base();
+        // A machine's own start G-code that heats the first nozzle only.
+        if (own_start)
+            s.start_gcode = "M104 S[first_layer_temperature_0]\nM109 S[first_layer_temperature_0]\nG28";
+        s.extruder_walls = 1;
+        s.infill_density = 20.0;
+        s.extruder_infill = s.extruder_solid_infill = 2;
+        if (one_value)
+            s.variables["temperature"] = {"210"}, s.variables["first_layer_temperature"] = {"210"};
+        else
+            s.variables["temperature"] = {"210", "240"}, s.variables["first_layer_temperature"] = {"210", "240"};
+        const std::string text = gcode_of(cube(1), s);
+        const std::string want = one_value ? "210" : "240";
+        INFO((one_value ? "one temperature" : "two temperatures") << (own_start ? ", own start" : "") << "\n"
+                                                                   << text.substr(0, 1500));
+        // T1 heated before its first extrusion, and never set to 0.
+        const std::size_t t1 = text.find("\nT1");
+        REQUIRE(t1 != std::string::npos);
+        std::size_t extrusion = t1;
+        for (std::size_t at = text.find("\nG1 ", t1); at != std::string::npos; at = text.find("\nG1 ", at + 1)) {
+            const std::size_t end = text.find('\n', at + 1);
+            const std::string line = text.substr(at + 1, end - at - 1);
+            if (line.find(" X") != std::string::npos && line.find(" E") != std::string::npos) {
+                extrusion = at;
+                break;
+            }
+        }
+        REQUIRE(extrusion > t1);
+        const std::string before = text.substr(0, extrusion);
+        CHECK((before.find("S" + want + " T1") != std::string::npos || before.find("T1 S" + want) != std::string::npos));
+        CHECK(text.find("S0 T1") == std::string::npos);
+        CHECK(text.find("T1 S0") == std::string::npos);
+    }
+}

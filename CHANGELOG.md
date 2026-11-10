@@ -9,6 +9,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Varias boquillas con el G-code de inicio de la máquina: cada boquilla se calienta antes de imprimir (nunca a 0).
+- Macros: `ceil`.
 - Resina: altura propia de la primera capa (`resin.first_layer_height`).
 - Con altura de capa variable, la separación Z del soporte respeta los milímetros pedidos.
 - Paquete de perfiles: un filamento con `compatible_prints` solo se ofrece con esas impresiones.

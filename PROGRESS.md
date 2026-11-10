@@ -12636,3 +12636,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   el escritorio: macOS (versión App Store) con suscripciones de StoreKit; Windows y Linux muestran el plan de la cuenta
   y, para comprar, mandan al teléfono o a la tienda; ningún dato de tarjeta en la aplicación. Pendiente tras la
   búsqueda profunda (StoreKit va con la fase de macOS).
+- Spec/next d9eadff (revisión multiextrusor del paquete):
+  - `gcode_macros.md` regla 4, GM16: `ceil`. Prueba `[macros]`.
+  - GM17: la condición en una línea con índice de extrusor ya funcionaba (`M104 T1 S215`); prueba añadida. El error
+    «unknown variable 'if'» de las Prusa XL y la Snapmaker U1 no se reproduce con ninguna variante; pedido el texto
+    exacto a la sesión de especificaciones.
+  - `multi_extruder.md` 8 bis, ME13: con el G-code de inicio de la máquina (que calienta solo la primera boquilla),
+    el motor no calentaba las demás: imprimía con la boquilla en 0. Ahora mira qué boquillas calentaron el inicio y
+    el cambio de herramienta, y calienta, esperando, la que no lo esté antes de su primera extrusión (temperatura de
+    primera capa en la primera capa; sin valor propio, la del primero). Prueba `[extruders]` ME13, que falla sin el
+    arreglo.

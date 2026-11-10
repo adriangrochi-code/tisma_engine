@@ -2850,6 +2850,41 @@ std::string toolchange_template_error(const Settings& s) {
     return {};
 }
 
+// The tools (from 0) a G-code heats with M104, M109 or G10 S, to a
+// temperature above 0; a command with no T heats `current`.
+std::set<int> heated_tools(std::string_view gcode, int current) {
+    std::set<int> out;
+    std::size_t at = 0;
+    while (at < gcode.size()) {
+        const std::size_t end = std::min(gcode.find('\n', at), gcode.size());
+        std::string_view line = gcode.substr(at, end - at);
+        at = end + 1;
+        line = line.substr(0, line.find(';'));
+        line = line.substr(std::min(line.find_first_not_of(" \t"), line.size()));
+        const std::string_view word = line.substr(0, line.find_first_of(" \t\r"));
+        std::string command(word);
+        for (char& c : command)
+            c = char(std::toupper(static_cast<unsigned char>(c)));
+        const bool g10 = command == "G10";
+        if (command != "M104" && command != "M109" && !g10)
+            continue;
+        double celsius = 0.0;
+        int tool = current;
+        for (std::size_t i = word.size(); i < line.size(); ++i) {
+            const char c = char(std::toupper(static_cast<unsigned char>(line[i])));
+            if (i > 0 && line[i - 1] != ' ' && line[i - 1] != '\t')
+                continue;
+            if (c == 'S' || c == 'R')
+                celsius = std::max(celsius, std::atof(std::string(line.substr(i + 1)).c_str()));
+            else if ((c == 'T' && !g10) || (c == 'P' && g10))
+                tool = std::atoi(std::string(line.substr(i + 1)).c_str());
+        }
+        if (celsius > 0.0)
+            out.insert(tool);
+    }
+    return out;
+}
+
 bool sets_temperature(std::string_view gcode) {
     std::size_t at = 0;
     while (at < gcode.size()) {
@@ -3263,6 +3298,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // previous_extruder, next_extruder and toolchange_z; T<next> unless that
     // G-code has it; with ooze prevention the next one waited for at its
     // temperature; its filament's start.
+    // The nozzles heated so far (from 0): by the engine's own start, else by
+    // the machine's start G-code; one never heated is heated, and waited
+    // for, before it first prints (multi_extruder.md, rule 8 bis, ME13).
+    std::set<int> heated = heat ? std::set<int>{} : heated_tools(start_gcode, 0);
     const auto toolchange_text = [&](int previous, int next, bool middle) {
         std::string lines, user;
         const auto add_user = [&](const std::string& text) {
@@ -3284,6 +3323,19 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         add_user(change);
         if (!changes_tool(change, next - 1))
             lines += "T" + std::to_string(next - 1) + "\n";
+        for (const int t : heated_tools(user, next - 1))
+            heated.insert(t);
+        if (!heat && s.extruders > 1 && !heated.contains(next - 1) && dialect.wait != Dialect::Wait::None) {
+            const auto layer = templates.variables.find("layer_num");
+            const bool first = layer == templates.variables.end() || layer->second.kind != TemplateValue::Kind::Int ||
+                               layer->second.integer <= 0;
+            const double celsius = first ? first_layer_value("first_layer_temperature", "temperature", std::size_t(next - 1))
+                                         : value_of("temperature", std::size_t(next - 1));
+            if (celsius > 0.0) {
+                lines += nozzle_gcode(true, next, celsius, "its first heating");
+                heated.insert(next - 1);
+            }
+        }
         if (middle && s.ooze_prevention && value_of("temperature", std::size_t(next - 1)) > 0.0 &&
             dialect.wait != Dialect::Wait::None)
             lines += nozzle_gcode(true, next, value_of("temperature", std::size_t(next - 1)));

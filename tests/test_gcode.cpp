@@ -162,6 +162,22 @@ TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gco
     CHECK_THROWS_AS(render_template("[no_such_variable]", c, "t"), TemplateError);
 }
 
+TEST_CASE("ceil, and a condition opening and closing on one line with an extruder index (gcode_macros.md, GM16, GM17)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["filament_type"] = {"PETG", "PLA"};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // GM16.
+    CHECK(render_template("{ceil(2.1)}", c, "t") == "3");
+    CHECK(render_template("{ceil(3)}", c, "t") == "3");
+    CHECK(render_template("{ceil(-2.5)}", c, "t") == "-2");
+    // GM17: inside a word, with an index, on one line.
+    CHECK(render_template("M104 T1 S{if filament_type[1] == \"PLA\"}215{else}240{endif}", c, "t") == "M104 T1 S215");
+    CHECK(render_template("M104 T0 S{if filament_type[0] == \"PLA\"}215{else}240{endif}", c, "t") == "M104 T0 S240");
+    CHECK(render_template("M104 S{if filament_type[0]==\"PLA\"}1{elsif filament_type[0]==\"PETG\"}2{else}3{endif} ; x", c, "t") ==
+          "M104 S2 ; x");
+}
+
 TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]") {
     Settings s = test_printer();
     s.infill_solid_below_area = 0.0; // the 10 mm cube's 57.8 mm2 of infill would be all solid (infill.solid_below_area)
