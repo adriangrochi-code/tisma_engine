@@ -12265,3 +12265,7 @@ QA; bundle id `net.tismaservidores.tisma`).
   recurso de GL sin cerrar al salir).
 - macOS CI, tercera vuelta: x86_64 compila entero; el enlace pedía el framework Security (los certificados del
   llavero que usa cpp-httplib). Agregado en CMake.
+- Fuga en ASan de `ui_project_import_*` (07:20 UTC): la memoria se pide dentro del código que llvmpipe genera al
+  vuelo, al dibujar la cama del proyecto importado; el objeto de la cama se reusa bien. Sin nombres de biblioteca
+  en la traza, una supresión de LSan solo para Mesa no se puede escribir sin tapar también las del motor. Sigue
+  abierta. macOS arm64 ya arranca en `macos-15`.
