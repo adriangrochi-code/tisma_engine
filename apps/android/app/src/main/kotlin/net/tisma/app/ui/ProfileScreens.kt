@@ -1,6 +1,7 @@
 package net.tisma.app.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -41,13 +42,30 @@ fun PrinterCard(state: SliceState, connection: Connection? = null, onConnection:
     val p = state.profile
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag("printer_card")) {
         androidx.compose.foundation.layout.Row(Modifier.padding(16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            androidx.compose.material3.Icon(painterResource(R.drawable.tisma_printer), null, Modifier.padding(end = 12.dp))
+            // settings_panel.md, rules 34 to 36: the printer's, the bed's and the nozzle's drawings.
+            if (p == null) androidx.compose.material3.Icon(painterResource(R.drawable.tisma_printer), null, Modifier.padding(end = 12.dp))
+            else Box(Modifier.padding(end = 12.dp)) { PrinterDrawing(printerShape { state.value(it) }) }
             Column(Modifier.weight(1f)) {
                 Text(p?.let { it.name ?: it.printer } ?: stringResource(R.string.profile_none), style = MaterialTheme.typography.titleMedium)
+                if (p != null) androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    val hardened = (state.value("machine.hardened_nozzle") as? kotlinx.serialization.json.JsonPrimitive)?.content == "true"
+                    NozzleDrawing(p.nozzle, hardened, highFlow(p.name ?: p.printer), size = 24.dp)
+                    Text(String.format(Locale.getDefault(), "%.2f mm", p.nozzle) + (if (hardened) " · " + stringResource(R.string.nozzle_hardened) else ""),
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 Text(if (p == null) stringResource(R.string.profile_none_hint)
-                    else String.format(Locale.getDefault(), "%.2f mm", p.nozzle) + " · " + (p.filament?.let { f -> if (p.pack) f.substringAfterLast('/').removeSuffix(".json").replace('_', ' ') else f }
+                    else (p.filament?.let { f -> if (p.pack) f.substringAfterLast('/').removeSuffix(".json").replace('_', ' ') else f }
                         ?: stringResource(if (p.pack) R.string.pack_default_filament else R.string.profile_generic_filament)),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            // The bed only on printers with exchangeable plates (Bambu Lab's, here).
+            if (isBambu(p)) {
+                val plate = (state.value("bambu.plate") as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+                Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                    BedDrawing(bedFamily(plate))
+                    if (plate.isNotEmpty()) Text(plate, style = MaterialTheme.typography.labelSmall)
+                }
             }
             // settings_panel.md, rule 42: right of the name, the connection's icon.
             connection?.let { ConnectionIcon(it, onConnection) }

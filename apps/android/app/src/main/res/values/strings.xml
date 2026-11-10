@@ -243,6 +243,7 @@
     <string name="connection_connecting">Connecting…</string>
     <string name="connection_connected">Connected over the network</string>
     <string name="connection_error">The printer does not answer</string>
+    <string name="nozzle_hardened">hardened steel</string>
     <string name="plate_share">Share the G-code</string>
     <string name="plate_send_to">Send to</string>
     <string name="plate_print">Print</string>
