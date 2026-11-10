@@ -12252,3 +12252,14 @@ QA; bundle id `net.tismaservidores.tisma`).
   (el corte por capas de un volumen, el de los volúmenes negativos) queda aparte para usarlo con bloqueadores y
   forzadores. **Sin terminar:** falta pasar `support_blockers`/`support_enforcers` de `ModelFile` hasta
   `slice_layers` y sumarlos a las zonas pintadas de `SupportParams` (supports_more.md, reglas 4 y 5, prueba SM12).
+- Regla 4 del convertidor, volúmenes de soporte (supports_more.md, reglas 4 y 5, SM12): `SupportVolumes`
+  (bloqueadores y forzadores) pasa de `slice_model` a `slice_layers` movido como la pieza; cada capa suma la
+  sección del volumen a las zonas pintadas de forzar y bloquear. La línea de comandos los toma de un 3MF
+  (`ModelFile::support_blockers`/`support_enforcers`), junto con los volúmenes negativos. Prueba `support volumes`
+  (bloqueador, forzador con el automático apagado, soporte apagado). Falta: la interfaz (la placa) y el aviso de qué
+  partes trajo el proyecto. Capas curvas y cinta: error claro, todavía no.
+- **CI local bd1dcab:** gcc 1160/1160 y clang 1160/1160; ASan 1155/1159. Dos fallas eran Xvfb que no arrancó (pasan
+  al repetir). `ui_project_import_prusaslicer` y `ui_project_import_standard` fallan siempre en ASan: LeakSanitizer
+  ve 112 bytes indirectos pedidos dentro de Mesa (glDrawArrays de la cama, renderer.cpp:1424). Ya fallaba en
+  038ce72. **Abierto:** buscar qué deja vivo el camino de abrir un proyecto ajeno (probablemente un contexto o
+  recurso de GL sin cerrar al salir).

@@ -131,10 +131,20 @@ double bridge_bead(const Settings& settings);
 // take their volume away from every layer they cross; they add no layers.
 // The modifiers (rule 3) give the zone they share with their object's parts
 // their settings: changing the walls, that zone has walls of its own.
+// Support blockers and enforcers given as volumes (supports_more.md, rules
+// 4 and 5; model_tools.md), in the mesh's coordinates: on each layer they
+// cross, what hangs inside a blocker gets no support, and what hangs inside an
+// enforcer gets it however steep, as the painted faces do.
+struct SupportVolumes {
+    IndexedMesh blockers, enforcers;
+    bool empty() const { return blockers.triangles.empty() && enforcers.triangles.empty(); }
+};
+
 SlicedModel slice_model(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu = nullptr,
                         const StressField* stress = nullptr, const Painting* painting = nullptr,
                         const std::vector<MeshObject>* objects = nullptr, const std::vector<ColorMix>* mixes = nullptr,
-                        const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr);
+                        const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr,
+                        const SupportVolumes* support_volumes = nullptr);
 
 // Object k of a model sliced object by object, as a model of its own (its
 // layers from 0), for what looks at a stack of layers (the stability review).

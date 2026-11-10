@@ -551,7 +551,8 @@ bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copie
     // The negative volumes (model_tools.md, rule 2) follow the part; not yet
     // through a cut, a split or copies.
     if (negative && (copies > 1 || settings.transform_cut_z || settings.transform_split)) {
-        err << "error: negative volumes do not go with --copies, transform.cut_z or transform.split yet\n";
+        err << "error: negative volumes and support blockers or enforcers do not go with --copies, transform.cut_z or "
+               "transform.split yet\n";
         return false;
     }
     std::vector<TriangleMesh> parts = apply_transform(std::move(mesh), settings, negative);
@@ -775,8 +776,25 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     // sequential.md, rule 2), or the model alone.
     std::vector<MeshObject> objects;
     const std::string file_name = std::filesystem::path(parsed->model).filename().string();
-    if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &stl.negative, parsed->align_y))
+    // The negative volumes and the support blockers and enforcers follow the
+    // part together, then are taken apart again (their triangles in order).
+    const std::size_t negatives = stl.negative.triangle_count(), blockers = stl.support_blockers.triangle_count();
+    TriangleMesh followers = stl.negative;
+    for (const TriangleMesh* more : {&stl.support_blockers, &stl.support_enforcers})
+        for (std::size_t t = 0; t < more->triangle_count(); ++t)
+            followers.add_triangle(more->corner(t, 0), more->corner(t, 1), more->corner(t, 2));
+    if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &followers, parsed->align_y))
         return kExitUsage;
+    const auto piece = [&](std::size_t from, std::size_t to) {
+        TriangleMesh m;
+        for (std::size_t t = from; t < to && t < followers.triangle_count(); ++t)
+            m.add_triangle(followers.corner(t, 0), followers.corner(t, 1), followers.corner(t, 2));
+        return m;
+    };
+    stl.negative = piece(0, negatives);
+    SupportVolumes support_volumes;
+    support_volumes.blockers = weld_exact(piece(negatives, negatives + blockers));
+    support_volumes.enforcers = weld_exact(piece(negatives + blockers, followers.triangle_count()));
 
     const auto start = std::chrono::steady_clock::now();
     const IndexedMesh mesh = weld_exact(stl.mesh);
@@ -824,13 +842,15 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         warnings.push_back({"speed_fallback", -1, 0.0,
                             "the printer's profile gives no speed for " + fallback + ": a stock Ender-3's are used", 0.0});
     try {
-        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut);
+        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut,
+                             nullptr, &support_volumes);
     } catch (const std::runtime_error& e) {
         if (!gpu)
             throw;
         err << "warning: GPU failed (" << e.what() << "), slicing on the CPU\n";
         warnings.push_back({"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
-        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut);
+        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut,
+                             nullptr, &support_volumes);
     }
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (const std::string reason = unprintable_reason(sliced, settings); !reason.empty()) {

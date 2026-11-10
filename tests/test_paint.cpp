@@ -483,3 +483,47 @@ TEST_CASE("paint bench: 200 strokes on a 100 mm cube of 12 triangles", "[.bench]
                 std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t1).count());
     CHECK(ms > 0.0);
 }
+
+TEST_CASE("support volumes: a blocker takes support away, an enforcer adds it (supports_more.md, 4 and 5, SM12)",
+          "[paint][support]") {
+    // A 10 mm square stem 4 mm tall under a 30 x 10 mm cap: the cap hangs out
+    // past X 10 to 20 on the right (and 0 to -10 on the left).
+    const IndexedMesh part = weld_exact(joined(box(0, 0, 0, 10, 10, 4), box(-10, 0, 4, 30, 10, 2)));
+    Settings s = test_printer();
+    s.support = true;
+    const auto layer_at = [](const SlicedModel& m, double z) {
+        for (std::size_t l = 0; l < m.layers.size(); ++l)
+            if (m.layers[l].bottom <= z && z < m.layers[l].top)
+                return l;
+        return m.layers.size();
+    };
+    const SlicedModel plain = slice_model(part, s);
+    const std::size_t l = layer_at(plain, 2.0);
+    REQUIRE(l < plain.support_areas.size());
+    CHECK(contains(plain.support_areas[l], 15, 2));
+    CHECK(contains(plain.support_areas[l], 15, 8));
+    // A blocker over the half at Y < 5 of what hangs on the right.
+    SupportVolumes blocker;
+    blocker.blockers = weld_exact(box(10, -1, 3.5f, 11, 6, 3));
+    const SlicedModel blocked = slice_model(part, s, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &blocker);
+    CHECK_FALSE(contains(blocked.support_areas[l], 15, 2));
+    CHECK(contains(blocked.support_areas[l], 15, 8));
+    CHECK(contains(blocked.support_areas[l], -5, 2)); // the left side as it was
+    // Automatic off: nothing without an enforcer; with one over the half at Y > 5, only there.
+    s.support_automatic = false;
+    const SlicedModel none = slice_model(part, s);
+    for (const Polygons& a : none.support_areas)
+        CHECK(a.empty());
+    SupportVolumes enforcer;
+    enforcer.enforcers = weld_exact(box(10, 5, 3.5f, 11, 6, 3));
+    const SlicedModel enforced = slice_model(part, s, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &enforcer);
+    CHECK_FALSE(contains(enforced.support_areas[l], 15, 2));
+    CHECK(contains(enforced.support_areas[l], 15, 8));
+    CHECK_FALSE(contains(enforced.support_areas[l], -5, 8));
+    // Support off: an enforcer adds none.
+    s.support = false;
+    s.support_automatic = true;
+    const SlicedModel off = slice_model(part, s, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &enforcer);
+    for (const Polygons& a : off.support_areas)
+        CHECK(a.empty());
+}
