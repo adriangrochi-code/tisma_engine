@@ -10,7 +10,8 @@ los campos; no trae ningún perfil.
 ## Descarga
 
 1. Cada versión es un release del repositorio, con:
-   - `index.json`: el índice (fabricantes, modelos, perfiles, archivos comprimidos con su tamaño y SHA-256);
+   - `index.json`: el índice (también `index.json.xz`, el mismo contenido comprimido, 0,12 MB contra 2,06 MB: se baja
+     ese si está) (fabricantes, modelos, perfiles, archivos comprimidos con su tamaño y SHA-256);
    - `compatible.json`: qué impresoras sirve cada filamento y cada perfil de impresión;
    - `<fabricante>.tar.xz`: uno por fabricante, con `vendors/<fabricante>/…`;
    - `community.tar.xz`: los datos de la comunidad (`community/…`);
