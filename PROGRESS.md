@@ -12301,4 +12301,4 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 | Preferencias, créditos, visión de color | Pendiente | |
 | Giro de pantalla y muerte del proceso a mitad de laminar/subir | Pendiente | |
 | Sin red ↔ con red (nube, impresoras, Compartida) | Pendiente | |
-| Textos: plurales, castellano/inglés | Revisado 10-11 | Plurales (ba8b30a); faltan textos fijos en código |
+| Textos: plurales, castellano/inglés | Revisado 10-11 | Plurales (ba8b30a); mensajes propios del motor en inglés en Mi biblioteca, paquete, CAD, piezas, calibraciones y placa (`AppMessageTest`) |
