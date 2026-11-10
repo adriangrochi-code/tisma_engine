@@ -1,0 +1,3 @@
+wait 2
+expect-toast Proyecto de PrusaSlicer: 1 pieza.
+expect-toast Ajustes del proyecto: 5 traducidos, 2 parecidos, 320 sin equivalente (todavía no se aplican)

@@ -11827,6 +11827,21 @@ arreglado en 9d8dc76 y subido.
 - Regla 9 (parte): `project_settings` lee los ajustes de un proyecto PrusaSlicer (`; clave = valor` de
   `Metadata/Slic3r_PE.config`; muestra pi4 del equipo de especificación, spec/next ca6b4a6: 327 ajustes). Al abrir
   el proyecto, si el paquete instalado tiene la tabla de ese programa, un segundo aviso dice «Ajustes del proyecto: A
-  traducidos, B parecidos, C sin equivalente (todavía no se aplican)». Sin probar en la interfaz con un paquete que
-  traiga la tabla (el paquete de prueba no la tiene todavía). Falta: aplicar los ajustes (reglas 6 y 8), el diálogo
+  traducidos, B parecidos, C sin equivalente (todavía no se aplican)». Probado en la interfaz desde el mantenimiento
+  del 10-11 (`ui_project_import_settings`). Falta: aplicar los ajustes (reglas 6 y 8), el diálogo
   con «Ver detalle» y la elección de impresora, y las partes de pi4 (regla 4).
+
+## 2026-11-10 00:40 — mantenimiento
+
+- **Revisado:** merge de `origin/main` y `origin/dev` (nada nuevo); fuzz de G-code 2000 corridas con semilla
+  1011202601 (varía polyholes, giro y paredes sin apoyo): 0 fallas, 28 descartadas por imprimibles; advertencias del
+  compilador; las notas «Sin probar» recientes; los cambios del 09-11 (polyholes, paredes sin apoyo, tabla de
+  traducción).
+- **Corregido:** dos advertencias en `src/library/library.cpp` (inicializador de `ProjectModel` incompleto y una
+  variable que tapaba a otra); `unsupported_turns` descarta por caja los polígonos de la capa de abajo antes de
+  probar cada punto (antes recorría todos por punto).
+- **Cerrado:** la nota «sin probar en la interfaz» de la tabla de traducción: el paquete de prueba trae
+  `translation.tar.xz` (filas con la forma del paquete real) y `ui_project_import_settings` abre la muestra pi4 y
+  espera «Ajustes del proyecto: 5 traducidos, 2 parecidos, 320 sin equivalente».
+- **No medido:** el banco de velocidad (CPU ocupada por el CI con ASan y el fuzz).
+- CI local completo en curso sobre b9173ea.

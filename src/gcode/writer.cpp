@@ -145,13 +145,22 @@ std::map<int, std::vector<char>> unsupported_turns(const std::map<int, std::vect
         for (std::size_t k = 0; k < paths.size(); ++k)
             loops.push_back({index, k, &paths[k]});
     }
-    // Held: some point over the layer below (inside an odd number of its paths).
+    // Held: some point over the layer below (inside an odd number of its
+    // paths); each path's box first, so most are not walked.
+    std::vector<Clipper2Lib::Rect64> boxes;
+    boxes.reserve(below.size());
+    for (const Polygon& path : below)
+        boxes.push_back(Clipper2Lib::GetBounds(path));
     const auto over = [&](const Point2d& p) {
         const Clipper2Lib::Point64 q{to_units(p.x), to_units(p.y)};
         int inside = 0;
-        for (const Polygon& path : below)
-            if (Clipper2Lib::PointInPolygon(q, path) != Clipper2Lib::PointInPolygonResult::IsOutside)
+        for (std::size_t k = 0; k < below.size(); ++k) {
+            const Clipper2Lib::Rect64& b = boxes[k];
+            if (q.x < b.left || q.x > b.right || q.y < b.top || q.y > b.bottom)
+                continue;
+            if (Clipper2Lib::PointInPolygon(q, below[k]) != Clipper2Lib::PointInPolygonResult::IsOutside)
                 ++inside;
+        }
         return inside % 2 == 1;
     };
     bool any_free = false;

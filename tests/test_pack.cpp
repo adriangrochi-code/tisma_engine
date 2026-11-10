@@ -195,7 +195,8 @@ TEST_CASE("pack install: a first install writes every archive under the pack fol
                                              [&](const std::string& l) { lines.push_back(l); });
     CHECK(r.pack_version == "2026.11.01-aaaaaaa");
     CHECK(r.discarded.empty());
-    CHECK(r.installed.size() == 5); // compatible, community, knowledge, acme, bolt
+    CHECK(r.installed.size() == 6); // compatible, community, knowledge, translation, acme, bolt
+    CHECK(fs::exists(pack / "translation/prusaslicer.json"));
     CHECK(fs::exists(pack / "vendors/acme/models/A1.json"));
     CHECK(fs::exists(pack / "vendors/bolt/models/B2.json"));
     CHECK(fs::exists(pack / "community/printers/Acme/Acme One.json"));

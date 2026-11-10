@@ -221,9 +221,12 @@ json library_save(const fs::path& dir, const LibrarySave& r) {
         try {
             ModelFile file = parse_model(model, r.model.extension().string());
             project.settings = parse_settings(settings);
-            project.models.push_back({r.model.stem().string(), std::move(file.mesh)});
-        } catch (const std::exception& e) {
-            fail("input", std::string("the model cannot be read: ") + e.what(), "no se puede leer el modelo");
+            ProjectModel one;
+            one.name = r.model.stem().string();
+            one.mesh = std::move(file.mesh);
+            project.models.push_back(std::move(one));
+        } catch (const std::exception& error) {
+            fail("input", std::string("the model cannot be read: ") + error.what(), "no se puede leer el modelo");
         }
         write_file(folder / "project.3mf", write_project_3mf(project));
     }
