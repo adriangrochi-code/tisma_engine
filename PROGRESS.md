@@ -12291,7 +12291,7 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 | Búsqueda en la red, sondeo y cámara en segundo plano | Revisado 10-11 | Seguían en segundo plano (52aa505, 5faf263) |
 | Aviso de fin de impresión (servicio) | Revisado 10-11 | Impresora apagada a mitad: nunca paraba; error no de impresora lo cortaba (75d2a4b) |
 | Nube: cuenta, sesiones, planes | Pendiente | |
-| Nube: trabajos (laminar/analizar), progreso, resultado | Pendiente | |
+| Nube: trabajos (laminar/analizar), progreso, resultado | Revisado 10-11 | Las vistas previas de resultados (hasta 1 GB) se acumulaban en la caché y una bajada cortada quedaba a medias (este commit, `CloudScreensTest`) |
 | Informar un problema | Pendiente | |
 | Actualizaciones de la app | Revisado 10-11 | Tamaño sin tope y huella en mayúsculas (18d78d2) |
 | Secretos (Keystore) | Revisado 10-11 | Un error pasajero borraba los códigos (735dccf) |
