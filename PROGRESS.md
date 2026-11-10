@@ -12545,3 +12545,9 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   bloqueador y el reforzador pintados vuelven al reabrir el proyecto. Las dos primeras fallan sin el arreglo.
 - Sin probar: borrar la pintura con el pincel en la interfaz (el motor da lo mismo con las capas vacías, pero no hay
   guion de interfaz que lo haga).
+- Dueño (20:00, por la sesión de especificaciones): búsqueda profunda de bugs hasta el 2026-11-12 03:10 UTC. Casos
+  raros y combinados donde la salida es incorrecta sin cerrarse: pintura de soporte (BH47 primero), soporte en
+  pendientes, puentes e islas, curvas con soporte y altura variable, modificadores y ajustes por objeto y por tramo,
+  costura, retracción y viaje, varios objetos y secuencial, modelos extremos (diminutos, enormes, paredes finas, no
+  cerrados, normales invertidas, fuera de la cama), ida y vuelta del 3MF, unidades, medidas del G-code frente al
+  modelo. Cada hallazgo con una prueba que falle sin el arreglo; resumen corto cada hora.
