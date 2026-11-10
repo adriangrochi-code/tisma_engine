@@ -222,4 +222,24 @@ class LibraryTest {
         assertEquals(before, libDir.walk().count())
         assertFalse(File(libDir.parentFile, "evil.txt").exists())
     }
+
+    @Test
+    fun `undo keeps only the last deletion's copy, and a past run's copies are removed`() {
+        val exe = engine()
+        val library = Library(exe, tmp.newFolder("library2"))
+        val work = tmp.newFolder("libwork2")
+        // A copy left by a run Android ended (onCleared never ran).
+        File(work, "undo").apply { mkdirs() }.resolve("old.tismalib").writeText("x")
+        val lib = LibraryViewModel(library, work)
+        assertTrue(File(work, "undo").listFiles().orEmpty().isEmpty())
+        val stl = tmp.newFile("c.stl").apply { writeText(cube) }
+        val config = tmp.newFile("c.json").apply { writeText("{}") }
+        val a = library.save(null, stl, config, null, emptyMap(), "", tmp.newFolder("s1"), name = "a")
+        val b = library.save(null, stl, config, null, emptyMap(), "", tmp.newFolder("s2"), name = "b")
+        lib.delete(a.id)
+        idle { lib.state.value.undo?.entry == a.id && !lib.state.value.busy }
+        lib.delete(b.id)
+        idle { lib.state.value.undo?.entry == b.id && !lib.state.value.busy }
+        assertEquals(1, File(work, "undo").listFiles().orEmpty().size)
+    }
 }

@@ -54,6 +54,12 @@ class LibraryViewModel(
     private val _state = MutableStateFlow(LibraryState())
     val state: StateFlow<LibraryState> = _state.asStateFlow()
 
+    init {
+        // Rule 8: undo lasts until the app closes. When Android ends the app, onCleared never runs: the copies of a
+        // past run are removed here, so they do not pile up on the phone.
+        File(workDir, "undo").deleteRecursively()
+    }
+
     fun setQuery(q: String) = _state.update { it.copy(query = q) }
     fun setWithAnalysis(v: Boolean) = _state.update { it.copy(withAnalysis = v) }
     fun setByName(v: Boolean) = _state.update { it.copy(byName = v) }
@@ -98,6 +104,8 @@ class LibraryViewModel(
     /** Rule 8: deletes an entry, a recipe or an analysis; a copy is kept to undo it until the app closes. */
     fun delete(id: String, recipe: String? = null, analysis: String? = null) = work {
         val copy = library.export(id, File(File(workDir, "undo").apply { mkdirs() }, "$id-${System.nanoTime()}.tismalib"))
+        // Only the last deletion can be undone: the copy before it goes.
+        _state.value.undo?.copy?.delete()
         library.delete(id, recipe, analysis)
         val what = when { recipe != null -> "recipe"; analysis != null -> "analysis"; else -> "entry" }
         val entry = if (what == "entry") null else library.show(id)
