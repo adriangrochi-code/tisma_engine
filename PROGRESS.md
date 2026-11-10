@@ -12180,3 +12180,5 @@ QA; bundle id `net.tismaservidores.tisma`).
 - 8ae9128: las respuestas HTTP de la nube y de las impresoras se leían enteras como texto; cualquier aparato de la red
   puede contestar al buscar impresoras. Ahora a lo sumo 16 MB (`HttpLimitTest`). Revisado sin cambios: la bajada de
   sitios ya corta a 200 MB, la cámara de Bambu a 8 MB por imagen.
+- 99b0756: si la impresora Bambu rechazaba el envío (tarjeta llena), la conexión de datos FTPS quedaba abierta. Prueba
+  en `BambuTest` con el simulador rechazando el `STOR`. Revisado sin cambios: un TLS fallido ya lo cierra el JDK.
