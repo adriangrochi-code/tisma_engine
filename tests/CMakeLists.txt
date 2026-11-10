@@ -589,6 +589,15 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/mode_chip.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_mode_chip.png)
     set_tests_properties(ui_script_mode_chip PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Preferences exported and imported (interface.md).
+    add_test(NAME ui_script_prefs_export_import
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/prefs_export_import.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_prefs_export_import.png)
+    set_tests_properties(ui_script_prefs_export_import PROPERTIES
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_prefs_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
     # The plate's right-click menu adds a cube and a sphere as models.
     add_test(NAME ui_script_plate_menu
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

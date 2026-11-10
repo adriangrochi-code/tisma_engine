@@ -1754,6 +1754,8 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(ExportPrefsButton, "Exportar…", "Export…") \
+    X(ImportPrefsButton, "Importar…", "Import…") \
     X(EditPresetMenu, "Editar el perfil", "Edit preset") \
     X(ExtruderColorMenu, "Cambiar el color del extrusor", "Change extruder color") \
     X(ShowTemplatesMenu, "Mostrar los perfiles de plantilla", "Show template presets") \

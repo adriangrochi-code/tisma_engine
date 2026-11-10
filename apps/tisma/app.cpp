@@ -573,6 +573,8 @@ enum class Purpose {
     ExportSketchDxf, // rule 20
     ExportViewDxf,
     ExportObject,      // a model's right-click menu: Export as STL/OBJ…
+    ExportPreferences, // Preferences › Other: export and import them
+    ImportPreferences,
     LoadProjectConfig, // interface.md, «Más»: Import Config from Project…
     ExportPlate        // Export Plate as STL/OBJ…
 };
@@ -962,8 +964,8 @@ private:
     void remember_toast(const std::string& text);
     std::vector<std::string> toasts_shown_; // for the scripts' expect-toast
     void fail(T title, std::string message, std::vector<std::string> details = {});
-    void load_preferences();
-    void save_preferences();
+    void load_preferences(const std::filesystem::path& from = {}); // from: an exported file (Preferences › Import)
+    void save_preferences(const std::filesystem::path& to = {});   // to: a file to export them to
     void apply_theme();
 
     // Profiles (docs/PROFILES.md).
@@ -3957,11 +3959,14 @@ void App::shutdown() {
     glfwTerminate();
 }
 
-void App::load_preferences() {
-    const std::filesystem::path path = preferences_path();
+void App::load_preferences(const std::filesystem::path& from) {
+    const std::filesystem::path path = from.empty() ? preferences_path() : from;
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        first_run_ = true;
+        if (from.empty())
+            first_run_ = true;
+        else
+            fail(T::CannotOpen, utf8(from));
         return;
     }
     try {
@@ -4004,8 +4009,10 @@ void App::load_preferences() {
         }
         if (j.value("language", "es") == "en")
             set_language(Language::English);
-        if (j.value("theme", "dark") == "light")
+        if (j.value("theme", "") == "light")
             theme_ = light_theme();
+        else if (j.value("theme", "") == "dark") // an imported file can bring the dark one back
+            theme_ = dark_theme();
         theme_system_ = j.value("theme", "dark") == "system";
         last_folder_ = from_utf8(j.value("folder", std::string()));
         show_templates_ = j.value("show_templates", true);
@@ -4130,8 +4137,8 @@ void App::load_preferences() {
     }
 }
 
-void App::save_preferences() {
-    const std::filesystem::path path = preferences_path();
+void App::save_preferences(const std::filesystem::path& to) {
+    const std::filesystem::path path = to.empty() ? preferences_path() : to;
     if (path.empty())
         return;
     try {
@@ -17435,6 +17442,7 @@ void App::more_menu() {
                 theme_ = light_theme();
                 apply_theme();
             }
+            note_rect("theme_menu_light");
             ImGui::EndMenu();
         }
         note_rect("theme");
@@ -18723,7 +18731,19 @@ void App::config_window() {
             ImGui::EndPopup();
         }
     }, tr(T::ConfigFactoryNote));
-    row(6, T::ConfigExport, "export", soon);
+    row(6, T::ConfigExport, "export", [&] {
+        if (ImGui::Button(tr(T::ExportPrefsButton))) {
+            purpose_ = Purpose::ExportPreferences;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ConfigExport), {".json"}, last_folder_, "tisma-preferences.json");
+        }
+        rect_of("prefs_export");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::ImportPrefsButton))) {
+            purpose_ = Purpose::ImportPreferences;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ConfigExport), {".json"}, last_folder_);
+        }
+        rect_of("prefs_import");
+    });
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
 
@@ -21101,6 +21121,12 @@ void App::file_chosen(const std::filesystem::path& chosen) {
         switch (purpose_) {
         case Purpose::LoadProjectConfig: load_project_config(chosen); break;
         case Purpose::ExportPlate: export_plate_to(chosen); break;
+        case Purpose::ExportPreferences: save_preferences(chosen); break;
+        case Purpose::ImportPreferences:
+            load_preferences(chosen);
+            apply_theme();
+            save_preferences(); // they are this machine's now
+            break;
         case Purpose::ExportObject: {
             if (export_object_ >= placed_meshes_.size())
                 break;
@@ -23352,6 +23378,12 @@ void App::script_input() {
         std::printf("ui-script: expect-optimize %s: got %s (%d %%)\n", step.key.c_str(), got.c_str(), o.best.density);
         if (got != step.key)
             return fail_step("got " + got);
+        next();
+    } else if (step.verb == "expect-theme") { // dark or light
+        const char* got = theme_.dark ? "dark" : "light";
+        std::printf("ui-script: expect-theme %s: %s\n", step.key.c_str(), got);
+        if (step.key != got)
+            return fail_step(std::string("the theme is ") + got);
         next();
     } else if (step.verb == "expect-level") { // the settings level: basic, normal, advanced or custom
         const char* got = view_level_ == ViewLevel::Basic    ? "basic"

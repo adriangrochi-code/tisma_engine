@@ -12412,3 +12412,8 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
 - **Paso 7e (Modo):** chip en la barra superior (en Preparar, cuando hay lugar) con el nivel de ajustes; abre tres
   opciones con botón de radio y su explicación (Básico — lo que casi toda impresión necesita; Normal — más ajustes;
   Avanzado — todos), las mismas del panel. Prueba `ui_script_mode_chip` (ventana de 1640 px) y verbo `expect-level`.
+- **Paso 7f (Preferencias que no hacían nada):** «Exportar e importar las preferencias» ya anda (Exportar… e
+  Importar…: el mismo JSON de `interface.json`; lo importado queda como las preferencias de esta máquina). Arreglado
+  de paso: cargar preferencias con `theme: dark` no volvía al tema oscuro si estaba el claro. Prueba
+  `ui_script_prefs_export_import` (con su propio HOME). Siguen «Próximamente»: nivel de OpenGL, sombra sobre la cama,
+  resolución de la vista y correr complementos (necesitan esas funciones en la vista y en los complementos).

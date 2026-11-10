@@ -1,0 +1,20 @@
+# Preferences › Other: Export… writes the preferences to a file and Import…
+# brings them back (interface.md; it said «Coming soon» before).
+expect-theme dark
+menu more
+menu config
+menu config_page_other
+menu prefs_export
+choose-file ui_prefs.json
+menu config_ok
+menu more
+menu theme
+menu theme_menu_light
+expect-theme light
+menu more
+menu config
+menu config_page_other
+menu prefs_import
+choose-file ui_prefs.json
+expect-theme dark
+menu config_cancel
