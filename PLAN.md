@@ -1325,10 +1325,19 @@ Prioridad alta, después del árbol en GPU. Primero las reglas 1 a 5 y la 9.
 - [ ] Reglas 3 y 4: mallas, partes y tipos de parte de cada familia. Las mallas en `3D/Objects` de la familia Orca ya se
   leen (extensión de producción, `formats.md` regla 18; prueba del 2026-11-09). Falta medir los archivos de muestra que genera el
   equipo de fichas.
+  Hecho (2026-11-10): `parse_3mf` separa pieza, negativo, modificadores, bloqueadores y forzadores (muestra pi4).
+  Falta, en este orden:
+  1. volúmenes de malla en la placa (`PlateVolume::Shape::Mesh`, la malla guardada en el proyecto 3MF como un objeto
+     más, en el marco del objeto), y tipos `SupportBlocker` y `SupportEnforcer`;
+  2. bloqueadores y forzadores como volumen en el laminado (hoy solo como pintura): la zona de la capa dentro del
+     volumen bloquea o fuerza el soporte, como lo pintado;
+  3. al abrir el 3MF de otro programa, sus partes pasan a la placa con esos tipos.
 - [ ] Regla 5: placas a camas.
 - [ ] Regla 9: el diálogo al abrir. Por ahora un aviso al abrir el 3MF de otro programa (2026-11-09): «Proyecto de
   <programa>: N piezas. Sus ajustes todavía no se traen», o el de programa desconocido (regla 2). Falta el diálogo
   completo con los ajustes traducidos, parecidos y sin equivalente, y «Usar la impresora del proyecto».
+  Hecho (2026-11-09/10): la tabla del paquete se baja y se lee; con ella, un segundo aviso cuenta los ajustes de un
+  proyecto PrusaSlicer en traducidos, parecidos y sin equivalente (prueba de interfaz con pi4).
 - [ ] Reglas 6 a 8, 11 y 12: ajustes con la tabla de traducción del paquete de perfiles (la hace la sesión de perfiles).
 - [ ] Regla 10: pintura, cuando haya archivos de muestra (PI6 a PI8).
 

@@ -11865,3 +11865,7 @@ arreglado en 9d8dc76 y subido.
   cada modificador (regla 7).
 - Cola nueva del equipo de especificación (después del conversor): `p2p_library.md` (spec/next a9148ef), cliente del
   motor e interfaz de escritorio, y un comando `check-file` reutilizable (reglas 3 sexies a 3 octies).
+- p2p (cuando arranque): decisión del dueño, `p2p_library.md` 8 bis a 8 quinquies (spec/next bff8a72): cifrado de
+  punta a punta con las claves de par; en la PC por defecto por intermediario de Tisma, con «Directo (más rápido;
+  los otros ven mi IP)» en Preferencias; intermediario topado: «Biblioteca ocupada, se retoma sola». La biblioteca de
+  pares elegida tiene que poder ir por intermediario.
