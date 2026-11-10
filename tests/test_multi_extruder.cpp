@@ -1001,3 +1001,42 @@ TEST_CASE("extruders: each nozzle's own filament temperature, never 0 (multi_ext
         CHECK(text.find("T1 S0") == std::string::npos);
     }
 }
+
+TEST_CASE("extruders: a machine's toolchange at the start never addresses tool -1 nor leaves the first nozzle at 0 (BH49)",
+          "[extruders]") {
+    // The change to the first extruder, from none, runs the machine's own
+    // toolchange G-code with previous_extruder -1; this one cools the
+    // previous tool and switches the next one off.
+    for (const bool own_start : {true, false}) {
+        Settings s = base();
+        if (own_start)
+            s.start_gcode = "M104 T0 S220\nM109 T0 S220\nG28";
+        s.gcode_toolchange = "M104 T{previous_extruder} S-5\nM104 T{next_extruder} S0";
+        s.variables["temperature"] = {"220", "220"};
+        s.variables["first_layer_temperature"] = {"220", "220"};
+        const std::string text = gcode_of(cube(1), s);
+        INFO((own_start ? "own start" : "engine's start") << "\n" << text.substr(0, 1500));
+        CHECK(text.find("T-1") == std::string::npos);
+        // Before the first extrusion, the last temperature T0 gets is not 0.
+        std::size_t first = std::string::npos;
+        for (std::size_t at = text.find("\nG1 "); at != std::string::npos; at = text.find("\nG1 ", at + 1)) {
+            const std::string line = text.substr(at + 1, text.find('\n', at + 1) - at - 1);
+            if (line.find(" X") != std::string::npos && line.find(" E") != std::string::npos) {
+                first = at;
+                break;
+            }
+        }
+        REQUIRE(first != std::string::npos);
+        const std::string before = text.substr(0, first);
+        const auto last = [&](std::initializer_list<const char*> texts) {
+            std::ptrdiff_t at = -1;
+            for (const char* t : texts)
+                if (const std::size_t f = before.rfind(t); f != std::string::npos)
+                    at = std::max(at, std::ptrdiff_t(f));
+            return at;
+        };
+        const std::ptrdiff_t off = last({"T0 S0"}), on = last({"S220 T0", "T0 S220"});
+        REQUIRE(on >= 0);
+        CHECK(on > off);
+    }
+}

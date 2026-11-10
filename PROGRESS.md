@@ -12658,3 +12658,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   90° en capas alternas, tramos a 45° y 135° parejos, la parte inclinada cambia con la altura, largo cercano al
   rectilíneo; el nombre se lee. Los porcentajes exactos de P8 (55 %, 43 %, 78 %) dependen de la fase en Z y no se
   igualan: es la forma, no el mismo dibujo.
+- BH49 (perfiles, parche multiextrusor; UltiMaker S5, Sermoon D3 Pro): el cambio de herramienta de la máquina, que el
+  motor corre también al primer extrusor «desde ninguno» con `previous_extruder` −1, dejaba `M104 T-1 S-5` y
+  apagaba la boquilla activa (`M104 T0 S0`) antes de imprimir. Ahora se quitan los comandos de temperatura a una
+  herramienta negativa, y si el cambio deja en 0 la boquilla que va a imprimir, se calienta de nuevo y se espera.
+  El resto del G-code de la máquina sale igual. Prueba `[extruders]` BH49, que falla sin el arreglo.
+- Cola (spec/next 77e6a3f, cloud.md 5b, decisión del dueño 21:50): ventas de escritorio por las tiendas. Windows:
+  Microsoft Store (MSIX) con el plan como suscripción en la app (Windows.Services.Store), recibo verificado por el
+  servidor. Linux: Flathub y Snap Store, el plan desde la cuenta. Hoja de ruta después de la beta: empaquetado MSIX y
+  compra en la tienda, manifiesto Flatpak, snapcraft.yaml; licencias compatibles con las tiendas.

@@ -9,6 +9,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Dos extrusores con G-code de máquina: sin `T-1` y sin apagar la boquilla activa al empezar.
 - Relleno `honeycomb_3d` (panal 3D).
 - Macros: bloques de sentencias con `if … then … endif` (cambios de herramienta de las Prusa XL y Snapmaker U1).
 - Varias boquillas con el G-code de inicio de la máquina: cada boquilla se calienta antes de imprimir (nunca a 0).

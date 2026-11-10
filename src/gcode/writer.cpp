@@ -2853,10 +2853,10 @@ std::string toolchange_template_error(const Settings& s) {
     return {};
 }
 
-// The tools (from 0) a G-code heats with M104, M109 or G10 S, to a
-// temperature above 0; a command with no T heats `current`.
-std::set<int> heated_tools(std::string_view gcode, int current) {
-    std::set<int> out;
+// The last temperature a G-code sets each tool (from 0) to with M104, M109
+// or G10 S; a command with no T sets `current`'s.
+std::map<int, double> tool_temperatures(std::string_view gcode, int current) {
+    std::map<int, double> out;
     std::size_t at = 0;
     while (at < gcode.size()) {
         const std::size_t end = std::min(gcode.find('\n', at), gcode.size());
@@ -2871,7 +2871,7 @@ std::set<int> heated_tools(std::string_view gcode, int current) {
         const bool g10 = command == "G10";
         if (command != "M104" && command != "M109" && !g10)
             continue;
-        double celsius = 0.0;
+        double celsius = -1.0;
         int tool = current;
         for (std::size_t i = word.size(); i < line.size(); ++i) {
             const char c = char(std::toupper(static_cast<unsigned char>(line[i])));
@@ -2882,8 +2882,41 @@ std::set<int> heated_tools(std::string_view gcode, int current) {
             else if ((c == 'T' && !g10) || (c == 'P' && g10))
                 tool = std::atoi(std::string(line.substr(i + 1)).c_str());
         }
+        if (celsius >= 0.0)
+            out[tool] = celsius;
+    }
+    return out;
+}
+
+// The tools (from 0) a G-code heats to a temperature above 0.
+std::set<int> heated_tools(std::string_view gcode, int current) {
+    std::set<int> out;
+    for (const auto& [tool, celsius] : tool_temperatures(gcode, current))
         if (celsius > 0.0)
             out.insert(tool);
+    return out;
+}
+
+// The G-code without its temperature commands for a tool below 0 (T-1, P-1:
+// a change's previous_extruder at the start, from none). BH49.
+std::string without_negative_tools(std::string_view gcode) {
+    std::string out;
+    std::size_t at = 0;
+    while (at < gcode.size()) {
+        const std::size_t end = std::min(gcode.find('\n', at), gcode.size());
+        const std::string_view line = gcode.substr(at, end - at);
+        at = end + 1;
+        std::string_view code = line.substr(0, line.find(';'));
+        code = code.substr(std::min(code.find_first_not_of(" \t"), code.size()));
+        std::string upper(code);
+        for (char& c : upper)
+            c = char(std::toupper(static_cast<unsigned char>(c)));
+        const bool heater = upper.starts_with("M104") || upper.starts_with("M109") || upper.starts_with("G10");
+        if (heater && (upper.find(" T-") != std::string::npos || upper.find(" P-") != std::string::npos))
+            continue;
+        out.append(line);
+        if (end < gcode.size())
+            out += '\n';
     }
     return out;
 }
@@ -3322,13 +3355,17 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         templates.variables["previous_extruder"] = TemplateValue::of(static_cast<long long>(previous - 1));
         templates.variables["next_extruder"] = TemplateValue::of(static_cast<long long>(next - 1));
         templates.variables["toolchange_z"] = templates.variables["layer_z"];
-        const std::string change = render_template(s.gcode_toolchange, templates, "gcode.toolchange");
+        const std::string change = without_negative_tools(render_template(s.gcode_toolchange, templates, "gcode.toolchange"));
         add_user(change);
         if (!changes_tool(change, next - 1))
             lines += "T" + std::to_string(next - 1) + "\n";
-        for (const int t : heated_tools(user, next - 1))
-            heated.insert(t);
-        if (!heat && s.extruders > 1 && !heated.contains(next - 1) && dialect.wait != Dialect::Wait::None) {
+        for (const auto& [t, celsius] : tool_temperatures(user, next - 1))
+            if (celsius > 0.0)
+                heated.insert(t);
+            else
+                heated.erase(t); // turned off: the one that prints next heats again (BH49)
+        if (s.extruders > 1 && !heated.contains(next - 1) && dialect.wait != Dialect::Wait::None &&
+            (!heat || tool_temperatures(user, next - 1).contains(next - 1))) {
             const auto layer = templates.variables.find("layer_num");
             const bool first = layer == templates.variables.end() || layer->second.kind != TemplateValue::Kind::Int ||
                                layer->second.integer <= 0;
