@@ -34,6 +34,14 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("p2p.sharing", false)
         set(value) = prefs.edit().putBoolean("p2p.sharing", value).apply()
 
+    /**
+     * p2p_library.md, rule 7 bis: scans already kept in «Mi biblioteca» whose «taken» did not reach the server yet, so
+     * a scan offered again is only marked, not kept twice.
+     */
+    var scansKept: Set<String>
+        get() = prefs.getStringSet("scans.kept", null)?.toSet() ?: emptySet()
+        set(v) = prefs.edit().putStringSet("scans.kept", v).apply()
+
     /** p2p_library.md, rule 3 ter: the highest block list and index sequences seen (an older one is refused). */
     var p2pListSequence: Long
         get() = prefs.getLong("p2p.list_sequence", -1)

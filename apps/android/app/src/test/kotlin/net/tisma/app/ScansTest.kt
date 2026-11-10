@@ -73,4 +73,34 @@ class ScansTest {
             server.stop()
         }
     }
+
+    @Test
+    fun `a scan kept while taken failed is not kept twice, and a fingerprint in capitals is accepted`() {
+        val server = MockCloud().start()
+        try {
+            val context: Context = ApplicationProvider.getApplicationContext()
+            val settings = AppSettings(context).apply { this.server = server.url; scansKept = emptySet() }
+            val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
+            val scan = server.addScan("ana@example.com", "Pieza", "pieza.stl", File("../../../tests/data/cube_ascii.stl").readBytes())
+            server.upperSha = true
+            server.failTaken = 1
+            cloud.signIn("ana@example.com", "password1")
+            val deadline = System.currentTimeMillis() + 10_000
+            while (!cloud.state.value.signedIn && System.currentTimeMillis() < deadline) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
+            var kept = 0
+            val dir = tmp.newFolder("scans")
+            kotlinx.coroutines.runBlocking {
+                assertEquals(1, cloud.takeScans(dir) { _, _ -> kept++; true })
+                assertEquals(setOf(scan.id), settings.scansKept)
+                // Offered again: only marked, not kept a second time.
+                assertEquals(0, cloud.takeScans(dir) { _, _ -> kept++; true })
+            }
+            assertEquals(1, kept)
+            assertTrue(settings.scansKept.isEmpty())
+            assertEquals(setOf("Test phone (Android)"), server.scan(scan.id)?.takenBy?.toSet())
+            assertTrue(dir.listFiles().orEmpty().isEmpty())
+        } finally {
+            server.stop()
+        }
+    }
 }

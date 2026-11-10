@@ -348,21 +348,34 @@ class CloudViewModel(
             val list = runCatching { client.scans(device) }.onFailure { AppLog.line("cloud: scans ${it.message}") }.getOrDefault(emptyList())
             var n = 0
             for (scan in list) {
+                // Kept before, but the server did not hear «taken»: only tell it again.
+                if (scan.id in settings.scansKept) {
+                    runCatching { client.scanTaken(scan.id, device) }.onSuccess { settings.scansKept -= scan.id }
+                    continue
+                }
+                var f: java.io.File? = null
                 runCatching {
                     dir.mkdirs()
                     val ext = scan.file.substringAfterLast('.', "stl").lowercase().takeIf { it in setOf("stl", "obj", "3mf") } ?: "stl"
-                    val f = java.io.File(dir, "scan-" + scan.id.replace(Regex("[^A-Za-z0-9_-]"), "_") + "." + ext)
-                    f.outputStream().use { client.downloadScan(scan.id, it) }
-                    if (scan.sha256.isNotBlank() && net.tisma.app.p2p.sha256(f) != scan.sha256) {
-                        f.delete(); throw java.io.IOException("The scan's mesh does not match its fingerprint")
+                    val file = java.io.File(dir, "scan-" + scan.id.replace(Regex("[^A-Za-z0-9_-]"), "_") + "." + ext).also { f = it }
+                    file.outputStream().use { client.downloadScan(scan.id, it) }
+                    // The fingerprint in hex, whatever its case.
+                    if (scan.sha256.isNotBlank() && !net.tisma.app.p2p.sha256(file).equals(scan.sha256.trim(), ignoreCase = true)) {
+                        throw java.io.IOException("The scan's mesh does not match its fingerprint")
                     }
                     // Rule 3 octies: a mesh that fails the safety checks is not kept.
-                    if (net.tisma.app.p2p.SafeFile.check(f) is net.tisma.app.p2p.SafeFile.Verdict.Unsafe) {
-                        f.delete(); throw java.io.IOException("Unsafe file: not opened")
+                    if (net.tisma.app.p2p.SafeFile.check(file) is net.tisma.app.p2p.SafeFile.Verdict.Unsafe) {
+                        throw java.io.IOException("Unsafe file: not opened")
                     }
-                    if (keep(scan, f)) { client.scanTaken(scan.id, device); n++ }
-                    f.delete()
+                    if (keep(scan, file)) {
+                        n++
+                        settings.scansKept += scan.id
+                        client.scanTaken(scan.id, device)
+                        settings.scansKept -= scan.id
+                    }
                 }.onFailure { AppLog.line("cloud: scan ${scan.id} ${it.message}") }
+                // A half download or a refused file never stays behind.
+                f?.delete()
             }
             n
         }

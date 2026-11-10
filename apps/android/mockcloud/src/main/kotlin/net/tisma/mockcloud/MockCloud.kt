@@ -133,6 +133,9 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
     /** p2p_library.md, rule 7 bis: a part scanned and sent to print, for [email]'s devices (the app's proposed routes). */
     class ScanDef(val id: String, val email: String, val name: String, val file: String, val mesh: ByteArray, val takenBy: MutableSet<String> = mutableSetOf())
     private val scans = mutableListOf<ScanDef>()
+    /** Tests: how many «taken» calls fail (as a dropped network would), and whether fingerprints come in capitals. */
+    @Volatile var failTaken = 0
+    @Volatile var upperSha = false
     fun addScan(email: String, name: String, file: String, mesh: ByteArray): ScanDef = synchronized(lock) {
         ScanDef("scan-${scans.size + 1}", email, name, file, mesh).also { scans += it }
     }
@@ -229,7 +232,7 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
                     put("scans", kotlinx.serialization.json.buildJsonArray {
                         mine.forEach { sc -> add(buildJsonObject {
                             put("id", sc.id); put("name", sc.name); put("file", sc.file); put("size", sc.mesh.size)
-                            put("sha256", java.security.MessageDigest.getInstance("SHA-256").digest(sc.mesh).joinToString("") { "%02x".format(it) })
+                            put("sha256", java.security.MessageDigest.getInstance("SHA-256").digest(sc.mesh).joinToString("") { "%02x".format(it) }.let { if (upperSha) it.uppercase() else it })
                             put("created", "2026-11-10T00:00:00Z")
                         }) }
                     })
@@ -244,6 +247,7 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
                 val a = auth(ex)
                 val body = readJson(ex)
                 val sc = scan(r[2])?.takeIf { it.email == a.email } ?: throw Stop(404, "No such scan")
+                if (failTaken > 0) { failTaken--; throw Stop(503, "Try again") }
                 synchronized(lock) { sc.takenBy += (body["device"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "" }
                 ok(buildJsonObject { put("ok", true) })
             }
