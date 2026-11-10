@@ -173,15 +173,20 @@ la forma de trabajar común de los programas de CAD, con el diseño propio de Ti
 se copian íconos ni imágenes de otro programa). Vale igual en Impresión 3D, en la vista previa y en Ingeniería
 (Estructural, Aerodinámica y Diseño).
 
-1. **Mouse** (preferencia «Navegación»: «CAD», por defecto, o «Clásica», la de antes):
+1. **Mouse:** los mismos controles que Fusion 360, por defecto (dueño, 10-11-2026: «que utilice los mismos controles
+   que tiene Fusion 360, que es lo más cómodo y lo más conocido por la gente que diseña»), según la ayuda pública de
+   Autodesk («Navigate the canvas»):
    - **clic izquierdo:** elige; arrastrar con el izquierdo desde un lugar vacío hace una selección con un rectángulo
      (de izquierda a derecha, lo que queda adentro; de derecha a izquierda, también lo que toca); Ctrl o Mayús suman;
    - **rueda apretada y arrastrar:** desplaza la vista;
-   - **girar la rueda:** acerca y aleja hacia donde apunta el mouse;
+   - **Mayús + rueda apretada y arrastrar:** gira la vista alrededor del punto de la pieza bajo el mouse (sin pieza
+     bajo el mouse, alrededor del centro de lo elegido o de la cama);
+   - **girar la rueda:** acerca y aleja hacia donde apunta el mouse, en el mismo sentido que Fusion 360;
    - **doble clic con la rueda:** encuadra todo;
-   - **arrastrar con el botón derecho:** gira la vista alrededor del punto de la pieza que está bajo el mouse (sin
-     pieza bajo el mouse, alrededor del centro de lo elegido o de la cama); Mayús + rueda apretada también gira;
-   - **clic derecho sin mover** (menos de 4 px): abre el menú de la pieza o de la cama (reglas de «Menús»).
+   - **clic derecho:** abre el menú de la pieza o de la cama (reglas de «Menús»), como el menú del botón derecho de
+     Fusion 360.
+   Preferencia «Navegación»: «Fusion 360» (por defecto), «Botón derecho gira» (arrastrar con el derecho gira; un clic
+   derecho sin mover, menos de 4 px, abre el menú) y «Clásica» (la de antes).
 2. **Cubo de vistas** arriba a la derecha de la vista 3D: un cubo con las caras Frente, Atrás, Izquierda, Derecha,
    Arriba y Abajo; tocar una cara, una arista o una esquina lleva a esa vista con una animación corta; arrastrarlo
    gira la vista; al lado, «Inicio» vuelve a la vista inicial. Sigue el giro de la vista.
@@ -437,7 +442,7 @@ Escenarios para comprobar en la pantalla, como se observaron en Tisma Slicer.
 | UI12 | Ingeniería > Analysis sin apoyos ni cargas | «Analyze» apagado, con «Add a fixed face and a load.» |
 | UI13 | Abrir un grupo de herramientas y tocar otro | El primer toque fuera de la tira solo la cierra; el segundo abre el otro grupo |
 | UI14 | Clic derecho sobre la cama vacía | Menú con Add Shape ▸ y Add calibration model ▸ |
-| UI17 | Navegación «CAD»: arrastrar con la rueda, girar la rueda, arrastrar con el derecho, clic derecho sin mover | Desplaza; acerca hacia el mouse; gira alrededor del punto bajo el mouse; abre el menú de la pieza |
+| UI17 | Navegación por defecto (Fusion 360): arrastrar con la rueda, Mayús + arrastrar con la rueda, girar la rueda, doble clic con la rueda, clic derecho | Desplaza; gira alrededor del punto bajo el mouse; acerca hacia el mouse; encuadra todo; abre el menú de la pieza |
 | UI18 | Tocar la cara «Arriba» del cubo de vistas y después «Inicio» | La vista pasa a la de arriba y vuelve a la inicial |
 | UI15 | Preferences > GUI > Appearance: Dark, y reiniciar | Paneles y tarjetas con los colores oscuros de la tabla; la vista 3D igual |
 
