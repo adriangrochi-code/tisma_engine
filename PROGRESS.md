@@ -12230,3 +12230,6 @@ QA; bundle id `net.tismaservidores.tisma`).
 - Paquete: con `--filament-gcode-from-source`, 14 variantes cortan por `support_air_filtration` e
   `initial_layer_height`, que no están en gcode_variables.md ni en los `values` de la máquina. Pedido a la ficha
   agregarlas; el motor regenera la tabla cuando lleguen.
+- gcode_variables.md (spec/next 10a2802, check_spec limpio): `initial_layer_height` (= `first_layer_height`) y
+  `support_air_filtration` (sí/no, vale no) en la tabla. Prueba en `[macros]`. Segundo fuzz 2000 corridas, semilla
+  1011202604: 0 fallas.

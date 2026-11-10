@@ -2882,6 +2882,14 @@ TEST_CASE("Bambu Lab's own variables are filled, and a list read past its end gi
     }));
 }
 
+TEST_CASE("OrcaSlicer and Creality Print filaments' own G-code names (gcode_variables.md, 2026-11-10)", "[gcode][macros]") {
+    Settings s = test_printer();
+    TemplateContext c = template_context(s, SlicedModel{});
+    CHECK(render_template("{if support_air_filtration}on{else}off{endif}", c, "extrusion.start_gcode") == "off");
+    CHECK(render_template("{initial_layer_height}", c, "extrusion.start_gcode") ==
+          template_text(TemplateValue::of(s.first_layer_height)));
+}
+
 TEST_CASE("the profile pack's machine G-code: what its full run found (BH45, third part)", "[gcode][macros]") {
     Settings s = test_printer();
     s.variables["temperature"] = {"215"};
