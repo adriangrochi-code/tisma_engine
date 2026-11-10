@@ -31,7 +31,7 @@ desventajas».
 3 ter. **Índice:** `format` `tisma-library-index`, `version` 1, `generated`, `sequence` (crece siempre: se rechaza uno
    menor que el último visto) y `models`, cada uno con `id`, `revision`, `published`, `name`, `description`, `tags`,
    `license` (SPDX, lista cerrada), `author` (`account` opaco y `name`), `thumbnail` (WebP, hasta 64 KB), `size`,
-   `files` (`path`, `role`: `project`, `analysis` o `photo`, sin G-code; `size`, `sha256`), `analysis` (resumen),
+   `files` (`path`, `role`: `project`, `profile` (receta), `analysis` o `photo`, sin G-code; `size`, `sha256`), `analysis` (resumen),
    `peer_key`, `manifest_signature` (firma del par sobre `{id, revision, files}`), `swarm` (protocolo e id del enjambre,
    lo llena el motor) y `checked` (lo revisó un sembrador).
 3 quater. **Lista de bloqueo:** `format` `tisma-library-blocklist`, `version` 1, `generated`, `sequence`, `expires`
@@ -50,6 +50,27 @@ desventajas».
    certificado. Las apps solo traen la clave del proyecto y aceptan un índice o una lista firmados por una clave de
    biblioteca con certificado válido y que no esté en `revoked_keys`. Si se roba el maestro, el dueño certifica una
    clave nueva y la vieja pasa a `revoked_keys`. Sin certificado, la biblioteca no publica (503).
+
+## Qué se sube y cómo se revisa (dueño, 10-11-2026)
+
+3 sexies. **Sin G-code:** un modelo publicado lleva el proyecto (piezas), los **ajustes generales** con que se laminó
+   (perfil de impresión y de filamento, como receta de `local_library.md`) y los **análisis** (FEA, CFD) con su
+   resumen. Nunca G-code: quien lo baja lo lamina en su teléfono, su computadora o la nube, con su impresora y esa
+   receta, y el análisis se muestra si vale para sus ajustes (`model_library.md`, regla 3). El servidor rechaza un
+   archivo con rol o extensión de G-code (`.gcode`, `.bgcode`, `.gco`, `.g`).
+3 septies. **Ajustes que no viajan:** de la receta se sacan antes de publicar el G-code de la máquina (inicio, fin,
+   cambios), los scripts de posprocesado, las rutas de archivos y los datos de conexión a impresoras. Al bajar, se usan
+   los de la impresora de quien baja.
+3 octies. **Archivos seguros** (lo comprueba la app al bajar y antes de abrir, y el sembrador al revisar):
+   - solo estos tipos: 3MF, STL, OBJ, STEP, la receta JSON del motor, `.tea`, `.taero` con su JSON, y fotos WebP, PNG o
+     JPEG; cada archivo se reconoce por su contenido, no por la extensión;
+   - un 3MF o ZIP se abre sin escribir nada fuera de su carpeta (sin rutas absolutas ni `..`), sin enlaces, con tope de
+     tamaño descomprimido (10 veces el comprimido y 2 GB) y sin archivos de programa adentro (ejecutables, scripts,
+     bibliotecas, macros de oficina);
+   - el 3MF no puede traer scripts de posprocesado ni G-code propio: si los trae, se quitan con aviso;
+   - un archivo que falla una comprobación no se abre ni se comparte, se borra, y se avisa «Archivo inseguro: no se
+     abrió» con el motivo; la app ofrece «Denunciar»;
+   - además, el sembrador lo pasa por un antivirus (ClamAV) y lo marca `checked`.
 
 ## La moderación
 
