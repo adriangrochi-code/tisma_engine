@@ -390,6 +390,10 @@ if(WIN32)
 else()
   target_sources(tisma_net PRIVATE src/net/http_httplib.cpp)
   target_link_libraries(tisma_net PRIVATE tisma_httplib)
+  if(APPLE)
+    # cpp-httplib takes the system's certificates from the keychain.
+    target_link_libraries(tisma_net PRIVATE "-framework Security" "-framework CoreFoundation")
+  endif()
 endif()
 
 # Bambu Lab printers on the local network (printer_connections.md, «Bambu Lab

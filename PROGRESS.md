@@ -12263,3 +12263,5 @@ QA; bundle id `net.tismaservidores.tisma`).
   ve 112 bytes indirectos pedidos dentro de Mesa (glDrawArrays de la cama, renderer.cpp:1424). Ya fallaba en
   038ce72. **Abierto:** buscar qué deja vivo el camino de abrir un proyecto ajeno (probablemente un contexto o
   recurso de GL sin cerrar al salir).
+- macOS CI, tercera vuelta: x86_64 compila entero; el enlace pedía el framework Security (los certificados del
+  llavero que usa cpp-httplib). Agregado en CMake.
