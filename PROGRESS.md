@@ -12348,3 +12348,12 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
 5. Ayuda: atajos de teclado, carpeta de configuración, información del sistema.
 6. Clic derecho de la pieza (instancias, espejo, dividir, borrar, imprimible) y de la cama.
 7. Engranaje del filamento, ▲ con marca, Preferencias (Como el sistema, Enter) y las filas «Próximamente».
+- **Paso 1 hecho:** «Más» en tarjetas de tres columnas (Tisma, Archivo, Editar / Vista, Configuración, Ayuda), cada
+  una con su subtítulo gris en negrita; cada acción con su atajo a la derecha en gris, la casilla marcada a la derecha
+  y apagada cuando no se puede (Exportar y Mandar sin laminar, Deshacer/Rehacer sin pasos, Borrar lo elegido sin
+  elección, Guardar y Laminar con la placa vacía). Entradas nuevas: Abrir un proyecto (Ctrl+O), Exportar el G-code
+  (Ctrl+G), Mandar el G-code (Ctrl+Shift+G, al programa de red probado o a la impresora por USB), (Re)laminar ahora
+  (Ctrl+R), Borrar lo elegido (Supr), Deshacer, Rehacer, Buscar, las siete vistas (0–6), Mostrar nombres (E) y
+  leyenda (L). Atajos del spec: Guardar como Ctrl+Alt+S (Ctrl+Shift+S sigue andando), Exportar Ctrl+G (Ctrl+E queda
+  para Exportar configuración). Prueba `ui_script_more_cards` con el verbo nuevo `expect-enabled`. Arreglado de paso:
+  el `expect-objects` viejo de los scripts tapaba al nuevo y no miraba el nombre del último modelo.

@@ -505,6 +505,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/design_missing.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_design_missing.png)
     set_tests_properties(ui_script_design_missing PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # «Más» as cards: subtitles, shortcuts on the right, greyed entries (interface.md).
+    add_test(NAME ui_script_more_cards
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/more_cards.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_more_cards.png)
+    set_tests_properties(ui_script_more_cards PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The plate's right-click menu adds a cube and a sphere as models.
     add_test(NAME ui_script_plate_menu
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

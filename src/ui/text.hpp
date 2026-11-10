@@ -412,8 +412,8 @@
     X(Slice, "Laminar", "Slice")                                                                                      \
     X(SliceTip, "Laminar el modelo con estos ajustes (Ctrl+R)", "Slice the model with these settings (Ctrl+R)")       \
     X(Export, "Exportar G-code", "Export G-code")                                                                     \
-    X(ExportTip, "Escribir el G-code, volver a leerlo del disco y verificarlo (Ctrl+E)",                              \
-      "Write the G-code, read it back from the disk and check it (Ctrl+E)")                                           \
+    X(ExportTip, "Escribir el G-code, volver a leerlo del disco y verificarlo (Ctrl+G)",                              \
+      "Write the G-code, read it back from the disk and check it (Ctrl+G)")                                           \
     X(ExportNeedsSlice, "Primero hay que laminar", "Slice first")                                                     \
     X(More, "Más", "More")                                                                                            \
     X(CopyLink, "Copiar enlace", "Copy Link")                                                                         \
@@ -1745,6 +1745,23 @@
     X(HiddenChanged, "Cambiado; se ve aunque el nivel lo esconde", "Changed; shown although the level hides it") \
     X(ChooseSettings, "Elegir ajustes…", "Choose settings…") \
     X(Undo, "Deshacer", "Undo") \
+    X(MoreTisma, "Tisma", "Tisma") \
+    X(MoreFile, "Archivo", "File") \
+    X(MoreEdit, "Editar", "Edit") \
+    X(MoreView, "Vista", "View") \
+    X(MoreConfiguration, "Configuración", "Configuration") \
+    X(MoreHelp, "Ayuda", "Help") \
+    X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
+    X(ExportGcodeMenu, "Exportar el G-code…", "Export G-code…") \
+    X(SendGcodeMenu, "Mandar el G-code…", "Send G-code…") \
+    X(SliceNowMenu, "(Re)laminar ahora", "(Re)Slice Now") \
+    X(DeleteSelectedMenu, "Borrar lo elegido", "Delete Selected") \
+    X(Redo, "Rehacer", "Redo") \
+    X(SearchMenu, "Buscar", "Search") \
+    X(ViewBottom, "Abajo", "Bottom") \
+    X(ShowLabelsMenu, "Mostrar los nombres", "Show Labels") \
+    X(ShowLegendMenu, "Mostrar la leyenda", "Show Legend") \
+    X(PreferencesMenu, "Preferencias", "Preferences") \
     X(BackToPlate, "‹ Placa", "‹ Plate") \
     X(PrinterSettingsTitle, "Configuración de la impresora", "Printer settings") \
     X(PrinterSettingsTip, "Configuración de la impresora: máquina, boquilla, límites, G-code y calibración", "Printer settings: machine, nozzle, limits, G-code and calibration") \

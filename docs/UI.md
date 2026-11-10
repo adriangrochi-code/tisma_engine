@@ -47,9 +47,9 @@ tisma ajustes.json modelo.stl  # con esos ajustes
 | Acercar o alejar | La rueda |
 | Encuadrar | Doble clic, o el botón de encuadrar |
 | Abrir | Ctrl+O, el botón Abrir o soltar el archivo sobre la ventana |
-| Guardar el proyecto | Ctrl+S (Ctrl+Mayús+S: guardar como) |
+| Guardar el proyecto | Ctrl+S (Ctrl+Alt+S: guardar como; Ctrl+Mayús+S también) |
 | Laminar | Ctrl+R |
-| Exportar | Ctrl+E |
+| Exportar el G-code | Ctrl+G (Ctrl+Mayús+G: mandarlo a la impresora) |
 | Capas de la vista previa | Flechas arriba y abajo, Re Pág y Av Pág, Inicio y Fin, o la rueda sobre la barra de capas |
 | Elegir un modelo de la placa | Clic sobre él; clic en la cama vacía: ninguno |
 | Mover un modelo | Arrastrarlo con el botón izquierdo |
