@@ -24,3 +24,11 @@ key ctrl+alt+l
 choose-file ui_config_project.tisma
 expect speed.walls 77
 expect-objects 2 ui_plate
+menu more
+expect-enabled export_toolpaths no
+menu view_iso
+slice
+menu more
+menu export_toolpaths
+choose-file ui_toolpaths.obj
+expect-toast ui_toolpaths.obj

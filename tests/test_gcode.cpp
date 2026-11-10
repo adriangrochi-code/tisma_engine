@@ -3149,3 +3149,47 @@ TEST_CASE("temperatures: the first layer's at the start, the print's from the se
     g = cube_gcode(s);
     CHECK(g.find("M104 S205") == std::string::npos);
 }
+
+// Export Toolpaths as OBJ (interface.md, the owner's QA 2026-11-10): every
+// extrusion of the G-code is one segment of an "l" polyline, joined runs in
+// one element, a group per kind, at the G-code's own points; travels are not
+// there.
+TEST_CASE("toolpaths as OBJ: each extrusion once, at its points, grouped by kind", "[gcode]") {
+    const std::string gcode = "G90\nM82\nG92 E0\n;LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\n"
+                              "G1 Z0.2 F600\nG1 X10 Y10 F6000\n;TYPE:External perimeter\n;WIDTH:0.45\n"
+                              "G1 X20 Y10 E1\nG1 X20 Y20 E2\nG1 X10 Y20 E3\nG1 X10 Y10 E4\n"
+                              "G1 X30 Y30 F6000\n;TYPE:Internal infill\nG1 X40 Y40 E5\n";
+    const GcodePreview preview = read_gcode_preview(gcode);
+    REQUIRE(preview.extrusions.size() == 5);
+    const std::string obj = toolpaths_obj(preview);
+    std::vector<std::array<double, 3>> v;
+    std::size_t segments = 0, polylines = 0, groups = 0;
+    std::istringstream in(obj);
+    for (std::string line; std::getline(in, line);) {
+        std::istringstream l(line);
+        std::string tag;
+        l >> tag;
+        if (tag == "v") {
+            std::array<double, 3> p{};
+            l >> p[0] >> p[1] >> p[2];
+            v.push_back(p);
+        } else if (tag == "l") {
+            std::vector<std::size_t> ids;
+            for (std::size_t id; l >> id;)
+                ids.push_back(id);
+            REQUIRE(ids.size() >= 2);
+            for (const std::size_t id : ids)
+                REQUIRE((id >= 1 && id <= v.size()));
+            segments += ids.size() - 1;
+            ++polylines;
+        } else if (tag == "g") {
+            ++groups;
+        }
+    }
+    CHECK(segments == preview.extrusions.size());
+    CHECK(polylines == 2); // the closed outer loop, then the infill line
+    CHECK(groups == 2);
+    REQUIRE(v.size() == 7);
+    CHECK(v.front() == std::array<double, 3>{10, 10, 0.2});
+    CHECK(v.back() == std::array<double, 3>{40, 40, 0.2});
+}

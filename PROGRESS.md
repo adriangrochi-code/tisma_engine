@@ -12421,3 +12421,7 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   laminado; sin ninguna imprimible, laminar lo dice. El proyecto lo guarda (`"printable": false`, en el archivo propio
   y en el 3MF). Pruebas `[project]` (ida y vuelta en los dos formatos) y `ui_script_printable`; verbo `expect-error`.
   La nube (`node`) también la saltea (prueba `[cloud]`). No hecho: la pieza no imprimible no se ve distinta en la vista.
+- **Paso 2b (Exportar las trayectorias como OBJ):** `toolpaths_obj` (motor, `gcode/preview`): cada extrusión del
+  G-code como segmento de una polilínea `l`, los tramos que se unen en una sola, un grupo `g` por tipo de línea, sin
+  los viajes. En Archivo de «Más», gris sin laminar. Pruebas: `[gcode]` contra un G-code a mano (cada extrusión una
+  vez, en sus puntos, por tipo) y el paso nuevo de `ui_script_file_import_export`.

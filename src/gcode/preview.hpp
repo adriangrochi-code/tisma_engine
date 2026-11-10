@@ -118,6 +118,12 @@ GcodePreview read_gcode_preview(std::string_view text, double filament_diameter 
 // rest, and the sums by layer and by kind (preview.md, rules 6 and 8).
 void time_preview(GcodePreview& preview, const Kinematics& kinematics, double filament_diameter = 1.75);
 
+// The extrusions as Wavefront OBJ polylines (Export Toolpaths as OBJ…,
+// interface.md): a group per line kind ("g outer_wall"), each run of
+// extrusions that join end to start as one "l" element over its points,
+// in the file's order. Travels are left out.
+std::string toolpaths_obj(const GcodePreview& preview);
+
 // Seconds in a duration written as "2d 1h 7m 36s" (any of the parts, in that
 // order, as format_duration writes them); -1 if it does not read so.
 double parse_duration(std::string_view text);

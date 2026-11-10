@@ -573,6 +573,7 @@ enum class Purpose {
     ExportSketchDxf, // rule 20
     ExportViewDxf,
     ExportObject,      // a model's right-click menu: Export as STL/OBJ…
+    ExportToolpaths,   // File › Export Toolpaths as OBJ…
     ExportPreferences, // Preferences › Other: export and import them
     ImportPreferences,
     LoadProjectConfig, // interface.md, «Más»: Import Config from Project…
@@ -17333,6 +17334,11 @@ void App::more_menu() {
                           project_path_.empty() ? last_folder_ : project_path_.parent_path(),
                           utf8((project_path_.empty() ? model_path_.stem() : project_path_.stem()).replace_extension(".stl")));
         }
+        if (item("export_toolpaths", tr(T::ExportToolpathsMenu), nullptr, result_ && result_->ok && !result_->resin)) {
+            purpose_ = Purpose::ExportToolpaths;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportToolpathsMenu), {".obj"}, last_folder_,
+                          utf8((project_path_.empty() ? model_path_.stem() : project_path_.stem()).replace_extension(".obj")));
+        }
         if (item("export_config", tr(T::ExportConfigMenu), "Ctrl+E"))
             begin_export_config();
         if (item("send_gcode", tr(T::SendGcodeMenu), "Ctrl+Shift+G", to_host || to_usb))
@@ -21144,6 +21150,17 @@ void App::file_chosen(const std::filesystem::path& chosen) {
         case Purpose::LoadProjectConfig: load_project_config(chosen); break;
         case Purpose::ExportPlate: export_plate_to(chosen); break;
         case Purpose::ExportPreferences: save_preferences(chosen); break;
+        case Purpose::ExportToolpaths: {
+            std::ofstream out(chosen, std::ios::binary);
+            if (result_)
+                out << toolpaths_obj(result_->preview);
+            out.close();
+            if (!result_ || !out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::PlateExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
         case Purpose::ImportPreferences:
             load_preferences(chosen);
             apply_theme();

@@ -1754,6 +1754,7 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(ExportToolpathsMenu, "Exportar las trayectorias como OBJ…", "Export Toolpaths as OBJ…") \
     X(PrintableMenu, "Imprimible", "Printable") \
     X(NothingPrintable, "Ningún modelo de la placa es imprimible.", "No model on the plate is printable.") \
     X(ExportPrefsButton, "Exportar…", "Export…") \
