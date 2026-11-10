@@ -3,6 +3,7 @@
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
 #include "slice/pipeline.hpp"
+#include "support/support.hpp"
 #include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -263,4 +264,47 @@ TEST_CASE("variable layers: one complex part sliced to checked G-code", "[variab
     for (const ThickLayer& t : zoned.thick)
         thick += !t.empty();
     CHECK(thick > 0); // the dome's middle prints thick, its slope fine
+}
+
+TEST_CASE("variable layers: the support's Z gap is in mm, over the layers' own thicknesses (supports_skirt.md)",
+          "[variable_layers][support]") {
+    // The helpers: 0.2 mm over 0.2 mm layers is one, over 0.1 mm ones two.
+    CHECK(support_gaps_above({0.2, 0.2, 0.2, 0.2}, 0.2) == std::vector<int>{1, 1, 1, 0});
+    CHECK(support_gaps_above({0.2, 0.1, 0.1, 0.1, 0.1}, 0.2) == std::vector<int>{2, 2, 2, 1, 0});
+    CHECK(support_gaps_below({0.2, 0.1, 0.1, 0.2}, 0.2) == std::vector<int>{0, 1, 2, 2});
+    CHECK(support_gaps_above({0.2, 0.2}, 0.0) == std::vector<int>{0, 0});
+    // A T: a 2 mm stem up to 6 mm, a 10 mm cap on it; 0.1 mm layers from 4 mm.
+    IndexedMesh t;
+    const auto box = [&](float x0, float y0, float z0, float x1, float y1, float z1) {
+        const auto base = std::uint32_t(t.vertices.size());
+        for (const auto& v : std::initializer_list<std::array<float, 3>>{
+                 {x0, y0, z0}, {x1, y0, z0}, {x1, y1, z0}, {x0, y1, z0}, {x0, y0, z1}, {x1, y0, z1}, {x1, y1, z1}, {x0, y1, z1}})
+            t.vertices.push_back({v[0], v[1], v[2]});
+        quad(t, base + 0, base + 3, base + 2, base + 1);
+        quad(t, base + 4, base + 5, base + 6, base + 7);
+        for (std::uint32_t i = 0; i < 4; ++i)
+            quad(t, base + i, base + (i + 1) % 4, base + 4 + (i + 1) % 4, base + 4 + i);
+    };
+    box(4, 4, 0, 6, 6, 6);
+    box(0, 0, 6, 10, 10, 8);
+    for (const bool fine : {false, true}) {
+        Settings s = test_printer();
+        s.support = true;
+        s.support_z_gap = 0.2;
+        if (fine)
+            s.layer_heights = {{4.0, 0.1}};
+        const SlicedModel m = slice_model(t, s);
+        // The cap's first layer, and the support's last under it.
+        std::size_t cap = 0;
+        while (cap < m.layers.size() && m.layers[cap].bottom < 6.0 - 1e-6)
+            ++cap;
+        REQUIRE(cap < m.layers.size());
+        std::size_t top = 0;
+        for (std::size_t l = 0; l < cap; ++l)
+            if (!m.support_areas[l].empty())
+                top = l;
+        INFO((fine ? "0.1 mm layers" : "0.2 mm layers") << ": support up to " << m.layers[top].top << ", cap from "
+                                                         << m.layers[cap].bottom);
+        CHECK_THAT(m.layers[cap].bottom - m.layers[top].top, WithinAbs(0.2, 1e-6));
+    }
 }

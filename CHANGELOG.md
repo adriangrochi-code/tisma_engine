@@ -9,6 +9,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Con altura de capa variable, la separación Z del soporte respeta los milímetros pedidos.
 - Paquete de perfiles: un filamento con `compatible_prints` solo se ofrece con esas impresiones.
 - Anchos de cordón: se aceptan si superan la altura de capa y hasta tres boquillas; muy finos, con aviso.
 - `support.xy_gap` en % se mide sobre el perímetro externo.

@@ -1748,6 +1748,13 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         });
     }
     out.support_areas.resize(out.layers.size());
+    // support.z_gap in layers, layer by layer: with variable heights a fixed
+    // count of nominal layers is not the gap asked for.
+    std::vector<double> layer_thickness;
+    for (const Layer& layer : out.layers)
+        layer_thickness.push_back(layer.top - layer.bottom);
+    const std::vector<int> gap_above = support_gaps_above(layer_thickness, settings.support_z_gap);
+    const std::vector<int> gap_below = support_gaps_below(layer_thickness, settings.support_z_gap);
     // The support under whatever hangs in the first support.enforce_layers
     // layers, however steep and whether support is on or not
     // (supports_more.md, rule 1): base only, in layers 0 to N - 4 (SM1).
@@ -1759,6 +1766,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         SupportParams sp;
         sp.threshold_angle = settings.support_angle;
         sp.z_gap_layers = int(std::lround(settings.support_z_gap / stack_height));
+        sp.gap_above = &gap_above; // in mm over the layers' own thicknesses
         sp.bottom_gap_layers = settings.support_bottom_z_gap > 0.0
                                    ? int(std::lround(settings.support_bottom_z_gap / stack_height))
                                    : sp.z_gap_layers;
@@ -1803,6 +1811,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             tp.xy_gap = sp.xy_gap;
             tp.bead = settings.wall_width;
             tp.z_gap_layers = sp.z_gap_layers;
+            tp.gap_above = sp.gap_above;
             tp.interface_layers = settings.support_interface_layers;
             const std::vector<Polygons> over = supported_overhangs(out.regions, thickness, sp);
             out.support_areas = tree_support_areas(out.regions, tree_nodes(out.regions, thickness, over, tp), over, tp);
@@ -1839,9 +1848,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     out.hanging.resize(out.layers.size());
     out.on_support.resize(out.layers.size());
     out.support_gap.assign(out.layers.size(), 0.0);
-    const std::size_t support_gap_layers =
-        std::size_t(std::max(0L, std::lround(settings.support_z_gap / stack_height)));
     tbb::parallel_for(std::size_t(1), out.layers.size(), [&](std::size_t l) {
+        const std::size_t support_gap_layers = std::size_t(gap_below[l]);
         if (out.regions[l].empty())
             return;
         out.hanging[l] = Clipper2Lib::Difference(out.regions[l], offset(held[l - 1], settings.wall_width / 2.0),
@@ -2135,7 +2143,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                               return;
                           // Interface: the support with the part above it within the next
                           // interface_layers layers past the Z gap; the rest is the base.
-                          const std::size_t gap = std::size_t(std::max(0L, std::lround(settings.support_z_gap / stack_height)));
+                          const std::size_t gap = std::size_t(gap_above[l]);
                           Polygons above;
                           for (int k = 1; k <= settings.support_interface_layers; ++k)
                               if (const std::size_t a = l + gap + std::size_t(k); a < out.regions.size())

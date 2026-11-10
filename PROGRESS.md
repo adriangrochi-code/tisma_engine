@@ -12597,7 +12597,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 
 | Área | Estado | Fecha | Qué se probó | Hallazgos |
 |---|---|---|---|---|
-| Capas y corte | pendiente | | | |
+| Capas y corte | revisado | 10-11 | reglas 1, 3 (última capa: 10,05→10,0; 10,1→10,2), 5 (`union`/`even_odd`), 6, 11 (errores con salida 2) | — |
 | Paredes | revisado (parcial) | 10-11 | anchos de cordón (P15), paredes de 0,3/0,6 mm, cubo de 0,8 mm, medidas externas = modelo | regla 8 (anchos) |
 | Superficies y relleno | pendiente | | | |
 | Falda, borde y balsa | revisado (parcial) | 10-11 | falda en secuencial (SQ6) | una falda por objeto → una sola |
@@ -12615,7 +12615,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 | Archivos (STL/OBJ/3MF, G-code binario, unidades) | revisado (parcial) | 10-11 | idas y vueltas STL/OBJ/3MF, binario↔ASCII, normales invertidas | 3MF a `%.9g` |
 | Perfiles y configuración (paquete) | revisado (parcial) | 10-11 | `compatible_prints`, cambio de filamento | regla nueva |
 | Conexión con impresoras / página de la impresora | pendiente | | | |
-| Lo propio de Tisma (curvas, altura variable, cúspide) | pendiente | | | |
+| Lo propio de Tisma (curvas, altura variable, cúspide) | revisado (parcial) | 10-11 | altura variable con soporte | `support.z_gap` contado en capas nominales: con capas de 0,1 quedaba a 0,1 mm |
 | Servicios (nube, nodos, biblioteca) | pendiente | | | |
 | Interfaz: menús, diálogos, preferencias | revisado (parcial) | 10-11 | auditoría de interface.md (tabla de arriba), Imprimible, vaso | vaso con modelos no imprimibles |
 | Interfaz: calibraciones | pendiente | | | |
@@ -12623,3 +12623,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 | Análisis (FEA, CFD) | pendiente | | | |
 | Migración | pendiente | | | |
 | Modelos extremos (diminutos, enormes, no cerrados, fuera de la cama) | revisado (parcial) | 10-11 | normales invertidas, paredes finas, cubo diminuto | — |
+
+- Altura variable con soporte: `support.z_gap` (mm) se pasaba a capas con la altura nominal; con capas de 0,1 mm cerca
+  del voladizo el soporte quedaba a 0,1 mm de la pieza en vez de 0,2. Ahora la separación se cuenta capa a capa con
+  los grosores reales (`support_gaps_above/below`), en la columna de rejilla, los árboles, la interfaz y lo que se
+  apoya en el soporte. Prueba `[variable_layers]` (T con capas de 0,1 desde 4 mm: separación 0,2; falla sin el
+  arreglo con 0,1). La separación de abajo (`support.bottom_z_gap`) sigue en capas nominales: pendiente.
