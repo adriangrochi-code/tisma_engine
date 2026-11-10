@@ -1753,6 +1753,13 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(ImportModelMenu, "Importar STL/3MF/OBJ…", "Import STL/3MF/OBJ…") \
+    X(ImportConfigMenu, "Importar la configuración…", "Import Config…") \
+    X(ImportProjectConfigMenu, "Importar la configuración de un proyecto…", "Import Config from Project…") \
+    X(ExportPlateMenu, "Exportar la placa como STL/OBJ…", "Export Plate as STL/OBJ…") \
+    X(ExportConfigMenu, "Exportar la configuración…", "Export Config…") \
+    X(PlateExported, "Placa exportada: %s", "Plate exported: %s") \
+    X(ProjectConfigLoaded, "Configuración tomada del proyecto %s", "Config taken from the project %s") \
     X(RecentProjects, "Proyectos recientes", "Recent projects") \
     X(DeleteAllMenu, "Borrar todo", "Delete All") \
     X(ExportGcodeMenu, "Exportar el G-code…", "Export G-code…") \

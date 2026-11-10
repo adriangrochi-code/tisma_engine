@@ -12361,3 +12361,12 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   ajustes quedan) y Proyectos recientes (numerados, el último primero, hasta 10, guardados con las preferencias; uno
   que ya no está se saca de la lista al elegirlo). Editar › Borrar todo (Ctrl+Supr). Supr solo ya no borra con Ctrl.
   Los scripts entienden cualquier letra y `alt+`. Prueba `ui_script_new_project`.
+- **Paso 2 (sigue):** Archivo › Importar STL/3MF/OBJ (Ctrl+I), Importar la configuración (Ctrl+L), Importar la
+  configuración de un proyecto (Ctrl+Alt+L: sus ajustes, perfiles y colores; la placa queda), Exportar la placa como
+  STL/OBJ (todas las piezas juntas en coordenadas de la cama; `.obj` escribe OBJ, si no STL binario) y Exportar la
+  configuración (Ctrl+E). Motor: `obj_text` (OBJ con cada esquina una vez). Arreglado: el 3MF de una sola pieza
+  (`write_3mf`) escribía 6 cifras y movía vértices hasta 0,5 µm; ahora 9, como el de varias piezas. Pruebas:
+  `[formats]` STL/OBJ/3MF de ida y vuelta esquina por esquina; `ui_script_file_import_export` (exportar la placa a OBJ
+  y volver a importarla; configuración afuera y adentro; configuración de un proyecto). Scripts: verbo `choose-file`.
+- Pendiente de Archivo: importar STL en pulgadas, SLA, ZIP, paquetes de configuración, exportar con soportes,
+  trayectorias OBJ, convertir G-code binario/ASCII, SD, reparar STL.

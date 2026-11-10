@@ -1,0 +1,26 @@
+# File › Export Plate as STL/OBJ… writes the plate as one mesh and Import
+# STL/3MF/OBJ… (Ctrl+I) brings it back; Export Config… (Ctrl+E) and Import
+# Config… (Ctrl+L) carry the settings out and back; Import Config from
+# Project… (Ctrl+Alt+L) takes a project's settings and leaves the plate.
+expect-objects 1
+menu more
+menu export_plate
+choose-file ui_plate.obj
+menu more
+menu import_model
+choose-file ui_plate.obj
+expect-objects 2 ui_plate
+set speed.walls 77
+key ctrl+e
+choose-file ui_config.json
+set speed.walls 44
+expect speed.walls 44
+key ctrl+l
+choose-file ui_config.json
+expect speed.walls 77
+save-project ui_config_project.tisma
+set speed.walls 55
+key ctrl+alt+l
+choose-file ui_config_project.tisma
+expect speed.walls 77
+expect-objects 2 ui_plate

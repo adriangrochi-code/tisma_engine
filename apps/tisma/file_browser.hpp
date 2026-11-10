@@ -26,6 +26,7 @@ public:
     void open(Mode mode, std::string title, std::vector<std::string> extensions, const std::filesystem::path& folder,
               std::string name = {});
     bool is_open() const { return open_; }
+    void close() { open_ = pending_open_ = confirm_replace_ = false; } // as Cancel (the scripted tests)
 
     // Draws it while open. Returns true once, with the chosen path, when the
     // user picks a file (in Save mode, after confirming a replacement).

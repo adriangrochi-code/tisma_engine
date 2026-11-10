@@ -571,7 +571,9 @@ enum class Purpose {
     ImportSketchDxf, // cad_design.md, rule 19 bis
     ImportSketchSvg,
     ExportSketchDxf, // rule 20
-    ExportViewDxf
+    ExportViewDxf,
+    LoadProjectConfig, // interface.md, «Más»: Import Config from Project…
+    ExportPlate        // Export Plate as STL/OBJ…
 };
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
@@ -881,6 +883,12 @@ private:
     void create_calibration(CalibrationKind kind, bool custom);
     void begin_export();
     void more_menu();       // «Más»: the cards of interface.md
+    void file_chosen(const std::filesystem::path& chosen); // the file browser's answer, for purpose_
+    void dialogs_rest();
+    void begin_import_config(bool from_project); // Ctrl+L, or Ctrl+Alt+L from a project
+    void begin_export_config();                  // Ctrl+E
+    void load_project_config(const std::filesystem::path& path); // a project's settings and profiles, not its models
+    void export_plate_to(const std::filesystem::path& path);     // the plate's models as one STL or OBJ, in bed coordinates
     void send_gcode();      // «Send G-code…»: the network program or the USB printer
     void delete_selected(bool keep_choice = false); // the chosen model off the plate (Del, the toolbar, «Más»)
     void empty_hint();
@@ -4553,6 +4561,54 @@ void App::load_settings_file(const std::filesystem::path& path) {
     } catch (const std::exception& e) {
         fail(T::CannotOpen, e.what());
     }
+}
+
+void App::begin_import_config(bool from_project) {
+    if (from_project) {
+        purpose_ = Purpose::LoadProjectConfig;
+        browser_.open(FileBrowser::Mode::Open, tr(T::ImportProjectConfigMenu), {".tisma", ".3mf"}, last_folder_);
+    } else {
+        purpose_ = Purpose::LoadSettings;
+        browser_.open(FileBrowser::Mode::Open, tr(T::LoadSettingsTitle), {".json"}, last_folder_);
+    }
+}
+
+void App::begin_export_config() {
+    purpose_ = Purpose::SaveSettings;
+    browser_.open(FileBrowser::Mode::Save, tr(T::SaveSettingsTitle), {".json"}, last_folder_, "tisma.json");
+}
+
+// Import Config from Project… (Ctrl+Alt+L): the project's settings, its
+// chosen profiles and its colours; the plate stays as it is.
+void App::load_project_config(const std::filesystem::path& path) {
+    try {
+        Project p = load_project(path);
+        settings_ = std::move(p.settings);
+        chosen_profile_ = p.profiles;
+        profiles_checked_.clear();
+        filament_colors_ = std::move(p.filament_colors);
+        fill_speeds();
+        bed_changed();
+        settings_changed();
+        notify(format(tr(T::ProjectConfigLoaded), utf8(path.filename()).c_str()));
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
+// Export Plate as STL/OBJ…: every model as placed, joined, in the bed's
+// coordinates; ".obj" writes OBJ, anything else a binary STL.
+void App::export_plate_to(const std::filesystem::path& path) {
+    const TriangleMesh plate = plate_now();
+    const std::string name = project_path_.empty() ? utf8(model_path_.stem()) : utf8(project_path_.stem());
+    const std::string data = lower_extension(path) == ".obj" ? obj_text(plate, name) : stl_binary(plate, "Tisma " + name);
+    std::ofstream out(path, std::ios::binary);
+    out << data;
+    out.close();
+    if (!out)
+        fail(T::CannotSave, utf8(path));
+    else
+        notify(format(tr(T::PlateExported), utf8(path.filename()).c_str()));
 }
 
 void App::load_case_file(const std::filesystem::path& path) {
@@ -8232,15 +8288,11 @@ void App::settings_panel() {
     // Settings files.
     ImGui::Separator();
     const float third = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2.0f) / 3.0f;
-    if (ImGui::Button(tr(T::LoadSettings), ImVec2(third, 0))) {
-        purpose_ = Purpose::LoadSettings;
-        browser_.open(FileBrowser::Mode::Open, tr(T::LoadSettingsTitle), {".json"}, last_folder_);
-    }
+    if (ImGui::Button(tr(T::LoadSettings), ImVec2(third, 0)))
+        begin_import_config(false);
     ImGui::SameLine();
-    if (ImGui::Button(tr(T::SaveSettings), ImVec2(third, 0))) {
-        purpose_ = Purpose::SaveSettings;
-        browser_.open(FileBrowser::Mode::Save, tr(T::SaveSettingsTitle), {".json"}, last_folder_, "tisma.json");
-    }
+    if (ImGui::Button(tr(T::SaveSettings), ImVec2(third, 0)))
+        begin_export_config();
     ImGui::SameLine();
     if (ImGui::Button(tr(T::ResetSettings), ImVec2(third, 0))) {
         settings_ = default_settings();
@@ -16722,8 +16774,25 @@ void App::more_menu() {
         if (item("save_project_as", tr(T::SaveProjectAs), "Ctrl+Alt+S", has_plate_))
             begin_save_project(true);
         ImGui::Separator();
+        if (item("import_model", tr(T::ImportModelMenu), "Ctrl+I")) {
+            purpose_ = Purpose::AddModel;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
+        }
+        if (item("import_config", tr(T::ImportConfigMenu), "Ctrl+L"))
+            begin_import_config(false);
+        if (item("import_project_config", tr(T::ImportProjectConfigMenu), "Ctrl+Alt+L"))
+            begin_import_config(true);
+        ImGui::Separator();
         if (item("export_gcode", tr(T::ExportGcodeMenu), "Ctrl+G", can_export))
             begin_export();
+        if (item("export_plate", tr(T::ExportPlateMenu), nullptr, has_plate_)) {
+            purpose_ = Purpose::ExportPlate;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportPlateMenu), {".stl", ".obj"},
+                          project_path_.empty() ? last_folder_ : project_path_.parent_path(),
+                          utf8((project_path_.empty() ? model_path_.stem() : project_path_.stem()).replace_extension(".stl")));
+        }
+        if (item("export_config", tr(T::ExportConfigMenu), "Ctrl+E"))
+            begin_export_config();
         if (item("send_gcode", tr(T::SendGcodeMenu), "Ctrl+Shift+G", to_host || to_usb))
             send_gcode();
         // A plan without "slice" (cloud.md, rule 10b): the entry shows which
@@ -20455,8 +20524,17 @@ void App::toasts() {
 
 void App::dialogs() {
     std::filesystem::path chosen;
-    if (browser_.draw(chosen, icon("tisma_folder"), rgb(theme_.accent_hover))) {
+    if (browser_.draw(chosen, icon("tisma_folder"), rgb(theme_.accent_hover)))
+        file_chosen(chosen);
+    dialogs_rest();
+}
+
+// What the file browser was opened for, done with the file chosen.
+void App::file_chosen(const std::filesystem::path& chosen) {
+    {
         switch (purpose_) {
+        case Purpose::LoadProjectConfig: load_project_config(chosen); break;
+        case Purpose::ExportPlate: export_plate_to(chosen); break;
         case Purpose::Open: open_path(chosen); break;
         case Purpose::AddModel: add_model(chosen); break;
         case Purpose::SaveGcode: export_gcode_to(chosen); break;
@@ -20530,6 +20608,10 @@ void App::dialogs() {
         }
         }
     }
+}
+
+// The dialogs other than the file browser.
+void App::dialogs_rest() {
     if (!browser_.is_open() && !browser_.folder().empty())
         last_folder_ = browser_.folder();
 
@@ -20887,6 +20969,16 @@ void App::layout() {
         start_slice();
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, ImGuiInputFlags_RouteGlobal))
         new_project();
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_I, ImGuiInputFlags_RouteGlobal)) {
+        purpose_ = Purpose::AddModel;
+        browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
+    }
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_L, ImGuiInputFlags_RouteGlobal))
+        begin_import_config(false);
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_L, ImGuiInputFlags_RouteGlobal))
+        begin_import_config(true);
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_E, ImGuiInputFlags_RouteGlobal))
+        begin_export_config();
     if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput &&
         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
         delete_all();
@@ -22934,6 +23026,12 @@ void App::script_input() {
         std::printf("ui-script: expect-sketch-constraints %zu: got %zu\n", want, s->constraints.size());
         if (s->constraints.size() != want)
             return fail_step("the sketch has " + std::to_string(s->constraints.size()) + " constraints");
+        next();
+    } else if (step.verb == "choose-file") { // the open file browser answered with KEY (relative to the working folder)
+        if (!browser_.is_open())
+            return f >= 30 ? fail_step("no file browser is open") : void();
+        browser_.close();
+        file_chosen(std::filesystem::absolute(step.key));
         next();
     } else if (step.verb == "save-project") { // writes the plate as a project to KEY (relative to the working folder)
         save_project_to(step.key);
