@@ -10,6 +10,32 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.12.0-beta.1] - 2026-11-10
+
+Segunda beta para los probadores del dueño: Windows, Linux y Android. En Windows, el instalador
+`tisma-engine-0.12.0-beta.1-setup-windows-x64.exe` (o el `.zip`, para usar sin instalar); en Linux, el `.zip`: se
+descomprime y se abre `tisma`. En Android, `tisma-android-0.12.0-beta.1-beta-arm64.apk` (la versión optimizada) o, si
+esa no abre, `tisma-android-0.12.0-beta.1-fallback-arm64.apk`; la app dice 0.1.0-beta.1. La APK optimizada de esta
+versión no se probó en el emulador (una anterior sí). macOS todavía no.
+
+### Para probar
+
+- **G-code original de cada impresora:** elegí una impresora del paquete y laminá. El G-code de inicio y de fin es
+  el del fabricante (PrusaSlicer, OrcaSlicer, Bambu Studio, Creality Print, Elegoo Slicer, Cura), con sus variables
+  llenas. En una Bambu Lab A1 o P1 ya no corta con «F0» (BH45). Sin probar en una impresora: mirá el principio del
+  G-code antes de imprimir.
+- **Temperaturas de la primera capa:** la primera capa sale a `first_layer_temperature` y
+  `first_layer_bed_temperature`, y en la segunda pasa a las normales.
+- **Lo que pidieron los probadores (BH39 a BH45):** «Solo desde la cama» con soportes de árbol, variables de los
+  G-code de otros programas, la separación del borde de adherencia en Normal, la cama que no tapa la pieza desde
+  abajo, el trazo de pintura continuo y los diálogos propios de Windows.
+- **Convertidor de proyectos (parcial):** abrí un `.3mf` de PrusaSlicer, OrcaSlicer o Bambu Studio. Trae las piezas y
+  sus partes (modificadores, volúmenes negativos, bloqueadores y forzadores de soporte), y un aviso dice cuántos de
+  sus ajustes tienen traducción, cuántos se parecen y cuántos no. Los ajustes todavía no se aplican.
+- **Mi biblioteca:** guardá una pieza con su proyecto, sus recetas por impresora y su análisis, marcá «La imprimí»,
+  y exportá o importá un `.tismalib`.
+- **Biblioteca compartida:** en desarrollo, no viene en esta versión (el formato con el servidor ya está acordado).
+
 ### Cambiado
 
 - La primera descarga del paquete de perfiles baja `index.json.xz` (0,12 MB en vez de 2 MB) cuando el paquete lo
@@ -72,7 +98,8 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
   aparte en el G-code y en la interfaz.
 
 - Al abrir un 3MF de otro programa (PrusaSlicer, OrcaSlicer, Bambu Studio, Creality Print, Elegoo Slicer, Anycubic,
-  Cura), un aviso dice de qué programa es y cuántas piezas trae; sus ajustes todavía no se traen.
+  Cura), un aviso dice de qué programa es y cuántas piezas trae. Trae también sus partes y ordena sus ajustes con la
+  tabla de traducción del paquete (traducidos, parecidos, sin traducción); todavía no se aplican.
 - Mi biblioteca (`tisma-engine library`): guardar piezas con su proyecto, recetas por impresora y análisis,
   revisar si una receta o un análisis siguen valiendo, «La imprimí», exportar e importar `.tismalib`. Sin G-code.
 - G-code original de cada impresora del paquete (`machine.macros`, bloque `gcode`): dialectos PrusaSlicer, OrcaSlicer,
