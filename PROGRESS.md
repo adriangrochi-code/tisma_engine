@@ -12242,3 +12242,6 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   sesión anterior se borran al abrir (`LibraryTest`).
 - 16151cc: la vista previa del G-code no dibujaba arcos con radio (`G2/G3 … R`, de Marlin), dejaba un arco que sube
   (vaso en espiral con arcos) en la capa de abajo y no leía palabras separadas por tabulador (`GcodeLayersTest`).
+- Servidor (tisma-cloud 0221576): publicar responde 422 con caracteres de control o marcas bidi. `PublishText` en
+  `shared` los quita (saltos de línea solo en la descripción) y cuenta cuántos (`PublishTextTest`). Se usa cuando
+  llegue el formulario de publicar desde Mi biblioteca, con el aviso en castellano.
