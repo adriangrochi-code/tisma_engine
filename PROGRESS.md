@@ -12269,3 +12269,5 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   la app lo pasaba a «lista» y adivinaba por el último porcentaje leído: una impresión vista al 97 % 15 s antes de
   terminar se avisaba como «detenida». Ahora manda lo que dice la impresora (`PrintEventsTest`,
   `PrinterConnectionTest`).
+- Ficha `profile_pack_format.md` (spec/next 6fe8045): un filamento con `compatible_prints` solo se ofrece con esos
+  perfiles de impresión (o el de la variante si no se eligió ninguno); sin el campo, con cualquiera (`ProfilePackTest`).
