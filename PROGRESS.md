@@ -12201,7 +12201,7 @@ QA; bundle id `net.tismaservidores.tisma`).
 |---|---|---|
 | 5 | Secciones abajo | Está (Biblioteca · Placa · Ingeniería · Impresora · Más, decisión del dueño 10-11) |
 | 6 | Tarjeta de la impresora en la Placa | Está |
-| 6 | Dibujos de impresora, cama y boquilla (`settings_panel.md` 34 a 36) | **Falta** (un ícono genérico) |
+| 6 | Dibujos de impresora, cama y boquilla (`settings_panel.md` 34 a 36) | **Faltaba** → hecho (`DrawingsTest`; no visto en un teléfono) |
 | 6 | Ícono de conexión en la tarjeta (`settings_panel.md` 42) | **Faltaba** → hecho (8631052) |
 | 6 | «Laminar», resultado, guardar, mandar | Está |
 | 6 | Compartir el G-code | **Faltaba** → hecho |
@@ -12221,7 +12221,7 @@ QA; bundle id `net.tismaservidores.tisma`).
 | 14 | Códigos cifrados con el Keystore | Está (MA8) |
 | 15 | Cuenta de Tisma Cloud, laminar y analizar en la nube | Está |
 | 15 | Entrar con Google; pagar con Google Play | **Falta** (decisión del dueño pendiente) |
-| 15 | Impresoras remotas de los puentes | **Falta** |
+| 15 | Impresoras remotas de los puentes | Después de la 1.0 (`cloud.md`: solo está el lado del puente; QA 10-11) |
 | 16 | Ayuda sin conexión (problemas, procedimientos, glosario, materiales, calibraciones) | Está |
 | 16 | Tutoriales del primer uso adaptados al teléfono | **Falta** |
 | 17 | Teclado numérico | Está (todos los campos numéricos) |
