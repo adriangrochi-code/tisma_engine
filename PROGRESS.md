@@ -12172,3 +12172,8 @@ QA; bundle id `net.tismaservidores.tisma`).
   rango. Ahora se lee como flujo con el analizador XML de Android (`MeshFileTest`). Memoria no medida en un teléfono.
 - 3b5a4ac: OBJ y STL de texto con líneas malas (vértice corto, cara con índice 0 o fuera de rango, tabulador) cerraban
   la app; ahora se saltan.
+- 6276e1a: el cliente MQTT de Bambu reservaba la memoria que pidiera el otro lado (hasta 256 MB); ahora rechaza más de
+  16 MB (`MqttLimitTest`).
+- ab40252: el envío a Bambu leía el G-code entero y lo comprimía en una segunda copia en memoria; con una impresión
+  larga el teléfono se quedaba sin memoria. Ahora pasa por archivos temporales; las pruebas de `printers` corren con
+  256 MB y empaquetan 400 MB (`BambuPackTest`).
