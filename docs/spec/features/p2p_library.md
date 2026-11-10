@@ -8,7 +8,7 @@ lista de lo prohibido; cada app la respeta.
 lee el teléfono / PC que ese archivo no está permitido o [esa] IP; así podríamos usar una red peer sin sus
 desventajas».
 
-**Fase:** a definir por el dueño (antes o después de la 1.0). Reemplaza la descarga directa desde el servidor de
+**Fase:** lo antes posible, antes de la 1.0 (dueño, 10-11-2026: «lo antes posible así subimos modelos»). Reemplaza la descarga directa desde el servidor de
 `model_library.md`; el resto de esa ficha (publicar, perfiles probados, análisis) sigue igual.
 
 ## Las partes
