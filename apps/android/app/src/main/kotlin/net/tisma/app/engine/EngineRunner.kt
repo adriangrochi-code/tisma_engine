@@ -25,6 +25,8 @@ class EngineRunner(
     private val workDir: File,
     /** Where the profile pack lives (`<packDir>/pack`), for its printers' profiles. */
     private val packDir: File? = null,
+    /** How long a printer's profile may take (tests shorten it). */
+    private val profileTimeoutS: Long = 30,
 ) {
     /** The stage the engine is in (`progress: <stage> <fraction>`: slicing, voxels, solving…), for the screen. */
     @Volatile var stageListener: ((String) -> Unit)? = null
@@ -119,21 +121,23 @@ class EngineRunner(
     fun profile(choice: ProfileChoice): JsonObject? {
         // QA AND11: on a fresh install the working folder is not there yet, and the engine would not even start.
         workDir.mkdirs()
-        val out = File(workDir, "profile.json").apply { delete() }
+        // Its own file: two profiles can be asked at once (the wizard and the temperatures card).
+        val out = File.createTempFile("profile", ".json", workDir)
         val args = if (choice.pack && packDir != null) {
             // The pack's variant with its own default filament and print profile (docs/CATALOG.md).
             mutableListOf(executable.path, "profile", "--pack", packDir.path, "--printer", choice.printer, "-o", out.path)
                 .also { a -> choice.filament?.let { a += listOf("--filament", it) }; choice.print?.let { a += listOf("--print", it) } }
         } else mutableListOf(executable.path, "profile", "--printer", choice.printer,
             "--nozzle", choice.nozzle.toString(), "-o", out.path).also { a -> choice.filament?.let { a += listOf("--filament", it) } }
-        return runCatching {
-            val p = engineProcess(args, workDir).directory(workDir).redirectErrorStream(true).start()
-            p.outputStream.close()
-            p.inputStream.readBytes()
-            if (!p.waitFor(30, TimeUnit.SECONDS)) { p.destroyForcibly(); return null }
-            if (p.exitValue() != 0 || !out.isFile) return null
-            Json.parseToJsonElement(out.readText()) as? JsonObject
-        }.getOrNull()
+        return try {
+            runCatching {
+                val c = callEngine(args, workDir, workDir, profileTimeoutS) ?: return null
+                if (c.exit != 0 || !out.isFile) return null
+                Json.parseToJsonElement(out.readText()) as? JsonObject
+            }.getOrNull()
+        } finally {
+            out.delete()
+        }
     }
 
     private fun run(args: List<String>, out: File, summary: File?, onProgress: (Int) -> Unit, cancelled: () -> Boolean): Slice {
@@ -349,7 +353,8 @@ class EngineRunner(
         workDir.mkdirs()
         out.delete()
         summary?.delete()
-        val stderr = File(workDir, "engine.err")
+        // Its own file: a slice and an analysis can run at once, and each must read its own errors.
+        val stderr = File.createTempFile("engine", ".err", workDir)
         val process = engineProcess(listOf(executable.path) + args, workDir)
             .directory(workDir)
             .redirectError(stderr)
@@ -373,7 +378,7 @@ class EngineRunner(
                 process.destroy()
                 if (!process.waitFor(2, TimeUnit.SECONDS)) process.destroyForcibly()
                 reader.join(1000)
-                out.delete()
+                out.delete(); stderr.delete()
                 throw Cancelled()
             }
         }
@@ -383,8 +388,10 @@ class EngineRunner(
         fun str(k: String) = (s?.get(k) as? JsonPrimitive)?.contentOrNull.orEmpty()
         if (code !in okCodes || !out.isFile) {
             val err = str("error").ifBlank { stderr.takeIf { it.isFile }?.readText()?.trim()?.lines()?.lastOrNull().orEmpty() }
+            stderr.delete()
             throw EngineException(str("code"), err.ifBlank { "The engine stopped (exit code $code)" }, str("error_es"), code)
         }
+        stderr.delete()
         return s
     }
 
