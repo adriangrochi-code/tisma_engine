@@ -12452,3 +12452,39 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
 - Repeticiones de la CI local 1234fc8: `ui_pack_published_resin`, `ui_bambu_print` y
   `ui_view_preview_speed_vulkan_same_as_opengl` pasan; `aero_drag_coefficients` pasó los 30 min con la máquina
   compartida (antes 11 min); se corre sola de nuevo.
+- **Estado de la tabla (2026-11-10, tarde):** hecho de lo que faltaba:
+  - Más en tarjetas, con atajos y gris.
+  - Thingiverse.
+  - Archivo: proyecto nuevo, recientes, importar (modelo, pulgadas, ZIP, configuración, configuración de proyecto),
+    exportar (G-code Ctrl+G, mandar, placa STL/OBJ, trayectorias OBJ, configuración Ctrl+E), convertir binario ↔ ASCII,
+    relaminar.
+  - Editar: no elegir nada, borrar todo, copiar, pegar, recargar F5.
+  - Ventana: Ctrl+1…6 y galería de formas.
+  - Vista: las vistas 0–6, nombres y leyenda, plegar el panel, pantalla completa.
+  - Configuración: asistente, actualizaciones del paquete, imprimir por USB.
+  - Calibración en Más y en la cama.
+  - Ayuda: versiones, información del sistema, carpeta de configuración, atajos (?).
+  - Pieza: copias, borrar, imprimible, recargar, metros/pulgadas, exportar, escalar al volumen, espejar, separar.
+  - Modo en la barra.
+  - Engranaje del perfil.
+  - ▲ con la salida marcada.
+  - Preferencias: «Como el sistema», Enter y exportar/importar.
+  Falta:
+  - Seleccionar todo (varias piezas elegidas).
+  - Ajustes de la placa.
+  - SLA y paquetes de configuración.
+  - Exportar con soportes.
+  - SD (exportar, expulsar).
+  - Reparar STL.
+  - Cola de envíos.
+  - Nueva instancia.
+  - Comparar perfiles.
+  - Instantáneas.
+  - Actualización del programa de escritorio.
+  - Integración con el escritorio.
+  - Grabar firmware.
+  - Archivo de Wi-Fi.
+  - Sitio web.
+  - Pieza: llenar la cama, objetos separados, reemplazar, simplificar, reteselar, revisar CAD, dividir para la
+    impresora, agregar parte y los submenús de volúmenes con bloqueador y forzador.
+  - Preferencias: 4 filas «Próximamente».
