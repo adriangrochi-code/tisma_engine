@@ -11869,3 +11869,11 @@ arreglado en 9d8dc76 y subido.
   punta a punta con las claves de par; en la PC por defecto por intermediario de Tisma, con «Directo (más rápido;
   los otros ven mi IP)» en Preferencias; intermediario topado: «Biblioteca ocupada, se retoma sola». La biblioteca de
   pares elegida tiene que poder ir por intermediario.
+- **Decisión (p2p, 2026-11-10, delegada al motor por la ficha):** red de pares libp2p: identidad = la clave Ed25519 de
+  par, Noise de punta a punta, circuit relay v2 como intermediario (tickets firmados por la clave de la biblioteca,
+  bytes por cuenta en el nodo), TCP y QUIC para «Directo»; protocolo propio sobre streams `/tisma/library/1.0.0`
+  (pedazos de 1 MiB comprobados con su SHA-256, lista de pedazos en el manifiesto firmado); sin DHT: los pares los da
+  `POST /v1/library/peers/announce`. libtorrent descartado: sin intermediario (dos teléfonos solo por relé no se
+  encuentran) y su cifrado no está ligado a la clave del par. Biblioteca del motor (cpp-libp2p Apache-2.0 o
+  rust-libp2p MIT por ABI C) a confirmar con una prueba de compilación en Windows y Android antes de anotarla en
+  THIRD_PARTY.md. Acordado con la sesión del servidor (session_01QadJfL79pTm8Ks4houx1oK).
