@@ -12247,3 +12247,5 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   llegue el formulario de publicar desde Mi biblioteca, con el aviso en castellano.
 - 18d78d2: la actualización de la app seguía escribiendo si el servidor mandaba más bytes que el tamaño de la lista
   (llena el teléfono), y una lista con el SHA-256 en mayúsculas daba toda actualización por dañada (`AppUpdaterTest`).
+- 8d22761: el lector de G-code binario reservaba lo que dijera la cabecera de un bloque (hasta 2 GB): un archivo dañado
+  cerraba la app sin memoria. Ahora un bloque de más de 64 MB se rechaza como ilegible (`GcodeLayersTest`).
