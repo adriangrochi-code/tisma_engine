@@ -12599,17 +12599,17 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 |---|---|---|---|---|
 | Capas y corte | revisado | 10-11 | reglas 1, 3 (última capa: 10,05→10,0; 10,1→10,2), 5 (`union`/`even_odd`), 6, 11 (errores con salida 2) | — |
 | Paredes | revisado (parcial) | 10-11 | anchos de cordón (P15), paredes de 0,3/0,6 mm, cubo de 0,8 mm, medidas externas = modelo | regla 8 (anchos) |
-| Superficies y relleno | pendiente | | | |
+| Superficies y relleno | revisado (parcial) | 10-11 | 3 capas sólidas abajo y 4 arriba (cubo 20 mm), relleno rectilíneo al 20 %: separación 2,035 mm (I1) | — |
 | Falda, borde y balsa | revisado (parcial) | 10-11 | falda en secuencial (SQ6) | una falda por objeto → una sola |
 | Soportes | revisado (parcial) | 10-11 | bloqueador pintado (rejilla, ajustado, orgánico), borrar, guardar y reabrir; `xy_gap` % | BH47; `xy_gap` del perímetro externo |
 | Velocidades y aceleraciones | revisado (parcial) | 10-11 | `speed.first_layer` en mm/s y % | era un tope, ahora fija la velocidad |
-| Enfriamiento | pendiente | | | |
-| Retracción y viajes | pendiente | | | |
+| Enfriamiento | revisado (parcial) | 10-11 | ventilador apagado en las capas 1 a 3, `M106` antes de la capa 4 | — |
+| Retracción y viajes | revisado (parcial) | 10-11 | balance de retracciones en tres G-codes (cubo, secuencial, altura variable): ninguna extrusión retraída | — |
 | Anchos y flujo | pendiente | | | |
 | Filamento | pendiente | | | |
 | Impresora y G-code (incl. secuencial) | revisado (parcial) | 10-11 | secuencial: orden, paso al siguiente objeto, falda | falda única |
 | Multimaterial | pendiente | | | |
-| Resina | pendiente | | | |
+| Resina | revisado (parcial) | 10-11 | primera capa propia (RE11) | ajuste nuevo de la ficha |
 | Herramientas sobre los modelos (corte, acomodo, pintura) | pendiente | | | |
 | Vista previa / visor de G-code | revisado (parcial) | 10-11 | leyenda frente al G-code, OBJ de trayectorias | — |
 | Archivos (STL/OBJ/3MF, G-code binario, unidades) | revisado (parcial) | 10-11 | idas y vueltas STL/OBJ/3MF, binario↔ASCII, normales invertidas | 3MF a `%.9g` |
