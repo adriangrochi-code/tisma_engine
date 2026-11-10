@@ -21,7 +21,13 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    Placa (cuando llegue el motor), Ingeniería al final.
 6. **CI**: `.github/workflows/ios.yml` en `macos-latest`: pruebas de `shared` en el simulador, `xcodebuild test` con
    el simulador de iPhone y capturas como artefacto. Las pruebas de `shared` también corren aquí en la JVM.
-7. **Distribución**: TestFlight cuando el dueño tenga la cuenta de Apple Developer; mientras, solo simulador.
+7. **Planes** (dueño, 10-11; `cloud.md` 5b, spec/next cada191): se compran dentro de la app con la tienda. En iOS,
+   StoreKit 2 con suscripciones que se renuevan solas, con los mismos ids de producto que Google Play donde se pueda;
+   el servidor verifica la compra y el plan queda en la cuenta de Tisma; «Cancelar o cambiar el plan» abre la página
+   de suscripciones de la tienda. La compra se hace en Swift (StoreKit 2 no se llama desde Kotlin) y el recibo va al
+   servidor por el cliente de la nube de `shared`. Necesita la cuenta de Apple Developer y los productos creados en
+   App Store Connect. En Android, Google Play Billing sigue pendiente (también lo decide la cuenta del dueño).
+8. **Distribución**: TestFlight cuando el dueño tenga la cuenta de Apple Developer; mientras, solo simulador.
 
 ## Límites
 
@@ -31,4 +37,5 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
 
 ## Pendiente del dueño
 
-- Identificador de la app (bundle id) y cuenta de Apple Developer para TestFlight.
+- Cuenta de Apple Developer (TestFlight y StoreKit); productos de suscripción en App Store Connect y Google Play.
+- Bundle id: `net.tismaservidores.tisma` (QA 10-11), salvo que el dueño diga otro.
