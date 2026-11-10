@@ -175,7 +175,7 @@ class CloudViewModel(
     suspend fun followJobs() {
         while (currentCoroutineContextActive()) {
             if (!state.value.signedIn) return
-            val jobs = request { client.jobs() } ?: return
+            val jobs = poll { client.jobs() } ?: return
             _state.update { it.copy(jobs = jobs, jobsLoaded = true) }
             if (jobs.none { !it.status.finished }) return
             delay(pollMs)
@@ -185,7 +185,7 @@ class CloudViewModel(
     /** Follows one job until it ends (rule 8). */
     suspend fun followJob(id: String) {
         while (currentCoroutineContextActive()) {
-            val job = request { client.job(id) } ?: return
+            val job = poll { client.job(id) } ?: return
             _state.update { s ->
                 val others = s.jobs.filter { it.id != id }
                 s.copy(jobs = (listOf(job) + others).sortedByDescending { it.createdAt })
@@ -323,6 +323,26 @@ class CloudViewModel(
         if (e.kind == CloudException.Kind.EXPIRED && client.token != null) expired()
         else if (!quiet) _state.update { it.copy(notice = Notice.Failed(e)) }
         null
+    }
+
+    /**
+     * A request made while following a job: without network (the phone in a lift, Wi-Fi to mobile data) it waits and
+     * asks again, longer each time up to 30 s, without a message each time; any other failure ends the following.
+     * Before, one lost answer stopped following the job for good, with its progress frozen on screen.
+     */
+    private suspend fun <T> poll(block: () -> T): T? {
+        var wait = pollMs
+        while (currentCoroutineContextActive()) {
+            try {
+                return withContext(io) { block() }
+            } catch (e: CloudException) {
+                if (!e.network) return request { throw e }
+                AppLog.line("cloud: no answer while following, again in ${wait} ms")
+                delay(wait)
+                wait = (wait * 2).coerceAtMost(maxOf(pollMs, 30_000L))
+            }
+        }
+        return null
     }
 
     /** Runs the blocking [block] off the main thread; [onDone] runs on the main thread if it did not fail. */
