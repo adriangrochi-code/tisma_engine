@@ -12271,3 +12271,34 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   `PrinterConnectionTest`).
 - Ficha `profile_pack_format.md` (spec/next 6fe8045): un filamento con `compatible_prints` solo se ofrece con esos
   perfiles de impresión (o el de la variante si no se eligió ninguno); sin el campo, con cualquiera (`ProfilePackTest`).
+
+## Android: tabla de revisión (pedido del dueño, 10-11 21:00; se trabaja hasta 12-11 03:10 UTC)
+
+| Área | Estado | Qué se probó y hallazgos |
+|---|---|---|
+| Placa: abrir STL/OBJ/3MF, vista 3D | Revisado 10-11 | 3MF por flujo y `p:path` (2bb4f30), líneas malas OBJ/STL (3b5a4ac), arcos y tabuladores de la vista previa (16151cc), G-code binario con bloque gigante (8d22761) |
+| Placa: laminar, cancelar, resultado, guardar, compartir, mandar | Revisado 10-11 | Compartir faltaba (agregado), motor colgado sin límite de tiempo (45fc876), archivos fijos compartidos entre llamadas (59cb49b) |
+| Placa: tarjeta de impresora, dibujos, ícono de conexión | Revisado 10-11 | Faltaban (agregados); notas de QA AND13–15 (orden de filamentos, cama «auto») |
+| Panel de ajustes (Impresión, Material, niveles, buscar) | Revisado 10-11 | Al escribir «1.» el campo pasaba a «1» y 1,5 quedaba 15 (13de62d) |
+| Asistente de perfiles y paquete | Revisado 10-11 | `compatible_prints` y cambio de filamento al cambiar la impresión (7063b65, 4c79675) |
+| Ingeniería (caras, cargas, material, seguridad, temperatura, mapa) | Revisado 10-11 | Faltaba la temperatura (55f9aae) |
+| Mi biblioteca (guardar, abrir, exportar, importar, borrar, deshacer, «La imprimí») | Revisado 10-11 | Errores en un idioma solo (45fc876), copias de deshacer acumuladas (63dce76) |
+| Compartida (lista, índice, denunciar, compartir) | Revisado 10-11 | Errores en inglés y fallos mudos (d7a7b60), bloqueo por código (6869773), `SafeFile` con scripts (8d8d5d6) |
+| Piezas escaneadas | Revisado 10-11 | Duplicado si falla «tomado», huella en mayúsculas, archivo a medias (559b192) |
+| Enlaces de sitios de modelos | Revisado 10-11 | Límite de 200 MB y nombres seguros: sin cambios |
+| Impresoras: Bambu (MQTT, FTPS, cámara) | Revisado 10-11 | MQTT sin límite (6276e1a), G-code entero en memoria (ab40252), conexión de datos abierta al rechazar (99b0756) |
+| Impresoras: Moonraker, OctoPrint, PrusaLink, Duet | Revisado 10-11 | Respuestas sin límite (8ae9128), fin «completo/cancelado» de Klipper y PrusaLink (b1d1090) |
+| Búsqueda en la red, sondeo y cámara en segundo plano | Revisado 10-11 | Seguían en segundo plano (52aa505, 5faf263) |
+| Aviso de fin de impresión (servicio) | Revisado 10-11 | Impresora apagada a mitad: nunca paraba; error no de impresora lo cortaba (75d2a4b) |
+| Nube: cuenta, sesiones, planes | Pendiente | |
+| Nube: trabajos (laminar/analizar), progreso, resultado | Pendiente | |
+| Informar un problema | Pendiente | |
+| Actualizaciones de la app | Revisado 10-11 | Tamaño sin tope y huella en mayúsculas (18d78d2) |
+| Secretos (Keystore) | Revisado 10-11 | Un error pasajero borraba los códigos (735dccf) |
+| Ayuda sin conexión, glosario, materiales | Pendiente | |
+| CAD (SolidCraft) y Piezas | Pendiente | |
+| Calibraciones | Pendiente | |
+| Preferencias, créditos, visión de color | Pendiente | |
+| Giro de pantalla y muerte del proceso a mitad de laminar/subir | Pendiente | |
+| Sin red ↔ con red (nube, impresoras, Compartida) | Pendiente | |
+| Textos: plurales, castellano/inglés | Revisado 10-11 | Plurales (ba8b30a); faltan textos fijos en código |
