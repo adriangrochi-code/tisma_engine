@@ -1754,6 +1754,9 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(ConvertToBinaryMenu, "Convertir G-code ASCII a binario…", "Convert ASCII G-code to binary…") \
+    X(ConvertToAsciiMenu, "Convertir G-code binario a ASCII…", "Convert binary G-code to ASCII…") \
+    X(GcodeConverted, "Convertido: %s", "Converted: %s") \
     X(DeselectAllMenu, "No elegir nada", "Deselect All") \
     X(ImportInchesMenu, "Importar STL (en pulgadas)…", "Import STL (Imperial Units)…") \
     X(ImportZipMenu, "Importar un archivo ZIP…", "Import ZIP Archive…") \

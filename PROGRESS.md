@@ -12438,3 +12438,7 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   para cuando la placa elija varias piezas (hoy `selected_` es una sola).
 - CI local 1234fc8 (gcc): 1172/1176; Xvfb no arrancó en 2, `ui_bambu_print` esperó al simulador y aero por tiempo con
   la máquina cargada; se repiten aparte.
+- **Paso 2d (Convertir):** Convertir G-code ASCII a binario… y binario a ASCII… (el archivo nuevo junto al elegido,
+  con la otra terminación). `ascii_gcode` (motor) devuelve el G-code con su resumen final y sus ajustes como líneas
+  `; clave = valor`; binario otra vez da los mismos bytes. Pruebas `[binary]` y el paso de
+  `ui_script_file_import_export`.

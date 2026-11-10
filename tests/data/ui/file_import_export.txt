@@ -32,3 +32,13 @@ menu more
 menu export_toolpaths
 choose-file ui_toolpaths.obj
 expect-toast ui_toolpaths.obj
+key ctrl+g
+choose-file ui_convert.gcode
+menu more
+menu convert_to_binary
+choose-file ui_convert.gcode
+expect-toast Converted: ui_convert.bgcode
+menu more
+menu convert_to_ascii
+choose-file ui_convert.bgcode
+expect-toast Converted: ui_convert.gcode

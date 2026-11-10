@@ -576,6 +576,8 @@ enum class Purpose {
     ExportObject,      // a model's right-click menu: Export as STL/OBJ…
     ExportToolpaths,   // File › Export Toolpaths as OBJ…
     AddModelInches,    // File › Import STL (Imperial Units)…
+    ConvertToBinary,   // File › Convert ASCII G-code to binary…
+    ConvertToAscii,    // File › Convert binary G-code to ASCII…
     ImportZip,         // File › Import ZIP Archive…
     ExportPreferences, // Preferences › Other: export and import them
     ImportPreferences,
@@ -1802,6 +1804,7 @@ private:
     void reload_from_disk(); // F5: the chosen model, or every one, read again from its file
     void window_tab(int n);  // Window › Ctrl+1 to Ctrl+6 (interface.md, «Más»)
     void import_zip(const std::filesystem::path& path); // every STL, OBJ and 3MF in it onto the plate
+    void convert_gcode(const std::filesystem::path& path, bool to_binary); // written next to it, the other kind
     // The calibration tests as menu entries (Más › Calibration, the empty
     // bed's Add calibration model ▸): the chosen one made, in its tab.
     void calibration_entries(const char* prefix);
@@ -5013,6 +5016,28 @@ void App::import_zip(const std::filesystem::path& path) {
         if (added == 0)
             fail(T::CannotOpen, utf8(path.filename()) + ": " + tr(T::ZipNoModels));
         last_folder_ = path.parent_path();
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
+// Convert ASCII G-code to binary, or binary to ASCII: the file written next
+// to the one chosen, with the other ending (.bgcode, .gcode); the printer's
+// metadata of a binary file come from the printer chosen now.
+void App::convert_gcode(const std::filesystem::path& path, bool to_binary) {
+    try {
+        std::ifstream in(path, std::ios::binary);
+        if (!in)
+            throw std::runtime_error(utf8(path) + ": cannot be read");
+        const std::string data{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        std::filesystem::path out_path = path;
+        out_path.replace_extension(to_binary ? ".bgcode" : ".gcode");
+        if (out_path == path)
+            out_path.replace_extension(to_binary ? ".converted.bgcode" : ".converted.gcode");
+        const std::string out_data = to_binary ? binary_gcode(data, settings_) : ascii_gcode(read_binary_gcode(data));
+        if (!write_aside(out_path, out_data))
+            throw std::runtime_error(utf8(out_path) + ": cannot be written");
+        notify(format(tr(T::GcodeConverted), utf8(out_path.filename()).c_str()));
     } catch (const std::exception& e) {
         fail(T::CannotOpen, e.what());
     }
@@ -17407,6 +17432,14 @@ void App::more_menu() {
                 start_cloud_slice();
         }
         ImGui::Separator();
+        if (item("convert_to_binary", tr(T::ConvertToBinaryMenu))) {
+            purpose_ = Purpose::ConvertToBinary;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ConvertToBinaryMenu), {".gcode", ".gco", ".g"}, last_folder_);
+        }
+        if (item("convert_to_ascii", tr(T::ConvertToAsciiMenu))) {
+            purpose_ = Purpose::ConvertToAscii;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ConvertToAsciiMenu), {".bgcode"}, last_folder_);
+        }
         if (item("slice_now", tr(T::SliceNowMenu), "Ctrl+R", has_plate_))
             start_slice();
         if (item("gcode_preview", tr(T::GcodePreviewMenu))) {
@@ -21215,6 +21248,8 @@ void App::file_chosen(const std::filesystem::path& chosen) {
             break;
         }
         case Purpose::ImportZip: import_zip(chosen); break;
+        case Purpose::ConvertToBinary:
+        case Purpose::ConvertToAscii: convert_gcode(chosen, purpose_ == Purpose::ConvertToBinary); break;
         case Purpose::ExportToolpaths: {
             std::ofstream out(chosen, std::ios::binary);
             if (result_)

@@ -48,4 +48,10 @@ struct BinaryGcode {
 // unknown or compressed block, a size past the end or a CRC that does not match.
 BinaryGcode read_binary_gcode(std::string_view bytes);
 
+// A binary G-code as ASCII text again (File › Convert binary G-code to
+// ASCII…): its G-code, then its print metadata and its slicer metadata as
+// "; key = value" lines, where binary_gcode took them from. Made binary
+// again with the same settings, it gives the same bytes.
+std::string ascii_gcode(const BinaryGcode& binary);
+
 } // namespace tisma
