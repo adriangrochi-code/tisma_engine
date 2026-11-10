@@ -11877,3 +11877,7 @@ arreglado en 9d8dc76 y subido.
   encuentran) y su cifrado no está ligado a la clave del par. Biblioteca del motor (cpp-libp2p Apache-2.0 o
   rust-libp2p MIT por ABI C) a confirmar con una prueba de compilación en Windows y Android antes de anotarla en
   THIRD_PARTY.md. Acordado con la sesión del servidor (session_01QadJfL79pTm8Ks4houx1oK).
+- **Decisión del dueño (2026-11-10), cambia la del 24-10:** macOS antes de la beta cerrada de diciembre: CI de macOS
+  en cada envío (arm64 y x86_64), vista con MoltenVK u OpenGL, diálogos nativos, cámara USB con AVFoundation y su
+  permiso, `.dmg` sin firmar por ahora, y el motor como biblioteca para iOS. Anotado en PLAN.md («macOS antes de la
+  beta»). Orden de trabajo: el conversor sigue; macOS empieza por el CI (lo que más destraba).

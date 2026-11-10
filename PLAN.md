@@ -229,7 +229,7 @@ Antes estaba «fuera de la primera versión»; ahora es una fase.
 | Fase | Cuándo | Contenido | Terminada cuando |
 |---|---|---|---|
 | F9 | antes de macOS | 4 y 5 ejes: campo escalar en el volumen (malla de tetraedros), capas curvas como isosuperficies (Dai et al. 2018, S³-Slicer, Neural Slicer), orientación de la boquilla, cinemática de la máquina (boquilla inclinada que gira, mesa giratoria, cabezal), choques y G-code con ejes giratorios | Una pieza con voladizos se imprime sin soportes en una máquina de 4 ejes y en una de 5 (hace falta decidir cuáles; la impresora propia del dueño es candidata) |
-| F10 | al final | macOS: CI en cada envío y arreglos para que compile y pase las pruebas (decisión del dueño, 2026-10-24: se deja para el final) | Compila y prueba en macOS |
+| F10 | **antes de la beta cerrada de diciembre** (decisión del dueño, 2026-11-10, cambia la del 24-10) | macOS e iOS, ver «macOS antes de la beta» abajo | Compila y prueba en macOS; el .dmg abre; la biblioteca para iOS compila |
 
 **Fichas:** el equipo que conoce Tisma Slicer las escribe en el orden de las fases: primero corte, perímetros,
 superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de imprimir) y soportes.
@@ -1315,6 +1315,16 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
    Deformación exagerada y los mapas de von Mises y desplazamiento, hechos el 2026-11-04; la memoria y el tiempo en Más opciones y «Análisis» fuera de Impresión 3D, hechos el 2026-11-04. Arrastrar la flecha de una fuerza, hecho el 2026-11-04. La dirección de impresión (Z o cinta), hecha el 2026-11-04. Optimizar con el relleno mínimo uniforme con el relleno por zonas, con nervios y con refuerzos, y la orientación recomendada, hechos el 2026-11-04. «Calcular en la nube» con su candado por plan, hecho el 2026-11-04. Faltan:,
    el resto de Optimizar (retícula);
 5. la pestaña Aerodinámica, con A3 (CFD).
+
+### macOS antes de la beta (decisión del dueño, 2026-11-10; reutilizar todo lo posible)
+
+- [ ] CI de macOS en cada envío, arm64 y x86_64 (runners de GitHub): compila y pasan las pruebas.
+- [ ] La vista: MoltenVK o el camino OpenGL que ya existe.
+- [ ] Diálogos nativos de abrir y guardar (como BH40 en Windows).
+- [ ] Cámara USB con AVFoundation y el permiso de cámara (`printer_connections.md`, regla 7 de macOS).
+- [ ] Paquete `.dmg`; sin firmar hasta que el dueño tenga la cuenta de Apple Developer, después firma y notarización.
+- [ ] El motor como biblioteca para iOS (arm64, sin GPU por ahora o Metal vía MoltenVK), para la app de iPhone que
+  hace la sesión de Android.
 
 ### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
 
