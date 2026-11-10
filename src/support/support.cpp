@@ -246,7 +246,13 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
                 // overhang thinner than a pixel (a slope just past the
                 // threshold) still sets the pixels it crosses.
                 a = BitGrid(x0, y0, pixel, width, height);
-                a.fill(offset(over[above_of(l)], params.margin + 0.75 * to_mm(pixel)));
+                const std::size_t above = above_of(l);
+                Polygons grown = offset(over[above], params.margin + 0.75 * to_mm(pixel));
+                // The margin never reaches a blocked face (BH47): what is
+                // blocked keeps no support under it.
+                if (params.block && above < params.block->size() && !(*params.block)[above].empty())
+                    grown = Clipper2Lib::Difference(grown, (*params.block)[above], Clipper2Lib::FillRule::NonZero);
+                a.fill(grown);
             }
         });
         const std::size_t count = top - bottom;

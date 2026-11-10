@@ -2982,7 +2982,8 @@ TEST_CASE("support: small extrusions at speed.small_support (orca_2_5.md, rule 1
     s.support_interface_speed = {};
     s.gcode_resolution = 0.0;
     s.min_layer_time = 0.0;      // no slowing down for cooling
-    s.first_layer_speed = 100.0; // nor on the first layer
+    s.first_layer_speed = 100.0; // nor on the first layer: 100 % of each speed (gcode_motion.md, rule 2)
+    s.first_layer_speed_percent = true;
     s.speed_max_flow = 0.0;
     // Each support path (extrusions between two moves that do not extrude)
     // with its length and its feeds.

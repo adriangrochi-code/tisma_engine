@@ -12524,3 +12524,57 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   laminar («el modo vaso imprime un solo objeto») aunque solo uno fuera imprimible; el nodo ya los quitaba antes de
   contar. Ahora cuenta solo los imprimibles. Prueba en `ui_script_printable` (falla sin el arreglo).
 - Revisado sin hallazgos: `ascii_gcode`, `obj_text`, `toolpaths_obj`, instancias, pegar y recargar.
+- Foco de las próximas rondas de bugs (dueño, 19:35, por la sesión de especificaciones): la generación, no solo
+  los cierres. Soporte en pendientes empinadas y suaves, y separación de interfaz y techo por estilo; ramas
+  orgánicas que chocan con el modelo; soporte bajo capas curvas; altura variable con soporte (alturas de capa del
+  soporte frente al modelo); cúspide con `detail_height`; curvas con altura variable; límites de pendiente frente a
+  `machine.free_angle`. Cada hallazgo con prueba.
+
+## 2026-11-10 20:30 — BH47: el soporte bajo un bloqueador pintado
+
+- Informe (dueño y sesión de especificaciones, caja negra en 274d5d2): un bloqueador de soporte pintado en parte de
+  una cara parecía añadir soporte. Medido por longitud extruida (no por segmentos: el borde redondo del hueco suma
+  muchos segmentos cortos), en el modelo en T con un círculo de 6 mm pintado bajo la placa: 108 mm de soporte dentro
+  del círculo sin pintar, 82 mm con el bloqueador. El voladizo sí se quitaba, pero la columna crecía después el
+  margen del soporte (1,6 mm) desde lo que quedaba y volvía a meterse bajo las caras bloqueadas.
+- Arreglo: el margen de cada voladizo se recorta con el área bloqueada de su capa. Ahora: rejilla 0 mm dentro (antes
+  108), ajustado 0 (antes 7685 en toda la altura). Orgánico: las capas que tocan la placa quedan fuera del círculo
+  (≥ 6,27 mm del centro); más abajo pasan troncos por debajo sin tocar las caras bloqueadas, que es lo esperado.
+- Pruebas `[paint]`: la columna de rejilla y la ajustada no entran 1 mm dentro del borde del bloqueador; el laminado
+  completo tampoco; un bloqueador borrado (capas vacías) da exactamente el soporte automático. `[project]`: el
+  bloqueador y el reforzador pintados vuelven al reabrir el proyecto. Las dos primeras fallan sin el arreglo.
+- Sin probar: borrar la pintura con el pincel en la interfaz (el motor da lo mismo con las capas vacías, pero no hay
+  guion de interfaz que lo haga).
+- Dueño (20:00, por la sesión de especificaciones): búsqueda profunda de bugs hasta el 2026-11-12 03:10 UTC. Casos
+  raros y combinados donde la salida es incorrecta sin cerrarse: pintura de soporte (BH47 primero), soporte en
+  pendientes, puentes e islas, curvas con soporte y altura variable, modificadores y ajustes por objeto y por tramo,
+  costura, retracción y viaje, varios objetos y secuencial, modelos extremos (diminutos, enormes, paredes finas, no
+  cerrados, normales invertidas, fuera de la cama), ida y vuelta del 3MF, unidades, medidas del G-code frente al
+  modelo. Cada hallazgo con una prueba que falle sin el arreglo; resumen corto cada hora.
+
+## 2026-11-10 21:10 — búsqueda profunda: falda única en la impresión secuencial
+
+- `sequential.md`, regla 5 (cambiada el 27-10 a «una sola falda rodea todos los objetos y se imprime una vez, al
+  principio», SQ6): cada objeto seguía llevando su propia falda; la prueba se había escrito con la versión anterior.
+  Ahora una sola falda alrededor de las primeras capas de todos los objetos, con la primera capa del primero (sin borde
+  si alguno lleva balsa); con `draft_shield`, que sube hasta arriba, cada objeto conserva la suya. Prueba
+  `[sequential]` actualizada (una falda, que rodea los dos objetos, antes de la primera pieza); falla sin el arreglo.
+- Revisado sin hallazgos: normales invertidas (todas o la mitad de las caras) dan el mismo G-code byte a byte; las
+  medidas de las paredes externas coinciden con el modelo (20,00 y 4,00 mm); paredes de 0,3 y 0,6 mm y un cubo de
+  0,8 mm; el paso al siguiente objeto (regla 3).
+
+## 2026-11-10 21:40 — specs nuevas: anchos de cordón, separación del soporte, velocidad de la primera capa
+
+- `perimeters.md` regla 8, P15 (spec/next 931ffe8): todo ancho de cordón se acepta si supera la altura de su capa (la
+  primera capa contra `layers.first_height`) y no pasa de tres boquillas; por debajo de un cuarto de la boquilla
+  lamina con el aviso `line_width_thin`. Antes: de un cuarto a cuatro boquillas, sin mirar la capa. Prueba
+  `[settings]` P15 (boquilla 0,6, capas 0,12: 0,133 avisa, 0,11 se rechaza).
+- `supports_skirt.md` (tabla, `support.xy_gap`): un porcentaje es del perímetro externo (`walls.outer_width`, o 1,125
+  boquillas), no de `walls.width`. `support_xy_gap()` en los dos sitios que lo usaban. Prueba: externo 0,6, paredes
+  0,45, 50 % → 0,30 mm.
+- `gcode_motion.md` regla 2 (spec/next b6010bd): `speed.first_layer` en mm/s fija cada extrusión de la primera capa
+  (antes era un tope: las más lentas quedaban igual); `"N%"` pone cada una al N % de la suya. La falda y el borde,
+  con «N %», toman el porcentaje de `speed.walls` (decisión propia: la ficha no lo dice). Prueba `[speeds]`:
+  perímetro de 20 con 30 → 30; 50 % → la mitad de cada tipo; ida y vuelta del texto.
+- Pendiente: el campo de la interfaz de `speed.first_layer` sigue en mm/s; un valor en % de un perfil se ve como
+  número sin unidad (el resumen sí dice «%»).

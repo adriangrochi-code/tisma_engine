@@ -9,6 +9,12 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Anchos de cordón: se aceptan si superan la altura de capa y hasta tres boquillas; muy finos, con aviso.
+- `support.xy_gap` en % se mide sobre el perímetro externo.
+- `speed.first_layer` fija la velocidad de toda la primera capa, o un porcentaje de cada una ("50%").
+- Impresión secuencial: una sola falda alrededor de todos los objetos, impresa una vez al principio.
+- Un bloqueador de soporte pintado en parte de una cara ya no deja soporte bajo su borde (el margen del soporte
+  entraba 1,6 mm en la zona bloqueada).
 - El modo vaso ya no se niega a laminar cuando la placa tiene otro modelo marcado como no imprimible.
 - La barra de estado ya no lee fuera del texto con un «1 » al final (lo encontró ASan).
 - Importar preferencias reemplaza la lista de proyectos recientes en vez de duplicarla.

@@ -110,6 +110,8 @@ IndexedMesh compensated_like(const IndexedMesh& mesh, const IndexedMesh& part, c
 // (gcode_motion.md, rule 1, "unos 0,40 mm" with a 0.4 nozzle): the nozzle's,
 // times the root of extrusion.bridge_flow_ratio (speeds_accels.md, rule 14).
 double bridge_bead(const Settings& settings);
+// support.xy_gap in mm: a percentage is of the outer wall's bead (supports_skirt.md).
+double support_xy_gap(const Settings& settings);
 
 // Slices a welded mesh with the given settings: layer plan, level-set
 // contours with gap closing, simplification, regions by fill mode, XY offset,
