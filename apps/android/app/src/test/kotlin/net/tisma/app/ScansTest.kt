@@ -26,6 +26,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** p2p_library.md, rule 7 bis: a part scanned and sent to print arrives in «Mi biblioteca», ready to slice. */
 @RunWith(RobolectricTestRunner::class)
@@ -59,8 +60,12 @@ class ScansTest {
             compose.runOnIdle { cloud.signIn("ana@example.com", "password1") }
             compose.waitUntil(10_000) { ShadowLooper.idleMainLooper(); cloud.state.value.signedIn && slice.state.value.libraryAvailable }
             compose.runOnIdle { nav.select(Section.LIBRARY) }
-            compose.waitUntil(15_000) { ShadowLooper.idleMainLooper(); server.scan(scan.id)?.takenBy != null }
-            assertEquals("Test phone (Android)", server.scan(scan.id)?.takenBy)
+            compose.waitUntil(15_000) { ShadowLooper.idleMainLooper(); server.scan(scan.id)?.takenBy?.isNotEmpty() == true }
+            assertEquals(setOf("Test phone (Android)"), server.scan(scan.id)?.takenBy?.toSet())
+            // Each device takes its own: another one is still offered it, this one no more.
+            val other = net.tisma.cloud.CloudClient(server.url).apply { login("ana@example.com", "password1", "Desk (Windows)") }
+            assertEquals(listOf(scan.id), other.scans("Desk (Windows)").map { it.id })
+            assertTrue(other.scans("Test phone (Android)").isEmpty())
             val entry = library.list().single()
             assertEquals("Escaneo de la pieza rota", entry.name)
             assertEquals(1, entry.recipes)

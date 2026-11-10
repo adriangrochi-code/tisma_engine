@@ -11961,7 +11961,7 @@ Pedido del dueño: lo escaneado con Tisma Scanner y mandado con «Imprimir» apa
 - Al abrir Biblioteca con la cuenta abierta, la app pide las piezas escaneadas pendientes, baja cada malla (comprueba
   su SHA-256 si el servidor la da), la guarda como entrada nueva de Mi biblioteca con los ajustes de la tarjeta de la
   impresora como receta, y recién entonces la marca recibida. Aviso: «Llegaron N piezas escaneadas…».
-- Rutas propuestas por la app hasta que el servidor publique las suyas: `GET /v1/me/scans`,
+- Rutas del servidor (tisma-cloud 89f8fc6), por equipo: `GET /v1/me/scans?device=<nombre>`,
   `GET /v1/me/scans/{id}/mesh`, `POST /v1/me/scans/{id}/taken` (`CloudClient.scans`, `downloadScan`, `scanTaken`).
   El servidor de prueba (`MockCloud`) las tiene.
 - Prueba: `ScansTest` (una pieza escaneada llega a Mi biblioteca y queda marcada recibida por ese teléfono).

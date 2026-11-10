@@ -345,7 +345,7 @@ class CloudViewModel(
     suspend fun takeScans(dir: java.io.File, keep: (net.tisma.cloud.Scan, java.io.File) -> Boolean): Int {
         if (!state.value.signedIn) return 0
         return withContext(io) {
-            val list = runCatching { client.scans() }.onFailure { AppLog.line("cloud: scans ${it.message}") }.getOrDefault(emptyList())
+            val list = runCatching { client.scans(device) }.onFailure { AppLog.line("cloud: scans ${it.message}") }.getOrDefault(emptyList())
             var n = 0
             for (scan in list) {
                 runCatching {

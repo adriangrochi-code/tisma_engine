@@ -131,7 +131,7 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
     fun job(id: String): JobDef? = synchronized(lock) { jobs.firstOrNull { it.id == id } }
 
     /** p2p_library.md, rule 7 bis: a part scanned and sent to print, for [email]'s devices (the app's proposed routes). */
-    class ScanDef(val id: String, val email: String, val name: String, val file: String, val mesh: ByteArray, var takenBy: String? = null)
+    class ScanDef(val id: String, val email: String, val name: String, val file: String, val mesh: ByteArray, val takenBy: MutableSet<String> = mutableSetOf())
     private val scans = mutableListOf<ScanDef>()
     fun addScan(email: String, name: String, file: String, mesh: ByteArray): ScanDef = synchronized(lock) {
         ScanDef("scan-${scans.size + 1}", email, name, file, mesh).also { scans += it }
@@ -223,7 +223,8 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
             method == "GET" && r == listOf("me", "reports") -> myReports(auth(ex))
             method == "GET" && r == listOf("me", "scans") -> {
                 val a = auth(ex)
-                val mine = synchronized(lock) { scans.filter { it.email == a.email && it.takenBy == null } }
+                val device = query["device"].orEmpty()
+                val mine = synchronized(lock) { scans.filter { it.email == a.email && device !in it.takenBy } }
                 ok(buildJsonObject {
                     put("scans", kotlinx.serialization.json.buildJsonArray {
                         mine.forEach { sc -> add(buildJsonObject {
@@ -243,7 +244,7 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
                 val a = auth(ex)
                 val body = readJson(ex)
                 val sc = scan(r[2])?.takeIf { it.email == a.email } ?: throw Stop(404, "No such scan")
-                synchronized(lock) { sc.takenBy = (body["device"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "?" }
+                synchronized(lock) { sc.takenBy += (body["device"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "" }
                 ok(buildJsonObject { put("ok", true) })
             }
             method == "POST" && r == listOf("reports") -> report(ex)

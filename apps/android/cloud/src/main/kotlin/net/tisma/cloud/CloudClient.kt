@@ -165,17 +165,17 @@ class CloudClient(
         }).text("id")
 
     /**
-     * p2p_library.md, rule 7 bis: the scanned parts sent to print and not yet taken by a device. The routes are the
-     * app's proposal until the server's are published: `GET /v1/me/scans`, `GET /v1/me/scans/{id}/mesh` and
-     * `POST /v1/me/scans/{id}/taken`.
+     * p2p_library.md, rule 7 bis: the scanned parts sent to print and not yet taken by [device] (each device takes its
+     * own): `GET /v1/me/scans?device=`, `GET /v1/me/scans/{id}/mesh` and `POST /v1/me/scans/{id}/taken {"device"}`.
      */
-    fun scans(): List<Scan> = list(get("/v1/me/scans"), "scans").map(Scan::from)
+    fun scans(device: String): List<Scan> =
+        list(get("/v1/me/scans?device=" + URLEncoder.encode(device, Charsets.UTF_8.name()).replace("+", "%20")), "scans").map(Scan::from)
 
     /** A scan's mesh, written to [out], at most [maxBytes]. */
     fun downloadScan(id: String, out: OutputStream, maxBytes: Long = MAX_RESULT_BYTES): Download =
         fetch("/v1/me/scans/" + path(id) + "/mesh", out, maxBytes)
 
-    /** The scan reached this device's library: the server stops offering it here. */
+    /** The scan reached this device's library: the server stops offering it to this device (idempotent). */
     fun scanTaken(id: String, device: String) {
         postObject("/v1/me/scans/" + path(id) + "/taken", buildJsonObject { put("device", device) })
     }
