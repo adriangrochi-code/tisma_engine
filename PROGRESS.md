@@ -12265,3 +12265,7 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
   «1.» se ponía 1 y el campo mostraba «1», y el «5» siguiente daba 15 (valor mal sin ningún error). Ahora el texto
   solo se reemplaza si el valor cambia por otro lado (restablecer, perfil). Prueba en `SettingsPanelTest` que falla
   sin el arreglo.
+- b1d1090: Klipper («complete»/«cancelled») y PrusaLink («FINISHED»/«STOPPED») dicen cómo terminó la impresión, pero
+  la app lo pasaba a «lista» y adivinaba por el último porcentaje leído: una impresión vista al 97 % 15 s antes de
+  terminar se avisaba como «detenida». Ahora manda lo que dice la impresora (`PrintEventsTest`,
+  `PrinterConnectionTest`).
