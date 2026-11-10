@@ -636,7 +636,7 @@
     <string name="shared_no_list">Todavía no hay una lista firmada: no se comparte nada.</string>
     <string name="shared_list_date">Lista del %1$s</string>
     <string name="shared_share">Compartir con otros teléfonos</string>
-    <string name="shared_privacy">Solo se comparte lo que publicaste o bajaste de la biblioteca compartida, nunca Mi biblioteca. Los teléfonos con que te conectás ven tu dirección IP.</string>
+    <string name="shared_privacy">Solo se comparte lo que publicaste o bajaste de la biblioteca compartida, nunca Mi biblioteca. Todo va cifrado por los intermediarios de Tisma: los otros teléfonos no ven tu dirección IP.</string>
     <string name="shared_now_sharing">Compartiendo ahora.</string>
     <string name="shared_off">No compartís: solo bajás cuando lo pedís.</string>
     <string name="shared_why_no_list">No comparte: falta la lista de bloqueo firmada.</string>
@@ -648,4 +648,23 @@
         <item quantity="one">Llegó %d pieza escaneada a Mi biblioteca, lista para laminar.</item>
         <item quantity="other">Llegaron %d piezas escaneadas a Mi biblioteca, listas para laminar.</item>
     </plurals>
+    <string name="shared_no_index">Todavía no hay un índice firmado de la biblioteca compartida.</string>
+    <string name="shared_download_soon">Bajar llega con la red de pares del motor.</string>
+    <string name="shared_checked">Revisado por un sembrador</string>
+    <string name="shared_report">Denunciar</string>
+    <string name="shared_report_why">¿Por qué?</string>
+    <string name="report_rights">Infringe derechos de autor</string>
+    <string name="report_dangerous">Peligroso o ilegal</string>
+    <string name="report_unsafe">Archivo inseguro</string>
+    <string name="report_other">Otro motivo</string>
+    <string name="shared_reported">Denuncia enviada: la revisa una persona.</string>
+    <string name="shared_report_failed">No se pudo mandar la denuncia: %1$s</string>
+    <string name="unsafe_file">Archivo inseguro: no se abrió (%1$s).</string>
+    <string name="unsafe_empty">está vacío</string>
+    <string name="unsafe_kind">no es un tipo que acepte la biblioteca</string>
+    <string name="unsafe_program">trae un programa</string>
+    <string name="unsafe_damaged">el ZIP está dañado</string>
+    <string name="unsafe_path">escribiría fuera de su carpeta</string>
+    <string name="unsafe_link">trae un enlace</string>
+    <string name="unsafe_big">descomprimido ocupa más de lo permitido</string>
 </resources>

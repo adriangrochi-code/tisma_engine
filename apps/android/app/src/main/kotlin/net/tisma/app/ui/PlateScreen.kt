@@ -566,6 +566,15 @@ fun Context.sliceNoticeText(n: SliceNotice): String = when (n) {
     is SliceNotice.Calibrated -> getString(R.string.cal_applied, calibrationName(n.kind), n.value.toString().removeSuffix(".0"))
     is SliceNotice.LibrarySaved -> getString(R.string.library_saved, n.name)
     is SliceNotice.LibraryFailed -> getString(R.string.library_failed, n.message)
+    is SliceNotice.Unsafe -> getString(R.string.unsafe_file, getString(when (n.problem) {
+        net.tisma.app.p2p.SafeFile.Problem.EMPTY -> R.string.unsafe_empty
+        net.tisma.app.p2p.SafeFile.Problem.NOT_A_KIND -> R.string.unsafe_kind
+        net.tisma.app.p2p.SafeFile.Problem.PROGRAM -> R.string.unsafe_program
+        net.tisma.app.p2p.SafeFile.Problem.DAMAGED -> R.string.unsafe_damaged
+        net.tisma.app.p2p.SafeFile.Problem.OUTSIDE_PATH -> R.string.unsafe_path
+        net.tisma.app.p2p.SafeFile.Problem.LINK -> R.string.unsafe_link
+        net.tisma.app.p2p.SafeFile.Problem.TOO_BIG -> R.string.unsafe_big
+    }) + (if (n.detail.isNotBlank()) ": " + n.detail else ""))
     is SliceNotice.ScansArrived -> resources.getQuantityString(R.plurals.scans_arrived, n.count, n.count)
     is SliceNotice.SiteRefused -> when (n.reason) {
         net.tisma.app.engine.SiteLink.Reason.NOT_HTTPS -> getString(R.string.site_not_https)

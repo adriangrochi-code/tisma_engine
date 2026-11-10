@@ -356,6 +356,10 @@ class CloudViewModel(
                     if (scan.sha256.isNotBlank() && net.tisma.app.p2p.BlockList.sha256(f) != scan.sha256) {
                         f.delete(); throw java.io.IOException("The scan's mesh does not match its fingerprint")
                     }
+                    // Rule 3 octies: a mesh that fails the safety checks is not kept.
+                    if (net.tisma.app.p2p.SafeFile.check(f) is net.tisma.app.p2p.SafeFile.Verdict.Unsafe) {
+                        f.delete(); throw java.io.IOException("Unsafe file: not opened")
+                    }
                     if (keep(scan, f)) { client.scanTaken(scan.id, device); n++ }
                     f.delete()
                 }.onFailure { AppLog.line("cloud: scan ${scan.id} ${it.message}") }

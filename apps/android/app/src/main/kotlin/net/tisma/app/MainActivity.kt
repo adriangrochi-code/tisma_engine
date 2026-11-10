@@ -112,6 +112,13 @@ class MainActivity : ComponentActivity() {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = net.tisma.app.p2p.SharedViewModel(
                 java.io.File(app.filesDir, "p2p"), net.tisma.app.updates.AppUpdater.hexKey(BuildConfig.UPDATES_KEY) ?: ByteArray(0),
+                server = object : net.tisma.app.p2p.LibraryServer {
+                    // Rule 3 bis: the library's own files need no session; «Denunciar» goes with the person's.
+                    override fun file(name: String) = net.tisma.cloud.CloudClient(app.settings.server, null).libraryFile(name)
+                    override fun report(model: String?, sha256: String?, reason: String) =
+                        net.tisma.cloud.CloudClient(app.settings.server, app.secrets.get(net.tisma.app.cloud.CloudViewModel.TOKEN))
+                            .libraryReport(model, sha256, reason)
+                },
                 saved = app.settings) as T
         }
     }

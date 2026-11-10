@@ -34,6 +34,14 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("p2p.sharing", false)
         set(value) = prefs.edit().putBoolean("p2p.sharing", value).apply()
 
+    /** p2p_library.md, rule 3 ter: the highest block list and index sequences seen (an older one is refused). */
+    var p2pListSequence: Long
+        get() = prefs.getLong("p2p.list_sequence", -1)
+        set(value) = prefs.edit().putLong("p2p.list_sequence", value).apply()
+    var p2pIndexSequence: Long
+        get() = prefs.getLong("p2p.index_sequence", -1)
+        set(value) = prefs.edit().putLong("p2p.index_sequence", value).apply()
+
     /** Rule 3's upload limit, in MB a day. */
     var p2pUploadCapMb: Int
         get() = prefs.getInt("p2p.upload_cap_mb", 500)

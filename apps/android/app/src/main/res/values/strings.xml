@@ -652,7 +652,7 @@
     <string name="shared_no_list">No signed list yet: nothing is shared.</string>
     <string name="shared_list_date">List of %1$s</string>
     <string name="shared_share">Share with other phones</string>
-    <string name="shared_privacy">Only what you published or downloaded from the shared library is shared, never My library. The phones you connect to see your IP address.</string>
+    <string name="shared_privacy">Only what you published or downloaded from the shared library is shared, never My library. Everything goes encrypted through Tisma\'s relays: other phones do not see your IP address.</string>
     <string name="shared_now_sharing">Sharing now.</string>
     <string name="shared_off">Not sharing: you only download when you ask.</string>
     <string name="shared_why_no_list">Not sharing: the signed block list is missing.</string>
@@ -664,4 +664,23 @@
         <item quantity="one">%d scanned part arrived in My library, ready to slice.</item>
         <item quantity="other">%d scanned parts arrived in My library, ready to slice.</item>
     </plurals>
+    <string name="shared_no_index">No signed index of the shared library yet.</string>
+    <string name="shared_download_soon">Downloading comes with the engine\'s peer network.</string>
+    <string name="shared_checked">Checked by a seeder</string>
+    <string name="shared_report">Report</string>
+    <string name="shared_report_why">Why?</string>
+    <string name="report_rights">It infringes copyright</string>
+    <string name="report_dangerous">Dangerous or illegal</string>
+    <string name="report_unsafe">Unsafe file</string>
+    <string name="report_other">Another reason</string>
+    <string name="shared_reported">Report sent: a person reviews it.</string>
+    <string name="shared_report_failed">The report could not be sent: %1$s</string>
+    <string name="unsafe_file">Unsafe file: not opened (%1$s).</string>
+    <string name="unsafe_empty">it is empty</string>
+    <string name="unsafe_kind">it is not a kind the library takes</string>
+    <string name="unsafe_program">it carries a program</string>
+    <string name="unsafe_damaged">the ZIP is damaged</string>
+    <string name="unsafe_path">it would write outside its folder</string>
+    <string name="unsafe_link">it carries a link</string>
+    <string name="unsafe_big">it unpacks to more than allowed</string>
 </resources>

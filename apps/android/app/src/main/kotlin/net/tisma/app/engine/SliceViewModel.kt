@@ -136,6 +136,8 @@ sealed interface SliceNotice {
     /** local_library.md, rule 3: the part was kept in «Mi biblioteca». */
     data class LibrarySaved(val name: String) : SliceNotice
     data class LibraryFailed(val message: String) : SliceNotice
+    /** p2p_library.md, rule 3 octies: a file that failed the safety checks was deleted, not opened. */
+    data class Unsafe(val problem: net.tisma.app.p2p.SafeFile.Problem, val detail: String) : SliceNotice
     /** p2p_library.md, rule 7 bis: parts scanned and sent to print arrived in «Mi biblioteca». */
     data class ScansArrived(val count: Int) : SliceNotice
     /** A model site's link that cannot be opened (rule 10), or its download that failed. */
@@ -1004,7 +1006,16 @@ class SliceViewModel(
                 AppLog.line("site: ${e.message}")
                 _state.update { it.copy(notice = SliceNotice.SiteRefused((e as? SiteLink.DownloadException)?.reason, e.message ?: "")) }
             }
-            f.getOrNull()?.let { file -> open(file.name) { file.inputStream() } }
+            f.getOrNull()?.let { file ->
+                // p2p_library.md, rule 3 octies: known by its content, a ZIP without odd paths, links or programs.
+                when (val v = withContext(io) { net.tisma.app.p2p.SafeFile.check(file) }) {
+                    is net.tisma.app.p2p.SafeFile.Verdict.Unsafe -> {
+                        file.delete()
+                        _state.update { it.copy(notice = SliceNotice.Unsafe(v.problem, v.detail)) }
+                    }
+                    is net.tisma.app.p2p.SafeFile.Verdict.Safe -> open(file.name) { file.inputStream() }
+                }
+            }
         }
     }
 

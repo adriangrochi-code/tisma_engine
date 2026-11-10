@@ -134,6 +134,37 @@ class CloudClient(
     }
 
     /**
+     * p2p_library.md, rule 3 bis: the shared library's files that need no session, as raw bytes (their signatures
+     * are checked over the exact bytes): `key` (the library key and its certificate), `blocklist.json`,
+     * `index.json` and their `.sig`.
+     */
+    fun libraryFile(name: String, maxBytes: Long = 64L * 1024 * 1024): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val response = send(HttpRequest("GET", serverUrl + "/v1/library/" + name, headers(false), timeoutMs = 60_000))
+        response.use { r ->
+            if (!r.ok) throw failure(r)
+            val b = ByteArray(64 * 1024)
+            var total = 0L
+            while (true) {
+                val n = r.body.read(b)
+                if (n < 0) break
+                total += n
+                if (total > maxBytes) throw CloudException(0, "The library's $name is too large")
+                out.write(b, 0, n)
+            }
+        }
+        return out.toByteArray()
+    }
+
+    /** Rule 7, «Denunciar»: a model or a file, and why; a person reviews it. Returns the report's id. */
+    fun libraryReport(model: String?, sha256: String?, reason: String): String =
+        postObject("/v1/library/reports", buildJsonObject {
+            model?.let { put("model", it) }
+            sha256?.let { put("sha256", it) }
+            put("reason", reason)
+        }).text("id")
+
+    /**
      * p2p_library.md, rule 7 bis: the scanned parts sent to print and not yet taken by a device. The routes are the
      * app's proposal until the server's are published: `GET /v1/me/scans`, `GET /v1/me/scans/{id}/mesh` and
      * `POST /v1/me/scans/{id}/taken`.

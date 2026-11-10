@@ -59,19 +59,32 @@ fun SharedScreen(shared: SharedViewModel) {
             Text(stringResource(R.string.shared_withdrawn, state.withdrawn.size), color = MaterialTheme.colorScheme.error)
             AccentTextButton(onClick = { shared.withdrawnSeen() }) { Text(stringResource(R.string.shared_ok)) }
         }
+        // Rule 7: a report sent, or why not.
+        state.reported?.let { TismaCard(Modifier.testTag("shared_reported")) {
+            Text(stringResource(R.string.shared_reported)); AccentTextButton(onClick = { shared.reportSeen() }) { Text(stringResource(R.string.shared_ok)) } } }
+        state.reportFailed?.let { TismaCard {
+            Text(stringResource(R.string.shared_report_failed, it), color = MaterialTheme.colorScheme.error)
+            AccentTextButton(onClick = { shared.reportSeen() }) { Text(stringResource(R.string.shared_ok)) } } }
         TismaCard {
             Text(stringResource(R.string.shared_index), style = MaterialTheme.typography.titleMedium)
-            Text(stringResource(R.string.shared_index_soon), style = MaterialTheme.typography.bodySmall,
+            if (state.index == null) Text(stringResource(R.string.shared_no_index), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("shared_index_soon"))
+            else {
+                OutlinedTextField(state.query, { shared.setQuery(it) }, singleLine = true, label = { Text(stringResource(R.string.profile_search)) },
+                    modifier = Modifier.fillMaxWidth().testTag("shared_search"))
+                Text(stringResource(R.string.shared_download_soon), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
+        state.found.take(200).forEach { m -> ModelCard(m) { reason -> shared.report(m.id, null, reason) } }
         TismaCard(Modifier.testTag("shared_list")) {
             Text(stringResource(R.string.shared_blocklist), style = MaterialTheme.typography.titleMedium)
             val list = state.list
             Text(if (list == null) stringResource(R.string.shared_no_list)
                 else stringResource(R.string.shared_list_date,
-                    DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm").withZone(ZoneId.systemDefault()).format(list.issued)),
+                    DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm").withZone(ZoneId.systemDefault()).format(list.generated)),
                 style = MaterialTheme.typography.bodySmall)
-            state.listProblem?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            state.problem?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         }
         TismaCard(Modifier.testTag("shared_sharing")) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -112,3 +125,27 @@ private fun charging(context: Context): Boolean = runCatching {
     val status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
     status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
 }.getOrDefault(false)
+
+/** A model of the index: who made it, its licence, whether a seeder checked it, and «Denunciar» (rule 7). */
+@Composable
+private fun ModelCard(m: net.tisma.app.p2p.LibraryIndex.Model, report: (String) -> Unit) {
+    var asking by rememberSaveable(m.id) { mutableStateOf(false) }
+    TismaCard(Modifier.testTag("shared_model_" + m.id)) {
+        Text(m.name, style = MaterialTheme.typography.titleMedium)
+        Text(listOf(m.author, m.license, sizeText(m.size)).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+        if (m.checked) Text(stringResource(R.string.shared_checked), style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (m.description.isNotBlank()) Text(m.description, style = MaterialTheme.typography.bodySmall, maxLines = 3)
+        if (!asking) AccentTextButton(onClick = { asking = true }, modifier = Modifier.testTag("shared_report_" + m.id)) {
+            Text(stringResource(R.string.shared_report))
+        } else {
+            Text(stringResource(R.string.shared_report_why), style = MaterialTheme.typography.labelLarge)
+            listOf(R.string.report_rights, R.string.report_dangerous, R.string.report_unsafe, R.string.report_other).forEach { r ->
+                val text = stringResource(r)
+                AccentTextButton(onClick = { report(text); asking = false }, modifier = Modifier.testTag("shared_report_reason_$r")) { Text(text) }
+            }
+        }
+    }
+}
+
+private fun sizeText(b: Long) = if (b <= 0) "" else if (b >= 1L shl 20) "%.1f MB".format(b / 1048576.0) else "${(b + 1023) / 1024} KB"

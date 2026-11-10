@@ -11965,3 +11965,22 @@ Pedido del dueño: lo escaneado con Tisma Scanner y mandado con «Imprimir» apa
   `GET /v1/me/scans/{id}/mesh`, `POST /v1/me/scans/{id}/taken` (`CloudClient.scans`, `downloadScan`, `scanTaken`).
   El servidor de prueba (`MockCloud`) las tiene.
 - Prueba: `ScansTest` (una pieza escaneada llega a Mi biblioteca y queda marcada recibida por ese teléfono).
+
+## 2026-11-10 — Android: la biblioteca compartida con el formato del servidor (p2p_library.md, 3 bis a 3 octies)
+
+- Cadena de claves: la app trae solo la clave del proyecto; la clave de la biblioteca vale si el proyecto firmó
+  `tisma-library-key/1\n` + sus 32 bytes y no está en `revoked_keys` (`LibraryKey`). Sin clave del proyecto en la
+  compilación no se acepta nada ni se comparte.
+- Lista `tisma-library-blocklist` e índice `tisma-library-index`: firmados, con `sequence` que no puede bajar (se
+  guarda en el teléfono), `expires` para la lista (P2P7). Rutas `GET /v1/library/{key,blocklist.json,index.json}` y
+  `.sig`; sin servidor se usan las copias guardadas (regla 6).
+- Compartida: búsqueda en el índice (sin cuentas ni archivos bloqueados, sin G-code), tarjeta de modelo con autor,
+  licencia, «revisado» y «Denunciar» (`POST /v1/library/reports`, regla 7). El texto de privacidad dice que todo va
+  por los relés de Tisma.
+- `SafeFile` (regla 3 octies): tipo por contenido; ZIP/3MF sin rutas afuera, sin vínculos, sin programas, a lo sumo
+  10× y 2 GB; avisa el G-code o scripts de un 3MF. Se aplica a lo bajado de sitios y a las piezas escaneadas: si
+  falla se borra con «Archivo inseguro: no se abrió».
+- Pruebas: `BlockListTest` (6: cadena de claves, P2P3, P2P5, P2P6, P2P7, índice, «Denunciar», copias guardadas) y
+  `SafeFileTest` (4: tipos, programas renombrados, `..`, ruta absoluta, bomba, dañado, vínculo, G-code en 3MF).
+- Falta: publicar desde Mi biblioteca (clave del par, saneo de recetas 3 septies), bajar por los relés (motor p2p),
+  renovar la lista cada 6 h mientras se comparte. La clave del proyecto la pone el dueño.
