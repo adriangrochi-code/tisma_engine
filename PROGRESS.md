@@ -12188,3 +12188,7 @@ QA; bundle id `net.tismaservidores.tisma`).
 - 59cb49b: el perfil de impresora iba siempre a `profile.json` y los errores de laminar/analizar a `engine.err`, ambos
   fijos: dos llamadas a la vez se leían los resultados entre sí. El perfil además esperaba la salida antes del límite
   (motor colgado = espera eterna). Archivos propios por llamada (`EngineCallTest`).
+- 52aa505: con la app en segundo plano seguían el sondeo de impresoras, la cámara (una imagen por segundo) y los
+  trabajos de la nube: `LaunchedEffect` no se detiene al salir. `WhileVisible` los corre solo con la app a la vista
+  (`WhileVisibleTest`). Pendiente de revisar: la búsqueda de impresoras en la red (NSD) también sigue en segundo
+  plano; el aviso de fin de impresión (`PrintWatchService`) sí debe seguir.
