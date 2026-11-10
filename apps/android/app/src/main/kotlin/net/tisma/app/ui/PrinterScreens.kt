@@ -77,10 +77,11 @@ fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navig
         }
     }
     if (search) {
-        androidx.compose.runtime.DisposableEffect(Unit) {
+        // Multicast discovery keeps the Wi-Fi awake: only while the list is on screen, not in the background.
+        WhileVisible {
             val d = net.tisma.app.printers.NetworkDiscovery(context, printers::onFound, printers::onLost)
             d.start()
-            onDispose { d.stop() }
+            try { kotlinx.coroutines.awaitCancellation() } finally { d.stop() }
         }
         // A printer not heard for 3 minutes leaves the list.
         WhileVisible {

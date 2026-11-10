@@ -52,7 +52,15 @@ class NetworkDiscovery(
         listeners.forEach { runCatching { nsd.stopServiceDiscovery(it) } }
         listeners.clear()
         synchronized(this) { pending.clear() }
+        // Its probing thread ends with it: a discovery is made each time the list comes to the front.
+        probe.shutdownNow()
     }
+
+    /** Whether discovery is running (for tests). */
+    val running: Boolean get() = listeners.isNotEmpty()
+
+    /** Whether its probing thread can still run (for tests). */
+    val probing: Boolean get() = !probe.isShutdown
 
     @Synchronized
     private fun enqueue(info: NsdServiceInfo, type: String) {
@@ -89,11 +97,11 @@ class NetworkDiscovery(
             DiscoveryTypes.OCTOPRINT -> onFound(FoundPrinter(PrinterKind.OCTOPRINT, s.serviceName, host, s.port,
                 txt["path"] ?: "/", listOfNotNull(txt["vendor"], txt["model"]).joinToString(" ")))
             DiscoveryTypes.MOONRAKER -> onFound(FoundPrinter(PrinterKind.MOONRAKER, s.serviceName, host, s.port))
-            else -> probe.execute {
+            else -> if (!probe.isShutdown) runCatching { probe.execute {
                 // A plain web service is a Klipper printer only if Moonraker answers there.
                 val p = FoundPrinter(PrinterKind.MOONRAKER, s.serviceName, host, s.port)
                 if (runCatching { MoonrakerConnection(p.url, null, UrlConnectionHttp).test() }.isSuccess) onFound(p)
-            }
+            } }
         }
     }
 }
