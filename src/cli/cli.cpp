@@ -368,6 +368,18 @@ const Entry* pick_entry(const std::vector<Entry>& all, const std::vector<const E
     for (const Entry& e : all)
         if (lower(name_of(e)) == lower(query))
             return &e;
+    // The name without the maker's ("Prusament PLA" of Prusament's), when it
+    // is only one's: other names holding its words do not make it ambiguous.
+    const Entry* by_model = nullptr;
+    int models = 0;
+    const std::string tail = " " + lower(query);
+    for (const Entry& e : all) {
+        const std::string name = lower(name_of(e));
+        if (name.size() > tail.size() && name.compare(name.size() - tail.size(), tail.size(), tail) == 0)
+            by_model = &e, ++models;
+    }
+    if (models == 1)
+        return by_model;
     if (found.size() == 1)
         return found.front();
     if (found.empty()) {

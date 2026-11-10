@@ -12663,6 +12663,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   apagaba la boquilla activa (`M104 T0 S0`) antes de imprimir. Ahora se quitan los comandos de temperatura a una
   herramienta negativa, y si el cambio deja en 0 la boquilla que va a imprimir, se calienta de nuevo y se espera.
   El resto del G-code de la máquina sale igual. Prueba `[extruders]` BH49, que falla sin el arreglo.
+- BH51 (búsqueda profunda, CLI): `profile --filament "Prusament PLA"` decía «names 3 filaments» porque solo aceptaba el
+  nombre completo con la marca («Prusament Prusament PLA») y las otras coincidencias eran nombres más largos con las
+  mismas palabras (PLA Blend, rPLA). Ahora el nombre sin la marca, si es de uno solo, lo elige. Prueba `[cli]`, que
+  falla sin el arreglo.
 - Pedido del dueño (2026-11-10): la clave de firma se crea sola al enchufar el pendrive, la primera vez, y después
   queda bloqueada. `python tools/sign_release.py create-key`, o doble clic en `tools/crear_clave_pendrive.bat`:
   espera un pendrive nuevo, crea `tisma/clave.pem` (nunca pisa una que ya esté), espera 2 min un segundo pendrive

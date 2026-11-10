@@ -695,6 +695,11 @@ TEST_CASE("profile: the settings made from the catalog, ready for slice --config
     r = run({"profile", "--printer", "Ender-3"});
     CHECK(r.code == 2);
     CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("names"));
+    // A filament by its name without the maker's, when longer names hold
+    // the same words: "Prusament PLA" is not "Prusament PLA Blend".
+    r = run({"profile", "--printer", "Creality Ender-3 S1", "--filament", "Prusament PLA"});
+    CHECK(r.code == 0);
+    CHECK_THAT(r.err, !Catch::Matchers::ContainsSubstring("names"));
     r = run({"profile", "--printer", "Nobody Nothing 9000"});
     CHECK(r.code == 2);
     CHECK_THAT(r.err, Catch::Matchers::ContainsSubstring("no printer"));
