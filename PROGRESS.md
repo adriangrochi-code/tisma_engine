@@ -12491,3 +12491,6 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
 - CI local 1234fc8, cerrada: las 4 fallas eran de la máquina. Siete `tisma` de corridas a mano quedaron colgados desde
   las 12:50 (el `timeout` cortaba xvfb-run, no la app) y se comían la CPU. Sin ellos, `aero_drag_coefficients` pasa en
   316 s y las otras tres al repetirlas. Las corridas a mano van ahora con `--screenshot` (la app termina sola).
+- Cola p2p (servidor 60b7dd1): con `"direct": true` cada multiaddr de `addrs` debe ser /ip4 o /ip6 con la IP pública
+  que ve el master (si no, 422); detrás de NAT, la dirección observada por identify/AutoNAT, nunca la local; /dns4,
+  /dns6 y privadas se rechazan. Con `"direct": false`, sin cambios. Entra con el cliente p2p (todavía no hecho).
