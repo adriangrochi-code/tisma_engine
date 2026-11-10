@@ -116,7 +116,9 @@ class PrintWatchService : Service() {
 
         fun text(context: Context, printer: String, e: PrintEvent): Pair<String, String> = when (e) {
             is PrintEvent.Finished -> context.getString(R.string.event_finished, printer) to e.file
-            is PrintEvent.Stopped -> context.getString(R.string.event_stopped, printer) to e.file
+            // The printer's own word for its state, when it gave one (a Bambu Lab's, shown as it comes).
+            is PrintEvent.Stopped -> context.getString(R.string.event_stopped, printer) to
+                (if (e.state.isBlank()) e.file else context.getString(R.string.event_stopped_state, e.file, e.state))
             is PrintEvent.Paused -> context.getString(R.string.event_paused, printer) to e.message.ifBlank { e.file }
             is PrintEvent.Failed -> context.getString(R.string.event_failed, printer) to e.message.ifBlank { e.file }
         }

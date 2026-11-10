@@ -3,8 +3,10 @@ name: CI
 # Windows builds and tests every push. Linux runs inside the work session
 # before every push (tools/ci_linux.sh, the same steps as the Linux jobs
 # here), so on GitHub the Linux jobs only run when started by hand (owner's
-# decision, 2026-10-24). macOS is added at the end of the project (see
-# PLAN.md).
+# decision, 2026-10-24). macOS builds and tests every push too, on Apple
+# silicon and on Intel (owner's decision, 2026-11-10: before the closed beta;
+# PLAN.md, «macOS antes de la beta»). While it is being brought up it does
+# not fail the run.
 on:
   push:
   workflow_dispatch:
@@ -79,3 +81,29 @@ jobs:
         run: cmake --build build --config Release --parallel
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+
+  macos:
+    name: macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    # Bringing macOS up (PLAN.md): its result is shown but does not fail the run yet.
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x86_64
+            runner: macos-15-intel # macos-13 is retired: a job asking for it waits forever
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Ninja and OpenSSL 3
+        run: brew install ninja openssl@3
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)"
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure

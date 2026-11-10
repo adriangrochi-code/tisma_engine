@@ -105,6 +105,6 @@ en su ejecución (probado: sin ella no arranca). Ninguna se copia ni se modifica
 |---|---|---|---|
 | Gradle y su envoltorio (`gradlew`, `gradle/wrapper/`) | 8.14.3 | Apache-2.0 | Compila la app. |
 | Android Gradle Plugin | 8.13.2 | Apache-2.0 | Compila el APK. |
-| Kotlin (compilador y complementos Compose y serialization) | 2.2.21 | Apache-2.0 | Compila el código de la app. |
+| Kotlin (compilador, Kotlin/Native para iOS y complementos Multiplatform, Compose y serialization) | 2.2.21 | Apache-2.0 | Compila el código de la app y el módulo compartido con iPhone (`apps/android/shared`). |
 | Android SDK (plataforma 36, build-tools 36.0.0) | — | Licencia del SDK de Android (aceptada en la máquina que compila) | Compila el APK; no se guarda en el repositorio. |
 | Android NDK | r29 (29.0.14206865) | Licencia del SDK de Android; su `libc++` es Apache-2.0 con la excepción LLVM | Compila `tisma-engine` para el teléfono. La r28 no sirve: su `libc++` no tiene `std::from_chars` con decimales, que el motor usa. |

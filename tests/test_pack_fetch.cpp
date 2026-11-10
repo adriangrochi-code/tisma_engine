@@ -113,8 +113,12 @@ TEST_CASE("pack update: a new version brings only the changed vendor (rules 19, 
     // so the update must not ask for it (the server would answer 404).
     releases.serve(kPackData / "release2");
     CHECK(pack_newer(pack, releases.url()) == "2026.11.04-bbbbbbb");
-    const PackInstallReport r = pack_update(pack, releases.url(), {});
+    std::vector<std::string> lines;
+    const PackInstallReport r = pack_update(pack, releases.url(), {}, [&](const std::string& l) { lines.push_back(l); });
     CHECK(r.pack_version == "2026.11.04-bbbbbbb");
+    // release2 has index.json.xz: the index comes compressed, and index.json is not asked for.
+    CHECK(std::any_of(lines.begin(), lines.end(), [](const std::string& l) { return l.starts_with("downloading index.json.xz"); }));
+    CHECK(std::none_of(lines.begin(), lines.end(), [](const std::string& l) { return l.starts_with("downloading index.json ("); }));
     CHECK(std::find(r.installed.begin(), r.installed.end(), "acme.tar.xz") != r.installed.end());
     CHECK(std::find(r.kept.begin(), r.kept.end(), "bolt.tar.xz") != r.kept.end());
     CHECK(text_of(pack / "vendors/acme/models/A1.json").find("Acme One Plus") != std::string::npos);

@@ -371,10 +371,20 @@ BambuResult bambu_camera_stream(const BambuConfig& config, const std::function<b
     }
     out.sha256 = tls->peer_sha256();
     out.serial = tls->peer_cn();
-    if (config.pinned_sha256.empty() || (tls->peer_sha256() != config.pinned_sha256 &&
-                                         (config.serial.empty() || tls->peer_cn() != config.serial))) {
-        out.code = config.pinned_sha256.empty() ? "confirm_certificate" : "certificate_changed";
-        out.error = "the camera's certificate is not the one accepted";
+    // The printer's certificate, one with its serial, or the camera's own
+    // that the person accepted (printer_connections.md, rules 4 and 6).
+    const bool held = tls->peer_sha256() == config.pinned_sha256 ||
+                      (!config.serial.empty() && tls->peer_cn() == config.serial) ||
+                      (!config.camera_pinned_sha256.empty() && tls->peer_sha256() == config.camera_pinned_sha256);
+    if (config.pinned_sha256.empty()) {
+        out.code = "confirm_certificate";
+        out.error = "the printer's certificate is not accepted yet";
+        return out;
+    }
+    if (!held) {
+        out.code = config.camera_pinned_sha256.empty() ? "confirm_camera_certificate" : "certificate_changed";
+        out.error = config.camera_pinned_sha256.empty() ? "the camera has a certificate of its own: confirm it"
+                                                        : "the camera's certificate is not the one accepted";
         return out;
     }
     int got = 0;

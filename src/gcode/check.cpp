@@ -257,18 +257,20 @@ private:
 
     void command(const ParsedLine& p, std::span<const Parameter> parameters) {
         const char kind = p.kind;
+        // A printer macro (START_PRINT..., or RepRapFirmware's M98 P"file")
+        // may heat a nozzle set to 0 before it (rule 18 bis): extruding then
+        // is only a note.
+        if (custom_ && ((!p.readable && kind != 'G' && kind != 'M' && kind != 'T') ||
+                        (p.readable && kind == 'M' && p.code == 98)))
+            for (std::size_t k = 0; k < cold_.size(); ++k)
+                if (cold_[k]) {
+                    if (macro_heats_.size() <= k)
+                        macro_heats_.resize(k + 1, false);
+                    macro_heats_[k] = true;
+                }
         if (!p.readable) {
             if (!custom_)
                 problem("unreadable command '" + std::string(p.head) + "'");
-            else if (kind != 'G' && kind != 'M' && kind != 'T')
-                // A printer macro (START_PRINT...) may heat a nozzle set to 0
-                // before it (rule 18 bis): extruding then is only a note.
-                for (std::size_t k = 0; k < cold_.size(); ++k)
-                    if (cold_[k]) {
-                        if (macro_heats_.size() <= k)
-                            macro_heats_.resize(k + 1, false);
-                        macro_heats_[k] = true;
-                    }
             return; // the user's own G-code may hold anything
         }
         if (!p.unreadable.empty()) {
@@ -472,8 +474,15 @@ private:
             ++out_.stats.extrusions;
             out_.stats.extruded_path += length;
             out_.stats.filament += de;
-            if (retracted_ > 1e-9)
+            // A negative restart extra as long as the retraction: nothing
+            // comes back, and the filament is short by design.
+            if (retracted_ > 1e-9 && !(restart_extra() < 0.0 && retracted_ + restart_extra() <= slack()))
                 problem("extrudes while the filament is retracted");
+            else if (retracted_ > 1e-9) {
+                tool_back_ = false;
+                retracted_ = 0.0;
+                pieces_ = 0;
+            }
             if (tool_ < cold_.size() && cold_[tool_]) {
                 if (tool_ < macro_heats_.size() && macro_heats_[tool_]) {
                     if (!cold_noted_)

@@ -235,4 +235,17 @@ class EngineRunnerTest {
         assertEquals("""{"layers":{"height":0.12},"support":{"enabled":true}}""",
             EngineRunner.SimpleSettings(0.12, true).toJson().toString())
     }
+
+    @Test
+    fun `AND12 the engine gets its own temporary folder, as Android has no tmp`() {
+        val engine = tmp.newFile("tmpdir.sh").apply {
+            writeText("#!/bin/sh\necho \"{\\\"tmp\\\": \\\"${'$'}TMPDIR\\\"}\"\n")
+            setExecutable(true)
+        }
+        val work = File(tmp.root, "fresh/engine")
+        val o = EngineRunner(engine, work).partDefaults("gear")
+        val dir = File((o["tmp"] as kotlinx.serialization.json.JsonPrimitive).content)
+        assertTrue(dir.isDirectory, dir.path)
+        assertTrue(dir.path.startsWith(work.path), dir.path)
+    }
 }

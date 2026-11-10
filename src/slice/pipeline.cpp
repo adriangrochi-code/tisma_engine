@@ -17,6 +17,7 @@
 #include "slice/painted.hpp"
 #include "support/support.hpp"
 #include "geom/distance.hpp"
+#include "geom/polyholes.hpp"
 #include "gpu/compute.hpp"
 #include "support/tree.hpp"
 #include "surfaces/bridges.hpp"
@@ -1455,6 +1456,22 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                     !(frame && frame->taken && (*frame->taken)[l] != (*frame->taken)[l - 1]) &&
                     !(frame && frame->regions && (*frame->regions)[l] != (*frame->regions)[l - 1]);
     }
+    // A layer's thin area and walls, from its region.
+    const auto build_walls = [&](std::size_t l) {
+        // What an opening by the thinnest bead removes is too thin to print.
+        const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
+        out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));
+        if (settings.wall_count > 0) {
+            // Only the outer wall on the first layer (walls_extra.md, rule 11).
+            out.walls[l] = walls_of(out.regions[l], l == 0 && settings.first_layer_one_wall ? 1 : settings.wall_count,
+                                    l == 0 ? first_settings : settings, beading_at(l));
+            // What the walls leave, simplified as the contours are: each wall's
+            // rounded corners add vertices that every later step would carry
+            // (the speed report's V9).
+            out.walls[l].infill = simplify(out.walls[l].infill, settings.simplify_tolerance);
+        } else
+            out.walls[l].infill = out.regions[l];
+    };
     tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
         if (copied[l])
             return;
@@ -1477,29 +1494,30 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         // Where an earlier extruder's part is, this one is not.
         if (frame && frame->taken && !(*frame->taken)[l].empty())
             out.regions[l] = Clipper2Lib::Difference(out.regions[l], (*frame->taken)[l], Clipper2Lib::FillRule::NonZero);
-        // What an opening by the thinnest bead removes is too thin to print.
-        const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
-        out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));
-        if (settings.wall_count > 0) {
-            // Only the outer wall on the first layer (walls_extra.md, rule 11).
-            out.walls[l] = walls_of(out.regions[l], l == 0 && settings.first_layer_one_wall ? 1 : settings.wall_count,
-                                    l == 0 ? first_settings : settings, beading_at(l));
-            // What the walls leave, simplified as the contours are: each wall's
-            // rounded corners add vertices that every later step would carry
-            // (the speed report's V9).
-            out.walls[l].infill = simplify(out.walls[l].infill, settings.simplify_tolerance);
-            fuzz_walls(out.walls[l].toolpaths, out.regions[l], fuzzy,
-                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l);
-        } else
-            out.walls[l].infill = out.regions[l];
+        if (!settings.polyholes)
+            build_walls(l);
     });
     for (std::size_t l = 1; l < out.layers.size(); ++l)
         if (copied[l]) {
             open[l] = open[l - 1];
             out.regions[l] = out.regions[l - 1];
-            out.thin_area[l] = out.thin_area[l - 1];
-            out.walls[l] = out.walls[l - 1];
+            if (!settings.polyholes) {
+                out.thin_area[l] = out.thin_area[l - 1];
+                out.walls[l] = out.walls[l - 1];
+            }
         }
+    // Round holes as polygons (orca_2_5.md, rule 5), once every layer's
+    // region is known: a hole is turned when it lasts two layers.
+    if (settings.polyholes) {
+        PolyholeOptions po;
+        po.margin = settings.polyhole_margin.value;
+        po.margin_percent = settings.polyhole_margin.percent;
+        po.nozzle = settings.nozzle_diameter;
+        po.max_edges = settings.polyhole_max_edges;
+        po.twist = settings.polyhole_twist;
+        make_polyholes(out.regions, po);
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) { build_walls(l); });
+    }
     // What holds a layer up, and what its skins see: with several extruders,
     // every part's (the skins their own with surfaces.interface_shells).
     const std::vector<Polygons>& held = frame && frame->cover ? *frame->cover : out.regions;
@@ -1518,11 +1536,24 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             if (!walls)
                 return;
             walls->infill = simplify(walls->infill, settings.simplify_tolerance);
-            fuzz_walls(walls->toolpaths, out.regions[l], fuzzy,
-                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l);
             out.walls[l] = std::move(*walls);
         });
     }
+    // Fuzzy skin (fuzzy_skin.md), once every layer's region is known: an
+    // outer wall that hangs over nothing (outside the layer below, half a
+    // bead past its edge) stays smooth, as a bridge (orca_2_5.md, rule 18).
+    if (settings.wall_count > 0)
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
+            if (!fuzzed(l) || out.regions[l].empty())
+                return;
+            Polygons air;
+            if (l > 0)
+                air = Clipper2Lib::Difference(out.regions[l], offset(out.regions[l - 1], 0.5 * settings.wall_width),
+                                              Clipper2Lib::FillRule::NonZero);
+            fuzz_walls(out.walls[l].toolpaths, out.regions[l], fuzzy,
+                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l,
+                       air.empty() ? nullptr : &air);
+        });
     for (std::size_t n : open)
         out.open_contours += n;
     out.cut_away = std::size_t(std::count(cut_away.begin(), cut_away.end(), 1));

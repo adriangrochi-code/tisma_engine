@@ -1,5 +1,6 @@
 #include "catalog/pack_fetch.hpp"
 
+#include "catalog/xz.hpp"
 #include "net/http.hpp"
 
 #include <algorithm>
@@ -92,16 +93,34 @@ PackInstallReport pack_update(const fs::path& pack_dir, const std::string& base_
     const fs::path staging = fs::path(pack_dir.string() + ".download");
     std::error_code ec;
     fs::remove_all(staging, ec);
-    // The index first (rule 1).
-    std::vector<std::string> errors = pack_fetch(pack_plan(nullptr, base_url, {}), staging, progress);
-    if (!errors.empty()) {
-        fs::remove_all(staging, ec);
-        throw PackError("the profile pack cannot be downloaded: " + errors.front());
-    }
+    // The index first (rule 1): index.json.xz when the pack has it (the same
+    // index, about a twentieth of the size; profile_pack_format.md,
+    // «Descarga»), else index.json.
     std::string text;
+    std::vector<PackDownload> first = pack_plan(nullptr, base_url, {});
     {
+        PackDownload packed = first.front();
+        packed.url += ".xz";
+        packed.name += ".xz";
+        if (pack_fetch({packed}, staging, progress).empty()) {
+            std::ifstream in(staging / packed.name, std::ios::binary);
+            const std::string data((std::istreambuf_iterator<char>(in)), {});
+            std::string why;
+            if (!xz_decompress(data, text, why, std::size_t(256) << 20))
+                text.clear();
+        }
+    }
+    if (text.empty()) {
+        std::vector<std::string> errors = pack_fetch(first, staging, progress);
+        if (!errors.empty()) {
+            fs::remove_all(staging, ec);
+            throw PackError("the profile pack cannot be downloaded: " + errors.front());
+        }
         std::ifstream in(staging / "index.json", std::ios::binary);
         text.assign(std::istreambuf_iterator<char>(in), {});
+    } else {
+        std::ofstream out(staging / "index.json", std::ios::binary | std::ios::trunc);
+        out.write(text.data(), std::streamsize(text.size()));
     }
     PackIndex index;
     try {
@@ -132,7 +151,7 @@ PackInstallReport pack_update(const fs::path& pack_dir, const std::string& base_
         plan.erase(std::remove_if(plan.begin(), plan.end(), [&](const PackDownload& d) { return archives.count(d.name) > 0; }),
                    plan.end());
     }
-    errors = pack_fetch(plan, staging, progress);
+    std::vector<std::string> errors = pack_fetch(plan, staging, progress);
     PackInstallReport report;
     try {
         report = pack_install(pack_dir, staging, progress);

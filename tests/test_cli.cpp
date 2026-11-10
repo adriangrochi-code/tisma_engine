@@ -9,6 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <filesystem>
@@ -759,5 +760,65 @@ TEST_CASE("calibration: the part and its height changes, then the best value wri
     CHECK(run({"calibration", "fit", "--config", config.string(), "--start", "1", "--end", "2", "--step", "1", "--model",
                model.string(), "--settings", tower.string()}).code == kExitUsage);
     CHECK(run({"calibration", "nothing", "--config", config.string()}).code == kExitUsage);
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("slice: the command line options of orca_2_5.md O6 (OR24 to OR28)", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_o6";
+    std::filesystem::create_directories(dir);
+    const std::string gcode = (dir / "cube.gcode").string(), config = (dir / "empty.json").string();
+    std::ofstream(config) << "{}";
+    // OR26 and OR27: the mesh's summary and the statistics to the standard output.
+    Run r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", gcode, "--inspect-mesh",
+                 "-", "--export-statistics", (dir / "stats.json").string(), "--export-settings", "-"});
+    REQUIRE(r.code == kExitOk);
+    CHECK_THAT(r.out, ContainsSubstring(R"({"size": [10, 10, 10], "volume": 1000, "triangles": 12, "closed": true)"));
+    CHECK_THAT(r.out, ContainsSubstring("\"layers\""));
+    const nlohmann::json stats = nlohmann::json::parse(std::ifstream(dir / "stats.json"));
+    CHECK(stats["plates"].size() == 1);
+    CHECK(stats["plates"][0]["layers"] == 50);
+    CHECK(stats["plates"][0]["print_seconds"].get<double>() > 0.0);
+    CHECK(stats["plates"][0]["filament"][0]["mm"].get<double>() > 0.0);
+    // OR24: with --strict a warning stops it; no G-code, every warning in the file.
+    std::filesystem::remove(gcode);
+    r = run({"slice", kData + "/cube_ascii.stl", "--config", config, "-o", gcode, "--strict", "--warnings",
+             (dir / "warnings.json").string()});
+    CHECK(r.code == kExitModel);
+    CHECK_THAT(r.err, ContainsSubstring("--strict"));
+    CHECK_FALSE(std::filesystem::exists(gcode));
+    CHECK(std::filesystem::exists(dir / "warnings.json"));
+    // OR28: three copies in one column along Y, against the grid.
+    const auto extent = [&](bool along_y) {
+        std::vector<std::string> args{"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o",
+                                      gcode, "--copies", "3"};
+        if (along_y)
+            args.push_back("--align-to-y-axis");
+        REQUIRE(run(args).code == kExitOk);
+        double lo[2] = {1e9, 1e9}, hi[2] = {-1e9, -1e9};
+        std::ifstream in(gcode);
+        for (std::string line; std::getline(in, line);)
+            if (line.starts_with("G1 X") && line.find(" E") != std::string::npos && line.find(" Y") != std::string::npos) {
+                const double x = std::atof(line.c_str() + 4), y = std::atof(line.c_str() + line.find(" Y") + 2);
+                lo[0] = std::min(lo[0], x), hi[0] = std::max(hi[0], x);
+                lo[1] = std::min(lo[1], y), hi[1] = std::max(hi[1], y);
+            }
+        return std::array<double, 2>{hi[0] - lo[0], hi[1] - lo[1]};
+    };
+    const std::array<double, 2> grid = extent(false), column = extent(true);
+    CHECK(column[0] < grid[0] - 5.0);         // narrower: one cube wide
+    CHECK(column[1] > grid[1] + 5.0);         // longer: three in a row
+    CHECK(column[1] - column[0] > 2.0 * 10.0); // two more cubes along Y
+    // OR25 from the command line: a face by its normal; bad values refused.
+    r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", gcode,
+             "--ground-face-normal", "1,0,0"});
+    CHECK(r.code == kExitOk);
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", gcode,
+               "--ground-face-normal", "0,0,0"}).code == kExitUsage);
+    CHECK(run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", gcode,
+               "--ground-face-point", "1,2"}).code == kExitUsage);
+    r = run({"slice", kData + "/cube_ascii.stl", "--config", kData + "/settings.json", "-o", gcode,
+             "--ground-face-point", "100,100,100"});
+    CHECK(r.code == kExitModel);
+    CHECK_THAT(r.err, ContainsSubstring("no face"));
     std::filesystem::remove_all(dir);
 }

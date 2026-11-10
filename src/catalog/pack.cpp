@@ -136,6 +136,12 @@ PackIndex parse_pack_index(std::string_view text_in) {
         out.compatible = file_of(j.at("compatible"));
     if (j.contains("community"))
         out.community = file_of(j.at("community"));
+    if (j.contains("translation_archive"))
+        out.translation_archive = file_of(j.at("translation_archive"));
+    if (j.contains("translation") && j.at("translation").is_object())
+        for (const auto& [dialect, path] : j.at("translation").items())
+            if (path.is_string())
+                out.translation[dialect] = path.get<std::string>();
     if (j.contains("vendors") && j.at("vendors").is_array())
         for (const json& v : j.at("vendors")) {
             if (!v.is_object())
@@ -199,6 +205,9 @@ std::vector<PackDownload> pack_plan(const PackIndex* index, const std::string& b
     add(index->community, "community.tar.xz");
     // knowledge.tar.xz (rule 21) is not in the index: no size or SHA-256 to check.
     out.push_back({base + "knowledge.tar.xz", "knowledge.tar.xz", 0, ""});
+    // The translation table, when the index names it (project_import.md, rule 11).
+    if (!index->translation_archive.name.empty())
+        add(index->translation_archive, "translation.tar.xz");
     for (const PackVendor& v : index->vendors) {
         if (!vendors.empty() && std::find(vendors.begin(), vendors.end(), v.id) == vendors.end())
             continue;
@@ -254,6 +263,7 @@ bool safe_pack_path(std::string_view path) {
     if (path.empty() || path.front() == '/' || path.find('\\') != std::string_view::npos || path.find(':') != std::string_view::npos)
         return false;
     const bool under = path.starts_with("community/") || path.starts_with("knowledge/") ||
+                       path.starts_with("translation/") ||
                        (path.starts_with("vendors/") && path.find('/', 8) != std::string_view::npos && path.find('/', 8) > 8);
     if (!under)
         return false;
@@ -380,6 +390,39 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
                                            {"filament_end", "end_gcode"}})
                 if (g.at("templates").contains(from) && g.at("templates").at(from).is_string())
                     profile["settings"]["extrusion"][to] = g.at("templates").at(from);
+    }
+    // A filament's values in the program it comes from, by that program's
+    // names (profile_pack_format.md, source_values): the variables of a
+    // machine's own G-code that the engine has no setting for
+    // (temperature_vitrification...), as machine.variables, under any the
+    // profile already sets.
+    if (kind == "filament" && j.contains("source_values") && j.at("source_values").is_object() &&
+        j.at("source_values").contains("values") && j.at("source_values").at("values").is_object()) {
+        json& variables = profile["settings"]["machine"]["variables"];
+        if (!variables.is_object())
+            variables = json::object();
+        for (const auto& [name, value] : j.at("source_values").at("values").items()) {
+            if (variables.contains(name) || name.empty() || name.find_first_of("[]\n") != std::string::npos)
+                continue;
+            if (value.is_array()) {
+                json list = json::array();
+                for (const json& item : value)
+                    if (item.is_number() || item.is_string())
+                        list.push_back(item);
+                    else if (item.is_boolean())
+                        list.push_back(item.get<bool>() ? "true" : "false");
+                if (!list.empty())
+                    variables[name] = list;
+            } else if (value.is_number() || value.is_string()) {
+                variables[name] = value;
+            } else if (value.is_boolean()) {
+                variables[name] = value.get<bool>() ? "true" : "false";
+            }
+        }
+        if (variables.empty())
+            profile["settings"]["machine"].erase("variables");
+        if (profile["settings"]["machine"].empty())
+            profile["settings"].erase("machine");
     }
     if (kind == "resin" || kind == "resin_print") {
         profile["kind"] = kind == "resin" ? "filament" : "print";

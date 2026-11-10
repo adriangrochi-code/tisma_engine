@@ -98,6 +98,22 @@ community = tar([("community/printers/Acme/Acme One.json", j({"vendor": "Acme", 
     value("resin.viscosity", 350, "mPa·s", "community", "https://example.org/forum-grey")]}))])
 knowledge = tar([("knowledge/glossary.json", j({"format": "tisma-knowledge-glossary", "version": 1, "language": "es",
                                                  "sources": [], "terms": []}))])
+# The settings' translation table (profile_pack_format.md, «Tabla de traducción»), with rows
+# shaped as the real pack's (profiles/next 8e2e5f0).
+translation = tar([("translation/prusaslicer.json", j({"format": "tisma-pack-translation", "version": 1,
+    "dialect": "prusaslicer", "kinds": {
+        "print": {"layer_height": {"engine": "layers.height", "group": "translated", "conversion": {"how": "number"}},
+                  "first_layer_height": {"engine": "layers.first_height", "group": "translated",
+                                         "conversion": {"how": "percent_of", "base": "layers.height"}},
+                  "external_perimeter_extrusion_width": {"engine": "walls.outer_width", "group": "similar",
+                                                         "conversion": {"how": "absolute_only"}},
+                  "thin_walls": {"engine": None, "group": "none"}},
+        "filament": {"extrusion_multiplier": {"engine": "extrusion.flow", "group": "translated",
+                                              "conversion": {"how": "factor", "factor": 100}}},
+        "printer": {"gcode_flavor": {"engine": "machine.flavor", "group": "similar",
+                                     "conversion": {"how": "map", "values": {"marlin2": "marlin"}}},
+                    "start_gcode": {"engine": "machine.start_gcode, machine.end_gcode", "group": "translated",
+                                    "conversion": {"how": "rule", "rule": "gcode_template"}, "with": ["end_gcode"]}}}}))])
 compatible = j({"format": "tisma-pack-compatible", "version": 1, "sets": [[0, 1], [2], []]})
 # Set 1 is Bolt's only, yet Acme Standard is the Acme One 0.4's default print: valid for it (rule 12).
 # Set 2 is empty, as 392 entries of the real pack 2026.10.27: taken as every printer, a pack error (BH29).
@@ -107,8 +123,10 @@ evil_link = tar([("vendors/bolt/models/B2.json", b"{}\n"), ("vendors/bolt/link",
 def file(name, data):
     return {"name": name, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
 
-def index(version, acme, bolt_data):
-    return j({"format": "tisma-profile-pack", "version": 2, "pack_version": version,
+def index(version, acme, bolt_data, table=None):
+    extra = {"translation": {"prusaslicer": "translation/prusaslicer.json"},
+             "translation_archive": file("translation.tar.xz", table)} if table else {}
+    return j({**extra,"format": "tisma-profile-pack", "version": 2, "pack_version": version,
               "generated": "2026-11-04T00:00:00Z", "license": "AGPL-3.0-or-later",
               "printers": ["vendors/acme/models/A1.json#0.4", "vendors/acme/models/A1.json#0.6",
                            "vendors/bolt/models/B2.json#default"],
@@ -131,10 +149,11 @@ def index(version, acme, bolt_data):
                                "default_variant": "default", "variants": [{"id": "default", "nozzle": 0}]}]}]})
 
 releases = {
-    "release1": {"index.json": index("2026.11.01-aaaaaaa", acme1, bolt), "compatible.json": compatible,
+    "release1": {"index.json": index("2026.11.01-aaaaaaa", acme1, bolt, translation), "translation.tar.xz": translation, "compatible.json": compatible,
                  "acme.tar.xz": acme1, "bolt.tar.xz": bolt, "community.tar.xz": community,
                  "knowledge.tar.xz": knowledge},
-    "release2": {"index.json": index("2026.11.04-bbbbbbb", acme2, bolt), "acme.tar.xz": acme2},
+    "release2": {"index.json": index("2026.11.04-bbbbbbb", acme2, bolt),
+                 "index.json.xz": xz(index("2026.11.04-bbbbbbb", acme2, bolt)), "acme.tar.xz": acme2},
     "evil": {"index.json": index("2026.11.04-ccccccc", evil_path, evil_link), "acme.tar.xz": evil_path,
              "bolt.tar.xz": evil_link},
 }

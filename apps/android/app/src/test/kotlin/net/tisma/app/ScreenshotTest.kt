@@ -98,8 +98,8 @@ class ScreenshotTest {
         val dir = File("build/screenshots").apply { mkdirs() }
         listOf<Pair<String, () -> Unit>>(
             "plate" to { nav.select(Section.PLATE) },
-            "print" to { nav.select(Section.PRINT) },
-            "print_quality" to { nav.select(Section.PRINT); nav.open(Screen.SettingsSection("print", "quality")) },
+            "print" to { nav.select(Section.PLATE); nav.open(Screen.SettingsTab("print")) },
+            "print_quality" to { nav.select(Section.PLATE); nav.open(Screen.SettingsTab("print")); nav.open(Screen.SettingsSection("print", "quality")) },
             "more" to { nav.select(Section.MORE) },
             "printer" to { nav.select(Section.PRINTER) },
         ).forEach { (name, go) ->

@@ -49,7 +49,7 @@ APK compila el motor desde la raíz del repositorio (unos minutos por arquitectu
 ```text
 cd apps/android
 tools/ci.sh                      # íconos, licencias, pruebas y el APK de depuración
-./gradlew :app:assembleDebug     # solo el APK: app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:assembleDebug     # los APK en app/build/outputs/apk/debug/: app-arm64-v8a-debug.apk (teléfonos), app-x86_64-debug.apk (emuladores) y app-universal-debug.apk (los dos)
 ```
 
 Impresoras simuladas para un emulador: `./gradlew :mockprinters:run` (Moonraker en `http://10.0.2.2:7125` sin

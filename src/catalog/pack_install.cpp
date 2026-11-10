@@ -266,6 +266,8 @@ PackInstallReport pack_install(const fs::path& pack_dir, const fs::path& staging
     std::vector<Archive> archives;
     archives.push_back({index.community.name.empty() ? "community.tar.xz" : index.community.name, index.community, "community/"});
     archives.push_back({"knowledge.tar.xz", PackFile{}, "knowledge/"}); // rule 21: not in the index
+    if (!index.translation_archive.name.empty()) // the translation table (project_import.md, rule 11)
+        archives.push_back({index.translation_archive.name, index.translation_archive, "translation/"});
     for (const PackVendor& v : index.vendors)
         archives.push_back({v.archive.name.empty() ? v.id + ".tar.xz" : v.archive.name, v.archive, "vendors/" + v.id + "/"});
     for (const Archive& a : archives) {

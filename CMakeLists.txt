@@ -185,6 +185,7 @@ add_library(tisma_core
   src/mesh/mesh.cpp
   src/mesh/indexed_mesh.cpp
   src/mesh/face_region.cpp
+  src/mesh/inspect.cpp
   src/mesh/shapes.cpp
   src/mesh/lattice.cpp
   src/mesh/orient.cpp
@@ -198,6 +199,7 @@ add_library(tisma_core
   src/geom/bitgrid.cpp
   src/geom/distance.cpp
   src/geom/polygons.cpp
+  src/geom/polyholes.cpp
   src/config/settings.cpp
   src/config/profiles.cpp
   src/slice/painted.cpp
@@ -279,6 +281,7 @@ add_library(tisma_core
   src/io/xml.cpp
   src/io/model.cpp
   src/io/threemf.cpp
+  src/io/project_import.cpp
   src/io/paths.cpp
   src/cad/design.cpp
   src/cad/sketch.cpp
@@ -318,6 +321,7 @@ add_library(tisma_core
   src/ui/slicing.cpp
   src/ui/project_slice.cpp
   src/cli/cli.cpp
+  src/cli/c_cli.cpp
   src/cli/node.cpp
   src/cli/pack_cli.cpp
   src/cli/part_cli.cpp
@@ -331,7 +335,7 @@ if(TISMA_GPU)
 else()
   target_sources(tisma_core PRIVATE src/gpu/compute_none.cpp)
 endif()
-target_include_directories(tisma_core PUBLIC src)
+target_include_directories(tisma_core PUBLIC src include)
 target_include_directories(tisma_core SYSTEM PRIVATE ${stb_write_SOURCE_DIR})
 # Kernels must give the same bits on the CPU and the GPU: no fused multiply-add.
 if(NOT MSVC)

@@ -10846,6 +10846,22 @@ vuelta de perfilado.
 - Regla 14, PNG: falta (decisión del dueño, 2026-11-04: SVG por ahora). Para PNG no hay lector en el motor: elegir
   uno permisivo y anotarlo antes de usarlo.
 
+
+## 2026-11-04 — Android: impresora y filamento en el asistente; el APK de CI trae SolidCraft
+
+Pedido del dueño: «tenés que elegir impresora y filamento primero», y que los filamentos salgan del paquete de perfiles.
+- El asistente del primer arranque, después de «Usar esta impresora», pasa al paso de filamento: los del paquete para
+  esa impresora (regla 12: su conjunto de `compatible.json`, los del fabricante primero, después los genéricos), con
+  el fabricante debajo de cada nombre. Antes volvía a la placa y el filamento solo se cambiaba tocando la tarjeta.
+- Regla 13: al instalar, el filamento queda en el primero de `defaults.filament` de la variante.
+- Decisión propia: los fabricantes del índice sin impresoras y con filamentos (bibliotecas de filamentos, hoy
+  `Orca_OrcaFilamentLibrary`, 36 KB) se bajan junto con la impresora elegida, para que estén los genéricos. El motor los
+  planea bien (`pack plan --vendors Anycubic,Orca_OrcaFilamentLibrary`, probado con el índice real).
+- CI de Android (`.github/workflows/android.yml`): baja los artefactos de la última corrida buena de «SolidCraft for
+  Android» y arma el APK con `-Ptisma.solidcraft`; sin artefactos, arma sin SolidCraft y lo avisa.
+- Pruebas: `PackWizardTest` (MA1 con el paso de filamento, el filamento de fábrica y la biblioteca), `ProfilePackTest`.
+  No probado en un teléfono.
+
 ## 2026-11-04 — la cama del paquete en la vista 3D (`profile_pack.md`, regla 14, solo SVG)
 
 **Hecho** (el dueño pidió SVG por ahora):
@@ -10922,6 +10938,24 @@ reemplazo con aviso es lo correcto. BH27 cerrado.
 `ui_pack_print_speeds`, la línea de licencia. **Sin probar:** PK1 contra GitHub de verdad desde la interfaz; la
 descarga en sí ya la prueba `test_pack_fetch` con un servidor simulado.
 
+
+## 2026-11-04 — Android: perfil de impresión del paquete y BH27 (cambios a mano)
+
+Del motor (dev `b8f5906`, BH27): los perfiles de impresión del paquete traen `speed.*`, y `profile --pack` los pone en
+los ajustes de la impresora. Decisión de la sesión de especificación: al elegir otro perfil de impresión o filamento
+del paquete, sus ajustes reemplazan a los actuales, salvo los cambiados a mano, que se mantienen y se avisan.
+- La pantalla del perfil de una impresora del paquete elige filamento y perfil de impresión (regla 12, los
+  compatibles), con «Listo». Al elegir la impresora queda el primero de `defaults.print` (regla 13).
+- `ProfileChoice.print` va a `profile --pack ... --print` (y por ahí a todo lo que corta); se guarda.
+- El panel ya tomaba los valores del perfil nuevo y dejaba encima los cambios a mano; ahora, además, un aviso
+  dice cuáles se mantuvieron.
+- Pruebas: `PackWizardTest` (perfil de impresión por defecto y elegido, aviso de cambios mantenidos, el valor a mano
+  queda y el del perfil nuevo entra). No probado en un teléfono.
+- Regla 15 en la app (después de dev `9ebf378`): la pantalla del perfil de una impresora del paquete muestra
+  `license · origin` de la impresora y de cada filamento y perfil de impresión, con el enlace al repositorio de los
+  perfiles. Las reglas 1 y 3 ya estaban (asistente del primer arranque; sin red, el catálogo incluido). Prueba en
+  `PackWizardTest`.
+
 ## 2026-11-04 — calibración de puentes y voladizos (PLAN, P1)
 
 **Hecho** (diseño propio en `docs/CALIBRATION.md`; ninguna ficha la describe):
@@ -10936,6 +10970,45 @@ descarga en sí ya la prueba `test_pack_fetch` con un servidor simulado.
 
 **Prueba:** `[calibration]` (forma, áreas a 6,1 y 8,5 mm, G-code verificado, ángulo aplicado, ajustes de impresión) y
 `ui_calibration_bridges` (la pieza laminada; captura mirada). **No probado en una impresora.**
+
+- Calibración `bridges_overhangs` en la app (dev `e540e9c`): «Puentes y voladizos» en Calibrar. El motor pone los
+  ajustes propios de la prueba (sin soportes ni arcos) en `--settings`, que la app ya usa para cortar; el ángulo
+  elegido deja `support.threshold_angle` = 90 − ángulo. Prueba con el motor real en `DesignToolsTest`.
+
+## 2026-11-05 — Pedido del dueño: «Mi biblioteca» local (escritorio y Android)
+
+Decisión del dueño: una biblioteca de modelos propia y local primero (sin cuenta ni red), que después se pueda publicar
+en la biblioteca de Tisma Cloud (`model_library.md`). Cada modelo guarda el proyecto, los ajustes con que se laminó,
+el G-code con su resumen y su receta, y el análisis de FEA o CFD con su resumen, para reimprimir fácil. Se pidió la
+ficha a la sesión de especificación y se avisó al motor. La app la hace cuando la ficha pase `check_spec`.
+- Ficha recibida: `local_library.md` (spec/next `207bd14`, ML1–ML9). Se propuso al motor un comando `library`, para que
+  el formato viva en un solo lugar y lo usen el escritorio y la app.
+- **Decisión del dueño (05-11-2026):** la biblioteca no guarda G-code. «Imprimir» lamina siempre con la receta, en el
+  teléfono, en el escritorio o en la nube. Se pidió a la sesión de especificación ajustar la ficha (reglas 1, 6, 7, 9 y
+  12; ML1, ML2, ML7 y ML8) y se avisó al motor.
+
+## 2026-11-05 — Android: «Mi biblioteca» (local_library.md) y las secciones nuevas
+
+- **Secciones (decisión del dueño, 05-11-2026, sobre `mobile_app.md`, regla 5):** Biblioteca · Plato · Ingeniería ·
+  Impresora · Más. La app abre en Biblioteca. Ingeniería tiene la pieza en 3D con FEA y arrastre, y el CAD y las
+  piezas (salieron de Más). Los ajustes de Impresión se abren desde el plato; los de Material, desde Impresora.
+- **Mi biblioteca en la app** (`Library.kt`, `LibraryViewModel.kt`, `LibraryScreen.kt`), sobre el comando `library`
+  del motor acordado con su sesión (todavía no está en el motor; mientras tanto la sección lo dice y lleva al plato):
+  - guardar desde el plato después de laminar o analizar (regla 3), con la receta (impresora, filamento, perfil de
+    impresión, cambios a mano) y el análisis; «Guardar como nueva»;
+  - lista con búsqueda (nombre, etiqueta, impresora, material, «con análisis»), orden por fecha o nombre, cuánto ocupa;
+  - abrir en el plato con la receta, «Imprimir» que lamina siempre con la receta (regla 6) y guarda el resumen en ella;
+  - avisos de la regla 7: «Receta de una versión anterior», ajustes que ya no existen, «El análisis no vale para
+    estos ajustes» con «Calcular de nuevo»;
+  - exportar y compartir `.tismalib`, importar (también al compartir con la app), «Reemplazar» o «Guardar como
+    nueva», y el rechazo de archivos inseguros lo hace el motor (ML6);
+  - borrar entrada, receta o análisis con confirmación y «Deshacer» hasta cerrar la app (regla 8).
+  - Ningún G-code se guarda (ML10).
+- Pruebas: `LibraryTest` con un motor de prueba (`fake_library_engine.py`) que responde el contrato: ML1, ML2, ML3/ML4,
+  ML5 (mitad del teléfono), ML6 y ML10. Las de Ingeniería, el panel y la accesibilidad, ajustadas a las secciones nuevas.
+  No probado con el motor real (no tiene `library` todavía) ni en un teléfono.
+- Sigue: cuando el motor tenga `library`, probar con él (y ML5 con el escritorio); la miniatura de 256 × 256 y «La
+  imprimí» con foto; el límite de espacio en Preferencias (regla 12).
 
 ## 2026-11-04 — firmar las versiones con la clave del pendrive (decisión del dueño)
 
@@ -10994,6 +11067,78 @@ La sesión de fichas laminó un cubo de 20 mm con cada variante FDM del paquete 
 - `ctest` completo pasa.
 - A mano: un G-code de inicio de Ender-3 V3 se lamina, da `START_PRINT EXTRUDER_TEMP=0 CH=0 IDLE=0` y un aviso.
 - **Sin probar con el paquete real:** el equipo del motor no lo lee. Lo vuelve a barrer la sesión de fichas.
+
+## 2026-11-05 — Android: beta 0.1.0-beta.1 para quienes prueban
+
+Pedido del dueño (por la sesión de especificación): una beta esta semana. `versionName` `0.1.0-beta.1`
+(`versionCode` 2), con `dev` mezclado (motor con BH29–BH31; BH32–BH34 y `library` todavía no están en `dev`). El
+actualizador sigue apagado (sin la clave pública del dueño). Notas en castellano: `apps/android/BETA.md`.
+**Firma:** no hay clave de lanzamiento; el APK de CI va firmado con la clave de depuración del ejecutor, que cambia
+entre corridas. Una clave fija es decisión del dueño (dónde se guarda y quién la tiene).
+
+## 2026-11-05 — Android: AND10, el filamento en la pestaña Material
+
+Bug del dueño (QA AND10): «no se puede elegir el filamento, hay que poner las temperaturas a mano».
+- Revisado con el paquete real (Creality, PrusaResearch, Elegoo, Orca_BBL y la biblioteca de filamentos): la lista
+  de la app da filamentos propios para las 454 impresoras de esos fabricantes, y `profile --pack --filament` cambia
+  las temperaturas (Ender-3 con Creality PETG: 240/70 °C en lugar de 205/60).
+- Lo que faltaba: la pestaña Material, donde están las temperaturas, no decía de qué filamento salen ni dejaba
+  elegirlo (solo desde la tarjeta de la impresora del plato). Ahora arriba de Material: el filamento, «Elegir
+  filamento» (los del paquete para esa impresora, o el catálogo) y, si hay ajustes de material cambiados a mano,
+  «Usar los valores del filamento» (los cambios a mano quedan encima del filamento, BH27).
+- Prueba: `PackWizardTest` (MA1 + AND10). No probado en un teléfono.
+
+## 2026-11-06 — Android: opciones de envío a una Bambu Lab (gcode_macros.md, regla 12)
+
+Regla del dueño (06-11, por la sesión de especificación): sin tiempo libre; al terminar, el siguiente ítem.
+- Al mandar a una Bambu Lab desde el plato: «Nivelar la cama», «Calibrar el flujo» (prendidas por defecto),
+  «Calibrar las vibraciones» y «Grabar un timelapse». Van en el pedido `project_file` por MQTT
+  (`PrintOptions` en el módulo de impresoras; las demás impresoras las ignoran).
+- Corrección de la ficha (spec `fda7ff8`): solo la **placa** va al G-code de inicio (`curr_bed_type`); las demás
+  opciones van solo en el pedido y no vuelven a laminar. La placa se elige en el plato con una impresora Bambu Lab
+  («La que detecte la impresora» o una de las seis de la ficha) y va como `bambu.plate` en los ajustes (clave del
+  motor); cambiarla pide laminar de nuevo. Prueba: `BambuPlateTest`.
+- Pruebas: `BambuTest` (valores por defecto y los elegidos en el pedido). La pantalla no tiene prueba automática.
+  No probado con una Bambu real.
+- `mobile_app.md`, lo que quedaba:
+  - regla 12, el costo en el resultado: gramos × `extrusion.cost` (precio por kg del Material). Con los filamentos
+    del paquete sale 0: `profile --pack` no pasa el `cost_per_kg` del filamento a `extrusion.cost` (avisado al
+    motor). Prueba: `PlateCostTest`.
+  - regla 6, Archivo: la información de la pieza (medidas y triángulos) y «Quitar de la placa».
+  - **Bloqueado:** regla 10, abrir STEP (el motor dice «STEP files are not supported yet»). Regla 15, Google y Google
+    Play: decisiones del dueño. Regla 9, la biblioteca de Tisma Cloud: espera el servidor.
+- `local_library.md`, regla 12: el límite de Mi biblioteca en Preferencias (500 MB por defecto en el teléfono). Al
+  pasarlo, la lista lo avisa y no borra nada sola. Prueba en `LibraryTest`.
+- La miniatura de 256 × 256 (regla 1): `Thumbnail.kt` la dibuja desde los triángulos (vista en ángulo, sombreado
+  plano, de atrás hacia adelante) y va con `library save --thumb`. Prueba en `LibraryTest` (que sea un PNG y la lista
+  lo muestre); el dibujo no se miró a ojo.
+- Sigue en la biblioteca: «La imprimí» con foto y nota (se propuso `library printed` al motor).
+
+## 2026-11-06 — Android: la cámara de las Bambu Lab A1 y P1 (printer_connections.md, regla 6 de Bambu Lab)
+
+Pedido de la sesión de especificación (en la PC el dueño no ve la cámara de su A1 mini, BH36).
+- `BambuConnection.cameraFrames()`: TLS al puerto 6000 con el certificado guardado de la impresora, el ingreso de
+  80 bytes (cabecera de 16 con tamaño 0x40 y tipo 0x3000, `bblp` y el código de acceso en 32 bytes cada uno) y las
+  imágenes JPEG, cada una tras una cabecera de 16 bytes con su tamaño (según la página de video de OpenBambuAPI, que
+  cita la ficha). Se revisa que cada imagen empiece en FF D8 y termine en FF D9.
+- La página de la impresora la muestra en vivo. Si falla, dice qué revisar: sin respuesta en el puerto 6000 (y que
+  las X1, P2S y H2 usan RTSP, que el teléfono todavía no muestra), código de acceso rechazado, certificado distinto,
+  o conectada sin imágenes.
+- `MockBambu` tiene la cámara; pruebas: `BambuTest` BL6 y `PrintersTest` CM2 (imágenes, y el código equivocado).
+  Las pruebas de la app abren `java.net` a Robolectric (el TLS del simulador lo necesita). No probado con una A1 real.
+- Estado en vivo y aviso al terminar o fallar con una Bambu Lab: el estado ya llegaba por MQTT y el servicio de
+  vigilancia ya avisaba, pero solo conocía `RUNNING`, `PAUSE` e `IDLE`. Cualquier otro (los que la impresora mande al
+  terminar o fallar, que ninguna especificación nombra) quedaba en «ocupada» y no avisaba. Ahora salir de la
+  impresión hacia ese estado avisa como al pasar a lista: terminada si el avance llegó a 99 %, detenida si no, con la
+  palabra de la impresora tal cual (sin adivinar nombres, `printer_connections.md`, regla 5). Un `print_error`
+  durante la impresión sigue siendo «falló». Prueba: `PrintEventsTest`. No probado con una impresora real.
+- Pruebas de interfaz de lo nuevo (Robolectric): `BambuSendTest` (desde el plato, con la Bambu simulada: apagar
+  nivelación y prender timelapse llega al `project_file`), además de `BambuPlateTest`, `PackWizardTest` (AND10) y
+  `LibraryTest`. En el emulador las prueba la sesión de especificación.
+- «La imprimí» (regla 1) en el detalle de una pieza de Mi biblioteca: nota y foto opcional, con
+  `library printed --date --photo --note` (contrato aceptado por el motor, que está haciendo el comando `library`).
+  Las pruebas de la app corren con `LC_ALL=C.UTF-8`, como Android pasa los argumentos (una nota con acentos).
+  Prueba en `LibraryTest`.
 
 ## 2026-11-05 — BH32: un perfil de impresión «para todas» se ofrece solo si cabe (spec 6970209)
 
@@ -11570,6 +11715,11 @@ arreglado en 9d8dc76 y subido.
 **Falta:** el límite de espacio (regla 12, ML7) y la biblioteca en la interfaz de escritorio.
 
 **Sigue:** avisar a Android; después PLAN.md.
+- Mi biblioteca contra el motor real (dev `e057b99`, `library`): `LibraryTest` usa el motor de `TISMA_HOST_ENGINE`
+  si está. Pasan ML3/ML4 (check) y ML5/ML6 (exportar, importar, «ya existe», archivo inseguro). ML1 falla: `save`
+  copia `--model` tal cual a `project.3mf`, y el plato tiene un STL; al «Imprimir» el motor dice «3MF: not a ZIP
+  package». Se pidió al motor que convierta a paquete 3MF al guardar (regla 1). Con el motor de prueba, todo pasa.
+
 
 ## 2026-11-06 05:00 — bloque nocturno: subida, fuzzer y árbol por islas
 
@@ -11582,6 +11732,49 @@ arreglado en 9d8dc76 y subido.
   `tree_fill_field` las recorre. Medido en la esfera de 100 mm (sphere.stl, `tree/organic.json`, 3 corridas):
   laminado 1,11 s con los offsets contra 1,39 s con el campo (antes de esto, 2,9 contra 1,44 s). Sigue sin conectar.
   Faltan la segunda pared desde el mismo campo y marching squares en la GPU.
+- Con dev `80e738d` (`library save` convierte STL/OBJ en un proyecto 3MF): `LibraryTest` pasa entero con el motor
+  real (ML1, ML2, ML3/ML4, ML5/ML6, ML10). La prueba usaba `perimeters.count`, que no es una clave del motor; ahora
+  `walls.count`. El APK de CI ya trae el motor con `library`. No probado en un teléfono.
+
+## 2026-11-06 — Android: AND11, temperaturas vacías en Material en una instalación nueva
+
+QA AND11 (APK `42171193144`, emulador sin red, catálogo incluido: Anycubic Kobra 2 con Anycubic ABS): la tarjeta del
+filamento decía «Anycubic ABS», pero las cuatro temperaturas estaban vacías.
+- Causa: `EngineRunner.profile()` corría el motor con su carpeta de trabajo (`cache/engine`) sin crearla. En una
+  instalación nueva, antes de laminar nada, esa carpeta no existe, el proceso no arranca y el perfil se toma como
+  vacío. Además, el laminado usaba entonces los valores por defecto del motor («no se usó el perfil»).
+- Arreglo: crear la carpeta. Con el motor real: 514 valores, boquilla 260 °C, cama 90 °C, primera capa igual que la
+  boquilla. Prueba: `MaterialTempsTest` (carpeta nueva; con el motor real si está, si no con uno de prueba).
+- «Agregar impresora» ahora nombra también Bambu Lab (modo LAN).
+
+## 2026-11-06 — Android: tamaño del APK
+
+Medido sin SolidCraft (con él suma unos 20 MB por arquitectura, comprimido): el APK de depuración con las dos
+arquitecturas pesaba 36 MB, casi todo dex sin achicar (28 MB) y dos copias del motor.
+- **Un APK por arquitectura** (`splits.abi`): `app-arm64-v8a-debug.apk` para teléfonos (33 MB), `app-x86_64` para
+  emuladores y el universal. Con SolidCraft, el de teléfono deja afuera la otra copia (unos 20 MB menos).
+- **Tipo `beta`** para quienes prueban: R8 achica y optimiza (`proguard-android-optimize.txt`), firmado con la clave de
+  depuración hasta que exista la del dueño. arm64: **7,0 MB** sin SolidCraft (contra 33 MB). Las pruebas corren sobre
+  depuración: una beta se prueba en un emulador antes de entregarla (pedido a la sesión de especificación).
+- CI sube aparte: `tisma-android-phone-apk`, `tisma-android-phone-beta-apk`, `tisma-android-emulator-apk` y el
+  universal (`tisma-android-debug-apk`, como antes).
+- Accesibilidad y textos: la prueba de nombres de los controles (regla 9) cubre ahora Material (con la tarjeta del
+  filamento), CAD, Ayuda y Piezas en Ingeniería, y `LibraryTest` la corre en la lista y en el detalle de una pieza:
+  todos con nombre. En castellano no falta ningún texto (los iguales a los ingleses son nombres: Material, Normal,
+  OctoPrint…), y no hay textos visibles escritos en el código.
+
+## 2026-11-06 — Android: AND12 (carpeta temporal del motor) y la biblioteca con proyectos 3MF
+
+Smoke del beta R8 x86_64 (`cb4a0e3`) por la sesión de especificación: sin cierres ni errores de R8 en asistente,
+3MF, laminar, vista previa, Material, Más y la lista de la Biblioteca.
+- **AND12:** Diseño → Box → Build daba «cannot make a temporary folder» (volumen 0). En Android no hay `/tmp`, y el
+  motor (para SolidCraft) le pide al sistema la carpeta temporal. Ahora cada proceso del motor (corte, perfil,
+  análisis, diseño, paquete, biblioteca) recibe `TMPDIR` dentro de la carpeta de la app, creada si falta
+  (`engineProcess`). Prueba: `EngineRunnerTest` AND12.
+- «Guardar en la biblioteca» no aparecía después de laminar un 3MF: la tarjeta del plato dejaba afuera los proyectos.
+  El motor guarda el 3MF tal cual como `project.3mf`, así que ahora también se ofrece. No hay prueba automática con
+  un 3MF.
+
 
 ## 2026-11-06 07:30 — bloque nocturno: CI y marching squares más livianos
 
@@ -11622,3 +11815,418 @@ arreglado en 9d8dc76 y subido.
   acá solo hay llvmpipe, que es más lento que la CPU.
 - Pruebas: las del árbol, la de GPU contra CPU y la suite sin las de la interfaz.
 - Sigue: marching squares en la GPU, y después lo siguiente de `PLAN.md`.
+
+## 2026-11-09 07:20 — bloque nocturno: abrir proyectos de otros programas (regla 1)
+
+- La sesión estuvo parada del 06-11 a la tarde al 09-11 a la mañana (reinicios del proceso); los bloques de esos días
+  no corrieron. 2b6ab4b quedó en verde en Windows, Android y Nightly.
+- Fuzzer con semilla nueva (20261109): 2000 corridas, 13 rechazadas por no imprimibles, 0 fallas.
+- Ficha nueva `project_import.md` (spec/next 90c1414, `check_spec` limpio): regla 1 hecha. `project_source` reconoce
+  la familia (PrusaSlicer, OrcaSlicer, Cura) por los archivos del paquete y el programa por `Application`; lo demás es
+  un 3MF del estándar (regla 2). Pruebas `[import]` (3 casos).
+- Sigue: reglas 3–5 y 9 (mallas, tipos de parte, placas, diálogo), que piden los archivos de muestra del equipo de
+  fichas.
+
+## 2026-11-09 11:40 — BH45: el G-code de inicio de una A1 con F0
+
+- Urgente del dueño, por el equipo de fichas: el G-code de inicio original de la Bambu A1 pegado en
+  `machine.start_gcode` hacía fallar el laminado («feed rate F0 is not positive»). `outer_wall_volumetric_speed` y
+  `flush_volumetric_speeds[initial_no_support_extruder]` quedaban en 0.
+- Arreglado según `gcode_macros.md`, regla 10 quater (spec/next 0aca4aa):
+  - el motor calcula las velocidades: la pared externa (velocidad × ancho × capa, sin pasar el caudal del filamento),
+    `flush_volumetric_speeds` y `filament_max_volumetric_speed` (el caudal del filamento, del cabezal o de la
+    impresión);
+  - sin ningún caudal en los ajustes, 8 mm³/s con aviso;
+  - las temperaturas salen de `machine.variables` (`flush_temperatures`, `nozzle_temperature_range_*`);
+  - un `F0` que quede en el G-code de la máquina, fuera de los comentarios, se escribe con la velocidad de viaje del
+    perfil (100 mm/s si no tiene), con aviso.
+- Prueba propia (GM12, sin el G-code de Bambu, que no se lee por la sala limpia): las mismas construcciones,
+  velocidades calculadas desde esas variables y un `F0` escrito tal cual. **No probado** con el G-code real de la A1,
+  X1C, P1S ni A1 mini: lo repite el equipo de fichas.
+- BH45 ampliado (spec/next ffead48; medición de la sesión de perfiles: de 56 variantes Bambu, 8 laminaban con su G-code,
+  20 no se leían por un índice fuera de lista y 28 fallaban por F0): se llenan las variables propias de las Bambu Lab
+  de la regla 10 quater (`first_non_support_filaments`, `first_layer_center_no_wipe_tower`, `max_print_z`, los
+  `*_id`, `filament_ids`, `curr_y_acceleration_limit` y las de cámara, vitrificación y ventilador adicional), y un
+  índice pasado el final de una lista da su último valor, con aviso, en vez de cortar. **No probado** con el paquete:
+  lo corre la sesión de perfiles con `validate.py --macros`.
+- BH45, tercera parte (corrida de la sesión de perfiles con ba03c61: 2101 de 2261 variantes laminan): 160 fallaban por
+  `filament_extruder_id` (G-code de los filamentos de Prusa) y 2 por la revisión de calefactor. Arreglado:
+  `filament_extruder_id` (0), `print_temperature` de Cura (la del filamento), `[nombre_[índice]]` (forma vieja con
+  índice variable), `random(a, b)` (el medio del rango, para que el G-code sea siempre el mismo), `filament_map` (1,
+  de base 1), `first_filaments`, los `*_hotend` y `total_toolchanges`; `M98` de RepRapFirmware cuenta como macro que
+  puede calentar (solo nota). Los `source_values` de los filamentos del paquete van a `machine.variables` del perfil
+  del filamento. **Decisión:** un perfil de filamento puede llevar cualquier variable de `machine.variables` (antes
+  solo las de temperatura), porque son los valores del filamento para el G-code de la impresora.
+- También: varias sentencias en un bloque, separadas por `;` (`{global x = 8; local y = 2}`), y la asignación a
+  una variable o a un elemento de lista (`{x = …}`, `{x[1] = …}`), como en la documentación pública del lenguaje de
+  macros de PrusaSlicer. Suite sin interfaz: 953 de 953 antes de esta parte; `[macros]`, `[template]` y `[gcode]`
+  después.
+- Queda: variables en 0 de la lista de la sesión de perfiles (`printer_notes`, `curr_bed_type`, `printer_model` y
+  otras).
+- Corrida con 40adede: laminan las 2261 variantes FFF del paquete. Error mío encontrado por la sesión de perfiles: el
+  cambio de `F0` también tocaba la `F` de comandos que no mueven (el `M862.1 F…` de Prusa, que marca la boquilla de
+  alto flujo). Ahora solo cambia en G0 a G3. Los `values` del dialecto prusaslicer ya se usaban (probado con
+  `printer_notes`). Queda `~nombre` dentro de `one_of` (2 variantes INDX): pregunta al equipo de fichas.
+- Regla 10 quinquies (spec/next 2a28242, pedido del dueño: «los gcode tienen que ser los originales»): pruebas GM13
+  (las líneas sin construcciones salen byte por byte, en orden: espacios, tabulaciones, comentarios, líneas vacías,
+  `[Checks]`, texto con tildes) y GM14 (`M862.1 … F{…}` sin alto flujo queda `F0`). El aviso de un G-code que no se
+  puede leer ya nombra la construcción (el mensaje del error de la plantilla).
+- `~nombre` en `one_of` (Prusa CORE One INDX, comportamiento del equipo de fichas): el texto de la variable como
+  expresión regular, verdadero si el valor coincide entero (PLA, TPU sí; PETG, PC, ASA no). Si la variable no es
+  texto, el error lo nombra. Con esto, las 2261 variantes FFF del paquete deberían leer todo su G-code.
+
+## 2026-11-09 — Android: dev `70f9335` (G-code original de cada máquina) y dos carreras en las pruebas
+
+- Unido dev `70f9335`: el motor usa el G-code original de cada impresora del paquete (2261/2261), para probar con la
+  A1 mini del dueño.
+- CI de GitHub, dos fallas intermitentes:
+  - `CloudViewModelTest` CC2: un modelo seguía consultando y leía `Dispatchers.Main` mientras `resetMain` lo cambiaba.
+    La prueba ahora para los modelos antes.
+  - `LibraryTest` ML1: dos llamadas al motor se pisaban el mismo archivo de errores (`library.err`): una lo borraba
+    mientras la otra lo leía. Ahora cada llamada tiene el suyo (biblioteca, paquete y las cortas del motor).
+
+## 2026-11-09 — Android: cámaras de Klipper y OctoPrint con giro y espejo
+
+Hoja de ruta (pedido del dueño por la sesión de especificación): lo que falte de `printer_connections.md` en el
+teléfono. Estado, cámara y mandar ya estaban para OctoPrint, Klipper, PrusaLink y Duet; faltaba la regla de
+«Cámara de la impresora» de mostrar la cámara «con giro y rotación».
+- Klipper: `flip_horizontal`, `flip_vertical` y `rotation` de `/server/webcams/list`; OctoPrint: `flipH`, `flipV` y
+  `rotate90` (90° al revés de las agujas, o sea 270° a favor) de sus ajustes. La imagen se da vuelta y se gira antes de
+  mostrarla (una cámara montada al revés se ve derecha; a 90° se cambian ancho y alto).
+- PrusaLink sigue sin cámara local (la ficha: «sin transmisión local documentada»): «Sin cámara».
+- Pruebas: `PrinterConnectionTest` CM1 (los simuladores con cámara espejada y girada) y `CameraTurnTest`.
+
+## 2026-11-09 — Android: memoria al laminar piezas grandes (rendimiento en gama baja)
+
+`MemoryEstimate` (MA9) usaba valores de diseño sin medir: 150 MB + 3000 bytes por triángulo, o sea 3,1 GB para un
+millón de triángulos. Un teléfono de gama media no llegaba y la app mandaba a la nube piezas que sí podía laminar.
+
+| Pieza (esfera, motor del host, 4 hilos) | Pico de memoria | Tiempo |
+|---|---|---|
+| 100 000 triángulos | 95 MB | 0,9 s |
+| 500 000 | 142 MB | 0,7 s |
+| 1 000 000 | 167 MB | 0,8 s |
+| 1 000 000, soportes y relleno 40 % | 183 MB | 0,9 s |
+| 2 000 000, soportes y relleno 40 % | 270 MB | 1,2 s |
+
+Unos 85 MB fijos y 90 bytes por triángulo. Nuevo cálculo: 128 MB + 300 bytes por triángulo (más de tres veces lo
+medido, por más hilos en el teléfono y piezas con más recorridos): un millón pide unos 414 MB. Prueba: `MemoryTest`.
+No medido en un teléfono (gama baja: queda para las pruebas con teléfonos reales).
+
+## 2026-11-09 — Android: doble toque acerca en ese punto (mobile_app.md, regla 6)
+
+El doble toque en la vista 3D del plato acercaba al centro; la regla dice «acerca en ese punto». `OrbitCamera.zoomAt`
+mueve la vista antes de acercar para que el punto tocado quede bajo el dedo. Prueba: `OrbitZoomTest` (un punto a la
+profundidad del centro queda en el mismo píxel, a menos de 2 px). Las pruebas de interfaz en el emulador no se pueden
+correr acá (no hay KVM): las hace la sesión de especificación.
+- Pendiente de la ficha, no del teléfono: la regla 10 pide abrir modelos «desde un enlace de un sitio de modelos», pero
+  ninguna ficha define el enlace (esquema o dirección); se preguntó.
+
+## 2026-11-09 — Android: abrir modelos desde un sitio (mobile_app.md, regla 10)
+
+Decisión de la sesión de especificación (como Tisma Slicer): `tisma://open?file=<URL https codificada>` y
+`prusaslicer://open?file=…` (el botón «Abrir en PrusaSlicer» de Printables).
+- `SiteLink.kt`: solo https, solo printables.com, media/files.printables.com, thingiverse.com y cdn.thingiverse.com
+  (con o sin `www.`; una redirección tiene que seguir en https y en la lista), máximo 200 MB (lo que diga el servidor
+  y lo que llegue), solo STL, OBJ, 3MF, STEP o un ZIP con uno (se toma el primero, por su nombre solo, sin carpetas).
+- Antes de bajar: «¿Abrir <archivo> de <sitio>?». Con «Permitir descargas de sitios compatibles» apagado (por defecto,
+  en Preferencias), el diálogo ofrece «Permitir y abrir». Un enlace rechazado dice por qué.
+- STEP se baja pero todavía no abre (el motor no lo lee).
+- Pruebas: `SiteLinkTest` (enlaces aceptados y rechazados, el ZIP con una ruta `../`, y el enlace hasta el plato con
+  una descarga de prueba). No probado con Printables real ni en un teléfono.
+
+## 2026-11-10 — Android: biblioteca compartida entre pares (p2p_library.md), la pantalla y el bloqueo
+
+Prioridad del dueño («lo antes posible así subimos modelos»), por la sesión de especificación: empezar por la
+pantalla y el bloqueo; el formato del índice lo propone el servidor.
+- `p2p/BlockList.kt`: la lista de bloqueo firmada con la clave de Tisma (Ed25519, como la de actualizaciones): sin
+  firma válida no se usa (P2P5). Huellas, cuentas, pares y bloqueos de IP cortos que se descartan al vencer (regla 5).
+  Formato propuesto por la app hasta que llegue el del servidor (`tisma-blocklist` v1, en el código).
+- `SharedCopies`: los archivos de la biblioteca compartida en el teléfono, por su SHA-256 (calculado, no tomado del
+  nombre). Una huella bloqueada se borra y se avisa «retirados de la biblioteca de Tisma» (regla 4, P2P3).
+- `SharingPolicy`: se comparte solo con el interruptor prendido, una lista firmada de menos de 7 días, Wi-Fi (red no
+  medida) y cargando (reglas 3 y 6, P2P6 y P2P7); la pantalla dice por qué no.
+- Pantalla: Biblioteca tiene dos pestañas, «Mi biblioteca» y «Compartida» (lista, retirados, compartir, tope de
+  subida por día, y el aviso de que los pares ven la IP, regla 8). Buscar y bajar esperan el índice del servidor.
+- La clave pública de Tisma todavía no existe (decisión del dueño): mientras tanto ninguna lista se acepta y no se
+  comparte nada.
+- Pruebas: `BlockListTest` (firma con una clave de prueba, P2P3, P2P5, P2P6, P2P7, bloqueo de IP que vence).
+- Falta: el índice y su búsqueda, bajar y publicar (red de pares: la biblioteca la elige el motor), «Denunciar»
+  (necesita la dirección del servidor) y renovar la lista cada 6 h mientras comparte.
+
+## 2026-11-10 — Android: piezas escaneadas en Mi biblioteca (p2p_library.md, regla 7 bis)
+
+Pedido del dueño: lo escaneado con Tisma Scanner y mandado con «Imprimir» aparece en Mi biblioteca del teléfono
+(misma cuenta de Tisma Cloud), listo para laminar.
+- Al abrir Biblioteca con la cuenta abierta, la app pide las piezas escaneadas pendientes, baja cada malla (comprueba
+  su SHA-256 si el servidor la da), la guarda como entrada nueva de Mi biblioteca con los ajustes de la tarjeta de la
+  impresora como receta, y recién entonces la marca recibida. Aviso: «Llegaron N piezas escaneadas…».
+- Rutas del servidor (tisma-cloud 89f8fc6), por equipo: `GET /v1/me/scans?device=<nombre>`,
+  `GET /v1/me/scans/{id}/mesh`, `POST /v1/me/scans/{id}/taken` (`CloudClient.scans`, `downloadScan`, `scanTaken`).
+  El servidor de prueba (`MockCloud`) las tiene.
+- Prueba: `ScansTest` (una pieza escaneada llega a Mi biblioteca y queda marcada recibida por ese teléfono).
+
+## 2026-11-10 — Android: la biblioteca compartida con el formato del servidor (p2p_library.md, 3 bis a 3 octies)
+
+- Cadena de claves: la app trae solo la clave del proyecto; la clave de la biblioteca vale si el proyecto firmó
+  `tisma-library-key/1\n` + sus 32 bytes y no está en `revoked_keys` (`LibraryKey`). Sin clave del proyecto en la
+  compilación no se acepta nada ni se comparte.
+- Lista `tisma-library-blocklist` e índice `tisma-library-index`: firmados, con `sequence` que no puede bajar (se
+  guarda en el teléfono), `expires` para la lista (P2P7). Rutas `GET /v1/library/{key,blocklist.json,index.json}` y
+  `.sig`; sin servidor se usan las copias guardadas (regla 6).
+- Compartida: búsqueda en el índice (sin cuentas ni archivos bloqueados, sin G-code), tarjeta de modelo con autor,
+  licencia, «revisado» y «Denunciar» (`POST /v1/library/reports`, regla 7). El texto de privacidad dice que todo va
+  por los relés de Tisma.
+- `SafeFile` (regla 3 octies): tipo por contenido; ZIP/3MF sin rutas afuera, sin vínculos, sin programas, a lo sumo
+  10× y 2 GB; avisa el G-code o scripts de un 3MF. Se aplica a lo bajado de sitios y a las piezas escaneadas: si
+  falla se borra con «Archivo inseguro: no se abrió».
+- Pruebas: `BlockListTest` (6: cadena de claves, P2P3, P2P5, P2P6, P2P7, índice, «Denunciar», copias guardadas) y
+  `SafeFileTest` (4: tipos, programas renombrados, `..`, ruta absoluta, bomba, dañado, vínculo, G-code en 3MF).
+- Falta: publicar desde Mi biblioteca (clave del par, saneo de recetas 3 septies), bajar por los relés (motor p2p),
+  renovar la lista cada 6 h mientras se comparte. La clave del proyecto la pone el dueño.
+
+## 2026-11-10 — iPhone: primer paso, el módulo compartido (Kotlin Multiplatform)
+
+Decisión del dueño (10-11): app de iPhone antes de la beta de diciembre. Plan en `apps/ios/PLAN.md` (aprobado por
+QA; bundle id `net.tismaservidores.tisma`).
+- `apps/android/shared`: módulo Kotlin Multiplatform (JVM, `iosArm64`, `iosSimulatorArm64`). Pasaron ahí la lista de
+  bloqueo, la clave de la biblioteca, el índice y `SharingPolicy` (sin `java.*`: `kotlin.time.Instant`, Base64 de
+  Kotlin). Ed25519 es `expect`: en JVM/Android el nuestro; en iOS el del sistema (CryptoKit), que pasa Swift al
+  arrancar; sin él no se acepta nada firmado.
+- Lo que usa archivos (`SharedCopies`, `sha256`, `SafeFile`) sigue en la app por ahora.
+- `tools/ci.sh` corre las pruebas de `shared` y compila la parte de iOS (klib para el simulador; Kotlin/Native compila
+  klibs de Apple en Linux). Enlazar el framework y probar en el simulador queda para el CI de macOS.
+- Siguiente: el cliente de la nube a `shared` con Ktor, luego impresoras (REST), luego Bambu (sockets TLS por
+  plataforma), y el proyecto de Xcode con el CI de macOS.
+## 2026-11-09 15:45 — project_import.md: la muestra de PrusaSlicer
+
+- Hoja de ruta del dueño (por el equipo de fichas): 1) `project_import.md`, 2) BH37/BH38 cuando llegue la pieza, 3)
+  PLAN.md hacia la beta cerrada de diciembre.
+- La muestra del equipo de fichas (`pi2_prusaslicer.3mf`, PrusaSlicer 2.7.2 por línea de comandos) pasa a
+  `tests/data/formats/` con su prueba: familia PrusaSlicer, `Application` PrusaSlicer-2.7.2, una caja de
+  30 × 10 × 15 mm. El README de la muestra dice dos objetos; el archivo trae uno (avisado).
+- Regla 9 (parte): al abrir un 3MF de otro programa, la interfaz avisa «Proyecto de <programa>: N piezas. Sus ajustes
+  todavía no se traen: se usan los de Tisma»; uno sin programa conocido, el aviso de la regla 2. `project_source`
+  cuenta las piezas (los ítems del modelo raíz). Prueba `ui_project_import_prusaslicer` con la muestra.
+
+## 2026-11-09 — print_time.md: esperas y aceleraciones del G-code de la máquina
+
+- Reglas 8, 9 y 13: un `G4 P<ms>` o `G4 S<s>` del G-code de inicio, de cambio de capa o propio suma su espera al
+  tiempo (normal y silencioso); `M204 S/P/T` y `SET_VELOCITY_LIMIT ACCEL=` cambian la aceleración de los movimientos
+  que siguen. Prueba en `test_firmware.cpp`: `G4 S60` suma 60 s (±1,5), `G4 P30000` 30 s, `M204 S100` alarga el
+  tiempo, lo mismo con Klipper.
+- Regla 13 completa: `M201` (aceleración por eje), `M203` (avance por eje; en RepRapFirmware en mm/min), `M205`
+  (tirones, `J` la desviación de unión), `M566` (tirones en mm/min), `M220` (porcentaje de velocidad) y
+  `SET_VELOCITY_LIMIT VELOCITY=` / `SQUARE_CORNER_VELOCITY=`. En Marlin 1 la `T` de `M204` es de retracción y no se
+  toma como de viaje. Prueba propia con cada comando.
+- Sigue: reglas 10 (calentar), 12 (esquinas por firmware) y 14 (preparación aparte), PT8; `project_import.md`
+  reglas 3 a 8 cuando lleguen las muestras.
+- Decisiones del equipo de fichas (2026-11-09), con lo que encontró la sesión del paquete:
+  1) `machine.min_layer_height` y `max_layer_height` acotan solo la altura variable y el soporte: una primera capa
+     de 0,3 con máximo 0,25 vale (antes fallaban 962 perfiles);
+  2) `restart_extra` y `toolchange_restart_extra` de −50 a 1000 mm (también el del filamento);
+  3) las velocidades de carga, descarga y enfriamiento de la MMU aceptan 0: ese paso se salta;
+  4) `limits_usage = emit` con Klipper se permite: solo `M204 S` y `SET_VELOCITY_LIMIT ACCEL VELOCITY`, con un aviso
+     informativo; el tiempo usa todos los límites.
+  Cada una con su prueba.
+- Regla 12 (PT8): en Klipper, la velocidad de una esquina sale de `square_corner_velocity` (el `corner_speed` de la
+  máquina) como una desviación de unión que depende de la aceleración: d = v² · (√2 − 1) / a, que da esa velocidad a
+  90°. Sin tirones. `minimum_cruise_ratio` (0,5 por defecto, o el de `SET_VELOCITY_LIMIT`) baja el tope de los
+  movimientos cortos: la velocidad que se alcanza en la parte que no navega. El mismo G-code da otro tiempo en Marlin y
+  en Klipper.
+- Reglas 10 y 14 (PT7): claves nuevas `machine.heat_rate_nozzle` y `heat_rate_bed` (°C/s, 0 = no se sabe),
+  `home_time` y `probe_time` (s), con su ayuda y su ficha nueva Límites › Preparación. Cada `M109`/`M190`/`M116` y el
+  `TEMPERATURE_WAIT` de Klipper suman el tiempo de subir desde la última temperatura alcanzada (25 °C al empezar);
+  `G28`, `G29` y `G4` también. Todo eso es preparación: está en el total y el G-code lo dice aparte
+  (`; estimated preparation time = …`). Los comandos de temperatura que escribe el motor al empezar también se leen.
+- Sigue: mostrar la preparación en la interfaz, cambios de herramienta como preparación, reglas 11 y 15 (aprender de
+  la impresora).
+
+## 2026-11-09 16:41 — mantenimiento
+
+- Revisado: `origin/main` y `origin/dev` sin cambios nuevos; sin otra sesión trabajando en `dev`.
+- Fuzz del G-code (2000 corridas, semilla 911202611), ahora también con extras de vuelta negativos, velocidades de
+  MMU en 0, `emit` con Klipper y los ajustes de preparación: 2 fallas. Era un error mío de hoy: un barrido que había
+  retraído 0,29 mm seguido de un `restart_extra` de −0,39 escribía una «vuelta» de −0,098 mm (otra retracción). La
+  vuelta ahora es max(0, retraído + extra); sin nada que devolver no se escribe y el chequeo acepta el filamento corto.
+  Con prueba. Segunda corrida de 2000 (semilla 1109202617): 0 fallas.
+- Encontrado a mano: la preparación del inicio (esperas, calentamiento) caía en el tiempo de la primera capa (16 s
+  pasaban a 1 min 16 s con un `G4 S60`). La tanda de tiempo se cierra después del inicio. Con prueba.
+- CI local completo en 70ea09a: gcc y clang 1121/1121; ASan cortado por el límite de una hora (se corre de nuevo).
+- No medido: el banco de velocidad (CPU ocupada por el CI y el fuzz; los números no servirían).
+- Regla 14 en la interfaz: junto al botón de laminar, «Tiempo estimado: 1h 4m 0s (impresión 58m 0s, preparación
+  6m 0s)» cuando hay preparación, y una fila «Preparación» en la leyenda de la vista previa. Probado: lectura del
+  comentario; la pantalla no se miró (sin captura).
+
+## 2026-11-09 — orca_2_5.md O5, reglas 20 a 22
+
+- `regex_replace(texto, /patrón/, reemplazo)` en el lenguaje de las plantillas, con grupos `$1`; el patrón puede ser
+  un literal `/…/` (con `\/` para una barra) o un texto. Errores con la marca: patrón que no se lee, `/` sin cerrar.
+- Partes del tiempo en el nombre del archivo: `print_time_day`, `print_time_hour`, `print_time_minute`,
+  `print_time_sec` y `print_time_total_sec` (OR21: 1:2:5 y 3725); sin el total quedan escritas tal cual.
+- `gcode.skip_config_block`: el G-code sin el bloque de ajustes del final (los totales quedan); en la ficha «Archivo de
+  salida», con su ayuda.
+- Regla 23 (OR23): ya se cumplía; prueba nueva con dos filamentos (200/240 °C) donde solo el 2 imprime: el inicio
+  calienta a 240 °C, con varios extrusores y con MMU. Pregunta al equipo de fichas: el motor calienta al empezar a
+  `temperature`, no a `first_layer_temperature` (la cama sí usa la de la primera capa).
+
+## 2026-11-09 — orca_2_5.md O6: la línea de comandos
+
+- `slice` gana:
+  - `--strict`: un aviso (no los informativos) es error, sin G-code, código 4; el archivo de avisos los lista todos;
+  - `--ground-largest-face`, `--ground-face-normal X,Y,Z` y `--ground-face-point X,Y,Z`: la cara va contra la cama
+    antes de las transformaciones (la cara plana más grande: triángulos en un mismo plano, con sus áreas sumadas);
+  - `--inspect-mesh`: tamaño, volumen, triángulos, si está cerrada, aristas abiertas y partes, en JSON;
+  - `--export-statistics`: por placa (una en la línea de comandos), tiempo, filamento por extrusor (mm, cm³, g,
+    costo) y capas; `--export-settings`: los ajustes resueltos. Los tres aceptan `-` para la salida estándar;
+  - `--align-to-y-axis`: las copias en una columna a lo largo de Y.
+- Módulo nuevo `src/mesh/inspect.*` con sus pruebas (OR25, OR26) y las de la línea de comandos (OR24 a OR28).
+- `--inspect-paint` en `slice <proyecto>`: el área pintada en mm² por canal (soporte, costura, piel difusa, color) y
+  por marca (forzar, bloquear, extrusor).
+
+## 2026-11-09 — orca_2_5.md O3, reglas 15 y 17
+
+- Regla 17 (OR17): `cooling.first_layer_fan` (−1 apagado, o 0 a 100 %): el ventilador exacto de la primera capa,
+  también en sus puentes, solo con `fan_off_layers` en 0; con `full_fan_layer` la subida arranca desde ese valor
+  (20 % en la capa 1, 46,7 % y 73,3 % en la 2 y la 3, el valor normal en la 4). En la ficha de enfriamiento, con su
+  ayuda.
+- Regla 15 (OR15): la balsa ya lo hacía; prueba con expansión 1,5 y 2 más en la primera capa (3,5 mm).
+- Regla 16 (OR16): `speed.small_support` (mm/s o % de la velocidad del soporte o de la interfaz) y
+  `speed.small_support_threshold` (un radio; 0 apagado): una extrusión de soporte de largo hasta 2π × el umbral va
+  más despacio. En la ficha de velocidades de relleno y soporte, con su ayuda.
+- Regla 18 (OR18): la piel difusa deja lisa la pared externa donde cuelga sobre nada (fuera de la capa de abajo,
+  medio cordón más allá de su borde). La piel difusa pasó a un paso propio, después de tener todas las regiones (antes
+  iba dentro del cálculo en paralelo de las paredes, donde la capa de abajo no estaba lista).
+- Regla 14 (OR14): orejas de borde (`adhesion.brim_ears`, `brim_ears_max_angle` 125°, `brim_ears_detection_length`
+  1 mm, `brim_ears_outer_only`): las vueltas del borde recortadas a discos de radio separación + ancho en las
+  esquinas filosas del contorno simplificado (las de afuera y, salvo «solo afuera», las de los agujeros). En la ficha
+  del borde, con su ayuda. Faltan las orejas pintadas (no hay canal de pintura para eso todavía).
+
+### 2026-11-09 — temperaturas de la primera capa (pedido del equipo de especificación)
+
+- Error corregido: la primera capa usaba `temperature`. Ahora, si el inicio no calienta, antes del G-code de inicio va
+  la cama con `first_layer_bed_temperature` y la boquilla con `first_layer_temperature` (cada extrusor la suya); al
+  empezar la segunda capa M104 a `temperature` y M140 a `bed_temperature`, solo si son distintas y si no hay cambios de
+  temperatura por altura. Un valor 0 en la de primera capa toma la normal. Pruebas en test_gcode y
+  test_multi_extruder. Suite completa: 964 casos pasan.
+
+### 2026-11-09 — polyholes (orca_2_5.md, regla 5, OR5)
+
+- `src/geom/polyholes.*`: un agujero convexo de más de 8 puntos dentro de `walls.polyhole_margin` de su círculo
+  (mm o % del radio), que dura dos capas o está en la primera, pasa a un polígono circunscrito de ~2 lados por mm de
+  diámetro con boquilla de 0,4 (3 a `polyhole_max_edges`); con `polyhole_twist`, cinco orientaciones que se repiten.
+  En el pipeline va después de tener todas las regiones; las paredes se rehacen. Ficha «Agujeros redondos» en la
+  interfaz, con su ayuda. Pruebas `[polyholes]` (OR5: 3, 10 y 30 mm → 6, 20 y 50 lados; tubo laminado → 20).
+- Falta de O1: paredes sin apoyo al final (regla 3) y costura precisa (regla 4).
+
+### 2026-11-09 — paredes sin apoyo al final (orca_2_5.md, regla 3, OR3)
+
+- `walls.unsupported_last`: en el escritor, por isla, una vuelta sin ningún punto sobre la capa de abajo va después
+  de las paredes si toca una vuelta sostenida (o anclada a través de otras), de adentro hacia afuera; si no toca
+  nada, en una segunda pasada después del relleno de la isla (que incluye los puentes). Con el relleno antes de las
+  paredes, igual. En la ficha «Más paredes», con su ayuda. Pruebas `[unsupported]`: sombrero (ala de 15 mm sobre un
+  tallo de 5: las vueltas del ala después del relleno; el tallo igual que antes) y escalón (la vuelta que cuelga
+  queda antes del relleno). El fuzz varía `polyholes`, `polyhole_twist` y `unsupported_last`.
+- Falta de O1: la costura precisa (regla 4), que necesita los modificadores auxiliares en el proyecto.
+- project_import PI1: prueba de interfaz `ui_project_import_standard` (el 3MF del estándar de una caja abre la caja con
+  el aviso de programa desconocido). La regla 9 completa (A traducidos, B parecidos, C sin equivalente, M placas)
+  espera la tabla de traducción del paquete de perfiles (regla 11), que todavía no viene en el paquete, y muestras de
+  la familia OrcaSlicer para contar las placas: hasta entonces el aviso dice las piezas y que los ajustes no se traen
+  (decisión: seguir la regla 12 mientras no haya tabla).
+- Tabla de traducción (profile_pack_format.md; project_import.md, reglas 6, 9 y 11): el paquete baja y descomprime
+  `translation.tar.xz` cuando el índice lo nombra (`translation_archive`, y `translation` por dialecto);
+  `parse_translation` lee `translation/<dialecto>.json` (formato `tisma-pack-translation` 1) y `sort_settings`
+  reparte los ajustes de un proyecto en traducidos, parecidos y sin equivalente (una clave que la tabla no tiene va a
+  «sin equivalente»; las claves de `with` van con su fila). Pruebas con filas reales que dio la sesión del paquete
+  (profiles/next 8e2e5f0). Falta: leer los ajustes del proyecto (`Metadata/Slic3r_PE.config`,
+  `project_settings.config`), que espera muestras con ajustes (la pi2 no los trae), y el diálogo de la regla 9.
+- Regla 9 (parte): `project_settings` lee los ajustes de un proyecto PrusaSlicer (`; clave = valor` de
+  `Metadata/Slic3r_PE.config`; muestra pi4 del equipo de especificación, spec/next ca6b4a6: 327 ajustes). Al abrir
+  el proyecto, si el paquete instalado tiene la tabla de ese programa, un segundo aviso dice «Ajustes del proyecto: A
+  traducidos, B parecidos, C sin equivalente (todavía no se aplican)». Probado en la interfaz desde el mantenimiento
+  del 10-11 (`ui_project_import_settings`). Falta: aplicar los ajustes (reglas 6 y 8), el diálogo
+  con «Ver detalle» y la elección de impresora, y las partes de pi4 (regla 4).
+
+## 2026-11-10 00:40 — mantenimiento
+
+- **Revisado:** merge de `origin/main` y `origin/dev` (nada nuevo); fuzz de G-code 2000 corridas con semilla
+  1011202601 (varía polyholes, giro y paredes sin apoyo): 0 fallas, 28 descartadas por imprimibles; advertencias del
+  compilador; las notas «Sin probar» recientes; los cambios del 09-11 (polyholes, paredes sin apoyo, tabla de
+  traducción).
+- **Corregido:** dos advertencias en `src/library/library.cpp` (inicializador de `ProjectModel` incompleto y una
+  variable que tapaba a otra); `unsupported_turns` descarta por caja los polígonos de la capa de abajo antes de
+  probar cada punto (antes recorría todos por punto).
+- **Cerrado:** la nota «sin probar en la interfaz» de la tabla de traducción: el paquete de prueba trae
+  `translation.tar.xz` (filas con la forma del paquete real) y `ui_project_import_settings` abre la muestra pi4 y
+  espera «Ajustes del proyecto: 5 traducidos, 2 parecidos, 320 sin equivalente».
+- **No medido:** el banco de velocidad (CPU ocupada por el CI con ASan y el fuzz).
+- CI local completo en curso sobre b9173ea.
+
+- **Cámara Bambu (dato de caja negra del dueño: la de su A1 mini se ve en Android y no en la PC):** la interfaz de
+  escritorio sí tiene la cámara (regla 6) y ya aceptaba el certificado propio de la impresora por huella, sin la
+  cadena de una autoridad. Pero el certificado del puerto 6000 puede no ser el del 8883 (en el simulador no lo es);
+  solo pasaba si su nombre era el número de serie, y si no, cortaba con «the camera's certificate is not the one
+  accepted», en inglés. Ahora: `camera_pinned_sha256` aparte (`confirm_camera_certificate`, con su huella), botón
+  «Aceptar el certificado de la cámara», se guarda con la impresora, y cada corte dice en castellano qué pasó.
+  Prueba en `[bambu]`. **Sin probar** con la A1 mini real ni el aceptar en la interfaz (el simulador da el número de
+  serie en el certificado de la cámara).
+- **Prueba que falló en el CI local (gcc):** `ui_script_structural_analyze`, «expect-optimize orientation: got
+  cancelled»: el resultado de la búsqueda anterior seguía visible un cuadro después de terminar la nueva. Al empezar
+  una búsqueda se borra el anterior.
+- project_import regla 4 (parte): `parse_3mf` guarda los modificadores (cada uno aparte), los bloqueadores y los
+  forzadores de soporte de un proyecto PrusaSlicer en `ModelFile::modifiers`, `support_blockers` y
+  `support_enforcers` (antes se descartaban; los negativos ya iban a `negative`). Prueba con pi4: cubo 12 triángulos,
+  esfera negativa 1280, cilindro modificador 1440, caja bloqueadora 12. Falta: llevarlos a la placa en la interfaz
+  (modificador como volumen de la pieza; bloqueador y forzador como pintura o volumen de soporte) y los ajustes de
+  cada modificador (regla 7).
+- Cola nueva del equipo de especificación (después del conversor): `p2p_library.md` (spec/next a9148ef), cliente del
+  motor e interfaz de escritorio, y un comando `check-file` reutilizable (reglas 3 sexies a 3 octies).
+- p2p (cuando arranque): decisión del dueño, `p2p_library.md` 8 bis a 8 quinquies (spec/next bff8a72): cifrado de
+  punta a punta con las claves de par; en la PC por defecto por intermediario de Tisma, con «Directo (más rápido;
+  los otros ven mi IP)» en Preferencias; intermediario topado: «Biblioteca ocupada, se retoma sola». La biblioteca de
+  pares elegida tiene que poder ir por intermediario.
+- **Decisión (p2p, 2026-11-10, delegada al motor por la ficha):** red de pares libp2p: identidad = la clave Ed25519 de
+  par, Noise de punta a punta, circuit relay v2 como intermediario (tickets firmados por la clave de la biblioteca,
+  bytes por cuenta en el nodo), TCP y QUIC para «Directo»; protocolo propio sobre streams `/tisma/library/1.0.0`
+  (pedazos de 1 MiB comprobados con su SHA-256, lista de pedazos en el manifiesto firmado); sin DHT: los pares los da
+  `POST /v1/library/peers/announce`. libtorrent descartado: sin intermediario (dos teléfonos solo por relé no se
+  encuentran) y su cifrado no está ligado a la clave del par. Biblioteca del motor (cpp-libp2p Apache-2.0 o
+  rust-libp2p MIT por ABI C) a confirmar con una prueba de compilación en Windows y Android antes de anotarla en
+  THIRD_PARTY.md. Acordado con la sesión del servidor (session_01QadJfL79pTm8Ks4houx1oK).
+- **Decisión del dueño (2026-11-10), cambia la del 24-10:** macOS antes de la beta cerrada de diciembre: CI de macOS
+  en cada envío (arm64 y x86_64), vista con MoltenVK u OpenGL, diálogos nativos, cámara USB con AVFoundation y su
+  permiso, `.dmg` sin firmar por ahora, y el motor como biblioteca para iOS. Anotado en PLAN.md («macOS antes de la
+  beta»). Orden de trabajo: el conversor sigue; macOS empieza por el CI (lo que más destraba).
+- **Regla del dueño (2026-11-10):** cada 3 h, una parte del bloque a buscar bugs generales y optimizar (cierres,
+  resultados mal, caminos lentos, memoria, textos en castellano) en el área del motor; se anota acá y se manda un
+  resumen corto al equipo de especificación. Primera vuelta: el mantenimiento de las 00:40 (advertencias, cámara
+  Bambu en inglés, carrera en la prueba estructural).
+- p2p, acordado con el servidor (2026-11-10): `swarm` = {"protocol":"libp2p/tisma-library/1","piece_size":1048576,
+  "piece_roots":{"<sha256 del archivo>":"<SHA-256 de los hashes crudos de los pedazos, en orden>"}}; la lista de
+  pedazos se pide a un par por el mismo protocolo. Ticket del relé: `POST /v1/library/relay-ticket` → carga JSON
+  canónica {account, peer_id, expires, cap_mb_per_hour} + firma Ed25519 de la clave de la biblioteca, 1 h. Anuncio:
+  `POST /v1/library/peers/announce` firmado por la clave de par sobre el JSON canónico, ±5 min, cada 10 min, solo en
+  memoria. `GET /v1/library/peers?model=&peer_key=`. PeerId: multihash identidad del PublicKey protobuf Ed25519,
+  base58btc. Pendiente del motor: vectores de prueba (clave fija → PeerId; ticket con clave de biblioteca fija).
+- Cola (2026-11-10, del equipo de especificación y del paquete): (1) capas curvas con `machine.relative_extrusion`
+  apagado fallan con rc 2: que la interfaz la prenda sola con aviso, o avise claro; (2) `curved.mode` stress sigue
+  sin hacer: a la cola de no planares; (3) el paquete publica `index.json.xz` (0,12 MB contra 2,06 MB): bajarlo si
+  está y caer a `index.json` si no; (4) release 0.12.0-beta.1 para todas las versiones (pedido del dueño).
+- release.yml: compila también los APK de Android (beta con R8 y el de respaldo, arm64) y los adjunta.
+- Cola (1) hecha: al elegir capas curvas en la interfaz con la E relativa apagada, se prende sola y un aviso lo dice;
+  si la impresora no puede (su tipo de G-code no tiene M83, o su G-code de inicio del paquete espera E absoluta), un
+  aviso de error dice que no se va a poder laminar. Sin guion de interfaz (el guion no elige en combos todavía).
+- Release 0.12.0-beta.1 preparada (VERSION, CHANGELOG con «Para probar», VERSIONING): espera la CI de Windows de dev y
+  la de Android de 5004d1b para unir android y publicar.
+- **Búsqueda de bugs (pedido del dueño, 2026-11-10 03:00):** las sesiones de especificación, perfiles, Android y
+  servidor avisadas. Motor: fuzz de G-code 2000 corridas, semilla 1011202603: 1 falla (corrida 1419, esfera, capas
+  cónicas): un viaje levantado hacia la falda bajaba a Z −0,07. Causa: fuera de la pieza J bajaba de 0,5 y la Z real
+  (punto fijo) no convergía. Arreglo: bisección cuando no converge; J entre 0,25 y 4 en toda la caja y su borde (las
+  pruebas solo en la pieza); cono analítico nivelado más allá de la caja. Prueba `fuzz_gcode_1011202603_1419`.
+  **Decisión (diseño propio, la ficha no lo dice):** los topes de J fuera de la pieza, 0,25 a 4.
+- Servidor (búsqueda de bugs, 5 arreglos): `GET /v1/library/index.json` y `blocklist.json` van en gzip si el pedido lo
+  acepta; la firma `.sig` es sobre los bytes sin comprimir y el ETag el de los bytes planos. Para el cliente de la
+  biblioteca compartida (pendiente): descomprimir antes de verificar.
+- Paquete: con `--filament-gcode-from-source`, 14 variantes cortan por `support_air_filtration` e
+  `initial_layer_height`, que no están en gcode_variables.md ni en los `values` de la máquina. Pedido a la ficha
+  agregarlas; el motor regenera la tabla cuando lleguen.

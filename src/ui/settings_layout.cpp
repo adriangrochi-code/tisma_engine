@@ -65,7 +65,13 @@ const std::vector<SectionLayout>& print_layout() {
             {"walls.first_layer_one_wall", A},
             {"walls.extra_if_needed", A},
             {"walls.extra_on_overhangs", A},
-            {"walls.avoid_curled_overhangs", A}}},
+            {"walls.avoid_curled_overhangs", A},
+            {"walls.unsupported_last", A}}},
+          {"polyholes", T::SubPolyholes,
+           {{"walls.polyholes", A},
+            {"walls.polyhole_margin", A},
+            {"walls.polyhole_twist", A},
+            {"walls.polyhole_max_edges", A}}},
           {"top_bottom", T::SubTopBottom,
            {{"surfaces.top_layers", B},
             {"surfaces.bottom_layers", B},
@@ -99,7 +105,9 @@ const std::vector<SectionLayout>& print_layout() {
             {"speed.over_bridges", A},
             {"speed.small_loops", A},
             {"speed.gap_fill", A}}},
-          {"infill_support", T::SubInfillSpeed, {{"speed.infill", N}, {"speed.support", N}, {"speed.support_interface", A}}},
+          {"infill_support", T::SubInfillSpeed,
+           {{"speed.infill", N}, {"speed.support", N}, {"speed.support_interface", A}, {"speed.small_support", A},
+            {"speed.small_support_threshold", A}}},
           {"travel", T::SubTravelSpeed,
            {{"speed.travel", N}, {"speed.travel_z", A}, {"travel.avoid_crossing_walls", N}, {"travel.max_detour", A}}},
           {"limits", T::SubSpeedCap, {{"speed.max", N}, {"speed.max_flow", A}, {"speed.flow_slope_up", A}, {"speed.flow_slope_down", A}}},
@@ -161,7 +169,10 @@ const std::vector<SectionLayout>& print_layout() {
             {"adhesion.skirt_layers", N},
             {"adhesion.skirt_min_filament", A},
             {"adhesion.draft_shield", N}}},
-          {"brim", T::SubBrim, {{"adhesion.brim_width", B}, {"adhesion.brim_type", N}, {"adhesion.brim_gap", N}}},
+          {"brim", T::SubBrim,
+           {{"adhesion.brim_width", B}, {"adhesion.brim_type", N}, {"adhesion.brim_gap", N}, {"adhesion.brim_ears", A},
+            {"adhesion.brim_ears_max_angle", A}, {"adhesion.brim_ears_detection_length", A},
+            {"adhesion.brim_ears_outer_only", A}}},
           {"raft", T::SubRaft,
            {{"adhesion.raft_layers", N},
             {"adhesion.raft_gap", A},
@@ -256,7 +267,8 @@ const std::vector<SectionLayout>& print_layout() {
           {"gcode_output", T::SubGcodeOut,
            {{"gcode.resolution", A}, {"changes", A}, {"gcode.volumetric_e", A}, {"gcode.verbose_comments", A},
             {"gcode.arcs", A}, {"gcode.binary", A}, {"gcode.corner_smoothing", A}, {"gcode.thumbnails", A}}},
-          {"output_file", T::SubOutputFile, {{"output.filename_format", A}, {"output.post_process", A}}},
+          {"output_file", T::SubOutputFile,
+           {{"output.filename_format", A}, {"output.post_process", A}, {"gcode.skip_config_block", A}}},
           {"gcode_templates", T::SubGcodeTemplates,
            {{"gcode.auto_temperatures", A},
             {"extrusion.start_gcode", A},
@@ -288,7 +300,8 @@ const std::vector<SectionLayout>& material_layout() {
             {"cooling.fan_always", N},
             {"cooling.fan_bridges", N},
             {"cooling.fan_off_layers", N},
-            {"cooling.full_fan_layer", A}}},
+            {"cooling.full_fan_layer", A},
+            {"cooling.first_layer_fan", A}}},
           {"overhang_fan", T::SubOverhangFan,
            {{"cooling.dynamic_overhang_fan", A},
             {"cooling.overhang_fan_0", A},
@@ -437,6 +450,11 @@ const std::vector<SectionLayout>& printer_layout() {
             {"machine.max_feed_z", N},
             {"machine.max_feed_e", N},
             {"machine.corner_speed", N}}},
+          {"preparation", T::SubPreparation,
+           {{"machine.heat_rate_nozzle", A},
+            {"machine.heat_rate_bed", A},
+            {"machine.home_time", A},
+            {"machine.probe_time", A}}},
           {"accelerations", T::SubAccel,
            {{"machine.acceleration", N},
             {"machine.travel_acceleration", N},
@@ -628,7 +646,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "walls_more")
         return format(T::SumWallsMore, int(s.staggered_inner_seams) + int(s.walls_staggered) + int(s.top_one_wall != TopOneWall::None) +
                                            int(s.first_layer_one_wall) + int(s.extra_if_needed) +
-                                           int(s.extra_on_overhangs) + int(s.avoid_curled_overhangs));
+                                           int(s.extra_on_overhangs) + int(s.avoid_curled_overhangs) +
+                                           int(s.unsupported_last));
+    if (id == "polyholes")
+        return s.polyholes ? tr(T::SumOn) : tr(T::SumOff);
     if (id == "top_bottom")
         return format(T::SumTopBottom, s.top_layers, s.bottom_layers);
     if (id == "infill")
@@ -831,6 +852,10 @@ std::string subsection_summary(std::string_view id, const Settings& s) {
     if (id == "speeds")
         return std::min(s.max_feed_x, s.max_feed_y) > 0.0
                    ? format(T::SumFeeds, speed_text(std::min(s.max_feed_x, s.max_feed_y)).c_str())
+                   : std::string(tr(T::NotSet));
+    if (id == "preparation") // the heating rates, or «Sin dato»
+        return s.heat_rate_nozzle > 0.0 || s.heat_rate_bed > 0.0
+                   ? number(s.heat_rate_nozzle) + " / " + number(s.heat_rate_bed) + " °C/s"
                    : std::string(tr(T::NotSet));
     if (id == "accelerations")
         return format(T::SumAccel, number(s.acceleration, 0).c_str());

@@ -12,6 +12,8 @@
 #include "net/digest.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <chrono>
 #include <catch2/matchers/catch_matchers_string.hpp>
 #include <nlohmann/json.hpp>
 
@@ -295,6 +297,34 @@ TEST_CASE("Bambu Lab: the A1 and P1 camera (rule 6)", "[bambu]") {
     CHECK(f.jpegs[2].starts_with("\xFF\xD8"));
     c.access_code = "00000000";
     CHECK_FALSE(bambu_camera(c, 1, 3000).ok);
+}
+
+TEST_CASE("Bambu Lab: the camera before the certificate is accepted says so, at once", "[bambu]") {
+    device::BambuSimulator sim(kSerial, kCode);
+    BambuConfig c = config_for(sim);
+    c.pinned_sha256.clear();
+    const auto start = std::chrono::steady_clock::now();
+    const device::BambuResult r = device::bambu_camera_stream(c, [](std::string) { return true; }, 3000, nullptr);
+    CHECK_FALSE(r.ok);
+    CHECK(r.code == "confirm_certificate");
+    CHECK(r.sha256.size() == 64);
+    CHECK(std::chrono::steady_clock::now() - start < std::chrono::seconds(3));
+    // The printer's certificate accepted, but the camera's is its own and does
+    // not carry the serial (as a printer may): it is confirmed apart, then
+    // the pictures come.
+    c.pinned_sha256 = sim.sha256();
+    c.serial = "another serial";
+    const device::BambuResult own = device::bambu_camera_stream(c, [](std::string) { return true; }, 3000, nullptr);
+    CHECK(own.code == "confirm_camera_certificate");
+    REQUIRE(own.sha256.size() == 64);
+    c.camera_pinned_sha256 = own.sha256;
+    int frames = 0;
+    const device::BambuResult shown = device::bambu_camera_stream(c, [&](std::string) { return ++frames < 2; }, 3000, nullptr);
+    CHECK(shown.ok);
+    CHECK(frames == 2);
+    // Another one later: changed.
+    c.camera_pinned_sha256 = std::string(64, '0');
+    CHECK(device::bambu_camera_stream(c, [](std::string) { return true; }, 3000, nullptr).code == "certificate_changed");
 }
 
 namespace {

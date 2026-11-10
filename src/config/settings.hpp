@@ -237,6 +237,15 @@ struct Settings {
     // avoid_curled_overhangs (rule 9) are read and kept: Tisma Slicer added no
     // wall on the spec's parts, and the second was not measured.
     bool staggered_inner_seams = false;
+    // Round holes as polygons with flat sides (orca_2_5.md, rule 5): how far a
+    // hole may stray from its circle (mm or % of the radius), a turn each
+    // layer, and the most sides.
+    bool polyholes = false;
+    // Loops with nothing under them printed last (orca_2_5.md, rule 3).
+    bool unsupported_last = false;
+    Speed polyhole_margin{20.0, true};
+    bool polyhole_twist = false;
+    int polyhole_max_edges = 50;
     // The odd inner loops half a layer up (walls.staggered, staggered_perimeters.md).
     bool walls_staggered = false;
     TopOneWall top_one_wall = TopOneWall::None;
@@ -350,6 +359,11 @@ struct Settings {
     // nozzle_diameter, which is the first's.
     std::vector<double> nozzle_diameters;
     double z_offset = 0.0;          // mm added to every Z of the part (gcode_extras.md, rule 5)
+    // The preparation in the time estimate (print_time.md, rules 10 and 14):
+    // how fast the nozzle and the bed heat, in degrees C per second (0: not
+    // known, the heating not counted), and the seconds a G28 and a G29 take.
+    double heat_rate_nozzle = 0.0, heat_rate_bed = 0.0;
+    double home_time = 0.0, probe_time = 0.0;
     double filament_diameter = 1.75; // mm
     bool relative_extrusion = false;
     GcodeFlavor flavor = GcodeFlavor::RepRap;
@@ -596,6 +610,11 @@ struct Settings {
     double gap_fill_speed = 0.0;    // gap fill (speed.solid_infill)
     Speed over_bridges_speed;       // solid infill right over a bridge, or a share of solid_infill (speed.solid_infill)
     Speed small_loop_speed;         // closed walls shorter than kSmallLoop, or a share of walls (their own)
+    // Support extrusions up to 2 pi small_support_threshold long (mm, a
+    // radius; 0: off) at small_support_speed, or a share of their own
+    // (orca_2_5.md, rule 16).
+    Speed small_support_speed;
+    double small_support_threshold = 0.0;
     Speed support_interface_speed;  // the support's interface, or a share of speed.support; not set: speed.support
     Speed first_layer_infill_speed; // the first layer's solid infill, past speed.first_layer, or a share of
                                     // solid_infill (speed.first_layer)
@@ -676,6 +695,11 @@ struct Settings {
     DraftShield draft_shield = DraftShield::Disabled;
     BrimType brim_type = BrimType::Outer;
     double brim_gap = 0.0; // mm
+    // Brim ears (orca_2_5.md, rule 14): discs at the sharp corners instead of the whole brim.
+    bool brim_ears = false;
+    double brim_ears_max_angle = 125.0;      // degrees
+    double brim_ears_detection_length = 1.0; // mm; 0: the contour as it is
+    bool brim_ears_outer_only = false;
     // The raft (skirt_brim_raft.md, rules 9 to 14): raft_layers of support
     // under the whole part, which goes up by them and raft_gap; 0: none.
     int raft_layers = 0;
@@ -748,6 +772,7 @@ struct Settings {
     // The fan up step by step until this layer (counted from 1) after the
     // ones without fan (cooling_more.md, rule 1); 0: at once.
     int full_fan_layer = 0;
+    double first_layer_fan = -1.0; // %: the first layer's exact fan (orca_2_5.md, rule 17); -1: off
     // The fan of the walls by how much of their bead rests on the layer below
     // (cooling_more.md, rules 3 and 4): overhang_fans[k] with 0, 25, 50 and
     // 75 % held, in a straight line between, down to 0 with all of it; never
@@ -841,6 +866,7 @@ struct Settings {
     bool volumetric_e = false;
     // Every line the engine writes says what it does in a comment (gcode_extras.md, rule 12).
     bool verbose_comments = false;
+    bool gcode_skip_config_block = false; // no settings block at the end (orca_2_5.md, rule 22)
     // Runs of a path that follow a circle within gcode_resolution become G2
     // and G3 (gcode_extras.md, rule 10).
     bool gcode_arcs = false;

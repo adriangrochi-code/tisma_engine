@@ -27,8 +27,21 @@ interface PrinterConnection {
     /** Uploads a G-code and, if [start], starts printing it. */
     fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream)
 
+    /**
+     * The same with the print options a printer takes when it starts (gcode_macros.md, rule 12: Bambu Lab's
+     * levelling, calibrations and timelapse). The others ignore them.
+     */
+    fun upload(name: String, length: Long, start: Boolean, options: PrintOptions, open: () -> InputStream) =
+        upload(name, length, start, open)
+
     /** The camera's addresses, if the printer has one. */
     fun camera(): Camera?
+
+    /**
+     * A camera that sends its images itself instead of by address (Bambu Lab A1 and P1, printer_connections.md,
+     * Bambu Lab rule 6), or null.
+     */
+    fun cameraFrames(): CameraFrames? = null
 
     /** Whether the controls below work over this connection. */
     val hasControls: Boolean get() = true
@@ -90,7 +103,20 @@ data class PrinterStatus(
     val message: String = "",
 )
 
-data class Camera(val streamUrl: String, val snapshotUrl: String)
+data class Camera(
+    val streamUrl: String,
+    val snapshotUrl: String,
+    /** How the image is turned as the printer's settings say (Moonraker webcams, OctoPrint's webcam settings). */
+    val flipHorizontal: Boolean = false,
+    val flipVertical: Boolean = false,
+    /** Clockwise degrees: 0, 90, 180 or 270. */
+    val rotation: Int = 0,
+)
+
+/** Images one after another from a printer's camera; [next] waits for the next JPEG. */
+interface CameraFrames : java.io.Closeable {
+    fun next(): ByteArray
+}
 
 /** A request to a printer failed. */
 class PrinterException(val kind: Kind, val detail: String, cause: Throwable? = null) : Exception(detail, cause) {
@@ -154,3 +180,14 @@ fun PrinterConfig.connect(secret: String?, http: net.tisma.cloud.Http = net.tism
         PrinterKind.DUET -> DuetConnection(url, secret.orEmpty().ifEmpty { "reprap" }, http)
         PrinterKind.BAMBU -> BambuConnection.of(url, secret.orEmpty(), certSha256.ifBlank { null })
     }
+
+/**
+ * What a Bambu Lab does before printing (gcode_macros.md, rule 12; printer_connections.md, «Bambu Lab en red
+ * local»): by default it levels the bed and calibrates the flow.
+ */
+data class PrintOptions(
+    val bedLeveling: Boolean = true,
+    val flowCalibration: Boolean = true,
+    val vibrationCalibration: Boolean = false,
+    val timelapse: Boolean = false,
+)

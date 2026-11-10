@@ -134,11 +134,61 @@ class CloudClient(
     }
 
     /**
+     * p2p_library.md, rule 3 bis: the shared library's files that need no session, as raw bytes (their signatures
+     * are checked over the exact bytes): `key` (the library key and its certificate), `blocklist.json`,
+     * `index.json` and their `.sig`.
+     */
+    fun libraryFile(name: String, maxBytes: Long = 64L * 1024 * 1024): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        val response = send(HttpRequest("GET", serverUrl + "/v1/library/" + name, headers(false), timeoutMs = 60_000))
+        response.use { r ->
+            if (!r.ok) throw failure(r)
+            val b = ByteArray(64 * 1024)
+            var total = 0L
+            while (true) {
+                val n = r.body.read(b)
+                if (n < 0) break
+                total += n
+                if (total > maxBytes) throw CloudException(0, "The library's $name is too large")
+                out.write(b, 0, n)
+            }
+        }
+        return out.toByteArray()
+    }
+
+    /** Rule 7, «Denunciar»: a model or a file, and why; a person reviews it. Returns the report's id. */
+    fun libraryReport(model: String?, sha256: String?, reason: String): String =
+        postObject("/v1/library/reports", buildJsonObject {
+            model?.let { put("model", it) }
+            sha256?.let { put("sha256", it) }
+            put("reason", reason)
+        }).text("id")
+
+    /**
+     * p2p_library.md, rule 7 bis: the scanned parts sent to print and not yet taken by [device] (each device takes its
+     * own): `GET /v1/me/scans?device=`, `GET /v1/me/scans/{id}/mesh` and `POST /v1/me/scans/{id}/taken {"device"}`.
+     */
+    fun scans(device: String): List<Scan> =
+        list(get("/v1/me/scans?device=" + URLEncoder.encode(device, Charsets.UTF_8.name()).replace("+", "%20")), "scans").map(Scan::from)
+
+    /** A scan's mesh, written to [out], at most [maxBytes]. */
+    fun downloadScan(id: String, out: OutputStream, maxBytes: Long = MAX_RESULT_BYTES): Download =
+        fetch("/v1/me/scans/" + path(id) + "/mesh", out, maxBytes)
+
+    /** The scan reached this device's library: the server stops offering it to this device (idempotent). */
+    fun scanTaken(id: String, device: String) {
+        postObject("/v1/me/scans/" + path(id) + "/taken", buildJsonObject { put("device", device) })
+    }
+
+    /**
      * `GET /v1/jobs/{id}/result`, written to [out] as it arrives (rule 9). At
      * most [maxBytes] are read; a larger result is an error.
      */
-    fun download(id: String, out: OutputStream, maxBytes: Long = MAX_RESULT_BYTES): Download {
-        val response = send(HttpRequest("GET", serverUrl + "/v1/jobs/" + path(id) + "/result", headers(true),
+    fun download(id: String, out: OutputStream, maxBytes: Long = MAX_RESULT_BYTES): Download =
+        fetch("/v1/jobs/" + path(id) + "/result", out, maxBytes)
+
+    private fun fetch(route: String, out: OutputStream, maxBytes: Long): Download {
+        val response = send(HttpRequest("GET", serverUrl + route, headers(true),
             timeoutMs = 30 * 60_000))
         response.use { r ->
             if (!r.ok) throw failure(r)

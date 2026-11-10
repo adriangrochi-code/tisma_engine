@@ -60,6 +60,8 @@ class EngineRunner(
         /** A printer of the profile pack, named `<model file>#<variant>`; [name] is what the person reads. */
         val pack: Boolean = false,
         val name: String? = null,
+        /** The pack's print profile (`vendors/<v>/prints/<file>`), or null for the variant's default. */
+        val print: String? = null,
     )
 
     /** The simple settings of MOBILE.md, step 5: a quality (layer height) and supports or not. */
@@ -115,15 +117,17 @@ class EngineRunner(
      * the engine's defaults and says so.
      */
     fun profile(choice: ProfileChoice): JsonObject? {
+        // QA AND11: on a fresh install the working folder is not there yet, and the engine would not even start.
+        workDir.mkdirs()
         val out = File(workDir, "profile.json").apply { delete() }
         val args = if (choice.pack && packDir != null) {
             // The pack's variant with its own default filament and print profile (docs/CATALOG.md).
             mutableListOf(executable.path, "profile", "--pack", packDir.path, "--printer", choice.printer, "-o", out.path)
-                .also { a -> choice.filament?.let { a += listOf("--filament", it) } }
+                .also { a -> choice.filament?.let { a += listOf("--filament", it) }; choice.print?.let { a += listOf("--print", it) } }
         } else mutableListOf(executable.path, "profile", "--printer", choice.printer,
             "--nozzle", choice.nozzle.toString(), "-o", out.path).also { a -> choice.filament?.let { a += listOf("--filament", it) } }
         return runCatching {
-            val p = ProcessBuilder(args).directory(workDir).redirectErrorStream(true).start()
+            val p = engineProcess(args, workDir).directory(workDir).redirectErrorStream(true).start()
             p.outputStream.close()
             p.inputStream.readBytes()
             if (!p.waitFor(30, TimeUnit.SECONDS)) { p.destroyForcibly(); return null }
@@ -199,17 +203,22 @@ class EngineRunner(
     /** Runs a short engine command; its output, or an [EngineException] with stderr's last line. */
     private fun capture(args: List<String>, timeoutS: Long = 120): String {
         workDir.mkdirs()
-        val err = File(workDir, "engine.err").apply { delete() }
-        val p = ProcessBuilder(listOf(executable.path) + args).directory(workDir).redirectError(err).start()
-        p.outputStream.close()
-        val out = p.inputStream.bufferedReader().readText()
-        if (!p.waitFor(timeoutS, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The engine took too long", "", -1) }
-        if (p.exitValue() != 0) {
-            val e = err.takeIf { it.isFile }?.readText().orEmpty().lines().filter { it.isNotBlank() && !it.startsWith("progress") }
-                .lastOrNull()?.removePrefix("error: ").orEmpty()
-            throw EngineException("error", e.ifBlank { "The engine stopped (exit code ${p.exitValue()})" }, "", p.exitValue())
+        // Its own file per call: calls can overlap (a check while a slice runs).
+        val err = File.createTempFile("engine", ".err", workDir)
+        try {
+            val p = engineProcess(listOf(executable.path) + args, workDir).directory(workDir).redirectError(err).start()
+            p.outputStream.close()
+            val out = p.inputStream.bufferedReader().readText()
+            if (!p.waitFor(timeoutS, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The engine took too long", "", -1) }
+            if (p.exitValue() != 0) {
+                val e = runCatching { err.readText() }.getOrDefault("").lines().filter { it.isNotBlank() && !it.startsWith("progress") }
+                    .lastOrNull()?.removePrefix("error: ").orEmpty()
+                throw EngineException("error", e.ifBlank { "The engine stopped (exit code ${p.exitValue()})" }, "", p.exitValue())
+            }
+            return out
+        } finally {
+            err.delete()
         }
-        return out
     }
 
     private fun json(text: String): JsonObject =
@@ -316,9 +325,9 @@ class EngineRunner(
         workDir.mkdirs()
         val f = File(workDir, "design.json").apply { writeText(doc.json().toString()) }
         val out = File(workDir, "design.stl").apply { delete() }
-        val err = File(workDir, "engine.err").apply { delete() }
-        val p = ProcessBuilder(listOf(executable.path, "design", "build", f.path, "--solidcraft", solidcraft.path, "-o", out.path,
-            "--quality", quality, "--timeline")).directory(workDir).redirectError(err).start()
+        val err = File.createTempFile("engine", ".err", workDir)
+        val p = engineProcess(listOf(executable.path, "design", "build", f.path, "--solidcraft", solidcraft.path, "-o", out.path,
+            "--quality", quality, "--timeline"), workDir).directory(workDir).redirectError(err).start()
         p.outputStream.close()
         val text = p.inputStream.bufferedReader().readText()
         if (!p.waitFor(300, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The design took too long", "", -1) }
@@ -357,7 +366,7 @@ class EngineRunner(
         out.delete()
         summary?.delete()
         val stderr = File(workDir, "engine.err")
-        val process = ProcessBuilder(listOf(executable.path) + args)
+        val process = engineProcess(listOf(executable.path) + args, workDir)
             .directory(workDir)
             .redirectError(stderr)
             .start()
@@ -407,4 +416,13 @@ class EngineRunner(
         /** The engine's file inside the app: Android unpacks it with the native libraries. */
         const val FILE_NAME = "libtisma_engine.so"
     }
+}
+
+/**
+ * A process of the engine with its own temporary folder (QA AND12): Android has no /tmp, and the engine (and
+ * SolidCraft through it) asks the system for one, so `TMPDIR` points inside [base], made if missing.
+ */
+internal fun engineProcess(command: List<String>, base: File): ProcessBuilder = ProcessBuilder(command).also { pb ->
+    val tmp = File(base, "tmp").apply { mkdirs() }
+    pb.environment()["TMPDIR"] = tmp.path
 }

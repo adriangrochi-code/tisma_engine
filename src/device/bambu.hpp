@@ -30,13 +30,17 @@ struct BambuConfig {
     std::string access_code; // a secret (rule 8): never logged nor in a message
     std::string serial;      // empty: taken from the certificate (rule 3)
     std::string pinned_sha256; // the certificate the person accepted; empty: none yet
+    // The camera's own certificate (port 6000), when it is not the printer's
+    // and does not carry its serial: the person accepts it apart.
+    std::string camera_pinned_sha256;
     int mqtt_port = 8883, ftps_port = 990, camera_port = 6000;
     int timeout_ms = 10000;
 };
 
 // What a call gave: ok, or a stable code with an English message:
 // unreachable, confirm_certificate (first time: show sha256 and serial and
-// ask), certificate_changed, unauthorized, timeout, refused, bad_answer,
+// ask), confirm_camera_certificate (the camera's certificate is its own:
+// show sha256 and ask), certificate_changed, unauthorized, timeout, refused, bad_answer,
 // failed.
 struct BambuResult {
     bool ok = false;

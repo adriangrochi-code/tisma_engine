@@ -1,6 +1,7 @@
 // Own design; see PROVENANCE.md.
 
 #include "cli/node.hpp"
+#include "mesh/inspect.hpp"
 
 #include "cli/cli.hpp"
 #include "calibration/calibration.hpp"
@@ -47,6 +48,7 @@ struct NodeArgs {
     std::vector<std::string> sets; // --set group.key=value, in order
     std::string over;              // --config-over: a partial settings JSON
     std::string config;            // --config: the settings of a bare model (aero, orient, analyze)
+    std::string inspect_paint;     // --inspect-paint: the painting's summary, "-" for the standard output
 };
 
 std::optional<std::string> read_whole(const std::filesystem::path& path);
@@ -170,7 +172,9 @@ std::string first_input(std::span<const std::string_view> args) {
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string_view a = args[i];
         if (a == "-o" || a == "--output" || a == "--summary" || a == "--config" || a == "-c" || a == "--warnings" ||
-            a == "--case" || a == "--copies" || a == "--set" || a == "--config-over") {
+            a == "--case" || a == "--copies" || a == "--set" || a == "--config-over" || a == "--inspect-paint" ||
+            a == "--inspect-mesh" || a == "--export-statistics" || a == "--export-settings" ||
+            a == "--ground-face-normal" || a == "--ground-face-point") {
             ++i;
             continue;
         }
@@ -263,6 +267,8 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
             a.over = std::string(args[++i]);
         } else if ((arg == "--config" || arg == "-c") && has_value) {
             a.config = std::string(args[++i]);
+        } else if (arg == "--inspect-paint" && has_value) {
+            a.inspect_paint = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -370,6 +376,14 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
     ui::PlateSlice plate = ui::plate_slice(objects, placed, settings);
     const TriangleMesh mesh = ui::plate_mesh(placed);
     placed.clear();
+    // What is painted, by kind (orca_2_5.md, rule 26).
+    if (!a.inspect_paint.empty()) {
+        const std::string json = paint_inspection_json(mesh, plate.painting) + "\n";
+        if (a.inspect_paint == "-")
+            out << json;
+        else if (!write_file(a.inspect_paint, [&](std::ostream& f) { f << json; }))
+            return fail(kExitInput, "cannot write '" + a.inspect_paint + "'", "cannot_write", "no se puede escribir");
+    }
     progress(10);
 
     ui::Slicer slicer;

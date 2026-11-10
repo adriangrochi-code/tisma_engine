@@ -37,6 +37,7 @@
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "device/bambu.hpp"
+#include "gcode/dialect.hpp"
 #include "gcode/output.hpp"
 #include "gcode/thumbnail.hpp"
 #include "device/bambu_simulator.hpp"
@@ -55,6 +56,7 @@
 #include "gcode/print_time.hpp"
 #include "gcode/writer.hpp"
 #include "io/model.hpp"
+#include "io/project_import.hpp"
 #include "io/stl.hpp"
 #include "mesh/shapes.hpp"
 #include "mesh/orient.hpp"
@@ -1602,7 +1604,8 @@ private:
         std::string jpeg;   // the newest frame
         long long frames = 0; // frames received
         bool ended = false;
-        std::string error;  // why it ended
+        std::string error;  // why it ended, as the person reads it
+        std::string code, sha256; // how it ended, and the camera's certificate
     };
     std::shared_ptr<BambuCamera> bambu_camera_;
     std::future<void> bambu_camera_job_;
@@ -1899,7 +1902,8 @@ const std::map<T, const char*>& row_keys() {
         {T::SpeedMaxFlow, "speed.max_flow"},
         {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
         {T::SpeedSmallLoops, "speed.small_loops"},
-        {T::SpeedSupportInterface, "speed.support_interface"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
+        {T::SpeedSupportInterface, "speed.support_interface"}, {T::SpeedSmallSupport, "speed.small_support"},
+        {T::SmallSupportThreshold, "speed.small_support_threshold"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
         {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
         {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
         {T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed"},
@@ -1931,8 +1935,9 @@ const std::map<T, const char*>& row_keys() {
         {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::SpreadCount, "walls.spread_count"}, {T::TransitionLength, "walls.transition_length"}, {T::TransitionAngle, "walls.transition_angle"}, {T::TransitionMargin, "walls.transition_margin"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
         {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
-        {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
-        {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"}, {T::GcodeThumbnails, "gcode.thumbnails"},
+        {T::ZOffset, "machine.z_offset"}, {T::HeatRateNozzle, "machine.heat_rate_nozzle"},
+        {T::HeatRateBed, "machine.heat_rate_bed"}, {T::HomeTime, "machine.home_time"}, {T::ProbeTime, "machine.probe_time"}, {T::VolumetricE, "gcode.volumetric_e"},
+        {T::VerboseComments, "gcode.verbose_comments"}, {T::SkipConfigBlock, "gcode.skip_config_block"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"}, {T::GcodeThumbnails, "gcode.thumbnails"},
         {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
         {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
@@ -1971,11 +1976,13 @@ const std::map<T, const char*>& row_keys() {
         {T::SkirtMinFilament, "adhesion.skirt_min_filament"}, {T::AutoTemperatures, "gcode.auto_temperatures"},
         {T::FilamentStartGcode, "extrusion.start_gcode"}, {T::FilamentEndGcode, "extrusion.end_gcode"},
         {T::FilenameFormat, "output.filename_format"}, {T::PostProcessRow, "output.post_process"}, {T::DraftShieldRow, "adhesion.draft_shield"},
-        {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"},
+        {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"}, {T::BrimEars, "adhesion.brim_ears"},
+        {T::BrimEarsMaxAngle, "adhesion.brim_ears_max_angle"}, {T::BrimEarsDetection, "adhesion.brim_ears_detection_length"},
+        {T::BrimEarsOuterOnly, "adhesion.brim_ears_outer_only"},
         {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
-        {T::FullFanLayer, "cooling.full_fan_layer"}, {T::CoolingEnabled, "cooling.enabled"},
+        {T::FullFanLayer, "cooling.full_fan_layer"}, {T::FirstLayerFan, "cooling.first_layer_fan"}, {T::CoolingEnabled, "cooling.enabled"},
         {T::DynamicOverhangFan, "cooling.dynamic_overhang_fan"}, {T::OverhangFan0, "cooling.overhang_fan_0"},
         {T::OverhangFan1, "cooling.overhang_fan_1"}, {T::OverhangFan2, "cooling.overhang_fan_2"},
         {T::OverhangFan3, "cooling.overhang_fan_3"}, {T::SlowdownLogicRow, "cooling.slowdown_logic"},
@@ -1993,6 +2000,8 @@ const std::map<T, const char*>& row_keys() {
         {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
         {T::WallsOuterFirst, "walls.outer_first"},
         {T::FilamentRetractionRow, "extrusion.retraction"},
+        {T::Polyholes, "walls.polyholes"}, {T::UnsupportedLast, "walls.unsupported_last"}, {T::PolyholeMargin, "walls.polyhole_margin"},
+        {T::PolyholeTwist, "walls.polyhole_twist"}, {T::PolyholeMaxEdges, "walls.polyhole_max_edges"},
         {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::WallsStaggered, "walls.staggered"}, {T::TopOneWallRow, "walls.top_one_wall"},
         {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
         {T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs"}, {T::ExtraOnOverhangs, "walls.extra_on_overhangs"},
@@ -3964,6 +3973,7 @@ void App::load_preferences() {
             bambu_.host = b.value("host", std::string());
             bambu_.serial = b.value("serial", std::string());
             bambu_.pinned_sha256 = b.value("certificate", std::string());
+            bambu_.camera_pinned_sha256 = b.value("camera_certificate", std::string());
             device_bambu_ = b.value("chosen", false);
             if (!bambu_.serial.empty())
                 if (const std::optional<std::string> code = cloud::load_secret("bambu:" + bambu_.serial))
@@ -4084,7 +4094,7 @@ void App::save_preferences() {
         j["device_baud"] = device_baud_;
         if (!bambu_sim_ && !bambu_.host.empty())
             j["bambu"] = {{"host", bambu_.host}, {"serial", bambu_.serial}, {"certificate", bambu_.pinned_sha256},
-                          {"chosen", device_bambu_}};
+                          {"camera_certificate", bambu_.camera_pinned_sha256}, {"chosen", device_bambu_}};
         if (!host_.url.empty())
             j["print_host"] = {{"kind", device::host_kind_word(host_.kind)}, {"url", host_.url}, {"user", host_.user},
                                {"chosen", device_host_}};
@@ -4208,6 +4218,37 @@ void App::load_model(const std::filesystem::path& path) {
         }
         calibration_.reset();
         use_mesh(std::move(stl.mesh), path, Tab::Prepare);
+        // Another program's project (project_import.md, rules 1, 2 and 9):
+        // which one, its parts, and that its settings stay out for now.
+        if (lower_extension(path) == ".3mf") {
+            std::ifstream in(path, std::ios::binary);
+            const std::string package((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            const ProjectSource source = project_source(package);
+            if (!source.program.empty() && source.program != "Tisma Slicer") {
+                notify(source.items > 1 ? format(tr(T::ProjectFromProgram), source.program.c_str(), source.items)
+                                        : format(tr(T::ProjectFromProgramOne), source.program.c_str()));
+                // Its settings by the pack's translation table, when it has
+                // one for this program (rules 6, 9 and 11).
+                if (pack_index_)
+                    if (const auto table_path = pack_index_->translation.find(translation_dialect(source));
+                        table_path != pack_index_->translation.end()) {
+                        const std::string& relative = table_path->second;
+                        std::ifstream table_in(pack_dir() / std::filesystem::path(std::u8string(relative.begin(), relative.end())),
+                                               std::ios::binary);
+                        const std::string table((std::istreambuf_iterator<char>(table_in)), std::istreambuf_iterator<char>());
+                        try {
+                            if (const auto own = project_settings(package); !table.empty() && !own.empty()) {
+                                const SettingSort sort = sort_settings(parse_translation(table), own);
+                                notify(format(tr(T::ProjectSettingsSorted), sort.translated, sort.similar, sort.none));
+                            }
+                        } catch (const TranslationError&) {
+                            // A table this program cannot read: the notice above stands.
+                        }
+                    }
+            }
+            else if (source.program.empty() && source.application.find("Tisma") == std::string::npos)
+                notify(tr(T::ProjectFromUnknown));
+        }
     } catch (const std::exception& e) {
         fail(T::CannotOpen, e.what());
     }
@@ -8419,6 +8460,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::ExtraIfNeeded, "walls.extra_if_needed", s.extra_if_needed);
         flag(T::ExtraOnOverhangs, "walls.extra_on_overhangs", s.extra_on_overhangs);
         flag(T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs", s.avoid_curled_overhangs);
+        flag(T::UnsupportedLast, "walls.unsupported_last", s.unsupported_last);
+    } else if (id == "polyholes") {
+        // Round holes as polygons (orca_2_5.md, rule 5).
+        flag(T::Polyholes, "walls.polyholes", s.polyholes);
+        if (shown("walls.polyhole_margin"))
+            changed |= unit_row(T::PolyholeMargin, s.polyhole_margin, 0.001, 100.0, 1000.0, "%.2f mm", 0.01f);
+        flag(T::PolyholeTwist, "walls.polyhole_twist", s.polyhole_twist);
+        whole(T::PolyholeMaxEdges, "walls.polyhole_max_edges", s.polyhole_max_edges, 3, 1000);
     } else if (id == "top_bottom") {
         whole(T::TopLayers, "surfaces.top_layers", s.top_layers, 0, 1000);
         whole(T::BottomLayers, "surfaces.bottom_layers", s.bottom_layers, 0, 1000);
@@ -8544,6 +8593,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SpeedInfill, "speed.infill", s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedSupport, "speed.support", s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         share_row(T::SpeedSupportInterface, "speed.support_interface", s.support_interface_speed);
+        share_row(T::SpeedSmallSupport, "speed.small_support", s.small_support_speed);
+        mm(T::SmallSupportThreshold, "speed.small_support_threshold", s.small_support_threshold, 0.0, 100.0,
+           s.small_support_threshold > 0.0 ? "%.1f mm" : tr(T::NotSet), 0.05f);
     } else if (id == "travel") {
         mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue),
@@ -8673,6 +8725,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {BrimType::OuterAndInner, tr(T::BrimBoth)},
                             {BrimType::None, tr(T::BrimNone)}});
         mm(T::BrimGap, "adhesion.brim_gap", s.brim_gap, 0.0, 100.0, "%.2f mm", 0.01f);
+        flag(T::BrimEars, "adhesion.brim_ears", s.brim_ears);
+        mm(T::BrimEarsMaxAngle, "adhesion.brim_ears_max_angle", s.brim_ears_max_angle, 0.0, 180.0, "%.0f°", 0.5f);
+        mm(T::BrimEarsDetection, "adhesion.brim_ears_detection_length", s.brim_ears_detection_length, 0.0, 100.0, "%.2f mm",
+           0.01f);
+        flag(T::BrimEarsOuterOnly, "adhesion.brim_ears_outer_only", s.brim_ears_outer_only);
     } else if (id == "raft") {
         whole(T::RaftLayers, "adhesion.raft_layers", s.raft_layers, 0, 100);
         mm(T::RaftGap, "adhesion.raft_gap", s.raft_gap, 0.0, 100.0, "%.2f mm", 0.01f);
@@ -8736,8 +8793,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         }
     } else if (id == "curved") {
         // Curved layers (nonplanar.md).
-        if (shown("curved.mode"))
-            changed |= row(T::CurvedModeRow, s.curved_mode,
+        const bool mode_changed = shown("curved.mode") &&
+                                  row(T::CurvedModeRow, s.curved_mode,
                            {{CurvedMode::Disabled, tr(T::SumOff)},
                             {CurvedMode::Wave, tr(T::CurvedWave)},
                             {CurvedMode::Conical, tr(T::CurvedCone)},
@@ -8745,6 +8802,18 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {CurvedMode::Stress, tr(T::CurvedStress)},
                             {CurvedMode::Surface, tr(T::CurvedSurface)},
                             {CurvedMode::Automatic, tr(T::CurvedAutomatic)}});
+        changed |= mode_changed;
+        // Curved layers take relative E (nonplanar.md, rule 7): turn it on
+        // when the printer can, else say plainly that slicing will fail.
+        if (mode_changed && s.curved_mode != CurvedMode::Disabled && !relative_e(s)) {
+            s.relative_extrusion = true;
+            if (relative_e(s)) {
+                notify(tr(T::CurvedRelativeOn));
+            } else {
+                s.relative_extrusion = false;
+                notify(tr(T::CurvedRelativeNo), true);
+            }
+        }
         if (shown("curved.pattern"))
             changed |= row(T::CurvedPatternRow, s.curved_pattern,
                            {{CurvedPattern::Egg, tr(T::CurvedEgg)},
@@ -8906,6 +8975,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::FanBridges, "cooling.fan_bridges", s.fan_bridges, 0.0, 100.0, "%.0f %%", 0.5f);
         whole(T::FanOffLayers, "cooling.fan_off_layers", s.fan_off_layers, 0, 100);
         whole(T::FullFanLayer, "cooling.full_fan_layer", s.full_fan_layer, 0, 1000);
+        mm(T::FirstLayerFan, "cooling.first_layer_fan", s.first_layer_fan, -1.0, 100.0,
+           s.first_layer_fan >= 0.0 ? "%.0f %%" : tr(T::NotSet), 0.5f);
     } else if (id == "overhang_fan") {
         flag(T::DynamicOverhangFan, "cooling.dynamic_overhang_fan", s.dynamic_overhang_fan);
         const T labels[4] = {T::OverhangFan0, T::OverhangFan1, T::OverhangFan2, T::OverhangFan3};
@@ -8958,7 +9029,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::RetractSpeed, "retraction.speed", s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
         mm(T::UnretractSpeed, "retraction.unretract_speed", s.unretract_speed, 0.0, 1000.0,
            s.unretract_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue), 0.5f);
-        mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, 0.0, 10.0, "%.2f mm", 0.01f);
+        mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, -50.0, 1000.0, "%.2f mm", 0.01f);
         flag(T::RetractLayerChange, "retraction.on_layer_change", s.retract_layer_change);
         flag(T::FirmwareRetraction, "retraction.firmware", s.firmware_retraction);
     } else if (id == "wipe") {
@@ -9186,9 +9257,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::SingleExtruderMmu, "machine.single_extruder_mmu", s.single_extruder_mmu);
         for (const auto& [label, key, list, top] :
              {std::tuple{T::ToolchangeLength, "retraction.toolchange_length", &s.toolchange_length, 200.0},
-              std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 10.0}}) {
-            if (list->size() == 1)
-                mm(label, key, list->front(), 0.0, top, "%.2f mm", 0.01f);
+              std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 1000.0}}) {
+            if (list->size() == 1) // the extra may be negative (less back)
+                mm(label, key, list->front(), top > 200.0 ? -50.0 : 0.0, top, "%.2f mm", 0.01f);
             else
                 count(label, key, list->size());
         }
@@ -9203,6 +9274,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         top(T::MaxFeedZ, "machine.max_feed_z", s.max_feed_z, 500.0);
         top(T::MaxFeedE, "machine.max_feed_e", s.max_feed_e, 500.0);
         mm(T::CornerSpeed, "machine.corner_speed", s.corner_speed, 0.0, 100.0, "%.1f mm/s", 0.1f);
+    } else if (id == "preparation") {
+        // The preparation in the time estimate (print_time.md, rules 10 and 14).
+        mm(T::HeatRateNozzle, "machine.heat_rate_nozzle", s.heat_rate_nozzle, 0.0, 50.0,
+           s.heat_rate_nozzle > 0.0 ? "%.1f °C/s" : tr(T::NotSet), 0.05f);
+        mm(T::HeatRateBed, "machine.heat_rate_bed", s.heat_rate_bed, 0.0, 50.0,
+           s.heat_rate_bed > 0.0 ? "%.2f °C/s" : tr(T::NotSet), 0.01f);
+        mm(T::HomeTime, "machine.home_time", s.home_time, 0.0, 3600.0, "%.0f s", 0.5f);
+        mm(T::ProbeTime, "machine.probe_time", s.probe_time, 0.0, 3600.0, "%.0f s", 0.5f);
     } else if (id == "accelerations") {
         mm(T::AccelerationRow, "machine.acceleration", s.acceleration, 0.0, 100000.0, "%.0f mm/s²", 10.0f);
         mm(T::TravelAcceleration, "machine.travel_acceleration", s.travel_acceleration, 0.0, 100000.0, "%.0f mm/s²",
@@ -9271,6 +9350,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::AutoTemperatures, "gcode.auto_temperatures", s.auto_temperatures);
     } else if (id == "output_file") {
         count(T::PostProcessRow, "output.post_process", s.post_process.size());
+        flag(T::SkipConfigBlock, "gcode.skip_config_block", s.gcode_skip_config_block);
     }
     ImGui::EndTable();
     // The thumbnails, full width (gcode_extras.md, rule 8): kept as typed
@@ -10000,7 +10080,17 @@ void App::slice_panel() {
         anchor("slice_button");
     } else {
         if (!result_->resin && result_->preview.estimated_seconds > 0.0)
-            loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(result_->preview.estimated_seconds).c_str());
+        {
+            const GcodePreview& p = result_->preview;
+            if (p.preparation_seconds > 0.0) // «1 h 4 min (impresión 58 min, preparación 6 min)», rule 14
+                loc::TextDisabled("%s: %s", tr(T::EstimatedTime),
+                                  format(tr(T::TimeSplit), format_duration(p.estimated_seconds).c_str(),
+                                         format_duration(p.estimated_seconds - p.preparation_seconds).c_str(),
+                                         format_duration(p.preparation_seconds).c_str())
+                                      .c_str());
+            else
+                loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(p.estimated_seconds).c_str());
+        }
         // With a tested network program, the main button sends (devices.md, rule 19); exporting moves to ▲.
         const bool to_host = host_ready() && !result_->resin && device_can_print();
         if (to_host) {
@@ -12188,6 +12278,8 @@ void App::preview_panels() {
         };
         if (p.estimated_seconds >= 0.0)
             line(tr(T::EstimatedTime), format_duration(p.estimated_seconds));
+        if (p.preparation_seconds > 0.0) // heating, homing, waits (print_time.md, rule 14)
+            line(tr(T::PreparationTime), format_duration(p.preparation_seconds));
         if (legend_full_) { // folded: the time only
             if (p.first_layer_seconds > 0.0)
                 line(tr(T::FirstLayerTime), format_duration(p.first_layer_seconds));
@@ -15540,6 +15632,9 @@ void App::start_optimize(OptimizeExtra extra) {
     const std::string filament_type = settings_.filament_type;
     optimize_cancel_ = false;
     optimize_permille_ = 0;
+    // The last search's result is stale from here: nothing reads it as this
+    // one's while it runs, nor in the frame between its end and its take.
+    optimize_result_.reset();
     const bool zones = extra == OptimizeExtra::Zones, ribs = extra == OptimizeExtra::Ribs, reinforce = extra == OptimizeExtra::Reinforce,
                orientation = extra == OptimizeExtra::Orientation, lattice = extra == OptimizeExtra::Lattice;
     const Affine to_bed{a, b};
@@ -21206,8 +21301,21 @@ void App::bambu_camera_on() {
             10000, &cam->stop);
         const std::lock_guard<std::mutex> hold(cam->lock);
         cam->ended = true;
-        if (!r.ok && !cam->stop)
-            cam->error = r.error;
+        cam->code = r.code;
+        cam->sha256 = r.sha256;
+        if (!r.ok && !cam->stop) {
+            // What happened, in the person's language (printer_connections.md, rule 6).
+            const std::string fingerprint = r.sha256.substr(0, std::min<std::size_t>(r.sha256.size(), 16));
+            cam->error = r.code == "confirm_certificate"   ? std::string(tr(T::BambuCameraConfirm))
+                         : r.code == "confirm_camera_certificate"
+                             ? format(tr(T::BambuCameraOwn), fingerprint.c_str())
+                         : r.code == "certificate_changed" ? format(tr(T::BambuCameraChanged), fingerprint.c_str())
+                         : r.code == "unreachable"         ? format(tr(T::BambuCameraUnreachable), r.error.c_str())
+                         : r.code == "unauthorized"        ? std::string(tr(T::BambuCameraRefused))
+                         : r.code == "timeout"             ? std::string(tr(T::BambuCameraSilent))
+                         : r.code == "bad_answer"          ? std::string(tr(T::BambuCameraBad))
+                                                           : r.error;
+        }
     });
 }
 
@@ -21227,7 +21335,7 @@ void App::bambu_camera_off() {
 void App::bambu_camera_view(float width) {
     if (!bambu_camera_)
         return;
-    std::string jpeg, error;
+    std::string jpeg, error, code, sha256;
     long long frames = 0;
     bool ended = false;
     {
@@ -21235,6 +21343,8 @@ void App::bambu_camera_view(float width) {
         frames = bambu_camera_->frames;
         ended = bambu_camera_->ended;
         error = bambu_camera_->error;
+        code = bambu_camera_->code;
+        sha256 = bambu_camera_->sha256;
         if (frames != bambu_camera_shown_)
             jpeg = bambu_camera_->jpeg;
     }
@@ -21255,6 +21365,15 @@ void App::bambu_camera_view(float width) {
         loc::TextDisabled("%s", tr(T::BambuCameraWaiting));
     if (ended)
         loc::TextColored(rgb(0xE5484D), tr(T::BambuCameraEnded), error.empty() ? "-" : error.c_str());
+    // The camera's own certificate, accepted apart as the printer's was
+    // (printer_connections.md, rules 4 and 6), then the camera again.
+    if (ended && (code == "confirm_camera_certificate" || code == "certificate_changed") && sha256.size() == 64 &&
+        ImGui::Button(tr(T::BambuCameraAccept))) {
+        bambu_camera_off();
+        bambu_.camera_pinned_sha256 = sha256;
+        save_preferences();
+        bambu_camera_on();
+    }
 }
 
 void App::bambu_refresh() {
@@ -22385,12 +22504,17 @@ void App::script_input() {
             got = bambu_sim_ && bambu_sim_->files().count(step.value + ".gcode.3mf") ? step.value : "nothing";
         else if (step.key == "camera") // the size of the frame shown, WxH; "none"
             got = bambu_camera_tex_ ? std::to_string(bambu_camera_w_) + "x" + std::to_string(bambu_camera_h_) : "none";
-        else
+        else if (step.key == "camera-error") { // why the camera stopped, as the person reads it
+            if (bambu_camera_) {
+                const std::lock_guard<std::mutex> hold(bambu_camera_->lock);
+                got = bambu_camera_->error;
+            }
+        } else
             return fail_step("unknown expect-bambu key");
         if (got == step.value) {
             std::printf("ui-script: expect-bambu %s %s: ok\n", step.key.c_str(), step.value.c_str());
             next();
-        } else if (f > (step.key == "camera" ? 600 : 2)) {
+        } else if (f > (step.key == "camera-error" ? 6000 : step.key == "camera" ? 600 : 2)) {
             fail_step("bambu " + step.key + " is «" + got + "», not «" + step.value + "»");
         }
     } else if (step.verb == "cloud-wait") { // until the call to Tisma Cloud is answered (up to 20 s)

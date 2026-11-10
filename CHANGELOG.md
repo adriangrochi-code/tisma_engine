@@ -10,18 +10,101 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ## [Sin publicar]
 
+## [0.12.0-beta.1] - 2026-11-10
+
+Segunda beta para los probadores del dueño: Windows, Linux y Android. En Windows, el instalador
+`tisma-engine-0.12.0-beta.1-setup-windows-x64.exe` (o el `.zip`, para usar sin instalar); en Linux, el `.zip`: se
+descomprime y se abre `tisma`. En Android, `tisma-android-0.12.0-beta.1-beta-arm64.apk` (la versión optimizada) o, si
+esa no abre, `tisma-android-0.12.0-beta.1-fallback-arm64.apk`; la app dice 0.1.0-beta.1. La APK optimizada de esta
+versión no se probó en el emulador (una anterior sí). macOS todavía no.
+
+### Para probar
+
+- **G-code original de cada impresora:** elegí una impresora del paquete y laminá. El G-code de inicio y de fin es
+  el del fabricante (PrusaSlicer, OrcaSlicer, Bambu Studio, Creality Print, Elegoo Slicer, Cura), con sus variables
+  llenas. En una Bambu Lab A1 o P1 ya no corta con «F0» (BH45). Sin probar en una impresora: mirá el principio del
+  G-code antes de imprimir.
+- **Temperaturas de la primera capa:** la primera capa sale a `first_layer_temperature` y
+  `first_layer_bed_temperature`, y en la segunda pasa a las normales.
+- **Lo que pidieron los probadores (BH39 a BH45):** «Solo desde la cama» con soportes de árbol, variables de los
+  G-code de otros programas, la separación del borde de adherencia en Normal, la cama que no tapa la pieza desde
+  abajo, el trazo de pintura continuo y los diálogos propios de Windows.
+- **Convertidor de proyectos (parcial):** abrí un `.3mf` de PrusaSlicer, OrcaSlicer o Bambu Studio. Trae las piezas y
+  sus partes (modificadores, volúmenes negativos, bloqueadores y forzadores de soporte), y un aviso dice cuántos de
+  sus ajustes tienen traducción, cuántos se parecen y cuántos no. Los ajustes todavía no se aplican.
+- **Mi biblioteca:** guardá una pieza con su proyecto, sus recetas por impresora y su análisis, marcá «La imprimí»,
+  y exportá o importá un `.tismalib`.
+- **Biblioteca compartida:** en desarrollo, no viene en esta versión (el formato con el servidor ya está acordado).
+
 ### Cambiado
+
+- Al elegir capas curvas con la extrusión relativa apagada, la interfaz la prende sola y lo avisa; si la
+  impresora no puede usarla, avisa que no se va a poder laminar (antes fallaba al laminar).
+
+- La primera descarga del paquete de perfiles baja `index.json.xz` (0,12 MB en vez de 2 MB) cuando el paquete lo
+  publica, y si no `index.json` como antes.
+
+- La piel difusa no se aplica donde la pared externa cuelga sobre nada (sale lisa, como un puente).
+
+- `machine.min_layer_height` y `max_layer_height` acotan solo la altura variable y el soporte, no la altura de capa ni
+  la primera capa. `restart_extra` acepta de −50 a 1000 mm; las velocidades de la MMU, 0 (paso que no se usa); y
+  `limits_usage = emit` con Klipper escribe solo lo que Klipper toma, en vez de dar error.
 
 - El relleno del soporte en árbol sale de campos de distancias calculados para muchas capas a la vez, en la GPU si
   hay una. Sin GPU tarda lo mismo que antes; el G-code es el mismo con GPU o sin ella.
 
 ### Corregido
 
+- Con capas curvas cónicas, un viaje levantado hacia la falda podía bajar más que la capa, hasta por debajo de la
+  cama: alrededor de la pieza las capas ya no se cruzan.
+- La cámara de una Bambu Lab A1 o P1 que presenta un certificado propio (distinto del de la impresora y sin su número
+  de serie) ya no se corta con un error en inglés: muestra su huella y se acepta aparte con «Aceptar el certificado
+  de la cámara». Los demás cortes de la cámara dicen en castellano qué pasó (puerto 6000 sin respuesta, código de
+  acceso, sin imágenes en 10 s).
+- La preparación del inicio (esperas y calentamiento) ya no se suma al tiempo de la primera capa.
+- Un `restart_extra` negativo más largo que lo retraído ya no retrae de nuevo al volver.
+- La primera capa se imprime a `first_layer_temperature` y `first_layer_bed_temperature` (cada extrusor con la suya);
+  al empezar la segunda capa pasa a `temperature` y `bed_temperature` (M104/M140 sin esperar), solo si son distintas.
+
+- La estimación del tiempo cuenta las esperas `G4` y los cambios de aceleración (`M204`, `SET_VELOCITY_LIMIT`) que
+  trae el G-code de la máquina, y los límites que cambia (`M201`, `M203`, `M205`, `M566`, `M220`).
+- La estimación del tiempo en Klipper usa sus esquinas (`square_corner_velocity`) y su `minimum_cruise_ratio`.
+
+- El G-code de inicio original de una impresora Bambu Lab pegado en el de la máquina hacía fallar el laminado con
+  «F0»: las velocidades que ese G-code calcula (`outer_wall_volumetric_speed`, `flush_volumetric_speeds` y otras)
+  ahora salen de los ajustes, y un `F0` que quede se escribe con la velocidad de viaje, con aviso (BH45). También se llenan las variables propias de las Bambu Lab
+  (`first_layer_center_no_wipe_tower`, `first_non_support_filaments`, `max_print_z` y otras), y una lista leída más
+  allá de su último valor da el último, con aviso, en vez de cortar. Con la corrida del paquete entero: el G-code
+  de los filamentos de Prusa (`filament_extruder_id`), `print_temperature` de Cura, la forma
+  `[nombre_[índice]]`, `random()`, el mapa de filamentos de la familia OrcaSlicer, y `M98` de RepRapFirmware como
+  macro que puede calentar; varias sentencias por bloque y asignaciones (`{x[1] = …}`) en las plantillas. El cambio
+  de `F0` solo toca movimientos (G0 a G3): la `F` de otros comandos queda como está.
 - Con la retracción del firmware (G10/G11) y varios extrusores, una herramienta que se iba con la retracción hecha
   cuando un cambio por altura dejaba el largo en 0 volvía sin G11 y extruía con el filamento retraído.
 
 ### Agregado
 
+- Paredes sin apoyo al final (`walls.unsupported_last`): una vuelta de pared que cuelga sobre nada va después de
+  las paredes que la sostienen, o después del relleno de su capa si no toca ninguna.
+- Agujeros como polígonos (`walls.polyholes`, `polyhole_margin`, `polyhole_twist`, `polyhole_max_edges`): un
+  agujero redondo sale con pocos lados planos que tocan su círculo, para que mida lo pedido.
+- `cooling.first_layer_fan`: un ventilador exacto para la primera capa, desde el que sube el resto.
+- `speed.small_support`: las extrusiones chicas del soporte más despacio (hasta 2π × `speed.small_support_threshold`).
+- Orejas de borde (`adhesion.brim_ears`): solo discos de borde en las esquinas filosas.
+
+- Línea de comandos: `--strict`, apoyar una cara en la cama (`--ground-largest-face` y otras), `--inspect-mesh`,
+  `--export-statistics`, `--export-settings`, `--align-to-y-axis` e `--inspect-paint` (en un proyecto).
+
+- `regex_replace` en las plantillas, las partes del tiempo (`print_time_hour` y otras) en el nombre del archivo y
+  `gcode.skip_config_block` para sacar el bloque de ajustes del final del G-code.
+
+- Tiempo de preparación en la estimación: el calentamiento (con la velocidad de calentamiento de la boquilla y de la
+  cama, claves nuevas en la máquina), ir al origen, nivelar y las esperas, sumados al total y dichos
+  aparte en el G-code y en la interfaz.
+
+- Al abrir un 3MF de otro programa (PrusaSlicer, OrcaSlicer, Bambu Studio, Creality Print, Elegoo Slicer, Anycubic,
+  Cura), un aviso dice de qué programa es y cuántas piezas trae. Trae también sus partes y ordena sus ajustes con la
+  tabla de traducción del paquete (traducidos, parecidos, sin traducción); todavía no se aplican.
 - Mi biblioteca (`tisma-engine library`): guardar piezas con su proyecto, recetas por impresora y análisis,
   revisar si una receta o un análisis siguen valiendo, «La imprimí», exportar e importar `.tismalib`. Sin G-code.
 - G-code original de cada impresora del paquete (`machine.macros`, bloque `gcode`): dialectos PrusaSlicer, OrcaSlicer,

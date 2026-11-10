@@ -342,6 +342,47 @@
      "line.\n\nAvoiding those small jumps gives more even walls. As measured, the margin's size does not move that "
      "cut-off: what matters is whether it is 0 or not.\n\nExample: leave it at 25 %, the default; set it to 0 only if "
      "you want even the smallest change to add a line."},
+    {"walls.unsupported_last",
+     "Cuando una vuelta de pared queda entera sobre el aire (nada de ella tiene pieza debajo), se imprime al "
+     "final: después de las paredes que la sostienen si toca alguna, y si no toca nada, después del relleno de su "
+     "capa, que le sirve de apoyo. Así la vuelta se apoya en algo en vez de colgar.\n\nSirve en voladizos y en "
+     "bordes que salen de golpe, como el ala de un sombrero.\n\nEjemplo: encendido si las primeras vueltas de un "
+     "voladizo se caen o se enrulan.",
+     "When a wall loop lies wholly over the air (nothing of it has the part below), it is printed last: after the "
+     "walls that hold it if it touches one, and if it touches nothing, after its layer's infill, which then holds "
+     "it. The loop rests on something instead of hanging.\n\nIt helps on overhangs and edges that stick out at "
+     "once, like a hat's brim.\n\nExample: on if the first loops of an overhang fall or curl."},
+    {"walls.polyholes",
+     "Un agujero redondo se imprime como un polígono de pocos lados planos, más o menos dos por cada mm de "
+     "diámetro con boquilla de 0,4. Los lados quedan tocando el círculo del agujero, así que el agujero sale de la "
+     "medida pedida: un círculo de muchos lados cortos suele salir más chico, porque el plástico se tira hacia "
+     "adentro en cada curva.\n\nCuenta como redondo un agujero convexo que no se aparta del círculo más que el "
+     "margen, y que dura al menos dos capas (o está en la primera).\n\nEjemplo: encendido en piezas con agujeros "
+     "para tornillos o ejes que tienen que entrar justo.",
+     "A round hole is printed as a polygon with a few flat sides, about two per mm of diameter with a 0.4 nozzle. "
+     "The sides touch the hole's circle, so the hole comes out at the size asked for: a circle of many short sides "
+     "tends to come out smaller, as the plastic pulls inward at each curve.\n\nA hole counts as round when it is "
+     "convex, keeps within the margin of its circle and lasts at least two layers (or is on the first).\n\n"
+     "Example: on for parts with holes for screws or shafts that must fit."},
+    {"walls.polyhole_margin",
+     "Solo cuenta con los agujeros como polígonos. Es cuánto puede apartarse un agujero de su círculo para contar "
+     "como redondo, en mm o en porcentaje del radio. El mismo margen junta el agujero de una capa con el de la "
+     "siguiente.\n\nEjemplo: 20 %, el valor de siempre; más si los agujeros vienen de una malla gruesa.",
+     "It only matters with holes as polygons. It is how far a hole may stray from its circle and still count as "
+     "round, in mm or in percent of the radius. The same margin matches a hole on one layer with the one on the "
+     "next.\n\nExample: 20 %, the default; more if the holes come from a coarse mesh."},
+    {"walls.polyhole_twist",
+     "Solo cuenta con los agujeros como polígonos. Gira el polígono un poco en cada capa, entre cinco posiciones que "
+     "se repiten cada cinco capas, para que las esquinas no queden una encima de la otra.\n\nEjemplo: encendido "
+     "para que el agujero quede más parejo a lo alto.",
+     "It only matters with holes as polygons. It turns the polygon a little each layer, among five positions that "
+     "repeat every five layers, so the corners do not stack up.\n\nExample: on for a hole that is more even along "
+     "its height."},
+    {"walls.polyhole_max_edges",
+     "Solo cuenta con los agujeros como polígonos. Es la mayor cantidad de lados del polígono; con 50, los agujeros "
+     "de más de unos 25 mm quedan en 50 lados.\n\nEjemplo: 50, el valor de siempre.",
+     "It only matters with holes as polygons. It is the most sides the polygon gets; with 50, holes over about 25 mm "
+     "stay at 50 sides.\n\nExample: 50, the default."},
     {"walls.staggered_inner_seams",
      "Normalmente todas las paredes de una capa empiezan en el mismo lugar, y sus costuras quedan una al lado de la "
      "otra. Encendido, cada pared de adentro empieza un poco antes que la de afuera sobre su propia vuelta (un ancho "
