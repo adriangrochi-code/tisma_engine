@@ -72,7 +72,7 @@ fun JobsScreen(state: CloudState, cloud: CloudViewModel, nav: Navigator) {
         return
     }
     // Restarts when a job is added, so a new one is followed too.
-    LaunchedEffect(state.jobs.size, state.jobs.count { !it.status.finished }) { cloud.followJobs() }
+    WhileVisible(state.jobs.size, state.jobs.count { !it.status.finished }) { cloud.followJobs() }
     Box(Modifier.fillMaxSize()) {
         when {
             !state.jobsLoaded -> CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -136,7 +136,7 @@ private fun StatusChip(s: JobStatus) {
 @Composable
 fun JobDetailScreen(id: String, state: CloudState, cloud: CloudViewModel, nav: Navigator) {
     val context = ctx()
-    LaunchedEffect(id) { cloud.followJob(id) }
+    WhileVisible(id) { cloud.followJob(id) }
     val job = state.jobs.firstOrNull { it.id == id }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri != null && job != null) {

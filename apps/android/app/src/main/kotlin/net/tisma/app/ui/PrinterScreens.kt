@@ -65,7 +65,7 @@ import java.util.Locale
 @Composable
 fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navigator, search: Boolean = true,
                    header: @Composable () -> Unit = {}) {
-    LaunchedEffect(state.printers.size) { printers.followAll() }
+    WhileVisible(state.printers.size) { printers.followAll() }
     val context = ctx()
     // The print notices need this permission from Android 13 on; asked once there are printers.
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -83,7 +83,7 @@ fun PrintersScreen(state: PrintersState, printers: PrintersViewModel, nav: Navig
             onDispose { d.stop() }
         }
         // A printer not heard for 3 minutes leaves the list.
-        LaunchedEffect(Unit) {
+        WhileVisible {
             while (true) {
                 kotlinx.coroutines.delay(10_000)
                 printers.refreshFound()
@@ -180,7 +180,7 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
     var confirmCancel by rememberSaveable { mutableStateOf(false) }
     var confirmRemove by rememberSaveable { mutableStateOf(false) }
     var startAfterUpload by rememberSaveable { mutableStateOf(true) }
-    LaunchedEffect(id) { printers.follow(id) }
+    WhileVisible(id) { printers.follow(id) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
             val (name, size) = nameAndSize(context, uri)
@@ -281,7 +281,7 @@ fun PrinterDetailScreen(id: String, state: PrintersState, printers: PrintersView
 
 @Composable
 private fun CameraBox(id: String, state: PrintersState, printers: PrintersViewModel) {
-    LaunchedEffect(id) { printers.followCamera(id) }
+    WhileVisible(id) { printers.followCamera(id) }
     val view = state.cameras[id] ?: return
     TismaCard(Modifier.testTag("camera")) {
         when (view) {
