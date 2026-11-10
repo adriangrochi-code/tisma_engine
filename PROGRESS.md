@@ -12240,3 +12240,5 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 - 63dce76: cada borrado en Mi biblioteca guardaba una copia para «Deshacer» que solo se limpiaba en `onCleared`, que no
   corre cuando Android cierra la app; las copias viejas también quedaban. Ahora solo queda la última y las de una
   sesión anterior se borran al abrir (`LibraryTest`).
+- 16151cc: la vista previa del G-code no dibujaba arcos con radio (`G2/G3 … R`, de Marlin), dejaba un arco que sube
+  (vaso en espiral con arcos) en la capa de abajo y no leía palabras separadas por tabulador (`GcodeLayersTest`).
