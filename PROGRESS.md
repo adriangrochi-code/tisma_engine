@@ -12258,3 +12258,10 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 - 8d8d5d6: `SafeFile` miraba los programas después de los tipos de texto, así que un script `#!/bin/sh` con una línea
   «# …» pasaba como OBJ seguro. Ahora los programas van primero, un OBJ necesita una línea de vértice y se leen los
   primeros 8 KB (`SafeFileTest`).
+
+## 2026-11-10 — Android: búsqueda profunda (pedido del dueño, hasta 12-11 03:10 UTC)
+
+- 13de62d: en el panel de ajustes, cada valor puesto al escribir reemplazaba el texto del campo: al borrar 1,25 hasta
+  «1.» se ponía 1 y el campo mostraba «1», y el «5» siguiente daba 15 (valor mal sin ningún error). Ahora el texto
+  solo se reemplaza si el valor cambia por otro lado (restablecer, perfil). Prueba en `SettingsPanelTest` que falla
+  sin el arreglo.
