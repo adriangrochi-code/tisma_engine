@@ -64,7 +64,7 @@ jobs:
             echo "::notice::No SolidCraft artifacts: the APK is built without the Design tab's CAD"
           fi
       - name: Test and build
-        run: ./gradlew --no-daemon $SOLIDCRAFT :cloud:test :printers:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleBeta
+        run: ./gradlew --no-daemon $SOLIDCRAFT :shared:jvmTest :cloud:test :printers:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleBeta
       # The phone's APK (arm64-v8a), the emulator's (x86_64) and the one with both, apart: the phone one is about
       # half the size.
       - uses: actions/upload-artifact@v4
