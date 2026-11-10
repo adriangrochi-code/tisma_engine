@@ -12161,3 +12161,14 @@ QA; bundle id `net.tismaservidores.tisma`).
   espera «Ajustes del proyecto: 5 traducidos, 2 parecidos, 320 sin equivalente».
 - **No medido:** el banco de velocidad (CPU ocupada por el CI con ASan y el fuzz).
 - CI local completo en curso sobre b9173ea.
+
+## 2026-11-10 — Android: búsqueda de errores (pedido del dueño)
+
+- d7a7b60: «Compartida» mostraba en inglés el detalle de una lista o índice inválido, y una denuncia que fallaba sin
+  mensaje no mostraba nada. Ahora un texto en el idioma de la persona (prueba en `BlockListTest`).
+- 2bb4f30: la vista 3D leía el 3MF entero a una cadena con listas de números en cajas (se queda sin memoria con
+  proyectos grandes), tomaba el primer `.model` del ZIP y no los objetos en otros archivos (`p:path`, extensión de
+  producción del 3MF, como guardan los proyectos de los laminadores) y se cerraba con un índice de triángulo fuera de
+  rango. Ahora se lee como flujo con el analizador XML de Android (`MeshFileTest`). Memoria no medida en un teléfono.
+- 3b5a4ac: OBJ y STL de texto con líneas malas (vértice corto, cara con índice 0 o fuera de rango, tabulador) cerraban
+  la app; ahora se saltan.
