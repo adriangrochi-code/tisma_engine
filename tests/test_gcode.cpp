@@ -3193,3 +3193,31 @@ TEST_CASE("toolpaths as OBJ: each extrusion once, at its points, grouped by kind
     CHECK(v.front() == std::array<double, 3>{10, 10, 0.2});
     CHECK(v.back() == std::array<double, 3>{40, 40, 0.2});
 }
+
+// The preview's legend against the G-code it shows (the owner's QA,
+// 2026-11-10): the time by kind adds up to the moves' time, which is the
+// estimate the file states less its retractions and waits; the filament by
+// kind adds up to the filament the file pushes; every extrusion of the file
+// is in some kind.
+TEST_CASE("the preview's legend adds up to the G-code it shows", "[gcode]") {
+    Settings s = test_printer();
+    const std::string gcode = cube_gcode(s);
+    GcodePreview p = read_gcode_preview(gcode, s.filament_diameter);
+    time_preview(p, machine_kinematics(s), s.filament_diameter);
+    double seconds = 0.0, filament = 0.0;
+    std::size_t moves = 0;
+    for (std::size_t k = 0; k < kLineKinds; ++k) {
+        seconds += p.kind_seconds[k];
+        filament += p.kind_filament[k];
+        if (k != std::size_t(LineKind::Travel))
+            moves += p.kind_moves[k];
+    }
+    INFO("moves " << p.moves_seconds << " s, estimate " << p.estimated_seconds << " s, filament " << p.filament
+                  << " mm, by kind " << filament << " mm");
+    CHECK_THAT(seconds, WithinRel(p.moves_seconds, 1e-6)); // sums of floats in another order
+    CHECK(moves == p.extrusions.size());
+    CHECK_THAT(filament, WithinRel(p.filament, 0.02));
+    REQUIRE(p.estimated_seconds > 0.0);
+    CHECK(p.moves_seconds <= p.estimated_seconds + 1.0);
+    CHECK(p.moves_seconds >= 0.75 * p.estimated_seconds);
+}

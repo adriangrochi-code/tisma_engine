@@ -12425,3 +12425,7 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   G-code como segmento de una polilínea `l`, los tramos que se unen en una sola, un grupo `g` por tipo de línea, sin
   los viajes. En Archivo de «Más», gris sin laminar. Pruebas: `[gcode]` contra un G-code a mano (cada extrusión una
   vez, en sus puntos, por tipo) y el paso nuevo de `ui_script_file_import_export`.
+- **Punto 2 (leyenda contra el G-code):** prueba `[gcode]` sobre el G-code del cubo: los tiempos por tipo suman el
+  tiempo de los movimientos (339,3 s), que queda bajo el estimado que escribe el archivo (351 s, que suma retracciones
+  y esperas) y por encima del 75 % de él; el filamento por tipo suma el del archivo (389,9 mm); cada extrusión está en
+  algún tipo. Sin diferencias encontradas.
