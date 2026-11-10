@@ -12269,3 +12269,6 @@ QA; bundle id `net.tismaservidores.tisma`).
   vuelo, al dibujar la cama del proyecto importado; el objeto de la cama se reusa bien. Sin nombres de biblioteca
   en la traza, una supresión de LSan solo para Mesa no se puede escribir sin tapar también las del motor. Sigue
   abierta. macOS arm64 ya arranca en `macos-15`.
+- **macOS en verde (2026-11-10 07:48 UTC, dev 3667e62):** compilación y todas las pruebas en x86_64 (macos-15-intel)
+  y arm64 (macos-15), además de Windows. Siguiente paso de macOS (PLAN.md, «macOS antes de la beta»): quitar
+  `continue-on-error`, el `.dmg` sin firmar en release.yml, diálogos nativos, cámara con AVFoundation, xcframework iOS.
