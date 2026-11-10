@@ -42,7 +42,7 @@ fun Context.noticeText(n: Notice): String = when (n) {
     Notice.CodeSent -> getString(R.string.notice_code_sent)
     Notice.PasswordChanged -> getString(R.string.notice_password_changed)
     is Notice.ReportSent -> getString(R.string.report_sent) +
-        if (n.similar > 0) " " + getString(R.string.report_similar, n.similar) else ""
+        if (n.similar > 0) " " + resources.getQuantityString(R.plurals.report_similar, n.similar, n.similar) else ""
     is Notice.Saved -> getString(R.string.notice_saved, n.name)
 }
 

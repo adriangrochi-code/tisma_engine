@@ -122,7 +122,10 @@
     <string name="report_without_account">Se manda sin cuenta.</string>
     <string name="report_too_short">Escribí en pocas palabras qué pasó.</string>
     <string name="report_sent">Gracias: el informe llegó al equipo de Tisma.</string>
-    <string name="report_similar">El mismo problema se informó %1$d veces antes: está entre los que hay que arreglar.</string>
+    <plurals name="report_similar">
+        <item quantity="one">El mismo problema se informó %d vez antes: está entre los que hay que arreglar.</item>
+        <item quantity="other">El mismo problema se informó %d veces antes: está entre los que hay que arreglar.</item>
+    </plurals>
     <string name="report_failed">No se pudo mandar el informe: %1$s</string>
     <string name="report_too_many">Se mandaron demasiados informes. Probá de nuevo en una hora.</string>
     <string name="my_reports_empty">Todavía no hay informes.</string>
@@ -576,12 +579,21 @@
     <string name="library_size">Ocupa %1$s</string>
     <string name="library_empty">Todavía no guardaste piezas. Laminá o analizá una y tocá «Guardar en la biblioteca».</string>
     <string name="library_none_found">Nada coincide con la búsqueda</string>
-    <string name="library_recipes">%1$d recetas</string>
-    <string name="library_analyses">%1$d análisis</string>
+    <plurals name="library_recipes">
+        <item quantity="one">%d receta</item>
+        <item quantity="other">%d recetas</item>
+    </plurals>
+    <plurals name="library_analyses">
+        <item quantity="one">%d análisis</item>
+        <item quantity="other">%d análisis</item>
+    </plurals>
     <string name="library_delete_ask">¿Borrar %1$s?</string>
     <string name="library_delete">Borrar</string>
     <string name="library_recipes_title">Recetas (se lamina al imprimir)</string>
-    <string name="library_layers">%1$d capas</string>
+    <plurals name="library_layers">
+        <item quantity="one">%d capa</item>
+        <item quantity="other">%d capas</item>
+    </plurals>
     <string name="library_engine">Motor %1$s</string>
     <string name="library_print">Imprimir</string>
     <string name="library_open">Abrir en el plato</string>
@@ -594,7 +606,10 @@
     <string name="filament_temps_from">Las temperaturas y el enfriamiento salen de este filamento.</string>
     <string name="filament_choose_printer">Elegir impresora y filamento</string>
     <string name="filament_choose">Elegir filamento</string>
-    <string name="filament_hand_changed">Cambiaste %1$d ajustes de material a mano: quedan encima del filamento.</string>
+    <plurals name="filament_hand_changed">
+        <item quantity="one">Cambiaste %d ajuste de material a mano: queda encima del filamento.</item>
+        <item quantity="other">Cambiaste %d ajustes de material a mano: quedan encima del filamento.</item>
+    </plurals>
     <string name="filament_reset">Usar los valores del filamento</string>
     <string name="bambu_options">Antes de imprimir</string>
     <string name="bambu_leveling">Nivelar la cama</string>
@@ -629,7 +644,10 @@
     <string name="site_failed">No se pudo bajar el modelo: %1$s</string>
     <string name="pref_site_downloads">Permitir descargas de sitios compatibles</string>
     <string name="shared_title">Compartida</string>
-    <string name="shared_withdrawn">%1$d archivos fueron retirados de la biblioteca de Tisma y se borraron de este teléfono.</string>
+    <plurals name="shared_withdrawn">
+        <item quantity="one">%d archivo fue retirado de la biblioteca de Tisma y se borró de este teléfono.</item>
+        <item quantity="other">%d archivos fueron retirados de la biblioteca de Tisma y se borraron de este teléfono.</item>
+    </plurals>
     <string name="shared_ok">Entendido</string>
     <string name="shared_index">Buscar y bajar</string>
     <string name="shared_index_soon">La búsqueda en la biblioteca compartida llega con el índice del servidor.</string>

@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -131,8 +132,8 @@ fun LibraryScreen(lib: LibraryViewModel, slice: SliceViewModel, nav: Navigator, 
                             val sub = (i.printers + i.materials).joinToString(" · ")
                             if (sub.isNotEmpty()) Text(sub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(listOfNotNull(
-                                stringResource(R.string.library_recipes, i.recipes).takeIf { i.recipes > 0 },
-                                stringResource(R.string.library_analyses, i.analyses).takeIf { i.analyses > 0 },
+                                pluralStringResource(R.plurals.library_recipes, i.recipes, i.recipes).takeIf { i.recipes > 0 },
+                                pluralStringResource(R.plurals.library_analyses, i.analyses, i.analyses).takeIf { i.analyses > 0 },
                                 size(i.bytes)).joinToString(" · "),
                                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -173,7 +174,7 @@ private fun EntryDetail(entry: Library.Entry, lib: LibraryViewModel, slice: Slic
                 Text(r.label.ifBlank { r.choice?.name ?: r.choice?.printer ?: "—" }, style = MaterialTheme.typography.titleSmall)
                 val sum = listOfNotNull(r.timeS?.let { time(it) }, r.filamentM?.let { String.format(Locale.getDefault(), "%.2f m", it) },
                     r.filamentG?.let { String.format(Locale.getDefault(), "%.1f g", it) },
-                    r.layers?.let { stringResource(R.string.library_layers, it) }).joinToString(" · ")
+                    r.layers?.let { pluralStringResource(R.plurals.library_layers, it, it) }).joinToString(" · ")
                 if (sum.isNotEmpty()) Text(sum, style = MaterialTheme.typography.bodySmall)
                 if (r.engine.isNotBlank()) Text(stringResource(R.string.library_engine, r.engine), style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)

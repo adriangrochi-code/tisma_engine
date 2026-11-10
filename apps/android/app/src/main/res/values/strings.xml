@@ -132,7 +132,10 @@
     <string name="report_without_account">Sent without an account.</string>
     <string name="report_too_short">Write in a few words what happened.</string>
     <string name="report_sent">Thank you: the report was sent to the Tisma team.</string>
-    <string name="report_similar">The same problem was reported %1$d times before: it is among the ones to fix.</string>
+    <plurals name="report_similar">
+        <item quantity="one">The same problem was reported %d time before: it is among the ones to fix.</item>
+        <item quantity="other">The same problem was reported %d times before: it is among the ones to fix.</item>
+    </plurals>
     <string name="report_failed">The report could not be sent: %1$s</string>
     <string name="report_too_many">Too many reports were sent. Try again in an hour.</string>
     <string name="my_reports_empty">No reports yet.</string>
@@ -592,12 +595,21 @@
     <string name="library_size">Takes %1$s</string>
     <string name="library_empty">No parts saved yet. Slice or analyse one and tap «Save in the library».</string>
     <string name="library_none_found">Nothing matches the search</string>
-    <string name="library_recipes">%1$d recipes</string>
-    <string name="library_analyses">%1$d analyses</string>
+    <plurals name="library_recipes">
+        <item quantity="one">%d recipe</item>
+        <item quantity="other">%d recipes</item>
+    </plurals>
+    <plurals name="library_analyses">
+        <item quantity="one">%d analysis</item>
+        <item quantity="other">%d analyses</item>
+    </plurals>
     <string name="library_delete_ask">Delete %1$s?</string>
     <string name="library_delete">Delete</string>
     <string name="library_recipes_title">Recipes (sliced when printing)</string>
-    <string name="library_layers">%1$d layers</string>
+    <plurals name="library_layers">
+        <item quantity="one">%d layer</item>
+        <item quantity="other">%d layers</item>
+    </plurals>
     <string name="library_engine">Engine %1$s</string>
     <string name="library_print">Print</string>
     <string name="library_open">Open on the plate</string>
@@ -610,7 +622,10 @@
     <string name="filament_temps_from">The temperatures and cooling come from this filament.</string>
     <string name="filament_choose_printer">Choose printer and filament</string>
     <string name="filament_choose">Choose filament</string>
-    <string name="filament_hand_changed">You changed %1$d material settings by hand: they stay over the filament.</string>
+    <plurals name="filament_hand_changed">
+        <item quantity="one">You changed %d material setting by hand: it stays over the filament.</item>
+        <item quantity="other">You changed %d material settings by hand: they stay over the filament.</item>
+    </plurals>
     <string name="filament_reset">Use the filament\'s values</string>
     <string name="bambu_options">Before printing</string>
     <string name="bambu_leveling">Level the bed</string>
@@ -645,7 +660,10 @@
     <string name="site_failed">The model could not be downloaded: %1$s</string>
     <string name="pref_site_downloads">Allow downloads from supported websites</string>
     <string name="shared_title">Shared</string>
-    <string name="shared_withdrawn">%1$d files were withdrawn from Tisma\'s library and deleted from this phone.</string>
+    <plurals name="shared_withdrawn">
+        <item quantity="one">%d file was withdrawn from Tisma\'s library and deleted from this phone.</item>
+        <item quantity="other">%d files were withdrawn from Tisma\'s library and deleted from this phone.</item>
+    </plurals>
     <string name="shared_ok">OK</string>
     <string name="shared_index">Search and download</string>
     <string name="shared_index_soon">Searching the shared library comes with the server\'s index.</string>

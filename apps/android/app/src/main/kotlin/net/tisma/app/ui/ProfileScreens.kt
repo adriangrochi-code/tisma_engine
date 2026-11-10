@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import net.tisma.app.R
@@ -79,7 +80,7 @@ fun FilamentCard(state: SliceState, slice: SliceViewModel, nav: Navigator) {
                 Text(stringResource(if (p == null) R.string.filament_choose_printer else R.string.filament_choose))
             }
             if (handChanged.isNotEmpty()) {
-                Text(stringResource(R.string.filament_hand_changed, handChanged.size), style = MaterialTheme.typography.bodySmall,
+                Text(pluralStringResource(R.plurals.filament_hand_changed, handChanged.size, handChanged.size), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error)
                 AccentTextButton(onClick = { handChanged.forEach { slice.setValue(it, null) } }, modifier = Modifier.testTag("filament_reset")) {
                     Text(stringResource(R.string.filament_reset))

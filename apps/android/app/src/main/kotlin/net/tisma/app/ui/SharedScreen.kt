@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -57,7 +58,7 @@ fun SharedScreen(shared: SharedViewModel) {
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Rule 4: a withdrawn copy is deleted, and said.
         if (state.withdrawn.isNotEmpty()) TismaCard(Modifier.testTag("shared_withdrawn")) {
-            Text(stringResource(R.string.shared_withdrawn, state.withdrawn.size), color = MaterialTheme.colorScheme.error)
+            Text(pluralStringResource(R.plurals.shared_withdrawn, state.withdrawn.size, state.withdrawn.size), color = MaterialTheme.colorScheme.error)
             AccentTextButton(onClick = { shared.withdrawnSeen() }) { Text(stringResource(R.string.shared_ok)) }
         }
         // Rule 7: a report sent, or why not.
