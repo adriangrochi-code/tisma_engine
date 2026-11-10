@@ -63,31 +63,37 @@ class PrintWatchService : Service() {
     private suspend fun watch() {
         val app = application as TismaApplication
         val store = PrinterStore(app, app.secrets)
-        val last = mutableMapOf<String, PrinterStatus>()
+        val watcher = PrintWatcher()
         val open = mutableMapOf<String, Pair<net.tisma.printers.PrinterConfig, net.tisma.printers.PrinterConnection>>()
         var quiet = 0
-        while (scope.isActive) {
-            var anyActive = false
-            for (p in store.all()) {
-                val conn = open[p.id]?.takeIf { it.first == p }?.second
-                    ?: p.connect(store.secret(p.id)).also { c -> open.put(p.id, p to c)?.second?.close() }
-                val now = try {
-                    conn.status()
-                } catch (e: PrinterException) {
-                    null
+        try {
+            while (scope.isActive) {
+                var anyActive = false
+                for (p in store.all()) {
+                    // Any failure (a bad address, a dropped socket) is «no answer this round», never the end of the
+                    // service with its notification left on screen.
+                    val now = try {
+                        val conn = open[p.id]?.takeIf { it.first == p }?.second
+                            ?: p.connect(store.secret(p.id)).also { c -> open.put(p.id, p to c)?.second?.let { o -> runCatching { o.close() } } }
+                        conn.status()
+                    } catch (e: Exception) {
+                        if (e !is PrinterException) net.tisma.app.data.AppLog.line("watch: ${p.name} ${e.javaClass.simpleName} ${e.message}")
+                        null
+                    }
+                    val (event, active) = watcher.observe(p.id, now)
+                    event?.let { notify(this, p.name, it) }
+                    if (active) anyActive = true
                 }
-                PrintEvents.between(last[p.id], now)?.let { notify(this, p.name, it) }
-                if (now != null) last[p.id] = now
-                if (PrintEvents.isActive(now ?: last[p.id])) anyActive = true
+                // Two quiet rounds in a row (no print on any printer): done.
+                quiet = if (anyActive) 0 else quiet + 1
+                if (quiet >= 2) break
+                delay(POLL_MS)
             }
-            // Two quiet rounds in a row (no print on any printer): done.
-            quiet = if (anyActive) 0 else quiet + 1
-            if (quiet >= 2) break
-            delay(POLL_MS)
+        } finally {
+            open.values.forEach { runCatching { it.second.close() } }
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            stopSelf()
         }
-        open.values.forEach { it.second.close() }
-        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
-        stopSelf()
     }
 
     override fun onDestroy() {
@@ -142,4 +148,31 @@ class PrintWatchService : Service() {
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
+}
+
+/**
+ * What the watch knows of each printer between rounds: its last state, and how many rounds in a row it did not
+ * answer. A printer that was printing and then went silent (switched off mid print) counts as printing only for
+ * [maxMissed] rounds, so the watch does not keep the phone awake for ever.
+ */
+internal class PrintWatcher(private val maxMissed: Int = 20) {
+    private val last = mutableMapOf<String, PrinterStatus>()
+    private val missed = mutableMapOf<String, Int>()
+
+    /** The event to tell (if any) and whether this printer still prints. */
+    fun observe(id: String, now: PrinterStatus?): Pair<PrintEvent?, Boolean> {
+        val event = PrintEvents.between(last[id], now)
+        if (now != null) last[id] = now
+        if (now != null && now.state != net.tisma.printers.PrinterState.OFFLINE) {
+            missed[id] = 0
+            printing[id] = PrintEvents.isActive(now)
+            return event to printing[id]!!
+        }
+        val m = (missed[id] ?: 0) + 1
+        missed[id] = m
+        return event to (m < maxMissed && printing[id] == true)
+    }
+
+    /** Whether it was printing the last time it answered. */
+    private val printing = mutableMapOf<String, Boolean>()
 }
