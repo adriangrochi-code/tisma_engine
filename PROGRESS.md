@@ -11984,3 +11984,17 @@ Pedido del dueño: lo escaneado con Tisma Scanner y mandado con «Imprimir» apa
   `SafeFileTest` (4: tipos, programas renombrados, `..`, ruta absoluta, bomba, dañado, vínculo, G-code en 3MF).
 - Falta: publicar desde Mi biblioteca (clave del par, saneo de recetas 3 septies), bajar por los relés (motor p2p),
   renovar la lista cada 6 h mientras se comparte. La clave del proyecto la pone el dueño.
+
+## 2026-11-10 — iPhone: primer paso, el módulo compartido (Kotlin Multiplatform)
+
+Decisión del dueño (10-11): app de iPhone antes de la beta de diciembre. Plan en `apps/ios/PLAN.md` (aprobado por
+QA; bundle id `net.tismaservidores.tisma`).
+- `apps/android/shared`: módulo Kotlin Multiplatform (JVM, `iosArm64`, `iosSimulatorArm64`). Pasaron ahí la lista de
+  bloqueo, la clave de la biblioteca, el índice y `SharingPolicy` (sin `java.*`: `kotlin.time.Instant`, Base64 de
+  Kotlin). Ed25519 es `expect`: en JVM/Android el nuestro; en iOS el del sistema (CryptoKit), que pasa Swift al
+  arrancar; sin él no se acepta nada firmado.
+- Lo que usa archivos (`SharedCopies`, `sha256`, `SafeFile`) sigue en la app por ahora.
+- `tools/ci.sh` corre las pruebas de `shared` y compila la parte de iOS (klib para el simulador; Kotlin/Native compila
+  klibs de Apple en Linux). Enlazar el framework y probar en el simulador queda para el CI de macOS.
+- Siguiente: el cliente de la nube a `shared` con Ktor, luego impresoras (REST), luego Bambu (sockets TLS por
+  plataforma), y el proyecto de Xcode con el CI de macOS.

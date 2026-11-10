@@ -43,7 +43,7 @@ class LibraryIndex(val sequence: Long, val models: List<Model>) {
 
         fun read(json: ByteArray, sig: ByteArray, libraryKey: ByteArray, lastSequence: Long = -1): LibraryIndex {
             if (libraryKey.size != 32 || sig.size != 64 || !Ed25519.verify(libraryKey, json, sig)) throw BadIndex("The index's signature does not match")
-            val o = runCatching { Json.parseToJsonElement(json.toString(Charsets.UTF_8)) as JsonObject }.getOrNull()
+            val o = runCatching { Json.parseToJsonElement(json.decodeToString()) as JsonObject }.getOrNull()
                 ?: throw BadIndex("The index cannot be read")
             if ((o["format"] as? JsonPrimitive)?.contentOrNull != "tisma-library-index") throw BadIndex("Not a library index")
             if (((o["version"] as? JsonPrimitive)?.intOrNull ?: 0) > 1) throw BadIndex("A newer index format")

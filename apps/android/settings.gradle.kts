@@ -22,5 +22,6 @@ rootProject.name = "tisma-android"
 // mockcloud: a test server written from docs/spec/features/cloud.md.
 // printers: clients of the printers on the network (printer_connections.md).
 // mockprinters: printer simulators written from the public API documentation.
+// shared: Kotlin Multiplatform logic shared with the iPhone app (apps/ios/PLAN.md).
 // app: the Android app.
-include(":cloud", ":mockcloud", ":printers", ":mockprinters", ":app")
+include(":shared", ":cloud", ":mockcloud", ":printers", ":mockprinters", ":app")

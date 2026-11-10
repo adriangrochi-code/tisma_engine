@@ -37,6 +37,7 @@ import net.tisma.app.R
 import net.tisma.app.p2p.SharedViewModel
 import net.tisma.app.p2p.SharingPolicy
 import java.time.ZoneId
+import kotlin.time.toJavaInstant
 import java.time.format.DateTimeFormatter
 
 /**
@@ -82,7 +83,7 @@ fun SharedScreen(shared: SharedViewModel) {
             val list = state.list
             Text(if (list == null) stringResource(R.string.shared_no_list)
                 else stringResource(R.string.shared_list_date,
-                    DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm").withZone(ZoneId.systemDefault()).format(list.generated)),
+                    DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm").withZone(ZoneId.systemDefault()).format(list.generated.toJavaInstant())),
                 style = MaterialTheme.typography.bodySmall)
             state.problem?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         }

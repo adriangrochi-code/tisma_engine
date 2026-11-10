@@ -13,5 +13,5 @@ if grep -rnE '\.(readNBytes|readAllBytes|transferTo)\(|InputStream\.nullInputStr
   exit 1
 fi
 python3 ../../tools/check_licenses.py ../..
-./gradlew --no-parallel :cloud:test :printers:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleBeta
+./gradlew --no-parallel :shared:jvmTest :shared:compileKotlinIosSimulatorArm64 :cloud:test :printers:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleBeta
 echo "Android checks passed: app/build/outputs/apk/debug/app-{arm64-v8a,x86_64,universal}-debug.apk"

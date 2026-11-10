@@ -89,7 +89,7 @@ android {
 }
 
 kotlin {
-    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17); optIn.add("kotlin.time.ExperimentalTime") }
 }
 
 // ---- The engine of the desktop, built for the phone (mobile_app.md, rule 1) ----
@@ -167,6 +167,7 @@ if (solidcraftDir != null) {
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation(project(":cloud"))
     implementation(project(":printers"))
     implementation(libs.kotlinx.coroutines.android)

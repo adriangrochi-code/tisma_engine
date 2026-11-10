@@ -9,10 +9,10 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import net.tisma.app.updates.Ed25519
-import java.io.File
-import java.security.MessageDigest
-import java.time.Instant
-import java.util.Base64
+import kotlin.io.encoding.Base64
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Instant
 
 /**
  * The library's key (p2p_library.md, rule 3 quinquies): the app carries only the project's key; the server's
@@ -22,12 +22,12 @@ import java.util.Base64
 object LibraryKey {
     class BadKey(message: String) : Exception(message)
 
-    private val PREFIX = "tisma-library-key/1\n".toByteArray()
+    private val PREFIX = "tisma-library-key/1\n".encodeToByteArray()
 
     /** `GET /v1/library/key`: `{"public_key": …, "certificate": …}`, each in base64 (or hex). */
     fun read(json: ByteArray, projectKey: ByteArray): ByteArray {
         if (projectKey.size != 32) throw BadKey("No project key in this build")
-        val o = runCatching { Json.parseToJsonElement(json.toString(Charsets.UTF_8)) as JsonObject }.getOrNull()
+        val o = runCatching { Json.parseToJsonElement(json.decodeToString()) as JsonObject }.getOrNull()
             ?: throw BadKey("The library key cannot be read")
         val key = bytes(o["public_key"]) ?: throw BadKey("No library key")
         val cert = bytes(o["certificate"]) ?: throw BadKey("The library key has no certificate")
@@ -39,10 +39,10 @@ object LibraryKey {
     internal fun bytes(e: JsonElement?): ByteArray? {
         val s = (e as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         if (s.length % 2 == 0 && s.all { it in "0123456789abcdefABCDEF" }) return ByteArray(s.length / 2) { s.substring(2 * it, 2 * it + 2).toInt(16).toByte() }
-        return runCatching { Base64.getDecoder().decode(s) }.getOrNull()
+        return runCatching { Base64.decode(s) }.getOrNull()
     }
 
-    fun hex(b: ByteArray) = b.joinToString("") { "%02x".format(it) }
+    fun hex(b: ByteArray) = b.joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 }
 
 /**
@@ -69,7 +69,7 @@ class BlockList(
     fun blocksPeer(key: String) = key in peers
 
     /** Rule 6: past `expires` (7 days without a new signature), sharing stops until it is renewed. */
-    fun stale(now: Instant = Instant.now()) = now.isAfter(expires)
+    fun stale(now: Instant = Clock.System.now()) = now > expires
 
     companion object {
         /**
@@ -78,15 +78,15 @@ class BlockList(
          */
         fun read(json: ByteArray, sig: ByteArray, libraryKey: ByteArray, lastSequence: Long = -1): BlockList {
             if (libraryKey.size != 32 || sig.size != 64 || !Ed25519.verify(libraryKey, json, sig)) throw BadList("The block list's signature does not match")
-            val o = runCatching { Json.parseToJsonElement(json.toString(Charsets.UTF_8)) as JsonObject }.getOrNull()
+            val o = runCatching { Json.parseToJsonElement(json.decodeToString()) as JsonObject }.getOrNull()
                 ?: throw BadList("The block list cannot be read")
             if ((o["format"] as? JsonPrimitive)?.contentOrNull != "tisma-library-blocklist") throw BadList("Not a block list")
             if (((o["version"] as? JsonPrimitive)?.intOrNull ?: 0) > 1) throw BadList("A newer block list format")
             val sequence = (o["sequence"] as? JsonPrimitive)?.longOrNull ?: throw BadList("The block list has no sequence")
             if (sequence < lastSequence) throw BadList("An older block list than the last one ($sequence < $lastSequence)")
-            fun time(k: String) = runCatching { Instant.parse((o[k] as? JsonPrimitive)?.contentOrNull) }.getOrNull()
+            fun time(k: String) = (o[k] as? JsonPrimitive)?.contentOrNull?.let { runCatching { Instant.parse(it) }.getOrNull() }
             val generated = time("generated") ?: throw BadList("The block list has no date")
-            val expires = time("expires") ?: generated.plusSeconds(7 * 24 * 3600)
+            val expires = time("expires") ?: generated + 7.days
             fun strings(k: String) = (o[k] as? JsonArray).orEmpty().mapNotNull { e ->
                 (e as? JsonPrimitive)?.contentOrNull ?: ((e as? JsonObject)?.get("id") as? JsonPrimitive)?.contentOrNull
                     ?: ((e as? JsonObject)?.get("key") as? JsonPrimitive)?.contentOrNull
@@ -105,34 +105,7 @@ class BlockList(
             return list
         }
 
-        fun sha256(f: File): String {
-            val md = MessageDigest.getInstance("SHA-256")
-            f.inputStream().use { i -> val b = ByteArray(64 * 1024); while (true) { val n = i.read(b); if (n < 0) break; md.update(b, 0, n) } }
-            return md.digest().joinToString("") { "%02x".format(it) }
-        }
     }
-}
-
-/**
- * The shared library's files on this phone (p2p_library.md, rule 2): only what the person published or downloaded,
- * each named by its SHA-256. «Mi biblioteca» is not here and is never shared (rule 8).
- */
-class SharedCopies(val dir: File) {
-    data class Copy(val sha256: String, val file: File)
-
-    fun all(): List<Copy> = dir.listFiles().orEmpty().filter { it.isFile }.map { Copy(it.nameWithoutExtension.lowercase(), it) }
-
-    /** Keeps [file] under its SHA-256 (checked, not trusted from its name). */
-    fun add(file: File, extension: String): Copy {
-        dir.mkdirs()
-        val sha = BlockList.sha256(file)
-        val target = File(dir, "$sha.$extension")
-        file.copyTo(target, overwrite = true)
-        return Copy(sha, target)
-    }
-
-    /** Rule 4: a blocked file is not kept: deleted, and returned so the person is told. */
-    fun apply(list: BlockList): List<Copy> = all().filter { list.blocksFile(it.sha256) }.onEach { it.file.delete() }
 }
 
 /** Rules 3, 6 and P2P6: when the phone may share (upload). Downloading is separate and only when asked. */
@@ -140,7 +113,7 @@ object SharingPolicy {
     enum class Why { OFF, NO_LIST, STALE_LIST, NOT_WIFI, NOT_CHARGING }
 
     /** Null when sharing may run; else the first reason it may not. */
-    fun blocked(enabled: Boolean, list: BlockList?, unmeteredNetwork: Boolean, charging: Boolean, now: Instant = Instant.now()): Why? = when {
+    fun blocked(enabled: Boolean, list: BlockList?, unmeteredNetwork: Boolean, charging: Boolean, now: Instant = Clock.System.now()): Why? = when {
         !enabled -> Why.OFF
         list == null -> Why.NO_LIST
         list.stale(now) -> Why.STALE_LIST

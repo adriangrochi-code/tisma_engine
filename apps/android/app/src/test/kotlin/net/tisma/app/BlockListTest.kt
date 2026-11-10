@@ -36,8 +36,9 @@ import java.io.File
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.Signature
-import java.time.Duration
-import java.time.Instant
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Instant
 import java.util.Base64
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -49,6 +50,7 @@ import kotlin.test.assertFalse
  * p2p_library.md: the key chain (project key → library key), the signed block list and index, applied to the
  * phone's shared copies, «Denunciar», and when the phone may share.
  */
+@OptIn(kotlin.time.ExperimentalTime::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
 class BlockListTest {
@@ -74,9 +76,9 @@ class BlockListTest {
         return """{"public_key":"${b64.encodeToString(raw(lib))}","certificate":"${b64.encodeToString(cert)}"}""".toByteArray()
     }
 
-    private fun list(sequence: Long, generated: Instant = Instant.now(), files: List<String> = emptyList(),
+    private fun list(sequence: Long, generated: Instant = Clock.System.now(), files: List<String> = emptyList(),
                      revoked: List<String> = emptyList()) = """{"format":"tisma-library-blocklist","version":1,
-        "generated":"$generated","sequence":$sequence,"expires":"${generated.plus(Duration.ofDays(7))}",
+        "generated":"$generated","sequence":$sequence,"expires":"${generated + 7.days}",
         "files":[${files.joinToString(",") { "{\"sha256\":\"$it\",\"reason\":\"rights\"}" }}],
         "accounts":["acct-9"],"peers":["peer-1"],"addresses":[],
         "revoked_keys":[${revoked.joinToString(",") { "\"$it\"" }}]}""".toByteArray()
@@ -87,7 +89,7 @@ class BlockListTest {
         "files":[{"path":"model.3mf","role":"model","size":120,"sha256":"$sha"}$extra]}"""
 
     private fun index(sequence: Long, vararg models: String) =
-        """{"format":"tisma-library-index","version":1,"generated":"${Instant.now()}","sequence":$sequence,
+        """{"format":"tisma-library-index","version":1,"generated":"${Clock.System.now()}","sequence":$sequence,
         "models":[${models.joinToString(",")}]}""".toByteArray()
 
     @Test
@@ -115,9 +117,9 @@ class BlockListTest {
 
     @Test
     fun `P2P7 an expired list stops sharing, and P2P6 only on Wi-Fi and charging`() {
-        val now = Instant.now()
+        val now = Clock.System.now()
         val fresh = list(1, now).let { BlockList.read(it, sign(library, it), libraryKey) }
-        val old = list(1, now.minus(Duration.ofDays(8))).let { BlockList.read(it, sign(library, it), libraryKey) }
+        val old = list(1, now - 8.days).let { BlockList.read(it, sign(library, it), libraryKey) }
         assertEquals(SharingPolicy.Why.STALE_LIST, SharingPolicy.blocked(true, old, unmeteredNetwork = true, charging = true, now))
         assertEquals(SharingPolicy.Why.NOT_WIFI, SharingPolicy.blocked(true, fresh, unmeteredNetwork = false, charging = true, now))
         assertEquals(SharingPolicy.Why.NOT_CHARGING, SharingPolicy.blocked(true, fresh, unmeteredNetwork = true, charging = false, now))

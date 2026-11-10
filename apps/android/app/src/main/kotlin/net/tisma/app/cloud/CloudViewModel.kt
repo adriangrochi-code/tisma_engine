@@ -353,7 +353,7 @@ class CloudViewModel(
                     val ext = scan.file.substringAfterLast('.', "stl").lowercase().takeIf { it in setOf("stl", "obj", "3mf") } ?: "stl"
                     val f = java.io.File(dir, "scan-" + scan.id.replace(Regex("[^A-Za-z0-9_-]"), "_") + "." + ext)
                     f.outputStream().use { client.downloadScan(scan.id, it) }
-                    if (scan.sha256.isNotBlank() && net.tisma.app.p2p.BlockList.sha256(f) != scan.sha256) {
+                    if (scan.sha256.isNotBlank() && net.tisma.app.p2p.sha256(f) != scan.sha256) {
                         f.delete(); throw java.io.IOException("The scan's mesh does not match its fingerprint")
                     }
                     // Rule 3 octies: a mesh that fails the safety checks is not kept.
