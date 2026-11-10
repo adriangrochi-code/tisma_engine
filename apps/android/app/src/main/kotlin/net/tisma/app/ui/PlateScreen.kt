@@ -574,6 +574,8 @@ private fun AnalysisProgress(state: SliceState, slice: SliceViewModel) {
 }
 
 fun Context.sliceNoticeText(n: SliceNotice): String = when (n) {
+    is SliceNotice.FilamentSwitched -> getString(R.string.filament_switched,
+        n.name.ifBlank { getString(R.string.pack_default_filament) })
     SliceNotice.Cancelled -> getString(R.string.plate_cancelled)
     SliceNotice.CannotRead -> getString(R.string.error_cannot_read)
     is SliceNotice.Saved -> getString(R.string.notice_saved, n.name)

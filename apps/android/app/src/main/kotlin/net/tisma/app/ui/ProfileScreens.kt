@@ -311,7 +311,7 @@ private fun PackFilamentPicker(state: SliceState, slice: SliceViewModel, nav: Na
                 item { Text(stringResource(R.string.pack_print_profile), style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.padding(top = 8.dp)) }
                 items(state.packPrints, key = { it.path }) { f ->
-                    Entry(f, choice.print == f.path, "pack_print_" + f.name) { slice.setProfile(choice.copy(print = f.path)) }
+                    Entry(f, choice.print == f.path, "pack_print_" + f.name) { slice.choosePackPrint(f.path) }
                 }
             }
         }

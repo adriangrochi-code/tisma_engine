@@ -231,6 +231,7 @@
     <string name="nozzle_hardened">acero endurecido</string>
     <string name="eng_temperature">Temperatura de la boquilla (adhesión entre capas)</string>
     <string name="shared_code">Código de publicación: %1$s</string>
+    <string name="filament_switched">El filamento no servía con esta impresión: se cambió a %1$s</string>
     <string name="plate_share">Compartir el G-code</string>
     <string name="plate_send_to">Mandar a</string>
     <string name="plate_print">Imprimir</string>

@@ -143,6 +143,8 @@ sealed interface SliceNotice {
     /** p2p_library.md, rule 7 bis: parts scanned and sent to print arrived in «Mi biblioteca». */
     data class ScansArrived(val count: Int) : SliceNotice
     /** A model site's link that cannot be opened (rule 10), or its download that failed. */
+    /** profile_pack_format.md (spec/next b705fe7): the chosen filament did not fit the new print; this one replaced it. */
+    data class FilamentSwitched(val name: String) : SliceNotice
     data class SiteRefused(val reason: SiteLink.Reason?, val detail: String = "") : SliceNotice
 }
 
@@ -630,6 +632,26 @@ class SliceViewModel(
                 s.copy(packBusy = false, packIndex = r.getOrNull() ?: s.packIndex,
                     packError = r.exceptionOrNull()?.let { it.message ?: "error" }?.takeIf { s.packIndex == null || r.isFailure })
             }
+        }
+    }
+
+    /**
+     * Chooses the pack's print profile [print]. A chosen filament whose `compatible_prints` leave it out is replaced
+     * by the variant's default filament, or else the first fitting one of the same material, and the person is told.
+     */
+    fun choosePackPrint(print: String?) {
+        val choice = _state.value.profile?.takeIf { it.pack } ?: return
+        val s = _state.value
+        val effective = print ?: s.packDefaultPrint
+        val current = s.packFilaments.firstOrNull { it.path == choice.filament }
+        if (current == null || current.worksWith(effective)) { setProfile(choice.copy(print = print)); return }
+        viewModelScope.launch {
+            val def = withContext(io) { runCatching { pack?.defaultFilament(choice.printer) }.getOrNull() }
+            val fits = s.packFilaments.filter { it.worksWith(effective) }
+            val replacement = fits.firstOrNull { it.path == def }
+                ?: fits.firstOrNull { current.material.isNotBlank() && it.material.equals(current.material, ignoreCase = true) }
+            setProfile(choice.copy(print = print, filament = replacement?.path))
+            _state.update { it.copy(notice = SliceNotice.FilamentSwitched(replacement?.name ?: "")) }
         }
     }
 

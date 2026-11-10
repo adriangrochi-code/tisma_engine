@@ -88,7 +88,9 @@ class ProfilePack(
                         /** Rule 15: the entry's `license` and `origin`. */
                         val license: String = "", val origin: String = "",
                         /** profile_pack_format.md, filaments: the print profiles it works with; empty, any. */
-                        val compatiblePrints: List<String> = emptyList()) {
+                        val compatiblePrints: List<String> = emptyList(),
+                        /** The material's type (PLA, PETG…), for a replacement of the same material. */
+                        val material: String = "") {
         /** Whether it may be offered with the print profile [print] (its path; null: none known, so any). */
         fun worksWith(print: String?) = compatiblePrints.isEmpty() || print == null || print in compatiblePrints
     }
@@ -134,7 +136,8 @@ class ProfilePack(
                 val generic = (o["generic"] as? JsonPrimitive)?.contentOrNull == "true"
                 out += Filament("vendors/${v.name}/$folder/${f.name}", f.nameWithoutExtension.replace('_', ' '), v.name, generic,
                     (o["license"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (o["origin"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
-                    (o["compatible_prints"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull })
+                    (o["compatible_prints"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+                    ((o["material"] as? JsonObject)?.get("type") as? JsonPrimitive)?.contentOrNull.orEmpty())
             }
         }
         return out.sortedBy { if (it.vendor == printerVendor && !it.generic) 0 else if (it.generic) 1 else 2 }
