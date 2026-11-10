@@ -12678,3 +12678,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   selecciona y por caja, central desplaza, Mayús+central orbita alrededor del punto bajo el cursor, rueda acerca al
   cursor en el sentido de Fusion, doble clic central encuadra, clic derecho = menú). Preferencia «Navegación»:
   «Fusion 360» (por defecto), «Botón derecho gira», «Clásica». Cubo y barra de vista sin cambios. UI17 actualizada.
+- Cola, con la navegación de Fusion 360 y como siguiente bloque grande de interfaz (pedido del dueño 22:40, spec/next
+  4483c04, cad_design.md «Diseño visual y forma de uso (estilo Fusion 360)», reglas 11 bis a 11 decies, CD26 a CD29):
+  barra de herramientas a todo el ancho con pestañas (Sólido, Boceto, Inspeccionar, Utilidades) y grupos con nombre;
+  árbol del navegador a la izquierda con ojos; línea de tiempo abajo con marcador arrastrable; diálogos como panel
+  flotante a la derecha con vista previa y manipuladores; boceto normal al plano con «Terminar boceto», paleta y
+  restricciones; menú radial; S busca herramientas; Presionar/Tirar, Mover/Copiar, Medir, Sección, Apariencia; lo
+  que falte en gris «Próximamente»; tema claro por defecto en Diseño. Diseño propio; capturas de la primera versión.
