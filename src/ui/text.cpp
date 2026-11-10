@@ -197,9 +197,11 @@ std::string singular_counts(std::string text) {
         if (alone)
             for (const auto& [many, one] : kWords) {
                 const std::size_t end = word + many.size();
+                if (end > text.size() || text.compare(word, many.size(), many) != 0)
+                    continue; // the word does not fit in what is left of the text, or is another
                 const bool whole = end == text.size() || !(std::isalpha(static_cast<unsigned char>(text[end])) ||
                                                           static_cast<unsigned char>(text[end]) >= 0x80);
-                if (text.compare(word, many.size(), many) == 0 && whole) {
+                if (whole) {
                     text.replace(word, many.size(), one);
                     break;
                 }

@@ -12494,3 +12494,8 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
 - Cola p2p (servidor 60b7dd1): con `"direct": true` cada multiaddr de `addrs` debe ser /ip4 o /ip6 con la IP pública
   que ve el master (si no, 422); detrás de NAT, la dirección observada por identify/AutoNAT, nunca la local; /dns4,
   /dns6 y privadas se rechazan. Con `"direct": false`, sin cambios. Entra con el cliente p2p (todavía no hecho).
+- Cola (spec/next 043b1bf): (1) profile_pack_format.md: los perfiles de impresión y filamento traen `source_values`
+  ({dialect, preset, values}); van a las variables del G-code como los `values` de la máquina, ganando el perfil
+  traducido si chocan (pack profiles/next 881642c, 2299 perfiles de impresión). (2) gcode_macros.md 10 bis bis, GM15:
+  en el dialecto orcaslicer, una variable de lista sin índice en un cálculo o comparación vale su único elemento o el
+  del extrusor activo (hoy 12 variantes caen al G-code simple por esto).

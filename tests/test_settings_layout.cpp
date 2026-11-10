@@ -144,3 +144,14 @@ TEST_CASE("a count of one takes the singular, in Spanish and English (the spec t
     CHECK(format("%d avisos", 1) == "1 aviso");
     CHECK(format("%d avisos", 2) == "2 avisos");
 }
+
+// A "1 " near the end of the text, shorter than any plural (ASan found a read
+// past the end in the status bar, maintenance 2026-11-10): nothing changes and
+// nothing past the text is read.
+TEST_CASE("a count of one at the end of a text is left as it is", "[ui]") {
+    CHECK(singular_counts("1 ") == "1 ");
+    CHECK(singular_counts("x 1 a") == "x 1 a");
+    CHECK(singular_counts("12,3 mm · 1 ab") == "12,3 mm · 1 ab");
+    CHECK(singular_counts("1 avis") == "1 avis");
+    CHECK(singular_counts("1 avisos") == "1 aviso");
+}

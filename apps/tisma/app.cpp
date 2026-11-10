@@ -4025,10 +4025,12 @@ void App::load_preferences(const std::filesystem::path& from) {
         theme_system_ = j.value("theme", "dark") == "system";
         last_folder_ = from_utf8(j.value("folder", std::string()));
         show_templates_ = j.value("show_templates", true);
-        if (const auto r = j.find("recent_projects"); r != j.end() && r->is_array())
+        if (const auto r = j.find("recent_projects"); r != j.end() && r->is_array()) {
+            recent_projects_.clear(); // the file's list, not added to the one there was (an imported file)
             for (const auto& e : *r)
                 if (e.is_string() && recent_projects_.size() < 10)
                     recent_projects_.push_back(from_utf8(e.get<std::string>()));
+        }
         render_mode_ = static_cast<RenderMode>(std::clamp(j.value("render", 1), 0, 2));
         msaa_ = std::clamp(j.value("msaa", 4), 1, 16);
         fxaa_ = j.value("fxaa", true);

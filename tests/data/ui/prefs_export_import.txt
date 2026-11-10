@@ -1,6 +1,7 @@
 # Preferences › Other: Export… writes the preferences to a file and Import…
 # brings them back (interface.md; it said «Coming soon» before).
 expect-theme dark
+save-project ui_prefs_recent.tisma
 menu more
 menu config
 menu config_page_other
@@ -18,3 +19,9 @@ menu prefs_import
 choose-file ui_prefs.json
 expect-theme dark
 menu config_cancel
+# Imported, the recent projects are the file's, not added twice.
+menu more
+menu recent
+expect-control recent_1
+expect-no-control recent_2
+menu view_iso
