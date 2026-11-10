@@ -12182,3 +12182,6 @@ QA; bundle id `net.tismaservidores.tisma`).
   sitios ya corta a 200 MB, la cámara de Bambu a 8 MB por imagen.
 - 99b0756: si la impresora Bambu rechazaba el envío (tarjeta llena), la conexión de datos FTPS quedaba abierta. Prueba
   en `BambuTest` con el simulador rechazando el `STOR`. Revisado sin cambios: un TLS fallido ya lo cierra el JDK.
+- 45fc876: cada llamada al motor leía su salida hasta el final antes de esperar con límite de tiempo: un motor colgado
+  se esperaba para siempre. Ahora la salida va a un archivo temporal (`callEngine`) y el límite vale. Los errores de
+  Mi biblioteca salían siempre en castellano, también con el teléfono en inglés (`EngineCallTest`).
