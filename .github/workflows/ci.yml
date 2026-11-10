@@ -92,7 +92,7 @@ jobs:
       matrix:
         include:
           - arch: arm64
-            runner: macos-14
+            runner: macos-15 # arm64; macos-14 jobs were cancelled before they started
           - arch: x86_64
             runner: macos-15-intel # macos-13 is retired: a job asking for it waits forever
     steps:

@@ -12245,3 +12245,6 @@ QA; bundle id `net.tismaservidores.tisma`).
   con el instalador y el zip de Windows, el zip de Linux y las dos APK de Android (beta R8 sin probar en el emulador
   y la de respaldo). Sin firma del dueño todavía. macOS no entra: x86_64 no compilaba (arreglado en 195a3d8, sin
   confirmar en la CI), arm64 se cancela antes de empezar. PR siguientes: #59 (dev → alpha) y #60 (alpha → main).
+- macOS CI, segunda vuelta: x86_64 ya pasa `template.cpp`; ahora cortaba en `mdns.cpp` y `ssdp.cpp` (`timeval`:
+  `tv_usec` es `int` en macOS), arreglado en aa8312f. arm64: los trabajos en `macos-14` se cancelan sin empezar (sin
+  registro); pasa a `macos-15` (arm64).
