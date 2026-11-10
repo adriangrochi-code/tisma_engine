@@ -12255,3 +12255,6 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 - Ficha (spec/next 967f7a3, regla 3 novies): la lista de bloqueo trae `models` (código de publicación y motivo); la
   búsqueda saca esa publicación sola, y la tarjeta del modelo muestra su código. Lo demás (solo cuentas registradas
   publican, el código en «Mis publicaciones», el autor de una pieza escaneada) va con la pantalla de publicar.
+- 8d8d5d6: `SafeFile` miraba los programas después de los tipos de texto, así que un script `#!/bin/sh` con una línea
+  «# …» pasaba como OBJ seguro. Ahora los programas van primero, un OBJ necesita una línea de vértice y se leen los
+  primeros 8 KB (`SafeFileTest`).
