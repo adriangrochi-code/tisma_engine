@@ -62,6 +62,8 @@ fun PlateScreen(
     printers: PrintersViewModel,
     signedIn: Boolean,
     nav: Navigator,
+    /** The Engineering section (owner's decision, 05-11-2026): the same part, with FEA, CFD, CAD and parts. */
+    engineering: Boolean = false,
 ) {
     val context = ctx()
     var sendTo by rememberSaveable { mutableStateOf<String?>(null) }
@@ -94,11 +96,11 @@ fun PlateScreen(
     if (wide && state.modelName != null) {
         Row(Modifier.fillMaxSize()) {
             view(Modifier.weight(1.3f).fillMaxHeight().padding(start = 16.dp, top = 16.dp, bottom = 16.dp))
-            Box(Modifier.weight(1f)) { PlateControls(state, slice, printerState, printers, signedIn, nav, sendTo, { sendTo = it }, pick, save, null) }
+            Box(Modifier.weight(1f)) { PlateControls(state, slice, printerState, printers, signedIn, nav, sendTo, { sendTo = it }, pick, save, null, engineering) }
         }
     } else {
         PlateControls(state, slice, printerState, printers, signedIn, nav, sendTo, { sendTo = it }, pick, save,
-            if (state.modelName != null) view else null)
+            if (state.modelName != null) view else null, engineering)
     }
 }
 
@@ -116,8 +118,10 @@ private fun PlateControls(
     pick: androidx.activity.compose.ManagedActivityResultLauncher<Array<String>, Uri?>,
     save: androidx.activity.compose.ManagedActivityResultLauncher<String, Uri?>,
     view: (@Composable (Modifier) -> Unit)?,
+    engineering: Boolean = false,
 ) {
     val context = ctx()
+    if (engineering) { EngineeringControls(state, slice, nav, pick, view); return }
     ScreenColumn {
         PrinterCard(state) { nav.open(Screen.ProfilePicker) }
         view?.invoke(Modifier.fillMaxWidth().height(320.dp))
@@ -133,6 +137,15 @@ private fun PlateControls(
             }
             Text(state.modelName ?: stringResource(R.string.plate_no_model), style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.testTag("plate_model"))
+            // Rule 6, «Archivo»: the part's size and triangles, and taking it off the plate.
+            state.mesh?.takeIf { state.modelName != null }?.let { m ->
+                val b = m.bounds
+                Text(stringResource(R.string.plate_info, String.format(Locale.getDefault(), "%.1f × %.1f × %.1f", b[3] - b[0], b[4] - b[1], b[5] - b[2]),
+                    m.triangles), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("plate_info"))
+            }
+            if (state.modelName != null) AccentTextButton(onClick = { slice.removeModel() }, enabled = !state.slicing && !state.analyzing,
+                modifier = Modifier.testTag("plate_remove")) { Text(stringResource(R.string.plate_remove)) }
             if (state.modelName != null && state.isProject) {
                 Text(stringResource(R.string.plate_project_settings), style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -152,6 +165,20 @@ private fun PlateControls(
                     Switch(state.settings.supports, { slice.setSettings(state.settings.copy(supports = it)) },
                         enabled = !state.slicing, modifier = Modifier.named(stringResource(R.string.plate_supports)))
                 }
+                // gcode_macros.md, rule 12: a Bambu Lab's plate goes into its start G-code (curr_bed_type), so it is a
+                // slicing setting; the other options are chosen when sending.
+                if (isBambu(state.profile)) {
+                    Text(stringResource(R.string.bambu_plate), style = MaterialTheme.typography.labelLarge)
+                    val plate = (state.value("bambu.plate") as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        (listOf("") + BAMBU_PLATES).forEach { name ->
+                            FilterChip(selected = plate == name, enabled = !state.slicing,
+                                onClick = { slice.setValue("bambu.plate", if (name.isEmpty()) null else kotlinx.serialization.json.JsonPrimitive(name)) },
+                                label = { Text(name.ifEmpty { stringResource(R.string.bambu_plate_auto) }) },
+                                modifier = Modifier.testTag("bambu_plate_" + name.ifEmpty { "auto" }))
+                        }
+                    }
+                }
                 // Copies of the model, which the engine arranges on the bed.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.plate_copies), modifier = Modifier.weight(1f))
@@ -163,6 +190,9 @@ private fun PlateControls(
                 }
             }
         }
+        // The Print settings open from here; Material is in the Printer section (owner's decision, 05-11-2026).
+        OutlinedButton(onClick = { nav.open(Screen.SettingsTab("print")) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .testTag("plate_print_settings")) { Text(stringResource(R.string.section_print)) }
         if (state.slicing) {
             TismaCard {
                 Text(stringResource(R.string.plate_slicing, state.progress), modifier = Modifier.testTag("plate_progress"))
@@ -188,10 +218,8 @@ private fun PlateControls(
                 AccentTextButton(onClick = { slice.sliceAnyway() }) { Text(stringResource(R.string.mem_try_anyway)) }
             }
         }
-        if (state.modelName != null && state.isProject && state.engineAvailable) EngineeringCard(state, slice)
         state.calibration?.let { CalibrationCard(it, slice) }
         if (state.modelName != null && !state.isProject && state.mesh != null) TransformCard(state, slice)
-        if (state.modelName != null && !state.isProject && state.engineAvailable && state.mesh != null) ModelEngineeringCard(state, slice)
         state.error?.let { e ->
             TismaCard {
                 Text(stringResource(R.string.job_error), style = MaterialTheme.typography.titleMedium)
@@ -211,6 +239,10 @@ private fun PlateControls(
                         (r.filamentG?.let { g -> String.format(Locale.getDefault(), " · %.1f g", g) } ?: ""))
                 }
                 r.layers?.let { Labeled(R.string.plate_layers, it.toString()) }
+                // mobile_app.md, rule 12: the cost, from the filament's price per kg (Material, extrusion.cost).
+                plateCost(r.filamentG, state.value("extrusion.cost"))?.let { c ->
+                    Labeled(R.string.plate_cost, String.format(Locale.getDefault(), "%.2f", c), Modifier.testTag("plate_cost"))
+                }
                 OutlinedButton(onClick = { nav.open(Screen.Preview(r.gcode.path)) },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_preview")) {
                     Text(stringResource(R.string.preview_open))
@@ -227,13 +259,32 @@ private fun PlateControls(
                     Text(stringResource(R.string.plate_send_to), style = MaterialTheme.typography.labelLarge)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ready.forEach { p ->
-                            FilterChip(selected = sendTo == p.id, onClick = { setSendTo(p.id) }, label = { Text(p.name) })
+                            FilterChip(selected = sendTo == p.id, onClick = { setSendTo(p.id) }, label = { Text(p.name) }, modifier = Modifier.testTag("send_to_" + p.name))
+                        }
+                    }
+                    // gcode_macros.md, rule 12: what a Bambu Lab does before printing, chosen when sending.
+                    var leveling by rememberSaveable { mutableStateOf(true) }
+                    var flow by rememberSaveable { mutableStateOf(true) }
+                    var vibration by rememberSaveable { mutableStateOf(false) }
+                    var timelapse by rememberSaveable { mutableStateOf(false) }
+                    val bambu = ready.firstOrNull { it.id == sendTo }?.kind == net.tisma.printers.PrinterKind.BAMBU
+                    if (bambu) {
+                        Text(stringResource(R.string.bambu_options), style = MaterialTheme.typography.labelLarge)
+                        listOf(Triple("leveling", R.string.bambu_leveling, leveling to { v: Boolean -> leveling = v }),
+                            Triple("flow", R.string.bambu_flow, flow to { v: Boolean -> flow = v }),
+                            Triple("vibration", R.string.bambu_vibration, vibration to { v: Boolean -> vibration = v }),
+                            Triple("timelapse", R.string.bambu_timelapse, timelapse to { v: Boolean -> timelapse = v })).forEach { (tag, label, value) ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(label), modifier = Modifier.weight(1f))
+                                Switch(value.first, value.second, modifier = Modifier.testTag("bambu_option_$tag").named(stringResource(label)))
+                            }
                         }
                     }
                     Button(
                         onClick = {
                             val id = sendTo ?: return@Button
-                            printers.upload(id, r.gcode.name, r.gcode.length(), true) { r.gcode.inputStream() }
+                            printers.upload(id, r.gcode.name, r.gcode.length(), true,
+                                net.tisma.printers.PrintOptions(leveling, flow, vibration, timelapse)) { r.gcode.inputStream() }
                         },
                         enabled = sendTo != null && !printerState.uploading,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_send"),
@@ -245,6 +296,9 @@ private fun PlateControls(
                 }
             }
         }
+        // A 3MF project too (QA, 06-11-2026): the engine keeps it as the entry's project.3mf as it is.
+        if (state.libraryAvailable && state.modelName != null &&
+            (state.result != null || state.analysis != null || state.fromLibrary != null)) LibraryCard(state, slice)
         // The cloud stays one tap away (mobile_app.md, rules 12 and 15).
         AccentTextButton(onClick = { nav.open(if (signedIn) Screen.NewJob else Screen.Account) },
             modifier = Modifier.testTag("plate_slice_cloud")) {
@@ -510,6 +564,27 @@ fun Context.sliceNoticeText(n: SliceNotice): String = when (n) {
     SliceNotice.ProfileGone -> getString(R.string.pack_profile_gone)
     is SliceNotice.PackUpdated -> getString(R.string.pack_updated, n.version)
     is SliceNotice.Calibrated -> getString(R.string.cal_applied, calibrationName(n.kind), n.value.toString().removeSuffix(".0"))
+    is SliceNotice.LibrarySaved -> getString(R.string.library_saved, n.name)
+    is SliceNotice.LibraryFailed -> getString(R.string.library_failed, n.message)
+    is SliceNotice.Unsafe -> getString(R.string.unsafe_file, getString(when (n.problem) {
+        net.tisma.app.p2p.SafeFile.Problem.EMPTY -> R.string.unsafe_empty
+        net.tisma.app.p2p.SafeFile.Problem.NOT_A_KIND -> R.string.unsafe_kind
+        net.tisma.app.p2p.SafeFile.Problem.PROGRAM -> R.string.unsafe_program
+        net.tisma.app.p2p.SafeFile.Problem.DAMAGED -> R.string.unsafe_damaged
+        net.tisma.app.p2p.SafeFile.Problem.OUTSIDE_PATH -> R.string.unsafe_path
+        net.tisma.app.p2p.SafeFile.Problem.LINK -> R.string.unsafe_link
+        net.tisma.app.p2p.SafeFile.Problem.TOO_BIG -> R.string.unsafe_big
+    }) + (if (n.detail.isNotBlank()) ": " + n.detail else ""))
+    is SliceNotice.ScansArrived -> resources.getQuantityString(R.plurals.scans_arrived, n.count, n.count)
+    is SliceNotice.SiteRefused -> when (n.reason) {
+        net.tisma.app.engine.SiteLink.Reason.NOT_HTTPS -> getString(R.string.site_not_https)
+        net.tisma.app.engine.SiteLink.Reason.SITE -> getString(R.string.site_not_listed)
+        net.tisma.app.engine.SiteLink.Reason.KIND -> getString(R.string.site_kind)
+        net.tisma.app.engine.SiteLink.Reason.NOT_A_LINK -> getString(R.string.site_bad_link)
+        null -> getString(R.string.site_failed, n.detail)
+    }
+    is SliceNotice.KeptChanges -> getString(R.string.profile_kept_changes,
+        n.labels.take(3).joinToString(", ") + if (n.labels.size > 3) " (+${n.labels.size - 3})" else "")
 }
 
 private fun displayName(context: Context, uri: Uri): String? = runCatching {
@@ -517,3 +592,97 @@ private fun displayName(context: Context, uri: Uri): String? = runCatching {
         if (c.moveToFirst()) c.getString(0) else null
     }
 }.getOrNull()
+
+/**
+ * «Mi biblioteca» on the plate (local_library.md, rules 3 and 7): keep the
+ * part with its recipe and its analysis; for a part from the library, what no
+ * longer matches.
+ */
+@Composable
+private fun LibraryCard(state: SliceState, slice: SliceViewModel) {
+    val lp = state.fromLibrary
+    TismaCard(Modifier.testTag("plate_library")) {
+        Text(stringResource(R.string.library_title), style = MaterialTheme.typography.titleMedium)
+        lp?.let { Text(stringResource(R.string.library_from, it.name), style = MaterialTheme.typography.bodySmall) }
+        lp?.check?.let { c ->
+            if (c.olderEngine) Text(stringResource(R.string.library_older_engine), color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("library_older_engine"))
+            if (c.missingKeys.isNotEmpty()) Text(stringResource(R.string.library_missing_keys, c.missingKeys.joinToString(", ")),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (lp != null && lp.staleAnalyses.isNotEmpty()) {
+            Text(stringResource(R.string.library_analysis_stale), color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("library_analysis_stale"))
+            OutlinedButton(onClick = { slice.analyzeModel() }, enabled = !state.analyzing && !state.slicing,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("library_reanalyze")) {
+                Text(stringResource(R.string.library_reanalyze))
+            }
+        }
+        if (state.result != null || state.analysis != null) {
+            Button(onClick = { slice.saveToLibrary() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("library_save")) {
+                Text(stringResource(R.string.library_save))
+            }
+            if (lp != null) AccentTextButton(onClick = { slice.saveToLibrary(asNew = true) }, modifier = Modifier.testTag("library_save_new")) {
+                Text(stringResource(R.string.library_save_new))
+            }
+        }
+    }
+}
+
+/**
+ * The Engineering section (owner's decision, 05-11-2026): the plate's part in
+ * the 3D view with its analyses (FEA and drag; mobile_app.md, rule 13), and
+ * the CAD and the parts.
+ */
+@Composable
+private fun EngineeringControls(
+    state: SliceState, slice: SliceViewModel, nav: Navigator,
+    pick: androidx.activity.compose.ManagedActivityResultLauncher<Array<String>, Uri?>,
+    view: (@Composable (Modifier) -> Unit)?,
+) {
+    ScreenColumn {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { nav.open(Screen.Cad) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("eng_cad")) {
+                Icon(painterResource(R.drawable.tisma_design), null); Spacer(Modifier.size(8.dp)); Text(stringResource(R.string.more_cad))
+            }
+            OutlinedButton(onClick = { nav.open(Screen.Parts) }, modifier = Modifier.weight(1f).heightIn(min = 52.dp).testTag("eng_parts")) {
+                Icon(painterResource(R.drawable.tisma_fasteners), null); Spacer(Modifier.size(8.dp)); Text(stringResource(R.string.more_parts))
+            }
+        }
+        view?.invoke(Modifier.fillMaxWidth().height(320.dp))
+        TismaCard {
+            OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, enabled = !state.analyzing,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("eng_open")) {
+                Icon(painterResource(R.drawable.tisma_folder), null)
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.plate_open))
+            }
+            Text(state.modelName ?: stringResource(R.string.eng_no_model), style = MaterialTheme.typography.bodyLarge)
+        }
+        if (!state.engineAvailable) Text(stringResource(R.string.plate_no_engine), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.modelName != null && state.isProject && state.engineAvailable) EngineeringCard(state, slice)
+        if (state.modelName != null && !state.isProject && state.engineAvailable && state.mesh != null) ModelEngineeringCard(state, slice)
+        if (state.libraryAvailable && state.modelName != null && !state.isProject &&
+            (state.analysis != null || state.fromLibrary != null)) LibraryCard(state, slice)
+        state.error?.let { e ->
+            TismaCard {
+                Text(stringResource(R.string.job_error), style = MaterialTheme.typography.titleMedium)
+                Text(e.errorEs.takeIf { ctx().isSpanish() && it.isNotBlank() } ?: e.error, color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+/** The print's filament cost: grams × the price per kg, or null without both. */
+internal fun plateCost(grams: Double?, pricePerKg: kotlinx.serialization.json.JsonElement?): Double? {
+    val price = (pricePerKg as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: return null
+    if (grams == null || grams <= 0 || price <= 0) return null
+    return grams / 1000 * price
+}
+
+/** The plates a Bambu Lab's start G-code knows (gcode_macros.md, rule 12); none chosen is «auto». */
+val BAMBU_PLATES = listOf("Cool Plate", "Engineering Plate", "High Temp Plate", "Textured PEI Plate", "Supertack Plate", "Textured Cool Plate")
+
+/** A printer of Bambu Lab's (the pack's `Orca_BBL` vendor, or its name). */
+internal fun isBambu(p: net.tisma.app.engine.EngineRunner.ProfileChoice?): Boolean =
+    p != null && (p.printer.contains("/BBL/") || p.printer.contains("Orca_BBL") || (p.name ?: p.printer).contains("Bambu", ignoreCase = true))

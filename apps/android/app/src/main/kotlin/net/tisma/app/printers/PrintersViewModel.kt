@@ -47,8 +47,12 @@ sealed interface CameraView {
     data object Connecting : CameraView
     data object None : CameraView
     data class Failed(val reason: String) : CameraView
+    /** A Bambu Lab camera that failed, with what to check (QA BH36: say clearly why it is not seen). */
+    data class BambuFailed(val kind: PrinterException.Kind, val detail: String) : CameraView
     /** The last image, as JPEG bytes. */
-    class Image(val jpeg: ByteArray) : CameraView
+    class Image(val jpeg: ByteArray, val flipHorizontal: Boolean = false, val flipVertical: Boolean = false,
+                /** Clockwise degrees, as the printer's camera settings say. */
+                val rotation: Int = 0) : CameraView
 }
 
 sealed interface PrinterNotice {
@@ -186,13 +190,15 @@ class PrintersViewModel(
         }
         val url = camera?.snapshotUrl?.takeIf { it.isNotBlank() }
         if (url == null) {
-            setCamera(id, CameraView.None)
+            // A camera that sends its own images (Bambu Lab A1 and P1, printer_connections.md, Bambu Lab rule 6).
+            if (p.kind == net.tisma.printers.PrinterKind.BAMBU) followFrames(id, p) else setCamera(id, CameraView.None)
             return
         }
         try {
             while (currentCoroutineContext().isActive) {
                 val view = try {
-                    CameraView.Image(withContext(io) { net.tisma.printers.Snapshot.fetch(url) })
+                    CameraView.Image(withContext(io) { net.tisma.printers.Snapshot.fetch(url) },
+                        camera.flipHorizontal, camera.flipVertical, camera.rotation)
                 } catch (e: PrinterException) {
                     CameraView.Failed(e.detail)
                 }
@@ -202,6 +208,26 @@ class PrintersViewModel(
         } finally {
             // Images live only while they are shown.
             _state.update { it.copy(cameras = it.cameras - id) }
+        }
+    }
+
+    private suspend fun followFrames(id: String, p: PrinterConfig) {
+        try {
+            withContext(io) {
+                connection(p).cameraFrames()?.use { frames ->
+                    while (currentCoroutineContext().isActive) {
+                        val jpeg = frames.next()
+                        setCamera(id, CameraView.Image(jpeg))
+                    }
+                } ?: setCamera(id, CameraView.None)
+            }
+        } catch (e: PrinterException) {
+            AppLog.line("printer: camera ${e.kind} ${e.detail}")
+            setCamera(id, CameraView.BambuFailed(e.kind, e.detail))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Images live only while they are shown.
+            _state.update { it.copy(cameras = it.cameras - id) }
+            throw e
         }
     }
 
@@ -230,13 +256,18 @@ class PrintersViewModel(
     fun cancel(id: String) = command(id) { it.cancel() }
 
     /** Uploads a G-code to a printer and starts it if [start] (MA7). */
-    fun upload(id: String, name: String, length: Long, start: Boolean, open: () -> InputStream?) {
+    fun upload(id: String, name: String, length: Long, start: Boolean, open: () -> InputStream?) =
+        upload(id, name, length, start, net.tisma.printers.PrintOptions(), open)
+
+    /** The same with the Bambu Lab print options (gcode_macros.md, rule 12); other printers ignore them. */
+    fun upload(id: String, name: String, length: Long, start: Boolean, options: net.tisma.printers.PrintOptions,
+               open: () -> InputStream?) {
         val p = state.value.printers.firstOrNull { it.id == id } ?: return
         _state.update { it.copy(uploading = true) }
         viewModelScope.launch {
             try {
                 withContext(io) {
-                    connection(p).upload(name, length, start) {
+                    connection(p).upload(name, length, start, options) {
                         open() ?: throw java.io.IOException("Cannot read $name")
                     }
                 }

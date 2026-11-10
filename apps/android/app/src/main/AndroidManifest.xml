@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- p2p_library.md, rule 3: share only on Wi-Fi (an unmetered network). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The checked update APK goes to Android's installer, which asks the person (app_updates.md, rule 11). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Following a print with the app closed (docs/MOBILE.md, «Avisos»). -->
@@ -29,7 +31,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!-- «Share with Tisma» and «Open with» for models (mobile_app.md, rule 10; MA5) and G-code, text or binary,
-                 which opens in the preview (QA AND5). Many apps send STL
+                 which opens in the preview (QA AND5); a «Mi biblioteca» entry (.tismalib, a ZIP) is imported. Many apps send STL
                  and 3MF as generic types, so those are accepted and the file is checked when it opens. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -41,6 +43,7 @@
                 <data android:mimeType="application/vnd.ms-pki.stl" />
                 <data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
                 <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
                 <data android:mimeType="text/x-gcode" />
                 <data android:mimeType="text/x.gcode" />
                 <data android:mimeType="application/x-gcode" />
@@ -59,10 +62,20 @@
                 <data android:mimeType="application/vnd.ms-pki.stl" />
                 <data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
                 <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/zip" />
                 <data android:mimeType="text/x-gcode" />
                 <data android:mimeType="text/x.gcode" />
                 <data android:mimeType="application/x-gcode" />
                 <data android:mimeType="text/plain" />
+            </intent-filter>
+            <!-- mobile_app.md, rule 10: a model site's «Open in…» link (tisma:// and prusaslicer://, as Printables
+                 sends); nothing is downloaded before the person says yes. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tisma" android:host="open" />
+                <data android:scheme="prusaslicer" android:host="open" />
             </intent-filter>
         </activity>
         <provider

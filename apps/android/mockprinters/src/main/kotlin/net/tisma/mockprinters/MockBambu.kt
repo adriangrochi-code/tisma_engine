@@ -44,10 +44,17 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
     private val loopback = InetAddress.getByName("127.0.0.1")
     private val mqttServer = ssl.serverSocketFactory.createServerSocket(0, 10, loopback) as SSLServerSocket
     private val ftpServer = ssl.serverSocketFactory.createServerSocket(0, 10, loopback) as SSLServerSocket
+    private val cameraServer = ssl.serverSocketFactory.createServerSocket(0, 10, loopback) as SSLServerSocket
 
     val mqttPort get() = mqttServer.localPort
     val ftpPort get() = ftpServer.localPort
-    val url get() = "bambu://127.0.0.1:$mqttPort?ftp=$ftpPort"
+    val cameraPort get() = cameraServer.localPort
+    val url get() = "bambu://127.0.0.1:$mqttPort?ftp=$ftpPort&cam=$cameraPort"
+
+    /** The camera's images: a tiny JPEG-shaped frame, numbered, every [cameraMs]. */
+    var cameraMs = 50L
+    /** The camera logins received (user, access code). */
+    val cameraLogins = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
 
     var gcodeState = "IDLE"
     var percent = 0
@@ -62,6 +69,7 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
     fun start(): MockBambu {
         Thread({ acceptLoop(mqttServer) { mqtt(it) } }, "bambu-mqtt").apply { isDaemon = true }.start()
         Thread({ acceptLoop(ftpServer) { ftp(it) } }, "bambu-ftp").apply { isDaemon = true }.start()
+        Thread({ acceptLoop(cameraServer) { camera(it) } }, "bambu-camera").apply { isDaemon = true }.start()
         return this
     }
 
@@ -69,6 +77,7 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
         running = false
         runCatching { mqttServer.close() }
         runCatching { ftpServer.close() }
+        runCatching { cameraServer.close() }
         dir.deleteRecursively()
     }
 
@@ -76,6 +85,26 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
         while (running) {
             val s = runCatching { server.accept() }.getOrNull() ?: break
             Thread({ runCatching { s.use { handle(it) } } }, "bambu-conn").apply { isDaemon = true }.start()
+        }
+    }
+
+    /** The A1/P1 camera as OpenBambuAPI's video page describes it: an 80-byte login, then framed JPEG images. */
+    private fun camera(s: Socket) {
+        val input = java.io.DataInputStream(s.getInputStream())
+        val login = ByteArray(80)
+        input.readFully(login)
+        fun field(at: Int) = String(login, at, 32, Charsets.US_ASCII).trimEnd('\u0000')
+        val user = field(16); val pass = field(48)
+        cameraLogins += user to pass
+        val head = java.nio.ByteBuffer.wrap(login, 0, 8).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        if (head.int != 0x40 || head.int != 0x3000 || user != "bblp" || pass != accessCode) return // closes
+        val out = s.getOutputStream()
+        var n = 0
+        while (running) {
+            val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte()) + "frame ${n++}".toByteArray() + byteArrayOf(0xFF.toByte(), 0xD9.toByte())
+            val h = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(jpeg.size).putInt(0).putInt(1).putInt(0)
+            out.write(h.array()); out.write(jpeg); out.flush()
+            Thread.sleep(cameraMs)
         }
     }
 

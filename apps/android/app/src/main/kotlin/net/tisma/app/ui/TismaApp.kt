@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -59,11 +60,16 @@ import net.tisma.app.data.AppSettings
 import net.tisma.app.printers.PrintersViewModel
 import net.tisma.app.engine.SliceViewModel
 
-/** The five sections of mobile_app.md, rule 5. */
+/**
+ * The sections (owner's decision, 05-11-2026, over mobile_app.md, rule 5):
+ * Library, Plate, Engineering, Printer and More. The app starts in «Mi
+ * biblioteca»; Engineering (FEA, CFD, CAD, parts) has its own section; the
+ * Print settings open from the plate and the Material ones from the printer.
+ */
 enum class Section(@StringRes val label: Int, @DrawableRes val icon: Int) {
+    LIBRARY(R.string.section_library, R.drawable.tisma_folder),
     PLATE(R.string.section_plate, R.drawable.tisma_plate),
-    PRINT(R.string.section_print, R.drawable.tisma_print),
-    MATERIAL(R.string.section_material, R.drawable.tisma_filament),
+    ENGINEERING(R.string.section_engineering, R.drawable.tisma_engineering),
     PRINTER(R.string.section_printer, R.drawable.tisma_printer),
     MORE(R.string.section_more, R.drawable.tisma_more),
 }
@@ -94,11 +100,13 @@ sealed interface Screen {
     data object Parts : Screen
     data object Cad : Screen
     data object Calibrate : Screen
+    /** The Print or Material settings tab, opened from the plate. */
+    data class SettingsTab(val tab: String) : Screen
 }
 
 /** Where the person is: a section and the screens opened on it. */
-class Navigator {
-    var section by mutableStateOf(Section.PLATE)
+class Navigator(start: Section = Section.LIBRARY) {
+    var section by mutableStateOf(start)
         private set
     val stack = mutableStateListOf<Screen>()
 
@@ -136,6 +144,8 @@ fun TismaApp(
     settings: AppSettings,
     nav: Navigator = remember { Navigator() },
     updates: net.tisma.app.updates.UpdatesViewModel? = null,
+    library: net.tisma.app.engine.LibraryViewModel? = null,
+    shared: net.tisma.app.p2p.SharedViewModel? = null,
 ) {
     val state by cloud.state.collectAsStateWithLifecycle()
     val printerState by printers.state.collectAsStateWithLifecycle()
@@ -194,6 +204,38 @@ fun TismaApp(
                 show(context.sliceNoticeText(n))
             }
         }
+    }
+    // local_library.md, rule 10: a shared or opened .tismalib is imported into «Mi biblioteca».
+    LaunchedEffect(sliceState.libraryFile) {
+        sliceState.libraryFile?.let { f ->
+            library?.import(f)
+            nav.select(Section.LIBRARY)
+            slice.libraryFileTaken()
+        }
+    }
+    // p2p_library.md, rule 7 bis: on opening the Library, scanned parts sent to print arrive in «Mi biblioteca».
+    val scanScope = androidx.compose.runtime.rememberCoroutineScope()
+    LaunchedEffect(nav.section, state.signedIn, sliceState.libraryAvailable) {
+        if (nav.section == Section.LIBRARY && state.signedIn && sliceState.libraryAvailable && library != null) scanScope.launch {
+            val n = cloud.takeScans(java.io.File(context.cacheDir, "scans")) { scan, f -> slice.keepScan(f, scan.name) }
+            if (n > 0) { slice.scansArrived(n); library.refresh() }
+        }
+    }
+    // mobile_app.md, rule 10: «Open <file> from <site>?» before downloading; with downloads off, it offers to allow them.
+    sliceState.siteLink?.let { r ->
+        var allowed by remember { mutableStateOf(settings.allowSiteDownloads) }
+        androidx.compose.material3.AlertDialog(onDismissRequest = { slice.cancelSiteLink() },
+            title = { Text(stringResource(R.string.site_open, r.fileName, r.site)) },
+            text = { if (!allowed) Text(stringResource(R.string.site_allow_hint)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    if (!allowed) { settings.allowSiteDownloads = true; allowed = true }
+                    slice.acceptSiteLink()
+                }, modifier = Modifier.testTag("site_open")) {
+                    Text(stringResource(if (allowed) R.string.site_open_yes else R.string.site_allow_and_open))
+                }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { slice.cancelSiteLink() }) { Text(stringResource(R.string.cancel)) } })
     }
     BackHandler(enabled = nav.stack.isNotEmpty()) { nav.back() }
 
@@ -272,10 +314,22 @@ fun TismaApp(
                     null -> when (nav.section) {
                         Section.PRINTER -> PrintersScreen(printerState, printers, nav, settings.searchNetwork) {
                             PrinterSettingsCard(sliceState, nav)
+                            // The Material settings live with the printer (owner's decision, 05-11-2026).
+                            androidx.compose.material3.OutlinedButton(onClick = { nav.open(Screen.SettingsTab("material")) },
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("printer_material_settings")) {
+                                Icon(painterResource(R.drawable.tisma_filament), null)
+                                Spacer(Modifier.width(8.dp))
+                                Text(stringResource(R.string.section_material))
+                            }
                         }
                         Section.PLATE -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav)
-                        Section.PRINT -> SettingsTabScreen("print", sliceState, slice, nav)
-                        Section.MATERIAL -> SettingsTabScreen("material", sliceState, slice, nav)
+                        Section.ENGINEERING -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav,
+                            engineering = true)
+                        Section.LIBRARY -> LibraryTabs(shared != null) { sharedTab ->
+                            if (sharedTab && shared != null) SharedScreen(shared)
+                            else if (library != null && sliceState.libraryAvailable) LibraryScreen(library, slice, nav, settings.libraryCapMb)
+                            else LibraryUnavailable(nav)
+                        }
                         else -> SectionHome(nav.section, state.signedIn, state.email, nav, updates?.let { u -> {
                             // Rule 1: «Buscar actualizaciones» in More.
                             MoreItem(R.string.updates_check, null, "more_updates") { u.check() }
@@ -301,6 +355,8 @@ fun TismaApp(
                     Screen.Parts -> PartsScreen(slice, nav)
                     Screen.Cad -> CadScreen(sliceState, slice, nav)
                     Screen.Calibrate -> CalibrateScreen(slice, nav)
+                    is Screen.SettingsTab -> SettingsTabScreen(top.tab, sliceState, slice, nav,
+                        header = if (top.tab == "material") ({ FilamentCard(sliceState, slice, nav) }) else null)
                     Screen.Help -> HelpScreen(slice.knowledge(), { k, v -> slice.setValue(k, v) }) { key ->
                         sliceState.layout?.rows?.get(key)?.label ?: key
                     }
@@ -340,6 +396,7 @@ private fun titleOf(s: Screen): Int = when (s) {
     Screen.Parts -> R.string.more_parts
     Screen.Cad -> R.string.more_cad
     Screen.Calibrate -> R.string.more_calibrate
+    is Screen.SettingsTab -> if (s.tab == "material") R.string.section_material else R.string.section_print
     is Screen.CustomPicker -> R.string.panel_choose
 }
 
@@ -352,7 +409,7 @@ private fun SectionHome(section: Section, signedIn: Boolean, email: String?, nav
                 Text(stringResource(R.string.plate_slice_cloud))
             }
         }
-        Section.PRINT, Section.MATERIAL -> Unit
+        Section.LIBRARY, Section.ENGINEERING -> Unit
         Section.PRINTER -> Placeholder(R.string.printer_coming)
         Section.MORE -> MoreHome(signedIn, email, nav, updateItem)
     }
@@ -384,8 +441,6 @@ private fun MoreHome(signedIn: Boolean, email: String?, nav: Navigator, updateIt
         MoreItem(R.string.more_report, null, "more_report") { nav.open(Screen.Report()) }
         if (signedIn) MoreItem(R.string.more_my_reports, null, "more_my_reports") { nav.open(Screen.MyReports) }
         MoreItem(R.string.more_preferences, null, "more_preferences") { nav.open(Screen.Preferences) }
-        MoreItem(R.string.more_cad, null, "more_cad") { nav.open(Screen.Cad) }
-        MoreItem(R.string.more_parts, null, "more_parts") { nav.open(Screen.Parts) }
         MoreItem(R.string.more_calibrate, null, "more_calibrate") { nav.open(Screen.Calibrate) }
         MoreItem(R.string.more_help, null, "more_help") { nav.open(Screen.Help) }
         MoreItem(R.string.more_messages, null, "more_messages") { nav.open(Screen.Messages) }
@@ -476,4 +531,29 @@ private fun NavLabel(@StringRes label: Int) {
     val scale = androidx.compose.ui.platform.LocalDensity.current.fontScale
     val size = MaterialTheme.typography.labelMedium.fontSize.value * minOf(scale, 1.15f) / scale
     Text(stringResource(label), maxLines = 1, softWrap = false, fontSize = androidx.compose.ui.unit.TextUnit(size, androidx.compose.ui.unit.TextUnitType.Sp))
+}
+
+/** «Mi biblioteca» needs an engine with its `library` commands; until then, the plate. */
+@Composable
+private fun LibraryUnavailable(nav: Navigator) {
+    Placeholder(R.string.library_unavailable) {
+        Button(onClick = { nav.select(Section.PLATE) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("library_to_plate")) {
+            Text(stringResource(R.string.library_to_plate))
+        }
+    }
+}
+
+/** «Mi biblioteca» and the shared library (p2p_library.md) side by side in the Library section. */
+@Composable
+private fun LibraryTabs(withShared: Boolean, content: @Composable (shared: Boolean) -> Unit) {
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    Column(Modifier.fillMaxSize()) {
+        if (withShared) androidx.compose.material3.TabRow(selectedTabIndex = tab) {
+            androidx.compose.material3.Tab(tab == 0, { tab = 0 }, text = { Text(stringResource(R.string.library_title)) },
+                modifier = Modifier.testTag("tab_my_library"))
+            androidx.compose.material3.Tab(tab == 1, { tab = 1 }, text = { Text(stringResource(R.string.shared_title)) },
+                modifier = Modifier.testTag("tab_shared"))
+        }
+        Box(Modifier.weight(1f)) { content(withShared && tab == 1) }
+    }
 }

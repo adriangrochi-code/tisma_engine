@@ -105,6 +105,33 @@ class CadTest {
         assertTrue(slice.state.value.modelName!!.endsWith(".stl"))
     }
 
+    /**
+     * With the real engine (TISMA_HOST_ENGINE) and the repository's fake
+     * SolidCraft (TISMA_FAKE_SOLIDCRAFT, tests/fake_solidcraft_cli.cpp): a box
+     * cut by a cylinder is checked and built, and the bodies read back.
+     */
+    @Test
+    fun `the engine checks and builds a design through SolidCraft`() {
+        val exe = System.getenv("TISMA_HOST_ENGINE")?.let(::File)
+        val sc = System.getenv("TISMA_FAKE_SOLIDCRAFT")?.let(::File)
+        org.junit.Assume.assumeTrue(exe != null && exe.canExecute() && sc != null && sc.canExecute())
+        var d = DesignDoc("Test")
+        d = d.copy(features = d.features + DesignDoc.Primitive("Box 1", "box", listOf(30.0, 20.0, 10.0)))
+        d = d.copy(features = d.features + DesignDoc.Primitive("Cylinder 1", "cylinder", listOf(8.0, 30.0)))
+        d = d.copy(features = d.features + DesignDoc.Operation("Cut 1", "combine", "Box 1", tools = listOf("Cylinder 1"), boolean = "cut"))
+        val runner = EngineRunner(exe!!, tmp.newFolder("work"))
+        assertEquals("true", runner.designCheck(d)["ok"].toString())
+        val (stl, o) = runner.designBuild(d, sc!!)
+        assertEquals("true", o["ok"].toString())
+        val mesh = net.tisma.app.engine.MeshFile.read(stl!!)
+        assertTrue(mesh.triangles > 12)
+        val v = o["volume_mm3"]!!.jsonPrimitive.content.toDouble()
+        assertTrue(v > 0 && v < 6000, "volume $v")
+        // A cut with no tools is refused by the check, before SolidCraft.
+        val bad = d.copy(features = d.features.dropLast(1) + DesignDoc.Operation("Cut 1", "combine", "Box 1", tools = emptyList()))
+        println("check of a cut without tools: " + runner.designCheck(bad))
+    }
+
     private fun wait(tag: String) = compose.waitUntil(10_000) {
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()

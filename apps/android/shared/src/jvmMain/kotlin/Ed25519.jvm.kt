@@ -12,7 +12,7 @@ import java.security.MessageDigest
  * affine coordinates with BigInteger: slow next to a native one, but it runs
  * a few times per update. Android has no Ed25519 of its own before API 33.
  */
-object Ed25519 {
+actual object Ed25519 {
     private val TWO: BigInteger = BigInteger.valueOf(2) // BigInteger.TWO is API 33
     private val P: BigInteger = TWO.pow(255) - BigInteger.valueOf(19)
     private val L: BigInteger = TWO.pow(252) + BigInteger("27742317777372353535851937790883648493")
@@ -102,6 +102,6 @@ object Ed25519 {
         return same(left, right)
     }
 
-    fun verify(publicKey: ByteArray, message: ByteArray, signature: ByteArray) =
+    actual fun verify(publicKey: ByteArray, message: ByteArray, signature: ByteArray): Boolean =
         verify(publicKey, message.inputStream(), signature)
 }

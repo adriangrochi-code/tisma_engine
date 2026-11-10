@@ -10846,6 +10846,22 @@ vuelta de perfilado.
 - Regla 14, PNG: falta (decisión del dueño, 2026-11-04: SVG por ahora). Para PNG no hay lector en el motor: elegir
   uno permisivo y anotarlo antes de usarlo.
 
+
+## 2026-11-04 — Android: impresora y filamento en el asistente; el APK de CI trae SolidCraft
+
+Pedido del dueño: «tenés que elegir impresora y filamento primero», y que los filamentos salgan del paquete de perfiles.
+- El asistente del primer arranque, después de «Usar esta impresora», pasa al paso de filamento: los del paquete para
+  esa impresora (regla 12: su conjunto de `compatible.json`, los del fabricante primero, después los genéricos), con
+  el fabricante debajo de cada nombre. Antes volvía a la placa y el filamento solo se cambiaba tocando la tarjeta.
+- Regla 13: al instalar, el filamento queda en el primero de `defaults.filament` de la variante.
+- Decisión propia: los fabricantes del índice sin impresoras y con filamentos (bibliotecas de filamentos, hoy
+  `Orca_OrcaFilamentLibrary`, 36 KB) se bajan junto con la impresora elegida, para que estén los genéricos. El motor los
+  planea bien (`pack plan --vendors Anycubic,Orca_OrcaFilamentLibrary`, probado con el índice real).
+- CI de Android (`.github/workflows/android.yml`): baja los artefactos de la última corrida buena de «SolidCraft for
+  Android» y arma el APK con `-Ptisma.solidcraft`; sin artefactos, arma sin SolidCraft y lo avisa.
+- Pruebas: `PackWizardTest` (MA1 con el paso de filamento, el filamento de fábrica y la biblioteca), `ProfilePackTest`.
+  No probado en un teléfono.
+
 ## 2026-11-04 — la cama del paquete en la vista 3D (`profile_pack.md`, regla 14, solo SVG)
 
 **Hecho** (el dueño pidió SVG por ahora):
@@ -10922,6 +10938,24 @@ reemplazo con aviso es lo correcto. BH27 cerrado.
 `ui_pack_print_speeds`, la línea de licencia. **Sin probar:** PK1 contra GitHub de verdad desde la interfaz; la
 descarga en sí ya la prueba `test_pack_fetch` con un servidor simulado.
 
+
+## 2026-11-04 — Android: perfil de impresión del paquete y BH27 (cambios a mano)
+
+Del motor (dev `b8f5906`, BH27): los perfiles de impresión del paquete traen `speed.*`, y `profile --pack` los pone en
+los ajustes de la impresora. Decisión de la sesión de especificación: al elegir otro perfil de impresión o filamento
+del paquete, sus ajustes reemplazan a los actuales, salvo los cambiados a mano, que se mantienen y se avisan.
+- La pantalla del perfil de una impresora del paquete elige filamento y perfil de impresión (regla 12, los
+  compatibles), con «Listo». Al elegir la impresora queda el primero de `defaults.print` (regla 13).
+- `ProfileChoice.print` va a `profile --pack ... --print` (y por ahí a todo lo que corta); se guarda.
+- El panel ya tomaba los valores del perfil nuevo y dejaba encima los cambios a mano; ahora, además, un aviso
+  dice cuáles se mantuvieron.
+- Pruebas: `PackWizardTest` (perfil de impresión por defecto y elegido, aviso de cambios mantenidos, el valor a mano
+  queda y el del perfil nuevo entra). No probado en un teléfono.
+- Regla 15 en la app (después de dev `9ebf378`): la pantalla del perfil de una impresora del paquete muestra
+  `license · origin` de la impresora y de cada filamento y perfil de impresión, con el enlace al repositorio de los
+  perfiles. Las reglas 1 y 3 ya estaban (asistente del primer arranque; sin red, el catálogo incluido). Prueba en
+  `PackWizardTest`.
+
 ## 2026-11-04 — calibración de puentes y voladizos (PLAN, P1)
 
 **Hecho** (diseño propio en `docs/CALIBRATION.md`; ninguna ficha la describe):
@@ -10936,6 +10970,45 @@ descarga en sí ya la prueba `test_pack_fetch` con un servidor simulado.
 
 **Prueba:** `[calibration]` (forma, áreas a 6,1 y 8,5 mm, G-code verificado, ángulo aplicado, ajustes de impresión) y
 `ui_calibration_bridges` (la pieza laminada; captura mirada). **No probado en una impresora.**
+
+- Calibración `bridges_overhangs` en la app (dev `e540e9c`): «Puentes y voladizos» en Calibrar. El motor pone los
+  ajustes propios de la prueba (sin soportes ni arcos) en `--settings`, que la app ya usa para cortar; el ángulo
+  elegido deja `support.threshold_angle` = 90 − ángulo. Prueba con el motor real en `DesignToolsTest`.
+
+## 2026-11-05 — Pedido del dueño: «Mi biblioteca» local (escritorio y Android)
+
+Decisión del dueño: una biblioteca de modelos propia y local primero (sin cuenta ni red), que después se pueda publicar
+en la biblioteca de Tisma Cloud (`model_library.md`). Cada modelo guarda el proyecto, los ajustes con que se laminó,
+el G-code con su resumen y su receta, y el análisis de FEA o CFD con su resumen, para reimprimir fácil. Se pidió la
+ficha a la sesión de especificación y se avisó al motor. La app la hace cuando la ficha pase `check_spec`.
+- Ficha recibida: `local_library.md` (spec/next `207bd14`, ML1–ML9). Se propuso al motor un comando `library`, para que
+  el formato viva en un solo lugar y lo usen el escritorio y la app.
+- **Decisión del dueño (05-11-2026):** la biblioteca no guarda G-code. «Imprimir» lamina siempre con la receta, en el
+  teléfono, en el escritorio o en la nube. Se pidió a la sesión de especificación ajustar la ficha (reglas 1, 6, 7, 9 y
+  12; ML1, ML2, ML7 y ML8) y se avisó al motor.
+
+## 2026-11-05 — Android: «Mi biblioteca» (local_library.md) y las secciones nuevas
+
+- **Secciones (decisión del dueño, 05-11-2026, sobre `mobile_app.md`, regla 5):** Biblioteca · Plato · Ingeniería ·
+  Impresora · Más. La app abre en Biblioteca. Ingeniería tiene la pieza en 3D con FEA y arrastre, y el CAD y las
+  piezas (salieron de Más). Los ajustes de Impresión se abren desde el plato; los de Material, desde Impresora.
+- **Mi biblioteca en la app** (`Library.kt`, `LibraryViewModel.kt`, `LibraryScreen.kt`), sobre el comando `library`
+  del motor acordado con su sesión (todavía no está en el motor; mientras tanto la sección lo dice y lleva al plato):
+  - guardar desde el plato después de laminar o analizar (regla 3), con la receta (impresora, filamento, perfil de
+    impresión, cambios a mano) y el análisis; «Guardar como nueva»;
+  - lista con búsqueda (nombre, etiqueta, impresora, material, «con análisis»), orden por fecha o nombre, cuánto ocupa;
+  - abrir en el plato con la receta, «Imprimir» que lamina siempre con la receta (regla 6) y guarda el resumen en ella;
+  - avisos de la regla 7: «Receta de una versión anterior», ajustes que ya no existen, «El análisis no vale para
+    estos ajustes» con «Calcular de nuevo»;
+  - exportar y compartir `.tismalib`, importar (también al compartir con la app), «Reemplazar» o «Guardar como
+    nueva», y el rechazo de archivos inseguros lo hace el motor (ML6);
+  - borrar entrada, receta o análisis con confirmación y «Deshacer» hasta cerrar la app (regla 8).
+  - Ningún G-code se guarda (ML10).
+- Pruebas: `LibraryTest` con un motor de prueba (`fake_library_engine.py`) que responde el contrato: ML1, ML2, ML3/ML4,
+  ML5 (mitad del teléfono), ML6 y ML10. Las de Ingeniería, el panel y la accesibilidad, ajustadas a las secciones nuevas.
+  No probado con el motor real (no tiene `library` todavía) ni en un teléfono.
+- Sigue: cuando el motor tenga `library`, probar con él (y ML5 con el escritorio); la miniatura de 256 × 256 y «La
+  imprimí» con foto; el límite de espacio en Preferencias (regla 12).
 
 ## 2026-11-04 — firmar las versiones con la clave del pendrive (decisión del dueño)
 
@@ -10994,6 +11067,78 @@ La sesión de fichas laminó un cubo de 20 mm con cada variante FDM del paquete 
 - `ctest` completo pasa.
 - A mano: un G-code de inicio de Ender-3 V3 se lamina, da `START_PRINT EXTRUDER_TEMP=0 CH=0 IDLE=0` y un aviso.
 - **Sin probar con el paquete real:** el equipo del motor no lo lee. Lo vuelve a barrer la sesión de fichas.
+
+## 2026-11-05 — Android: beta 0.1.0-beta.1 para quienes prueban
+
+Pedido del dueño (por la sesión de especificación): una beta esta semana. `versionName` `0.1.0-beta.1`
+(`versionCode` 2), con `dev` mezclado (motor con BH29–BH31; BH32–BH34 y `library` todavía no están en `dev`). El
+actualizador sigue apagado (sin la clave pública del dueño). Notas en castellano: `apps/android/BETA.md`.
+**Firma:** no hay clave de lanzamiento; el APK de CI va firmado con la clave de depuración del ejecutor, que cambia
+entre corridas. Una clave fija es decisión del dueño (dónde se guarda y quién la tiene).
+
+## 2026-11-05 — Android: AND10, el filamento en la pestaña Material
+
+Bug del dueño (QA AND10): «no se puede elegir el filamento, hay que poner las temperaturas a mano».
+- Revisado con el paquete real (Creality, PrusaResearch, Elegoo, Orca_BBL y la biblioteca de filamentos): la lista
+  de la app da filamentos propios para las 454 impresoras de esos fabricantes, y `profile --pack --filament` cambia
+  las temperaturas (Ender-3 con Creality PETG: 240/70 °C en lugar de 205/60).
+- Lo que faltaba: la pestaña Material, donde están las temperaturas, no decía de qué filamento salen ni dejaba
+  elegirlo (solo desde la tarjeta de la impresora del plato). Ahora arriba de Material: el filamento, «Elegir
+  filamento» (los del paquete para esa impresora, o el catálogo) y, si hay ajustes de material cambiados a mano,
+  «Usar los valores del filamento» (los cambios a mano quedan encima del filamento, BH27).
+- Prueba: `PackWizardTest` (MA1 + AND10). No probado en un teléfono.
+
+## 2026-11-06 — Android: opciones de envío a una Bambu Lab (gcode_macros.md, regla 12)
+
+Regla del dueño (06-11, por la sesión de especificación): sin tiempo libre; al terminar, el siguiente ítem.
+- Al mandar a una Bambu Lab desde el plato: «Nivelar la cama», «Calibrar el flujo» (prendidas por defecto),
+  «Calibrar las vibraciones» y «Grabar un timelapse». Van en el pedido `project_file` por MQTT
+  (`PrintOptions` en el módulo de impresoras; las demás impresoras las ignoran).
+- Corrección de la ficha (spec `fda7ff8`): solo la **placa** va al G-code de inicio (`curr_bed_type`); las demás
+  opciones van solo en el pedido y no vuelven a laminar. La placa se elige en el plato con una impresora Bambu Lab
+  («La que detecte la impresora» o una de las seis de la ficha) y va como `bambu.plate` en los ajustes (clave del
+  motor); cambiarla pide laminar de nuevo. Prueba: `BambuPlateTest`.
+- Pruebas: `BambuTest` (valores por defecto y los elegidos en el pedido). La pantalla no tiene prueba automática.
+  No probado con una Bambu real.
+- `mobile_app.md`, lo que quedaba:
+  - regla 12, el costo en el resultado: gramos × `extrusion.cost` (precio por kg del Material). Con los filamentos
+    del paquete sale 0: `profile --pack` no pasa el `cost_per_kg` del filamento a `extrusion.cost` (avisado al
+    motor). Prueba: `PlateCostTest`.
+  - regla 6, Archivo: la información de la pieza (medidas y triángulos) y «Quitar de la placa».
+  - **Bloqueado:** regla 10, abrir STEP (el motor dice «STEP files are not supported yet»). Regla 15, Google y Google
+    Play: decisiones del dueño. Regla 9, la biblioteca de Tisma Cloud: espera el servidor.
+- `local_library.md`, regla 12: el límite de Mi biblioteca en Preferencias (500 MB por defecto en el teléfono). Al
+  pasarlo, la lista lo avisa y no borra nada sola. Prueba en `LibraryTest`.
+- La miniatura de 256 × 256 (regla 1): `Thumbnail.kt` la dibuja desde los triángulos (vista en ángulo, sombreado
+  plano, de atrás hacia adelante) y va con `library save --thumb`. Prueba en `LibraryTest` (que sea un PNG y la lista
+  lo muestre); el dibujo no se miró a ojo.
+- Sigue en la biblioteca: «La imprimí» con foto y nota (se propuso `library printed` al motor).
+
+## 2026-11-06 — Android: la cámara de las Bambu Lab A1 y P1 (printer_connections.md, regla 6 de Bambu Lab)
+
+Pedido de la sesión de especificación (en la PC el dueño no ve la cámara de su A1 mini, BH36).
+- `BambuConnection.cameraFrames()`: TLS al puerto 6000 con el certificado guardado de la impresora, el ingreso de
+  80 bytes (cabecera de 16 con tamaño 0x40 y tipo 0x3000, `bblp` y el código de acceso en 32 bytes cada uno) y las
+  imágenes JPEG, cada una tras una cabecera de 16 bytes con su tamaño (según la página de video de OpenBambuAPI, que
+  cita la ficha). Se revisa que cada imagen empiece en FF D8 y termine en FF D9.
+- La página de la impresora la muestra en vivo. Si falla, dice qué revisar: sin respuesta en el puerto 6000 (y que
+  las X1, P2S y H2 usan RTSP, que el teléfono todavía no muestra), código de acceso rechazado, certificado distinto,
+  o conectada sin imágenes.
+- `MockBambu` tiene la cámara; pruebas: `BambuTest` BL6 y `PrintersTest` CM2 (imágenes, y el código equivocado).
+  Las pruebas de la app abren `java.net` a Robolectric (el TLS del simulador lo necesita). No probado con una A1 real.
+- Estado en vivo y aviso al terminar o fallar con una Bambu Lab: el estado ya llegaba por MQTT y el servicio de
+  vigilancia ya avisaba, pero solo conocía `RUNNING`, `PAUSE` e `IDLE`. Cualquier otro (los que la impresora mande al
+  terminar o fallar, que ninguna especificación nombra) quedaba en «ocupada» y no avisaba. Ahora salir de la
+  impresión hacia ese estado avisa como al pasar a lista: terminada si el avance llegó a 99 %, detenida si no, con la
+  palabra de la impresora tal cual (sin adivinar nombres, `printer_connections.md`, regla 5). Un `print_error`
+  durante la impresión sigue siendo «falló». Prueba: `PrintEventsTest`. No probado con una impresora real.
+- Pruebas de interfaz de lo nuevo (Robolectric): `BambuSendTest` (desde el plato, con la Bambu simulada: apagar
+  nivelación y prender timelapse llega al `project_file`), además de `BambuPlateTest`, `PackWizardTest` (AND10) y
+  `LibraryTest`. En el emulador las prueba la sesión de especificación.
+- «La imprimí» (regla 1) en el detalle de una pieza de Mi biblioteca: nota y foto opcional, con
+  `library printed --date --photo --note` (contrato aceptado por el motor, que está haciendo el comando `library`).
+  Las pruebas de la app corren con `LC_ALL=C.UTF-8`, como Android pasa los argumentos (una nota con acentos).
+  Prueba en `LibraryTest`.
 
 ## 2026-11-05 — BH32: un perfil de impresión «para todas» se ofrece solo si cabe (spec 6970209)
 
@@ -11570,6 +11715,11 @@ arreglado en 9d8dc76 y subido.
 **Falta:** el límite de espacio (regla 12, ML7) y la biblioteca en la interfaz de escritorio.
 
 **Sigue:** avisar a Android; después PLAN.md.
+- Mi biblioteca contra el motor real (dev `e057b99`, `library`): `LibraryTest` usa el motor de `TISMA_HOST_ENGINE`
+  si está. Pasan ML3/ML4 (check) y ML5/ML6 (exportar, importar, «ya existe», archivo inseguro). ML1 falla: `save`
+  copia `--model` tal cual a `project.3mf`, y el plato tiene un STL; al «Imprimir» el motor dice «3MF: not a ZIP
+  package». Se pidió al motor que convierta a paquete 3MF al guardar (regla 1). Con el motor de prueba, todo pasa.
+
 
 ## 2026-11-06 05:00 — bloque nocturno: subida, fuzzer y árbol por islas
 
@@ -11582,6 +11732,49 @@ arreglado en 9d8dc76 y subido.
   `tree_fill_field` las recorre. Medido en la esfera de 100 mm (sphere.stl, `tree/organic.json`, 3 corridas):
   laminado 1,11 s con los offsets contra 1,39 s con el campo (antes de esto, 2,9 contra 1,44 s). Sigue sin conectar.
   Faltan la segunda pared desde el mismo campo y marching squares en la GPU.
+- Con dev `80e738d` (`library save` convierte STL/OBJ en un proyecto 3MF): `LibraryTest` pasa entero con el motor
+  real (ML1, ML2, ML3/ML4, ML5/ML6, ML10). La prueba usaba `perimeters.count`, que no es una clave del motor; ahora
+  `walls.count`. El APK de CI ya trae el motor con `library`. No probado en un teléfono.
+
+## 2026-11-06 — Android: AND11, temperaturas vacías en Material en una instalación nueva
+
+QA AND11 (APK `42171193144`, emulador sin red, catálogo incluido: Anycubic Kobra 2 con Anycubic ABS): la tarjeta del
+filamento decía «Anycubic ABS», pero las cuatro temperaturas estaban vacías.
+- Causa: `EngineRunner.profile()` corría el motor con su carpeta de trabajo (`cache/engine`) sin crearla. En una
+  instalación nueva, antes de laminar nada, esa carpeta no existe, el proceso no arranca y el perfil se toma como
+  vacío. Además, el laminado usaba entonces los valores por defecto del motor («no se usó el perfil»).
+- Arreglo: crear la carpeta. Con el motor real: 514 valores, boquilla 260 °C, cama 90 °C, primera capa igual que la
+  boquilla. Prueba: `MaterialTempsTest` (carpeta nueva; con el motor real si está, si no con uno de prueba).
+- «Agregar impresora» ahora nombra también Bambu Lab (modo LAN).
+
+## 2026-11-06 — Android: tamaño del APK
+
+Medido sin SolidCraft (con él suma unos 20 MB por arquitectura, comprimido): el APK de depuración con las dos
+arquitecturas pesaba 36 MB, casi todo dex sin achicar (28 MB) y dos copias del motor.
+- **Un APK por arquitectura** (`splits.abi`): `app-arm64-v8a-debug.apk` para teléfonos (33 MB), `app-x86_64` para
+  emuladores y el universal. Con SolidCraft, el de teléfono deja afuera la otra copia (unos 20 MB menos).
+- **Tipo `beta`** para quienes prueban: R8 achica y optimiza (`proguard-android-optimize.txt`), firmado con la clave de
+  depuración hasta que exista la del dueño. arm64: **7,0 MB** sin SolidCraft (contra 33 MB). Las pruebas corren sobre
+  depuración: una beta se prueba en un emulador antes de entregarla (pedido a la sesión de especificación).
+- CI sube aparte: `tisma-android-phone-apk`, `tisma-android-phone-beta-apk`, `tisma-android-emulator-apk` y el
+  universal (`tisma-android-debug-apk`, como antes).
+- Accesibilidad y textos: la prueba de nombres de los controles (regla 9) cubre ahora Material (con la tarjeta del
+  filamento), CAD, Ayuda y Piezas en Ingeniería, y `LibraryTest` la corre en la lista y en el detalle de una pieza:
+  todos con nombre. En castellano no falta ningún texto (los iguales a los ingleses son nombres: Material, Normal,
+  OctoPrint…), y no hay textos visibles escritos en el código.
+
+## 2026-11-06 — Android: AND12 (carpeta temporal del motor) y la biblioteca con proyectos 3MF
+
+Smoke del beta R8 x86_64 (`cb4a0e3`) por la sesión de especificación: sin cierres ni errores de R8 en asistente,
+3MF, laminar, vista previa, Material, Más y la lista de la Biblioteca.
+- **AND12:** Diseño → Box → Build daba «cannot make a temporary folder» (volumen 0). En Android no hay `/tmp`, y el
+  motor (para SolidCraft) le pide al sistema la carpeta temporal. Ahora cada proceso del motor (corte, perfil,
+  análisis, diseño, paquete, biblioteca) recibe `TMPDIR` dentro de la carpeta de la app, creada si falta
+  (`engineProcess`). Prueba: `EngineRunnerTest` AND12.
+- «Guardar en la biblioteca» no aparecía después de laminar un 3MF: la tarjeta del plato dejaba afuera los proyectos.
+  El motor guarda el 3MF tal cual como `project.3mf`, así que ahora también se ofrece. No hay prueba automática con
+  un 3MF.
+
 
 ## 2026-11-06 07:30 — bloque nocturno: CI y marching squares más livianos
 
@@ -11682,6 +11875,129 @@ arreglado en 9d8dc76 y subido.
   expresión regular, verdadero si el valor coincide entero (PLA, TPU sí; PETG, PC, ASA no). Si la variable no es
   texto, el error lo nombra. Con esto, las 2261 variantes FFF del paquete deberían leer todo su G-code.
 
+## 2026-11-09 — Android: dev `70f9335` (G-code original de cada máquina) y dos carreras en las pruebas
+
+- Unido dev `70f9335`: el motor usa el G-code original de cada impresora del paquete (2261/2261), para probar con la
+  A1 mini del dueño.
+- CI de GitHub, dos fallas intermitentes:
+  - `CloudViewModelTest` CC2: un modelo seguía consultando y leía `Dispatchers.Main` mientras `resetMain` lo cambiaba.
+    La prueba ahora para los modelos antes.
+  - `LibraryTest` ML1: dos llamadas al motor se pisaban el mismo archivo de errores (`library.err`): una lo borraba
+    mientras la otra lo leía. Ahora cada llamada tiene el suyo (biblioteca, paquete y las cortas del motor).
+
+## 2026-11-09 — Android: cámaras de Klipper y OctoPrint con giro y espejo
+
+Hoja de ruta (pedido del dueño por la sesión de especificación): lo que falte de `printer_connections.md` en el
+teléfono. Estado, cámara y mandar ya estaban para OctoPrint, Klipper, PrusaLink y Duet; faltaba la regla de
+«Cámara de la impresora» de mostrar la cámara «con giro y rotación».
+- Klipper: `flip_horizontal`, `flip_vertical` y `rotation` de `/server/webcams/list`; OctoPrint: `flipH`, `flipV` y
+  `rotate90` (90° al revés de las agujas, o sea 270° a favor) de sus ajustes. La imagen se da vuelta y se gira antes de
+  mostrarla (una cámara montada al revés se ve derecha; a 90° se cambian ancho y alto).
+- PrusaLink sigue sin cámara local (la ficha: «sin transmisión local documentada»): «Sin cámara».
+- Pruebas: `PrinterConnectionTest` CM1 (los simuladores con cámara espejada y girada) y `CameraTurnTest`.
+
+## 2026-11-09 — Android: memoria al laminar piezas grandes (rendimiento en gama baja)
+
+`MemoryEstimate` (MA9) usaba valores de diseño sin medir: 150 MB + 3000 bytes por triángulo, o sea 3,1 GB para un
+millón de triángulos. Un teléfono de gama media no llegaba y la app mandaba a la nube piezas que sí podía laminar.
+
+| Pieza (esfera, motor del host, 4 hilos) | Pico de memoria | Tiempo |
+|---|---|---|
+| 100 000 triángulos | 95 MB | 0,9 s |
+| 500 000 | 142 MB | 0,7 s |
+| 1 000 000 | 167 MB | 0,8 s |
+| 1 000 000, soportes y relleno 40 % | 183 MB | 0,9 s |
+| 2 000 000, soportes y relleno 40 % | 270 MB | 1,2 s |
+
+Unos 85 MB fijos y 90 bytes por triángulo. Nuevo cálculo: 128 MB + 300 bytes por triángulo (más de tres veces lo
+medido, por más hilos en el teléfono y piezas con más recorridos): un millón pide unos 414 MB. Prueba: `MemoryTest`.
+No medido en un teléfono (gama baja: queda para las pruebas con teléfonos reales).
+
+## 2026-11-09 — Android: doble toque acerca en ese punto (mobile_app.md, regla 6)
+
+El doble toque en la vista 3D del plato acercaba al centro; la regla dice «acerca en ese punto». `OrbitCamera.zoomAt`
+mueve la vista antes de acercar para que el punto tocado quede bajo el dedo. Prueba: `OrbitZoomTest` (un punto a la
+profundidad del centro queda en el mismo píxel, a menos de 2 px). Las pruebas de interfaz en el emulador no se pueden
+correr acá (no hay KVM): las hace la sesión de especificación.
+- Pendiente de la ficha, no del teléfono: la regla 10 pide abrir modelos «desde un enlace de un sitio de modelos», pero
+  ninguna ficha define el enlace (esquema o dirección); se preguntó.
+
+## 2026-11-09 — Android: abrir modelos desde un sitio (mobile_app.md, regla 10)
+
+Decisión de la sesión de especificación (como Tisma Slicer): `tisma://open?file=<URL https codificada>` y
+`prusaslicer://open?file=…` (el botón «Abrir en PrusaSlicer» de Printables).
+- `SiteLink.kt`: solo https, solo printables.com, media/files.printables.com, thingiverse.com y cdn.thingiverse.com
+  (con o sin `www.`; una redirección tiene que seguir en https y en la lista), máximo 200 MB (lo que diga el servidor
+  y lo que llegue), solo STL, OBJ, 3MF, STEP o un ZIP con uno (se toma el primero, por su nombre solo, sin carpetas).
+- Antes de bajar: «¿Abrir <archivo> de <sitio>?». Con «Permitir descargas de sitios compatibles» apagado (por defecto,
+  en Preferencias), el diálogo ofrece «Permitir y abrir». Un enlace rechazado dice por qué.
+- STEP se baja pero todavía no abre (el motor no lo lee).
+- Pruebas: `SiteLinkTest` (enlaces aceptados y rechazados, el ZIP con una ruta `../`, y el enlace hasta el plato con
+  una descarga de prueba). No probado con Printables real ni en un teléfono.
+
+## 2026-11-10 — Android: biblioteca compartida entre pares (p2p_library.md), la pantalla y el bloqueo
+
+Prioridad del dueño («lo antes posible así subimos modelos»), por la sesión de especificación: empezar por la
+pantalla y el bloqueo; el formato del índice lo propone el servidor.
+- `p2p/BlockList.kt`: la lista de bloqueo firmada con la clave de Tisma (Ed25519, como la de actualizaciones): sin
+  firma válida no se usa (P2P5). Huellas, cuentas, pares y bloqueos de IP cortos que se descartan al vencer (regla 5).
+  Formato propuesto por la app hasta que llegue el del servidor (`tisma-blocklist` v1, en el código).
+- `SharedCopies`: los archivos de la biblioteca compartida en el teléfono, por su SHA-256 (calculado, no tomado del
+  nombre). Una huella bloqueada se borra y se avisa «retirados de la biblioteca de Tisma» (regla 4, P2P3).
+- `SharingPolicy`: se comparte solo con el interruptor prendido, una lista firmada de menos de 7 días, Wi-Fi (red no
+  medida) y cargando (reglas 3 y 6, P2P6 y P2P7); la pantalla dice por qué no.
+- Pantalla: Biblioteca tiene dos pestañas, «Mi biblioteca» y «Compartida» (lista, retirados, compartir, tope de
+  subida por día, y el aviso de que los pares ven la IP, regla 8). Buscar y bajar esperan el índice del servidor.
+- La clave pública de Tisma todavía no existe (decisión del dueño): mientras tanto ninguna lista se acepta y no se
+  comparte nada.
+- Pruebas: `BlockListTest` (firma con una clave de prueba, P2P3, P2P5, P2P6, P2P7, bloqueo de IP que vence).
+- Falta: el índice y su búsqueda, bajar y publicar (red de pares: la biblioteca la elige el motor), «Denunciar»
+  (necesita la dirección del servidor) y renovar la lista cada 6 h mientras comparte.
+
+## 2026-11-10 — Android: piezas escaneadas en Mi biblioteca (p2p_library.md, regla 7 bis)
+
+Pedido del dueño: lo escaneado con Tisma Scanner y mandado con «Imprimir» aparece en Mi biblioteca del teléfono
+(misma cuenta de Tisma Cloud), listo para laminar.
+- Al abrir Biblioteca con la cuenta abierta, la app pide las piezas escaneadas pendientes, baja cada malla (comprueba
+  su SHA-256 si el servidor la da), la guarda como entrada nueva de Mi biblioteca con los ajustes de la tarjeta de la
+  impresora como receta, y recién entonces la marca recibida. Aviso: «Llegaron N piezas escaneadas…».
+- Rutas del servidor (tisma-cloud 89f8fc6), por equipo: `GET /v1/me/scans?device=<nombre>`,
+  `GET /v1/me/scans/{id}/mesh`, `POST /v1/me/scans/{id}/taken` (`CloudClient.scans`, `downloadScan`, `scanTaken`).
+  El servidor de prueba (`MockCloud`) las tiene.
+- Prueba: `ScansTest` (una pieza escaneada llega a Mi biblioteca y queda marcada recibida por ese teléfono).
+
+## 2026-11-10 — Android: la biblioteca compartida con el formato del servidor (p2p_library.md, 3 bis a 3 octies)
+
+- Cadena de claves: la app trae solo la clave del proyecto; la clave de la biblioteca vale si el proyecto firmó
+  `tisma-library-key/1\n` + sus 32 bytes y no está en `revoked_keys` (`LibraryKey`). Sin clave del proyecto en la
+  compilación no se acepta nada ni se comparte.
+- Lista `tisma-library-blocklist` e índice `tisma-library-index`: firmados, con `sequence` que no puede bajar (se
+  guarda en el teléfono), `expires` para la lista (P2P7). Rutas `GET /v1/library/{key,blocklist.json,index.json}` y
+  `.sig`; sin servidor se usan las copias guardadas (regla 6).
+- Compartida: búsqueda en el índice (sin cuentas ni archivos bloqueados, sin G-code), tarjeta de modelo con autor,
+  licencia, «revisado» y «Denunciar» (`POST /v1/library/reports`, regla 7). El texto de privacidad dice que todo va
+  por los relés de Tisma.
+- `SafeFile` (regla 3 octies): tipo por contenido; ZIP/3MF sin rutas afuera, sin vínculos, sin programas, a lo sumo
+  10× y 2 GB; avisa el G-code o scripts de un 3MF. Se aplica a lo bajado de sitios y a las piezas escaneadas: si
+  falla se borra con «Archivo inseguro: no se abrió».
+- Pruebas: `BlockListTest` (6: cadena de claves, P2P3, P2P5, P2P6, P2P7, índice, «Denunciar», copias guardadas) y
+  `SafeFileTest` (4: tipos, programas renombrados, `..`, ruta absoluta, bomba, dañado, vínculo, G-code en 3MF).
+- Falta: publicar desde Mi biblioteca (clave del par, saneo de recetas 3 septies), bajar por los relés (motor p2p),
+  renovar la lista cada 6 h mientras se comparte. La clave del proyecto la pone el dueño.
+
+## 2026-11-10 — iPhone: primer paso, el módulo compartido (Kotlin Multiplatform)
+
+Decisión del dueño (10-11): app de iPhone antes de la beta de diciembre. Plan en `apps/ios/PLAN.md` (aprobado por
+QA; bundle id `net.tismaservidores.tisma`).
+- `apps/android/shared`: módulo Kotlin Multiplatform (JVM, `iosArm64`, `iosSimulatorArm64`). Pasaron ahí la lista de
+  bloqueo, la clave de la biblioteca, el índice y `SharingPolicy` (sin `java.*`: `kotlin.time.Instant`, Base64 de
+  Kotlin). Ed25519 es `expect`: en JVM/Android el nuestro; en iOS el del sistema (CryptoKit), que pasa Swift al
+  arrancar; sin él no se acepta nada firmado.
+- Lo que usa archivos (`SharedCopies`, `sha256`, `SafeFile`) sigue en la app por ahora.
+- `tools/ci.sh` corre las pruebas de `shared` y compila la parte de iOS (klib para el simulador; Kotlin/Native compila
+  klibs de Apple en Linux). Enlazar el framework y probar en el simulador queda para el CI de macOS.
+- Siguiente: el cliente de la nube a `shared` con Ktor, luego impresoras (REST), luego Bambu (sockets TLS por
+  plataforma), y el proyecto de Xcode con el CI de macOS.
 ## 2026-11-09 15:45 — project_import.md: la muestra de PrusaSlicer
 
 - Hoja de ruta del dueño (por el equipo de fichas): 1) `project_import.md`, 2) BH37/BH38 cuando llegue la pieza, 3)

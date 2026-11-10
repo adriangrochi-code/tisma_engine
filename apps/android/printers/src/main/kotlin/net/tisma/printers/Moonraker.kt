@@ -102,7 +102,10 @@ class MoonrakerConnection(url: String, apiKey: String?, http: Http) : PrinterCon
         val r = result(rest.get("/server/webcams/list"))
         val cam = (r["webcams"] as? JsonArray)?.filterIsInstance<JsonObject>()?.firstOrNull { it.str("enabled") != "false" }
             ?: return null
-        return Camera(absolute(cam.str("stream_url")), absolute(cam.str("snapshot_url")))
+        // printer_connections.md, «Cámara de la impresora»: each camera with its flip and rotation.
+        return Camera(absolute(cam.str("stream_url")), absolute(cam.str("snapshot_url")),
+            cam.str("flip_horizontal") == "true", cam.str("flip_vertical") == "true",
+            (cam.str("rotation").toDoubleOrNull()?.toInt() ?: 0).mod(360))
     }
 
     /** A camera address may be relative to the printer's host (`/webcam/?action=stream`). */

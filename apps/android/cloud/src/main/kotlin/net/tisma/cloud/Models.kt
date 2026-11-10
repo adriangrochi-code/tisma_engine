@@ -150,6 +150,17 @@ data class SentReport(
     }
 }
 
+/**
+ * A part scanned with Tisma Scanner and sent with «Imprimir» (p2p_library.md, rule 7 bis): private to the account,
+ * waiting to reach «Mi biblioteca». [sha256] checks the mesh when the server gives it.
+ */
+data class Scan(val id: String, val name: String, val file: String, val size: Long, val sha256: String, val created: String) {
+    companion object {
+        fun from(o: JsonObject) = Scan(o.text("id"), o.text("name"), o.text("file"), o.number("size").toLong(),
+            o.text("sha256").lowercase(), o.text("created"))
+    }
+}
+
 /** A downloaded result: its name and where it was written. */
 data class Download(val filename: String, val bytes: Long)
 

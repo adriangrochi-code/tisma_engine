@@ -87,6 +87,24 @@ class DesignToolsTest {
     }
 
     @Test
+    fun `the bridges and overhangs test slices without supports and its angle sets the support threshold`() {
+        val (slice, _) = vm()
+        var error: String? = "none"
+        slice.calibrate("bridges_overhangs", null) { error = it }
+        idle { error != "none" && slice.state.value.calibration != null }
+        val c = slice.state.value.calibration!!
+        assertEquals(listOf(20.0, 30.0, 40.0, 50.0, 60.0, 70.0), c.segments.map { it.third })
+        idle { slice.state.value.mesh != null }
+        slice.slice(checkMemory = false)
+        idle { !slice.state.value.slicing && (slice.state.value.result != null || slice.state.value.error != null) }
+        assertNotNull(slice.state.value.result, slice.state.value.error?.error)
+        // A 40° fin printed well: supports start at 90 − 40 = 50° (the engine's calibration apply).
+        slice.applyCalibration(40.0)
+        idle { slice.state.value.calibration == null }
+        assertEquals("50", net.tisma.app.engine.SettingsLayout.show(slice.state.value.value("support.threshold_angle")))
+    }
+
+    @Test
     fun `orientation and drag run on a bare model`() {
         val (slice, runner) = vm()
         val (rot, o) = runner.orientModel(cube, EngineRunner.SimpleSettings(), null, {}, { false })

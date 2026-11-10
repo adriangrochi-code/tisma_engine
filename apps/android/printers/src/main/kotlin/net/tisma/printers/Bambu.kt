@@ -30,6 +30,7 @@ class BambuConnection(
     pinnedSha256: String?,
     private val mqttPort: Int = 8883,
     private val ftpPort: Int = 990,
+    private val cameraPort: Int = 6000,
 ) : PrinterConnection {
     val tls = PinnedTls(pinnedSha256)
     @Volatile private var mqtt: MqttClient? = null
@@ -137,7 +138,10 @@ class BambuConnection(
     override fun resume() = printCommand("resume", { put("param", "") })
     override fun cancel() = printCommand("stop", { put("param", "") })
 
-    override fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream) {
+    override fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream) =
+        upload(name, length, start, PrintOptions(), open)
+
+    override fun upload(name: String, length: Long, start: Boolean, options: PrintOptions, open: () -> InputStream) {
         client()
         val gcode = open().use { it.readBytes() }
         val base = name.substringAfterLast('/').removeSuffix(".gcode").removeSuffix(".3mf")
@@ -150,13 +154,65 @@ class BambuConnection(
             put("subtask_name", base)
             put("url", "ftp:///$remote")
             put("md5", md5(gcode))
-            put("timelapse", false); put("bed_type", "auto"); put("bed_levelling", true)
-            put("flow_cali", false); put("vibration_cali", false); put("layer_inspect", false)
+            put("timelapse", options.timelapse); put("bed_type", "auto"); put("bed_levelling", options.bedLeveling)
+            put("flow_cali", options.flowCalibration); put("vibration_cali", options.vibrationCalibration); put("layer_inspect", false)
             put("ams_mapping", ""); put("use_ams", false)
         })
     }
 
     override fun camera(): Camera? = null
+
+    /**
+     * The A1 and P1 camera (printer_connections.md, Bambu Lab rule 6, after OpenBambuAPI's video page): TLS to
+     * port 6000 with the printer's pinned certificate, an 80-byte login (a 16-byte header: size 0x40, type 0x3000,
+     * then `bblp` and the access code in 32 bytes each, padded with zeros), then JPEG images, each after a 16-byte
+     * header whose first four bytes (little-endian) are its size.
+     */
+    override fun cameraFrames(): CameraFrames {
+        val socket = try {
+            tls.socket(host, cameraPort)
+        } catch (e: PrinterException) {
+            throw e
+        } catch (e: java.io.IOException) {
+            throw PrinterException(PrinterException.Kind.NETWORK, "The camera does not answer on port $cameraPort", e)
+        }
+        try {
+            socket.soTimeout = 10_000
+            socket.getOutputStream().apply { write(cameraLogin(accessCode)); flush() }
+        } catch (e: java.io.IOException) {
+            socket.close()
+            throw PrinterException(PrinterException.Kind.NETWORK, "The camera closed the connection", e)
+        }
+        val input = java.io.DataInputStream(socket.getInputStream().buffered())
+        return object : CameraFrames {
+            private var seen = false
+            override fun next(): ByteArray {
+                val head = ByteArray(16)
+                try {
+                    input.readFully(head)
+                } catch (e: java.io.EOFException) {
+                    // Closed before any image: the access code was refused.
+                    throw PrinterException(if (seen) PrinterException.Kind.NETWORK else PrinterException.Kind.AUTH,
+                        if (seen) "The camera stopped" else "The camera refused the access code", e)
+                } catch (e: java.net.SocketTimeoutException) {
+                    throw PrinterException(PrinterException.Kind.UNEXPECTED, "The camera sends no images", e)
+                }
+                val size = le32(head, 0)
+                if (size <= 0 || size > 8 * 1024 * 1024) throw PrinterException(PrinterException.Kind.UNEXPECTED, "A camera image of $size bytes")
+                val jpeg = ByteArray(size.toInt())
+                try { input.readFully(jpeg) } catch (e: java.io.IOException) {
+                    throw PrinterException(PrinterException.Kind.NETWORK, "The camera stopped", e)
+                }
+                val ok = jpeg.size >= 4 && jpeg[0] == 0xFF.toByte() && jpeg[1] == 0xD8.toByte() &&
+                    jpeg[jpeg.size - 2] == 0xFF.toByte() && jpeg[jpeg.size - 1] == 0xD9.toByte()
+                if (!ok) throw PrinterException(PrinterException.Kind.UNEXPECTED, "A camera image is not a JPEG")
+                seen = true
+                return jpeg
+            }
+
+            override fun close() = runCatching { socket.close() }.let { }
+        }
+    }
 
     private fun gcode(lines: String) = printCommand("gcode_line", { put("param", lines + "\n") }, qos = 0)
 
@@ -179,9 +235,22 @@ class BambuConnection(
         /** From a saved address, `bambu://host` (tests may give other ports: `bambu://host:mqtt?ftp=port`). */
         fun of(url: String, accessCode: String, pinned: String?): BambuConnection {
             val u = URI(if (url.startsWith("bambu://")) url else "bambu://$url")
-            val ftp = u.query?.split('&')?.firstOrNull { it.startsWith("ftp=") }?.substringAfter('=')?.toIntOrNull() ?: 990
-            return BambuConnection(u.host, accessCode, pinned, if (u.port > 0) u.port else 8883, ftp)
+            fun q(k: String) = u.query?.split('&')?.firstOrNull { it.startsWith("$k=") }?.substringAfter('=')?.toIntOrNull()
+            return BambuConnection(u.host, accessCode, pinned, if (u.port > 0) u.port else 8883, q("ftp") ?: 990, q("cam") ?: 6000)
         }
+
+        /** The camera's 80-byte login: the header, then `bblp` and the access code, 32 bytes each. */
+        fun cameraLogin(accessCode: String): ByteArray {
+            val b = java.nio.ByteBuffer.allocate(80).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            b.putInt(0x40); b.putInt(0x3000); b.putInt(0); b.putInt(0)
+            fun field(v: String) { val raw = v.toByteArray(Charsets.US_ASCII).copyOf(32); b.put(raw) }
+            field("bblp"); field(accessCode)
+            return b.array()
+        }
+
+        private fun le32(b: ByteArray, at: Int): Long =
+            (b[at].toLong() and 0xFF) or ((b[at + 1].toLong() and 0xFF) shl 8) or
+                ((b[at + 2].toLong() and 0xFF) shl 16) or ((b[at + 3].toLong() and 0xFF) shl 24)
 
         /** The G-code packed as Bambu Lab's local mode reads it: `Metadata/plate_1.gcode` and its MD5. */
         fun pack(gcode: ByteArray): ByteArray {

@@ -23,6 +23,34 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putBoolean(CLOUD_PREFER, value).apply()
 
     /** «Buscar impresoras en la red» (printer_connections.md, «Búsqueda en la red», rule 1). */
+    /** «Mi biblioteca»'s size limit in MB (local_library.md, rule 12: 500 MB on the phone). Nothing is deleted on its own. */
+    /** preferences.md, «Allow downloads from supported websites»: models from a site's link (mobile_app.md rule 10). Off at first. */
+    var allowSiteDownloads: Boolean
+        get() = prefs.getBoolean("site.downloads", false)
+        set(value) = prefs.edit().putBoolean("site.downloads", value).apply()
+
+    /** p2p_library.md, rule 3: share the shared library's files with other phones (only Wi-Fi and charging). Off at first. */
+    var p2pSharing: Boolean
+        get() = prefs.getBoolean("p2p.sharing", false)
+        set(value) = prefs.edit().putBoolean("p2p.sharing", value).apply()
+
+    /** p2p_library.md, rule 3 ter: the highest block list and index sequences seen (an older one is refused). */
+    var p2pListSequence: Long
+        get() = prefs.getLong("p2p.list_sequence", -1)
+        set(value) = prefs.edit().putLong("p2p.list_sequence", value).apply()
+    var p2pIndexSequence: Long
+        get() = prefs.getLong("p2p.index_sequence", -1)
+        set(value) = prefs.edit().putLong("p2p.index_sequence", value).apply()
+
+    /** Rule 3's upload limit, in MB a day. */
+    var p2pUploadCapMb: Int
+        get() = prefs.getInt("p2p.upload_cap_mb", 500)
+        set(value) = prefs.edit().putInt("p2p.upload_cap_mb", value).apply()
+
+    var libraryCapMb: Int
+        get() = prefs.getInt("library.cap_mb", 500)
+        set(value) = prefs.edit().putInt("library.cap_mb", value).apply()
+
     var searchNetwork: Boolean
         get() = prefs.getBoolean(SEARCH_NETWORK, true)
         set(value) = prefs.edit().putBoolean(SEARCH_NETWORK, value).apply()
@@ -66,6 +94,9 @@ class AppSettings(context: Context) {
     var profilePack: Boolean
         get() = prefs.getBoolean("profile.pack", false)
         set(v) = prefs.edit().putBoolean("profile.pack", v).apply()
+    var profilePrint: String?
+        get() = prefs.getString("profile.print", null)
+        set(v) = prefs.edit().putString("profile.print", v).apply()
     var profileName: String?
         get() = prefs.getString("profile.name", null)
         set(v) = prefs.edit().putString("profile.name", v).apply()

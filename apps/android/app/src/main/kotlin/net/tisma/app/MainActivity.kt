@@ -86,8 +86,40 @@ class MainActivity : ComponentActivity() {
                 val runner = EngineRunner(exe, work, packDir)
                 return SliceViewModel(runner, work, loadCatalog = catalog, saved = app.settings,
                     freeMemory = free, loadLayout = layout,
-                    pack = if (runner.available) net.tisma.app.engine.ProfilePack(exe, packDir) else null) as T
+                    pack = if (runner.available) net.tisma.app.engine.ProfilePack(exe, packDir) else null,
+                    library = if (runner.available) libraryOf(app) else null) as T
             }
+        }
+    }
+
+    /** «Mi biblioteca» in the app's own storage (local_library.md, rule 11). */
+    private fun libraryOf(app: TismaApplication) = net.tisma.app.engine.Library(
+        java.io.File(app.applicationInfo.nativeLibraryDir, EngineRunner.FILE_NAME), java.io.File(app.filesDir, "library"))
+
+    private val library: net.tisma.app.engine.LibraryViewModel by viewModels {
+        val app = application as TismaApplication
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                net.tisma.app.engine.LibraryViewModel(libraryOf(app), java.io.File(app.cacheDir, "library")) as T
+        }
+    }
+
+    /** The shared library (p2p_library.md): its block list is checked with Tisma's key (none yet: sharing stays off). */
+    private val shared: net.tisma.app.p2p.SharedViewModel by viewModels {
+        val app = application as TismaApplication
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = net.tisma.app.p2p.SharedViewModel(
+                java.io.File(app.filesDir, "p2p"), net.tisma.app.updates.AppUpdater.hexKey(BuildConfig.UPDATES_KEY) ?: ByteArray(0),
+                server = object : net.tisma.app.p2p.LibraryServer {
+                    // Rule 3 bis: the library's own files need no session; «Denunciar» goes with the person's.
+                    override fun file(name: String) = net.tisma.cloud.CloudClient(app.settings.server, null).libraryFile(name)
+                    override fun report(model: String?, sha256: String?, reason: String) =
+                        net.tisma.cloud.CloudClient(app.settings.server, app.secrets.get(net.tisma.app.cloud.CloudViewModel.TOKEN))
+                            .libraryReport(model, sha256, reason)
+                },
+                saved = app.settings) as T
         }
     }
 
@@ -98,6 +130,9 @@ class MainActivity : ComponentActivity() {
 
     /** A model shared from another app or opened with Tisma goes to the plate (MA5). */
     private fun handleShared(intent: android.content.Intent?) {
+        // mobile_app.md, rule 10: a model site's link asks first, then downloads (SiteLink).
+        intent?.data?.takeIf { intent.action == android.content.Intent.ACTION_VIEW && it.scheme?.lowercase() in net.tisma.app.engine.SiteLink.SCHEMES }
+            ?.let { slice.linkOpened(it.toString()); nav.select(net.tisma.app.ui.Section.PLATE); return }
         val uri: android.net.Uri = sharedUri(intent) ?: return
         val name = runCatching {
             contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
@@ -122,7 +157,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             TismaTheme {
-                TismaApp(cloud, printers, slice, app.settings, nav, updates)
+                TismaApp(cloud, printers, slice, app.settings, nav, updates, library, shared)
             }
         }
     }

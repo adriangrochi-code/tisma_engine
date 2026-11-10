@@ -71,6 +71,10 @@ abstract class SimulatedPrinter(private val port: Int, private val host: String)
     /** The camera: false makes the printer report none. */
     var hasCamera = true
 
+    /** How the camera is mounted, as the printer's settings say: mirrored, and turned clockwise (0 or 270 here). */
+    var cameraFlipped = false
+    var cameraRotation = 0
+
     /** A small JPEG, as a camera snapshot. */
     val snapshot: ByteArray by lazy {
         val img = java.awt.image.BufferedImage(16, 9, java.awt.image.BufferedImage.TYPE_INT_RGB)
@@ -244,6 +248,7 @@ class MockMoonraker(port: Int = 0, host: String = "127.0.0.1") : SimulatedPrinte
                 if (hasCamera) add(buildJsonObject {
                     put("name", "printer"); put("enabled", true)
                     put("stream_url", "/webcam/?action=stream"); put("snapshot_url", "$url/snapshot.jpg")
+                    put("flip_horizontal", cameraFlipped); put("flip_vertical", false); put("rotation", cameraRotation)
                 })
             })
         })
@@ -328,6 +333,7 @@ class MockOctoPrint(port: Int = 0, host: String = "127.0.0.1") : SimulatedPrinte
                 put("webcamEnabled", hasCamera)
                 put("streamUrl", "/webcam/?action=stream")
                 put("snapshotUrl", "$url/snapshot.jpg")
+                put("flipH", cameraFlipped); put("flipV", false); put("rotate90", cameraRotation == 270)
             }
         })
         else -> throw Stop(404, """{"error": "Not Found"}""")

@@ -23,6 +23,7 @@ import net.tisma.mockprinters.MockMoonraker
 import net.tisma.mockprinters.MockOctoPrint
 import org.junit.After
 import org.junit.Before
+import kotlinx.coroutines.launch
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -186,6 +187,28 @@ class PrintersTest {
         assertEquals("12345678", store.secret(p.id))
         // Saved data survives a new store.
         assertEquals("AA:BB", PrinterStore(context, net.tisma.app.data.KeystoreSecretStore(context) { testKey }).all().single().certSha256)
+    }
+
+    @Test
+    fun `CM2 a Bambu Lab A1 or P1 camera shows its images, and a refused code says what to check`() {
+        val bambu = net.tisma.mockprinters.MockBambu().start()
+        try {
+            val saved = store.save(net.tisma.printers.PrinterConfig(PrinterStore.newId(), "A1 mini", net.tisma.printers.PrinterKind.BAMBU,
+                bambu.url, ""), bambu.accessCode)
+            val wrong = store.save(net.tisma.printers.PrinterConfig(PrinterStore.newId(), "A1 wrong", net.tisma.printers.PrinterKind.BAMBU,
+                bambu.url, ""), "00000000")
+            val vm = PrintersViewModel(store, pollMs = 20, connector = { c, secret ->
+                net.tisma.printers.BambuConnection.of(c.url, secret.orEmpty(), null) })
+            val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch { vm.followCamera(saved.id) }
+            waitState { vm.state.value.cameras[saved.id] is net.tisma.app.printers.CameraView.Image }
+            job.cancel()
+            // A wrong access code: the camera closes, and the screen says to check the code.
+            val job2 = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch { vm.followCamera(wrong.id) }
+            waitState { (vm.state.value.cameras[wrong.id] as? net.tisma.app.printers.CameraView.BambuFailed)?.kind == net.tisma.printers.PrinterException.Kind.AUTH }
+            job2.cancel()
+        } finally {
+            bambu.stop()
+        }
     }
 
     @Test
