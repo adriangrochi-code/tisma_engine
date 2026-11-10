@@ -2,6 +2,7 @@ package net.tisma.app
 
 import android.content.Context
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -150,6 +151,17 @@ class SettingsPanelTest {
         wait("edit_layers.height")
         compose.onNodeWithTag("edit_layers.height").performTextReplacement("0.12")
         compose.runOnIdle { assertEquals(0.12, slice.state.value.settings.layerHeight) }
+        // Deleting back to «1.» keeps the point (1,25 → 1,5 must not become 15), with a comma too.
+        compose.onNodeWithTag("panel_section").performScrollToNode(hasTestTag("edit_layers.first_height"))
+        val first = compose.onNodeWithTag("edit_layers.first_height")
+        first.performTextReplacement("1.25")
+        first.performTextReplacement("1.2")
+        first.performTextReplacement("1.")
+        first.assert(androidx.compose.ui.test.hasText("1.", substring = false))
+        first.performTextReplacement("1.5")
+        compose.runOnIdle { assertEquals(JsonPrimitive(1.5), slice.state.value.settings.changes["layers.first_height"]) }
+        first.performTextReplacement("1,")
+        first.assert(androidx.compose.ui.test.hasText("1,", substring = false))
     }
 
     @Test

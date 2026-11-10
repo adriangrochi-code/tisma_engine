@@ -301,7 +301,12 @@ private fun Editor(row: SettingsLayout.Row, value: kotlinx.serialization.json.Js
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         else -> {
             // Typed text is kept here while it does not fit; what fits is set at once.
-            var text by remember(row.key, shown) { mutableStateOf(shown) }
+            var text by remember(row.key) { mutableStateOf(shown) }
+            // A value changed elsewhere (reset, profile) replaces the text; the text's own value does not: «1.» or
+            // «1,» on the way to 1,5 stays as typed instead of becoming «1» (and then «15»).
+            androidx.compose.runtime.LaunchedEffect(shown) {
+                if (SettingsLayout.toJson(e, text)?.let { SettingsLayout.show(it) } != shown) text = shown
+            }
             val number = e is SettingsLayout.Editor.Number
             val bad = text.isNotBlank() && SettingsLayout.toJson(e, text) == null
             OutlinedTextField(
