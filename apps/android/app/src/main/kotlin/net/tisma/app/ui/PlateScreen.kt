@@ -252,6 +252,12 @@ private fun PlateControls(
                     Spacer(Modifier.size(8.dp))
                     Text(stringResource(R.string.plate_save))
                 }
+                // mobile_app.md, rule 6: save, share or send. A copy in the shared folder, given to the app the person picks.
+                val context = androidx.compose.ui.platform.LocalContext.current
+                OutlinedButton(onClick = { shareGcode(context, r.gcode) },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("plate_share")) {
+                    Text(stringResource(R.string.plate_share))
+                }
                 val ready = printerState.printers.filter {
                     printerState.status[it.id]?.state.let { s -> s == null || s == PrinterState.READY }
                 }
@@ -686,3 +692,15 @@ val BAMBU_PLATES = listOf("Cool Plate", "Engineering Plate", "High Temp Plate", 
 /** A printer of Bambu Lab's (the pack's `Orca_BBL` vendor, or its name). */
 internal fun isBambu(p: net.tisma.app.engine.EngineRunner.ProfileChoice?): Boolean =
     p != null && (p.printer.contains("/BBL/") || p.printer.contains("Orca_BBL") || (p.name ?: p.printer).contains("Bambu", ignoreCase = true))
+
+/** Shares a G-code through Android's chooser (a copy under cache/share, the FileProvider's shared folder). */
+internal fun shareGcode(context: android.content.Context, gcode: java.io.File) {
+    runCatching {
+        val dir = java.io.File(context.cacheDir, "share").apply { deleteRecursively(); mkdirs() }
+        val copy = gcode.copyTo(java.io.File(dir, gcode.name), overwrite = true)
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".updates", copy)
+        val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/x.gcode")
+            .putExtra(android.content.Intent.EXTRA_STREAM, uri).addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        context.startActivity(android.content.Intent.createChooser(send, gcode.name).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+    }.onFailure { net.tisma.app.data.AppLog.line("share: ${it.message}") }
+}

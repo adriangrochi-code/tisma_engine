@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Only the checked update APKs are shared, with Android's installer, and the exported «Mi biblioteca» entries
-     (.tismalib), with the app the person picks. -->
+     (.tismalib) and sliced G-code, with the app the person picks. -->
 <paths>
     <cache-path name="updates" path="updates/" />
     <cache-path name="library" path="library/export/" />
+    <cache-path name="share" path="share/" />
 </paths>

@@ -220,6 +220,7 @@
     <string name="plate_filament">Filamento</string>
     <string name="plate_layers">Capas</string>
     <string name="plate_save">Guardar el G-code</string>
+    <string name="plate_share">Compartir el G-code</string>
     <string name="plate_send_to">Mandar a</string>
     <string name="plate_print">Imprimir</string>
 
