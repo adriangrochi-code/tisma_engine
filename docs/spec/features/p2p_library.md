@@ -23,6 +23,22 @@ desventajas».
    modelos para que estén siempre disponibles. Por defecto, la app comparte solo lo que la persona publicó o bajó, solo
    con Wi-Fi y con el cargador puesto en el teléfono, con un tope de subida configurable.
 
+## Formato (propuesta del servidor, 10-11-2026)
+
+3 bis. **Rutas de lectura, sin sesión:** `GET /v1/library/index.json`, `/v1/library/blocklist.json` y sus `.sig` (64
+   bytes Ed25519 sobre los bytes exactos), `/v1/library/key` (`public_key` y `certificate`) y
+   `/v1/library/thumbs/<sha256>.webp`.
+3 ter. **Índice:** `format` `tisma-library-index`, `version` 1, `generated`, `sequence` (crece siempre: se rechaza uno
+   menor que el último visto) y `models`, cada uno con `id`, `revision`, `published`, `name`, `description`, `tags`,
+   `license` (SPDX, lista cerrada), `author` (`account` opaco y `name`), `thumbnail` (WebP, hasta 64 KB), `size`,
+   `files` (`path`, `role`: `project`, `analysis` o `photo`, sin G-code; `size`, `sha256`), `analysis` (resumen),
+   `peer_key`, `manifest_signature` (firma del par sobre `{id, revision, files}`), `swarm` (protocolo e id del enjambre,
+   lo llena el motor) y `checked` (lo revisó un sembrador).
+3 quater. **Lista de bloqueo:** `format` `tisma-library-blocklist`, `version` 1, `generated`, `sequence`, `expires`
+   (generated + 7 días; se firma de nuevo cada 6 h), `files` (sha256 y motivo), `accounts`, `peers`, `addresses` (IP
+   con `until`) y `revoked_keys`.
+3 quinquies. **Clave:** a decidir por el dueño (ver `app_updates.md`, regla 14).
+
 ## La moderación
 
 4. **Lista de bloqueo** (en el servidor, firmada como el índice):
