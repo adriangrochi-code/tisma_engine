@@ -32,18 +32,18 @@ desventajas».
    menor que el último visto) y `models`, cada uno con `id`, `revision`, `published`, `name`, `description`, `tags`,
    `license` (SPDX, lista cerrada), `author` (`account` opaco y `name`), `thumbnail` (WebP, hasta 64 KB), `size`,
    `files` (`path`, `role`: `project`, `profile` (receta), `analysis` o `photo`, sin G-code; `size`, `sha256`), `analysis` (resumen),
-   `peer_key`, `manifest_signature` (firma del par sobre `{id, revision, files}`), `swarm` (protocolo e id del enjambre,
+   `peer_key`, `manifest_signature` (firma del par sobre `{"files":[...]}`, ver 3 bis bis), `swarm` (protocolo e id del enjambre,
    lo llena el motor) y `checked` (lo revisó un sembrador).
 3 quater. **Lista de bloqueo:** `format` `tisma-library-blocklist`, `version` 1, `generated`, `sequence`, `expires`
    (generated + 7 días; se firma de nuevo cada 6 h), `files` (sha256 y motivo), `accounts`, `peers`, `addresses` (IP
-   con `until`) y `revoked_keys`.
+   con `until`) y `revoked_keys`. Una IP va como `{"sha256": SHA-256(sal del día + IP), "until"}`, con `address_salt` en la lista.
 3 bis bis. **Publicar** (servidor, a4eb152): `POST /v1/library/peer-key`, `POST /v1/library/models` (JSON, con la
    miniatura en `thumbnail_webp` en base64, hasta 64 KB), `.../models/<id>/revisions`, `DELETE .../models/<id>`,
    `GET /v1/library/mine`, `POST /v1/library/reports`. `manifest_signature` es la firma Ed25519 de la clave del par
    sobre el JSON canónico `{"files":[...]}` (claves ordenadas, sin espacios, UTF-8, archivos ordenados por `path`).
    Licencias: CC0-1.0, CC-BY-4.0, CC-BY-SA-4.0, CC-BY-NC-4.0, CC-BY-NC-SA-4.0, CC-BY-ND-4.0, CC-BY-NC-ND-4.0, MIT,
    GPL-3.0-or-later, LicenseRef-All-Rights-Reserved. Una IP de la lista va como red (`203.0.113.5/32`). Sin certificado
-   el servidor sirve igual (para probar) con `certificate` `null`; las apps no lo usan.
+   el servidor responde 503, salvo en pruebas (`TISMA_LIBRARY_UNCERTIFIED`).
 3 quinquies. **Clave** (decisión del dueño, 10-11-2026): el maestro genera una clave Ed25519 propia de la biblioteca
    (`storage/library.key`). El dueño firma una sola vez su clave pública con la clave del proyecto del USB
    (`app_updates.md`, regla 14), sobre los bytes `tisma-library-key/1\n` más la clave pública de 32 bytes, y sube ese
@@ -96,7 +96,9 @@ desventajas».
      nueva, lista para laminar e imprimir (`local_library.md`);
    - **«Publicar»:** la publica en la biblioteca compartida como cualquier modelo (reglas 1 a 7), con nombre, licencia y
      miniatura del escaneo. La revisa un sembrador como cualquier otra.
-   La pieza escaneada es privada hasta que se publica.
+   La pieza escaneada es privada hasta que se publica. Servidor: `POST /v1/files` con el trabajo de escaneo la guarda en
+   la cuenta (`pieza.stl` y su informe); `GET /v1/files` las lista para las apps, que recuerdan cuáles ya trajeron a cada
+   equipo; se publica con `from_file`. Cuota por cuenta de 5 GB.
 
 ## IP oculta (decisión del dueño, 10-11-2026: mixto)
 
