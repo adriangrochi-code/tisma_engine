@@ -12674,3 +12674,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   «Navegación» CAD/Clásica, cubo de vista arriba a la derecha, barra de vista abajo al centro, fondo degradado gris
   claro, rejilla de 10 mm marcada y punto del centro de órbita; en Impresión 3D, vista previa e Ingeniería; diseño
   propio, con guiones `--ui-script`.
+- Cambio a lo anterior (spec/next 9ec20ff): los controles por defecto son los de Fusion 360 (clic izquierdo
+  selecciona y por caja, central desplaza, Mayús+central orbita alrededor del punto bajo el cursor, rueda acerca al
+  cursor en el sentido de Fusion, doble clic central encuadra, clic derecho = menú). Preferencia «Navegación»:
+  «Fusion 360» (por defecto), «Botón derecho gira», «Clásica». Cubo y barra de vista sin cambios. UI17 actualizada.
