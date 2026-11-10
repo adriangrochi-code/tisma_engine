@@ -2505,6 +2505,17 @@ std::vector<Warning> capability_warnings(const Settings& s) {
         out.push_back({kind, -1, 0.0, std::move(message), value});
     };
     char text[200];
+    // An extruder the machine does not have: the first is used (multi_extruder.md,
+    // rule 8 ter, ME14), as Tisma Slicer does.
+    for (const auto& [key, e] : {std::pair{"extruders.walls", s.extruder_walls}, {"extruders.infill", s.extruder_infill},
+                                 {"extruders.solid_infill", s.extruder_solid_infill}, {"extruders.support", s.extruder_support},
+                                 {"extruders.support_interface", s.extruder_support_interface},
+                                 {"extruders.wipe_tower", s.extruder_wipe_tower}})
+        if (e > std::max(s.extruders, 1)) {
+            std::snprintf(text, sizeof text, "%s asks for extruder %d, but the machine has %d: extruder 1 is used", key, e,
+                          std::max(s.extruders, 1));
+            add("missing_extruder", text, double(e));
+        }
     // A filament on a pellet printer, or the other way round (pellets.md,
     // rule 1, PE9): a warning; the slicing is the same.
     if (s.material_feedstock != s.feedstock && s.machine_technology == MachineTechnology::Fdm)

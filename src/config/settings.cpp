@@ -465,8 +465,10 @@ double nozzle_of(const Settings& settings, int extruder) {
 }
 
 KindExtruders kind_extruders(const Settings& s) {
-    KindExtruders k{s.extruder_walls,  s.extruder_infill,           s.extruder_solid_infill,
-                    s.extruder_support, s.extruder_support_interface, s.extruder_wipe_tower};
+    // One the machine does not have is the first (multi_extruder.md, rule 8 ter, ME14).
+    const auto have = [&](int e) { return e > std::max(s.extruders, 1) ? 1 : e; };
+    KindExtruders k{have(s.extruder_walls),   have(s.extruder_infill),           have(s.extruder_solid_infill),
+                    have(s.extruder_support), have(s.extruder_support_interface), have(s.extruder_wipe_tower)};
     if (!s.fine_walls_coarse_infill || s.extruders < 2)
         return k;
     // The finest and the coarsest nozzle, the first of equals.
@@ -4447,12 +4449,10 @@ void check_settings(const Settings& s) {
             if (on)
                 throw SettingsError(std::string(key) + ": not with the interlocking waves (infill.waves)");
     }
-    // An extrusion's extruder must be one the machine has (multi_extruder.md, rule 2).
-    for (const auto& [key, e] : {std::pair{"extruders.walls", s.extruder_walls}, {"extruders.infill", s.extruder_infill},
-                                 {"extruders.solid_infill", s.extruder_solid_infill}, {"extruders.support", s.extruder_support},
-                                 {"extruders.support_interface", s.extruder_support_interface},
-                                 {"extruders.wipe_tower", s.extruder_wipe_tower},
-                                 {"extruders.bed_temperature_from", s.bed_temperature_from}})
+    // The bed's temperature from an extruder the machine has (multi_extruder.md,
+    // rule 2); an extrusion's extruder it does not have is the first, with a
+    // warning (rule 8 ter, ME14: capability_warnings).
+    for (const auto& [key, e] : {std::pair{"extruders.bed_temperature_from", s.bed_temperature_from}})
         if (e > s.extruders) {
             std::snprintf(text, sizeof text, "%s: extruder %d, but the machine has %d (machine.extruders)", key, e,
                           s.extruders);

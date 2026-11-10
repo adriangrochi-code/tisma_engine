@@ -12703,6 +12703,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
   interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
   (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
+- ME14 (spec/next, `multi_extruder.md` regla 8 ter; perfiles Prusa CORE One «SOLUBLE»): `extruders.support` 5 en una
+  boquilla daba «extruder 5, but the machine has 1». Ahora un extrusor que la máquina no tiene (perímetros, relleno,
+  sólido, soporte, interfaz, torre) es el 1, con el aviso `missing_extruder`; `bed_temperature_from` sigue
+  rechazándose. Prueba `[extruders]` ME14, que falla sin el arreglo.
 - Caja negra del camino de `color_mixing.md` combinado (sin hallazgos): mezcla 1 : 1 en una boquilla con jarrón,
   planchado, balsa, soportes y un degradé de un componente: G-code que pasa la comprobación, 50 cambios donde
   corresponde y nunca la herramienta de la mezcla (`T2` con dos filamentos); los soportes no toman la mezcla.

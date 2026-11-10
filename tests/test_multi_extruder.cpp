@@ -359,9 +359,11 @@ TEST_CASE("extruders: settings round trip and one extruder unchanged", "[extrude
     CHECK(back.gcode_toolchange == "T{next_extruder}");
     CHECK_THROWS_AS(parse_settings(R"({"machine": {"extruders": 17}})"), SettingsError);
     CHECK_THROWS_AS(parse_settings(R"({"retraction": {"toolchange_length": [-1]}})"), SettingsError);
-    Settings bad = base();
-    bad.extruder_infill = 3;
-    CHECK_THROWS_AS(check_settings(bad), SettingsError);
+    // An extruder the machine does not have is the first, not an error (rule 8 ter, ME14).
+    Settings missing = base();
+    missing.extruder_infill = 3;
+    CHECK_NOTHROW(check_settings(missing));
+    CHECK(kind_extruders(missing).infill == 1);
     // One extruder: no T, whatever the objects say.
     Settings one = base();
     one.extruders = 1;
@@ -1039,4 +1041,36 @@ TEST_CASE("extruders: a machine's toolchange at the start never addresses tool -
         REQUIRE(on >= 0);
         CHECK(on > off);
     }
+}
+
+TEST_CASE("extruders: one the machine does not have is the first, with a warning (multi_extruder.md, rule 8 ter, ME14)",
+          "[extruders]") {
+    // A cube with an overhang on one nozzle; the profile asks the support and
+    // its interface from extruder 5 (Prusa CORE One «SOLUBLE» profiles).
+    Settings s = base();
+    s.extruders = 1;
+    s.variables["temperature"] = {"210"};
+    s.support = true;
+    s.extruder_support = s.extruder_support_interface = 5;
+    REQUIRE_NOTHROW(check_settings(s));
+    const std::vector<Warning> warnings = capability_warnings(s);
+    const auto missing = std::count_if(warnings.begin(), warnings.end(), [](const Warning& w) { return w.kind == "missing_extruder"; });
+    CHECK(missing == 2);
+    const auto it = std::find_if(warnings.begin(), warnings.end(), [](const Warning& w) { return w.kind == "missing_extruder"; });
+    REQUIRE(it != warnings.end());
+    CHECK_THAT(it->message, ContainsSubstring("extruder 5"));
+    CHECK_THAT(it->message, ContainsSubstring("extruder 1 is used"));
+    CHECK(kind_extruders(s).support == 1);
+    CHECK(kind_extruders(s).support_interface == 1);
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 100, 100, 10);
+    add_box(p.mesh, 90, 90, 10, 115, 100, 12); // 15 mm out over nothing
+    p.objects = {{"ledge", 0, 24, 0, 0, 1}};
+    const std::string text = gcode_of(p, s);
+    CHECK_THAT(text, ContainsSubstring(";TYPE:Support material"));
+    CHECK_THAT(text, !ContainsSubstring("\nT4"));
+    CHECK_THAT(text, !ContainsSubstring("\nT1"));
+    // The bed's temperature from a missing extruder is still refused.
+    s.bed_temperature_from = 5;
+    CHECK_THROWS(check_settings(s));
 }

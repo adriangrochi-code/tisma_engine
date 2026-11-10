@@ -522,7 +522,8 @@ espacios del cabezal, en el de impresora.
 ### `extruders`
 
 De la ficha `docs/spec/features/multi_extruder.md`: qué extrusor imprime qué, con `machine.extruders` mayor que 1. Va en
-el perfil de impresión.
+el perfil de impresión. Un número mayor que `machine.extruders` (salvo en `bed_temperature_from`) no es un error: se
+usa el extrusor 1 y se lamina con el aviso `missing_extruder` (regla 8 ter, ME14).
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
