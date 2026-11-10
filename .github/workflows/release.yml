@@ -105,7 +105,8 @@ jobs:
           if [ "$RUNNER_OS" = "Linux" ]; then
             cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "$key"
           elif [ "$RUNNER_OS" = "macOS" ]; then
-            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "$key" -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)"
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "$key" -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" \
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
           else
             cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "$key"
           fi
@@ -264,8 +265,8 @@ jobs:
           # The list the programs read, with this release first and its
           # signatures empty: the published list, if any, is the base.
           gh release download updates --pattern updates.json --dir previous 2>/dev/null || true
-          # macOS is not in the update list yet (app_updates.md names no macOS system).
-          listed=$(ls packages/* | grep -v -- '-macos-')
+          # The .dmg is for the first install only (app_updates.md, rule 13): macOS updates with its .zip.
+          listed=$(ls packages/* | grep -v '\.dmg$')
           python3 tools/updates_list.py --version "$version" --tag "$TAG" --repo "$GITHUB_REPOSITORY" \
             --notes notes.md --previous previous/updates.json -o updates.json $listed
           gh release create "$TAG" packages/* updates.json --draft --title "Tisma engine $version" \

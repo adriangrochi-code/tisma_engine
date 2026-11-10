@@ -12276,3 +12276,7 @@ QA; bundle id `net.tismaservidores.tisma`).
   con la misma carpeta (todavía no es una `.app`). Sin SolidCraft en macOS (no hay paquete suyo para macOS). Los
   paquetes de macOS no entran en `updates.json`: app_updates.md no nombra un sistema macOS (pregunta a la ficha).
   Sin probar hasta la próxima release.
+- app_updates.md regla 13 (spec/next 499acaa, check_spec limpio): `macos-arm64` y `macos-x64` en la lista de
+  actualizaciones, con el `.zip` y `min_system` 13.0 (la release compila con `CMAKE_OSX_DEPLOYMENT_TARGET=13.0`); el
+  `.dmg` queda fuera de la lista. Falta: el `.zip` con `Tisma.app` (hoy la carpeta suelta) y el actualizador del
+  programa en macOS.
