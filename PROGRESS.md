@@ -12284,3 +12284,16 @@ QA; bundle id `net.tismaservidores.tisma`).
   con sips e iconutil desde el PNG de 512, el permiso de cámara (NSCameraUsageDescription) para lo que viene, los
   tipos 3mf/stl/obj, macOS 13.0 como mínimo. La release la mete en el `.zip` y el `.dmg`; la CI de macOS la arma en
   cada envío y comprueba el plist, el ícono y que el motor arranque. Sin firmar.
+
+## 2026-11-10 08:40 UTC — mantenimiento (cada 8 h)
+
+- **Revisado:** `origin/main` y `origin/dev` al día (nada nuevo). Fuzz de G-code 2000 corridas con las semillas
+  1011202603 a 1011202608 en la noche: 1 falla (la 1419 de la primera, capas cónicas, arreglada con su prueba), el
+  resto 0. Casos borde de lo nuevo (volúmenes de soporte, `chars_to`, `real_z`).
+- **Encontrado y arreglado:** `--ground-*` dejaba los bloqueadores y forzadores de soporte de un 3MF sin girar con la
+  pieza; ahora los rechaza con un mensaje claro, como a los volúmenes negativos (prueba en `[cli]`).
+- **CI:** GitHub en verde en Windows y macOS (x86_64 y arm64) desde 3667e62; macOS cuenta desde 9152eda. La CI local
+  completa corre sobre b2a2963 (resultado en la entrada siguiente).
+- **No medido:** el banco de velocidad (CPU ocupada por la CI local con ASan y el fuzz).
+- **Abierto:** la fuga en ASan de `ui_project_import_*` (dentro de llvmpipe); los volúmenes de soporte en la placa de
+  la interfaz (hace falta una forma «malla» en `PlateVolume`, con su guardado y su dibujo).
