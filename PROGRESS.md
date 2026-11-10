@@ -12646,3 +12646,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
     el cambio de herramienta, y calienta, esperando, la que no lo esté antes de su primera extrusión (temperatura de
     primera capa en la primera capa; sin valor propio, la del primero). Prueba `[extruders]` ME13, que falla sin el
     arreglo.
+- `gcode_macros.md` regla 1, «bloque de sentencias», GM18 (spec/next b1aace9; era el GM17 de las Prusa XL y la
+  Snapmaker U1): `{ … }` en varias líneas con `if … then … elsif … then … else … endif` como sentencias (anidables,
+  sin `;` después de `endif`), además de `local`, `global`, asignaciones y textos o expresiones que se escriben.
+  Antes: «unknown variable 'if'». Un bloque con `then` es de sentencias; sin `then`, la forma `{if …}` de siempre.
+  Variable `wait_for_extruder_temp` (sí, salvo con prevención de goteo). Pruebas `[macros]` GM18 y lo que usa el
+  cambio de herramienta de dos cabezales (espera, capa, herramientas, texto + número, temperatura indexada, posición);
+  fallan sin el arreglo.

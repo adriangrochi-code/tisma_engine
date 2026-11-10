@@ -2716,6 +2716,9 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     c.variables["num_extruders"] = TemplateValue::of(1LL);
     c.variables["initial_extruder"] = c.variables["initial_tool"] = TemplateValue::of(0LL);
     c.variables["is_extruder_used"] = list({TemplateValue::of(true)});
+    // A tool change waits for the next nozzle's temperature (gcode_variables.md);
+    // with ooze prevention the engine waits itself (multi_extruder.md, rule 7).
+    c.variables["wait_for_extruder_temp"] = TemplateValue::of(!s.ooze_prevention);
     c.variables["input_filename_base"] = TemplateValue::of(s.input_name);
     double lo[2] = {0.0, 0.0}, hi[2] = {0.0, 0.0};
     bool any = false;

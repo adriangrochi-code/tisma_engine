@@ -178,6 +178,38 @@ TEST_CASE("ceil, and a condition opening and closing on one line with an extrude
           "M104 S2 ; x");
 }
 
+TEST_CASE("a block of statements: local, assignments, if then elsif else endif, written texts (gcode_macros.md, GM18)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"215", "240"};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // GM18.
+    CHECK(render_template("{\nlocal a = 1;\nif a < 2 then\n  a = 3;\nendif\n\"A\" + a + \"\n\";\n}", c, "t") == "A3\n");
+    // The minimal case from the pack: nothing written.
+    CHECK(render_template("{\nlocal a = 1;\nif a < 2 then\n  a = 3;\nendif\n}", c, "t").empty());
+    // elsif, else, nested; a condition starting the block.
+    const std::string block = "{if b == 1 then \"one\";\nelsif b == 2 then\n  if 1 then \"two\"; endif\nelse \"many\";\nendif}";
+    for (const auto& [b, want] : {std::pair{1, "one"}, {2, "two"}, {5, "many"}}) {
+        TemplateContext d = c;
+        d.variables["b"] = TemplateValue::of(static_cast<long long>(b));
+        CHECK(render_template(block, d, "t") == want);
+    }
+    // Text around it and an indexed engine variable.
+    CHECK(render_template("M109 S{local t = first_layer_temperature[1];\nif t > 230 then t - 5; else t; endif}", c, "t") ==
+          "M109 S235");
+    // What a two-head toolchange uses: a wait flag, the layer and the tools,
+    // a text joined to a number, the next tool's temperature, the position.
+    TemplateContext t = c;
+    t.variables["next_extruder"] = TemplateValue::of(1LL);
+    CHECK(render_template("{if wait_for_extruder_temp and not((layer_num < 0) and (next_extruder == initial_tool)) then\n"
+                          "\"M109 T\" + next_extruder + \" S\" + first_layer_temperature[next_extruder] + \"\n\";\nendif}",
+                          t, "t")
+              .find("M109 T1 S240") != std::string::npos);
+    CHECK_NOTHROW(render_template("{position[2] = position[2] + 2.0;}", t, "t"));
+    // An if without its endif fails.
+    CHECK_THROWS_AS(render_template("{if 1 then \"x\";}", c, "t"), TemplateError);
+}
+
 TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]") {
     Settings s = test_printer();
     s.infill_solid_below_area = 0.0; // the 10 mm cube's 57.8 mm2 of infill would be all solid (infill.solid_below_area)
