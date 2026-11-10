@@ -27,3 +27,7 @@ slice
 menu more
 expect-enabled window_preview yes
 menu window_plater
+menu more
+menu shape_gallery
+menu gallery_cylinder
+expect-objects 2 Cylinder

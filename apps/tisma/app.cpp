@@ -17344,6 +17344,8 @@ void App::more_menu() {
 
         // 1. Tisma.
         card(tr(T::MoreTisma));
+        if (item("thingiverse", tr(T::ThingiverseMenu)))
+            open_link("https://www.thingiverse.com/");
         if (item("cloud", tr(T::CloudMenu)))
             cloud_open_ = true;
         if (item("config", tr(T::ConfigMenu), "Ctrl+,"))
@@ -17492,6 +17494,24 @@ void App::more_menu() {
         for (int i = 0; i < 6; ++i)
             if (item(tabs[i].name, tr(tabs[i].label), tabs[i].keys, i != 5 || result_.has_value()))
                 window_tab(i + 1);
+        // The shapes the empty bed's menu adds, 20 mm across.
+        if (ImGui::BeginMenu(tr(T::ShapeGalleryMenu))) {
+            const struct {
+                const char* name;
+                T label;
+            } shapes[] = {{"gallery_cube", T::ShapeCube}, {"gallery_cylinder", T::ShapeCylinder}, {"gallery_sphere", T::ShapeSphere}};
+            for (const auto& shape : shapes) {
+                const bool hit = ImGui::MenuItem(tr(shape.label));
+                note_rect(shape.name);
+                if (hit)
+                    add_shape(shape.label == T::ShapeCube       ? make_box(20, 20, 20)
+                              : shape.label == T::ShapeCylinder ? make_cylinder(10, 20)
+                                                                : make_sphere(10),
+                              shape.label);
+            }
+            ImGui::EndMenu();
+        }
+        note_rect("shape_gallery");
 
         // 5. View.
         card(tr(T::MoreView));

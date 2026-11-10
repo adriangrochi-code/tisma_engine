@@ -12447,3 +12447,8 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   gris sin paquete) e Imprimir por USB… (la página de la impresora). Prueba `ui_script_configuration_card`; verbos
   `expect-tab` y `expect-catalog`. Quedan: instantáneas, actualizaciones del programa en escritorio (no hay todavía),
   integración con el escritorio, grabar firmware, archivo de Wi-Fi.
+- **Paso 4b/1b:** Ventana › Galería de formas ▸ (cubo, cilindro, esfera, como el menú de la cama) y Tisma ›
+  Thingiverse (abre el sitio). Prueba en `ui_script_window_view`.
+- Repeticiones de la CI local 1234fc8: `ui_pack_published_resin`, `ui_bambu_print` y
+  `ui_view_preview_speed_vulkan_same_as_opengl` pasan; `aero_drag_coefficients` pasó los 30 min con la máquina
+  compartida (antes 11 min); se corre sola de nuevo.
