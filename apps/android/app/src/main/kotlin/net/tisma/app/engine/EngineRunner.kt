@@ -202,23 +202,11 @@ class EngineRunner(
 
     /** Runs a short engine command; its output, or an [EngineException] with stderr's last line. */
     private fun capture(args: List<String>, timeoutS: Long = 120): String {
-        workDir.mkdirs()
-        // Its own file per call: calls can overlap (a check while a slice runs).
-        val err = File.createTempFile("engine", ".err", workDir)
-        try {
-            val p = engineProcess(listOf(executable.path) + args, workDir).directory(workDir).redirectError(err).start()
-            p.outputStream.close()
-            val out = p.inputStream.bufferedReader().readText()
-            if (!p.waitFor(timeoutS, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The engine took too long", "", -1) }
-            if (p.exitValue() != 0) {
-                val e = runCatching { err.readText() }.getOrDefault("").lines().filter { it.isNotBlank() && !it.startsWith("progress") }
-                    .lastOrNull()?.removePrefix("error: ").orEmpty()
-                throw EngineException("error", e.ifBlank { "The engine stopped (exit code ${p.exitValue()})" }, "", p.exitValue())
-            }
-            return out
-        } finally {
-            err.delete()
-        }
+        // Its own files per call: calls can overlap (a check while a slice runs).
+        val c = callEngine(listOf(executable.path) + args, workDir, workDir, timeoutS)
+            ?: throw EngineException("timeout", "The engine took too long", "", -1)
+        if (c.exit != 0) throw EngineException("error", c.lastError?.ifBlank { null } ?: "The engine stopped (exit code ${c.exit})", "", c.exit)
+        return c.out
     }
 
     private fun json(text: String): JsonObject =
@@ -325,15 +313,11 @@ class EngineRunner(
         workDir.mkdirs()
         val f = File(workDir, "design.json").apply { writeText(doc.json().toString()) }
         val out = File(workDir, "design.stl").apply { delete() }
-        val err = File.createTempFile("engine", ".err", workDir)
-        val p = engineProcess(listOf(executable.path, "design", "build", f.path, "--solidcraft", solidcraft.path, "-o", out.path,
-            "--quality", quality, "--timeline"), workDir).directory(workDir).redirectError(err).start()
-        p.outputStream.close()
-        val text = p.inputStream.bufferedReader().readText()
-        if (!p.waitFor(300, TimeUnit.SECONDS)) { p.destroyForcibly(); throw EngineException("timeout", "The design took too long", "", -1) }
-        val o = runCatching { json(text) }.getOrNull()
-            ?: throw EngineException("error", err.takeIf { it.isFile }?.readText()?.trim()?.lines()?.lastOrNull()?.removePrefix("error: ")
-                ?: "The engine stopped (exit code ${p.exitValue()})", "", p.exitValue())
+        val c = callEngine(listOf(executable.path, "design", "build", f.path, "--solidcraft", solidcraft.path, "-o", out.path,
+            "--quality", quality, "--timeline"), workDir, workDir, 300)
+            ?: throw EngineException("timeout", "The design took too long", "", -1)
+        val o = runCatching { json(c.out) }.getOrNull()
+            ?: throw EngineException("error", c.lastError ?: "The engine stopped (exit code ${c.exit})", "", c.exit)
         return out.takeIf { it.isFile && it.length() > 84 } to o
     }
 
@@ -425,4 +409,32 @@ class EngineRunner(
 internal fun engineProcess(command: List<String>, base: File): ProcessBuilder = ProcessBuilder(command).also { pb ->
     val tmp = File(base, "tmp").apply { mkdirs() }
     pb.environment()["TMPDIR"] = tmp.path
+}
+
+/** A finished engine call: its exit code, its output and the last line of its errors (progress lines left out). */
+internal class EngineCall(val exit: Int, val out: String, val lastError: String?)
+
+/**
+ * Runs the engine with [args] and waits at most [timeoutS]. Its output goes to a file, not a pipe read before the
+ * wait: reading a pipe to its end first would wait forever for an engine that hangs, and the time limit never came.
+ * Null when the time ran out (the engine is stopped). Its temporary files are always deleted.
+ */
+internal fun callEngine(command: List<String>, base: File, dir: File, timeoutS: Long): EngineCall? {
+    dir.mkdirs()
+    val out = File.createTempFile("engine", ".out", dir)
+    val err = File.createTempFile("engine", ".err", dir)
+    try {
+        val p = engineProcess(command, base).directory(dir).redirectOutput(out).redirectError(err).start()
+        p.outputStream.close()
+        if (!p.waitFor(timeoutS, TimeUnit.SECONDS)) {
+            p.destroyForcibly()
+            p.waitFor(5, TimeUnit.SECONDS)
+            return null
+        }
+        val last = runCatching { err.readText() }.getOrDefault("").lines()
+            .filter { it.isNotBlank() && !it.startsWith("progress") }.lastOrNull()?.removePrefix("error: ")
+        return EngineCall(p.exitValue(), out.readText(), last)
+    } finally {
+        out.delete(); err.delete()
+    }
 }

@@ -248,15 +248,8 @@ class ProfilePack(
     }
 
     private fun run(args: List<String>): String {
-        dataDir.mkdirs()
-        val err = File.createTempFile("pack", ".err", dataDir)
-        val p = engineProcess(listOf(engine.path) + args, dataDir).redirectError(err).start()
-        p.outputStream.close()
-        val out = p.inputStream.bufferedReader().readText()
-        if (!p.waitFor(10, TimeUnit.MINUTES)) { p.destroyForcibly(); throw PackException("The engine took too long") }
-        val e = runCatching { err.readText() }.getOrDefault("").lines().filter { it.isNotBlank() && !it.startsWith("progress") }
-        err.delete()
-        if (p.exitValue() != 0) throw PackException(e.lastOrNull()?.removePrefix("error: ") ?: "The engine stopped (${p.exitValue()})")
-        return out
+        val c = callEngine(listOf(engine.path) + args, dataDir, dataDir, 600) ?: throw PackException("The engine took too long")
+        if (c.exit != 0) throw PackException(c.lastError ?: "The engine stopped (${c.exit})")
+        return c.out
     }
 }

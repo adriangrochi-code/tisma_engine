@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
  * runs its commands and reads their JSON. Own design over the engine's
  * commands.
  */
-class Library(private val engine: File, val dir: File) {
+class Library(private val engine: File, val dir: File, private val timeoutS: Long = 300) {
     class LibraryException(message: String, val exitCode: Int = 1, val answer: JsonObject? = null) : Exception(message)
 
     /** A line of the list (rule 4). */
@@ -159,21 +159,18 @@ class Library(private val engine: File, val dir: File) {
 
     private fun run(args: List<String>): String {
         dir.mkdirs()
-        // Its own file per call: two calls can overlap (a save and the check after it).
-        val err = File.createTempFile("library", ".err", dir.parentFile ?: dir)
-        val p = engineProcess(listOf(engine.path) + args, dir.parentFile ?: dir).redirectError(err).start()
-        p.outputStream.close()
-        val out = p.inputStream.bufferedReader().readText()
-        if (!p.waitFor(5, TimeUnit.MINUTES)) { p.destroyForcibly(); throw LibraryException("The engine took too long") }
-        val e = runCatching { err.readText() }.getOrDefault("").lines().filter { it.isNotBlank() }.lastOrNull()?.removePrefix("error: ")
-        err.delete()
-        if (p.exitValue() != 0) {
-            val answer = runCatching { Json.parseToJsonElement(out) as JsonObject }.getOrNull()
-            val message = answer?.s("error_es")?.ifBlank { null } ?: answer?.s("error")?.ifBlank { null } ?: e
-                ?: "The engine stopped (${p.exitValue()})"
-            throw LibraryException(message, p.exitValue(), answer)
+        // Its own files per call: two calls can overlap (a save and the check after it).
+        val c = callEngine(listOf(engine.path) + args, dir.parentFile ?: dir, dir.parentFile ?: dir, timeoutS)
+            ?: throw LibraryException("The engine took too long")
+        if (c.exit != 0) {
+            val answer = runCatching { Json.parseToJsonElement(c.out) as JsonObject }.getOrNull()
+            // The engine gives both languages: the phone's own, not always Spanish.
+            val es = java.util.Locale.getDefault().language == "es"
+            val message = (if (es) answer?.s("error_es")?.ifBlank { null } else null) ?: answer?.s("error")?.ifBlank { null }
+                ?: answer?.s("error_es")?.ifBlank { null } ?: c.lastError ?: "The engine stopped (${c.exit})"
+            throw LibraryException(message, c.exit, answer)
         }
-        return out
+        return c.out
     }
 
     private fun json(text: String): JsonObject =
