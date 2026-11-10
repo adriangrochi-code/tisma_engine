@@ -12524,3 +12524,8 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   laminar («el modo vaso imprime un solo objeto») aunque solo uno fuera imprimible; el nodo ya los quitaba antes de
   contar. Ahora cuenta solo los imprimibles. Prueba en `ui_script_printable` (falla sin el arreglo).
 - Revisado sin hallazgos: `ascii_gcode`, `obj_text`, `toolpaths_obj`, instancias, pegar y recargar.
+- Foco de las próximas rondas de bugs (dueño, 19:35, por la sesión de especificaciones): la generación, no solo
+  los cierres. Soporte en pendientes empinadas y suaves, y separación de interfaz y techo por estilo; ramas
+  orgánicas que chocan con el modelo; soporte bajo capas curvas; altura variable con soporte (alturas de capa del
+  soporte frente al modelo); cúspide con `detail_height`; curvas con altura variable; límites de pendiente frente a
+  `machine.free_angle`. Cada hallazgo con prueba.
