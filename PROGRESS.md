@@ -12238,3 +12238,6 @@ QA; bundle id `net.tismaservidores.tisma`).
   `src/io/number.hpp` usa el de la biblioteca si está, si no un flujo con la configuración regional clásica; los 23
   usos pasan por ahí. Prueba `[number]` compara los dos caminos. arm64 (macos-14) se cancela sin empezar: sin causa
   vista todavía (puede ser un límite de minutos de macOS de la cuenta).
+- p2p: vectores de prueba mandados al servidor (claves de prueba de RFC 8032 §7.1): clave de par → PeerId
+  `12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV`; ticket con la clave de biblioteca de la prueba 2, carga
+  canónica con claves ordenadas, base64url sin relleno. Se pasan a una prueba del motor cuando exista el cliente.
