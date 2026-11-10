@@ -12224,3 +12224,9 @@ QA; bundle id `net.tismaservidores.tisma`).
   (punto fijo) no convergía. Arreglo: bisección cuando no converge; J entre 0,25 y 4 en toda la caja y su borde (las
   pruebas solo en la pieza); cono analítico nivelado más allá de la caja. Prueba `fuzz_gcode_1011202603_1419`.
   **Decisión (diseño propio, la ficha no lo dice):** los topes de J fuera de la pieza, 0,25 a 4.
+- Servidor (búsqueda de bugs, 5 arreglos): `GET /v1/library/index.json` y `blocklist.json` van en gzip si el pedido lo
+  acepta; la firma `.sig` es sobre los bytes sin comprimir y el ETag el de los bytes planos. Para el cliente de la
+  biblioteca compartida (pendiente): descomprimir antes de verificar.
+- Paquete: con `--filament-gcode-from-source`, 14 variantes cortan por `support_air_filtration` e
+  `initial_layer_height`, que no están en gcode_variables.md ni en los `values` de la máquina. Pedido a la ficha
+  agregarlas; el motor regenera la tabla cuando lleguen.
