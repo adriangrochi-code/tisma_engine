@@ -119,11 +119,13 @@ sale de la documentación pública de cada programa; si no hay, se avisa en el r
 | `year` | entero | `start` (2) | `year` |
 ## `orcaslicer`
 
-250 variables.
+252 variables.
 
 | Variable | Tipo | Dónde | Equivalente |
 |---|---|---|---|
 | `layer_z` | número | `before_layer_change`, `layer_change`, `toolchange`, `timelapse`, `end`, `toolchange_gcode` (735) | `layer_z` |
+| `initial_layer_height` | número | `filament_start` (14, agregado 10-11) | `first_layer_height` |
+| `support_air_filtration` | sí/no | `filament_start` (14, agregado 10-11) | sin equivalente: vale no |
 | `nozzle_temperature_initial_layer` | lista de enteros | `start`, `toolchange`, `toolchange_gcode`, `before_layer_change`, `end` (572) | `first_layer_temperature` |
 | `bed_temperature_initial_layer_single` | entero | `start`, `layer_change`, `before_layer_change` (501) | `first_layer_bed_temperature` |
 | `layer_num` | entero | `layer_change`, `before_layer_change`, `toolchange`, `wrapping_detection_gcode`, `timelapse`, `toolchange_gcode`, `end` (281) | `layer_num` |
