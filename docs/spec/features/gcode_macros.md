@@ -22,6 +22,13 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
    - **condición:** `{if <condición>}…{elsif <condición>}…{else}…{endif}`; `elsif` y `else` son opcionales y puede
      haber varios `elsif`; pueden anidarse;
    - **expresión:** `{<expresión>}` se reemplaza por su valor;
+   - **bloque de sentencias:** `{ sentencia; sentencia; … }` en varias líneas. Sentencias: `local nombre = valor;` y
+     `global nombre = valor;` (variables nuevas, `local` solo dentro de esta plantilla); una asignación
+     `nombre = valor;` o `nombre[i] = valor;` (también a variables del motor como `position[2]`, que cambia la posición
+     que sigue); `if <condición> then … elsif <condición> then … else … endif` (pueden anidarse, sin `;` después de
+     `endif`); y un texto o una expresión sueltos terminados en `;`, que se escriben en la salida tal cual (un salto de
+     línea dentro de las comillas sale como salto de línea). Lo que no sea una sentencia de texto no escribe nada
+     (prueba GM18);
    - **forma vieja:** `[variable]` o `[variable_índice]` (por ejemplo `[temperature_0]`) se reemplaza por el valor, sin
      cuentas.
 2. **Valores:** números (enteros y con decimales), textos entre comillas dobles (`"texto"`, sin interpretar lo que
@@ -145,4 +152,5 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 | GM15 | G-code `orcaslicer` con `{if outer_wall_acceleration > 0}` y la variable como lista de uno o de dos (dos extrusores, el segundo en uso) | Se interpreta: vale el único valor, o el del segundo extrusor; no cae en la versión simple |
 | GM16 | `{ceil(2.1)}` y `{ceil(3)}` en un G-code `orcaslicer` | `3` y `3` |
 | GM17 | Una condición que abre y cierra en la misma línea, dentro de un texto y con un índice de extrusor: `M104 T1 S{if filament_type[1] == "PLA"}215{else}240{endif}` con PLA | `M104 T1 S215`; no cae en la versión simple |
+| GM18 | `{\nlocal a = 1;\nif a < 2 then\n  a = 3;\nendif\n"A" + a + "\n";\n}` (con saltos de línea reales) | Sale `A3` y un salto de línea; nada más |
 | GM9 | Todas las impresoras del paquete, cada una con sus G-code originales | Todas laminan; las variables que falten quedan en el registro |
