@@ -3,16 +3,27 @@
     {"resin.layer_height",
      "Una impresora de resina arma la pieza de a una capa: la plataforma de impresión baja dentro de la cubeta con "
      "resina líquida y una pantalla que está abajo ilumina la forma de la capa, que se endurece con la luz. Este "
-     "ajuste es el grosor de cada capa, el mismo para todas.\n\nCapas más finas dejan superficies más lisas y menos "
+     "ajuste es el grosor de cada capa, salvo la primera, que puede tener el suyo.\n\nCapas más finas dejan superficies más lisas y menos "
      "escalones en las curvas, pero son más capas y la impresión tarda más. Capas más gruesas imprimen más rápido, "
      "pero cada una necesita más luz para curarse del todo.\n\nEjemplo: 0,05 mm es lo habitual; 0,03 mm para una "
      "miniatura con mucho detalle; 0,1 mm para una pieza grande donde importa más el tiempo.",
      "A resin printer builds the part one layer at a time: the build plate dips into the vat of liquid resin and a "
      "screen underneath lights up the shape of the layer, which hardens under the light. This setting is how thick "
-     "each layer is, the same for all of them.\n\nThinner layers give smoother surfaces and smaller steps on curves, "
+     "each layer is, except the first, which may have its own.\n\nThinner layers give smoother surfaces and smaller steps on curves, "
      "but there are more of them and the print takes longer. Thicker layers print faster, but each one needs more "
      "light to cure all the way through.\n\nExample: 0.05 mm is the usual choice; 0.03 mm for a highly detailed "
      "miniature; 0.1 mm for a big part where time matters more."},
+    {"resin.first_layer_height",
+     "El grosor de la primera capa, la que se cura pegada a la plataforma de impresión. Algunos fabricantes de resina "
+     "piden una primera capa más gruesa que las demás, para que la pieza se agarre mejor a la plataforma; otros, una "
+     "más fina. Con 0 mide lo mismo que las demás capas.\n\nLas capas que siguen miden la altura de capa normal, así "
+     "que la segunda capa termina a la altura de la primera más una capa.\n\nEjemplo: con 0,1 mm aquí y capas de "
+     "0,05 mm, la primera capa llega a 0,1 mm y la segunda a 0,15 mm.",
+     "How thick the first layer is, the one cured against the build plate. Some resin makers ask for a first layer "
+     "thicker than the rest, so the part holds on to the plate better; others ask for a thinner one. At 0 it is as "
+     "thick as the other layers.\n\nThe layers after it are the usual layer height, so the second layer ends at the "
+     "first one's height plus one layer.\n\nExample: with 0.1 mm here and 0.05 mm layers, the first layer reaches "
+     "0.1 mm and the second 0.15 mm."},
     {"resin.supports",
      "La pieza crece colgada de la plataforma, y cada capa nueva se pega a la anterior. Una zona que empieza en el "
      "aire, sin nada que la sostenga, como la punta del mentón de una figura, queda flotando en la resina y se "

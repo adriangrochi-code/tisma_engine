@@ -2130,7 +2130,8 @@ const std::map<T, const char*>& row_keys() {
         {T::DisplayPixelsX, "machine.display_pixels_x"}, {T::DisplayPixelsY, "machine.display_pixels_y"},
         {T::DisplayWidth, "machine.display_width"}, {T::DisplayHeight, "machine.display_height"},
         {T::DisplayMirrorX, "machine.display_mirror_x"}, {T::DisplayMirrorY, "machine.display_mirror_y"},
-        {T::ResinLayerHeight, "resin.layer_height"}, {T::ResinExposure, "resin.exposure"},
+        {T::ResinLayerHeight, "resin.layer_height"}, {T::ResinFirstLayerHeight, "resin.first_layer_height"},
+        {T::ResinExposure, "resin.exposure"},
         {T::ResinBottomExposure, "resin.bottom_exposure"}, {T::ResinBottomLayers, "resin.bottom_layers"},
         {T::ResinElephantFoot, "resin.elephant_foot"}, {T::ResinScaleX, "resin.scale_x"},
         {T::ResinScaleY, "resin.scale_y"}, {T::ResinScaleZ, "resin.scale_z"},
@@ -9680,6 +9681,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::DisplayMirrorY, "machine.display_mirror_y", s.display_mirror_y);
     } else if (id == "resin_layers") {
         mm(T::ResinLayerHeight, "resin.layer_height", s.resin_layer_height, 0.005, 0.5, "%.3f mm", 0.001f);
+        // 0: as the others (resin.md, rule 1).
+        mm(T::ResinFirstLayerHeight, "resin.first_layer_height", s.resin_first_layer_height, 0.0, 0.5, "%.3f mm", 0.001f);
     } else if (id == "resin_supports") {
         // Resin supports, pad and hollowing (resin_supports.md).
         flag(T::ResinSupports, "resin.supports", s.resin_supports);

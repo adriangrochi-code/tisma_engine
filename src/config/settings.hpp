@@ -539,6 +539,7 @@ struct Settings {
     // edges (0: black and white). The defaults are a generic standard resin's
     // on a Mars 5.
     double resin_layer_height = 0.05;
+    double resin_first_layer_height = 0.0; // the first layer's (resin.md, rule 1); 0: resin_layer_height
     double resin_exposure = 2.5, resin_bottom_exposure = 30.0;
     int resin_bottom_layers = 5;
     double resin_elephant_foot = 0.2;

@@ -2282,6 +2282,7 @@
     X(SubResinCorrections, "Correcciones de resina", "Resin corrections") \
     X(SubResinMaterial, "Datos de la resina", "Resin data") \
     X(ResinLayerHeight, "Altura de capa", "Layer height") \
+    X(ResinFirstLayerHeight, "Altura de la primera capa", "First layer height") \
     X(DisplayPixelsX, "Píxeles en X", "Pixels in X") \
     X(DisplayPixelsY, "Píxeles en Y", "Pixels in Y") \
     X(DisplayWidth, "Ancho de la pantalla", "Display width") \

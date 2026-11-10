@@ -1564,7 +1564,7 @@ Settings parse_checked(std::string_view text) {
     });
     // Resin printing (resin.md).
     read_group(root, "resin",
-               {"layer_height", "exposure", "bottom_exposure", "bottom_layers", "elephant_foot", "scale_x", "scale_y",
+               {"layer_height", "first_layer_height", "exposure", "bottom_exposure", "bottom_layers", "elephant_foot", "scale_x", "scale_y",
                 "scale_z", "lift_distance", "lift_speed", "bottom_lift_distance", "bottom_lift_speed", "retract_speed",
                 "wait_before_exposure", "wait_after_cure", "wait_after_lift", "light_pwm", "bottom_light_pwm",
                 "antialiasing", "density", "gamma", "z_correction_layers", "absolute_correction", "printer_name",
@@ -1610,6 +1610,8 @@ Settings parse_checked(std::string_view text) {
         };
         if (n == "layer_height")
             s.resin_layer_height = in(0.005, 0.5);
+        else if (n == "first_layer_height") // 0: resin.layer_height (resin.md, rule 1)
+            s.resin_first_layer_height = d == 0.0 ? 0.0 : in(0.005, 0.5);
         else if (n == "exposure" || n == "bottom_exposure")
             (n == "exposure" ? s.resin_exposure : s.resin_bottom_exposure) = above(600.0, "s");
         else if (n == "bottom_layers")
@@ -3506,6 +3508,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"machine.display_mirror_x", flag(s.display_mirror_x)},
         {"machine.display_mirror_y", flag(s.display_mirror_y)},
         {"resin.layer_height", num(s.resin_layer_height)},
+        {"resin.first_layer_height", num(s.resin_first_layer_height)},
         {"resin.exposure", num(s.resin_exposure)},
         {"resin.bottom_exposure", num(s.resin_bottom_exposure)},
         {"resin.bottom_layers", std::to_string(s.resin_bottom_layers)},
@@ -3933,6 +3936,7 @@ std::string settings_json(const Settings& s) {
         {"belt", {{"enabled", s.belt_enabled}, {"angle", s.belt_angle}, {"belt_is_z", s.belt_is_z}}},
         {"resin",
          {{"layer_height", s.resin_layer_height},
+          {"first_layer_height", s.resin_first_layer_height},
           {"exposure", s.resin_exposure},
           {"bottom_exposure", s.resin_bottom_exposure},
           {"bottom_layers", s.resin_bottom_layers},

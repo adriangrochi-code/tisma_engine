@@ -634,7 +634,8 @@ material.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
 |---|---|---|---|---|
-| `layer_height` | número | 0.05 | 0,005 a 0,5 | Altura de todas las capas, en mm. La capa `n` (desde 0) tiene su tope en `(n + 1) · altura` y se corta en su mitad |
+| `layer_height` | número | 0.05 | 0,005 a 0,5 | Altura de las capas salvo la primera, en mm. La capa `n` (desde 0) tiene su tope en `(n + 1) · altura` y se corta en su mitad |
+| `first_layer_height` | número | 0 | 0, o 0,005 a 0,5 | Altura de la primera capa, en mm (ficha `resin.md`, regla 1, RE11); 0: `layer_height`. Con ella, la capa `n` tiene su tope en `first_layer_height + n · layer_height` |
 | `exposure`, `bottom_exposure` | número | 2.5, 30 | más de 0 a 600 | Exposición de las capas normales y de las de fondo, en s |
 | `bottom_layers` | entero | 5 | 0 a 1000 | Capas de fondo: usan `bottom_exposure`, la subida de fondo y `bottom_light_pwm`. Con 0, igual la primera es de fondo |
 | `elephant_foot` | número | 0.2 | 0 a 2 | Cuánto se achica la primera capa en XY, en mm. La capa `i` de las `N` de fondo se achica `elephant_foot · (1 − i / N)` |

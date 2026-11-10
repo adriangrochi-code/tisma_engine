@@ -218,7 +218,7 @@ const std::vector<SectionLayout>& print_layout() {
             {"extruders.ooze_prevention", A},
             {"extruders.standby_delta", A}}},
           {"multi_nozzle", T::SubMultiNozzle, {{"multi.fine_walls_coarse_infill", N}, {"multi.color_mixing", N}}},
-          {"resin_layers", T::SubResinLayers, {{"resin.layer_height", N}}},
+          {"resin_layers", T::SubResinLayers, {{"resin.layer_height", N}, {"resin.first_layer_height", A}}},
           {"resin_supports", T::SubResinSupports,
            {{"resin.supports", N},
             {"resin.support_elevation", N},
