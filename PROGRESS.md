@@ -12230,3 +12230,7 @@ QA; bundle id `net.tismaservidores.tisma`).
 Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`PluralsTest`) y el ícono de conexión
 (`ConnectionIconTest`). Siguiente, en orden: dibujos de impresora/cama/boquilla, impresoras remotas de los puentes
 (falta la ficha de la ruta), tutoriales del primer uso.
+- 75d2a4b: el servicio que avisa el fin de impresión seguía para siempre si una impresora se apagaba a mitad de
+  impresión, y un error que no fuera de impresora (dirección mala, conexión cortada) lo cortaba dejando su aviso
+  fijo en pantalla. Ahora una impresora callada deja de contar a las 20 vueltas (5 min) y el servicio siempre se
+  cierra (`PrintWatcherTest`).
