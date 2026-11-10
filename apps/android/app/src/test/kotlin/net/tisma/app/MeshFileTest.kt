@@ -40,6 +40,19 @@ class MeshFileTest {
     }
 
     @Test
+    fun `OBJ and ASCII STL with bad lines skip them instead of closing the app`() {
+        val obj = tmp.newFile("bad.obj").apply {
+            writeText("v\t0 0 0\nv 1 0 0\nv 0 1 0\nv 1 2\nvn 0 0 1\nf 1 2 3\nf 1 2 9\nf 0 1 2\nf -3 -2 -1\nf 1 2\n")
+        }
+        assertEquals(2, MeshFile.read(obj).triangles)
+        val stl = tmp.newFile("bad.stl").apply {
+            writeText("solid x\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 nan-ish\nvertex 0 1 0\nendloop\nendfacet\n" +
+                "facet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid x\n")
+        }
+        assertEquals(1, MeshFile.read(stl).triangles)
+    }
+
+    @Test
     fun `3MF build items, components and transforms`() {
         val model = """<model unit="millimeter"><resources>
             <object id="1" type="model"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/></vertices>

@@ -170,9 +170,10 @@ class MeshFile(
                 r.forEachLine { line ->
                     val t = line.trim()
                     if (t.startsWith("vertex", ignoreCase = true)) {
-                        val parts = t.split(Regex("\\s+"))
-                        if (parts.size >= 4 && k < 3) {
-                            v[3 * k] = parts[1].toFloat(); v[3 * k + 1] = parts[2].toFloat(); v[3 * k + 2] = parts[3].toFloat()
+                        val parts = t.split(WS)
+                        val x = parts.getOrNull(1)?.toFloatOrNull(); val y = parts.getOrNull(2)?.toFloatOrNull(); val z = parts.getOrNull(3)?.toFloatOrNull()
+                        if (x != null && y != null && z != null && k < 3) {
+                            v[3 * k] = x; v[3 * k + 1] = y; v[3 * k + 2] = z
                             k++
                         }
                     } else if (t.startsWith("endloop", ignoreCase = true)) {
@@ -198,21 +199,36 @@ class MeshFile(
             return b.build()
         }
 
+        /** Whitespace, compiled once: a model can have millions of lines. */
+        private val WS = Regex("\\s+")
+
+        /** OBJ: `v` and `f` lines (tabs too, negative indices count back); a bad number or index skips its line. */
         fun readObj(input: InputStream): MeshFile {
-            val verts = ArrayList<FloatArray>()
+            var verts = FloatArray(3 * 1024)
+            var n = 0
             val b = Builder()
             input.bufferedReader().forEachLine { line ->
                 val t = line.trim()
-                when {
-                    t.startsWith("v ") -> t.split(Regex("\\s+")).let { verts += floatArrayOf(it[1].toFloat(), it[2].toFloat(), it[3].toFloat()) }
-                    t.startsWith("f ") -> {
-                        val idx = t.split(Regex("\\s+")).drop(1).map { s ->
-                            val i = s.substringBefore('/').toInt()
-                            if (i < 0) verts.size + i else i - 1
+                if (t.length < 2 || !t[1].isWhitespace()) return@forEachLine
+                when (t[0]) {
+                    'v' -> {
+                        val p = t.split(WS)
+                        val x = p.getOrNull(1)?.toFloatOrNull(); val y = p.getOrNull(2)?.toFloatOrNull(); val z = p.getOrNull(3)?.toFloatOrNull()
+                        if (x != null && y != null && z != null) {
+                            if (3 * n + 3 > verts.size) verts = verts.copyOf(verts.size * 2)
+                            verts[3 * n] = x; verts[3 * n + 1] = y; verts[3 * n + 2] = z
+                            n++
                         }
+                    }
+                    'f' -> {
+                        val idx = t.split(WS).drop(1).map { s ->
+                            val i = s.substringBefore('/').toIntOrNull() ?: 0
+                            if (i < 0) n + i else i - 1
+                        }
+                        if (idx.size < 3 || idx.any { it !in 0 until n }) return@forEachLine
                         for (k in 1 until idx.size - 1) {
-                            val a = verts[idx[0]]; val c = verts[idx[k]]; val d = verts[idx[k + 1]]
-                            b.add(a[0], a[1], a[2], c[0], c[1], c[2], d[0], d[1], d[2])
+                            val a = 3 * idx[0]; val c = 3 * idx[k]; val d = 3 * idx[k + 1]
+                            b.add(verts[a], verts[a + 1], verts[a + 2], verts[c], verts[c + 1], verts[c + 2], verts[d], verts[d + 1], verts[d + 2])
                         }
                     }
                 }
@@ -328,7 +344,7 @@ class MeshFile(
         private fun identity() = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f)
 
         private fun matrix(text: String?): FloatArray {
-            val v = text?.trim()?.split(Regex("\\s+"))?.mapNotNull { it.toFloatOrNull() }
+            val v = text?.trim()?.split(WS)?.mapNotNull { it.toFloatOrNull() }
             return if (v != null && v.size == 12) v.toFloatArray() else identity()
         }
 
