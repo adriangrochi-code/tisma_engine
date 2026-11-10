@@ -12589,3 +12589,37 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   «El filamento no servía con esta impresión: se cambió a <nombre>»; si ninguno sirve, queda el que estaba. La
   decisión es `pack_refit_filament` (motor), probada en `[pack]`; la interfaz la llama al elegir una impresión del
   paquete. Sin guion de interfaz: el paquete de prueba tiene un solo filamento de Acme.
+
+## Búsqueda profunda: tabla de cobertura (dueño, 2026-11-10 21:00; hasta 2026-11-12 03:10 UTC)
+
+Áreas de `docs/spec/COVERAGE.md` más los flujos de interfaz pedidos. «Revisado» = probado contra la ficha buscando
+salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las pendientes en este orden.
+
+| Área | Estado | Fecha | Qué se probó | Hallazgos |
+|---|---|---|---|---|
+| Capas y corte | pendiente | | | |
+| Paredes | revisado (parcial) | 10-11 | anchos de cordón (P15), paredes de 0,3/0,6 mm, cubo de 0,8 mm, medidas externas = modelo | regla 8 (anchos) |
+| Superficies y relleno | pendiente | | | |
+| Falda, borde y balsa | revisado (parcial) | 10-11 | falda en secuencial (SQ6) | una falda por objeto → una sola |
+| Soportes | revisado (parcial) | 10-11 | bloqueador pintado (rejilla, ajustado, orgánico), borrar, guardar y reabrir; `xy_gap` % | BH47; `xy_gap` del perímetro externo |
+| Velocidades y aceleraciones | revisado (parcial) | 10-11 | `speed.first_layer` en mm/s y % | era un tope, ahora fija la velocidad |
+| Enfriamiento | pendiente | | | |
+| Retracción y viajes | pendiente | | | |
+| Anchos y flujo | pendiente | | | |
+| Filamento | pendiente | | | |
+| Impresora y G-code (incl. secuencial) | revisado (parcial) | 10-11 | secuencial: orden, paso al siguiente objeto, falda | falda única |
+| Multimaterial | pendiente | | | |
+| Resina | pendiente | | | |
+| Herramientas sobre los modelos (corte, acomodo, pintura) | pendiente | | | |
+| Vista previa / visor de G-code | revisado (parcial) | 10-11 | leyenda frente al G-code, OBJ de trayectorias | — |
+| Archivos (STL/OBJ/3MF, G-code binario, unidades) | revisado (parcial) | 10-11 | idas y vueltas STL/OBJ/3MF, binario↔ASCII, normales invertidas | 3MF a `%.9g` |
+| Perfiles y configuración (paquete) | revisado (parcial) | 10-11 | `compatible_prints`, cambio de filamento | regla nueva |
+| Conexión con impresoras / página de la impresora | pendiente | | | |
+| Lo propio de Tisma (curvas, altura variable, cúspide) | pendiente | | | |
+| Servicios (nube, nodos, biblioteca) | pendiente | | | |
+| Interfaz: menús, diálogos, preferencias | revisado (parcial) | 10-11 | auditoría de interface.md (tabla de arriba), Imprimible, vaso | vaso con modelos no imprimibles |
+| Interfaz: calibraciones | pendiente | | | |
+| Línea de comandos | pendiente | | | |
+| Análisis (FEA, CFD) | pendiente | | | |
+| Migración | pendiente | | | |
+| Modelos extremos (diminutos, enormes, no cerrados, fuera de la cama) | revisado (parcial) | 10-11 | normales invertidas, paredes finas, cubo diminuto | — |
