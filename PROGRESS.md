@@ -12517,3 +12517,10 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
 - Cola p2p (spec/next 967f7a3, p2p_library.md): la lista de bloqueo suma `models` (código de publicación y motivo): el
   cliente deja de compartir y bajar esa publicación y borra sus archivos con el aviso «retirado», como un archivo
   bloqueado. Solo publican cuentas registradas; la tarjeta del modelo muestra el código de publicación.
+
+## 2026-11-10 19:30 — búsqueda de bugs (pase horario)
+
+- Modo vaso con un modelo fuera de la impresión: la interfaz contaba todos los modelos de la placa y se negaba a
+  laminar («el modo vaso imprime un solo objeto») aunque solo uno fuera imprimible; el nodo ya los quitaba antes de
+  contar. Ahora cuenta solo los imprimibles. Prueba en `ui_script_printable` (falla sin el arreglo).
+- Revisado sin hallazgos: `ascii_gcode`, `obj_text`, `toolpaths_obj`, instancias, pegar y recargar.

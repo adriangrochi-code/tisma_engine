@@ -6385,8 +6385,11 @@ void App::start_slice() {
         return;
     }
     // Vase mode prints one object (vase_mode.md, rule 2), or several one
-    // after another (sequential.md, rule 5).
-    if (settings_.vase && objects_.size() > 1 && !settings_.sequential) {
+    // after another (sequential.md, rule 5). A model left out of the print
+    // does not count.
+    const auto printed_count =
+        std::count_if(objects_.begin(), objects_.end(), [](const PlateObject& o) { return o.printable; });
+    if (settings_.vase && printed_count > 1 && !settings_.sequential) {
         fail(T::CannotSlice, tr(T::VaseManyObjects));
         return;
     }

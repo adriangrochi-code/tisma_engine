@@ -9,6 +9,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- El modo vaso ya no se niega a laminar cuando la placa tiene otro modelo marcado como no imprimible.
 - La barra de estado ya no lee fuera del texto con un «1 » al final (lo encontró ASan).
 - Importar preferencias reemplaza la lista de proyectos recientes en vez de duplicarla.
 - «Más» en tarjetas, con atajos y entradas en gris; Archivo, Editar, Ventana, Vista, Configuración, Calibración y
