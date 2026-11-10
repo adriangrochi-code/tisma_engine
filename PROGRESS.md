@@ -12237,3 +12237,6 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 - 559b192: si marcar «recibida» una pieza escaneada fallaba por la red, la vez siguiente se guardaba otra vez en Mi
   biblioteca (duplicada). Ahora el teléfono recuerda las guardadas sin confirmar y solo reintenta la marca. Una huella
   en mayúsculas rechazaba todas, y una bajada a medias quedaba en disco (`ScansTest`).
+- 63dce76: cada borrado en Mi biblioteca guardaba una copia para «Deshacer» que solo se limpiaba en `onCleared`, que no
+  corre cuando Android cierra la app; las copias viejas también quedaban. Ahora solo queda la última y las de una
+  sesión anterior se borran al abrir (`LibraryTest`).
