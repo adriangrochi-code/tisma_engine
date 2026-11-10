@@ -163,7 +163,8 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
                 }
                 return
             }
-            val code = t.substringBefore(';').trim()
+            // Words may be separated by tabs as well as spaces.
+            val code = t.substringBefore(';').replace('\t', ' ').trim()
             val word = code.substringBefore(' ').uppercase()
             when (word) {
                 "G90" -> absolute = true
@@ -213,8 +214,23 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
         fun arc(a: Map<Char, Double>, clockwise: Boolean) {
             val nx = a['X']?.let { if (absolute) it else x + it } ?: x
             val ny = a['Y']?.let { if (absolute) it else y + it } ?: y
-            val cx = x + (a['I'] ?: 0.0)
-            val cy = y + (a['J'] ?: 0.0)
+            // A helical arc (spiral vase with arcs) climbs: its Z is the end's.
+            val nz = a['Z']?.let { if (absolute) it else z + it } ?: z
+            var cx = x + (a['I'] ?: 0.0)
+            var cy = y + (a['J'] ?: 0.0)
+            // The radius form (`R`, Marlin's G2/G3): the centre on the chord's bisector; a negative R is the long way.
+            val radius = a['R']
+            if (radius != null && a['I'] == null && a['J'] == null) {
+                val dx = nx - x; val dy = ny - y
+                val d = hypot(dx, dy)
+                val rr = abs(radius)
+                if (d < 1e-9 || d > 2 * rr + 1e-6) { x = nx; y = ny; z = nz; extrude(a); return }
+                val h = kotlin.math.sqrt((rr * rr - d * d / 4).coerceAtLeast(0.0))
+                // Left of the chord for counter-clockwise short arcs; the other side for clockwise or the long way.
+                val side = (if (clockwise) -1.0 else 1.0) * (if (radius < 0) -1.0 else 1.0)
+                cx = (x + nx) / 2 - side * h * dy / d
+                cy = (y + ny) / 2 + side * h * dx / d
+            }
             a['F']?.let { feed = it }
             val de = extrude(a)
             val r = hypot(x - cx, y - cy)
@@ -224,7 +240,7 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
             if (!clockwise && a1 <= a0) a1 += 2 * Math.PI
             if (de > 1e-9 && r > 1e-6) {
                 val steps = ceil(abs(a1 - a0) / (Math.PI / 36)).toInt().coerceIn(1, 360)
-                val layer = layerFor(z)
+                val layer = layerFor(nz)
                 if (type < 0) type = typeIndex("Custom")
                 var px = x; var py = y
                 for (k in 1..steps) {
@@ -235,7 +251,7 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
                     px = qx; py = qy
                 }
             }
-            x = nx; y = ny
+            x = nx; y = ny; z = nz
         }
     }
 }

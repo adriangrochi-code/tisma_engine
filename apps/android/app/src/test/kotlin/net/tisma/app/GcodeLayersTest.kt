@@ -81,6 +81,22 @@ class GcodeLayersTest {
     }
 
     @Test
+    fun `radius arcs, helical arcs and tabs are drawn`() {
+        // The same half circle as above, in Marlin's radius form, with tabs between the words.
+        val r = read("G1 Z0.2\nG1 X10 Y0\n;TYPE:Perimeter\nG3\tX-10\tY0\tR10\tE1\n")
+        val s = r.layers[0].segments
+        assertTrue(r.layers[0].count >= 18)
+        assertEquals(-10f, s[s.size - 2], 1e-4f)
+        assertTrue((0 until r.layers[0].count).all { s[4 * it + 3] >= -1e-3f }, "counter-clockwise goes through y > 0")
+        // Clockwise with R goes the other way, through y < 0.
+        val cw = read("G1 Z0.2\nG1 X10 Y0\nG2 X-10 Y0 R10 E1\n").layers[0].segments
+        assertTrue((0 until cw.size / 4).all { cw[4 * it + 3] <= 1e-3f })
+        // A helical arc climbing to Z 0.4 belongs to the 0.4 layer, and the next move continues from there.
+        val h = read("G1 Z0.2\nG1 X10 Y0\nG1 X10 Y5 E1\nG3 X-10 Y5 I-10 J0 Z0.4 E2\nG1 X-10 Y8 E3\n")
+        assertEquals(listOf(0.2f, 0.4f), h.layers.map { it.z })
+    }
+
+    @Test
     fun `AND3 the engine's own G-code reads (cube, 50 layers)`() {
         val text = javaClass.getResourceAsStream("/engine_cube.gcode")!!.bufferedReader()
         val g = GcodeLayers.read(text)
