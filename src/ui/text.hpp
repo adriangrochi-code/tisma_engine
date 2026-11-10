@@ -1754,6 +1754,10 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(PackUpToDate, "Los perfiles están al día.", "The profiles are up to date.") \
+    X(WizardMenu, "Asistente de configuración…", "Configuration Wizard…") \
+    X(CheckConfigUpdatesMenu, "Buscar actualizaciones de la configuración", "Check for Configuration Updates") \
+    X(PrintUsbMenu, "Imprimir por USB…", "Print via USB…") \
     X(ConvertToBinaryMenu, "Convertir G-code ASCII a binario…", "Convert ASCII G-code to binary…") \
     X(ConvertToAsciiMenu, "Convertir G-code binario a ASCII…", "Convert binary G-code to ASCII…") \
     X(GcodeConverted, "Convertido: %s", "Converted: %s") \

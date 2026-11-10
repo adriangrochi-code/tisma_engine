@@ -1785,6 +1785,7 @@ private:
     bool pack_check_updates_ = true;     // packs.check_updates
     long long pack_checked_ = 0;         // packs.checked: when the last look for a newer pack was (seconds)
     std::future<std::string> pack_newer_job_; // the newer pack_version, empty when none
+    bool pack_check_asked_ = false; // that look was asked for (Check for Configuration Updates): say "up to date" too
     int catalog_pack_pick_ = -1;
     std::size_t catalog_pack_variant_ = 0;
     // The project file last opened or saved.
@@ -6094,6 +6095,9 @@ void App::poll_pack_update() {
         const std::string version = pack_newer_job_.get();
         if (!version.empty())
             notify(format(tr(T::PackNewer), version.c_str()));
+        else if (pack_check_asked_)
+            notify(tr(T::PackUpToDate));
+        pack_check_asked_ = false;
     }
     if (!pack_job_.valid() || pack_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
         return;
@@ -17531,8 +17535,23 @@ void App::more_menu() {
 
         // 6. Configuration.
         card(tr(T::MoreConfiguration));
+        // The first run's assistant again: the printer, then the filament, from the catalog.
+        if (item("wizard", tr(T::WizardMenu))) {
+            first_run_ = true;
+            setup_step_ = 1;
+            catalog_kind_ = ProfileKind::Printer, catalog_open_ = true;
+        }
+        // The profile pack's newer version, looked for now (profile_pack.md, rule 19).
+        if (item("check_config_updates", tr(T::CheckConfigUpdatesMenu), nullptr,
+                 pack_index_.has_value() && !pack_newer_job_.valid())) {
+            pack_checked_ = static_cast<long long>(std::time(nullptr));
+            pack_check_asked_ = true;
+            pack_newer_job_ = std::async(std::launch::async, [dir = pack_dir(), url = pack_url_] { return pack_newer(dir, url); });
+        }
         if (item("preferences", tr(T::PreferencesMenu), "Ctrl+P"))
             config_open_ = true;
+        if (item("print_usb", tr(T::PrintUsbMenu)))
+            set_tab(Tab::Device);
         if (ImGui::BeginMenu(tr(T::Language))) {
             if (ImGui::MenuItem("Español", nullptr, language() == Language::Spanish))
                 set_language(Language::Spanish);
@@ -23532,6 +23551,24 @@ void App::script_input() {
         std::printf("ui-script: expect-scale %s: %.4f\n", step.key.c_str(), got);
         if (std::abs(got - want) > 1e-3)
             return fail_step("the scale is " + std::to_string(got));
+        next();
+    } else if (step.verb == "expect-tab") { // prepare, preview, calibration, device, design...
+        const char* got = tab_ == Tab::Prepare       ? "prepare"
+                          : tab_ == Tab::Preview     ? "preview"
+                          : tab_ == Tab::Calibration ? "calibration"
+                          : tab_ == Tab::Device      ? "device"
+                          : tab_ == Tab::Design      ? "design"
+                                                     : "other";
+        std::printf("ui-script: expect-tab %s: %s\n", step.key.c_str(), got);
+        if (step.key != got)
+            return f >= 30 ? fail_step(std::string("the tab is ") + got) : void();
+        next();
+    } else if (step.verb == "expect-catalog") { // the catalog is open: printer or filament
+        const bool open = catalog_kind_.has_value() &&
+                          (step.key == "printer" ? *catalog_kind_ == ProfileKind::Printer : *catalog_kind_ == ProfileKind::Filament);
+        if (!open)
+            return f >= 30 ? fail_step("the " + step.key + " catalog is not open") : void();
+        std::printf("ui-script: expect-catalog %s: ok\n", step.key.c_str());
         next();
     } else if (step.verb == "expect-theme") { // dark or light
         const char* got = theme_.dark ? "dark" : "light";

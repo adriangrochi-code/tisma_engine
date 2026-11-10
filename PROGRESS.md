@@ -12442,3 +12442,8 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   con la otra terminación). `ascii_gcode` (motor) devuelve el G-code con su resumen final y sus ajustes como líneas
   `; clave = valor`; binario otra vez da los mismos bytes. Pruebas `[binary]` y el paso de
   `ui_script_file_import_export`.
+- **Paso 7g (Configuración):** Asistente de configuración… (el de la primera vez: impresora y filamento del
+  catálogo), Buscar actualizaciones de la configuración (el paquete de perfiles; dice «al día» si no hay una nueva;
+  gris sin paquete) e Imprimir por USB… (la página de la impresora). Prueba `ui_script_configuration_card`; verbos
+  `expect-tab` y `expect-catalog`. Quedan: instantáneas, actualizaciones del programa en escritorio (no hay todavía),
+  integración con el escritorio, grabar firmware, archivo de Wi-Fi.
