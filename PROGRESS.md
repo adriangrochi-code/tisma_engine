@@ -11885,3 +11885,10 @@ arreglado en 9d8dc76 y subido.
   resultados mal, caminos lentos, memoria, textos en castellano) en el área del motor; se anota acá y se manda un
   resumen corto al equipo de especificación. Primera vuelta: el mantenimiento de las 00:40 (advertencias, cámara
   Bambu en inglés, carrera en la prueba estructural).
+- p2p, acordado con el servidor (2026-11-10): `swarm` = {"protocol":"libp2p/tisma-library/1","piece_size":1048576,
+  "piece_roots":{"<sha256 del archivo>":"<SHA-256 de los hashes crudos de los pedazos, en orden>"}}; la lista de
+  pedazos se pide a un par por el mismo protocolo. Ticket del relé: `POST /v1/library/relay-ticket` → carga JSON
+  canónica {account, peer_id, expires, cap_mb_per_hour} + firma Ed25519 de la clave de la biblioteca, 1 h. Anuncio:
+  `POST /v1/library/peers/announce` firmado por la clave de par sobre el JSON canónico, ±5 min, cada 10 min, solo en
+  memoria. `GET /v1/library/peers?model=&peer_key=`. PeerId: multihash identidad del PublicKey protobuf Ed25519,
+  base58btc. Pendiente del motor: vectores de prueba (clave fija → PeerId; ticket con clave de biblioteca fija).
