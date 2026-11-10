@@ -12667,6 +12667,42 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   nombre completo con la marca («Prusament Prusament PLA») y las otras coincidencias eran nombres más largos con las
   mismas palabras (PLA Blend, rPLA). Ahora el nombre sin la marca, si es de uno solo, lo elige. Prueba `[cli]`, que
   falla sin el arreglo.
+- **color_mixing_plus.md (Full Spectrum), tabla de estado** (pedido del dueño 23:25, por la sesión de spec). Base:
+  `color_mixing.md` hecha (ciclo por proporción, orden, gradiente en Z por bandas, JSON del proyecto, color previsto).
+
+  | Reglas | Qué | Estado |
+  |---|---|---|
+  | 1 | Cuatro tipos (ratio, pattern, match, gradient) | parcial: ratio y gradient (de `color_mixing.md`) |
+  | 2 | Secuencia escrita | pendiente |
+  | 3 | Degradé de 2 a 4 filamentos en Z / X / Y / entre puntos | parcial: solo en Z |
+  | 4 | Color buscado (CIEDE2000, recomendaciones) | pendiente |
+  | 5 | Pares automáticos | pendiente |
+  | 6–7 | Lista de mezclas, nombre, acciones; asignar | parcial: asignar a pieza y pintar con el número de la mezcla |
+  | 8–9 | Alto por filamento, paso | pendiente |
+  | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | pendiente |
+  | 13–14 | Solo la superficie, paredes de más | pendiente |
+  | 15 | Sesgo | pendiente |
+  | 16 | Pintado con mezcla | parcial: las trayectorias pintadas toman el ciclo; falta con las reglas 10–15 |
+  | 17 | Vista previa del color antes de laminar | parcial: color previsto de la mezcla |
+  | 18–19 | Soportes y torre sin mezcla; sin mezcla, G-code igual | parcial: a probar con las opciones nuevas (MX16) |
+  | 20–21 | Mezclador Oklab; espectral con TD | pendiente (hoy Yule-Nielsen n = 2) |
+  | 22–24 | Paleta de calibración, recomendaciones, nombres de colores | pendiente |
+  | 25–29 | Colores desde imagen | pendiente (fase posterior, por la ficha) |
+  | 30–31 | Proyecto con los datos nuevos; 3MF de Full Spectrum | parcial: formato de `color_mixing.md` |
+  | 32 | Aviso de costo con estimación | parcial: aviso de `multimaterial.md` regla 9 |
+  | 33 | Purgar en el relleno, por defecto con mezclas | parcial: `object.wipe_into_infill` existe, no prendido por mezcla ni limitado por `surface_depth` / TD |
+  | 34 | Primero el relleno en capas con cambio | parcial: `infill.before_walls` existe; falta por capa con cambio |
+  | 35 | `purge_infill_max` | pendiente |
+  | 36 | Lo que no entra: torre o descarte, `min_purge_on_tower` antes | parcial: `min_purge_on_tower` existe |
+  | 37 | Volumen de purga según colores | pendiente |
+  | 38–40 | Sugerencias, ciclos alineados en la placa, informe | pendiente (regla 11 de `color_mixing.md` hecha) |
+
+  Orden elegido: (1) secuencia escrita, pares automáticos y tipos en el proyecto (reglas 1, 2, 5, 30; MX1–MX3,
+  MX19); (2) subcapas (10–12; MX8–MX10); (3) alto por filamento (8–9; MX7); (4) solo la superficie y paredes de más
+  (13–14; MX11, MX12, MX14); (5) sesgo (15; MX13); (6) degradé en X/Y y 2 a 4 filamentos (3; MX15); (7) purga en una
+  boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
+  interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
+  (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
 - BH52 (búsqueda profunda, copias + falda): `--copies 1000` en una MK4S decía «182 fit», pero con 182 la falda se salía
   de la cama y no había G-code («the skirt goes off the bed»). La cuenta de las que caben ahora resta de la cama lo
   que el borde y la falda llegan más allá de las copias de afuera. Prueba `[cli]` BH52, que falla sin el arreglo.
