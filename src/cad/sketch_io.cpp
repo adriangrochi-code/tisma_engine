@@ -2,6 +2,7 @@
 // Own code over the public format references; see PROVENANCE.md.
 
 #include "cad/sketch_io.hpp"
+#include "io/number.hpp"
 
 #include <algorithm>
 #include <array>
@@ -51,7 +52,7 @@ std::optional<double> number(std::string_view text) {
     if (!text.empty() && text.front() == '+')
         text.remove_prefix(1);
     double v = 0.0;
-    const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), v);
+    const auto [end, ec] = chars_to(text.data(), text.data() + text.size(), v);
     if (ec != std::errc() || end != text.data() + text.size() || !std::isfinite(v))
         return std::nullopt;
     return v;
@@ -595,7 +596,7 @@ std::vector<double> numbers_in(std::string_view s) {
         if (i >= s.size())
             break;
         double v = 0.0;
-        const auto [end, ec] = std::from_chars(s.data() + i, s.data() + s.size(), v);
+        const auto [end, ec] = chars_to(s.data() + i, s.data() + s.size(), v);
         if (ec != std::errc() || end == s.data() + i) {
             ++i;
             continue;

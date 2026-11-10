@@ -69,6 +69,7 @@ std::vector<PlateObject> project_objects(std::vector<ProjectModel>& models) {
             o.place.scale = scale;
         }
         o.extruder = m.extruder;
+        o.printable = m.printable;
         o.wipe_into_infill = m.wipe_into_infill;
         o.wipe_into_object = m.wipe_into_object;
         o.settings = m.settings;

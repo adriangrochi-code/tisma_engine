@@ -58,6 +58,12 @@ class SignRelease(unittest.TestCase):
         old_windows = self.folder / "tisma-engine-1.0.0-windows-x86.zip"
         old_windows.write_bytes(b"x")
         self.assertEqual(updates_list.package_entry(old_windows, "")["system"], "windows-x86")
+        # macOS (rule 13, 2026-11-10): the .zip, from macOS 13.0; the .dmg is no update.
+        for arch in ("arm64", "x64"):
+            mac = self.folder / f"tisma-engine-1.0.0-macos-{arch}.zip"
+            mac.write_bytes(b"x")
+            entry = updates_list.package_entry(mac, "")
+            self.assertEqual((entry["system"], entry["min_system"]), (f"macos-{arch}", "13.0"))
         self.assertEqual(updates_list.package_entry(old_windows, "")["family"], "legacy")
         old_windows.unlink()
         for p in new["packages"]:

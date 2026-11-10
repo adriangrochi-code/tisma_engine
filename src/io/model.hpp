@@ -93,6 +93,12 @@ std::string write_3mf(const TriangleMesh& mesh, std::string_view name);
 // is an STL. Throws ModelError.
 ModelFile parse_model(std::string_view data, std::string_view extension);
 
+// The mesh as Wavefront OBJ text: each distinct corner once as "v x y z"
+// (written so it reads back to the same float), then "f a b c" per triangle
+// (1-based), with a comment naming it. Read back by parse_model, it gives the
+// same triangles in the same order.
+std::string obj_text(const TriangleMesh& mesh, std::string_view name = {});
+
 // Reads and parses a model file. Throws ModelError.
 ModelFile read_model(const std::filesystem::path& path);
 

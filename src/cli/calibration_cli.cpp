@@ -1,4 +1,5 @@
 #include "cli/calibration_cli.hpp"
+#include "io/number.hpp"
 
 #include "calibration/calibration.hpp"
 #include "cli/cli.hpp"
@@ -35,7 +36,7 @@ int usage(std::ostream& err, const std::string& problem) {
 }
 
 bool number(const std::string& text, double& v) {
-    const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), v);
+    const auto [end, ec] = chars_to(text.data(), text.data() + text.size(), v);
     return ec == std::errc() && end == text.data() + text.size();
 }
 

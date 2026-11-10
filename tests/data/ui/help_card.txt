@@ -1,0 +1,24 @@
+# Help (interface.md, «Más»): Keyboard Shortcuts lists every shortcut by card
+# and opens with "?" too; System Info shows the version and the machine;
+# Show Configuration Folder is there when the preferences have a folder.
+menu more
+expect-enabled shortcuts yes
+expect-enabled system_info yes
+menu shortcuts
+expect-control shortcuts_list
+expect-text Keyboard Shortcuts
+key escape
+wait 3
+expect-no-control shortcuts_list
+key shift+slash
+wait 3
+expect-control shortcuts_list
+key escape
+wait 3
+menu more
+menu system_info
+expect-control system_info
+expect-text Tisma 0.
+key escape
+wait 3
+expect-no-control system_info

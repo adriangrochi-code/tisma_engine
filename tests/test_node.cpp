@@ -604,3 +604,26 @@ TEST_CASE("slice of a project: --inspect-paint writes what is painted (orca_2_5.
     CHECK(j["support"].empty());
     std::filesystem::remove_all(dir);
 }
+
+// A model marked not printable (interface.md, «Menús») stays out of the
+// slice in the cloud too: off the bed, it does not stop the slice; alone, the
+// slice says there is nothing to print.
+TEST_CASE("slice of a project: a model that is not printable is left out", "[cli][cloud]") {
+    const auto dir = fresh_dir("tisma_test_node_printable");
+    const auto project = dir / "plate.3mf";
+    Project p = box_project(100.0, 100.0);
+    Project off = box_project(400.0, 100.0); // off the bed: it would fail if it were sliced
+    off.models.front().printable = false;
+    p.models.push_back(off.models.front());
+    save_project(project, p);
+    const auto gcode = dir / "plate.gcode", summary = dir / "summary.json";
+    Run r = run({"slice", project.string(), "-o", gcode.string(), "--summary", summary.string(), "--sandbox"});
+    CHECK(r.code == kExitOk);
+    CHECK(std::filesystem::exists(gcode));
+
+    save_project(project, off);
+    r = run({"slice", project.string(), "-o", gcode.string(), "--summary", summary.string(), "--sandbox"});
+    CHECK(r.code != kExitOk);
+    CHECK_THAT(nlohmann::json::parse(read_text(summary))["error"].get<std::string>(), ContainsSubstring("printable"));
+    std::filesystem::remove_all(dir);
+}

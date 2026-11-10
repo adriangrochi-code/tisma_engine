@@ -1,4 +1,5 @@
 #include "io/model.hpp"
+#include "io/stl.hpp"
 #include "io/xml.hpp"
 #include "io/zip.hpp"
 #include "slice/placement.hpp"
@@ -7,6 +8,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -221,4 +223,38 @@ TEST_CASE("placement: without a bed it stays, unless a centre is given (PL15)", 
     place_on_bed(m.mesh, s);
     CHECK_THAT(m.mesh.bounding_box().min.x, WithinAbs(40.0, 1e-4));
     CHECK_THAT(m.mesh.bounding_box().max.y, WithinAbs(60.0, 1e-4));
+}
+
+// Export round trips (the owner's QA, 2026-11-10): a mesh written as binary
+// STL, OBJ or 3MF reads back as the same triangles, corner for corner, in the
+// same order; OBJ writes each shared corner once.
+TEST_CASE("formats: STL, OBJ and 3MF exports read back to the same triangles", "[formats]") {
+    std::mt19937 rng(20261110);
+    std::uniform_real_distribution<float> d(-120.0f, 250.0f);
+    std::vector<Vec3f> points(40);
+    for (Vec3f& p : points)
+        p = {d(rng), d(rng), d(rng) * 0.37f};
+    TriangleMesh mesh;
+    std::uniform_int_distribution<std::size_t> pick(0, points.size() - 1);
+    for (int t = 0; t < 200; ++t)
+        mesh.add_triangle(points[pick(rng)], points[pick(rng)], points[pick(rng)]);
+
+    const auto same = [&](const TriangleMesh& got) {
+        REQUIRE(got.corners().size() == mesh.corners().size());
+        for (std::size_t i = 0; i < got.corners().size(); ++i) {
+            CHECK(got.corners()[i].x == mesh.corners()[i].x);
+            CHECK(got.corners()[i].y == mesh.corners()[i].y);
+            CHECK(got.corners()[i].z == mesh.corners()[i].z);
+        }
+    };
+    same(parse_model(stl_binary(mesh, "plate"), ".stl").mesh);
+    const std::string obj = obj_text(mesh, "plate");
+    same(parse_model(obj, ".obj").mesh);
+    std::size_t vertices = 0;
+    for (std::size_t at = obj.find("\nv "); at != std::string::npos; at = obj.find("\nv ", at + 1))
+        ++vertices;
+    CHECK(vertices <= points.size());
+    same(parse_model(write_3mf(mesh, "plate"), ".3mf").mesh);
+    // An empty plate is no model: reading it back says so.
+    CHECK_THROWS(parse_model(obj_text(TriangleMesh{}), ".obj"));
 }

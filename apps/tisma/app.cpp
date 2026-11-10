@@ -58,6 +58,7 @@
 #include "io/model.hpp"
 #include "io/project_import.hpp"
 #include "io/stl.hpp"
+#include "io/zip.hpp"
 #include "mesh/shapes.hpp"
 #include "mesh/orient.hpp"
 #include "project/project.hpp"
@@ -571,7 +572,17 @@ enum class Purpose {
     ImportSketchDxf, // cad_design.md, rule 19 bis
     ImportSketchSvg,
     ExportSketchDxf, // rule 20
-    ExportViewDxf
+    ExportViewDxf,
+    ExportObject,      // a model's right-click menu: Export as STL/OBJ…
+    ExportToolpaths,   // File › Export Toolpaths as OBJ…
+    AddModelInches,    // File › Import STL (Imperial Units)…
+    ConvertToBinary,   // File › Convert ASCII G-code to binary…
+    ConvertToAscii,    // File › Convert binary G-code to ASCII…
+    ImportZip,         // File › Import ZIP Archive…
+    ExportPreferences, // Preferences › Other: export and import them
+    ImportPreferences,
+    LoadProjectConfig, // interface.md, «Más»: Import Config from Project…
+    ExportPlate        // Export Plate as STL/OBJ…
 };
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
@@ -880,6 +891,15 @@ private:
     void load_calibration(CalibrationPrint print);
     void create_calibration(CalibrationKind kind, bool custom);
     void begin_export();
+    void more_menu();       // «Más»: the cards of interface.md
+    void file_chosen(const std::filesystem::path& chosen); // the file browser's answer, for purpose_
+    void dialogs_rest();
+    void begin_import_config(bool from_project); // Ctrl+L, or Ctrl+Alt+L from a project
+    void begin_export_config();                  // Ctrl+E
+    void load_project_config(const std::filesystem::path& path); // a project's settings and profiles, not its models
+    void export_plate_to(const std::filesystem::path& path);     // the plate's models as one STL or OBJ, in bed coordinates
+    void send_gcode();      // «Send G-code…»: the network program or the USB printer
+    void delete_selected(bool keep_choice = false); // the chosen model off the plate (Del, the toolbar, «Más»)
     void empty_hint();
     void toasts();
     void dialogs();
@@ -950,8 +970,8 @@ private:
     void remember_toast(const std::string& text);
     std::vector<std::string> toasts_shown_; // for the scripts' expect-toast
     void fail(T title, std::string message, std::vector<std::string> details = {});
-    void load_preferences();
-    void save_preferences();
+    void load_preferences(const std::filesystem::path& from = {}); // from: an exported file (Preferences › Import)
+    void save_preferences(const std::filesystem::path& to = {});   // to: a file to export them to
     void apply_theme();
 
     // Profiles (docs/PROFILES.md).
@@ -1023,6 +1043,10 @@ private:
     // «Based on» under a card, and the Credits and sources page (credits.md).
     void card_credits(std::string_view card, float left, float right);
     void credits_dialog();
+    bool shortcuts_open_ = false, system_info_open_ = false;
+    void shortcuts_dialog();   // Help › Keyboard Shortcuts (?)
+    void system_info_dialog(); // Help › System Info
+    void machine_lines();      // the machine: processor, memory, graphics, screen, power
     // The help panel over the settings panel (assistant.md).
     void help_panel();
     void load_help_data();
@@ -1295,7 +1319,7 @@ private:
     int config_page_ = 0;
     std::string config_query_;
     struct ConfigState {
-        bool english = false, dark = true;
+        bool english = false, dark = true, theme_system = false;
         RenderMode render = RenderMode::Ambient;
         int msaa = 4;
         bool fxaa = true, moire = true;
@@ -1761,10 +1785,39 @@ private:
     bool pack_check_updates_ = true;     // packs.check_updates
     long long pack_checked_ = 0;         // packs.checked: when the last look for a newer pack was (seconds)
     std::future<std::string> pack_newer_job_; // the newer pack_version, empty when none
+    bool pack_check_asked_ = false; // that look was asked for (Check for Configuration Updates): say "up to date" too
     int catalog_pack_pick_ = -1;
     std::size_t catalog_pack_variant_ = 0;
     // The project file last opened or saved.
     std::filesystem::path project_path_;
+    // The projects opened or saved last, newest first (interface.md, «Más»:
+    // Recent projects), kept with the preferences.
+    std::vector<std::filesystem::path> recent_projects_;
+    bool theme_system_ = false; // Appearance «Like the system»: the theme follows the system's
+    bool show_templates_ = true; // the built-in (template) profiles in the lists; off: only the chosen one
+    void follow_system_theme();
+    void remember_project(const std::filesystem::path& path);
+    void new_project(); // an empty plate, no project file (Ctrl+N)
+    void delete_all();  // every model off the plate (Ctrl+Del)
+    std::optional<PlateObject> clipboard_; // Copy (Ctrl+C) and Paste (Ctrl+V) on the plate
+    void paste();
+    bool can_reload() const;
+    void reload_from_disk(); // F5: the chosen model, or every one, read again from its file
+    void window_tab(int n);  // Window › Ctrl+1 to Ctrl+6 (interface.md, «Más»)
+    void import_zip(const std::filesystem::path& path); // every STL, OBJ and 3MF in it onto the plate
+    void convert_gcode(const std::filesystem::path& path, bool to_binary); // written next to it, the other kind
+    // The calibration tests as menu entries (Más › Calibration, the empty
+    // bed's Add calibration model ▸): the chosen one made, in its tab.
+    void calibration_entries(const char* prefix);
+    // A model's instances: the models with its name and as many triangles.
+    std::vector<std::size_t> instances_of(std::size_t index) const;
+    void set_instances(std::size_t index, int count);
+    void scale_to_volume(std::size_t index);
+    int instances_count_ = 1;     // the Set number of instances… field
+    bool instances_open_ = false; // that dialog, to open
+    std::size_t export_object_ = 0; // the model Export as STL/OBJ… writes
+    void toggle_fullscreen(); // F11
+    int windowed_[4] = {0, 0, 0, 0}; // the window's place and size before Fullscreen
 
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
@@ -2278,6 +2331,8 @@ std::string g_last_field; // the last of them, for a field narrower than its cel
 // The entries of a menu drawn this frame, by a name in English, for
 // --ui-script's menu step: min x, min y, max x, max y.
 std::map<std::string, ImVec4> g_menu_rects;
+// The named entries drawn greyed this frame (--ui-script's expect-enabled).
+std::set<std::string> g_menu_disabled;
 // The scripted tests: the control a click is about to aim at. The panel that
 // draws it scrolls it into view (a taller panel no longer hides it).
 std::string g_scroll_to;
@@ -3524,6 +3579,9 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    if (theme_system_) // the theme the system asks for, from the start
+        if (const std::optional<bool> dark = system_prefers_dark(); dark && *dark != theme_.dark)
+            theme_ = *dark ? dark_theme() : light_theme();
     // The system's own Open and Save As dialogs where there are (Windows,
     // BH40); scripted and screenshot runs keep the drawn one they drive.
     FileBrowser::use_native(options_.screenshot.empty() && options_.ui_script.empty());
@@ -3910,11 +3968,14 @@ void App::shutdown() {
     glfwTerminate();
 }
 
-void App::load_preferences() {
-    const std::filesystem::path path = preferences_path();
+void App::load_preferences(const std::filesystem::path& from) {
+    const std::filesystem::path path = from.empty() ? preferences_path() : from;
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        first_run_ = true;
+        if (from.empty())
+            first_run_ = true;
+        else
+            fail(T::CannotOpen, utf8(from));
         return;
     }
     try {
@@ -3957,9 +4018,19 @@ void App::load_preferences() {
         }
         if (j.value("language", "es") == "en")
             set_language(Language::English);
-        if (j.value("theme", "dark") == "light")
+        if (j.value("theme", "") == "light")
             theme_ = light_theme();
+        else if (j.value("theme", "") == "dark") // an imported file can bring the dark one back
+            theme_ = dark_theme();
+        theme_system_ = j.value("theme", "dark") == "system";
         last_folder_ = from_utf8(j.value("folder", std::string()));
+        show_templates_ = j.value("show_templates", true);
+        if (const auto r = j.find("recent_projects"); r != j.end() && r->is_array()) {
+            recent_projects_.clear(); // the file's list, not added to the one there was (an imported file)
+            for (const auto& e : *r)
+                if (e.is_string() && recent_projects_.size() < 10)
+                    recent_projects_.push_back(from_utf8(e.get<std::string>()));
+        }
         render_mode_ = static_cast<RenderMode>(std::clamp(j.value("render", 1), 0, 2));
         msaa_ = std::clamp(j.value("msaa", 4), 1, 16);
         fxaa_ = j.value("fxaa", true);
@@ -4077,15 +4148,19 @@ void App::load_preferences() {
     }
 }
 
-void App::save_preferences() {
-    const std::filesystem::path path = preferences_path();
+void App::save_preferences(const std::filesystem::path& to) {
+    const std::filesystem::path path = to.empty() ? preferences_path() : to;
     if (path.empty())
         return;
     try {
         nlohmann::json j;
         j["language"] = language() == Language::English ? "en" : "es";
-        j["theme"] = theme_.dark ? "dark" : "light";
+        j["theme"] = theme_system_ ? "system" : theme_.dark ? "dark" : "light";
         j["folder"] = utf8(last_folder_);
+        j["show_templates"] = show_templates_;
+        j["recent_projects"] = nlohmann::json::array();
+        for (const std::filesystem::path& r : recent_projects_)
+            j["recent_projects"].push_back(utf8(r));
         j["render"] = int(render_mode_);
         j["msaa"] = msaa_;
         j["fxaa"] = fxaa_;
@@ -4258,6 +4333,8 @@ void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab
     ++revision_.model;
     objects_.clear();
     objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    if (std::error_code ec; std::filesystem::is_regular_file(name, ec))
+        objects_.back().source = utf8(std::filesystem::absolute(name, ec));
     fire("model_added");
     selected_ = 0;
     tool_ = PlateTool::Select;
@@ -4393,6 +4470,8 @@ void App::add_mesh(TriangleMesh mesh, const std::filesystem::path& name) {
         return;
     }
     objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    if (std::error_code ec; std::filesystem::is_regular_file(name, ec))
+        objects_.back().source = utf8(std::filesystem::absolute(name, ec));
     fire("model_added");
     selected_ = int(objects_.size()) - 1;
     arrange_plate();
@@ -4537,6 +4616,54 @@ void App::load_settings_file(const std::filesystem::path& path) {
     }
 }
 
+void App::begin_import_config(bool from_project) {
+    if (from_project) {
+        purpose_ = Purpose::LoadProjectConfig;
+        browser_.open(FileBrowser::Mode::Open, tr(T::ImportProjectConfigMenu), {".tisma", ".3mf"}, last_folder_);
+    } else {
+        purpose_ = Purpose::LoadSettings;
+        browser_.open(FileBrowser::Mode::Open, tr(T::LoadSettingsTitle), {".json"}, last_folder_);
+    }
+}
+
+void App::begin_export_config() {
+    purpose_ = Purpose::SaveSettings;
+    browser_.open(FileBrowser::Mode::Save, tr(T::SaveSettingsTitle), {".json"}, last_folder_, "tisma.json");
+}
+
+// Import Config from Project… (Ctrl+Alt+L): the project's settings, its
+// chosen profiles and its colours; the plate stays as it is.
+void App::load_project_config(const std::filesystem::path& path) {
+    try {
+        Project p = load_project(path);
+        settings_ = std::move(p.settings);
+        chosen_profile_ = p.profiles;
+        profiles_checked_.clear();
+        filament_colors_ = std::move(p.filament_colors);
+        fill_speeds();
+        bed_changed();
+        settings_changed();
+        notify(format(tr(T::ProjectConfigLoaded), utf8(path.filename()).c_str()));
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
+// Export Plate as STL/OBJ…: every model as placed, joined, in the bed's
+// coordinates; ".obj" writes OBJ, anything else a binary STL.
+void App::export_plate_to(const std::filesystem::path& path) {
+    const TriangleMesh plate = plate_now();
+    const std::string name = project_path_.empty() ? utf8(model_path_.stem()) : utf8(project_path_.stem());
+    const std::string data = lower_extension(path) == ".obj" ? obj_text(plate, name) : stl_binary(plate, "Tisma " + name);
+    std::ofstream out(path, std::ios::binary);
+    out << data;
+    out.close();
+    if (!out)
+        fail(T::CannotSave, utf8(path));
+    else
+        notify(format(tr(T::PlateExported), utf8(path.filename()).c_str()));
+}
+
 void App::load_case_file(const std::filesystem::path& path) {
     try {
         load_case_ = load_analysis_case(path);
@@ -4613,6 +4740,7 @@ void App::open_project(const std::filesystem::path& path) {
         }
     }
     project_path_ = path;
+    remember_project(path);
     glfwSetWindowTitle(window_, ("Tisma · " + utf8(path.filename())).c_str());
     notify(format(tr(T::ProjectOpened), utf8(path.filename()).c_str()));
 }
@@ -4659,6 +4787,7 @@ Project App::current_project() const {
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
         p.models.back().engineering = objects_[i].engineering;
+        p.models.back().printable = objects_[i].printable;
     }
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
@@ -4677,8 +4806,270 @@ void App::save_project_to(const std::filesystem::path& path) {
         return;
     }
     project_path_ = path;
+    remember_project(path);
     glfwSetWindowTitle(window_, ("Tisma · " + utf8(path.filename())).c_str());
     notify(format(tr(T::ProjectSaved), utf8(path.filename()).c_str()));
+}
+
+// The project first in the recent list, at most ten, each once.
+void App::remember_project(const std::filesystem::path& path) {
+    std::error_code ec;
+    std::filesystem::path full = std::filesystem::absolute(path, ec);
+    if (ec)
+        full = path;
+    std::erase(recent_projects_, full);
+    recent_projects_.insert(recent_projects_.begin(), full);
+    if (recent_projects_.size() > 10)
+        recent_projects_.resize(10);
+}
+
+// Paste (Ctrl+V): the copied model once more on the plate, chosen, and the
+// plate arranged.
+void App::paste() {
+    if (!clipboard_ || calibration_ || viewer_)
+        return;
+    objects_.push_back(*clipboard_);
+    selected_ = int(objects_.size()) - 1;
+    arrange_plate();
+}
+
+bool App::can_reload() const {
+    for (std::size_t i = 0; i < objects_.size(); ++i)
+        if (!objects_[i].source.empty() && (selected_ < 0 || int(i) == selected_))
+            return true;
+    return false;
+}
+
+// Reload from Disk (F5): each model read again from its file, where it is
+// placed; its painting stays only if the triangles are as many as before.
+void App::reload_from_disk() {
+    std::string done;
+    for (std::size_t i = 0; i < objects_.size(); ++i) {
+        PlateObject& o = objects_[i];
+        if (o.source.empty() || (selected_ >= 0 && int(i) != selected_))
+            continue;
+        try {
+            ModelFile file = read_model(from_utf8(o.source));
+            if (file.mesh.empty())
+                throw std::runtime_error(o.source + ": the file has no triangles");
+            if (file.mesh.triangle_count() != o.mesh.triangle_count())
+                o.painting = {};
+            o.mesh = std::move(file.mesh);
+            done += (done.empty() ? "" : ", ") + o.name;
+        } catch (const std::exception& e) {
+            fail(T::CannotOpen, e.what());
+        }
+    }
+    if (done.empty())
+        return;
+    plate_changed();
+    notify(format(tr(T::Reloaded), done.c_str()));
+}
+
+// Window (Ctrl+1 to Ctrl+6): 1 the plate, 2 to 4 the print, filament and
+// printer settings (the panel unfolded), 5 the 3D view (the plate), 6 the
+// preview, once there is a slice.
+void App::window_tab(int n) {
+    if (n == 6) {
+        if (result_)
+            set_tab(Tab::Preview);
+        return;
+    }
+    if (tab_ != Tab::Prepare)
+        set_tab(Tab::Prepare);
+    printer_page_ = false;
+    if (n >= 2 && n <= 4) {
+        panel_folded_ = false;
+        objects_tab_ = false;
+        if (n == 4)
+            printer_page_ = true;
+        else
+            panel_tab_ = n == 2 ? SettingsTab::Print : SettingsTab::Material;
+    }
+    frame_pending_ = true;
+}
+
+// Fullscreen (F11): the window over its whole monitor, and back.
+void App::toggle_fullscreen() {
+    if (GLFWmonitor* now = glfwGetWindowMonitor(window_)) {
+        (void)now;
+        glfwSetWindowMonitor(window_, nullptr, windowed_[0], windowed_[1], std::max(windowed_[2], 640),
+                             std::max(windowed_[3], 480), GLFW_DONT_CARE);
+    } else {
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
+        if (!mode)
+            return;
+        glfwGetWindowPos(window_, &windowed_[0], &windowed_[1]);
+        glfwGetWindowSize(window_, &windowed_[2], &windowed_[3]);
+        glfwSetWindowMonitor(window_, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+    }
+    frame_pending_ = true;
+}
+
+std::vector<std::size_t> App::instances_of(std::size_t index) const {
+    std::vector<std::size_t> out;
+    if (index >= objects_.size())
+        return out;
+    const PlateObject& o = objects_[index];
+    for (std::size_t i = 0; i < objects_.size(); ++i)
+        if (objects_[i].name == o.name && objects_[i].mesh.triangle_count() == o.mesh.triangle_count())
+            out.push_back(i);
+    return out;
+}
+
+// Set number of instances…: copies of the model added or the last ones taken
+// away until there are COUNT; the plate is arranged.
+void App::set_instances(std::size_t index, int count) {
+    count = std::clamp(count, 1, 500);
+    std::vector<std::size_t> same = instances_of(index);
+    if (same.empty())
+        return;
+    const PlateObject model = objects_[index];
+    while (int(same.size()) > count) {
+        const std::size_t last = same.back() == index && same.size() > 1 ? same[same.size() - 2] : same.back();
+        objects_.erase(objects_.begin() + std::ptrdiff_t(last));
+        same = instances_of(index > last ? index - 1 : index);
+        if (index > last)
+            --index;
+    }
+    for (int k = int(same.size()); k < count; ++k)
+        objects_.push_back(model);
+    selected_ = int(index);
+    arrange_plate();
+}
+
+// Scale to print volume: the largest even scale that fits the bed's box and
+// the machine's height, the model then set in the middle of the bed.
+void App::scale_to_volume(std::size_t index) {
+    if (index >= objects_.size() || index >= placed_meshes_.size() || settings_.bed.size() < 3)
+        return;
+    double x0 = 1e30, y0 = 1e30, x1 = -1e30, y1 = -1e30;
+    for (const auto& p : settings_.bed) {
+        x0 = std::min(x0, p[0]), x1 = std::max(x1, p[0]);
+        y0 = std::min(y0, p[1]), y1 = std::max(y1, p[1]);
+    }
+    const BoundingBox box = placed_meshes_[index].bounding_box();
+    const double w = double(box.max.x) - box.min.x, d = double(box.max.y) - box.min.y, h = double(box.max.z) - box.min.z;
+    if (w <= 0.0 || d <= 0.0 || h <= 0.0)
+        return;
+    double f = std::min((x1 - x0) / w, (y1 - y0) / d);
+    if (settings_.max_height > 0.0)
+        f = std::min(f, settings_.max_height / h);
+    f *= 0.995; // a hair inside the edges
+    for (double& s : objects_[index].place.scale)
+        s *= f;
+    objects_[index].place.x = 0.5 * (x0 + x1);
+    objects_[index].place.y = 0.5 * (y0 + y1);
+    plate_changed();
+}
+
+// Appearance «Like the system»: the dark or light theme as the system asks
+// (when it does not say, the theme stays).
+void App::follow_system_theme() {
+    const std::optional<bool> dark = system_prefers_dark();
+    if (!dark || *dark == theme_.dark)
+        return;
+    theme_ = *dark ? dark_theme() : light_theme();
+    apply_theme();
+}
+
+void App::calibration_entries(const char* prefix) {
+    const bool resin = settings_.machine_technology == MachineTechnology::Msla;
+    for (int k = 0; k < kCalibrationKinds; ++k) {
+        const CalibrationKind kind = CalibrationKind(k);
+        if (is_resin_calibration(kind) != resin)
+            continue;
+        const std::string name = std::string(prefix) + calibration_kind_name(kind);
+        const bool hit = ImGui::MenuItem((std::string(calibration_title(kind)) + "##" + name).c_str(), nullptr, false,
+                                         !slice_job_.running());
+        note_rect(name);
+        if (hit) {
+            set_tab(Tab::Calibration);
+            create_calibration(kind, false);
+        }
+    }
+}
+
+// Import ZIP Archive…: a 3MF package opens as one; otherwise every STL, OBJ
+// and 3MF inside goes on the plate, each named by its file.
+void App::import_zip(const std::filesystem::path& path) {
+    try {
+        std::ifstream in(path, std::ios::binary);
+        const std::string data{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        const ZipArchive zip(data);
+        if (zip.find("3D/3dmodel.model")) {
+            add_model(path);
+            return;
+        }
+        std::size_t added = 0;
+        for (const ZipArchive::Entry& e : zip.entries()) {
+            const std::filesystem::path name = from_utf8(e.name);
+            const std::string ext = lower_extension(name);
+            if (ext != ".stl" && ext != ".obj" && ext != ".3mf")
+                continue;
+            if (e.size > (std::uint64_t(1) << 30))
+                throw std::runtime_error(e.name + ": larger than 1 GB");
+            ModelFile m = parse_model(zip.read(e), ext);
+            if (m.mesh.empty())
+                continue;
+            add_mesh(std::move(m.mesh), name.filename());
+            ++added;
+        }
+        if (added == 0)
+            fail(T::CannotOpen, utf8(path.filename()) + ": " + tr(T::ZipNoModels));
+        last_folder_ = path.parent_path();
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
+// Convert ASCII G-code to binary, or binary to ASCII: the file written next
+// to the one chosen, with the other ending (.bgcode, .gcode); the printer's
+// metadata of a binary file come from the printer chosen now.
+void App::convert_gcode(const std::filesystem::path& path, bool to_binary) {
+    try {
+        std::ifstream in(path, std::ios::binary);
+        if (!in)
+            throw std::runtime_error(utf8(path) + ": cannot be read");
+        const std::string data{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        std::filesystem::path out_path = path;
+        out_path.replace_extension(to_binary ? ".bgcode" : ".gcode");
+        if (out_path == path)
+            out_path.replace_extension(to_binary ? ".converted.bgcode" : ".converted.gcode");
+        const std::string out_data = to_binary ? binary_gcode(data, settings_) : ascii_gcode(read_binary_gcode(data));
+        if (!write_aside(out_path, out_data))
+            throw std::runtime_error(utf8(out_path) + ": cannot be written");
+        notify(format(tr(T::GcodeConverted), utf8(out_path.filename()).c_str()));
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
+// Every model off the plate, and the preview with them.
+void App::delete_all() {
+    if (objects_.empty())
+        return;
+    objects_.clear();
+    selected_ = -1;
+    result_.reset();
+    renderer_.clear_preview();
+    vk_view_.clear_preview();
+    plate_changed();
+}
+
+// New Project (Ctrl+N): an empty plate that is no file yet; the printer, the
+// filament and the settings stay as they are.
+void App::new_project() {
+    calibration_.reset();
+    chosen_value_.reset();
+    delete_all();
+    place_undo_.clear();
+    place_redo_.clear();
+    project_path_.clear();
+    if (tab_ != Tab::Prepare && !engineering_tab(tab_))
+        set_tab(Tab::Prepare);
+    glfwSetWindowTitle(window_, "Tisma");
 }
 
 // User profiles live next to the preferences; without a place for those,
@@ -5036,7 +5427,8 @@ void App::profile_row(ProfileKind kind, bool compact) {
         };
         ImGui::SeparatorText(tr(T::BuiltinProfiles));
         for (const Profile& p : builtin_profiles_[k])
-            if (listed(p) && ImGui::Selectable((shown_name(p.name) + "##" + p.name).c_str(), chosen == &p))
+            if (listed(p) && (show_templates_ || chosen == &p) &&
+                ImGui::Selectable((shown_name(p.name) + "##" + p.name).c_str(), chosen == &p))
                 picked = &p;
         if (std::any_of(user_profiles_[k].begin(), user_profiles_[k].end(), listed)) {
             ImGui::SeparatorText(tr(T::MyProfiles));
@@ -5079,9 +5471,48 @@ void App::profile_row(ProfileKind kind, bool compact) {
         }
     }
     ImGui::SameLine(0, gap);
-    if (icon_button("##menu", "tisma_more", tr(T::More), size))
+    const bool gear = icon_button("##menu", "tisma_more", tr(T::More), size);
+    note_rect(kind == ProfileKind::Print ? "gear_print" : kind == ProfileKind::Filament ? "gear_filament" : "gear_printer");
+    if (gear)
         ImGui::OpenPopup("##profile_menu");
     if (ImGui::BeginPopup("##profile_menu")) {
+        // The gear's entries (interface.md, «Menús»): its settings, the
+        // extruder's colour, the template profiles shown or not.
+        const bool edit = ImGui::MenuItem(tr(T::EditPresetMenu));
+        note_rect("edit_preset");
+        if (edit)
+            window_tab(kind == ProfileKind::Print ? 2 : kind == ProfileKind::Filament ? 3 : 4);
+        if (kind == ProfileKind::Filament) {
+            const bool colour = ImGui::BeginMenu(tr(T::ExtruderColorMenu));
+            note_rect("extruder_color");
+            if (colour) {
+                if (filament_colors_.empty())
+                    filament_colors_.resize(1);
+                unsigned v = 0x808080;
+                if (const std::string hex = filament_color(1); hex.size() == 7 && hex[0] == '#')
+                    std::sscanf(hex.c_str() + 1, "%6x", &v);
+                float rgb3[3] = {float((v >> 16) & 0xFF) / 255.0f, float((v >> 8) & 0xFF) / 255.0f, float(v & 0xFF) / 255.0f};
+                if (ImGui::ColorPicker3("##extruder_color", rgb3, ImGuiColorEditFlags_NoSidePreview)) {
+                    char hex[8];
+                    std::snprintf(hex, sizeof hex, "#%02X%02X%02X", unsigned(std::lround(rgb3[0] * 255.0f)),
+                                  unsigned(std::lround(rgb3[1] * 255.0f)), unsigned(std::lround(rgb3[2] * 255.0f)));
+                    filament_colors_[0] = hex;
+                    for (ColorMix& m : mixes_) { // the mixed colours made with it (color_mixing.md)
+                        std::vector<std::string> colors;
+                        std::vector<double> shares;
+                        for (const ColorMix::Component& c : m.components)
+                            colors.push_back(filament_color(c.extruder)), shares.push_back(c.share);
+                        m.color = mix_color(colors, shares);
+                    }
+                }
+                ImGui::EndMenu();
+            }
+        }
+        const bool templates = ImGui::MenuItem(tr(T::ShowTemplatesMenu), nullptr, show_templates_);
+        note_rect("show_templates");
+        if (templates)
+            show_templates_ = !show_templates_;
+        ImGui::Separator();
         if (ImGui::MenuItem(tr(T::SaveProfileAs)))
             save_as();
         if (kind != ProfileKind::Print && ImGui::MenuItem(tr(T::FromCatalog)))
@@ -5666,6 +6097,9 @@ void App::poll_pack_update() {
         const std::string version = pack_newer_job_.get();
         if (!version.empty())
             notify(format(tr(T::PackNewer), version.c_str()));
+        else if (pack_check_asked_)
+            notify(tr(T::PackUpToDate));
+        pack_check_asked_ = false;
     }
     if (!pack_job_.valid() || pack_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
         return;
@@ -5951,16 +6385,34 @@ void App::start_slice() {
         return;
     }
     // Vase mode prints one object (vase_mode.md, rule 2), or several one
-    // after another (sequential.md, rule 5).
-    if (settings_.vase && objects_.size() > 1 && !settings_.sequential) {
+    // after another (sequential.md, rule 5). A model left out of the print
+    // does not count.
+    const auto printed_count =
+        std::count_if(objects_.begin(), objects_.end(), [](const PlateObject& o) { return o.printable; });
+    if (settings_.vase && printed_count > 1 && !settings_.sequential) {
         fail(T::CannotSlice, tr(T::VaseManyObjects));
         return;
     }
-    TriangleMesh placed = plate_now();
+    // Only the printable models (interface.md, «Menús»: Printable).
+    std::vector<PlateObject> printed;
+    std::vector<TriangleMesh> printed_meshes;
+    const bool all_printed = std::all_of(objects_.begin(), objects_.end(), [](const PlateObject& o) { return o.printable; });
+    if (!all_printed) {
+        for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i)
+            if (objects_[i].printable)
+                printed.push_back(objects_[i]), printed_meshes.push_back(placed_meshes_[i]);
+        if (printed.empty()) {
+            fail(T::CannotSlice, tr(T::NothingPrintable));
+            return;
+        }
+    }
+    TriangleMesh placed = all_printed ? plate_now() : plate_mesh(printed_meshes);
+    if (!all_printed && offset_ != Vec3{})
+        placed = translated(placed, offset_);
     // A test prints with its own settings: no supports under the resin tests
     // or the bridges, for one (calibration_print_settings).
     const Settings settings = calibration_ ? calibration_print_settings(calibration_kind_, settings_) : settings_;
-    PlateSlice plate = plate_slice(objects_, placed_meshes_, settings);
+    PlateSlice plate = all_printed ? plate_slice(objects_, placed_meshes_, settings) : plate_slice(printed, printed_meshes, settings);
     Painting painting = std::move(plate.painting);
     std::vector<MeshObject> objects = std::move(plate.objects);
     SliceVolumes volumes = std::move(plate.volumes);
@@ -6348,6 +6800,17 @@ void App::top_bar() {
     const bool chip_shown = chip_text || spare >= button_h + gap;
     if (chip_shown)
         right += (chip_text ? width_of(chip_label) : button_h) + gap;
+    // The mode chip (interface.md, «Menús»: Modo): the settings level, three
+    // options with their explanation; only when there is room (the settings
+    // panel has the same choice).
+    const T level_name = view_level_ == ViewLevel::Basic    ? T::LevelBasic
+                         : view_level_ == ViewLevel::Normal ? T::LevelNormal
+                         : view_level_ == ViewLevel::Advanced ? T::LevelAdvanced
+                                                              : T::LevelCustom;
+    const bool mode_shown = tab_ == Tab::Prepare && spare - (chip_shown ? (chip_text ? width_of(chip_label) : button_h) + gap : 0.0f) >=
+                                                        width_of(tr(level_name)) + 2.0f * gap + button_h;
+    if (mode_shown)
+        right += width_of(tr(level_name)) + gap;
     // The help (assistant.md, rule 1), between the tabs and the actions, when
     // there is room; F1 and More open it anyway. The search for a setting is
     // in the settings panel, under the printer (the owner's decision, 2026-10-29).
@@ -6365,6 +6828,33 @@ void App::top_bar() {
     }
     ImGui::SameLine(ImGui::GetWindowWidth() - right - 12.0f * scale_);
     ImGui::SetCursorPosY(top);
+    if (mode_shown) {
+        const bool mode = button("##mode_chip", nullptr, tr(level_name), false, false, true, tr(T::ChooseSettings), button_h);
+        note_rect("mode_chip");
+        if (mode)
+            ImGui::OpenPopup("##mode_menu");
+        if (ImGui::BeginPopup("##mode_menu")) {
+            const struct {
+                const char* name;
+                T label, tip;
+                ViewLevel level;
+            } modes[] = {{"mode_simple", T::LevelBasic, T::LevelBasicTip, ViewLevel::Basic},
+                         {"mode_advanced", T::LevelNormal, T::LevelNormalTip, ViewLevel::Normal},
+                         {"mode_expert", T::LevelAdvanced, T::LevelAdvancedTip, ViewLevel::Advanced}};
+            for (const auto& m : modes) {
+                if (ImGui::RadioButton((std::string(tr(m.label)) + "##" + m.name).c_str(), view_level_ == m.level)) {
+                    choose_level(m.level);
+                    ImGui::CloseCurrentPopup();
+                }
+                note_rect(m.name);
+                ImGui::SameLine();
+                loc::TextDisabled("— %s", tr(m.tip));
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::SameLine(0, gap);
+        ImGui::SetCursorPosY(top);
+    }
     if (chip_shown) {
         const bool chip = chip_text ? button("##cloud_chip", "account", chip_label, false, cloud_open_, true,
                                              tr(T::CloudChipTip), button_h)
@@ -6387,100 +6877,7 @@ void App::top_bar() {
                                   ImGui::GetItemRectMax().y);
     if (more)
         ImGui::OpenPopup("##more_menu");
-    if (ImGui::BeginPopup("##more_menu")) {
-        // Configuración first (preferences.md, PF8).
-        const bool config = ImGui::MenuItem(tr(T::ConfigMenu), "Ctrl+,");
-        g_menu_rects["config"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                        ImGui::GetItemRectMax().y);
-        if (config)
-            config_open_ = true;
-        const bool cloud = ImGui::MenuItem(tr(T::CloudMenu));
-        g_menu_rects["cloud"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                       ImGui::GetItemRectMax().y);
-        if (cloud)
-            cloud_open_ = true;
-        // A plan without "slice" (cloud.md, rule 10b): the entry shows which
-        // plans have it and opens the account page instead.
-        const bool slice_locked = !cloud_token_.empty() && cloud_account_ &&
-                                  !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "slice");
-        const std::string slice_label =
-            slice_locked ? std::string(tr(T::CloudSliceMenu)) + " — " +
-                               format(tr(T::CloudPlanLock), cloud::plans_with(cloud_plans_, "slice").c_str())
-                         : std::string(tr(T::CloudSliceMenu));
-        const bool cloud_slice = ImGui::MenuItem(slice_label.c_str(), nullptr, false, has_plate_ && !cloud_slice_.valid());
-        g_menu_rects["cloud_slice"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                             ImGui::GetItemRectMax().y);
-        if (cloud_slice && slice_locked)
-            cloud_open_ = true;
-        else if (cloud_slice)
-            start_cloud_slice();
-        const bool report = ImGui::MenuItem(tr(T::ReportMenu));
-        g_menu_rects["report"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                        ImGui::GetItemRectMax().y);
-        if (report)
-            report_open_ = true;
-        ImGui::Separator();
-        if (ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S"))
-            begin_save_project(false);
-        if (ImGui::MenuItem(tr(T::SaveProjectAs), "Ctrl+Shift+S"))
-            begin_save_project(true);
-        ImGui::Separator();
-        if (ImGui::BeginMenu(tr(T::Language))) {
-            if (ImGui::MenuItem("Español", nullptr, language() == Language::Spanish))
-                set_language(Language::Spanish);
-            if (ImGui::MenuItem("English", nullptr, language() == Language::English))
-                set_language(Language::English);
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu(tr(T::Theme))) {
-            if (ImGui::MenuItem(tr(T::Dark), nullptr, theme_.dark)) {
-                theme_ = dark_theme();
-                apply_theme();
-            }
-            if (ImGui::MenuItem(tr(T::Light), nullptr, !theme_.dark)) {
-                theme_ = light_theme();
-                apply_theme();
-            }
-            ImGui::EndMenu();
-        }
-        if (ImGui::MenuItem(tr(T::GcodePreviewMenu))) {
-            purpose_ = Purpose::Open;
-            browser_.open(FileBrowser::Mode::Open, tr(T::GcodePreviewMenu), {".gcode", ".gco", ".g", ".bgcode"}, last_folder_);
-        }
-        if (ImGui::MenuItem(tr(T::ExportView))) {
-            purpose_ = Purpose::ExportView;
-            browser_.open(FileBrowser::Mode::Save, tr(T::ExportViewTitle), {".json"}, last_folder_, "tisma-view.json");
-        }
-        if (ImGui::MenuItem(tr(T::ImportView))) {
-            purpose_ = Purpose::ImportView;
-            browser_.open(FileBrowser::Mode::Open, tr(T::ImportViewTitle), {".json"}, last_folder_);
-        }
-        if (ImGui::MenuItem(tr(T::Tutorial)))
-            tour_step_ = 0;
-        if (ImGui::MenuItem(tr(T::TipsOn), nullptr, tips_))
-            tips_ = !tips_;
-        if (ImGui::MenuItem(tr(T::TipsAgain))) {
-            tips_seen_.clear();
-            tips_ = true;
-        }
-        // The assistant's preferences (assistant.md, «Ajustes»).
-        if (ImGui::MenuItem(tr(T::AssistantTutorials), nullptr, assistant_tutorials_))
-            assistant_tutorials_ = !assistant_tutorials_;
-        if (ImGui::MenuItem(tr(T::AssistantGlossary), nullptr, assistant_glossary_))
-            g_glossary_tips = assistant_glossary_ = !assistant_glossary_;
-        if (ImGui::MenuItem(tr(T::AssistantMaterial), nullptr, assistant_material_))
-            assistant_material_ = !assistant_material_;
-        if (ImGui::MenuItem(tr(T::Help), "F1"))
-            help_open_ = true;
-        if (ImGui::MenuItem(tr(T::Credits)))
-            credits_open_ = true;
-        if (ImGui::MenuItem(tr(T::About)))
-            about_open_ = true;
-        ImGui::Separator();
-        if (ImGui::MenuItem(tr(T::Quit)))
-            glfwSetWindowShouldClose(window_, GLFW_TRUE);
-        ImGui::EndPopup();
-    }
+    more_menu();
     dl->AddLine(ImVec2(origin.x, origin.y + height - 1.0f), ImVec2(origin.x + vp->Size.x, origin.y + height - 1.0f),
                 ImGui::GetColorU32(rgb(theme_.border)));
     ImGui::End();
@@ -7829,6 +8226,118 @@ void App::help_apply_dialog() {
     ImGui::EndPopup();
 }
 
+// The machine as Preferences › Video and Help › System Info show it.
+void App::machine_lines() {
+    const std::string cpu = system_.cpu.empty() ? std::string("?") : system_.cpu;
+    loc::TextDisabled(tr(T::ConfigMachineCpu), cpu.c_str(), system_.physical_cores, system_.logical_cores);
+    loc::TextDisabled(tr(T::ConfigMachineRam), bytes_text(system_.ram_total).c_str(), bytes_text(system_.ram_free).c_str());
+    loc::TextDisabled(tr(T::ConfigMachineGpu), (gpu_vendor_.empty() ? gpu_renderer_ : gpu_vendor_ + " · " + gpu_renderer_).c_str(),
+                      gpu_version_.c_str());
+    if (screen_width_ > 0 && screen_hz_ > 0)
+        loc::TextDisabled(tr(T::ConfigMachineScreen), screen_width_, screen_height_, screen_hz_, double(scale_));
+    else if (screen_width_ > 0) // a screen that does not say its rate (a virtual one)
+        loc::TextDisabled(tr(T::ConfigMachineScreenNoRate), screen_width_, screen_height_, double(scale_));
+    loc::TextDisabled("%s", tr(system_.power == PowerSource::Battery  ? T::ConfigOnBattery
+                               : system_.power == PowerSource::Mains ? T::ConfigOnMains
+                                                                     : T::ConfigPowerUnknown));
+}
+
+// Help › Keyboard Shortcuts (?): every shortcut, by card.
+void App::shortcuts_dialog() {
+    if (shortcuts_open_) {
+        ImGui::OpenPopup("###shortcuts");
+        shortcuts_open_ = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(760.0f * scale_, vp->Size.x * 0.92f), vp->Size.y * 0.8f), ImGuiCond_Appearing);
+    const std::string title = std::string(tr(T::ShortcutsMenu)) + "###shortcuts";
+    if (!ImGui::BeginPopupModal(title.c_str()))
+        return;
+    struct Row {
+        T label;
+        const char* keys;
+    };
+    struct Section {
+        T title;
+        std::vector<Row> rows;
+    };
+    static const std::vector<Section> sections = {
+        {T::MoreFile,
+         {{T::NewProjectMenu, "Ctrl+N"}, {T::OpenProjectMenu, "Ctrl+O"}, {T::SaveProject, "Ctrl+S"},
+          {T::SaveProjectAs, "Ctrl+Alt+S"}, {T::ImportModelMenu, "Ctrl+I"}, {T::ImportConfigMenu, "Ctrl+L"},
+          {T::ImportProjectConfigMenu, "Ctrl+Alt+L"}, {T::ExportGcodeMenu, "Ctrl+G"}, {T::SendGcodeMenu, "Ctrl+Shift+G"},
+          {T::ExportConfigMenu, "Ctrl+E"}, {T::SliceNowMenu, "Ctrl+R"}}},
+        {T::MoreEdit,
+         {{T::DeleteSelectedMenu, "Del"}, {T::DeleteAllMenu, "Ctrl+Del"}, {T::Undo, "Ctrl+Z"}, {T::Redo, "Ctrl+Y"},
+          {T::CopyMenu, "Ctrl+C"}, {T::PasteMenu, "Ctrl+V"}, {T::ReloadMenu, "F5"}, {T::SearchMenu, "Ctrl+F"}}},
+        {T::MoreWindow,
+         {{T::PlaterTabMenu, "Ctrl+1"}, {T::PrintSettingsTabMenu, "Ctrl+2"}, {T::FilamentSettingsTabMenu, "Ctrl+3"},
+          {T::PrinterSettingsTabMenu, "Ctrl+4"}, {T::View3dMenu, "Ctrl+5"}, {T::PreviewMenu, "Ctrl+6"}}},
+        {T::MoreView,
+         {{T::ViewIso, "0"}, {T::ViewTop, "1"}, {T::ViewBottom, "2"}, {T::ViewFront, "3"}, {T::ViewBack, "4"},
+          {T::ViewLeft, "5"}, {T::ViewRight, "6"}, {T::ZoomFit, "Z"}, {T::ShortOrtho, "K"}, {T::ShowLabelsMenu, "E"},
+          {T::ShowLegendMenu, "L"}, {T::CollapseSidebarMenu, "Shift+Tab"}, {T::FullscreenMenu, "F11"}}},
+        {T::ShortcutsPlate,
+         {{T::ShortMove, "M"}, {T::ShortRotate, "R"}, {T::ShortScale, "S"}, {T::ShortLayFlat, "F"}, {T::ShortCut, "C"},
+          {T::ShortMeasure, "U"}, {T::ToolPaint, "P"}, {T::ShortArrange, "A"}, {T::ShortSelect, "Esc"}}},
+        {T::MoreHelp, {{T::PreferencesMenu, "Ctrl+P"}, {T::Help, "F1"}, {T::ShortcutsMenu, "?"}}},
+    };
+    const float bottom = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    ImGui::BeginChild("##shortcut_list", ImVec2(0, -bottom));
+    if (ImGui::BeginTable("##shortcut_cols", 2, ImGuiTableFlags_SizingStretchSame)) {
+        int n = 0;
+        for (const Section& section : sections) {
+            if (n++ % 2 == 0)
+                ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(section.title));
+            if (ImGui::BeginTable(tr(section.title), 2, ImGuiTableFlags_SizingStretchProp)) {
+                for (const Row& r : section.rows) {
+                    ImGui::TableNextColumn();
+                    loc::Text("%s", tr(r.label));
+                    ImGui::TableNextColumn();
+                    loc::TextDisabled("%s", r.keys);
+                }
+                ImGui::EndTable();
+            }
+            ImGui::Spacing();
+        }
+        ImGui::EndTable();
+    }
+    ImGui::EndChild();
+    note_rect("shortcuts_list");
+    if (ImGui::Button(tr(T::Close), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+// Help › System Info: the program's version, the system and the machine.
+void App::system_info_dialog() {
+    if (system_info_open_) {
+        ImGui::OpenPopup("###system_info");
+        system_info_open_ = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    const std::string title = std::string(tr(T::SystemInfoMenu)) + "###system_info";
+    if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    loc::Text(tr(T::SystemVersion), TISMA_VERSION);
+#if defined(_WIN32)
+    loc::TextDisabled(tr(T::SystemOs), "Windows");
+#elif defined(__APPLE__)
+    loc::TextDisabled(tr(T::SystemOs), "macOS");
+#else
+    loc::TextDisabled(tr(T::SystemOs), "Linux");
+#endif
+    machine_lines();
+    note_rect("system_info");
+    if (ImGui::Button(tr(T::Close), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
 // More › Credits and sources (credits.md, rule 4): the functions taken from
 // other sources, and the third-party components with their licenses and the
 // notices those licenses ask to hand out with the program.
@@ -8267,15 +8776,11 @@ void App::settings_panel() {
     // Settings files.
     ImGui::Separator();
     const float third = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2.0f) / 3.0f;
-    if (ImGui::Button(tr(T::LoadSettings), ImVec2(third, 0))) {
-        purpose_ = Purpose::LoadSettings;
-        browser_.open(FileBrowser::Mode::Open, tr(T::LoadSettingsTitle), {".json"}, last_folder_);
-    }
+    if (ImGui::Button(tr(T::LoadSettings), ImVec2(third, 0)))
+        begin_import_config(false);
     ImGui::SameLine();
-    if (ImGui::Button(tr(T::SaveSettings), ImVec2(third, 0))) {
-        purpose_ = Purpose::SaveSettings;
-        browser_.open(FileBrowser::Mode::Save, tr(T::SaveSettingsTitle), {".json"}, last_folder_, "tisma.json");
-    }
+    if (ImGui::Button(tr(T::SaveSettings), ImVec2(third, 0)))
+        begin_export_config();
     ImGui::SameLine();
     if (ImGui::Button(tr(T::ResetSettings), ImVec2(third, 0))) {
         settings_ = default_settings();
@@ -9923,6 +10428,28 @@ void App::viewport() {
         }
     }
     object_menu();
+    // Set number of instances… (the model's right-click menu).
+    if (instances_open_) {
+        ImGui::OpenPopup("###instances");
+        instances_open_ = false;
+    }
+    if (ImGui::BeginPopupModal((std::string(tr(T::SetInstancesMenu)) + "###instances").c_str(), nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SetNextItemWidth(140.0f * scale_);
+        ImGui::InputInt(tr(T::InstancesCount), &instances_count_);
+        instances_count_ = std::clamp(instances_count_, 1, 500);
+        note_rect("instances_count");
+        if (ImGui::Button(tr(T::Ok), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            if (selected_ >= 0 && selected_ < int(objects_.size()))
+                set_instances(std::size_t(selected_), instances_count_);
+            ImGui::CloseCurrentPopup();
+        }
+        note_rect("instances_ok");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
     plate_menu();
     ImGui::End();
     ImGui::PopStyleVar();
@@ -10111,14 +10638,28 @@ void App::slice_panel() {
         g_menu_rects["save_more"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                            ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         if (ImGui::BeginPopup("##save_menu")) {
+            // The outputs this slice can go to, the main button's one marked
+            // (interface.md, «Menús»): the program on the network, the
+            // printer on USB, the file.
             const bool connected = printer_ && printer_->status().state == device::PrinterState::Idle;
-            const bool send = ImGui::MenuItem(tr(connected ? T::SendToPrinter : T::SendToPrinterNone), nullptr, false,
-                                              connected && device_can_print() && !result_->resin);
-            g_menu_rects["send"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
-                                          ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
-            if (send)
-                device_print();
-            if (to_host && ImGui::MenuItem(tr(T::Export)))
+            const bool usb = connected && device_can_print() && !result_->resin;
+            if (to_host) {
+                const bool host = ImGui::MenuItem(tr(T::SendToPrinter), nullptr, true, !host_job_.valid());
+                note_rect("send_host");
+                if (host) {
+                    host_dialog_name_ = host_default_name();
+                    host_dialog_open_ = true;
+                }
+            }
+            if (usb) {
+                const bool send = ImGui::MenuItem((std::string(tr(T::SendToPrinter)) + " (USB)").c_str());
+                note_rect("send");
+                if (send)
+                    device_print();
+            }
+            const bool file = ImGui::MenuItem(tr(result_->resin ? T::ExportGoo : T::Export), nullptr, !to_host);
+            note_rect("export_file");
+            if (file)
                 begin_export();
             const bool project = ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S");
             g_menu_rects["project"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
@@ -10167,6 +10708,13 @@ void App::plate_menu() {
                                                        : make_sphere(10),
                       item.label);
         }
+        ImGui::EndMenu();
+    }
+    // The calibration tests (interface.md, «Menús»: Add calibration model ▸).
+    const bool calibrations = ImGui::BeginMenu(tr(T::AddCalibrationModel));
+    placed("calibration");
+    if (calibrations) {
+        calibration_entries("bed_cal_");
         ImGui::EndMenu();
     }
     if (cad_design_) { // the Design tab's tools, also with an empty plate (cad_design.md, rule 3)
@@ -10238,6 +10786,83 @@ void App::object_menu() {
     }
     PlateObject& o = objects_[std::size_t(selected_)];
     loc::TextDisabled("%s", o.name.c_str());
+    ImGui::Separator();
+    // The model itself (interface.md, «Menús»): its instances, delete, reload,
+    // units, export, size, mirror and split.
+    const std::size_t index = std::size_t(selected_);
+    const auto entry = [](const char* name, const char* label, const char* keys = nullptr, bool enabled = true) {
+        const bool hit = ImGui::MenuItem((std::string(label) + "##" + name).c_str(), keys, false, enabled);
+        note_rect(name);
+        if (!enabled)
+            g_menu_disabled.insert(name);
+        return hit;
+    };
+    const std::size_t copies = instances_of(index).size();
+    if (entry("add_instance", tr(T::AddInstanceMenu), "+")) {
+        set_instances(index, int(copies) + 1);
+        ImGui::EndPopup();
+        return;
+    }
+    if (entry("remove_instance", tr(T::RemoveInstanceMenu), "-", copies > 1)) {
+        set_instances(index, int(copies) - 1);
+        ImGui::EndPopup();
+        return;
+    }
+    if (entry("set_instances", tr(T::SetInstancesMenu))) {
+        instances_count_ = int(copies);
+        instances_open_ = true;
+    }
+    if (entry("delete", tr(T::DeleteMenu), "Del")) {
+        delete_selected();
+        ImGui::EndPopup();
+        return;
+    }
+    const bool printable = ImGui::MenuItem((std::string(tr(T::PrintableMenu)) + "##printable").c_str(), nullptr, o.printable);
+    note_rect("printable");
+    if (printable) {
+        o.printable = !o.printable;
+        plate_changed();
+    }
+    ImGui::Separator();
+    if (entry("reload_object", tr(T::ReloadMenu), nullptr, !o.source.empty()))
+        reload_from_disk();
+    if (entry("convert_meters", tr(T::ConvertMetersMenu))) {
+        for (double& v : o.place.scale)
+            v *= 1000.0;
+        plate_changed();
+    }
+    if (entry("convert_inches", tr(T::ConvertInchesMenu))) {
+        for (double& v : o.place.scale)
+            v *= 25.4;
+        plate_changed();
+    }
+    if (entry("export_object", tr(T::ExportObjectMenu))) {
+        export_object_ = index;
+        purpose_ = Purpose::ExportObject;
+        browser_.open(FileBrowser::Mode::Save, tr(T::ExportObjectMenu), {".stl", ".obj"}, last_folder_,
+                      utf8(from_utf8(o.name).stem()) + ".stl");
+    }
+    ImGui::Separator();
+    if (entry("scale_to_volume", tr(T::ScaleToVolumeMenu), nullptr, settings_.bed.size() >= 3))
+        scale_to_volume(index);
+    if (ImGui::BeginMenu(tr(T::MirrorMenu))) {
+        const T axes[] = {T::AxisX, T::AxisY, T::AxisZ};
+        for (int a = 0; a < 3; ++a)
+            if (entry(a == 0 ? "mirror_x" : a == 1 ? "mirror_y" : "mirror_z", tr(axes[a])))
+                mirror_selected(a);
+        ImGui::EndMenu();
+    }
+    note_rect("mirror");
+    if (ImGui::BeginMenu(tr(T::SplitMenu))) {
+        if (entry("split_objects", tr(T::SplitObjectsMenu)))
+            split_selected();
+        ImGui::EndMenu();
+    }
+    note_rect("split");
+    if (std::size_t(selected_) >= objects_.size()) { // split or mirrored away
+        ImGui::EndPopup();
+        return;
+    }
     ImGui::Separator();
     if (view_level_ == ViewLevel::Basic) {
         loc::TextDisabled("%s", tr(T::ObjectSettingsBasic));
@@ -10584,16 +11209,8 @@ void App::plate_tools() {
         purpose_ = Purpose::AddModel;
         browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
     }
-    if (button("##remove", "tool_remove", nullptr, false, false, chosen, tr(T::ToolRemoveTip), size)) {
-        objects_.erase(objects_.begin() + selected_);
-        selected_ = objects_.empty() ? -1 : std::min(selected_, int(objects_.size()) - 1);
-        if (objects_.empty()) {
-            result_.reset();
-            renderer_.clear_preview();
-            vk_view_.clear_preview();
-        }
-        plate_changed();
-    }
+    if (button("##remove", "tool_remove", nullptr, false, false, chosen, tr(T::ToolRemoveTip), size))
+        delete_selected(true);
     if (button("##duplicate", "tool_duplicate", nullptr, false, false, chosen, tr(T::ToolDuplicateTip), size)) {
         objects_.push_back(objects_[std::size_t(selected_)]);
         selected_ = int(objects_.size()) - 1;
@@ -10669,18 +11286,20 @@ void App::plate_tools() {
             arrange_plate();
             tip("arrange");
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        // Esc: back to Select; again, nothing chosen (interface.md, «Más»: Deselect All).
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            if (tool_ == PlateTool::Select)
+                selected_ = -1;
             tool_ = PlateTool::Select;
-        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen) {
-            objects_.erase(objects_.begin() + selected_);
-            selected_ = -1;
-            if (objects_.empty()) {
-                result_.reset();
-                renderer_.clear_preview();
-                vk_view_.clear_preview();
-            }
-            plate_changed();
         }
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen && !ImGui::GetIO().KeyCtrl) // Ctrl+Del: all
+            delete_selected();
+        // + and − add or take away an instance (interface.md, «Menús»).
+        if (chosen && (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false) ||
+                       (ImGui::IsKeyPressed(ImGuiKey_Equal, false) && ImGui::GetIO().KeyShift)))
+            set_instances(std::size_t(selected_), int(instances_of(std::size_t(selected_)).size()) + 1);
+        if (chosen && (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false) || ImGui::IsKeyPressed(ImGuiKey_Minus, false)))
+            set_instances(std::size_t(selected_), int(instances_of(std::size_t(selected_)).size()) - 1);
     }
     // The tool's card, next to the column; under the folded panel's card.
     const float card_top = panel_folded_now() && tab_ == Tab::Prepare && compact_bottom_ > strip_min.y
@@ -16641,6 +17260,413 @@ void App::undo_engineering(bool redo) {
 // Ctrl+Z puts the last moved model back where it was; Ctrl+Y (or
 // Ctrl+Shift+Z) moves it again. Steps from a plate with other models are
 // dropped: their numbers no longer name the same models.
+// The chosen model off the plate; KEEP_CHOICE picks the next one (the
+// toolbar's button), otherwise nothing stays chosen (Del, «Más»).
+void App::delete_selected(bool keep_choice) {
+    if (selected_ < 0 || selected_ >= int(objects_.size()))
+        return;
+    objects_.erase(objects_.begin() + selected_);
+    selected_ = keep_choice && !objects_.empty() ? std::min(selected_, int(objects_.size()) - 1) : -1;
+    if (objects_.empty()) {
+        result_.reset();
+        renderer_.clear_preview();
+        vk_view_.clear_preview();
+    }
+    plate_changed();
+}
+
+// «Más» (interface.md, «Más»): cards in columns of three, each with its grey
+// subtitle; every action shows its shortcut on the right, in grey, and is
+// greyed when it can't be used. Only the actions the program has are listed
+// (the audit in PROGRESS.md, 2026-11-10, keeps the rest in order).
+void App::more_menu() {
+    // The page behind the cards, so the white cards stand out.
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, rgb(theme_.window));
+    const bool open = ImGui::BeginPopup("##more_menu");
+    ImGui::PopStyleColor();
+    if (!open)
+        return;
+    // An entry, named for --ui-script's menu step.
+    // Drawn here, not with MenuItem: its shortcut column is the window's,
+    // past the card's edge. The shortcut and the check mark go on the right.
+    const auto item = [&](const char* name, const char* label, const char* keys = nullptr, bool enabled = true,
+                          bool checked = false) {
+        const std::string id = std::string(label) + "##" + name;
+        ImGui::BeginDisabled(!enabled);
+        const bool hit = ImGui::Selectable(id.c_str(), false, ImGuiSelectableFlags_None,
+                                           ImVec2(ImGui::GetContentRegionAvail().x, 0.0f));
+        ImGui::EndDisabled();
+        const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        float right = hi.x;
+        if (checked) {
+            const float h = ImGui::GetTextLineHeight();
+            right -= h;
+            ImGui::RenderCheckMark(dl, ImVec2(right + 0.15f * h, lo.y + 0.5f * (hi.y - lo.y - 0.7f * h)),
+                                   ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled), 0.7f * h);
+            right -= 4.0f * scale_;
+        }
+        if (keys)
+            dl->AddText(ImVec2(right - ImGui::CalcTextSize(keys).x, lo.y + 0.5f * (hi.y - lo.y - ImGui::GetTextLineHeight())),
+                        ImGui::GetColorU32(ImGuiCol_TextDisabled), keys);
+        note_rect(name);
+        if (!enabled)
+            g_menu_disabled.insert(name);
+        if (g_keep_texts) // the label and its shortcut, for expect-text
+            g_texts.push_back(keys ? std::string(label) + "  " + keys : std::string(label));
+        return hit;
+    };
+    const auto title = [&](const char* text) {
+        // Grey and bold: drawn twice, a pixel apart.
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        const ImU32 grey = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddText(at, grey, text);
+        dl->AddText(ImVec2(at.x + std::max(1.0f, scale_), at.y), grey, text);
+        ImGui::Dummy(ImVec2(ImGui::CalcTextSize(text).x + 1.0f, ImGui::GetTextLineHeight()));
+        ImGui::Spacing();
+        if (g_keep_texts)
+            g_texts.push_back(text);
+    };
+    const bool can_export = result_ && result_->ok && !viewer_ && !stale_;
+    const bool to_host = can_export && host_ready() && !result_->resin && device_can_print() && !host_job_.valid();
+    const bool to_usb = can_export && !result_->resin && device_can_print() && printer_ &&
+                        printer_->status().state == device::PrinterState::Idle;
+    const bool on_plate = tab_ == Tab::Prepare && !printer_page_;
+    const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
+
+    const float card_w = 270.0f * scale_;
+    const ImU32 card_bg = ImGui::GetColorU32(rgb(theme_.panel));
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(10.0f * scale_, 8.0f * scale_));
+    if (ImGui::BeginTable("##more_cards", 3, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_PadOuterX)) {
+        for (int c = 0; c < 3; ++c)
+            ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, card_w);
+        const auto card = [&](const char* text) {
+            ImGui::TableNextColumn();
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, card_bg);
+            title(text);
+        };
+
+        // 1. Tisma.
+        card(tr(T::MoreTisma));
+        if (item("thingiverse", tr(T::ThingiverseMenu)))
+            open_link("https://www.thingiverse.com/");
+        if (item("cloud", tr(T::CloudMenu)))
+            cloud_open_ = true;
+        if (item("config", tr(T::ConfigMenu), "Ctrl+,"))
+            config_open_ = true;
+
+        // 2. File.
+        card(tr(T::MoreFile));
+        if (item("new_project", tr(T::NewProjectMenu), "Ctrl+N"))
+            new_project();
+        if (item("open_project", tr(T::OpenProjectMenu), "Ctrl+O")) {
+            purpose_ = Purpose::Open;
+            browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
+        }
+        // Numbered, newest first; one no longer there is dropped when chosen.
+        if (ImGui::BeginMenu(tr(T::RecentProjects), !recent_projects_.empty())) {
+            std::optional<std::filesystem::path> open;
+            for (std::size_t i = 0; i < recent_projects_.size(); ++i) {
+                const std::string label = std::to_string(i + 1) + "  " + utf8(recent_projects_[i].filename()) +
+                                          "##recent" + std::to_string(i);
+                if (ImGui::MenuItem(label.c_str()))
+                    open = recent_projects_[i];
+                note_rect("recent_" + std::to_string(i + 1));
+                ImGui::SetItemTooltip("%s", utf8(recent_projects_[i]).c_str());
+            }
+            ImGui::EndMenu();
+            if (open) {
+                std::error_code ec;
+                if (std::filesystem::exists(*open, ec))
+                    open_project(*open);
+                else {
+                    std::erase(recent_projects_, *open);
+                    fail(T::CannotOpen, utf8(*open));
+                }
+            }
+        }
+        note_rect("recent");
+        if (recent_projects_.empty())
+            g_menu_disabled.insert("recent");
+        if (item("save_project", tr(T::SaveProject), "Ctrl+S", has_plate_))
+            begin_save_project(false);
+        if (item("save_project_as", tr(T::SaveProjectAs), "Ctrl+Alt+S", has_plate_))
+            begin_save_project(true);
+        ImGui::Separator();
+        if (item("import_model", tr(T::ImportModelMenu), "Ctrl+I")) {
+            purpose_ = Purpose::AddModel;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
+        }
+        if (item("import_inches", tr(T::ImportInchesMenu))) {
+            purpose_ = Purpose::AddModelInches;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ImportInchesMenu), {".stl", ".obj"}, last_folder_);
+        }
+        if (item("import_zip", tr(T::ImportZipMenu))) {
+            purpose_ = Purpose::ImportZip;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ImportZipMenu), {".zip"}, last_folder_);
+        }
+        if (item("import_config", tr(T::ImportConfigMenu), "Ctrl+L"))
+            begin_import_config(false);
+        if (item("import_project_config", tr(T::ImportProjectConfigMenu), "Ctrl+Alt+L"))
+            begin_import_config(true);
+        ImGui::Separator();
+        if (item("export_gcode", tr(T::ExportGcodeMenu), "Ctrl+G", can_export))
+            begin_export();
+        if (item("export_plate", tr(T::ExportPlateMenu), nullptr, has_plate_)) {
+            purpose_ = Purpose::ExportPlate;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportPlateMenu), {".stl", ".obj"},
+                          project_path_.empty() ? last_folder_ : project_path_.parent_path(),
+                          utf8((project_path_.empty() ? model_path_.stem() : project_path_.stem()).replace_extension(".stl")));
+        }
+        if (item("export_toolpaths", tr(T::ExportToolpathsMenu), nullptr, result_ && result_->ok && !result_->resin)) {
+            purpose_ = Purpose::ExportToolpaths;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportToolpathsMenu), {".obj"}, last_folder_,
+                          utf8((project_path_.empty() ? model_path_.stem() : project_path_.stem()).replace_extension(".obj")));
+        }
+        if (item("export_config", tr(T::ExportConfigMenu), "Ctrl+E"))
+            begin_export_config();
+        if (item("send_gcode", tr(T::SendGcodeMenu), "Ctrl+Shift+G", to_host || to_usb))
+            send_gcode();
+        // A plan without "slice" (cloud.md, rule 10b): the entry shows which
+        // plans have it and opens the account page instead.
+        const bool slice_locked = !cloud_token_.empty() && cloud_account_ &&
+                                  !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "slice");
+        const std::string slice_label =
+            slice_locked ? std::string(tr(T::CloudSliceMenu)) + " — " +
+                               format(tr(T::CloudPlanLock), cloud::plans_with(cloud_plans_, "slice").c_str())
+                         : std::string(tr(T::CloudSliceMenu));
+        if (item("cloud_slice", slice_label.c_str(), nullptr, has_plate_ && !cloud_slice_.valid())) {
+            if (slice_locked)
+                cloud_open_ = true;
+            else
+                start_cloud_slice();
+        }
+        ImGui::Separator();
+        if (item("convert_to_binary", tr(T::ConvertToBinaryMenu))) {
+            purpose_ = Purpose::ConvertToBinary;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ConvertToBinaryMenu), {".gcode", ".gco", ".g"}, last_folder_);
+        }
+        if (item("convert_to_ascii", tr(T::ConvertToAsciiMenu))) {
+            purpose_ = Purpose::ConvertToAscii;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ConvertToAsciiMenu), {".bgcode"}, last_folder_);
+        }
+        if (item("slice_now", tr(T::SliceNowMenu), "Ctrl+R", has_plate_))
+            start_slice();
+        if (item("gcode_preview", tr(T::GcodePreviewMenu))) {
+            purpose_ = Purpose::Open;
+            browser_.open(FileBrowser::Mode::Open, tr(T::GcodePreviewMenu), {".gcode", ".gco", ".g", ".bgcode"},
+                          last_folder_);
+        }
+        if (item("quit", tr(T::Quit)))
+            glfwSetWindowShouldClose(window_, GLFW_TRUE);
+
+        // 3. Edit.
+        card(tr(T::MoreEdit));
+        if (item("deselect_all", tr(T::DeselectAllMenu), "Esc", on_plate && chosen)) {
+            selected_ = -1;
+            tool_ = PlateTool::Select;
+        }
+        if (item("delete_selected", tr(T::DeleteSelectedMenu), "Del", on_plate && chosen))
+            delete_selected();
+        if (item("delete_all", tr(T::DeleteAllMenu), "Ctrl+Del", on_plate && !objects_.empty()))
+            delete_all();
+        if (item("copy", tr(T::CopyMenu), "Ctrl+C", on_plate && chosen))
+            clipboard_ = objects_[std::size_t(selected_)];
+        if (item("paste", tr(T::PasteMenu), "Ctrl+V", on_plate && clipboard_.has_value()))
+            paste();
+        if (item("reload", tr(T::ReloadMenu), "F5", on_plate && can_reload()))
+            reload_from_disk();
+        if (item("undo", tr(T::Undo), "Ctrl+Z", on_plate && !place_undo_.empty()))
+            undo_place(false);
+        if (item("redo", tr(T::Redo), "Ctrl+Y", on_plate && !place_redo_.empty()))
+            undo_place(true);
+        if (item("search", tr(T::SearchMenu), "Ctrl+F"))
+            search_focus_ = true, printer_page_ = false;
+
+        // 4. Window.
+        card(tr(T::MoreWindow));
+        static constexpr struct {
+            const char* name;
+            T label;
+            const char* keys;
+        } tabs[] = {{"window_plater", T::PlaterTabMenu, "Ctrl+1"},
+                    {"window_print", T::PrintSettingsTabMenu, "Ctrl+2"},
+                    {"window_filament", T::FilamentSettingsTabMenu, "Ctrl+3"},
+                    {"window_printer", T::PrinterSettingsTabMenu, "Ctrl+4"},
+                    {"window_3d", T::View3dMenu, "Ctrl+5"},
+                    {"window_preview", T::PreviewMenu, "Ctrl+6"}};
+        for (int i = 0; i < 6; ++i)
+            if (item(tabs[i].name, tr(tabs[i].label), tabs[i].keys, i != 5 || result_.has_value()))
+                window_tab(i + 1);
+        // The shapes the empty bed's menu adds, 20 mm across.
+        if (ImGui::BeginMenu(tr(T::ShapeGalleryMenu))) {
+            const struct {
+                const char* name;
+                T label;
+            } shapes[] = {{"gallery_cube", T::ShapeCube}, {"gallery_cylinder", T::ShapeCylinder}, {"gallery_sphere", T::ShapeSphere}};
+            for (const auto& shape : shapes) {
+                const bool hit = ImGui::MenuItem(tr(shape.label));
+                note_rect(shape.name);
+                if (hit)
+                    add_shape(shape.label == T::ShapeCube       ? make_box(20, 20, 20)
+                              : shape.label == T::ShapeCylinder ? make_cylinder(10, 20)
+                                                                : make_sphere(10),
+                              shape.label);
+            }
+            ImGui::EndMenu();
+        }
+        note_rect("shape_gallery");
+
+        // 5. View.
+        card(tr(T::MoreView));
+        static constexpr struct {
+            const char* name;
+            T label;
+            const char* key;
+            StandardView view;
+        } views[] = {{"view_iso", T::ViewIso, "0", StandardView::Iso},
+                     {"view_top", T::ViewTop, "1", StandardView::Top},
+                     {"view_bottom", T::ViewBottom, "2", StandardView::Bottom},
+                     {"view_front", T::ViewFront, "3", StandardView::Front},
+                     {"view_back", T::ViewBack, "4", StandardView::Back},
+                     {"view_left", T::ViewLeft, "5", StandardView::Left},
+                     {"view_right", T::ViewRight, "6", StandardView::Right}};
+        for (const auto& v : views)
+            if (item(v.name, tr(v.label), v.key)) {
+                camera_.set_view(v.view);
+                frame_all();
+            }
+        ImGui::Separator();
+        if (item("show_labels", tr(T::ShowLabelsMenu), "E", true, show_labels_))
+            show_labels_ = !show_labels_;
+        if (item("show_legend", tr(T::ShowLegendMenu), "L", true, show_legend_))
+            show_legend_ = !show_legend_;
+        if (item("collapse_sidebar", tr(T::CollapseSidebarMenu), "Shift+Tab", true, panel_folded_)) {
+            panel_folded_ = !panel_folded_;
+            frame_pending_ = true;
+        }
+        if (item("fullscreen", tr(T::FullscreenMenu), "F11", true, glfwGetWindowMonitor(window_) != nullptr))
+            toggle_fullscreen();
+        ImGui::Separator();
+        if (item("export_view", tr(T::ExportView))) {
+            purpose_ = Purpose::ExportView;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportViewTitle), {".json"}, last_folder_, "tisma-view.json");
+        }
+        if (item("import_view", tr(T::ImportView))) {
+            purpose_ = Purpose::ImportView;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ImportViewTitle), {".json"}, last_folder_);
+        }
+
+        // 6. Configuration.
+        card(tr(T::MoreConfiguration));
+        // The first run's assistant again: the printer, then the filament, from the catalog.
+        if (item("wizard", tr(T::WizardMenu))) {
+            first_run_ = true;
+            setup_step_ = 1;
+            catalog_kind_ = ProfileKind::Printer, catalog_open_ = true;
+        }
+        // The profile pack's newer version, looked for now (profile_pack.md, rule 19).
+        if (item("check_config_updates", tr(T::CheckConfigUpdatesMenu), nullptr,
+                 pack_index_.has_value() && !pack_newer_job_.valid())) {
+            pack_checked_ = static_cast<long long>(std::time(nullptr));
+            pack_check_asked_ = true;
+            pack_newer_job_ = std::async(std::launch::async, [dir = pack_dir(), url = pack_url_] { return pack_newer(dir, url); });
+        }
+        if (item("preferences", tr(T::PreferencesMenu), "Ctrl+P"))
+            config_open_ = true;
+        if (item("print_usb", tr(T::PrintUsbMenu)))
+            set_tab(Tab::Device);
+        if (ImGui::BeginMenu(tr(T::Language))) {
+            if (ImGui::MenuItem("Español", nullptr, language() == Language::Spanish))
+                set_language(Language::Spanish);
+            if (ImGui::MenuItem("English", nullptr, language() == Language::English))
+                set_language(Language::English);
+            ImGui::EndMenu();
+        }
+        note_rect("language");
+        if (ImGui::BeginMenu(tr(T::Theme))) {
+            if (ImGui::MenuItem(tr(T::LikeSystem), nullptr, theme_system_)) {
+                theme_system_ = true;
+                follow_system_theme();
+            }
+            if (ImGui::MenuItem(tr(T::Dark), nullptr, !theme_system_ && theme_.dark)) {
+                theme_system_ = false;
+                theme_ = dark_theme();
+                apply_theme();
+            }
+            if (ImGui::MenuItem(tr(T::Light), nullptr, !theme_system_ && !theme_.dark)) {
+                theme_system_ = false;
+                theme_ = light_theme();
+                apply_theme();
+            }
+            note_rect("theme_menu_light");
+            ImGui::EndMenu();
+        }
+        note_rect("theme");
+        if (item("cloud_account", tr(T::CloudMenu)))
+            cloud_open_ = true;
+        ImGui::Separator();
+        // The assistant's preferences (assistant.md, «Ajustes»).
+        if (item("assistant_tutorials", tr(T::AssistantTutorials), nullptr, true, assistant_tutorials_))
+            assistant_tutorials_ = !assistant_tutorials_;
+        if (item("assistant_glossary", tr(T::AssistantGlossary), nullptr, true, assistant_glossary_))
+            g_glossary_tips = assistant_glossary_ = !assistant_glossary_;
+        if (item("assistant_material", tr(T::AssistantMaterial), nullptr, true, assistant_material_))
+            assistant_material_ = !assistant_material_;
+
+        // 7. Calibration: the tests, each made in its tab.
+        card(tr(T::MoreCalibration));
+        calibration_entries("cal_");
+
+        // 8. Help.
+        card(tr(T::MoreHelp));
+        if (item("help", tr(T::Help), "F1"))
+            help_open_ = true;
+        if (item("tutorial", tr(T::Tutorial)))
+            tour_step_ = 0;
+        if (item("tips", tr(T::TipsOn), nullptr, true, tips_))
+            tips_ = !tips_;
+        if (item("tips_again", tr(T::TipsAgain))) {
+            tips_seen_.clear();
+            tips_ = true;
+        }
+        ImGui::Separator();
+        if (item("releases", tr(T::ReleasesMenu)))
+            open_link("https://github.com/adriangrochi-code/tisma_engine/releases");
+        if (item("system_info", tr(T::SystemInfoMenu)))
+            system_info_open_ = true;
+        if (item("config_folder", tr(T::ConfigFolderMenu), nullptr, !preferences_path().empty()))
+            open_folder(preferences_path().parent_path());
+        if (item("shortcuts", tr(T::ShortcutsMenu), "?"))
+            shortcuts_open_ = true;
+        if (item("report", tr(T::ReportMenu)))
+            report_open_ = true;
+        if (item("credits", tr(T::Credits)))
+            credits_open_ = true;
+        if (item("about", tr(T::About)))
+            about_open_ = true;
+        ImGui::EndTable();
+    }
+    ImGui::PopStyleVar();
+    ImGui::EndPopup();
+}
+
+// «Send G-code…» (Ctrl+Shift+G): to the tested network program, or to the
+// printer on USB (devices.md, rule 19).
+void App::send_gcode() {
+    if (!result_ || !result_->ok || viewer_ || stale_ || result_->resin || !device_can_print())
+        return;
+    if (host_ready()) {
+        if (!host_job_.valid()) {
+            host_dialog_name_ = host_default_name();
+            host_dialog_open_ = true;
+        }
+    } else if (printer_ && printer_->status().state == device::PrinterState::Idle) {
+        device_print();
+    }
+}
+
 void App::undo_place(bool redo) {
     std::vector<PlaceStep>& from = redo ? place_redo_ : place_undo_;
     std::vector<PlaceStep>& to = redo ? place_undo_ : place_redo_;
@@ -16813,6 +17839,7 @@ App::ConfigState App::config_state() const {
     ConfigState c;
     c.english = language() == Language::English;
     c.dark = theme_.dark;
+    c.theme_system = theme_system_;
     c.render = render_mode_, c.msaa = msaa_, c.fxaa = fxaa_, c.moire = moire_, c.ao_strength = ao_strength_;
     c.tips = tips_, c.tutorials = assistant_tutorials_, c.glossary = assistant_glossary_, c.material = assistant_material_;
     c.cad_design = cad_design_, c.orthographic = camera_.orthographic, c.level = view_level_, c.gpu = settings_.gpu;
@@ -16825,6 +17852,7 @@ App::ConfigState App::config_state() const {
 void App::restore_config(const ConfigState& c) {
     if ((language() == Language::English) != c.english)
         set_language(c.english ? Language::English : Language::Spanish);
+    theme_system_ = c.theme_system;
     if (theme_.dark != c.dark) {
         theme_ = c.dark ? dark_theme() : light_theme();
         apply_theme();
@@ -17661,11 +18689,24 @@ void App::config_window() {
 
     // Interfaz.
     row(1, T::Theme, "theme", [&] {
-        if (ImGui::BeginCombo("##v", tr(theme_.dark ? T::Dark : T::Light))) {
-            if (ImGui::Selectable(tr(T::Dark), theme_.dark) && !theme_.dark)
-                theme_ = dark_theme(), apply_theme();
-            if (ImGui::Selectable(tr(T::Light), !theme_.dark) && theme_.dark)
-                theme_ = light_theme(), apply_theme();
+        if (ImGui::BeginCombo("##v", tr(theme_system_ ? T::LikeSystem : theme_.dark ? T::Dark : T::Light))) {
+            if (ImGui::Selectable(tr(T::LikeSystem), theme_system_)) {
+                theme_system_ = true;
+                follow_system_theme();
+            }
+            rect_of("theme_system");
+            if (ImGui::Selectable(tr(T::Light), !theme_system_ && !theme_.dark)) {
+                theme_system_ = false;
+                if (theme_.dark)
+                    theme_ = light_theme(), apply_theme();
+            }
+            rect_of("theme_light");
+            if (ImGui::Selectable(tr(T::Dark), !theme_system_ && theme_.dark)) {
+                theme_system_ = false;
+                if (!theme_.dark)
+                    theme_ = dark_theme(), apply_theme();
+            }
+            rect_of("theme_dark");
             ImGui::EndCombo();
         }
     });
@@ -17693,18 +18734,7 @@ void App::config_window() {
     if (wanted.empty() && config_page_ == 2) {
         loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ConfigMachine));
         ImGui::Separator();
-        const std::string cpu = system_.cpu.empty() ? std::string("?") : system_.cpu;
-        loc::TextDisabled(tr(T::ConfigMachineCpu), cpu.c_str(), system_.physical_cores, system_.logical_cores);
-        loc::TextDisabled(tr(T::ConfigMachineRam), bytes_text(system_.ram_total).c_str(), bytes_text(system_.ram_free).c_str());
-        loc::TextDisabled(tr(T::ConfigMachineGpu), (gpu_vendor_.empty() ? gpu_renderer_ : gpu_vendor_ + " · " + gpu_renderer_).c_str(),
-                          gpu_version_.c_str());
-        if (screen_width_ > 0 && screen_hz_ > 0)
-            loc::TextDisabled(tr(T::ConfigMachineScreen), screen_width_, screen_height_, screen_hz_, double(scale_));
-        else if (screen_width_ > 0) // a screen that does not say its rate (a virtual one)
-            loc::TextDisabled(tr(T::ConfigMachineScreenNoRate), screen_width_, screen_height_, double(scale_));
-        loc::TextDisabled("%s", tr(system_.power == PowerSource::Battery  ? T::ConfigOnBattery
-                                   : system_.power == PowerSource::Mains ? T::ConfigOnMains
-                                                                         : T::ConfigPowerUnknown));
+        machine_lines();
         if (ImGui::Button(tr(T::ConfigRecommended)))
             apply_quality("automatic");
         rect_of("config_recommended");
@@ -17859,7 +18889,19 @@ void App::config_window() {
             ImGui::EndPopup();
         }
     }, tr(T::ConfigFactoryNote));
-    row(6, T::ConfigExport, "export", soon);
+    row(6, T::ConfigExport, "export", [&] {
+        if (ImGui::Button(tr(T::ExportPrefsButton))) {
+            purpose_ = Purpose::ExportPreferences;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ConfigExport), {".json"}, last_folder_, "tisma-preferences.json");
+        }
+        rect_of("prefs_export");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::ImportPrefsButton))) {
+            purpose_ = Purpose::ImportPreferences;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ConfigExport), {".json"}, last_folder_);
+        }
+        rect_of("prefs_import");
+    });
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
 
@@ -17870,7 +18912,10 @@ void App::config_window() {
     bool cancel = ImGui::Button(tr(T::Cancel), ImVec2(button_w, 0));
     rect_of("config_cancel");
     ImGui::SameLine();
-    const bool ok = ImGui::Button(tr(T::ConfigOk), ImVec2(button_w, 0));
+    // Enter is Aceptar too, while no field is being edited.
+    const bool ok = ImGui::Button(tr(T::ConfigOk), ImVec2(button_w, 0)) ||
+                    (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive() &&
+                     !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Enter, false));
     rect_of("config_ok");
     if (!open || (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
         cancel = true;
@@ -20223,8 +21268,62 @@ void App::toasts() {
 
 void App::dialogs() {
     std::filesystem::path chosen;
-    if (browser_.draw(chosen, icon("tisma_folder"), rgb(theme_.accent_hover))) {
+    if (browser_.draw(chosen, icon("tisma_folder"), rgb(theme_.accent_hover)))
+        file_chosen(chosen);
+    dialogs_rest();
+}
+
+// What the file browser was opened for, done with the file chosen.
+void App::file_chosen(const std::filesystem::path& chosen) {
+    {
         switch (purpose_) {
+        case Purpose::LoadProjectConfig: load_project_config(chosen); break;
+        case Purpose::ExportPlate: export_plate_to(chosen); break;
+        case Purpose::ExportPreferences: save_preferences(chosen); break;
+        case Purpose::AddModelInches: {
+            const auto before = revision_.model;
+            add_model(chosen);
+            if (revision_.model != before && !objects_.empty()) {
+                PlateObject& o = objects_.back(); // the model read, in inches: ×25.4 to millimetres
+                for (double& v : o.place.scale)
+                    v *= 25.4;
+                arrange_plate();
+            }
+            break;
+        }
+        case Purpose::ImportZip: import_zip(chosen); break;
+        case Purpose::ConvertToBinary:
+        case Purpose::ConvertToAscii: convert_gcode(chosen, purpose_ == Purpose::ConvertToBinary); break;
+        case Purpose::ExportToolpaths: {
+            std::ofstream out(chosen, std::ios::binary);
+            if (result_)
+                out << toolpaths_obj(result_->preview);
+            out.close();
+            if (!result_ || !out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::PlateExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
+        case Purpose::ImportPreferences:
+            load_preferences(chosen);
+            apply_theme();
+            save_preferences(); // they are this machine's now
+            break;
+        case Purpose::ExportObject: {
+            if (export_object_ >= placed_meshes_.size())
+                break;
+            const TriangleMesh& m = placed_meshes_[export_object_];
+            const std::string name = export_object_ < objects_.size() ? objects_[export_object_].name : std::string();
+            std::ofstream out(chosen, std::ios::binary);
+            out << (lower_extension(chosen) == ".obj" ? obj_text(m, name) : stl_binary(m, "Tisma " + name));
+            out.close();
+            if (!out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::PlateExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
         case Purpose::Open: open_path(chosen); break;
         case Purpose::AddModel: add_model(chosen); break;
         case Purpose::SaveGcode: export_gcode_to(chosen); break;
@@ -20298,6 +21397,10 @@ void App::dialogs() {
         }
         }
     }
+}
+
+// The dialogs other than the file browser.
+void App::dialogs_rest() {
     if (!browser_.is_open() && !browser_.folder().empty())
         last_folder_ = browser_.folder();
 
@@ -20371,6 +21474,8 @@ void App::dialogs() {
     catalog_dialog();
     choose_settings_dialog();
     credits_dialog();
+    shortcuts_dialog();
+    system_info_dialog();
     // A pause's message, or the G-code for a layer (preview.md, rule 12).
     if (change_dialog_) {
         ImGui::OpenPopup("###layer_change");
@@ -20426,6 +21531,7 @@ void App::layout() {
     anchors_.clear();
     g_field_rects.clear();
     g_menu_rects.clear();
+    g_menu_disabled.clear();
     g_dump_rows.clear();
     moves_top_ = 0.0f;
     // A large model's field let go: its plate made again once.
@@ -20564,6 +21670,9 @@ void App::layout() {
         search_focus_ = true, printer_page_ = false; // the field is in the settings panel
     if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
         help_open_ = !help_open_;
+    // Keyboard Shortcuts: "?" (Shift and the key "/" on most keyboards).
+    if (plate_keys() && ImGui::IsKeyPressed(ImGuiKey_Slash, false) && ImGui::GetIO().KeyShift)
+        shortcuts_open_ = true;
     // The sketch's toggles (cad_design.md, rules 15 and 16) and its two
     // levels of Esc (rule 11, CD10), while no field has the keyboard.
     // Esc ends picking an operation's points.
@@ -20645,13 +21754,59 @@ void App::layout() {
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
             structural_tool_ = 0;
     }
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+    // Save Project as… is Ctrl+Alt+S (interface.md, «Más»); Ctrl+Shift+S, the
+    // old one, still works.
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_S, ImGuiInputFlags_RouteGlobal) ||
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(true);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_R, ImGuiInputFlags_RouteGlobal))
         start_slice();
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_E, ImGuiInputFlags_RouteGlobal) && result_ && result_->ok && !viewer_ &&
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, ImGuiInputFlags_RouteGlobal))
+        new_project();
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_I, ImGuiInputFlags_RouteGlobal)) {
+        purpose_ = Purpose::AddModel;
+        browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
+    }
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_L, ImGuiInputFlags_RouteGlobal))
+        begin_import_config(false);
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_L, ImGuiInputFlags_RouteGlobal))
+        begin_import_config(true);
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_E, ImGuiInputFlags_RouteGlobal))
+        begin_export_config();
+    if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput &&
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
+        delete_all();
+    // Window's tabs (Ctrl+1 to Ctrl+6), Fullscreen (F11), Collapse Sidebar
+    // (Shift+Tab, not while a field takes Tab).
+    if (no_popup()) {
+        for (int i = 0; i < 6; ++i)
+            if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey(int(ImGuiKey_1) + i), ImGuiInputFlags_RouteGlobal))
+                window_tab(i + 1);
+        if (ImGui::Shortcut(ImGuiKey_F11, ImGuiInputFlags_RouteGlobal))
+            toggle_fullscreen();
+        if (!ImGui::GetIO().WantTextInput && ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_Tab, ImGuiInputFlags_RouteGlobal)) {
+            panel_folded_ = !panel_folded_;
+            frame_pending_ = true;
+        }
+    }
+    // Copy, Paste and Reload on the plate, not while a text field has the
+    // keys (it copies and pastes its own text).
+    if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput && no_popup()) {
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_RouteGlobal) && selected_ >= 0 &&
+            selected_ < int(objects_.size()))
+            clipboard_ = objects_[std::size_t(selected_)];
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_V, ImGuiInputFlags_RouteGlobal))
+            paste();
+        if (ImGui::Shortcut(ImGuiKey_F5, ImGuiInputFlags_RouteGlobal))
+            reload_from_disk();
+    }
+    // Export G-code… is Ctrl+G and Send G-code… Ctrl+Shift+G (interface.md,
+    // «Más»); Ctrl+E is kept for Export Config….
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_G, ImGuiInputFlags_RouteGlobal) && result_ && result_->ok && !viewer_ &&
         !stale_)
         begin_export();
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_RouteGlobal))
+        send_gcode();
     g_chords.clear();
 }
 
@@ -22020,6 +23175,15 @@ void App::script_input() {
         script_at_ = script_.size();
     };
     const auto key_named = [](std::string_view name) {
+        if (name.size() == 1 && name[0] >= 'a' && name[0] <= 'z') // any letter
+            return ImGuiKey(int(ImGuiKey_A) + (name[0] - 'a'));
+        if (name.size() == 1 && name[0] >= '0' && name[0] <= '9') // any digit
+            return ImGuiKey(int(ImGuiKey_0) + (name[0] - '0'));
+        if (name.size() >= 2 && name[0] == 'f' && name.substr(1).find_first_not_of("0123456789") == std::string_view::npos) {
+            const int n = std::atoi(std::string(name.substr(1)).c_str());
+            if (n >= 1 && n <= 12)
+                return ImGuiKey(int(ImGuiKey_F1) + n - 1);
+        }
         return name == "enter" ? ImGuiKey_Enter : name == "escape" ? ImGuiKey_Escape : name == "tab" ? ImGuiKey_Tab
                : name == "backspace"                               ? ImGuiKey_Backspace
                : name == "delete"                                  ? ImGuiKey_Delete
@@ -22033,6 +23197,9 @@ void App::script_input() {
                : name == "y"                                       ? ImGuiKey_Y
                : name == "p"                                       ? ImGuiKey_P
                : name == "comma"                                   ? ImGuiKey_Comma
+               : name == "slash"                                   ? ImGuiKey_Slash
+               : name == "minus"                                   ? ImGuiKey_Minus
+               : name == "equal"                                   ? ImGuiKey_Equal
                                                                    : ImGuiKey_None;
     };
     if (step.verb == "click") {
@@ -22073,7 +23240,8 @@ void App::script_input() {
         for (bool more = true; more;) {
             more = false;
             for (const auto& [prefix, mod] : {std::pair{std::string_view("ctrl+"), ImGuiMod_Ctrl},
-                                              std::pair{std::string_view("shift+"), ImGuiMod_Shift}})
+                                              std::pair{std::string_view("shift+"), ImGuiMod_Shift},
+                                              std::pair{std::string_view("alt+"), ImGuiMod_Alt}})
                 if (name.starts_with(prefix)) {
                     mods.push_back(mod);
                     name.remove_prefix(prefix.size());
@@ -22181,10 +23349,6 @@ void App::script_input() {
     } else if (step.verb == "wait") {
         if (f >= std::atoi(step.key.c_str()))
             next();
-    } else if (step.verb == "expect-objects") { // how many objects the plate holds
-        if (objects_.size() != std::size_t(std::atoi(step.key.c_str())))
-            return fail_step("the plate holds " + std::to_string(objects_.size()) + " objects");
-        next();
     } else if (step.verb == "expect-structural") { // what keeps Analyze off: material, fixed, force or none
         if (objects_.empty())
             return fail_step("no part on the plate");
@@ -22397,6 +23561,63 @@ void App::script_input() {
         std::printf("ui-script: expect-optimize %s: got %s (%d %%)\n", step.key.c_str(), got.c_str(), o.best.density);
         if (got != step.key)
             return fail_step("got " + got);
+        next();
+    } else if (step.verb == "expect-error") { // the error dialog's message contains VALUE (the whole line)
+        const std::string what = step.key + (step.value.empty() ? "" : " " + step.value);
+        if (error_message_.find(what) == std::string::npos)
+            return f >= 60 ? fail_step("the error says: " + error_message_) : void();
+        std::printf("ui-script: expect-error %s: ok\n", what.c_str());
+        error_title_.clear(), error_message_.clear(); // expected: it does not fail the run
+        next();
+    } else if (step.verb == "expect-scale") { // the last model's scale in X, to 0.001
+        if (objects_.empty())
+            return fail_step("no model");
+        const double got = objects_.back().place.scale[0], want = std::atof(step.key.c_str());
+        std::printf("ui-script: expect-scale %s: %.4f\n", step.key.c_str(), got);
+        if (std::abs(got - want) > 1e-3)
+            return fail_step("the scale is " + std::to_string(got));
+        next();
+    } else if (step.verb == "expect-tab") { // prepare, preview, calibration, device, design...
+        const char* got = tab_ == Tab::Prepare       ? "prepare"
+                          : tab_ == Tab::Preview     ? "preview"
+                          : tab_ == Tab::Calibration ? "calibration"
+                          : tab_ == Tab::Device      ? "device"
+                          : tab_ == Tab::Design      ? "design"
+                                                     : "other";
+        std::printf("ui-script: expect-tab %s: %s\n", step.key.c_str(), got);
+        if (step.key != got)
+            return f >= 30 ? fail_step(std::string("the tab is ") + got) : void();
+        next();
+    } else if (step.verb == "expect-catalog") { // the catalog is open: printer or filament
+        const bool open = catalog_kind_.has_value() &&
+                          (step.key == "printer" ? *catalog_kind_ == ProfileKind::Printer : *catalog_kind_ == ProfileKind::Filament);
+        if (!open)
+            return f >= 30 ? fail_step("the " + step.key + " catalog is not open") : void();
+        std::printf("ui-script: expect-catalog %s: ok\n", step.key.c_str());
+        next();
+    } else if (step.verb == "expect-theme") { // dark or light
+        const char* got = theme_.dark ? "dark" : "light";
+        std::printf("ui-script: expect-theme %s: %s\n", step.key.c_str(), got);
+        if (step.key != got)
+            return fail_step(std::string("the theme is ") + got);
+        next();
+    } else if (step.verb == "expect-level") { // the settings level: basic, normal, advanced or custom
+        const char* got = view_level_ == ViewLevel::Basic    ? "basic"
+                          : view_level_ == ViewLevel::Normal ? "normal"
+                          : view_level_ == ViewLevel::Advanced ? "advanced"
+                                                               : "custom";
+        std::printf("ui-script: expect-level %s: %s\n", step.key.c_str(), got);
+        if (step.key != got)
+            return fail_step(std::string("the level is ") + got);
+        next();
+    } else if (step.verb == "expect-enabled") { // a named menu entry on the screen, usable (yes) or greyed (no)
+        if (!g_menu_rects.contains(step.key))
+            return f >= 30 ? fail_step("it is not on the screen") : void();
+        const bool enabled = !g_menu_disabled.contains(step.key);
+        std::printf("ui-script: expect-enabled %s %s: %s\n", step.key.c_str(), step.value.c_str(),
+                    enabled ? "enabled" : "greyed");
+        if (enabled != (step.value == "yes"))
+            return fail_step(enabled ? "it is enabled" : "it is greyed");
         next();
     } else if (step.verb == "expect-control") { // a named control (menu entry, slider, button) is on the screen
         if (g_menu_rects.contains(step.key)) {
@@ -22681,6 +23902,16 @@ void App::script_input() {
         std::printf("ui-script: expect-sketch-constraints %zu: got %zu\n", want, s->constraints.size());
         if (s->constraints.size() != want)
             return fail_step("the sketch has " + std::to_string(s->constraints.size()) + " constraints");
+        next();
+    } else if (step.verb == "choose-file") { // the open file browser answered with KEY (relative to the working folder)
+        if (!browser_.is_open())
+            return f >= 30 ? fail_step("no file browser is open") : void();
+        browser_.close();
+        if (ImGui::GetCurrentContext()->OpenPopupStack.Size > 0) // its modal too, as its own buttons close it
+            ImGui::ClosePopupToLevel(0, true);
+        // "@/name": next to the script (its test data); otherwise from the working folder.
+        file_chosen(step.key.starts_with("@/") ? std::filesystem::path(options_.ui_script).parent_path() / step.key.substr(2)
+                                               : std::filesystem::absolute(step.key));
         next();
     } else if (step.verb == "save-project") { // writes the plate as a project to KEY (relative to the working folder)
         save_project_to(step.key);

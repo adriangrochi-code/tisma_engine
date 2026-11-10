@@ -219,7 +219,9 @@ std::vector<MdnsService> mdns_browse(const std::string& service, int ms) {
         fd_set ready;
         FD_ZERO(&ready);
         FD_SET(s, &ready);
-        timeval wait{long(left / 1000), long((left % 1000) * 1000)};
+        timeval wait{}; // tv_usec is an int on macOS
+        wait.tv_sec = decltype(wait.tv_sec)(left / 1000);
+        wait.tv_usec = decltype(wait.tv_usec)((left % 1000) * 1000);
         if (select(int(s + 1), &ready, nullptr, nullptr, &wait) <= 0)
             continue;
         std::vector<std::uint8_t> buffer(9000);

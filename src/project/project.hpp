@@ -70,6 +70,9 @@ struct ProjectModel {
     // Its turn and scale on the bed, by rows: a point p of the mesh is at
     // turn · p + offset (formats.md, rule 8: a 3MF's build item transform).
     std::array<double, 9> turn{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    // Whether it is printed (interface.md, «Menús»: Printable); a model that
+    // is not stays on the bed and out of the slice.
+    bool printable = true;
 };
 
 // The calibration being printed: which one, and the value of each segment.

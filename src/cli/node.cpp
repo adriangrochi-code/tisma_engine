@@ -1,6 +1,7 @@
 // Own design; see PROVENANCE.md.
 
 #include "cli/node.hpp"
+#include "io/number.hpp"
 #include "mesh/inspect.hpp"
 
 #include "cli/cli.hpp"
@@ -364,6 +365,11 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
         if (kind && is_resin_calibration(*kind))
             settings.resin_supports = settings.resin_pad = settings.resin_pad_around_object = settings.resin_hollow = false;
     }
+    // A model marked not printable stays out, as on the desktop (interface.md, «Menús»).
+    std::erase_if(project.models, [](const ProjectModel& m) { return !m.printable; });
+    if (project.models.empty())
+        return fail(kExitModel, "no model in the project is printable", "nothing_printable",
+                    "ningún modelo del proyecto es imprimible");
     const std::vector<ui::PlateObject> objects = ui::project_objects(project.models);
     project.models.clear();
     if (settings.vase && objects.size() > 1 && !settings.sequential)
@@ -476,7 +482,7 @@ int cmd_analyze_project(std::span<const std::string_view> args, std::ostream& ou
     bool solid = false, no_zones = false, ribs = false;
     const auto whole = [&](std::string_view text, long& into) {
         long v = -1;
-        const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), v);
+        const auto [end, ec] = chars_to(text.data(), text.data() + text.size(), v);
         if (ec != std::errc() || end != text.data() + text.size() || v < 0)
             return false;
         into = v;
@@ -774,14 +780,14 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
             direction_text = std::string(args[++i]);
         } else if (arg == "--speed" && has_value) {
             const std::string_view v = args[++i];
-            const auto [end, ec] = std::from_chars(v.data(), v.data() + v.size(), speed);
+            const auto [end, ec] = chars_to(v.data(), v.data() + v.size(), speed);
             speed_given = ec == std::errc() && end == v.data() + v.size();
             if (!speed_given && usage.empty())
                 usage = "error: aero: --speed needs a number of m/s";
         } else if ((arg == "--object" || arg == "--instance") && has_value) {
             const std::string_view v = args[++i];
             long n = -1;
-            const auto [end, ec] = std::from_chars(v.data(), v.data() + v.size(), n);
+            const auto [end, ec] = chars_to(v.data(), v.data() + v.size(), n);
             if (ec != std::errc() || end != v.data() + v.size() || n < 0) {
                 if (usage.empty())
                     usage = "error: aero: " + std::string(arg) + " needs a whole number from 0";
@@ -833,7 +839,7 @@ int cmd_aero_project(std::span<const std::string_view> args, std::ostream& out, 
             const char* end = p + direction_text.size();
             int k = 0;
             for (; k < 3; ++k) {
-                const auto [next, ec] = std::from_chars(p, end, v[k]);
+                const auto [next, ec] = chars_to(p, end, v[k]);
                 if (ec != std::errc())
                     break;
                 p = next;
@@ -984,7 +990,7 @@ int cmd_orient_project(std::span<const std::string_view> args, std::ostream& out
         } else if ((arg == "--object" || arg == "--instance") && has_value) {
             const std::string_view v = args[++i];
             long n = -1;
-            const auto [end, ec] = std::from_chars(v.data(), v.data() + v.size(), n);
+            const auto [end, ec] = chars_to(v.data(), v.data() + v.size(), n);
             if (ec != std::errc() || end != v.data() + v.size() || n < 0) {
                 if (usage.empty())
                     usage = "error: orient: " + std::string(arg) + " needs a whole number from 0";

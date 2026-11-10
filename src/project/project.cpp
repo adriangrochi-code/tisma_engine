@@ -105,6 +105,8 @@ static ordered_json project_json(const Project& project, bool offsets) {
             models.back()["wipe_into_infill"] = true;
         if (m.wipe_into_object)
             models.back()["wipe_into_object"] = true;
+        if (!m.printable)
+            models.back()["printable"] = false;
         if (!m.settings.empty())
             models.back()["settings"] = ordered_json::parse(m.settings);
         for (const ProjectVolume& v : m.volumes) {
@@ -293,7 +295,8 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
                 model.extruder = m.at("extruder").get<int>();
             }
             for (const auto& [key, flag] : {std::pair{"wipe_into_infill", &model.wipe_into_infill},
-                                            std::pair{"wipe_into_object", &model.wipe_into_object}})
+                                            std::pair{"wipe_into_object", &model.wipe_into_object},
+                                            std::pair{"printable", &model.printable}})
                 if (m.contains(key)) {
                     if (!m.at(key).is_boolean())
                         fail(what + "." + key + ": must be true or false");

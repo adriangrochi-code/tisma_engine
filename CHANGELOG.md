@@ -9,6 +9,26 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- El modo vaso ya no se niega a laminar cuando la placa tiene otro modelo marcado como no imprimible.
+- La barra de estado ya no lee fuera del texto con un «1 » al final (lo encontró ASan).
+- Importar preferencias reemplaza la lista de proyectos recientes en vez de duplicarla.
+- «Más» en tarjetas, con atajos y entradas en gris; Archivo, Editar, Ventana, Vista, Configuración, Calibración y
+  Ayuda con casi todas sus acciones; menú de la pieza con copias, Imprimible, espejo, separar y más; chip de Modo.
+- El 3MF de una sola pieza guarda los vértices exactos (antes se movían hasta 0,5 µm).
+
+### Agregado
+
+- Bloqueadores y forzadores de soporte de un 3MF (volúmenes de PrusaSlicer y parecidos): al laminar desde la línea
+  de comandos, el soporte no va dentro de un bloqueador y va dentro de un forzador aunque lo que cuelga no pase el
+  ángulo de soporte. Todavía no en la placa de la interfaz.
+- macOS: la versión compila y pasa las pruebas en Mac con Apple Silicon e Intel; la release trae `Tisma.app` en un
+  `.zip` y en un `.dmg` sin firmar, desde macOS 13.
+
+### Corregido
+
+- Los contadores con uno dicen «1 aviso», «1 capa», «1 pared» (antes «1 avisos»), también en inglés.
+- `--ground-*` con un 3MF que trae bloqueadores o forzadores de soporte ya no los deja fuera de lugar: avisa que
+  todavía no se puede.
 
 ## [0.12.0-beta.1] - 2026-11-10
 

@@ -38,9 +38,12 @@ SYSTEMS = [
     (re.compile(r"-windows-x64\.(zip|exe|msi)$"), ("windows-x64", "current", "10")),
     (re.compile(r"-windows-x86\.(zip|exe|msi)$"), ("windows-x86", "legacy", "6.0")),
     (re.compile(r"-linux-x64\.(zip|AppImage)$"), ("linux-x64", "current", "")),
+    (re.compile(r"-macos-arm64\.zip$"), ("macos-arm64", "current", "13.0")),
+    (re.compile(r"-macos-x64\.zip$"), ("macos-x64", "current", "13.0")),
     (re.compile(r"\.apk$"), ("android", "current", "28")),
 ]
-EXPECTED_NAMES = "…-windows-x64.zip/.exe/.msi, …-windows-x86.zip/.exe/.msi, …-linux-x64.zip/.AppImage, ….apk"
+EXPECTED_NAMES = ("…-windows-x64.zip/.exe/.msi, …-windows-x86.zip/.exe/.msi, …-linux-x64.zip/.AppImage, "
+                  "…-macos-arm64.zip, …-macos-x64.zip, ….apk")
 
 
 def fail(message):

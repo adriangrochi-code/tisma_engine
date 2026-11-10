@@ -820,5 +820,10 @@ TEST_CASE("slice: the command line options of orca_2_5.md O6 (OR24 to OR28)", "[
              "--ground-face-point", "100,100,100"});
     CHECK(r.code == kExitModel);
     CHECK_THAT(r.err, ContainsSubstring("no face"));
+    // A 3MF with a support blocker: its volume would not turn with the part (not yet).
+    r = run({"slice", kData + "/formats/pi4_prusaslicer_parts.3mf", "--config", kData + "/settings.json", "-o", gcode,
+             "--ground-face-normal", "1,0,0"});
+    CHECK(r.code == kExitUsage);
+    CHECK_THAT(r.err, ContainsSubstring("support blockers"));
     std::filesystem::remove_all(dir);
 }

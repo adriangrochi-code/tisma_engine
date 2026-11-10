@@ -1,4 +1,5 @@
 #include "device/gcode_host.hpp"
+#include "io/number.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -30,7 +31,7 @@ std::optional<double> number_at(std::string_view line, std::size_t& at) {
     const char* begin = line.data() + at;
     const char* end = line.data() + line.size();
     double v = 0.0;
-    const auto r = std::from_chars(begin, end, v);
+    const auto r = chars_to(begin, end, v);
     if (r.ec != std::errc() || r.ptr == begin)
         return std::nullopt;
     at = std::size_t(r.ptr - line.data());

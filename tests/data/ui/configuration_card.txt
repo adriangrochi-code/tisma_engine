@@ -1,0 +1,10 @@
+# Configuration in «Más» (interface.md): Print via USB… opens the printer's
+# page; Check for Configuration Updates is greyed with no profile pack;
+# Configuration Wizard… opens the printer catalog, as the first run does.
+menu more
+expect-enabled check_config_updates no
+menu print_usb
+expect-tab device
+menu more
+menu wizard
+expect-catalog printer

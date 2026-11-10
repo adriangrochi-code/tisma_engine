@@ -10,7 +10,11 @@
 #include <charconv>
 #include <cmath>
 #include <filesystem>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <fstream>
+#include <unordered_map>
 #include <vector>
 
 namespace tisma {
@@ -83,7 +87,7 @@ ModelFile parse_obj(std::string_view text) {
                 // "v", "v/vt", "v//vn" or "v/vt/vn": the vertex is the first.
                 const std::string_view index = w.substr(0, w.find('/'));
                 long long i = 0;
-                const auto [p, ec] = std::from_chars(index.data(), index.data() + index.size(), i);
+                const auto [p, ec] = chars_to(index.data(), index.data() + index.size(), i);
                 if (ec != std::errc() || p != index.data() + index.size() || i == 0)
                     fail("a bad vertex index '" + std::string(w) + "'");
                 const long long n = static_cast<long long>(vertices.size());
@@ -101,6 +105,47 @@ ModelFile parse_obj(std::string_view text) {
     }
     if (out.mesh.empty())
         throw ModelError("OBJ: no faces");
+    return out;
+}
+
+std::string obj_text(const TriangleMesh& mesh, std::string_view name) {
+    // Corners equal bit for bit share one vertex.
+    struct Key {
+        std::uint32_t x, y, z;
+        bool operator==(const Key&) const = default;
+    };
+    struct Hash {
+        std::size_t operator()(const Key& k) const {
+            return (std::size_t(k.x) * 73856093u) ^ (std::size_t(k.y) * 19349663u) ^ (std::size_t(k.z) * 83492791u);
+        }
+    };
+    const auto key = [](const Vec3f& v) {
+        Key k;
+        std::memcpy(&k.x, &v.x, 4);
+        std::memcpy(&k.y, &v.y, 4);
+        std::memcpy(&k.z, &v.z, 4);
+        return k;
+    };
+    std::unordered_map<Key, std::size_t, Hash> index;
+    std::vector<std::size_t> faces;
+    faces.reserve(mesh.corners().size());
+    std::string out = "# Tisma";
+    if (!name.empty())
+        out.append(" ").append(name);
+    out += "\n";
+    char line[96];
+    for (const Vec3f& v : mesh.corners()) {
+        const auto [it, added] = index.try_emplace(key(v), index.size() + 1);
+        if (added) {
+            std::snprintf(line, sizeof line, "v %.9g %.9g %.9g\n", double(v.x), double(v.y), double(v.z));
+            out += line;
+        }
+        faces.push_back(it->second);
+    }
+    for (std::size_t i = 0; i + 2 < faces.size(); i += 3) {
+        std::snprintf(line, sizeof line, "f %zu %zu %zu\n", faces[i], faces[i + 1], faces[i + 2]);
+        out += line;
+    }
     return out;
 }
 

@@ -130,3 +130,28 @@ TEST_CASE("interface text: numbers in the language, the decimal comma in Spanish
     CHECK(subsection_summary("walls_thin", s) == "2 beads share the change in width");
     set_language(Language::Spanish);
 }
+
+TEST_CASE("a count of one takes the singular, in Spanish and English (the spec team's QA, 2026-11-10)", "[ui]") {
+    CHECK(singular_counts("1 avisos") == "1 aviso");
+    CHECK(singular_counts("1 warnings") == "1 warning");
+    CHECK(singular_counts("Proyecto: 1 piezas, 1 capas, 1 paredes") == "Proyecto: 1 pieza, 1 capa, 1 pared");
+    CHECK(singular_counts("11 avisos") == "11 avisos");
+    CHECK(singular_counts("2,1 capas") == "2,1 capas");
+    CHECK(singular_counts("0.1 layers") == "0.1 layers");
+    CHECK(singular_counts("1 avisos de la tarjeta") == "1 aviso de la tarjeta");
+    CHECK(singular_counts("1 capasx") == "1 capasx");
+    CHECK(singular_counts("Cada 1 capas") == "Cada 1 capa");
+    CHECK(format("%d avisos", 1) == "1 aviso");
+    CHECK(format("%d avisos", 2) == "2 avisos");
+}
+
+// A "1 " near the end of the text, shorter than any plural (ASan found a read
+// past the end in the status bar, maintenance 2026-11-10): nothing changes and
+// nothing past the text is read.
+TEST_CASE("a count of one at the end of a text is left as it is", "[ui]") {
+    CHECK(singular_counts("1 ") == "1 ");
+    CHECK(singular_counts("x 1 a") == "x 1 a");
+    CHECK(singular_counts("12,3 mm · 1 ab") == "12,3 mm · 1 ab");
+    CHECK(singular_counts("1 avis") == "1 avis");
+    CHECK(singular_counts("1 avisos") == "1 aviso");
+}

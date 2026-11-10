@@ -12230,3 +12230,297 @@ QA; bundle id `net.tismaservidores.tisma`).
 - Paquete: con `--filament-gcode-from-source`, 14 variantes cortan por `support_air_filtration` e
   `initial_layer_height`, que no están en gcode_variables.md ni en los `values` de la máquina. Pedido a la ficha
   agregarlas; el motor regenera la tabla cuando lleguen.
+- gcode_variables.md (spec/next 10a2802, check_spec limpio): `initial_layer_height` (= `first_layer_height`) y
+  `support_air_filtration` (sí/no, vale no) en la tabla. Prueba en `[macros]`. Segundo fuzz 2000 corridas, semilla
+  1011202604: 0 fallas.
+- macOS CI (2026-11-10): x86_64 en `macos-15-intel` (macos-13 ya no existe y dejaba la corrida en cola); compilaba
+  hasta `template.cpp`: la biblioteca de Apple no tiene `from_chars` de punto flotante. `chars_to` en
+  `src/io/number.hpp` usa el de la biblioteca si está, si no un flujo con la configuración regional clásica; los 23
+  usos pasan por ahí. Prueba `[number]` compara los dos caminos. arm64 (macos-14) se cancela sin empezar: sin causa
+  vista todavía (puede ser un límite de minutos de macOS de la cuenta).
+- p2p: vectores de prueba mandados al servidor (claves de prueba de RFC 8032 §7.1): clave de par → PeerId
+  `12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV`; ticket con la clave de biblioteca de la prueba 2, carga
+  canónica con claves ordenadas, base64url sin relleno. Se pasan a una prueba del motor cuando exista el cliente.
+- **Publicada 0.12.0-beta.1 (2026-11-10 04:35 UTC):** https://github.com/adriangrochi-code/tisma_engine/releases/tag/v0.12.0-beta.1
+  con el instalador y el zip de Windows, el zip de Linux y las dos APK de Android (beta R8 sin probar en el emulador
+  y la de respaldo). Sin firma del dueño todavía. macOS no entra: x86_64 no compilaba (arreglado en 195a3d8, sin
+  confirmar en la CI), arm64 se cancela antes de empezar. PR siguientes: #59 (dev → alpha) y #60 (alpha → main).
+- macOS CI, segunda vuelta: x86_64 ya pasa `template.cpp`; ahora cortaba en `mdns.cpp` y `ssdp.cpp` (`timeval`:
+  `tv_usec` es `int` en macOS), arreglado en aa8312f. arm64: los trabajos en `macos-14` se cancelan sin empezar (sin
+  registro); pasa a `macos-15` (arm64).
+- Bloque nocturno 2026-11-10 02:14 (Montevideo): regla 4 del convertidor, volúmenes de soporte. `volume_sections`
+  (el corte por capas de un volumen, el de los volúmenes negativos) queda aparte para usarlo con bloqueadores y
+  forzadores. **Sin terminar:** falta pasar `support_blockers`/`support_enforcers` de `ModelFile` hasta
+  `slice_layers` y sumarlos a las zonas pintadas de `SupportParams` (supports_more.md, reglas 4 y 5, prueba SM12).
+- Regla 4 del convertidor, volúmenes de soporte (supports_more.md, reglas 4 y 5, SM12): `SupportVolumes`
+  (bloqueadores y forzadores) pasa de `slice_model` a `slice_layers` movido como la pieza; cada capa suma la
+  sección del volumen a las zonas pintadas de forzar y bloquear. La línea de comandos los toma de un 3MF
+  (`ModelFile::support_blockers`/`support_enforcers`), junto con los volúmenes negativos. Prueba `support volumes`
+  (bloqueador, forzador con el automático apagado, soporte apagado). Falta: la interfaz (la placa) y el aviso de qué
+  partes trajo el proyecto. Capas curvas y cinta: error claro, todavía no.
+- **CI local bd1dcab:** gcc 1160/1160 y clang 1160/1160; ASan 1155/1159. Dos fallas eran Xvfb que no arrancó (pasan
+  al repetir). `ui_project_import_prusaslicer` y `ui_project_import_standard` fallan siempre en ASan: LeakSanitizer
+  ve 112 bytes indirectos pedidos dentro de Mesa (glDrawArrays de la cama, renderer.cpp:1424). Ya fallaba en
+  038ce72. **Abierto:** buscar qué deja vivo el camino de abrir un proyecto ajeno (probablemente un contexto o
+  recurso de GL sin cerrar al salir).
+- macOS CI, tercera vuelta: x86_64 compila entero; el enlace pedía el framework Security (los certificados del
+  llavero que usa cpp-httplib). Agregado en CMake.
+- Fuga en ASan de `ui_project_import_*` (07:20 UTC): la memoria se pide dentro del código que llvmpipe genera al
+  vuelo, al dibujar la cama del proyecto importado; el objeto de la cama se reusa bien. Sin nombres de biblioteca
+  en la traza, una supresión de LSan solo para Mesa no se puede escribir sin tapar también las del motor. Sigue
+  abierta. macOS arm64 ya arranca en `macos-15`.
+- **macOS en verde (2026-11-10 07:48 UTC, dev 3667e62):** compilación y todas las pruebas en x86_64 (macos-15-intel)
+  y arm64 (macos-15), además de Windows. Siguiente paso de macOS (PLAN.md, «macOS antes de la beta»): quitar
+  `continue-on-error`, el `.dmg` sin firmar en release.yml, diálogos nativos, cámara con AVFoundation, xcframework iOS.
+- release.yml compila también macOS (arm64 en macos-15, x86_64 en macos-15-intel): el `.zip` y un `.dmg` sin firmar
+  con la misma carpeta (todavía no es una `.app`). Sin SolidCraft en macOS (no hay paquete suyo para macOS). Los
+  paquetes de macOS no entran en `updates.json`: app_updates.md no nombra un sistema macOS (pregunta a la ficha).
+  Sin probar hasta la próxima release.
+- app_updates.md regla 13 (spec/next 499acaa, check_spec limpio): `macos-arm64` y `macos-x64` en la lista de
+  actualizaciones, con el `.zip` y `min_system` 13.0 (la release compila con `CMAKE_OSX_DEPLOYMENT_TARGET=13.0`); el
+  `.dmg` queda fuera de la lista. Falta: el `.zip` con `Tisma.app` (hoy la carpeta suelta) y el actualizador del
+  programa en macOS.
+- `Tisma.app` (packaging/macos/make_app.sh, Info.plist.in): los programas en Contents/MacOS, el ícono `.icns` hecho
+  con sips e iconutil desde el PNG de 512, el permiso de cámara (NSCameraUsageDescription) para lo que viene, los
+  tipos 3mf/stl/obj, macOS 13.0 como mínimo. La release la mete en el `.zip` y el `.dmg`; la CI de macOS la arma en
+  cada envío y comprueba el plist, el ícono y que el motor arranque. Sin firmar.
+
+## 2026-11-10 08:40 UTC — mantenimiento (cada 8 h)
+
+- **Revisado:** `origin/main` y `origin/dev` al día (nada nuevo). Fuzz de G-code 2000 corridas con las semillas
+  1011202603 a 1011202608 en la noche: 1 falla (la 1419 de la primera, capas cónicas, arreglada con su prueba), el
+  resto 0. Casos borde de lo nuevo (volúmenes de soporte, `chars_to`, `real_z`).
+- **Encontrado y arreglado:** `--ground-*` dejaba los bloqueadores y forzadores de soporte de un 3MF sin girar con la
+  pieza; ahora los rechaza con un mensaje claro, como a los volúmenes negativos (prueba en `[cli]`).
+- **CI:** GitHub en verde en Windows y macOS (x86_64 y arm64) desde 3667e62; macOS cuenta desde 9152eda. La CI local
+  completa corre sobre b2a2963 (resultado en la entrada siguiente).
+- **No medido:** el banco de velocidad (CPU ocupada por la CI local con ASan y el fuzz).
+- **Abierto:** la fuga en ASan de `ui_project_import_*` (dentro de llvmpipe); los volúmenes de soporte en la placa de
+  la interfaz (hace falta una forma «malla» en `PlateVolume`, con su guardado y su dibujo).
+- **CI local b2a2963 (mantenimiento):** gcc 1161/1161, clang 1161/1161, ASan 1156/1160. Fallas: las dos
+  `ui_project_import_*` (la fuga dentro de llvmpipe, abierta); `ui_script_design_sketch` (Xvfb no arrancó) y
+  `ui_bambu_print` (30 s, la máquina cargada) pasan al repetirlas. Fuzz de las 10:10, semilla 1011202609: 0 fallas.
+- ASan: `ui_project_import_prusaslicer` y `_standard` corren con `ASAN_OPTIONS=detect_leaks=0`, como otras pruebas de
+  la vista: la fuga de 112 bytes es de llvmpipe al dibujar la cama del proyecto y la traza no nombra módulos (una
+  supresión de LSan por biblioteca no se puede escribir sin tapar las del motor). El resto de ASan sigue activo en
+  ellas; las demás pruebas siguen viendo fugas. Con ASan: las 5 `ui_project_import*` pasan.
+- Cola (ficha, spec/next 23a88e6, profile_pack_format.md regla 3 de la tabla): `prusaslicer_values` también en una
+  clave que conserva su nombre (seam_position back→rear, aligned_back→aligned; fuzzy_skin disabled_fuzzy→none);
+  primero el mapa de valores, después la conversión; un valor fuera del mapa pasa igual. El motor todavía no aplica
+  los ajustes del proyecto (solo los ordena): entra con la regla 6/8 del convertidor.
+- QA del dueño (2026-11-10), punto 3: «1 avisos» → «1 aviso». `singular_counts` en `format()`: «1» delante de un
+  plural conocido (avisos, capas, paredes, piezas, triángulos, extrusores, objetos, copias, cordones, perímetros,
+  filamentos, partes y sus inglés) pasa al singular; «11», «2,1» y «0.1» no. Prueba en `[ui]`.
+
+## 2026-11-10 12:30 UTC — auditoría de la interfaz contra interface.md (pedido del dueño)
+
+Leído `docs/spec/features/interface.md` (pasa `tools/check_spec.py`) contra `apps/tisma/app.cpp`. «Más» es hoy un solo
+desplegable (`##more_menu`) de unas 25 entradas, sin secciones; la mayoría de las tarjetas del spec no existen.
+Leyenda: ✔ presente, ✘ falta, ◐ parcial o distinto, ∅ presente pero no hace nada.
+
+| Menú | ✔ presente | ◐ parcial / distinto | ✘ falta |
+|---|---|---|---|
+| Más › Tisma | Cuenta de Tisma Cloud, Preferencias (Ctrl+, y Ctrl+P) | | Thingiverse |
+| Más › Archivo | Guardar (Ctrl+S), Laminar en la nube (gris sin placa), Vista previa de G-code, Salir | Guardar como usa Ctrl+Shift+S (spec Ctrl+Alt+S); Exportar G-code es el botón principal y usa Ctrl+E (spec Ctrl+G; Ctrl+E es Exportar configuración); Mandar G-code solo en ▲; Abrir (Ctrl+O) y Relaminar (Ctrl+R) solo como tecla o botón | Nuevo proyecto (Ctrl+N), Recientes, todo Importar (Ctrl+I, Imperial, SLA, ZIP, Config Ctrl+L, Config de proyecto Ctrl+Alt+L, Paquete), Exportar a SD (Ctrl+U), Exportar placa STL/OBJ (con y sin soportes), Trayectorias OBJ, Exportar configuración y paquetes, los dos Convertir, Expulsar SD (Ctrl+T), Reparar STL |
+| Más › Editar | | Borrar (Supr), Deshacer, Rehacer, Buscar (Ctrl+F) solo como teclas; Esc solo vuelve a Seleccionar | Seleccionar todo (Ctrl+A), Borrar todo (Ctrl+Supr), Copiar, Pegar, Recargar (F5), Ajustes de la placa |
+| Más › Ventana | | pestañas en la barra superior, sin Ctrl+1…6 | las diez entradas (Ctrl+1…6, Galería de formas, Cola de envíos Ctrl+J, Nueva instancia, Comparar perfiles) |
+| Más › Vista | | teclas 0–6, E, L funcionan, sin entradas en el menú; Plegar panel solo en Preferencias, sin Shift+Tab | Pantalla completa (F11) |
+| Más › Configuración | Preferencias, Idioma, Cuenta | | Asistente, Instantáneas (ver y tomar), Buscar actualizaciones (config y programa), Integración con el escritorio, Grabar firmware, Imprimir por USB, Archivo de Wi-Fi |
+| Más › Calibración | | las pruebas viven en la pestaña Calibración, no en «Más» | la sección entera en «Más» |
+| Más › Ayuda | Reportar un problema, Acerca de | Información del sistema solo dentro de Preferencias › Video | Sitio web, Versiones, Carpeta de configuración, Atajos de teclado (?) |
+| Más (general) | | solo 4 entradas muestran su atajo; solo «Laminar en la nube» se pone gris | |
+| Clic derecho, pieza | Modificador de altura, Relleno, Perímetros, Agregar ajuste ▸ | Modificador y Volumen negativo son entradas sueltas, no submenús; «Capas sólidas» en vez de Material de soporte; nivel Básico bloquea el menú | Instancias (+, −, cantidad, llenar cama), Borrar, Objetos separados, Imprimible ☑, Recargar, Convertir de metros / pulgadas, Reemplazar por STL, Exportar STL/OBJ, Escalar al volumen, Simplificar, Reteselar, Revisar CAD, Espejo ▸, Dividir ▸, Dividir para la impresora, Agregar parte ▸, Bloqueador ▸, Forzador ▸ |
+| Clic derecho, cama | Agregar forma ▸ (cubo, cilindro, esfera) | | Agregar modelo de calibración ▸ |
+| Modo | | 4 niveles (Básico/Normal/Avanzado/Personalizado) en el panel, no 3 en la barra; explicación solo al pasar el mouse; sin botones de radio | |
+| Engranaje del filamento | | el menú del perfil tiene Guardar como, Del catálogo, Borrar | Editar perfil, Color del extrusor, Mostrar/ocultar plantillas |
+| Flecha del botón principal | Exportar, Mandar a la impresora (gris sin conexión), Guardar proyecto | sin marca en la salida elegida; las salidas imposibles salen en gris en vez de no salir | |
+| Preferencias | General, Cámara, Otros, Cancelar/Aceptar, Esc = Cancelar | «GUI» se llama «Interfaz»; tema sin «Como el sistema»; Enter no acepta | |
+| Preferencias (∅) | | | Nivel de OpenGL, Sombra sobre la cama, Resolución de la vista, Correr complementos, Exportar/importar preferencias: muestran «Próximamente» y no hacen nada |
+
+No hay otra entrada presente que no haga nada (ningún manejador vacío). Dudas: si la pestaña Calibración cubre
+«Corrección dimensional» y «Aplicar un resultado»; el color de los interruptores de Preferencias.
+
+Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prueba `--ui-script` o `--dump-ui`:
+1. «Más» con secciones, atajo a la derecha y gris cuando no se puede; atajos del spec (Ctrl+Alt+S, Ctrl+G).
+2. Archivo: Nuevo proyecto, Recientes, Importar, Exportar placa y configuración.
+3. Editar: Seleccionar todo, Borrar todo, Copiar/Pegar, Recargar.
+4. Ventana y Vista: Ctrl+1…6, pantalla completa, plegar panel (Shift+Tab).
+5. Ayuda: atajos de teclado, carpeta de configuración, información del sistema.
+6. Clic derecho de la pieza (instancias, espejo, dividir, borrar, imprimible) y de la cama.
+7. Engranaje del filamento, ▲ con marca, Preferencias (Como el sistema, Enter) y las filas «Próximamente».
+- **Paso 1 hecho:** «Más» en tarjetas de tres columnas (Tisma, Archivo, Editar / Vista, Configuración, Ayuda), cada
+  una con su subtítulo gris en negrita; cada acción con su atajo a la derecha en gris, la casilla marcada a la derecha
+  y apagada cuando no se puede (Exportar y Mandar sin laminar, Deshacer/Rehacer sin pasos, Borrar lo elegido sin
+  elección, Guardar y Laminar con la placa vacía). Entradas nuevas: Abrir un proyecto (Ctrl+O), Exportar el G-code
+  (Ctrl+G), Mandar el G-code (Ctrl+Shift+G, al programa de red probado o a la impresora por USB), (Re)laminar ahora
+  (Ctrl+R), Borrar lo elegido (Supr), Deshacer, Rehacer, Buscar, las siete vistas (0–6), Mostrar nombres (E) y
+  leyenda (L). Atajos del spec: Guardar como Ctrl+Alt+S (Ctrl+Shift+S sigue andando), Exportar Ctrl+G (Ctrl+E queda
+  para Exportar configuración). Prueba `ui_script_more_cards` con el verbo nuevo `expect-enabled`. Arreglado de paso:
+  el `expect-objects` viejo de los scripts tapaba al nuevo y no miraba el nombre del último modelo.
+- **Paso 2 (parte):** Archivo › Proyecto nuevo (Ctrl+N: placa vacía, sin archivo; la impresora, el filamento y los
+  ajustes quedan) y Proyectos recientes (numerados, el último primero, hasta 10, guardados con las preferencias; uno
+  que ya no está se saca de la lista al elegirlo). Editar › Borrar todo (Ctrl+Supr). Supr solo ya no borra con Ctrl.
+  Los scripts entienden cualquier letra y `alt+`. Prueba `ui_script_new_project`.
+- **Paso 2 (sigue):** Archivo › Importar STL/3MF/OBJ (Ctrl+I), Importar la configuración (Ctrl+L), Importar la
+  configuración de un proyecto (Ctrl+Alt+L: sus ajustes, perfiles y colores; la placa queda), Exportar la placa como
+  STL/OBJ (todas las piezas juntas en coordenadas de la cama; `.obj` escribe OBJ, si no STL binario) y Exportar la
+  configuración (Ctrl+E). Motor: `obj_text` (OBJ con cada esquina una vez). Arreglado: el 3MF de una sola pieza
+  (`write_3mf`) escribía 6 cifras y movía vértices hasta 0,5 µm; ahora 9, como el de varias piezas. Pruebas:
+  `[formats]` STL/OBJ/3MF de ida y vuelta esquina por esquina; `ui_script_file_import_export` (exportar la placa a OBJ
+  y volver a importarla; configuración afuera y adentro; configuración de un proyecto). Scripts: verbo `choose-file`.
+- Pendiente de Archivo: importar STL en pulgadas, SLA, ZIP, paquetes de configuración, exportar con soportes,
+  trayectorias OBJ, convertir G-code binario/ASCII, SD, reparar STL.
+- **Paso 3 (Editar):** Copiar (Ctrl+C) y Pegar (Ctrl+V) del modelo elegido, en la placa y no mientras un campo de
+  texto tiene el teclado; Recargar desde el disco (F5): el modelo elegido, o todos, leído otra vez de su archivo, en
+  su lugar (cada pieza recuerda su archivo en `PlateObject::source`; la pintura queda si tiene los mismos triángulos).
+  Prueba `ui_script_edit_copy_reload`. Queda: Seleccionar todo (hace falta elegir varias piezas), Ajustes de la placa.
+- **Paso 4 (Ventana y Vista):** tarjeta Ventana en «Más»: placa (Ctrl+1), ajustes de impresión, filamento e impresora
+  (Ctrl+2/3/4, con el panel desplegado; la impresora abre su página), 3D (Ctrl+5) y Vista previa (Ctrl+6, gris sin
+  laminar). Vista: Plegar el panel (Shift+Tab, casilla) y Pantalla completa (F11, casilla; vuelve al tamaño y lugar
+  de antes). Prueba `ui_script_window_view`. Quedan de Ventana: galería de formas, cola de envíos (Ctrl+J), nueva
+  instancia, comparar perfiles.
+- **Paso 5 (Ayuda):** Atajos de teclado (también con «?»: la lista de todos los atajos por tarjeta), Información del
+  sistema (versión, sistema y la máquina, las mismas líneas que Preferencias › Video, ahora en `machine_lines`),
+  Mostrar la carpeta de configuración (`open_folder`, con el explorador del sistema) y Versiones del programa (la
+  página de releases). Prueba `ui_script_help_card`. Queda: el sitio web (no hay uno todavía).
+- **Paso 6 (clic derecho de la pieza):** Agregar una copia (+), Quitar una copia (−, gris con una sola), Cantidad de
+  copias… (diálogo), Borrar (Supr), Recargar desde el disco (gris sin archivo), Convertir de metros (×1000) y de
+  pulgadas (×25,4), Exportar como STL/OBJ… (la pieza como está en la cama), Escalar al volumen de impresión (la mayor
+  escala pareja que entra en la cama y la altura, centrada), Espejar ▸ X/Y/Z, Separar ▸ En piezas. Van arriba del
+  menú y se ven también en el nivel Básico. Copias = modelos con el mismo nombre y los mismos triángulos. Prueba
+  `ui_script_object_menu_actions`. Quedan: llenar la cama, objetos separados, Imprimible (hace falta que el laminado
+  saltee la pieza y que el proyecto lo guarde), Reemplazar por STL, Simplificar, Reteselar, Revisar CAD, Dividir para
+  la impresora, Agregar parte ▸, submenús de modificador/negativo con formas, bloqueador y forzador de soporte
+  (pendiente: la forma «malla» en `PlateVolume`), Material de soporte.
+- **Paso 7a (flecha del botón principal):** solo las salidas posibles (el programa de red probado, la impresora por
+  USB conectada, el archivo), la del botón marcada; la impresora sin conexión ya no sale en gris. Prueba
+  `ui_script_arrow_menu`.
+- **Paso 7b (Preferencias):** Apariencia con «Como el sistema» (lee AppsUseLightTheme en Windows, AppleInterfaceStyle
+  en macOS y color-scheme de GNOME; se guarda como `theme: system` y se aplica al abrir), Claro y Oscuro, también en
+  el submenú Tema de «Más»; Enter es Aceptar cuando no se está editando un campo. Prueba
+  `ui_script_config_theme_enter`. No probado: la lectura del tema en Windows y macOS (sin esas máquinas acá).
+- **Paso 7c (calibración en los menús):** la cama vacía tiene «Agregar un modelo de calibración ▸» y «Más» la
+  tarjeta Calibración, con las pruebas de la pestaña (las de resina con una impresora de resina); elegir una la arma
+  y la lamina en la pestaña Calibración. Prueba `ui_script_calibration_menus`. Queda: «Corrección dimensional…» y
+  «Aplicar un resultado…» como entradas propias (hoy están dentro de la pestaña).
+- **Paso 7d (engranaje del perfil):** Editar el perfil (abre sus ajustes: impresión, filamento o la página de la
+  impresora), Cambiar el color del extrusor (solo filamento; el color del extrusor 1 y las mezclas que lo usan) y
+  Mostrar los perfiles de plantilla (casilla; apagada, la lista integrada muestra solo el elegido; se guarda en las
+  preferencias). Prueba `ui_script_gear_filament`.
+- CI local b111be9: 1165/1166 en gcc; `aero_drag_coefficients` por tiempo con la máquina cargada por compilaciones en
+  paralelo (se repite sola).
+- **Paso 7e (Modo):** chip en la barra superior (en Preparar, cuando hay lugar) con el nivel de ajustes; abre tres
+  opciones con botón de radio y su explicación (Básico — lo que casi toda impresión necesita; Normal — más ajustes;
+  Avanzado — todos), las mismas del panel. Prueba `ui_script_mode_chip` (ventana de 1640 px) y verbo `expect-level`.
+- **Paso 7f (Preferencias que no hacían nada):** «Exportar e importar las preferencias» ya anda (Exportar… e
+  Importar…: el mismo JSON de `interface.json`; lo importado queda como las preferencias de esta máquina). Arreglado
+  de paso: cargar preferencias con `theme: dark` no volvía al tema oscuro si estaba el claro. Prueba
+  `ui_script_prefs_export_import` (con su propio HOME). Siguen «Próximamente»: nivel de OpenGL, sombra sobre la cama,
+  resolución de la vista y correr complementos (necesitan esas funciones en la vista y en los complementos).
+- **Paso 6b (Imprimible):** casilla en el menú de la pieza; una pieza no imprimible queda en la cama y fuera del
+  laminado; sin ninguna imprimible, laminar lo dice. El proyecto lo guarda (`"printable": false`, en el archivo propio
+  y en el 3MF). Pruebas `[project]` (ida y vuelta en los dos formatos) y `ui_script_printable`; verbo `expect-error`.
+  La nube (`node`) también la saltea (prueba `[cloud]`). No hecho: la pieza no imprimible no se ve distinta en la vista.
+- **Paso 2b (Exportar las trayectorias como OBJ):** `toolpaths_obj` (motor, `gcode/preview`): cada extrusión del
+  G-code como segmento de una polilínea `l`, los tramos que se unen en una sola, un grupo `g` por tipo de línea, sin
+  los viajes. En Archivo de «Más», gris sin laminar. Pruebas: `[gcode]` contra un G-code a mano (cada extrusión una
+  vez, en sus puntos, por tipo) y el paso nuevo de `ui_script_file_import_export`.
+- **Punto 2 (leyenda contra el G-code):** prueba `[gcode]` sobre el G-code del cubo: los tiempos por tipo suman el
+  tiempo de los movimientos (339,3 s), que queda bajo el estimado que escribe el archivo (351 s, que suma retracciones
+  y esperas) y por encima del 75 % de él; el filamento por tipo suma el del archivo (389,9 mm); cada extrusión está en
+  algún tipo. Sin diferencias encontradas.
+- **Paso 2c (Importar):** Importar STL (en pulgadas)… (el modelo ×25,4) e Importar un archivo ZIP… (un 3MF se abre
+  como tal; si no, cada STL, OBJ y 3MF de adentro a la placa, con su nombre; más de 1 GB por archivo se rechaza).
+  Prueba `ui_script_import_zip_inches` con `tests/data/ui/two_models.zip` (datos propios: el cubo de las pruebas y un
+  tetraedro); los scripts aceptan `@/` para archivos junto al script y el verbo `expect-scale`.
+- **Paso 3b (Editar):** No elegir nada (Esc): Esc vuelve primero a Elegir y, otra vez, deja la placa sin pieza
+  elegida; también en «Más» (gris sin elección). Prueba en `ui_script_new_project`. Seleccionar todo (Ctrl+A) queda
+  para cuando la placa elija varias piezas (hoy `selected_` es una sola).
+- CI local 1234fc8 (gcc): 1172/1176; Xvfb no arrancó en 2, `ui_bambu_print` esperó al simulador y aero por tiempo con
+  la máquina cargada; se repiten aparte.
+- **Paso 2d (Convertir):** Convertir G-code ASCII a binario… y binario a ASCII… (el archivo nuevo junto al elegido,
+  con la otra terminación). `ascii_gcode` (motor) devuelve el G-code con su resumen final y sus ajustes como líneas
+  `; clave = valor`; binario otra vez da los mismos bytes. Pruebas `[binary]` y el paso de
+  `ui_script_file_import_export`.
+- **Paso 7g (Configuración):** Asistente de configuración… (el de la primera vez: impresora y filamento del
+  catálogo), Buscar actualizaciones de la configuración (el paquete de perfiles; dice «al día» si no hay una nueva;
+  gris sin paquete) e Imprimir por USB… (la página de la impresora). Prueba `ui_script_configuration_card`; verbos
+  `expect-tab` y `expect-catalog`. Quedan: instantáneas, actualizaciones del programa en escritorio (no hay todavía),
+  integración con el escritorio, grabar firmware, archivo de Wi-Fi.
+- **Paso 4b/1b:** Ventana › Galería de formas ▸ (cubo, cilindro, esfera, como el menú de la cama) y Tisma ›
+  Thingiverse (abre el sitio). Prueba en `ui_script_window_view`.
+- Repeticiones de la CI local 1234fc8: `ui_pack_published_resin`, `ui_bambu_print` y
+  `ui_view_preview_speed_vulkan_same_as_opengl` pasan; `aero_drag_coefficients` pasó los 30 min con la máquina
+  compartida (antes 11 min); se corre sola de nuevo.
+- **Estado de la tabla (2026-11-10, tarde):** hecho de lo que faltaba:
+  - Más en tarjetas, con atajos y gris.
+  - Thingiverse.
+  - Archivo: proyecto nuevo, recientes, importar (modelo, pulgadas, ZIP, configuración, configuración de proyecto),
+    exportar (G-code Ctrl+G, mandar, placa STL/OBJ, trayectorias OBJ, configuración Ctrl+E), convertir binario ↔ ASCII,
+    relaminar.
+  - Editar: no elegir nada, borrar todo, copiar, pegar, recargar F5.
+  - Ventana: Ctrl+1…6 y galería de formas.
+  - Vista: las vistas 0–6, nombres y leyenda, plegar el panel, pantalla completa.
+  - Configuración: asistente, actualizaciones del paquete, imprimir por USB.
+  - Calibración en Más y en la cama.
+  - Ayuda: versiones, información del sistema, carpeta de configuración, atajos (?).
+  - Pieza: copias, borrar, imprimible, recargar, metros/pulgadas, exportar, escalar al volumen, espejar, separar.
+  - Modo en la barra.
+  - Engranaje del perfil.
+  - ▲ con la salida marcada.
+  - Preferencias: «Como el sistema», Enter y exportar/importar.
+  Falta:
+  - Seleccionar todo (varias piezas elegidas).
+  - Ajustes de la placa.
+  - SLA y paquetes de configuración.
+  - Exportar con soportes.
+  - SD (exportar, expulsar).
+  - Reparar STL.
+  - Cola de envíos.
+  - Nueva instancia.
+  - Comparar perfiles.
+  - Instantáneas.
+  - Actualización del programa de escritorio.
+  - Integración con el escritorio.
+  - Grabar firmware.
+  - Archivo de Wi-Fi.
+  - Sitio web.
+  - Pieza: llenar la cama, objetos separados, reemplazar, simplificar, reteselar, revisar CAD, dividir para la
+    impresora, agregar parte y los submenús de volúmenes con bloqueador y forzador.
+  - Preferencias: 4 filas «Próximamente».
+- CI local 1234fc8, cerrada: las 4 fallas eran de la máquina. Siete `tisma` de corridas a mano quedaron colgados desde
+  las 12:50 (el `timeout` cortaba xvfb-run, no la app) y se comían la CPU. Sin ellos, `aero_drag_coefficients` pasa en
+  316 s y las otras tres al repetirlas. Las corridas a mano van ahora con `--screenshot` (la app termina sola).
+- Cola p2p (servidor 60b7dd1): con `"direct": true` cada multiaddr de `addrs` debe ser /ip4 o /ip6 con la IP pública
+  que ve el master (si no, 422); detrás de NAT, la dirección observada por identify/AutoNAT, nunca la local; /dns4,
+  /dns6 y privadas se rechazan. Con `"direct": false`, sin cambios. Entra con el cliente p2p (todavía no hecho).
+- Cola (spec/next 043b1bf): (1) profile_pack_format.md: los perfiles de impresión y filamento traen `source_values`
+  ({dialect, preset, values}); van a las variables del G-code como los `values` de la máquina, ganando el perfil
+  traducido si chocan (pack profiles/next 881642c, 2299 perfiles de impresión). (2) gcode_macros.md 10 bis bis, GM15:
+  en el dialecto orcaslicer, una variable de lista sin índice en un cálculo o comparación vale su único elemento o el
+  del extrusor activo (hoy 12 variantes caen al G-code simple por esto).
+
+## 2026-11-10 16:41 UTC — mantenimiento (cada 8 h)
+
+- **Revisado:** `origin/main` y `origin/dev` al día. CI local completa sobre ad7181d: gcc 1184/1184, clang 1184/1184,
+  ASan 1174/1183. Fuzz de G-code 2000 corridas, semilla 1011202611: 18 rechazadas como imprimibles a medias, 0 fallas.
+- **Encontrado y arreglado (d280842):**
+  - ASan: `singular_counts` (el «1 aviso» de esta mañana) leía un byte después del final del texto cuando a un «1 » le
+    seguía menos texto que una palabra plural; lo veía la barra de estado en 9 pruebas de interfaz. Ahora mide antes
+    de leer. Prueba `[ui]` con textos cortos; las 9 pasan con ASan.
+  - Importar preferencias sumaba los proyectos recientes del archivo a los que había (duplicados); ahora los
+    reemplaza. Prueba en `ui_script_prefs_export_import`.
+- **Medido:** esfera de banco de 100 mm (`bench/gen_sphere.py --segments 400`, `tests/data/printer_settings.json`):
+  0,97–1,12 s el laminado completo con la escritura (3 corridas). Sin cambio que medir en este bloque.
+- **Revisado sin hallazgos:** el código nuevo de la interfaz de hoy (instancias, recargar, ZIP, pulgadas, convertir,
+  Imprimible, atajos).
+- Cola p2p (spec/next 967f7a3, p2p_library.md): la lista de bloqueo suma `models` (código de publicación y motivo): el
+  cliente deja de compartir y bajar esa publicación y borra sus archivos con el aviso «retirado», como un archivo
+  bloqueado. Solo publican cuentas registradas; la tarjeta del modelo muestra el código de publicación.
+
+## 2026-11-10 19:30 — búsqueda de bugs (pase horario)
+
+- Modo vaso con un modelo fuera de la impresión: la interfaz contaba todos los modelos de la placa y se negaba a
+  laminar («el modo vaso imprime un solo objeto») aunque solo uno fuera imprimible; el nodo ya los quitaba antes de
+  contar. Ahora cuenta solo los imprimibles. Prueba en `ui_script_printable` (falla sin el arreglo).
+- Revisado sin hallazgos: `ascii_gcode`, `obj_text`, `toolpaths_obj`, instancias, pegar y recargar.

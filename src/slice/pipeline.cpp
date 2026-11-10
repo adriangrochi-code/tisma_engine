@@ -522,16 +522,17 @@ struct PartFrame {
 // compensated as the part; null when there are none.
 SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& settings, gpu::Context* gpu,
                          const StressField* stress, const Painting* painting, const PartFrame* frame, int tool = 1,
-                         const IndexedMesh* negative = nullptr);
+                         const IndexedMesh* negative = nullptr, const SupportVolumes* volumes = nullptr);
 SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>* tools, int tool = 1,
-                        const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr);
+                        const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr,
+                        const SupportVolumes* volumes = nullptr);
 // `uncompensated`: the plate before compensated(), for the modifiers to be
 // compensated as it was.
 SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>& objects,
                         const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr,
-                        const IndexedMesh* uncompensated = nullptr);
+                        const IndexedMesh* uncompensated = nullptr, const SupportVolumes* volumes = nullptr);
 
 // Each list of a part's paths (walls and fills, not the support), with its layer.
 template <class F>
@@ -633,7 +634,8 @@ bool several_tools(const std::vector<MeshObject>& objects, const Settings& setti
 SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu,
                         const StressField* stress, const Painting* painting, const std::vector<MeshObject>* given,
                         const std::vector<ColorMix>* mixes, const IndexedMesh* negative_volumes,
-                        const std::vector<MeshModifier>* given_modifiers) {
+                        const std::vector<MeshModifier>* given_modifiers, const SupportVolumes* given_volumes) {
+    const SupportVolumes* volumes = given_volumes && !given_volumes->empty() ? given_volumes : nullptr;
     SlicedModel out;
     if (input.vertices.empty())
         return out;
@@ -707,7 +709,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         for (MeshObject& o : plain)
             o.ranges.clear();
         SlicedModel ranged_out = slice_model(input, ranged ? *ranged : settings, gpu, stress, painting, &plain, mixes,
-                                             negative_volumes, with_ranges.empty() ? given_modifiers : &with_ranges);
+                                             negative_volumes, with_ranges.empty() ? given_modifiers : &with_ranges,
+                                             volumes);
         ranged_out.notices.insert(ranged_out.notices.begin(), out.notices.begin(), out.notices.end());
         return ranged_out;
     }
@@ -731,6 +734,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         flat.walls_staggered = false; // not on a belt (staggered_perimeters.md, rule 5)
         if (modifiers)
             throw std::invalid_argument("belt printers do not take modifiers yet");
+        if (volumes)
+            throw std::invalid_argument("belt printers do not take support blockers or enforcers yet");
         if (negative) {
             const IndexedMesh turned = belt_mesh(*negative, settings);
             return slice_model(belt_mesh(input, settings), flat, gpu, stress, painting, given, mixes, &turned);
@@ -747,12 +752,14 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             throw CurvedError("curved layers do not take modifiers yet (curved.mode)");
         if (negative)
             throw CurvedError("curved layers do not take negative volumes yet (curved.mode)");
+        if (volumes)
+            throw CurvedError("curved layers do not take support blockers or enforcers yet (curved.mode)");
         std::optional<CurvedField> field = curved_field(settings, input);
         if (!field) { // nothing to bend: flat layers (nonplanar_modes.md, CO1)
             Settings flat = settings;
             flat.curved_mode = CurvedMode::Disabled;
             flat.walls_staggered = false; // not with curved layers (staggered_perimeters.md, rule 5)
-            return slice_model(input, flat, gpu, stress, painting, given, mixes, negative);
+            return slice_model(input, flat, gpu, stress, painting, given, mixes, negative, nullptr, volumes);
         }
         const double longest =
             field->mode == CurvedMode::Wave ? std::clamp(2.0 * std::numbers::pi / field->k / 20.0, 0.25, 1.0) : 1.0;
@@ -809,7 +816,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 const Painting paint = painting ? object_painting(*painting, o) : Painting{};
                 const Settings own = own_settings(settings, o.settings, o.name);
                 SlicedModel part = slice_plate(mesh, own, gpu, stress, painting ? &paint : nullptr, nullptr,
-                                               object_tool(o, settings), negative);
+                                               object_tool(o, settings), negative, nullptr, volumes);
                 if (part.layers.empty())
                     continue;
                 if (object_tool(o, settings) != 1)
@@ -830,10 +837,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         // Each extruder's objects apart on the plate's layers
         // (multi_extruder.md, rule 1); one other than the first, every path its.
         if (several_tools(*objects, settings) || modifiers) {
-            out = slice_plate(input, settings, gpu, stress, painting, objects, 1, negative, modifiers);
+            out = slice_plate(input, settings, gpu, stress, painting, objects, 1, negative, modifiers, volumes);
         } else {
             out = slice_plate(input, own_settings(settings, objects->front().settings, objects->front().name), gpu,
-                              stress, painting, nullptr, object_tool(objects->front(), settings), negative);
+                              stress, painting, nullptr, object_tool(objects->front(), settings), negative, nullptr,
+                              volumes);
             if (object_tool(objects->front(), settings) != 1)
                 tag_tool(out, object_tool(objects->front(), settings));
         }
@@ -850,20 +858,21 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         }
         return out;
     }
-    return slice_plate(input, settings, gpu, stress, painting, nullptr, 1, negative);
+    return slice_plate(input, settings, gpu, stress, painting, nullptr, 1, negative, nullptr, volumes);
 }
 
 namespace {
 
 SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>* tools, int tool,
-                        const IndexedMesh* negative, const std::vector<MeshModifier>* modifiers) {
+                        const IndexedMesh* negative, const std::vector<MeshModifier>* modifiers,
+                        const SupportVolumes* volumes) {
     // Several extruders print layer by layer, every extruder on every layer:
     // no zones of layer heights (multi_extruder.md; docs/CONFIG.md).
     if (settings.extruders > 1 && settings.detail_height > 0.0) {
         Settings flat = settings;
         flat.detail_height = 0.0;
-        return slice_plate(input, flat, gpu, stress, painting, tools, tool, negative, modifiers);
+        return slice_plate(input, flat, gpu, stress, painting, tools, tool, negative, modifiers, volumes);
     }
     // Vase mode (vase_mode.md, rule 1): one wall, no infill and no top
     // layers, whatever those settings say.
@@ -874,7 +883,7 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         vase.infill_density = 0.0;
         vase.top_layers = 0;
         vase.top_min_thickness = 0.0;
-        return slice_plate(input, vase, gpu, stress, painting, tools, tool, negative, modifiers);
+        return slice_plate(input, vase, gpu, stress, painting, tools, tool, negative, modifiers, volumes);
     }
     // A raft (skirt_brim_raft.md, rules 9 to 14): the part sliced as if on
     // the bed, its first layer as thick as the others, without the first
@@ -886,7 +895,7 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         part.first_layer_shrink = 0.0;
         part.brim_width = 0.0;
         part.first_line_width = {}; // the raft's first layer has them
-        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool, negative, modifiers);
+        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool, negative, modifiers, volumes);
         add_raft(raft, settings);
         return raft;
     }
@@ -894,10 +903,20 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
     std::optional<IndexedMesh> cut;
     if (negative)
         cut = compensated_like(*negative, input, settings);
+    // The support volumes moved as the part is (supports_more.md, rules 4 and 5).
+    std::optional<SupportVolumes> moved;
+    if (volumes) {
+        moved.emplace();
+        if (!volumes->blockers.triangles.empty())
+            moved->blockers = compensated_like(volumes->blockers, input, settings);
+        if (!volumes->enforcers.triangles.empty())
+            moved->enforcers = compensated_like(volumes->enforcers, input, settings);
+    }
+    const SupportVolumes* support = moved ? &*moved : nullptr;
     if (!tools)
-        return slice_layers(mesh, settings, gpu, stress, painting, nullptr, tool, cut ? &*cut : nullptr);
+        return slice_layers(mesh, settings, gpu, stress, painting, nullptr, tool, cut ? &*cut : nullptr, support);
     return slice_tools(mesh, settings, gpu, stress, painting, *tools, cut ? &*cut : nullptr, modifiers,
-                       &input);
+                       &input, support);
 }
 
 // A part's regions on given layers, as slice_layers makes them before its
@@ -986,8 +1005,9 @@ void interlock(std::vector<std::vector<Polygons>>& regions, const std::vector<La
 // of the plate's.
 SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>& objects, const IndexedMesh* negative,
-                        const std::vector<MeshModifier>* modifiers, const IndexedMesh* uncompensated) {
-    SlicedModel out = slice_layers(mesh, settings, gpu, stress, painting, nullptr, 1, negative);
+                        const std::vector<MeshModifier>* modifiers, const IndexedMesh* uncompensated,
+                        const SupportVolumes* volumes) {
+    SlicedModel out = slice_layers(mesh, settings, gpu, stress, painting, nullptr, 1, negative, volumes);
     if (out.layers.empty())
         return out;
     PartFrame frame;
@@ -1260,6 +1280,26 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
 
 namespace {
 
+// A volume's section on each level (a negative volume, a support blocker or
+// enforcer): its outline, whatever way its triangles face. Own design.
+std::vector<Polygons> volume_sections(const IndexedMesh& volume, const std::vector<float>& heights,
+                                      double gap_closing, gpu::Context* gpu) {
+    IndexedMesh oriented = volume;
+    orient_consistently(oriented);
+    std::vector<char> same;
+    const std::vector<std::vector<Contour>> contours =
+        slice_levels(oriented, height_field(oriented), heights, gap_closing, gpu, &same);
+    // A level like the one below comes back empty: it takes that one's.
+    std::vector<std::size_t> from(heights.size());
+    for (std::size_t l = 0; l < heights.size(); ++l)
+        from[l] = l > 0 && same[l] ? from[l - 1] : l;
+    std::vector<Polygons> out(heights.size());
+    tbb::parallel_for(std::size_t(0), heights.size(), [&](std::size_t l) {
+        out[l] = layer_region(to_polygons(contours[from[l]]), FillMode::Union);
+    });
+    return out;
+}
+
 // The squared distances inside many grids at once: on the GPU when there is
 // one, on the CPU (the same numbers) when there is none or Vulkan fails.
 std::vector<std::vector<float>> distances_inside(std::span<const BitGrid> grids, gpu::Context* gpu) {
@@ -1328,7 +1368,7 @@ void tree_fill_by_field(SlicedModel& out, const std::vector<Polygons>& above, co
 
 SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& given, gpu::Context* gpu,
                          const StressField* stress, const Painting* painting, const PartFrame* frame, int tool,
-                         const IndexedMesh* negative) {
+                         const IndexedMesh* negative, const SupportVolumes* volumes) {
     const PartNozzles nozzles = part_nozzles(given, tool);
     const Settings& settings = nozzles.settings;
     SlicedModel out;
@@ -1375,21 +1415,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // The negative volumes' sections on the same levels (model_tools.md, rule
     // 2): taken away from every layer they cross; the layers stay the part's.
     std::vector<Polygons> cut;
-    if (negative) {
-        IndexedMesh oriented = *negative;
-        orient_consistently(oriented);
-        std::vector<char> cut_same;
-        const std::vector<std::vector<Contour>> cut_contours =
-            slice_levels(oriented, height_field(oriented), heights, settings.gap_closing_radius, gpu, &cut_same);
-        // A level like the one below comes back empty: it takes that one's.
-        std::vector<std::size_t> from(heights.size());
-        for (std::size_t l = 0; l < heights.size(); ++l)
-            from[l] = l > 0 && cut_same[l] ? from[l - 1] : l;
-        cut.resize(heights.size());
-        tbb::parallel_for(std::size_t(0), heights.size(), [&](std::size_t l) {
-            cut[l] = layer_region(to_polygons(cut_contours[from[l]]), FillMode::Union);
-        });
-    }
+    if (negative)
+        cut = volume_sections(*negative, heights, settings.gap_closing_radius, gpu);
 
     out.regions.resize(out.layers.size());
     out.walls.resize(out.layers.size());
@@ -1721,11 +1748,23 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         sp.automatic = settings.support_automatic;
         sp.gpu = gpu;
         // A painted face's own layer, a little wider: its overhang lies under it.
-        const std::vector<Polygons> enforce = painted_areas(painted[0], out.layers, settings.wall_width / 2.0);
-        const std::vector<Polygons> block = painted_areas(painted[1], out.layers, settings.wall_width / 2.0);
-        if (!painted[0].empty())
+        std::vector<Polygons> enforce = painted_areas(painted[0], out.layers, settings.wall_width / 2.0);
+        std::vector<Polygons> block = painted_areas(painted[1], out.layers, settings.wall_width / 2.0);
+        // The support volumes' sections join them (supports_more.md, rules 4 and 5).
+        const auto add_volume = [&](const IndexedMesh& volume, std::vector<Polygons>& areas) {
+            if (volume.triangles.empty())
+                return false;
+            const std::vector<Polygons> sections = volume_sections(volume, heights, settings.gap_closing_radius, gpu);
+            areas.resize(out.layers.size());
+            for (std::size_t l = 0; l < areas.size() && l < sections.size(); ++l)
+                areas[l] = Clipper2Lib::Union(areas[l], sections[l], Clipper2Lib::FillRule::NonZero);
+            return true;
+        };
+        const bool enforced = volumes && add_volume(volumes->enforcers, enforce);
+        const bool blocked = volumes && add_volume(volumes->blockers, block);
+        if (!painted[0].empty() || enforced)
             sp.enforce = &enforce;
-        if (!painted[1].empty())
+        if (!painted[1].empty() || blocked)
             sp.block = &block;
         if (settings.support && settings.support_style == SupportStyle::Organic) {
             TreeParams tp;

@@ -231,4 +231,14 @@ BinaryGcode read_binary_gcode(std::string_view bytes) {
     return out;
 }
 
+std::string ascii_gcode(const BinaryGcode& binary) {
+    std::string out = binary.gcode;
+    if (!out.empty() && out.back() != '\n')
+        out += '\n';
+    for (const auto* group : {&binary.print, &binary.slicer})
+        for (const auto& [key, value] : *group)
+            out += "; " + key + " = " + value + "\n";
+    return out;
+}
+
 } // namespace tisma

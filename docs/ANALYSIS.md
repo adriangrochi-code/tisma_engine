@@ -35,8 +35,9 @@ el apartado Ingeniería (`formats.md`, regla 11 bis), así que no hace falta `--
 - el material es el cambiado a mano en el panel, o si no el del tipo de filamento del perfil (PLA, PLA+, PLA-CF,
   PETG, PETG-CF, ABS, ASA, PA-CF, PA6-CF, PAHT-CF; un tipo que no está en la tabla da un aviso y se usa el PLA);
 - los otros valores cambiados a mano en el panel reemplazan a los del perfil: altura de capa, altura de la
-  primera capa y ancho de línea (como `walls.width`). La temperatura de extrusión todavía no cambia el material, y
-  un aviso lo dice;
+  primera capa y ancho de línea (como `walls.width`). La temperatura de extrusión entra en la adhesión
+  entre capas y entre cordones (`fea/adhesion`, relativa a la recomendada del material); el módulo y la
+  resistencia del material en sí no cambian con ella;
 - la calidad sale de las opciones de la pestaña Estructural («high» es alta; lo demás, normal);
 - cada zona fija o con fuerza es el conjunto de sus triángulos, y cada punto, un disco de su radio sobre la
   superficie. Un nodo está en la zona si queda a menos de un vóxel de ella. Una fuerza se reparte solo entre las caras

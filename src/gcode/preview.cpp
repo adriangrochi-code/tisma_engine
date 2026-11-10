@@ -1,12 +1,15 @@
 // Reads G-code into moves for display. Own design; see PROVENANCE.md.
 
 #include "gcode/preview.hpp"
+#include "io/number.hpp"
 
 #include "geom/bead.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cstdio>
+#include <string>
 #include <cmath>
 #include <numbers>
 #include <optional>
@@ -59,7 +62,7 @@ std::optional<double> number(std::string_view t) {
     if (!t.empty() && t.front() == '+')
         t.remove_prefix(1);
     double v = 0.0;
-    const auto [end, ec] = std::from_chars(t.data(), t.data() + t.size(), v, std::chars_format::general);
+    const auto [end, ec] = chars_to(t.data(), t.data() + t.size(), v, std::chars_format::general);
     if (ec != std::errc() || !std::isfinite(v))
         return std::nullopt;
     return v;
@@ -478,6 +481,41 @@ void time_preview(GcodePreview& preview, const Kinematics& kinematics, double fi
             first = false;
         }
     }
+}
+
+std::string toolpaths_obj(const GcodePreview& preview) {
+    std::string out = "# Tisma toolpaths\n";
+    std::size_t vertices = 0;
+    char line[96];
+    const auto vertex = [&](float x, float y, float z) {
+        std::snprintf(line, sizeof line, "v %.6g %.6g %.6g\n", double(x), double(y), double(z));
+        out += line;
+        return ++vertices;
+    };
+    std::optional<LineKind> group;
+    std::string run;  // the "l" element being built
+    const PreviewMove* last = nullptr;
+    const auto close = [&] {
+        if (!run.empty())
+            out += run + "\n";
+        run.clear();
+    };
+    for (const std::uint32_t index : preview.extrusions) {
+        const PreviewMove& m = preview.moves[index];
+        const bool joins = last && last->kind == m.kind && last->x1 == m.x0 && last->y1 == m.y0 && last->z1 == m.z0;
+        if (!joins) {
+            close();
+            if (group != m.kind) {
+                group = m.kind;
+                out += std::string("g ") + line_kind_id(m.kind) + "\n";
+            }
+            run = "l " + std::to_string(vertex(m.x0, m.y0, m.z0));
+        }
+        run += " " + std::to_string(vertex(m.x1, m.y1, m.z1));
+        last = &m;
+    }
+    close();
+    return out;
 }
 
 } // namespace tisma

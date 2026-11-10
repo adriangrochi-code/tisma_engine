@@ -1,0 +1,23 @@
+# A model's right-click menu (interface.md, «Menús»): Mirror ▸ and Scale to
+# print volume act on it; Reload from disk is there for a model read from a
+# file; Remove instance is greyed with one copy; Add instance adds one, + and −
+# add and take away; Delete takes it off.
+right-click-model
+menu mirror
+menu mirror_x
+expect-objects 1
+right-click-model
+expect-enabled reload_object yes
+expect-enabled remove_instance no
+menu scale_to_volume
+expect-place x 128
+expect-objects 1
+right-click-model
+menu add_instance
+expect-objects 2
+key shift+equal
+wait 3
+expect-objects 3
+key minus
+wait 3
+expect-objects 2

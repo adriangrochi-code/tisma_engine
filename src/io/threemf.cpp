@@ -112,7 +112,7 @@ struct ModelPart {
 
 std::uint32_t parse_index(std::string_view text, const XmlReader& xml, const char* what) {
     std::uint32_t v = 0;
-    const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), v);
+    const auto [end, ec] = chars_to(text.data(), text.data() + text.size(), v);
     if (ec != std::errc() || end != text.data() + text.size())
         throw ModelError("3MF, line " + std::to_string(xml.line()) + ": a bad " + what + " \"" + std::string(text) + "\"");
     return v;
@@ -514,7 +514,7 @@ std::string write_3mf(const TriangleMesh& mesh, std::string_view name) {
                         " <resources>\n  <object id=\"1\" type=\"model\" name=\"" + escaped + "\">\n   <mesh>\n    <vertices>\n";
     char line[128];
     for (const Vec3f& v : vertices) {
-        std::snprintf(line, sizeof line, "     <vertex x=\"%.6g\" y=\"%.6g\" z=\"%.6g\"/>\n", double(v.x), double(v.y), double(v.z));
+        std::snprintf(line, sizeof line, "     <vertex x=\"%.9g\" y=\"%.9g\" z=\"%.9g\"/>\n", double(v.x), double(v.y), double(v.z));
         model += line;
     }
     model += "    </vertices>\n    <triangles>\n";

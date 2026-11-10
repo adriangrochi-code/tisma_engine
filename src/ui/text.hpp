@@ -412,8 +412,8 @@
     X(Slice, "Laminar", "Slice")                                                                                      \
     X(SliceTip, "Laminar el modelo con estos ajustes (Ctrl+R)", "Slice the model with these settings (Ctrl+R)")       \
     X(Export, "Exportar G-code", "Export G-code")                                                                     \
-    X(ExportTip, "Escribir el G-code, volver a leerlo del disco y verificarlo (Ctrl+E)",                              \
-      "Write the G-code, read it back from the disk and check it (Ctrl+E)")                                           \
+    X(ExportTip, "Escribir el G-code, volver a leerlo del disco y verificarlo (Ctrl+G)",                              \
+      "Write the G-code, read it back from the disk and check it (Ctrl+G)")                                           \
     X(ExportNeedsSlice, "Primero hay que laminar", "Slice first")                                                     \
     X(More, "Más", "More")                                                                                            \
     X(CopyLink, "Copiar enlace", "Copy Link")                                                                         \
@@ -1261,6 +1261,7 @@
     X(Language, "Idioma", "Language")                                                                                 \
     X(Theme, "Tema", "Theme")                                                                                         \
     X(Dark, "Oscuro", "Dark")                                                                                         \
+    X(LikeSystem, "Como el sistema", "Like the system") \
     X(Light, "Claro", "Light")                                                                                        \
     X(About, "Acerca de Tisma", "About Tisma")                                                                        \
     X(AboutText, "Tisma engine %s: un laminador propio, escrito desde cero.",                                         \
@@ -1745,6 +1746,101 @@
     X(HiddenChanged, "Cambiado; se ve aunque el nivel lo esconde", "Changed; shown although the level hides it") \
     X(ChooseSettings, "Elegir ajustes…", "Choose settings…") \
     X(Undo, "Deshacer", "Undo") \
+    X(MoreTisma, "Tisma", "Tisma") \
+    X(MoreFile, "Archivo", "File") \
+    X(MoreEdit, "Editar", "Edit") \
+    X(MoreView, "Vista", "View") \
+    X(MoreConfiguration, "Configuración", "Configuration") \
+    X(MoreHelp, "Ayuda", "Help") \
+    X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
+    X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(ShapeGalleryMenu, "Galería de formas", "Shape Gallery") \
+    X(ThingiverseMenu, "Thingiverse", "Thingiverse") \
+    X(PackUpToDate, "Los perfiles están al día.", "The profiles are up to date.") \
+    X(WizardMenu, "Asistente de configuración…", "Configuration Wizard…") \
+    X(CheckConfigUpdatesMenu, "Buscar actualizaciones de la configuración", "Check for Configuration Updates") \
+    X(PrintUsbMenu, "Imprimir por USB…", "Print via USB…") \
+    X(ConvertToBinaryMenu, "Convertir G-code ASCII a binario…", "Convert ASCII G-code to binary…") \
+    X(ConvertToAsciiMenu, "Convertir G-code binario a ASCII…", "Convert binary G-code to ASCII…") \
+    X(GcodeConverted, "Convertido: %s", "Converted: %s") \
+    X(DeselectAllMenu, "No elegir nada", "Deselect All") \
+    X(ImportInchesMenu, "Importar STL (en pulgadas)…", "Import STL (Imperial Units)…") \
+    X(ImportZipMenu, "Importar un archivo ZIP…", "Import ZIP Archive…") \
+    X(ZipNoModels, "el ZIP no tiene modelos STL, OBJ ni 3MF", "the ZIP has no STL, OBJ or 3MF models") \
+    X(ExportToolpathsMenu, "Exportar las trayectorias como OBJ…", "Export Toolpaths as OBJ…") \
+    X(PrintableMenu, "Imprimible", "Printable") \
+    X(NothingPrintable, "Ningún modelo de la placa es imprimible.", "No model on the plate is printable.") \
+    X(ExportPrefsButton, "Exportar…", "Export…") \
+    X(ImportPrefsButton, "Importar…", "Import…") \
+    X(EditPresetMenu, "Editar el perfil", "Edit preset") \
+    X(ExtruderColorMenu, "Cambiar el color del extrusor", "Change extruder color") \
+    X(ShowTemplatesMenu, "Mostrar los perfiles de plantilla", "Show template presets") \
+    X(AddCalibrationModel, "Agregar un modelo de calibración", "Add calibration model") \
+    X(MoreCalibration, "Calibración", "Calibration") \
+    X(AddInstanceMenu, "Agregar una copia", "Add instance") \
+    X(RemoveInstanceMenu, "Quitar una copia", "Remove instance") \
+    X(SetInstancesMenu, "Cantidad de copias…", "Set number of instances…") \
+    X(InstancesCount, "Copias", "Instances") \
+    X(DeleteMenu, "Borrar", "Delete") \
+    X(ConvertMetersMenu, "Convertir de metros", "Convert from meters") \
+    X(ConvertInchesMenu, "Convertir de pulgadas", "Convert from imperial units") \
+    X(ExportObjectMenu, "Exportar como STL/OBJ…", "Export as STL/OBJ…") \
+    X(ScaleToVolumeMenu, "Escalar al volumen de impresión", "Scale to print volume") \
+    X(MirrorMenu, "Espejar", "Mirror") \
+    X(SplitMenu, "Separar", "Split") \
+    X(SplitObjectsMenu, "En piezas", "To objects") \
+    X(AxisX, "En X", "Along X axis") \
+    X(AxisY, "En Y", "Along Y axis") \
+    X(AxisZ, "En Z", "Along Z axis") \
+    X(Ok, "Aceptar", "OK") \
+    X(ReleasesMenu, "Versiones del programa", "Software Releases") \
+    X(SystemInfoMenu, "Información del sistema", "System Info") \
+    X(ConfigFolderMenu, "Mostrar la carpeta de configuración", "Show Configuration Folder") \
+    X(ShortcutsMenu, "Atajos de teclado", "Keyboard Shortcuts") \
+    X(ShortcutsPlate, "Placa", "Plate") \
+    X(ShortMove, "Mover", "Move") \
+    X(ShortRotate, "Rotar", "Rotate") \
+    X(ShortScale, "Escalar", "Scale") \
+    X(ShortLayFlat, "Apoyar en una cara", "Lay on face") \
+    X(ShortCut, "Cortar", "Cut") \
+    X(ShortMeasure, "Medir", "Measure") \
+    X(ShortArrange, "Organizar", "Arrange") \
+    X(ShortSelect, "Elegir (ninguna herramienta)", "Select (no tool)") \
+    X(ShortOrtho, "Perspectiva u ortográfica", "Perspective or orthographic") \
+    X(SystemVersion, "Tisma %s", "Tisma %s") \
+    X(SystemOs, "Sistema: %s", "System: %s") \
+    X(MoreWindow, "Ventana", "Window") \
+    X(PlaterTabMenu, "Pestaña de la placa", "Plater Tab") \
+    X(PrintSettingsTabMenu, "Ajustes de impresión", "Print Settings Tab") \
+    X(FilamentSettingsTabMenu, "Ajustes del filamento", "Filament Settings Tab") \
+    X(PrinterSettingsTabMenu, "Ajustes de la impresora", "Printer Settings Tab") \
+    X(View3dMenu, "3D", "3D") \
+    X(PreviewMenu, "Vista previa", "Preview") \
+    X(CollapseSidebarMenu, "Plegar el panel", "Collapse Sidebar") \
+    X(FullscreenMenu, "Pantalla completa", "Fullscreen") \
+    X(CopyMenu, "Copiar", "Copy") \
+    X(PasteMenu, "Pegar", "Paste") \
+    X(ReloadMenu, "Recargar desde el disco", "Reload from Disk") \
+    X(Reloaded, "Recargado desde el disco: %s", "Reloaded from disk: %s") \
+    X(ImportModelMenu, "Importar STL/3MF/OBJ…", "Import STL/3MF/OBJ…") \
+    X(ImportConfigMenu, "Importar la configuración…", "Import Config…") \
+    X(ImportProjectConfigMenu, "Importar la configuración de un proyecto…", "Import Config from Project…") \
+    X(ExportPlateMenu, "Exportar la placa como STL/OBJ…", "Export Plate as STL/OBJ…") \
+    X(ExportConfigMenu, "Exportar la configuración…", "Export Config…") \
+    X(PlateExported, "Placa exportada: %s", "Plate exported: %s") \
+    X(ProjectConfigLoaded, "Configuración tomada del proyecto %s", "Config taken from the project %s") \
+    X(RecentProjects, "Proyectos recientes", "Recent projects") \
+    X(DeleteAllMenu, "Borrar todo", "Delete All") \
+    X(ExportGcodeMenu, "Exportar el G-code…", "Export G-code…") \
+    X(SendGcodeMenu, "Mandar el G-code…", "Send G-code…") \
+    X(SliceNowMenu, "(Re)laminar ahora", "(Re)Slice Now") \
+    X(DeleteSelectedMenu, "Borrar lo elegido", "Delete Selected") \
+    X(Redo, "Rehacer", "Redo") \
+    X(SearchMenu, "Buscar", "Search") \
+    X(ViewBottom, "Abajo", "Bottom") \
+    X(ShowLabelsMenu, "Mostrar los nombres", "Show Labels") \
+    X(ShowLegendMenu, "Mostrar la leyenda", "Show Legend") \
+    X(PreferencesMenu, "Preferencias", "Preferences") \
     X(BackToPlate, "‹ Placa", "‹ Plate") \
     X(PrinterSettingsTitle, "Configuración de la impresora", "Printer settings") \
     X(PrinterSettingsTip, "Configuración de la impresora: máquina, boquilla, límites, G-code y calibración", "Printer settings: machine, nozzle, limits, G-code and calibration") \
@@ -2433,6 +2529,9 @@ const char* tr(T id);
 // the language's, a comma in Spanish (the spec team's TR1). Other
 // conversions are as printf writes them.
 std::string vformat(const char* fmt, std::va_list args);
+// "1 avisos" → "1 aviso", "1 layers" → "1 layer": a count of one before a
+// known plural takes the singular (format() does it for every text).
+std::string singular_counts(std::string text);
 std::string format(const char* fmt, ...)
 #if defined(__GNUC__)
     __attribute__((format(printf, 1, 2)))

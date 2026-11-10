@@ -1,0 +1,10 @@
+# The main button's arrow (interface.md, «Menús»): only the outputs this
+# slice can go to, the chosen one marked. With no printer connected and no
+# network program, sending is not offered; exporting the file is, marked.
+slice
+menu save_more
+expect-control export_file
+expect-control project
+expect-no-control send
+expect-no-control send_host
+menu export_file

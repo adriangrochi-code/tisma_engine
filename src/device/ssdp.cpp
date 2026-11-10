@@ -135,7 +135,9 @@ SsdpListen ssdp_listen(int ms, const std::vector<int>& ports) {
             FD_SET(s, &ready);
             highest = std::max(highest, s);
         }
-        timeval wait{long(left / 1000), long((left % 1000) * 1000)};
+        timeval wait{}; // tv_usec is an int on macOS
+        wait.tv_sec = decltype(wait.tv_sec)(left / 1000);
+        wait.tv_usec = decltype(wait.tv_usec)((left % 1000) * 1000);
         if (select(int(highest + 1), &ready, nullptr, nullptr, &wait) <= 0)
             continue;
         for (const Socket s : sockets) {

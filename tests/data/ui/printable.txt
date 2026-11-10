@@ -1,0 +1,17 @@
+# Printable (interface.md, «Menús»): a model taken out of the print stays on
+# the bed and out of the slice; with none printable, slicing says so. Vase
+# mode prints one object: a model left out of the print does not count.
+click-model
+key ctrl+c
+right-click-model
+menu printable
+expect-objects 1
+key ctrl+r
+expect-error No model on the plate is printable.
+key escape
+wait 3
+key ctrl+v
+wait 3
+expect-objects 2
+set vase.enabled true
+slice
