@@ -145,6 +145,47 @@ ejecutó aquí):
 11. **Teclas:** Enter confirma; Esc vuelve un nivel atrás y nunca borra trabajo; deshacer y rehacer funcionan dentro
     del boceto. «Ajustar a la selección» desde la línea de tiempo y la lista de cuerpos.
 
+### Diseño visual y forma de uso (estilo Fusion 360)
+
+Pedido del dueño (10-11-2026): «que en el apartado de CAD sea visualmente como es Fusion, cómodo y modernizado…
+visualmente deja mucho que desear y a nivel de herramientas también». Se toma la organización y la forma de uso
+habitual de Fusion 360 y de los CAD paramétricos, con el diseño propio de Tisma (colores, íconos y textos propios; no
+se copian íconos ni imágenes). La navegación de la vista es la de `interface.md` («Navegación de la vista 3D»). Esto
+reemplaza la disposición de la regla 3 en lo que se contradiga.
+
+11 bis. **Barra de herramientas** arriba de la vista, de ancho completo, con pestañas **Sólido**, **Boceto** (solo con un
+    boceto abierto), **Inspeccionar** y **Utilidades**. Cada pestaña tiene grupos con nombre debajo (**Crear**,
+    **Modificar**, **Construir**, **Inspeccionar**, **Insertar**, **Seleccionar**); cada grupo muestra sus 2 o 3
+    herramientas más usadas como íconos grandes y una flecha que despliega todas con ícono y nombre. Al pasar el mouse,
+    una tarjeta con el nombre, qué hace y su atajo.
+11 ter. **Navegador** a la izquierda (reemplaza las secciones largas del panel): un árbol con **Origen** (planos XY, YZ,
+    XZ y ejes), **Bocetos**, **Cuerpos**, **Construcción** y **Parámetros**; cada renglón con un ojo para mostrar u
+    ocultar, clic para elegir, doble clic para editar y clic derecho con su menú. «Mandar a la placa» queda al pie.
+11 quater. **Línea de tiempo abajo**, horizontal, a todo el ancho: un ícono por operación en orden; doble clic edita,
+    clic derecho suprime, renombra o borra, y una marca al final que se arrastra para volver atrás en el historial (lo
+    que queda después se ve gris hasta soltarla al final). Una operación que falla se ve en rojo con el motivo al pasar
+    el mouse. La línea de comandos (regla 12) queda plegada a la derecha de la línea de tiempo y se abre al escribir.
+11 quinquies. **Cuadros de cada operación:** un panel flotante a la derecha de la vista con sus campos, vista previa en
+    vivo en la pieza y «Aceptar» / «Cancelar»; flechas y anillos en la vista para arrastrar distancias y ángulos, con
+    el valor en un campo editable al lado del mouse (tipear un número o una expresión lo fija). Enter acepta, Esc
+    cancela.
+11 sexies. **Boceto:** al empezar uno, la vista se pone de frente al plano; arriba, «Terminar boceto» en verde; a la
+    derecha, la paleta del boceto (tipo de línea normal o de construcción, grilla, ajuste a la grilla, mostrar
+    restricciones, mostrar cotas, mirar de frente, sección); las restricciones se ven como íconos chicos junto a la
+    geometría y las cotas se editan con doble clic sobre el número.
+11 septies. **Menú del botón derecho en la vista:** un menú radial con lo más usado (repetir la última herramienta,
+    Boceto, Extruir, Redondear, Mover/Copiar, Medir, Borrar) y, debajo, la lista del contexto de lo elegido.
+11 octies. **Buscar herramienta:** la tecla S abre un buscador de herramientas que filtra al escribir; las más usadas
+    se pueden fijar a la barra.
+11 novies. **Herramientas que faltan o se priorizan:** **Presionar/Tirar** (arrastrar una cara para extruir o cortar),
+    **Mover/Copiar** con manipulador, **Medir** entre caras, aristas y puntos, **Sección** de la vista y **Apariencia**
+    del cuerpo. Una herramienta que todavía no está se ve apagada con «Próximamente», nunca escondida.
+11 decies. **Aspecto:** tema claro por defecto en Diseño (fondo gris claro con degradé, grilla fina), cuerpos con
+    sombreado suave y aristas visibles, lo elegido en violeta, animaciones cortas al cambiar de vista; todo con los
+    tamaños, márgenes y tipografía de `interface.md`.
+
+Pruebas: CD26 a CD29.
+
 ### Herramientas de dibujo técnico
 
 Como en los programas de dibujo técnico (AutoCAD y sus parecidos): son ideas de uso comunes a esos programas, escritas
@@ -270,3 +311,7 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
 | CD23 | «Traer SVG» de un contorno cerrado | Un perfil cerrado que se extruye |
 | CD24 | Exportar como DXF un boceto con línea, arco y círculo; traer ese DXF a un boceto nuevo | Las tres curvas, con las mismas medidas (diferencia menor que 0,001 mm) |
 | CD25 | 20 operaciones seguidas en Diseño | Un solo proceso del componente abierto durante todas; si se lo cierra a la fuerza, la orden siguiente lo vuelve a abrir y el diseño queda igual |
+| CD26 | Diseño: pestaña Sólido, grupo Crear, flecha del grupo | Muestra todas las herramientas de Crear con ícono y nombre; Extruir abre su panel a la derecha con vista previa |
+| CD27 | Hacer boceto, extruir y redondear; arrastrar la marca de la línea de tiempo antes del redondeo | La pieza se ve sin redondeo y el ícono del redondeo en gris; soltar al final lo vuelve a aplicar |
+| CD28 | Clic derecho en la vista con una cara elegida | Menú radial con Repetir, Boceto, Extruir, Redondear, Mover/Copiar, Medir y Borrar, y la lista del contexto |
+| CD29 | Tecla S y escribir «redo» | Aparece Redondear; Enter la empieza |
