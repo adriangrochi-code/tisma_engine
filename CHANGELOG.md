@@ -23,6 +23,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- La cámara de una Bambu Lab A1 o P1 que presenta un certificado propio (distinto del de la impresora y sin su número
+  de serie) ya no se corta con un error en inglés: muestra su huella y se acepta aparte con «Aceptar el certificado
+  de la cámara». Los demás cortes de la cámara dicen en castellano qué pasó (puerto 6000 sin respuesta, código de
+  acceso, sin imágenes en 10 s).
 - La preparación del inicio (esperas y calentamiento) ya no se suma al tiempo de la primera capa.
 - Un `restart_extra` negativo más largo que lo retraído ya no retrae de nuevo al volver.
 - La primera capa se imprime a `first_layer_temperature` y `first_layer_bed_temperature` (cada extrusor con la suya);

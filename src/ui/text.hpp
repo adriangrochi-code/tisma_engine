@@ -841,6 +841,14 @@
     X(BambuStop, "Detener", "Stop") \
     X(BambuCamera, "Cámara", "Camera") \
     X(BambuCameraWaiting, "Esperando la imagen de la cámara…", "Waiting for the camera's picture…") \
+    X(BambuCameraConfirm, "primero conectá la impresora y confirmá su certificado", "connect the printer and confirm its certificate first") \
+    X(BambuCameraChanged, "el certificado de la cámara no es el que se aceptó para esta impresora (huella %s)", "the camera's certificate is not the one accepted for this printer (fingerprint %s)") \
+    X(BambuCameraOwn, "la cámara tiene un certificado propio, distinto del de la impresora (huella %s): confirmalo", "the camera has a certificate of its own, not the printer's (fingerprint %s): confirm it") \
+    X(BambuCameraAccept, "Aceptar el certificado de la cámara", "Accept the camera's certificate") \
+    X(BambuCameraUnreachable, "no se pudo conectar al puerto 6000 de la impresora (%s)", "could not connect to the printer's port 6000 (%s)") \
+    X(BambuCameraRefused, "la cámara cerró la conexión: revisá el código de acceso", "the camera closed the connection: check the access code") \
+    X(BambuCameraSilent, "la cámara no mandó ninguna imagen en 10 s", "the camera sent no picture in 10 s") \
+    X(BambuCameraBad, "la cámara mandó algo que no es una imagen", "the camera sent something that is not a picture") \
     X(BambuCameraEnded, "La cámara se cortó: %s. Solo las series A1 y P1 la mandan por la red local.", "The camera stopped: %s. Only the A1 and P1 series send it on the local network.") \
     X(BambuSerial, "Número de serie: %s", "Serial number: %s") \
     X(BambuNotTested, "Conexión con Bambu Lab nueva: sin probar todavía con una impresora real.", "New Bambu Lab connection: not yet tested with a real printer.") \

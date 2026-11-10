@@ -11845,3 +11845,15 @@ arreglado en 9d8dc76 y subido.
   espera «Ajustes del proyecto: 5 traducidos, 2 parecidos, 320 sin equivalente».
 - **No medido:** el banco de velocidad (CPU ocupada por el CI con ASan y el fuzz).
 - CI local completo en curso sobre b9173ea.
+
+- **Cámara Bambu (dato de caja negra del dueño: la de su A1 mini se ve en Android y no en la PC):** la interfaz de
+  escritorio sí tiene la cámara (regla 6) y ya aceptaba el certificado propio de la impresora por huella, sin la
+  cadena de una autoridad. Pero el certificado del puerto 6000 puede no ser el del 8883 (en el simulador no lo es);
+  solo pasaba si su nombre era el número de serie, y si no, cortaba con «the camera's certificate is not the one
+  accepted», en inglés. Ahora: `camera_pinned_sha256` aparte (`confirm_camera_certificate`, con su huella), botón
+  «Aceptar el certificado de la cámara», se guarda con la impresora, y cada corte dice en castellano qué pasó.
+  Prueba en `[bambu]`. **Sin probar** con la A1 mini real ni el aceptar en la interfaz (el simulador da el número de
+  serie en el certificado de la cámara).
+- **Prueba que falló en el CI local (gcc):** `ui_script_structural_analyze`, «expect-optimize orientation: got
+  cancelled»: el resultado de la búsqueda anterior seguía visible un cuadro después de terminar la nueva. Al empezar
+  una búsqueda se borra el anterior.

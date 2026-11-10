@@ -1603,7 +1603,8 @@ private:
         std::string jpeg;   // the newest frame
         long long frames = 0; // frames received
         bool ended = false;
-        std::string error;  // why it ended
+        std::string error;  // why it ended, as the person reads it
+        std::string code, sha256; // how it ended, and the camera's certificate
     };
     std::shared_ptr<BambuCamera> bambu_camera_;
     std::future<void> bambu_camera_job_;
@@ -3971,6 +3972,7 @@ void App::load_preferences() {
             bambu_.host = b.value("host", std::string());
             bambu_.serial = b.value("serial", std::string());
             bambu_.pinned_sha256 = b.value("certificate", std::string());
+            bambu_.camera_pinned_sha256 = b.value("camera_certificate", std::string());
             device_bambu_ = b.value("chosen", false);
             if (!bambu_.serial.empty())
                 if (const std::optional<std::string> code = cloud::load_secret("bambu:" + bambu_.serial))
@@ -4091,7 +4093,7 @@ void App::save_preferences() {
         j["device_baud"] = device_baud_;
         if (!bambu_sim_ && !bambu_.host.empty())
             j["bambu"] = {{"host", bambu_.host}, {"serial", bambu_.serial}, {"certificate", bambu_.pinned_sha256},
-                          {"chosen", device_bambu_}};
+                          {"camera_certificate", bambu_.camera_pinned_sha256}, {"chosen", device_bambu_}};
         if (!host_.url.empty())
             j["print_host"] = {{"kind", device::host_kind_word(host_.kind)}, {"url", host_.url}, {"user", host_.user},
                                {"chosen", device_host_}};
@@ -4227,9 +4229,11 @@ void App::load_model(const std::filesystem::path& path) {
                 // Its settings by the pack's translation table, when it has
                 // one for this program (rules 6, 9 and 11).
                 if (pack_index_)
-                    if (const auto path = pack_index_->translation.find(translation_dialect(source));
-                        path != pack_index_->translation.end()) {
-                        std::ifstream table_in(pack_dir() / std::filesystem::path(std::u8string(path->second.begin(), path->second.end())), std::ios::binary);
+                    if (const auto table_path = pack_index_->translation.find(translation_dialect(source));
+                        table_path != pack_index_->translation.end()) {
+                        const std::string& relative = table_path->second;
+                        std::ifstream table_in(pack_dir() / std::filesystem::path(std::u8string(relative.begin(), relative.end())),
+                                               std::ios::binary);
                         const std::string table((std::istreambuf_iterator<char>(table_in)), std::istreambuf_iterator<char>());
                         try {
                             if (const auto own = project_settings(package); !table.empty() && !own.empty()) {
@@ -15615,6 +15619,9 @@ void App::start_optimize(OptimizeExtra extra) {
     const std::string filament_type = settings_.filament_type;
     optimize_cancel_ = false;
     optimize_permille_ = 0;
+    // The last search's result is stale from here: nothing reads it as this
+    // one's while it runs, nor in the frame between its end and its take.
+    optimize_result_.reset();
     const bool zones = extra == OptimizeExtra::Zones, ribs = extra == OptimizeExtra::Ribs, reinforce = extra == OptimizeExtra::Reinforce,
                orientation = extra == OptimizeExtra::Orientation, lattice = extra == OptimizeExtra::Lattice;
     const Affine to_bed{a, b};
@@ -21281,8 +21288,21 @@ void App::bambu_camera_on() {
             10000, &cam->stop);
         const std::lock_guard<std::mutex> hold(cam->lock);
         cam->ended = true;
-        if (!r.ok && !cam->stop)
-            cam->error = r.error;
+        cam->code = r.code;
+        cam->sha256 = r.sha256;
+        if (!r.ok && !cam->stop) {
+            // What happened, in the person's language (printer_connections.md, rule 6).
+            const std::string fingerprint = r.sha256.substr(0, std::min<std::size_t>(r.sha256.size(), 16));
+            cam->error = r.code == "confirm_certificate"   ? std::string(tr(T::BambuCameraConfirm))
+                         : r.code == "confirm_camera_certificate"
+                             ? format(tr(T::BambuCameraOwn), fingerprint.c_str())
+                         : r.code == "certificate_changed" ? format(tr(T::BambuCameraChanged), fingerprint.c_str())
+                         : r.code == "unreachable"         ? format(tr(T::BambuCameraUnreachable), r.error.c_str())
+                         : r.code == "unauthorized"        ? std::string(tr(T::BambuCameraRefused))
+                         : r.code == "timeout"             ? std::string(tr(T::BambuCameraSilent))
+                         : r.code == "bad_answer"          ? std::string(tr(T::BambuCameraBad))
+                                                           : r.error;
+        }
     });
 }
 
@@ -21302,7 +21322,7 @@ void App::bambu_camera_off() {
 void App::bambu_camera_view(float width) {
     if (!bambu_camera_)
         return;
-    std::string jpeg, error;
+    std::string jpeg, error, code, sha256;
     long long frames = 0;
     bool ended = false;
     {
@@ -21310,6 +21330,8 @@ void App::bambu_camera_view(float width) {
         frames = bambu_camera_->frames;
         ended = bambu_camera_->ended;
         error = bambu_camera_->error;
+        code = bambu_camera_->code;
+        sha256 = bambu_camera_->sha256;
         if (frames != bambu_camera_shown_)
             jpeg = bambu_camera_->jpeg;
     }
@@ -21330,6 +21352,15 @@ void App::bambu_camera_view(float width) {
         loc::TextDisabled("%s", tr(T::BambuCameraWaiting));
     if (ended)
         loc::TextColored(rgb(0xE5484D), tr(T::BambuCameraEnded), error.empty() ? "-" : error.c_str());
+    // The camera's own certificate, accepted apart as the printer's was
+    // (printer_connections.md, rules 4 and 6), then the camera again.
+    if (ended && (code == "confirm_camera_certificate" || code == "certificate_changed") && sha256.size() == 64 &&
+        ImGui::Button(tr(T::BambuCameraAccept))) {
+        bambu_camera_off();
+        bambu_.camera_pinned_sha256 = sha256;
+        save_preferences();
+        bambu_camera_on();
+    }
 }
 
 void App::bambu_refresh() {
@@ -22460,12 +22491,17 @@ void App::script_input() {
             got = bambu_sim_ && bambu_sim_->files().count(step.value + ".gcode.3mf") ? step.value : "nothing";
         else if (step.key == "camera") // the size of the frame shown, WxH; "none"
             got = bambu_camera_tex_ ? std::to_string(bambu_camera_w_) + "x" + std::to_string(bambu_camera_h_) : "none";
-        else
+        else if (step.key == "camera-error") { // why the camera stopped, as the person reads it
+            if (bambu_camera_) {
+                const std::lock_guard<std::mutex> hold(bambu_camera_->lock);
+                got = bambu_camera_->error;
+            }
+        } else
             return fail_step("unknown expect-bambu key");
         if (got == step.value) {
             std::printf("ui-script: expect-bambu %s %s: ok\n", step.key.c_str(), step.value.c_str());
             next();
-        } else if (f > (step.key == "camera" ? 600 : 2)) {
+        } else if (f > (step.key == "camera-error" ? 6000 : step.key == "camera" ? 600 : 2)) {
             fail_step("bambu " + step.key + " is «" + got + "», not «" + step.value + "»");
         }
     } else if (step.verb == "cloud-wait") { // until the call to Tisma Cloud is answered (up to 20 s)
