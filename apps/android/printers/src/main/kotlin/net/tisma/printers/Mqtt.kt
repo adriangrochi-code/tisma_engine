@@ -135,6 +135,9 @@ class MqttClient(
             mult *= 128
             if (mult > 128 * 128 * 128) throw IOException("Bad remaining length")
         }
+        // A printer's report is a few tens of KB: a bigger length is a broken or hostile peer, not a reason to take
+        // hundreds of MB of the phone's memory.
+        if (len > MAX_PACKET) throw IOException("MQTT packet too big: $len bytes")
         val body = ByteArray(len)
         input.readFully(body)
         return first to body
@@ -160,6 +163,8 @@ class MqttClient(
     }
 
     companion object {
+        const val MAX_PACKET = 16 * 1024 * 1024
+
         /** Reads one MQTT packet from a stream (for the simulator's broker). */
         fun readFrom(input: InputStream): Pair<Int, ByteArray>? {
             val first = input.read()
