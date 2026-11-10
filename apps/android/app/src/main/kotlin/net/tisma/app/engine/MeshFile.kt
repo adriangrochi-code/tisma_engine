@@ -220,67 +220,110 @@ class MeshFile(
             return b.build()
         }
 
-        /** 3MF: every build item's object (and its components), with the item's and the components' transforms. */
+        /**
+         * 3MF: every build item's object (and its components), with the item's and the components' transforms. Read
+         * as a stream (a project's model can be hundreds of MB), from the root model and, for the production
+         * extension's `p:path` components, the other model files of the package (3MF production extension, public
+         * specification). Bad indices are skipped, never a crash.
+         */
         fun read3mf(file: File): MeshFile = ZipFile(file).use { z ->
-            val entry = z.entries().asSequence().firstOrNull { it.name.startsWith("3D/") && it.name.endsWith(".model") }
+            val models = z.entries().asSequence().map { it.name }.filter { it.startsWith("3D/") && it.endsWith(".model") }.toList()
+            val root = models.firstOrNull { it.equals("3D/3dmodel.model", ignoreCase = true) } ?: models.firstOrNull()
                 ?: throw IllegalArgumentException("No model in ${file.name}")
-            val xml = z.getInputStream(entry).bufferedReader().readText()
-            val objects = mutableMapOf<String, Pair<FloatArray, IntArray>>()
-            val components = mutableMapOf<String, List<Pair<String, FloatArray>>>()
-            Regex("""<object\b([^>]*)>(.*?)</object>""", RegexOption.DOT_MATCHES_ALL).findAll(xml).forEach { m ->
-                val id = attr(m.groupValues[1], "id") ?: return@forEach
-                val body = m.groupValues[2]
-                if (body.contains("<mesh")) {
-                    val vs = ArrayList<Float>()
-                    Regex("""<vertex\b([^>]*)/?>""").findAll(body).forEach { v ->
-                        vs += attr(v.groupValues[1], "x")!!.toFloat(); vs += attr(v.groupValues[1], "y")!!.toFloat()
-                        vs += attr(v.groupValues[1], "z")!!.toFloat()
-                    }
-                    val ts = ArrayList<Int>()
-                    Regex("""<triangle\b([^>]*)/?>""").findAll(body).forEach { t ->
-                        ts += attr(t.groupValues[1], "v1")!!.toInt(); ts += attr(t.groupValues[1], "v2")!!.toInt()
-                        ts += attr(t.groupValues[1], "v3")!!.toInt()
-                    }
-                    objects[id] = vs.toFloatArray() to ts.toIntArray()
-                }
-                val comps = Regex("""<component\b([^>]*)/?>""").findAll(body).mapNotNull { c ->
-                    val oid = attr(c.groupValues[1], "objectid") ?: return@mapNotNull null
-                    oid to matrix(attr(c.groupValues[1], "transform"))
-                }.toList()
-                if (comps.isNotEmpty()) components[id] = comps
+            val parsed = mutableMapOf<String, ModelPart>()
+            fun part(name: String): ModelPart? = parsed[name] ?: z.getEntry(name)?.let { e ->
+                z.getInputStream(e).use { parseModel(it) }.also { parsed[name] = it }
             }
+            fun ref(path: String?, current: String) = path?.trim()?.removePrefix("/")?.takeIf { it.isNotEmpty() } ?: current
             val b = Builder()
-            fun emit(id: String, m: FloatArray, depth: Int) {
+            fun emit(fileName: String, id: String, m: FloatArray, depth: Int) {
                 if (depth > 16) return
-                objects[id]?.let { (v, t) ->
+                val pt = part(fileName) ?: return
+                pt.meshes[id]?.let { (v, t) ->
+                    val count = v.size / 3
+                    val p = FloatArray(9)
                     var i = 0
                     while (i + 2 < t.size) {
-                        val p = FloatArray(9)
-                        for (k in 0..2) {
-                            val vi = 3 * t[i + k]
-                            val x = v[vi]; val y = v[vi + 1]; val zz = v[vi + 2]
-                            // 3MF: row vectors; [x y z 1] times the 4x3 matrix.
-                            p[3 * k] = x * m[0] + y * m[3] + zz * m[6] + m[9]
-                            p[3 * k + 1] = x * m[1] + y * m[4] + zz * m[7] + m[10]
-                            p[3 * k + 2] = x * m[2] + y * m[5] + zz * m[8] + m[11]
+                        if ((0..2).all { t[i + it] in 0 until count }) {
+                            for (k in 0..2) {
+                                val vi = 3 * t[i + k]
+                                val x = v[vi]; val y = v[vi + 1]; val zz = v[vi + 2]
+                                // 3MF: row vectors; [x y z 1] times the 4x3 matrix.
+                                p[3 * k] = x * m[0] + y * m[3] + zz * m[6] + m[9]
+                                p[3 * k + 1] = x * m[1] + y * m[4] + zz * m[7] + m[10]
+                                p[3 * k + 2] = x * m[2] + y * m[5] + zz * m[8] + m[11]
+                            }
+                            b.add(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8])
                         }
-                        b.add(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8])
                         i += 3
                     }
                 }
-                components[id]?.forEach { (cid, cm) -> emit(cid, compose(cm, m), depth + 1) }
+                pt.components[id]?.forEach { c -> emit(ref(c.path, fileName), c.objectId, compose(c.transform, m), depth + 1) }
             }
-            val build = Regex("""<item\b([^>]*)/?>""").findAll(xml).toList()
-            if (build.isEmpty()) objects.keys.forEach { emit(it, identity(), 0) }
-            build.forEach { item ->
-                val oid = attr(item.groupValues[1], "objectid") ?: return@forEach
-                emit(oid, matrix(attr(item.groupValues[1], "transform")), 0)
-            }
+            val top = part(root)!!
+            if (top.items.isEmpty()) top.meshes.keys.forEach { emit(root, it, identity(), 0) }
+            top.items.forEach { emit(ref(it.path, root), it.objectId, it.transform, 0) }
             b.build()
         }
 
-        private fun attr(attrs: String, name: String): String? =
-            Regex("""\b$name\s*=\s*"([^"]*)"""").find(attrs)?.groupValues?.get(1)
+        private class Ref(val objectId: String, val path: String?, val transform: FloatArray)
+        private class ModelPart(
+            val meshes: Map<String, Pair<FloatArray, IntArray>>,
+            val components: Map<String, List<Ref>>,
+            val items: List<Ref>,
+        )
+
+        /** One model file, read with a pull parser: vertices and triangles go straight into primitive arrays. */
+        private fun parseModel(input: InputStream): ModelPart {
+            val x = android.util.Xml.newPullParser()
+            x.setFeature(org.xmlpull.v1.XmlPullParser.FEATURE_PROCESS_NAMESPACES, false)
+            x.setInput(input, null)
+            val meshes = mutableMapOf<String, Pair<FloatArray, IntArray>>()
+            val components = mutableMapOf<String, MutableList<Ref>>()
+            val items = mutableListOf<Ref>()
+            var id: String? = null
+            var vs = FloatArray(3 * 1024); var nv = 0
+            var ts = IntArray(3 * 1024); var nt = 0
+            var hasMesh = false
+            fun a(name: String): String? {
+                for (i in 0 until x.attributeCount) {
+                    val n = x.getAttributeName(i)
+                    if (n == name || n.endsWith(":$name")) return x.getAttributeValue(i)
+                }
+                return null
+            }
+            fun ref() = a("objectid")?.let { Ref(it, a("path"), matrix(a("transform"))) }
+            while (true) {
+                when (x.next()) {
+                    org.xmlpull.v1.XmlPullParser.END_DOCUMENT -> break
+                    org.xmlpull.v1.XmlPullParser.START_TAG -> when (x.name.substringAfter(':')) {
+                        "object" -> { id = a("id"); nv = 0; nt = 0; hasMesh = false }
+                        "mesh" -> hasMesh = true
+                        "vertex" -> {
+                            if (3 * nv + 3 > vs.size) vs = vs.copyOf(vs.size * 2)
+                            vs[3 * nv] = a("x")?.toFloatOrNull() ?: 0f
+                            vs[3 * nv + 1] = a("y")?.toFloatOrNull() ?: 0f
+                            vs[3 * nv + 2] = a("z")?.toFloatOrNull() ?: 0f
+                            nv++
+                        }
+                        "triangle" -> {
+                            if (3 * nt + 3 > ts.size) ts = ts.copyOf(ts.size * 2)
+                            ts[3 * nt] = a("v1")?.toIntOrNull() ?: -1
+                            ts[3 * nt + 1] = a("v2")?.toIntOrNull() ?: -1
+                            ts[3 * nt + 2] = a("v3")?.toIntOrNull() ?: -1
+                            nt++
+                        }
+                        "component" -> id?.let { o -> ref()?.let { components.getOrPut(o) { mutableListOf() } += it } }
+                        "item" -> ref()?.let { items += it }
+                    }
+                    org.xmlpull.v1.XmlPullParser.END_TAG -> if (x.name.substringAfter(':') == "object") {
+                        id?.let { o -> if (hasMesh) meshes[o] = vs.copyOf(3 * nv) to ts.copyOf(3 * nt) }
+                        id = null
+                    }
+                }
+            }
+            return ModelPart(meshes, components, items)
+        }
 
         private fun identity() = floatArrayOf(1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f, 1f, 0f, 0f, 0f)
 

@@ -9,6 +9,9 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.test.assertEquals
 
+/** Robolectric: the 3MF reader uses Android's XML pull parser. */
+@org.junit.runner.RunWith(org.robolectric.RobolectricTestRunner::class)
+@org.robolectric.annotation.Config(sdk = [35])
 class MeshFileTest {
     @get:Rule
     val tmp = TemporaryFolder()
@@ -53,6 +56,25 @@ class MeshFileTest {
         assertEquals(listOf(20f, 0f, 5f, 22f, 2f, 5f), m.bounds.toList())
         val onBed = m.onBed(100f, 100f)
         assertEquals(listOf(99f, 99f, 0f, 101f, 101f, 0f), onBed.bounds.toList())
+    }
+
+    @Test
+    fun `a 3MF project with objects in other model files, as slicer projects save them, and bad indices skipped`() {
+        val root = """<model unit="millimeter" xmlns:p="http://schemas.microsoft.com/3dmanufacturing/production/2015/06"><resources>
+            <object id="5" type="model"><components><component p:path="/3D/Objects/object_1.model" objectid="1" transform="1 0 0 0 1 0 0 0 1 10 0 0"/></components></object>
+            </resources><build><item objectid="5"/></build></model>"""
+        val part = """<model unit="millimeter"><resources>
+            <object id="1" type="model"><mesh><vertices><vertex x="0" y="0" z="0"/><vertex x="1" y="0" z="0"/><vertex x="0" y="1" z="0"/></vertices>
+            <triangles><triangle v1="0" v2="1" v3="2"/><triangle v1="0" v2="1" v3="99"/></triangles></mesh></object></resources></model>"""
+        val f = tmp.newFile("project.3mf")
+        java.util.zip.ZipOutputStream(f.outputStream()).use { z ->
+            // The part first: the root model is found by its name, not by its place in the ZIP.
+            z.putNextEntry(java.util.zip.ZipEntry("3D/Objects/object_1.model")); z.write(part.toByteArray())
+            z.putNextEntry(java.util.zip.ZipEntry("3D/3dmodel.model")); z.write(root.toByteArray())
+        }
+        val m = MeshFile.read(f)
+        assertEquals(1, m.triangles)
+        assertEquals(listOf(10f, 0f, 0f, 11f, 1f, 0f), m.bounds.toList())
     }
 
     @Test
