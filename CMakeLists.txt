@@ -321,6 +321,7 @@ add_library(tisma_core
   src/ui/slicing.cpp
   src/ui/project_slice.cpp
   src/cli/cli.cpp
+  src/cli/c_cli.cpp
   src/cli/node.cpp
   src/cli/pack_cli.cpp
   src/cli/part_cli.cpp
@@ -334,7 +335,7 @@ if(TISMA_GPU)
 else()
   target_sources(tisma_core PRIVATE src/gpu/compute_none.cpp)
 endif()
-target_include_directories(tisma_core PUBLIC src)
+target_include_directories(tisma_core PUBLIC src include)
 target_include_directories(tisma_core SYSTEM PRIVATE ${stb_write_SOURCE_DIR})
 # Kernels must give the same bits on the CPU and the GPU: no fused multiply-add.
 if(NOT MSVC)

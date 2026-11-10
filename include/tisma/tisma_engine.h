@@ -131,6 +131,16 @@ tisma_status tisma_preview_segments(tisma_ctx* ctx, int first, int count, size_t
 tisma_status tisma_analyze_start(tisma_ctx* ctx, int object, const char* quality);
 const char* tisma_analysis_json(tisma_ctx* ctx);
 
+/* The command line in the same process, for platforms that cannot start a
+ * program (iOS: apps/ios/PLAN.md). argv as main gets it (argv[0] is the
+ * program's name and is skipped); the return value is the program's exit
+ * code (docs/CLI.md). What it would print goes to *out and *err, each a
+ * NUL-terminated buffer the caller frees with tisma_free (sizes without the
+ * NUL); out, err and the sizes may be null when not wanted. Implemented.
+ * Safe to call from several threads at once. */
+int tisma_run_cli(int argc, const char* const* argv, char** out, size_t* out_size, char** err, size_t* err_size);
+void tisma_free(void* buffer);
+
 #ifdef __cplusplus
 }
 #endif

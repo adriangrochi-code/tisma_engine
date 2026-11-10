@@ -1324,7 +1324,9 @@ roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tabla
 - [ ] Cámara USB con AVFoundation y el permiso de cámara (`printer_connections.md`, regla 7 de macOS).
 - [ ] Paquete `.dmg`; sin firmar hasta que el dueño tenga la cuenta de Apple Developer, después firma y notarización.
 - [ ] El motor como biblioteca para iOS (arm64, sin GPU por ahora o Metal vía MoltenVK), para la app de iPhone que
-  hace la sesión de Android.
+  hace la sesión de Android: un xcframework (iosArm64 + iosSimulatorArm64) con la entrada C `tisma_run_cli`
+  (argc/argv de la línea de comandos, salida en buffers, mismos códigos de salida; `include/tisma/tisma_engine.h`,
+  hecha el 2026-11-10). Lo mismo para SolidCraft (apps/ios/PLAN.md, android daf5723).
 
 ### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
 
