@@ -20,6 +20,7 @@ namespace {
 
 constexpr double kTipRadius = 2.0; // mm: the cone's rounded tip (rule 1)
 constexpr double kMinJ = 0.6, kMaxJ = 1.4;
+constexpr double kMinEdgeJ = 0.25, kMaxEdgeJ = 4.0; // out of the part (own design)
 
 double smooth_step(double t) {
     t = std::clamp(t, 0.0, 1.0);
@@ -46,7 +47,13 @@ double CurvedField::shape(double x, double y, double z) const {
     case CurvedMode::Conical:
         if (!grid.empty()) // from the part's overhangs: on the grid
             return on_grid(x, y);
-        return cone * (std::sqrt(x * x + y * y + kTipRadius * kTipRadius) - kTipRadius);
+        {
+            // Level past the part's box, as the grid is past its edge.
+            double rr = x * x + y * y;
+            if (reach > 0.0)
+                rr = std::min(rr, reach * reach);
+            return cone * (std::sqrt(rr + kTipRadius * kTipRadius) - kTipRadius);
+        }
     case CurvedMode::Surface:
     case CurvedMode::Overhangs:
         return grid.empty() ? 0.0 : on_grid(x, y);
@@ -106,7 +113,9 @@ double CurvedField::thickness(double x, double y, double z) const {
 double CurvedField::real_z(double x, double y, double flat) const {
     if (flat_at(flat))
         return flat;
-    // z - D(z) = flat: D changes less than z does (J > 0), so this converges.
+    // z - D(z) = flat. Iterated, this converges where |∂D/∂z| < 1 (J over
+    // 0.5), as in the part; else (J down to 0.25 around it) by halves: z - D
+    // grows with z wherever J > 0, from flat_below up.
     double z = flat + offset(x, y, flat);
     for (int i = 0; i < 60; ++i) {
         const double next = flat + offset(x, y, z);
@@ -114,7 +123,14 @@ double CurvedField::real_z(double x, double y, double flat) const {
             return next;
         z = next;
     }
-    return z;
+    double lo = base + flat_below, hi = std::max(lo, flat) + 1.0;
+    for (int i = 0; i < 60 && hi - offset(x, y, hi) < flat; ++i)
+        hi += hi - lo;
+    for (int i = 0; i < 100 && hi - lo > 1e-10; ++i) {
+        const double mid = 0.5 * (lo + hi);
+        (mid - offset(x, y, mid) < flat ? lo : hi) = mid;
+    }
+    return 0.5 * (lo + hi);
 }
 
 double CurvedField::most() const {
@@ -161,7 +177,7 @@ struct Bounds {
 // corners. Columns on a grid over its box, each kept where a ray along Z
 // finds it inside the part, at the heights the ramps need; and points over
 // its faces, a millimetre or so apart, for what is thinner than the grid.
-std::vector<Vec3f> samples_of(const IndexedMesh& mesh, const Box& b, const CurvedField& f) {
+std::vector<Vec3f> samples_of(const IndexedMesh& mesh, const Box& b, const CurvedField& f, std::vector<Vec3f>& edge) {
     std::vector<Vec3f> out;
     // Heights: through the whole part, and closer in the ramps.
     std::vector<double> zs;
@@ -214,6 +230,28 @@ std::vector<Vec3f> samples_of(const IndexedMesh& mesh, const Box& b, const Curve
                     if (z >= hits[k] && z <= hits[k + 1])
                         out.push_back({float(x), float(y), float(z)});
         }
+    // Around the part, where a skirt, a brim or a travel goes (`edge`): over
+    // the whole box, past the grid's last node when there is one (the field
+    // is level from there out), at every height; finer along the box's edge.
+    {
+        const double m = f.grid.empty() ? 0.0 : 2.0 * f.cell;
+        const double x0 = b.x0 - m, x1 = b.x1 + m, y0 = b.y0 - m, y1 = b.y1 + m;
+        const int across = 24;
+        for (int j = 0; j <= across; ++j)
+            for (int i = 0; i <= across; ++i)
+                for (const double z : zs)
+                    edge.push_back({float(x0 + (x1 - x0) * i / across), float(y0 + (y1 - y0) * j / across), float(z)});
+        for (int i = 0; i <= n; ++i) {
+            const double t = double(i) / n;
+            const double ex = x0 + (x1 - x0) * t, ey = y0 + (y1 - y0) * t;
+            for (const double z : zs) {
+                edge.push_back({float(ex), float(y0), float(z)});
+                edge.push_back({float(ex), float(y1), float(z)});
+                edge.push_back({float(x0), float(ey), float(z)});
+                edge.push_back({float(x1), float(ey), float(z)});
+            }
+        }
+    }
     // Over the faces.
     double area = 0.0;
     for (const auto& tri : mesh.triangles) {
@@ -610,6 +648,7 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
     f.height = b.z1 - b.z0;
     // How far from the centre the nozzle goes: the bed's farthest corner (a
     // travel out to the skirt follows the cone too), or well past the part.
+    f.reach = std::hypot(0.5 * (b.x1 - b.x0), 0.5 * (b.y1 - b.y0));
     f.radius = std::hypot(0.5 * (b.x1 - b.x0), 0.5 * (b.y1 - b.y0)) + 50.0;
     for (const auto& [bx, by] : s.bed)
         f.radius = std::max(f.radius, std::hypot(bx - f.cx, by - f.cy));
@@ -681,11 +720,23 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
                 return true;
         return false;
     };
-    const std::vector<Vec3f> points = samples_of(mesh, b, f);
+    std::vector<Vec3f> edge;
+    const std::vector<Vec3f> points = samples_of(mesh, b, f, edge);
+    // Out of the part, only what keeps the layers in order: a lifted travel
+    // out to the skirt above the layer, never under the bed (fuzz, seed
+    // 1011202603, run 1419: J below 0 there); the skirt not too thin or thick.
+    const auto in_order = [&](const CurvedField& g) {
+        double lo = 1.0, hi = 1.0;
+        for (const Vec3f& p : edge) {
+            const double jj = g.thickness(p.x, p.y, p.z);
+            lo = std::min(lo, jj), hi = std::max(hi, jj);
+        }
+        return lo >= kMinEdgeJ - 1e-9 && hi <= kMaxEdgeJ + 1e-9;
+    };
     const auto fits = [&](const CurvedField& g) {
         const Bounds bb = bounds_of(g, points, tan_x, tan_y);
         return bb.j_min >= kMinJ - 1e-9 && bb.j_max <= kMaxJ + 1e-9 && bb.head <= 1.0 + 1e-9 &&
-               clearance_use(bb, s) <= 1.0 + 1e-9;
+               clearance_use(bb, s) <= 1.0 + 1e-9 && in_order(g);
     };
     if (fits(f))
         return helps(1.0) ? std::optional<CurvedField>(f) : std::nullopt;
@@ -697,6 +748,10 @@ std::optional<CurvedField> curved_field(const Settings& s, const IndexedMesh& me
                           "curved.mode: the layers would be %.2f to %.2f times as thick as sliced (0.6 to 1.4 at most); "
                           "lower curved.amplitude or curved.cone_angle, or raise curved.ramp_height",
                           bb.j_min, bb.j_max);
+        else if (!in_order(f))
+            std::snprintf(text, sizeof text,
+                          "curved.mode: around the part (the skirt, the brim and the travels) the layers would cross "
+                          "or come too thin; lower curved.amplitude or curved.cone_angle, or raise curved.ramp_height");
         else if (bb.head > 1.0 + 1e-9)
             std::snprintf(text, sizeof text,
                           "curved.mode: the layers are steeper than the head lets the nozzle climb (head.free_angle_x, "

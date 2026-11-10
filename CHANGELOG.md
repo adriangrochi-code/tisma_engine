@@ -55,6 +55,8 @@ versión no se probó en el emulador (una anterior sí). macOS todavía no.
 
 ### Corregido
 
+- Con capas curvas cónicas, un viaje levantado hacia la falda podía bajar más que la capa, hasta por debajo de la
+  cama: alrededor de la pieza las capas ya no se cruzan.
 - La cámara de una Bambu Lab A1 o P1 que presenta un certificado propio (distinto del de la impresora y sin su número
   de serie) ya no se corta con un error en inglés: muestra su huella y se acepta aparte con «Aceptar el certificado
   de la cámara». Los demás cortes de la cámara dicen en castellano qué pasó (puerto 6000 sin respuesta, código de

@@ -159,6 +159,11 @@ add_test(NAME fuzz_gcode_smoke COMMAND tisma_fuzz_gcode 12 7)
 # length back to 0, and never undone (2026-11-06).
 add_test(NAME fuzz_gcode_6112026_1728 COMMAND tisma_fuzz_gcode 2000 6112026)
 set_tests_properties(fuzz_gcode_6112026_1728 PROPERTIES ENVIRONMENT "TISMA_FUZZ_ONLY=1728")
+# Seed 1011202603, run 1419: conical curved layers on a sphere, a lifted
+# travel out to the skirt under the bed (J below 0.5 out of the part, where
+# real_z's iteration did not converge; 2026-11-10).
+add_test(NAME fuzz_gcode_1011202603_1419 COMMAND tisma_fuzz_gcode 2000 1011202603)
+set_tests_properties(fuzz_gcode_1011202603_1419 PROPERTIES ENVIRONMENT "TISMA_FUZZ_ONLY=1419")
 
 # The settings panel as data for the phone (mobile_app.md, rule 7): no window,
 # so it runs everywhere the interface builds.

@@ -12218,3 +12218,9 @@ QA; bundle id `net.tismaservidores.tisma`).
   aviso de error dice que no se va a poder laminar. Sin guion de interfaz (el guion no elige en combos todavía).
 - Release 0.12.0-beta.1 preparada (VERSION, CHANGELOG con «Para probar», VERSIONING): espera la CI de Windows de dev y
   la de Android de 5004d1b para unir android y publicar.
+- **Búsqueda de bugs (pedido del dueño, 2026-11-10 03:00):** las sesiones de especificación, perfiles, Android y
+  servidor avisadas. Motor: fuzz de G-code 2000 corridas, semilla 1011202603: 1 falla (corrida 1419, esfera, capas
+  cónicas): un viaje levantado hacia la falda bajaba a Z −0,07. Causa: fuera de la pieza J bajaba de 0,5 y la Z real
+  (punto fijo) no convergía. Arreglo: bisección cuando no converge; J entre 0,25 y 4 en toda la caja y su borde (las
+  pruebas solo en la pieza); cono analítico nivelado más allá de la caja. Prueba `fuzz_gcode_1011202603_1419`.
+  **Decisión (diseño propio, la ficha no lo dice):** los topes de J fuera de la pieza, 0,25 a 4.
