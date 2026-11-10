@@ -12632,3 +12632,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - `resin.md` regla 1, RE11 (spec/next 5d95bc0): `resin.first_layer_height` (0: `resin.layer_height`); la capa `n`
   tiene su tope en `h0 + n·h`. Ajuste, guía, campo en la tarjeta de capas de resina, CONFIG.md. Prueba `[resin]` RE11
   (0,1 y 0,05: topes 0,1 y 0,15, una capa menos).
+- Cola (spec/next cada191, cloud.md 5b, decisión del dueño 21:25): los planes se compran en las tiendas oficiales. En
+  el escritorio: macOS (versión App Store) con suscripciones de StoreKit; Windows y Linux muestran el plan de la cuenta
+  y, para comprar, mandan al teléfono o a la tienda; ningún dato de tarjeta en la aplicación. Pendiente tras la
+  búsqueda profunda (StoreKit va con la fase de macOS).
