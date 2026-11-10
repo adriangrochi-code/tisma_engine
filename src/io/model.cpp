@@ -83,7 +83,7 @@ ModelFile parse_obj(std::string_view text) {
                 // "v", "v/vt", "v//vn" or "v/vt/vn": the vertex is the first.
                 const std::string_view index = w.substr(0, w.find('/'));
                 long long i = 0;
-                const auto [p, ec] = std::from_chars(index.data(), index.data() + index.size(), i);
+                const auto [p, ec] = chars_to(index.data(), index.data() + index.size(), i);
                 if (ec != std::errc() || p != index.data() + index.size() || i == 0)
                     fail("a bad vertex index '" + std::string(w) + "'");
                 const long long n = static_cast<long long>(vertices.size());

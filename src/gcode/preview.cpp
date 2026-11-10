@@ -1,6 +1,7 @@
 // Reads G-code into moves for display. Own design; see PROVENANCE.md.
 
 #include "gcode/preview.hpp"
+#include "io/number.hpp"
 
 #include "geom/bead.hpp"
 
@@ -59,7 +60,7 @@ std::optional<double> number(std::string_view t) {
     if (!t.empty() && t.front() == '+')
         t.remove_prefix(1);
     double v = 0.0;
-    const auto [end, ec] = std::from_chars(t.data(), t.data() + t.size(), v, std::chars_format::general);
+    const auto [end, ec] = chars_to(t.data(), t.data() + t.size(), v, std::chars_format::general);
     if (ec != std::errc() || !std::isfinite(v))
         return std::nullopt;
     return v;

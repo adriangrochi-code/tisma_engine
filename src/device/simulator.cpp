@@ -1,4 +1,5 @@
 #include "device/simulator.hpp"
+#include "io/number.hpp"
 
 #include "device/gcode_host.hpp"
 
@@ -18,7 +19,7 @@ std::optional<double> argument(std::string_view command, char letter) {
             continue;
         double v = 0.0;
         const char* begin = command.data() + i + 1;
-        const auto r = std::from_chars(begin, command.data() + command.size(), v);
+        const auto r = chars_to(begin, command.data() + command.size(), v);
         if (r.ec == std::errc() && r.ptr != begin)
             return v;
     }
@@ -127,7 +128,7 @@ void SimulatedPrinter::handle(const std::string& line) {
         // A numbered line: the number must follow the last, the checksum match.
         const std::size_t star = line.rfind('*');
         std::uint32_t number = 0;
-        const auto r = std::from_chars(line.data() + 1, line.data() + line.size(), number);
+        const auto r = chars_to(line.data() + 1, line.data() + line.size(), number);
         const std::size_t space = line.find(' ');
         if (r.ec != std::errc() || star == std::string::npos || space == std::string::npos || star < space) {
             reply("Error:No Checksum with line number, Last Line: " + std::to_string(last_line_));
@@ -136,7 +137,7 @@ void SimulatedPrinter::handle(const std::string& line) {
             return;
         }
         int checksum = -1;
-        std::from_chars(line.data() + star + 1, line.data() + line.size(), checksum);
+        chars_to(line.data() + star + 1, line.data() + line.size(), checksum);
         const bool corrupt = options_.fail_line != 0 && number == options_.fail_line && !failed_once_;
         if (corrupt)
             failed_once_ = true;

@@ -1,6 +1,7 @@
 // G-code output (docs/spec/GCODE_OUTPUT.md). Own design; see PROVENANCE.md.
 
 #include "gcode/writer.hpp"
+#include "io/number.hpp"
 
 #include "gcode/arcs.hpp"
 #include "gcode/cooling.hpp"
@@ -2400,7 +2401,7 @@ std::string substitute_variables(std::string_view text, const std::map<std::stri
                         const std::string digits = name.substr(bracket + 1, name.size() - bracket - 2);
                         // from_chars: an index too big for a size_t is no index
                         // (std::stoul threw out of the writer).
-                        const auto [last, error] = std::from_chars(digits.data(), digits.data() + digits.size(), index);
+                        const auto [last, error] = chars_to(digits.data(), digits.data() + digits.size(), index);
                         ok = !digits.empty() && error == std::errc() && last == digits.data() + digits.size();
                         name = name.substr(0, bracket);
                     }

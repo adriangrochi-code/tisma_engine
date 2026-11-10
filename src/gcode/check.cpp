@@ -2,6 +2,7 @@
 // PROVENANCE.md.
 
 #include "gcode/check.hpp"
+#include "io/number.hpp"
 #include "adhesion/adhesion.hpp"
 #include "gcode/dialect.hpp"
 
@@ -51,7 +52,7 @@ std::optional<double> number(std::string_view t) {
     if (t.front() == '+')
         t.remove_prefix(1);
     double v = 0.0;
-    const auto [end, ec] = std::from_chars(t.data(), t.data() + t.size(), v, std::chars_format::fixed);
+    const auto [end, ec] = chars_to(t.data(), t.data() + t.size(), v, std::chars_format::fixed);
     if (ec != std::errc() || end != t.data() + t.size() || !std::isfinite(v))
         return std::nullopt;
     return v;

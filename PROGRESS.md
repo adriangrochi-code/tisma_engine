@@ -12233,3 +12233,8 @@ QA; bundle id `net.tismaservidores.tisma`).
 - gcode_variables.md (spec/next 10a2802, check_spec limpio): `initial_layer_height` (= `first_layer_height`) y
   `support_air_filtration` (sí/no, vale no) en la tabla. Prueba en `[macros]`. Segundo fuzz 2000 corridas, semilla
   1011202604: 0 fallas.
+- macOS CI (2026-11-10): x86_64 en `macos-15-intel` (macos-13 ya no existe y dejaba la corrida en cola); compilaba
+  hasta `template.cpp`: la biblioteca de Apple no tiene `from_chars` de punto flotante. `chars_to` en
+  `src/io/number.hpp` usa el de la biblioteca si está, si no un flujo con la configuración regional clásica; los 23
+  usos pasan por ahí. Prueba `[number]` compara los dos caminos. arm64 (macos-14) se cancela sin empezar: sin causa
+  vista todavía (puede ser un límite de minutos de macOS de la cuenta).

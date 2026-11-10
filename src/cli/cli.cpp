@@ -1,4 +1,5 @@
 #include "cli/cli.hpp"
+#include "io/number.hpp"
 #include "cli/node.hpp"
 #include "cli/library_cli.hpp"
 #include "cli/pack_cli.hpp"
@@ -405,7 +406,7 @@ int cmd_profile(std::span<const std::string_view> args, std::ostream& out, std::
         usage = "profile needs --printer";
     double nozzle = 0.0;
     if (usage.empty() && !nozzle_text.empty()) {
-        const auto [end, ec] = std::from_chars(nozzle_text.data(), nozzle_text.data() + nozzle_text.size(), nozzle);
+        const auto [end, ec] = chars_to(nozzle_text.data(), nozzle_text.data() + nozzle_text.size(), nozzle);
         if (ec != std::errc() || end != nozzle_text.data() + nozzle_text.size() || !(nozzle > 0.0))
             usage = "profile: --nozzle needs a diameter in mm";
     }
@@ -1199,7 +1200,7 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
         }
         int n = 0;
         const std::string_view value = i + 1 < rest.size() ? rest[i + 1] : std::string_view();
-        const auto [end, ec] = std::from_chars(value.data(), value.data() + value.size(), n);
+        const auto [end, ec] = chars_to(value.data(), value.data() + value.size(), n);
         if (value.empty() || ec != std::errc() || end != value.data() + value.size() || n < 1 || n > 4096) {
             err << "error: --threads needs a whole number from 1\n" << kUsage;
             return kExitUsage;

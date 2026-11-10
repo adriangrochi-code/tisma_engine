@@ -3,6 +3,7 @@
 // see PROVENANCE.md.
 
 #include "gcode/template.hpp"
+#include "io/number.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -69,11 +70,11 @@ TemplateValue TemplateValue::parse(std::string_view written) {
         return of(std::move(text));
     }
     long long integer = 0;
-    if (const auto r = std::from_chars(written.data(), written.data() + written.size(), integer);
+    if (const auto r = chars_to(written.data(), written.data() + written.size(), integer);
         r.ec == std::errc() && r.ptr == written.data() + written.size() && !written.empty())
         return of(integer);
     double real = 0.0;
-    if (const auto r = std::from_chars(written.data(), written.data() + written.size(), real);
+    if (const auto r = chars_to(written.data(), written.data() + written.size(), real);
         r.ec == std::errc() && r.ptr == written.data() + written.size() && !written.empty())
         return of(real);
     return of(std::string(written));
@@ -816,7 +817,7 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
                     if (!index.empty()) {
                         long long at = 0;
                         if (index.find_first_not_of("0123456789") == std::string_view::npos) {
-                            if (std::from_chars(index.data(), index.data() + index.size(), at).ec != std::errc())
+                            if (chars_to(index.data(), index.data() + index.size(), at).ec != std::errc())
                                 src.fail(index_at, "the index " + std::string(index) + " is too large");
                         } else {
                             const TemplateValue* n = lookup(index);

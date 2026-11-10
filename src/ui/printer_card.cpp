@@ -1,4 +1,5 @@
 #include "ui/printer_card.hpp"
+#include "io/number.hpp"
 
 #include "ui/settings_view.hpp"
 
@@ -78,7 +79,7 @@ std::optional<CatalogMatch> catalog_model_of(const Catalog& catalog, std::string
             continue;
         const std::string_view number = name.substr(head.size(), name.size() - head.size() - 3);
         double d = 0.0;
-        const auto [end, ec] = std::from_chars(number.data(), number.data() + number.size(), d);
+        const auto [end, ec] = chars_to(number.data(), number.data() + number.size(), d);
         if (ec == std::errc() && end == number.data() + number.size() && d > 0.0)
             return CatalogMatch{&p, d};
     }
