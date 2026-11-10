@@ -1753,6 +1753,15 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(MoreWindow, "Ventana", "Window") \
+    X(PlaterTabMenu, "Pestaña de la placa", "Plater Tab") \
+    X(PrintSettingsTabMenu, "Ajustes de impresión", "Print Settings Tab") \
+    X(FilamentSettingsTabMenu, "Ajustes del filamento", "Filament Settings Tab") \
+    X(PrinterSettingsTabMenu, "Ajustes de la impresora", "Printer Settings Tab") \
+    X(View3dMenu, "3D", "3D") \
+    X(PreviewMenu, "Vista previa", "Preview") \
+    X(CollapseSidebarMenu, "Plegar el panel", "Collapse Sidebar") \
+    X(FullscreenMenu, "Pantalla completa", "Fullscreen") \
     X(CopyMenu, "Copiar", "Copy") \
     X(PasteMenu, "Pegar", "Paste") \
     X(ReloadMenu, "Recargar desde el disco", "Reload from Disk") \

@@ -12374,3 +12374,8 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   texto tiene el teclado; Recargar desde el disco (F5): el modelo elegido, o todos, leído otra vez de su archivo, en
   su lugar (cada pieza recuerda su archivo en `PlateObject::source`; la pintura queda si tiene los mismos triángulos).
   Prueba `ui_script_edit_copy_reload`. Queda: Seleccionar todo (hace falta elegir varias piezas), Ajustes de la placa.
+- **Paso 4 (Ventana y Vista):** tarjeta Ventana en «Más»: placa (Ctrl+1), ajustes de impresión, filamento e impresora
+  (Ctrl+2/3/4, con el panel desplegado; la impresora abre su página), 3D (Ctrl+5) y Vista previa (Ctrl+6, gris sin
+  laminar). Vista: Plegar el panel (Shift+Tab, casilla) y Pantalla completa (F11, casilla; vuelve al tamaño y lugar
+  de antes). Prueba `ui_script_window_view`. Quedan de Ventana: galería de formas, cola de envíos (Ctrl+J), nueva
+  instancia, comparar perfiles.

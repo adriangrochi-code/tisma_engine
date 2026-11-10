@@ -1786,6 +1786,9 @@ private:
     void paste();
     bool can_reload() const;
     void reload_from_disk(); // F5: the chosen model, or every one, read again from its file
+    void window_tab(int n);  // Window › Ctrl+1 to Ctrl+6 (interface.md, «Más»)
+    void toggle_fullscreen(); // F11
+    int windowed_[4] = {0, 0, 0, 0}; // the window's place and size before Fullscreen
 
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
@@ -4818,6 +4821,47 @@ void App::reload_from_disk() {
         return;
     plate_changed();
     notify(format(tr(T::Reloaded), done.c_str()));
+}
+
+// Window (Ctrl+1 to Ctrl+6): 1 the plate, 2 to 4 the print, filament and
+// printer settings (the panel unfolded), 5 the 3D view (the plate), 6 the
+// preview, once there is a slice.
+void App::window_tab(int n) {
+    if (n == 6) {
+        if (result_)
+            set_tab(Tab::Preview);
+        return;
+    }
+    if (tab_ != Tab::Prepare)
+        set_tab(Tab::Prepare);
+    printer_page_ = false;
+    if (n >= 2 && n <= 4) {
+        panel_folded_ = false;
+        objects_tab_ = false;
+        if (n == 4)
+            printer_page_ = true;
+        else
+            panel_tab_ = n == 2 ? SettingsTab::Print : SettingsTab::Material;
+    }
+    frame_pending_ = true;
+}
+
+// Fullscreen (F11): the window over its whole monitor, and back.
+void App::toggle_fullscreen() {
+    if (GLFWmonitor* now = glfwGetWindowMonitor(window_)) {
+        (void)now;
+        glfwSetWindowMonitor(window_, nullptr, windowed_[0], windowed_[1], std::max(windowed_[2], 640),
+                             std::max(windowed_[3], 480), GLFW_DONT_CARE);
+    } else {
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
+        if (!mode)
+            return;
+        glfwGetWindowPos(window_, &windowed_[0], &windowed_[1]);
+        glfwGetWindowSize(window_, &windowed_[2], &windowed_[3]);
+        glfwSetWindowMonitor(window_, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+    }
+    frame_pending_ = true;
 }
 
 // Every model off the plate, and the preview with them.
@@ -16890,7 +16934,23 @@ void App::more_menu() {
         if (item("search", tr(T::SearchMenu), "Ctrl+F"))
             search_focus_ = true, printer_page_ = false;
 
-        // 5. View (4. Window comes with its tabs).
+        // 4. Window.
+        card(tr(T::MoreWindow));
+        static constexpr struct {
+            const char* name;
+            T label;
+            const char* keys;
+        } tabs[] = {{"window_plater", T::PlaterTabMenu, "Ctrl+1"},
+                    {"window_print", T::PrintSettingsTabMenu, "Ctrl+2"},
+                    {"window_filament", T::FilamentSettingsTabMenu, "Ctrl+3"},
+                    {"window_printer", T::PrinterSettingsTabMenu, "Ctrl+4"},
+                    {"window_3d", T::View3dMenu, "Ctrl+5"},
+                    {"window_preview", T::PreviewMenu, "Ctrl+6"}};
+        for (int i = 0; i < 6; ++i)
+            if (item(tabs[i].name, tr(tabs[i].label), tabs[i].keys, i != 5 || result_.has_value()))
+                window_tab(i + 1);
+
+        // 5. View.
         card(tr(T::MoreView));
         static constexpr struct {
             const char* name;
@@ -16914,6 +16974,12 @@ void App::more_menu() {
             show_labels_ = !show_labels_;
         if (item("show_legend", tr(T::ShowLegendMenu), "L", true, show_legend_))
             show_legend_ = !show_legend_;
+        if (item("collapse_sidebar", tr(T::CollapseSidebarMenu), "Shift+Tab", true, panel_folded_)) {
+            panel_folded_ = !panel_folded_;
+            frame_pending_ = true;
+        }
+        if (item("fullscreen", tr(T::FullscreenMenu), "F11", true, glfwGetWindowMonitor(window_) != nullptr))
+            toggle_fullscreen();
         ImGui::Separator();
         if (item("export_view", tr(T::ExportView))) {
             purpose_ = Purpose::ExportView;
@@ -21039,6 +21105,19 @@ void App::layout() {
     if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput &&
         ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
         delete_all();
+    // Window's tabs (Ctrl+1 to Ctrl+6), Fullscreen (F11), Collapse Sidebar
+    // (Shift+Tab, not while a field takes Tab).
+    if (no_popup()) {
+        for (int i = 0; i < 6; ++i)
+            if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey(int(ImGuiKey_1) + i), ImGuiInputFlags_RouteGlobal))
+                window_tab(i + 1);
+        if (ImGui::Shortcut(ImGuiKey_F11, ImGuiInputFlags_RouteGlobal))
+            toggle_fullscreen();
+        if (!ImGui::GetIO().WantTextInput && ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_Tab, ImGuiInputFlags_RouteGlobal)) {
+            panel_folded_ = !panel_folded_;
+            frame_pending_ = true;
+        }
+    }
     // Copy, Paste and Reload on the plate, not while a text field has the
     // keys (it copies and pastes its own text).
     if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput && no_popup()) {
@@ -22427,6 +22506,8 @@ void App::script_input() {
     const auto key_named = [](std::string_view name) {
         if (name.size() == 1 && name[0] >= 'a' && name[0] <= 'z') // any letter
             return ImGuiKey(int(ImGuiKey_A) + (name[0] - 'a'));
+        if (name.size() == 1 && name[0] >= '0' && name[0] <= '9') // any digit
+            return ImGuiKey(int(ImGuiKey_0) + (name[0] - '0'));
         if (name.size() >= 2 && name[0] == 'f' && name.substr(1).find_first_not_of("0123456789") == std::string_view::npos) {
             const int n = std::atoi(std::string(name.substr(1)).c_str());
             if (n >= 1 && n <= 12)
