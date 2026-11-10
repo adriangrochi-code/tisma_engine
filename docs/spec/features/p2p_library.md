@@ -109,6 +109,9 @@ desventajas».
    - el **teléfono**, siempre;
    - la **computadora**, por defecto; en Preferencias puede elegir «Directo (más rápido; los otros ven mi IP)», con el
      aviso de la regla 8.
+8 ter bis. **Direcciones de «Directo»:** una app que comparte directo anuncia solo la dirección pública con que la ve
+   el servidor central (la que observa con su red de pares); el servidor rechaza otra, para que nadie mande el tráfico de
+   un modelo a la IP de un tercero.
 8 quater. **Gasto acotado:** cada intermediario tiene un tope de ancho de banda por hora y por cuenta, configurable en
    el panel; al llegar, las apps que eligieron directo siguen y las demás esperan («Biblioteca ocupada, se retoma
    sola»). Los sembradores (regla 3) comparten directo desde la nube, sin intermediario.
