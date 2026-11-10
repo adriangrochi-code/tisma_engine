@@ -144,6 +144,10 @@ jobs:
             cp sc/*/bin/solidcraft-cli sc/*/share/doc/solidcraft/LICENSE-MIT sc/*/share/doc/solidcraft/LICENSE-APACHE \
                sc/*/share/doc/solidcraft/NOTICE sc/*/share/doc/solidcraft/THIRD-PARTY-LICENSES.txt "$package/solidcraft/"
           fi
+          # macOS: the programs in Tisma.app (app_updates.md, rule 13: the .zip with the app).
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            packaging/macos/make_app.sh "$package" "$(cat VERSION)"
+          fi
           cmake -E tar cf "$package.zip" --format=zip "$package"
           # macOS: the same folder in an unsigned disk image (PLAN.md, «macOS antes de la beta»).
           if [ "$RUNNER_OS" = "macOS" ]; then

@@ -12280,3 +12280,7 @@ QA; bundle id `net.tismaservidores.tisma`).
   actualizaciones, con el `.zip` y `min_system` 13.0 (la release compila con `CMAKE_OSX_DEPLOYMENT_TARGET=13.0`); el
   `.dmg` queda fuera de la lista. Falta: el `.zip` con `Tisma.app` (hoy la carpeta suelta) y el actualizador del
   programa en macOS.
+- `Tisma.app` (packaging/macos/make_app.sh, Info.plist.in): los programas en Contents/MacOS, el ícono `.icns` hecho
+  con sips e iconutil desde el PNG de 512, el permiso de cámara (NSCameraUsageDescription) para lo que viene, los
+  tipos 3mf/stl/obj, macOS 13.0 como mínimo. La release la mete en el `.zip` y el `.dmg`; la CI de macOS la arma en
+  cada envío y comprueba el plist, el ícono y que el motor arranque. Sin firmar.

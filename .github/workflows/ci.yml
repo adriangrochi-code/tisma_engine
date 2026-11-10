@@ -106,3 +106,10 @@ jobs:
         run: cmake --build build
       - name: Test
         run: ctest --test-dir build --output-on-failure
+      - name: Tisma.app as the release makes it
+        run: |
+          mkdir -p pkg && cp build/tisma-engine build/apps/tisma/tisma LICENSE pkg/
+          packaging/macos/make_app.sh pkg 0.0.0
+          plutil -lint pkg/Tisma.app/Contents/Info.plist
+          test -x pkg/Tisma.app/Contents/MacOS/tisma && test -s pkg/Tisma.app/Contents/Resources/tisma.icns
+          pkg/Tisma.app/Contents/MacOS/tisma-engine --version
