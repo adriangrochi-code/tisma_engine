@@ -85,8 +85,7 @@ jobs:
   macos:
     name: macOS (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
-    # Bringing macOS up (PLAN.md): its result is shown but does not fail the run yet.
-    continue-on-error: true
+    # macOS before the beta (PLAN.md): green on both since 2026-11-10, so it counts.
     strategy:
       fail-fast: false
       matrix:
