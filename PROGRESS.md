@@ -12667,3 +12667,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   Microsoft Store (MSIX) con el plan como suscripción en la app (Windows.Services.Store), recibo verificado por el
   servidor. Linux: Flathub y Snap Store, el plan desde la cuenta. Hoja de ruta después de la beta: empaquetado MSIX y
   compra en la tienda, manifiesto Flatpak, snapcraft.yaml; licencias compatibles con las tiendas.
+- Cola, después de la búsqueda profunda (pedido del dueño 22:30, spec/next a2e51e4, interface.md «Navegación de la
+  vista 3D (estilo de programa de CAD)», UI17/UI18): navegación CAD por defecto (clic selecciona, arrastre en vacío
+  selecciona por caja, botón central desplaza, rueda acerca al cursor, doble clic central encuadra, arrastre derecho
+  orbita alrededor del punto bajo el cursor, Mayús+central orbita, clic derecho sin mover abre el menú), preferencia
+  «Navegación» CAD/Clásica, cubo de vista arriba a la derecha, barra de vista abajo al centro, fondo degradado gris
+  claro, rejilla de 10 mm marcada y punto del centro de órbita; en Impresión 3D, vista previa e Ingeniería; diseño
+  propio, con guiones `--ui-script`.
