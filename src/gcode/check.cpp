@@ -474,8 +474,15 @@ private:
             ++out_.stats.extrusions;
             out_.stats.extruded_path += length;
             out_.stats.filament += de;
-            if (retracted_ > 1e-9)
+            // A negative restart extra as long as the retraction: nothing
+            // comes back, and the filament is short by design.
+            if (retracted_ > 1e-9 && !(restart_extra() < 0.0 && retracted_ + restart_extra() <= slack()))
                 problem("extrudes while the filament is retracted");
+            else if (retracted_ > 1e-9) {
+                tool_back_ = false;
+                retracted_ = 0.0;
+                pieces_ = 0;
+            }
             if (tool_ < cold_.size() && cold_[tool_]) {
                 if (tool_ < macro_heats_.size() && macro_heats_[tool_]) {
                     if (!cold_noted_)

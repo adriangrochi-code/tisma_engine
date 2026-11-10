@@ -174,3 +174,32 @@ TEST_CASE("fuzzy skin: painted, only where the paint is, with the mode off (rule
                 top = std::max(top, std::fabs(std::hypot(q.p.x, q.p.y) - 9.8));
     CHECK(top < 0.01);
 }
+
+TEST_CASE("fuzzy skin: a wall over nothing stays smooth, as a bridge (orca_2_5.md, rule 18, OR18)", "[fuzzy]") {
+    // A mushroom: a stem of radius 5 up to z 5, a cap of radius 10 from 5 to 7.
+    TriangleMesh m = tube(5.0, 0.0, 5.0, 256);
+    const TriangleMesh cap = tube(10.0, 0.0, 2.0, 256);
+    for (std::size_t t = 0; t < cap.triangle_count(); ++t) {
+        Vec3f c[3];
+        for (int k = 0; k < 3; ++k)
+            c[k] = cap.corner(t, k), c[k].z += 5.0f;
+        m.add_triangle(c[0], c[1], c[2]);
+    }
+    Settings s;
+    s.gpu = GpuMode::Off;
+    s.fuzzy_mode = FuzzyMode::External;
+    const SlicedModel rough = slice_model(weld_exact(m), s);
+    std::size_t first_cap = 0;
+    while (first_cap < rough.layers.size() && rough.layers[first_cap].bottom < 5.0 - 1e-6)
+        ++first_cap;
+    REQUIRE(first_cap + 2 < rough.layers.size());
+    // The stem's outer wall is rough; the cap's first layer hangs over air: smooth.
+    const auto [stem_lo, stem_hi] = radii(rough, first_cap - 3, 0);
+    CHECK(stem_hi - stem_lo > 0.2);
+    const auto [lo, hi] = radii(rough, first_cap, 0);
+    CHECK(lo > 9.0);
+    CHECK(hi - lo < 0.01);
+    // The cap's next layer stands on the first: rough again.
+    const auto [lo2, hi2] = radii(rough, first_cap + 1, 0);
+    CHECK(hi2 - lo2 > 0.2);
+}

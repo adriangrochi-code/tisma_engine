@@ -1,0 +1,2 @@
+wait 2
+expect-toast Proyecto de PrusaSlicer: 1 pieza.

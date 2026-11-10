@@ -134,6 +134,20 @@
      "they are thrown away, they can go fairly fast; too fast, they wobble or fall over before the print is done. If "
      "the interface (the top part touching the model) has no speed of its own, it uses this one too. It comes from "
      "your printer's profile.\n\nExample: 40 to 60 mm/s on a typical printer."},
+    {"speed.small_support",
+     "Las extrusiones chicas del soporte (las columnas finitas, las puntas de las ramas) salen mejor más despacio. "
+     "Este ajuste es su velocidad, en mm/s o como porcentaje de la del soporte o la interfaz que les toca.\n\nSolo "
+     "vale con un «Umbral del soporte chico» mayor que 0.\n\nEjemplo: «50%» con un umbral de 2 mm.",
+     "Small support extrusions (thin columns, branch tips) come out better slower. This setting is their speed, in "
+     "mm/s or as a percentage of the support or interface speed they would have.\n\nIt only applies with a «Small "
+     "support threshold» above 0.\n\nExample: 50% with a threshold of 2 mm."},
+    {"speed.small_support_threshold",
+     "Qué tan chica tiene que ser una extrusión de soporte para ir a la velocidad del soporte chico. Es un radio, en "
+     "mm: va más despacio la que no es más larga que el contorno de un círculo de ese radio (2π por el umbral).\n\n"
+     "0 lo apaga.\n\nEjemplo: 2 mm (extrusiones de hasta 12,6 mm).",
+     "How small a support extrusion must be to go at the small support speed. It is a radius, in mm: one no longer "
+     "than the outline of a circle of that radius (2π times the threshold) goes slower.\n\n0 turns it off.\n\n"
+     "Example: 2 mm (extrusions up to 12.6 mm)."},
     {"speed.support_interface",
      "La interfaz es la parte de arriba del soporte, más densa, sobre la que se apoya la pieza. Este ajuste es su "
      "velocidad, en mm/s o como porcentaje de la del soporte. Solo importa si hay soportes.\n\nMás despacio, la "

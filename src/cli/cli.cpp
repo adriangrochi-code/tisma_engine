@@ -31,6 +31,8 @@
 #include "geom/polygons.hpp"
 #include "gpu/compute.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "mesh/inspect.hpp"
+#include "gcode/preview.hpp"
 #include "perimeters/sites.hpp"
 #include "perimeters/transitions.hpp"
 #include "slice/layers.hpp"
@@ -43,6 +45,12 @@
 #include <oneapi/tbb/global_control.h>
 
 #include <algorithm>
+#include <nlohmann/json.hpp>
+#include <array>
+#include <cmath>
+#include <cstring>
+#include <sstream>
+#include <map>
 #include <charconv>
 #include <cctype>
 #include <cstdlib>
@@ -99,6 +107,10 @@ constexpr std::string_view kUsage =
     "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
     "                     [--summary <summary.json>]   (the nodes' summary: print time, filament, layers)\n"
     "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
+    "                     [--align-to-y-axis]   (the copies in one column along Y)\n"
+    "                     [--strict]   (a warning is an error: no G-code, exit code 4)\n"
+    "                     [--ground-largest-face | --ground-face-normal X,Y,Z | --ground-face-point X,Y,Z]\n"
+    "                     [--inspect-mesh <out.json|->] [--export-statistics <out.json|->] [--export-settings <out.json|->]\n"
     "  tisma-engine slice <project> -o <out.gcode> --summary <summary.json> [--sandbox] [--no-gpu] [--yes]\n"
     "                     (a project saved by the interface, as the cloud's nodes run it: docs/spec/features/cloud.md)\n"
     "  on a project's slice, analyze, aero and orient: [--config-over <partial.json>] [--set group.key=value ...]\n"
@@ -145,6 +157,16 @@ struct SliceArgs {
     bool yes = false;          // slice only: run the settings' post-processing scripts without asking
     std::size_t copies = 1;    // slice only: copies of the model on the bed
     bool project = false;      // analyze only: the model is a project, with its settings and conditions
+    // orca_2_5.md, O6 (slice only): warnings as errors (rule 24); the face put
+    // on the bed (25); the mesh's summary (26); statistics and the resolved
+    // settings, "-" for the standard output (27); copies along Y (28).
+    bool strict = false;
+    enum class Ground { None, Largest, Normal, Point } ground = Ground::None;
+    std::array<double, 3> ground_value{0.0, 0.0, 0.0};
+    std::string inspect_mesh;
+    std::string statistics;
+    std::string export_settings;
+    bool align_y = false;
 };
 
 // Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
@@ -188,6 +210,39 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
             out.estimate = true;
         } else if (a == "--yes" && !analyze) {
             out.yes = true;
+        } else if (a == "--strict" && !analyze) {
+            out.strict = true;
+        } else if (a == "--align-to-y-axis" && !analyze) {
+            out.align_y = true;
+        } else if (a == "--ground-largest-face" && !analyze) {
+            out.ground = SliceArgs::Ground::Largest;
+        } else if ((a == "--ground-face-normal" || a == "--ground-face-point") && !analyze) {
+            std::string v;
+            if (!value(v))
+                return std::nullopt;
+            std::array<double, 3> xyz{};
+            char* end = v.data();
+            bool ok = true;
+            for (std::size_t k = 0; k < 3 && ok; ++k) {
+                const char* from = end;
+                xyz[k] = std::strtod(from, &end);
+                ok = end != from && std::isfinite(xyz[k]) && (k == 2 ? *end == '\0' : *end++ == ',');
+            }
+            if (!ok || (a == "--ground-face-normal" && xyz[0] == 0.0 && xyz[1] == 0.0 && xyz[2] == 0.0)) {
+                err << "error: " << a << " needs X,Y,Z" << (a == "--ground-face-normal" ? " (not all 0)" : "") << "\n";
+                return std::nullopt;
+            }
+            out.ground = a == "--ground-face-normal" ? SliceArgs::Ground::Normal : SliceArgs::Ground::Point;
+            out.ground_value = xyz;
+        } else if (a == "--inspect-mesh" && !analyze) {
+            if (!value(out.inspect_mesh))
+                return std::nullopt;
+        } else if (a == "--export-statistics" && !analyze) {
+            if (!value(out.statistics))
+                return std::nullopt;
+        } else if (a == "--export-settings" && !analyze) {
+            if (!value(out.export_settings))
+                return std::nullopt;
         } else if (a == "--copies" && !analyze) {
             std::string n;
             if (!value(n))
@@ -234,10 +289,12 @@ bool outputs_are_safe(const SliceArgs& a, std::ostream& err) {
     const std::pair<const char*, const std::string*> inputs[] = {
         {"the model", &a.model}, {"--config", &a.config}, {"--case", &a.analysis_case}};
     const std::pair<const char*, const std::string*> outputs[] = {
-        {"-o", &a.output}, {"--warnings", &a.warnings}, {"--vtk", &a.vtk}, {"--mesh", &a.mesh}, {"--summary", &a.summary}};
+        {"-o", &a.output},           {"--warnings", &a.warnings},          {"--vtk", &a.vtk},
+        {"--mesh", &a.mesh},         {"--summary", &a.summary},            {"--inspect-mesh", &a.inspect_mesh},
+        {"--export-statistics", &a.statistics}, {"--export-settings", &a.export_settings}};
     for (std::size_t i = 0; i < std::size(outputs); ++i) {
         const auto& [name, path] = outputs[i];
-        if (path->empty())
+        if (path->empty() || *path == "-") // "-": the standard output
             continue;
         // -o may be a folder: the file gets its name there (gcode_templates.md, rule 15).
         const bool folder = i == 0 && std::filesystem::is_directory(*path);
@@ -251,7 +308,7 @@ bool outputs_are_safe(const SliceArgs& a, std::ostream& err) {
                 return false;
             }
         for (std::size_t j = 0; j < i; ++j)
-            if (!outputs[j].second->empty() && same_file(*path, *outputs[j].second)) {
+            if (!outputs[j].second->empty() && *outputs[j].second != "-" && same_file(*path, *outputs[j].second)) {
                 err << "error: " << name << " and " << outputs[j].first << " are the same file\n";
                 return false;
             }
@@ -486,7 +543,8 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
 // cut or a split made, side by side. False, with the problem in err, when
 // pieces and copies are both asked for.
 bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copies, const std::string& name,
-                 std::vector<MeshObject>& objects, std::ostream& err, TriangleMesh* negative = nullptr) {
+                 std::vector<MeshObject>& objects, std::ostream& err, TriangleMesh* negative = nullptr,
+                 bool along_y = false) {
     if (negative && negative->empty())
         negative = nullptr;
     // The negative volumes (model_tools.md, rule 2) follow the part; not yet
@@ -516,11 +574,11 @@ bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copie
     }
     mesh = parts.empty() ? TriangleMesh{} : std::move(parts.front());
     if (copies > 1) {
-        if (const std::size_t fit = copies_that_fit(mesh, copies, settings); fit < copies) {
+        if (const std::size_t fit = copies_that_fit(mesh, copies, settings, along_y); fit < copies) {
             err << "error: " << copies << " copies do not fit on the bed (machine.bed): " << fit << " fit\n";
             return false;
         }
-        mesh = place_copies(mesh, copies, settings, name, &objects);
+        mesh = place_copies(mesh, copies, settings, name, &objects, along_y);
     } else {
         place_on_bed(mesh, settings, negative);
         objects.push_back({name, 0, mesh.triangle_count(), 0, 0});
@@ -579,6 +637,62 @@ int slice_resin_file(const SliceArgs& args, Settings settings, ModelFile& model,
     return kExitOk;
 }
 
+// A text to a file, or to the standard output for "-".
+bool write_text_or_stdout(const std::string& path, const std::string& text, std::ostream& out) {
+    if (path == "-") {
+        out << text;
+        return true;
+    }
+    if (!write_file(path, [&](std::ostream& f) { f << text; }))
+        return false;
+    out << "wrote " << path << "\n";
+    return true;
+}
+
+// --export-statistics (orca_2_5.md, rule 27): for each plate (one here), the
+// time, the filament by extruder (mm, cm3, g, cost) and the layers, from the
+// G-code's closing summary.
+std::string gcode_statistics_json(const std::filesystem::path& gcode, std::size_t layers) {
+    std::ifstream in(gcode, std::ios::binary);
+    std::string line, time;
+    std::map<std::string, std::string> lists;
+    const std::pair<const char*, const char*> keys[] = {{"; filament used [mm] = ", "mm"},
+                                                        {"; filament used [cm3] = ", "cm3"},
+                                                        {"; filament used [g] = ", "g"},
+                                                        {"; filament cost = ", "cost"}};
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.starts_with("; estimated printing time = "))
+            time = line.substr(std::strlen("; estimated printing time = "));
+        for (const auto& [key, name] : keys)
+            if (line.starts_with(key))
+                lists[name] = line.substr(std::strlen(key));
+    }
+    nlohmann::json filament = nlohmann::json::array();
+    std::map<std::string, std::vector<double>> values;
+    std::size_t extruders = 0;
+    for (const auto& [name, text] : lists) {
+        std::stringstream s(text);
+        for (std::string item; std::getline(s, item, ',');)
+            values[name].push_back(std::atof(item.c_str()));
+        extruders = std::max(extruders, values[name].size());
+    }
+    for (std::size_t e = 0; e < extruders; ++e) {
+        nlohmann::json one{{"extruder", e + 1}};
+        for (const char* name : {"mm", "cm3", "g", "cost"})
+            if (values.count(name) && e < values[name].size())
+                one[name] = values[name][e];
+        filament.push_back(one);
+    }
+    const nlohmann::json plate{{"plate", 1},
+                               {"print_time", time},
+                               {"print_seconds", parse_duration(time)},
+                               {"layers", layers},
+                               {"filament", filament}};
+    return nlohmann::json{{"plates", nlohmann::json::array({plate})}}.dump(2);
+}
+
 int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
     const std::optional<SliceArgs> parsed = parse_slice_args(args, err);
     if (!parsed) {
@@ -624,11 +738,43 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
         return rc;
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+    // A face on the bed (orca_2_5.md, rule 25), before the transforms and the placement.
+    if (parsed->ground != SliceArgs::Ground::None) {
+        if (!stl.negative.empty()) {
+            err << "error: --ground-* does not go with negative volumes yet\n";
+            return kExitUsage;
+        }
+        const std::optional<std::array<double, 3>> normal =
+            parsed->ground == SliceArgs::Ground::Largest ? largest_flat_face(stl.mesh)
+            : parsed->ground == SliceArgs::Ground::Point ? face_through(stl.mesh, parsed->ground_value)
+                                                         : std::optional<std::array<double, 3>>(parsed->ground_value);
+        if (!normal) {
+            err << "error: " << (parsed->ground == SliceArgs::Ground::Point ? "no face of the model passes through that point"
+                                                                           : "the model has no face")
+                << "\n";
+            return kExitModel;
+        }
+        stl.mesh = laid_on_face(stl.mesh, *normal);
+    }
+    // The mesh's summary (rule 26).
+    if (!parsed->inspect_mesh.empty()) {
+        const std::string json = inspection_json(inspect_mesh(stl.mesh));
+        if (!write_text_or_stdout(parsed->inspect_mesh, json + "\n", out)) {
+            err << "error: cannot write '" << parsed->inspect_mesh << "'\n";
+            return kExitInput;
+        }
+    }
+    // The resolved settings (rule 27).
+    if (!parsed->export_settings.empty() &&
+        !write_text_or_stdout(parsed->export_settings, settings_json(settings) + "\n", out)) {
+        err << "error: cannot write '" << parsed->export_settings << "'\n";
+        return kExitInput;
+    }
     // The copies, each an object of the plate (placement.md, rule 2;
     // sequential.md, rule 2), or the model alone.
     std::vector<MeshObject> objects;
     const std::string file_name = std::filesystem::path(parsed->model).filename().string();
-    if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &stl.negative))
+    if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &stl.negative, parsed->align_y))
         return kExitUsage;
 
     const auto start = std::chrono::steady_clock::now();
@@ -791,6 +937,26 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
             return kExitInput;
         }
         out << "wrote " << parsed->warnings << "\n";
+    }
+    // --strict (orca_2_5.md, rule 24): a warning is an error; no G-code is
+    // kept, the warnings file lists them all. Information is not a warning.
+    if (parsed->strict) {
+        const auto first = std::find_if(warnings.begin(), warnings.end(),
+                                        [](const Warning& w) { return w.severity != "information" && w.severity != "info"; });
+        if (first != warnings.end()) {
+            std::error_code ignored;
+            std::filesystem::remove(target, ignored);
+            err << "error: --strict: " << first->message << " (" << first->kind << ")\n";
+            return kExitModel;
+        }
+    }
+    // The statistics of the plate (rule 27).
+    if (!parsed->statistics.empty()) {
+        const std::string json = gcode_statistics_json(target, sliced.layers.size());
+        if (!write_text_or_stdout(parsed->statistics, json + "\n", out)) {
+            err << "error: cannot write '" << parsed->statistics << "'\n";
+            return kExitInput;
+        }
     }
     if (!parsed->summary.empty()) {
         const std::string summary = slice_summary_json(target, exported.check.stats.filament, sliced.layers.size(),

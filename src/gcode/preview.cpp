@@ -175,6 +175,9 @@ private:
             // The normal mode's: a silent mode's estimate follows it (gcode_extras.md, rule 7).
             if (const std::size_t eq = c.find('='); eq != std::string_view::npos)
                 out_.estimated_seconds = parse_duration(c.substr(eq + 1));
+        } else if (c.starts_with("estimated preparation time")) {
+            if (const std::size_t eq = c.find('='); eq != std::string_view::npos)
+                out_.preparation_seconds = parse_duration(c.substr(eq + 1));
         } else if (c.starts_with("WIDTH:")) {
             if (const std::optional<double> v = number(c.substr(6)); v && *v > 0.0) {
                 width_ = *v;

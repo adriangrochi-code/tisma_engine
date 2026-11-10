@@ -41,6 +41,9 @@ add_executable(tisma_tests
   test_corners.cpp
   test_gcode_arcs.cpp
   test_firmware.cpp
+  test_inspect.cpp
+  test_polyholes.cpp
+  test_unsupported_walls.cpp
   test_template.cpp
   test_binary.cpp
   test_retraction.cpp
@@ -231,6 +234,34 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --catalog filament --catalog-search acme
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_filaments.png)
     set_tests_properties(ui_pack_filaments PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # Another program's 3MF project: which program, its parts, and that its
+    # settings stay out for now (project_import.md, rules 1, 2 and 9).
+    add_test(NAME ui_project_import_prusaslicer
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/formats/pi2_prusaslicer.3mf --lang es --light --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/project_import.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_import_prusaslicer.png)
+    set_tests_properties(ui_project_import_prusaslicer PROPERTIES TIMEOUT 300)
+    # PI1: a standard 3MF with a box and no program's data opens the box, with
+    # the unknown program's notice (project_import.md, rule 2).
+    add_test(NAME ui_project_import_standard
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/formats/box.3mf --lang es --light --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/project_import_standard.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_import_standard.png)
+    set_tests_properties(ui_project_import_standard PROPERTIES TIMEOUT 300)
+    # A PrusaSlicer project's settings sorted by the pack's translation table
+    # (project_import.md, rules 6, 9 and 11; the spec team's pi4 sample).
+    add_test(NAME ui_project_import_settings
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/formats/pi4_prusaslicer_parts.3mf --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/project_import_settings.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_import_settings.png)
+    set_tests_properties(ui_project_import_settings PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home"
+                         RESOURCE_LOCK ui_catalog_home
                          ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
     # The pack printer's «Datos publicados», and a maker's value used (rules 23 and 24).

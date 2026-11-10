@@ -9,11 +9,16 @@
 
 namespace tisma {
 
-double move_time(double length, double v0, double v1, double feed, double a) {
+double move_time(double length, double v0, double v1, double feed, double a, double cruise_ratio) {
     if (length <= 0.0)
         return 0.0;
     if (!(a > 0.0))
         return length / feed;
+    // A part of the move kept for cruising: the top speed reachable in the
+    // rest, sped up and slowed down evenly.
+    if (cruise_ratio > 0.0)
+        feed = std::max(std::min(feed, std::sqrt(a * (1.0 - cruise_ratio) * length + 0.5 * (v0 * v0 + v1 * v1))),
+                        std::max(v0, v1));
     const double accelerate = (feed * feed - v0 * v0) / (2.0 * a);
     const double decelerate = (feed * feed - v1 * v1) / (2.0 * a);
     if (accelerate + decelerate <= length) // reaches the feed: trapezoid
@@ -30,7 +35,7 @@ void PrintTime::add(double dx, double dy, double dz, double de, double feed, boo
     // No slower than the machine moves at all, and no axis faster than its
     // limit: the feed shrinks with the worst one, and so does the acceleration.
     const double d[4] = {dx, dy, dz, de};
-    double v = std::max(feed, extruding ? k_.min_extrude_feed : k_.min_travel_feed);
+    double v = std::max(feed * speed_factor_, extruding ? k_.min_extrude_feed : k_.min_travel_feed);
     double a = extruding ? k_.acceleration
                : xyz > 0.0 || !(k_.retract_acceleration > 0.0) ? k_.travel_acceleration
                                                                : k_.retract_acceleration;
@@ -55,11 +60,14 @@ std::size_t PrintTime::mark() {
 
 double PrintTime::flush() {
     const std::size_t n = moves_.size();
+    const double waits = pending_dwell_;
+    pending_dwell_ = 0.0;
     if (n == 0) {
         for (const auto& [mark, before] : pending_marks_)
             mark_times_[mark] = total_;
         pending_marks_.clear();
-        return 0.0;
+        total_ += waits;
+        return waits;
     }
     const bool jerks = k_.jerk[0] > 0.0 || k_.jerk[1] > 0.0 || k_.jerk[2] > 0.0 || k_.jerk[3] > 0.0;
     // junction[i]: the speed between move i - 1 and move i; at rest at both ends.
@@ -69,13 +77,20 @@ double PrintTime::flush() {
         const Move& b = moves_[i];
         const double lower = std::min(a.feed, b.feed);
         const double cosine = a.ux * b.ux + a.uy * b.uy + a.uz * b.uz; // 0 when either is E alone
-        if (k_.junction_deviation > 0.0) {
-            // The corner rounded by a circle that keeps junction_deviation from
+        const double accel = std::min(a.acceleration, b.acceleration);
+        // Klipper: the deviation that gives corner_speed at 90 degrees, where
+        // sin(45) / (1 - sin(45)) = 1 / (sqrt(2) - 1).
+        const double deviation = k_.klipper ? (accel > 0.0 ? k_.corner_speed * k_.corner_speed * (std::sqrt(2.0) - 1.0) / accel : 0.0)
+                                            : k_.junction_deviation;
+        if (deviation > 0.0) {
+            // The corner rounded by a circle that keeps the deviation from
             // it: sin(a/2) of the angle a between the moves, from its cosine.
             const double sine = std::sqrt(std::max(0.0, 0.5 * (1.0 + cosine)));
             const double r = sine >= 1.0 - 1e-9 ? std::numeric_limits<double>::infinity()
-                                                : k_.junction_deviation * sine / (1.0 - sine);
-            junction[i] = std::min(lower, std::sqrt(std::min(a.acceleration, b.acceleration) * r));
+                                                : deviation * sine / (1.0 - sine);
+            junction[i] = std::min(lower, std::sqrt(accel * r));
+        } else if (k_.klipper) {
+            junction[i] = 0.0; // a square corner velocity of 0: stops at every corner
         } else if (jerks) {
             // Each axis changes its speed at once by its jerk at most.
             const double da[4] = {a.ux - b.ux, a.uy - b.uy, a.uz - b.uz, a.ue - b.ue};
@@ -101,12 +116,14 @@ double PrintTime::flush() {
     for (std::size_t i = 0; i < n; ++i) {
         for (; next_mark < pending_marks_.size() && pending_marks_[next_mark].second <= i; ++next_mark)
             mark_times_[pending_marks_[next_mark].first] = total_ + t;
-        t += move_time(moves_[i].length, junction[i], junction[i + 1], moves_[i].feed, moves_[i].acceleration);
+        t += move_time(moves_[i].length, junction[i], junction[i + 1], moves_[i].feed, moves_[i].acceleration,
+                       k_.klipper ? k_.min_cruise_ratio : 0.0);
     }
     for (; next_mark < pending_marks_.size(); ++next_mark)
         mark_times_[pending_marks_[next_mark].first] = total_ + t;
     pending_marks_.clear();
     moves_.clear();
+    t += waits;
     total_ += t;
     return t;
 }

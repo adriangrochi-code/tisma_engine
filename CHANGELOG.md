@@ -12,10 +12,25 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- La piel difusa no se aplica donde la pared externa cuelga sobre nada (sale lisa, como un puente).
+
+- `machine.min_layer_height` y `max_layer_height` acotan solo la altura variable y el soporte, no la altura de capa ni
+  la primera capa. `restart_extra` acepta de −50 a 1000 mm; las velocidades de la MMU, 0 (paso que no se usa); y
+  `limits_usage = emit` con Klipper escribe solo lo que Klipper toma, en vez de dar error.
+
 - El relleno del soporte en árbol sale de campos de distancias calculados para muchas capas a la vez, en la GPU si
   hay una. Sin GPU tarda lo mismo que antes; el G-code es el mismo con GPU o sin ella.
 
 ### Corregido
+
+- La preparación del inicio (esperas y calentamiento) ya no se suma al tiempo de la primera capa.
+- Un `restart_extra` negativo más largo que lo retraído ya no retrae de nuevo al volver.
+- La primera capa se imprime a `first_layer_temperature` y `first_layer_bed_temperature` (cada extrusor con la suya);
+  al empezar la segunda capa pasa a `temperature` y `bed_temperature` (M104/M140 sin esperar), solo si son distintas.
+
+- La estimación del tiempo cuenta las esperas `G4` y los cambios de aceleración (`M204`, `SET_VELOCITY_LIMIT`) que
+  trae el G-code de la máquina, y los límites que cambia (`M201`, `M203`, `M205`, `M566`, `M220`).
+- La estimación del tiempo en Klipper usa sus esquinas (`square_corner_velocity`) y su `minimum_cruise_ratio`.
 
 - El G-code de inicio original de una impresora Bambu Lab pegado en el de la máquina hacía fallar el laminado con
   «F0»: las velocidades que ese G-code calcula (`outer_wall_volumetric_speed`, `flush_volumetric_speeds` y otras)
@@ -31,6 +46,26 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Agregado
 
+- Paredes sin apoyo al final (`walls.unsupported_last`): una vuelta de pared que cuelga sobre nada va después de
+  las paredes que la sostienen, o después del relleno de su capa si no toca ninguna.
+- Agujeros como polígonos (`walls.polyholes`, `polyhole_margin`, `polyhole_twist`, `polyhole_max_edges`): un
+  agujero redondo sale con pocos lados planos que tocan su círculo, para que mida lo pedido.
+- `cooling.first_layer_fan`: un ventilador exacto para la primera capa, desde el que sube el resto.
+- `speed.small_support`: las extrusiones chicas del soporte más despacio (hasta 2π × `speed.small_support_threshold`).
+- Orejas de borde (`adhesion.brim_ears`): solo discos de borde en las esquinas filosas.
+
+- Línea de comandos: `--strict`, apoyar una cara en la cama (`--ground-largest-face` y otras), `--inspect-mesh`,
+  `--export-statistics`, `--export-settings`, `--align-to-y-axis` e `--inspect-paint` (en un proyecto).
+
+- `regex_replace` en las plantillas, las partes del tiempo (`print_time_hour` y otras) en el nombre del archivo y
+  `gcode.skip_config_block` para sacar el bloque de ajustes del final del G-code.
+
+- Tiempo de preparación en la estimación: el calentamiento (con la velocidad de calentamiento de la boquilla y de la
+  cama, claves nuevas en la máquina), ir al origen, nivelar y las esperas, sumados al total y dichos
+  aparte en el G-code y en la interfaz.
+
+- Al abrir un 3MF de otro programa (PrusaSlicer, OrcaSlicer, Bambu Studio, Creality Print, Elegoo Slicer, Anycubic,
+  Cura), un aviso dice de qué programa es y cuántas piezas trae; sus ajustes todavía no se traen.
 - Mi biblioteca (`tisma-engine library`): guardar piezas con su proyecto, recetas por impresora y análisis,
   revisar si una receta o un análisis siguen valiendo, «La imprimí», exportar e importar `.tismalib`. Sin G-code.
 - G-code original de cada impresora del paquete (`machine.macros`, bloque `gcode`): dialectos PrusaSlicer, OrcaSlicer,

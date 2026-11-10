@@ -111,14 +111,17 @@ TEST_CASE("hostile input: settings out of reach of the printer are refused or wa
     s = test_printer();
     s.first_layer_height = 1.0;
     CHECK_THROWS_AS(check_settings(s), SettingsError);
+    // The machine's layer limits bound the variable height only: the layer
+    // height and the first layer only by the nozzle (spec team, 2026-11-09).
     s = test_printer();
-    s.max_layer_height = 0.3;
-    s.layer_height = 0.32;
-    CHECK_THROWS_AS(check_settings(s), SettingsError);
+    s.max_layer_height = 0.25;
+    s.first_layer_height = 0.3;
+    s.layer_height = 0.28;
+    CHECK_NOTHROW(check_settings(s));
     s = test_printer();
     s.min_layer_height = 0.1;
     s.layer_height = 0.08;
-    CHECK_THROWS_AS(check_settings(s), SettingsError);
+    CHECK_NOTHROW(check_settings(s));
     // Limits that contradict each other are named as such, before the layers.
     s = test_printer();
     s.min_layer_height = 0.3;

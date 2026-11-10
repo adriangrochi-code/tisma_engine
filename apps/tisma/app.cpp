@@ -55,6 +55,7 @@
 #include "gcode/print_time.hpp"
 #include "gcode/writer.hpp"
 #include "io/model.hpp"
+#include "io/project_import.hpp"
 #include "io/stl.hpp"
 #include "mesh/shapes.hpp"
 #include "mesh/orient.hpp"
@@ -1899,7 +1900,8 @@ const std::map<T, const char*>& row_keys() {
         {T::SpeedMaxFlow, "speed.max_flow"},
         {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
         {T::SpeedSmallLoops, "speed.small_loops"},
-        {T::SpeedSupportInterface, "speed.support_interface"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
+        {T::SpeedSupportInterface, "speed.support_interface"}, {T::SpeedSmallSupport, "speed.small_support"},
+        {T::SmallSupportThreshold, "speed.small_support_threshold"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
         {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
         {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
         {T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed"},
@@ -1931,8 +1933,9 @@ const std::map<T, const char*>& row_keys() {
         {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::SpreadCount, "walls.spread_count"}, {T::TransitionLength, "walls.transition_length"}, {T::TransitionAngle, "walls.transition_angle"}, {T::TransitionMargin, "walls.transition_margin"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
         {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
-        {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
-        {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"}, {T::GcodeThumbnails, "gcode.thumbnails"},
+        {T::ZOffset, "machine.z_offset"}, {T::HeatRateNozzle, "machine.heat_rate_nozzle"},
+        {T::HeatRateBed, "machine.heat_rate_bed"}, {T::HomeTime, "machine.home_time"}, {T::ProbeTime, "machine.probe_time"}, {T::VolumetricE, "gcode.volumetric_e"},
+        {T::VerboseComments, "gcode.verbose_comments"}, {T::SkipConfigBlock, "gcode.skip_config_block"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"}, {T::GcodeThumbnails, "gcode.thumbnails"},
         {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
         {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
@@ -1971,11 +1974,13 @@ const std::map<T, const char*>& row_keys() {
         {T::SkirtMinFilament, "adhesion.skirt_min_filament"}, {T::AutoTemperatures, "gcode.auto_temperatures"},
         {T::FilamentStartGcode, "extrusion.start_gcode"}, {T::FilamentEndGcode, "extrusion.end_gcode"},
         {T::FilenameFormat, "output.filename_format"}, {T::PostProcessRow, "output.post_process"}, {T::DraftShieldRow, "adhesion.draft_shield"},
-        {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"},
+        {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"}, {T::BrimEars, "adhesion.brim_ears"},
+        {T::BrimEarsMaxAngle, "adhesion.brim_ears_max_angle"}, {T::BrimEarsDetection, "adhesion.brim_ears_detection_length"},
+        {T::BrimEarsOuterOnly, "adhesion.brim_ears_outer_only"},
         {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
-        {T::FullFanLayer, "cooling.full_fan_layer"}, {T::CoolingEnabled, "cooling.enabled"},
+        {T::FullFanLayer, "cooling.full_fan_layer"}, {T::FirstLayerFan, "cooling.first_layer_fan"}, {T::CoolingEnabled, "cooling.enabled"},
         {T::DynamicOverhangFan, "cooling.dynamic_overhang_fan"}, {T::OverhangFan0, "cooling.overhang_fan_0"},
         {T::OverhangFan1, "cooling.overhang_fan_1"}, {T::OverhangFan2, "cooling.overhang_fan_2"},
         {T::OverhangFan3, "cooling.overhang_fan_3"}, {T::SlowdownLogicRow, "cooling.slowdown_logic"},
@@ -1993,6 +1998,8 @@ const std::map<T, const char*>& row_keys() {
         {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
         {T::WallsOuterFirst, "walls.outer_first"},
         {T::FilamentRetractionRow, "extrusion.retraction"},
+        {T::Polyholes, "walls.polyholes"}, {T::UnsupportedLast, "walls.unsupported_last"}, {T::PolyholeMargin, "walls.polyhole_margin"},
+        {T::PolyholeTwist, "walls.polyhole_twist"}, {T::PolyholeMaxEdges, "walls.polyhole_max_edges"},
         {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::WallsStaggered, "walls.staggered"}, {T::TopOneWallRow, "walls.top_one_wall"},
         {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
         {T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs"}, {T::ExtraOnOverhangs, "walls.extra_on_overhangs"},
@@ -4208,6 +4215,35 @@ void App::load_model(const std::filesystem::path& path) {
         }
         calibration_.reset();
         use_mesh(std::move(stl.mesh), path, Tab::Prepare);
+        // Another program's project (project_import.md, rules 1, 2 and 9):
+        // which one, its parts, and that its settings stay out for now.
+        if (lower_extension(path) == ".3mf") {
+            std::ifstream in(path, std::ios::binary);
+            const std::string package((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            const ProjectSource source = project_source(package);
+            if (!source.program.empty() && source.program != "Tisma Slicer") {
+                notify(source.items > 1 ? format(tr(T::ProjectFromProgram), source.program.c_str(), source.items)
+                                        : format(tr(T::ProjectFromProgramOne), source.program.c_str()));
+                // Its settings by the pack's translation table, when it has
+                // one for this program (rules 6, 9 and 11).
+                if (pack_index_)
+                    if (const auto path = pack_index_->translation.find(translation_dialect(source));
+                        path != pack_index_->translation.end()) {
+                        std::ifstream table_in(pack_dir() / std::filesystem::path(std::u8string(path->second.begin(), path->second.end())), std::ios::binary);
+                        const std::string table((std::istreambuf_iterator<char>(table_in)), std::istreambuf_iterator<char>());
+                        try {
+                            if (const auto own = project_settings(package); !table.empty() && !own.empty()) {
+                                const SettingSort sort = sort_settings(parse_translation(table), own);
+                                notify(format(tr(T::ProjectSettingsSorted), sort.translated, sort.similar, sort.none));
+                            }
+                        } catch (const TranslationError&) {
+                            // A table this program cannot read: the notice above stands.
+                        }
+                    }
+            }
+            else if (source.program.empty() && source.application.find("Tisma") == std::string::npos)
+                notify(tr(T::ProjectFromUnknown));
+        }
     } catch (const std::exception& e) {
         fail(T::CannotOpen, e.what());
     }
@@ -8419,6 +8455,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::ExtraIfNeeded, "walls.extra_if_needed", s.extra_if_needed);
         flag(T::ExtraOnOverhangs, "walls.extra_on_overhangs", s.extra_on_overhangs);
         flag(T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs", s.avoid_curled_overhangs);
+        flag(T::UnsupportedLast, "walls.unsupported_last", s.unsupported_last);
+    } else if (id == "polyholes") {
+        // Round holes as polygons (orca_2_5.md, rule 5).
+        flag(T::Polyholes, "walls.polyholes", s.polyholes);
+        if (shown("walls.polyhole_margin"))
+            changed |= unit_row(T::PolyholeMargin, s.polyhole_margin, 0.001, 100.0, 1000.0, "%.2f mm", 0.01f);
+        flag(T::PolyholeTwist, "walls.polyhole_twist", s.polyhole_twist);
+        whole(T::PolyholeMaxEdges, "walls.polyhole_max_edges", s.polyhole_max_edges, 3, 1000);
     } else if (id == "top_bottom") {
         whole(T::TopLayers, "surfaces.top_layers", s.top_layers, 0, 1000);
         whole(T::BottomLayers, "surfaces.bottom_layers", s.bottom_layers, 0, 1000);
@@ -8544,6 +8588,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SpeedInfill, "speed.infill", s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedSupport, "speed.support", s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         share_row(T::SpeedSupportInterface, "speed.support_interface", s.support_interface_speed);
+        share_row(T::SpeedSmallSupport, "speed.small_support", s.small_support_speed);
+        mm(T::SmallSupportThreshold, "speed.small_support_threshold", s.small_support_threshold, 0.0, 100.0,
+           s.small_support_threshold > 0.0 ? "%.1f mm" : tr(T::NotSet), 0.05f);
     } else if (id == "travel") {
         mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue),
@@ -8673,6 +8720,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {BrimType::OuterAndInner, tr(T::BrimBoth)},
                             {BrimType::None, tr(T::BrimNone)}});
         mm(T::BrimGap, "adhesion.brim_gap", s.brim_gap, 0.0, 100.0, "%.2f mm", 0.01f);
+        flag(T::BrimEars, "adhesion.brim_ears", s.brim_ears);
+        mm(T::BrimEarsMaxAngle, "adhesion.brim_ears_max_angle", s.brim_ears_max_angle, 0.0, 180.0, "%.0f°", 0.5f);
+        mm(T::BrimEarsDetection, "adhesion.brim_ears_detection_length", s.brim_ears_detection_length, 0.0, 100.0, "%.2f mm",
+           0.01f);
+        flag(T::BrimEarsOuterOnly, "adhesion.brim_ears_outer_only", s.brim_ears_outer_only);
     } else if (id == "raft") {
         whole(T::RaftLayers, "adhesion.raft_layers", s.raft_layers, 0, 100);
         mm(T::RaftGap, "adhesion.raft_gap", s.raft_gap, 0.0, 100.0, "%.2f mm", 0.01f);
@@ -8906,6 +8958,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::FanBridges, "cooling.fan_bridges", s.fan_bridges, 0.0, 100.0, "%.0f %%", 0.5f);
         whole(T::FanOffLayers, "cooling.fan_off_layers", s.fan_off_layers, 0, 100);
         whole(T::FullFanLayer, "cooling.full_fan_layer", s.full_fan_layer, 0, 1000);
+        mm(T::FirstLayerFan, "cooling.first_layer_fan", s.first_layer_fan, -1.0, 100.0,
+           s.first_layer_fan >= 0.0 ? "%.0f %%" : tr(T::NotSet), 0.5f);
     } else if (id == "overhang_fan") {
         flag(T::DynamicOverhangFan, "cooling.dynamic_overhang_fan", s.dynamic_overhang_fan);
         const T labels[4] = {T::OverhangFan0, T::OverhangFan1, T::OverhangFan2, T::OverhangFan3};
@@ -8958,7 +9012,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::RetractSpeed, "retraction.speed", s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
         mm(T::UnretractSpeed, "retraction.unretract_speed", s.unretract_speed, 0.0, 1000.0,
            s.unretract_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue), 0.5f);
-        mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, 0.0, 10.0, "%.2f mm", 0.01f);
+        mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, -50.0, 1000.0, "%.2f mm", 0.01f);
         flag(T::RetractLayerChange, "retraction.on_layer_change", s.retract_layer_change);
         flag(T::FirmwareRetraction, "retraction.firmware", s.firmware_retraction);
     } else if (id == "wipe") {
@@ -9186,9 +9240,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::SingleExtruderMmu, "machine.single_extruder_mmu", s.single_extruder_mmu);
         for (const auto& [label, key, list, top] :
              {std::tuple{T::ToolchangeLength, "retraction.toolchange_length", &s.toolchange_length, 200.0},
-              std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 10.0}}) {
-            if (list->size() == 1)
-                mm(label, key, list->front(), 0.0, top, "%.2f mm", 0.01f);
+              std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 1000.0}}) {
+            if (list->size() == 1) // the extra may be negative (less back)
+                mm(label, key, list->front(), top > 200.0 ? -50.0 : 0.0, top, "%.2f mm", 0.01f);
             else
                 count(label, key, list->size());
         }
@@ -9203,6 +9257,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         top(T::MaxFeedZ, "machine.max_feed_z", s.max_feed_z, 500.0);
         top(T::MaxFeedE, "machine.max_feed_e", s.max_feed_e, 500.0);
         mm(T::CornerSpeed, "machine.corner_speed", s.corner_speed, 0.0, 100.0, "%.1f mm/s", 0.1f);
+    } else if (id == "preparation") {
+        // The preparation in the time estimate (print_time.md, rules 10 and 14).
+        mm(T::HeatRateNozzle, "machine.heat_rate_nozzle", s.heat_rate_nozzle, 0.0, 50.0,
+           s.heat_rate_nozzle > 0.0 ? "%.1f °C/s" : tr(T::NotSet), 0.05f);
+        mm(T::HeatRateBed, "machine.heat_rate_bed", s.heat_rate_bed, 0.0, 50.0,
+           s.heat_rate_bed > 0.0 ? "%.2f °C/s" : tr(T::NotSet), 0.01f);
+        mm(T::HomeTime, "machine.home_time", s.home_time, 0.0, 3600.0, "%.0f s", 0.5f);
+        mm(T::ProbeTime, "machine.probe_time", s.probe_time, 0.0, 3600.0, "%.0f s", 0.5f);
     } else if (id == "accelerations") {
         mm(T::AccelerationRow, "machine.acceleration", s.acceleration, 0.0, 100000.0, "%.0f mm/s²", 10.0f);
         mm(T::TravelAcceleration, "machine.travel_acceleration", s.travel_acceleration, 0.0, 100000.0, "%.0f mm/s²",
@@ -9271,6 +9333,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::AutoTemperatures, "gcode.auto_temperatures", s.auto_temperatures);
     } else if (id == "output_file") {
         count(T::PostProcessRow, "output.post_process", s.post_process.size());
+        flag(T::SkipConfigBlock, "gcode.skip_config_block", s.gcode_skip_config_block);
     }
     ImGui::EndTable();
     // The thumbnails, full width (gcode_extras.md, rule 8): kept as typed
@@ -10000,7 +10063,17 @@ void App::slice_panel() {
         anchor("slice_button");
     } else {
         if (!result_->resin && result_->preview.estimated_seconds > 0.0)
-            loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(result_->preview.estimated_seconds).c_str());
+        {
+            const GcodePreview& p = result_->preview;
+            if (p.preparation_seconds > 0.0) // «1 h 4 min (impresión 58 min, preparación 6 min)», rule 14
+                loc::TextDisabled("%s: %s", tr(T::EstimatedTime),
+                                  format(tr(T::TimeSplit), format_duration(p.estimated_seconds).c_str(),
+                                         format_duration(p.estimated_seconds - p.preparation_seconds).c_str(),
+                                         format_duration(p.preparation_seconds).c_str())
+                                      .c_str());
+            else
+                loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(p.estimated_seconds).c_str());
+        }
         // With a tested network program, the main button sends (devices.md, rule 19); exporting moves to ▲.
         const bool to_host = host_ready() && !result_->resin && device_can_print();
         if (to_host) {
@@ -12188,6 +12261,8 @@ void App::preview_panels() {
         };
         if (p.estimated_seconds >= 0.0)
             line(tr(T::EstimatedTime), format_duration(p.estimated_seconds));
+        if (p.preparation_seconds > 0.0) // heating, homing, waits (print_time.md, rule 14)
+            line(tr(T::PreparationTime), format_duration(p.preparation_seconds));
         if (legend_full_) { // folded: the time only
             if (p.first_layer_seconds > 0.0)
                 line(tr(T::FirstLayerTime), format_duration(p.first_layer_seconds));

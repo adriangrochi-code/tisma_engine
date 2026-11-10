@@ -1068,6 +1068,8 @@
     X(LayerOf, "Capa %d de %d  ·  Z %.2f mm", "Layer %d of %d  ·  Z %.2f mm")                                         \
     X(OnlyThisLayer, "Solo esta capa", "This layer only")                                                             \
     X(EstimatedTime, "Tiempo estimado", "Estimated time")                                                             \
+    X(PreparationTime, "Preparación", "Preparation") \
+    X(TimeSplit, "%s (impresión %s, preparación %s)", "%s (printing %s, preparation %s)") \
     X(FilamentUsed, "Filamento", "Filament")                                                                          \
     X(Layers, "Capas", "Layers")                                                                                      \
     X(Lines, "Líneas", "Lines")                                                                                       \
@@ -1223,6 +1225,14 @@
     X(FlowRow, "Flujo", "Flow")                                                                                       \
     X(FlowTip, "El porcentaje del volumen que se extruye en todas las líneas; lo ajusta la calibración de flujo", "The percentage of the volume every line extrudes; the flow calibration sets it") \
     X(GcodeOpened, "G-code abierto: %s", "G-code opened: %s")                                                         \
+    X(ProjectFromProgram, "Proyecto de %s: %d piezas. Sus ajustes todavía no se traen: se usan los de Tisma",          \
+      "Project from %s: %d parts. Its settings are not brought in yet: Tisma's are used")                              \
+    X(ProjectFromProgramOne, "Proyecto de %s: 1 pieza. Sus ajustes todavía no se traen: se usan los de Tisma",          \
+      "Project from %s: 1 part. Its settings are not brought in yet: Tisma's are used")                                 \
+    X(ProjectSettingsSorted, "Ajustes del proyecto: %d traducidos, %d parecidos, %d sin equivalente (todavía no se aplican)", \
+      "Project settings: %d translated, %d similar, %d without equivalent (not applied yet)")                    \
+    X(ProjectFromUnknown, "Proyecto de un programa desconocido: se abrieron las piezas, sin sus ajustes",             \
+      "Project from an unknown program: the parts were opened, without their settings")                               \
     X(ViewerOnly, "Vista de un G-code abierto: no se puede volver a laminar", "Viewing an opened G-code file: it cannot be sliced again") \
     X(Details, "Detalles", "Details")                                                                                 \
     X(Close, "Cerrar", "Close")                                                                                       \
@@ -1699,6 +1709,8 @@
     X(SubNozzle, "Boquilla", "Nozzle") \
     X(SubExtruder, "Extrusor", "Extruder") \
     X(SubSpeedLimits, "Velocidades", "Speeds") \
+    X(SubPreparation, "Preparación", "Preparation") \
+    X(SubPolyholes, "Agujeros redondos", "Round holes") \
     X(SubAccel, "Aceleraciones", "Accelerations") \
     X(SubMaxTemps, "Temperaturas máximas", "Maximum temperatures") \
     X(SubFirmware, "Firmware", "Firmware") \
@@ -1923,6 +1935,7 @@
     X(FanBridges, "Ventilador en puentes", "Fan on bridges") \
     X(FanOffLayers, "Capas sin ventilador", "Layers without fan") \
     X(FullFanLayer, "Ventilador completo desde la capa", "Full fan from layer") \
+    X(FirstLayerFan, "Ventilador de la primera capa", "First layer fan") \
     X(CoolingEnabled, "Enfriamiento automático", "Automatic cooling") \
     X(MinSpeed, "Velocidad mínima", "Minimum speed") \
     X(PressureAdvance, "Avance de presión", "Pressure advance") \
@@ -1931,6 +1944,8 @@
     X(SpeedOverBridges, "Sobre los puentes", "Over bridges") \
     X(SpeedSmallLoops, "Perímetros chicos", "Small loops") \
     X(SpeedSupportInterface, "Interfaz del soporte", "Support interface") \
+    X(SpeedSmallSupport, "Soporte chico", "Small support") \
+    X(SmallSupportThreshold, "Umbral del soporte chico", "Small support threshold") \
     X(SpeedGapFill, "Relleno de huecos", "Gap fill") \
     X(SpeedFirstLayerInfill, "Relleno de la primera capa", "First layer infill") \
     X(SpeedTravelZ, "Viajes en Z", "Travel in Z") \
@@ -1967,6 +1982,7 @@
     X(ZOffset, "Desfase de Z", "Z offset") \
     X(VolumetricE, "E volumétrica", "Volumetric E") \
     X(VerboseComments, "Comentarios detallados", "Verbose comments") \
+    X(SkipConfigBlock, "Sin el bloque de ajustes", "No settings block") \
     X(GcodeArcs, "Arcos G2/G3", "G2/G3 arcs") \
     X(GcodeBinary, "G-code binario (.bgcode)", "Binary G-code (.bgcode)") \
     X(GcodeThumbnails, "Miniaturas (ancho x alto / formato)", "Thumbnails (width x height / format)") \
@@ -1989,6 +2005,10 @@
     X(BrimBoth, "Afuera y en los agujeros", "Outside and in the holes") \
     X(BrimNone, "Ninguno", "None") \
     X(BrimGap, "Separación del borde", "Brim gap") \
+    X(BrimEars, "Orejas de borde", "Brim ears") \
+    X(BrimEarsMaxAngle, "Ángulo máximo de las orejas", "Brim ears max angle") \
+    X(BrimEarsDetection, "Detección de las esquinas", "Ear corner detection") \
+    X(BrimEarsOuterOnly, "Orejas solo afuera", "Ears outside only") \
     X(SubSilent, "Modo silencioso", "Silent mode") \
     X(RetractAcceleration, "Aceleración al retraer", "Retraction acceleration") \
     X(MaxAccelX, "Aceleración máxima en X", "Maximum acceleration in X") \
@@ -2317,6 +2337,11 @@
     X(BeforeWipe, "Retracción antes del barrido", "Retraction before the wipe") \
     X(AfterWipe, "Retracción después del barrido", "Retraction after the wipe") \
     X(WipeInward, "Barrer hacia adentro", "Wipe inward") \
+    X(Polyholes, "Agujeros como polígonos", "Holes as polygons") \
+    X(UnsupportedLast, "Paredes sin apoyo al final", "Unsupported walls last") \
+    X(PolyholeMargin, "Cuánto se aparta del círculo", "How far from the circle") \
+    X(PolyholeTwist, "Girar el polígono en cada capa", "Turn the polygon each layer") \
+    X(PolyholeMaxEdges, "Lados como máximo", "Most sides") \
     X(WipeInwardDistance, "Cuánto se corre el barrido", "How far the wipe moves in") \
     X(FirmwareRetraction, "Retracción del firmware (G10/G11)", "Firmware retraction (G10/G11)") \
     X(LiftAbove, "Saltar solo por encima de", "Lift only above") \
@@ -2358,6 +2383,10 @@
     X(MaxFeedZ, "Velocidad máxima en Z", "Maximum speed in Z") \
     X(MaxFeedE, "Velocidad máxima del extrusor", "Maximum extruder speed") \
     X(CornerSpeed, "Velocidad en esquinas", "Corner speed") \
+    X(HeatRateNozzle, "Calentamiento de la boquilla", "Nozzle heating rate") \
+    X(HeatRateBed, "Calentamiento de la cama", "Bed heating rate") \
+    X(HomeTime, "Tiempo de ir al origen (G28)", "Homing time (G28)") \
+    X(ProbeTime, "Tiempo de nivelar (G29)", "Levelling time (G29)") \
     X(AccelerationRow, "Aceleración", "Acceleration") \
     X(TravelAcceleration, "Aceleración en viajes", "Travel acceleration") \
     X(MaxNozzleTemp, "Boquilla máxima", "Nozzle maximum") \

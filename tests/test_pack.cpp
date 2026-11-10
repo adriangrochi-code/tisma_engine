@@ -195,7 +195,8 @@ TEST_CASE("pack install: a first install writes every archive under the pack fol
                                              [&](const std::string& l) { lines.push_back(l); });
     CHECK(r.pack_version == "2026.11.01-aaaaaaa");
     CHECK(r.discarded.empty());
-    CHECK(r.installed.size() == 5); // compatible, community, knowledge, acme, bolt
+    CHECK(r.installed.size() == 6); // compatible, community, knowledge, translation, acme, bolt
+    CHECK(fs::exists(pack / "translation/prusaslicer.json"));
     CHECK(fs::exists(pack / "vendors/acme/models/A1.json"));
     CHECK(fs::exists(pack / "vendors/bolt/models/B2.json"));
     CHECK(fs::exists(pack / "community/printers/Acme/Acme One.json"));
@@ -558,4 +559,30 @@ TEST_CASE("pack: a filament's values in the program it comes from fill the machi
     CHECK(v.at("required_nozzle_HRC") == std::vector<std::string>{"3"});
     CHECK(v.at("temperature") == std::vector<std::string>{"215"}); // the profile's own wins
     CHECK(v.at("hold") == std::vector<std::string>{"true"});
+}
+
+TEST_CASE("pack: the translation table's archive is named, planned and unpacked under translation/ (project_import.md, "
+          "rule 11)",
+          "[pack]") {
+    std::string text = kIndex;
+    text.replace(text.find(" \"vendors\""), 0,
+                 " \"translation_archive\": {\"name\": \"translation.tar.xz\", \"size\": 77, \"sha256\": \"EE55\"},\n"
+                 " \"translation\": {\"prusaslicer\": \"translation/prusaslicer.json\", \"orcaslicer\": "
+                 "\"translation/orcaslicer.json\"},\n");
+    const PackIndex index = parse_pack_index(text);
+    CHECK(index.translation_archive.name == "translation.tar.xz");
+    CHECK(index.translation_archive.size == 77);
+    CHECK(index.translation_archive.sha256 == "ee55");
+    CHECK(index.translation.size() == 2);
+    CHECK(index.translation.at("orcaslicer") == "translation/orcaslicer.json");
+    const auto plan = pack_plan(&index, "", {"acme"});
+    CHECK(std::count_if(plan.begin(), plan.end(), [](const PackDownload& d) {
+              return d.name == "translation.tar.xz" && d.size == 77 && d.sha256 == "ee55";
+          }) == 1);
+    // An older index without it: nothing more to download.
+    const PackIndex old = parse_pack_index(kIndex);
+    const auto plain = pack_plan(&old, "", {"acme"});
+    CHECK(std::none_of(plain.begin(), plain.end(), [](const PackDownload& d) { return d.name == "translation.tar.xz"; }));
+    CHECK(safe_pack_path("translation/prusaslicer.json"));
+    CHECK_FALSE(safe_pack_path("translation/../index.json"));
 }

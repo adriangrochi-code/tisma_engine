@@ -1,4 +1,12 @@
 {
+ "translation": {
+  "prusaslicer": "translation/prusaslicer.json"
+ },
+ "translation_archive": {
+  "name": "translation.tar.xz",
+  "size": 576,
+  "sha256": "67ddd7b67032e3e2a5755526835959bea0517132fca18d11a5b4ab5d93d7c6f1"
+ },
  "format": "tisma-profile-pack",
  "version": 2,
  "pack_version": "2026.11.01-aaaaaaa",

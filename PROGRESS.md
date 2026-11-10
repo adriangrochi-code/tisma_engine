@@ -11998,3 +11998,166 @@ QA; bundle id `net.tismaservidores.tisma`).
   klibs de Apple en Linux). Enlazar el framework y probar en el simulador queda para el CI de macOS.
 - Siguiente: el cliente de la nube a `shared` con Ktor, luego impresoras (REST), luego Bambu (sockets TLS por
   plataforma), y el proyecto de Xcode con el CI de macOS.
+## 2026-11-09 15:45 — project_import.md: la muestra de PrusaSlicer
+
+- Hoja de ruta del dueño (por el equipo de fichas): 1) `project_import.md`, 2) BH37/BH38 cuando llegue la pieza, 3)
+  PLAN.md hacia la beta cerrada de diciembre.
+- La muestra del equipo de fichas (`pi2_prusaslicer.3mf`, PrusaSlicer 2.7.2 por línea de comandos) pasa a
+  `tests/data/formats/` con su prueba: familia PrusaSlicer, `Application` PrusaSlicer-2.7.2, una caja de
+  30 × 10 × 15 mm. El README de la muestra dice dos objetos; el archivo trae uno (avisado).
+- Regla 9 (parte): al abrir un 3MF de otro programa, la interfaz avisa «Proyecto de <programa>: N piezas. Sus ajustes
+  todavía no se traen: se usan los de Tisma»; uno sin programa conocido, el aviso de la regla 2. `project_source`
+  cuenta las piezas (los ítems del modelo raíz). Prueba `ui_project_import_prusaslicer` con la muestra.
+
+## 2026-11-09 — print_time.md: esperas y aceleraciones del G-code de la máquina
+
+- Reglas 8, 9 y 13: un `G4 P<ms>` o `G4 S<s>` del G-code de inicio, de cambio de capa o propio suma su espera al
+  tiempo (normal y silencioso); `M204 S/P/T` y `SET_VELOCITY_LIMIT ACCEL=` cambian la aceleración de los movimientos
+  que siguen. Prueba en `test_firmware.cpp`: `G4 S60` suma 60 s (±1,5), `G4 P30000` 30 s, `M204 S100` alarga el
+  tiempo, lo mismo con Klipper.
+- Regla 13 completa: `M201` (aceleración por eje), `M203` (avance por eje; en RepRapFirmware en mm/min), `M205`
+  (tirones, `J` la desviación de unión), `M566` (tirones en mm/min), `M220` (porcentaje de velocidad) y
+  `SET_VELOCITY_LIMIT VELOCITY=` / `SQUARE_CORNER_VELOCITY=`. En Marlin 1 la `T` de `M204` es de retracción y no se
+  toma como de viaje. Prueba propia con cada comando.
+- Sigue: reglas 10 (calentar), 12 (esquinas por firmware) y 14 (preparación aparte), PT8; `project_import.md`
+  reglas 3 a 8 cuando lleguen las muestras.
+- Decisiones del equipo de fichas (2026-11-09), con lo que encontró la sesión del paquete:
+  1) `machine.min_layer_height` y `max_layer_height` acotan solo la altura variable y el soporte: una primera capa
+     de 0,3 con máximo 0,25 vale (antes fallaban 962 perfiles);
+  2) `restart_extra` y `toolchange_restart_extra` de −50 a 1000 mm (también el del filamento);
+  3) las velocidades de carga, descarga y enfriamiento de la MMU aceptan 0: ese paso se salta;
+  4) `limits_usage = emit` con Klipper se permite: solo `M204 S` y `SET_VELOCITY_LIMIT ACCEL VELOCITY`, con un aviso
+     informativo; el tiempo usa todos los límites.
+  Cada una con su prueba.
+- Regla 12 (PT8): en Klipper, la velocidad de una esquina sale de `square_corner_velocity` (el `corner_speed` de la
+  máquina) como una desviación de unión que depende de la aceleración: d = v² · (√2 − 1) / a, que da esa velocidad a
+  90°. Sin tirones. `minimum_cruise_ratio` (0,5 por defecto, o el de `SET_VELOCITY_LIMIT`) baja el tope de los
+  movimientos cortos: la velocidad que se alcanza en la parte que no navega. El mismo G-code da otro tiempo en Marlin y
+  en Klipper.
+- Reglas 10 y 14 (PT7): claves nuevas `machine.heat_rate_nozzle` y `heat_rate_bed` (°C/s, 0 = no se sabe),
+  `home_time` y `probe_time` (s), con su ayuda y su ficha nueva Límites › Preparación. Cada `M109`/`M190`/`M116` y el
+  `TEMPERATURE_WAIT` de Klipper suman el tiempo de subir desde la última temperatura alcanzada (25 °C al empezar);
+  `G28`, `G29` y `G4` también. Todo eso es preparación: está en el total y el G-code lo dice aparte
+  (`; estimated preparation time = …`). Los comandos de temperatura que escribe el motor al empezar también se leen.
+- Sigue: mostrar la preparación en la interfaz, cambios de herramienta como preparación, reglas 11 y 15 (aprender de
+  la impresora).
+
+## 2026-11-09 16:41 — mantenimiento
+
+- Revisado: `origin/main` y `origin/dev` sin cambios nuevos; sin otra sesión trabajando en `dev`.
+- Fuzz del G-code (2000 corridas, semilla 911202611), ahora también con extras de vuelta negativos, velocidades de
+  MMU en 0, `emit` con Klipper y los ajustes de preparación: 2 fallas. Era un error mío de hoy: un barrido que había
+  retraído 0,29 mm seguido de un `restart_extra` de −0,39 escribía una «vuelta» de −0,098 mm (otra retracción). La
+  vuelta ahora es max(0, retraído + extra); sin nada que devolver no se escribe y el chequeo acepta el filamento corto.
+  Con prueba. Segunda corrida de 2000 (semilla 1109202617): 0 fallas.
+- Encontrado a mano: la preparación del inicio (esperas, calentamiento) caía en el tiempo de la primera capa (16 s
+  pasaban a 1 min 16 s con un `G4 S60`). La tanda de tiempo se cierra después del inicio. Con prueba.
+- CI local completo en 70ea09a: gcc y clang 1121/1121; ASan cortado por el límite de una hora (se corre de nuevo).
+- No medido: el banco de velocidad (CPU ocupada por el CI y el fuzz; los números no servirían).
+- Regla 14 en la interfaz: junto al botón de laminar, «Tiempo estimado: 1h 4m 0s (impresión 58m 0s, preparación
+  6m 0s)» cuando hay preparación, y una fila «Preparación» en la leyenda de la vista previa. Probado: lectura del
+  comentario; la pantalla no se miró (sin captura).
+
+## 2026-11-09 — orca_2_5.md O5, reglas 20 a 22
+
+- `regex_replace(texto, /patrón/, reemplazo)` en el lenguaje de las plantillas, con grupos `$1`; el patrón puede ser
+  un literal `/…/` (con `\/` para una barra) o un texto. Errores con la marca: patrón que no se lee, `/` sin cerrar.
+- Partes del tiempo en el nombre del archivo: `print_time_day`, `print_time_hour`, `print_time_minute`,
+  `print_time_sec` y `print_time_total_sec` (OR21: 1:2:5 y 3725); sin el total quedan escritas tal cual.
+- `gcode.skip_config_block`: el G-code sin el bloque de ajustes del final (los totales quedan); en la ficha «Archivo de
+  salida», con su ayuda.
+- Regla 23 (OR23): ya se cumplía; prueba nueva con dos filamentos (200/240 °C) donde solo el 2 imprime: el inicio
+  calienta a 240 °C, con varios extrusores y con MMU. Pregunta al equipo de fichas: el motor calienta al empezar a
+  `temperature`, no a `first_layer_temperature` (la cama sí usa la de la primera capa).
+
+## 2026-11-09 — orca_2_5.md O6: la línea de comandos
+
+- `slice` gana:
+  - `--strict`: un aviso (no los informativos) es error, sin G-code, código 4; el archivo de avisos los lista todos;
+  - `--ground-largest-face`, `--ground-face-normal X,Y,Z` y `--ground-face-point X,Y,Z`: la cara va contra la cama
+    antes de las transformaciones (la cara plana más grande: triángulos en un mismo plano, con sus áreas sumadas);
+  - `--inspect-mesh`: tamaño, volumen, triángulos, si está cerrada, aristas abiertas y partes, en JSON;
+  - `--export-statistics`: por placa (una en la línea de comandos), tiempo, filamento por extrusor (mm, cm³, g,
+    costo) y capas; `--export-settings`: los ajustes resueltos. Los tres aceptan `-` para la salida estándar;
+  - `--align-to-y-axis`: las copias en una columna a lo largo de Y.
+- Módulo nuevo `src/mesh/inspect.*` con sus pruebas (OR25, OR26) y las de la línea de comandos (OR24 a OR28).
+- `--inspect-paint` en `slice <proyecto>`: el área pintada en mm² por canal (soporte, costura, piel difusa, color) y
+  por marca (forzar, bloquear, extrusor).
+
+## 2026-11-09 — orca_2_5.md O3, reglas 15 y 17
+
+- Regla 17 (OR17): `cooling.first_layer_fan` (−1 apagado, o 0 a 100 %): el ventilador exacto de la primera capa,
+  también en sus puentes, solo con `fan_off_layers` en 0; con `full_fan_layer` la subida arranca desde ese valor
+  (20 % en la capa 1, 46,7 % y 73,3 % en la 2 y la 3, el valor normal en la 4). En la ficha de enfriamiento, con su
+  ayuda.
+- Regla 15 (OR15): la balsa ya lo hacía; prueba con expansión 1,5 y 2 más en la primera capa (3,5 mm).
+- Regla 16 (OR16): `speed.small_support` (mm/s o % de la velocidad del soporte o de la interfaz) y
+  `speed.small_support_threshold` (un radio; 0 apagado): una extrusión de soporte de largo hasta 2π × el umbral va
+  más despacio. En la ficha de velocidades de relleno y soporte, con su ayuda.
+- Regla 18 (OR18): la piel difusa deja lisa la pared externa donde cuelga sobre nada (fuera de la capa de abajo,
+  medio cordón más allá de su borde). La piel difusa pasó a un paso propio, después de tener todas las regiones (antes
+  iba dentro del cálculo en paralelo de las paredes, donde la capa de abajo no estaba lista).
+- Regla 14 (OR14): orejas de borde (`adhesion.brim_ears`, `brim_ears_max_angle` 125°, `brim_ears_detection_length`
+  1 mm, `brim_ears_outer_only`): las vueltas del borde recortadas a discos de radio separación + ancho en las
+  esquinas filosas del contorno simplificado (las de afuera y, salvo «solo afuera», las de los agujeros). En la ficha
+  del borde, con su ayuda. Faltan las orejas pintadas (no hay canal de pintura para eso todavía).
+
+### 2026-11-09 — temperaturas de la primera capa (pedido del equipo de especificación)
+
+- Error corregido: la primera capa usaba `temperature`. Ahora, si el inicio no calienta, antes del G-code de inicio va
+  la cama con `first_layer_bed_temperature` y la boquilla con `first_layer_temperature` (cada extrusor la suya); al
+  empezar la segunda capa M104 a `temperature` y M140 a `bed_temperature`, solo si son distintas y si no hay cambios de
+  temperatura por altura. Un valor 0 en la de primera capa toma la normal. Pruebas en test_gcode y
+  test_multi_extruder. Suite completa: 964 casos pasan.
+
+### 2026-11-09 — polyholes (orca_2_5.md, regla 5, OR5)
+
+- `src/geom/polyholes.*`: un agujero convexo de más de 8 puntos dentro de `walls.polyhole_margin` de su círculo
+  (mm o % del radio), que dura dos capas o está en la primera, pasa a un polígono circunscrito de ~2 lados por mm de
+  diámetro con boquilla de 0,4 (3 a `polyhole_max_edges`); con `polyhole_twist`, cinco orientaciones que se repiten.
+  En el pipeline va después de tener todas las regiones; las paredes se rehacen. Ficha «Agujeros redondos» en la
+  interfaz, con su ayuda. Pruebas `[polyholes]` (OR5: 3, 10 y 30 mm → 6, 20 y 50 lados; tubo laminado → 20).
+- Falta de O1: paredes sin apoyo al final (regla 3) y costura precisa (regla 4).
+
+### 2026-11-09 — paredes sin apoyo al final (orca_2_5.md, regla 3, OR3)
+
+- `walls.unsupported_last`: en el escritor, por isla, una vuelta sin ningún punto sobre la capa de abajo va después
+  de las paredes si toca una vuelta sostenida (o anclada a través de otras), de adentro hacia afuera; si no toca
+  nada, en una segunda pasada después del relleno de la isla (que incluye los puentes). Con el relleno antes de las
+  paredes, igual. En la ficha «Más paredes», con su ayuda. Pruebas `[unsupported]`: sombrero (ala de 15 mm sobre un
+  tallo de 5: las vueltas del ala después del relleno; el tallo igual que antes) y escalón (la vuelta que cuelga
+  queda antes del relleno). El fuzz varía `polyholes`, `polyhole_twist` y `unsupported_last`.
+- Falta de O1: la costura precisa (regla 4), que necesita los modificadores auxiliares en el proyecto.
+- project_import PI1: prueba de interfaz `ui_project_import_standard` (el 3MF del estándar de una caja abre la caja con
+  el aviso de programa desconocido). La regla 9 completa (A traducidos, B parecidos, C sin equivalente, M placas)
+  espera la tabla de traducción del paquete de perfiles (regla 11), que todavía no viene en el paquete, y muestras de
+  la familia OrcaSlicer para contar las placas: hasta entonces el aviso dice las piezas y que los ajustes no se traen
+  (decisión: seguir la regla 12 mientras no haya tabla).
+- Tabla de traducción (profile_pack_format.md; project_import.md, reglas 6, 9 y 11): el paquete baja y descomprime
+  `translation.tar.xz` cuando el índice lo nombra (`translation_archive`, y `translation` por dialecto);
+  `parse_translation` lee `translation/<dialecto>.json` (formato `tisma-pack-translation` 1) y `sort_settings`
+  reparte los ajustes de un proyecto en traducidos, parecidos y sin equivalente (una clave que la tabla no tiene va a
+  «sin equivalente»; las claves de `with` van con su fila). Pruebas con filas reales que dio la sesión del paquete
+  (profiles/next 8e2e5f0). Falta: leer los ajustes del proyecto (`Metadata/Slic3r_PE.config`,
+  `project_settings.config`), que espera muestras con ajustes (la pi2 no los trae), y el diálogo de la regla 9.
+- Regla 9 (parte): `project_settings` lee los ajustes de un proyecto PrusaSlicer (`; clave = valor` de
+  `Metadata/Slic3r_PE.config`; muestra pi4 del equipo de especificación, spec/next ca6b4a6: 327 ajustes). Al abrir
+  el proyecto, si el paquete instalado tiene la tabla de ese programa, un segundo aviso dice «Ajustes del proyecto: A
+  traducidos, B parecidos, C sin equivalente (todavía no se aplican)». Probado en la interfaz desde el mantenimiento
+  del 10-11 (`ui_project_import_settings`). Falta: aplicar los ajustes (reglas 6 y 8), el diálogo
+  con «Ver detalle» y la elección de impresora, y las partes de pi4 (regla 4).
+
+## 2026-11-10 00:40 — mantenimiento
+
+- **Revisado:** merge de `origin/main` y `origin/dev` (nada nuevo); fuzz de G-code 2000 corridas con semilla
+  1011202601 (varía polyholes, giro y paredes sin apoyo): 0 fallas, 28 descartadas por imprimibles; advertencias del
+  compilador; las notas «Sin probar» recientes; los cambios del 09-11 (polyholes, paredes sin apoyo, tabla de
+  traducción).
+- **Corregido:** dos advertencias en `src/library/library.cpp` (inicializador de `ProjectModel` incompleto y una
+  variable que tapaba a otra); `unsupported_turns` descarta por caja los polígonos de la capa de abajo antes de
+  probar cada punto (antes recorría todos por punto).
+- **Cerrado:** la nota «sin probar en la interfaz» de la tabla de traducción: el paquete de prueba trae
+  `translation.tar.xz` (filas con la forma del paquete real) y `ui_project_import_settings` abre la muestra pi4 y
+  espera «Ajustes del proyecto: 5 traducidos, 2 parecidos, 320 sin equivalente».
+- **No medido:** el banco de velocidad (CPU ocupada por el CI con ASan y el fuzz).
+- CI local completo en curso sobre b9173ea.

@@ -37,6 +37,15 @@
      "engine does not tell it the diameter: you add that to the start G-code yourself, or the part gets too much or "
      "too little plastic. On a pellet printer the engine writes it for Marlin and RepRapFirmware.\n\nExample: off for "
      "almost everyone; on, with M200 D1.75 in the start G-code, if your firmware uses volumetric extrusion."},
+    {"gcode.skip_config_block",
+     "Al final del G-code, el programa escribe todos los ajustes con que se laminó, como comentarios. Así se puede "
+     "abrir el archivo más tarde y recuperarlos. Algunas impresoras rechazan esas líneas.\n\nCon este ajuste el "
+     "archivo sale sin ese bloque: la pieza es la misma, pero el G-code ya no guarda sus ajustes.\n\nEjemplo: "
+     "apagado; encendido solo si la impresora da un error al leer el final del archivo.",
+     "At the end of the G-code, the program writes every setting it sliced with, as comments. That way the file can "
+     "be opened later and its settings brought back. Some printers reject those lines.\n\nWith this on, the file "
+     "comes out without that block: the part is the same, but the G-code no longer keeps its settings.\n\nExample: "
+     "off; on only if the printer gives an error reading the end of the file."},
     {"gcode.verbose_comments",
      "El G-code es el archivo de órdenes que lee la impresora. Con este ajuste, cada línea que escribe el motor lleva "
      "al final un comentario corto que dice qué hace: pared, relleno, retracción, viaje, ventilador.\n\nLa impresora "

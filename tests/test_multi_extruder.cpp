@@ -908,3 +908,56 @@ TEST_CASE("nozzles: each extruder's parts on the plate's own layers, with a laye
     REQUIRE(seen.layers.count("External perimeter"));
     CHECK(seen.layers.at("External perimeter").size() == model.layers.size());
 }
+
+TEST_CASE("wipe tower: an MMU speed of 0 is a step not used (spec team, 2026-11-09)", "[extruders][tower]") {
+    const Settings read = parse_settings(
+        R"({"extrusion": {"loading_speed": 0, "unloading_speed": 0, "cooling_initial_speed": 0, "cooling_final_speed": 0}})");
+    CHECK(read.loading_speed == 0.0);
+    CHECK(read.cooling_final_speed == 0.0);
+    CHECK_THROWS_AS(parse_settings(R"({"extrusion": {"loading_speed": -1}})"), SettingsError);
+    Settings s = tower_base(true);
+    s.verbose_comments = true; // the moves' notes
+    const std::string with = gcode_of(two_colours(), s);
+    s.cooling_initial_speed = s.cooling_final_speed = 0.0;
+    const std::string without = gcode_of(two_colours(), s);
+    CHECK(with.find("cool the tip") != std::string::npos);
+    CHECK(without.find("cool the tip") == std::string::npos);
+    CHECK(without.find("\nT1\n") != std::string::npos);
+}
+
+TEST_CASE("extruders: the first layer's nozzle temperature is that of the filament that prints it (orca_2_5.md, rule 23, OR23)",
+          "[extruders]") {
+    for (const bool mmu : {false, true}) {
+        Settings s = base();
+        s.single_extruder_mmu = mmu;
+        if (mmu)
+            s.wipe_tower = true, s.relative_extrusion = true;
+        s.variables["temperature"] = {"200", "240"};
+        const std::string text = gcode_of(cube(2), s); // only filament 2 prints
+        const std::size_t layer = text.find(";LAYER_CHANGE");
+        INFO("mmu " << mmu << "\n" << text.substr(0, std::min<std::size_t>(layer, 1500)));
+        CHECK(text.find("S240") < layer);
+        CHECK(text.find("S200") > layer);
+    }
+}
+
+TEST_CASE("extruders: each one heats to its first layer's temperature, then to its own (spec team, 2026-11-09)",
+          "[extruders]") {
+    Settings s = base();
+    s.extruder_walls = 1;
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 3;
+    s.extruder_infill = s.extruder_solid_infill = 2;
+    s.variables["temperature"] = {"205", "225"};
+    s.variables["first_layer_temperature"] = {"215", "235"};
+    const std::string text = gcode_of(cube(1), s);
+    const std::size_t first = text.find(";LAYER_CHANGE"), second = text.find(";LAYER_CHANGE", first + 1),
+                      third = text.find(";LAYER_CHANGE", second + 1);
+    const std::string start = text.substr(0, first), layer2 = text.substr(second, third - second);
+    INFO(start);
+    CHECK(start.find("S215 T0") != std::string::npos);
+    CHECK(start.find("S235 T1") != std::string::npos);
+    CHECK(start.find("S205") == std::string::npos);
+    CHECK(layer2.find("M104 S205 T0") != std::string::npos);
+    CHECK(layer2.find("M104 S225 T1") != std::string::npos);
+}

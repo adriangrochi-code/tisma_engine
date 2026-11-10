@@ -346,6 +346,29 @@
      "does both, and none removes it.\n\nInner helps when the base has large holes whose edges lift; outer is the "
      "usual choice. How wide it is comes from the brim width.\n\nExample: outer for almost everything; outer and inner "
      "for an ABS frame with a big hole in the middle."},
+    {"adhesion.brim_ears",
+     "En lugar del borde entero, discos chicos solo en las esquinas filosas de la pieza, donde más se despega. Gasta "
+     "menos material y deja menos para limpiar. El radio de cada oreja es el ancho del borde.\n\nEjemplo: apagado; "
+     "encendido para piezas con esquinas en punta que se levantan.",
+     "Instead of the whole brim, small discs only at the part's sharp corners, where it lifts most. It uses less "
+     "material and leaves less to clean. Each ear's radius is the brim width.\n\nExample: off; on for parts with "
+     "pointed corners that lift."},
+    {"adhesion.brim_ears_max_angle",
+     "Qué tan cerrada tiene que ser una esquina para llevar oreja: lleva una si su ángulo es menor que este. 0 no pone "
+     "ninguna; 180 pone en casi cualquier punto que no sea recto.\n\nEjemplo: 125° (las esquinas de un cuadrado sí, "
+     "las de un octógono no).",
+     "How sharp a corner must be to get an ear: it gets one when its angle is under this. 0 puts none; 180 puts one at "
+     "almost any point that is not straight.\n\nExample: 125° (a square's corners yes, an octagon's no)."},
+    {"adhesion.brim_ears_detection_length",
+     "Antes de buscar esquinas, el contorno se simplifica: se borran los detalles más chicos que este largo, para que "
+     "una curva con muchos puntos no parezca llena de esquinas. 0 no simplifica.\n\nEjemplo: 1 mm.",
+     "Before looking for corners, the outline is simplified: details smaller than this length go, so that a curve with "
+     "many points does not look full of corners. 0 does not simplify.\n\nExample: 1 mm."},
+    {"adhesion.brim_ears_outer_only",
+     "Con este ajuste, las orejas van solo en el contorno de afuera de la pieza: ninguna dentro de los agujeros.\n\n"
+     "Ejemplo: encendido para piezas con agujeros chicos donde una oreja molestaría.",
+     "With this on, ears go only on the part's outer outline: none inside the holes.\n\nExample: on for parts with "
+     "small holes where an ear would be in the way."},
     {"adhesion.brim_gap",
      "Es un espacio entre la pieza y la primera vuelta del borde, en milímetros. El borde mantiene su ancho, solo se "
      "corre hacia afuera.\n\nCon 0 el borde queda pegado y agarra mejor, pero hay que cortarlo y puede dejar una "

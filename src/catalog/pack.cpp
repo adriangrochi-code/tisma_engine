@@ -136,6 +136,12 @@ PackIndex parse_pack_index(std::string_view text_in) {
         out.compatible = file_of(j.at("compatible"));
     if (j.contains("community"))
         out.community = file_of(j.at("community"));
+    if (j.contains("translation_archive"))
+        out.translation_archive = file_of(j.at("translation_archive"));
+    if (j.contains("translation") && j.at("translation").is_object())
+        for (const auto& [dialect, path] : j.at("translation").items())
+            if (path.is_string())
+                out.translation[dialect] = path.get<std::string>();
     if (j.contains("vendors") && j.at("vendors").is_array())
         for (const json& v : j.at("vendors")) {
             if (!v.is_object())
@@ -199,6 +205,9 @@ std::vector<PackDownload> pack_plan(const PackIndex* index, const std::string& b
     add(index->community, "community.tar.xz");
     // knowledge.tar.xz (rule 21) is not in the index: no size or SHA-256 to check.
     out.push_back({base + "knowledge.tar.xz", "knowledge.tar.xz", 0, ""});
+    // The translation table, when the index names it (project_import.md, rule 11).
+    if (!index->translation_archive.name.empty())
+        add(index->translation_archive, "translation.tar.xz");
     for (const PackVendor& v : index->vendors) {
         if (!vendors.empty() && std::find(vendors.begin(), vendors.end(), v.id) == vendors.end())
             continue;
@@ -254,6 +263,7 @@ bool safe_pack_path(std::string_view path) {
     if (path.empty() || path.front() == '/' || path.find('\\') != std::string_view::npos || path.find(':') != std::string_view::npos)
         return false;
     const bool under = path.starts_with("community/") || path.starts_with("knowledge/") ||
+                       path.starts_with("translation/") ||
                        (path.starts_with("vendors/") && path.find('/', 8) != std::string_view::npos && path.find('/', 8) > 8);
     if (!under)
         return false;

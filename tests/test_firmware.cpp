@@ -4,6 +4,7 @@
 #include "gcode/print_time.hpp"
 #include "gcode/writer.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "report/warnings.hpp"
 #include "slice/pipeline.hpp"
 #include "test_printer.hpp"
 
@@ -11,6 +12,7 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -141,7 +143,19 @@ TEST_CASE("firmware: Klipper takes its limits from its configuration (FW4); gene
           "[firmware]") {
     Settings klipper = firmware_printer(GcodeFlavor::Klipper);
     klipper.limits_usage = LimitsUsage::Emit;
-    CHECK_THROWS_WITH(check_settings(klipper), ContainsSubstring("machine.limits_usage: Klipper"));
+    // Allowed: only what Klipper takes (M204, SET_VELOCITY_LIMIT), with a note.
+    CHECK_NOTHROW(check_settings(klipper));
+    {
+        std::vector<Warning> notes;
+        std::ostringstream out;
+        write_gcode(out, slice_model(cube(), klipper), klipper, &notes);
+        const std::string g = out.str();
+        CHECK(g.find("M201") == std::string::npos);
+        CHECK(g.find("M203") == std::string::npos);
+        CHECK(g.find("M205") == std::string::npos);
+        CHECK(g.find("\nSET_VELOCITY_LIMIT ACCEL=1500 VELOCITY=500\n") != std::string::npos);
+        CHECK(std::any_of(notes.begin(), notes.end(), [](const Warning& w) { return w.kind == "limits_klipper"; }));
+    }
     Settings reprap = firmware_printer(GcodeFlavor::RepRap);
     reprap.limits_usage = LimitsUsage::Emit;
     reprap.gcode_progress = true;
@@ -347,4 +361,104 @@ TEST_CASE("time: marks give the time up to them", "[time]") {
     CHECK(t.time_at(middle) < first);
     CHECK_THAT(t.time_at(middle), WithinRel(first / 2.0, 1e-9)); // two equal moves through a straight junction
     CHECK(t.time_at(end) == t.total());
+}
+
+TEST_CASE("time: waits and acceleration changes in the machine G-code (print_time.md, rules 8, 9 and 13)", "[time]") {
+    Settings s = firmware_printer(GcodeFlavor::Marlin);
+    const double base = estimate(gcode_of(s), "printing time");
+    Settings wait = s;
+    wait.start_gcode = "G28 ; home\nG4 S60 ; wait";
+    CHECK_THAT(estimate(gcode_of(wait), "printing time"), WithinAbs(base + 60.0, 1.5));
+    wait.start_gcode = "G28 ; home\nG4 P30000\nG4 ; no time given";
+    CHECK_THAT(estimate(gcode_of(wait), "printing time"), WithinAbs(base + 30.0, 1.5));
+    Settings slow = s;
+    slow.start_gcode = "G28 ; home\nM204 S100";
+    CHECK(estimate(gcode_of(slow), "printing time") > base + 5.0);
+    slow.flavor = GcodeFlavor::Klipper;
+    slow.start_gcode = "G28 ; home\nSET_VELOCITY_LIMIT ACCEL=100";
+    Settings klipper = s;
+    klipper.flavor = GcodeFlavor::Klipper;
+    CHECK(estimate(gcode_of(slow), "printing time") > estimate(gcode_of(klipper), "printing time") + 5.0);
+}
+
+TEST_CASE("time: M201, M203, M205, M220 and SET_VELOCITY_LIMIT in the machine G-code (print_time.md, rule 13)", "[time]") {
+    Settings s = firmware_printer(GcodeFlavor::Marlin);
+    const double base = estimate(gcode_of(s), "printing time");
+    const auto with = [&](const std::string& start, GcodeFlavor flavor = GcodeFlavor::Marlin) {
+        Settings c = s;
+        c.flavor = flavor;
+        c.start_gcode = "G28 ; home\n" + start;
+        return estimate(gcode_of(c), "printing time");
+    };
+    CHECK(with("M220 S50") > base * 1.3);
+    CHECK(with("M203 X20 Y20") > base + 10.0);
+    CHECK(with("M201 X100 Y100") > base + 10.0);
+    // RepRapFirmware's M203 is in mm/min: X1200 is the same 20 mm/s.
+    CHECK_THAT(with("M203 X1200 Y1200", GcodeFlavor::RepRapFirmware), WithinAbs(with("M203 X20 Y20"), 2.0));
+    Settings klipper = s;
+    klipper.flavor = GcodeFlavor::Klipper;
+    CHECK(with("SET_VELOCITY_LIMIT VELOCITY=20", GcodeFlavor::Klipper) > estimate(gcode_of(klipper), "printing time") + 10.0);
+}
+
+TEST_CASE("time: each firmware's corners give its own time (print_time.md, rule 12, PT8)", "[time]") {
+    // The same G-code, timed by each firmware's corners.
+    Settings s = firmware_printer(GcodeFlavor::Marlin);
+    s.jerk_x = s.jerk_y = 8.0;
+    const auto time_of = [&](GcodeFlavor flavor) {
+        Settings c = s;
+        c.flavor = flavor;
+        return estimate(gcode_of(c), "printing time");
+    };
+    const double marlin = time_of(GcodeFlavor::Marlin), klipper = time_of(GcodeFlavor::Klipper),
+                 reprap = time_of(GcodeFlavor::RepRapFirmware);
+    INFO("marlin " << marlin << " klipper " << klipper << " reprap " << reprap);
+    CHECK(std::abs(marlin - klipper) > 1.0);
+    // Klipper: a lower square corner velocity and a higher minimum cruise ratio are slower.
+    Settings k = s;
+    k.flavor = GcodeFlavor::Klipper;
+    k.corner_speed = 5.0;
+    const double base = estimate(gcode_of(k), "printing time");
+    k.corner_speed = 1.0;
+    CHECK(estimate(gcode_of(k), "printing time") > base);
+    k.corner_speed = 5.0;
+    k.start_gcode = "G28 ; home\nSET_VELOCITY_LIMIT MINIMUM_CRUISE_RATIO=0.9";
+    CHECK(estimate(gcode_of(k), "printing time") > base);
+    k.start_gcode = "G28 ; home\nSET_VELOCITY_LIMIT MINIMUM_CRUISE_RATIO=0";
+    CHECK(estimate(gcode_of(k), "printing time") < base);
+}
+
+TEST_CASE("time: heating, homing and levelling as preparation, shown apart (print_time.md, rules 10 and 14, PT7)", "[time]") {
+    Settings s = firmware_printer(GcodeFlavor::Marlin);
+    s.variables["temperature"] = {"200"};
+    s.variables["bed_temperature"] = {"60"};
+    s.start_gcode = "G28 ; home\nG29";
+    const std::string plain = gcode_of(s);
+    const double base = estimate(plain, "printing time");
+    CHECK(plain.find("; estimated preparation time") == std::string::npos); // nothing known: nothing apart
+    s.heat_rate_nozzle = 2.0; // 25 to 200 C: 87.5 s
+    s.heat_rate_bed = 1.0;    // 25 to 60 C: 35 s
+    s.home_time = 10.0;
+    s.probe_time = 40.0;
+    const std::string timed = gcode_of(s);
+    CHECK_THAT(estimate(timed, "printing time"), WithinAbs(base + 87.5 + 35.0 + 10.0 + 40.0, 1.5));
+    CHECK_THAT(estimate(timed, "preparation time"), WithinAbs(87.5 + 35.0 + 10.0 + 40.0, 1.0));
+    // A start that heats itself: the engine adds no temperatures (so no bed),
+    // and a second wait at the same temperature heats nothing more.
+    s.start_gcode = "G28 ; home\nG29\nM109 S200\nM109 S200\nG4 S5";
+    CHECK_THAT(estimate(gcode_of(s), "preparation time"), WithinAbs(87.5 + 10.0 + 40.0 + 5.0, 1.0));
+    // Klipper's own wait.
+    s.flavor = GcodeFlavor::Klipper;
+    s.auto_temperatures = false;
+    s.start_gcode = "M140 S60\nTEMPERATURE_WAIT SENSOR=heater_bed MINIMUM=60";
+    CHECK_THAT(estimate(gcode_of(s), "preparation time"), WithinAbs(35.0, 1.0));
+}
+
+TEST_CASE("time: the start's preparation is not the first layer's time (print_time.md, rule 14)", "[time]") {
+    Settings s = firmware_printer(GcodeFlavor::Marlin);
+    const std::string plain = gcode_of(s);
+    s.start_gcode = "G28 ; home\nG4 S60";
+    const std::string waits = gcode_of(s);
+    CHECK_THAT(estimate(waits, "first layer printing time (normal mode)"),
+               WithinAbs(estimate(plain, "first layer printing time (normal mode)"), 0.5));
+    CHECK_THAT(estimate(waits, "printing time"), WithinAbs(estimate(plain, "printing time") + 60.0, 1.5));
 }

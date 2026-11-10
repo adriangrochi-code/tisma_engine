@@ -814,6 +814,15 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   fichas y con `THIRD_PARTY.md` (5, CR3). Las aletas de soporte, la guía de calibración, los perfiles de resina y la
   conexión con Bambu Lab ya tienen su crédito, que se verá bajo su panel cuando existan
 - [ ] `print_time.md` (después de F4): el tiempo simulando cada movimiento del G-code
+  Hecho (2026-11-09): las esperas `G4` (P en ms, S en s) y los `M204` / `SET_VELOCITY_LIMIT ACCEL=` del G-code de
+  la máquina (inicio, cambio de capa y los propios) cuentan en el tiempo y cambian la aceleración de lo que sigue
+  (reglas 8, 9 y 13), y también `M201`, `M203` (mm/min en RepRapFirmware), `M205` (tirones y `J`), `M566`, `M220` y
+  `SET_VELOCITY_LIMIT VELOCITY=` / `SQUARE_CORNER_VELOCITY=` / `MINIMUM_CRUISE_RATIO=`. Regla 12 y PT8: Klipper con sus
+  esquinas (`square_corner_velocity` como desviación de unión) y `minimum_cruise_ratio` (0,5); Marlin con tirón o
+  desviación, RepRapFirmware con tirón. Reglas 10 y 14 (PT7): `machine.heat_rate_nozzle`/`heat_rate_bed` (°C/s),
+  `home_time` y `probe_time`; el calentamiento de cada espera, `G28`, `G29` y `G4` suman a la preparación, que el G-code
+  dice aparte (`; estimated preparation time`). La interfaz la muestra («1 h 4 min (impresión 58 min, preparación 6 min)» y una
+  fila en la leyenda). Quedan: cambios de herramienta como preparación y las reglas 11 y 15 (aprender de la impresora)
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
   escalar a medida, cortar, separar y copias en grilla. Hecho (2026-10-27): el grupo `transform` de la línea de
   comandos (escala o «N%», encajar en una caja, giros, corte horizontal con las dos mitades cerradas, separar en piezas
@@ -1205,14 +1214,24 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
   quedan dos pruebas (`[determinism]`): una T con soportes en árbol y relleno lightning, y dos objetos en dos
   extrusores con etiquetas M486, piel difusa y arcos.
 - [ ] O1 (reglas 1 a 5): limpiar hacia adentro (hecha, 2026-11-02), retracción después del barrido (hecha), paredes
-  sin apoyo al final, modificadores de costura precisa, polyholes.
+  sin apoyo al final (hecha, 2026-11-09, OR3), modificadores de costura precisa, polyholes (hecha, 2026-11-09, OR5).
 - [ ] O2 (reglas 7 a 13 bis): expansión de la superficie de arriba, orden y ángulo fijo arriba y abajo, gyroid y TPMS
   adaptativos, relleno suavizado, separado por pieza, de varias líneas, espiral hacia adentro.
-- [ ] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera
+- [x] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera
   capa según los filamentos usados.
-- [ ] O6 (reglas 24 a 28): `--strict`, apoyar la pieza, inspeccionar, estadísticas, copias a lo largo de Y.
-- [ ] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
+  Hecho (2026-11-09): reglas 20 a 22 (OR20 a OR22): `regex_replace(texto, /patrón/, reemplazo)` con `$1`, el literal
+  `/patrón/` en las plantillas, `print_time_day`/`hour`/`minute`/`sec`/`total_sec` en el nombre del archivo y
+  `gcode.skip_config_block`. Regla 23 (OR23): ya se cumplía (la boquilla y la cama del primer filamento que imprime);
+  ahora con prueba, con varios extrusores y con MMU.
+- [x] O6 (reglas 24 a 28): `--strict`, apoyar la pieza, inspeccionar, estadísticas, copias a lo largo de Y.
+  Hecho (2026-11-09): `--strict`, `--ground-largest-face`/`--ground-face-normal`/`--ground-face-point`,
+  `--inspect-mesh`, `--export-statistics`, `--export-settings` (con `-`, la salida estándar) y `--align-to-y-axis`
+  (OR24 a OR28), y `--inspect-paint` en el laminado de un proyecto.
+- [x] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
   puentes; la balsa solo necesita la prueba OR15.
+  Hecho (2026-11-09): regla 15 (prueba OR15), regla 16 (`speed.small_support` y `small_support_threshold`, OR16) y
+  regla 17 (`cooling.first_layer_fan`, OR17), regla 18 (piel difusa lisa sobre el aire, OR18) y regla 14 (orejas de
+  borde, OR14). Faltan las orejas pintadas.
 - O7 y O8 van con sus fichas de interfaz.
 
 ### Espacio de diseño CAD con SolidCraft (pedido del dueño, 2026-10-29, por el equipo de fichas)
@@ -1307,7 +1326,9 @@ Prioridad alta, después del árbol en GPU. Primero las reglas 1 a 5 y la 9.
   leen (extensión de producción, `formats.md` regla 18; prueba del 2026-11-09). Falta medir los archivos de muestra que genera el
   equipo de fichas.
 - [ ] Regla 5: placas a camas.
-- [ ] Regla 9: el diálogo al abrir.
+- [ ] Regla 9: el diálogo al abrir. Por ahora un aviso al abrir el 3MF de otro programa (2026-11-09): «Proyecto de
+  <programa>: N piezas. Sus ajustes todavía no se traen», o el de programa desconocido (regla 2). Falta el diálogo
+  completo con los ajustes traducidos, parecidos y sin equivalente, y «Usar la impresora del proyecto».
 - [ ] Reglas 6 a 8, 11 y 12: ajustes con la tabla de traducción del paquete de perfiles (la hace la sesión de perfiles).
 - [ ] Regla 10: pintura, cuando haya archivos de muestra (PI6 a PI8).
 

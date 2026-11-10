@@ -19,6 +19,12 @@ struct Kinematics {
     double jerk[4] = {0.0, 0.0, 0.0, 0.0};      // mm/s per axis a junction changes at once
     double junction_deviation = 0.0;            // mm; in place of the jerk and corner_speed
     double min_extrude_feed = 0.0, min_travel_feed = 0.0; // mm/s
+    // Klipper's corners (print_time.md, rule 12): corner_speed is its
+    // square_corner_velocity, turned into a junction deviation by each
+    // move's acceleration, and no jerks; min_cruise_ratio of a move's length
+    // is kept at its top speed, which caps short moves.
+    bool klipper = false;
+    double min_cruise_ratio = 0.0;
 };
 
 // Print time from textbook kinematics (own design): every move has a
@@ -53,6 +59,21 @@ public:
         k_.travel_acceleration = travel;
     }
 
+    // A wait (G4) after the moves added so far: the machine stops for it
+    // (print_time.md, rule 9). Added to the batch's time when it is flushed.
+    // The limits the machine G-code changes on the way (M201, M203, M205,
+    // SET_VELOCITY_LIMIT; print_time.md, rule 13): they hold from the next batch.
+    Kinematics& limits() { return k_; }
+    // M220: the feeds of the moves that follow, times this factor.
+    void set_speed_factor(double factor) {
+        if (factor > 0.0)
+            speed_factor_ = factor;
+    }
+    void dwell(double seconds) {
+        if (seconds > 0.0)
+            pending_dwell_ += seconds;
+    }
+
     double total() const { return total_; }
 
     // A mark between the moves added so far and the next ones: once they are
@@ -69,13 +90,15 @@ private:
     Kinematics k_;
     std::vector<Move> moves_;
     double total_ = 0.0;
+    double pending_dwell_ = 0.0;
+    double speed_factor_ = 1.0;
     std::vector<std::pair<std::size_t, std::size_t>> pending_marks_; // (mark, moves before it) of this batch
     std::vector<double> mark_times_;
 };
 
 // The time of a move of length mm that enters at v0, leaves at v1 and runs at
 // most at feed, with acceleration a (v0 and v1 reachable from each other).
-double move_time(double length, double v0, double v1, double feed, double a);
+double move_time(double length, double v0, double v1, double feed, double a, double cruise_ratio = 0.0);
 
 // "1h 7m 36s", "7m 36s", "36s" (docs/spec/GCODE_OUTPUT.md, "Tiempos"); days as "2d 1h 0m 5s".
 std::string format_duration(double seconds);
