@@ -12185,3 +12185,6 @@ QA; bundle id `net.tismaservidores.tisma`).
 - 45fc876: cada llamada al motor leía su salida hasta el final antes de esperar con límite de tiempo: un motor colgado
   se esperaba para siempre. Ahora la salida va a un archivo temporal (`callEngine`) y el límite vale. Los errores de
   Mi biblioteca salían siempre en castellano, también con el teléfono en inglés (`EngineCallTest`).
+- 59cb49b: el perfil de impresora iba siempre a `profile.json` y los errores de laminar/analizar a `engine.err`, ambos
+  fijos: dos llamadas a la vez se leían los resultados entre sí. El perfil además esperaba la salida antes del límite
+  (motor colgado = espera eterna). Archivos propios por llamada (`EngineCallTest`).
