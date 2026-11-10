@@ -12488,3 +12488,6 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   - Pieza: llenar la cama, objetos separados, reemplazar, simplificar, reteselar, revisar CAD, dividir para la
     impresora, agregar parte y los submenús de volúmenes con bloqueador y forzador.
   - Preferencias: 4 filas «Próximamente».
+- CI local 1234fc8, cerrada: las 4 fallas eran de la máquina. Siete `tisma` de corridas a mano quedaron colgados desde
+  las 12:50 (el `timeout` cortaba xvfb-run, no la app) y se comían la CPU. Sin ellos, `aero_drag_coefficients` pasa en
+  316 s y las otras tres al repetirlas. Las corridas a mano van ahora con `--screenshot` (la app termina sola).
