@@ -11857,3 +11857,11 @@ arreglado en 9d8dc76 y subido.
 - **Prueba que falló en el CI local (gcc):** `ui_script_structural_analyze`, «expect-optimize orientation: got
   cancelled»: el resultado de la búsqueda anterior seguía visible un cuadro después de terminar la nueva. Al empezar
   una búsqueda se borra el anterior.
+- project_import regla 4 (parte): `parse_3mf` guarda los modificadores (cada uno aparte), los bloqueadores y los
+  forzadores de soporte de un proyecto PrusaSlicer en `ModelFile::modifiers`, `support_blockers` y
+  `support_enforcers` (antes se descartaban; los negativos ya iban a `negative`). Prueba con pi4: cubo 12 triángulos,
+  esfera negativa 1280, cilindro modificador 1440, caja bloqueadora 12. Falta: llevarlos a la placa en la interfaz
+  (modificador como volumen de la pieza; bloqueador y forzador como pintura o volumen de soporte) y los ajustes de
+  cada modificador (regla 7).
+- Cola nueva del equipo de especificación (después del conversor): `p2p_library.md` (spec/next a9148ef), cliente del
+  motor e interfaz de escritorio, y un comando `check-file` reutilizable (reglas 3 sexies a 3 octies).

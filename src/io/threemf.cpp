@@ -188,10 +188,12 @@ ModelPart parse_model_part(std::string_view text) {
 
 // The volumes of a slicer project's objects (Metadata/Slic3r_PE_model.config):
 // for each object, the triangle ranges that are not parts.
+enum class VolumeKind { Part, Negative, Modifier, Blocker, Enforcer, Other };
 struct Volume {
     std::uint32_t first = 0, last = 0;
     bool part = true;
     bool negative = false; // a volume that takes material away (model_tools.md, rule 2)
+    VolumeKind kind = VolumeKind::Part; // project_import.md, rule 4
 };
 std::map<std::uint32_t, std::vector<Volume>> project_volumes(std::string_view text) {
     std::map<std::uint32_t, std::vector<Volume>> out;
@@ -220,6 +222,12 @@ std::map<std::uint32_t, std::vector<Volume>> project_volumes(std::string_view te
             const std::string_view type = xml.attribute("value").value_or("ModelPart");
             volume->part = type == "ModelPart";
             volume->negative = type == "NegativeVolume";
+            volume->kind = type == "ModelPart"           ? VolumeKind::Part
+                           : type == "NegativeVolume"    ? VolumeKind::Negative
+                           : type == "ParameterModifier" ? VolumeKind::Modifier
+                           : type == "SupportBlocker"    ? VolumeKind::Blocker
+                           : type == "SupportEnforcer"   ? VolumeKind::Enforcer
+                                                         : VolumeKind::Other;
         }
     }
     return out;
@@ -291,16 +299,32 @@ struct Builder {
         out.parts += listed ? std::size_t(std::count_if(listed->begin(), listed->end(), [](const Volume& v) { return v.part; }))
                             : 1;
         const bool mirrored = determinant(transform) < 0.0; // keep the faces outward
+        std::size_t modifiers_before = out.modifiers.size();
+        if (listed)
+            for (const Volume& v : *listed)
+                if (v.kind == VolumeKind::Modifier)
+                    out.modifiers.emplace_back();
         for (std::size_t t = 0; t < object.triangles.size(); ++t) {
             const auto in = [&](const Volume& v) { return t >= v.first && t <= v.last; };
-            const bool negative = listed && std::any_of(listed->begin(), listed->end(), [&](const Volume& v) {
-                                      return v.negative && in(v);
-                                  });
-            if (!negative && listed && std::any_of(listed->begin(), listed->end(), [&](const Volume& v) {
-                    return !v.part && in(v);
-                }))
+            const Volume* volume = nullptr;
+            std::size_t modifier = modifiers_before;
+            if (listed)
+                for (const Volume& v : *listed) {
+                    if (in(v)) {
+                        volume = &v;
+                        break;
+                    }
+                    if (v.kind == VolumeKind::Modifier)
+                        ++modifier;
+                }
+            const VolumeKind kind = volume ? volume->kind : VolumeKind::Part;
+            if (kind == VolumeKind::Other)
                 continue;
-            TriangleMesh& to = negative ? out.negative : out.mesh;
+            TriangleMesh& to = kind == VolumeKind::Negative ? out.negative
+                               : kind == VolumeKind::Modifier ? out.modifiers[modifier]
+                               : kind == VolumeKind::Blocker  ? out.support_blockers
+                               : kind == VolumeKind::Enforcer ? out.support_enforcers
+                                                              : out.mesh;
             const auto& tri = object.triangles[t];
             for (const std::uint32_t v : tri)
                 if (v >= object.vertices.size())

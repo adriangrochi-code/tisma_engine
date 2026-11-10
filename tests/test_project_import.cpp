@@ -229,3 +229,24 @@ TEST_CASE("project import: a PrusaSlicer project's own settings, and how many th
     std::ifstream box(std::filesystem::path(TISMA_TEST_DATA_DIR) / "formats" / "box.3mf", std::ios::binary);
     CHECK(project_settings(std::string((std::istreambuf_iterator<char>(box)), std::istreambuf_iterator<char>())).empty());
 }
+
+TEST_CASE("project import: a PrusaSlicer project's kinds of part (rule 4, pi4)", "[project_import]") {
+    std::ifstream in(std::filesystem::path(TISMA_TEST_DATA_DIR) / "formats" / "pi4_prusaslicer_parts.3mf", std::ios::binary);
+    REQUIRE(in);
+    const std::string package((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const ModelFile m = parse_3mf(package);
+    // The cube (12 triangles), a negative sphere, a modifier cylinder and a
+    // support blocker box, as the project's config lists them.
+    CHECK(m.parts == 1);
+    CHECK(m.mesh.triangle_count() == 12);
+    CHECK(m.negative.triangle_count() == 1280);
+    REQUIRE(m.modifiers.size() == 1);
+    CHECK(m.modifiers[0].triangle_count() == 1440);
+    CHECK(m.support_blockers.triangle_count() == 12);
+    CHECK(m.support_enforcers.empty());
+    // The blocker box where the project put it: centred at (22.5, 2.5, 2.5) of the object.
+    const BoundingBox b = m.support_blockers.bounding_box();
+    const BoundingBox cube = m.mesh.bounding_box();
+    CHECK(b.max.x > cube.min.x); // it overlaps the cube's side, as placed
+    CHECK(b.min.z < cube.max.z);
+}

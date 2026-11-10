@@ -33,6 +33,11 @@ struct ModelFile {
     // A slicer project's negative volumes (model_tools.md, rule 2), in the
     // same coordinates: taken away from the part when slicing.
     TriangleMesh negative;
+    // Its other kinds of part (project_import.md, rule 4), in the same
+    // coordinates: modifiers (each volume apart), support blockers and
+    // support enforcers.
+    std::vector<TriangleMesh> modifiers;
+    TriangleMesh support_blockers, support_enforcers;
 };
 
 // A Wavefront OBJ file: its vertices ("v") and faces ("f", any number of
