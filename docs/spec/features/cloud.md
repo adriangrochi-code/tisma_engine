@@ -53,8 +53,13 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
 5b. **Cobro por las tiendas oficiales** (decisión del dueño, 10-11-2026: «usar Google Play, la tienda de Mac y tiendas
     oficiales, que me simplifiquen lo más posible»):
     - la suscripción a un plan se compra dentro de la app, con la tienda del sistema: Google Play en Android, App Store
-      en iPhone y en Mac (compras dentro de la app, suscripción automática), y Microsoft Store en Windows cuando la
-      app esté publicada ahí;
+      en iPhone y en Mac (compras dentro de la app, suscripción automática), y Microsoft Store en Windows (la app
+      publicada en la tienda, con la suscripción como complemento de la app; dueño, 10-11-2026: «cobrarlo por la
+      Microsoft Store o las tiendas principales de Linux, para alcanzar al mayor público y que el cobro sea lo más
+      fácil y automatizado posible»);
+    - Linux: la app se publica en Flathub y en la Snap Store para llegar a más gente; como esas tiendas hoy no venden
+      suscripciones dentro de la app, en Linux el plan se compra en otra tienda con la misma cuenta, o con el cobro por
+      la web si el dueño lo prende;
     - el plan queda en la cuenta de Tisma Cloud: lo comprado en una tienda vale en todos los equipos de esa cuenta
       (Linux, Windows fuera de la tienda y la computadora usan el plan de la cuenta);
     - el servidor solo acepta la compra verificada con la tienda (recibo firmado o aviso del servidor de la tienda) y
