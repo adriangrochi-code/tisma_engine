@@ -37,6 +37,13 @@ desventajas».
 3 quater. **Lista de bloqueo:** `format` `tisma-library-blocklist`, `version` 1, `generated`, `sequence`, `expires`
    (generated + 7 días; se firma de nuevo cada 6 h), `files` (sha256 y motivo), `accounts`, `peers`, `addresses` (IP
    con `until`) y `revoked_keys`.
+3 bis bis. **Publicar** (servidor, a4eb152): `POST /v1/library/peer-key`, `POST /v1/library/models` (JSON, con la
+   miniatura en `thumbnail_webp` en base64, hasta 64 KB), `.../models/<id>/revisions`, `DELETE .../models/<id>`,
+   `GET /v1/library/mine`, `POST /v1/library/reports`. `manifest_signature` es la firma Ed25519 de la clave del par
+   sobre el JSON canónico `{"files":[...]}` (claves ordenadas, sin espacios, UTF-8, archivos ordenados por `path`).
+   Licencias: CC0-1.0, CC-BY-4.0, CC-BY-SA-4.0, CC-BY-NC-4.0, CC-BY-NC-SA-4.0, CC-BY-ND-4.0, CC-BY-NC-ND-4.0, MIT,
+   GPL-3.0-or-later, LicenseRef-All-Rights-Reserved. Una IP de la lista va como red (`203.0.113.5/32`). Sin certificado
+   el servidor sirve igual (para probar) con `certificate` `null`; las apps no lo usan.
 3 quinquies. **Clave** (decisión del dueño, 10-11-2026): el maestro genera una clave Ed25519 propia de la biblioteca
    (`storage/library.key`). El dueño firma una sola vez su clave pública con la clave del proyecto del USB
    (`app_updates.md`, regla 14), sobre los bytes `tisma-library-key/1\n` más la clave pública de 32 bytes, y sube ese
