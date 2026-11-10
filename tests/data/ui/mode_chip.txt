@@ -1,0 +1,13 @@
+# The mode chip in the top bar (interface.md, «Menús»: Modo): three options
+# with a radio button and their explanation; choosing one sets the settings
+# level, as the panel does.
+expect-level normal
+menu mode_chip
+expect-control mode_simple
+expect-control mode_expert
+expect-text All the settings
+menu mode_expert
+expect-level advanced
+menu mode_chip
+menu mode_simple
+expect-level basic

@@ -582,6 +582,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/gear_filament.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_gear_filament.png)
     set_tests_properties(ui_script_gear_filament PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The mode chip in the top bar (interface.md, «Menús»).
+    add_test(NAME ui_script_mode_chip
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1700x900x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1640x860
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/mode_chip.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_mode_chip.png)
+    set_tests_properties(ui_script_mode_chip PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The plate's right-click menu adds a cube and a sphere as models.
     add_test(NAME ui_script_plate_menu
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

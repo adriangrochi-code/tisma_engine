@@ -6705,6 +6705,17 @@ void App::top_bar() {
     const bool chip_shown = chip_text || spare >= button_h + gap;
     if (chip_shown)
         right += (chip_text ? width_of(chip_label) : button_h) + gap;
+    // The mode chip (interface.md, «Menús»: Modo): the settings level, three
+    // options with their explanation; only when there is room (the settings
+    // panel has the same choice).
+    const T level_name = view_level_ == ViewLevel::Basic    ? T::LevelBasic
+                         : view_level_ == ViewLevel::Normal ? T::LevelNormal
+                         : view_level_ == ViewLevel::Advanced ? T::LevelAdvanced
+                                                              : T::LevelCustom;
+    const bool mode_shown = tab_ == Tab::Prepare && spare - (chip_shown ? (chip_text ? width_of(chip_label) : button_h) + gap : 0.0f) >=
+                                                        width_of(tr(level_name)) + 2.0f * gap + button_h;
+    if (mode_shown)
+        right += width_of(tr(level_name)) + gap;
     // The help (assistant.md, rule 1), between the tabs and the actions, when
     // there is room; F1 and More open it anyway. The search for a setting is
     // in the settings panel, under the printer (the owner's decision, 2026-10-29).
@@ -6722,6 +6733,33 @@ void App::top_bar() {
     }
     ImGui::SameLine(ImGui::GetWindowWidth() - right - 12.0f * scale_);
     ImGui::SetCursorPosY(top);
+    if (mode_shown) {
+        const bool mode = button("##mode_chip", nullptr, tr(level_name), false, false, true, tr(T::ChooseSettings), button_h);
+        note_rect("mode_chip");
+        if (mode)
+            ImGui::OpenPopup("##mode_menu");
+        if (ImGui::BeginPopup("##mode_menu")) {
+            const struct {
+                const char* name;
+                T label, tip;
+                ViewLevel level;
+            } modes[] = {{"mode_simple", T::LevelBasic, T::LevelBasicTip, ViewLevel::Basic},
+                         {"mode_advanced", T::LevelNormal, T::LevelNormalTip, ViewLevel::Normal},
+                         {"mode_expert", T::LevelAdvanced, T::LevelAdvancedTip, ViewLevel::Advanced}};
+            for (const auto& m : modes) {
+                if (ImGui::RadioButton((std::string(tr(m.label)) + "##" + m.name).c_str(), view_level_ == m.level)) {
+                    choose_level(m.level);
+                    ImGui::CloseCurrentPopup();
+                }
+                note_rect(m.name);
+                ImGui::SameLine();
+                loc::TextDisabled("— %s", tr(m.tip));
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::SameLine(0, gap);
+        ImGui::SetCursorPosY(top);
+    }
     if (chip_shown) {
         const bool chip = chip_text ? button("##cloud_chip", "account", chip_label, false, cloud_open_, true,
                                              tr(T::CloudChipTip), button_h)
@@ -23314,6 +23352,15 @@ void App::script_input() {
         std::printf("ui-script: expect-optimize %s: got %s (%d %%)\n", step.key.c_str(), got.c_str(), o.best.density);
         if (got != step.key)
             return fail_step("got " + got);
+        next();
+    } else if (step.verb == "expect-level") { // the settings level: basic, normal, advanced or custom
+        const char* got = view_level_ == ViewLevel::Basic    ? "basic"
+                          : view_level_ == ViewLevel::Normal ? "normal"
+                          : view_level_ == ViewLevel::Advanced ? "advanced"
+                                                               : "custom";
+        std::printf("ui-script: expect-level %s: %s\n", step.key.c_str(), got);
+        if (step.key != got)
+            return fail_step(std::string("the level is ") + got);
         next();
     } else if (step.verb == "expect-enabled") { // a named menu entry on the screen, usable (yes) or greyed (no)
         if (!g_menu_rects.contains(step.key))

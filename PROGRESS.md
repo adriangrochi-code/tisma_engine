@@ -12409,3 +12409,6 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   preferencias). Prueba `ui_script_gear_filament`.
 - CI local b111be9: 1165/1166 en gcc; `aero_drag_coefficients` por tiempo con la máquina cargada por compilaciones en
   paralelo (se repite sola).
+- **Paso 7e (Modo):** chip en la barra superior (en Preparar, cuando hay lugar) con el nivel de ajustes; abre tres
+  opciones con botón de radio y su explicación (Básico — lo que casi toda impresión necesita; Normal — más ajustes;
+  Avanzado — todos), las mismas del panel. Prueba `ui_script_mode_chip` (ventana de 1640 px) y verbo `expect-level`.
