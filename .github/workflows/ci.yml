@@ -94,7 +94,7 @@ jobs:
           - arch: arm64
             runner: macos-14
           - arch: x86_64
-            runner: macos-13
+            runner: macos-15-intel # macos-13 is retired: a job asking for it waits forever
     steps:
       - uses: actions/checkout@v4
       - name: Install Ninja and OpenSSL 3
