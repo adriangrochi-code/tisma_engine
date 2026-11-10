@@ -12192,3 +12192,5 @@ QA; bundle id `net.tismaservidores.tisma`).
   trabajos de la nube: `LaunchedEffect` no se detiene al salir. `WhileVisible` los corre solo con la app a la vista
   (`WhileVisibleTest`). Pendiente de revisar: la búsqueda de impresoras en la red (NSD) también sigue en segundo
   plano; el aviso de fin de impresión (`PrintWatchService`) sí debe seguir.
+- 5faf263: la búsqueda de impresoras en la red (NSD) seguía con la app en segundo plano y su hilo de sondeo nunca se
+  cerraba. Ahora corre solo con la lista a la vista (`WhileVisible`) y `stop()` cierra el hilo (`DiscoveryLifecycleTest`).
