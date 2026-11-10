@@ -12667,6 +12667,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   nombre completo con la marca («Prusament Prusament PLA») y las otras coincidencias eran nombres más largos con las
   mismas palabras (PLA Blend, rPLA). Ahora el nombre sin la marca, si es de uno solo, lo elige. Prueba `[cli]`, que
   falla sin el arreglo.
+- BH52 (búsqueda profunda, copias + falda): `--copies 1000` en una MK4S decía «182 fit», pero con 182 la falda se salía
+  de la cama y no había G-code («the skirt goes off the bed»). La cuenta de las que caben ahora resta de la cama lo
+  que el borde y la falda llegan más allá de las copias de afuera. Prueba `[cli]` BH52, que falla sin el arreglo.
 - Pedido del dueño (2026-11-10): la clave de firma se crea sola al enchufar el pendrive, la primera vez, y después
   queda bloqueada. `python tools/sign_release.py create-key`, o doble clic en `tools/crear_clave_pendrive.bat`:
   espera un pendrive nuevo, crea `tisma/clave.pem` (nunca pisa una que ya esté), espera 2 min un segundo pendrive

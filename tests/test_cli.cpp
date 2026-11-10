@@ -524,6 +524,27 @@ TEST_CASE("slice runs the post-processing scripts once confirmed (rules 16 and 1
     std::filesystem::remove_all(dir);
 }
 
+TEST_CASE("slice --copies: as many as fit, with the skirt around them on the bed too (BH52)", "[cli]") {
+    const auto dir = test_temp_dir() / "tisma_test_copies_fit";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto config = dir / "settings.json", gcode = dir / "fit.gcode";
+    REQUIRE(run({"profile", "--printer", "Prusa Research Original Prusa MK4S", "--filament", "Prusament Prusament PLA",
+                 "-o", config.string()})
+                .code == kExitOk);
+    Run r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--copies", "1000"});
+    REQUIRE(r.code == kExitUsage);
+    const std::size_t at = r.err.find(": ", r.err.find("bed"));
+    REQUIRE(at != std::string::npos);
+    const std::string fit = std::to_string(std::stoul(r.err.substr(at + 2)));
+    INFO(fit << " fit");
+    // The number said to fit makes G-code: the skirt does not go off the bed.
+    r = run({"slice", kData + "/cube_ascii.stl", "--config", config.string(), "-o", gcode.string(), "--copies", fit});
+    INFO(r.err);
+    CHECK(r.code == kExitOk);
+    std::filesystem::remove_all(dir);
+}
+
 TEST_CASE("slice --copies prints copies of the model, one by one with sequential printing (sequential.md, SQ1)",
           "[cli]") {
     const auto dir = test_temp_dir() / "tisma_test_copies";
