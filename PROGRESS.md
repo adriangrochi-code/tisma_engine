@@ -12297,3 +12297,6 @@ QA; bundle id `net.tismaservidores.tisma`).
 - **No medido:** el banco de velocidad (CPU ocupada por la CI local con ASan y el fuzz).
 - **Abierto:** la fuga en ASan de `ui_project_import_*` (dentro de llvmpipe); los volúmenes de soporte en la placa de
   la interfaz (hace falta una forma «malla» en `PlateVolume`, con su guardado y su dibujo).
+- **CI local b2a2963 (mantenimiento):** gcc 1161/1161, clang 1161/1161, ASan 1156/1160. Fallas: las dos
+  `ui_project_import_*` (la fuga dentro de llvmpipe, abierta); `ui_script_design_sketch` (Xvfb no arrancó) y
+  `ui_bambu_print` (30 s, la máquina cargada) pasan al repetirlas. Fuzz de las 10:10, semilla 1011202609: 0 fallas.
