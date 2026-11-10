@@ -10426,14 +10426,28 @@ void App::slice_panel() {
         g_menu_rects["save_more"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                            ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         if (ImGui::BeginPopup("##save_menu")) {
+            // The outputs this slice can go to, the main button's one marked
+            // (interface.md, «Menús»): the program on the network, the
+            // printer on USB, the file.
             const bool connected = printer_ && printer_->status().state == device::PrinterState::Idle;
-            const bool send = ImGui::MenuItem(tr(connected ? T::SendToPrinter : T::SendToPrinterNone), nullptr, false,
-                                              connected && device_can_print() && !result_->resin);
-            g_menu_rects["send"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
-                                          ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
-            if (send)
-                device_print();
-            if (to_host && ImGui::MenuItem(tr(T::Export)))
+            const bool usb = connected && device_can_print() && !result_->resin;
+            if (to_host) {
+                const bool host = ImGui::MenuItem(tr(T::SendToPrinter), nullptr, true, !host_job_.valid());
+                note_rect("send_host");
+                if (host) {
+                    host_dialog_name_ = host_default_name();
+                    host_dialog_open_ = true;
+                }
+            }
+            if (usb) {
+                const bool send = ImGui::MenuItem((std::string(tr(T::SendToPrinter)) + " (USB)").c_str());
+                note_rect("send");
+                if (send)
+                    device_print();
+            }
+            const bool file = ImGui::MenuItem(tr(result_->resin ? T::ExportGoo : T::Export), nullptr, !to_host);
+            note_rect("export_file");
+            if (file)
                 begin_export();
             const bool project = ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S");
             g_menu_rects["project"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,

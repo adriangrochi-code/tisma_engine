@@ -12392,3 +12392,6 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   saltee la pieza y que el proyecto lo guarde), Reemplazar por STL, Simplificar, Reteselar, Revisar CAD, Dividir para
   la impresora, Agregar parte ▸, submenús de modificador/negativo con formas, bloqueador y forzador de soporte
   (pendiente: la forma «malla» en `PlateVolume`), Material de soporte.
+- **Paso 7a (flecha del botón principal):** solo las salidas posibles (el programa de red probado, la impresora por
+  USB conectada, el archivo), la del botón marcada; la impresora sin conexión ya no sale en gris. Prueba
+  `ui_script_arrow_menu`.
