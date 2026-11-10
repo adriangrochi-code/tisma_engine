@@ -32,8 +32,9 @@ desventajas».
    menor que el último visto) y `models`, cada uno con `id`, `revision`, `published`, `name`, `description`, `tags`,
    `license` (SPDX, lista cerrada), `author` (`account` opaco y `name`), `thumbnail` (WebP, hasta 64 KB), `size`,
    `files` (`path`, `role`: `project`, `profile` (receta), `analysis` o `photo`, sin G-code; `size`, `sha256`), `analysis` (resumen),
-   `peer_key`, `manifest_signature` (firma del par sobre `{"files":[...]}`, ver 3 bis bis), `swarm` (`{"protocol": "libp2p/tisma-library/1", "piece_size": 1048576, "piece_roots": {…}}`, con la raíz de
-   los pedazos de cada archivo; acordado con el motor) y `checked` (lo revisó un sembrador).
+   `peer_key`, `manifest_signature` (firma del par sobre `{"files":[...]}`, ver 3 bis bis), `swarm` (`{"protocol": "libp2p/tisma-library/1", "piece_size": 1048576, "piece_roots": {…}}`, donde
+   `piece_roots` lleva una entrada por cada archivo del modelo y ninguna otra: la clave es el `sha256` del archivo y el
+   valor, el SHA-256 de las huellas de sus pedazos (32 bytes cada una, seguidas en orden); acordado con el motor) y `checked` (lo revisó un sembrador).
 3 quater. **Lista de bloqueo:** `format` `tisma-library-blocklist`, `version` 1, `generated`, `sequence`, `expires`
    (generated + 7 días; se firma de nuevo cada 6 h), `files` (sha256 y motivo), `accounts`, `peers`, `addresses` (IP
    con `until`) y `revoked_keys`. Una IP va como `{"sha256": SHA-256(sal del día + IP), "until"}`, con `address_salt` en la lista.
@@ -42,7 +43,7 @@ desventajas».
    `GET /v1/library/mine`, `POST /v1/library/reports`. `manifest_signature` es la firma Ed25519 de la clave del par
    sobre el JSON canónico `{"files":[...]}` (claves ordenadas, sin espacios, UTF-8, archivos ordenados por `path`).
    Licencias: CC0-1.0, CC-BY-4.0, CC-BY-SA-4.0, CC-BY-NC-4.0, CC-BY-NC-SA-4.0, CC-BY-ND-4.0, CC-BY-NC-ND-4.0, MIT,
-   GPL-3.0-or-later, LicenseRef-All-Rights-Reserved. Una IP que se bloquea se manda al panel como red (`203.0.113.5/32`); en la lista publicada va como huella (3 quater). Sin certificado
+   GPL-3.0-or-later, LicenseRef-All-Rights-Reserved. Una IP que se bloquea se manda al panel como dirección o como red de una sola dirección (`203.0.113.5/32`; un rango se rechaza); en la lista publicada va como huella (3 quater). Sin certificado
    el servidor responde 503, salvo en pruebas (`TISMA_LIBRARY_UNCERTIFIED`).
 3 quinquies. **Clave** (decisión del dueño, 10-11-2026): el maestro genera una clave Ed25519 propia de la biblioteca
    (`storage/library.key`). El dueño firma una sola vez su clave pública con la clave del proyecto del USB
