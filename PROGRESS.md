@@ -11892,3 +11892,8 @@ arreglado en 9d8dc76 y subido.
   `POST /v1/library/peers/announce` firmado por la clave de par sobre el JSON canónico, ±5 min, cada 10 min, solo en
   memoria. `GET /v1/library/peers?model=&peer_key=`. PeerId: multihash identidad del PublicKey protobuf Ed25519,
   base58btc. Pendiente del motor: vectores de prueba (clave fija → PeerId; ticket con clave de biblioteca fija).
+- Cola (2026-11-10, del equipo de especificación y del paquete): (1) capas curvas con `machine.relative_extrusion`
+  apagado fallan con rc 2: que la interfaz la prenda sola con aviso, o avise claro; (2) `curved.mode` stress sigue
+  sin hacer: a la cola de no planares; (3) el paquete publica `index.json.xz` (0,12 MB contra 2,06 MB): bajarlo si
+  está y caer a `index.json` si no; (4) release 0.12.0-beta.1 para todas las versiones (pedido del dueño).
+- release.yml: compila también los APK de Android (beta con R8 y el de respaldo, arm64) y los adjunta.

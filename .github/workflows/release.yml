@@ -149,9 +149,64 @@ jobs:
             tisma-engine-*.exe
           if-no-files-found: error
 
+  # The Android app (apps/android/, as .github/workflows/android.yml builds it): the testers' build shrunk by R8
+  # and the debug one as a fallback, both for phones (arm64-v8a), with SolidCraft when its workflow has artifacts.
+  android:
+    name: Build (android-arm64)
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install the NDK the engine is built with
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" > /dev/null
+      - name: Get SolidCraft from its own workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow solidcraft-android.yml --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId' || true)
+          dir="$RUNNER_TEMP/solidcraft"
+          if [ -n "$run" ]; then
+            for abi in arm64-v8a x86_64; do
+              gh run download "$run" -R "$GITHUB_REPOSITORY" -n "solidcraft-android-$abi" -D "$RUNNER_TEMP/sc-$abi" || true
+              mkdir -p "$dir" && cp -rn "$RUNNER_TEMP/sc-$abi"/. "$dir"/ 2>/dev/null || true
+            done
+          fi
+          if [ -f "$dir/arm64-v8a/solidcraft-cli" ] && [ -f "$dir/x86_64/solidcraft-cli" ]; then
+            chmod +x "$dir"/*/solidcraft-cli
+            echo "SOLIDCRAFT=-Ptisma.solidcraft=$dir" >> "$GITHUB_ENV"
+          else
+            echo "::notice::No SolidCraft artifacts: the APKs are built without the Design tab's CAD"
+          fi
+      - name: Build
+        run: ./gradlew --no-daemon $SOLIDCRAFT :app:assembleDebug :app:assembleBeta
+      - name: Name the APKs after the release
+        run: |
+          version="$(cat ../../VERSION)"
+          cp app/build/outputs/apk/beta/app-arm64-v8a-beta.apk "../../tisma-android-$version-beta-arm64.apk"
+          cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk "../../tisma-android-$version-fallback-arm64.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-arm64
+          path: tisma-android-*.apk
+          if-no-files-found: error
+
   publish:
     name: Leave the release as a draft for the owner to sign (published as it is without the key)
-    needs: [version, build]
+    needs: [version, build, android]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
