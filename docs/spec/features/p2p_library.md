@@ -37,7 +37,12 @@ desventajas».
 3 quater. **Lista de bloqueo:** `format` `tisma-library-blocklist`, `version` 1, `generated`, `sequence`, `expires`
    (generated + 7 días; se firma de nuevo cada 6 h), `files` (sha256 y motivo), `accounts`, `peers`, `addresses` (IP
    con `until`) y `revoked_keys`.
-3 quinquies. **Clave:** a decidir por el dueño (ver `app_updates.md`, regla 14).
+3 quinquies. **Clave** (decisión del dueño, 10-11-2026): el maestro genera una clave Ed25519 propia de la biblioteca
+   (`storage/library.key`). El dueño firma una sola vez su clave pública con la clave del proyecto del USB
+   (`app_updates.md`, regla 14), sobre los bytes `tisma-library-key/1\n` más la clave pública de 32 bytes, y sube ese
+   certificado. Las apps solo traen la clave del proyecto y aceptan un índice o una lista firmados por una clave de
+   biblioteca con certificado válido y que no esté en `revoked_keys`. Si se roba el maestro, el dueño certifica una
+   clave nueva y la vieja pasa a `revoked_keys`. Sin certificado, la biblioteca no publica (503).
 
 ## La moderación
 
