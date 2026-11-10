@@ -31,10 +31,17 @@ class Catalog(val printers: List<PrinterModel>, val filaments: List<FilamentMode
         val fullName get() = "$vendor $name"
     }
 
-    /** Filaments that fit a printer (same diameter), by material then name. */
+    /**
+     * Filaments that fit a printer (same diameter): the printer's own brand first, then PLA (the usual first
+     * material), then the rest by material and name. QA: a Bambu Lab printer listed «Anycubic ABS» first.
+     */
     fun filamentsFor(p: PrinterModel?): List<FilamentModel> =
         filaments.filter { p == null || it.diameter == 0.0 || kotlin.math.abs(it.diameter - p.filamentDiameter) < 0.01 }
-            .sortedWith(compareBy({ it.material }, { it.fullName }))
+            .sortedWith(compareBy({ if (p != null && sameBrand(it.vendor, p.vendor)) 0 else 1 },
+                { if (it.material.equals("PLA", ignoreCase = true)) 0 else 1 }, { it.material }, { it.fullName }))
+
+    /** «Bambu Lab» and «BambuLab» are one brand. */
+    private fun sameBrand(a: String, b: String) = a.filter { it.isLetterOrDigit() }.equals(b.filter { it.isLetterOrDigit() }, ignoreCase = true)
 
     fun search(query: String): List<PrinterModel> {
         val words = query.lowercase().split(' ').filter { it.isNotBlank() }

@@ -145,6 +145,20 @@ class EngineRunnerTest {
     }
 
     @Test
+    fun `the printer's own brand comes first, then PLA (QA, Bambu Lab listed Anycubic ABS first)`() {
+        val root = File(System.getProperty("user.dir")).parentFile.parentFile.parentFile
+        val c = net.tisma.app.engine.Catalog.parse(File(root, "resources/catalog/printers.json").readText(),
+            File(root, "resources/catalog/filaments.json").readText())
+        val bambu = c.search("bambu a1 mini").first()
+        val list = c.filamentsFor(bambu)
+        val own = list.takeWhile { it.vendor.replace(" ", "").equals(bambu.vendor.replace(" ", ""), true) }
+        if (own.isNotEmpty()) assertEquals("PLA", own.first().material.uppercase())
+        val rest = list.drop(own.size)
+        assertEquals("PLA", rest.first().material.uppercase())
+        assertTrue(list.first().material.uppercase() != "ABS")
+    }
+
+    @Test
     fun `analyze runs the nodes' command line and returns the verdict`() {
         val engine = fake("""
             echo "progress 50"

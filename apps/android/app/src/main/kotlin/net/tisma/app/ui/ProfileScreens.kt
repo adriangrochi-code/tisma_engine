@@ -64,7 +64,9 @@ fun PrinterCard(state: SliceState, connection: Connection? = null, onConnection:
                 val plate = (state.value("bambu.plate") as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
                 Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
                     BedDrawing(bedFamily(plate))
-                    if (plate.isNotEmpty()) Text(plate, style = MaterialTheme.typography.labelSmall)
+                    // QA: without a name the tile said nothing; «auto» is the printer's own choice.
+                    Text(plate.ifEmpty { stringResource(R.string.bambu_plate_auto) }, style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.testTag("printer_card_plate"))
                 }
             }
             // settings_panel.md, rule 42: right of the name, the connection's icon.
