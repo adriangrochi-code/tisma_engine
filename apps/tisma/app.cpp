@@ -1034,6 +1034,10 @@ private:
     // «Based on» under a card, and the Credits and sources page (credits.md).
     void card_credits(std::string_view card, float left, float right);
     void credits_dialog();
+    bool shortcuts_open_ = false, system_info_open_ = false;
+    void shortcuts_dialog();   // Help › Keyboard Shortcuts (?)
+    void system_info_dialog(); // Help › System Info
+    void machine_lines();      // the machine: processor, memory, graphics, screen, power
     // The help panel over the settings panel (assistant.md).
     void help_panel();
     void load_help_data();
@@ -7942,6 +7946,118 @@ void App::help_apply_dialog() {
         help_change_guide_.clear();
         ImGui::CloseCurrentPopup();
     }
+    ImGui::EndPopup();
+}
+
+// The machine as Preferences › Video and Help › System Info show it.
+void App::machine_lines() {
+    const std::string cpu = system_.cpu.empty() ? std::string("?") : system_.cpu;
+    loc::TextDisabled(tr(T::ConfigMachineCpu), cpu.c_str(), system_.physical_cores, system_.logical_cores);
+    loc::TextDisabled(tr(T::ConfigMachineRam), bytes_text(system_.ram_total).c_str(), bytes_text(system_.ram_free).c_str());
+    loc::TextDisabled(tr(T::ConfigMachineGpu), (gpu_vendor_.empty() ? gpu_renderer_ : gpu_vendor_ + " · " + gpu_renderer_).c_str(),
+                      gpu_version_.c_str());
+    if (screen_width_ > 0 && screen_hz_ > 0)
+        loc::TextDisabled(tr(T::ConfigMachineScreen), screen_width_, screen_height_, screen_hz_, double(scale_));
+    else if (screen_width_ > 0) // a screen that does not say its rate (a virtual one)
+        loc::TextDisabled(tr(T::ConfigMachineScreenNoRate), screen_width_, screen_height_, double(scale_));
+    loc::TextDisabled("%s", tr(system_.power == PowerSource::Battery  ? T::ConfigOnBattery
+                               : system_.power == PowerSource::Mains ? T::ConfigOnMains
+                                                                     : T::ConfigPowerUnknown));
+}
+
+// Help › Keyboard Shortcuts (?): every shortcut, by card.
+void App::shortcuts_dialog() {
+    if (shortcuts_open_) {
+        ImGui::OpenPopup("###shortcuts");
+        shortcuts_open_ = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(760.0f * scale_, vp->Size.x * 0.92f), vp->Size.y * 0.8f), ImGuiCond_Appearing);
+    const std::string title = std::string(tr(T::ShortcutsMenu)) + "###shortcuts";
+    if (!ImGui::BeginPopupModal(title.c_str()))
+        return;
+    struct Row {
+        T label;
+        const char* keys;
+    };
+    struct Section {
+        T title;
+        std::vector<Row> rows;
+    };
+    static const std::vector<Section> sections = {
+        {T::MoreFile,
+         {{T::NewProjectMenu, "Ctrl+N"}, {T::OpenProjectMenu, "Ctrl+O"}, {T::SaveProject, "Ctrl+S"},
+          {T::SaveProjectAs, "Ctrl+Alt+S"}, {T::ImportModelMenu, "Ctrl+I"}, {T::ImportConfigMenu, "Ctrl+L"},
+          {T::ImportProjectConfigMenu, "Ctrl+Alt+L"}, {T::ExportGcodeMenu, "Ctrl+G"}, {T::SendGcodeMenu, "Ctrl+Shift+G"},
+          {T::ExportConfigMenu, "Ctrl+E"}, {T::SliceNowMenu, "Ctrl+R"}}},
+        {T::MoreEdit,
+         {{T::DeleteSelectedMenu, "Del"}, {T::DeleteAllMenu, "Ctrl+Del"}, {T::Undo, "Ctrl+Z"}, {T::Redo, "Ctrl+Y"},
+          {T::CopyMenu, "Ctrl+C"}, {T::PasteMenu, "Ctrl+V"}, {T::ReloadMenu, "F5"}, {T::SearchMenu, "Ctrl+F"}}},
+        {T::MoreWindow,
+         {{T::PlaterTabMenu, "Ctrl+1"}, {T::PrintSettingsTabMenu, "Ctrl+2"}, {T::FilamentSettingsTabMenu, "Ctrl+3"},
+          {T::PrinterSettingsTabMenu, "Ctrl+4"}, {T::View3dMenu, "Ctrl+5"}, {T::PreviewMenu, "Ctrl+6"}}},
+        {T::MoreView,
+         {{T::ViewIso, "0"}, {T::ViewTop, "1"}, {T::ViewBottom, "2"}, {T::ViewFront, "3"}, {T::ViewBack, "4"},
+          {T::ViewLeft, "5"}, {T::ViewRight, "6"}, {T::ZoomFit, "Z"}, {T::ShortOrtho, "K"}, {T::ShowLabelsMenu, "E"},
+          {T::ShowLegendMenu, "L"}, {T::CollapseSidebarMenu, "Shift+Tab"}, {T::FullscreenMenu, "F11"}}},
+        {T::ShortcutsPlate,
+         {{T::ShortMove, "M"}, {T::ShortRotate, "R"}, {T::ShortScale, "S"}, {T::ShortLayFlat, "F"}, {T::ShortCut, "C"},
+          {T::ShortMeasure, "U"}, {T::ToolPaint, "P"}, {T::ShortArrange, "A"}, {T::ShortSelect, "Esc"}}},
+        {T::MoreHelp, {{T::PreferencesMenu, "Ctrl+P"}, {T::Help, "F1"}, {T::ShortcutsMenu, "?"}}},
+    };
+    const float bottom = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    ImGui::BeginChild("##shortcut_list", ImVec2(0, -bottom));
+    if (ImGui::BeginTable("##shortcut_cols", 2, ImGuiTableFlags_SizingStretchSame)) {
+        int n = 0;
+        for (const Section& section : sections) {
+            if (n++ % 2 == 0)
+                ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(section.title));
+            if (ImGui::BeginTable(tr(section.title), 2, ImGuiTableFlags_SizingStretchProp)) {
+                for (const Row& r : section.rows) {
+                    ImGui::TableNextColumn();
+                    loc::Text("%s", tr(r.label));
+                    ImGui::TableNextColumn();
+                    loc::TextDisabled("%s", r.keys);
+                }
+                ImGui::EndTable();
+            }
+            ImGui::Spacing();
+        }
+        ImGui::EndTable();
+    }
+    ImGui::EndChild();
+    note_rect("shortcuts_list");
+    if (ImGui::Button(tr(T::Close), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+// Help › System Info: the program's version, the system and the machine.
+void App::system_info_dialog() {
+    if (system_info_open_) {
+        ImGui::OpenPopup("###system_info");
+        system_info_open_ = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    const std::string title = std::string(tr(T::SystemInfoMenu)) + "###system_info";
+    if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    loc::Text(tr(T::SystemVersion), TISMA_VERSION);
+#if defined(_WIN32)
+    loc::TextDisabled(tr(T::SystemOs), "Windows");
+#elif defined(__APPLE__)
+    loc::TextDisabled(tr(T::SystemOs), "macOS");
+#else
+    loc::TextDisabled(tr(T::SystemOs), "Linux");
+#endif
+    machine_lines();
+    note_rect("system_info");
+    if (ImGui::Button(tr(T::Close), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }
 
@@ -17038,6 +17154,14 @@ void App::more_menu() {
             tips_ = true;
         }
         ImGui::Separator();
+        if (item("releases", tr(T::ReleasesMenu)))
+            open_link("https://github.com/adriangrochi-code/tisma_engine/releases");
+        if (item("system_info", tr(T::SystemInfoMenu)))
+            system_info_open_ = true;
+        if (item("config_folder", tr(T::ConfigFolderMenu), nullptr, !preferences_path().empty()))
+            open_folder(preferences_path().parent_path());
+        if (item("shortcuts", tr(T::ShortcutsMenu), "?"))
+            shortcuts_open_ = true;
         if (item("report", tr(T::ReportMenu)))
             report_open_ = true;
         if (item("credits", tr(T::Credits)))
@@ -18117,18 +18241,7 @@ void App::config_window() {
     if (wanted.empty() && config_page_ == 2) {
         loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ConfigMachine));
         ImGui::Separator();
-        const std::string cpu = system_.cpu.empty() ? std::string("?") : system_.cpu;
-        loc::TextDisabled(tr(T::ConfigMachineCpu), cpu.c_str(), system_.physical_cores, system_.logical_cores);
-        loc::TextDisabled(tr(T::ConfigMachineRam), bytes_text(system_.ram_total).c_str(), bytes_text(system_.ram_free).c_str());
-        loc::TextDisabled(tr(T::ConfigMachineGpu), (gpu_vendor_.empty() ? gpu_renderer_ : gpu_vendor_ + " · " + gpu_renderer_).c_str(),
-                          gpu_version_.c_str());
-        if (screen_width_ > 0 && screen_hz_ > 0)
-            loc::TextDisabled(tr(T::ConfigMachineScreen), screen_width_, screen_height_, screen_hz_, double(scale_));
-        else if (screen_width_ > 0) // a screen that does not say its rate (a virtual one)
-            loc::TextDisabled(tr(T::ConfigMachineScreenNoRate), screen_width_, screen_height_, double(scale_));
-        loc::TextDisabled("%s", tr(system_.power == PowerSource::Battery  ? T::ConfigOnBattery
-                                   : system_.power == PowerSource::Mains ? T::ConfigOnMains
-                                                                         : T::ConfigPowerUnknown));
+        machine_lines();
         if (ImGui::Button(tr(T::ConfigRecommended)))
             apply_quality("automatic");
         rect_of("config_recommended");
@@ -20808,6 +20921,8 @@ void App::dialogs_rest() {
     catalog_dialog();
     choose_settings_dialog();
     credits_dialog();
+    shortcuts_dialog();
+    system_info_dialog();
     // A pause's message, or the G-code for a layer (preview.md, rule 12).
     if (change_dialog_) {
         ImGui::OpenPopup("###layer_change");
@@ -21002,6 +21117,9 @@ void App::layout() {
         search_focus_ = true, printer_page_ = false; // the field is in the settings panel
     if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
         help_open_ = !help_open_;
+    // Keyboard Shortcuts: "?" (Shift and the key "/" on most keyboards).
+    if (plate_keys() && ImGui::IsKeyPressed(ImGuiKey_Slash, false) && ImGui::GetIO().KeyShift)
+        shortcuts_open_ = true;
     // The sketch's toggles (cad_design.md, rules 15 and 16) and its two
     // levels of Esc (rule 11, CD10), while no field has the keyboard.
     // Esc ends picking an operation's points.
@@ -22526,6 +22644,7 @@ void App::script_input() {
                : name == "y"                                       ? ImGuiKey_Y
                : name == "p"                                       ? ImGuiKey_P
                : name == "comma"                                   ? ImGuiKey_Comma
+               : name == "slash"                                   ? ImGuiKey_Slash
                                                                    : ImGuiKey_None;
     };
     if (step.verb == "click") {

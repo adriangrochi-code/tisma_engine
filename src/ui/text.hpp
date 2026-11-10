@@ -1753,6 +1753,22 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(ReleasesMenu, "Versiones del programa", "Software Releases") \
+    X(SystemInfoMenu, "Información del sistema", "System Info") \
+    X(ConfigFolderMenu, "Mostrar la carpeta de configuración", "Show Configuration Folder") \
+    X(ShortcutsMenu, "Atajos de teclado", "Keyboard Shortcuts") \
+    X(ShortcutsPlate, "Placa", "Plate") \
+    X(ShortMove, "Mover", "Move") \
+    X(ShortRotate, "Rotar", "Rotate") \
+    X(ShortScale, "Escalar", "Scale") \
+    X(ShortLayFlat, "Apoyar en una cara", "Lay on face") \
+    X(ShortCut, "Cortar", "Cut") \
+    X(ShortMeasure, "Medir", "Measure") \
+    X(ShortArrange, "Organizar", "Arrange") \
+    X(ShortSelect, "Elegir (ninguna herramienta)", "Select (no tool)") \
+    X(ShortOrtho, "Perspectiva u ortográfica", "Perspective or orthographic") \
+    X(SystemVersion, "Tisma %s", "Tisma %s") \
+    X(SystemOs, "Sistema: %s", "System: %s") \
     X(MoreWindow, "Ventana", "Window") \
     X(PlaterTabMenu, "Pestaña de la placa", "Plater Tab") \
     X(PrintSettingsTabMenu, "Ajustes de impresión", "Print Settings Tab") \

@@ -12379,3 +12379,7 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   laminar). Vista: Plegar el panel (Shift+Tab, casilla) y Pantalla completa (F11, casilla; vuelve al tamaño y lugar
   de antes). Prueba `ui_script_window_view`. Quedan de Ventana: galería de formas, cola de envíos (Ctrl+J), nueva
   instancia, comparar perfiles.
+- **Paso 5 (Ayuda):** Atajos de teclado (también con «?»: la lista de todos los atajos por tarjeta), Información del
+  sistema (versión, sistema y la máquina, las mismas líneas que Preferencias › Video, ahora en `machine_lines`),
+  Mostrar la carpeta de configuración (`open_folder`, con el explorador del sistema) y Versiones del programa (la
+  página de releases). Prueba `ui_script_help_card`. Queda: el sitio web (no hay uno todavía).

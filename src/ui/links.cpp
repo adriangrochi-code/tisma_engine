@@ -31,4 +31,18 @@ bool open_link(const std::string& url) {
 #endif
 }
 
+bool open_folder(const std::filesystem::path& folder) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(folder, ec))
+        return false;
+#ifdef _WIN32
+    return reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", folder.wstring().c_str(), nullptr, nullptr,
+                                                   SW_SHOWNORMAL)) > 32;
+#elif defined(__APPLE__)
+    return cad::run_process("/usr/bin/open", {folder.string()}, 10.0).ok();
+#else
+    return cad::run_process("/usr/bin/xdg-open", {folder.string()}, 10.0).started;
+#endif
+}
+
 } // namespace tisma::ui
