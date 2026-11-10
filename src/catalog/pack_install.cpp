@@ -383,6 +383,7 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
     if (read_all(pack_dir / "compatible.json", sets_text))
         sets = parse_pack_compatible(sets_text);
     nlohmann::json printer_over = nlohmann::json::object(); // the printer settings they carry (BH27)
+    std::vector<std::string> filament_prints; // the filament's compatible_prints
     for (const auto& [path, kind] : {std::pair{out.filament_path, ProfileKind::Filament}, std::pair{out.print_path, ProfileKind::Print}}) {
         if (path.empty())
             continue;
@@ -405,7 +406,12 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
             throw PackError(entry.profile.name + (out.resin ? " is not a resin profile, and the " : " is a resin profile, and the ") +
                             out.printer.name + (out.resin ? " is a resin printer" : " is not a resin printer"));
         if (kind == ProfileKind::Filament)
-            out.filament_vendor = entry.vendor;
+            out.filament_vendor = entry.vendor, filament_prints = entry.compatible_prints;
+        // A filament made for some print profiles only (profile_pack_format.md, entries, rule 4).
+        if (kind == ProfileKind::Print && !out.filament_path.empty() && !pack_print_fits(filament_prints, path) &&
+            !(defaults.contains(pack_key(path)) && defaults.contains(pack_key(out.filament_path))))
+            throw PackError((out.filament ? out.filament->name : out.filament_path) + " is not for the print profile " +
+                            entry.profile.name);
         (kind == ProfileKind::Filament ? out.filament_printer_settings : out.print_printer_settings) = entry.printer_settings;
         (kind == ProfileKind::Filament ? out.filament_license : out.print_license) = entry.license;
         (kind == ProfileKind::Filament ? out.filament_origin : out.print_origin) = entry.origin;
@@ -466,7 +472,8 @@ namespace {
 // The entries of `kind` (filament or print) of the installed vendors offered
 // for printer number `printer`: for a resin printer, the resins and resin
 // print profiles.
-std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const PackIndex& index, int printer, ProfileKind kind) {
+std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const PackIndex& index, int printer, ProfileKind kind,
+                                              const std::string& print = {}) {
     std::vector<std::vector<int>> sets;
     std::string sets_text;
     if (read_all(pack_dir / "compatible.json", sets_text)) {
@@ -509,6 +516,8 @@ std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const Pa
             try {
                 std::vector<std::string> ignored;
                 const PackEntry e = parse_pack_entry(text, ignored);
+                if (!print.empty() && !pack_print_fits(e.compatible_prints, print))
+                    continue; // made for other print profiles
                 if (e.profile.kind == kind && e.resin == resin && (defaults.contains(pack_key(path)) ||
                      (pack_compatible(e.compatible, sets, printer) &&
                       !(printer_profile && for_every_printer(e, sets) && !print_misfit(*printer_profile, e).empty()))))
@@ -521,8 +530,15 @@ std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const Pa
 }
 } // namespace
 
-std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const PackIndex& index, int printer) {
-    return pack_entries_for(pack_dir, index, printer, ProfileKind::Filament);
+std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const PackIndex& index, int printer,
+                                                const std::string& print) {
+    return pack_entries_for(pack_dir, index, printer, ProfileKind::Filament, print);
+}
+
+bool pack_print_fits(const std::vector<std::string>& compatible_prints, const std::string& print) {
+    return compatible_prints.empty() ||
+           std::any_of(compatible_prints.begin(), compatible_prints.end(),
+                       [&](const std::string& p) { return pack_key(p) == pack_key(print); });
 }
 
 std::vector<PackFilamentRef> pack_prints_for(const fs::path& pack_dir, const PackIndex& index, int printer) {

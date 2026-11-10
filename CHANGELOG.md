@@ -9,6 +9,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Paquete de perfiles: un filamento con `compatible_prints` solo se ofrece con esas impresiones.
 - Anchos de cordón: se aceptan si superan la altura de capa y hasta tres boquillas; muy finos, con aviso.
 - `support.xy_gap` en % se mide sobre el perímetro externo.
 - `speed.first_layer` fija la velocidad de toda la primera capa, o un porcentaje de cada una ("50%").

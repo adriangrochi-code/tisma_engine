@@ -1772,6 +1772,8 @@ private:
     std::string material_community_for_ = "\x01";             // "filaments/<name>" or "resins/<name>"
     std::vector<CommunityValue> material_community_;
     int pack_filaments_number_ = -2;                         // the printer pack_filaments_found_ is for
+    std::string pack_filaments_print_;                       // and the print profile (compatible_prints)
+    std::map<std::string, std::string> pack_print_path_;     // a pack print profile's path, by name
     std::vector<PackFilamentRef> pack_filaments_found_;
     std::string pack_url_; // packs.url; empty: the latest release
     struct PackJobState {
@@ -5182,6 +5184,7 @@ void App::load_profile_lists() {
                         PackEntry entry = read_pack_entry(pack_dir(), ref.path, ignored);
                         pack_entry_printer_[entry.profile.name] = entry.printer_settings;
                         pack_profile_source_[entry.profile.name] = {entry.license, entry.origin};
+                        pack_print_path_[entry.profile.name] = ref.path;
                         if (std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
                                          [&](const Profile& b) { return b.name == entry.profile.name; }))
                             builtin_profiles_[k].push_back(std::move(entry.profile));
@@ -5588,10 +5591,15 @@ void App::catalog_dialog() {
         if (!printers && pack_index_) {
             const auto it = pack_printer_number_.find(chosen_profile_[std::size_t(ProfileKind::Printer)]);
             const int number = it == pack_printer_number_.end() ? -1 : it->second;
-            if (number != pack_filaments_number_) {
+            // Only those for the chosen print profile, when it is the pack's
+            // (compatible_prints; profile_pack_format.md, entries, rule 4).
+            const auto print = pack_print_path_.find(chosen_profile_[std::size_t(ProfileKind::Print)]);
+            const std::string print_path = print == pack_print_path_.end() ? std::string() : print->second;
+            if (number != pack_filaments_number_ || print_path != pack_filaments_print_) {
                 pack_filaments_found_ = number < 0 ? std::vector<PackFilamentRef>{}
-                                                   : pack_filaments_for(pack_dir(), *pack_index_, number);
+                                                   : pack_filaments_for(pack_dir(), *pack_index_, number, print_path);
                 pack_filaments_number_ = number;
+                pack_filaments_print_ = print_path;
             }
             std::string lower_query = catalog_query_;
             std::transform(lower_query.begin(), lower_query.end(), lower_query.begin(),

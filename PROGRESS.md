@@ -12578,3 +12578,9 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   perímetro de 20 con 30 → 30; 50 % → la mitad de cada tipo; ida y vuelta del texto.
 - Pendiente: el campo de la interfaz de `speed.first_layer` sigue en mm/s; un valor en % de un perfil se ve como
   número sin unidad (el resumen sí dice «%»).
+- `profile_pack_format.md` (spec/next 6fe8045, entradas, regla 4): un filamento puede llevar `compatible_prints`
+  (rutas de perfiles de impresión del paquete). `PackEntry::compatible_prints`; `pack_filaments_for(..., print)` solo
+  ofrece los que sirven con la impresión elegida (la interfaz pasa la ruta de la impresión del paquete elegida);
+  `pack_profiles` rechaza la pareja que no sirve, salvo que las dos sean las de la variante. Sin el campo, cualquier
+  impresión. Prueba `[pack]` (con y sin el campo, rutas con o sin `vendors/`). Sin probar con el paquete real
+  (profiles/next 8cf1546).

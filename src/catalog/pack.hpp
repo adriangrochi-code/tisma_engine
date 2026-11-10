@@ -103,6 +103,9 @@ Profile pack_printer_profile(std::string_view model_json, const std::string& var
 struct PackEntry {
     Profile profile;
     std::optional<int> compatible; // a set of compatible.json; none: every printer
+    // A filament's print profiles (pack paths) it works with
+    // (profile_pack_format.md, entries, rule 4); empty: any print.
+    std::vector<std::string> compatible_prints;
     bool generic = false;
     double nozzle = 0.0; // a print profile's nozzle, when all its printers use one; 0: not given
     std::string license, origin;
@@ -191,7 +194,13 @@ bool pack_printer_is_resin(const PackIndex& index, int printer);
 struct PackFilamentRef {
     std::string path, name, vendor;
 };
-std::vector<PackFilamentRef> pack_filaments_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer);
+// With `print` (a pack path), only the filaments that work with that print
+// profile (compatible_prints; profile_pack_format.md, entries, rule 4).
+std::vector<PackFilamentRef> pack_filaments_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer,
+                                                const std::string& print = {});
+// Whether a filament with these compatible_prints works with print profile
+// `print` (a pack path, with or without "vendors/"); empty lists work with any.
+bool pack_print_fits(const std::vector<std::string>& compatible_prints, const std::string& print);
 // The same for the print profiles (for a resin printer, the resin print
 // profiles), rule 12.
 std::vector<PackFilamentRef> pack_prints_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer);
