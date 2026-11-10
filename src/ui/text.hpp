@@ -1753,6 +1753,22 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(AddInstanceMenu, "Agregar una copia", "Add instance") \
+    X(RemoveInstanceMenu, "Quitar una copia", "Remove instance") \
+    X(SetInstancesMenu, "Cantidad de copias…", "Set number of instances…") \
+    X(InstancesCount, "Copias", "Instances") \
+    X(DeleteMenu, "Borrar", "Delete") \
+    X(ConvertMetersMenu, "Convertir de metros", "Convert from meters") \
+    X(ConvertInchesMenu, "Convertir de pulgadas", "Convert from imperial units") \
+    X(ExportObjectMenu, "Exportar como STL/OBJ…", "Export as STL/OBJ…") \
+    X(ScaleToVolumeMenu, "Escalar al volumen de impresión", "Scale to print volume") \
+    X(MirrorMenu, "Espejar", "Mirror") \
+    X(SplitMenu, "Separar", "Split") \
+    X(SplitObjectsMenu, "En piezas", "To objects") \
+    X(AxisX, "En X", "Along X axis") \
+    X(AxisY, "En Y", "Along Y axis") \
+    X(AxisZ, "En Z", "Along Z axis") \
+    X(Ok, "Aceptar", "OK") \
     X(ReleasesMenu, "Versiones del programa", "Software Releases") \
     X(SystemInfoMenu, "Información del sistema", "System Info") \
     X(ConfigFolderMenu, "Mostrar la carpeta de configuración", "Show Configuration Folder") \

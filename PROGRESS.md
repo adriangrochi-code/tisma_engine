@@ -12383,3 +12383,12 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   sistema (versión, sistema y la máquina, las mismas líneas que Preferencias › Video, ahora en `machine_lines`),
   Mostrar la carpeta de configuración (`open_folder`, con el explorador del sistema) y Versiones del programa (la
   página de releases). Prueba `ui_script_help_card`. Queda: el sitio web (no hay uno todavía).
+- **Paso 6 (clic derecho de la pieza):** Agregar una copia (+), Quitar una copia (−, gris con una sola), Cantidad de
+  copias… (diálogo), Borrar (Supr), Recargar desde el disco (gris sin archivo), Convertir de metros (×1000) y de
+  pulgadas (×25,4), Exportar como STL/OBJ… (la pieza como está en la cama), Escalar al volumen de impresión (la mayor
+  escala pareja que entra en la cama y la altura, centrada), Espejar ▸ X/Y/Z, Separar ▸ En piezas. Van arriba del
+  menú y se ven también en el nivel Básico. Copias = modelos con el mismo nombre y los mismos triángulos. Prueba
+  `ui_script_object_menu_actions`. Quedan: llenar la cama, objetos separados, Imprimible (hace falta que el laminado
+  saltee la pieza y que el proyecto lo guarde), Reemplazar por STL, Simplificar, Reteselar, Revisar CAD, Dividir para
+  la impresora, Agregar parte ▸, submenús de modificador/negativo con formas, bloqueador y forzador de soporte
+  (pendiente: la forma «malla» en `PlateVolume`), Material de soporte.

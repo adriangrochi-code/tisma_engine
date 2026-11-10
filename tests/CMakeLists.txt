@@ -547,6 +547,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/help_card.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_help_card.png)
     set_tests_properties(ui_script_help_card PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # A model's right-click menu: mirror, scale to volume, instances (interface.md, «Menús»).
+    add_test(NAME ui_script_object_menu_actions
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/object_menu_actions.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_object_menu_actions.png)
+    set_tests_properties(ui_script_object_menu_actions PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The plate's right-click menu adds a cube and a sphere as models.
     add_test(NAME ui_script_plate_menu
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>

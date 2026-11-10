@@ -572,6 +572,7 @@ enum class Purpose {
     ImportSketchSvg,
     ExportSketchDxf, // rule 20
     ExportViewDxf,
+    ExportObject,      // a model's right-click menu: Export as STL/OBJ…
     LoadProjectConfig, // interface.md, «Más»: Import Config from Project…
     ExportPlate        // Export Plate as STL/OBJ…
 };
@@ -1791,6 +1792,13 @@ private:
     bool can_reload() const;
     void reload_from_disk(); // F5: the chosen model, or every one, read again from its file
     void window_tab(int n);  // Window › Ctrl+1 to Ctrl+6 (interface.md, «Más»)
+    // A model's instances: the models with its name and as many triangles.
+    std::vector<std::size_t> instances_of(std::size_t index) const;
+    void set_instances(std::size_t index, int count);
+    void scale_to_volume(std::size_t index);
+    int instances_count_ = 1;     // the Set number of instances… field
+    bool instances_open_ = false; // that dialog, to open
+    std::size_t export_object_ = 0; // the model Export as STL/OBJ… writes
     void toggle_fullscreen(); // F11
     int windowed_[4] = {0, 0, 0, 0}; // the window's place and size before Fullscreen
 
@@ -4866,6 +4874,63 @@ void App::toggle_fullscreen() {
         glfwSetWindowMonitor(window_, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
     }
     frame_pending_ = true;
+}
+
+std::vector<std::size_t> App::instances_of(std::size_t index) const {
+    std::vector<std::size_t> out;
+    if (index >= objects_.size())
+        return out;
+    const PlateObject& o = objects_[index];
+    for (std::size_t i = 0; i < objects_.size(); ++i)
+        if (objects_[i].name == o.name && objects_[i].mesh.triangle_count() == o.mesh.triangle_count())
+            out.push_back(i);
+    return out;
+}
+
+// Set number of instances…: copies of the model added or the last ones taken
+// away until there are COUNT; the plate is arranged.
+void App::set_instances(std::size_t index, int count) {
+    count = std::clamp(count, 1, 500);
+    std::vector<std::size_t> same = instances_of(index);
+    if (same.empty())
+        return;
+    const PlateObject model = objects_[index];
+    while (int(same.size()) > count) {
+        const std::size_t last = same.back() == index && same.size() > 1 ? same[same.size() - 2] : same.back();
+        objects_.erase(objects_.begin() + std::ptrdiff_t(last));
+        same = instances_of(index > last ? index - 1 : index);
+        if (index > last)
+            --index;
+    }
+    for (int k = int(same.size()); k < count; ++k)
+        objects_.push_back(model);
+    selected_ = int(index);
+    arrange_plate();
+}
+
+// Scale to print volume: the largest even scale that fits the bed's box and
+// the machine's height, the model then set in the middle of the bed.
+void App::scale_to_volume(std::size_t index) {
+    if (index >= objects_.size() || index >= placed_meshes_.size() || settings_.bed.size() < 3)
+        return;
+    double x0 = 1e30, y0 = 1e30, x1 = -1e30, y1 = -1e30;
+    for (const auto& p : settings_.bed) {
+        x0 = std::min(x0, p[0]), x1 = std::max(x1, p[0]);
+        y0 = std::min(y0, p[1]), y1 = std::max(y1, p[1]);
+    }
+    const BoundingBox box = placed_meshes_[index].bounding_box();
+    const double w = double(box.max.x) - box.min.x, d = double(box.max.y) - box.min.y, h = double(box.max.z) - box.min.z;
+    if (w <= 0.0 || d <= 0.0 || h <= 0.0)
+        return;
+    double f = std::min((x1 - x0) / w, (y1 - y0) / d);
+    if (settings_.max_height > 0.0)
+        f = std::min(f, settings_.max_height / h);
+    f *= 0.995; // a hair inside the edges
+    for (double& s : objects_[index].place.scale)
+        s *= f;
+    objects_[index].place.x = 0.5 * (x0 + x1);
+    objects_[index].place.y = 0.5 * (y0 + y1);
+    plate_changed();
 }
 
 // Every model off the plate, and the preview with them.
@@ -10151,6 +10216,28 @@ void App::viewport() {
         }
     }
     object_menu();
+    // Set number of instances… (the model's right-click menu).
+    if (instances_open_) {
+        ImGui::OpenPopup("###instances");
+        instances_open_ = false;
+    }
+    if (ImGui::BeginPopupModal((std::string(tr(T::SetInstancesMenu)) + "###instances").c_str(), nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SetNextItemWidth(140.0f * scale_);
+        ImGui::InputInt(tr(T::InstancesCount), &instances_count_);
+        instances_count_ = std::clamp(instances_count_, 1, 500);
+        note_rect("instances_count");
+        if (ImGui::Button(tr(T::Ok), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            if (selected_ >= 0 && selected_ < int(objects_.size()))
+                set_instances(std::size_t(selected_), instances_count_);
+            ImGui::CloseCurrentPopup();
+        }
+        note_rect("instances_ok");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
     plate_menu();
     ImGui::End();
     ImGui::PopStyleVar();
@@ -10466,6 +10553,77 @@ void App::object_menu() {
     }
     PlateObject& o = objects_[std::size_t(selected_)];
     loc::TextDisabled("%s", o.name.c_str());
+    ImGui::Separator();
+    // The model itself (interface.md, «Menús»): its instances, delete, reload,
+    // units, export, size, mirror and split.
+    const std::size_t index = std::size_t(selected_);
+    const auto entry = [](const char* name, const char* label, const char* keys = nullptr, bool enabled = true) {
+        const bool hit = ImGui::MenuItem((std::string(label) + "##" + name).c_str(), keys, false, enabled);
+        note_rect(name);
+        if (!enabled)
+            g_menu_disabled.insert(name);
+        return hit;
+    };
+    const std::size_t copies = instances_of(index).size();
+    if (entry("add_instance", tr(T::AddInstanceMenu), "+")) {
+        set_instances(index, int(copies) + 1);
+        ImGui::EndPopup();
+        return;
+    }
+    if (entry("remove_instance", tr(T::RemoveInstanceMenu), "-", copies > 1)) {
+        set_instances(index, int(copies) - 1);
+        ImGui::EndPopup();
+        return;
+    }
+    if (entry("set_instances", tr(T::SetInstancesMenu))) {
+        instances_count_ = int(copies);
+        instances_open_ = true;
+    }
+    if (entry("delete", tr(T::DeleteMenu), "Del")) {
+        delete_selected();
+        ImGui::EndPopup();
+        return;
+    }
+    ImGui::Separator();
+    if (entry("reload_object", tr(T::ReloadMenu), nullptr, !o.source.empty()))
+        reload_from_disk();
+    if (entry("convert_meters", tr(T::ConvertMetersMenu))) {
+        for (double& v : o.place.scale)
+            v *= 1000.0;
+        plate_changed();
+    }
+    if (entry("convert_inches", tr(T::ConvertInchesMenu))) {
+        for (double& v : o.place.scale)
+            v *= 25.4;
+        plate_changed();
+    }
+    if (entry("export_object", tr(T::ExportObjectMenu))) {
+        export_object_ = index;
+        purpose_ = Purpose::ExportObject;
+        browser_.open(FileBrowser::Mode::Save, tr(T::ExportObjectMenu), {".stl", ".obj"}, last_folder_,
+                      utf8(from_utf8(o.name).stem()) + ".stl");
+    }
+    ImGui::Separator();
+    if (entry("scale_to_volume", tr(T::ScaleToVolumeMenu), nullptr, settings_.bed.size() >= 3))
+        scale_to_volume(index);
+    if (ImGui::BeginMenu(tr(T::MirrorMenu))) {
+        const T axes[] = {T::AxisX, T::AxisY, T::AxisZ};
+        for (int a = 0; a < 3; ++a)
+            if (entry(a == 0 ? "mirror_x" : a == 1 ? "mirror_y" : "mirror_z", tr(axes[a])))
+                mirror_selected(a);
+        ImGui::EndMenu();
+    }
+    note_rect("mirror");
+    if (ImGui::BeginMenu(tr(T::SplitMenu))) {
+        if (entry("split_objects", tr(T::SplitObjectsMenu)))
+            split_selected();
+        ImGui::EndMenu();
+    }
+    note_rect("split");
+    if (std::size_t(selected_) >= objects_.size()) { // split or mirrored away
+        ImGui::EndPopup();
+        return;
+    }
     ImGui::Separator();
     if (view_level_ == ViewLevel::Basic) {
         loc::TextDisabled("%s", tr(T::ObjectSettingsBasic));
@@ -10893,6 +11051,12 @@ void App::plate_tools() {
             tool_ = PlateTool::Select;
         if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen && !ImGui::GetIO().KeyCtrl) // Ctrl+Del: all
             delete_selected();
+        // + and − add or take away an instance (interface.md, «Menús»).
+        if (chosen && (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false) ||
+                       (ImGui::IsKeyPressed(ImGuiKey_Equal, false) && ImGui::GetIO().KeyShift)))
+            set_instances(std::size_t(selected_), int(instances_of(std::size_t(selected_)).size()) + 1);
+        if (chosen && (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false) || ImGui::IsKeyPressed(ImGuiKey_Minus, false)))
+            set_instances(std::size_t(selected_), int(instances_of(std::size_t(selected_)).size()) - 1);
     }
     // The tool's card, next to the column; under the folded panel's card.
     const float card_top = panel_folded_now() && tab_ == Tab::Prepare && compact_bottom_ > strip_min.y
@@ -20771,6 +20935,20 @@ void App::file_chosen(const std::filesystem::path& chosen) {
         switch (purpose_) {
         case Purpose::LoadProjectConfig: load_project_config(chosen); break;
         case Purpose::ExportPlate: export_plate_to(chosen); break;
+        case Purpose::ExportObject: {
+            if (export_object_ >= placed_meshes_.size())
+                break;
+            const TriangleMesh& m = placed_meshes_[export_object_];
+            const std::string name = export_object_ < objects_.size() ? objects_[export_object_].name : std::string();
+            std::ofstream out(chosen, std::ios::binary);
+            out << (lower_extension(chosen) == ".obj" ? obj_text(m, name) : stl_binary(m, "Tisma " + name));
+            out.close();
+            if (!out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::PlateExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
         case Purpose::Open: open_path(chosen); break;
         case Purpose::AddModel: add_model(chosen); break;
         case Purpose::SaveGcode: export_gcode_to(chosen); break;
@@ -22645,6 +22823,8 @@ void App::script_input() {
                : name == "p"                                       ? ImGuiKey_P
                : name == "comma"                                   ? ImGuiKey_Comma
                : name == "slash"                                   ? ImGuiKey_Slash
+               : name == "minus"                                   ? ImGuiKey_Minus
+               : name == "equal"                                   ? ImGuiKey_Equal
                                                                    : ImGuiKey_None;
     };
     if (step.verb == "click") {
