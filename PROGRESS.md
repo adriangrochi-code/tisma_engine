@@ -12529,3 +12529,19 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   orgánicas que chocan con el modelo; soporte bajo capas curvas; altura variable con soporte (alturas de capa del
   soporte frente al modelo); cúspide con `detail_height`; curvas con altura variable; límites de pendiente frente a
   `machine.free_angle`. Cada hallazgo con prueba.
+
+## 2026-11-10 20:30 — BH47: el soporte bajo un bloqueador pintado
+
+- Informe (dueño y sesión de especificaciones, caja negra en 274d5d2): un bloqueador de soporte pintado en parte de
+  una cara parecía añadir soporte. Medido por longitud extruida (no por segmentos: el borde redondo del hueco suma
+  muchos segmentos cortos), en el modelo en T con un círculo de 6 mm pintado bajo la placa: 108 mm de soporte dentro
+  del círculo sin pintar, 82 mm con el bloqueador. El voladizo sí se quitaba, pero la columna crecía después el
+  margen del soporte (1,6 mm) desde lo que quedaba y volvía a meterse bajo las caras bloqueadas.
+- Arreglo: el margen de cada voladizo se recorta con el área bloqueada de su capa. Ahora: rejilla 0 mm dentro (antes
+  108), ajustado 0 (antes 7685 en toda la altura). Orgánico: las capas que tocan la placa quedan fuera del círculo
+  (≥ 6,27 mm del centro); más abajo pasan troncos por debajo sin tocar las caras bloqueadas, que es lo esperado.
+- Pruebas `[paint]`: la columna de rejilla y la ajustada no entran 1 mm dentro del borde del bloqueador; el laminado
+  completo tampoco; un bloqueador borrado (capas vacías) da exactamente el soporte automático. `[project]`: el
+  bloqueador y el reforzador pintados vuelven al reabrir el proyecto. Las dos primeras fallan sin el arreglo.
+- Sin probar: borrar la pintura con el pincel en la interfaz (el motor da lo mismo con las capas vacías, pero no hay
+  guion de interfaz que lo haga).

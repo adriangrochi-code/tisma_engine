@@ -103,6 +103,9 @@ TEST_CASE("a project reads back as it was written", "[project]") {
     Project painted = p;
     painted.models[1].painting.set_tree(PaintChannel::Seam, 2, {Painting::kSplit, 0, 1, 2, 1});
     painted.models[1].painting.set_tree(PaintChannel::Color, 0, {3});
+    // A support blocker and an enforcer too (BH47).
+    painted.models[1].painting.set_tree(PaintChannel::Support, 1, {kPaintBlock});
+    painted.models[1].painting.set_tree(PaintChannel::Support, 3, {Painting::kSplit, kPaintEnforce, 0, 0, kPaintBlock});
     const Project again = read_project(write_project(painted));
     CHECK(again.models[0].painting.empty());
     CHECK(again.models[1].painting == painted.models[1].painting);

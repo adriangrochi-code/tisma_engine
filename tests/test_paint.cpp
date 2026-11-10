@@ -296,6 +296,27 @@ TEST_CASE("paint: support goes where it is enforced and not where it is blocked 
     std::vector<Polygons> areas = support_areas(regions, heights, sp);
     CHECK_FALSE(contains(areas[5], 15, 2));
     CHECK(contains(areas[5], 15, 8));
+    // The support's margin around what is left does not creep under the
+    // blocked faces (BH47): nothing 1 mm inside the blocker's edge, at any
+    // height, in the grid and the snug styles.
+    for (const double closing : {0.0, 2.0}) {
+        SupportParams fitted = sp;
+        fitted.margin = 1.6; // the grid style's (supports_skirt.md, rule 2)
+        if (closing > 0.0)
+            fitted.margin = 0.0, fitted.closing = closing;
+        areas = support_areas(regions, heights, fitted);
+        for (std::size_t l = 0; l < areas.size(); ++l) {
+            INFO("layer " << l << ", closing " << closing);
+            CHECK_FALSE(contains(areas[l], 15, 4.0));
+            CHECK_FALSE(contains(areas[l], 12, 4.4));
+        }
+        CHECK(contains(areas[5], 15, 8));
+    }
+    // A blocker erased again (its layers empty): the automatic support, exactly.
+    std::vector<Polygons> erased(15);
+    sp.block = &erased;
+    areas = support_areas(regions, heights, sp);
+    CHECK(areas == plain);
     // Automatic off: nothing without an enforcer; with one, only in it.
     sp.block = nullptr;
     sp.automatic = false;
@@ -397,6 +418,11 @@ TEST_CASE("paint: the slicer follows painted support and seams", "[paint]") {
     SlicedModel blocked = slice_model(mesh, s, nullptr, nullptr, &p);
     CHECK_FALSE(contains(blocked.support_areas[l], 15, 1.5));
     CHECK(contains(blocked.support_areas[l], 15, 8));
+    // Nor just inside the blocker's edge, where the margin used to reach (BH47).
+    for (std::size_t k = 0; k < blocked.support_areas.size(); ++k) {
+        INFO("layer " << k);
+        CHECK_FALSE(contains(blocked.support_areas[k], 15, 3.0));
+    }
     // Automatic support off, an enforcer around (15, 8): support there only.
     s.support_automatic = false;
     Painting q;
