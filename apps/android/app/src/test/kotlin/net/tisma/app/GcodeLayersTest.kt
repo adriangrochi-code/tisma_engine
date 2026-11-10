@@ -105,6 +105,17 @@ class GcodeLayersTest {
     }
 
     @Test
+    fun `a binary G-code block claiming 2 GB is refused, not allocated`() {
+        val f = File.createTempFile("huge", ".bgcode")
+        val head = net.tisma.app.engine.GcodeLayers.BINARY_MAGIC + byteArrayOf(1, 0, 0, 0, 0, 0)
+        // A G-code block (type 1), not compressed, of 0x7FFF0000 bytes, and nothing after it.
+        val block = byteArrayOf(1, 0, 0, 0, 0x00, 0x00, 0xFF.toByte(), 0x7F)
+        f.writeBytes(head + block)
+        assertFailsWith<BinaryGcode.Unreadable> { BinaryGcode.open(f).bufferedReader().use { GcodeLayers.read(it) } }
+        f.delete()
+    }
+
+    @Test
     fun `binary G-code from the engine reads (cube, 50 layers)`() {
         val f = File.createTempFile("cube", ".bgcode")
         javaClass.getResourceAsStream("/engine_cube.bgcode")!!.use { i -> f.outputStream().use { i.copyTo(it) } }

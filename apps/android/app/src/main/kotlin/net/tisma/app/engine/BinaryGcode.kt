@@ -21,6 +21,8 @@ object BinaryGcode {
 
     private const val GCODE = 1
     private const val THUMBNAIL = 5
+    /** The largest block read (64 MB). */
+    const val MAX_BLOCK = 64L * 1024 * 1024
 
     /** The text G-code, read block by block as it is consumed (a large print is not held whole in memory). */
     fun open(file: File): InputStream {
@@ -61,7 +63,8 @@ object BinaryGcode {
                 if (le(header, 2, 2) != 0L) throw Unreadable("Compressed blocks are not read")
                 if (type > THUMBNAIL) throw Unreadable("Unknown block type $type")
                 val size = le(header, 4, 4)
-                if (size > Int.MAX_VALUE - 16) throw Unreadable("A block is too large")
+                // Real blocks are tens of KB; a damaged or hostile header must not take the phone's memory.
+                if (size > MAX_BLOCK) throw Unreadable("A block is too large")
                 val params = ByteArray(if (type == THUMBNAIL) 6 else 2)
                 val data = ByteArray(size.toInt())
                 readFully(input, params)
