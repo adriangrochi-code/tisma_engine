@@ -1752,6 +1752,9 @@
     X(MoreConfiguration, "Configuración", "Configuration") \
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
+    X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(RecentProjects, "Proyectos recientes", "Recent projects") \
+    X(DeleteAllMenu, "Borrar todo", "Delete All") \
     X(ExportGcodeMenu, "Exportar el G-code…", "Export G-code…") \
     X(SendGcodeMenu, "Mandar el G-code…", "Send G-code…") \
     X(SliceNowMenu, "(Re)laminar ahora", "(Re)Slice Now") \

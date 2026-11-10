@@ -12357,3 +12357,7 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   leyenda (L). Atajos del spec: Guardar como Ctrl+Alt+S (Ctrl+Shift+S sigue andando), Exportar Ctrl+G (Ctrl+E queda
   para Exportar configuración). Prueba `ui_script_more_cards` con el verbo nuevo `expect-enabled`. Arreglado de paso:
   el `expect-objects` viejo de los scripts tapaba al nuevo y no miraba el nombre del último modelo.
+- **Paso 2 (parte):** Archivo › Proyecto nuevo (Ctrl+N: placa vacía, sin archivo; la impresora, el filamento y los
+  ajustes quedan) y Proyectos recientes (numerados, el último primero, hasta 10, guardados con las preferencias; uno
+  que ya no está se saca de la lista al elegirlo). Editar › Borrar todo (Ctrl+Supr). Supr solo ya no borra con Ctrl.
+  Los scripts entienden cualquier letra y `alt+`. Prueba `ui_script_new_project`.

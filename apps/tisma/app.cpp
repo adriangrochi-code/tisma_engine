@@ -1768,6 +1768,12 @@ private:
     std::size_t catalog_pack_variant_ = 0;
     // The project file last opened or saved.
     std::filesystem::path project_path_;
+    // The projects opened or saved last, newest first (interface.md, «Más»:
+    // Recent projects), kept with the preferences.
+    std::vector<std::filesystem::path> recent_projects_;
+    void remember_project(const std::filesystem::path& path);
+    void new_project(); // an empty plate, no project file (Ctrl+N)
+    void delete_all();  // every model off the plate (Ctrl+Del)
 
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
@@ -3965,6 +3971,10 @@ void App::load_preferences() {
         if (j.value("theme", "dark") == "light")
             theme_ = light_theme();
         last_folder_ = from_utf8(j.value("folder", std::string()));
+        if (const auto r = j.find("recent_projects"); r != j.end() && r->is_array())
+            for (const auto& e : *r)
+                if (e.is_string() && recent_projects_.size() < 10)
+                    recent_projects_.push_back(from_utf8(e.get<std::string>()));
         render_mode_ = static_cast<RenderMode>(std::clamp(j.value("render", 1), 0, 2));
         msaa_ = std::clamp(j.value("msaa", 4), 1, 16);
         fxaa_ = j.value("fxaa", true);
@@ -4091,6 +4101,9 @@ void App::save_preferences() {
         j["language"] = language() == Language::English ? "en" : "es";
         j["theme"] = theme_.dark ? "dark" : "light";
         j["folder"] = utf8(last_folder_);
+        j["recent_projects"] = nlohmann::json::array();
+        for (const std::filesystem::path& r : recent_projects_)
+            j["recent_projects"].push_back(utf8(r));
         j["render"] = int(render_mode_);
         j["msaa"] = msaa_;
         j["fxaa"] = fxaa_;
@@ -4618,6 +4631,7 @@ void App::open_project(const std::filesystem::path& path) {
         }
     }
     project_path_ = path;
+    remember_project(path);
     glfwSetWindowTitle(window_, ("Tisma · " + utf8(path.filename())).c_str());
     notify(format(tr(T::ProjectOpened), utf8(path.filename()).c_str()));
 }
@@ -4682,8 +4696,47 @@ void App::save_project_to(const std::filesystem::path& path) {
         return;
     }
     project_path_ = path;
+    remember_project(path);
     glfwSetWindowTitle(window_, ("Tisma · " + utf8(path.filename())).c_str());
     notify(format(tr(T::ProjectSaved), utf8(path.filename()).c_str()));
+}
+
+// The project first in the recent list, at most ten, each once.
+void App::remember_project(const std::filesystem::path& path) {
+    std::error_code ec;
+    std::filesystem::path full = std::filesystem::absolute(path, ec);
+    if (ec)
+        full = path;
+    std::erase(recent_projects_, full);
+    recent_projects_.insert(recent_projects_.begin(), full);
+    if (recent_projects_.size() > 10)
+        recent_projects_.resize(10);
+}
+
+// Every model off the plate, and the preview with them.
+void App::delete_all() {
+    if (objects_.empty())
+        return;
+    objects_.clear();
+    selected_ = -1;
+    result_.reset();
+    renderer_.clear_preview();
+    vk_view_.clear_preview();
+    plate_changed();
+}
+
+// New Project (Ctrl+N): an empty plate that is no file yet; the printer, the
+// filament and the settings stay as they are.
+void App::new_project() {
+    calibration_.reset();
+    chosen_value_.reset();
+    delete_all();
+    place_undo_.clear();
+    place_redo_.clear();
+    project_path_.clear();
+    if (tab_ != Tab::Prepare && !engineering_tab(tab_))
+        set_tab(Tab::Prepare);
+    glfwSetWindowTitle(window_, "Tisma");
 }
 
 // User profiles live next to the preferences; without a place for those,
@@ -10575,7 +10628,7 @@ void App::plate_tools() {
         }
         if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
             tool_ = PlateTool::Select;
-        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen)
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen && !ImGui::GetIO().KeyCtrl) // Ctrl+Del: all
             delete_selected();
     }
     // The tool's card, next to the column; under the folded panel's card.
@@ -16633,10 +16686,37 @@ void App::more_menu() {
 
         // 2. File.
         card(tr(T::MoreFile));
+        if (item("new_project", tr(T::NewProjectMenu), "Ctrl+N"))
+            new_project();
         if (item("open_project", tr(T::OpenProjectMenu), "Ctrl+O")) {
             purpose_ = Purpose::Open;
             browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
         }
+        // Numbered, newest first; one no longer there is dropped when chosen.
+        if (ImGui::BeginMenu(tr(T::RecentProjects), !recent_projects_.empty())) {
+            std::optional<std::filesystem::path> open;
+            for (std::size_t i = 0; i < recent_projects_.size(); ++i) {
+                const std::string label = std::to_string(i + 1) + "  " + utf8(recent_projects_[i].filename()) +
+                                          "##recent" + std::to_string(i);
+                if (ImGui::MenuItem(label.c_str()))
+                    open = recent_projects_[i];
+                note_rect("recent_" + std::to_string(i + 1));
+                ImGui::SetItemTooltip("%s", utf8(recent_projects_[i]).c_str());
+            }
+            ImGui::EndMenu();
+            if (open) {
+                std::error_code ec;
+                if (std::filesystem::exists(*open, ec))
+                    open_project(*open);
+                else {
+                    std::erase(recent_projects_, *open);
+                    fail(T::CannotOpen, utf8(*open));
+                }
+            }
+        }
+        note_rect("recent");
+        if (recent_projects_.empty())
+            g_menu_disabled.insert("recent");
         if (item("save_project", tr(T::SaveProject), "Ctrl+S", has_plate_))
             begin_save_project(false);
         if (item("save_project_as", tr(T::SaveProjectAs), "Ctrl+Alt+S", has_plate_))
@@ -16675,6 +16755,8 @@ void App::more_menu() {
         card(tr(T::MoreEdit));
         if (item("delete_selected", tr(T::DeleteSelectedMenu), "Del", on_plate && chosen))
             delete_selected();
+        if (item("delete_all", tr(T::DeleteAllMenu), "Ctrl+Del", on_plate && !objects_.empty()))
+            delete_all();
         if (item("undo", tr(T::Undo), "Ctrl+Z", on_plate && !place_undo_.empty()))
             undo_place(false);
         if (item("redo", tr(T::Redo), "Ctrl+Y", on_plate && !place_redo_.empty()))
@@ -20803,6 +20885,11 @@ void App::layout() {
         begin_save_project(true);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_R, ImGuiInputFlags_RouteGlobal))
         start_slice();
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, ImGuiInputFlags_RouteGlobal))
+        new_project();
+    if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput &&
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
+        delete_all();
     // Export G-code… is Ctrl+G and Send G-code… Ctrl+Shift+G (interface.md,
     // «Más»); Ctrl+E is kept for Export Config….
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_G, ImGuiInputFlags_RouteGlobal) && result_ && result_->ok && !viewer_ &&
@@ -22178,6 +22265,8 @@ void App::script_input() {
         script_at_ = script_.size();
     };
     const auto key_named = [](std::string_view name) {
+        if (name.size() == 1 && name[0] >= 'a' && name[0] <= 'z') // any letter
+            return ImGuiKey(int(ImGuiKey_A) + (name[0] - 'a'));
         return name == "enter" ? ImGuiKey_Enter : name == "escape" ? ImGuiKey_Escape : name == "tab" ? ImGuiKey_Tab
                : name == "backspace"                               ? ImGuiKey_Backspace
                : name == "delete"                                  ? ImGuiKey_Delete
@@ -22231,7 +22320,8 @@ void App::script_input() {
         for (bool more = true; more;) {
             more = false;
             for (const auto& [prefix, mod] : {std::pair{std::string_view("ctrl+"), ImGuiMod_Ctrl},
-                                              std::pair{std::string_view("shift+"), ImGuiMod_Shift}})
+                                              std::pair{std::string_view("shift+"), ImGuiMod_Shift},
+                                              std::pair{std::string_view("alt+"), ImGuiMod_Alt}})
                 if (name.starts_with(prefix)) {
                     mods.push_back(mod);
                     name.remove_prefix(prefix.size());
