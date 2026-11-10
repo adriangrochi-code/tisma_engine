@@ -98,11 +98,24 @@ desventajas».
      miniatura del escaneo. La revisa un sembrador como cualquier otra.
    La pieza escaneada es privada hasta que se publica.
 
+## IP oculta (decisión del dueño, 10-11-2026: mixto)
+
+8 bis. **Todo cifrado:** cada transferencia entre apps va cifrada de punta a punta (con las claves de par de la regla 5).
+8 ter. **Intermediarios de Tisma:** nodos de Tisma Cloud que pasan los pedazos entre dos apps sin poder leerlos; cada
+   app solo ve la dirección del intermediario. Los usan:
+   - el **teléfono**, siempre;
+   - la **computadora**, por defecto; en Preferencias puede elegir «Directo (más rápido; los otros ven mi IP)», con el
+     aviso de la regla 8.
+8 quater. **Gasto acotado:** cada intermediario tiene un tope de ancho de banda por hora y por cuenta, configurable en
+   el panel; al llegar, las apps que eligieron directo siguen y las demás esperan («Biblioteca ocupada, se retoma
+   sola»). Los sembradores (regla 3) comparten directo desde la nube, sin intermediario.
+8 quinquies. **Quién sabe las IP:** solo el servidor central, para conectar y para el bloqueo de 24 h; no las publica,
+   y en la lista de bloqueo una IP va como huella (SHA-256 con una sal que rota cada día), no en claro.
+
 ## Privacidad
 
 8. La app no comparte nada que la persona no haya publicado o bajado de la biblioteca. «Mi biblioteca» local
-   (`local_library.md`) no se comparte nunca. La dirección IP de cada par la ven los pares con que se conecta, y la
-   pantalla de compartir lo dice antes de activarlo.
+   (`local_library.md`) no se comparte nunca. Con intermediario, los otros pares no ven la IP; con «Directo» sí, y la pantalla lo dice antes de activarlo.
 
 ## Pruebas
 
