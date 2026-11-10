@@ -189,6 +189,23 @@ fun PreferencesScreen(state: CloudState, cloud: CloudViewModel, settings: AppSet
                     modifier = Modifier.testTag("pref_search").named(stringResource(R.string.pref_search_network)))
             }
         }
+        // preferences.md, «Allow downloads from supported websites» (mobile_app.md, rule 10).
+        var sites by rememberSaveable { mutableStateOf(settings.allowSiteDownloads) }
+        TismaCard {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.pref_site_downloads), modifier = Modifier.weight(1f))
+                Switch(sites, { sites = it; settings.allowSiteDownloads = it },
+                    modifier = Modifier.testTag("pref_site_downloads").named(stringResource(R.string.pref_site_downloads)))
+            }
+        }
+        // local_library.md, rule 12: the library's size limit, in MB.
+        var cap by rememberSaveable { mutableStateOf(settings.libraryCapMb.toString()) }
+        TismaCard {
+            OutlinedTextField(cap, { t -> cap = t.filter { it.isDigit() }.take(6); cap.toIntOrNull()?.takeIf { it >= 50 }?.let { settings.libraryCapMb = it } },
+                singleLine = true, label = { Text(stringResource(R.string.pref_library_cap)) },
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth().testTag("pref_library_cap"))
+        }
         // app_updates.md, «Ajustes»: updates.check and updates.channel.
         var check by rememberSaveable { mutableStateOf(settings.updatesCheck) }
         var beta by rememberSaveable { mutableStateOf(settings.updatesChannel == "beta") }

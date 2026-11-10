@@ -24,6 +24,7 @@ import net.tisma.app.engine.SliceViewModel
 import net.tisma.app.printers.PrinterStore
 import net.tisma.app.printers.PrintersViewModel
 import net.tisma.app.ui.Navigator
+import net.tisma.app.ui.Screen
 import net.tisma.app.ui.Section
 import net.tisma.app.ui.TismaApp
 import net.tisma.app.ui.TismaTheme
@@ -119,7 +120,7 @@ class SettingsPanelTest {
         val nav = Navigator()
         val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
         compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, nav) } }
-        compose.runOnIdle { nav.select(Section.PRINT) }
+        compose.runOnIdle { nav.select(Section.PLATE); nav.open(Screen.SettingsTab("print")) }
         wait("panel_section_strength")
         // Normal shows more than Basic.
         compose.onNodeWithTag("panel_view_normal").performClick()
@@ -182,12 +183,13 @@ class SettingsPanelTest {
         val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
         val nav = Navigator()
         compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, nav) } }
-        compose.runOnIdle { nav.select(Section.PRINT) }
+        compose.runOnIdle { nav.select(Section.PLATE); nav.open(Screen.SettingsTab("print")) }
         wait("panel_section_strength")
         wait("panel_sub_layer_height")
         compose.onNodeWithTag("panel_section_strength").performClick()
         wait("row_walls.count")
-        compose.runOnIdle { assertTrue(nav.stack.isEmpty()) }
+        // Side by side: the section opens beside the list, not as another screen over the tab.
+        compose.runOnIdle { assertTrue(nav.stack.toList() == listOf<Screen>(Screen.SettingsTab("print"))) }
         // The plate: the 3D view and the controls together once a model is open.
         compose.runOnIdle { nav.select(Section.PLATE); slice.open("cube.stl") { File("../../../tests/data/cube_ascii.stl").inputStream() } }
         wait("plate_3d")

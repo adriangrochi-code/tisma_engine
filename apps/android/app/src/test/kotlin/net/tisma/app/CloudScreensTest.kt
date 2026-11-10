@@ -65,7 +65,12 @@ class CloudScreensTest {
     fun stop() = server.stop()
 
     private fun waitFor(tag: String) = try {
-        compose.waitUntil(10_000) { compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        // The job's files come in on other threads and their results are posted to the main one: let it run them
+        // while waiting, with room for a slow CI machine (the dev branch's GitHub job missed 10 s now and then).
+        compose.waitUntil(20_000) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
     } catch (e: Throwable) {
         println("STATE " + vm.state.value)
         println(compose.onRoot().printToString())
@@ -73,12 +78,13 @@ class CloudScreensTest {
     }
 
     /** Waits for the model, letting the main thread run what it posted. */
-    private fun waitState(condition: () -> Boolean) = compose.waitUntil(10_000) {
+    private fun waitState(condition: () -> Boolean) = compose.waitUntil(20_000) {
         org.robolectric.shadows.ShadowLooper.idleMainLooper()
         condition()
     }
 
-    private fun waitForText(text: String) = compose.waitUntil(10_000) {
+    private fun waitForText(text: String) = compose.waitUntil(20_000) {
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
         compose.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
     }
 

@@ -56,12 +56,15 @@ class AccessibilityTest {
         val missing = mutableListOf<String>()
         val screens: List<Pair<String, () -> Unit>> = Section.entries.map { s -> s.name to { nav.select(s) } } + listOf(
             "Preferences" to { nav.select(Section.MORE); nav.open(Screen.Preferences) },
-            "Print section" to { nav.select(Section.PRINT); nav.open(Screen.SettingsSection("print", "quality")) },
+            "Print section" to { nav.select(Section.PLATE); nav.open(Screen.SettingsTab("print")); nav.open(Screen.SettingsSection("print", "quality")) },
             "Printer settings" to { nav.select(Section.PRINTER); nav.open(Screen.PrinterSettings) },
             "Report" to { nav.select(Section.MORE); nav.open(Screen.Report()) },
             "Account" to { nav.select(Section.MORE); nav.open(Screen.Account) },
-            "Parts" to { nav.select(Section.MORE); nav.open(Screen.Parts) },
+            "Parts" to { nav.select(Section.ENGINEERING); nav.open(Screen.Parts) },
             "Calibrate" to { nav.select(Section.MORE); nav.open(Screen.Calibrate) },
+            "Material" to { nav.select(Section.PRINTER); nav.open(Screen.SettingsTab("material")) },
+            "CAD" to { nav.select(Section.ENGINEERING); nav.open(Screen.Cad) },
+            "Help" to { nav.select(Section.MORE); nav.open(Screen.Help) },
         )
         for ((name, go) in screens) {
             compose.runOnIdle { go() }

@@ -288,9 +288,16 @@ private fun CameraBox(id: String, state: PrintersState, printers: PrintersViewMo
             CameraView.Connecting -> Text(stringResource(R.string.camera_connecting), color = MaterialTheme.colorScheme.onSurfaceVariant)
             CameraView.None -> Text(stringResource(R.string.camera_none), color = MaterialTheme.colorScheme.onSurfaceVariant)
             is CameraView.Failed -> Text(stringResource(R.string.camera_failed, view.reason), color = MaterialTheme.colorScheme.error)
+            is CameraView.BambuFailed -> Text(stringResource(when (view.kind) {
+                net.tisma.printers.PrinterException.Kind.NETWORK -> R.string.camera_bambu_network
+                net.tisma.printers.PrinterException.Kind.AUTH -> R.string.camera_bambu_auth
+                net.tisma.printers.PrinterException.Kind.CERTIFICATE -> R.string.camera_bambu_certificate
+                else -> R.string.camera_bambu_no_images
+            }), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("camera_bambu_failed"))
             is CameraView.Image -> {
                 val bitmap = androidx.compose.runtime.remember(view) {
-                    android.graphics.BitmapFactory.decodeByteArray(view.jpeg, 0, view.jpeg.size)?.asImageBitmap()
+                    android.graphics.BitmapFactory.decodeByteArray(view.jpeg, 0, view.jpeg.size)
+                        ?.let { cameraTurned(it, view.flipHorizontal, view.flipVertical, view.rotation) }?.asImageBitmap()
                 }
                 if (bitmap != null) {
                     androidx.compose.foundation.Image(bitmap, stringResource(R.string.camera_title),
@@ -482,3 +489,16 @@ private fun nameAndSize(context: Context, uri: Uri): Pair<String?, Long> = runCa
         if (c.moveToFirst()) c.getString(0) to (if (c.isNull(1)) -1L else c.getLong(1)) else null
     }
 }.getOrNull() ?: (null to -1L)
+
+/**
+ * The camera image as the printer's settings say it is mounted (printer_connections.md, «Cámara de la
+ * impresora»: flips, then a clockwise turn), so a camera upside down is seen the right way.
+ */
+internal fun cameraTurned(b: android.graphics.Bitmap, flipH: Boolean, flipV: Boolean, rotation: Int): android.graphics.Bitmap {
+    if (!flipH && !flipV && rotation % 360 == 0) return b
+    val m = android.graphics.Matrix().apply {
+        postScale(if (flipH) -1f else 1f, if (flipV) -1f else 1f, b.width / 2f, b.height / 2f)
+        postRotate(rotation.toFloat())
+    }
+    return android.graphics.Bitmap.createBitmap(b, 0, 0, b.width, b.height, m, true)
+}

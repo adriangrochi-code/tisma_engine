@@ -24,8 +24,8 @@ android {
         applicationId = "net.tismaservidores.tisma"
         minSdk = 28
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.0-beta.1"
         // The project's Ed25519 public key for the updates (app_updates.md, rules 5 and 13), as 64 hex digits:
         // -Ptisma.updatesKey=…; empty until the owner makes the key, and then the updater stays off.
         buildConfigField("String", "UPDATES_KEY", "\"" + (project.findProperty("tisma.updatesKey") as String? ?: "") + "\"")
@@ -34,6 +34,27 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+        }
+        // For testers: shrunk by R8 (the arm64 APK goes from about 33 MB to 9 MB, without SolidCraft) and signed
+        // with the debug key until the owner's release key exists. The tests run on debug: a beta is smoke-tested
+        // on an emulator before it is handed out.
+        create("beta") {
+            initWith(getByName("release"))
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
+    }
+
+    // One APK per architecture, as well as the one with both: phones only need arm64-v8a, which leaves out the
+    // other copy of the engine and of SolidCraft (about half the APK); x86_64 is for emulators.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = true
         }
     }
 
@@ -58,11 +79,17 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // The Bambu Lab mock's TLS under Robolectric reads java.net internals (the camera test, CM2).
+        // Arguments to the engine's process in UTF-8, as on Android (a note «Salió bien», local_library.md rule 1).
+        unitTests.all {
+            it.jvmArgs("--add-opens", "java.base/java.net=ALL-UNNAMED")
+            it.environment("LC_ALL", "C.UTF-8")
+        }
     }
 }
 
 kotlin {
-    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
+    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17); optIn.add("kotlin.time.ExperimentalTime") }
 }
 
 // ---- The engine of the desktop, built for the phone (mobile_app.md, rule 1) ----
@@ -140,6 +167,7 @@ if (solidcraftDir != null) {
 }
 
 dependencies {
+    implementation(project(":shared"))
     implementation(project(":cloud"))
     implementation(project(":printers"))
     implementation(libs.kotlinx.coroutines.android)

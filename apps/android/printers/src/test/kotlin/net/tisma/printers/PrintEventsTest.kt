@@ -11,6 +11,10 @@ class PrintEventsTest {
     fun `finished, stopped, paused and failed`() {
         assertEquals(PrintEvent.Finished("cube.gcode"), PrintEvents.between(s(PrinterState.PRINTING, 99.5), s(PrinterState.READY)))
         assertEquals(PrintEvent.Stopped("cube.gcode"), PrintEvents.between(s(PrinterState.PAUSED, 40.0), s(PrinterState.READY)))
+        // A Bambu Lab leaving the print for a state no specification names (shown as BUSY with its name):
+        // at the end it is finished; before, stopped, with the printer's own word.
+        assertEquals(PrintEvent.Finished("cube.gcode"), PrintEvents.between(s(PrinterState.PRINTING, 100.0), s(PrinterState.BUSY, null, "FINISH")))
+        assertEquals(PrintEvent.Stopped("cube.gcode", "FAILED"), PrintEvents.between(s(PrinterState.PRINTING, 40.0), s(PrinterState.BUSY, null, "FAILED")))
         assertEquals(PrintEvent.Paused("cube.gcode", "Filament runout"),
             PrintEvents.between(s(PrinterState.PRINTING, 40.0), s(PrinterState.PAUSED, 40.0, "Filament runout")))
         assertEquals(PrintEvent.Failed("cube.gcode", "MCU shutdown"),
