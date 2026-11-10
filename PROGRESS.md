@@ -12514,3 +12514,6 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   0,97–1,12 s el laminado completo con la escritura (3 corridas). Sin cambio que medir en este bloque.
 - **Revisado sin hallazgos:** el código nuevo de la interfaz de hoy (instancias, recargar, ZIP, pulgadas, convertir,
   Imprimible, atajos).
+- Cola p2p (spec/next 967f7a3, p2p_library.md): la lista de bloqueo suma `models` (código de publicación y motivo): el
+  cliente deja de compartir y bajar esa publicación y borra sus archivos con el aviso «retirado», como un archivo
+  bloqueado. Solo publican cuentas registradas; la tarjeta del modelo muestra el código de publicación.
