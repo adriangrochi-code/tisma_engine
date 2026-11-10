@@ -134,11 +134,30 @@ class CloudClient(
     }
 
     /**
+     * p2p_library.md, rule 7 bis: the scanned parts sent to print and not yet taken by a device. The routes are the
+     * app's proposal until the server's are published: `GET /v1/me/scans`, `GET /v1/me/scans/{id}/mesh` and
+     * `POST /v1/me/scans/{id}/taken`.
+     */
+    fun scans(): List<Scan> = list(get("/v1/me/scans"), "scans").map(Scan::from)
+
+    /** A scan's mesh, written to [out], at most [maxBytes]. */
+    fun downloadScan(id: String, out: OutputStream, maxBytes: Long = MAX_RESULT_BYTES): Download =
+        fetch("/v1/me/scans/" + path(id) + "/mesh", out, maxBytes)
+
+    /** The scan reached this device's library: the server stops offering it here. */
+    fun scanTaken(id: String, device: String) {
+        postObject("/v1/me/scans/" + path(id) + "/taken", buildJsonObject { put("device", device) })
+    }
+
+    /**
      * `GET /v1/jobs/{id}/result`, written to [out] as it arrives (rule 9). At
      * most [maxBytes] are read; a larger result is an error.
      */
-    fun download(id: String, out: OutputStream, maxBytes: Long = MAX_RESULT_BYTES): Download {
-        val response = send(HttpRequest("GET", serverUrl + "/v1/jobs/" + path(id) + "/result", headers(true),
+    fun download(id: String, out: OutputStream, maxBytes: Long = MAX_RESULT_BYTES): Download =
+        fetch("/v1/jobs/" + path(id) + "/result", out, maxBytes)
+
+    private fun fetch(route: String, out: OutputStream, maxBytes: Long): Download {
+        val response = send(HttpRequest("GET", serverUrl + route, headers(true),
             timeoutMs = 30 * 60_000))
         response.use { r ->
             if (!r.ok) throw failure(r)

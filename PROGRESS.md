@@ -11953,3 +11953,15 @@ pantalla y el bloqueo; el formato del índice lo propone el servidor.
 - Pruebas: `BlockListTest` (firma con una clave de prueba, P2P3, P2P5, P2P6, P2P7, bloqueo de IP que vence).
 - Falta: el índice y su búsqueda, bajar y publicar (red de pares: la biblioteca la elige el motor), «Denunciar»
   (necesita la dirección del servidor) y renovar la lista cada 6 h mientras comparte.
+
+## 2026-11-10 — Android: piezas escaneadas en Mi biblioteca (p2p_library.md, regla 7 bis)
+
+Pedido del dueño: lo escaneado con Tisma Scanner y mandado con «Imprimir» aparece en Mi biblioteca del teléfono
+(misma cuenta de Tisma Cloud), listo para laminar.
+- Al abrir Biblioteca con la cuenta abierta, la app pide las piezas escaneadas pendientes, baja cada malla (comprueba
+  su SHA-256 si el servidor la da), la guarda como entrada nueva de Mi biblioteca con los ajustes de la tarjeta de la
+  impresora como receta, y recién entonces la marca recibida. Aviso: «Llegaron N piezas escaneadas…».
+- Rutas propuestas por la app hasta que el servidor publique las suyas: `GET /v1/me/scans`,
+  `GET /v1/me/scans/{id}/mesh`, `POST /v1/me/scans/{id}/taken` (`CloudClient.scans`, `downloadScan`, `scanTaken`).
+  El servidor de prueba (`MockCloud`) las tiene.
+- Prueba: `ScansTest` (una pieza escaneada llega a Mi biblioteca y queda marcada recibida por ese teléfono).

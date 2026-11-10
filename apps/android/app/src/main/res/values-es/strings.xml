@@ -644,4 +644,8 @@
     <string name="shared_why_wifi">No comparte: solo con Wi-Fi, no con datos móviles.</string>
     <string name="shared_why_charging">No comparte: solo con el cargador puesto.</string>
     <string name="shared_upload_cap">Subida máxima por día (MB)</string>
+    <plurals name="scans_arrived">
+        <item quantity="one">Llegó %d pieza escaneada a Mi biblioteca, lista para laminar.</item>
+        <item quantity="other">Llegaron %d piezas escaneadas a Mi biblioteca, listas para laminar.</item>
+    </plurals>
 </resources>

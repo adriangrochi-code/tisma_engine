@@ -660,4 +660,8 @@
     <string name="shared_why_wifi">Not sharing: only on Wi-Fi, not on mobile data.</string>
     <string name="shared_why_charging">Not sharing: only while charging.</string>
     <string name="shared_upload_cap">Upload limit a day (MB)</string>
+    <plurals name="scans_arrived">
+        <item quantity="one">%d scanned part arrived in My library, ready to slice.</item>
+        <item quantity="other">%d scanned parts arrived in My library, ready to slice.</item>
+    </plurals>
 </resources>

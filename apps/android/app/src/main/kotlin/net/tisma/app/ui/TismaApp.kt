@@ -213,6 +213,14 @@ fun TismaApp(
             slice.libraryFileTaken()
         }
     }
+    // p2p_library.md, rule 7 bis: on opening the Library, scanned parts sent to print arrive in «Mi biblioteca».
+    val scanScope = androidx.compose.runtime.rememberCoroutineScope()
+    LaunchedEffect(nav.section, state.signedIn, sliceState.libraryAvailable) {
+        if (nav.section == Section.LIBRARY && state.signedIn && sliceState.libraryAvailable && library != null) scanScope.launch {
+            val n = cloud.takeScans(java.io.File(context.cacheDir, "scans")) { scan, f -> slice.keepScan(f, scan.name) }
+            if (n > 0) { slice.scansArrived(n); library.refresh() }
+        }
+    }
     // mobile_app.md, rule 10: «Open <file> from <site>?» before downloading; with downloads off, it offers to allow them.
     sliceState.siteLink?.let { r ->
         var allowed by remember { mutableStateOf(settings.allowSiteDownloads) }

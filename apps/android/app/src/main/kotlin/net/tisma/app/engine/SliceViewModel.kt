@@ -136,6 +136,8 @@ sealed interface SliceNotice {
     /** local_library.md, rule 3: the part was kept in «Mi biblioteca». */
     data class LibrarySaved(val name: String) : SliceNotice
     data class LibraryFailed(val message: String) : SliceNotice
+    /** p2p_library.md, rule 7 bis: parts scanned and sent to print arrived in «Mi biblioteca». */
+    data class ScansArrived(val count: Int) : SliceNotice
     /** A model site's link that cannot be opened (rule 10), or its download that failed. */
     data class SiteRefused(val reason: SiteLink.Reason?, val detail: String = "") : SliceNotice
 }
@@ -1005,4 +1007,21 @@ class SliceViewModel(
             f.getOrNull()?.let { file -> open(file.name) { file.inputStream() } }
         }
     }
+
+    /**
+     * p2p_library.md, rule 7 bis: a scanned part becomes a new entry of «Mi biblioteca», with the printer card's
+     * settings as its recipe, ready to slice. Blocking (called from the cloud's download thread).
+     */
+    fun keepScan(mesh: File, name: String): Boolean {
+        val lib = library ?: return false
+        val s = state.value
+        return runCatching {
+            val config = runner.writeConfig(s.settings, s.profile)
+            val label = s.profile?.let { it.name ?: it.printer } ?: ""
+            lib.save(null, mesh, config, s.profile, settingsChanges(s.settings), label, workDir, name = name.ifBlank { mesh.nameWithoutExtension })
+        }.onFailure { AppLog.line("library: scan ${it.message}") }.isSuccess
+    }
+
+    /** Rule 7 bis: «N scanned parts arrived in My library». */
+    fun scansArrived(n: Int) { if (n > 0) _state.update { it.copy(notice = SliceNotice.ScansArrived(n)) } }
 }

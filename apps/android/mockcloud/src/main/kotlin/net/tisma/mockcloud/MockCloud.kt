@@ -130,6 +130,14 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
     fun expireTokens() = synchronized(lock) { tokens.clear() }
     fun job(id: String): JobDef? = synchronized(lock) { jobs.firstOrNull { it.id == id } }
 
+    /** p2p_library.md, rule 7 bis: a part scanned and sent to print, for [email]'s devices (the app's proposed routes). */
+    class ScanDef(val id: String, val email: String, val name: String, val file: String, val mesh: ByteArray, var takenBy: String? = null)
+    private val scans = mutableListOf<ScanDef>()
+    fun addScan(email: String, name: String, file: String, mesh: ByteArray): ScanDef = synchronized(lock) {
+        ScanDef("scan-${scans.size + 1}", email, name, file, mesh).also { scans += it }
+    }
+    fun scan(id: String): ScanDef? = synchronized(lock) { scans.firstOrNull { it.id == id } }
+
     // ---- The API ----
 
     private class Reply(val status: Int, val body: ByteArray, val type: String = "application/json",
@@ -213,6 +221,31 @@ class MockCloud(private val port: Int = 0, private val host: String = "127.0.0.1
                 ok(buildJsonObject { put("closed", closed) })
             }
             method == "GET" && r == listOf("me", "reports") -> myReports(auth(ex))
+            method == "GET" && r == listOf("me", "scans") -> {
+                val a = auth(ex)
+                val mine = synchronized(lock) { scans.filter { it.email == a.email && it.takenBy == null } }
+                ok(buildJsonObject {
+                    put("scans", kotlinx.serialization.json.buildJsonArray {
+                        mine.forEach { sc -> add(buildJsonObject {
+                            put("id", sc.id); put("name", sc.name); put("file", sc.file); put("size", sc.mesh.size)
+                            put("sha256", java.security.MessageDigest.getInstance("SHA-256").digest(sc.mesh).joinToString("") { "%02x".format(it) })
+                            put("created", "2026-11-10T00:00:00Z")
+                        }) }
+                    })
+                })
+            }
+            method == "GET" && r.size == 4 && r[0] == "me" && r[1] == "scans" && r[3] == "mesh" -> {
+                val a = auth(ex)
+                val sc = scan(r[2])?.takeIf { it.email == a.email } ?: throw Stop(404, "No such scan")
+                Reply(200, sc.mesh, "application/octet-stream", mapOf("Content-Disposition" to "attachment; filename=\"${sc.file}\""))
+            }
+            method == "POST" && r.size == 4 && r[0] == "me" && r[1] == "scans" && r[3] == "taken" -> {
+                val a = auth(ex)
+                val body = readJson(ex)
+                val sc = scan(r[2])?.takeIf { it.email == a.email } ?: throw Stop(404, "No such scan")
+                synchronized(lock) { sc.takenBy = (body["device"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: "?" }
+                ok(buildJsonObject { put("ok", true) })
+            }
             method == "POST" && r == listOf("reports") -> report(ex)
             method == "POST" && r == listOf("jobs") -> submit(ex, auth(ex))
             method == "GET" && r == listOf("jobs") -> listJobs(auth(ex), query["limit"]?.toIntOrNull() ?: 50)
