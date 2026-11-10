@@ -11897,3 +11897,8 @@ arreglado en 9d8dc76 y subido.
   sin hacer: a la cola de no planares; (3) el paquete publica `index.json.xz` (0,12 MB contra 2,06 MB): bajarlo si
   está y caer a `index.json` si no; (4) release 0.12.0-beta.1 para todas las versiones (pedido del dueño).
 - release.yml: compila también los APK de Android (beta con R8 y el de respaldo, arm64) y los adjunta.
+- Cola (1) hecha: al elegir capas curvas en la interfaz con la E relativa apagada, se prende sola y un aviso lo dice;
+  si la impresora no puede (su tipo de G-code no tiene M83, o su G-code de inicio del paquete espera E absoluta), un
+  aviso de error dice que no se va a poder laminar. Sin guion de interfaz (el guion no elige en combos todavía).
+- Release 0.12.0-beta.1 preparada (VERSION, CHANGELOG con «Para probar», VERSIONING): espera la CI de Windows de dev y
+  la de Android de 5004d1b para unir android y publicar.

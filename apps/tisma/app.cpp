@@ -37,6 +37,7 @@
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
 #include "device/bambu.hpp"
+#include "gcode/dialect.hpp"
 #include "gcode/output.hpp"
 #include "gcode/thumbnail.hpp"
 #include "device/bambu_simulator.hpp"
@@ -8792,8 +8793,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         }
     } else if (id == "curved") {
         // Curved layers (nonplanar.md).
-        if (shown("curved.mode"))
-            changed |= row(T::CurvedModeRow, s.curved_mode,
+        const bool mode_changed = shown("curved.mode") &&
+                                  row(T::CurvedModeRow, s.curved_mode,
                            {{CurvedMode::Disabled, tr(T::SumOff)},
                             {CurvedMode::Wave, tr(T::CurvedWave)},
                             {CurvedMode::Conical, tr(T::CurvedCone)},
@@ -8801,6 +8802,18 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {CurvedMode::Stress, tr(T::CurvedStress)},
                             {CurvedMode::Surface, tr(T::CurvedSurface)},
                             {CurvedMode::Automatic, tr(T::CurvedAutomatic)}});
+        changed |= mode_changed;
+        // Curved layers take relative E (nonplanar.md, rule 7): turn it on
+        // when the printer can, else say plainly that slicing will fail.
+        if (mode_changed && s.curved_mode != CurvedMode::Disabled && !relative_e(s)) {
+            s.relative_extrusion = true;
+            if (relative_e(s)) {
+                notify(tr(T::CurvedRelativeOn));
+            } else {
+                s.relative_extrusion = false;
+                notify(tr(T::CurvedRelativeNo), true);
+            }
+        }
         if (shown("curved.pattern"))
             changed |= row(T::CurvedPatternRow, s.curved_pattern,
                            {{CurvedPattern::Egg, tr(T::CurvedEgg)},

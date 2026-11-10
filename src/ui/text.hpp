@@ -2145,6 +2145,10 @@
     X(CurvedCone, "Cono", "Cone") \
     X(CurvedOverhangs, "Voladizos", "Overhangs") \
     X(CurvedStress, "Tensiones", "Stress") \
+    X(CurvedRelativeOn, "Las capas curvas necesitan la extrusión relativa: se activó (Impresora, «E relativa»)", \
+      "Curved layers need relative extrusion: it was turned on (Printer, \"Relative E\")") \
+    X(CurvedRelativeNo, "Las capas curvas necesitan la extrusión relativa, y esta impresora no la tiene (su tipo de G-code o su G-code de inicio usan E absoluta): no se va a poder laminar", \
+      "Curved layers need relative extrusion, which this printer does not have (its G-code flavor or start G-code use absolute E): slicing will fail") \
     X(CurvedSurface, "Caras superiores", "Top faces") \
     X(CurvedAutomatic, "Automático", "Automatic") \
     X(CurvedPatternRow, "Forma de la onda", "Wave shape") \

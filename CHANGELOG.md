@@ -38,6 +38,9 @@ versión no se probó en el emulador (una anterior sí). macOS todavía no.
 
 ### Cambiado
 
+- Al elegir capas curvas con la extrusión relativa apagada, la interfaz la prende sola y lo avisa; si la
+  impresora no puede usarla, avisa que no se va a poder laminar (antes fallaba al laminar).
+
 - La primera descarga del paquete de perfiles baja `index.json.xz` (0,12 MB en vez de 2 MB) cuando el paquete lo
   publica, y si no `index.json` como antes.
 
