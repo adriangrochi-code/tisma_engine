@@ -12252,3 +12252,6 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 - 735dccf: cualquier error al leer un secreto lo borraba para siempre (códigos de acceso, sesión), también uno pasajero
   del Keystore. Ahora solo se borra si fue sellado con otra clave, la clave quedó invalidada o la entrada está dañada
   (`SecretStoreTest`).
+- Ficha (spec/next 967f7a3, regla 3 novies): la lista de bloqueo trae `models` (código de publicación y motivo); la
+  búsqueda saca esa publicación sola, y la tarjeta del modelo muestra su código. Lo demás (solo cuentas registradas
+  publican, el código en «Mis publicaciones», el autor de una pieza escaneada) va con la pantalla de publicar.
