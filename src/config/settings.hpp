@@ -601,7 +601,11 @@ struct Settings {
     double top_solid_infill_speed = 0.0;
     double support_speed = 0.0;
     double travel_speed = 0.0;
+    // speed.first_layer (gcode_motion.md, rule 2): in mm/s every first-layer
+    // extrusion goes at it, the slower ones too; as a percentage ("50%"),
+    // each at that share of its own speed.
     double first_layer_speed = 0.0;
+    bool first_layer_speed_percent = false;
     double max_speed = 0.0; // no extrusion goes faster; 0: no cap
     double speed_max_flow = 0.0; // mm3/s the print's own flow cap (speed.max_flow); 0: none
     // Speeds of their own (gcode_motion.md; speeds_accels.md, rules 1 to 4),
@@ -933,6 +937,9 @@ void require_speeds(const Settings& settings);
 // The fastest an extrusion is asked to go, mm/s: the fastest extrusion speed,
 // capped by speed.max when that is set.
 double fastest_extrusion(const Settings& settings);
+// A first-layer extrusion's speed, its own being `own` mm/s (gcode_motion.md,
+// rule 2): speed.first_layer in mm/s, or that share of `own`.
+double first_layer_of(const Settings& settings, double own);
 
 // The section of a bead w wide and h high as extrusion.section counts it.
 double extruded_section(BeadSection section, double width, double height);

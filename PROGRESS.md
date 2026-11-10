@@ -12562,3 +12562,19 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
 - Revisado sin hallazgos: normales invertidas (todas o la mitad de las caras) dan el mismo G-code byte a byte; las
   medidas de las paredes externas coinciden con el modelo (20,00 y 4,00 mm); paredes de 0,3 y 0,6 mm y un cubo de
   0,8 mm; el paso al siguiente objeto (regla 3).
+
+## 2026-11-10 21:40 — specs nuevas: anchos de cordón, separación del soporte, velocidad de la primera capa
+
+- `perimeters.md` regla 8, P15 (spec/next 931ffe8): todo ancho de cordón se acepta si supera la altura de su capa (la
+  primera capa contra `layers.first_height`) y no pasa de tres boquillas; por debajo de un cuarto de la boquilla
+  lamina con el aviso `line_width_thin`. Antes: de un cuarto a cuatro boquillas, sin mirar la capa. Prueba
+  `[settings]` P15 (boquilla 0,6, capas 0,12: 0,133 avisa, 0,11 se rechaza).
+- `supports_skirt.md` (tabla, `support.xy_gap`): un porcentaje es del perímetro externo (`walls.outer_width`, o 1,125
+  boquillas), no de `walls.width`. `support_xy_gap()` en los dos sitios que lo usaban. Prueba: externo 0,6, paredes
+  0,45, 50 % → 0,30 mm.
+- `gcode_motion.md` regla 2 (spec/next b6010bd): `speed.first_layer` en mm/s fija cada extrusión de la primera capa
+  (antes era un tope: las más lentas quedaban igual); `"N%"` pone cada una al N % de la suya. La falda y el borde,
+  con «N %», toman el porcentaje de `speed.walls` (decisión propia: la ficha no lo dice). Prueba `[speeds]`:
+  perímetro de 20 con 30 → 30; 50 % → la mitad de cada tipo; ida y vuelta del texto.
+- Pendiente: el campo de la interfaz de `speed.first_layer` sigue en mm/s; un valor en % de un perfil se ve como
+  número sin unidad (el resumen sí dice «%»).

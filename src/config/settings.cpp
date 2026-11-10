@@ -2184,6 +2184,8 @@ Settings parse_checked(std::string_view text) {
                                             ? &s.overhang_speeds[std::size_t(n.back() - '0')]
                                             : nullptr;
                    if (v.is_null()) { // not set: from the printer's profile
+                       if (n == "first_layer")
+                           s.first_layer_speed_percent = false;
                        if (share)
                            *share = {};
                        else
@@ -2201,9 +2203,22 @@ Settings parse_checked(std::string_view text) {
                        *share = {p, true};
                        return;
                    }
+                   if (n == "first_layer" && v.is_string()) { // "50%": of each extrusion's speed (gcode_motion.md, rule 2)
+                       const std::string t = v.get<std::string>();
+                       char* end = nullptr;
+                       const double p = std::strtod(t.c_str(), &end);
+                       if (t.empty() || t.back() != '%' || end != t.c_str() + t.size() - 1 || !(p > 0.0) ||
+                           !(p <= 1000.0))
+                           fail(k, "must be a number of mm/s or a percentage from 0 to 1000 like \"50%\"");
+                       s.first_layer_speed = p;
+                       s.first_layer_speed_percent = true;
+                       return;
+                   }
                    const double d = number(g, n, k);
                    if (!(d > 0.0))
                        fail(k, "must be greater than 0");
+                   if (n == "first_layer")
+                       s.first_layer_speed_percent = false;
                    if (share)
                        *share = {d, false};
                    else if (n == "bridges" || n == "gap_fill" || n == "travel_z")
@@ -3200,12 +3215,20 @@ void require_speeds(const Settings& settings) {
 }
 
 double fastest_extrusion(const Settings& s) {
-    const double fastest = std::max({s.wall_speed, s.outer_wall_speed.of(s.wall_speed), s.infill_speed,
+    double fastest = std::max({s.wall_speed, s.outer_wall_speed.of(s.wall_speed), s.infill_speed,
                                      s.solid_infill_speed, s.top_solid_infill_speed, s.support_speed,
-                                     s.first_layer_speed, s.bridge_speed, s.gap_fill_speed, s.arcs_speed,
+                                     s.first_layer_speed_percent ? 0.0 : s.first_layer_speed, s.bridge_speed, s.gap_fill_speed, s.arcs_speed,
                                      s.over_bridges_speed.of(s.solid_infill_speed), s.small_loop_speed.of(s.wall_speed),
                                      s.first_layer_infill_speed.of(s.solid_infill_speed)});
+    if (s.first_layer_speed_percent) // the first layer at a share of each speed
+        fastest = std::max(fastest, fastest * s.first_layer_speed / 100.0);
     return s.max_speed > 0.0 ? std::min(fastest, s.max_speed) : fastest;
+}
+
+double first_layer_of(const Settings& s, double own) {
+    if (!(s.first_layer_speed > 0.0))
+        return own;
+    return s.first_layer_speed_percent ? own * s.first_layer_speed / 100.0 : s.first_layer_speed;
 }
 
 double extruded_section(BeadSection section, double width, double height) {
@@ -3536,7 +3559,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"speed.top_solid_infill", speed(s.top_solid_infill_speed)},
         {"speed.support", speed(s.support_speed)},
         {"speed.travel", speed(s.travel_speed)},
-        {"speed.first_layer", speed(s.first_layer_speed)},
+        {"speed.first_layer", share(Speed{s.first_layer_speed, s.first_layer_speed_percent})},
         {"speed.max", speed(s.max_speed)},
         {"speed.max_flow", num(s.speed_max_flow)},
         {"speed.bridges", speed(s.bridge_speed)},
@@ -4086,7 +4109,7 @@ std::string settings_json(const Settings& s) {
           {"top_solid_infill", speed(s.top_solid_infill_speed)},
           {"support", speed(s.support_speed)},
           {"travel", speed(s.travel_speed)},
-          {"first_layer", speed(s.first_layer_speed)},
+          {"first_layer", share(Speed{s.first_layer_speed, s.first_layer_speed_percent})},
           {"max", speed(s.max_speed)},
           {"max_flow", s.speed_max_flow},
           {"bridges", speed(s.bridge_speed)},
@@ -4435,44 +4458,40 @@ void check_settings(const Settings& s) {
                       s.object_extruder, s.extruders);
         throw SettingsError(text);
     }
-    if (s.wall_width < 0.25 * nozzle || s.wall_width > 4.0 * nozzle) {
-        std::snprintf(text, sizeof text, "walls.width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
-                      s.wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
+    // A bead's width (perimeters.md, rule 8, P15): more than its layer's
+    // height and at most three nozzles; under a quarter of the nozzle it
+    // slices with a warning (capability_warnings). 10 mm of infill or
+    // support from a 0.4 nozzle sliced and passed the G-code check (the spec
+    // team's BH5).
+    const auto bead = [&](const char* key, double width, double height) {
+        if (width > height && width <= 3.0 * nozzle)
+            return;
+        std::snprintf(text, sizeof text,
+                      "%s: %.3g mm cannot come out of a %.3g mm nozzle in %.3g mm layers (more than %.3g, up to %.3g mm)",
+                      key, width, nozzle, height, height, 3.0 * nozzle);
         throw SettingsError(text);
-    }
-    if (s.outer_wall_width > 0.0 && (s.outer_wall_width < 0.25 * nozzle || s.outer_wall_width > 4.0 * nozzle)) {
-        std::snprintf(text, sizeof text, "walls.outer_width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)",
-                      s.outer_wall_width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
-        throw SettingsError(text);
-    }
-    // The other beads by the same rule: 10 mm of infill or support from a 0.4
-    // nozzle sliced and passed the G-code check (the spec team's BH5).
+    };
+    bead("walls.width", s.wall_width, s.layer_height);
+    if (s.outer_wall_width > 0.0)
+        bead("walls.outer_width", s.outer_wall_width, s.layer_height);
     for (const auto& [key, width] : std::initializer_list<std::pair<const char*, double>>{
              {"infill.width", s.infill_width},
              {"surfaces.solid_width", s.solid_width},
              {"surfaces.top_width", s.top_width},
              {"support.width", s.support_width.value > 0.0 ? s.support_width.of(s.layer_height) : 0.0}})
-        if (width > 0.0 && (width < 0.25 * nozzle || width > 4.0 * nozzle)) {
-            std::snprintf(text, sizeof text, "%s: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)", key,
-                          width, nozzle, 0.25 * nozzle, 4.0 * nozzle);
-            throw SettingsError(text);
-        }
+        if (width > 0.0)
+            bead(key, width, s.layer_height);
     // The thin walls' least bead: a minimum, so only its top (the spec team's
     // BH5, again: 9 mm on a 0.4 nozzle laid an over-wide bead).
-    if (const double least = s.wall_min_line_width.of(nozzle); least > 4.0 * nozzle) {
+    if (const double least = s.wall_min_line_width.of(nozzle); least > 3.0 * nozzle) {
         std::snprintf(text, sizeof text, "walls.min_line_width: %.3g mm cannot come out of a %.3g mm nozzle (up to %.3g mm)",
-                      least, nozzle, 4.0 * nozzle);
+                      least, nozzle, 3.0 * nozzle);
         throw SettingsError(text);
     }
     // The first layer's bead, by the same rule: 20 mm on a 0.4 nozzle spilt
     // past the skirt and the G-code failed its own check (the spec team's BH1).
-    if (const double first = s.first_line_width.of(s.first_layer_height);
-        s.first_line_width.value > 0.0 && (first < 0.25 * nozzle || first > 4.0 * nozzle)) {
-        std::snprintf(text, sizeof text,
-                      "layers.first_line_width: %.3g mm cannot come out of a %.3g mm nozzle (%.3g to %.3g mm)", first,
-                      nozzle, 0.25 * nozzle, 4.0 * nozzle);
-        throw SettingsError(text);
-    }
+    if (s.first_line_width.value > 0.0)
+        bead("layers.first_line_width", s.first_line_width.of(s.first_layer_height), s.first_layer_height);
 }
 
 } // namespace tisma

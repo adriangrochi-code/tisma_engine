@@ -240,6 +240,12 @@ double outer_bead(const Settings& settings) {
     return settings.outer_wall_width > 0.0 ? settings.outer_wall_width : 1.125 * settings.nozzle_diameter;
 }
 
+// support.xy_gap in mm, a percentage being of the outer wall's bead
+// (supports_skirt.md, settings table and rule 2): 0.225 mm with a 0.45 one.
+double support_xy_gap(const Settings& settings) {
+    return settings.support_xy_gap.of(outer_bead(settings));
+}
+
 // The walls of a region, `count` of them, by the settings' generator.
 LayerWalls walls_of(const Polygons& region, int count, const Settings& settings, BeadingParams beading) {
     if (settings.wall_generator == WallGenerator::Fixed)
@@ -1758,7 +1764,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                    : sp.z_gap_layers;
         sp.buildplate_only = settings.support_buildplate_only;
         sp.under_bridges = settings.support_under_bridges;
-        sp.xy_gap = settings.support_xy_gap.of(settings.wall_width);
+        sp.xy_gap = support_xy_gap(settings);
         // snug: fitted to what hangs, its gaps closed by support.closing_radius
         // (supports_more.md, rule 14).
         sp.margin = settings.support_style == SupportStyle::Snug ? 0.0 : kSupportMargin;
@@ -1847,7 +1853,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             return;
         // The support keeps support.xy_gap off the part: that much and a bead
         // more of what hangs still lies over it.
-        const double xy_gap = settings.support_xy_gap.of(settings.wall_width);
+        const double xy_gap = support_xy_gap(settings);
         Polygons on = Clipper2Lib::Intersect(
             Clipper2Lib::Difference(out.regions[l], held[l - 1], Clipper2Lib::FillRule::NonZero),
             offset(support_at[top], xy_gap + settings.wall_width), Clipper2Lib::FillRule::NonZero);
