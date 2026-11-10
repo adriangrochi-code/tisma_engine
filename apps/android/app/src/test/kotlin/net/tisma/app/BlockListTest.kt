@@ -2,6 +2,8 @@ package net.tisma.app
 
 import android.content.Context
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -201,5 +203,31 @@ class BlockListTest {
         while (shared.state.value.list == null && System.currentTimeMillis() < deadline) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
         assertEquals(9L, shared.state.value.list?.sequence)
         assertNull(shared.state.value.problem)
+    }
+
+    @Test
+    fun `a bad list and a failed report are said in the person's language, even without a message`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val json = list(1)
+        val server = object : LibraryServer {
+            override fun file(name: String) = when (name) {
+                "key" -> keyJson(); "blocklist.json" -> json; "blocklist.json.sig" -> sign(pair(), json)
+                else -> throw java.io.IOException("404")
+            }
+            override fun report(model: String?, sha256: String?, reason: String): String = throw java.io.IOException()
+        }
+        val settings = AppSettings(context).apply { packWizardDone = true }
+        val shared = SharedViewModel(tmp.newFolder("p2p"), projectKey, server, settings)
+        val work = tmp.newFolder("work")
+        val slice = SliceViewModel(EngineRunner(File(work, "none"), work), work, saved = settings)
+        val cloud = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5)
+        val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
+        compose.setContent { TismaTheme { TismaApp(cloud, printers, slice, settings, Navigator(Section.LIBRARY), shared = shared) } }
+        compose.onNodeWithTag("tab_shared").performClick()
+        compose.waitUntil(10_000) { ShadowLooper.idleMainLooper(); compose.onAllNodes(hasTestTag("shared_problem")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(context.getString(R.string.shared_problem)).assertExists()
+        assertTrue(compose.onAllNodes(hasText("signature", substring = true)).fetchSemanticsNodes().isEmpty())
+        compose.runOnIdle { shared.report("m1", null, "rights") }
+        compose.waitUntil(10_000) { ShadowLooper.idleMainLooper(); compose.onAllNodes(hasTestTag("shared_report_failed")).fetchSemanticsNodes().isNotEmpty() }
     }
 }

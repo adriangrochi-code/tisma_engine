@@ -63,7 +63,7 @@ fun SharedScreen(shared: SharedViewModel) {
         // Rule 7: a report sent, or why not.
         state.reported?.let { TismaCard(Modifier.testTag("shared_reported")) {
             Text(stringResource(R.string.shared_reported)); AccentTextButton(onClick = { shared.reportSeen() }) { Text(stringResource(R.string.shared_ok)) } } }
-        state.reportFailed?.let { TismaCard {
+        state.reportFailed?.let { TismaCard(Modifier.testTag("shared_report_failed")) {
             Text(stringResource(R.string.shared_report_failed, it), color = MaterialTheme.colorScheme.error)
             AccentTextButton(onClick = { shared.reportSeen() }) { Text(stringResource(R.string.shared_ok)) } } }
         TismaCard {
@@ -85,7 +85,9 @@ fun SharedScreen(shared: SharedViewModel) {
                 else stringResource(R.string.shared_list_date,
                     DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm").withZone(ZoneId.systemDefault()).format(list.generated.toJavaInstant())),
                 style = MaterialTheme.typography.bodySmall)
-            state.problem?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+            // The detail (in English, from the check) goes to the log; the person reads their own language.
+            if (state.problem != null) Text(stringResource(R.string.shared_problem), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("shared_problem"))
         }
         TismaCard(Modifier.testTag("shared_sharing")) {
             Row(verticalAlignment = Alignment.CenterVertically) {

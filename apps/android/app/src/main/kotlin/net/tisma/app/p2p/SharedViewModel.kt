@@ -100,7 +100,7 @@ class SharedViewModel(
             val kept = withContext(io) { copies.all() }
             _state.update { st ->
                 val (list, index, removed) = r.getOrNull() ?: Triple(null, null, emptyList())
-                st.copy(list = list ?: st.list, index = index ?: st.index, problem = r.exceptionOrNull()?.message,
+                st.copy(list = list ?: st.list, index = index ?: st.index, problem = r.exceptionOrNull()?.let { e -> e.message ?: e::class.simpleName ?: "?" },
                     withdrawn = st.withdrawn + removed.map { it.sha256 }, copies = kept)
             }
         }
@@ -118,7 +118,7 @@ class SharedViewModel(
         val s = server ?: return
         viewModelScope.launch {
             val r = withContext(io) { runCatching { s.report(model, sha256, reason) } }
-            _state.update { it.copy(reported = r.getOrNull()?.let { model ?: sha256 }, reportFailed = r.exceptionOrNull()?.message) }
+            _state.update { it.copy(reported = r.getOrNull()?.let { model ?: sha256 }, reportFailed = r.exceptionOrNull()?.let { e -> e.message?.takeIf { it.isNotBlank() } ?: e::class.simpleName ?: "?" }) }
         }
     }
 
