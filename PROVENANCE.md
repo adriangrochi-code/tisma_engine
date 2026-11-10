@@ -339,3 +339,9 @@ Lo que sale de una ficha se anota así: «ficha `docs/spec/features/<nombre>.md`
 | `src/geom/polyholes.*` — agujeros redondos como polígonos | Ficha `orca_2_5.md`, regla 5 (de la wiki pública de OrcaSlicer, nunca de su código). Diseño propio: círculo estimado por el promedio de los vértices y su distancia media, convexidad por el signo de los giros, agujeros juntados entre capas por el mismo margen (búsqueda ordenada por x), polígono circunscrito (los lados tocan el círculo, radio de las esquinas r / cos(π/n)), reemplazado con una diferencia de Clipper2. |
 | `unsupported_turns` (`src/gcode/writer.cpp`) — paredes sin apoyo al final | Ficha `orca_2_5.md`, regla 3. Diseño propio: una vuelta sin ningún punto sobre la región de la capa de abajo; anclada si toca (distancia a la línea ≤ 0,55 × la suma de los anchos) una vuelta sostenida o anclada, cerrado transitivo; las ancladas después de las paredes, de adentro hacia afuera, y las sueltas después del relleno de la isla. |
 | La app de macOS (2026-11-10): `packaging/macos/make_app.sh`, `packaging/macos/Info.plist.in` | Estructura de un bundle y claves de Info.plist según la documentación pública de Apple (Bundle Programming Guide, Information Property List Key Reference); `sips` e `iconutil` son herramientas del sistema. Diseño propio. |
+
+## Relleno `honeycomb_3d` (2026-11-10)
+
+Ficha `infill_patterns.md`, regla 11 y prueba P8. Diseño propio: filas a la separación de la densidad en la dirección
+de la capa (0° y 90° alternadas), cada una con tramos rectos unidos por tramos a 45°; la parte inclinada sigue una onda
+triangular en Z de período dos separaciones, y las filas vecinas son simétricas para cerrar celdas. Sin código ajeno.

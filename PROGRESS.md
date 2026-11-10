@@ -12653,3 +12653,8 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   Variable `wait_for_extruder_temp` (sí, salvo con prevención de goteo). Pruebas `[macros]` GM18 y lo que usa el
   cambio de herramienta de dos cabezales (espera, capa, herramientas, texto + número, temperatura indexada, posición);
   fallan sin el arreglo.
+- `infill_patterns.md` regla 11, P8 (pedido de la sesión de especificaciones: 34 impresiones del paquete lo usan):
+  patrón `honeycomb_3d`, antes rechazado. Diseño propio (PROVENANCE.md). Prueba `[combine]`: dirección principal 0° y
+  90° en capas alternas, tramos a 45° y 135° parejos, la parte inclinada cambia con la altura, largo cercano al
+  rectilíneo; el nombre se lee. Los porcentajes exactos de P8 (55 %, 43 %, 78 %) dependen de la fase en Z y no se
+  igualan: es la forma, no el mismo dibujo.

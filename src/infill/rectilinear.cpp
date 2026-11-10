@@ -208,6 +208,8 @@ std::size_t fill_period(const FillParams& params) {
         return 0;
     case InfillPattern::Honeycomb:
         return 6;
+    case InfillPattern::Honeycomb3d:
+        return 0; // it moves with the height
     case InfillPattern::Rectilinear:
     case InfillPattern::Grid:
     case InfillPattern::Triangles:
@@ -378,6 +380,9 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
         out.sparse = honeycomb_fill(surfaces.sparse, honeycomb_side(ws, params.density), principal, w);
         break;
     }
+    case InfillPattern::Honeycomb3d: // rows along 0 and 90 degrees, a layer each (rule 11, P8)
+        out.sparse = honeycomb3d_fill(surfaces.sparse, ws / params.density, z, layer % 2 == 0 ? 0.0 : 90.0, w);
+        break;
     case InfillPattern::Concentric:
         out.sparse = concentric_fill(surfaces.sparse, ws / params.density, w);
         break;

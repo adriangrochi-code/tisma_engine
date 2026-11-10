@@ -139,6 +139,40 @@ std::vector<Toolpath> honeycomb_fill(const Polygons& region, double side, double
     return f.clip(waves, kMaxJoin * h, width);
 }
 
+std::vector<Toolpath> honeycomb3d_fill(const Polygons& region, double spacing, double z, double principal_degrees,
+                                       double width) {
+    if (!(spacing > 0.0) || region.empty())
+        return {};
+    const Frame f(region, width, principal_degrees);
+    if (f.turned.empty())
+        return {};
+    // Along a row, a period of 2 spacings: along at +a, a slant down to -a,
+    // along at -a, a slant up; a, from 0 to a quarter period, a triangle wave
+    // in z of that period (straight rows, then full zigzags, then straight).
+    const double period = 2.0 * spacing * kUnitsPerMm, quarter = period / 4.0;
+    const double phase = z * kUnitsPerMm / period;
+    const double a = quarter * std::fabs(2.0 * (phase - std::floor(phase)) - 1.0);
+    const double gap = spacing * kUnitsPerMm;
+    const auto n0 = static_cast<std::int64_t>(std::floor(double(f.xmin) / period)) - 1;
+    const auto n1 = static_cast<std::int64_t>(std::ceil(double(f.xmax) / period)) + 1;
+    Polygons rows;
+    for (auto m = static_cast<std::int64_t>(std::floor(double(f.ymin) / gap)) - 1; double(m) * gap <= double(f.ymax) + gap;
+         ++m) {
+        const double y = double(m) * gap, sign = m % 2 == 0 ? 1.0 : -1.0;
+        Polygon row;
+        row.reserve(std::size_t(4 * (n1 - n0 + 1)));
+        for (std::int64_t n = n0; n <= n1; ++n) {
+            const double x = double(n) * period;
+            row.push_back({std::llround(x + a), std::llround(y + sign * a)});
+            row.push_back({std::llround(x + 2.0 * quarter - a), std::llround(y + sign * a)});
+            row.push_back({std::llround(x + 2.0 * quarter + a), std::llround(y - sign * a)});
+            row.push_back({std::llround(x + period - a), std::llround(y - sign * a)});
+        }
+        rows.push_back(std::move(row));
+    }
+    return f.clip(rows, kMaxJoin * gap, width);
+}
+
 namespace {
 
 // A box in mm, for the curves' pruning.

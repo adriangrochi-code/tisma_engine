@@ -22,7 +22,7 @@ enum class GpuMode { Auto, Off };
 // The pattern of the top surface and of the bottom one (surfaces.top_pattern,
 // surfaces.bottom_pattern; infill_patterns.md, rules 14 to 17).
 enum class SurfacePattern { Monotonic, Rectilinear, MonotonicLines, AlignedRectilinear, Concentric, Hilbert, Archimedean, Octagram };
-enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram };
+enum class InfillPattern { Rectilinear, Grid, Gyroid, Triangles, Cubic, AdaptiveCubic, SupportCubic, Lightning, Stars, AlignedRectilinear, Zigzag, Line, Honeycomb, Concentric, Hilbert, Archimedean, Octagram, Honeycomb3d };
 // The firmware the G-code is for. Past Marlin, Klipper and RepRap, the old
 // dialects of gcode_extras.md (rule 6): Repetier and Smoothie as RepRap, and
 // how the others differ in src/gcode/dialect.hpp.

@@ -178,7 +178,8 @@ const std::map<std::string, InfillPattern>& infill_patterns() {
         {"concentric", InfillPattern::Concentric},
         {"hilbert", InfillPattern::Hilbert},
         {"archimedean", InfillPattern::Archimedean},
-        {"octagram", InfillPattern::Octagram}};
+        {"octagram", InfillPattern::Octagram},
+        {"honeycomb_3d", InfillPattern::Honeycomb3d}};
     return names;
 }
 

@@ -530,6 +530,7 @@
     X(AlignedRectilinear, "Rectilíneo alineado", "Aligned rectilinear")                                               \
     X(Zigzag, "Zigzag", "Zigzag")                                                                                     \
     X(LineInfill, "Línea", "Line")                                                                                    \
+    X(Honeycomb3d, "Panal 3D", "3D honeycomb")                                                                     \
     X(Honeycomb, "Panal", "Honeycomb")                                                                                \
     X(ConcentricInfill, "Concéntrico", "Concentric")                                                                  \
     X(HilbertInfill, "Hilbert", "Hilbert")                                                                            \

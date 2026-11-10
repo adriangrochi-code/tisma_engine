@@ -566,6 +566,43 @@ TEST_CASE("infill patterns: honeycomb, the principal direction turning a layer e
           0.7 * area_a);
 }
 
+TEST_CASE("infill patterns: 3D honeycomb, rows at 0 and 90 degrees with slants that change with the height (rule 11, P8)",
+          "[combine]") {
+    FillParams p;
+    p.width = 0.4;
+    p.density = 0.2;
+    p.angle = 45.0;
+    p.pattern = InfillPattern::Honeycomb3d;
+    const LayerSurfaces region = square_sparse(20.0);
+    std::vector<double> slanted;
+    // P8: layer 5 mostly at 0 degrees, 6 at 90, 45 at 0; the slants at 45 and 135.
+    for (const auto& [layer, main] : {std::pair{4, 0}, std::pair{5, 90}, std::pair{44, 0}, std::pair{10, 0}}) {
+        const std::vector<Toolpath> lines = fill_layer(region, std::size_t(layer), p, 0.2 * (layer + 1)).sparse;
+        REQUIRE_FALSE(lines.empty());
+        const std::map<int, double> d = by_direction(lines);
+        const double all = total(lines);
+        const auto share = [&](int a) { return d.count(a) ? d.at(a) / all : 0.0; };
+        INFO("layer " << layer + 1 << ": 0 " << share(0) << ", 90 " << share(90) << ", 45 " << share(45) << ", 135 "
+                      << share(135));
+        CHECK(share(main) > 0.4);
+        CHECK(share(main == 0 ? 90 : 0) < 0.1); // the rows' joins along the edge
+        CHECK_THAT(share(45), WithinAbs(share(135), 0.08));
+        CHECK(share(main) + share(45) + share(135) > 0.9);
+        slanted.push_back(share(45) + share(135));
+        // About the rectilinear's length (P8: 190 to 209 mm against 197), the
+        // slants adding to it; the rectilinear's joins along the edge are longer.
+        p.pattern = InfillPattern::Rectilinear;
+        const std::vector<Toolpath> rect = fill_layer(region, std::size_t(layer), p, 0.2 * (layer + 1)).sparse;
+        INFO("3d " << all << " in " << lines.size() << ", rectilinear " << total(rect) << " in " << rect.size());
+        CHECK_THAT(all / total(rect), WithinAbs(1.0, 0.3));
+        p.pattern = InfillPattern::Honeycomb3d;
+    }
+    // How much slants changes with the height.
+    CHECK(*std::max_element(slanted.begin(), slanted.end()) - *std::min_element(slanted.begin(), slanted.end()) > 0.15);
+    // Read and written by name.
+    CHECK(parse_settings(R"({"infill": {"pattern": "honeycomb_3d"}})").infill_pattern == InfillPattern::Honeycomb3d);
+}
+
 TEST_CASE("infill patterns: concentric loops (P9)", "[combine]") {
     FillParams p;
     p.width = 0.4;
