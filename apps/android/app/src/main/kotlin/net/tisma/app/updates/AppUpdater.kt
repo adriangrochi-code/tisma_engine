@@ -85,6 +85,8 @@ class AppUpdater(
                         if (cancelled()) throw UpdateException("Cancelled")
                         val n = resp.body.read(buf)
                         if (n < 0) break
+                        // More than the list says is not the package: stop before it fills the phone.
+                        if (p.size > 0 && have + n > p.size) throw UpdateException("damaged")
                         f.write(buf, 0, n)
                         have += n
                         if (p.size > 0) onProgress((100 * have / p.size).toInt().coerceIn(0, 100))
@@ -108,7 +110,8 @@ class AppUpdater(
             val buf = ByteArray(64 * 1024)
             while (true) { val n = i.read(buf); if (n < 0) break; sha.update(buf, 0, n) }
         }
-        if (sha.digest().joinToString("") { "%02x".format(it) } != p.sha256) return false
+        // The list's hex may come in either case.
+        if (!sha.digest().joinToString("") { "%02x".format(it) }.equals(p.sha256.trim(), ignoreCase = true)) return false
         val sig = runCatching { Base64.getDecoder().decode(p.signature) }.getOrNull() ?: return false
         return f.inputStream().buffered().use { Ed25519.verify(publicKey, it, sig) }
     }

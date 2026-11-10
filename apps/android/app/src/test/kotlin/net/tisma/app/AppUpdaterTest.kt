@@ -67,4 +67,18 @@ class AppUpdaterTest {
             assertFalse(dir.listFiles()!!.any { it.name.endsWith(".apk") || it.name.endsWith(".part") })
         }
     }
+
+    @Test
+    fun `a package longer than the list says stops at its size, and the fingerprint is read in any case`() {
+        StaticFiles(files(apk + ByteArray(2 shl 20)), port = 47613).use { s ->
+            val dir = tmp.newFolder("updates")
+            val u = AppUpdater(net.tisma.cloud.UrlConnectionHttp, key, listOf(s.url + "/updates.json"), dir)
+            val offer = Updates.choose(u.releases(), "stable", 30, "0.1.0").offer!!
+            val e = assertFailsWith<AppUpdater.UpdateException> { u.download(offer, {}) { false } }
+            assertEquals("damaged", e.message)
+            assertFalse(dir.listFiles()!!.any { it.name.endsWith(".part") && it.length() > offer.pkg.size })
+            val good = tmp.newFile("good.apk").apply { writeBytes(apk) }
+            assertTrue(u.check(good, offer.pkg.copy(sha256 = offer.pkg.sha256.uppercase())))
+        }
+    }
 }
