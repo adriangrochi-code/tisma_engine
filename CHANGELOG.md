@@ -12,6 +12,9 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Cambiado
 
+- La primera descarga del paquete de perfiles baja `index.json.xz` (0,12 MB en vez de 2 MB) cuando el paquete lo
+  publica, y si no `index.json` como antes.
+
 - La piel difusa no se aplica donde la pared externa cuelga sobre nada (sale lisa, como un puente).
 
 - `machine.min_layer_height` y `max_layer_height` acotan solo la altura variable y el soporte, no la altura de capa ni

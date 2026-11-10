@@ -152,7 +152,8 @@ releases = {
     "release1": {"index.json": index("2026.11.01-aaaaaaa", acme1, bolt, translation), "translation.tar.xz": translation, "compatible.json": compatible,
                  "acme.tar.xz": acme1, "bolt.tar.xz": bolt, "community.tar.xz": community,
                  "knowledge.tar.xz": knowledge},
-    "release2": {"index.json": index("2026.11.04-bbbbbbb", acme2, bolt), "acme.tar.xz": acme2},
+    "release2": {"index.json": index("2026.11.04-bbbbbbb", acme2, bolt),
+                 "index.json.xz": xz(index("2026.11.04-bbbbbbb", acme2, bolt)), "acme.tar.xz": acme2},
     "evil": {"index.json": index("2026.11.04-ccccccc", evil_path, evil_link), "acme.tar.xz": evil_path,
              "bolt.tar.xz": evil_link},
 }
