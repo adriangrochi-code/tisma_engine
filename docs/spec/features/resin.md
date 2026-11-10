@@ -29,7 +29,8 @@ Las velocidades se dan en mm/s y las esperas en s. El archivo GOO guarda las vel
 | `machine.display_width`, `machine.display_height` | mm | 143,43, 89,6 | Tamaño del área que ilumina la pantalla |
 | `machine.display_mirror_x`, `machine.display_mirror_y` | — | sí, no | Espejar las imágenes |
 | `machine.max_height` | mm | 150 | Altura máxima de impresión |
-| `resin.layer_height` | mm | 0,05 | Altura de todas las capas |
+| `resin.layer_height` | mm | 0,05 | Altura de las capas, salvo la primera |
+| `resin.first_layer_height` | mm | 0 = `resin.layer_height` | Altura de la primera capa (en el material, como en PrusaSlicer) |
 | `resin.exposure`, `resin.bottom_exposure` | s | 2,5, 30 | Exposición de las capas normales y de las de fondo |
 | `resin.bottom_layers` | — | 5 | Capas de fondo, que se pegan a la plataforma |
 | `resin.elephant_foot` | mm | 0,2 | Cuánto se achica la primera capa en XY |
@@ -56,7 +57,8 @@ Los valores por defecto son los de la Elegoo Mars 5 con la resina estándar gen�
 
 ### Capas e imágenes
 
-1. **Capas:** todas miden `resin.layer_height`. La capa `n` (desde 0) tiene su tope en `Z = (n + 1) · h`.
+1. **Capas:** la primera mide `resin.first_layer_height` (`h0`; con 0, `resin.layer_height`) y las demás
+   `resin.layer_height` (`h`). La capa `n` (desde 0) tiene su tope en `Z = h0 + n · h` (prueba RE11).
 2. **Píxel:** `p = machine.display_width / machine.display_pixels_x` (0,035 mm en la Mars 5; igual en Y).
 3. **Ubicación en la imagen:**
    - la imagen es la pantalla vista desde arriba, con la fila 0 en la Y máxima: `columna = X / p`, `fila =
@@ -196,3 +198,4 @@ Medidas en Tisma Slicer (24-10-2026) como caja negra.
 | RE8 | Cubo de RE1, sin pata de elefante, capa 100 | `resin.gamma` 1 / 2 / 0 | 1: columnas 1763 a 2335, 7 grises; en la fila del medio, borde izquierdo 73 y derecho 37. 2: los mismos píxeles, borde 21 y 5. 0: columnas 1764 a 2334, solo 0 y 255; 326 612 píxeles con luz en vez de 327 756 |
 | RE9 | Voladizo de `supports_more.md` (losa de Z 8 a 10), sin soportes | `resin.z_correction_layers` 0 / 3 | 0: desde Z 8,05 la capa ilumina la losa entera (327 756 píxeles, columnas 1763 a 2335). 3: en Z 8,05, 8,10 y 8,15 solo la columna (164 164 píxeles, columnas 2049 a 2335); desde Z 8,20, la losa entera |
 | RE10 | Cubo de RE1, capa 100 | `resin.absolute_correction` 0,1 / −0,1 / 0,5 / −0,5 | Igual que sin corrección: 327 756 píxeles, columnas 1763 a 2335 |
+| RE11 | Cubo de RE1 | `resin.first_layer_height` 0,1, `resin.layer_height` 0,05 | Primera capa con tope en 0,1; la segunda en 0,15; el número de capas baja en una |
