@@ -163,6 +163,7 @@ struct PackProfiles {
     std::optional<Profile> filament, print;
     std::string filament_path, print_path;
     std::string filament_vendor; // the filament entry's maker (community data)
+    std::vector<std::string> filament_prints; // its compatible_prints (empty: any print)
     // The printer profile has the printer settings its filament and print
     // profile carry (their speeds), over the variant's (BH27).
     bool resin = false;          // a resin printer: the filament is its resin
@@ -201,6 +202,22 @@ std::vector<PackFilamentRef> pack_filaments_for(const std::filesystem::path& pac
 // Whether a filament with these compatible_prints works with print profile
 // `print` (a pack path, with or without "vendors/"); empty lists work with any.
 bool pack_print_fits(const std::vector<std::string>& compatible_prints, const std::string& print);
+
+// A filament the interface may hold: its name, material type and
+// compatible_prints (empty: any print; `pack` false: not a pack filament,
+// which works with any print).
+struct FilamentChoice {
+    std::string name, type;
+    std::vector<std::string> compatible_prints;
+    bool pack = true;
+};
+// When print profile `print` (a pack path) is chosen and filament `current`
+// does not work with it (compatible_prints), the one to switch to: the
+// printer's default filament if it fits, else the first of `filaments` that
+// fits, of the same material; nothing when `current` fits or none does
+// (profile_pack_format.md, entries, rule 4).
+std::optional<std::string> pack_refit_filament(const std::vector<FilamentChoice>& filaments, const std::string& current,
+                                               const std::string& print, const std::string& printer_default);
 // The same for the print profiles (for a resin printer, the resin print
 // profiles), rule 12.
 std::vector<PackFilamentRef> pack_prints_for(const std::filesystem::path& pack_dir, const PackIndex& index, int printer);

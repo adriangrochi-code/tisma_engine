@@ -412,6 +412,29 @@ TEST_CASE("pack: a filament made for some print profiles (compatible_prints; pro
     CHECK(pack_print_fits({"vendors/acme/prints/Fine.json"}, "acme/prints/Fine.json"));
 }
 
+TEST_CASE("pack: another print chosen, a filament that no longer fits is switched (profile_pack_format.md, entries, rule 4)",
+          "[pack]") {
+    const std::string fine = "vendors/acme/prints/Fine.json", standard = "vendors/acme/prints/Standard.json";
+    const std::vector<FilamentChoice> filaments = {
+        {"Acme PLA", "PLA", {"acme/prints/Standard.json"}},
+        {"Acme PETG", "PETG", {}},
+        {"Other PLA", "PLA", {fine}},
+        {"Any PLA", "PLA", {}},
+        {"My PLA", "PLA", {}, false}, // the person's own: any print
+    };
+    // It fits: nothing changes.
+    CHECK_FALSE(pack_refit_filament(filaments, "Acme PLA", standard, "Acme PLA"));
+    CHECK_FALSE(pack_refit_filament(filaments, "My PLA", fine, "Acme PLA"));
+    // It does not: the printer's default when it fits...
+    CHECK(pack_refit_filament(filaments, "Acme PLA", fine, "Any PLA") == std::optional<std::string>("Any PLA"));
+    // ...else the first of the same material that fits (not the PETG).
+    CHECK(pack_refit_filament(filaments, "Acme PLA", fine, "Acme PLA") == std::optional<std::string>("Other PLA"));
+    // None fits: it stays.
+    CHECK_FALSE(pack_refit_filament({filaments[0], filaments[1]}, "Acme PLA", fine, "Acme PLA"));
+    // No pack print chosen: nothing to check.
+    CHECK_FALSE(pack_refit_filament(filaments, "Acme PLA", "", "Any PLA"));
+}
+
 TEST_CASE("pack: a variant's defaults always valid for it, an empty set for every printer (rule 12, BH29)", "[pack]") {
     const fs::path pack = fresh_dir("tisma_pack_bh29") / "pack";
     pack_install(pack, staging_from("release1", "tisma_pack_stage_bh29"));

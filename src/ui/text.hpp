@@ -1144,6 +1144,7 @@
     X(UseValueConfirm, "Este dato no lo publica el fabricante. ¿Usarlo igual?", "The maker does not publish this value. Use it anyway?") \
     X(PublishedHint, "Datos de la comunidad del paquete libre, cada uno con su fuente. Ninguno cambia un ajuste solo.", "Community data from the free pack, each with its source. None changes a setting by itself.") \
     X(PublishedAt, "minuto %s", "minute %s") \
+    X(FilamentRefit, "El filamento no servía con esta impresión: se cambió a %s", "The filament did not work with this print profile: changed to %s") \
     X(PackKeptByHand, "Se mantuvieron tus cambios en %s; el resto vino del perfil elegido", "Your changes to %s were kept; the rest came from the chosen profile") \
     X(PackProfileGone, "Este perfil ya no está en el paquete: %s queda elegido hasta que elijas otro", "This profile is no longer in the pack: %s stays chosen until you choose another") \
     X(CmMaxFlow, "Flujo máximo medido", "Measured maximum flow") \

@@ -12584,3 +12584,8 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   `pack_profiles` rechaza la pareja que no sirve, salvo que las dos sean las de la variante. Sin el campo, cualquier
   impresión. Prueba `[pack]` (con y sin el campo, rutas con o sin `vendors/`). Sin probar con el paquete real
   (profiles/next 8cf1546).
+- Spec/next b705fe7: al cambiar la impresión en la interfaz, si el filamento elegido ya no sirve (`compatible_prints`),
+  se pasa al filamento por defecto de la variante si sirve, si no al primero que sirva del mismo material, con el aviso
+  «El filamento no servía con esta impresión: se cambió a <nombre>»; si ninguno sirve, queda el que estaba. La
+  decisión es `pack_refit_filament` (motor), probada en `[pack]`; la interfaz la llama al elegir una impresión del
+  paquete. Sin guion de interfaz: el paquete de prueba tiene un solo filamento de Acme.

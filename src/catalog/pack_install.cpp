@@ -406,7 +406,7 @@ PackProfiles pack_profiles(const fs::path& pack_dir, const PackIndex& index, con
             throw PackError(entry.profile.name + (out.resin ? " is not a resin profile, and the " : " is a resin profile, and the ") +
                             out.printer.name + (out.resin ? " is a resin printer" : " is not a resin printer"));
         if (kind == ProfileKind::Filament)
-            out.filament_vendor = entry.vendor, filament_prints = entry.compatible_prints;
+            out.filament_vendor = entry.vendor, filament_prints = out.filament_prints = entry.compatible_prints;
         // A filament made for some print profiles only (profile_pack_format.md, entries, rule 4).
         if (kind == ProfileKind::Print && !out.filament_path.empty() && !pack_print_fits(filament_prints, path) &&
             !(defaults.contains(pack_key(path)) && defaults.contains(pack_key(out.filament_path))))
@@ -533,6 +533,26 @@ std::vector<PackFilamentRef> pack_entries_for(const fs::path& pack_dir, const Pa
 std::vector<PackFilamentRef> pack_filaments_for(const fs::path& pack_dir, const PackIndex& index, int printer,
                                                 const std::string& print) {
     return pack_entries_for(pack_dir, index, printer, ProfileKind::Filament, print);
+}
+
+std::optional<std::string> pack_refit_filament(const std::vector<FilamentChoice>& filaments, const std::string& current,
+                                               const std::string& print, const std::string& printer_default) {
+    const auto find = [&](const std::string& name) -> const FilamentChoice* {
+        for (const FilamentChoice& f : filaments)
+            if (f.name == name)
+                return &f;
+        return nullptr;
+    };
+    const auto fits = [&](const FilamentChoice& f) { return !f.pack || pack_print_fits(f.compatible_prints, print); };
+    const FilamentChoice* now = find(current);
+    if (print.empty() || !now || fits(*now))
+        return std::nullopt;
+    if (const FilamentChoice* d = find(printer_default); d && d != now && fits(*d))
+        return d->name;
+    for (const FilamentChoice& f : filaments)
+        if (&f != now && f.type == now->type && fits(f))
+            return f.name;
+    return std::nullopt;
 }
 
 bool pack_print_fits(const std::vector<std::string>& compatible_prints, const std::string& print) {

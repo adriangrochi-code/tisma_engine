@@ -981,6 +981,7 @@ private:
     void pack_source_line(ProfileKind kind);
     std::vector<double> printer_diameters() const;
     void choose_profile(ProfileKind kind, const Profile& profile);
+    void refit_filament(); // the filament again, for a print it does not fit (compatible_prints)
     // Speeds the settings lack: a stock Ender-3's, and a word about it.
     void fill_speeds();
     void save_profile_as(ProfileKind kind, std::string name);
@@ -1774,6 +1775,8 @@ private:
     int pack_filaments_number_ = -2;                         // the printer pack_filaments_found_ is for
     std::string pack_filaments_print_;                       // and the print profile (compatible_prints)
     std::map<std::string, std::string> pack_print_path_;     // a pack print profile's path, by name
+    std::map<std::string, std::vector<std::string>> pack_filament_prints_; // a pack filament's compatible_prints
+    std::map<std::string, std::string> pack_default_filament_; // a pack printer's default filament, by printer
     std::vector<PackFilamentRef> pack_filaments_found_;
     std::string pack_url_; // packs.url; empty: the latest release
     struct PackJobState {
@@ -5126,6 +5129,8 @@ void App::load_profile_lists() {
                     number = p.number;
                     if (p.filament) {
                         pack_filament_vendor_[p.filament->name] = p.filament_vendor;
+                        pack_filament_prints_[p.filament->name] = p.filament_prints;
+                        pack_default_filament_[p.printer.name] = p.filament->name;
                         pack_entry_printer_[p.filament->name] = p.filament_printer_settings;
                         pack_profile_source_[p.filament->name] = {p.filament_license, p.filament_origin};
                     }
@@ -5199,6 +5204,7 @@ void App::load_profile_lists() {
                     std::vector<std::string> ignored;
                     PackEntry entry = read_pack_entry(pack_dir(), path, ignored);
                     pack_filament_vendor_[entry.profile.name] = entry.vendor;
+                    pack_filament_prints_[entry.profile.name] = entry.compatible_prints;
                     pack_entry_printer_[entry.profile.name] = entry.printer_settings;
                     pack_profile_source_[entry.profile.name] = {entry.license, entry.origin};
                     Profile f = std::move(entry.profile);
@@ -5323,6 +5329,8 @@ void App::choose_profile(ProfileKind kind, const Profile& profile) {
         }
     }
     profiles_checked_.clear();
+    if (kind == ProfileKind::Print)
+        refit_filament();
     if (kind == ProfileKind::Printer)
         fire("printer_selected");
     if (kind == ProfileKind::Filament) {
@@ -5339,6 +5347,41 @@ void App::choose_profile(ProfileKind kind, const Profile& profile) {
             notify(tr(T::SpeedFallback));
     }
     settings_changed();
+}
+
+// A print profile chosen that the pack filament does not work with
+// (compatible_prints): the printer's default filament, or the first that
+// fits of the same material, with a notice (profile_pack_format.md,
+// entries, rule 4).
+void App::refit_filament() {
+    const auto print = pack_print_path_.find(chosen_profile_[std::size_t(ProfileKind::Print)]);
+    if (print == pack_print_path_.end())
+        return;
+    std::vector<FilamentChoice> choices;
+    std::map<std::string, const Profile*> by_name;
+    for (const auto* list : {&builtin_profiles_[std::size_t(ProfileKind::Filament)], &user_profiles_[std::size_t(ProfileKind::Filament)]})
+        for (const Profile& p : *list) {
+            if (by_name.contains(p.name))
+                continue;
+            by_name[p.name] = &p;
+            FilamentChoice c{p.name, {}, {}, false};
+            try {
+                c.type = with_profile(Settings{}, ProfileKind::Filament, p.settings).filament_type;
+            } catch (const std::exception&) {
+            }
+            if (const auto it = pack_filament_prints_.find(p.name); it != pack_filament_prints_.end())
+                c.pack = true, c.compatible_prints = it->second;
+            choices.push_back(std::move(c));
+        }
+    const auto d = pack_default_filament_.find(chosen_profile_[std::size_t(ProfileKind::Printer)]);
+    const std::optional<std::string> to =
+        pack_refit_filament(choices, chosen_profile_[std::size_t(ProfileKind::Filament)], print->second,
+                            d == pack_default_filament_.end() ? std::string() : d->second);
+    if (!to)
+        return;
+    const Profile chosen = *by_name.at(*to);
+    choose_profile(ProfileKind::Filament, chosen);
+    notify(format(tr(T::FilamentRefit), chosen.name.c_str()));
 }
 
 void App::fill_speeds() {
