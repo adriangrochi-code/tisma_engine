@@ -742,8 +742,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
     // A face on the bed (orca_2_5.md, rule 25), before the transforms and the placement.
     if (parsed->ground != SliceArgs::Ground::None) {
-        if (!stl.negative.empty()) {
-            err << "error: --ground-* does not go with negative volumes yet\n";
+        if (!stl.negative.empty() || !stl.support_blockers.empty() || !stl.support_enforcers.empty()) {
+            err << "error: --ground-* does not go with negative volumes or support blockers and enforcers yet\n";
             return kExitUsage;
         }
         const std::optional<std::array<double, 3>> normal =
