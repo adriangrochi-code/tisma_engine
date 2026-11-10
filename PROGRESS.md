@@ -12245,3 +12245,5 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 - Servidor (tisma-cloud 0221576): publicar responde 422 con caracteres de control o marcas bidi. `PublishText` en
   `shared` los quita (saltos de línea solo en la descripción) y cuenta cuántos (`PublishTextTest`). Se usa cuando
   llegue el formulario de publicar desde Mi biblioteca, con el aviso en castellano.
+- 18d78d2: la actualización de la app seguía escribiendo si el servidor mandaba más bytes que el tamaño de la lista
+  (llena el teléfono), y una lista con el SHA-256 en mayúsculas daba toda actualización por dañada (`AppUpdaterTest`).
