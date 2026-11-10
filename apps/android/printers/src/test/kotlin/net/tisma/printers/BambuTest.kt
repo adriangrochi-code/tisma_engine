@@ -19,6 +19,17 @@ class BambuTest {
         BambuConnection.of(printer.url, code, pinned)
 
     @Test
+    fun `a refused upload closes its data connection`() {
+        val c = connect()
+        printer.refuseStore = true
+        val gcode = "G28\n".toByteArray()
+        assertFailsWith<PrinterException> { c.upload("cube.gcode", gcode.size.toLong(), start = false) { gcode.inputStream() } }
+        val deadline = System.currentTimeMillis() + 10_000
+        while (printer.refusedDataClosed == null && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertEquals(true, printer.refusedDataClosed)
+    }
+
+    @Test
     fun `BL1 state, upload as gcode 3mf with its MD5, project_file, pause, resume, stop`() {
         val c = connect()
         assertEquals("Bambu Lab ${printer.serial}", c.test())

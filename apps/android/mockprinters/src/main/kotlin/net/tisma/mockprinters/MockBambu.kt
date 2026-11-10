@@ -191,6 +191,10 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
         push()
     }
 
+    /** Refuse the next upload after opening its data connection (a full card), and whether the phone closed it. */
+    @Volatile var refuseStore = false
+    @Volatile var refusedDataClosed: Boolean? = null
+
     private fun ftp(s: Socket) {
         val r = BufferedReader(InputStreamReader(s.getInputStream()))
         val w = s.getOutputStream()
@@ -216,6 +220,18 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
                 }
                 "STOR" -> {
                     val ps = passive ?: run { say("425 Use PASV first"); null } ?: continue
+                    if (refuseStore) {
+                        // A full card: the data connection is taken, then the store refused; is it closed by the phone?
+                        val raw = ps.accept()
+                        val data = ssl.socketFactory.createSocket(raw, raw.inetAddress.hostAddress, raw.port, true) as SSLSocket
+                        data.useClientMode = false
+                        data.startHandshake()
+                        say("552 No space left")
+                        data.soTimeout = 5_000
+                        refusedDataClosed = runCatching { data.use { it.getInputStream().read() < 0 } }.getOrDefault(false)
+                        ps.close()
+                        continue
+                    }
                     say("150 Opening data connection")
                     val raw = ps.accept()
                     val data = ssl.socketFactory.createSocket(raw, raw.inetAddress.hostAddress, raw.port, true) as SSLSocket

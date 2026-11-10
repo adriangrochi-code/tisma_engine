@@ -36,10 +36,17 @@ class FtpsUpload(private val tls: PinnedTls, private val host: String, private v
             val dataPort = nums[4] * 256 + nums[5]
             command(w, "STOR $remoteName")
             // The data address is the printer's own (the PASV address may be a private one behind it).
-            val plain = Socket().apply { connect(InetSocketAddress(host, dataPort), 10_000) }
-            val data = tls.wrap(plain, host, port)
-            expect(r, 150, 125)
-            data.use { d -> open().use { it.copyTo(d.getOutputStream(), 64 * 1024) } }
+            val plain = Socket()
+            val data = try {
+                plain.connect(InetSocketAddress(host, dataPort), 10_000)
+                tls.wrap(plain, host, port)
+            } catch (e: Throwable) {
+                runCatching { plain.close() }; throw e
+            }
+            data.use { d ->
+                expect(r, 150, 125)
+                open().use { it.copyTo(d.getOutputStream(), 64 * 1024) }
+            }
             expect(r, 226, 250)
             runCatching { command(w, "QUIT") }
         }
