@@ -12215,7 +12215,7 @@ QA; bundle id `net.tismaservidores.tisma`).
 | 11 | Paquete de perfiles y asistente | Está |
 | 12 | Laminar con avance y cancelar, aviso de memoria, tiempo, m, g, costo, vista previa | Está |
 | 13 | Ingeniería: caras, cargas, material, factor de seguridad | Está |
-| 13 | Temperatura en Ingeniería | **Falta** (el motor aún no la usa: `docs/ANALYSIS.md`) |
+| 13 | Temperatura en Ingeniería | El motor sí la usa (QA 10-11, motor 1738151): toma la de Material; falta el campo en la pantalla de Ingeniería (se pidió al motor qué clave lee) |
 | 13 | Analizar con mapa; relleno mínimo y aplicarlo | Está |
 | 14 | Bambu, Klipper, OctoPrint (+ PrusaLink, Duet), búsqueda, enviar, pausar, seguir, parar, cámara | Está |
 | 14 | Códigos cifrados con el Keystore | Está (MA8) |
