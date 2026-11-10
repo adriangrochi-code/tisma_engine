@@ -113,6 +113,9 @@ archivo de modelo), `variants` (`id` y `nozzle` de cada una) y `default_variant`
    `soluble`.
    Un filamento puede llevar `compatible_prints`: las rutas de los perfiles de impresión del paquete con los que sirve.
    Con ese campo, se ofrece solo si la impresión elegida está en la lista; sin él, sirve con cualquier impresión.
+   Si se cambia la impresión y el filamento elegido ya no sirve con ella, se pasa al filamento por defecto de la
+   variante (o al primero que sirva, del mismo material) y se avisa «El filamento no servía con esta impresión: se
+   cambió a <nombre>».
 5. **Impresión:** además, `nozzle`, la boquilla para la que está hecho, si todas sus impresoras usan la misma.
 
 ## `compatible.json`
