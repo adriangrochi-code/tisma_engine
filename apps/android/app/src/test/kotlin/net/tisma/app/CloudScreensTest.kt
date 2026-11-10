@@ -34,6 +34,8 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -102,6 +104,30 @@ class CloudScreensTest {
         waitFor("hours")
         // 5 h of the plan and 3 h given by the administration (rule 5a).
         compose.onNodeWithText("0 of 8 h used · 8 h left").assertIsDisplayed()
+    }
+
+    @Test
+    fun `previewed results do not pile up in the cache, and a failed download leaves no file`() {
+        val cache = java.nio.file.Files.createTempDirectory("results").toFile()
+        val v = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5, cacheDir = cache)
+        v.signIn("ana@example.com", "password1")
+        waitState { v.state.value.signedIn }
+        val client = CloudClient(server.url).apply { login("ana@example.com", "password1", "t") }
+        val bytes = cube3mf()
+        fun job(done: Boolean) = client.submit(JobRequest.Slice, "cube.3mf", bytes.size.toLong()) { bytes.inputStream() }
+            .also { j -> if (done) repeat(3) { client.job(j.id) } }
+        val a = job(true); val b = job(true); val running = job(false)
+        val results = java.io.File(cache, "results")
+        var shown: String? = null
+        v.previewResult(a.id) { shown = it }
+        waitState { shown != null }
+        shown = null
+        v.previewResult(b.id) { shown = it }
+        waitState { shown != null }
+        assertEquals(listOf(java.io.File(shown!!).name), results.listFiles()!!.map { it.name })
+        v.previewResult(running.id) { shown = "running" }
+        waitState { !v.state.value.busy && v.state.value.notice != null }
+        assertTrue(results.listFiles()!!.none { it.name.contains(running.id.filter { c -> c.isLetterOrDigit() || c == '-' }) })
     }
 
     @Test

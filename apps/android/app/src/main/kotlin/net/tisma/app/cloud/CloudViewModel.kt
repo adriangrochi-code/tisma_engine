@@ -252,7 +252,14 @@ class CloudViewModel(
         launchRequest(onDone = { path?.let(onReady) }) {
             val dir = java.io.File(cacheDir, "results").apply { mkdirs() }
             val f = java.io.File(dir, "job-" + id.filter { it.isLetterOrDigit() || it == '-' } + ".gcode")
-            f.outputStream().use { client.download(id, it) }
+            // Only the result on screen is kept: results go up to 1 GB, and the cache is not emptied on its own.
+            dir.listFiles()?.filter { it != f }?.forEach { it.delete() }
+            try {
+                f.outputStream().use { client.download(id, it) }
+            } catch (e: Exception) {
+                f.delete() // a cut download is not left half there
+                throw e
+            }
             path = f.path
         }
     }
