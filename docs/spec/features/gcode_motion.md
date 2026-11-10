@@ -40,7 +40,10 @@ velocidad, y cómo se viaja entre tramos sin dejar hilos.
    - filamento por mm de tramo: `E = A · multiplicador / (π · (material.diameter / 2)²)`;
    - con `w` = 0,45, `h` = 0,2 y filamento de 1,75: 0,033849 mm por mm de tramo (prueba M1);
    - **puentes:** sección redonda de diámetro igual al ancho del puente (unos 0,40 mm): 0,052735 mm por mm (prueba M2).
-2. **Velocidad de cada tipo:** la de su ajuste. En la primera capa todo va a `speed.first_layer` (prueba M1).
+2. **Velocidad de cada tipo:** la de su ajuste. En la primera capa todo va a `speed.first_layer` (prueba M1):
+   en mm/s, cada extrusión de la primera capa va a ese valor, también las que serían más lentas (no es un tope); en
+   «N %», cada extrusión va al N % de su propia velocidad. La excepción es el relleno sólido con
+   `speed.first_layer_infill` distinto de 0 (`speeds_accels.md`, regla 3).
 3. **Perímetros chicos:** un perímetro cerrado de menos de unos 41 mm de largo va a `speed.small_loops`, también el
    externo. Medido: con 40,6 mm sí, con 42,2 mm no (prueba M4). Es el largo de una circunferencia de 6,5 mm de radio.
 4. **Topes:** ninguna extrusión supera `speed.max`; si `speed.max_flow` no es 0, tampoco su caudal
