@@ -49,6 +49,8 @@ data class SliceState(
     val packFilaments: List<ProfilePack.Filament> = emptyList(),
     /** The pack's print profiles for the chosen printer (rule 12). */
     val packPrints: List<ProfilePack.Filament> = emptyList(),
+    /** The variant's own print profile, used when the person chose none (for `compatible_prints`). */
+    val packDefaultPrint: String? = null,
     /** Rule 15: the chosen pack printer's `license · origin`. */
     val packPrinterLicense: String = "",
     /** Rule 19: a newer published pack, to offer its update. */
@@ -639,7 +641,8 @@ class SliceViewModel(
             val list = withContext(io) { runCatching { p.filamentsFor(choice.printer) }.getOrDefault(emptyList()) }
             val prints = withContext(io) { runCatching { p.printsFor(choice.printer) }.getOrDefault(emptyList()) }
             val license = withContext(io) { runCatching { p.licenseLine(choice.printer) }.getOrDefault("") }
-            _state.update { it.copy(packFilaments = list, packPrints = prints, packPrinterLicense = license) }
+            val defaultPrint = withContext(io) { runCatching { p.defaultPrint(choice.printer) }.getOrNull() }
+            _state.update { it.copy(packFilaments = list, packPrints = prints, packPrinterLicense = license, packDefaultPrint = defaultPrint) }
         }
     }
 

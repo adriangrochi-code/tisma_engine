@@ -86,7 +86,12 @@ class ProfilePack(
     /** A filament of the installed pack: the path the engine takes with `--filament`, and what the person reads. */
     data class Filament(val path: String, val name: String, val vendor: String, val generic: Boolean,
                         /** Rule 15: the entry's `license` and `origin`. */
-                        val license: String = "", val origin: String = "")
+                        val license: String = "", val origin: String = "",
+                        /** profile_pack_format.md, filaments: the print profiles it works with; empty, any. */
+                        val compatiblePrints: List<String> = emptyList()) {
+        /** Whether it may be offered with the print profile [print] (its path; null: none known, so any). */
+        fun worksWith(print: String?) = compatiblePrints.isEmpty() || print == null || print in compatiblePrints
+    }
 
     /** Rule 15: `license · origin` of a pack file (a model, filament or print), or empty. */
     fun licenseLine(path: String): String {
@@ -128,7 +133,8 @@ class ProfilePack(
                 if (set != null && (number < 0 || sets.getOrNull(set)?.contains(number) != true)) return@forEach
                 val generic = (o["generic"] as? JsonPrimitive)?.contentOrNull == "true"
                 out += Filament("vendors/${v.name}/$folder/${f.name}", f.nameWithoutExtension.replace('_', ' '), v.name, generic,
-                    (o["license"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (o["origin"] as? JsonPrimitive)?.contentOrNull.orEmpty())
+                    (o["license"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (o["origin"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    (o["compatible_prints"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull })
             }
         }
         return out.sortedBy { if (it.vendor == printerVendor && !it.generic) 0 else if (it.generic) 1 else 2 }

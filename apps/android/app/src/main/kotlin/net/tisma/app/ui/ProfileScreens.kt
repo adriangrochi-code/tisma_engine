@@ -298,7 +298,9 @@ private fun PackFilamentPicker(state: SliceState, slice: SliceViewModel, nav: Na
                 FilterChip(selected = choice.filament == null, onClick = { slice.setProfile(choice.copy(filament = null)) },
                     label = { Text(stringResource(R.string.pack_default_filament)) }, modifier = Modifier.testTag("pack_filament_default"))
             }
-            items(state.packFilaments, key = { it.path }) { f ->
+            // A filament limited to some print profiles is offered only with one of them (profile_pack_format.md).
+            val print = choice.print ?: state.packDefaultPrint
+            items(state.packFilaments.filter { it.worksWith(print) }, key = { it.path }) { f ->
                 Entry(f, choice.filament == f.path, "pack_filament_" + f.name) { slice.setProfile(choice.copy(filament = f.path)) }
             }
             if (state.packFilaments.isEmpty()) item {

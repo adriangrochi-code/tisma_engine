@@ -85,6 +85,22 @@ class ProfilePackTest {
         assertEquals(listOf("Acme PLA", "Generic PETG", "Any TPU"), names)
     }
 
+    @Test
+    fun `a filament with compatible_prints is offered only with one of those prints`() {
+        val data = tmp.newFolder("fp")
+        val pack = File(data, "pack").apply { mkdirs() }
+        File(pack, "index.json").writeText("""{"printers":["vendors/Acme/models/One.json#0.4"]}""")
+        File(pack, "compatible.json").writeText("""{"format":"tisma-pack-compatible","version":2,"sets":[[0]]}""")
+        val dir = File(pack, "vendors/Acme/filaments").apply { mkdirs() }
+        dir.resolve("Acme_PLA.json").writeText("""{"format":"tisma-pack-entry","technology":"fff","compatible":0}""")
+        dir.resolve("Acme_CF_Fast.json").writeText("""{"format":"tisma-pack-entry","technology":"fff","compatible":0,
+            "compatible_prints":["vendors/Acme/prints/0.20mm_Fast.json"]}""")
+        val list = ProfilePack(File("none"), data).filamentsFor("vendors/Acme/models/One.json#0.4")
+        fun offered(print: String?) = list.filter { it.worksWith(print) }.map { it.name }
+        assertEquals(setOf("Acme PLA", "Acme CF Fast"), offered("vendors/Acme/prints/0.20mm_Fast.json").toSet())
+        assertEquals(listOf("Acme PLA"), offered("vendors/Acme/prints/0.12mm_Fine.json"))
+    }
+
     /**
      * With the real engine (TISMA_HOST_ENGINE) and the pack's files downloaded
      * once into TISMA_PACK_FILES (index.json, compatible.json, the archives),
