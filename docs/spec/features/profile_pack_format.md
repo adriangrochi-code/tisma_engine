@@ -111,6 +111,8 @@ archivo de modelo), `variants` (`id` y `nozzle` de cada una) y `default_variant`
 3. **`generic`:** el perfil es genérico (de un paquete de plantillas), no de un fabricante.
 4. **Filamentos:** además, `material` con `type` (PLA, PETG…), `vendor`, `density` (g/cm³), `cost_per_kg`, `colour` y
    `soluble`.
+   Un filamento puede llevar `compatible_prints`: las rutas de los perfiles de impresión del paquete con los que sirve.
+   Con ese campo, se ofrece solo si la impresión elegida está en la lista; sin él, sirve con cualquier impresión.
 5. **Impresión:** además, `nozzle`, la boquilla para la que está hecho, si todas sus impresoras usan la misma.
 
 ## `compatible.json`
