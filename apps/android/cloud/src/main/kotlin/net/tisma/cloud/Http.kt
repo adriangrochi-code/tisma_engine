@@ -41,7 +41,19 @@ class HttpRequest(
 /** An answer. [body] is read only when the caller asks for it, so a large result can be streamed. */
 class HttpResponse(val status: Int, val headers: Map<String, String>, val body: InputStream) : AutoCloseable {
     val ok get() = status in 200..299
-    fun text(): String = body.use { it.readBytes().toString(Charsets.UTF_8) }
+    /**
+     * The body as text, at most [max] bytes: any device on the network can answer a printer's port (discovery asks
+     * many), and an endless answer must not take the phone's memory.
+     */
+    fun text(max: Int = MAX_TEXT): String = body.use {
+        val b = it.readUpTo(max + 1)
+        if (b.size > max) throw java.io.IOException("The answer is larger than $max bytes")
+        b.toString(Charsets.UTF_8)
+    }
+
+    companion object {
+        const val MAX_TEXT = 16 * 1024 * 1024
+    }
     fun header(name: String): String? = headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
     override fun close() = body.close()
 }
