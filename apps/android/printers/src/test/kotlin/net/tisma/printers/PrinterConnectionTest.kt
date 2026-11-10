@@ -56,6 +56,19 @@ class PrinterConnectionTest {
     }
 
     @Test
+    fun `Moonraker and PrusaLink say whether the last print finished or was cancelled`() {
+        val m = sim(MockMoonraker())
+        val k = PrinterConfig("1", "Voron", PrinterKind.MOONRAKER, m.url).connect(null)
+        m.state = "complete"; assertEquals(true, k.status().finished)
+        m.state = "cancelled"; assertEquals(false, k.status().finished)
+        m.state = "standby"; assertEquals(null, k.status().finished)
+        val p = sim(net.tisma.mockprinters.MockPrusaLink())
+        val c = PrinterConfig("3", "MK4", PrinterKind.PRUSALINK, p.url, user = "maker").connect("test-pass")
+        p.state = "complete"; assertEquals(true, c.status().finished)
+        p.state = "cancelled"; assertEquals(false, c.status().finished)
+    }
+
+    @Test
     fun `N1 OctoPrint test, upload and print, pause, resume, cancel`() {
         val o = sim(MockOctoPrint())
         val c = PrinterConfig("2", "Ender", PrinterKind.OCTOPRINT, o.url).connect("test-key")

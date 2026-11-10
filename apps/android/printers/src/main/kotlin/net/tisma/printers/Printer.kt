@@ -101,6 +101,11 @@ data class PrinterStatus(
     val chamber: Temperature? = null,
     /** The printer's own words about an error or its state. */
     val message: String = "",
+    /**
+     * How the last print ended, when the printer says so (Moonraker «complete»/«cancelled», PrusaLink
+     * «FINISHED»/«STOPPED»): true finished, false stopped, null not said (then the progress decides).
+     */
+    val finished: Boolean? = null,
 )
 
 data class Camera(

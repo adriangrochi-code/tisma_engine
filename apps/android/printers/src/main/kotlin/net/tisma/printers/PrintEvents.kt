@@ -29,8 +29,9 @@ object PrintEvents {
             now == PrinterState.PAUSED && was == PrinterState.PRINTING -> PrintEvent.Paused(file, after.message)
             // A state the printer names but no specification documents (Bambu Lab, printer_connections.md, rule 5)
             // comes as BUSY with its name: leaving the print for it is an end like READY, judged by the progress.
+            // The printer's own word wins; without it, the last progress seen (a poll may miss the last percent).
             (now == PrinterState.READY || now == PrinterState.BUSY) && active ->
-                if ((before.percent ?: 0.0) >= 99.0) PrintEvent.Finished(file) else PrintEvent.Stopped(file, after.message)
+                if (after.finished ?: ((before.percent ?: 0.0) >= 99.0)) PrintEvent.Finished(file) else PrintEvent.Stopped(file, after.message)
             else -> null
         }
     }

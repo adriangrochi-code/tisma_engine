@@ -30,7 +30,8 @@ class PrusaLinkConnection(url: String, user: String, password: String, http: Htt
     override fun status(): PrinterStatus {
         val s = rest.get("/api/v1/status").obj() ?: throw unexpected()
         val p = s.o("printer") ?: throw unexpected()
-        val state = when (p.str("state").uppercase()) {
+        val word = p.str("state").uppercase()
+        val state = when (word) {
             "PRINTING" -> PrinterState.PRINTING
             "PAUSED" -> PrinterState.PAUSED
             "BUSY" -> PrinterState.BUSY
@@ -49,6 +50,7 @@ class PrusaLinkConnection(url: String, user: String, password: String, http: Htt
             nozzle = p.num("temp_nozzle")?.let { Temperature(it, p.num("target_nozzle") ?: 0.0) },
             bed = p.num("temp_bed")?.let { Temperature(it, p.num("target_bed") ?: 0.0) },
             message = if (state == PrinterState.ERROR) p.str("state") else "",
+            finished = when (word) { "FINISHED" -> true; "STOPPED" -> false; else -> null },
         )
     }
 

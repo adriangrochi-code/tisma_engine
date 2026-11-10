@@ -17,6 +17,11 @@ class PrintEventsTest {
         assertEquals(PrintEvent.Stopped("cube.gcode", "FAILED"), PrintEvents.between(s(PrinterState.PRINTING, 40.0), s(PrinterState.BUSY, null, "FAILED")))
         assertEquals(PrintEvent.Paused("cube.gcode", "Filament runout"),
             PrintEvents.between(s(PrinterState.PRINTING, 40.0), s(PrinterState.PAUSED, 40.0, "Filament runout")))
+        // The printer's own word wins over the last percent a poll caught (97 % 15 s before the end).
+        assertEquals(PrintEvent.Finished("cube.gcode"),
+            PrintEvents.between(s(PrinterState.PRINTING, 97.0), PrinterStatus(PrinterState.READY, "cube.gcode", finished = true)))
+        assertEquals(PrintEvent.Stopped("cube.gcode"),
+            PrintEvents.between(s(PrinterState.PRINTING, 99.6), PrinterStatus(PrinterState.READY, "cube.gcode", finished = false)))
         assertEquals(PrintEvent.Failed("cube.gcode", "MCU shutdown"),
             PrintEvents.between(s(PrinterState.PRINTING, 40.0), s(PrinterState.ERROR, msg = "MCU shutdown")))
     }

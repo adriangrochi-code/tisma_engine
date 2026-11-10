@@ -59,6 +59,7 @@ class MoonrakerConnection(url: String, apiKey: String?, http: Http) : PrinterCon
             nozzle = nozzle,
             bed = bed,
             message = stats?.str("message").orEmpty(),
+            finished = when (stats?.str("state")) { "complete" -> true; "cancelled" -> false; else -> null },
         )
     }
 
