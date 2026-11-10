@@ -1261,6 +1261,7 @@
     X(Language, "Idioma", "Language")                                                                                 \
     X(Theme, "Tema", "Theme")                                                                                         \
     X(Dark, "Oscuro", "Dark")                                                                                         \
+    X(LikeSystem, "Como el sistema", "Like the system") \
     X(Light, "Claro", "Light")                                                                                        \
     X(About, "Acerca de Tisma", "About Tisma")                                                                        \
     X(AboutText, "Tisma engine %s: un laminador propio, escrito desde cero.",                                         \

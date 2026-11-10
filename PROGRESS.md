@@ -12395,3 +12395,7 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
 - **Paso 7a (flecha del botón principal):** solo las salidas posibles (el programa de red probado, la impresora por
   USB conectada, el archivo), la del botón marcada; la impresora sin conexión ya no sale en gris. Prueba
   `ui_script_arrow_menu`.
+- **Paso 7b (Preferencias):** Apariencia con «Como el sistema» (lee AppsUseLightTheme en Windows, AppleInterfaceStyle
+  en macOS y color-scheme de GNOME; se guarda como `theme: system` y se aplica al abrir), Claro y Oscuro, también en
+  el submenú Tema de «Más»; Enter es Aceptar cuando no se está editando un campo. Prueba
+  `ui_script_config_theme_enter`. No probado: la lectura del tema en Windows y macOS (sin esas máquinas acá).

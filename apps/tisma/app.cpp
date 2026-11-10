@@ -1311,7 +1311,7 @@ private:
     int config_page_ = 0;
     std::string config_query_;
     struct ConfigState {
-        bool english = false, dark = true;
+        bool english = false, dark = true, theme_system = false;
         RenderMode render = RenderMode::Ambient;
         int msaa = 4;
         bool fxaa = true, moire = true;
@@ -1784,6 +1784,8 @@ private:
     // The projects opened or saved last, newest first (interface.md, «Más»:
     // Recent projects), kept with the preferences.
     std::vector<std::filesystem::path> recent_projects_;
+    bool theme_system_ = false; // Appearance «Like the system»: the theme follows the system's
+    void follow_system_theme();
     void remember_project(const std::filesystem::path& path);
     void new_project(); // an empty plate, no project file (Ctrl+N)
     void delete_all();  // every model off the plate (Ctrl+Del)
@@ -3562,6 +3564,9 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    if (theme_system_) // the theme the system asks for, from the start
+        if (const std::optional<bool> dark = system_prefers_dark(); dark && *dark != theme_.dark)
+            theme_ = *dark ? dark_theme() : light_theme();
     // The system's own Open and Save As dialogs where there are (Windows,
     // BH40); scripted and screenshot runs keep the drawn one they drive.
     FileBrowser::use_native(options_.screenshot.empty() && options_.ui_script.empty());
@@ -3997,6 +4002,7 @@ void App::load_preferences() {
             set_language(Language::English);
         if (j.value("theme", "dark") == "light")
             theme_ = light_theme();
+        theme_system_ = j.value("theme", "dark") == "system";
         last_folder_ = from_utf8(j.value("folder", std::string()));
         if (const auto r = j.find("recent_projects"); r != j.end() && r->is_array())
             for (const auto& e : *r)
@@ -4126,7 +4132,7 @@ void App::save_preferences() {
     try {
         nlohmann::json j;
         j["language"] = language() == Language::English ? "en" : "es";
-        j["theme"] = theme_.dark ? "dark" : "light";
+        j["theme"] = theme_system_ ? "system" : theme_.dark ? "dark" : "light";
         j["folder"] = utf8(last_folder_);
         j["recent_projects"] = nlohmann::json::array();
         for (const std::filesystem::path& r : recent_projects_)
@@ -4931,6 +4937,16 @@ void App::scale_to_volume(std::size_t index) {
     objects_[index].place.x = 0.5 * (x0 + x1);
     objects_[index].place.y = 0.5 * (y0 + y1);
     plate_changed();
+}
+
+// Appearance «Like the system»: the dark or light theme as the system asks
+// (when it does not say, the theme stays).
+void App::follow_system_theme() {
+    const std::optional<bool> dark = system_prefers_dark();
+    if (!dark || *dark == theme_.dark)
+        return;
+    theme_ = *dark ? dark_theme() : light_theme();
+    apply_theme();
 }
 
 // Every model off the plate, and the preview with them.
@@ -17297,11 +17313,17 @@ void App::more_menu() {
         }
         note_rect("language");
         if (ImGui::BeginMenu(tr(T::Theme))) {
-            if (ImGui::MenuItem(tr(T::Dark), nullptr, theme_.dark)) {
+            if (ImGui::MenuItem(tr(T::LikeSystem), nullptr, theme_system_)) {
+                theme_system_ = true;
+                follow_system_theme();
+            }
+            if (ImGui::MenuItem(tr(T::Dark), nullptr, !theme_system_ && theme_.dark)) {
+                theme_system_ = false;
                 theme_ = dark_theme();
                 apply_theme();
             }
-            if (ImGui::MenuItem(tr(T::Light), nullptr, !theme_.dark)) {
+            if (ImGui::MenuItem(tr(T::Light), nullptr, !theme_system_ && !theme_.dark)) {
+                theme_system_ = false;
                 theme_ = light_theme();
                 apply_theme();
             }
@@ -17539,6 +17561,7 @@ App::ConfigState App::config_state() const {
     ConfigState c;
     c.english = language() == Language::English;
     c.dark = theme_.dark;
+    c.theme_system = theme_system_;
     c.render = render_mode_, c.msaa = msaa_, c.fxaa = fxaa_, c.moire = moire_, c.ao_strength = ao_strength_;
     c.tips = tips_, c.tutorials = assistant_tutorials_, c.glossary = assistant_glossary_, c.material = assistant_material_;
     c.cad_design = cad_design_, c.orthographic = camera_.orthographic, c.level = view_level_, c.gpu = settings_.gpu;
@@ -17551,6 +17574,7 @@ App::ConfigState App::config_state() const {
 void App::restore_config(const ConfigState& c) {
     if ((language() == Language::English) != c.english)
         set_language(c.english ? Language::English : Language::Spanish);
+    theme_system_ = c.theme_system;
     if (theme_.dark != c.dark) {
         theme_ = c.dark ? dark_theme() : light_theme();
         apply_theme();
@@ -18387,11 +18411,24 @@ void App::config_window() {
 
     // Interfaz.
     row(1, T::Theme, "theme", [&] {
-        if (ImGui::BeginCombo("##v", tr(theme_.dark ? T::Dark : T::Light))) {
-            if (ImGui::Selectable(tr(T::Dark), theme_.dark) && !theme_.dark)
-                theme_ = dark_theme(), apply_theme();
-            if (ImGui::Selectable(tr(T::Light), !theme_.dark) && theme_.dark)
-                theme_ = light_theme(), apply_theme();
+        if (ImGui::BeginCombo("##v", tr(theme_system_ ? T::LikeSystem : theme_.dark ? T::Dark : T::Light))) {
+            if (ImGui::Selectable(tr(T::LikeSystem), theme_system_)) {
+                theme_system_ = true;
+                follow_system_theme();
+            }
+            rect_of("theme_system");
+            if (ImGui::Selectable(tr(T::Light), !theme_system_ && !theme_.dark)) {
+                theme_system_ = false;
+                if (theme_.dark)
+                    theme_ = light_theme(), apply_theme();
+            }
+            rect_of("theme_light");
+            if (ImGui::Selectable(tr(T::Dark), !theme_system_ && theme_.dark)) {
+                theme_system_ = false;
+                if (!theme_.dark)
+                    theme_ = dark_theme(), apply_theme();
+            }
+            rect_of("theme_dark");
             ImGui::EndCombo();
         }
     });
@@ -18585,7 +18622,10 @@ void App::config_window() {
     bool cancel = ImGui::Button(tr(T::Cancel), ImVec2(button_w, 0));
     rect_of("config_cancel");
     ImGui::SameLine();
-    const bool ok = ImGui::Button(tr(T::ConfigOk), ImVec2(button_w, 0));
+    // Enter is Aceptar too, while no field is being edited.
+    const bool ok = ImGui::Button(tr(T::ConfigOk), ImVec2(button_w, 0)) ||
+                    (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive() &&
+                     !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Enter, false));
     rect_of("config_ok");
     if (!open || (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
         cancel = true;
