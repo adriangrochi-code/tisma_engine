@@ -36,7 +36,7 @@ desventajas».
    `piece_roots` lleva una entrada por cada archivo del modelo y ninguna otra: la clave es el `sha256` del archivo y el
    valor, el SHA-256 de las huellas de sus pedazos (32 bytes cada una, seguidas en orden); acordado con el motor) y `checked` (lo revisó un sembrador).
 3 quater. **Lista de bloqueo:** `format` `tisma-library-blocklist`, `version` 1, `generated`, `sequence`, `expires`
-   (generated + 7 días; se firma de nuevo cada 6 h), `files` (sha256 y motivo), `accounts`, `peers`, `addresses` (IP
+   (generated + 7 días; se firma de nuevo cada 6 h), `files` (sha256 y motivo), `models` (código de publicación y motivo), `accounts`, `peers`, `addresses` (IP
    con `until`) y `revoked_keys`. Una IP va como `{"sha256": SHA-256(sal del día + IP), "until"}`, con `address_salt` en la lista.
 3 bis bis. **Publicar** (servidor, a4eb152): `POST /v1/library/peer-key`, `POST /v1/library/models` (JSON, con la
    miniatura en `thumbnail_webp` en base64, hasta 64 KB), `.../models/<id>/revisions`, `DELETE .../models/<id>`,
@@ -75,6 +75,11 @@ desventajas».
 
 ## La moderación
 
+3 novies. **Quién publica y cómo se bloquea** (dueño, 10-11-2026): solo publica una cuenta registrada; cada
+   publicación tiene su código (el `id` del índice), que se ve en la ficha del modelo y en «Mis publicaciones». Se
+   puede bloquear una publicación sola por su código (lista `models`), sin tocar las demás de esa cuenta; una cuenta
+   entera, con `accounts`.
+
 4. **Lista de bloqueo** (en el servidor, firmada como el índice):
    - **huellas de archivos** prohibidos: la app no los baja, no los comparte, no los abre y borra su copia con el aviso
      «Este archivo fue retirado de la biblioteca de Tisma»;
@@ -97,6 +102,8 @@ desventajas».
      nueva, lista para laminar e imprimir (`local_library.md`);
    - **«Publicar»:** la publica en la biblioteca compartida como cualquier modelo (reglas 1 a 7), con nombre, licencia y
      miniatura del escaneo. La revisa un sembrador como cualquier otra.
+   **Autoría:** el autor y titular de una pieza escaneada es la persona que la escaneó (su cuenta): va como `author` y
+   elige la licencia al publicar.
    La pieza escaneada es privada hasta que se publica. Servidor: `POST /v1/files` con el trabajo de escaneo la guarda en
    la cuenta (`pieza.stl` y su informe); `GET /v1/files` las lista para las apps, que recuerdan cuáles ya trajeron a cada
    equipo; se publica con `from_file`. Cuota por cuenta de 5 GB.
