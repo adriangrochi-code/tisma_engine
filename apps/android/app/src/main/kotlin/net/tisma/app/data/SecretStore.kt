@@ -40,10 +40,17 @@ class KeystoreSecretStore(
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes, 0, NONCE))
             String(cipher.doFinal(bytes, NONCE, bytes.size - NONCE), Charsets.UTF_8)
+        } catch (e: javax.crypto.AEADBadTagException) {
+            // Another key than the one that sealed it (the app's data was restored elsewhere, the key was lost):
+            // the secret cannot come back, the person signs in again.
+            remove(name); null
+        } catch (e: IllegalArgumentException) {
+            remove(name); null // a damaged entry (not base64, too short)
+        } catch (e: android.security.keystore.KeyPermanentlyInvalidatedException) {
+            remove(name); null
         } catch (e: Exception) {
-            // A key that was lost (the app's data was restored elsewhere) or a
-            // damaged entry: the secret is gone, the person signs in again.
-            remove(name)
+            // Anything else may pass (the Keystore busy just after the phone starts): the secret stays for next time.
+            net.tisma.app.data.AppLog.line("secrets: ${e.javaClass.simpleName} ${e.message}")
             null
         }
     }

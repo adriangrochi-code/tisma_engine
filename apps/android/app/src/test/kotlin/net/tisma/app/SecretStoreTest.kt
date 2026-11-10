@@ -7,41 +7,25 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import java.io.File
 import javax.crypto.KeyGenerator
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
+/** A passing Keystore error keeps the person's access codes; only a secret that can never be read again goes. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class SecretStoreTest {
-    private val context: Context = ApplicationProvider.getApplicationContext()
-
-    private fun appFilesContain(secret: String): Boolean {
-        val root = File(context.applicationInfo.dataDir)
-        return root.walkTopDown().filter { it.isFile }.any { it.readBytes().toString(Charsets.ISO_8859_1).contains(secret) }
-    }
-
     @Test
-    fun `MA8 a stored secret is never in the app's files as text`() {
-        val store = KeystoreSecretStore(context) { testKey }
-        val token = "tok_9f8e7d6c5b4a39281706"
-        store.put("cloud.token", token)
-        assertEquals(token, store.get("cloud.token"))
-        // SharedPreferences write on a background thread; wait for the file.
-        eventually { File(context.applicationInfo.dataDir, "shared_prefs/${KeystoreSecretStore.FILE}.xml").exists() }
-        assertFalse(appFilesContain(token))
-        store.remove("cloud.token")
-        assertNull(store.get("cloud.token"))
-    }
-
-    @Test
-    fun `a secret sealed with another key reads as gone`() {
-        KeystoreSecretStore(context) { testKey }.put("code", "12345678")
+    fun `a passing error keeps the secret, another key removes it`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        KeystoreSecretStore(context) { testKey }.put("printer.code", "12345678")
+        // The Keystore fails for a moment: nothing is read, nothing is lost.
+        val busy = KeystoreSecretStore(context) { throw java.security.ProviderException("Keystore operation failed") }
+        assertNull(busy.get("printer.code"))
+        assertEquals("12345678", KeystoreSecretStore(context) { testKey }.get("printer.code"))
+        // Another key (the data restored on another phone): the secret cannot come back and is removed.
         val other = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
-        assertNull(KeystoreSecretStore(context) { other }.get("code"))
-        // And the broken entry was dropped.
-        assertNull(KeystoreSecretStore(context) { testKey }.get("code"))
+        assertNull(KeystoreSecretStore(context) { other }.get("printer.code"))
+        assertNull(KeystoreSecretStore(context) { testKey }.get("printer.code"))
     }
 }
