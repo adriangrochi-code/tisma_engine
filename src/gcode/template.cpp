@@ -115,6 +115,31 @@ using Variables = std::map<std::string, TemplateValue, std::less<>>;
 const TemplateValue& one(const TemplateValue& v) { return v.kind == Kind::List && v.list.size() == 1 ? v.list[0] : v; }
 bool numeric(const TemplateValue& v) { return one(v).kind == Kind::Int || one(v).kind == Kind::Real; }
 double real_of(const TemplateValue& v) { return one(v).kind == Kind::Int ? double(one(v).integer) : one(v).real; }
+
+// A text written as a number ("5000", "0.4", "50%"), as the values a machine's
+// variables or source values bring, counts as that number (gcode_macros.md,
+// rule 10 bis bis; BH50). Anything else stays as it is.
+TemplateValue number_of_text(const TemplateValue& v) {
+    if (v.kind != Kind::Text || v.text.empty())
+        return v;
+    std::string_view t = v.text;
+    if (t.size() > 1 && t.back() == '%')
+        t.remove_suffix(1);
+    if (t.front() == '"')
+        return v;
+    const TemplateValue n = TemplateValue::parse(t);
+    return n.kind == Kind::Int || n.kind == Kind::Real ? n : v;
+}
+
+// A list where one value is expected (a setting per extruder) counts as its
+// only value, or else the value of the extruder in use (gcode_macros.md,
+// rule 10 bis bis, GM15): past the end, the last one.
+const TemplateValue& of_extruder(const TemplateValue& v, long long extruder) {
+    if (v.kind != Kind::List || v.list.empty())
+        return v;
+    const std::size_t at = extruder < 0 ? 0 : std::min<std::size_t>(std::size_t(extruder), v.list.size() - 1);
+    return v.list[at];
+}
 bool ident_start(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'; }
 bool ident_char(char c) { return ident_start(c) || (c >= '0' && c <= '9') || c == '.'; }
 
@@ -144,7 +169,10 @@ class Expression {
 public:
     Expression(const Source& source, std::size_t at, std::size_t end,
                const std::function<const TemplateValue*(std::string_view)>& lookup)
-        : src_(source), at_(at), end_(end), lookup_(lookup) {}
+        : src_(source), at_(at), end_(end), lookup_(lookup) {
+        if (const TemplateValue* e = lookup_("current_extruder"); e && e->kind == Kind::Int)
+            extruder_ = e->integer;
+    }
 
     TemplateValue whole() {
         TemplateValue v = ternary();
@@ -274,7 +302,7 @@ private:
             if (!take("/"))
                 src_.fail(at_, "the regular expression has no closing /");
             try {
-                const bool found = std::regex_search(template_text(a), std::regex(pattern));
+                const bool found = std::regex_search(template_text(of_extruder(left, extruder_)), std::regex(pattern));
                 return TemplateValue::of(found == match);
             } catch (const std::regex_error&) {
                 src_.fail(at, "a regular expression that cannot be read");
@@ -308,7 +336,13 @@ private:
             const std::size_t at = at_;
             if (take("+")) {
                 const TemplateValue b = product();
-                if (a.kind == Kind::Text || b.kind == Kind::Text)
+                // Texts are joined, unless they are numbers next to a number
+                // (rule 10 bis bis, BH50): "5000" + 1 is 5001, "a" + 1 is a1.
+                const TemplateValue& x = of_extruder(a, extruder_);
+                const TemplateValue& y = of_extruder(b, extruder_);
+                const bool texts = (x.kind == Kind::Text && y.kind == Kind::Text) || (x.kind == Kind::Text && !numeric(x)) ||
+                                   (y.kind == Kind::Text && !numeric(y));
+                if (texts)
                     a = TemplateValue::of(template_text(a) + template_text(b));
                 else
                     a = arithmetic('+', a, b, at);
@@ -619,6 +653,19 @@ private:
     const Source& src_;
     std::size_t at_, end_;
     const std::function<const TemplateValue*(std::string_view)>& lookup_;
+    long long extruder_ = 0;
+
+    // Inside an expression, a list where one value is expected and a text
+    // written as a number count as that value (rule 10 bis bis, GM15, BH50).
+    TemplateValue one(const TemplateValue& v) const { return number_of_text(of_extruder(v, extruder_)); }
+    bool numeric(const TemplateValue& v) const {
+        const TemplateValue x = one(v);
+        return x.kind == Kind::Int || x.kind == Kind::Real;
+    }
+    double real_of(const TemplateValue& v) const {
+        const TemplateValue x = one(v);
+        return x.kind == Kind::Int ? double(x.integer) : x.real;
+    }
 };
 
 // Where the } that closes the { at `open` is, past texts in quotes.
@@ -845,6 +892,11 @@ std::string render_raw(std::string_view text, TemplateContext& context, std::str
                         }
                         if (v->kind == TemplateValue::Kind::List)
                             v = &v->list[static_cast<std::size_t>(at)];
+                    } else if (v->kind == TemplateValue::Kind::List) {
+                        // [name] of a list: the value of the extruder in use
+                        // (gcode_macros.md, rule 10 bis bis; BH50).
+                        const TemplateValue* e = lookup("current_extruder");
+                        v = &of_extruder(*v, e && e->kind == TemplateValue::Kind::Int ? e->integer : 0);
                     }
                     out += template_text(*v);
                 }

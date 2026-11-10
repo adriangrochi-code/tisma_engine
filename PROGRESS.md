@@ -12663,6 +12663,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   apagaba la boquilla activa (`M104 T0 S0`) antes de imprimir. Ahora se quitan los comandos de temperatura a una
   herramienta negativa, y si el cambio deja en 0 la boquilla que va a imprimir, se calienta de nuevo y se espera.
   El resto del G-code de la máquina sale igual. Prueba `[extruders]` BH49, que falla sin el arreglo.
+- BH50 (perfiles; 12 G-code de inicio de Bambu X1): una lista de dos o más valores sin índice en una cuenta o una
+  comparación (`{if outer_wall_acceleration > 0}`) fallaba, y la máquina caía en la versión simple. Ahora vale su único
+  valor o el del extrusor en uso (gcode_macros.md regla 10 bis bis, GM15), también en la forma antigua `[a]`; y un texto
+  escrito como número («5000», «0.4», «50%») cuenta como número en cuentas y comparaciones. Dos textos se siguen
+  uniendo con `+`. Prueba `[macros]` BH50, que falla sin el arreglo (8 de 12).
 - Cola (spec/next 77e6a3f, cloud.md 5b, decisión del dueño 21:50): ventas de escritorio por las tiendas. Windows:
   Microsoft Store (MSIX) con el plan como suscripción en la app (Windows.Services.Store), recibo verificado por el
   servidor. Linux: Flathub y Snap Store, el plan desde la cuenta. Hoja de ruta después de la beta: empaquetado MSIX y

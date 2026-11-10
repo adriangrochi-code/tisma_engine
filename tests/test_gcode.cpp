@@ -178,6 +178,36 @@ TEST_CASE("ceil, and a condition opening and closing on one line with an extrude
           "M104 S2 ; x");
 }
 
+TEST_CASE("a list where a number is expected, and numbers written as texts (gcode_macros.md, rule 10 bis bis, GM15, BH50)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["a"] = {"5000", "5000"};
+    s.variables["acc"] = {"1000", "3000"};
+    s.variables["one"] = {"7"};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // The minimal case: a list of two in a condition.
+    CHECK(render_template("{if a > 0}yes{endif}", c, "t") == "yes");
+    CHECK(render_template("{if one == 7}yes{endif}", c, "t") == "yes");
+    // The extruder in use picks the value, in sums, comparisons and the old form.
+    c.variables["current_extruder"] = TemplateValue::of(1LL);
+    CHECK(render_template("{acc / 2}", c, "t") == "1500");
+    CHECK(render_template("{if acc >= 3000}M204 S[acc]{endif}", c, "t") == "M204 S3000");
+    c.variables["current_extruder"] = TemplateValue::of(0LL);
+    CHECK(render_template("[acc]", c, "t") == "1000");
+    CHECK(render_template("{acc[1]}", c, "t") == "3000");
+    // Numbers that come as texts count as numbers.
+    c.variables["speed"] = TemplateValue::of(std::vector<TemplateValue>{TemplateValue::of(std::string("120")),
+                                                                         TemplateValue::of(std::string("80"))});
+    c.variables["pct"] = TemplateValue::of(std::string("50%"));
+    CHECK(render_template("{if speed > 100}fast{else}slow{endif}", c, "t") == "fast");
+    CHECK(render_template("{speed * 60}", c, "t") == "7200");
+    CHECK(render_template("{speed + 1}", c, "t") == "121");
+    CHECK(render_template("{if pct < 60}low{endif}", c, "t") == "low");
+    // Texts that are not numbers still join and compare as texts.
+    CHECK(render_template("{\"T\" + 1}", c, "t") == "T1");
+    CHECK(render_template("{if \"PLA\" == \"PLA\"}same{endif}", c, "t") == "same");
+}
+
 TEST_CASE("a block of statements: local, assignments, if then elsif else endif, written texts (gcode_macros.md, GM18)",
           "[gcode][macros]") {
     Settings s = test_printer();
