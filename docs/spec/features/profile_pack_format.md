@@ -155,6 +155,10 @@ para las impresoras 5 y 9.
    - `expressions`: solo en `cura`, G-code que su programa calcula con un lenguaje de programación: el motor no lo
      evalúa ni lo usa;
    - `origin`, `source`, `keys`, `from`: de dónde salió; solo para mostrar.
+   - en los perfiles de impresión y de filamento, `source_values` (`{dialect, preset, values}`): los valores del perfil del
+     programa de origen con los nombres del dialecto, solo los que usa el G-code de las máquinas y que no tienen nombre
+     equivalente en `prusaslicer`. El motor los suma a las variables del G-code igual que `values` de la máquina; el
+     perfil traducido manda si una variable sale de los dos.
 3. **Nombres de variables por dialecto:** un G-code `orcaslicer` (y `crealityprint`, `elegooslicer`) usa sus nombres,
    por ejemplo `nozzle_temperature_initial_layer` por `first_layer_temperature` y
    `bed_temperature_initial_layer_single` por `first_layer_bed_temperature`. El motor los llena con el mismo valor

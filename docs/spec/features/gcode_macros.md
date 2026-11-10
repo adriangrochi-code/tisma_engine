@@ -69,6 +69,10 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
     `elegooslicer` usan el mismo lenguaje con sus propios nombres de variables, que el motor llena con el valor
     equivalente; `cura` solo reemplaza `{nombre}` por su valor, sin condiciones ni cuentas. Si el G-code de un
     dialecto no se puede interpretar, se usa la versión simple del perfil y se avisa en el registro.
+10 bis bis. **Listas donde se espera un número** (dialecto `orcaslicer` y sus derivados): una variable que es una lista
+    de números o porcentajes, usada en una cuenta o una comparación sin índice (por ejemplo
+    `{if outer_wall_acceleration > 0}`), vale su único elemento si tiene uno, y si no, el del extrusor en uso. Antes,
+    un G-code así no se podía interpretar y caía en la versión simple (prueba GM15).
 10 ter. **Extrusión:** con el G-code del bloque `gcode`, el motor extruye en relativo o absoluto según
     `relative_extrusion` de ese bloque.
 
@@ -138,4 +142,5 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 | GM12 | G-code de inicio original de la Bambu Lab A1 pegado en el G-code de inicio, filamento PLA | Lamina; ninguna línea con `F0`; las velocidades calculadas de los ajustes |
 | GM13 | Cada G-code de máquina del paquete, comparado línea por línea con el texto original | Toda línea sin construcciones sale igual, en el mismo orden; las líneas con construcciones solo cambian en lo evaluado |
 | GM14 | El inicio de una Prusa con `M862.1 ... F{(nozzle_high_flow[0] ? 1 : 0)}` sin alto flujo | `F0` queda en `M862.1` |
+| GM15 | G-code `orcaslicer` con `{if outer_wall_acceleration > 0}` y la variable como lista de uno o de dos (dos extrusores, el segundo en uso) | Se interpreta: vale el único valor, o el del segundo extrusor; no cae en la versión simple |
 | GM9 | Todas las impresoras del paquete, cada una con sus G-code originales | Todas laminan; las variables que falten quedan en el registro |
