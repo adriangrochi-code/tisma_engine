@@ -96,6 +96,15 @@ std::vector<int> mix_layers(const ColorMix& mix, const std::vector<Layer>& layer
     const std::size_t n = layers.size();
     std::vector<int> out(n, 0);
     const auto in = [&](std::size_t l) { return l < present.size() && present[l]; };
+    if (!mix.pattern.empty()) { // a written sequence, as it is (color_mixing_plus.md, rule 2)
+        std::size_t first = n;
+        for (std::size_t l = 0; l < n; ++l)
+            if (in(l)) {
+                first = std::min(first, l);
+                out[l] = mix.pattern[(l - first) % mix.pattern.size()];
+            }
+        return out;
+    }
     if (mix.components.empty())
         return out;
     if (!mix.gradient) {
@@ -185,10 +194,74 @@ std::vector<int> mix_layers(const ColorMix& mix, const std::vector<Layer>& layer
 }
 
 bool mix_usable(const ColorMix& mix, int extruders) {
-    if (mix.id <= extruders || mix.components.empty())
+    if (mix.id <= extruders || mix.components.empty() || !mix.enabled)
         return false;
-    return std::all_of(mix.components.begin(), mix.components.end(),
-                       [&](const ColorMix::Component& c) { return c.extruder >= 1 && c.extruder <= extruders; });
+    const auto real = [&](int e) { return e >= 1 && e <= extruders; };
+    return std::all_of(mix.components.begin(), mix.components.end(), [&](const ColorMix::Component& c) { return real(c.extruder); }) &&
+           std::all_of(mix.pattern.begin(), mix.pattern.end(), real);
+}
+
+std::vector<int> parse_mix_pattern(std::string_view text, const std::vector<int>& letters, int extruders) {
+    std::vector<int> out;
+    for (std::size_t i = 0; i < text.size();) {
+        const char c = text[i];
+        if (c == ' ' || c == ',' || c == '/' || c == '-' || c == '\t') {
+            ++i;
+            continue;
+        }
+        int filament = 0;
+        if (c >= '0' && c <= '9') {
+            while (i < text.size() && text[i] >= '0' && text[i] <= '9' && filament < 100000)
+                filament = filament * 10 + (text[i++] - '0');
+        } else if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+            const std::size_t k = std::size_t((c | 0x20) - 'a');
+            if (letters.empty())
+                filament = int(k) + 1;
+            else if (k < letters.size())
+                filament = letters[k];
+            else
+                throw ColorMixError(std::string("the sequence's ") + char(c & ~0x20) + " is not one of the blend's " +
+                                    std::to_string(letters.size()) + " filaments");
+            ++i;
+        } else {
+            throw ColorMixError(std::string("the sequence has '") + c + "': only filament numbers or letters");
+        }
+        if (filament < 1 || filament > extruders)
+            throw ColorMixError("the sequence names filament " + std::to_string(filament) + ", but there are " +
+                                std::to_string(extruders));
+        out.push_back(filament);
+    }
+    if (out.empty())
+        throw ColorMixError("the sequence is empty");
+    return out;
+}
+
+ColorMix pattern_mix(int id, const std::vector<int>& pattern) {
+    ColorMix mix;
+    mix.id = id;
+    mix.pattern = pattern;
+    for (const int f : pattern) {
+        auto it = std::find_if(mix.components.begin(), mix.components.end(), [&](const auto& c) { return c.extruder == f; });
+        if (it == mix.components.end())
+            mix.components.push_back({f, 0.0}), it = mix.components.end() - 1;
+        it->share += 1.0 / double(pattern.size());
+    }
+    return mix;
+}
+
+std::vector<ColorMix> auto_pair_mixes(const std::vector<std::string>& filament_colors) {
+    std::vector<ColorMix> out;
+    const int n = int(filament_colors.size());
+    int id = n;
+    for (int a = 1; a <= n; ++a)
+        for (int b = a + 1; b <= n; ++b) {
+            ColorMix mix;
+            mix.id = ++id;
+            mix.components = {{a, 0.5}, {b, 0.5}};
+            mix.color = mix_color({filament_colors[std::size_t(a - 1)], filament_colors[std::size_t(b - 1)]}, {0.5, 0.5});
+            out.push_back(std::move(mix));
+        }
+    return out;
 }
 
 std::vector<ColorMix> parse_color_mixes(std::string_view text) {
@@ -219,6 +292,29 @@ std::vector<ColorMix> parse_color_mixes(std::string_view text) {
             mix.color = v.at("color").get<std::string>();
         const std::string kind = v.contains("kind") && v.at("kind").is_string() ? v.at("kind").get<std::string>() : "fullspectrum";
         mix.gradient = kind == "gradient";
+        if (v.contains("enabled") && v.at("enabled").is_boolean())
+            mix.enabled = v.at("enabled").get<bool>();
+        if (v.contains("name") && v.at("name").is_string())
+            mix.name = v.at("name").get<std::string>();
+        if (v.contains("bias") && v.at("bias").is_number())
+            mix.bias = std::clamp(v.at("bias").get<double>(), -1.0, 1.0);
+        if (kind == "pattern") {
+            if (!v.contains("pattern") || !v.at("pattern").is_array() || v.at("pattern").empty())
+                fail("a pattern blend needs its pattern, a list of filaments");
+            std::vector<int> pattern;
+            for (const json& f : v.at("pattern")) {
+                if (!f.is_number_integer() || f.get<int>() < 1 || f.get<int>() > 255)
+                    fail("a pattern's filaments are numbers from 1");
+                pattern.push_back(f.get<int>());
+            }
+            ColorMix made = pattern_mix(mix.id, pattern);
+            mix.pattern = std::move(made.pattern);
+            mix.components = std::move(made.components);
+            if (mix.components.size() > 4)
+                fail("a pattern blend has 1 to 4 filaments");
+            out.push_back(std::move(mix));
+            continue;
+        }
         for (const char* key : {"minz", "maxz"})
             if (v.contains(key) && v.at(key).is_number())
                 (std::string_view(key) == "minz" ? mix.min_z : mix.max_z) = v.at(key).get<double>();
@@ -252,8 +348,16 @@ std::string color_mixes_json(const std::vector<ColorMix>& mixes, const std::vect
     for (const ColorMix& m : mixes) {
         ordered_json v;
         v["id"] = m.id;
-        v["kind"] = m.gradient ? "gradient" : "fullspectrum";
+        v["kind"] = m.gradient ? "gradient" : !m.pattern.empty() ? "pattern" : "fullspectrum";
         v["color"] = m.color;
+        if (!m.pattern.empty())
+            v["pattern"] = m.pattern;
+        if (!m.enabled)
+            v["enabled"] = false;
+        if (!m.name.empty())
+            v["name"] = m.name;
+        if (m.bias != 0.0)
+            v["bias"] = m.bias;
         if (m.min_z)
             v["minz"] = *m.min_z;
         if (m.max_z)

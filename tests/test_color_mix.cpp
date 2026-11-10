@@ -303,3 +303,85 @@ TEST_CASE("color mixing: the blends and each model's extruder travel with the pr
     CHECK(read.mixes.empty());
     CHECK(read.models[0].extruder == 1);
 }
+
+// color_mixing_plus.md: written sequences, automatic pairs, the new data in
+// the project (rules 1, 2, 5, 6, 30; MX1 to MX4, MX19).
+
+TEST_CASE("color mixing plus: the automatic pairs of 4 filaments (rule 5, MX1)", "[mixing]") {
+    const std::vector<ColorMix> pairs = auto_pair_mixes({"#ffffff", "#000000", "#ff0000", "#0000ff"});
+    REQUIRE(pairs.size() == 6);
+    for (std::size_t k = 0; k < pairs.size(); ++k) {
+        CHECK(pairs[k].id == int(k) + 5);
+        REQUIRE(pairs[k].components.size() == 2);
+        CHECK(pairs[k].components[0].share == 0.5);
+        CHECK(pairs[k].components[0].extruder < pairs[k].components[1].extruder);
+        CHECK(mix_usable(pairs[k], 4));
+    }
+    CHECK(pairs[0].components[0].extruder == 1);
+    CHECK(pairs[0].components[1].extruder == 2);
+    CHECK(pairs[5].components[0].extruder == 3);
+    CHECK(pairs[5].components[1].extruder == 4);
+    CHECK(pairs[0].color == mix_color({"#ffffff", "#000000"}, {0.5, 0.5}));
+    // Turned off, it is not offered (MX2).
+    ColorMix off = pairs[0];
+    off.enabled = false;
+    CHECK_FALSE(mix_usable(off, 4));
+    // A part that used it says so when sliced.
+    ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    half.enabled = false;
+    const SlicedModel model = sliced(box(3), base(), {half});
+    CHECK(sequence(model) == std::string(50, '2'));
+    REQUIRE(model.notices.size() == 1);
+    CHECK_THAT(model.notices.front(), ContainsSubstring("blend 3 is turned off"));
+    CHECK(sliced(box(3), base(), {blend(3, {{1, 0.5}, {2, 0.5}})}).notices.empty());
+}
+
+TEST_CASE("color mixing plus: a written sequence, by numbers or letters (rule 2, MX3, MX4)", "[mixing]") {
+    const std::vector<int> want{1, 1, 2};
+    CHECK(parse_mix_pattern("1,1,2", {}, 4) == want);
+    CHECK(parse_mix_pattern("1 1 2", {}, 4) == want);
+    CHECK(parse_mix_pattern("1/1-2", {}, 4) == want);
+    CHECK(parse_mix_pattern("AAB", {}, 4) == want);
+    CHECK(parse_mix_pattern("aab", {3, 1}, 4) == std::vector<int>{3, 3, 1}); // the blend's filaments
+    CHECK(parse_mix_pattern("10, 2", {}, 12) == std::vector<int>{10, 2});   // a run of digits is one number
+    // MX4: a filament that does not exist, a letter past the blend's, nothing.
+    CHECK_THROWS_WITH(parse_mix_pattern("1,9", {}, 4), ContainsSubstring("filament 9"));
+    CHECK_THROWS_AS(parse_mix_pattern("ABC", {1, 2}, 4), ColorMixError);
+    CHECK_THROWS_AS(parse_mix_pattern(" , ", {}, 4), ColorMixError);
+    CHECK_THROWS_AS(parse_mix_pattern("1;2", {}, 4), ColorMixError);
+    // The share of each filament, from the sequence: 1 at 66.7 %.
+    const ColorMix m = pattern_mix(3, want);
+    REQUIRE(m.components.size() == 2);
+    CHECK_THAT(m.components[0].share, WithinAbs(2.0 / 3.0, 1e-9));
+    CHECK(m.components[1].extruder == 2);
+    // Printed as it is, repeated, from the blend's first layer: the same
+    // G-code from both writings.
+    const Settings s = base();
+    const SlicedModel a = sliced(box(3), s, {pattern_mix(3, parse_mix_pattern("1,1,2", {}, 2))});
+    const SlicedModel b = sliced(box(3), s, {pattern_mix(3, parse_mix_pattern("AAB", {}, 2))});
+    CHECK(sequence(a) == repeat("112", 50));
+    CHECK(gcode_of(a, s) == gcode_of(b, s));
+    // A sequence that is not the ratio's cycle: 1,2,2,1 stays as written,
+    // where the ratio 1 : 1 would give 1,2.
+    CHECK(sequence(sliced(box(3), s, {pattern_mix(3, {1, 2, 2, 1})})) == repeat("1221", 50));
+}
+
+TEST_CASE("color mixing plus: the new data in the project's file (rule 30, MX19)", "[mixing]") {
+    // A project of ratio blends is written as before.
+    const std::vector<ColorMix> old{blend(3, {{1, 0.25}, {2, 0.75}})};
+    const std::string text = color_mixes_json(old, {"#ffffff", "#000000"});
+    for (const char* key : {"pattern", "enabled", "name", "bias"})
+        CHECK_THAT(text, !ContainsSubstring(std::string("\"") + key + "\""));
+    CHECK(parse_color_mixes(text) == old);
+    // A sequence, turned off, named, with a bias: back as it was.
+    ColorMix p = pattern_mix(4, {1, 1, 2});
+    p.color = "#555555";
+    p.enabled = false;
+    p.name = "Dark grey";
+    p.bias = -0.5;
+    const std::vector<ColorMix> back = parse_color_mixes(color_mixes_json({p}, {"#ffffff", "#000000"}));
+    REQUIRE(back.size() == 1);
+    CHECK(back[0] == p);
+    CHECK_THROWS_AS(parse_color_mixes(R"({"virtual_extruders": [{"id": 3, "kind": "pattern", "components": []}]})"),
+                    ColorMixError);
+}

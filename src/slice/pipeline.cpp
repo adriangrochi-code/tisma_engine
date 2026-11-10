@@ -802,11 +802,20 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             if (mix_usable(m, settings.extruders))
                 blends.push_back(m);
     std::vector<MeshObject> resolved;
+    std::vector<std::string> mix_notices;
     if (given) {
         resolved = *given;
         for (MeshObject& o : resolved)
-            if (std::none_of(blends.begin(), blends.end(), [&](const ColorMix& m) { return m.id == o.extruder; }))
+            if (std::none_of(blends.begin(), blends.end(), [&](const ColorMix& m) { return m.id == o.extruder; })) {
+                const int was = o.extruder;
                 o.extruder = std::clamp(o.extruder, 1, std::max(settings.extruders, 1));
+                // A blend turned off is not printed (color_mixing_plus.md, rule 6, MX2): said so.
+                if (mixes && std::any_of(mixes->begin(), mixes->end(), [&](const ColorMix& m) { return m.id == was && !m.enabled; }) &&
+                    std::find_if(mix_notices.begin(), mix_notices.end(), [&](const std::string& n) { return n.rfind(o.name + ":", 0) == 0; }) ==
+                        mix_notices.end())
+                    mix_notices.push_back(o.name + ": blend " + std::to_string(was) + " is turned off; printed with filament " +
+                                          std::to_string(o.extruder));
+            }
     }
     const std::vector<MeshObject>* objects = given ? &resolved : nullptr;
     // The plate's objects: each one sliced apart when printed one after
@@ -858,6 +867,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 out.brim = out.objects.front().brim;
                 out.raft_layers = out.objects.front().raft_layers;
             }
+            out.notices.insert(out.notices.end(), mix_notices.begin(), mix_notices.end());
             return out;
         }
         // Each extruder's objects apart on the plate's layers
@@ -882,6 +892,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             out.objects.push_back({o.name, o.object, o.instance, outline_of(points), double(hi) - double(lo), 0, out.raft_layers, {}, {},
                                    o.wipe_into_infill, o.wipe_into_object});
         }
+        out.notices.insert(out.notices.end(), mix_notices.begin(), mix_notices.end());
         return out;
     }
     return slice_plate(input, settings, gpu, stress, painting, nullptr, 1, negative, nullptr, volumes);

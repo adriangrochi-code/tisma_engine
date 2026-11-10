@@ -12672,12 +12672,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 
   | Reglas | Qué | Estado |
   |---|---|---|
-  | 1 | Cuatro tipos (ratio, pattern, match, gradient) | parcial: ratio y gradient (de `color_mixing.md`) |
-  | 2 | Secuencia escrita | pendiente |
+  | 1 | Cuatro tipos (ratio, pattern, match, gradient) | parcial: ratio, pattern y gradient; falta match |
+  | 2 | Secuencia escrita | hecho en el motor (MX3, MX4); falta el campo en rojo de la interfaz |
   | 3 | Degradé de 2 a 4 filamentos en Z / X / Y / entre puntos | parcial: solo en Z |
   | 4 | Color buscado (CIEDE2000, recomendaciones) | pendiente |
-  | 5 | Pares automáticos | pendiente |
-  | 6–7 | Lista de mezclas, nombre, acciones; asignar | parcial: asignar a pieza y pintar con el número de la mezcla |
+  | 5 | Pares automáticos | parcial: `auto_pair_mixes` (MX1); falta `mixing.auto_pairs` y crearlos en la interfaz |
+  | 6–7 | Lista de mezclas, nombre, acciones; asignar | parcial: asignar a pieza y pintar; `enabled` y `name` en el motor, una mezcla apagada avisa al laminar (MX2) |
   | 8–9 | Alto por filamento, paso | pendiente |
   | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | pendiente |
   | 13–14 | Solo la superficie, paredes de más | pendiente |
@@ -12688,7 +12688,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   | 20–21 | Mezclador Oklab; espectral con TD | pendiente (hoy Yule-Nielsen n = 2) |
   | 22–24 | Paleta de calibración, recomendaciones, nombres de colores | pendiente |
   | 25–29 | Colores desde imagen | pendiente (fase posterior, por la ficha) |
-  | 30–31 | Proyecto con los datos nuevos; 3MF de Full Spectrum | parcial: formato de `color_mixing.md` |
+  | 30–31 | Proyecto con los datos nuevos; 3MF de Full Spectrum | 30 hecho (MX19: sin datos nuevos se escribe igual); 31 pendiente |
   | 32 | Aviso de costo con estimación | parcial: aviso de `multimaterial.md` regla 9 |
   | 33 | Purgar en el relleno, por defecto con mezclas | parcial: `object.wipe_into_infill` existe, no prendido por mezcla ni limitado por `surface_depth` / TD |
   | 34 | Primero el relleno en capas con cambio | parcial: `infill.before_walls` existe; falta por capa con cambio |

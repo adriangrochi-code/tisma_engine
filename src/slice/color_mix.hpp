@@ -36,8 +36,32 @@ struct ColorMix {
         friend bool operator==(const Component&, const Component&) = default;
     };
     std::vector<Component> components;
+    // color_mixing_plus.md (rules 1, 2, 6, 15, 30): a written sequence of
+    // filaments (from 1), printed as it is, repeated; whether it is offered;
+    // its visible name; its bias, from -1 to 1.
+    std::vector<int> pattern;
+    bool enabled = true;
+    std::string name;
+    double bias = 0.0;
     friend bool operator==(const ColorMix&, const ColorMix&) = default;
 };
+
+// A written sequence (color_mixing_plus.md, rule 2): filament numbers, or
+// letters for the blend's filaments in order (A the first of `letters`, B
+// the second; with none, A is filament 1). Spaces, commas, / and - only
+// separate: "1,1,2", "1 1 2" and "AAB" are the same; a run of digits is one
+// number. Throws ColorMixError for a filament the machine (`extruders`)
+// does not have, or an empty sequence.
+std::vector<int> parse_mix_pattern(std::string_view text, const std::vector<int>& letters, int extruders);
+
+// A blend of a written sequence: its filaments in the order they first
+// appear, each with its share of the sequence (1,1,2: 1 at 2/3, 2 at 1/3).
+ColorMix pattern_mix(int id, const std::vector<int>& pattern);
+
+// The automatic pairs (rule 5): every 50 : 50 blend of two of the filaments,
+// numbered after them (4 filaments: 6 blends, 5 to 10), each with its
+// colour from `filament_colors` (one per filament).
+std::vector<ColorMix> auto_pair_mixes(const std::vector<std::string>& filament_colors);
 
 // The cycle of layers of a blend (rule 7): for each share (all above 0,
 // together 1), how many layers it gets in the shortest cycle, from 2 to 64
@@ -60,13 +84,17 @@ std::vector<int> mix_order(const std::vector<int>& counts);
 std::vector<int> mix_layers(const ColorMix& mix, const std::vector<Layer>& layers, const std::vector<char>& present);
 
 // Whether a blend can print on a machine with `extruders` filaments: its
-// number after theirs and its filaments among them (rule 5).
+// number after theirs and its filaments among them (rule 5), and it is
+// enabled (color_mixing_plus.md, rule 6).
 bool mix_usable(const ColorMix& mix, int extruders);
 
 // The project's blends in their JSON (rules 14 to 16): {"version": 1,
 // "physical_extruders": [{"id", "color"}], "virtual_extruders": [{"id",
 // "kind": "fullspectrum" or "gradient", "color", "components": [{"extruder",
 // "ratio"}] or, for a gradient, [{"extruder", "position"}], "minz", "maxz"}]}.
+// color_mixing_plus.md (rule 30) adds "kind": "pattern" with "pattern": [1,
+// 1, 2], and "enabled", "name" and "bias", written only when they are not
+// the default, so a project of ratio blends is written as before.
 // Ratios that do not add up to 1 are taken in proportion (1 and 3 are 0.25
 // and 0.75). Throws ColorMixError.
 std::vector<ColorMix> parse_color_mixes(std::string_view json);
