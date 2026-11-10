@@ -37,7 +37,7 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
    - paréntesis para agrupar. Precedencia usual: `not` y `-` de un operando, después `*` `/` `%`, `+` `-`,
      comparaciones, `and`, `or`, ternario.
 4. **Funciones:** `min` y `max` de dos valores; la parte entera, que se escribe con la palabra `int` y corta los
-   decimales; `round`, que redondea a entero; `digits` con un valor, una cantidad de caracteres y, opcional, de
+   decimales; `round`, que redondea a entero; `ceil`, que redondea hacia arriba (dialecto `orcaslicer` y derivados); `digits` con un valor, una cantidad de caracteres y, opcional, de
    decimales (0 si falta): redondea a esos decimales, agrega ceros a la derecha si faltan y rellena con espacios a la
    izquierda hasta esa cantidad de caracteres; `zdigits`, igual pero rellenando con ceros; `is_nil` de una variable:
    si no tiene valor.
@@ -143,4 +143,6 @@ saca la sesión del paquete de perfiles de los datos del paquete (regla 9). Ning
 | GM13 | Cada G-code de máquina del paquete, comparado línea por línea con el texto original | Toda línea sin construcciones sale igual, en el mismo orden; las líneas con construcciones solo cambian en lo evaluado |
 | GM14 | El inicio de una Prusa con `M862.1 ... F{(nozzle_high_flow[0] ? 1 : 0)}` sin alto flujo | `F0` queda en `M862.1` |
 | GM15 | G-code `orcaslicer` con `{if outer_wall_acceleration > 0}` y la variable como lista de uno o de dos (dos extrusores, el segundo en uso) | Se interpreta: vale el único valor, o el del segundo extrusor; no cae en la versión simple |
+| GM16 | `{ceil(2.1)}` y `{ceil(3)}` en un G-code `orcaslicer` | `3` y `3` |
+| GM17 | Una condición que abre y cierra en la misma línea, dentro de un texto y con un índice de extrusor: `M104 T1 S{if filament_type[1] == "PLA"}215{else}240{endif}` con PLA | `M104 T1 S215`; no cae en la versión simple |
 | GM9 | Todas las impresoras del paquete, cada una con sus G-code originales | Todas laminan; las variables que falten quedan en el registro |

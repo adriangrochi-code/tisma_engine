@@ -93,6 +93,9 @@ de abajo.
 
 ### Torre de purga
 
+8 bis. **Temperatura de cada boquilla:** en una impresora con varias boquillas, cada calentador toma la temperatura
+   del filamento de su extrusor (la de la primera capa en la primera capa); un extrusor sin filamento propio toma el
+   del primero. Nunca imprime con una boquilla en 0 (prueba ME13).
 9. **Requisito:** Tisma Slicer solo la hace con E relativa (`M83`); con E absoluta no lamina (prueba ME6).
 10. **Forma:** un rectángulo de `wipe_tower.width` de ancho, con la esquina en (`wipe_tower.x`, `wipe_tower.y`), de la
     profundidad que hace falta para la purga de la capa con más purga; `wipe_tower.brim_width` de borde en la primera
@@ -162,3 +165,4 @@ de 0,2, 2 perímetros, sin relleno, sin falda ni borde, centro en (100, 100)), d
 | ME10 | Apilada, relleno al 20 %, 3 capas sólidas | `surfaces.interface_shells` no / sí | No: capas 21 a 27 con relleno ralo en los dos materiales. Sí: capa 22 puente interno de 757 mm, 23 sólida, 24 superficie de arriba (extrusor 1); 25 a 27 sólidas (extrusor 2) |
 | ME11 | Dos colores, relleno al 20 % | `interlocking.beams` | El extrusor 1 llega hasta X 102,48 (sin vigas: 99,8); el perímetro externo de cada mitad pasa de 58,3 a 119 mm. Capas 10 y 11 iguales, la 12 distinta |
 | ME12 | Voladizo de `supports_skirt.md` | `support.synchronize_layers` con `support.z_gap` 0; `machine.max_layer_height` 0,25 | Sin sincronizar: 70 capas (soporte en Z 0,49, 0,8, 1,08…). Sincronizado: 50 capas, soporte en Z 0,2, 0,4, 0,6… Altura máxima 0,25: capas del soporte de 0,247 (sin el ajuste, 0,296) |
+| ME13 | Dos boquillas, filamentos PLA 210 y PETG 240, una pieza de cada uno | `M104`/`M109` del extrusor 1 a 240 antes de su primera extrusión; ninguna extrusión con su boquilla en 0 |
