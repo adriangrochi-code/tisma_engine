@@ -12241,3 +12241,7 @@ QA; bundle id `net.tismaservidores.tisma`).
 - p2p: vectores de prueba mandados al servidor (claves de prueba de RFC 8032 §7.1): clave de par → PeerId
   `12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV`; ticket con la clave de biblioteca de la prueba 2, carga
   canónica con claves ordenadas, base64url sin relleno. Se pasan a una prueba del motor cuando exista el cliente.
+- **Publicada 0.12.0-beta.1 (2026-11-10 04:35 UTC):** https://github.com/adriangrochi-code/tisma_engine/releases/tag/v0.12.0-beta.1
+  con el instalador y el zip de Windows, el zip de Linux y las dos APK de Android (beta R8 sin probar en el emulador
+  y la de respaldo). Sin firma del dueño todavía. macOS no entra: x86_64 no compilaba (arreglado en 195a3d8, sin
+  confirmar en la CI), arm64 se cancela antes de empezar. PR siguientes: #59 (dev → alpha) y #60 (alpha → main).
