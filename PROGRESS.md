@@ -12177,3 +12177,6 @@ QA; bundle id `net.tismaservidores.tisma`).
 - ab40252: el envío a Bambu leía el G-code entero y lo comprimía en una segunda copia en memoria; con una impresión
   larga el teléfono se quedaba sin memoria. Ahora pasa por archivos temporales; las pruebas de `printers` corren con
   256 MB y empaquetan 400 MB (`BambuPackTest`).
+- 8ae9128: las respuestas HTTP de la nube y de las impresoras se leían enteras como texto; cualquier aparato de la red
+  puede contestar al buscar impresoras. Ahora a lo sumo 16 MB (`HttpLimitTest`). Revisado sin cambios: la bajada de
+  sitios ya corta a 200 MB, la cámara de Bambu a 8 MB por imagen.
