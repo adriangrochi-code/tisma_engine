@@ -1,0 +1,25 @@
+# cad_design.md rule 9 (CD4): a parameter drives a size; changing it changes the part.
+menu mode_engineering
+expect-control tab_design
+menu tab_design
+expect-control design_box
+menu design_box
+expect-design 8000
+expect-control design_param_add
+menu design_param_add
+expect-control design_param_expr_1
+expect-control design_fx_1_size0
+menu design_fx_1_size0
+wait 5
+type p1*3
+key enter
+wait 5
+expect-design 12000
+# The parameter changed: the bound size follows it.
+menu design_param_expr_1
+wait 3
+key ctrl+a
+type 15 mm
+key enter
+wait 5
+expect-design 18000

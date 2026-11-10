@@ -13,6 +13,7 @@ add_executable(tisma_tests
   test_stl.cpp
   test_mesh.cpp
   test_cli.cpp
+  test_node.cpp
   test_indexed_mesh.cpp
   test_level_set.cpp
   test_contours.cpp
@@ -40,6 +41,11 @@ add_executable(tisma_tests
   test_corners.cpp
   test_gcode_arcs.cpp
   test_firmware.cpp
+  test_inspect.cpp
+  test_polyholes.cpp
+  test_unsupported_walls.cpp
+  test_c_cli.cpp
+  test_number.cpp
   test_template.cpp
   test_binary.cpp
   test_retraction.cpp
@@ -74,17 +80,33 @@ add_executable(tisma_tests
   test_voronoi.cpp
   test_fea.cpp
   test_analysis.cpp
+  test_lattice.cpp
+  test_adhesion.cpp
   test_gcode_check.cpp
+  test_thumbnail.cpp
+  test_printer_limits.cpp
   test_gcode_preview.cpp
   test_calibration.cpp
   test_determinism.cpp
   test_profiles.cpp
   test_project.cpp
+  test_orient.cpp
   test_catalog.cpp
   test_device.cpp
   test_cad.cpp
+  test_sketch_io.cpp
+  test_sketch_edit.cpp
+  test_aero.cpp
   test_fasteners.cpp
   test_gears.cpp
+  test_cloud.cpp
+  test_bambu.cpp
+  test_pack.cpp
+  test_library.cpp
+  test_project_import.cpp
+  test_xz.cpp
+  test_pack_fetch.cpp
+  test_print_host.cpp
 )
 # The stand-in for the bundled solidcraft-cli (cad_design.md, rule 1): the
 # tests drive it instead of the real tool.
@@ -95,11 +117,20 @@ target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SOLIDCRAFT="$<TARGET_F
 # Boost.Polygon is the oracle the own Voronoi diagram is tested against.
 # nlohmann/json reads the analysis report back.
 target_link_libraries(tisma_tests PRIVATE tisma_core tisma_warnings tisma_boost_polygon nlohmann_json::nlohmann_json Catch2::Catch2WithMain)
+# The cloud client, and cpp-httplib's server for its mock server (test_cloud.cpp).
+target_link_libraries(tisma_tests PRIVATE tisma_net tisma_httplib tisma_bambu)
+# A stand-in for libsecret's secret-tool (the token's store on Linux).
+add_executable(tisma_fake_secret_tool fake_secret_tool.cpp)
+add_dependencies(tisma_tests tisma_fake_secret_tool)
+target_compile_definitions(tisma_tests PRIVATE TISMA_FAKE_SECRET_TOOL="$<TARGET_FILE:tisma_fake_secret_tool>")
+# The mock Tisma Cloud server around a program (the interface's cloud tests).
+add_executable(tisma_mock_cloud mock_cloud_main.cpp)
+target_link_libraries(tisma_mock_cloud PRIVATE tisma_core tisma_httplib nlohmann_json::nlohmann_json tisma_warnings)
 target_compile_definitions(tisma_tests PRIVATE TISMA_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 # The interface's logic without OpenGL (src/ui/), when the interface is built.
 if(TISMA_BUILD_UI)
-  target_sources(tisma_tests PRIVATE test_ui.cpp test_raytrace.cpp test_plate.cpp test_help.cpp test_credits.cpp test_assistant.cpp
-    test_system_info.cpp)
+  target_sources(tisma_tests PRIVATE test_ui.cpp test_bed_art.cpp test_raytrace.cpp test_plate.cpp test_help.cpp test_credits.cpp test_assistant.cpp
+    test_system_info.cpp test_image_decode.cpp)
   target_link_libraries(tisma_tests PRIVATE tisma_ui)
   target_compile_definitions(tisma_tests PRIVATE TISMA_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets"
                                                  TISMA_DOCS_DIR="${PROJECT_SOURCE_DIR}/docs"
@@ -110,18 +141,47 @@ list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
 # Exit code 4 is Catch2's "all tests skipped" (for example GPU tests without a device).
 catch_discover_tests(tisma_tests PROPERTIES SKIP_RETURN_CODE 4)
+# The aerodynamic drag coefficients (aerodynamics.md, AE1 to AE4) run the
+# lattice at a useful size: too slow for the debug build with the sanitizers.
+if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_test(NAME aero_drag_coefficients COMMAND tisma_tests "[aero-full]")
+  # It takes every core for minutes: the simulated print, whose window
+  # renders in software, does not run beside it (it starved past its timeout).
+  set_tests_properties(aero_drag_coefficients PROPERTIES TIMEOUT 1800 RESOURCE_LOCK all_cores)
+endif()
 
 # The random search for G-code the checker rejects (tests/fuzz_gcode.cpp); a
 # short run here, long runs with new seeds in the maintenance blocks.
 add_executable(tisma_fuzz_gcode fuzz_gcode.cpp)
 target_link_libraries(tisma_fuzz_gcode PRIVATE tisma_core tisma_warnings)
 add_test(NAME fuzz_gcode_smoke COMMAND tisma_fuzz_gcode 12 7)
+# Fuzzer cases that failed once, sliced alone (TISMA_FUZZ_ONLY): seed 6112026,
+# run 1728, a firmware G10 left out by a tool when a change by height set the
+# length back to 0, and never undone (2026-11-06).
+add_test(NAME fuzz_gcode_6112026_1728 COMMAND tisma_fuzz_gcode 2000 6112026)
+set_tests_properties(fuzz_gcode_6112026_1728 PROPERTIES ENVIRONMENT "TISMA_FUZZ_ONLY=1728")
+# Seed 1011202603, run 1419: conical curved layers on a sphere, a lifted
+# travel out to the skirt under the bed (J below 0.5 out of the part, where
+# real_z's iteration did not converge; 2026-11-10).
+add_test(NAME fuzz_gcode_1011202603_1419 COMMAND tisma_fuzz_gcode 2000 1011202603)
+set_tests_properties(fuzz_gcode_1011202603_1419 PROPERTIES ENVIRONMENT "TISMA_FUZZ_ONLY=1419")
+
+# The settings panel as data for the phone (mobile_app.md, rule 7): no window,
+# so it runs everywhere the interface builds.
+if(TISMA_BUILD_UI)
+  add_test(NAME ui_settings_layout COMMAND $<TARGET_FILE:tisma> --settings-layout - --lang en)
+  set_tests_properties(ui_settings_layout PROPERTIES
+    PASS_REGULAR_EXPRESSION "\"id\": \"material\".*\"key\": \"layers.height\"|\"key\": \"layers.height\".*\"id\": \"material\"")
+endif()
 
 # The whole interface, end to end, where a display can be faked: open a
 # model, slice it, export the checked G-code and draw the preview.
 if(TISMA_BUILD_UI AND NOT WIN32)
-  find_program(TISMA_XVFB_RUN xvfb-run)
-  if(TISMA_XVFB_RUN)
+  find_program(TISMA_XVFB_REAL xvfb-run)
+  if(TISMA_XVFB_REAL)
+    # Through a wrapper without the race of xvfb-run -a (two tests at once
+    # on one display): tests/xvfb_run.sh.
+    set(TISMA_XVFB_RUN ${CMAKE_CURRENT_SOURCE_DIR}/xvfb_run.sh)
     add_test(NAME ui_slice_export_screenshot
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view preview
@@ -158,6 +218,150 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
               --pick-catalog-printer "Creality CR-5 Pro H"
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_printer.png)
+    # The free profile pack (profile_pack.md): the invented test pack installed
+    # by the engine, then a printer of it added and chosen with its filament
+    # and print profile, as factory profiles (rules 9 and 13, PK6).
+    add_test(NAME ui_pack_install
+      COMMAND $<TARGET_FILE:tisma-engine> pack install --data ${CMAKE_CURRENT_BINARY_DIR}/ui_pack
+              --from ${CMAKE_CURRENT_SOURCE_DIR}/data/pack/release1)
+    set_tests_properties(ui_pack_install PROPERTIES FIXTURES_SETUP ui_pack)
+    add_test(NAME ui_pack_printer_picked
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack --pick-pack-printer "vendors/acme/models/A1.json#0.4"
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_printer.png)
+    set_tests_properties(ui_pack_printer_picked PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         PASS_REGULAR_EXPRESSION "pack printer: Acme One 0.4 · Acme PLA · Acme Standard" TIMEOUT 300)
+    # The filament catalog offers the pack's filaments for that printer (rule 12).
+    add_test(NAME ui_pack_filaments
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack --pick-pack-printer "vendors/acme/models/A1.json#0.4"
+              --catalog filament --catalog-search acme
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_filaments.png)
+    set_tests_properties(ui_pack_filaments PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # Another program's 3MF project: which program, its parts, and that its
+    # settings stay out for now (project_import.md, rules 1, 2 and 9).
+    add_test(NAME ui_project_import_prusaslicer
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/formats/pi2_prusaslicer.3mf --lang es --light --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/project_import.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_import_prusaslicer.png)
+    # Leak checks off: llvmpipe leaks 112 bytes drawing this project's bed (inside Mesa, no
+    # module names to suppress); ASan's other checks stay on (PROGRESS.md, 2026-11-10).
+    set_tests_properties(ui_project_import_prusaslicer PROPERTIES TIMEOUT 300 ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+    # PI1: a standard 3MF with a box and no program's data opens the box, with
+    # the unknown program's notice (project_import.md, rule 2).
+    add_test(NAME ui_project_import_standard
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/formats/box.3mf --lang es --light --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/project_import_standard.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_import_standard.png)
+    # Leak checks off: llvmpipe leaks 112 bytes drawing this project's bed (inside Mesa, no
+    # module names to suppress); ASan's other checks stay on (PROGRESS.md, 2026-11-10).
+    set_tests_properties(ui_project_import_standard PROPERTIES TIMEOUT 300 ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+    # A PrusaSlicer project's settings sorted by the pack's translation table
+    # (project_import.md, rules 6, 9 and 11; the spec team's pi4 sample).
+    add_test(NAME ui_project_import_settings
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/formats/pi4_prusaslicer_parts.3mf --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/project_import_settings.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_import_settings.png)
+    set_tests_properties(ui_project_import_settings PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home"
+                         RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # The pack printer's «Datos publicados», and a maker's value used (rules 23 and 24).
+    add_test(NAME ui_pack_published
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack --pick-pack-printer "vendors/acme/models/A1.json#0.4"
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/pack_published.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_published.png)
+    set_tests_properties(ui_pack_published PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # A pack printer the pack no longer has stays chosen, with a notice (rule 20);
+    # on a pack of its own, since the script takes a file out of it.
+    add_test(NAME ui_pack_gone_install
+      COMMAND $<TARGET_FILE:tisma-engine> pack install --data ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_gone
+              --from ${CMAKE_CURRENT_SOURCE_DIR}/data/pack/release1)
+    set_tests_properties(ui_pack_gone_install PROPERTIES FIXTURES_SETUP ui_pack_gone)
+    add_test(NAME ui_pack_gone
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_gone/pack --pick-pack-printer "vendors/acme/models/A1.json#0.4"
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/pack_gone.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_gone.png)
+    set_tests_properties(ui_pack_gone PROPERTIES FIXTURES_REQUIRED "ui_pack_gone;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # The chosen pack filament's «Datos publicados», the maker's density used (rule 23).
+    add_test(NAME ui_pack_published_material
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack --pick-pack-printer "vendors/acme/models/A1.json#0.4"
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/pack_published_material.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_published_material.png)
+    set_tests_properties(ui_pack_published_material PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    add_test(NAME ui_pack_published_resin
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack --pick-pack-printer "vendors/bolt/models/B2.json#default"
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/pack_published_resin.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_published_resin.png)
+    set_tests_properties(ui_pack_published_resin PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    add_test(NAME ui_pack_print_speeds
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --light --size 1200x760
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack --pick-pack-printer "vendors/acme/models/A1.json#0.4"
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/pack_print_speeds.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_print_speeds.png)
+    set_tests_properties(ui_pack_print_speeds PROPERTIES FIXTURES_REQUIRED "ui_pack;ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # A Bambu Lab printer on the network, against the simulated one.
+    add_test(NAME ui_bambu_print
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/bambu_print.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_bambu_print.png)
+    set_tests_properties(ui_bambu_print PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # A network program (Duet here) that does not answer: «Test» says why.
+    add_test(NAME ui_print_host_offline
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/print_host_offline.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_print_host_offline.png)
+    set_tests_properties(ui_print_host_offline PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # Nothing listens on port 9 (discard) here: the download fails at once.
+    add_test(NAME ui_pack_offline_first_run
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --light --size 1200x760 --first-run --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_none/pack
+              --pack-url http://127.0.0.1:9/
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/pack_offline.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_offline.png)
+    set_tests_properties(ui_pack_offline_first_run PROPERTIES FIXTURES_REQUIRED "ui_catalog_home" RESOURCE_LOCK ui_catalog_home
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_catalog_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    add_test(NAME ui_pack_catalog
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --light --size 1200x760 --catalog printer --catalog-search acme
+              --pack ${CMAKE_CURRENT_BINARY_DIR}/ui_pack/pack
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_pack_catalog.png)
+    set_tests_properties(ui_pack_catalog PROPERTIES FIXTURES_REQUIRED ui_pack ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # A 2.85 mm printer: the filament catalog offers only that diameter, and
     # says why it is empty (pellets.md, rule 1; profiles.md, rule 5).
     add_test(NAME ui_catalog_filament_by_diameter
@@ -191,6 +395,20 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --dump-ui ${CMAKE_CURRENT_BINARY_DIR}/ui_dump_rows.json
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_dump_rows.png)
     set_tests_properties(ui_dump_rows PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # TR25: at 1440 x 900, every section, both languages: no label is cut
+    # without its «…» (the dump counts the rows whose label the column hides).
+    foreach(lang es en)
+      foreach(section quality strength speed support adhesion other)
+        add_test(NAME ui_labels_fit_${lang}_${section}
+          COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1500x950x24" $<TARGET_FILE:tisma>
+                  ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang ${lang} --size 1440x900 --level advanced
+                  --section print/${section}
+                  --dump-ui ${CMAKE_CURRENT_BINARY_DIR}/ui_labels_${lang}_${section}.json
+                  --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_labels_${lang}_${section}.png)
+        set_tests_properties(ui_labels_fit_${lang}_${section} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
+          TIMEOUT 300 PASS_REGULAR_EXPRESSION "dump-ui: [0-9]+ rows, 0 with the label cut")
+      endforeach()
+    endforeach()
     # A still view draws nothing new (idle_view): its draw calls counted.
     add_test(NAME ui_script_idle_view
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -224,6 +442,14 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/paint_drag.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_paint_drag.png)
     set_tests_properties(ui_script_paint_drag PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    foreach(lang es en)
+      add_test(NAME ui_script_view_bar_narrow_${lang}
+        COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+                ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang ${lang} --size 900x700
+                --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/view_bar_narrow.txt
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_view_bar_narrow_${lang}.png)
+      set_tests_properties(ui_script_view_bar_narrow_${lang} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    endforeach()
     add_test(NAME ui_script_paint_holds_occlusion
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --graphics opengl --render ao
@@ -251,7 +477,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     # The Design tab (cad_design.md, stage D1) driven through the stand-in
     # solidcraft-cli: the tab, the primitives, the command line, sending to the
     # plate and editing again; without the component (CD21); hidden (CD1).
-    foreach(script design_tab design_command design_hidden design_sketch fasteners gears)
+    foreach(script aerodynamics design_tab design_parameters design_constraints design_operations design_sketch_edit design_sketch_fillet design_command design_hidden design_sketch fasteners gears structural_tab structural_analyze)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
@@ -260,6 +486,18 @@ if(TISMA_BUILD_UI AND NOT WIN32)
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_${script}.png)
       set_tests_properties(ui_script_${script} PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     endforeach()
+    # The analysis takes every core and, under ASan, about 160 s alone: more
+    # time, and not beside the full drag test.
+    set_tests_properties(ui_script_structural_analyze PROPERTIES TIMEOUT 900 RESOURCE_LOCK all_cores)
+    # The timeline (rule 8): the stand-in refuses the body «Caja 2».
+    add_test(NAME ui_script_design_timeline
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
+              --solidcraft $<TARGET_FILE:tisma_fake_solidcraft>
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/design_timeline.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_design_timeline.png)
+    set_tests_properties(ui_script_design_timeline PROPERTIES
+      ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0;TISMA_FAKE_SOLIDCRAFT_REFUSE=Caja 2" TIMEOUT 300)
     add_test(NAME ui_script_design_missing
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760
@@ -267,6 +505,120 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/design_missing.txt
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_design_missing.png)
     set_tests_properties(ui_script_design_missing PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # «Más» as cards: subtitles, shortcuts on the right, greyed entries (interface.md).
+    add_test(NAME ui_script_more_cards
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/more_cards.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_more_cards.png)
+    set_tests_properties(ui_script_more_cards PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # File › New Project, Recent projects and Edit › Delete All (interface.md, «Más»).
+    add_test(NAME ui_script_new_project
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/new_project.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_new_project.png)
+    set_tests_properties(ui_script_new_project PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # File › Import and Export: the plate as OBJ, the settings, a project's settings (interface.md, «Más»).
+    add_test(NAME ui_script_file_import_export
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/file_import_export.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_file_import_export.png)
+    set_tests_properties(ui_script_file_import_export PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Edit › Copy, Paste and Reload from Disk (interface.md, «Más»).
+    add_test(NAME ui_script_edit_copy_reload
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/edit_copy_reload.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_edit_copy_reload.png)
+    set_tests_properties(ui_script_edit_copy_reload PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Window's tabs, Collapse Sidebar and Fullscreen (interface.md, «Más»).
+    add_test(NAME ui_script_window_view
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/window_view.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_window_view.png)
+    set_tests_properties(ui_script_window_view PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Help: Keyboard Shortcuts and System Info (interface.md, «Más»).
+    add_test(NAME ui_script_help_card
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/help_card.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_help_card.png)
+    set_tests_properties(ui_script_help_card PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # A model's right-click menu: mirror, scale to volume, instances (interface.md, «Menús»).
+    add_test(NAME ui_script_object_menu_actions
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/object_menu_actions.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_object_menu_actions.png)
+    set_tests_properties(ui_script_object_menu_actions PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The main button's arrow: the possible outputs only (interface.md, «Menús»).
+    add_test(NAME ui_script_arrow_menu
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/arrow_menu.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_arrow_menu.png)
+    set_tests_properties(ui_script_arrow_menu PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Preferences: Enter is OK (interface.md).
+    add_test(NAME ui_script_config_theme_enter
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/config_theme_enter.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_config_theme_enter.png)
+    set_tests_properties(ui_script_config_theme_enter PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Calibration tests from the bed's menu and from «Más» (interface.md).
+    add_test(NAME ui_script_calibration_menus
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/calibration_menus.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_calibration_menus.png)
+    set_tests_properties(ui_script_calibration_menus PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The filament's gear menu (interface.md, «Menús»).
+    add_test(NAME ui_script_gear_filament
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/gear_filament.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_gear_filament.png)
+    set_tests_properties(ui_script_gear_filament PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # The mode chip in the top bar (interface.md, «Menús»).
+    add_test(NAME ui_script_mode_chip
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1700x900x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1640x860
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/mode_chip.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_mode_chip.png)
+    set_tests_properties(ui_script_mode_chip PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Preferences exported and imported (interface.md).
+    add_test(NAME ui_script_prefs_export_import
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/prefs_export_import.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_prefs_export_import.png)
+    set_tests_properties(ui_script_prefs_export_import PROPERTIES
+                         ENVIRONMENT "HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_prefs_home;XDG_CONFIG_HOME=;ASAN_OPTIONS=detect_leaks=0"
+                         TIMEOUT 300)
+    # A model's Printable checkbox (interface.md, «Menús»).
+    add_test(NAME ui_script_printable
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/printable.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_printable.png)
+    set_tests_properties(ui_script_printable PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # File › Import ZIP Archive and Import STL (Imperial Units) (interface.md, «Más»).
+    add_test(NAME ui_script_import_zip_inches
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/import_zip_inches.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_import_zip_inches.png)
+    set_tests_properties(ui_script_import_zip_inches PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    # Configuration in «Más»: wizard, updates, print via USB (interface.md).
+    add_test(NAME ui_script_configuration_card
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/configuration_card.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_configuration_card.png)
+    set_tests_properties(ui_script_configuration_card PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The plate's right-click menu adds a cube and a sphere as models.
     add_test(NAME ui_script_plate_menu
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -304,6 +656,70 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     endforeach()
     # The handles drawn on the model (move arrows, rotation rings, scale
     # boxes), dragged in the view.
+    # The Tisma Cloud dialog against the mock server; the token goes to the
+    # stand-in secret-tool, never to this machine's store.
+    add_test(NAME ui_script_cloud
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud.png)
+    set_tests_properties(ui_script_cloud PROPERTIES TIMEOUT 300 ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_secrets.txt")
+    add_test(NAME ui_script_cloud_default
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_default.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_default.png)
+    set_tests_properties(ui_script_cloud_default PROPERTIES TIMEOUT 300 ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+    # A server that does not answer (port 9 of this machine, nothing listens there).
+    add_test(NAME ui_script_cloud_unreachable
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server http://127.0.0.1:9
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_unreachable.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_unreachable.png)
+    set_tests_properties(ui_script_cloud_unreachable PROPERTIES TIMEOUT 300 ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+    add_test(NAME ui_script_cloud_slice
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_slice.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_slice.png)
+    set_tests_properties(ui_script_cloud_slice PROPERTIES TIMEOUT 300 ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_slice_secrets.txt")
+    # Analysing in the cloud from Structural (engineering_panel.md, rule 10;
+    # cloud.md, rules 6 to 10b): a fea job, its .tea kept with the part.
+    add_test(NAME ui_script_cloud_structural
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/cloud_structural.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_cloud_structural.png)
+    set_tests_properties(ui_script_cloud_structural PROPERTIES TIMEOUT 300 ENVIRONMENT
+      "ASAN_OPTIONS=detect_leaks=0;TISMA_SECRET_TOOL=$<TARGET_FILE:tisma_fake_secret_tool>;TISMA_FAKE_SECRETS=${CMAKE_CURRENT_BINARY_DIR}/ui_cloud_structural_secrets.txt")
+    # After an unexpected closing (problem_reports.md, rule 10; IP9): a mark
+    # of a process that is gone, planted in a configuration folder of its own.
+    add_test(NAME ui_crash_report_setup
+      COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/crash_config
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_crash_config)
+    set_tests_properties(ui_crash_report_setup PROPERTIES FIXTURES_SETUP ui_crash_config)
+    add_test(NAME ui_script_crash_report
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --crash-check
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/crash_report.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_crash_report.png)
+    set_tests_properties(ui_script_crash_report PROPERTIES TIMEOUT 300 FIXTURES_REQUIRED ui_crash_config
+      RESOURCE_LOCK ui_crash_config
+      ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/ui_crash_config")
+    add_test(NAME ui_script_report
+      COMMAND $<TARGET_FILE:tisma_mock_cloud> ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --cloud-server {url}
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/report.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_report.png)
+    set_tests_properties(ui_script_report PROPERTIES TIMEOUT 300 ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+    add_test(NAME ui_script_place_undo
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tool move
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/place_undo.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_place_undo.png)
+    set_tests_properties(ui_script_place_undo PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     foreach(tool move rotate scale)
       add_test(NAME ui_script_${tool}_gizmo
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -324,6 +740,13 @@ if(TISMA_BUILD_UI AND NOT WIN32)
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view device --device sim
               --device-print --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_device.png)
+    set_tests_properties(ui_device_prints_to_simulator PROPERTIES RESOURCE_LOCK all_cores)
+    # The printer's limits read on connecting, into the profile's empty values.
+    add_test(NAME ui_device_limits
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1200x760 --view device --device sim
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/device_limits.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_device_limits.png)
     # A project saved with chosen profiles opens again to the same G-code.
     add_test(NAME ui_project_save
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -340,6 +763,26 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     add_test(NAME ui_project_same_gcode
       COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_project_a.gcode
               ${CMAKE_CURRENT_BINARY_DIR}/ui_project_b.gcode)
+    # The same project as a 3MF package (formats.md, rule 11): opened as a
+    # project, not as a model, and sliced to the same G-code.
+    add_test(NAME ui_project_3mf_save
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_project.tisma --lang en --size 900x600
+              --save-project ${CMAKE_CURRENT_BINARY_DIR}/ui_project.3mf
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_3mf_a.png)
+    add_test(NAME ui_project_3mf_reopen
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_project.3mf --lang en --size 900x600
+              --export ${CMAKE_CURRENT_BINARY_DIR}/ui_project_c.gcode
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_project_3mf_b.png)
+    add_test(NAME ui_project_3mf_same_gcode
+      COMMAND ${CMAKE_COMMAND} -E compare_files ${CMAKE_CURRENT_BINARY_DIR}/ui_project_a.gcode
+              ${CMAKE_CURRENT_BINARY_DIR}/ui_project_c.gcode)
+    set_tests_properties(ui_project_3mf_save PROPERTIES FIXTURES_REQUIRED ui_project FIXTURES_SETUP ui_project_3mf
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    set_tests_properties(ui_project_3mf_reopen PROPERTIES FIXTURES_REQUIRED ui_project_3mf FIXTURES_SETUP ui_project_c
+                         ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
+    set_tests_properties(ui_project_3mf_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_project;ui_project_c")
     # A plate of two models (the second one added and the plate arranged),
     # with the Scale tool open, sliced; its project opens to the same G-code.
     add_test(NAME ui_plate_save
@@ -499,6 +942,12 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang en --size 1280x720
               --knowledge ${CMAKE_CURRENT_SOURCE_DIR}/data/knowledge --tutorial first_print,1
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_tutorial.png)
+    # Bridges and overhangs (docs/CALIBRATION.md): the part made and sliced, its card with the angles.
+    add_test(NAME ui_calibration_bridges
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              --lang es --light --size 1200x760 --calibration bridges_overhangs
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_calibration_bridges.png)
+    set_tests_properties(ui_calibration_bridges PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # A calibration guide with a guide before it not done (assistant.md, AS16, AS17).
     add_test(NAME ui_calibration_guide
       COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
@@ -567,7 +1016,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_project_reopen PROPERTIES FIXTURES_REQUIRED ui_project FIXTURES_SETUP ui_project_b)
     set_tests_properties(ui_project_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_project;ui_project_b")
     set_tests_properties(ui_slice_export_screenshot ui_raytrace_matches_cpu ui_moire_filter_smooths_fine_lines
-                         ui_device_prints_to_simulator ui_project_save ui_project_reopen PROPERTIES
+                         ui_device_prints_to_simulator ui_device_limits ui_project_save ui_project_reopen PROPERTIES
                          ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
   endif()
 endif()
@@ -593,6 +1042,8 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME license_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/check_licenses.py ${PROJECT_SOURCE_DIR})
   # VERSION has its section in CHANGELOG.md (docs/VERSIONING.md).
   add_test(NAME release_notes_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/release_notes.py --check)
+  # The release list and its signing (docs/FIRMAR_VERSIONES.md); skipped without openssl 3.
+  add_test(NAME sign_release_check COMMAND Python3::Interpreter ${PROJECT_SOURCE_DIR}/tools/test_sign_release.py)
   # Specs from the team that knows Tisma Slicer carry no code and no internal
   # names (see CLEANROOM.md).
   if(EXISTS ${PROJECT_SOURCE_DIR}/docs/spec)
@@ -617,4 +1068,13 @@ if(Python3_Interpreter_FOUND)
       ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300 PASS_REGULAR_EXPRESSION "the box tree was made ahead"
       FAIL_REGULAR_EXPRESSION "error: ")
   endif()
+endif()
+
+# The Windows installer's script builds (NSIS; packaging/windows/tisma.nsi),
+# where makensis is installed.
+find_program(TISMA_MAKENSIS makensis PATHS "C:/Program Files (x86)/NSIS")
+if(TISMA_MAKENSIS)
+  add_test(NAME installer_script_check
+    COMMAND ${CMAKE_COMMAND} -DMAKENSIS=${TISMA_MAKENSIS} -DSOURCE_DIR=${PROJECT_SOURCE_DIR}
+            -DWORK=${CMAKE_CURRENT_BINARY_DIR}/installer_check -P ${CMAKE_CURRENT_SOURCE_DIR}/check_installer.cmake)
 endif()

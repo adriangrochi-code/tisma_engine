@@ -105,7 +105,7 @@ TEST_CASE("templates: errors name the section, the line and the column (rule 8, 
     CHECK_THROWS_WITH(render("{endif}"), ContainsSubstring("{endif} without its {if}"));
     CHECK_THROWS_WITH(render("{1 +}"), ContainsSubstring("a value is expected"));
     CHECK_THROWS_WITH(render("{foo(1)}"), ContainsSubstring("unknown function 'foo'"));
-    CHECK_THROWS_WITH(render("{temperature[3]}"), ContainsSubstring("index 3 is out of 'temperature'"));
+    CHECK_THROWS_WITH(render("{temperature[-1]}"), ContainsSubstring("index -1 is out of 'temperature'"));
     CHECK_THROWS_WITH(render("{1 / 0}"), ContainsSubstring("division by zero"));
     CHECK_THROWS_WITH(render("{ {"), ContainsSubstring("a { without its }"));
     CHECK_THROWS_WITH(render("{if 1 +}{endif}"), ContainsSubstring("a value is expected"));
@@ -167,6 +167,18 @@ TEST_CASE("templates in the G-code: the print's variables (rule 7, T6)", "[templ
                     "{is_extruder_used[0]} {year > 2000} {layers.height}";
     const std::string g = gcode_of(s);
     CHECK(at(g, ";T6 50 cube20 1 90 110 20 0 0 true true 0.2") != std::string::npos);
+}
+
+TEST_CASE("templates in the G-code: the names the profile pack's start G-code uses (profile_pack_format.md; PK9)",
+          "[template][gcode]") {
+    Settings s = printer();
+    s.start_gcode = ";PK9 {layer_count} [layer_count] {first_layer_min_x} {first_layer_min_y} {first_layer_max_x} "
+                    "{first_layer_max_y} {first_layer_size_x} {first_layer_size_y} {travel_speed > 0} "
+                    "{month >= 1} {day >= 1} {hour >= 0} {minute >= 0} {second >= 0}\n"
+                    "G1 X{first_layer_min_x} Y{first_layer_min_y}";
+    const std::string g = gcode_of(s);
+    CHECK(at(g, ";PK9 50 50 90 90 110 110 20 20 true true true true true true") != std::string::npos);
+    CHECK(at(g, "G1 X90 Y90") != std::string::npos); // PK9: the first layer's corner, 90 to 90.5
 }
 
 TEST_CASE("templates in the G-code: the profiles' own parameters (gcode_templates.md; presets.md, rules 21 and 22)",
@@ -261,15 +273,15 @@ TEST_CASE("templates in the G-code: automatic temperatures (rule 10, T10)", "[te
 
 TEST_CASE("templates in the G-code: an error fails the export (rule 8, T7)", "[template][gcode]") {
     Settings s = printer();
-    s.start_gcode = "G28\nM104 S{print_time}";
+    s.start_gcode = "G28\nM104 S{no_such_variable}";
     const SlicedModel model = slice_model(cube(), s);
     std::ostringstream out;
-    CHECK_THROWS_WITH(write_gcode(out, model, s), ContainsSubstring("machine.start_gcode, line 2: unknown variable 'print_time'"));
+    CHECK_THROWS_WITH(write_gcode(out, model, s), ContainsSubstring("machine.start_gcode, line 2: unknown variable 'no_such_variable'"));
     const std::filesystem::path path = test_temp_dir() / "tisma_template_error.gcode";
     std::filesystem::remove(path);
     const GcodeExport exported = export_gcode(path, model, s);
     CHECK_FALSE(exported.written);
-    CHECK_THAT(exported.error, ContainsSubstring("unknown variable 'print_time'"));
+    CHECK_THAT(exported.error, ContainsSubstring("unknown variable 'no_such_variable'"));
     CHECK_FALSE(std::filesystem::exists(path));
     // A template in a layer change names its section.
     s.start_gcode = "G28";
@@ -298,4 +310,25 @@ TEST_CASE("templates: the output file's name, before and after the G-code (rule 
     CHECK(totals->print_seconds > 60.0);
     CHECK(totals->grams > 1.0);
     std::filesystem::remove(path);
+}
+
+TEST_CASE("templates: regex_replace and the print time's parts (orca_2_5.md, rules 20 and 21, OR20 and OR21)",
+          "[template]") {
+    TemplateContext c;
+    c.variables["input_filename_base"] = TemplateValue::of(std::string("parte_v3"));
+    CHECK(render_template("{regex_replace(input_filename_base, /_v\\d+$/, \"\")}.gcode", c, "test") == "parte.gcode");
+    // Groups as $1, a pattern from a text, and a / inside the pattern.
+    CHECK(render_template("{regex_replace(\"a-b\", /(\\w)-(\\w)/, \"$2-$1\")}", c, "test") == "b-a");
+    CHECK(render_template("{regex_replace(\"x.stl\", \"\\\\.stl$\", \"\")}", c, "test") == "x");
+    CHECK(render_template("{regex_replace(\"a/b\", /\\//, \"_\")}", c, "test") == "a_b");
+    CHECK_THROWS_WITH(render_template("{regex_replace(\"a\", /(/, \"\")}", c, "test"),
+                      ContainsSubstring("regular expression in regex_replace"));
+    CHECK_THROWS_WITH(render_template("{regex_replace(\"a\", /a, \"\")}", c, "test"), ContainsSubstring("closing /"));
+
+    Settings s = printer();
+    s.filename_format = "{print_time_hour}:{print_time_minute}:{print_time_sec}_{print_time_total_sec}_{print_time_day}";
+    const SlicedModel model = slice_model(cube(), s);
+    CHECK(output_filename(s, model, GcodeTotals{3725.0, 0.0}) == "1:2:5_3725_0");
+    CHECK(output_filename(s, model, std::nullopt) ==
+          "{print_time_hour}:{print_time_minute}:{print_time_sec}_{print_time_total_sec}_{print_time_day}");
 }

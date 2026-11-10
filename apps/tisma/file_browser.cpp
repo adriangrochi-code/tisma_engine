@@ -2,10 +2,19 @@
 
 #include "file_browser.hpp"
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <commdlg.h>
+#endif
+
 #include "ui/text.hpp"
 
 #include <misc/cpp/imgui_stdlib.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <system_error>
 
@@ -40,7 +49,61 @@ void FileBrowser::open(Mode mode, std::string title, std::vector<std::string> ex
     go(start);
     open_ = true;
     pending_open_ = true;
+    native_done_ = false;
+    if (native_ && run_native()) {
+        native_done_ = true;
+        pending_open_ = false;
+    }
 }
+
+#ifdef _WIN32
+// The Open and Save As dialogs of Windows (GetOpenFileNameW and
+// GetSaveFileNameW): the extensions as the filter, then all files; in Save
+// mode the proposed name, the first extension added when none is typed, and
+// the system asking before replacing a file.
+bool FileBrowser::run_native() {
+    std::wstring patterns;
+    for (const std::string& e : extensions_)
+        patterns += (patterns.empty() ? L"*" : L";*") + from_utf8(e).wstring();
+    std::wstring filter;
+    if (!patterns.empty()) {
+        filter += patterns; // shown as the type, as the system lists it
+        filter.push_back(L'\0');
+        filter += patterns;
+        filter.push_back(L'\0');
+    }
+    filter += from_utf8(tr(T::ShowAllFiles)).wstring();
+    filter.push_back(L'\0');
+    filter += L"*.*";
+    filter.push_back(L'\0');
+    std::vector<wchar_t> file(32768, L'\0');
+    if (mode_ == Mode::Save) {
+        const std::wstring name = from_utf8(name_).wstring();
+        std::copy_n(name.begin(), std::min(name.size(), file.size() - 1), file.begin());
+    }
+    const std::wstring title = from_utf8(title_).wstring(), folder = folder_.wstring();
+    const std::wstring extension = extensions_.empty() ? std::wstring() : from_utf8(extensions_.front().substr(1)).wstring();
+    OPENFILENAMEW ofn{};
+    ofn.lStructSize = sizeof ofn;
+    ofn.hwndOwner = GetActiveWindow();
+    ofn.lpstrFilter = filter.c_str();
+    ofn.nFilterIndex = 1;
+    ofn.lpstrFile = file.data();
+    ofn.nMaxFile = DWORD(file.size());
+    ofn.lpstrInitialDir = folder.c_str();
+    ofn.lpstrTitle = title.c_str();
+    ofn.lpstrDefExt = extension.empty() ? nullptr : extension.c_str();
+    ofn.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST |
+                (mode_ == Mode::Save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+    const BOOL ok = mode_ == Mode::Save ? GetSaveFileNameW(&ofn) : GetOpenFileNameW(&ofn);
+    native_chosen_ = ok ? std::filesystem::path(std::wstring(file.data())) : std::filesystem::path();
+    if (ok)
+        folder_ = native_chosen_.parent_path();
+    return true;
+}
+#else
+bool FileBrowser::run_native() { return false; }
+#endif
 
 void FileBrowser::go(const std::filesystem::path& folder) {
     std::error_code ec;
@@ -61,6 +124,14 @@ std::filesystem::path FileBrowser::target() const {
 bool FileBrowser::draw(std::filesystem::path& chosen, ImTextureRef folder_icon, ImVec4 icon_tint) {
     if (!open_)
         return false;
+    if (native_done_) { // the system's dialog closed in open()
+        native_done_ = false;
+        open_ = false;
+        if (native_chosen_.empty())
+            return false;
+        chosen = native_chosen_;
+        return true;
+    }
     const std::string popup = title_ + "###file_browser";
     if (pending_open_) {
         ImGui::OpenPopup(popup.c_str());

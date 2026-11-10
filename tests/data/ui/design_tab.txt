@@ -1,5 +1,6 @@
 # The Design tab (cad_design.md, CD1, CD1b, CD19, CD20): in the top bar's
-# Ingeniería section (the owner's request, 2026-11-02); its panel with the
+# Ingeniería section (the owner's request, 2026-11-02), after Estructural, which
+# the section opens on the first time (engineering_panel.md, rule 1); its panel with the
 # primitives, Fasteners, the greyed stages,
 # «Mandar a la placa» off until a body exists, and the command line under the
 # same view. A box built through the stand-in tool, sent twice, gives two
@@ -9,7 +10,10 @@ expect-control mode_engineering
 expect-control tab_prepare
 expect-no-control tab_design
 menu mode_engineering
+expect-control tab_structural
+expect-control structural_part
 expect-control tab_design
+menu tab_design
 expect-control design_fasteners
 expect-no-control tab_prepare
 expect-apart mode_engineering tab_design
@@ -24,6 +28,8 @@ expect-design none
 menu design_box
 expect-design 8000
 expect-no-control design_needs_solid
+expect-control design_view_dxf
+expect-control design_view_dxf_hidden
 menu design_send
 expect-objects 2 Caja
 expect-control tab_prepare

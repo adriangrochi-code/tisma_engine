@@ -107,6 +107,10 @@ struct GcodeStats {
 struct GcodeCheck {
     std::vector<GcodeProblem> problems; // the first kMaxProblems
     std::size_t problem_count = 0;      // all of them
+    // What looks wrong but may be right: after a printer macro (a command
+    // that is not G, M or T, as START_PRINT) the printer may heat the nozzle
+    // itself (profile_pack.md, rule 18 bis). They do not fail the check.
+    std::vector<GcodeProblem> notes;
     GcodeStats stats;
     bool ok() const { return problem_count == 0; }
 };

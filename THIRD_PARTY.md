@@ -31,6 +31,13 @@ licencia en `resources/licenses/`, que la interfaz muestra en Más › Créditos
 | Dear ImGui | imgui | 1.92.9b (commit `f1cc2ae15e53a861a874c3034aae6798fde194ab`) | MIT AND Apache-2.0 | `LICENSE.txt` del tag `v1.92.9b` (MIT). Trae `imstb_truetype.h`, `imstb_rectpack.h` e `imstb_textedit.h` con licencia doble MIT o dominio público: se elige MIT. Las fuentes incrustadas ProggyClean y ProggyForever son MIT (`docs/FONTS.md`). `misc/fonts/Roboto-Medium.ttf` (versión 2.001152) es Apache-2.0, según `docs/FONTS.md` y la tabla `name` del propio archivo. El cargador `backends/imgui_impl_opengl3_loader.h` es de dominio público (Unlicense, fuera de la lista): no se compila, el motor usa su propio cargador (`IMGUI_IMPL_OPENGL_LOADER_CUSTOM`). | https://github.com/ocornut/imgui | Solo la interfaz: los paneles, botones y controles, con sus backends de GLFW, OpenGL 3 y Vulkan (`backends/imgui_impl_vulkan.cpp`, MIT como el resto, sobre volk; solo con `TISMA_GPU`), y Roboto Medium como fuente, incrustada sin modificar. Al distribuir el programa hay que incluir su licencia y la de Apache-2.0 de la fuente. |
 | SolidCraft | — (`solidcraft-cli`; no se compila ni se enlaza: el instalador lleva su ejecutable publicado) | 0.30.0 (release `v0.30.0`, 2026-11-02; `solidcraft-windows-x64-portable.zip`, SHA-256 `ae5f502bc0062656965bff31f50739504e24c219baf520526fbd9208dfc261ba`; `solidcraft-0.30.0-linux-x86_64.tar.gz`, SHA-256 `5cd95727352b9a343fc8ff4bfb688671a5901a1b601a71c46e94c7b20750c9a0`) | MIT OR Apache-2.0 | `LICENSE-MIT`, `LICENSE-APACHE` y `NOTICE` del paquete; su `THIRD-PARTY-LICENSES.txt` (560 cajas de Rust, revisado el 2026-10-29: permisivas o con opción permisiva, ninguna GPL, LGPL ni AGPL obligatoria; fuentes OFL 1.1 y modelos CC0 o de dominio público). Núcleo B-rep: truck (Apache-2.0). | https://github.com/tangency-labs/solidcraft | Solo la interfaz: la pestaña Diseño (ficha `cad_design.md`, regla 1) le manda guiones JSON de comandos al ejecutable `solidcraft-cli` que va en la carpeta `solidcraft/` junto al programa, y lee el 3MF que devuelve. Es otro proceso: el motor no compila ni enlaza nada suyo. El paquete suma 110 MB sin comprimir (43 MB en el zip). Al distribuirlo van sus licencias, su `NOTICE` y su `THIRD-PARTY-LICENSES.txt`. Crédito: «Basado en SolidCraft». |
 | nanosvg | nanosvg | commit `239e102ec2c691f2902e20ace2ed36ee4a35cfe6` (2026-07-10; el proyecto no tiene tags) | Zlib | `LICENSE.txt` en ese commit. Su `AI_POLICY.md` rige los aportes a nanosvg, no su uso. | https://github.com/memononen/nanosvg | Solo la interfaz: lee y rasteriza los íconos SVG de `assets/brand/`. Solo cabeceras. |
+| stb_image | stb | 2.30 (`stb_image.h` del commit `d14d46f6b44456eb88beac58cba833a4135d4c89`, SHA-256 `594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3`) | MIT | El final de `stb_image.h`: «available under 2 licenses — choose whichever you prefer»: MIT o dominio público (Unlicense); se toma MIT. Un solo archivo, sin nada más. | https://github.com/nothings/stb | Lee las imágenes JPEG de la cámara de las impresoras Bambu Lab y las PNG (`src/ui/image_decode.cpp`), solo en la interfaz. |
+| stb_image_write | stb_write | 1.16 (`stb_image_write.h` del commit `d14d46f6b44456eb88beac58cba833a4135d4c89`, SHA-256 `cbd5f0ad7a9cf4468affb36354a1d2338034f2c12473cf1a8e32053cb6914a05`) | MIT | El final de `stb_image_write.h`: «available under 2 licenses — choose whichever you prefer»: MIT o dominio público (Unlicense); se toma MIT. Un solo archivo, sin nada más; solo usa la biblioteca estándar de C. | https://github.com/nothings/stb | Escribe las miniaturas del G-code en JPG y en PNG comprimido (`src/gcode/thumbnail.cpp`), en el núcleo: también la línea de comandos. Sin `stdio`: escribe a memoria. |
+| cpp-httplib | cpphttplib | 0.62.0 (commit `74ef3c42188acd6391f027c4337fb0e1a68c0024`, 2026-10-18) | MIT | `LICENSE` del tag `v0.62.0`; `httplib.h` dice «MIT License», un solo autor. Se usa solo la cabecera, sin su CMake; no se definen sus opciones de zlib, brotli ni zstd, así que no trae nada más. | https://github.com/yhirose/cpp-httplib | El cliente HTTP de la nube en Linux y macOS (`src/net/http_httplib.cpp`, ficha `cloud.md`) y el servidor simulado de las pruebas (`tests/test_cloud.cpp`). En Windows el cliente usa WinHTTP, del sistema. |
+| Mbed TLS | mbedtls | 3.6.2 (LTS; archivo de la release `mbedtls-3.6.2.tar.bz2`, SHA-256 `8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca`) | Apache-2.0 | `LICENSE` y `README.md` de la release: doble licencia «Apache-2.0 OR GPL-2.0-or-later», a elección de quien la usa; se toma Apache-2.0. `framework/` lleva la misma doble licencia. Trae en `3rdparty/` everest y p256-m (los dos con la misma doble licencia), que quedan apagados en la configuración por defecto y no se compilan. Se compila sin sus programas ni sus pruebas. | https://github.com/Mbed-TLS/mbedtls | TLS de las impresoras Bambu Lab en red local (MQTT, FTPS y cámara; `src/net/tls.cpp`, ficha `printer_connections.md`), igual en Windows y Linux, y el servidor TLS del simulador de las pruebas. |
+| OpenSSL | — (la del sistema: `find_package(OpenSSL 3)`; no se compila) | 3.0 o más nueva, la del sistema (en la sesión y la CI de Linux, 3.0.13 de Ubuntu 24.04) | Apache-2.0 | `LICENSE.txt` de OpenSSL 3.0 (Apache-2.0 desde la 3.0; las 1.x tenían otra licencia y no se aceptan: se pide la 3). | https://www.openssl.org | HTTPS del cliente de la nube en Linux y macOS, enlazada como biblioteca compartida del sistema; el paquete no la lleva. Sin OpenSSL 3 el cliente solo habla `http://`. |
+
+SolidCraft en la app de Android (decisión del dueño, 2026-11-04): el flujo `.github/workflows/solidcraft-android.yml` compila `solidcraft-cli` desde la etiqueta `v0.30.0` (commit `afd81380ab06b0e77e03fdf68185d4b484d0e84e`, el mismo de la fila de SolidCraft de la tabla, MIT OR Apache-2.0) para arm64-v8a y x86_64 con el NDK r29, y lo guarda como artefacto con `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` y `THIRD-PARTY-LICENSES.txt`. Con `-Ptisma.solidcraft=<carpeta>` la app lo lleva como `lib/<abi>/libsolidcraft.so` y sus licencias van a los créditos de la app. Las cajas de Rust que entran en la compilación para Android son las del `Cargo.lock` de esa versión (`--locked`); hay que revisar su `THIRD-PARTY-LICENSES.txt` del artefacto antes de publicar un APK que lo lleve.
 
 ## Herramientas de compilación (no se enlazan ni se distribuyen)
 
@@ -38,3 +45,66 @@ licencia en `resources/licenses/`, que la interfaz muestra en Más › Créditos
 |---|---|---|---|
 | glslang (`glslangValidator`) | 15.1.0 (Ubuntu 24.04, paquete `glslang-tools`); licencia leída en el tag `vulkan-sdk-1.4.350.1`, commit `275822a6261ee689aadb1da5f09a0ec2f058685c` | Mezcla: el núcleo BSD-3-Clause; el preprocesador suma una licencia permisiva propia de NVIDIA; partes MIT y Apache-2.0; conserva el texto «GPL 3 with special bison exception», aunque dice que Bison ya no se usa | `tools/compile_shaders.py` pasa los shaders de GLSL a SPIR-V. El SPIR-V generado se guarda en `src/gpu/shaders/generated/` y es salida de la herramienta, no código de glslang. Nunca se enlaza ni se distribuye. |
 | Mesa lavapipe | la de Ubuntu 24.04 (paquete `mesa-vulkan-drivers`) | MIT | Solo en la CI y en pruebas locales: un dispositivo Vulkan por software para correr las pruebas de GPU sin GPU. |
+| OpenSSL (programa `openssl`) | 3.0 o más nueva: la de Git para Windows en la computadora del dueño; 3.0.13 de Ubuntu 24.04 en la CI | Apache-2.0 | `tools/sign_release.py` firma y comprueba las versiones con Ed25519 (`docs/FIRMAR_VERSIONES.md`), y su prueba crea una clave de prueba. Se llama como programa; no se enlaza ni se distribuye. |
+| GitHub CLI (`gh`) | la que instale el dueño; la de la imagen de la CI | MIT | `tools/sign_release.py` baja el borrador, sube la lista firmada y publica; el flujo de releases arma el borrador. No se distribuye. |
+| NSIS (`makensis`, con Modern UI 2, LogicLib y el complemento System, que vienen con él) | 3.x: la de la imagen `windows-2022` de la CI (o la de Chocolatey); 3.09 de Ubuntu 24.04 en la sesión | Zlib (zlib/libpng; `COPYING` de NSIS). Sus partes de compresión bzip2 y LZMA tienen otras licencias: no se usan, el instalador comprime con zlib (`SetCompressor zlib`). Una parte del complemento System (`Call.S`) es MIT | Arma el instalador de Windows (`packaging/windows/tisma.nsi`). El instalador lleva el ejecutable de arranque de NSIS (zlib/libpng, que no pide aviso en el programa); el compilador no se distribuye. |
+
+## App de Android (`apps/android/`, Gradle)
+
+Las bibliotecas de la app (ficha `mobile_app.md`, regla 4) se declaran en `apps/android/gradle/libs.versions.toml`;
+`tools/check_licenses.py` comprueba que cada una esté en esta tabla (columna «Gradle») con una licencia permitida, o en
+la de herramientas de prueba de abajo. Revisado el 2026-11-04: las 92 bibliotecas que entran al APK (las de la tabla y
+sus dependencias transitivas, según `./gradlew :app:dependencies --configuration releaseRuntimeClasspath`) son
+Apache-2.0 según la licencia declarada en el POM publicado de cada versión; `com.google.guava:listenablefuture:1.0` no
+la declara en su POM y la hereda de `guava-parent` (Apache-2.0). Ninguna trae GPL, LGPL ni AGPL. La lectura fue del POM,
+no del archivo de licencia de cada fuente: antes de publicar la app, `resources/credits.json` y los avisos van a salir
+de los mismos datos.
+
+| Biblioteca | Gradle | Versión | Licencia | Leída en | URL | Uso |
+|---|---|---|---|---|---|---|
+| Kotlin coroutines | org.jetbrains.kotlinx:kotlinx-coroutines-core | 1.10.2 | Apache-2.0 | POM publicado | https://github.com/Kotlin/kotlinx.coroutines | Hilos de la app y seguimiento de trabajos. Trae la biblioteca estándar de Kotlin (Apache-2.0) y `org.jetbrains:annotations` (Apache-2.0). |
+| Kotlin coroutines (Android) | org.jetbrains.kotlinx:kotlinx-coroutines-android | 1.10.2 | Apache-2.0 | POM publicado | https://github.com/Kotlin/kotlinx.coroutines | El hilo principal de Android. |
+| kotlinx.serialization JSON | org.jetbrains.kotlinx:kotlinx-serialization-json | 1.9.0 | Apache-2.0 | POM publicado | https://github.com/Kotlin/kotlinx.serialization | Leer y escribir el JSON de Tisma Cloud (`cloud.md`). |
+| AndroidX Core | androidx.core:core-ktx | 1.17.0 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | Base de la app. |
+| AndroidSVG | com.caverock:androidsvg-aar | 1.4 | Apache-2.0 | POM publicado (sin dependencias) | https://bigbadaboom.github.io/androidsvg/ | Pasa a imagen las texturas SVG de las camas del paquete de perfiles (`profile_pack.md`, regla 14). |
+| AndroidX Activity Compose | androidx.activity:activity-compose | 1.11.0 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | La actividad con Compose, elegir y guardar archivos. |
+| AndroidX Lifecycle ViewModel Compose | androidx.lifecycle:lifecycle-viewmodel-compose | 2.9.4 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | El estado de las pantallas sobrevive a girar el teléfono. |
+| AndroidX Lifecycle Runtime Compose | androidx.lifecycle:lifecycle-runtime-compose | 2.9.4 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/androidx | Leer el estado según el ciclo de vida. |
+| Jetpack Compose BOM | androidx.compose:compose-bom | 2025.10.01 | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/compose | Fija las versiones de Compose. |
+| Compose UI | androidx.compose.ui:ui | la del BOM | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/compose | La interfaz. |
+| Compose Material 3 | androidx.compose.material3:material3 | la del BOM | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/compose | Componentes, con los colores de `interface.md`. Sin el paquete de íconos de Material: los íconos son los de `assets/brand/`. |
+| Compose UI Test Manifest | androidx.compose.ui:ui-test-manifest | la del BOM | Apache-2.0 | POM publicado | https://developer.android.com/jetpack/compose | Solo en la versión de depuración, para las pruebas de pantallas. |
+
+**El motor dentro del APK** (desde el 2026-11-04): el APK lleva el programa `tisma-engine` compilado con el NDK
+(`lib/<abi>/libtisma_engine.so`), y con él las bibliotecas del motor de la tabla de arriba que enlaza `tisma_core`:
+oneTBB, Clipper2, nlohmann/json y Boost.Polygon con Boost.Config, en las mismas versiones. Sin GPU (`TISMA_GPU=OFF`), sin
+interfaz y sin OpenSSL. La biblioteca de C++ es la `libc++` del NDK, enlazada estática (Apache-2.0 con la excepción
+LLVM). Los avisos van en Más › Créditos y fuentes de la app (`credits.md`, regla 4): los del motor salen de
+`resources/credits.json` y `resources/licenses/`, los de la app de `apps/android/credits_android.json` y
+`apps/android/licenses/` (el texto de la licencia de libc++, Apache-2.0 con las excepciones de LLVM, del archivo
+`libcxx/LICENSE.TXT` de LLVM); una prueba de la app compara esos créditos con `gradle/libs.versions.toml`.
+
+### Herramientas de prueba de la app (no entran al APK)
+
+Corren solo en la máquina que compila (pruebas en la JVM con Robolectric); no se enlazan ni se distribuyen, como las
+herramientas de compilación de arriba. Dos traen licencias fuera de la lista permitida y quedan **para que decida el
+dueño**: JUnit 4 (EPL-1.0), que Robolectric y las pruebas de Compose necesitan como ejecutor, y
+`javax.annotation:javax.annotation-api` 1.3.2 (CDDL-1.1 o GPL-2.0 con la excepción de classpath), que Robolectric pide
+en su ejecución (probado: sin ella no arranca). Ninguna se copia ni se modifica.
+
+| Herramienta | Gradle (solo pruebas) | Versión | Licencia | Uso |
+|---|---|---|---|---|
+| JUnit 4 | junit:junit | 4.13.2 | EPL-1.0 (trae hamcrest-core 1.3, BSD-3-Clause) | Ejecutor de las pruebas. |
+| kotlin-test-junit | org.jetbrains.kotlin:kotlin-test-junit | 2.2.21 | Apache-2.0 | Afirmaciones de las pruebas. |
+| kotlinx-coroutines-test | org.jetbrains.kotlinx:kotlinx-coroutines-test | 1.10.2 | Apache-2.0 | El hilo principal en las pruebas. |
+| Robolectric | org.robolectric:robolectric | 4.16 | MIT (trae ASM, BSD-3-Clause; Bouncy Castle, MIT; ICU4J, Unicode-3.0; Guava, Apache-2.0; javax.annotation-api, CDDL-1.1 o GPL-2.0 con excepción) | Android en la JVM, sin emulador. Baja `android-all-instrumented` (Apache-2.0, AOSP) en la primera corrida. |
+| AndroidX Test Core | androidx.test:core | 1.7.0 | Apache-2.0 | El contexto de la app en las pruebas. |
+| Compose UI Test JUnit4 | androidx.compose.ui:ui-test-junit4 | la del BOM | Apache-2.0 | Pruebas de las pantallas. |
+
+| Herramienta de compilación de la app | Versión | Licencia | Uso |
+|---|---|---|---|
+| Gradle y su envoltorio (`gradlew`, `gradle/wrapper/`) | 8.14.3 | Apache-2.0 | Compila la app. |
+| Android Gradle Plugin | 8.13.2 | Apache-2.0 | Compila el APK. |
+| Kotlin (compilador, Kotlin/Native para iOS y complementos Multiplatform, Compose y serialization) | 2.2.21 | Apache-2.0 | Compila el código de la app y el módulo compartido con iPhone (`apps/android/shared`). |
+| Android SDK (plataforma 36, build-tools 36.0.0) | — | Licencia del SDK de Android (aceptada en la máquina que compila) | Compila el APK; no se guarda en el repositorio. |
+| Android NDK | r29 (29.0.14206865) | Licencia del SDK de Android; su `libc++` es Apache-2.0 con la excepción LLVM | Compila `tisma-engine` para el teléfono. La r28 no sirve: su `libc++` no tiene `std::from_chars` con decimales, que el motor usa. |

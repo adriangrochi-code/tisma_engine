@@ -1,0 +1,61 @@
+# The Structural tab (engineering_panel.md, rules 1 to 4 and 9; EP1, EP5): in
+# the Ingeniería section before Design, its panel with the part, the values
+# from the profile, the working temperature and Analizar, off until there are
+# a material, a fixed point or zone and a force. The stock filament profile,
+# «PLA», names no type: its name gives the material, so what is missing first
+# is something fixed (EP5).
+menu mode_engineering
+expect-control tab_structural
+expect-control tab_design
+expect-apart tab_structural tab_design
+menu tab_structural
+expect-control structural_part
+expect-control structural_material
+expect-control structural_extrusion_temperature
+expect-control structural_layer_height
+expect-control structural_line_width
+expect-control structural_working_temperature
+expect-control structural_analyze
+expect-structural fixed
+# Rule 10: the size, memory and time the analysis would take (what the old
+# Análisis tab of Impresión 3D showed).
+expect-text vóxeles de
+wait 20
+expect-text Memoria: unos
+expect-control structural_print_direction
+expect-no-control tab_prepare
+menu mode_print
+expect-control tab_prepare
+expect-no-control tab_structural
+# EP1: Impresión 3D has no «Análisis» any more (rule 1).
+expect-no-control tab_analysis
+# Marking (rules 5 and 8; EP5, EP7): a fixed zone clicked on the cube, then
+# a force point; Ctrl+Z takes the force back, Ctrl+Y puts it again; with
+# Rotar (Esc) a click marks nothing.
+menu mode_engineering
+expect-control tab_structural
+menu tab_structural
+expect-control structural_tool_fixed_zone
+menu structural_tool_fixed_zone
+click-model
+expect-structural force
+menu structural_tool_force_point
+click-model
+expect-structural none
+expect-control structural_condition_remove_1
+key ctrl+z
+expect-structural force
+key ctrl+y
+expect-structural none
+key escape
+click-model
+expect-structural none
+expect-no-control structural_condition_remove_2
+# Rule 7: the force's arrow, its free end dragged, turns the force (its
+# direction becomes three numbers); Ctrl+Z puts it back.
+expect-control structural_arrow_2
+expect-no-control structural_force_vector_1
+drag-control structural_arrow_2 60 -40
+expect-control structural_force_vector_1
+key ctrl+z
+expect-no-control structural_force_vector_1

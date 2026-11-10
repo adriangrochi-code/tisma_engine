@@ -91,10 +91,19 @@ ejecutó aquí):
 3. **La pestaña Diseño** (como Análisis):
    - **secciones de la barra de arriba** (pedido del dueño del 02-11-2026, que reemplaza el lugar anterior «entre
      Vista previa y Análisis»): un selector con forma de píldora al lado del logo cambia entre «Impresión 3D»
-     (Preparar, Vista previa, Análisis, Calibración, Impresora) e «Ingeniería» (Diseño y Tornillería). Cada sección
-     muestra solo sus pestañas y su propio panel izquierdo, y vuelve a la última pestaña usada en ella. Diseño va en
-     Ingeniería, con el ícono de una escuadra y lápiz y el nombre «Diseño» («Design» en inglés); con
-     `ui.cad_design` apagado no hay sección Ingeniería;
+     (Preparar, Vista previa, Calibración, Impresora) e «Ingeniería» (Estructural, Aerodinámica, Diseño). Cada
+     sección muestra solo sus pestañas y su propio panel izquierdo, y vuelve a la última pestaña usada en ella;
+   - **Ingeniería tiene los tres trabajos de ingeniería** (corrección del dueño, 02-11-2026: «en Ingeniería se perdió
+     el CFD y el FEA»): **Estructural** (el análisis por elementos finitos y la optimización: `engineering_panel.md`, a partir del panel de
+     Ingeniería de `interface.md`, `structural_analysis.md` y `structural_optimization.md`), **Aerodinámica**
+     (el CFD de `aerodynamics.md`, la pestaña Aerodynamics de ese mismo panel) y **Diseño**. La pestaña «Análisis» de
+     Impresión 3D se va: su contenido pasa a Estructural, completo y no solo la estimación de vóxeles (apoyos, cargas y
+     límites marcados en la pieza con el mouse, material, temperatura, factor de seguridad, resolución, «Calcular en la
+     nube», Analizar, el mapa de colores con el veredicto y Optimizar);
+   - Diseño lleva el ícono de una escuadra y lápiz y el nombre «Diseño» («Design» en inglés); con `ui.cad_design`
+     apagado, Ingeniería queda con Estructural y Aerodinámica;
+   - la biblioteca de piezas (tornillería, engranajes y las que siguen) va adentro de Diseño, no en otra pestaña
+     (pedido del dueño del 02-11-2026): sus páginas se abren desde «Nuevo» en la misma columna (`design_parts.md`);
    - se arma como Análisis: a la izquierda, en la columna del panel y no flotando sobre la vista, un **panel** con el
      título «Diseño», el nombre del diseño en violeta y sus
      secciones; en el medio, la misma vista 3D con la misma cama; abajo, la **línea de comandos** (regla 12); arriba
@@ -169,7 +178,20 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
     STL, OBJ y glTF como cuerpos de malla (se ven, se miden, se mueven y se exportan, pero las operaciones de sólido
     necesitan un cuerpo B-rep); «Convertir malla» rehace como sólido paramétrico las piezas cerradas de sección
     constante con caras planas y cilíndricas.
-20. **Exportar:** STEP AP242 (con nombres, colores y ensambles), 3MF, STL y OBJ.
+19 bis. **Dibujos 2D de otros programas** (pedido del dueño, 02-11-2026: «lo de AutoCAD en cuanto sea posible»):
+    - **DXF** (ASCII, la referencia pública de Autodesk): «Traer DXF» en un boceto lee líneas, círculos, arcos,
+      polilíneas, elipses, splines, puntos, texto y bloques (con escala, giro y matrices), en milímetros según
+      `$INSUNITS`; lo de espacio papel no se trae. Es el comando `sketch.insert_dxf` de SolidCraft;
+    - **SVG**: «Traer SVG» en un boceto (logos, contornos dibujados en otro programa), con `sketch.insert_svg`;
+    - lo traído queda como curvas del boceto: se recorta, se acota y se extruye como lo dibujado a mano;
+    - un archivo que no se puede leer avisa con el motivo y no cambia el boceto.
+20. **Exportar:** STEP AP242 (con nombres, colores y ensambles), 3MF, STL y OBJ; el boceto abierto, como **DXF**
+    (`sketch.export_dxf`), y la vista actual como DXF de líneas, con las aristas ocultas punteadas o sin ellas
+    (`file.export_view_dxf`).
+20 bis. **SolidCraft abierto mientras se diseña:** al entrar a Diseño, el motor arranca una sola vez el componente en
+    su modo de sesión (`solidcraft-cli mcp`, que mantiene el diseño abierto) y le manda cada orden por ahí, en vez de
+    arrancar un programa por orden. Se cierra al cerrar el programa o tras 10 minutos sin usar Diseño. Si la sesión se
+    cae, se vuelve a abrir sola rehaciendo el diseño con su guion (regla 22) y avisa una vez.
 21. **Mandar a la placa** (Ctrl+Mayús+P):
     - la pieza pasa a Preparar como un objeto, hecha malla con `cad.chord_tolerance` y `cad.angle_tolerance`, apoyada
       en la cama y centrada si es nueva;
@@ -207,6 +229,11 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
       (reglas 7, 17). Pruebas CD5, CD17, CD18.
     - **D5:** STEP e IGES de entrada y salida, mallas, texto, guardado en el proyecto, medidas (reglas 10, 19, 20,
       22, 23). Pruebas CD8, CD9, CD11.
+    - **D5b (en la 1.0, después de la nube):** DXF y SVG de entrada y salida, y la sesión abierta (reglas 19 bis, 20
+      y 20 bis). Pruebas CD22 a CD25.
+    - **D6 (después de la 1.0, en cuanto SolidCraft lo tenga):** planos 2D de la pieza (vistas, cortes, cotas y
+      rótulo, a PDF y DXF) con el espacio de dibujo que SolidCraft está haciendo (`docs/drawing-foundations.md` de
+      su repositorio); capas y panel de propiedades con pinzamientos. Ficha propia cuando su contrato esté publicado.
     - Cada etapa se construye sobre el núcleo de SolidCraft (regla 1); lo que todavía no está se ve apagado con
       «Próximamente».
 
@@ -214,10 +241,10 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
 
 | # | Caso | Resultado |
 |---|---|---|
-| CD1 | Abrir el programa y tocar «Ingeniería» en el selector junto al logo | La barra muestra solo Diseño y Tornillería; el panel de Diseño ocupa la columna izquierda; volver a «Impresión 3D» abre la última pestaña usada allí; con `ui.cad_design` apagado no hay sección Ingeniería, ni Boceto y Primitiva en Organizar |
+| CD1 | Abrir el programa y tocar «Ingeniería» en el selector junto al logo | La barra muestra Estructural, Aerodinámica y Diseño, e Impresión 3D ya no tiene «Análisis»; en Estructural se marca una cara fija y una carga con el mouse y «Analizar» da el mapa y el veredicto; en Aerodinámica se elige dirección y velocidad y da el arrastre y el mapa de presión; en el panel, «Nuevo» tiene «Tornillería» y «Engranajes», que abren su página en la misma columna con «< Diseño» para volver (`design_parts.md`); el panel de Diseño ocupa la columna izquierda; volver a «Impresión 3D» abre la última pestaña usada allí; con `ui.cad_design` apagado Ingeniería queda con Estructural y Aerodinámica, y no hay Boceto ni Primitiva en Organizar |
 | CD1b | Pestaña Diseño, sin nada hecho | Panel «Diseño» a la izquierda con Nuevo, Boceto, Operaciones, Parámetros, Historial y Medidas; «Mandar a la placa» apagado con «Hacé un sólido primero.»; la línea de comandos abajo |
 | CD2 | Boceto de un rectángulo de 40 × 30 mm en XY, extruir 20 mm | Un cuerpo de 24 000 mm³ y caja 40 × 30 × 20 |
-| CD3 | CD2 con una cota del ancho, sin restricciones de posición | La barra dice 2 grados de libertad; con «fijo» en una esquina, 0, y el boceto en negro |
+| CD3 | El rectángulo de CD2 (dos esquinas: sus lados ya son horizontales y verticales), con cotas del ancho y del alto, sin restricciones de posición | La barra dice 2 grados de libertad (con una sola cota, 3); con «fijo» en una esquina, 0, y el boceto con el color de «definido» (negro en el tema claro, blanco en el oscuro) |
 | CD4 | CD2, cambiar el parámetro del ancho a 50 | El cuerpo pasa a 30 000 mm³ sin rehacer nada a mano |
 | CD5 | Cilindro de 20 mm de diámetro y 10 de alto, agujero pasante M5 de la tabla ISO | Agujero de 5,5 mm (holgura media de ISO 273 para M5) que atraviesa la pieza |
 | CD6 | CD2 con un redondeo de 3 mm en una arista y después borrar el redondeo | Volumen menor con el redondeo; al borrarlo, otra vez 24 000 mm³ y las operaciones de después se rehacen |
@@ -236,3 +263,7 @@ acá con nombres propios; el programa no usa marcas ni textos de otros.
 | CD19 | Pestaña Diseño abierta | La misma ventana, vista y cama que Preparar; no se abre ningún otro programa |
 | CD20 | Diseño nuevo, «Mandar a la placa» dos veces | Dos objetos en la placa; con «Editar en Diseño» sobre uno y volver a mandar, sigue habiendo dos |
 | CD21 | Programa sin el componente de diseño | Pestaña Diseño con «Falta el componente de diseño…»; abrir, laminar y exportar andan igual |
+| CD22 | «Traer DXF» de un rectángulo de 40 × 20 en pulgadas (`$INSUNITS` 1) con un círculo de 10 de diámetro adentro | Boceto con un rectángulo de 1016 × 508 mm y un círculo de 254 mm; extruir da una placa con agujero |
+| CD23 | «Traer SVG» de un contorno cerrado | Un perfil cerrado que se extruye |
+| CD24 | Exportar como DXF un boceto con línea, arco y círculo; traer ese DXF a un boceto nuevo | Las tres curvas, con las mismas medidas (diferencia menor que 0,001 mm) |
+| CD25 | 20 operaciones seguidas en Diseño | Un solo proceso del componente abierto durante todas; si se lo cierra a la fuerza, la orden siguiente lo vuelve a abrir y el diseño queda igual |

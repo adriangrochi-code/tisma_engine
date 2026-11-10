@@ -126,11 +126,14 @@ struct VulkanView::Impl {
     VkFramebuffer scene_fb = VK_NULL_HANDLE, composite_fb = VK_NULL_HANDLE;
     VkDescriptorSet picture_set = VK_NULL_HANDLE; // ImGui's texture, the same through resizes
 
-    enum Pipe { Background, Plate, Grid, Outline, Mesh, Paint, Preview, Travels, Composite, kPipes };
+    // Decal: the paint's pipeline without writing depth (a pack bed's picture).
+    enum Pipe { Background, Plate, Grid, Outline, Mesh, Paint, Preview, Travels, Composite, Decal, kPipes };
     std::array<VkPipeline, kPipes> pipes{};
 
     // What is drawn.
-    Buffer plate_v, grid_v, model_v, model_coarse_v, paint_v, extrusions_v, travels_v;
+    Buffer plate_v, grid_v, model_v, model_coarse_v, paint_v, extrusions_v, travels_v, bed_art_v, bed_model_v;
+    std::uint32_t bed_art_count = 0, bed_model_count = 0;
+    std::vector<BedArt::Group> bed_art_groups;
     std::uint32_t plate_count = 0, grid_count = 0, grid_outline = 0, model_count = 0, model_coarse_count = 0, paint_count = 0,
                   travel_count = 0;
     float grid_step = 10.0f;
@@ -484,7 +487,7 @@ struct VulkanView::Impl {
         // modules: 0 screen.vert, 1 background.frag, 2 plate.vert, 3 plate.frag, 4 line.vert, 5 grid.frag,
         // 6 line.frag, 7 mesh.vert, 8 mesh.frag, 9 preview.vert, 10 preview.frag, 11 composite.frag
         const std::array<std::array<int, 2>, kPipes> shader = {{
-            {0, 1}, {2, 3}, {4, 5}, {4, 6}, {7, 8}, {7, 8}, {9, 10}, {4, 6}, {0, 11},
+            {0, 1}, {2, 3}, {4, 5}, {4, 6}, {7, 8}, {7, 8}, {9, 10}, {4, 6}, {0, 11}, {7, 8},
         }};
         stages[0].module = modules[std::size_t(shader[which][0])];
         stages[1].module = modules[std::size_t(shader[which][1])];
@@ -507,6 +510,7 @@ struct VulkanView::Impl {
             break;
         case Mesh:
         case Paint:
+        case Decal:
             bindings.push_back({0, 6 * sizeof(float), VK_VERTEX_INPUT_RATE_VERTEX});
             attributes.push_back({0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0});
             attributes.push_back({1, 0, VK_FORMAT_R32G32B32_SFLOAT, 3 * sizeof(float)});
@@ -545,7 +549,7 @@ struct VulkanView::Impl {
             raster.depthBiasEnable = VK_TRUE;
             raster.depthBiasConstantFactor = 1.0f;
             raster.depthBiasSlopeFactor = 1.0f;
-        } else if (which == Paint) { // pulled forward over its own faces
+        } else if (which == Paint || which == Decal) { // pulled forward over its own faces
             raster.depthBiasEnable = VK_TRUE;
             raster.depthBiasConstantFactor = -4.0f;
             raster.depthBiasSlopeFactor = -1.0f;
@@ -557,7 +561,7 @@ struct VulkanView::Impl {
         depth_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         const bool scene = which != Background && which != Composite;
         depth_state.depthTestEnable = scene ? VK_TRUE : VK_FALSE;
-        depth_state.depthWriteEnable = scene && which != Grid && which != Outline ? VK_TRUE : VK_FALSE;
+        depth_state.depthWriteEnable = scene && which != Grid && which != Outline && which != Decal ? VK_TRUE : VK_FALSE;
         depth_state.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
         VkPipelineColorBlendAttachmentState blend{};
         blend.colorWriteMask = 0xF;
@@ -846,12 +850,33 @@ struct VulkanView::Impl {
         push(draw);
         vkCmdDraw(c, 3, 1, 0, 0);
 
-        if (plate_count > 0) {
+        // From under the bed, no plate: the part's underside shows (BH43).
+        const bool under = plate_hidden(f.eye);
+        if (plate_count > 0 && !under) {
             draw = {};
             copy(draw.colour, f.plate);
             bind(Plate, &plate_v);
             push(draw);
             vkCmdDraw(c, plate_count, 1, 0, 0);
+        }
+        // A pack printer's bed (profile_pack.md, rule 14): its model in the
+        // plate's colour, then its picture pulled forward as the paint is.
+        if (bed_model_count > 0 && !under) {
+            draw = {};
+            copy(draw.colour, f.plate);
+            bind(Mesh, &bed_model_v);
+            push(draw);
+            vkCmdDraw(c, bed_model_count, 1, 0, 0);
+        }
+        if (bed_art_count > 0 && !under) {
+            draw = {};
+            bind(Decal, &bed_art_v); // writes no depth: the grid still draws over it
+            for (const BedArt::Group& g : bed_art_groups) {
+                copy(draw.colour, Vec3{float((g.rgb >> 16) & 0xFF) / 255.0f, float((g.rgb >> 8) & 0xFF) / 255.0f,
+                                       float(g.rgb & 0xFF) / 255.0f});
+                push(draw);
+                vkCmdDraw(c, g.count, 1, g.first, 0);
+            }
         }
         if (grid_count > 0) {
             const std::uint32_t lines = grid_count - grid_outline;
@@ -945,8 +970,10 @@ struct VulkanView::Impl {
                 whole ? far_group(layer_pixels(f.projection, f.height, f.eye, preview_lo, preview_hi, layer_height)) : 1;
             const PreviewDrawOrder* walls = orders.far_walls(group, whole);
             drawn_group = walls ? group : 1;
+            // Cut below the top: the infill only on the top layer (cut_preview_draws).
             std::vector<PreviewRange> draws =
-                preview_draws(walls ? *walls : orders.full, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip);
+                walls ? preview_draws(*walls, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip)
+                      : cut_preview_draws(orders, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip);
             if (walls) {
                 const std::vector<PreviewRange> rest =
                     preview_draws(orders.others, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &clip);
@@ -957,7 +984,9 @@ struct VulkanView::Impl {
                 drawn += r.count;
             }
             if (f.show_travels && travel_count > 0 && layer_travels.size() > hi + 1) {
-                const std::size_t t0 = layer_travels[lo], tn = layer_travels[hi + 1] - t0;
+                // Cut: the top layer's travels only; the others are inside the part.
+                const std::size_t from = cut_buries(orders, lo, hi, f.kind_mask, f.top_shown, f.top_hidden) ? hi : lo;
+                const std::size_t t0 = layer_travels[from], tn = layer_travels[hi + 1] - t0;
                 if (tn > 0) {
                     bind(Travels, &travels_v);
                     push(DrawBlock{});
@@ -995,7 +1024,7 @@ struct VulkanView::Impl {
         if (picture_set)
             ImGui_ImplVulkan_RemoveTexture(picture_set);
         picture_set = VK_NULL_HANDLE;
-        for (Buffer* b : {&plate_v, &grid_v, &model_v, &model_coarse_v, &paint_v, &extrusions_v, &travels_v})
+        for (Buffer* b : {&plate_v, &grid_v, &model_v, &model_coarse_v, &paint_v, &extrusions_v, &travels_v, &bed_art_v, &bed_model_v})
             free_buffer(*b);
         for (Buffer& b : paint_slots)
             free_buffer(b);
@@ -1064,6 +1093,21 @@ void VulkanView::set_bed(const BedPolygon& bed, const BedLook& look) {
         v.grid_outline = std::uint32_t(edge.size());
         v.grid_step = float(look.step);
         v.grid_major_every = std::max(look.major_every, 1);
+    });
+}
+
+void VulkanView::set_bed_extras(const BedArt& art, const std::vector<float>& model) {
+    Impl& v = *impl_;
+    v.shown.clear();
+    if (!v.ready)
+        return;
+    v.bed_art_count = v.bed_model_count = 0;
+    v.guard([&] {
+        v.upload(v.bed_art_v, art.vertices.data(), art.vertices.size() * sizeof(float));
+        v.bed_art_count = std::uint32_t(art.vertices.size() / 6);
+        v.bed_art_groups = art.groups;
+        v.upload(v.bed_model_v, model.data(), model.size() * sizeof(float));
+        v.bed_model_count = std::uint32_t(model.size() / 6);
     });
 }
 
@@ -1261,6 +1305,7 @@ bool VulkanView::init(const VulkanDevice&, std::string& error) {
 }
 void VulkanView::shutdown() {}
 void VulkanView::set_bed(const BedPolygon&, const BedLook&) {}
+void VulkanView::set_bed_extras(const BedArt&, const std::vector<float>&) {}
 void VulkanView::set_model(const std::vector<float>&) {}
 void VulkanView::set_model_coarse(const std::vector<float>&) {}
 void VulkanView::set_paint(const std::vector<float>&, const std::vector<Renderer::PaintGroup>&) {}

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <cstdio>
 
 using namespace tisma;
@@ -72,14 +73,93 @@ TEST_CASE("surfaces.bottom_pattern: monotonic bottom lines, unjoined; the solid 
     LayerSurfaces s;
     s.bottom = square(0, 0, 10);
     FillParams p;
-    p.monotonic_bottom = true;
+    p.bottom_pattern = SurfacePattern::Monotonic;
     const LayerFill mono = fill_layer(s, 0, p, 0.2);
     REQUIRE_FALSE(mono.solid.empty());
     for (const Toolpath& t : mono.solid)
         CHECK(t.points.size() == 2);
-    p.monotonic_bottom = false;
+    p.bottom_pattern = SurfacePattern::Rectilinear;
     const LayerFill zig = fill_layer(s, 0, p, 0.2);
     CHECK(zig.solid.size() < mono.solid.size());
+}
+
+TEST_CASE("P10: the top and bottom surface patterns (infill_patterns.md, rules 14 to 17)", "[infill]") {
+    const auto length = [](const std::vector<Toolpath>& paths) {
+        double total = 0.0;
+        for (const Toolpath& t : paths)
+            for (std::size_t i = 1; i <= t.points.size() && t.points.size() > 1; ++i) {
+                if (i == t.points.size() && !t.closed)
+                    break; // a loop closes back to its first point
+                const auto& a = t.points[i - 1].p;
+                const auto& c = t.points[i % t.points.size()].p;
+                total += std::hypot(c.x - a.x, c.y - a.y);
+            }
+        return total;
+    };
+    LayerSurfaces s;
+    s.top = square(0, 0, 20);
+    FillParams p; // 0.4 mm beads
+    p.top_pattern = SurfacePattern::Monotonic;
+    const double lines = length(fill_layer(s, 0, p, 10.0).top);
+    REQUIRE(lines > 0.0);
+    // Every pattern covers the surface about as much as the lines (P10: 924 to
+    // 960 mm on the cube against 956 for the lines).
+    for (const SurfacePattern pattern :
+         {SurfacePattern::Rectilinear, SurfacePattern::MonotonicLines, SurfacePattern::AlignedRectilinear,
+          SurfacePattern::Concentric, SurfacePattern::Hilbert, SurfacePattern::Archimedean, SurfacePattern::Octagram}) {
+        INFO(surface_pattern_name(pattern));
+        p.top_pattern = pattern;
+        const LayerFill f = fill_layer(s, 0, p, 10.0);
+        CHECK(length(f.top) > 0.9 * lines);
+        CHECK(length(f.top) < 1.15 * lines);
+    }
+    // aligned_rectilinear does not turn between layers; rectilinear does (rule 15).
+    const auto first_direction = [](const LayerFill& f) {
+        const Toolpath& t = f.top.front();
+        return std::atan2(t.points[1].p.y - t.points[0].p.y, t.points[1].p.x - t.points[0].p.x);
+    };
+    p.top_pattern = SurfacePattern::AlignedRectilinear;
+    CHECK(std::abs(std::sin(first_direction(fill_layer(s, 0, p)) - first_direction(fill_layer(s, 1, p)))) < 1e-6);
+    // monotonic_lines (BH21): every line the same way; monotonic goes back and forth.
+    const auto directions = [](const LayerFill& f) {
+        std::set<int> signs;
+        for (const Toolpath& t : f.top)
+            if (t.points.size() >= 2)
+                signs.insert((t.points.back().p.x - t.points.front().p.x) + (t.points.back().p.y - t.points.front().p.y) > 0.0
+                                 ? 1
+                                 : -1);
+        return signs.size();
+    };
+    p.top_pattern = SurfacePattern::MonotonicLines;
+    CHECK(directions(fill_layer(s, 0, p)) == 1);
+    CHECK(directions(fill_layer(s, 1, p)) == 1);
+    // concentric: loops, each closed.
+    p.top_pattern = SurfacePattern::Concentric;
+    const LayerFill loops = fill_layer(s, 0, p);
+    REQUIRE(loops.top.size() > 5);
+    // Rule 17: on the bottom, only the bottom surface itself takes the pattern;
+    // the solid layer over it (nothing exposed) zig-zags as always.
+    LayerSurfaces bottom;
+    bottom.bottom = square(0, 0, 20);
+    bottom.bottom_exposed = bottom.bottom;
+    FillParams b;
+    b.bottom_pattern = SurfacePattern::Concentric;
+    const LayerFill exposed = fill_layer(bottom, 0, b);
+    bottom.bottom_exposed.clear();
+    const LayerFill inner = fill_layer(bottom, 1, b);
+    b.bottom_pattern = SurfacePattern::Rectilinear;
+    const LayerFill zigzag = fill_layer(bottom, 1, b);
+    CHECK(exposed.solid.size() > 5); // loops
+    CHECK(inner.solid.size() == zigzag.solid.size());
+    CHECK(std::abs(length(inner.solid) - length(zigzag.solid)) < 1e-9);
+    // The settings read every name and write it back.
+    for (const char* name : {"monotonic", "rectilinear", "monotonic_lines", "aligned_rectilinear", "concentric", "hilbert",
+                             "archimedean", "octagram"}) {
+        const Settings read = parse_settings(std::string(R"({"surfaces": {"top_pattern": ")") + name +
+                                             R"(", "bottom_pattern": ")" + name + R"("}})");
+        CHECK(std::string(surface_pattern_name(read.top_pattern)) == name);
+        CHECK(std::string(surface_pattern_name(read.bottom_pattern)) == name);
+    }
 }
 
 TEST_CASE("fill_layer: solid at 100%, sparse at the density, angles turn by layer", "[infill]") {
@@ -271,8 +351,8 @@ TEST_CASE("monotonic top surfaces: one direction, nothing before the touching li
             CHECK(switches == 1);
         }
     }
-    CHECK(parse_settings(R"({"surfaces": {"top_pattern": "rectilinear"}})").monotonic_top == false);
-    CHECK(parse_settings(R"({"surfaces": {"top_pattern": "monotonic"}})").monotonic_top == true);
+    CHECK(parse_settings(R"({"surfaces": {"top_pattern": "rectilinear"}})").top_pattern == SurfacePattern::Rectilinear);
+    CHECK(parse_settings(R"({"surfaces": {"top_pattern": "monotonic"}})").top_pattern == SurfacePattern::Monotonic);
 }
 
 TEST_CASE("gap fill: variable-width beads where the solid lines leave room", "[infill]") {

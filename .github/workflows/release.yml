@@ -1,10 +1,18 @@
 name: Release
 
-# Publishes a GitHub release of the version in VERSION (docs/VERSIONING.md):
-# builds, tests and packages the engine on Windows and Linux, and publishes the
-# release with that version's section of CHANGELOG.md as its notes. A version
-# with a pre-release label (such as 0.6.0-alpha.1) is published as a
-# pre-release.
+# Makes a GitHub release of the version in VERSION (docs/VERSIONING.md):
+# builds, tests and packages the engine on Windows and Linux, and leaves the
+# release as a draft with that version's section of CHANGELOG.md as its notes
+# and an unsigned updates.json (tools/updates_list.py). The owner signs it with
+# the key on the USB stick and publishes it (tools/sign_release.py,
+# docs/FIRMAR_VERSIONES.md; owner's decision, 2026-11-04: the private key is
+# never in GitHub). A version with a pre-release label (such as
+# 0.6.0-alpha.1) is a pre-release.
+#
+# The programs check updates with the project's public key, taken at build
+# time from the repository variable TISMA_UPDATES_KEY (64 hex digits; not a
+# secret). Without it the updater stays off, and the release is published at
+# once, with no updates.json and nothing to sign.
 #
 # It runs when:
 # - a push to alpha or main changes VERSION (or this workflow) and the tag
@@ -71,6 +79,13 @@ jobs:
           - os: ubuntu-24.04
             name: linux-x64
             programs: build/tisma-engine build/apps/tisma/tisma
+          # macOS before the beta (PLAN.md): an unsigned .dmg for now.
+          - os: macos-15
+            name: macos-arm64
+            programs: build/tisma-engine build/apps/tisma/tisma
+          - os: macos-15-intel
+            name: macos-x64
+            programs: build/tisma-engine build/apps/tisma/tisma
     defaults:
       run:
         shell: bash
@@ -79,14 +94,21 @@ jobs:
       - name: Install Ninja and X11 (for the interface)
         if: runner.os == 'Linux'
         run: >-
-          sudo apt-get update && sudo apt-get install -y ninja-build
+          sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
           libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev xvfb
+      - name: Install Ninja and OpenSSL 3
+        if: runner.os == 'macOS'
+        run: brew install ninja openssl@3
       - name: Configure
         run: |
+          key="-DTISMA_UPDATES_KEY=${{ vars.TISMA_UPDATES_KEY }}"
           if [ "$RUNNER_OS" = "Linux" ]; then
-            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "$key"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release "$key" -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" \
+              -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
           else
-            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "$key"
           fi
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -103,7 +125,10 @@ jobs:
           # tool at the pinned version, with its licenses (THIRD_PARTY.md).
           sc_version=0.30.0
           mkdir -p "$package/solidcraft" sc
-          if [ "$RUNNER_OS" = "Windows" ]; then
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            echo "::notice::No SolidCraft for macOS yet: the Design tab has no CAD in this build"
+            rmdir "$package/solidcraft"
+          elif [ "$RUNNER_OS" = "Windows" ]; then
             asset="solidcraft-$sc_version-windows-x64-portable.zip"
             sha=ae5f502bc0062656965bff31f50739504e24c219baf520526fbd9208dfc261ba
             curl -sSL --retry 3 -o "$asset" "https://github.com/tangency-labs/solidcraft/releases/download/v$sc_version/$asset"
@@ -119,16 +144,94 @@ jobs:
             cp sc/*/bin/solidcraft-cli sc/*/share/doc/solidcraft/LICENSE-MIT sc/*/share/doc/solidcraft/LICENSE-APACHE \
                sc/*/share/doc/solidcraft/NOTICE sc/*/share/doc/solidcraft/THIRD-PARTY-LICENSES.txt "$package/solidcraft/"
           fi
+          # macOS: the programs in Tisma.app (app_updates.md, rule 13: the .zip with the app).
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            packaging/macos/make_app.sh "$package" "$(cat VERSION)"
+          fi
           cmake -E tar cf "$package.zip" --format=zip "$package"
+          # macOS: the same folder in an unsigned disk image (PLAN.md, «macOS antes de la beta»).
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            hdiutil create -volname "Tisma engine $(cat VERSION)" -srcfolder "$package" -ov -format UDZO "$package.dmg"
+          fi
+          # Windows: the installer too (packaging/windows/tisma.nsi; NSIS,
+          # zlib/libpng licence), per user, with its shortcuts and file types.
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            nsis="$(command -v makensis || true)"
+            if [ -z "$nsis" ]; then
+              [ -x "/c/Program Files (x86)/NSIS/makensis.exe" ] || choco install nsis -y --no-progress
+              nsis="/c/Program Files (x86)/NSIS/makensis.exe"
+            fi
+            "$nsis" -V2 -DVERSION="$(cat VERSION)" -DSOURCE="$(cygpath -w "$PWD/$package")" \
+              -DOUTFILE="$(cygpath -w "$PWD/tisma-engine-$(cat VERSION)-setup-windows-x64.exe")" \
+              -DICON="$(cygpath -w "$PWD/assets/brand/app/tisma.ico")" packaging/windows/tisma.nsi
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: tisma-engine-*.zip
+          path: |
+            tisma-engine-*.zip
+            tisma-engine-*.exe
+            tisma-engine-*.dmg
+          if-no-files-found: error
+
+  # The Android app (apps/android/, as .github/workflows/android.yml builds it): the testers' build shrunk by R8
+  # and the debug one as a fallback, both for phones (arm64-v8a), with SolidCraft when its workflow has artifacts.
+  android:
+    name: Build (android-arm64)
+    needs: version
+    if: needs.version.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    defaults:
+      run:
+        working-directory: apps/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install the NDK the engine is built with
+        run: |
+          sudo apt-get update && sudo apt-get install -y ninja-build
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;29.0.14206865" > /dev/null
+      - name: Get SolidCraft from its own workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow solidcraft-android.yml --status success --limit 1 \
+            --json databaseId --jq '.[0].databaseId' || true)
+          dir="$RUNNER_TEMP/solidcraft"
+          if [ -n "$run" ]; then
+            for abi in arm64-v8a x86_64; do
+              gh run download "$run" -R "$GITHUB_REPOSITORY" -n "solidcraft-android-$abi" -D "$RUNNER_TEMP/sc-$abi" || true
+              mkdir -p "$dir" && cp -rn "$RUNNER_TEMP/sc-$abi"/. "$dir"/ 2>/dev/null || true
+            done
+          fi
+          if [ -f "$dir/arm64-v8a/solidcraft-cli" ] && [ -f "$dir/x86_64/solidcraft-cli" ]; then
+            chmod +x "$dir"/*/solidcraft-cli
+            echo "SOLIDCRAFT=-Ptisma.solidcraft=$dir" >> "$GITHUB_ENV"
+          else
+            echo "::notice::No SolidCraft artifacts: the APKs are built without the Design tab's CAD"
+          fi
+      - name: Build
+        run: ./gradlew --no-daemon $SOLIDCRAFT :app:assembleDebug :app:assembleBeta
+      - name: Name the APKs after the release
+        run: |
+          version="$(cat ../../VERSION)"
+          cp app/build/outputs/apk/beta/app-arm64-v8a-beta.apk "../../tisma-android-$version-beta-arm64.apk"
+          cp app/build/outputs/apk/debug/app-arm64-v8a-debug.apk "../../tisma-android-$version-fallback-arm64.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-arm64
+          path: tisma-android-*.apk
           if-no-files-found: error
 
   publish:
-    name: Publish the release
-    needs: [version, build]
+    name: Leave the release as a draft for the owner to sign (published as it is without the key)
+    needs: [version, build, android]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -154,4 +257,22 @@ jobs:
           else
             where="--target $GITHUB_SHA"
           fi
-          gh release create "$TAG" packages/*.zip --title "Tisma engine $version" --notes-file notes.md $where $prerelease
+          # Without the project's public key the programs are built with the
+          # updater off: nothing to sign, so the release is published as it
+          # is, without updates.json (docs/FIRMAR_VERSIONES.md, «Sin la clave»).
+          if [ -z "${{ vars.TISMA_UPDATES_KEY }}" ]; then
+            gh release create "$TAG" packages/* --title "Tisma engine $version" \
+              --notes-file notes.md $where $prerelease
+            echo "::notice::$TAG published without updates.json: no TISMA_UPDATES_KEY, the updater is off in this build"
+            exit 0
+          fi
+          # The list the programs read, with this release first and its
+          # signatures empty: the published list, if any, is the base.
+          gh release download updates --pattern updates.json --dir previous 2>/dev/null || true
+          # The .dmg is for the first install only (app_updates.md, rule 13): macOS updates with its .zip.
+          listed=$(ls packages/* | grep -v '\.dmg$')
+          python3 tools/updates_list.py --version "$version" --tag "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --notes notes.md --previous previous/updates.json -o updates.json $listed
+          gh release create "$TAG" packages/* updates.json --draft --title "Tisma engine $version" \
+            --notes-file notes.md $where $prerelease
+          echo "::notice::$TAG is a draft: sign it and publish it with tools/sign_release.py (docs/FIRMAR_VERSIONES.md)"

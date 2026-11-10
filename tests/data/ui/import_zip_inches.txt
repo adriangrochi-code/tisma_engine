@@ -1,0 +1,13 @@
+# File › Import ZIP Archive… puts every STL, OBJ and 3MF of the archive on
+# the plate (two_models.zip: a cube and a tetrahedron, and a text file
+# left out); Import STL (Imperial Units)… reads the model in inches.
+expect-objects 1
+menu more
+menu import_zip
+choose-file @/two_models.zip
+expect-objects 3 tetra
+menu more
+menu import_inches
+choose-file @/../cube_ascii.stl
+expect-objects 4 cube_ascii
+expect-scale 25.4

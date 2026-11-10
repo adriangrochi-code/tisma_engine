@@ -1,0 +1,280 @@
+package net.tisma.app
+
+import android.content.Context
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.printToString
+import androidx.test.core.app.ApplicationProvider
+import net.tisma.app.cloud.CloudViewModel
+import net.tisma.app.data.AppSettings
+import net.tisma.app.data.KeystoreSecretStore
+import net.tisma.app.printers.PrinterStore
+import net.tisma.app.printers.PrintersViewModel
+import net.tisma.app.ui.Navigator
+import net.tisma.app.ui.Section
+import net.tisma.app.ui.TismaApp
+import net.tisma.app.ui.TismaTheme
+import net.tisma.mockprinters.MockMoonraker
+import net.tisma.mockprinters.MockOctoPrint
+import org.junit.After
+import org.junit.Before
+import kotlinx.coroutines.launch
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import java.io.File
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+/** The Printer section against simulated printers (MA7, MA8, N1). */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
+class PrintersTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    private val context: Context = ApplicationProvider.getApplicationContext()
+    private val moonraker = MockMoonraker().apply { start() }
+    private val octoprint = MockOctoPrint().apply { start() }
+    private lateinit var printers: PrintersViewModel
+    private lateinit var store: PrinterStore
+    private val nav = Navigator()
+
+    @Before
+    fun start() {
+        val settings = AppSettings(context)
+        val secrets = KeystoreSecretStore(context) { testKey }
+        store = PrinterStore(context, secrets)
+        printers = PrintersViewModel(store, pollMs = 20)
+        val cloud = CloudViewModel(settings, secrets, "Test", pollMs = 5)
+        compose.setContent { TismaTheme { TismaApp(cloud, printers, noEngine(context), settings, nav) } }
+        compose.runOnIdle { nav.select(Section.PRINTER) }
+    }
+
+    @After
+    fun stop() {
+        moonraker.stop()
+        octoprint.stop()
+    }
+
+    private fun waitState(condition: () -> Boolean) = compose.waitUntil(10_000) {
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        condition()
+    }
+
+    private fun dump() {
+        println("PRINTERS " + printers.state.value)
+        println(compose.onAllNodes(androidx.compose.ui.test.isRoot(), useUnmergedTree = true).printToString())
+    }
+
+    private fun waitFor(tag: String) = try { compose.waitUntil(10_000) {
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    } } catch (e: Throwable) { dump(); throw e }
+
+    private fun waitForText(text: String) = try { compose.waitUntil(10_000) {
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        compose.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    } } catch (e: Throwable) { dump(); throw e }
+
+    private fun addPrinter(kind: String, address: String, key: String?) {
+        compose.onNodeWithTag("add_printer").performClick()
+        waitFor("printer_address")
+        compose.onNodeWithTag("kind_$kind").performClick()
+        compose.onNodeWithTag("printer_name").performTextInput("Test printer")
+        compose.onNodeWithTag("printer_address").performTextInput(address)
+        key?.let { compose.onNodeWithTag("printer_key").performTextInput(it) }
+        compose.onNodeWithTag("printer_save").performClick()
+        waitState { printers.state.value.printers.isNotEmpty() }
+    }
+
+    @Test
+    fun `MA7 a G-code sent to a Klipper printer starts, shows its progress, and pauses`() {
+        // Slow enough that the print never ends while the test pauses and cancels it.
+        moonraker.stepPercent = 0.01
+        addPrinter("moonraker", moonraker.url, null)
+        val id = printers.state.value.printers.single().id
+        waitFor("printer_$id")
+        compose.runOnIdle { nav.open(net.tisma.app.ui.Screen.PrinterDetail(id)) }
+        val gcode = "G28\nG1 X10 Y10 E1\n".toByteArray()
+        compose.runOnIdle { printers.upload(id, "cube.gcode", gcode.size.toLong(), true) { gcode.inputStream() } }
+        waitState { moonraker.state == "printing" || moonraker.state == "complete" }
+        assertTrue(moonraker.files.getValue("cube.gcode").contentEquals(gcode))
+        waitFor("printer_pause")
+        waitForText("Nozzle 210 / 210 °C")
+        waitState { !printers.state.value.busy }
+        compose.onNodeWithTag("printer_pause").performScrollTo().performClick()
+        waitState { moonraker.state == "paused" }
+        waitFor("printer_resume")
+        // The buttons wait while a command is on its way.
+        waitState { !printers.state.value.busy }
+        compose.onNodeWithTag("printer_cancel").performScrollTo().performClick()
+        waitFor("printer_cancel_confirm")
+        compose.onNodeWithTag("printer_cancel_confirm").performClick()
+        waitState { moonraker.state == "cancelled" }
+    }
+
+    @Test
+    fun `controls heat, home and move an idle printer`() {
+        // No camera image arriving while the page scrolls (it would move the buttons under the tap).
+        moonraker.hasCamera = false
+        addPrinter("moonraker", moonraker.url, null)
+        val id = printers.state.value.printers.single().id
+        compose.runOnIdle { nav.open(net.tisma.app.ui.Screen.PrinterDetail(id)) }
+        waitFor("temp_nozzle")
+        compose.onNodeWithTag("temp_nozzle").performScrollTo().performTextInput("215")
+        compose.onNodeWithTag("temp_set_nozzle").performScrollTo()
+        compose.waitForIdle()
+        compose.onNodeWithTag("temp_set_nozzle").performClick()
+        waitState { moonraker.nozzleTarget == 215.0 }
+        waitState { !printers.state.value.busy }
+        compose.onNodeWithTag("home").performScrollTo()
+        compose.waitForIdle()
+        compose.onNodeWithTag("home").performClick()
+        waitState { moonraker.homed }
+        waitState { !printers.state.value.busy }
+        compose.onNodeWithTag("jog_plus_x").performScrollTo()
+        compose.waitForIdle()
+        compose.onNodeWithTag("jog_plus_x").performClick()
+        waitState { moonraker.commands.any { it.startsWith("G1 X10") } }
+    }
+
+    @Test
+    fun `a PrusaLink printer is added with its user and password, and has no controls`() {
+        val prusa = net.tisma.mockprinters.MockPrusaLink().apply { start() }
+        try {
+            compose.onNodeWithTag("add_printer").performClick()
+            waitFor("printer_address")
+            compose.onNodeWithTag("kind_prusalink").performClick()
+            compose.onNodeWithTag("printer_address").performTextInput(prusa.url)
+            compose.onNodeWithTag("printer_key").performTextInput("test-pass")
+            compose.onNodeWithTag("printer_save").performClick()
+            waitState { printers.state.value.printers.isNotEmpty() }
+            val p = printers.state.value.printers.single()
+            assertEquals("maker", p.user)
+            compose.runOnIdle { nav.open(net.tisma.app.ui.Screen.PrinterDetail(p.id)) }
+            waitFor("printer_upload")
+            assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasTestTag("controls"), true).fetchSemanticsNodes().isEmpty())
+        } finally {
+            prusa.stop()
+        }
+    }
+
+    @Test
+    fun `BL1 a Bambu Lab printer is added after confirming its serial and certificate`() {
+        // The protocol itself is tested in the printers module (BambuTest); here, the screens and the saving.
+        val vm = PrintersViewModel(store, pollMs = 20, connector = { _, _ -> net.tisma.printers.BambuConnection.of("bambu://127.0.0.1:1", "", null) },
+            probeBambu = { _, _ -> Triple("Bambu Lab 01S00C1", "01S00C1", "AA:BB") })
+        var done = false
+        vm.testAndSave(null, "X1", net.tisma.printers.PrinterKind.BAMBU, "192.168.1.9", "12345678") { done = true }
+        waitState { vm.state.value.confirm != null }
+        assertEquals("01S00C1", vm.state.value.confirm!!.serial)
+        assertTrue(vm.state.value.printers.isEmpty())
+        vm.confirmCertificate { done = true }
+        waitState { done }
+        val p = vm.state.value.printers.single()
+        assertEquals("bambu://192.168.1.9", p.url)
+        assertEquals("01S00C1", p.serial)
+        assertEquals("AA:BB", p.certSha256)
+        assertEquals("12345678", store.secret(p.id))
+        // Saved data survives a new store.
+        assertEquals("AA:BB", PrinterStore(context, net.tisma.app.data.KeystoreSecretStore(context) { testKey }).all().single().certSha256)
+    }
+
+    @Test
+    fun `CM2 a Bambu Lab A1 or P1 camera shows its images, and a refused code says what to check`() {
+        val bambu = net.tisma.mockprinters.MockBambu().start()
+        try {
+            val saved = store.save(net.tisma.printers.PrinterConfig(PrinterStore.newId(), "A1 mini", net.tisma.printers.PrinterKind.BAMBU,
+                bambu.url, ""), bambu.accessCode)
+            val wrong = store.save(net.tisma.printers.PrinterConfig(PrinterStore.newId(), "A1 wrong", net.tisma.printers.PrinterKind.BAMBU,
+                bambu.url, ""), "00000000")
+            val vm = PrintersViewModel(store, pollMs = 20, connector = { c, secret ->
+                net.tisma.printers.BambuConnection.of(c.url, secret.orEmpty(), null) })
+            val job = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch { vm.followCamera(saved.id) }
+            waitState { vm.state.value.cameras[saved.id] is net.tisma.app.printers.CameraView.Image }
+            job.cancel()
+            // A wrong access code: the camera closes, and the screen says to check the code.
+            val job2 = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch { vm.followCamera(wrong.id) }
+            waitState { (vm.state.value.cameras[wrong.id] as? net.tisma.app.printers.CameraView.BambuFailed)?.kind == net.tisma.printers.PrinterException.Kind.AUTH }
+            job2.cancel()
+        } finally {
+            bambu.stop()
+        }
+    }
+
+    @Test
+    fun `CM1 the printer's camera shows on its page`() {
+        addPrinter("moonraker", moonraker.url, null)
+        val id = printers.state.value.printers.single().id
+        compose.runOnIdle { nav.open(net.tisma.app.ui.Screen.PrinterDetail(id)) }
+        waitState { printers.state.value.cameras[id] is net.tisma.app.printers.CameraView.Image }
+        waitFor("camera_image")
+    }
+
+    @Test
+    fun `BD2 a printer found on the network is offered once and added with its address`() {
+        val f = net.tisma.printers.FoundPrinter(net.tisma.printers.PrinterKind.OCTOPRINT, "octopi",
+            "127.0.0.1", octoprint.url.substringAfterLast(':').toInt(), "/")
+        compose.runOnIdle { printers.onFound(f); printers.onFound(f) }
+        waitFor("found_" + f.key)
+        compose.onNodeWithTag("found_" + f.key).performClick()
+        waitFor("printer_key")
+        compose.onNodeWithTag("printer_key").performTextInput("test-key")
+        compose.onNodeWithTag("printer_save").performClick()
+        waitState { printers.state.value.printers.size == 1 }
+        assertEquals(octoprint.url, printers.state.value.printers.single().url)
+        // Saved, it is no longer offered.
+        waitState { printers.state.value.found.isEmpty() }
+    }
+
+    @Test
+    fun `a finished print posts a notice`() {
+        val nm = context.getSystemService(android.app.NotificationManager::class.java)
+        org.robolectric.Shadows.shadowOf(context as android.app.Application)
+            .grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        net.tisma.app.printers.PrintWatchService.channels(context)
+        net.tisma.app.printers.PrintWatchService.notify(context, "Voron", net.tisma.printers.PrintEvent.Finished("cube.gcode"))
+        val posted = org.robolectric.Shadows.shadowOf(nm).allNotifications.single()
+        assertEquals("Voron finished printing", posted.extras.getString(android.app.Notification.EXTRA_TITLE))
+        assertEquals("cube.gcode", posted.extras.getString(android.app.Notification.EXTRA_TEXT))
+    }
+
+    @Test
+    fun `MA8 the OctoPrint key is kept encrypted and a wrong one is refused`() {
+        compose.onNodeWithTag("add_printer").performClick()
+        waitFor("printer_address")
+        compose.onNodeWithTag("kind_octoprint").performClick()
+        compose.onNodeWithTag("printer_address").performTextInput(octoprint.url)
+        compose.onNodeWithTag("printer_key").performTextInput("wrong-key")
+        compose.onNodeWithTag("printer_save").performClick()
+        // The test failed: nothing is saved, the reason is told (the notice
+        // goes by too fast to read in a test: the session log has it), and
+        // the key is not in the log.
+        waitState { net.tisma.app.data.AppLog.text().contains("printer: auth Invalid API key") }
+        // The notice reaches the screen (QA AND1: notices were cancelled before showing).
+        waitForText("The printer refused the key: Invalid API key")
+        assertTrue(printers.state.value.printers.isEmpty())
+        assertFalse(net.tisma.app.data.AppLog.text().contains("wrong-key"))
+    }
+
+    @Test
+    fun `an OctoPrint printer with its key is saved, and the key never appears as text`() {
+        addPrinter("octoprint", octoprint.url, "test-key")
+        val p = printers.state.value.printers.single()
+        assertEquals("test-key", store.secret(p.id))
+        waitState { printers.state.value.status[p.id] != null }
+        assertEquals(net.tisma.printers.PrinterState.READY, printers.state.value.status.getValue(p.id).state)
+        val data = File(context.applicationInfo.dataDir)
+        waitState { File(data, "shared_prefs/${PrinterStore.FILE}.xml").exists() }
+        assertFalse(data.walkTopDown().filter { it.isFile }.any { it.readText(Charsets.ISO_8859_1).contains("test-key") })
+    }
+}

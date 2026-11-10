@@ -1,7 +1,12 @@
+#include "config/settings.hpp"
+#include "gcode/writer.hpp"
+#include "geom/distance.hpp"
 #include "gpu/compute.hpp"
 #include "io/stl.hpp"
 #include "slice/layers.hpp"
+#include "slice/pipeline.hpp"
 #include "support/support.hpp"
+#include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -10,6 +15,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <numbers>
+#include <sstream>
 
 using namespace tisma;
 
@@ -204,4 +210,68 @@ TEST_CASE("supports with the GPU are the CPU's", "[gpu]") {
         CHECK(on_gpu[l] == on_cpu[l]);
     }
     CHECK(area_mm2(on_cpu[5]) > 50.0);
+}
+
+TEST_CASE("the distance transform on the GPU gives the CPU's numbers", "[gpu][distance]") {
+    gpu::Context& ctx = require_context();
+    unsigned seed = 9;
+    std::vector<BitGrid> all;
+    for (int round = 0; round < 12; ++round) {
+        // From a few pixels to wider than a 64-bit word and taller than a group.
+        const int w = 1 + int(seed % 150), h = 1 + int((seed >> 8) % 90);
+        BitGrid g(0, 0, 1, w, h);
+        for (int j = 0; j < h; ++j)
+            for (int i = 0; i < w; ++i) {
+                seed = seed * 1103515245u + 12345u;
+                // Discs and noise: long runs, so distances grow well past 1.
+                const int dx = i - w / 2, dy = j - h / 2;
+                if (dx * dx + dy * dy < (w * h) / 6 || (seed >> 16) % 10 < unsigned(round % 6))
+                    g.set(i, j);
+            }
+        std::vector<float> gpu_out;
+        ctx.distance_inside(g, gpu_out);
+        CAPTURE(round, w, h);
+        CHECK(gpu_out == squared_distance_inside(g));
+        all.push_back(g);
+        if (round == 5)
+            all.emplace_back(); // an empty grid among them
+    }
+    // All of them in one run, as every layer's at once.
+    std::vector<std::vector<float>> batch;
+    ctx.distance_inside(std::span<const BitGrid>(all), batch);
+    REQUIRE(batch.size() == all.size());
+    for (std::size_t k = 0; k < all.size(); ++k) {
+        CAPTURE(k);
+        CHECK(batch[k] == squared_distance_inside(all[k]));
+    }
+}
+
+TEST_CASE("tree support sliced with the GPU gives the CPU's G-code", "[gpu][distance]") {
+    gpu::Context& ctx = require_context();
+    // A T: a column under a slab that hangs out on both sides, the branches'
+    // fill from the distance fields of every layer at once.
+    IndexedMesh mesh;
+    const auto box = [&](float x0, float y0, float z0, float x1, float y1, float z1) {
+        const auto base = std::uint32_t(mesh.vertices.size());
+        for (int k = 0; k < 8; ++k)
+            mesh.vertices.push_back({k & 1 ? x1 : x0, (k >> 1) & 1 ? y1 : y0, (k >> 2) & 1 ? z1 : z0});
+        const std::uint32_t faces[6][4] = {{0, 2, 3, 1}, {4, 5, 7, 6}, {0, 1, 5, 4}, {2, 6, 7, 3}, {0, 4, 6, 2}, {1, 3, 7, 5}};
+        for (const auto& f : faces) {
+            mesh.triangles.push_back({base + f[0], base + f[1], base + f[2]});
+            mesh.triangles.push_back({base + f[0], base + f[2], base + f[3]});
+        }
+    };
+    box(95, 90, 0, 105, 110, 10);
+    box(70, 85, 10, 130, 115, 13);
+    Settings s = test_printer();
+    s.support = true;
+    s.support_style = SupportStyle::Organic;
+    const auto gcode = [&](gpu::Context* gpu) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(mesh, s, gpu), s);
+        return out.str();
+    };
+    const std::string cpu = gcode(nullptr);
+    CHECK(cpu.find(";TYPE:Support") != std::string::npos);
+    CHECK(gcode(&ctx) == cpu);
 }

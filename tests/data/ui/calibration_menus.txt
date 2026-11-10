@@ -1,0 +1,14 @@
+# The calibration tests from the empty bed's right-click menu (Add
+# calibration model ▸) and from «Más» › Calibration (interface.md): the
+# chosen test is made in the Calibration tab, sliced.
+right-click-plate
+menu calibration
+menu bed_cal_temperature
+wait 30
+expect-objects 1
+menu more
+expect-control cal_retraction
+expect-control cal_flow
+menu cal_retraction
+wait 30
+expect-objects 1

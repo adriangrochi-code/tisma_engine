@@ -731,3 +731,38 @@ TEST_CASE("calibration: a forced flow on a wedge that thins to an edge checks", 
         CHECK(fastest <= limits.max_feed + 1.0 / 60.0);
     }
 }
+
+TEST_CASE("calibration: bridges and overhangs (docs/CALIBRATION.md)", "[calibration]") {
+    const CalibrationPrint p = bridges_overhangs_test();
+    CHECK(p.kind == "bridges_overhangs");
+    CHECK(calibration_kind_from_name(p.kind) == CalibrationKind::BridgesOverhangs);
+    CHECK_FALSE(is_tower(CalibrationKind::BridgesOverhangs));
+    REQUIRE(p.segments.size() == 6);
+    CHECK(p.segments.front().value == 20.0);
+    CHECK(p.segments.back().value == 70.0);
+    const BoundingBox box = p.mesh.bounding_box();
+    CHECK_THAT(box.min.x + box.max.x, WithinAbs(0.0, 1e-3)); // centred
+    CHECK_THAT(box.min.y + box.max.y, WithinAbs(0.0, 1e-3));
+    CHECK_THAT(box.min.z, WithinAbs(0.0, 1e-6));
+    CHECK_THAT(box.max.z, WithinAbs(9.0, 1e-4)); // the decks' top
+    const Settings s = plain();
+    const SlicedModel m = slice_model(weld_exact(p.mesh), s);
+    // Above the fins (8 mm): the five decks only, (span + 10) × 6 mm each.
+    CHECK_THAT(area_at(m, 8.5), WithinRel((20.0 + 30.0 + 40.0 + 50.0 + 60.0) * 6.0, 2e-3));
+    // At 6 mm, above the pads and the labels: six fins 3 × 8 mm and ten pillars 5 × 6 mm.
+    CHECK_THAT(area_at(m, 6.1), WithinRel(6 * 24.0 + 10 * 30.0, 5e-3));
+    CHECK(checks(gcode_of(m, s), gcode_limits(m, s)));
+    // The steepest clean fin, 50° from the vertical: faces under 40° from the
+    // horizontal get support.
+    Settings applied = plain();
+    CHECK(apply_calibration(CalibrationKind::BridgesOverhangs, 50.0, applied));
+    CHECK(applied.support_angle == 40.0);
+    CHECK(automatic_calibration(CalibrationKind::BridgesOverhangs, plain()).segments.size() == 6);
+    // It prints with nothing under it; the other tests keep the supports.
+    Settings supported = plain();
+    supported.support = supported.arcs = true;
+    const Settings test = calibration_print_settings(CalibrationKind::BridgesOverhangs, supported);
+    CHECK_FALSE(test.support);
+    CHECK_FALSE(test.arcs);
+    CHECK(calibration_print_settings(CalibrationKind::Flow, supported).support);
+}

@@ -65,17 +65,59 @@ struct Dimension {
     friend bool operator==(const Dimension&, const Dimension&) = default;
 };
 
+// A constraint or a dimension added by hand (rule 5). `a` and `b` name what
+// it binds: a segment (entity, its segment as segments_of counts them), a
+// point (entity, its point as point_of counts them) or a circle or arc
+// (entity, index unused), as each kind says. `value` is the dimension: mm,
+// or degrees for Angle; `at` where a Fixed point stays.
+struct GeoConstraint {
+    enum class Kind {
+        Horizontal,         // a: segment
+        Vertical,           // a: segment
+        Parallel,           // a, b: segments
+        Perpendicular,      // a, b: segments
+        Equal,              // a, b: segments (lengths) or circles/arcs (radii)
+        Concentric,         // a, b: circles/arcs
+        Tangent,            // a: segment, b: circle/arc
+        Coincident,         // a, b: points
+        Fixed,              // a: point, held at `at`
+        Length,             // a: segment, value
+        Distance,           // a, b: points, value
+        HorizontalDistance, // a, b: points, value (b.x - a.x, its sign as drawn)
+        VerticalDistance,   // a, b: points, value
+        Radius,             // a: circle/arc, value
+        Diameter,           // a: circle/arc, value
+        Angle,              // a, b: segments, value in degrees from a to b
+    } kind = Kind::Horizontal;
+    EntityPoint a, b;
+    double value = 0.0;
+    Pt at;
+    friend bool operator==(const GeoConstraint&, const GeoConstraint&) = default;
+};
+// The name a kind is saved with ("horizontal", "length"...) and back.
+const char* geo_kind_name(GeoConstraint::Kind kind);
+std::optional<GeoConstraint::Kind> geo_kind_named(const std::string& name);
+// Whether a kind is a dimension (it carries a value).
+bool is_dimension(GeoConstraint::Kind kind);
+
 struct Sketch {
     SketchPlane plane = SketchPlane::XY;
     std::vector<Entity> entities;
     std::vector<Constraint> constraints;
     std::vector<Dimension> dimensions;
+    std::vector<GeoConstraint> rules; // rule 5, added by hand
     bool empty() const { return entities.empty(); }
     // Whether any entity closes a region to extrude: a closed chain of three
-    // points or more, a rectangle, a circle.
+    // points or more, a rectangle, a circle, or open chains and arcs joined
+    // end to end into a loop (joined_loops).
     bool has_region() const;
     friend bool operator==(const Sketch&, const Sketch&) = default;
 };
+
+// The loops that open chains and arcs (not construction) close by meeting
+// end to end, within 1e-6 mm (rule 6: a profile drawn piece by piece, a
+// rounded corner): each as a polygon, the arcs in segments of half a degree.
+std::vector<std::vector<Pt>> joined_loops(const Sketch& sketch);
 
 // The point an entity's EntityPoint names.
 Pt point_of(const Entity& e, std::size_t index);

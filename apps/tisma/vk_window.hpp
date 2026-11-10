@@ -41,6 +41,9 @@ public:
 
     // A texture for ImGui::Image, from RGBA rows from the top; 0 if it failed.
     ImTextureID add_texture(const std::uint8_t* rgba, int width, int height);
+    // Frees a texture from add_texture once the frames in flight that may
+    // draw it are done; it must not be drawn after this call.
+    void remove_texture(ImTextureID id);
 
     // Draws a frame: first `before` records into the frame's command buffer
     // (a VkCommandBuffer) what must come before the window's pass, with the

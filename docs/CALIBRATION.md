@@ -147,11 +147,19 @@ pestaña Calibrar muestra solo estas dos; se imprimen sobre la plataforma, sin s
   medidos, cada corrección nueva es la actual por la medida deseada sobre la impresa (`resin.scale_x`, `scale_y`,
   `scale_z`); la tarjeta la calcula y la aplica.
 
-### Siguientes (estándar)
+### Puentes y voladizos (`bridges_overhangs`, diseño propio)
 
-| Prueba | Pieza o G-code | Qué ajusta |
-|---|---|---|
-| Puentes y voladizos | Puentes de 10 a 50 mm y voladizos de 20° a 70° | El ángulo de los soportes; la velocidad y el ventilador de puentes cuando existan esos ajustes |
+- **Pieza:**
+  - adelante, seis aletas de 8 mm de alto, 3 mm de espesor y 8 mm de fondo, inclinadas hacia +X a 20°, 30°, 40°,
+    50°, 60° y 70° de la vertical, de izquierda a derecha. Cada una tiene delante una base de 4 mm de alto con su
+    ángulo en relieve;
+  - atrás, cinco puentes de 10, 20, 30, 40 y 50 mm (el más corto adelante), de 1 mm de espesor, entre dos pilares de
+    5 × 6 × 8 mm. El largo va en relieve en el pilar izquierdo.
+- **Cómo se imprime:** sin soportes ni arcos en voladizos (`calibration_print_settings`), así no hay nada debajo.
+- **Qué se elige:** la aleta más inclinada que salió prolija. **Usar** pone `support.threshold_angle = 90° − ángulo`:
+  una cara más tendida que eso, medida desde la horizontal, lleva soporte.
+- **Los puentes** muestran qué largo sale sin soporte. La velocidad y el ventilador de puentes se ajustan a mano por
+  ahora.
 
 ### Nuevas (propias de este motor)
 

@@ -4,6 +4,7 @@
 #include "report/analysis_json.hpp"
 
 #include "fea/materials.hpp"
+#include "fea/verdict.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -19,12 +20,15 @@ json safety(double s) { return std::isfinite(s) ? json(s) : json(nullptr); }
 
 } // namespace
 
-std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c) {
+std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c, const std::array<double, 12>& to_part) {
     const OrthotropicMaterial& m = c.material;
     const MaterialRecord* record = find_material(c.material_id);
+    const MaterialFamily* family = family_of_material_id(c.material_id);
     json material = {{"id", c.material_id},
-                     {"name", record ? std::string(record->name) : std::string()},
-                     {"source", record ? std::string(record->source) : std::string()},
+                     {"name", record ? std::string(record->name) : family ? std::string(family->name) : std::string()},
+                     {"source", record   ? std::string(record->source)
+                                : family ? std::string("typical values, structural_analysis.md")
+                                         : std::string()},
                      {"constants",
                       {{"e1", m.e1},     {"e2", m.e2},     {"e3", m.e3},     {"g12", m.g12},   {"g13", m.g13},
                        {"g23", m.g23},   {"nu12", m.nu12}, {"nu13", m.nu13}, {"nu23", m.nu23}, {"xt", m.xt},
@@ -39,12 +43,18 @@ std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c) {
                    {"voxels_below_1", r.below[0]},
                    {"voxels_below_1_5", r.below[1]},
                    {"voxels_below_2", r.below[2]}};
-    if (r.weakest_layer >= 0)
-        result["weakest"] = {{"x", r.weakest[0]},
-                             {"y", r.weakest[1]},
-                             {"z", r.weakest[2]},
+    if (r.weakest_layer >= 0) {
+        double p[3];
+        for (std::size_t i = 0; i < 3; ++i)
+            p[i] = to_part[3 * i] * r.weakest[0] + to_part[3 * i + 1] * r.weakest[1] + to_part[3 * i + 2] * r.weakest[2] +
+                   to_part[9 + i];
+        result["weakest"] = {{"x", p[0]},
+                             {"y", p[1]},
+                             {"z", p[2]},
                              {"layer", r.weakest_layer},
                              {"mode", failure_mode_name(r.result.mode[r.result.weakest])}};
+        result["weakest_on_bed"] = {{"x", r.weakest[0]}, {"y", r.weakest[1]}, {"z", r.weakest[2]}};
+    }
     json layers = json::array();
     for (std::size_t l = 0; l < r.layer_safety.size(); ++l) {
         const LayerSafety& s = r.layer_safety[l];
@@ -72,6 +82,7 @@ std::string analysis_json(const AnalysisReport& r, const AnalysisCase& c) {
         {"version", 1},
         {"valid", r.valid},
         {"model", c.model == AnalysisModel::AsPrinted ? "as_printed" : "solid"},
+        {"frame", "part"},
         {"material", material},
         {"voxels",
          {{"size", r.grid.hx},

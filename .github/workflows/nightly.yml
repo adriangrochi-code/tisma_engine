@@ -1,0 +1,160 @@
+name: Nightly
+
+# Daily builds of dev (the owner's request, 2026-11-02, through the spec team):
+# builds and tests Windows x64 and Linux x64, and publishes the packages as one
+# rolling pre-release, tag `nightly`, replaced each time, with the commit and
+# the date in its notes. Only when dev changed since the last one.
+#
+# It runs:
+# - every day at 05:23 UTC (a schedule runs from the default branch's copy of
+#   this file, so it starts once this file reaches main);
+# - on a push to dev, at most once every 20 hours (so daily builds work before
+#   this file reaches main);
+# - by hand (workflow_dispatch), which builds even if dev did not change.
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Is there a new dev to build?
+    runs-on: ubuntu-24.04
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - name: Compare dev with the last nightly
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          sha="$(gh api "repos/$REPO/commits/dev" --jq .sha)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          last="$(gh api "repos/$REPO/git/ref/tags/nightly" --jq .object.sha 2>/dev/null || true)"
+          published="$(gh release view nightly --repo "$REPO" --json publishedAt --jq .publishedAt 2>/dev/null || true)"
+          build=true
+          if [ "$EVENT" != "workflow_dispatch" ] && [ "$last" = "$sha" ]; then
+            echo "::notice::the last nightly is already dev's $sha"
+            build=false
+          fi
+          if [ "$EVENT" = "push" ] && [ -n "$published" ]; then
+            age=$(( $(date -u +%s) - $(date -u -d "$published" +%s) ))
+            if [ "$age" -lt 72000 ]; then
+              echo "::notice::the last nightly is $((age / 3600)) h old: the next one waits"
+              build=false
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-2022
+            name: windows-x64
+            programs: build/Release/tisma-engine.exe build/apps/tisma/Release/tisma.exe
+          - os: ubuntu-24.04
+            name: linux-x64
+            programs: build/tisma-engine build/apps/tisma/tisma
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.sha }}
+      - name: Install Ninja and X11 (for the interface)
+        if: runner.os == 'Linux'
+        run: >-
+          sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev
+          libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl-dev xvfb
+      - name: Configure
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          else
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          fi
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Package
+        run: |
+          package="tisma-engine-nightly-$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)-${{ matrix.name }}"
+          mkdir -p "$package/docs"
+          cp ${{ matrix.programs }} "$package/"
+          cp LICENSE README.md CHANGELOG.md THIRD_PARTY.md VERSION "$package/"
+          cp docs/CONFIG.md docs/ANALYSIS.md docs/MATERIALS.md docs/GCODE_CHECK.md docs/VERSIONING.md docs/UI.md "$package/docs/"
+          # The design component (cad_design.md, rule 1), as in release.yml.
+          sc_version=0.30.0
+          mkdir -p "$package/solidcraft" sc
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            asset="solidcraft-$sc_version-windows-x64-portable.zip"
+            sha=ae5f502bc0062656965bff31f50739504e24c219baf520526fbd9208dfc261ba
+            curl -sSL --retry 3 -o "$asset" "https://github.com/tangency-labs/solidcraft/releases/download/v$sc_version/$asset"
+            echo "$sha  $asset" | sha256sum -c -
+            (cd sc && cmake -E tar xf "../$asset")
+            cp sc/*/solidcraft-cli.exe sc/*/LICENSE-MIT sc/*/LICENSE-APACHE sc/*/NOTICE sc/*/THIRD-PARTY-LICENSES.txt "$package/solidcraft/"
+          else
+            asset="solidcraft-$sc_version-linux-x86_64.tar.gz"
+            sha=5cd95727352b9a343fc8ff4bfb688671a5901a1b601a71c46e94c7b20750c9a0
+            curl -sSL --retry 3 -o "$asset" "https://github.com/tangency-labs/solidcraft/releases/download/v$sc_version/$asset"
+            echo "$sha  $asset" | sha256sum -c -
+            (cd sc && tar xzf "../$asset")
+            cp sc/*/bin/solidcraft-cli sc/*/share/doc/solidcraft/LICENSE-MIT sc/*/share/doc/solidcraft/LICENSE-APACHE \
+               sc/*/share/doc/solidcraft/NOTICE sc/*/share/doc/solidcraft/THIRD-PARTY-LICENSES.txt "$package/solidcraft/"
+          fi
+          cmake -E tar cf "$package.zip" --format=zip "$package"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: tisma-engine-nightly-*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish the nightly
+    needs: [check, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: packages
+          merge-multiple: true
+      - name: Replace the nightly pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.check.outputs.sha }}
+        run: |
+          subject="$(gh api "repos/$REPO/commits/$SHA" --jq '.commit.message | split("\n")[0]')"
+          {
+            echo "Daily build of \`dev\`: not a release, for trying the latest changes."
+            echo
+            echo "- Commit: $SHA ($subject)"
+            echo "- Built: $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo "- What changed: the «Sin publicar» section of CHANGELOG.md in the package."
+          } > notes.md
+          gh release delete nightly --repo "$REPO" --cleanup-tag --yes 2>/dev/null || true
+          gh release create nightly packages/*.zip --repo "$REPO" --target "$SHA" --prerelease \
+            --title "Tisma engine nightly $(date -u +%Y-%m-%d)" --notes-file notes.md

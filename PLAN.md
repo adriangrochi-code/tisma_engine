@@ -229,7 +229,7 @@ Antes estaba «fuera de la primera versión»; ahora es una fase.
 | Fase | Cuándo | Contenido | Terminada cuando |
 |---|---|---|---|
 | F9 | antes de macOS | 4 y 5 ejes: campo escalar en el volumen (malla de tetraedros), capas curvas como isosuperficies (Dai et al. 2018, S³-Slicer, Neural Slicer), orientación de la boquilla, cinemática de la máquina (boquilla inclinada que gira, mesa giratoria, cabezal), choques y G-code con ejes giratorios | Una pieza con voladizos se imprime sin soportes en una máquina de 4 ejes y en una de 5 (hace falta decidir cuáles; la impresora propia del dueño es candidata) |
-| F10 | al final | macOS: CI en cada envío y arreglos para que compile y pase las pruebas (decisión del dueño, 2026-10-24: se deja para el final) | Compila y prueba en macOS |
+| F10 | **antes de la beta cerrada de diciembre** (decisión del dueño, 2026-11-10, cambia la del 24-10) | macOS e iOS, ver «macOS antes de la beta» abajo | Compila y prueba en macOS; el .dmg abre; la biblioteca para iOS compila |
 
 **Fichas:** el equipo que conoce Tisma Slicer las escribe en el orden de las fases: primero corte, perímetros,
 superficies, G-code (enfriamiento, coasting, arc overhangs, revisión antes de imprimir) y soportes.
@@ -400,6 +400,11 @@ Análisis estructural por elementos finitos en vóxeles (fuentes en «Fuentes de
   en cada uno; la dirección de cada vóxel tomada del laminado real (`src/fea/as_printed.*`); el solver con una matriz
   por dirección (pasos de 5°); criterio de Tsai–Wu, mapa del factor de seguridad y modo de falla (cordón, unión entre
   cordones, unión entre capas); la pieza con los huecos del relleno ralo cuando hay 4 vóxeles por ancho de línea
+- [x] **Adherencia según cómo se imprime** (pedido del dueño, 2026-11-03; `src/fea/adhesion.*`): la resistencia y la
+  rigidez entre capas y la resistencia entre líneas cambian con el material, la temperatura de extrusión, la altura de
+  capa sobre el ancho de línea, el ventilador y la cámara (modelo de `docs/research/`); el resultado muestra el rango
+  probable del factor de seguridad (±1σ) y avisa cuando la temperatura es baja o alta para el material
+  - [ ] el tiempo de capa real (sale del laminado) y paredes simples por zona; nivel B con la historia térmica
 - [x] Base de materiales (pedido del dueño): literatura (Song 2017, Casavola 2016, Cantrell 2017, Ahn 2002), hojas
   técnicas de Bambu Lab (11 materiales) y eSUN (2), y ensayos de CNC Kitchen (6); cada número con su fuente y reglas
   escritas para lo que falta (`src/fea/materials.*`, `docs/MATERIALS.md`)
@@ -447,7 +452,9 @@ con nombres propios en `docs/CONFIG.md`.
 - [x] Voladizos por ángulo y su proyección hacia abajo (grupo `support`, `src/support/*`: solo las áreas por capa)
 - [x] Soporte en líneas con separación en Z y XY, interfaz densa y base (tipos `Support material` y
   `Support material interface`)
-- [ ] Puentes cortos sin soporte (`max_bridge_length`)
+- [x] Puentes sin soporte (2026-11-05, cerrado según la ficha): un puente no lleva soporte, de cualquier largo,
+  salvo con `support.under_bridges` (`supports_skirt.md`, S10; `BEHAVIOR.md`). `support.free_bridge_length` no cambia
+  el soporte: solo hace que la revisión antes de imprimir avise de un puente más largo.
 - [x] Puente o voladizo punto por punto (`supports_skirt.md`, regla 3, S11; 2026-10-29): la U, los dos pilares y el
   marco sin soporte; un pilar de un lado, uno central, uno en una esquina y la L con soporte; la V de 30°, puente. La
   condición de cruzar los dos apoyos a 60° o más la confirmó el equipo de fichas (llega a la ficha con `aa0c7c3`)
@@ -615,8 +622,17 @@ Device esté en `main` (PR #11): lo primero es el USB del escritorio, que la fic
   o el G-code abierto, pausar, seguir, cancelar, mover y extruir, registro; la impresora simulada para probar sin
   máquina, con una prueba de punta a punta
 - [ ] El servicio local de `tisma` para la app de Android (`docs/MOBILE.md`)
-- [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas
+- [ ] Las conexiones de red de la ficha de Device: Moonraker, OctoPrint, PrusaLink, Duet, las marcas. Hechos en
+  `src/device/print_host.*` contra simuladores propios: OctoPrint, Moonraker, PrusaLink y Duet (2026-11-05), y en la
+  página de Dispositivo («Programa en la red»: probar, estado, enviar e imprimir, pausar, seguir, cancelar). También el botón
+  principal «Mandar a la impresora» y el diálogo de envío con nombre, con «Subir y simular» en Duet (reglas 19 y 20).
+  Búsqueda por Zeroconf de OctoPrint hecha (2026-11-05). Falta la de Moonraker (nombres `.local` y su API)
 - [ ] Probado con una impresora real por USB (necesita al dueño)
+- [ ] Leer los límites de la impresora (`printer_connections.md`, reglas 1 a 8): hecho el núcleo (`src/device/printer_limits.*`,
+  2026-11-05: Marlin M115 y M503, Klipper `toolhead` y `configfile`, llenar solo lo vacío). Al conectar por USB ya se
+  piden (M115 y M503) y llenan lo vacío con un aviso. Con Moonraker, al probar
+  la conexión (2026-11-05). Faltan la lista «En el perfil / En la impresora» y el botón «Leer de la impresora» en
+  Límites
 
 ## Estado de P1
 
@@ -642,7 +658,7 @@ eso»). Por ahora no hay fichas de la interfaz de Tisma; todo es diseño propio 
   velocidad
 - [x] Calibraciones estándar, tercera tanda: tope de flujo volumétrico (`machine.max_flow`), resonancias (el motor
   escribe la aceleración: `M204`, `SET_VELOCITY_LIMIT`), pata de elefante (`slicing.first_layer_shrink`)
-- [ ] Calibraciones estándar que faltan: puentes y voladizos
+- [x] Calibraciones estándar que faltan: puentes y voladizos (2026-11-04, `docs/CALIBRATION.md`)
 - [ ] App móvil de Android para seguir la impresión (pedido del dueño, 2026-10-24). Decidido: la opción 1 (seguir
   la impresión, no la interfaz entera), solo por WiFi (el USB es de la PC), con la estética de la app de Prusa
   (EasyPrint) como caja negra; después, Device en el escritorio. El plan y el orden de trabajo están en `docs/MOBILE.md` (P6)
@@ -798,6 +814,15 @@ Llegaron con el PR #22 a `dev`. Cada una se lee solo si `tools/check_spec.py` pa
   fichas y con `THIRD_PARTY.md` (5, CR3). Las aletas de soporte, la guía de calibración, los perfiles de resina y la
   conexión con Bambu Lab ya tienen su crédito, que se verá bajo su panel cuando existan
 - [ ] `print_time.md` (después de F4): el tiempo simulando cada movimiento del G-code
+  Hecho (2026-11-09): las esperas `G4` (P en ms, S en s) y los `M204` / `SET_VELOCITY_LIMIT ACCEL=` del G-code de
+  la máquina (inicio, cambio de capa y los propios) cuentan en el tiempo y cambian la aceleración de lo que sigue
+  (reglas 8, 9 y 13), y también `M201`, `M203` (mm/min en RepRapFirmware), `M205` (tirones y `J`), `M566`, `M220` y
+  `SET_VELOCITY_LIMIT VELOCITY=` / `SQUARE_CORNER_VELOCITY=` / `MINIMUM_CRUISE_RATIO=`. Regla 12 y PT8: Klipper con sus
+  esquinas (`square_corner_velocity` como desviación de unión) y `minimum_cruise_ratio` (0,5); Marlin con tirón o
+  desviación, RepRapFirmware con tirón. Reglas 10 y 14 (PT7): `machine.heat_rate_nozzle`/`heat_rate_bed` (°C/s),
+  `home_time` y `probe_time`; el calentamiento de cada espera, `G28`, `G29` y `G4` suman a la preparación, que el G-code
+  dice aparte (`; estimated preparation time`). La interfaz la muestra («1 h 4 min (impresión 58 min, preparación 6 min)» y una
+  fila en la leyenda). Quedan: cambios de herramienta como preparación y las reglas 11 y 15 (aprender de la impresora)
 - [ ] `model_tools.md` (F3 y P4): partes, volúmenes negativos, modificadores, ajustes por objeto y por rango;
   escalar a medida, cortar, separar y copias en grilla. Hecho (2026-10-27): el grupo `transform` de la línea de
   comandos (escala o «N%», encajar en una caja, giros, corte horizontal con las dos mitades cerradas, separar en piezas
@@ -963,8 +988,21 @@ Con el PR #23 (2026-10-26):
     corte, y la vista previa de la interfaz muestra la pieza sobre la cinta. Falta que el visor dibuje el alto del
     cordón perpendicular a la capa inclinada (hoy va vertical, y la cara lateral se ve con huecos)
 - [ ] `preview.md`, `preferences.md`, `formats.md` y `model_tools.md` (reglas 16 a 30), ampliadas
-- [ ] `printer_connections.md` (F9), `cloud.md` (la línea de comandos del nodo, reglas 18 a 21), `mobile_app.md`
-  (la API de C) e `INTEGRATION.md`
+- [ ] **Tisma Cloud en la 1.0** (decisión del dueño, 02-11-2026: «lo antes posible», antes que el resto de
+  UI27–UI41), ficha `cloud.md`:
+  - [x] C1 (2026-11-02): la capa HTTP propia (`src/net/`: WinHTTP en Windows, cpp-httplib y OpenSSL 3 en Linux y
+    macOS) y el cliente (`src/cloud/client.*`, código del dueño sin la capa HTTP de PrusaSlicer, más `/v1/plans`),
+    probados contra un servidor simulado (CC1 a CC6, CC13 a CC15 del lado del cliente);
+  - [ ] C2: el panel de la cuenta (hecho 2026-11-02, con el chip de la barra superior) (entrar, horas, planes con el actual marcado, el enlace a la página de pago),
+    informar un problema, el token en el almacén de claves del sistema (regla 3), laminar y analizar en la nube desde
+    la interfaz con su avance en la barra de estado;
+  - [ ] C3: la línea de comandos de los nodos (reglas 18 a 21: `slice` y `analyze` con `--summary`, `--sandbox`,
+    líneas `progress`; CC10 a CC12). Hecho (2026-11-02): `slice` de un proyecto guardado por el motor (CC10 a CC12),
+    con el mismo armado de la placa que la interfaz. Falta: `analyze` (los apoyos, las cargas y el material tienen
+    que ir en el proyecto primero), los proyectos de otros laminadores (`formats.md`, regla 18) y un avance más fino
+    durante el corte. El proyecto como paquete 3MF (`formats.md`, reglas 6 a 11), hecho el 2026-11-02;
+  - [ ] después: el puente de impresoras (reglas 12 a 17), la biblioteca de modelos y Thingiverse
+- [ ] `printer_connections.md` (F9), `mobile_app.md` (la API de C) e `INTEGRATION.md`
 - [ ] **Ajustes de las fichas que el motor no lee** (medición del equipo de fichas, 2026-10-28, `dev` 32d74be;
   `docs/spec/qa/2026-10-28-ajustes.md` en `spec/next` cc8d580, `tools/check_spec.py` limpio): lee 368 de 479 claves
   del laminado. Faltan, por grupo: `fins` 20, `support` 13, `waam` 10 (después de la primera versión), `walls` 9,
@@ -1119,6 +1157,54 @@ El dueño quiere alcanzar o superar el ritmo de Tisma Slicer. El equipo de specs
   en paralelo. Gota de 172 080 triángulos: alineada 3,81 → 2,68 s (1,41 → 0,96 veces `nearest`). El G-code es el mismo
   byte a byte. La GPU no rinde acá (ver `PROGRESS.md`)
 
+### Soporte en árbol y pintura más livianos (pedido del dueño, 2026-11-05)
+
+Medido en una esfera de 100 mm (4 núcleos): laminar con árbol tardaba 1,05 s contra 0,38 s con grilla. El 95 % de la
+diferencia está en el relleno de cada capa del árbol (`tree_fill`, unos 700 ms). Son los offsets de Clipper para la
+pared, la segunda pared de las ramas anchas y las líneas.
+- [x] Pintura: la vista se rearma solo en los triángulos que tocó el trazo, y la brocha corta en la mitad de piezas
+  (15,1 → 2,7 ms en 200 trazos).
+- [x] Árbol, paso 1 (CPU): áreas simplificadas a 1/8 de cordón y sin buscar segunda pared cuando ninguna rama es tan
+  ancha. Laminado 1,05 → 0,71 s, G-code 149 → 103 ms.
+- [x] Árbol, paso 2 (GPU): el relleno de cada capa sale de un campo de distancias. **Conectado al laminado
+  (2026-11-06).** Lo que se hizo:
+  - la transformada exacta en CPU y en GPU, también para todas las capas en una sola llamada;
+  - `distance_level` (marching squares);
+  - `tree_fill_field`, igual a `tree_fill` en las pruebas.
+  - Medido en la esfera: la transformada de todas las capas, 250–300 ms en CPU. Lo demás de la ruta tarda unos
+    2,6 s contra 1,4 s de los offsets de Clipper, porque cada capa usa una grilla de toda la caja de sus ramas, casi
+    vacía, y una segunda transformada para la segunda pared.
+  - Conectada, haría el árbol más lento aun con la transformada gratis. Para que pague:
+    - [x] una grilla por isla (por rama), no por capa (2026-11-06): en la esfera de 100 mm el laminado con el campo
+      pasa a 1,39 s contra 1,11 s con los offsets (antes 2,9 contra 1,44 s), con la transformada en la CPU;
+    - [x] `distance_level` sin raíces para clasificar y sin tabla hash (2026-11-06): medido con callgrind en las
+      pruebas `[field]`, 20,4 → 12,3 M instrucciones; la ruta del campo, 51,8 → 43,2 M contra 19,5 M de los
+      offsets. Lo que queda: la transformada (15 %), las líneas (compartidas con los offsets) y la segunda pared;
+    - conectado (2026-11-06): el laminado junta las capas de a 64 y hace en una sola llamada las transformadas de
+      todas sus ramas, en la GPU si hay una; si no, en la CPU, con los mismos números, así que el G-code no depende
+      del equipo. Los contornos se simplifican a 1/12 de cordón (a 1/8, como las áreas, la pared de una rama fina
+      quedaba un 10 % más corta). La segunda pared se sigue haciendo con offsets, solo en las capas donde el campo
+      encuentra una rama tan ancha: hecha con bits (el núcleo engordado) salía hasta un 10 % más corta donde se juntan
+      dos ramas, y pedía una segunda transformada;
+    - medido en la esfera de 100 mm (laminado entero, el mejor de 5, solo CPU): 1,29 s con los offsets (cffa3c7)
+      contra 1,31 s con el campo; G-code de 488 685 a 497 276 líneas. Con una GPU real se ahorra la transformada
+      (250–300 ms de CPU en total, repartidos entre los núcleos): sin medir, acá solo hay llvmpipe;
+    - queda: marching squares y los umbrales en la GPU, y la meta de 150 ms para el relleno del árbol.
+  - Las ramas se rasterizan en una grilla de bits por capa (la misma `BitGrid` del soporte en grilla).
+  - Un kernel calcula la distancia euclídea a su borde en dos pasadas separables: columnas, después filas.
+  - La pared es la curva de nivel a medio cordón (marching squares).
+  - La segunda pared va donde la distancia llega a la mitad de `tree_double_wall_diameter`, crecido otra vez.
+  - Lo de adentro es la distancia mayor que un cordón.
+  - Las líneas siguen en la CPU, sobre ese adentro.
+  - La versión de CPU es la referencia: la prueba compara las dos.
+  - Meta: el relleno del árbol por debajo de 150 ms en la esfera.
+- [ ] Árbol, paso 3: las áreas (discos y cascos de las ramas) rasterizadas en la GPU en la misma grilla, sin pasar
+  por Clipper.
+- [x] Pintura en piezas de pocos triángulos enormes (2026-11-06): medido, no hace falta. En un cubo de 100 mm de 12
+  triángulos, 200 trazos de 2 mm tardan 16 ms (0,08 ms cada uno) y rearmar la vista, 0,07 ms (3461 piezas). Queda la
+  prueba oculta `[.bench]` en `tests/test_paint.cpp`.
+- [ ] Repetir con la pieza del tester (BH37/BH38) cuando llegue.
+
 ### Lo nuevo de OrcaSlicer 2.5 (`docs/spec/features/orca_2_5.md`, pedido del dueño, 2026-10-29)
 
 La ficha sale solo de las notas de la versión y de la wiki públicas de OrcaSlicer (nunca de su código). Cada
@@ -1128,14 +1214,24 @@ ajuste nuevo viene apagado o con el valor que deja todo igual. Orden de la ficha
   quedan dos pruebas (`[determinism]`): una T con soportes en árbol y relleno lightning, y dos objetos en dos
   extrusores con etiquetas M486, piel difusa y arcos.
 - [ ] O1 (reglas 1 a 5): limpiar hacia adentro (hecha, 2026-11-02), retracción después del barrido (hecha), paredes
-  sin apoyo al final, modificadores de costura precisa, polyholes.
+  sin apoyo al final (hecha, 2026-11-09, OR3), modificadores de costura precisa, polyholes (hecha, 2026-11-09, OR5).
 - [ ] O2 (reglas 7 a 13 bis): expansión de la superficie de arriba, orden y ángulo fijo arriba y abajo, gyroid y TPMS
   adaptativos, relleno suavizado, separado por pieza, de varias líneas, espiral hacia adentro.
-- [ ] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera
+- [x] O5 (reglas 20 a 23): `regex_replace`, partes del tiempo, sin el bloque de ajustes, temperaturas de la primera
   capa según los filamentos usados.
-- [ ] O6 (reglas 24 a 28): `--strict`, apoyar la pieza, inspeccionar, estadísticas, copias a lo largo de Y.
-- [ ] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
+  Hecho (2026-11-09): reglas 20 a 22 (OR20 a OR22): `regex_replace(texto, /patrón/, reemplazo)` con `$1`, el literal
+  `/patrón/` en las plantillas, `print_time_day`/`hour`/`minute`/`sec`/`total_sec` en el nombre del archivo y
+  `gcode.skip_config_block`. Regla 23 (OR23): ya se cumplía (la boquilla y la cama del primer filamento que imprime);
+  ahora con prueba, con varios extrusores y con MMU.
+- [x] O6 (reglas 24 a 28): `--strict`, apoyar la pieza, inspeccionar, estadísticas, copias a lo largo de Y.
+  Hecho (2026-11-09): `--strict`, `--ground-largest-face`/`--ground-face-normal`/`--ground-face-point`,
+  `--inspect-mesh`, `--export-statistics`, `--export-settings` (con `-`, la salida estándar) y `--align-to-y-axis`
+  (OR24 a OR28), y `--inspect-paint` en el laminado de un proyecto.
+- [x] O3 (reglas 14 a 18): orejas de borde, soporte chico más lento, ventilador de la primera capa, piel difusa sin
   puentes; la balsa solo necesita la prueba OR15.
+  Hecho (2026-11-09): regla 15 (prueba OR15), regla 16 (`speed.small_support` y `small_support_threshold`, OR16) y
+  regla 17 (`cooling.first_layer_fan`, OR17), regla 18 (piel difusa lisa sobre el aire, OR18) y regla 14 (orejas de
+  borde, OR14). Faltan las orejas pintadas.
 - O7 y O8 van con sus fichas de interfaz.
 
 ### Espacio de diseño CAD con SolidCraft (pedido del dueño, 2026-10-29, por el equipo de fichas)
@@ -1185,8 +1281,9 @@ Diseño es una pestaña más de la misma ventana; nunca otro programa.
 
 Etapas (regla 24): D1 (hecha el 2026-11-02: pestaña, panel, línea de comandos, primitivas, mandar a la placa y
 volver a editar; CD1, CD1b, CD7, CD19, CD20, CD21), D2 (hecha el 2026-11-02: bocetos en un plano, coordenadas
-tipeadas, entrada junto al cursor, referencias, ortogonal y polar, extruir y revolucionar; CD2, CD10, CD13 a CD16), D3 (restricciones, parámetros, línea de tiempo), D4 (redondeos, agujeros, roscas,
-patrones, booleanas), D5 (STEP e IGES, mallas, texto, proyecto, medidas).
+tipeadas, entrada junto al cursor, referencias, ortogonal y polar, extruir y revolucionar; CD2, CD10, CD13 a CD16), D3 (hecha el 2026-11-03: parámetros, CD4; restricciones y cotas con grados de libertad, CD3; línea de tiempo editable, regla 8, con la parte de CD6 que no necesita redondeo; arrastrar puntos del boceto resolviendo en cada cuadro), D4 (primera parte hecha el 2026-11-03: redondeo, chaflán,
+vaciado, agujeros por ISO 273, simetría, patrón circular y en fila, combinar; CD5 y CD6 completo; edición del boceto de la regla 17, CD17 y CD18,
+hecha el 2026-11-03, con perfiles de tramos y arcos sueltos; roscas y agujeros roscados, hechos el 2026-11-03; medir del boceto, regla 18, hecho el 2026-11-03; mover, partir y desmoldeo, hechos el 2026-11-03; faltan barrer y recubrir), D5 (STEP e IGES, mallas, texto, proyecto, medidas); D5b (DXF y SVG al boceto, el boceto y la vista a DXF, SolidCraft abierto como sesión: hecho el 2026-11-04).
 
 La ficha de comportamiento (`cad_design.md`) la escribe el equipo de fichas.
 
@@ -1198,6 +1295,63 @@ Ingeniería (el dueño pide «una solución de AutoCAD bastante completa» para 
 tuercas de mano, separadores, engranajes rectos y helicoidales (hechos el 2026-11-02), después cremalleras, poleas,
 insertos y bisagras; y
 roscas y agujeros normalizados sobre piezas de Diseño (D4, con las mismas tablas).
+
+**Ingeniería en el proyecto y pestañas de análisis** (orden del equipo de fichas, 2026-11-02;
+`engineering_panel.md` EP1 a EP10, `formats.md` regla 11 bis, FM23 a FM26):
+1. los datos de Ingeniería por pieza en el proyecto (condiciones, valores a mano, opciones): **hecho el 2026-11-03**
+   (`src/project/engineering.*`);
+2. el último resultado como archivo propio del paquete, con su huella (malla, condiciones, ajustes) para saber si
+   quedó viejo: **hecho el 2026-11-03**;
+3. `analyze` sobre el proyecto con esas condiciones (FM25), zonas por triángulos y puntos con radio en el caso:
+   **hecho el 2026-11-03** (`tisma-engine analyze proyecto.3mf -o informe.json`); falta guardar el resultado en el
+   proyecto, que lo hace la pestaña Estructural;
+4. la pestaña Estructural (marcar, lista, Analizar, mapa, veredicto) y sacar «Análisis» de Impresión 3D: empezado
+   el 2026-11-03 con los valores del panel (`src/project/engineering_values.*`: del perfil o a mano, material por
+   tipo de filamento, qué apaga Analizar) y la pestaña Estructural con la pieza, los valores, la temperatura de
+   trabajo y Analizar; marcar en la vista y la lista con deshacer (2026-11-03); fuerzas en N o kg con dirección,
+   Analizar en segundo plano con avance y Cancelar, veredicto, masa, sugerencias, mapa del factor de seguridad,
+   punto crítico, «Desactualizado» y el resultado guardado con la pieza; límites de desplazamiento y «Demasiado
+   flexible»; botón para probar cada material sugerido, con las familias de la tabla como material (2026-11-03).
+   Deformación exagerada y los mapas de von Mises y desplazamiento, hechos el 2026-11-04; la memoria y el tiempo en Más opciones y «Análisis» fuera de Impresión 3D, hechos el 2026-11-04. Arrastrar la flecha de una fuerza, hecho el 2026-11-04. La dirección de impresión (Z o cinta), hecha el 2026-11-04. Optimizar con el relleno mínimo uniforme con el relleno por zonas, con nervios y con refuerzos, y la orientación recomendada, hechos el 2026-11-04. «Calcular en la nube» con su candado por plan, hecho el 2026-11-04. Faltan:,
+   el resto de Optimizar (retícula);
+5. la pestaña Aerodinámica, con A3 (CFD).
+
+### macOS antes de la beta (decisión del dueño, 2026-11-10; reutilizar todo lo posible)
+
+- [ ] CI de macOS en cada envío, arm64 y x86_64 (runners de GitHub): compila y pasan las pruebas.
+- [ ] La vista: MoltenVK o el camino OpenGL que ya existe.
+- [ ] Diálogos nativos de abrir y guardar (como BH40 en Windows).
+- [ ] Cámara USB con AVFoundation y el permiso de cámara (`printer_connections.md`, regla 7 de macOS).
+- [ ] Paquete `.dmg`; sin firmar hasta que el dueño tenga la cuenta de Apple Developer, después firma y notarización.
+- [ ] El motor como biblioteca para iOS (arm64, sin GPU por ahora o Metal vía MoltenVK), para la app de iPhone que
+  hace la sesión de Android: un xcframework (iosArm64 + iosSimulatorArm64) con la entrada C `tisma_run_cli`
+  (argc/argv de la línea de comandos, salida en buffers, mismos códigos de salida; `include/tisma/tisma_engine.h`,
+  hecha el 2026-11-10). Lo mismo para SolidCraft (apps/ios/PLAN.md, android daf5723).
+
+### Abrir proyectos de otros programas (`project_import.md`, spec/next 90c1414, pedido del dueño, 2026-11-06)
+
+Prioridad alta, después del árbol en GPU. Primero las reglas 1 a 5 y la 9.
+- [x] Regla 1: reconocer el programa por los archivos del paquete (familia PrusaSlicer, familia OrcaSlicer, Cura) y
+  nombrarlo por el campo `Application` (`project_source`, `src/io/project_import.*`, 2026-11-09); regla 2: lo que
+  no se reconoce es un 3MF del estándar.
+- [ ] Reglas 3 y 4: mallas, partes y tipos de parte de cada familia. Las mallas en `3D/Objects` de la familia Orca ya se
+  leen (extensión de producción, `formats.md` regla 18; prueba del 2026-11-09). Falta medir los archivos de muestra que genera el
+  equipo de fichas.
+  Hecho (2026-11-10): `parse_3mf` separa pieza, negativo, modificadores, bloqueadores y forzadores (muestra pi4).
+  Falta, en este orden:
+  1. volúmenes de malla en la placa (`PlateVolume::Shape::Mesh`, la malla guardada en el proyecto 3MF como un objeto
+     más, en el marco del objeto), y tipos `SupportBlocker` y `SupportEnforcer`;
+  2. bloqueadores y forzadores como volumen en el laminado (hoy solo como pintura): la zona de la capa dentro del
+     volumen bloquea o fuerza el soporte, como lo pintado;
+  3. al abrir el 3MF de otro programa, sus partes pasan a la placa con esos tipos.
+- [ ] Regla 5: placas a camas.
+- [ ] Regla 9: el diálogo al abrir. Por ahora un aviso al abrir el 3MF de otro programa (2026-11-09): «Proyecto de
+  <programa>: N piezas. Sus ajustes todavía no se traen», o el de programa desconocido (regla 2). Falta el diálogo
+  completo con los ajustes traducidos, parecidos y sin equivalente, y «Usar la impresora del proyecto».
+  Hecho (2026-11-09/10): la tabla del paquete se baja y se lee; con ella, un segundo aviso cuenta los ajustes de un
+  proyecto PrusaSlicer en traducidos, parecidos y sin equivalente (prueba de interfaz con pi4).
+- [ ] Reglas 6 a 8, 11 y 12: ajustes con la tabla de traducción del paquete de perfiles (la hace la sesión de perfiles).
+- [ ] Regla 10: pintura, cuando haya archivos de muestra (PI6 a PI8).
 
 ## Avance
 

@@ -880,3 +880,84 @@ TEST_CASE("extruders: each extruder's parts keep their combined infill", "[extru
     CHECK_THAT(sparse[0], WithinAbs(sparse[1], 0.2 * sparse[1]));
     CHECK(text.find(";HEIGHT:0.400\n") != std::string::npos);
 }
+
+TEST_CASE("nozzles: each extruder's parts on the plate's own layers, with a layer cap and variable heights",
+          "[extruders][nozzles]") {
+    // The fuzzer's seed 202611050900, run 1658: two nozzles (0.4, 0.34), the
+    // walls with the finer, the layer heights from a list above its cap, two
+    // objects with an extruder each. The parts were cut on layers planned without the
+    // cap (0.4 mm) and laid on the plate's capped ones (0.34 mm): the walls
+    // of a layer printed at another layer's height.
+    Settings s = base();
+    s.nozzle_diameters = {0.4, 0.34};
+    s.layer_height = 0.16;
+    s.first_layer_height = 0.2;
+    s.layer_heights = {{1.0, 0.45}}; // from 1 mm up, 0.45 mm asked: more than either nozzle allows
+    s.walls_staggered = true;        // the raised loops are half a layer: off the layer, the check sees it
+    s.extruder_walls = 2;            // the walls' nozzle (the finer) sets the layers' cap
+    const Plate p = two_colours();
+    const SlicedModel model = slice_model(weld_exact(p.mesh), s, nullptr, nullptr, nullptr, &p.objects);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const GcodeCheck check = check_gcode(out.str(), gcode_limits(model, s));
+    INFO((check.problems.empty() ? std::string() : std::to_string(check.problems.front().line) + ": " +
+                                                       check.problems.front().message));
+    CHECK(check.ok());
+    // Every layer of the plate has walls of both objects (both 10 mm tall).
+    const Shown seen = shown(out.str());
+    REQUIRE(seen.layers.count("External perimeter"));
+    CHECK(seen.layers.at("External perimeter").size() == model.layers.size());
+}
+
+TEST_CASE("wipe tower: an MMU speed of 0 is a step not used (spec team, 2026-11-09)", "[extruders][tower]") {
+    const Settings read = parse_settings(
+        R"({"extrusion": {"loading_speed": 0, "unloading_speed": 0, "cooling_initial_speed": 0, "cooling_final_speed": 0}})");
+    CHECK(read.loading_speed == 0.0);
+    CHECK(read.cooling_final_speed == 0.0);
+    CHECK_THROWS_AS(parse_settings(R"({"extrusion": {"loading_speed": -1}})"), SettingsError);
+    Settings s = tower_base(true);
+    s.verbose_comments = true; // the moves' notes
+    const std::string with = gcode_of(two_colours(), s);
+    s.cooling_initial_speed = s.cooling_final_speed = 0.0;
+    const std::string without = gcode_of(two_colours(), s);
+    CHECK(with.find("cool the tip") != std::string::npos);
+    CHECK(without.find("cool the tip") == std::string::npos);
+    CHECK(without.find("\nT1\n") != std::string::npos);
+}
+
+TEST_CASE("extruders: the first layer's nozzle temperature is that of the filament that prints it (orca_2_5.md, rule 23, OR23)",
+          "[extruders]") {
+    for (const bool mmu : {false, true}) {
+        Settings s = base();
+        s.single_extruder_mmu = mmu;
+        if (mmu)
+            s.wipe_tower = true, s.relative_extrusion = true;
+        s.variables["temperature"] = {"200", "240"};
+        const std::string text = gcode_of(cube(2), s); // only filament 2 prints
+        const std::size_t layer = text.find(";LAYER_CHANGE");
+        INFO("mmu " << mmu << "\n" << text.substr(0, std::min<std::size_t>(layer, 1500)));
+        CHECK(text.find("S240") < layer);
+        CHECK(text.find("S200") > layer);
+    }
+}
+
+TEST_CASE("extruders: each one heats to its first layer's temperature, then to its own (spec team, 2026-11-09)",
+          "[extruders]") {
+    Settings s = base();
+    s.extruder_walls = 1;
+    s.infill_density = 20.0;
+    s.top_layers = s.bottom_layers = 3;
+    s.extruder_infill = s.extruder_solid_infill = 2;
+    s.variables["temperature"] = {"205", "225"};
+    s.variables["first_layer_temperature"] = {"215", "235"};
+    const std::string text = gcode_of(cube(1), s);
+    const std::size_t first = text.find(";LAYER_CHANGE"), second = text.find(";LAYER_CHANGE", first + 1),
+                      third = text.find(";LAYER_CHANGE", second + 1);
+    const std::string start = text.substr(0, first), layer2 = text.substr(second, third - second);
+    INFO(start);
+    CHECK(start.find("S215 T0") != std::string::npos);
+    CHECK(start.find("S235 T1") != std::string::npos);
+    CHECK(start.find("S205") == std::string::npos);
+    CHECK(layer2.find("M104 S205 T0") != std::string::npos);
+    CHECK(layer2.find("M104 S225 T1") != std::string::npos);
+}

@@ -1,0 +1,28 @@
+# A Bambu Lab printer on the local network against the simulated one
+# (printer_connections.md, «Bambu Lab en red local»): the certificate is
+# confirmed once, then the state with the AMS, printing from the AMS, pausing
+# and stopping; the camera's frames shown in the panel.
+slice
+wait 30
+bambu sim
+bambu connect
+bambu-wait
+expect-bambu code confirm_certificate
+bambu accept
+bambu-wait
+expect-bambu state IDLE
+expect-bambu trays 4
+bambu camera
+expect-bambu camera 32x24
+bambu camera-off
+expect-bambu camera none
+bambu print
+bambu-wait
+expect-bambu sent cube_ascii
+expect-bambu state PREPARE
+bambu pause
+bambu-wait
+expect-bambu state PAUSE
+bambu stop
+bambu-wait
+expect-bambu state FAILED

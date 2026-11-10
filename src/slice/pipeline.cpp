@@ -16,6 +16,9 @@
 #include "slice/belt.hpp"
 #include "slice/painted.hpp"
 #include "support/support.hpp"
+#include "geom/distance.hpp"
+#include "geom/polyholes.hpp"
+#include "gpu/compute.hpp"
 #include "support/tree.hpp"
 #include "surfaces/bridges.hpp"
 #include "perimeters/fixed.hpp"
@@ -519,16 +522,17 @@ struct PartFrame {
 // compensated as the part; null when there are none.
 SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& settings, gpu::Context* gpu,
                          const StressField* stress, const Painting* painting, const PartFrame* frame, int tool = 1,
-                         const IndexedMesh* negative = nullptr);
+                         const IndexedMesh* negative = nullptr, const SupportVolumes* volumes = nullptr);
 SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>* tools, int tool = 1,
-                        const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr);
+                        const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr,
+                        const SupportVolumes* volumes = nullptr);
 // `uncompensated`: the plate before compensated(), for the modifiers to be
 // compensated as it was.
 SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>& objects,
                         const IndexedMesh* negative = nullptr, const std::vector<MeshModifier>* modifiers = nullptr,
-                        const IndexedMesh* uncompensated = nullptr);
+                        const IndexedMesh* uncompensated = nullptr, const SupportVolumes* volumes = nullptr);
 
 // Each list of a part's paths (walls and fills, not the support), with its layer.
 template <class F>
@@ -630,7 +634,8 @@ bool several_tools(const std::vector<MeshObject>& objects, const Settings& setti
 SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu,
                         const StressField* stress, const Painting* painting, const std::vector<MeshObject>* given,
                         const std::vector<ColorMix>* mixes, const IndexedMesh* negative_volumes,
-                        const std::vector<MeshModifier>* given_modifiers) {
+                        const std::vector<MeshModifier>* given_modifiers, const SupportVolumes* given_volumes) {
+    const SupportVolumes* volumes = given_volumes && !given_volumes->empty() ? given_volumes : nullptr;
     SlicedModel out;
     if (input.vertices.empty())
         return out;
@@ -704,7 +709,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         for (MeshObject& o : plain)
             o.ranges.clear();
         SlicedModel ranged_out = slice_model(input, ranged ? *ranged : settings, gpu, stress, painting, &plain, mixes,
-                                             negative_volumes, with_ranges.empty() ? given_modifiers : &with_ranges);
+                                             negative_volumes, with_ranges.empty() ? given_modifiers : &with_ranges,
+                                             volumes);
         ranged_out.notices.insert(ranged_out.notices.begin(), out.notices.begin(), out.notices.end());
         return ranged_out;
     }
@@ -728,6 +734,8 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         flat.walls_staggered = false; // not on a belt (staggered_perimeters.md, rule 5)
         if (modifiers)
             throw std::invalid_argument("belt printers do not take modifiers yet");
+        if (volumes)
+            throw std::invalid_argument("belt printers do not take support blockers or enforcers yet");
         if (negative) {
             const IndexedMesh turned = belt_mesh(*negative, settings);
             return slice_model(belt_mesh(input, settings), flat, gpu, stress, painting, given, mixes, &turned);
@@ -744,12 +752,14 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             throw CurvedError("curved layers do not take modifiers yet (curved.mode)");
         if (negative)
             throw CurvedError("curved layers do not take negative volumes yet (curved.mode)");
+        if (volumes)
+            throw CurvedError("curved layers do not take support blockers or enforcers yet (curved.mode)");
         std::optional<CurvedField> field = curved_field(settings, input);
         if (!field) { // nothing to bend: flat layers (nonplanar_modes.md, CO1)
             Settings flat = settings;
             flat.curved_mode = CurvedMode::Disabled;
             flat.walls_staggered = false; // not with curved layers (staggered_perimeters.md, rule 5)
-            return slice_model(input, flat, gpu, stress, painting, given, mixes, negative);
+            return slice_model(input, flat, gpu, stress, painting, given, mixes, negative, nullptr, volumes);
         }
         const double longest =
             field->mode == CurvedMode::Wave ? std::clamp(2.0 * std::numbers::pi / field->k / 20.0, 0.25, 1.0) : 1.0;
@@ -806,7 +816,7 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 const Painting paint = painting ? object_painting(*painting, o) : Painting{};
                 const Settings own = own_settings(settings, o.settings, o.name);
                 SlicedModel part = slice_plate(mesh, own, gpu, stress, painting ? &paint : nullptr, nullptr,
-                                               object_tool(o, settings), negative);
+                                               object_tool(o, settings), negative, nullptr, volumes);
                 if (part.layers.empty())
                     continue;
                 if (object_tool(o, settings) != 1)
@@ -827,10 +837,11 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         // Each extruder's objects apart on the plate's layers
         // (multi_extruder.md, rule 1); one other than the first, every path its.
         if (several_tools(*objects, settings) || modifiers) {
-            out = slice_plate(input, settings, gpu, stress, painting, objects, 1, negative, modifiers);
+            out = slice_plate(input, settings, gpu, stress, painting, objects, 1, negative, modifiers, volumes);
         } else {
             out = slice_plate(input, own_settings(settings, objects->front().settings, objects->front().name), gpu,
-                              stress, painting, nullptr, object_tool(objects->front(), settings), negative);
+                              stress, painting, nullptr, object_tool(objects->front(), settings), negative, nullptr,
+                              volumes);
             if (object_tool(objects->front(), settings) != 1)
                 tag_tool(out, object_tool(objects->front(), settings));
         }
@@ -847,20 +858,21 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         }
         return out;
     }
-    return slice_plate(input, settings, gpu, stress, painting, nullptr, 1, negative);
+    return slice_plate(input, settings, gpu, stress, painting, nullptr, 1, negative, nullptr, volumes);
 }
 
 namespace {
 
 SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>* tools, int tool,
-                        const IndexedMesh* negative, const std::vector<MeshModifier>* modifiers) {
+                        const IndexedMesh* negative, const std::vector<MeshModifier>* modifiers,
+                        const SupportVolumes* volumes) {
     // Several extruders print layer by layer, every extruder on every layer:
     // no zones of layer heights (multi_extruder.md; docs/CONFIG.md).
     if (settings.extruders > 1 && settings.detail_height > 0.0) {
         Settings flat = settings;
         flat.detail_height = 0.0;
-        return slice_plate(input, flat, gpu, stress, painting, tools, tool, negative, modifiers);
+        return slice_plate(input, flat, gpu, stress, painting, tools, tool, negative, modifiers, volumes);
     }
     // Vase mode (vase_mode.md, rule 1): one wall, no infill and no top
     // layers, whatever those settings say.
@@ -871,7 +883,7 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         vase.infill_density = 0.0;
         vase.top_layers = 0;
         vase.top_min_thickness = 0.0;
-        return slice_plate(input, vase, gpu, stress, painting, tools, tool, negative, modifiers);
+        return slice_plate(input, vase, gpu, stress, painting, tools, tool, negative, modifiers, volumes);
     }
     // A raft (skirt_brim_raft.md, rules 9 to 14): the part sliced as if on
     // the bed, its first layer as thick as the others, without the first
@@ -883,7 +895,7 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
         part.first_layer_shrink = 0.0;
         part.brim_width = 0.0;
         part.first_line_width = {}; // the raft's first layer has them
-        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool, negative, modifiers);
+        SlicedModel raft = slice_plate(input, part, gpu, stress, painting, tools, tool, negative, modifiers, volumes);
         add_raft(raft, settings);
         return raft;
     }
@@ -891,10 +903,20 @@ SlicedModel slice_plate(const IndexedMesh& input, const Settings& settings, gpu:
     std::optional<IndexedMesh> cut;
     if (negative)
         cut = compensated_like(*negative, input, settings);
+    // The support volumes moved as the part is (supports_more.md, rules 4 and 5).
+    std::optional<SupportVolumes> moved;
+    if (volumes) {
+        moved.emplace();
+        if (!volumes->blockers.triangles.empty())
+            moved->blockers = compensated_like(volumes->blockers, input, settings);
+        if (!volumes->enforcers.triangles.empty())
+            moved->enforcers = compensated_like(volumes->enforcers, input, settings);
+    }
+    const SupportVolumes* support = moved ? &*moved : nullptr;
     if (!tools)
-        return slice_layers(mesh, settings, gpu, stress, painting, nullptr, tool, cut ? &*cut : nullptr);
+        return slice_layers(mesh, settings, gpu, stress, painting, nullptr, tool, cut ? &*cut : nullptr, support);
     return slice_tools(mesh, settings, gpu, stress, painting, *tools, cut ? &*cut : nullptr, modifiers,
-                       &input);
+                       &input, support);
 }
 
 // A part's regions on given layers, as slice_layers makes them before its
@@ -983,8 +1005,9 @@ void interlock(std::vector<std::vector<Polygons>>& regions, const std::vector<La
 // of the plate's.
 SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::Context* gpu, const StressField* stress,
                         const Painting* painting, const std::vector<MeshObject>& objects, const IndexedMesh* negative,
-                        const std::vector<MeshModifier>* modifiers, const IndexedMesh* uncompensated) {
-    SlicedModel out = slice_layers(mesh, settings, gpu, stress, painting, nullptr, 1, negative);
+                        const std::vector<MeshModifier>* modifiers, const IndexedMesh* uncompensated,
+                        const SupportVolumes* volumes) {
+    SlicedModel out = slice_layers(mesh, settings, gpu, stress, painting, nullptr, 1, negative, volumes);
     if (out.layers.empty())
         return out;
     PartFrame frame;
@@ -1000,7 +1023,11 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         }
         if (!settings.placement_drop_to_bed) // what is under the bed is not printed (placement.md, PL5)
             min_z = std::max(min_z, 0.0f);
-        frame.stack = plan_layer_stack(oriented, min_z, max_z, settings);
+        // With the same settings as the plate's slice_layers above (its
+        // nozzles' layer cap), or the parts land on other layers than the
+        // plate's (fuzzer, seed 202611050900, run 1658: 38 layers of 0.4 mm
+        // under 40 of 0.339 mm, two nozzles and variable heights).
+        frame.stack = plan_layer_stack(oriented, min_z, max_z, part_nozzles(settings, 1).settings);
         frame.centre = {0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     }
     const std::size_t n = out.layers.size();
@@ -1251,9 +1278,97 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
     return out;
 }
 
+namespace {
+
+// A volume's section on each level (a negative volume, a support blocker or
+// enforcer): its outline, whatever way its triangles face. Own design.
+std::vector<Polygons> volume_sections(const IndexedMesh& volume, const std::vector<float>& heights,
+                                      double gap_closing, gpu::Context* gpu) {
+    IndexedMesh oriented = volume;
+    orient_consistently(oriented);
+    std::vector<char> same;
+    const std::vector<std::vector<Contour>> contours =
+        slice_levels(oriented, height_field(oriented), heights, gap_closing, gpu, &same);
+    // A level like the one below comes back empty: it takes that one's.
+    std::vector<std::size_t> from(heights.size());
+    for (std::size_t l = 0; l < heights.size(); ++l)
+        from[l] = l > 0 && same[l] ? from[l - 1] : l;
+    std::vector<Polygons> out(heights.size());
+    tbb::parallel_for(std::size_t(0), heights.size(), [&](std::size_t l) {
+        out[l] = layer_region(to_polygons(contours[from[l]]), FillMode::Union);
+    });
+    return out;
+}
+
+// The squared distances inside many grids at once: on the GPU when there is
+// one, on the CPU (the same numbers) when there is none or Vulkan fails.
+std::vector<std::vector<float>> distances_inside(std::span<const BitGrid> grids, gpu::Context* gpu) {
+    std::vector<std::vector<float>> out;
+    if (grids.empty())
+        return out;
+    if (gpu)
+        try {
+            gpu->distance_inside(grids, out);
+            return out;
+        } catch (const std::runtime_error&) {
+        }
+    out.assign(grids.size(), {});
+    tbb::parallel_for(std::size_t(0), grids.size(), [&](std::size_t k) { out[k] = squared_distance_inside(grids[k]); });
+    return out;
+}
+
+// The organic tree's fill of every layer with an area (tree_width > 0) from
+// distance fields (tree_fill_field), the fields of a chunk of layers in one
+// GPU run.
+// In chunks, so that the fields of a tall model do not all sit in memory.
+void tree_fill_by_field(SlicedModel& out, const std::vector<Polygons>& above, const std::vector<double>& width,
+                        const Settings& settings, gpu::Context* gpu) {
+    constexpr std::size_t kChunk = 64;
+    const std::size_t n = width.size();
+    for (std::size_t first = 0; first < n; first += kChunk) {
+        const std::size_t last = std::min(n, first + kChunk), count = last - first;
+        // Each layer's grids, one after the other in `grids`; layer k's from start[k].
+        std::vector<std::vector<BitGrid>> own(count);
+        tbb::parallel_for(first, last, [&](std::size_t l) {
+            if (width[l] > 0.0)
+                own[l - first] = tree_branch_grids(out.support_areas[l], above[l], width[l]);
+        });
+        std::vector<std::size_t> start(count + 1, 0);
+        for (std::size_t k = 0; k < count; ++k)
+            start[k + 1] = start[k] + own[k].size();
+        std::vector<BitGrid> grids;
+        grids.reserve(start[count]);
+        for (std::vector<BitGrid>& g : own)
+            for (BitGrid& b : g)
+                grids.push_back(std::move(b));
+        const std::vector<std::vector<float>> fields = distances_inside(grids, gpu);
+        std::vector<TreeFieldWalls> walls(count);
+        tbb::parallel_for(first, last, [&](std::size_t l) {
+            const std::size_t k = l - first;
+            if (width[l] > 0.0)
+                walls[k] = tree_field_walls(std::span<const BitGrid>(grids).subspan(start[k], start[k + 1] - start[k]),
+                                            std::span<const std::vector<float>>(fields).subspan(start[k], start[k + 1] - start[k]),
+                                            width[l], settings.tree_double_wall_diameter);
+        });
+        tbb::parallel_for(first, last, [&](std::size_t l) {
+            const std::size_t k = l - first;
+            if (width[l] <= 0.0)
+                return;
+            // Interface lines at 45 and 135 degrees in turn (supports_more.md, rule 17).
+            TreeFill tf = tree_field_finish(out.support_areas[l], above[l], std::move(walls[k]), width[l],
+                                            settings.support_spacing, settings.tree_double_wall_diameter,
+                                            (l % 2 == 0) ? 0.0 : 90.0);
+            out.fills[l].support = std::move(tf.support);
+            out.fills[l].support_interface = std::move(tf.interface);
+        });
+    }
+}
+
+} // namespace
+
 SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& given, gpu::Context* gpu,
                          const StressField* stress, const Painting* painting, const PartFrame* frame, int tool,
-                         const IndexedMesh* negative) {
+                         const IndexedMesh* negative, const SupportVolumes* volumes) {
     const PartNozzles nozzles = part_nozzles(given, tool);
     const Settings& settings = nozzles.settings;
     SlicedModel out;
@@ -1300,21 +1415,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // The negative volumes' sections on the same levels (model_tools.md, rule
     // 2): taken away from every layer they cross; the layers stay the part's.
     std::vector<Polygons> cut;
-    if (negative) {
-        IndexedMesh oriented = *negative;
-        orient_consistently(oriented);
-        std::vector<char> cut_same;
-        const std::vector<std::vector<Contour>> cut_contours =
-            slice_levels(oriented, height_field(oriented), heights, settings.gap_closing_radius, gpu, &cut_same);
-        // A level like the one below comes back empty: it takes that one's.
-        std::vector<std::size_t> from(heights.size());
-        for (std::size_t l = 0; l < heights.size(); ++l)
-            from[l] = l > 0 && cut_same[l] ? from[l - 1] : l;
-        cut.resize(heights.size());
-        tbb::parallel_for(std::size_t(0), heights.size(), [&](std::size_t l) {
-            cut[l] = layer_region(to_polygons(cut_contours[from[l]]), FillMode::Union);
-        });
-    }
+    if (negative)
+        cut = volume_sections(*negative, heights, settings.gap_closing_radius, gpu);
 
     out.regions.resize(out.layers.size());
     out.walls.resize(out.layers.size());
@@ -1381,6 +1483,22 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                     !(frame && frame->taken && (*frame->taken)[l] != (*frame->taken)[l - 1]) &&
                     !(frame && frame->regions && (*frame->regions)[l] != (*frame->regions)[l - 1]);
     }
+    // A layer's thin area and walls, from its region.
+    const auto build_walls = [&](std::size_t l) {
+        // What an opening by the thinnest bead removes is too thin to print.
+        const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
+        out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));
+        if (settings.wall_count > 0) {
+            // Only the outer wall on the first layer (walls_extra.md, rule 11).
+            out.walls[l] = walls_of(out.regions[l], l == 0 && settings.first_layer_one_wall ? 1 : settings.wall_count,
+                                    l == 0 ? first_settings : settings, beading_at(l));
+            // What the walls leave, simplified as the contours are: each wall's
+            // rounded corners add vertices that every later step would carry
+            // (the speed report's V9).
+            out.walls[l].infill = simplify(out.walls[l].infill, settings.simplify_tolerance);
+        } else
+            out.walls[l].infill = out.regions[l];
+    };
     tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
         if (copied[l])
             return;
@@ -1403,29 +1521,30 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         // Where an earlier extruder's part is, this one is not.
         if (frame && frame->taken && !(*frame->taken)[l].empty())
             out.regions[l] = Clipper2Lib::Difference(out.regions[l], (*frame->taken)[l], Clipper2Lib::FillRule::NonZero);
-        // What an opening by the thinnest bead removes is too thin to print.
-        const Polygons printable = offset(offset(out.regions[l], -thinnest / 2.0), thinnest / 2.0);
-        out.thin_area[l] = area_mm2(Clipper2Lib::Difference(out.regions[l], printable, Clipper2Lib::FillRule::NonZero));
-        if (settings.wall_count > 0) {
-            // Only the outer wall on the first layer (walls_extra.md, rule 11).
-            out.walls[l] = walls_of(out.regions[l], l == 0 && settings.first_layer_one_wall ? 1 : settings.wall_count,
-                                    l == 0 ? first_settings : settings, beading_at(l));
-            // What the walls leave, simplified as the contours are: each wall's
-            // rounded corners add vertices that every later step would carry
-            // (the speed report's V9).
-            out.walls[l].infill = simplify(out.walls[l].infill, settings.simplify_tolerance);
-            fuzz_walls(out.walls[l].toolpaths, out.regions[l], fuzzy,
-                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l);
-        } else
-            out.walls[l].infill = out.regions[l];
+        if (!settings.polyholes)
+            build_walls(l);
     });
     for (std::size_t l = 1; l < out.layers.size(); ++l)
         if (copied[l]) {
             open[l] = open[l - 1];
             out.regions[l] = out.regions[l - 1];
-            out.thin_area[l] = out.thin_area[l - 1];
-            out.walls[l] = out.walls[l - 1];
+            if (!settings.polyholes) {
+                out.thin_area[l] = out.thin_area[l - 1];
+                out.walls[l] = out.walls[l - 1];
+            }
         }
+    // Round holes as polygons (orca_2_5.md, rule 5), once every layer's
+    // region is known: a hole is turned when it lasts two layers.
+    if (settings.polyholes) {
+        PolyholeOptions po;
+        po.margin = settings.polyhole_margin.value;
+        po.margin_percent = settings.polyhole_margin.percent;
+        po.nozzle = settings.nozzle_diameter;
+        po.max_edges = settings.polyhole_max_edges;
+        po.twist = settings.polyhole_twist;
+        make_polyholes(out.regions, po);
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) { build_walls(l); });
+    }
     // What holds a layer up, and what its skins see: with several extruders,
     // every part's (the skins their own with surfaces.interface_shells).
     const std::vector<Polygons>& held = frame && frame->cover ? *frame->cover : out.regions;
@@ -1444,11 +1563,24 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             if (!walls)
                 return;
             walls->infill = simplify(walls->infill, settings.simplify_tolerance);
-            fuzz_walls(walls->toolpaths, out.regions[l], fuzzy,
-                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l);
             out.walls[l] = std::move(*walls);
         });
     }
+    // Fuzzy skin (fuzzy_skin.md), once every layer's region is known: an
+    // outer wall that hangs over nothing (outside the layer below, half a
+    // bead past its edge) stays smooth, as a bridge (orca_2_5.md, rule 18).
+    if (settings.wall_count > 0)
+        tbb::parallel_for(std::size_t(0), out.layers.size(), [&](std::size_t l) {
+            if (!fuzzed(l) || out.regions[l].empty())
+                return;
+            Polygons air;
+            if (l > 0)
+                air = Clipper2Lib::Difference(out.regions[l], offset(out.regions[l - 1], 0.5 * settings.wall_width),
+                                              Clipper2Lib::FillRule::NonZero);
+            fuzz_walls(out.walls[l].toolpaths, out.regions[l], fuzzy,
+                       l < fuzzy_painted.size() && !fuzzy_painted[l].empty() ? &fuzzy_painted[l] : nullptr, l,
+                       air.empty() ? nullptr : &air);
+        });
     for (std::size_t n : open)
         out.open_contours += n;
     out.cut_away = std::size_t(std::count(cut_away.begin(), cut_away.end(), 1));
@@ -1616,11 +1748,23 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         sp.automatic = settings.support_automatic;
         sp.gpu = gpu;
         // A painted face's own layer, a little wider: its overhang lies under it.
-        const std::vector<Polygons> enforce = painted_areas(painted[0], out.layers, settings.wall_width / 2.0);
-        const std::vector<Polygons> block = painted_areas(painted[1], out.layers, settings.wall_width / 2.0);
-        if (!painted[0].empty())
+        std::vector<Polygons> enforce = painted_areas(painted[0], out.layers, settings.wall_width / 2.0);
+        std::vector<Polygons> block = painted_areas(painted[1], out.layers, settings.wall_width / 2.0);
+        // The support volumes' sections join them (supports_more.md, rules 4 and 5).
+        const auto add_volume = [&](const IndexedMesh& volume, std::vector<Polygons>& areas) {
+            if (volume.triangles.empty())
+                return false;
+            const std::vector<Polygons> sections = volume_sections(volume, heights, settings.gap_closing_radius, gpu);
+            areas.resize(out.layers.size());
+            for (std::size_t l = 0; l < areas.size() && l < sections.size(); ++l)
+                areas[l] = Clipper2Lib::Union(areas[l], sections[l], Clipper2Lib::FillRule::NonZero);
+            return true;
+        };
+        const bool enforced = volumes && add_volume(volumes->enforcers, enforce);
+        const bool blocked = volumes && add_volume(volumes->blockers, block);
+        if (!painted[0].empty() || enforced)
             sp.enforce = &enforce;
-        if (!painted[1].empty())
+        if (!painted[1].empty() || blocked)
             sp.block = &block;
         if (settings.support && settings.support_style == SupportStyle::Organic) {
             TreeParams tp;
@@ -1636,6 +1780,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
             tp.interface_layers = settings.support_interface_layers;
             const std::vector<Polygons> over = supported_overhangs(out.regions, thickness, sp);
             out.support_areas = tree_support_areas(out.regions, tree_nodes(out.regions, thickness, over, tp), over, tp);
+            // Only from the bed holds for the trees too (supports_more.md rule 2, BH39).
+            if (sp.buildplate_only)
+                keep_from_bed(out.support_areas, out.regions, sp.bottom_gap_layers);
         } else if (settings.support) {
             out.support_areas = support_areas(out.regions, thickness, sp);
         }
@@ -1804,7 +1951,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
         combined_region[r] = std::move(common);
     });
     FillParams fill{settings.wall_width, settings.infill_density / 100.0, settings.infill_angle, settings.infill_pattern,
-                    settings.monotonic_top};
+                    settings.top_pattern};
     fill.bridge_width = bridge_bead(settings);
     fill.sparse_width = nozzles.sparse_width;
     // At 0 from the nozzle, not the walls (surfaces_infill.md, I9): the top
@@ -1813,7 +1960,7 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     fill.solid_width = settings.solid_width > 0.0 ? settings.solid_width : 1.125 * settings.nozzle_diameter;
     fill.wall_overlap = settings.infill_wall_overlap / 100.0;
     fill.max_link = settings.infill_max_link;
-    fill.monotonic_bottom = settings.monotonic_bottom;
+    fill.bottom_pattern = settings.bottom_pattern;
     fill.depth = depth.empty() ? nullptr : &depth;
     fill.centre = frame ? frame->centre : Point2d{0.5 * (double(min_x) + double(max_x)), 0.5 * (double(min_y) + double(max_y))};
     // Lightning (docs/INFILL.md): from the top down, in what the stress
@@ -1901,6 +2048,12 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                          a.top_under == b.top_under && a.bottom == b.bottom && a.sparse == b.sparse &&
                          a.bridge == b.bridge;
         });
+    // The tree's fill comes from distance fields (PLAN.md, «Soporte en árbol
+    // y pintura más livianos», step 2), the layers' fields computed together
+    // below, on the GPU when there is one: the same numbers either way.
+    const bool tree_by_field = settings.support_style == SupportStyle::Organic;
+    std::vector<Polygons> tree_above(tree_by_field ? out.layers.size() : 0);
+    std::vector<double> tree_width(tree_by_field ? out.layers.size() : 0, 0.0);
     tbb::parallel_for(std::size_t(0), out.layers.size(),
                       [&](std::size_t l) {
                           if (repeats[l])
@@ -1988,12 +2141,9 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                                                : settings.support_width.value <= 0.0 ? settings.wall_width
                                                : settings.support_width.percent ? settings.support_width.value / 100.0 * h
                                                                                 : settings.support_width.value;
-                          if (settings.support_style == SupportStyle::Organic) {
-                              // Interface lines at 45 and 135 degrees in turn (supports_more.md, rule 17).
-                              TreeFill tf = tree_fill(out.support_areas[l], above, width, settings.support_spacing,
-                                                      settings.tree_double_wall_diameter, (l % 2 == 0) ? 0.0 : 90.0);
-                              out.fills[l].support = std::move(tf.support);
-                              out.fills[l].support_interface = std::move(tf.interface);
+                          if (settings.support_style == SupportStyle::Organic) { // filled below, every layer's field at once
+                              tree_above[l] = std::move(above);
+                              tree_width[l] = width;
                               return;
                           }
                           // The base in lines along support.line_angle, support.spacing
@@ -2013,6 +2163,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
                           }
                           out.fills[l].support_interface = support_interface(interface, contact, settings, bead, width);
                       });
+    if (tree_by_field)
+        tree_fill_by_field(out, tree_above, tree_width, settings, gpu);
     for (std::size_t l = period; l < out.layers.size(); ++l)
         if (repeats[l]) {
             out.fills[l] = out.fills[l - period];

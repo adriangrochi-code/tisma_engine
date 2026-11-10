@@ -1,0 +1,29 @@
+# Report a problem against the mock server (problem_reports.md; cloud.md,
+# rule 11): without a few words it is not sent (IP2); «See what is attached»
+# shows the log (IP5); sent without an account, the toast counts the earlier
+# reports of the same problem (CC6, IP6); a 429 keeps the dialog open with its
+# notice (IP7).
+menu more
+menu report
+expect-control report_window
+menu report_send
+expect-cloud report Write in a few words
+menu report.title
+type The supports are missing
+menu report_see_attached
+expect-control report.attached
+menu report_attached_close
+expect-no-control report.attached
+menu report_send
+report-wait
+expect-toast reported 2 times before
+expect-no-control report_window
+menu more
+menu report
+expect-control report_window
+menu report.title
+type flood of reports
+menu report_send
+report-wait
+expect-cloud report Too many reports were sent
+expect-control report_window

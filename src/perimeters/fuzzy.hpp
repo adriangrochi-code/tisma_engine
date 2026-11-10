@@ -23,7 +23,9 @@ struct FuzzyParams {
 // around its holes, and where `painted` is given, the stretches of any outer
 // wall inside it, whatever the mode (rule 4). Inner walls never change. The
 // points are spread from `seed`: the same layer gives the same G-code.
+// Where `air` is given, a point inside it keeps the wall smooth: the wall
+// hangs over nothing there (orca_2_5.md, rule 18).
 void fuzz_walls(std::vector<Toolpath>& walls, const Polygons& region, const FuzzyParams& params,
-                const Polygons* painted, std::uint64_t seed);
+                const Polygons* painted, std::uint64_t seed, const Polygons* air = nullptr);
 
 } // namespace tisma

@@ -3,14 +3,18 @@
 // see PROVENANCE.md.
 
 #include "gcode/template.hpp"
+#include "io/number.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
 #include <functional>
 #include <optional>
 #include <regex>
+#include <set>
+#include <system_error>
 #include <utility>
 
 namespace tisma {
@@ -66,11 +70,11 @@ TemplateValue TemplateValue::parse(std::string_view written) {
         return of(std::move(text));
     }
     long long integer = 0;
-    if (const auto r = std::from_chars(written.data(), written.data() + written.size(), integer);
+    if (const auto r = chars_to(written.data(), written.data() + written.size(), integer);
         r.ec == std::errc() && r.ptr == written.data() + written.size() && !written.empty())
         return of(integer);
     double real = 0.0;
-    if (const auto r = std::from_chars(written.data(), written.data() + written.size(), real);
+    if (const auto r = chars_to(written.data(), written.data() + written.size(), real);
         r.ec == std::errc() && r.ptr == written.data() + written.size() && !written.empty())
         return of(real);
     return of(std::string(written));
@@ -115,9 +119,15 @@ bool ident_start(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z
 bool ident_char(char c) { return ident_start(c) || (c >= '0' && c <= '9') || c == '.'; }
 
 // The template being rendered, for the errors' line and mark.
+// What marks a text as a regular expression from ~name (one_of() only).
+constexpr char kPatternMark = '\x01';
+
 struct Source {
     std::string_view text;
     std::string_view section;
+    // Lists read past their end, which give their last value instead
+    // (gcode_macros.md, rule 10 quater): named here for the log.
+    std::set<std::string, std::less<>>* clamped = nullptr;
 
     [[noreturn]] void fail(std::size_t at, const std::string& message) const {
         at = std::min(at, text.size());
@@ -404,6 +414,36 @@ private:
                 src_.fail(at, "a number that cannot be read");
             return v;
         }
+        // /pattern/: a regular expression written in place, for
+        // regex_replace() and one_of() (orca_2_5.md, rule 20). A \/ is a /.
+        if (c == '/') {
+            std::string pattern;
+            std::size_t j = at_ + 1;
+            for (; j < end_ && src_.text[j] != '/'; ++j) {
+                if (src_.text[j] == '\\' && j + 1 < end_ && src_.text[j + 1] == '/')
+                    ++j;
+                else if (src_.text[j] == '\\' && j + 1 < end_)
+                    pattern += src_.text[j++];
+                pattern += src_.text[j];
+            }
+            if (j >= end_)
+                src_.fail(at, "a regular expression without its closing /");
+            at_ = j + 1;
+            return TemplateValue::of(std::string(1, kPatternMark) + pattern);
+        }
+        // ~name: the variable's text as a regular expression, for one_of()
+        // (the OrcaSlicer family's G-code; gcode_macros.md, rule 10 quater).
+        if (take("~")) {
+            const std::size_t name_at = at_;
+            const std::string pattern_of = identifier();
+            const TemplateValue* p = pattern_of.empty() ? nullptr : lookup_(pattern_of);
+            if (!p)
+                src_.fail(name_at, "'~' takes a variable holding a regular expression");
+            const TemplateValue& text = one(*p);
+            if (text.kind != Kind::Text)
+                src_.fail(name_at, "'~" + pattern_of + "' is not a text (a regular expression is expected)");
+            return TemplateValue::of(std::string(1, kPatternMark) + text.text);
+        }
         const std::string name = identifier();
         if (name.empty())
             src_.fail(at, "a value is expected");
@@ -427,9 +467,14 @@ private:
                     src_.fail(index_at, "'" + name + "' has one value: index 0 only");
                 return *v;
             }
-            if (index.integer < 0 || std::size_t(index.integer) >= v->list.size())
+            if (index.integer < 0 || v->list.empty())
                 src_.fail(index_at, "index " + std::to_string(index.integer) + " is out of '" + name + "' (" +
                                          std::to_string(v->list.size()) + " values)");
+            if (std::size_t(index.integer) >= v->list.size()) { // past the end: the last value
+                if (src_.clamped)
+                    src_.clamped->insert(name);
+                return v->list.back();
+            }
             return v->list[std::size_t(index.integer)];
         }
         return *v;
@@ -462,6 +507,15 @@ private:
             count(2, 2);
             const bool first = name == "min" ? number(0) <= number(1) : number(0) >= number(1);
             return one(first ? args[0] : args[1]);
+        }
+        if (name == "random") {
+            // random(a, b): the same G-code every time (orca_2_5.md, rule 19),
+            // so the middle of the range, whole when both ends are.
+            count(2, 2);
+            const double mid = (number(0) + number(1)) / 2.0;
+            if (args[0].kind == Kind::Int && args[1].kind == Kind::Int)
+                return TemplateValue::of(static_cast<long long>(std::floor(mid)));
+            return TemplateValue::of(mid);
         }
         if (name == "int") {
             count(1, 1);
@@ -496,12 +550,35 @@ private:
             if (args.size() < 2)
                 src_.fail(at, "one_of() takes a value and what it may be");
             for (std::size_t i = 1; i < args.size(); ++i) {
+                const TemplateValue& option = one(args[i]);
+                if (option.kind == Kind::Text && option.text.starts_with(kPatternMark)) { // ~name: the whole value matches
+                    try {
+                        if (std::regex_match(template_text(one(args[0])), std::regex(option.text.substr(1))))
+                            return TemplateValue::of(true);
+                    } catch (const std::regex_error&) {
+                        src_.fail(where[i], "the regular expression in one_of() cannot be read");
+                    }
+                    continue;
+                }
                 const bool same = numeric(args[0]) && numeric(args[i]) ? real_of(args[0]) == real_of(args[i])
-                                                                       : template_text(one(args[0])) == template_text(one(args[i]));
+                                                                       : template_text(one(args[0])) == template_text(option);
                 if (same)
                     return TemplateValue::of(true);
             }
             return TemplateValue::of(false);
+        }
+        if (name == "regex_replace") { // (text, /pattern/, replacement with $1 for the groups), rule 20
+            count(3, 3);
+            const TemplateValue& pattern = one(args[1]);
+            std::string expression = template_text(pattern);
+            if (pattern.kind == Kind::Text && pattern.text.starts_with(kPatternMark))
+                expression.erase(0, 1);
+            try {
+                return TemplateValue::of(std::regex_replace(template_text(one(args[0])), std::regex(expression),
+                                                            template_text(one(args[2]))));
+            } catch (const std::regex_error&) {
+                src_.fail(where[1], "the regular expression in regex_replace() cannot be read");
+            }
         }
         if (name == "size" || name == "empty") {
             count(1, 1);
@@ -556,15 +633,130 @@ std::size_t closing(std::string_view text, std::size_t open) {
 
 } // namespace
 
+namespace {
+
+std::string render_raw(std::string_view text, TemplateContext& context, std::string_view section);
+
+// Each F word of value 0 outside comments (F0, F0.0) becomes F<feed>
+// (gcode_macros.md, rule 10 quater): a machine's own G-code with a speed
+// variable the engine left at 0 must not stop the print.
+std::string without_zero_feeds(std::string text, TemplateContext& context) {
+    if (context.zero_feed <= 0.0)
+        return text;
+    std::string out;
+    out.reserve(text.size());
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string::npos)
+            end = text.size();
+        std::string line = text.substr(start, end - start);
+        const std::size_t comment = std::min(line.find(';'), line.size());
+        // Moves only (G0 to G3): elsewhere an F is no speed (Prusa's M862.1 F
+        // is a check of the nozzle's kind).
+        std::size_t w = line.find_first_not_of(" \t");
+        bool move = false;
+        if (w != std::string::npos && (line[w] == 'G' || line[w] == 'g')) {
+            std::size_t d = w + 1;
+            while (d < comment && line[d] == '0')
+                ++d;
+            const bool digit = d < comment && line[d] >= '1' && line[d] <= '3';
+            const std::size_t after = digit ? d + 1 : d;
+            move = (digit || (d > w + 1)) && (after >= comment || line[after] == ' ' || line[after] == '\t');
+        }
+        for (std::size_t i = 0; move && i < comment; ++i) {
+            if ((line[i] != 'F' && line[i] != 'f') || (i > 0 && line[i - 1] != ' ' && line[i - 1] != '\t'))
+                continue;
+            std::size_t j = i + 1;
+            while (j < comment && (std::isdigit(static_cast<unsigned char>(line[j])) || line[j] == '.' || line[j] == '-' ||
+                                   line[j] == '+'))
+                ++j;
+            if (j == i + 1 || (j < comment && line[j] != ' ' && line[j] != '\t' && line[j] != '\r'))
+                continue;
+            const std::string number = line.substr(i + 1, j - i - 1);
+            char* end_of = nullptr;
+            const double v = std::strtod(number.c_str(), &end_of);
+            if (end_of != number.c_str() + number.size() || v != 0.0)
+                continue;
+            const std::string feed = std::to_string(std::llround(context.zero_feed));
+            line.replace(i + 1, j - i - 1, feed);
+            ++context.zero_feeds;
+            i += feed.size();
+        }
+        out += line;
+        if (end == text.size())
+            break;
+        out += '\n';
+        start = end + 1;
+    }
+    return out;
+}
+
+} // namespace
+
 std::string render_template(std::string_view text, TemplateContext& context, std::string_view section) {
-    const Source src{text, section};
+    return without_zero_feeds(render_raw(text, context, section), context);
+}
+
+namespace {
+
+std::string render_raw(std::string_view text, TemplateContext& context, std::string_view section) {
+    const Source src{text, section, &context.index_clamped};
     Variables locals;
-    const std::function<const TemplateValue*(std::string_view)> lookup = [&](std::string_view name) -> const TemplateValue* {
+    Variables converted; // aliases' values in their own type
+    std::function<const TemplateValue*(std::string_view)> lookup;
+    lookup = [&](std::string_view name) -> const TemplateValue* {
         for (const Variables* scope : {&locals, &context.globals, &context.variables})
-            if (const auto it = scope->find(name); it != scope->end())
+            if (const auto it = scope->find(name); it != scope->end()) {
+                if (scope == &context.variables && context.unfilled.contains(name))
+                    context.unfilled_used.emplace(name);
+                if (scope == &context.variables && context.estimated.contains(name))
+                    context.estimated_used.emplace(name);
                 return &it->second;
-        return nullptr;
+            }
+        const auto alias = context.aliases.find(name);
+        if (alias == context.aliases.end())
+            return nullptr;
+        const TemplateValue* v = lookup(alias->second.first);
+        if (!v)
+            return nullptr;
+        const char type = alias->second.second;
+        TemplateValue as = *v;
+        if (std::string_view("nibt").find(type) != std::string_view::npos && v->kind == TemplateValue::Kind::List)
+            as = v->list.empty() ? TemplateValue{} : v->list.front();
+        else if (std::string_view("NIBT").find(type) != std::string_view::npos && v->kind != TemplateValue::Kind::List)
+            as = TemplateValue::of(std::vector<TemplateValue>{*v});
+        return &(converted[std::string(name)] = std::move(as));
     };
+    // The cura dialect (gcode_macros.md, rule 10 bis): {name} is replaced by
+    // its value (a list's first: one value per extruder there), and nothing
+    // else is read; a name the engine does not know stays as written.
+    if (context.braces_only) {
+        std::string out;
+        std::size_t i = 0;
+        while (i < text.size()) {
+            if (text[i] == '{' && i + 1 < text.size() && ident_start(text[i + 1])) {
+                std::size_t j = i + 1;
+                while (j < text.size() && ident_char(text[j]))
+                    ++j;
+                if (j < text.size() && text[j] == '}') {
+                    const std::string_view name = text.substr(i + 1, j - i - 1);
+                    if (const TemplateValue* v = lookup(name)) {
+                        out += template_text(v->kind == TemplateValue::Kind::List
+                                                 ? (v->list.empty() ? TemplateValue{} : v->list.front())
+                                                 : *v);
+                    } else {
+                        context.unfilled_used.emplace(name);
+                        out.append(text.substr(i, j + 1 - i));
+                    }
+                    i = j + 1;
+                    continue;
+                }
+            }
+            out += text[i++];
+        }
+        return out;
+    }
     // The {if} blocks open: whether the text around them is kept, whether a
     // branch of theirs was taken, and whether the current one is kept.
     struct Branch {
@@ -578,16 +770,78 @@ std::string render_template(std::string_view text, TemplateContext& context, std
     std::size_t i = 0;
     while (i < text.size()) {
         const char c = text[i];
-        if (c == '[' && i + 1 < text.size() && ident_start(text[i + 1])) { // [name]
+        if (c == '[' && i + 1 < text.size() && ident_start(text[i + 1])) { // [name], [name[index]], [name_index]
             std::size_t j = i + 1;
             while (j < text.size() && ident_char(text[j]))
                 ++j;
+            const std::string_view name = text.substr(i + 1, j - i - 1);
+            // [name[index]]: the index a number or a variable, no sums.
+            std::string_view index;
+            std::size_t index_at = 0;
+            if (j < text.size() && text[j] == '[') {
+                std::size_t k = j + 1;
+                while (k < text.size() && ident_char(text[k]))
+                    ++k;
+                if (k > j + 1 && k + 1 < text.size() && text[k] == ']' && text[k + 1] == ']') {
+                    index = text.substr(j + 1, k - j - 1);
+                    index_at = j + 1;
+                    j = k + 1;
+                }
+            }
             if (j < text.size() && text[j] == ']') {
                 if (kept()) {
-                    const std::string_view name = text.substr(i + 1, j - i - 1);
                     const TemplateValue* v = lookup(name);
+                    // [temperature_[current_extruder]]: the old form with a
+                    // variable index, the list «temperature».
+                    if (!v && !index.empty() && name.size() > 1 && name.back() == '_')
+                        v = lookup(name.substr(0, name.size() - 1));
+                    // [temperature_0]: the list «temperature», item 0.
+                    if (!v && index.empty()) {
+                        const std::size_t under = name.find_last_of('_');
+                        if (under != std::string_view::npos && under + 1 < name.size() &&
+                            name.find_first_not_of("0123456789", under + 1) == std::string_view::npos) {
+                            if (const TemplateValue* list = lookup(name.substr(0, under))) {
+                                v = list;
+                                index = name.substr(under + 1);
+                                index_at = i + 1 + under + 1;
+                            }
+                        }
+                    }
+                    if (!v && index.empty() && context.verbatim.contains(name)) {
+                        out += text.substr(i, j - i + 1);
+                        i = j + 1;
+                        continue;
+                    }
                     if (!v)
                         src.fail(i + 1, "unknown variable '" + std::string(name) + "'");
+                    if (!index.empty()) {
+                        long long at = 0;
+                        if (index.find_first_not_of("0123456789") == std::string_view::npos) {
+                            if (chars_to(index.data(), index.data() + index.size(), at).ec != std::errc())
+                                src.fail(index_at, "the index " + std::string(index) + " is too large");
+                        } else {
+                            const TemplateValue* n = lookup(index);
+                            if (!n)
+                                src.fail(index_at, "unknown variable '" + std::string(index) + "'");
+                            if (n->kind == TemplateValue::Kind::Int)
+                                at = n->integer;
+                            else if (n->kind == TemplateValue::Kind::Real && n->real == std::floor(n->real))
+                                at = static_cast<long long>(n->real);
+                            else
+                                src.fail(index_at, "the index '" + std::string(index) + "' is not a whole number");
+                        }
+                        // A single value is a list of one (rule 2).
+                        const std::size_t size = v->kind == TemplateValue::Kind::List ? v->list.size() : 1;
+                        if (at < 0 || size == 0)
+                            src.fail(index_at, "index " + std::to_string(at) + " out of '" + std::string(name) + "' (" +
+                                                   std::to_string(size) + " values)");
+                        if (static_cast<std::size_t>(at) >= size) { // past the end: the last value
+                            context.index_clamped.emplace(name);
+                            at = static_cast<decltype(at)>(size - 1);
+                        }
+                        if (v->kind == TemplateValue::Kind::List)
+                            v = &v->list[static_cast<std::size_t>(at)];
+                    }
                     out += template_text(*v);
                 }
                 i = j + 1;
@@ -612,7 +866,6 @@ std::string render_template(std::string_view text, TemplateContext& context, std
         const auto word = [&](std::string_view w) {
             return block.substr(0, w.size()) == w && (block.size() == w.size() || !ident_char(block[w.size()]));
         };
-        Expression e(src, begin, end, lookup);
         if (word("if")) {
             Expression cond(src, begin + 2, end, lookup);
             bool yes = false;
@@ -644,17 +897,110 @@ std::string render_template(std::string_view text, TemplateContext& context, std
             if (open.empty())
                 src.fail(i, "an {endif} without its {if}");
             open.pop_back();
-        } else if (word("local") || word("global")) {
-            const bool global = word("global");
-            Expression assignment(src, begin + (global ? 6 : 5), end, lookup);
-            if (kept()) {
-                auto [name, value] = assignment.assignment();
-                (global ? context.globals : locals)[name] = std::move(value);
-            }
         } else if (kept()) {
             if (block.empty())
                 src.fail(i, "an empty {}");
-            out += template_text(e.whole());
+            // Statements apart by ';' (outside texts and brackets): local and
+            // global ones, assignments to a variable or a list's item
+            // (name = …, name[i] = …), and expressions, whose values are
+            // written (PrusaSlicer's documented macro language).
+            std::vector<std::pair<std::size_t, std::size_t>> statements;
+            {
+                std::size_t from = begin;
+                int depth = 0;
+                char quote = 0;
+                for (std::size_t k = begin; k < end; ++k) {
+                    const char ch = text[k];
+                    if (quote) {
+                        if (ch == '\\')
+                            ++k;
+                        else if (ch == quote)
+                            quote = 0;
+                    } else if (ch == '"') {
+                        quote = ch;
+                    } else if (ch == '(' || ch == '[') {
+                        ++depth;
+                    } else if ((ch == ')' || ch == ']') && depth > 0) {
+                        --depth;
+                    } else if (ch == ';' && depth == 0) {
+                        statements.emplace_back(from, k);
+                        from = k + 1;
+                    }
+                }
+                statements.emplace_back(from, end);
+            }
+            for (auto [a, b] : statements) {
+                while (a < b && (text[a] == ' ' || text[a] == '\t' || text[a] == '\n' || text[a] == '\r'))
+                    ++a;
+                while (b > a && (text[b - 1] == ' ' || text[b - 1] == '\t' || text[b - 1] == '\n' || text[b - 1] == '\r'))
+                    --b;
+                if (a == b)
+                    continue;
+                const std::string_view st = text.substr(a, b - a);
+                const auto starts = [&](std::string_view w) {
+                    return st.substr(0, w.size()) == w && (st.size() == w.size() || !ident_char(st[w.size()]));
+                };
+                if (starts("local") || starts("global")) {
+                    const bool global = starts("global");
+                    Expression assignment(src, a + (global ? 6 : 5), b, lookup);
+                    auto [name, value] = assignment.assignment();
+                    (global ? context.globals : locals)[name] = std::move(value);
+                    continue;
+                }
+                // name = … or name[index] = … (not ==)
+                std::size_t k = 0;
+                while (k < st.size() && ident_char(st[k]))
+                    ++k;
+                std::size_t index_from = 0, index_to = 0;
+                std::size_t eq = k;
+                if (k > 0 && ident_start(st[0])) {
+                    while (eq < st.size() && st[eq] == ' ')
+                        ++eq;
+                    if (eq < st.size() && st[eq] == '[') {
+                        int d = 0;
+                        std::size_t m = eq;
+                        for (; m < st.size(); ++m) {
+                            if (st[m] == '[')
+                                ++d;
+                            else if (st[m] == ']' && --d == 0)
+                                break;
+                        }
+                        index_from = eq + 1;
+                        index_to = m;
+                        eq = m + 1;
+                        while (eq < st.size() && st[eq] == ' ')
+                            ++eq;
+                    }
+                }
+                if (k > 0 && ident_start(st[0]) && eq < st.size() && st[eq] == '=' &&
+                    (eq + 1 >= st.size() || st[eq + 1] != '=')) {
+                    const std::string name(st.substr(0, k));
+                    TemplateValue value = Expression(src, a + eq + 1, b, lookup).whole();
+                    TemplateValue* target = nullptr;
+                    if (const auto it = locals.find(name); it != locals.end())
+                        target = &it->second;
+                    else if (const auto g = context.globals.find(name); g != context.globals.end())
+                        target = &g->second;
+                    else if (const TemplateValue* known = lookup(name))
+                        target = &(locals[name] = *known);
+                    else
+                        src.fail(a, "unknown variable '" + name + "'");
+                    if (index_to > index_from) {
+                        const TemplateValue at = Expression(src, a + index_from, a + index_to, lookup).whole();
+                        if (at.kind != TemplateValue::Kind::Int || at.integer < 0 || at.integer > 1000)
+                            src.fail(a + index_from, "an index must be a whole number from 0");
+                        if (target->kind != TemplateValue::Kind::List)
+                            *target = TemplateValue::of(std::vector<TemplateValue>{*target});
+                        if (target->list.size() <= std::size_t(at.integer))
+                            target->list.resize(std::size_t(at.integer) + 1, target->list.empty() ? value : target->list.back());
+                        target->list[std::size_t(at.integer)] = std::move(value);
+                    } else {
+                        *target = std::move(value);
+                    }
+                    continue;
+                }
+                out += template_text(Expression(src, a, b, lookup).whole());
+            }
         }
         i = close + 1;
     }
@@ -662,5 +1008,7 @@ std::string render_template(std::string_view text, TemplateContext& context, std
         src.fail(open.back().at, "an {if} without its {endif}");
     return out;
 }
+
+} // namespace
 
 } // namespace tisma

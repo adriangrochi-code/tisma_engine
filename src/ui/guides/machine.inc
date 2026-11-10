@@ -375,6 +375,32 @@
      "on parts with many corners, a smaller value gives a longer time. It comes from the printer's profile; if the "
      "profile does not have it, 10 mm/s is used.\n\nExample: 10 mm/s if you do not know it; a higher value on fast "
      "printers, as their profile says."},
+    {"machine.heat_rate_nozzle",
+     "Es cuántos grados por segundo sube la temperatura de la boquilla al calentar. El programa la usa para sumar al "
+     "tiempo estimado lo que tarda en llegar a la temperatura de impresión, y lo muestra aparte como preparación.\n\n"
+     "En 0 no se sabe y el calentamiento no se cuenta. Se mide calentando desde frío: los grados que sube dividido "
+     "los segundos que tarda.\n\nEjemplo: 2 °C/s, si la boquilla tarda 90 s en llegar de 25 °C a 200 °C.",
+     "It is how many degrees per second the nozzle's temperature rises when it heats. The program uses it to add to "
+     "the estimated time how long it takes to reach the printing temperature, and shows it apart as preparation.\n\n"
+     "At 0 it is not known and the heating is not counted. Measure it heating from cold: the degrees it rises divided "
+     "by the seconds it takes.\n\nExample: 2 °C/s, if the nozzle takes 90 s to go from 25 °C to 200 °C."},
+    {"machine.heat_rate_bed",
+     "Es cuántos grados por segundo sube la temperatura de la cama al calentar. Como el de la boquilla, suma al tiempo "
+     "estimado lo que tarda en llegar a su temperatura, como preparación.\n\nEn 0 no se cuenta. Las camas grandes "
+     "suben despacio.\n\nEjemplo: 0,5 °C/s, si la cama tarda 70 s en llegar de 25 °C a 60 °C.",
+     "It is how many degrees per second the bed's temperature rises when it heats. Like the nozzle's, it adds to the "
+     "estimated time how long it takes to reach its temperature, as preparation.\n\nAt 0 it is not counted. Big beds "
+     "heat slowly.\n\nExample: 0.5 °C/s, if the bed takes 70 s to go from 25 °C to 60 °C."},
+    {"machine.home_time",
+     "Son los segundos que tarda la impresora en ir al origen (el comando G28) al empezar. Se suman al tiempo estimado "
+     "como preparación.\n\nSe mide con un reloj la primera vez.\n\nEjemplo: 15 s.",
+     "It is the seconds the printer takes to go home (the G28 command) at the start. They are added to the estimated "
+     "time as preparation.\n\nMeasure it with a clock the first time.\n\nExample: 15 s."},
+    {"machine.probe_time",
+     "Son los segundos que tarda la impresora en medir la cama para nivelarla (el comando G29) al empezar. Se suman "
+     "al tiempo estimado como preparación.\n\nEjemplo: 60 s en una impresora que mide 25 puntos.",
+     "It is the seconds the printer takes to measure the bed to level it (the G29 command) at the start. They are "
+     "added to the estimated time as preparation.\n\nExample: 60 s on a printer that measures 25 points."},
     {"machine.acceleration",
      "Es qué tan rápido gana velocidad el cabezal cuando imprime, en mm/s². Un auto con más aceleración llega antes a "
      "su velocidad; acá pasa lo mismo.\n\nMás aceleración termina antes, sobre todo en piezas chicas con muchas "
@@ -555,6 +581,19 @@
      "change at some height, asks for more than this, the program warns you: the bed will not get there and the part "
      "may come loose. At 0, it is unknown and not checked.\n\nExample: 100 °C on many ordinary printers; 110 to 120 °C "
      "on those that print ABS or engineering materials."},
+    {"machine.strict_parser",
+     "Algunas impresoras leen el archivo entero antes de empezar y se traban o lo rechazan si encuentran algo que no "
+     "conocen. Las Anycubic Kobra 3, Kobra S1 y Kobra X hacen eso: con «Anycubic» el G-code sale ordenado como lo "
+     "escribe el programa de Anycubic, con el resumen al principio, sin la lista de ajustes al final y siempre en "
+     "texto, nunca binario.\n\nNo cambia cómo se imprime la pieza, solo cómo se ordena el archivo. Las Kobra "
+     "anteriores (Kobra, Kobra 2, Neo, Go) imprimen cualquier G-code y no lo necesitan.\n\nEjemplo: «Anycubic» si la "
+     "Kobra 3 se queda en «parsing» con un archivo de este programa; «Lee cualquier G-code» para el resto.",
+     "Some printers read the whole file before they start and get stuck or refuse it when they find something they "
+     "do not know. The Anycubic Kobra 3, Kobra S1 and Kobra X do this: with \"Anycubic\" the G-code is laid out as "
+     "Anycubic's program writes it, with the summary at the start, without the list of settings at the end and "
+     "always as text, never binary.\n\nIt does not change how the part prints, only how the file is laid out. Older "
+     "Kobras (Kobra, Kobra 2, Neo, Go) print any G-code and do not need it.\n\nExample: \"Anycubic\" if a Kobra 3 "
+     "stays on \"parsing\" with a file from this program; \"Reads any G-code\" for the rest."},
     {"machine.flavor",
      "Es el dialecto del G-code, el idioma de las instrucciones que lee la impresora. Cada firmware (el programa que "
      "corre dentro de la impresora) entiende algunos comandos distintos, por ejemplo para calentar o para el "

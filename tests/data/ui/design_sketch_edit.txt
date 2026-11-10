@@ -1,0 +1,66 @@
+# Editing a sketch (cad_design.md, rule 17): CD17 (two crossing lines, TR
+# and a click on one end: that end is cut at the crossing), then CD18 (a
+# circle picked with a click, AR polar about the origin, 6 in 360 degrees:
+# six circles 60 degrees apart), then the trimmed line offset 2 mm.
+menu mode_engineering
+menu tab_design
+menu design_sketch
+menu design_plane_xy
+expect-control sketch_finish
+expect-control sketch_edit_trim
+menu design_command
+type L
+key enter
+type 0,0
+key enter
+type 20,20
+key enter
+key enter
+type L
+key enter
+type 0,20
+key enter
+type 20,0
+key enter
+key enter
+expect-sketch-entities 2
+type TR
+key enter
+sketch-point 17 17
+expect-sketch-entities 2
+expect-sketch-point 1 1 10 10
+expect-sketch-point 1 0 0 0
+key escape
+type C
+key enter
+type 30,0
+key enter
+type 4
+key enter
+expect-sketch-entities 3
+type AR
+key enter
+sketch-point 34 0
+key enter
+type P
+key enter
+type 0,0
+key enter
+type 6
+key enter
+key enter
+expect-sketch-entities 8
+expect-sketch-point 8 0 15 -25.981
+expect-sketch-point 5 0 -15 25.981
+type O
+key enter
+type 2
+key enter
+sketch-point 5 5
+sketch-point 0 10
+expect-sketch-entities 9
+expect-sketch-point 9 0 -1.414 1.414
+# D5b (rules 19 bis, 20): bring in DXF and SVG, export DXF.
+expect-control sketch_import_dxf
+expect-control sketch_import_svg
+expect-control sketch_export_dxf

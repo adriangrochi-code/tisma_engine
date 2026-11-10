@@ -19,6 +19,9 @@ TEST_CASE("settings panel: every setting has a section, a card and a level (SP1)
         // The command line's: the interface has tools, and each object its menu.
         if (key.starts_with("placement.") || key.starts_with("transform.") || key.starts_with("object."))
             continue;
+        // The send window's options (gcode_macros.md, rule 12), chosen when sending.
+        if (key.starts_with("bambu."))
+            continue;
         const std::optional<SettingPlace> place = setting_place(key);
         REQUIRE(place);
         CHECK(place->section != nullptr);
@@ -39,7 +42,7 @@ TEST_CASE("settings panel: every setting has a section, a card and a level (SP1)
             }
         }
     CHECK_FALSE(setting_place("compute.gpu"));
-    CHECK(setting_place("machine.variables.first_layer_temperature")->subsection->id == "variables");
+    CHECK(setting_place("machine.variables.first_layer_temperature")->subsection->id == "nozzle_temp"); // settings_panel.md rule 10
 }
 
 TEST_CASE("settings panel: Basic shows the spec's list, Normal more, Advanced all (rule 10)", "[ui][layout]") {
@@ -48,7 +51,8 @@ TEST_CASE("settings panel: Basic shows the spec's list, Normal more, Advanced al
         "surfaces.bottom_layers", "surfaces.top_min_thickness", "surfaces.bottom_min_thickness", "surfaces.top_pattern",
         "infill.density", "infill.pattern", "support.enabled", "support.automatic", "adhesion.skirt_loops",
         "adhesion.skirt_distance", "adhesion.brim_width", "machine.variables.temperature",
-        "machine.variables.bed_temperature", "cooling.fan_min", "cooling.fan_max", "retraction.length", "retraction.lift",
+        "machine.variables.bed_temperature", "machine.variables.first_layer_temperature",
+        "machine.variables.first_layer_bed_temperature", "cooling.fan_min", "cooling.fan_max", "retraction.length", "retraction.lift",
         // the printer's, in its own page
         "machine.bed", "machine.max_height", "machine.nozzle_diameter", "machine.filament_diameter"};
     std::size_t shown = 0, normal = 0, all = 0;
@@ -64,6 +68,8 @@ TEST_CASE("settings panel: Basic shows the spec's list, Normal more, Advanced al
                     ++all;
                 }
     CHECK(shown == basic.size());
+    // The brim's gap from the part, seen at the level the program opens in (BH42).
+    CHECK(setting_place("adhesion.brim_gap")->level == SettingLevel::Normal);
     CHECK(shown < normal);
     CHECK(normal < all);
     // The spec's Advanced-only settings.
@@ -123,4 +129,29 @@ TEST_CASE("interface text: numbers in the language, the decimal comma in Spanish
     s.wall_spread_count = 2;
     CHECK(subsection_summary("walls_thin", s) == "2 beads share the change in width");
     set_language(Language::Spanish);
+}
+
+TEST_CASE("a count of one takes the singular, in Spanish and English (the spec team's QA, 2026-11-10)", "[ui]") {
+    CHECK(singular_counts("1 avisos") == "1 aviso");
+    CHECK(singular_counts("1 warnings") == "1 warning");
+    CHECK(singular_counts("Proyecto: 1 piezas, 1 capas, 1 paredes") == "Proyecto: 1 pieza, 1 capa, 1 pared");
+    CHECK(singular_counts("11 avisos") == "11 avisos");
+    CHECK(singular_counts("2,1 capas") == "2,1 capas");
+    CHECK(singular_counts("0.1 layers") == "0.1 layers");
+    CHECK(singular_counts("1 avisos de la tarjeta") == "1 aviso de la tarjeta");
+    CHECK(singular_counts("1 capasx") == "1 capasx");
+    CHECK(singular_counts("Cada 1 capas") == "Cada 1 capa");
+    CHECK(format("%d avisos", 1) == "1 aviso");
+    CHECK(format("%d avisos", 2) == "2 avisos");
+}
+
+// A "1 " near the end of the text, shorter than any plural (ASan found a read
+// past the end in the status bar, maintenance 2026-11-10): nothing changes and
+// nothing past the text is read.
+TEST_CASE("a count of one at the end of a text is left as it is", "[ui]") {
+    CHECK(singular_counts("1 ") == "1 ");
+    CHECK(singular_counts("x 1 a") == "x 1 a");
+    CHECK(singular_counts("12,3 mm · 1 ab") == "12,3 mm · 1 ab");
+    CHECK(singular_counts("1 avis") == "1 avis");
+    CHECK(singular_counts("1 avisos") == "1 aviso");
 }

@@ -1,0 +1,108 @@
+{
+ "format": "tisma-profile-pack",
+ "version": 2,
+ "pack_version": "2026.11.04-bbbbbbb",
+ "generated": "2026-11-04T00:00:00Z",
+ "license": "AGPL-3.0-or-later",
+ "printers": [
+  "vendors/acme/models/A1.json#0.4",
+  "vendors/acme/models/A1.json#0.6",
+  "vendors/bolt/models/B2.json#default"
+ ],
+ "compatible": {
+  "name": "compatible.json",
+  "size": 108,
+  "sha256": "3f623874013cfa17459322fb34f6287b9dcad95b84896d68b08ed0ec295a922e"
+ },
+ "community": {
+  "name": "community.tar.xz",
+  "size": 720,
+  "sha256": "150285872dbb2d99dcf13f7e1821a1bd7679f32950857914f46771f254797282"
+ },
+ "vendors": [
+  {
+   "id": "acme",
+   "name": "Acme",
+   "license": "AGPL-3.0-or-later",
+   "origin": "Invented",
+   "printers": [
+    "vendors/acme/models/A1.json#0.4",
+    "vendors/acme/models/A1.json#0.6"
+   ],
+   "filaments": [
+    "vendors/acme/filaments/PLA.json"
+   ],
+   "prints": [
+    "vendors/acme/prints/Standard.json",
+    "vendors/acme/prints/Fine.json",
+    "vendors/acme/prints/Draft.json",
+    "vendors/acme/prints/Coarse.json",
+    "vendors/acme/prints/Wide.json"
+   ],
+   "archive": {
+    "name": "acme.tar.xz",
+    "size": 1192,
+    "sha256": "15c4c1394e1ac1a43b22ffc1cc028792c6381f61ac20f2c9db753bc3b55587ce"
+   },
+   "models": [
+    {
+     "id": "A1",
+     "name": "Acme One",
+     "technology": "fff",
+     "family": "One",
+     "assets": {
+      "bed_model": "vendors/acme/beds/A1.stl",
+      "bed_texture": "vendors/acme/beds/A1.svg"
+     },
+     "file": "vendors/acme/models/A1.json",
+     "default_variant": "0.4",
+     "variants": [
+      {
+       "id": "0.4",
+       "nozzle": 0.4
+      },
+      {
+       "id": "0.6",
+       "nozzle": 0.6
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "bolt",
+   "name": "Bolt",
+   "license": "AGPL-3.0-or-later",
+   "origin": "Invented",
+   "printers": [
+    "vendors/bolt/models/B2.json#default"
+   ],
+   "archive": {
+    "name": "bolt.tar.xz",
+    "size": 572,
+    "sha256": "cf283c7db38a3d68865cb7679ac211189b6c635ff1f91dcf49f37cad7541f257"
+   },
+   "resins": [
+    "vendors/bolt/resins/Grey.json"
+   ],
+   "resin_prints": [
+    "vendors/bolt/resin_prints/Fine.json"
+   ],
+   "models": [
+    {
+     "id": "B2",
+     "name": "Bolt Two",
+     "technology": "sla",
+     "file": "vendors/bolt/models/B2.json",
+     "default_variant": "default",
+     "variants": [
+      {
+       "id": "default",
+       "nozzle": 0
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

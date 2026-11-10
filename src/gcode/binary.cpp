@@ -7,6 +7,7 @@
 #include "config/settings.hpp"
 
 #include <array>
+#include <initializer_list>
 #include <stdexcept>
 
 #ifndef TISMA_VERSION
@@ -51,12 +52,16 @@ std::uint32_t get(std::string_view bytes, std::size_t at, int size) {
 }
 
 // One uncompressed block with its CRC32 over header, parameters and data.
-void block(std::string& out, std::uint16_t type, std::string_view data) {
+// The parameters: the encoding (0: INI for metadata, none for G-code), or a
+// thumbnail's format, width and height.
+void block(std::string& out, std::uint16_t type, std::string_view data,
+           std::initializer_list<std::uint16_t> parameters = {0}) {
     std::string head;
     put16(head, type);
     put16(head, 0); // no compression
     put32(head, std::uint32_t(data.size()));
-    put16(head, 0); // the encoding: INI for metadata, none for G-code
+    for (const std::uint16_t p : parameters)
+        put16(head, p);
     std::uint32_t crc = crc32(head);
     crc = crc32(data, crc);
     out += head;
@@ -95,7 +100,7 @@ std::uint32_t crc32(std::string_view bytes, std::uint32_t crc) {
     return ~crc;
 }
 
-std::string binary_gcode(std::string_view text, const Settings& s) {
+std::string binary_gcode(std::string_view text, const Settings& s, const std::vector<GcodeThumbnail>& thumbnails) {
     // The G-code up to the closing summary; the summary and the settings after it.
     const std::string_view summary_mark = "\n; estimated printing time = ";
     const std::size_t summary = text.find(summary_mark);
@@ -155,6 +160,8 @@ std::string binary_gcode(std::string_view text, const Settings& s) {
     put16(out, 1); // CRC32
     block(out, kFileMetadata, ini({{"Producer", std::string("Tisma engine ") + TISMA_VERSION}}));
     block(out, kPrinterMetadata, ini(printer));
+    for (const GcodeThumbnail& t : thumbnails)
+        block(out, kThumbnail, t.data, {std::uint16_t(t.format), std::uint16_t(t.width), std::uint16_t(t.height)});
     block(out, kPrintMetadata, ini(print));
     block(out, kSlicerMetadata, ini(slicer));
     // The G-code, in blocks of whole lines.
@@ -212,11 +219,25 @@ BinaryGcode read_binary_gcode(std::string_view bytes) {
         case kGcode:
             out.gcode += data;
             break;
-        default: // thumbnails: not read here
+        case kThumbnail:
+            out.thumbnails.push_back({int(get(bytes, at + 8, 2)), int(get(bytes, at + 10, 2)), int(get(bytes, at + 12, 2)),
+                                      std::string(data)});
+            break;
+        default:
             break;
         }
         at += whole;
     }
+    return out;
+}
+
+std::string ascii_gcode(const BinaryGcode& binary) {
+    std::string out = binary.gcode;
+    if (!out.empty() && out.back() != '\n')
+        out += '\n';
+    for (const auto* group : {&binary.print, &binary.slicer})
+        for (const auto& [key, value] : *group)
+            out += "; " + key + " = " + value + "\n";
     return out;
 }
 

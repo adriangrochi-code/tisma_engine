@@ -13,6 +13,7 @@
 #include <cmath>
 #include <limits>
 #include <numbers>
+#include <optional>
 
 namespace tisma {
 namespace {
@@ -240,16 +241,72 @@ LayerFill fill_layer(const LayerSurfaces& surfaces, std::size_t layer, const Fil
     // Neighbouring lines overlap as the walls' beads (perimeters.md, rule 1):
     // a bead's spacing apart, the outer ones a spacing's half from the edge.
     const double d = std::clamp(params.overlap, 0.0, 0.5 * std::min(top, inner));
-    if (params.monotonic_top)
+    // A surface in a curve pattern (infill_patterns.md, rule 16): the sparse
+    // curves, dense, a spacing apart. Null for the line patterns.
+    const auto curves = [&](SurfacePattern pattern, const Polygons& region, double width) -> std::optional<std::vector<Toolpath>> {
+        const double spacing = width - d;
+        switch (pattern) {
+        case SurfacePattern::Concentric:
+            return concentric_fill(region, spacing, width);
+        case SurfacePattern::Hilbert:
+            return hilbert_fill(region, spacing, params.angle, width);
+        case SurfacePattern::Archimedean:
+            return archimedean_fill(region, spacing, params.centre, width);
+        case SurfacePattern::Octagram:
+            return octagram_fill(region, spacing, params.centre, width);
+        default:
+            return std::nullopt;
+        }
+    };
+    // monotonic_lines (rule 14, P10): each line a piece of its own, and all
+    // printed the same way, at the layer's angle: a piece that runs against
+    // it is turned round.
+    const auto one_way = [](std::vector<Toolpath> lines, double degrees) {
+        const double a = degrees * std::numbers::pi / 180.0, ux = std::cos(a), uy = std::sin(a);
+        for (Toolpath& t : lines)
+            if (t.points.size() >= 2 && (t.points.back().p.x - t.points.front().p.x) * ux +
+                                                (t.points.back().p.y - t.points.front().p.y) * uy <
+                                            0.0)
+                std::reverse(t.points.begin(), t.points.end());
+        for (Toolpath& t : lines)
+            t.one_way = true;
+        return lines;
+    };
+    // The top surface: monotonic lines (each a piece, in monotonic order),
+    // the same all one way (monotonic_lines), zig-zags, zig-zags that do not
+    // turn between layers (aligned_rectilinear, rule 15), or a curve.
+    if (auto c = curves(params.top_pattern, surface, top))
+        out.top = std::move(*c);
+    else if (params.top_pattern == SurfacePattern::MonotonicLines)
+        out.top = one_way(rectilinear_fill(surface, top - d, angle, top, false, true, true, params.wall_overlap * top + d / 2.0),
+                          angle);
+    else if (params.top_pattern == SurfacePattern::Monotonic)
         out.top = rectilinear_fill(surface, top - d, angle, top, false, true, true, params.wall_overlap * top + d / 2.0);
     else
-        out.top = rectilinear_fill(surface, top - d, angle, top, true, true, false, d / 2.0);
-    // The bottom surfaces monotonic like the top ones (surfaces.bottom_pattern),
-    // reaching as far as the zig-zags; the solid layers under a top surface
-    // zig-zag.
-    if (params.monotonic_bottom && !surfaces.bottom.empty()) {
+        out.top = rectilinear_fill(surface, top - d,
+                                   params.top_pattern == SurfacePattern::AlignedRectilinear ? params.angle : angle, top,
+                                   true, true, false, d / 2.0);
+    // The bottom surfaces: monotonic like the top ones (surfaces.bottom_pattern),
+    // reaching as far as the zig-zags, or zig-zags. The other patterns only
+    // on the bottom surface itself (rule 17); the solid layers over it and
+    // under a top surface zig-zag as always.
+    const SurfacePattern bp = params.bottom_pattern;
+    const bool lines_bottom = bp == SurfacePattern::Monotonic || bp == SurfacePattern::MonotonicLines;
+    if (lines_bottom && !surfaces.bottom.empty()) {
         out.solid = rectilinear_fill(surfaces.bottom, inner - d, angle, inner, false, true, true, d / 2.0);
+        if (bp == SurfacePattern::MonotonicLines)
+            out.solid = one_way(std::move(out.solid), angle);
         for (Toolpath& t : rectilinear_fill(surfaces.top_under, inner - d, angle, inner, true, true, false, d / 2.0))
+            out.solid.push_back(std::move(t));
+    } else if (bp != SurfacePattern::Rectilinear && !surfaces.bottom.empty()) {
+        // The bottom surface itself in its pattern, the rest in zig-zags.
+        const Polygons exposed = Clipper2Lib::Intersect(surfaces.bottom, surfaces.bottom_exposed, Clipper2Lib::FillRule::NonZero);
+        const Polygons rest = Clipper2Lib::Difference(solid, exposed, Clipper2Lib::FillRule::NonZero);
+        if (auto c = curves(bp, exposed, inner))
+            out.solid = std::move(*c);
+        else // aligned_rectilinear: the zig-zags at the infill's angle in every layer
+            out.solid = rectilinear_fill(exposed, inner - d, params.angle, inner, true, true, false, d / 2.0);
+        for (Toolpath& t : rectilinear_fill(rest, inner - d, angle, inner, true, true, false, d / 2.0))
             out.solid.push_back(std::move(t));
     } else {
         out.solid = rectilinear_fill(solid, inner - d, angle, inner, true, true, false, d / 2.0);

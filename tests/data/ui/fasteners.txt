@@ -2,6 +2,8 @@
 # opened from Nuevo or by name on the command line; an M8 nut, a bolt sent with its nut, the size
 # and the length changed, and a bad length refused.
 menu mode_engineering
+expect-control tab_design
+menu tab_design
 expect-no-control fasteners_back
 menu design_fasteners
 expect-control fasteners_back

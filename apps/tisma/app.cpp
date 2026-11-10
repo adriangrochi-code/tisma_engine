@@ -10,21 +10,43 @@
 #include "vk_view.hpp"
 #include "vk_window.hpp"
 
+#include "cad/constraints.hpp"
 #include "cad/design.hpp"
+#include "cad/parameters.hpp"
 #include "cad/fasteners.hpp"
 #include "cad/gears.hpp"
+#include "cloud/client.hpp"
+#include "cloud/report.hpp"
+#include "cloud/secret_store.hpp"
 #include "mesh/indexed_mesh.hpp"
 #include "slice/painted.hpp"
 #include "ui/system_info.hpp"
 #include "cad/process.hpp"
 #include "cad/solidcraft.hpp"
+#include "cad/sketch_edit.hpp"
+#include "cad/sketch_io.hpp"
+#include "cad/view_dxf.hpp"
+#include "slice/belt.hpp"
+#include "aero/aero.hpp"
 #include "calibration/calibration.hpp"
 #include "catalog/catalog.hpp"
+#include "catalog/pack.hpp"
+#include "catalog/pack_fetch.hpp"
 #include "illustrations.hpp"
 #include "config/analysis_case.hpp"
 #include "config/profiles.hpp"
 #include "config/settings.hpp"
+#include "device/bambu.hpp"
+#include "gcode/dialect.hpp"
+#include "gcode/output.hpp"
+#include "gcode/thumbnail.hpp"
+#include "device/bambu_simulator.hpp"
+#include "ui/image_decode.hpp"
 #include "device/gcode_host.hpp"
+#include "device/mdns.hpp"
+#include "device/print_host.hpp"
+#include "device/printer_limits.hpp"
+#include "device/ssdp.hpp"
 #include "device/serial_port.hpp"
 #include "device/simulator.hpp"
 #include "fea/analysis.hpp"
@@ -34,15 +56,26 @@
 #include "gcode/print_time.hpp"
 #include "gcode/writer.hpp"
 #include "io/model.hpp"
+#include "io/project_import.hpp"
 #include "io/stl.hpp"
+#include "io/zip.hpp"
 #include "mesh/shapes.hpp"
+#include "mesh/orient.hpp"
 #include "project/project.hpp"
+#include "project/engineering_values.hpp"
+#include "mesh/face_region.hpp"
+#include "project/engineering_case.hpp"
+#include "fea/materials.hpp"
+#include "fea/verdict.hpp"
 #include "ui/camera.hpp"
 #include "ui/credits.hpp"
 #include "ui/files.hpp"
 #include "ui/icons.hpp"
 #include "ui/help.hpp"
+#include "ui/links.hpp"
 #include "ui/plate.hpp"
+#include "ui/project_slice.hpp"
+#include "ui/session_marks.hpp"
 #include "ui/png.hpp"
 #include "ui/presets.hpp"
 #include "ui/raytrace.hpp"
@@ -79,11 +112,15 @@
 #include <cctype>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <map>
 #include <numbers>
 #include <memory>
+#include <mutex>
+#include <atomic>
 #include <csignal>
 #include <optional>
+#include <random>
 #include <set>
 #include <sstream>
 #include <string_view>
@@ -111,6 +148,42 @@ constexpr std::uint32_t kWarningColour = 0xE5A13A; // a warning in the help (an 
 
 // Set by SIGTERM or SIGINT: the main loop ends as when the window closes.
 volatile std::sig_atomic_t g_stop_signal = 0;
+
+// The Ctrl shortcuts as each key event carried them (the spec team's UI48: a
+// quick Ctrl+Z, all within one frame, could reach the frame as a plain Z).
+// GLFW's key callback gives the modifiers held at that key's press; the
+// frame reads them here instead of Ctrl's state when it is drawn.
+struct KeyChord {
+    char key = 0;        // 'z', 'y', ',' or 'p', by the layout's own letter
+    bool shift = false;
+    double time = 0.0;   // glfwGetTime() at the press
+};
+std::vector<KeyChord> g_chords;
+double g_ctrl_z_time = -1.0; // the last Ctrl+Z or Ctrl+Shift+Z press: a Z then is not "frame the part"
+
+void on_key(GLFWwindow*, int key, int scancode, int action, int mods) {
+    if (action != GLFW_PRESS || !(mods & GLFW_MOD_CONTROL))
+        return;
+    const char* name = glfwGetKeyName(key, scancode);
+    char c = name && name[0] && !name[1] ? char(std::tolower(static_cast<unsigned char>(name[0]))) : 0;
+    if (!c && key == GLFW_KEY_COMMA)
+        c = ',';
+    if (c != 'z' && c != 'y' && c != ',' && c != 'p')
+        return;
+    g_chords.push_back({c, (mods & GLFW_MOD_SHIFT) != 0, glfwGetTime()});
+    if (c == 'z')
+        g_ctrl_z_time = glfwGetTime();
+}
+
+// A chord of this frame, taken (so it acts once).
+bool take_chord(char key, bool shift) {
+    for (auto it = g_chords.begin(); it != g_chords.end(); ++it)
+        if (it->key == key && it->shift == shift) {
+            g_chords.erase(it);
+            return true;
+        }
+    return false;
+}
 void on_stop_signal(int) { g_stop_signal = 1; }
 
 constexpr const char* kIcons[] = {
@@ -124,7 +197,7 @@ constexpr const char* kIcons[] = {
     "section_quality",  "section_strength", "section_speed", "section_support",  "section_adhesion", "section_other",
     "section_nonplanar",
     "section_temperature", "section_cooling", "section_flow", "section_retraction", "section_needs",
-    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help",
+    "section_machine",  "section_nozzle",  "section_limits",  "section_gcode",   "help", "account",
 };
 
 const std::vector<std::string> kOpenExtensions = {".stl", ".obj", ".3mf", ".tisma", ".gcode", ".gco", ".g", ".bgcode", ".json"};
@@ -138,6 +211,10 @@ bool is_model(const std::filesystem::path& path) {
 ImVec4 rgb(std::uint32_t c, float alpha = 1.0f) {
     return ImVec4(float((c >> 16) & 0xFF) / 255.0f, float((c >> 8) & 0xFF) / 255.0f, float(c & 0xFF) / 255.0f, alpha);
 }
+// The map's colour bands (rule 12): below 1, up to the asked factor, up to
+// twice, up to four times, more.
+constexpr std::uint32_t kSafetyBands[5] = {0xE5484D, 0xF5C524, 0xB8D94B, 0x3FBF7F, 0x4C9BFF};
+
 Vec3 vec(std::uint32_t c) {
     return Vec3{float((c >> 16) & 0xFF) / 255.0f, float((c >> 8) & 0xFF) / 255.0f, float(c & 0xFF) / 255.0f};
 }
@@ -151,7 +228,12 @@ struct Theme {
     std::uint32_t view_top, view_bottom, plate, model;
     std::uint32_t sky, ground; // the ambient light from above and from below
     std::uint32_t grid_minor, grid_major;
-    std::uint32_t paint_enforce = 0x2FBF71, paint_block = 0xE5484D; // the Paint tool's marks
+    std::uint32_t paint_enforce = 0x2FBF71, paint_block = 0xE5484D; // the Paint tool's buttons and texts
+    // While painting (the testers' UI35): the part light and neutral, the marks
+    // dark. Measured on the screen with ambient occlusion (WCAG 2.1's
+    // luminance contrast): 5.0 on a lit face and 3.0 on a shaded one, against
+    // 1.2 and 1.0 for the green mark on the violet part before.
+    std::uint32_t paint_part = 0xE4E2E8, paint_mark_enforce = 0x0E6536, paint_mark_block = 0xA51E26;
 };
 
 Theme dark_theme() {
@@ -289,6 +371,11 @@ const char* field_text(const char* label, const char* fmt, double v) {
     return out.c_str();
 }
 
+// The texts drawn this frame through loc, kept only while a script runs
+// (expect-no-text: no untranslated line on the screen, TR22).
+bool g_keep_texts = false;
+std::vector<std::string> g_texts;
+
 // ImGui's printf-like texts, each number with the language's decimal point (TR1).
 namespace loc {
 #define TISMA_LOC_TEXT(call)                                                                                           \
@@ -296,6 +383,8 @@ namespace loc {
     va_start(args, fmt);                                                                                               \
     const std::string text = vformat(fmt, args);                                                                       \
     va_end(args);                                                                                                      \
+    if (g_keep_texts)                                                                                                  \
+        g_texts.push_back(text);                                                                                       \
     call
 void Text(const char* fmt, ...) IM_FMTARGS(1);
 void Text(const char* fmt, ...) { TISMA_LOC_TEXT(ImGui::TextUnformatted(text.c_str())); }
@@ -401,12 +490,12 @@ void keep_unreadable(const std::filesystem::path& path) {
     std::filesystem::copy_file(path, copy, std::filesystem::copy_options::overwrite_existing, ec);
 }
 
-enum class Tab { Prepare, Preview, Design, Analysis, Calibration, Device };
+enum class Tab { Prepare, Preview, Design, Calibration, Device, Structural, Aerodynamics };
 // The tabs of the Ingeniería section; the rest are Impresión 3D's (the
 // owner's request, 2026-11-02: each section with its tabs and its own panel).
 // Fasteners live inside Design (the owner, the same day).
 bool engineering_tab(Tab t) {
-    return t == Tab::Design;
+    return t == Tab::Design || t == Tab::Structural || t == Tab::Aerodynamics;
 }
 
 // A measure as the interface writes it: up to `decimals` places, no trailing
@@ -479,7 +568,21 @@ enum class Purpose {
     SaveExtruderTest,
     LoadCase,
     ExportView,
-    ImportView
+    ImportView,
+    ImportSketchDxf, // cad_design.md, rule 19 bis
+    ImportSketchSvg,
+    ExportSketchDxf, // rule 20
+    ExportViewDxf,
+    ExportObject,      // a model's right-click menu: Export as STL/OBJ…
+    ExportToolpaths,   // File › Export Toolpaths as OBJ…
+    AddModelInches,    // File › Import STL (Imperial Units)…
+    ConvertToBinary,   // File › Convert ASCII G-code to binary…
+    ConvertToAscii,    // File › Convert binary G-code to ASCII…
+    ImportZip,         // File › Import ZIP Archive…
+    ExportPreferences, // Preferences › Other: export and import them
+    ImportPreferences,
+    LoadProjectConfig, // interface.md, «Más»: Import Config from Project…
+    ExportPlate        // Export Plate as STL/OBJ…
 };
 
 // The plate tool in use (docs/UI.md, «Herramientas de la placa»).
@@ -503,13 +606,23 @@ private:
     void viewport();
     void view_tools();
     void preview_panels();
-    void analysis_panel();
     // The Design tab (cad_design.md, stage D1): the panel, the command line
     // under the view, the design built through the bundled tool.
     void design_panel();
     void design_command_line();
     void run_command(std::string text);
     void add_primitive(cad::Primitive kind, const std::array<double, cad::kMaxSizes>& sizes);
+    // Stage D4 (rule 7): an operation on a body, and the points it takes in
+    // the view (edges, faces, hole places) while design_pick_ is it.
+    void add_operation(cad::OperationKind kind);
+    bool design_hit(std::array<double, 3>& at) const;
+    void update_design_edges();
+    void design_pick_at(const std::array<double, 3>& p);
+    void design_pick_overlay();
+    std::optional<std::size_t> design_pick_;
+    std::vector<std::array<std::array<float, 3>, 2>> design_edges_;
+    std::size_t design_edges_tris_ = std::size_t(-1);
+    double design_edges_volume_ = -1.0;
     void rebuild_design();
     void design_built(cad::BuildResult built);
     void show_design();
@@ -523,7 +636,57 @@ private:
     void fasteners_panel();
     // Configuración (preferences.md): the dialog, the Video page's qualities
     // (view_auto_quality.md, rules 3 and 4) and the machine it runs on.
+    struct CloudReply {
+        enum class Kind { Refresh, Login, Logout } kind = Kind::Refresh;
+        bool ok = false;
+        cloud::Failure error;
+        std::string token, billing_url, store_error;
+        bool token_read = false; // the store was read for the token
+        std::optional<cloud::Account> account;
+        std::vector<cloud::Plan> plans;
+        bool plans_ok = false;
+        // Why the plans did not come: -1 not asked, 0 no answer (no
+        // connection), else the HTTP status (UI49).
+        int plans_failure = -1;
+        std::vector<cloud::Job> jobs; // the account's (rule 10)
+        bool jobs_ok = false;
+        std::vector<cloud::SentReport> reports; // the account's own (problem_reports.md, rule 11)
+        bool reports_ok = false;
+    };
     void config_window();
+    void cloud_window();
+    void cloud_start(CloudReply::Kind kind);
+    void cloud_finished(CloudReply reply);
+    void report_window();
+    Project current_project() const;
+    void start_cloud_slice();
+    void cloud_slice_step();
+    // «Calcular en la nube» in Structural (engineering_panel.md, rule 10;
+    // cloud.md, rules 6 to 10b): the project as a fea job, its .tea result
+    // kept with the part as a local one.
+    std::size_t cloud_eng_part_ = 0;
+    std::string cloud_eng_kind_; // "structural" (a fea job) or "aerodynamics" (aero)
+    std::string cloud_eng_fingerprint_;
+    void start_cloud_engineering(const std::string& kind);
+    void cloud_engineering_step();
+    struct CloudSliceState { // shared with the call's thread
+        std::mutex mutex;
+        std::string status; // queued, running, done...
+        int progress = 0;
+        std::atomic<bool> cancel{false};
+    };
+    struct CloudSliceReply {
+        bool ok = false;
+        cloud::Failure error;
+        cloud::Job job;
+        std::filesystem::path result;
+    };
+    void log_line(const std::string& line);
+    struct ReportReply {
+        bool ok = false;
+        int similar = 0;
+        cloud::Failure error;
+    };
     // The handles on the chosen model (the owner's request, 2026-11-02, with a
     // picture): arrows to move, rings to turn, boxes to scale, by axis in the
     // bed's colours (X red, Y green, Z blue), dragged in the view.
@@ -534,6 +697,8 @@ private:
     // filament and the print profile.
     bool panel_folded_now() const;
     void update_view_hold();
+    void remember_place(int object, const Placement& before);
+    void undo_place(bool redo);
     void compact_panel();
     void unfold_button();
     void apply_quality(const std::string& quality);
@@ -546,6 +711,152 @@ private:
     void open_page(DesignPage page);
     void show_page();
     void gears_panel();
+    // Ingeniería, Estructural (engineering_panel.md): the part, its values,
+    // its conditions and Analyze, in the left column.
+    void structural_panel();
+    int structural_part_ = 0;
+    // The marking tool (rule 5): 0 Rotar, then the kinds of ConditionKind + 1.
+    int structural_tool_ = 0;
+    // Analizar (rules 9, 11 and 12): the run in the background, its progress
+    // and cancel, and the map of its last result shown in the view.
+    struct StructuralRun {
+        bool ok = false, cancelled = false;
+        std::string error;
+        std::size_t part = 0;
+        std::string fingerprint, report;
+        // The voxels' outside (rule 12): 3 corners a triangle, each corner's
+        // displacement (mm), and per triangle its safety factor, von Mises
+        // stress (MPa) and how far it moved (mm).
+        std::vector<Vec3f> corners, moved;
+        std::vector<float> safety, stress, motion;
+        double asked = 2.0, max_stress = 0.0, max_motion = 0.0, size = 1.0;
+        std::vector<float> surface;     // what the view paints: 6 floats a corner (mesh_vertices' layout), by band
+        std::vector<std::uint8_t> band; // per triangle of `surface`: the map's colour band, 0 to 4
+        std::optional<std::array<double, 3>> weakest; // on the bed
+        double weakest_safety = 0.0;
+    };
+    Background<StructuralRun> structural_job_;
+    std::atomic<bool> structural_cancel_{false};
+    std::atomic<int> structural_permille_{0};
+    std::optional<StructuralRun> structural_map_; // the last finished run of this session
+    bool structural_show_map_ = true;
+    // «Más opciones» (rule 10): the memory and time the analysis would take,
+    // counted in the background (estimate_analysis voxelizes the part).
+    struct StructuralEstimate {
+        std::string key;
+        double memory_mb = 0.0, seconds = 0.0;
+    };
+    Background<StructuralEstimate> structural_estimate_job_;
+    StructuralEstimate structural_estimate_;
+    int structural_map_kind_ = 0;          // 0 the safety factor, 1 von Mises, 2 the displacement (rule 12)
+    bool structural_deformed_ = false;     // the shape drawn deformed (rule 12)
+    float structural_exaggerate_ = 0.0f;   // times the real displacement; 0: chosen for the part
+    std::string structural_paint_key_;     // what the view's map shows
+    void paint_structural_map();
+    bool try_material_ = false; // a suggested material chosen: analyze again
+    bool structural_map_in_view_ = false;
+    std::string structural_message_;
+    std::string structural_parsed_for_;
+    nlohmann::json structural_parsed_;
+    void start_structural();
+    // «Optimizar» (rule 13; structural_optimization.md, rule 2): the lowest
+    // uniform infill that holds, searched in the background.
+    struct OptimizeRun {
+        std::size_t part = 0;
+        std::string fingerprint;
+        bool cancelled = false;
+        std::string error;
+        LightestInfill best;
+        bool zones = false; // also by zones (rule 3)
+        ZonedInfill zoned;
+        bool ribs = false; // also with ribs (rule 4)
+        RibbedInfill ribbed;
+        bool reinforce = false; // also with reinforcements (rule 6)
+        ReinforcedInfill reinforced;
+        bool orientation = false; // the orientation instead (rule 8)
+        OrientationChoice orient;
+        bool lattice = false; // a lattice instead (rule 7)
+        LightestLattice latticed;
+        // The part's map to the bed and its mesh's size when searched: the
+        // zones go on the model where it was (it may have moved since).
+        Affine to_bed;
+        std::size_t triangles = 0;
+    };
+    Background<OptimizeRun> optimize_job_;
+    std::atomic<bool> optimize_cancel_{false};
+    std::atomic<int> optimize_permille_{0};
+    std::optional<OptimizeRun> optimize_result_;
+    enum class OptimizeExtra { None, Zones, Ribs, Reinforce, Orientation, Lattice };
+    void start_optimize(OptimizeExtra extra = OptimizeExtra::None);
+    void apply_zones(std::size_t part, const ZonedInfill& zoned);
+    void apply_ribs(std::size_t part, const RibbedInfill& ribbed);
+    // The optimization's boxes as the part's own modifiers, its infill at
+    // `density`; undone together. False when they do not fit.
+    bool apply_boxes(std::size_t part, const std::vector<MeshModifier>& boxes, int density, const std::string& note);
+    // Whether a part's result is out of date (rule 14): its fingerprint
+    // hashes the whole mesh (200 ms for 2 million triangles), so it is
+    // computed again only when the part, the plate, its Engineering data or
+    // the settings change.
+    bool structural_stale(std::size_t part, const EngineeringResult& r);
+    std::string stale_key_;
+    std::string stale_fingerprint_;
+    void structural_done(StructuralRun run);
+    void update_structural_view();
+    // The Aerodynamics tab (engineering_panel.md, rules 15 and 16;
+    // aerodynamics.md): the run in the background, its map in the view.
+    struct AeroRun {
+        bool ok = false, cancelled = false;
+        std::string error;
+        std::size_t part = 0;
+        std::string fingerprint, report;
+        std::vector<float> corners; // the part on the bed: 9 floats a triangle
+        std::vector<float> cp, ra;  // per triangle
+        std::vector<aero::AeroResult::Streamline> streamlines; // on the bed
+    };
+    bool aero_lines_ = true;
+    int aero_test_cells_ = 0; // the scripted tests: a coarser lattice (0: the quality's)
+    Background<AeroRun> aero_job_;
+    std::atomic<bool> aero_cancel_{false};
+    std::atomic<int> aero_permille_{0};
+    std::optional<AeroRun> aero_map_;
+    int aero_map_kind_ = 0; // 0 the pressure coefficient, 1 the roughness
+    int aero_map_shown_ = -1;
+    bool aero_map_in_view_ = false;
+    std::string aero_message_, aero_parsed_for_;
+    nlohmann::json aero_parsed_;
+    void aerodynamics_panel();
+    void start_aerodynamics();
+    void aerodynamics_done(AeroRun run);
+    void update_aero_view();
+    void aero_overlay();
+    std::array<double, 3> aero_direction(const AerodynamicsInputs& a) const;
+    bool structural_map_wanted();
+    void structural_overlay();
+    // A force arrow's free end, dragged to turn the force (rule 7): the
+    // overlay keeps where each is drawn; a press on one starts the drag.
+    struct ArrowHandle {
+        std::size_t part = 0, condition = 0;
+        ImVec2 tail;
+        std::array<double, 3> at{}; // where the force acts, on the bed
+    };
+    std::vector<ArrowHandle> arrow_handles_;
+    std::optional<ArrowHandle> arrow_drag_;
+    // Undo and redo of each part's Engineering data (rule 8): the part and
+    // its data before the change.
+    struct EngineeringStep {
+        std::size_t object, count;
+        ProjectEngineering before;
+        // Optimizar's changes to the part itself (UI51): its turn, own
+        // settings and volumes, undone with the same Ctrl+Z.
+        bool part = false;
+        Placement place{};
+        std::string settings{};
+        std::vector<PlateVolume> volumes{};
+    };
+    std::vector<EngineeringStep> engineering_undo_, engineering_redo_;
+    void remember_engineering(std::size_t object);
+    void remember_part(std::size_t object);
+    void undo_engineering(bool redo);
     void rebuild_gear();
     void send_gear_to_plate(bool with_mate);
     std::string gear_name(const cad::GearSpec& spec) const;
@@ -572,7 +883,7 @@ private:
     void mixing_dialog();
     std::string filament_color(int extruder) const;
     void objects_material_changed();
-    void brush_stroke(std::size_t object, ImVec2 at);
+    void brush_stroke(std::size_t object, ImVec2 at, bool joined = false);
     void brush_drag(std::size_t object);
     void update_paint_view();
     Vec3 mouse_ray() const;
@@ -580,6 +891,15 @@ private:
     void load_calibration(CalibrationPrint print);
     void create_calibration(CalibrationKind kind, bool custom);
     void begin_export();
+    void more_menu();       // «Más»: the cards of interface.md
+    void file_chosen(const std::filesystem::path& chosen); // the file browser's answer, for purpose_
+    void dialogs_rest();
+    void begin_import_config(bool from_project); // Ctrl+L, or Ctrl+Alt+L from a project
+    void begin_export_config();                  // Ctrl+E
+    void load_project_config(const std::filesystem::path& path); // a project's settings and profiles, not its models
+    void export_plate_to(const std::filesystem::path& path);     // the plate's models as one STL or OBJ, in bed coordinates
+    void send_gcode();      // «Send G-code…»: the network program or the USB printer
+    void delete_selected(bool keep_choice = false); // the chosen model off the plate (Del, the toolbar, «Más»)
     void empty_hint();
     void toasts();
     void dialogs();
@@ -612,6 +932,26 @@ private:
     void check_moire(int fb_w, int fb_h);
     // The Device page (docs/DEVICE.md).
     void device_panel();
+    void bambu_panel(float field, float button_h);
+    void bambu_poll();
+    void host_panel(float field, float button_h);
+    void host_poll();
+    void host_test();
+    void host_refresh();
+    void host_send(bool start, std::string name = {}, bool simulate = false);
+    bool host_ready() const; // a network program chosen and tested: the main button sends (devices.md, rule 19)
+    std::string host_default_name() const;
+    void host_upload_dialog();
+    void host_command(int what); // 0 pause, 1 resume, 2 cancel
+    void bambu_refresh();
+    void bambu_send(const std::string& command);
+    void bambu_print_now();
+    void bambu_simulate();
+    void bambu_camera_on();
+    void bambu_camera_off();
+    void bambu_camera_view(float width);
+    ImTextureID upload_texture(const Image& image, bool clamp);
+    void drop_texture(ImTextureID id);
     void device_connect(const std::string& port);
     void device_disconnect();
     void device_poll();
@@ -619,22 +959,26 @@ private:
     void device_print();
     ViewFrame view_frame(int fb_w, int fb_h);
     void settings_changed();
+    void take_printer_limits();
+    void take_limits(const device::PrinterLimits& limits, const std::string& firmware);
     void bed_changed();
     void place_model();
     void frame_all();
     void frame_now();
     void set_tab(Tab tab);
-    void estimate_voxels_if_stale();
     void notify(std::string text, bool error = false);
+    void remember_toast(const std::string& text);
+    std::vector<std::string> toasts_shown_; // for the scripts' expect-toast
     void fail(T title, std::string message, std::vector<std::string> details = {});
-    void load_preferences();
-    void save_preferences();
+    void load_preferences(const std::filesystem::path& from = {}); // from: an exported file (Preferences › Import)
+    void save_preferences(const std::filesystem::path& to = {});   // to: a file to export them to
     void apply_theme();
 
     // Profiles (docs/PROFILES.md).
     std::filesystem::path profiles_root() const;
     void load_profile_lists();
     void profile_row(ProfileKind kind, bool compact = false);
+    void pack_source_line(ProfileKind kind);
     std::vector<double> printer_diameters() const;
     void choose_profile(ProfileKind kind, const Profile& profile);
     // Speeds the settings lack: a stock Ender-3's, and a word about it.
@@ -644,6 +988,18 @@ private:
     const Profile* find_profile(ProfileKind kind, const std::string& name, bool* builtin = nullptr) const;
     void catalog_dialog();
     void add_catalog_profile(const Profile& profile);
+    // The free profile pack (profile_pack.md).
+    std::filesystem::path pack_dir() const;
+    void refresh_bed_extras();
+    void load_pack();
+    void start_pack_update(PackChoice choice, std::string add_after);
+    void poll_pack_update();
+    void add_pack_printer(const std::string& printer);
+    void pack_catalog_entry(const PackModelRef& ref);
+    void published_values(const std::vector<CommunityValue>& values);
+    void refresh_material_community();
+    void material_published();
+    void use_community_value(const CommunityValue& v);
     void first_run_next();
 
     // Widgets.
@@ -676,6 +1032,8 @@ private:
     // The settings of the chosen profiles, as saved: what a change is
     // measured from and a card's Reset goes back to (rule 8).
     Settings saved_settings() const;
+    Settings with_carried(const Settings& s, std::initializer_list<ProfileKind> kinds,
+                          const std::set<std::string>* skip = nullptr) const;
     void choose_level(ViewLevel level);
     // The search (rule 5): the field in the top bar, and going to a setting.
     void search_box(float width, float height);
@@ -685,6 +1043,10 @@ private:
     // «Based on» under a card, and the Credits and sources page (credits.md).
     void card_credits(std::string_view card, float left, float right);
     void credits_dialog();
+    bool shortcuts_open_ = false, system_info_open_ = false;
+    void shortcuts_dialog();   // Help › Keyboard Shortcuts (?)
+    void system_info_dialog(); // Help › System Info
+    void machine_lines();      // the machine: processor, memory, graphics, screen, power
     // The help panel over the settings panel (assistant.md).
     void help_panel();
     void load_help_data();
@@ -848,8 +1210,11 @@ private:
     int painting_object_ = -1;
     bool painted_ = false;     // the stroke changed something
     bool paint_dirty_ = true;  // the view's copy of the paint is out of date
+    bool paint_stroked_ = false; // a stroke changed some triangles: only those are walked again
+    PaintMeshCache paint_cache_;
     std::optional<float> brush_depth_; // how far ahead of the eye the face under the mouse is
     ImVec2 last_stroke_{0.0f, 0.0f};   // where the stroke's last dab went, on the screen
+    std::optional<Vec3> last_dab_;      // and on the model, while the stroke stays on it
     bool has_plate_ = false;          // there is a model on the plate
     std::size_t plate_triangles_ = 0; // all of the plate's
     TriangleMesh plate_now() const;
@@ -859,7 +1224,7 @@ private:
 
     // What the model and the settings are now, and what the running jobs
     // were started from.
-    Revision revision_, slice_made_, voxels_made_;
+    Revision revision_, slice_made_;
     Slicer slicer_;
     Background<SliceResult> slice_job_;
     std::optional<SliceResult> result_;
@@ -871,9 +1236,6 @@ private:
     std::filesystem::path gcode_path_;
     double slice_started_ = 0.0;
 
-    Background<VoxelEstimate> voxel_job_;
-    std::optional<VoxelEstimate> voxels_;
-    bool voxels_stale_ = true;
 
     // The Design tab (cad_design.md): the design, its last build and the
     // bundled tool (rule 1, first step).
@@ -884,8 +1246,20 @@ private:
     double design_volume_ = 0.0;    // mm3
     std::string design_file_;       // SolidCraft's design file of that build
     std::string design_error_;      // what the last build said, or empty
+    // The timeline (rule 8): the first feature that fails and why; the ones
+    // after it wait. The feature being renamed, and its text.
+    std::optional<std::size_t> design_failed_;
+    std::string design_failure_;
+    int design_rename_ = -1;
+    bool design_rename_focus_ = false;
+    char design_rename_buf_[128] = {};
     bool design_dirty_ = false;     // changed since the build that runs
     Background<cad::BuildResult> design_job_;
+    // CD25: the bundled tool kept open while designing, closed after 10
+    // minutes idle; only touched by the design job or when it is not running.
+    std::shared_ptr<cad::SolidCraftSession> design_session_;
+    bool design_restart_noted_ = false;
+    bool view_dxf_hidden_ = true; // «Vista como DXF»: hidden edges dashed
     Background<cad::SolidCraftInfo> solidcraft_job_;
     cad::SolidCraftInfo solidcraft_;
     bool solidcraft_probed_ = false;
@@ -912,10 +1286,40 @@ private:
     // Configuración (preferences.md): open or not, its page and search, and
     // every option as it was when it opened (Cancelar puts them back).
     bool config_open_ = false;
+    // Tisma Cloud (cloud.md): the dialog, the last answers and the one call in flight.
+    bool cloud_open_ = false;
+    std::string cloud_server_, cloud_email_, cloud_password_, cloud_token_, cloud_billing_; // cloud.server, cloud.email
+    bool cloud_token_read_ = false;
+    std::optional<cloud::Account> cloud_account_;
+    std::vector<cloud::Plan> cloud_plans_;
+    int cloud_plans_failure_ = -1; // CloudReply::plans_failure of the last answer that asked
+    std::vector<cloud::Job> cloud_jobs_;
+    std::vector<cloud::SentReport> cloud_reports_;
+    std::string cloud_status_;
+    bool cloud_status_error_ = false;
+    std::future<CloudReply> cloud_job_;
+    // Report a problem (problem_reports.md): the dialog's fields and its call.
+    bool report_open_ = false, report_attach_ = true, report_focus_title_ = false;
+    int report_kind_ = 0; // bug, crash, suggestion
+    std::string report_title_, report_description_, report_steps_, report_expected_, report_status_;
+    std::future<ReportReply> report_job_;
+    std::string session_log_; // what this session said: notices, errors, steps (the report's log)
+    // This session's mark and its log on disk, and the log of one that closed
+    // unexpectedly, offered in a report at start (problem_reports.md, rule 10).
+    ui::SessionMark session_mark_;
+    std::ofstream session_file_;
+    std::size_t session_file_bytes_ = 0;
+    std::string crashed_log_;
+    bool offer_crash_report_ = false;
+    // Slicing in the cloud (cloud.md, rules 6 to 9): the job in flight and its state.
+    std::future<CloudSliceReply> cloud_slice_;
+    std::shared_ptr<CloudSliceState> cloud_slice_state_;
+    std::future<CloudSliceReply> cloud_eng_;
+    std::shared_ptr<CloudSliceState> cloud_eng_state_;
     int config_page_ = 0;
     std::string config_query_;
     struct ConfigState {
-        bool english = false, dark = true;
+        bool english = false, dark = true, theme_system = false;
         RenderMode render = RenderMode::Ambient;
         int msaa = 4;
         bool fxaa = true, moire = true;
@@ -941,14 +1345,23 @@ private:
     bool battery_saver_ = true;
     bool show_frame_time_ = true;
     bool panel_folded_ = false;     // ui.panel_folded
-    float compact_bottom_ = 0.0f;
+    float compact_bottom_ = 0.0f;   // the folded panel's card: where it ends on the screen, this frame
+    // Undo and redo of where the models are (Ctrl+Z, Ctrl+Y; the spec team's
+    // UI45): each step is a model's placement before a drag or an edit, kept
+    // while the plate has the same models.
+    struct PlaceStep {
+        std::size_t object = 0, count = 0; // which model, of how many on the plate
+        Placement place;
+    };
+    std::vector<PlaceStep> place_undo_, place_redo_;
+    Placement press_place_;    // the pressed model's placement when the bed drag began
+    bool card_editing_ = false; // the tool card's edit already has its undo step
     // What the view lowers while something moves (view_auto_quality.md, rules 5, 6, 8).
     int ao_hold_ = 0;                  // ViewFrame::ao_hold for this frame
     int ao_hold_seen_ = 0;             // the most since the script last asked (expect-held)
     long ao_passes_mark_ = 0;          // the renderer's occlusions when the script last asked
     bool lowered_ = false;             // lowered since the motion started, until it stops
     bool lowered_notice_shown_ = false; // ui.lowered_notice_shown: the first time's toast
-    Mat4 last_view_{};                 // the camera of the last frame, to see it move   // the folded panel's card: where it ends on the screen, this frame
     struct GizmoDrag {
         int kind = 0; // 0 move along an axis, 1 turn about one, 2 scale along one, 3 scale all
         int axis = 0;
@@ -967,7 +1380,7 @@ private:
     double frame_started_ = 0.0;
     // The tab each section opens on: the last one used there.
     Tab last_print_tab_ = Tab::Prepare;
-    Tab last_engineering_tab_ = Tab::Design;
+    Tab last_engineering_tab_ = Tab::Structural; // the first tab (engineering_panel.md, rule 1; TR27)
     int next_design_id_ = 1;
     bool design_pick_primitive_ = false; // the Primitiva tool from Prepare: the chooser opens
     bool design_pick_sketch_ = false;    // the Boceto tool from Prepare: the plane is asked
@@ -990,7 +1403,31 @@ private:
     // and the tracking, and the toggles F3, F8, F9, F10.
     struct SketchEdit {
         std::size_t feature = 0;
-        enum class Tool { None, Line, Rectangle, Circle, Arc } tool = Tool::None;
+        enum class Tool { None, Line, Rectangle, Circle, Arc, Constrain, Edit } tool = Tool::None;
+        // The editing tools (rule 17), each a few steps: picks, points and
+        // numbers asked for on the command line.
+        enum class EditKind { Trim, Extend, Offset, Fillet, Chamfer, Mirror, Array, Move, Copy, Rotate, Scale, Distance, Area };
+        EditKind edit = EditKind::Trim;
+        int edit_step = 0;
+        std::vector<std::size_t> selected;
+        std::vector<cad::Pt> edit_points;
+        std::optional<std::size_t> edit_entity;
+        bool array_polar = true;
+        int array_count = 6, array_columns = 3, array_rows = 1;
+        double array_angle = 360.0, array_dx = 10.0, array_dy = 10.0;
+        std::optional<cad::Pt> box_from; // a selection box being dragged
+        // The constraint tool (rule 5): what it makes, what was picked, and a
+        // dimension asking for its value on the command line.
+        enum class Rule { Dimension, Horizontal, Vertical, Parallel, Perpendicular, Equal, Coincident, Concentric, Tangent, Fixed, Angle };
+        Rule rule = Rule::Dimension;
+        struct Pick {
+            enum class What { Point, Segment, Round } what = What::Point;
+            cad::EntityPoint ref;
+        };
+        std::vector<Pick> picks;
+        std::optional<cad::GeoConstraint> pending;
+        // A point dragged with no tool (rule 5): solved every frame.
+        std::optional<cad::EntityPoint> drag;
         std::vector<cad::Pt> points;
         std::optional<cad::Pt> last; // the last point placed, for @ coordinates
         std::optional<cad::Pt> raw;  // the mouse on the plane
@@ -1032,6 +1469,26 @@ private:
     void sketch_strip();
     void sketch_cursor_input();
     cad::Sketch* editing_sketch();
+    void import_sketch_file(const std::filesystem::path& path, bool svg);
+    void sketch_rule_tool(SketchEdit::Rule rule);
+    void sketch_pick(const cad::Pt& p);
+    void sketch_rule_prompt();
+    void sketch_apply_rule(const cad::GeoConstraint& rule);
+    double sketch_pick_radius() const;
+    void sketch_edit_tool(SketchEdit::EditKind kind);
+    void sketch_edit_prompt();
+    void sketch_edit_point(const cad::Pt& p, const cad::Pt& raw);
+    bool sketch_edit_text(const std::string& word, const std::string& text);
+    void sketch_edit_finish(bool changed);
+    bool sketch_edit_selecting() const;
+    double offset_distance_ = 2.0, fillet_radius_ = 2.0, chamfer_distance_ = 1.0, rotate_angle_ = 90.0, scale_factor_ = 2.0;
+    void sketch_drag_to(const cad::Pt& p);
+    // The degrees of freedom of the sketch being drawn, counted again only
+    // when it changes.
+    const cad::SketchSolve& sketch_dof();
+    cad::Sketch dof_sketch_;
+    cad::SketchSolve dof_;
+    bool dof_valid_ = false;
 
     // The preview's controls.
     int top_layer_ = 0; // 0-based
@@ -1102,6 +1559,7 @@ private:
     bool ray_checked_ = false;
     bool moire_checked_ = false;
     bool catalog_printer_picked_ = false; // --pick-catalog-printer done
+    bool pack_printer_picked_ = false;    // --pick-pack-printer done
     // The Measure tool's prepared mesh (measure_mesh) of one object, for the
     // plate as it was at scene_version_ measure_version_.
     MeasureMesh measure_prepared_;
@@ -1125,6 +1583,59 @@ private:
     std::vector<std::string> device_log_;    // the events, newest last
     bool device_print_sent_ = false;         // with --device-print: the job was started
     bool device_print_done_ = false;         // and it finished (or failed)
+
+    // A Bambu Lab printer on the local network (printer_connections.md,
+    // «Bambu Lab en red local»; devices.md, rules 11 and 16).
+    bool device_bambu_ = false;               // the Device page shows it instead of USB
+    // A program that runs the printer on the network (printer_connections.md,
+    // «Programas que manejan impresoras»; devices.md, rules 14 to 22):
+    // OctoPrint, Moonraker, PrusaLink or Duet. Its key and password are secrets.
+    bool device_host_ = false;
+    device::HostConfig host_;
+    std::future<device::HostVersion> host_test_job_;
+    std::future<device::HostStatus> host_status_job_;
+    std::future<device::HostResult> host_job_;
+    std::future<device::HostLimits> host_limits_job_;
+    device::HostVersion host_version_;        // the last test
+    bool host_tested_ = false;
+    device::HostStatus host_status_;          // the last state read
+    std::string host_job_what_;               // what the running job is, for its message
+    bool host_start_ = true;                  // «Start printing» after the upload
+    bool host_dialog_open_ = false;           // the upload dialog, to open next frame
+    std::future<std::vector<device::MdnsService>> host_search_; // Zeroconf, for OctoPrint
+    std::vector<device::MdnsService> host_found_;
+    bool host_searched_ = false;
+    std::string host_dialog_name_;
+    device::BambuConfig bambu_;               // address, access code (a secret), serial, accepted certificate
+    std::unique_ptr<device::BambuSimulator> bambu_sim_;
+    std::future<device::BambuStatus> bambu_status_job_;
+    std::future<device::BambuResult> bambu_job_;   // a command or a print
+    std::future<device::SsdpListen> bambu_search_;
+    device::BambuStatus bambu_status_;        // the last state read
+    device::BambuResult bambu_result_;        // the last command's or print's answer
+    std::vector<device::SsdpPrinter> bambu_found_;
+    std::vector<int> bambu_busy_ports_;
+    bool bambu_searched_ = false, bambu_use_ams_ = true;
+    std::string thumbnails_draft_; // gcode.thumbnails as typed
+    bool thumbnails_editing_ = false;
+    std::string bambu_job_name_;
+    std::shared_ptr<std::atomic<double>> bambu_sent_ = std::make_shared<std::atomic<double>>(-1.0);
+    // The A1 and P1 camera (rule 6): a thread reads the frames, the interface
+    // shows the newest one.
+    struct BambuCamera {
+        std::atomic<bool> stop{false};
+        std::mutex lock;
+        std::string jpeg;   // the newest frame
+        long long frames = 0; // frames received
+        bool ended = false;
+        std::string error;  // why it ended, as the person reads it
+        std::string code, sha256; // how it ended, and the camera's certificate
+    };
+    std::shared_ptr<BambuCamera> bambu_camera_;
+    std::future<void> bambu_camera_job_;
+    ImTextureID bambu_camera_tex_ = 0;
+    int bambu_camera_w_ = 0, bambu_camera_h_ = 0;
+    long long bambu_camera_shown_ = 0; // the frame the texture holds
 
     FileBrowser browser_;
     Purpose purpose_ = Purpose::Open;
@@ -1236,8 +1747,77 @@ private:
     std::string catalog_query_;
     int catalog_pick_ = -1;
     std::size_t catalog_nozzle_ = 0;
+    // The free profile pack (profile_pack.md): the installed index, the
+    // printers chosen from it (packs.printers), whose profiles show as factory
+    // ones (rule 9), and the download in flight.
+    std::optional<PackIndex> pack_index_;
+    std::vector<std::string> pack_printers_;
+    std::vector<std::string> pack_filaments_;                // packs.filaments: more filaments added from the pack
+    std::map<std::string, int> pack_printer_number_;         // a pack printer profile's name: its number in the index
+    std::map<std::string, std::pair<std::string, std::string>> pack_printer_model_; // its vendor's and model's names
+    std::map<std::string, std::pair<std::string, std::string>> pack_printer_bed_;   // its bed_model's and bed_texture's paths
+    std::string bed_extras_for_ = "\x01"; // the printer and bed the 3D view's bed model and picture are for
+    std::string community_for_ = "\x01";                    // the printer community_values_ are for
+    std::vector<CommunityValue> community_values_;
+    std::map<std::string, std::vector<std::string>> pack_kept_; // each pack printer's profiles as last made (rule 20)
+    bool pack_kept_dirty_ = false;
+    std::set<std::string> pack_gone_; // pack printers the pack no longer has, kept from the copy
+    std::optional<CommunityValue> community_confirm_;        // a value waiting for the person's yes (rule 24)
+    std::map<std::string, std::string> pack_filament_vendor_; // a pack filament profile's name: its maker
+    // A pack filament's or print profile's name: the printer settings it
+    // carries (its speeds, as JSON groups), part of the profile (BH27).
+    std::map<std::string, std::string> pack_entry_printer_;
+    // A pack profile's name: its license and origin, shown under its row (rule 15).
+    std::map<std::string, std::pair<std::string, std::string>> pack_profile_source_;
+    std::string material_community_for_ = "\x01";             // "filaments/<name>" or "resins/<name>"
+    std::vector<CommunityValue> material_community_;
+    int pack_filaments_number_ = -2;                         // the printer pack_filaments_found_ is for
+    std::vector<PackFilamentRef> pack_filaments_found_;
+    std::string pack_url_; // packs.url; empty: the latest release
+    struct PackJobState {
+        std::mutex mutex;
+        std::string status;
+    };
+    std::shared_ptr<PackJobState> pack_state_;
+    std::future<std::string> pack_job_; // the error; empty when it went well
+    bool pack_first_index_ = false;      // pack_job_ is the first run's index download (rules 1 and 3)
+    std::string pack_add_after_;         // a printer to add once its download ends
+    bool pack_check_updates_ = true;     // packs.check_updates
+    long long pack_checked_ = 0;         // packs.checked: when the last look for a newer pack was (seconds)
+    std::future<std::string> pack_newer_job_; // the newer pack_version, empty when none
+    bool pack_check_asked_ = false; // that look was asked for (Check for Configuration Updates): say "up to date" too
+    int catalog_pack_pick_ = -1;
+    std::size_t catalog_pack_variant_ = 0;
     // The project file last opened or saved.
     std::filesystem::path project_path_;
+    // The projects opened or saved last, newest first (interface.md, «Más»:
+    // Recent projects), kept with the preferences.
+    std::vector<std::filesystem::path> recent_projects_;
+    bool theme_system_ = false; // Appearance «Like the system»: the theme follows the system's
+    bool show_templates_ = true; // the built-in (template) profiles in the lists; off: only the chosen one
+    void follow_system_theme();
+    void remember_project(const std::filesystem::path& path);
+    void new_project(); // an empty plate, no project file (Ctrl+N)
+    void delete_all();  // every model off the plate (Ctrl+Del)
+    std::optional<PlateObject> clipboard_; // Copy (Ctrl+C) and Paste (Ctrl+V) on the plate
+    void paste();
+    bool can_reload() const;
+    void reload_from_disk(); // F5: the chosen model, or every one, read again from its file
+    void window_tab(int n);  // Window › Ctrl+1 to Ctrl+6 (interface.md, «Más»)
+    void import_zip(const std::filesystem::path& path); // every STL, OBJ and 3MF in it onto the plate
+    void convert_gcode(const std::filesystem::path& path, bool to_binary); // written next to it, the other kind
+    // The calibration tests as menu entries (Más › Calibration, the empty
+    // bed's Add calibration model ▸): the chosen one made, in its tab.
+    void calibration_entries(const char* prefix);
+    // A model's instances: the models with its name and as many triangles.
+    std::vector<std::size_t> instances_of(std::size_t index) const;
+    void set_instances(std::size_t index, int count);
+    void scale_to_volume(std::size_t index);
+    int instances_count_ = 1;     // the Set number of instances… field
+    bool instances_open_ = false; // that dialog, to open
+    std::size_t export_object_ = 0; // the model Export as STL/OBJ… writes
+    void toggle_fullscreen(); // F11
+    int windowed_[4] = {0, 0, 0, 0}; // the window's place and size before Fullscreen
 
     // Screenshot mode.
     int frames_ = 0, settled_frames_ = 0;
@@ -1359,7 +1939,7 @@ const std::map<T, const char*>& row_keys() {
         {T::InfillBeforeWalls, "infill.before_walls"}, {T::MaxLink, "infill.max_link"},
         {T::InfillDensity, "infill.density"}, {T::InfillPattern, "infill.pattern"}, {T::InfillAngle, "infill.angle"},
         {T::SolidEvery, "infill.solid_every"}, {T::SolidBelowArea, "infill.solid_below_area"},
-        {T::NonplanarInfill, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
+        {T::NonplanarRow, "infill.nonplanar"}, {T::NonplanarAmplitude, "infill.nonplanar_amplitude"},
         {T::NonplanarWavelength, "infill.nonplanar_wavelength"}, {T::CombineInfill, "infill.combine_layers"},
         {T::CombineAuto, "infill.combine_auto"}, {T::DenseUnderTop, "infill.dense_under_top"},
         {T::DenseDensity, "infill.dense_density"}, {T::StressDensity, "infill.stress_density"},
@@ -1375,7 +1955,8 @@ const std::map<T, const char*>& row_keys() {
         {T::SpeedMaxFlow, "speed.max_flow"},
         {T::SpeedBridges, "speed.bridges"}, {T::SpeedOverBridges, "speed.over_bridges"},
         {T::SpeedSmallLoops, "speed.small_loops"},
-        {T::SpeedSupportInterface, "speed.support_interface"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
+        {T::SpeedSupportInterface, "speed.support_interface"}, {T::SpeedSmallSupport, "speed.small_support"},
+        {T::SmallSupportThreshold, "speed.small_support_threshold"}, {T::AccelWipeTower, "acceleration.wipe_tower"},
         {T::SpeedGapFill, "speed.gap_fill"}, {T::SpeedFirstLayerInfill, "speed.first_layer_infill"},
         {T::SpeedTravelZ, "speed.travel_z"}, {T::InfillMaxSpeed, "extrusion.infill_max_speed"},
         {T::InfillMaxCrossingSpeed, "extrusion.infill_max_crossing_speed"},
@@ -1389,12 +1970,13 @@ const std::map<T, const char*>& row_keys() {
         {T::Overhang3, "speed.overhang_3"}, {T::FlowSlopeUp, "speed.flow_slope_up"},
         {T::FlowSlopeDown, "speed.flow_slope_down"},
         {T::FilamentDiameter, "machine.filament_diameter"}, {T::FeedstockRow, "machine.feedstock"}, {T::NozzleTemp, "machine.variables"},
-        {T::BedTemp, "machine.variables"}, {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
+        {T::BedTemp, "machine.variables"}, {T::FirstNozzleTemp, "machine.variables"}, {T::FirstBedTemp, "machine.variables"},
+        {T::FlowRow, "extrusion.flow"}, {T::FanMin, "cooling.fan_min"},
         {T::FanMax, "cooling.fan_max"}, {T::MinLayerTime, "cooling.min_layer_time"},
         {T::KeepOuterSpeed, "cooling.keep_outer_speed"}, {T::BedWidth, "machine.bed"}, {T::BedDepth, "machine.bed"},
         {T::MaxHeight, "machine.max_height"}, {T::Nozzle, "machine.nozzle_diameter"},
         {T::MinLayerHeight, "machine.min_layer_height"}, {T::MaxLayerHeight, "machine.max_layer_height"},
-        {T::Flavor, "machine.flavor"}, {T::RelativeE, "machine.relative_extrusion"},
+        {T::Flavor, "machine.flavor"}, {T::StrictParserRow, "machine.strict_parser"}, {T::RelativeE, "machine.relative_extrusion"},
         {T::Retraction, "retraction.length"}, {T::RetractSpeed, "retraction.speed"},
         {T::RetractLift, "retraction.lift"}, {T::GcodeResolution, "gcode.resolution"},
         {T::CornerSmoothing, "gcode.corner_smoothing"},
@@ -1406,8 +1988,9 @@ const std::map<T, const char*>& row_keys() {
         {T::SeamGap, "walls.seam_gap"}, {T::OuterWidth, "walls.outer_width"}, {T::SpreadCount, "walls.spread_count"}, {T::TransitionLength, "walls.transition_length"}, {T::TransitionAngle, "walls.transition_angle"}, {T::TransitionMargin, "walls.transition_margin"}, {T::FirstLineWidth, "layers.first_line_width"}, {T::TopWidth, "surfaces.top_width"}, {T::SolidWidth, "surfaces.solid_width"},
         {T::InfillWidth, "infill.width"},
         {T::WallGeneratorRow, "walls.generator"}, {T::WallGapFill, "walls.gap_fill"},
-        {T::ZOffset, "machine.z_offset"}, {T::VolumetricE, "gcode.volumetric_e"},
-        {T::VerboseComments, "gcode.verbose_comments"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"},
+        {T::ZOffset, "machine.z_offset"}, {T::HeatRateNozzle, "machine.heat_rate_nozzle"},
+        {T::HeatRateBed, "machine.heat_rate_bed"}, {T::HomeTime, "machine.home_time"}, {T::ProbeTime, "machine.probe_time"}, {T::VolumetricE, "gcode.volumetric_e"},
+        {T::VerboseComments, "gcode.verbose_comments"}, {T::SkipConfigBlock, "gcode.skip_config_block"}, {T::GcodeArcs, "gcode.arcs"}, {T::GcodeBinary, "gcode.binary"}, {T::GcodeThumbnails, "gcode.thumbnails"},
         {T::ChamberMinTemp, "extrusion.chamber_min_temperature"}, {T::FilamentDensity, "extrusion.density"},
         {T::FilamentCost, "extrusion.cost"}, {T::SpoolWeight, "extrusion.spool_weight"},
         {T::ShrinkageXY, "extrusion.shrinkage_xy"}, {T::ShrinkageZ, "extrusion.shrinkage_z"},
@@ -1446,11 +2029,13 @@ const std::map<T, const char*>& row_keys() {
         {T::SkirtMinFilament, "adhesion.skirt_min_filament"}, {T::AutoTemperatures, "gcode.auto_temperatures"},
         {T::FilamentStartGcode, "extrusion.start_gcode"}, {T::FilamentEndGcode, "extrusion.end_gcode"},
         {T::FilenameFormat, "output.filename_format"}, {T::PostProcessRow, "output.post_process"}, {T::DraftShieldRow, "adhesion.draft_shield"},
-        {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"},
+        {T::BrimTypeRow, "adhesion.brim_type"}, {T::BrimGap, "adhesion.brim_gap"}, {T::BrimEars, "adhesion.brim_ears"},
+        {T::BrimEarsMaxAngle, "adhesion.brim_ears_max_angle"}, {T::BrimEarsDetection, "adhesion.brim_ears_detection_length"},
+        {T::BrimEarsOuterOnly, "adhesion.brim_ears_outer_only"},
         {T::ChamberTemp, "extrusion.chamber_temperature"}, {T::FanBelowTime, "cooling.fan_below_time"},
         {T::FanAlways, "cooling.fan_always"}, {T::FanBridges, "cooling.fan_bridges"},
         {T::FanOffLayers, "cooling.fan_off_layers"}, {T::MinSpeed, "cooling.min_speed"},
-        {T::FullFanLayer, "cooling.full_fan_layer"}, {T::CoolingEnabled, "cooling.enabled"},
+        {T::FullFanLayer, "cooling.full_fan_layer"}, {T::FirstLayerFan, "cooling.first_layer_fan"}, {T::CoolingEnabled, "cooling.enabled"},
         {T::DynamicOverhangFan, "cooling.dynamic_overhang_fan"}, {T::OverhangFan0, "cooling.overhang_fan_0"},
         {T::OverhangFan1, "cooling.overhang_fan_1"}, {T::OverhangFan2, "cooling.overhang_fan_2"},
         {T::OverhangFan3, "cooling.overhang_fan_3"}, {T::SlowdownLogicRow, "cooling.slowdown_logic"},
@@ -1468,6 +2053,8 @@ const std::map<T, const char*>& row_keys() {
         {T::MaxDetour, "travel.max_detour"}, {T::WallsClockwise, "walls.clockwise"},
         {T::WallsOuterFirst, "walls.outer_first"},
         {T::FilamentRetractionRow, "extrusion.retraction"},
+        {T::Polyholes, "walls.polyholes"}, {T::UnsupportedLast, "walls.unsupported_last"}, {T::PolyholeMargin, "walls.polyhole_margin"},
+        {T::PolyholeTwist, "walls.polyhole_twist"}, {T::PolyholeMaxEdges, "walls.polyhole_max_edges"},
         {T::StaggeredSeams, "walls.staggered_inner_seams"}, {T::WallsStaggered, "walls.staggered"}, {T::TopOneWallRow, "walls.top_one_wall"},
         {T::FirstLayerOneWall, "walls.first_layer_one_wall"}, {T::ExtraIfNeeded, "walls.extra_if_needed"},
         {T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs"}, {T::ExtraOnOverhangs, "walls.extra_on_overhangs"},
@@ -1574,10 +2161,14 @@ const char* row_key(T label) {
 std::string key_label(std::string_view key) {
     static const std::map<std::string, T, std::less<>> labels = [] {
         std::map<std::string, T, std::less<>> m;
+        // The temperature rows also point at machine.variables: its own row names it.
+        m.emplace("machine.variables", T::VariablesRow);
         for (const auto& [label, k] : row_keys())
             m.emplace(k, label);
         m.emplace("machine.variables.temperature", T::NozzleTemp);
         m.emplace("machine.variables.bed_temperature", T::BedTemp);
+        m.emplace("machine.variables.first_layer_temperature", T::FirstNozzleTemp);
+        m.emplace("machine.variables.first_layer_bed_temperature", T::FirstBedTemp);
         return m;
     }();
     const auto it = labels.find(key);
@@ -1740,6 +2331,23 @@ std::string g_last_field; // the last of them, for a field narrower than its cel
 // The entries of a menu drawn this frame, by a name in English, for
 // --ui-script's menu step: min x, min y, max x, max y.
 std::map<std::string, ImVec4> g_menu_rects;
+// The named entries drawn greyed this frame (--ui-script's expect-enabled).
+std::set<std::string> g_menu_disabled;
+// The scripted tests: the control a click is about to aim at. The panel that
+// draws it scrolls it into view (a taller panel no longer hides it).
+std::string g_scroll_to;
+void note_rect(const std::string& name) {
+    if (!g_scroll_to.empty() && g_scroll_to == name) {
+        // Wholly inside the window's visible part, or scrolled to.
+        const float top = ImGui::GetWindowPos().y, bottom = top + ImGui::GetWindowSize().y;
+        if (ImGui::GetItemRectMin().y >= top && ImGui::GetItemRectMax().y <= bottom)
+            g_scroll_to.clear();
+        else
+            ImGui::SetScrollHereY(0.5f);
+    }
+    g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                ImGui::GetItemRectMax().y);
+}
 // --dump-ui: each setting row drawn this frame, by its field's name in
 // g_field_rects: its label, and whether the label's column cuts it.
 struct DumpRow {
@@ -1747,6 +2355,7 @@ struct DumpRow {
     bool cut = false;
     bool ranged = false; // a number field: its limits
     double min = 0.0, max = 0.0;
+    bool shortened = false; // the label ends in «…», whole on hover (TR25)
 };
 bool g_dump_ui = false;
 std::vector<DumpRow> g_dump_rows;
@@ -1915,6 +2524,7 @@ const char* calibration_title(CalibrationKind kind) {
     case CalibrationKind::ElephantFoot: return tr(T::CalElephantFoot);
     case CalibrationKind::ResinExposure: return tr(T::CalResinExposure);
     case CalibrationKind::ResinMeasure: return tr(T::CalResinMeasure);
+    case CalibrationKind::BridgesOverhangs: return tr(T::CalBridges);
     }
     return "";
 }
@@ -2243,6 +2853,7 @@ void App::printer_page() {
         ImGui::BeginChild("##printer_profile", ImVec2(w, ImGui::GetFrameHeightWithSpacing()));
         profile_row(ProfileKind::Printer);
         ImGui::EndChild();
+        pack_source_line(ProfileKind::Printer);
     }
     ImGui::Separator();
 
@@ -2259,9 +2870,21 @@ void App::printer_page() {
         T title;
         const char* icon;
     };
-    static constexpr Extra extras[] = {{"calibration", T::SecCalibration, "tisma_calibrate"},
-                                       {"connection", T::SecConnection, "tisma_printer"},
-                                       {"notes", T::SecNotes, "section_other"}};
+    std::vector<Extra> extras = {{"calibration", T::SecCalibration, "tisma_calibrate"},
+                                 {"connection", T::SecConnection, "tisma_printer"},
+                                 {"notes", T::SecNotes, "section_other"}};
+    // The pack's community data for a pack printer (profile_pack.md, rules 22 to 24).
+    {
+        const std::string& now = chosen_profile_[std::size_t(ProfileKind::Printer)];
+        if (now != community_for_) {
+            community_for_ = now;
+            community_values_.clear();
+            if (const auto it = pack_printer_model_.find(now); it != pack_printer_model_.end())
+                community_values_ = pack_community(pack_dir(), "printers", it->second.first, it->second.second);
+        }
+        if (!community_values_.empty())
+            extras.push_back({"published", T::SecPublished, "section_other"});
+    }
     const bool known = std::any_of(sections.begin(), sections.end(), [&](const SectionLayout* s) { return s->id == printer_section_; }) ||
                        std::any_of(std::begin(extras), std::end(extras), [&](const Extra& e) { return printer_section_ == e.id; });
     if (!known)
@@ -2427,6 +3050,8 @@ void App::printer_page() {
             printer_page_ = false;
             set_tab(Tab::Device);
         }
+    } else if (printer_section_ == "published") {
+        published_values(community_values_);
     } else if (printer_section_ == "notes") {
         std::string& notes = printer_notes_[printer];
         ImGui::InputTextMultiline("##notes", &notes, ImVec2(-FLT_MIN, 18.0f * ImGui::GetTextLineHeight()));
@@ -2463,12 +3088,31 @@ void label_cell(T label, const char* tip = nullptr) {
     const ImVec2 cell = ImGui::GetCursorScreenPos();
     const float column = ImGui::GetContentRegionAvail().x;
     ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(tr(label));
-    const bool cut = ImGui::GetItemRectMax().x > cell.x + column; // the column hides its end
+    // A label longer than the column, beside its info button, ends in «…»
+    // and shows whole on hover; the button always stays in sight (TR25).
+    const char* text = tr(label);
+    const float button = row_key(label) ? ImGui::GetFontSize() * 0.95f * 1.35f : 0.0f;
+    const float room = std::max(0.0f, column - button);
+    const bool shortened = ImGui::CalcTextSize(text).x > room;
+    if (shortened) {
+        std::string s = text;
+        while (!s.empty() && ImGui::CalcTextSize((s + "…").c_str()).x > room) {
+            s.pop_back();
+            while (!s.empty() && (static_cast<unsigned char>(s.back()) & 0xC0) == 0x80)
+                s.pop_back(); // a whole UTF-8 character at a time
+        }
+        while (!s.empty() && s.back() == ' ')
+            s.pop_back();
+        ImGui::TextUnformatted((s + "…").c_str());
+    } else {
+        ImGui::TextUnformatted(text);
+    }
+    // Cut: the column hides part of the label with no sign of it.
+    const bool cut = ImGui::GetItemRectMax().x > cell.x + column + 0.5f;
     if (tip && ImGui::IsItemHovered())
-        loc::SetTooltip("%s", tip);
-    else if (ImGui::IsItemHovered() && cut)
-        loc::SetTooltip("%s", tr(label));
+        loc::SetTooltip("%s\n\n%s", text, tip);
+    else if (ImGui::IsItemHovered() && shortened)
+        loc::SetTooltip("%s", text);
     if (const char* info = row_key(label))
         info_button(label, info);
     if (g_row_tag) {
@@ -2504,8 +3148,10 @@ void label_cell(T label, const char* tip = nullptr) {
         const ImVec2 at = ImGui::GetCursorScreenPos();
         g_field_rects[name] = ImVec4(at.x, at.y, at.x + ImGui::GetContentRegionAvail().x, at.y + ImGui::GetFrameHeight());
         g_last_field = name;
-        if (g_dump_ui)
+        if (g_dump_ui) {
             g_dump_rows.push_back({name, tr(label), cut});
+            g_dump_rows.back().shortened = shortened;
+        }
     }
 }
 
@@ -2745,13 +3391,36 @@ bool height_steps_rows(std::vector<std::array<double, 2>>& steps, double layer_h
 
 // A whole-number variable of the start G-code ([temperature]), edited as a number.
 bool variable_row(T label, Settings& s, const char* name, int min, int max, const char* fmt, const char* tip) {
-    std::vector<std::string>& values = s.variables[name];
-    if (values.empty())
-        values.push_back("0");
-    int v = std::atoi(values.front().c_str());
+    // Shown as 0 when the profile does not give it, and written only when
+    // changed: drawing the row must not change the settings (a pack
+    // filament without a bed temperature showed «1 cambio», 2026-11-04).
+    const auto it = s.variables.find(name);
+    int v = it != s.variables.end() && !it->second.empty() ? std::atoi(it->second.front().c_str()) : 0;
     if (!row(label, v, min, max, fmt, tip))
         return false;
-    values.front() = std::to_string(v);
+    std::vector<std::string>& values = s.variables[name];
+    if (values.empty())
+        values.push_back(std::to_string(v));
+    else
+        values.front() = std::to_string(v);
+    return true;
+}
+
+// A first-layer variable ([first_layer_temperature]): empty means the same as
+// `fallback` on every layer, so it shows that value and is written only when
+// changed; set back to the fallback's value, it is emptied again.
+bool first_layer_variable_row(T label, Settings& s, const char* name, const char* fallback, int min, int max, const char* fmt,
+                              const char* tip) {
+    const auto own = s.variables.find(name);
+    const auto other = s.variables.find(fallback);
+    const int base = other != s.variables.end() && !other->second.empty() ? std::atoi(other->second.front().c_str()) : 0;
+    int v = own != s.variables.end() && !own->second.empty() ? std::atoi(own->second.front().c_str()) : base;
+    if (!row(label, v, min, max, fmt, tip))
+        return false;
+    if (v == base)
+        s.variables.erase(name);
+    else
+        s.variables[name] = {std::to_string(v)};
     return true;
 }
 
@@ -2881,6 +3550,8 @@ bool App::init(std::string& error) {
     }
     if (!font_)
         font_ = io.Fonts->AddFontDefault();
+    // Before ImGui's own callbacks, which call it first (UI48).
+    glfwSetKeyCallback(window_, on_key);
     if (vulkan_) {
         ImGui_ImplGlfw_InitForVulkan(window_, true);
         if (!vk_.init_imgui(error))
@@ -2891,25 +3562,7 @@ bool App::init(std::string& error) {
         if (!renderer_.init(error))
             return false;
     }
-    // A texture for ImGui::Image from RGBA rows, with OpenGL or Vulkan.
-    const auto texture = [&](const Image& image, bool clamp) -> ImTextureID {
-        if (vulkan_)
-            return vk_.add_texture(image.rgba.data(), image.width, image.height);
-        unsigned tex = 0;
-        glGenTextures(1, &tex);
-        glBindTexture(GL_TEXTURE_2D, tex);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        if (clamp) {
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        }
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                     image.rgba.data());
-        glBindTexture(GL_TEXTURE_2D, 0);
-        return ImTextureID(tex);
-    };
+    const auto texture = [&](const Image& image, bool clamp) { return upload_texture(image, clamp); };
 
     // Icons drawn white at twice their size; the buttons tint them.
     const int icon_pixels = int(std::lround(48.0f * scale_));
@@ -2926,6 +3579,29 @@ bool App::init(std::string& error) {
 
     if (options_.screenshot.empty())
         load_preferences();
+    if (theme_system_) // the theme the system asks for, from the start
+        if (const std::optional<bool> dark = system_prefers_dark(); dark && *dark != theme_.dark)
+            theme_ = *dark ? dark_theme() : light_theme();
+    // The system's own Open and Save As dialogs where there are (Windows,
+    // BH40); scripted and screenshot runs keep the drawn one they drive.
+    FileBrowser::use_native(options_.screenshot.empty() && options_.ui_script.empty());
+    if (cloud_server_.empty()) // none saved: Tisma Cloud's own (cloud.md, rule 1)
+        cloud_server_ = cloud::kDefaultServer;
+    if (!options_.cloud_server.empty()) // the server for this run (tests: the mock one)
+        cloud_server_ = options_.cloud_server;
+    // A session that closed unexpectedly is offered as a report, once; this
+    // one leaves its mark (problem_reports.md, rule 10). Screenshots and the
+    // tests leave none, unless --crash-check.
+    if ((options_.screenshot.empty() || options_.crash_check) && !preferences_path().empty()) {
+        const std::filesystem::path folder = preferences_path().parent_path();
+        if (std::optional<std::string> log = ui::closed_session_log(folder)) {
+            crashed_log_ = log->empty() ? std::string("(the session wrote no log)\n") : std::move(*log);
+            offer_crash_report_ = true;
+        }
+        session_mark_ = ui::mark_session(folder);
+        if (!session_mark_.log.empty())
+            session_file_.open(session_mark_.log, std::ios::binary | std::ios::app);
+    }
     read_graphics_info();
     if (view_quality_ != "custom" && options_.render < 0 && options_.msaa < 0 && options_.fxaa < 0 && options_.screenshot.empty())
         apply_quality(view_quality_);
@@ -3023,6 +3699,23 @@ bool App::init(std::string& error) {
         device_connect(device_port_);
     }
     // The profiles; with none chosen yet, the ones the settings match.
+    if (!options_.pack_url.empty())
+        pack_url_ = options_.pack_url;
+    load_pack();
+    // The first run with no pack: its index, in the background and without
+    // asking, so the catalog lists its printers (profile_pack.md, rule 1, PK1).
+    if (first_run_ && !pack_index_ && !pack_dir().empty()) {
+        pack_first_index_ = true;
+        start_pack_update({}, {});
+    }
+    // A newer pack, looked for at most once a day (profile_pack.md, rule 19).
+    if (pack_index_ && pack_check_updates_ && options_.screenshot.empty() && options_.pack.empty()) {
+        const long long now = static_cast<long long>(std::time(nullptr));
+        if (now - pack_checked_ >= 24 * 3600) {
+            pack_checked_ = now;
+            pack_newer_job_ = std::async(std::launch::async, [dir = pack_dir(), url = pack_url_] { return pack_newer(dir, url); });
+        }
+    }
     load_profile_lists();
     for (const ProfileKind kind : kProfileKinds) {
         std::string& chosen = chosen_profile_[std::size_t(kind)];
@@ -3122,7 +3815,7 @@ bool App::init(std::string& error) {
             Brush brush;
             brush.centre = {b.x, b.y, b.z};
             brush.radius = b.radius;
-            brush.detail = std::max(0.05, b.radius / 8.0);
+            brush.detail = std::max(0.05, b.radius / 6.0);
             brush.mark = b.block ? kPaintBlock : kPaintEnforce;
             paint(objects_[i].painting, channel, placed_meshes_[i], brush);
         }
@@ -3201,10 +3894,49 @@ void App::apply_theme() {
     vk_view_.set_bed(settings_.bed, look);
 }
 
+// A texture for ImGui::Image from RGBA rows, with OpenGL or Vulkan.
+ImTextureID App::upload_texture(const Image& image, bool clamp) {
+    if (image.width <= 0 || image.height <= 0)
+        return ImTextureID(0);
+    if (vulkan_)
+        return vk_.add_texture(image.rgba.data(), image.width, image.height);
+    if (!gl_loaded_)
+        return ImTextureID(0);
+    unsigned tex = 0;
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    if (clamp) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.width, image.height, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                 image.rgba.data());
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return ImTextureID(tex);
+}
+
+// Frees a texture from upload_texture; it must not be drawn after this.
+void App::drop_texture(ImTextureID id) {
+    if (!id)
+        return;
+    if (vulkan_) {
+        vk_.remove_texture(id);
+    } else if (gl_loaded_) {
+        const auto tex = unsigned(id);
+        glDeleteTextures(1, &tex);
+    }
+}
+
 void App::shutdown() {
     slice_job_.wait();
-    voxel_job_.wait();
     device_disconnect();
+    bambu_camera_off();
+    // A normal exit: no mark left for the next start (problem_reports.md, rule 10).
+    session_file_.close();
+    ui::end_session(session_mark_);
     if (options_.screenshot.empty() && (gl_loaded_ || vulkan_))
         save_preferences();
     if (gl_loaded_) {
@@ -3236,16 +3968,32 @@ void App::shutdown() {
     glfwTerminate();
 }
 
-void App::load_preferences() {
-    const std::filesystem::path path = preferences_path();
+void App::load_preferences(const std::filesystem::path& from) {
+    const std::filesystem::path path = from.empty() ? preferences_path() : from;
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        first_run_ = true;
+        if (from.empty())
+            first_run_ = true;
+        else
+            fail(T::CannotOpen, utf8(from));
         return;
     }
     try {
         const nlohmann::json j = nlohmann::json::parse(in);
         tips_ = j.value("tips", true);
+        if (const auto packs = j.find("packs"); packs != j.end() && packs->is_object()) {
+            pack_url_ = packs->value("url", "");
+            pack_check_updates_ = packs->value("check_updates", true);
+            pack_checked_ = packs->value("checked", 0LL);
+            if (const auto chosen = packs->find("printers"); chosen != packs->end() && chosen->is_array())
+                for (const auto& p : *chosen)
+                    if (p.is_string())
+                        pack_printers_.push_back(p.get<std::string>());
+            if (const auto chosen = packs->find("filaments"); chosen != packs->end() && chosen->is_array())
+                for (const auto& p : *chosen)
+                    if (p.is_string())
+                        pack_filaments_.push_back(p.get<std::string>());
+        }
         if (const auto a = j.find("assistant"); a != j.end() && a->is_object()) {
             assistant_tutorials_ = a->value("tutorials", true);
             g_glossary_tips = assistant_glossary_ = a->value("glossary_tips", true);
@@ -3270,15 +4018,53 @@ void App::load_preferences() {
         }
         if (j.value("language", "es") == "en")
             set_language(Language::English);
-        if (j.value("theme", "dark") == "light")
+        if (j.value("theme", "") == "light")
             theme_ = light_theme();
+        else if (j.value("theme", "") == "dark") // an imported file can bring the dark one back
+            theme_ = dark_theme();
+        theme_system_ = j.value("theme", "dark") == "system";
         last_folder_ = from_utf8(j.value("folder", std::string()));
+        show_templates_ = j.value("show_templates", true);
+        if (const auto r = j.find("recent_projects"); r != j.end() && r->is_array()) {
+            recent_projects_.clear(); // the file's list, not added to the one there was (an imported file)
+            for (const auto& e : *r)
+                if (e.is_string() && recent_projects_.size() < 10)
+                    recent_projects_.push_back(from_utf8(e.get<std::string>()));
+        }
         render_mode_ = static_cast<RenderMode>(std::clamp(j.value("render", 1), 0, 2));
         msaa_ = std::clamp(j.value("msaa", 4), 1, 16);
         fxaa_ = j.value("fxaa", true);
         moire_ = j.value("moire_filter", true);
         device_port_ = j.value("device_port", std::string("sim"));
         device_baud_ = j.value("device_baud", 115200);
+        // The Bambu Lab printer: its address, serial and accepted
+        // certificate; its access code from the system's store.
+        if (j.contains("bambu") && j["bambu"].is_object()) {
+            const nlohmann::json& b = j["bambu"];
+            bambu_.host = b.value("host", std::string());
+            bambu_.serial = b.value("serial", std::string());
+            bambu_.pinned_sha256 = b.value("certificate", std::string());
+            bambu_.camera_pinned_sha256 = b.value("camera_certificate", std::string());
+            device_bambu_ = b.value("chosen", false);
+            if (!bambu_.serial.empty())
+                if (const std::optional<std::string> code = cloud::load_secret("bambu:" + bambu_.serial))
+                    bambu_.access_code = *code;
+        }
+        // The network program: its kind, address and user; the key and
+        // password from the system's store.
+        if (j.contains("print_host") && j["print_host"].is_object()) {
+            const nlohmann::json& h = j["print_host"];
+            device::host_kind_from(h.value("kind", std::string("octoprint")), host_.kind);
+            host_.url = h.value("url", std::string());
+            host_.user = h.value("user", std::string());
+            device_host_ = h.value("chosen", false) && !device_bambu_;
+            if (!host_.url.empty()) {
+                if (const std::optional<std::string> k = cloud::load_secret("host-key:" + host_.url))
+                    host_.api_key = *k;
+                if (const std::optional<std::string> p = cloud::load_secret("host-password:" + host_.url))
+                    host_.password = *p;
+            }
+        }
         ao_strength_ = std::clamp(j.value("ao_strength", 1.0f), 0.0f, 1.5f);
         if (const auto ui = j.find("ui"); ui != j.end() && ui->is_object()) {
             graphics_api_ = ui->value("graphics_api", std::string("auto"));
@@ -3294,6 +4080,10 @@ void App::load_preferences() {
             show_frame_time_ = ui->value("show_frame_time", true);
             panel_folded_ = ui->value("panel_folded", false);
             lowered_notice_shown_ = ui->value("lowered_notice_shown", false);
+        }
+        if (const auto c = j.find("cloud"); c != j.end() && c->is_object()) {
+            cloud_server_ = c->value("server", std::string());
+            cloud_email_ = c->value("email", std::string());
         }
         if (j.contains("settings")) {
             try {
@@ -3358,23 +4148,38 @@ void App::load_preferences() {
     }
 }
 
-void App::save_preferences() {
-    const std::filesystem::path path = preferences_path();
+void App::save_preferences(const std::filesystem::path& to) {
+    const std::filesystem::path path = to.empty() ? preferences_path() : to;
     if (path.empty())
         return;
     try {
         nlohmann::json j;
         j["language"] = language() == Language::English ? "en" : "es";
-        j["theme"] = theme_.dark ? "dark" : "light";
+        j["theme"] = theme_system_ ? "system" : theme_.dark ? "dark" : "light";
         j["folder"] = utf8(last_folder_);
+        j["show_templates"] = show_templates_;
+        j["recent_projects"] = nlohmann::json::array();
+        for (const std::filesystem::path& r : recent_projects_)
+            j["recent_projects"].push_back(utf8(r));
         j["render"] = int(render_mode_);
         j["msaa"] = msaa_;
         j["fxaa"] = fxaa_;
         j["moire_filter"] = moire_;
         j["device_port"] = device_port_;
         j["device_baud"] = device_baud_;
+        if (!bambu_sim_ && !bambu_.host.empty())
+            j["bambu"] = {{"host", bambu_.host}, {"serial", bambu_.serial}, {"certificate", bambu_.pinned_sha256},
+                          {"camera_certificate", bambu_.camera_pinned_sha256}, {"chosen", device_bambu_}};
+        if (!host_.url.empty())
+            j["print_host"] = {{"kind", device::host_kind_word(host_.kind)}, {"url", host_.url}, {"user", host_.user},
+                               {"chosen", device_host_}};
         j["ao_strength"] = ao_strength_;
         j["tips"] = tips_;
+        j["packs"]["url"] = pack_url_;
+        j["packs"]["check_updates"] = pack_check_updates_;
+        j["packs"]["checked"] = pack_checked_;
+        j["packs"]["printers"] = pack_printers_;
+        j["packs"]["filaments"] = pack_filaments_;
         j["assistant"]["tutorials"] = assistant_tutorials_;
         j["assistant"]["glossary_tips"] = assistant_glossary_;
         j["assistant"]["material_tips"] = assistant_material_;
@@ -3398,6 +4203,9 @@ void App::save_preferences() {
         j["ui"]["show_frame_time"] = show_frame_time_;
         j["ui"]["panel_folded"] = panel_folded_;
         j["ui"]["lowered_notice_shown"] = lowered_notice_shown_;
+        // Tisma Cloud: the server and the e-mail; the token is in the system's store (cloud.md, rule 3).
+        j["cloud"]["server"] = cloud_server_;
+        j["cloud"]["email"] = cloud_email_;
         for (const auto& [printer, notes] : printer_notes_)
             if (!notes.empty())
                 j["printers"][printer]["notes"] = notes;
@@ -3420,12 +4228,24 @@ void App::save_preferences() {
     }
 }
 
+// The toasts shown while a script runs, for expect-toast (at most the last 200).
+void App::remember_toast(const std::string& text) {
+    if (script_.empty())
+        return;
+    toasts_shown_.push_back(text);
+    if (toasts_shown_.size() > 200)
+        toasts_shown_.erase(toasts_shown_.begin());
+}
+
 void App::notify(std::string text, bool error) {
+    log_line(std::string(error ? "error: " : "") + text);
+    remember_toast(text);
     toasts_.push_back({std::move(text), error, ImGui::GetTime() + kToastSeconds, {}});
 }
 
 // A toast with «Undo», kept twice as long.
 void App::notify_undo(std::string text, std::function<void()> undo) {
+    remember_toast(text);
     toasts_.push_back({std::move(text), false, ImGui::GetTime() + 2.0 * kToastSeconds, std::move(undo)});
 }
 
@@ -3433,6 +4253,7 @@ void App::fail(T title, std::string message, std::vector<std::string> details) {
     // The engine's words in the language (TR21).
     error_title_ = tr(title);
     error_message_ = translated_error(message);
+    log_line("error: " + error_title_ + ": " + error_message_);
     for (std::string& d : details)
         d = translated_error(d);
     error_details_ = std::move(details);
@@ -3442,10 +4263,11 @@ void App::fail(T title, std::string message, std::vector<std::string> details) {
 void App::open_path(const std::filesystem::path& path) {
     const std::string ext = lower_extension(path);
     last_folder_ = path.parent_path();
-    if (is_model(path))
-        load_model(path);
-    else if (ext == ".tisma")
+    // A 3MF the engine saved is a project (formats.md, rule 11), not a model.
+    if (ext == ".tisma" || (ext == ".3mf" && is_project_file(path)))
         open_project(path);
+    else if (is_model(path))
+        load_model(path);
     else if (ext == ".gcode" || ext == ".gco" || ext == ".g" || ext == ".bgcode")
         load_gcode(path);
     else if (ext == ".json")
@@ -3471,6 +4293,37 @@ void App::load_model(const std::filesystem::path& path) {
         }
         calibration_.reset();
         use_mesh(std::move(stl.mesh), path, Tab::Prepare);
+        // Another program's project (project_import.md, rules 1, 2 and 9):
+        // which one, its parts, and that its settings stay out for now.
+        if (lower_extension(path) == ".3mf") {
+            std::ifstream in(path, std::ios::binary);
+            const std::string package((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            const ProjectSource source = project_source(package);
+            if (!source.program.empty() && source.program != "Tisma Slicer") {
+                notify(source.items > 1 ? format(tr(T::ProjectFromProgram), source.program.c_str(), source.items)
+                                        : format(tr(T::ProjectFromProgramOne), source.program.c_str()));
+                // Its settings by the pack's translation table, when it has
+                // one for this program (rules 6, 9 and 11).
+                if (pack_index_)
+                    if (const auto table_path = pack_index_->translation.find(translation_dialect(source));
+                        table_path != pack_index_->translation.end()) {
+                        const std::string& relative = table_path->second;
+                        std::ifstream table_in(pack_dir() / std::filesystem::path(std::u8string(relative.begin(), relative.end())),
+                                               std::ios::binary);
+                        const std::string table((std::istreambuf_iterator<char>(table_in)), std::istreambuf_iterator<char>());
+                        try {
+                            if (const auto own = project_settings(package); !table.empty() && !own.empty()) {
+                                const SettingSort sort = sort_settings(parse_translation(table), own);
+                                notify(format(tr(T::ProjectSettingsSorted), sort.translated, sort.similar, sort.none));
+                            }
+                        } catch (const TranslationError&) {
+                            // A table this program cannot read: the notice above stands.
+                        }
+                    }
+            }
+            else if (source.program.empty() && source.application.find("Tisma") == std::string::npos)
+                notify(tr(T::ProjectFromUnknown));
+        }
     } catch (const std::exception& e) {
         fail(T::CannotOpen, e.what());
     }
@@ -3480,6 +4333,8 @@ void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab
     ++revision_.model;
     objects_.clear();
     objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    if (std::error_code ec; std::filesystem::is_regular_file(name, ec))
+        objects_.back().source = utf8(std::filesystem::absolute(name, ec));
     fire("model_added");
     selected_ = 0;
     tool_ = PlateTool::Select;
@@ -3489,8 +4344,6 @@ void App::use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab
     renderer_.clear_preview();
     vk_view_.clear_preview();
     place_model();
-    voxels_.reset();
-    voxels_stale_ = true;
     stale_ = false;
     set_tab(tab);
     frame_all();
@@ -3593,7 +4446,6 @@ void App::plate_changed() {
     ++revision_.model;
     if (result_ && !viewer_)
         stale_ = true;
-    voxels_stale_ = true;
     rebuild_plate();
 }
 
@@ -3618,6 +4470,8 @@ void App::add_mesh(TriangleMesh mesh, const std::filesystem::path& name) {
         return;
     }
     objects_.push_back({utf8(name.filename()), std::move(mesh), {}, {}});
+    if (std::error_code ec; std::filesystem::is_regular_file(name, ec))
+        objects_.back().source = utf8(std::filesystem::absolute(name, ec));
     fire("model_added");
     selected_ = int(objects_.size()) - 1;
     arrange_plate();
@@ -3762,6 +4616,54 @@ void App::load_settings_file(const std::filesystem::path& path) {
     }
 }
 
+void App::begin_import_config(bool from_project) {
+    if (from_project) {
+        purpose_ = Purpose::LoadProjectConfig;
+        browser_.open(FileBrowser::Mode::Open, tr(T::ImportProjectConfigMenu), {".tisma", ".3mf"}, last_folder_);
+    } else {
+        purpose_ = Purpose::LoadSettings;
+        browser_.open(FileBrowser::Mode::Open, tr(T::LoadSettingsTitle), {".json"}, last_folder_);
+    }
+}
+
+void App::begin_export_config() {
+    purpose_ = Purpose::SaveSettings;
+    browser_.open(FileBrowser::Mode::Save, tr(T::SaveSettingsTitle), {".json"}, last_folder_, "tisma.json");
+}
+
+// Import Config from Project… (Ctrl+Alt+L): the project's settings, its
+// chosen profiles and its colours; the plate stays as it is.
+void App::load_project_config(const std::filesystem::path& path) {
+    try {
+        Project p = load_project(path);
+        settings_ = std::move(p.settings);
+        chosen_profile_ = p.profiles;
+        profiles_checked_.clear();
+        filament_colors_ = std::move(p.filament_colors);
+        fill_speeds();
+        bed_changed();
+        settings_changed();
+        notify(format(tr(T::ProjectConfigLoaded), utf8(path.filename()).c_str()));
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
+// Export Plate as STL/OBJ…: every model as placed, joined, in the bed's
+// coordinates; ".obj" writes OBJ, anything else a binary STL.
+void App::export_plate_to(const std::filesystem::path& path) {
+    const TriangleMesh plate = plate_now();
+    const std::string name = project_path_.empty() ? utf8(model_path_.stem()) : utf8(project_path_.stem());
+    const std::string data = lower_extension(path) == ".obj" ? obj_text(plate, name) : stl_binary(plate, "Tisma " + name);
+    std::ofstream out(path, std::ios::binary);
+    out << data;
+    out.close();
+    if (!out)
+        fail(T::CannotSave, utf8(path));
+    else
+        notify(format(tr(T::PlateExported), utf8(path.filename()).c_str()));
+}
+
 void App::load_case_file(const std::filesystem::path& path) {
     try {
         load_case_ = load_analysis_case(path);
@@ -3791,6 +4693,17 @@ void App::open_project(const std::filesystem::path& path) {
         return;
     }
     settings_ = std::move(p.settings);
+    // The Structural map belongs to the plate it was made on.
+    structural_map_.reset();
+    if (structural_map_in_view_) {
+        structural_map_in_view_ = false;
+        paint_dirty_ = true;
+    }
+    aero_map_.reset();
+    if (aero_map_in_view_) {
+        aero_map_in_view_ = false;
+        paint_dirty_ = true;
+    }
     fill_speeds();
     chosen_profile_ = p.profiles;
     profiles_checked_.clear();
@@ -3803,25 +4716,7 @@ void App::open_project(const std::filesystem::path& path) {
     settings_changed();
     if (!p.models.empty()) {
         // Each model as the project placed it (its mesh moved by its offset).
-        std::vector<PlateObject> objects;
-        for (ProjectModel& m : p.models) {
-            PlateObject o{m.name, translated(m.mesh, {float(m.offset[0]), float(m.offset[1]), float(m.offset[2])}), {},
-                          std::move(m.painting)};
-            o.extruder = m.extruder;
-            o.wipe_into_infill = m.wipe_into_infill;
-            o.wipe_into_object = m.wipe_into_object;
-            o.settings = m.settings;
-            for (const ProjectVolume& v : m.volumes)
-                o.volumes.push_back({v.negative ? PlateVolume::Kind::Negative : PlateVolume::Kind::Modifier,
-                                     v.cylinder ? PlateVolume::Shape::Cylinder : PlateVolume::Shape::Box, v.offset, v.size,
-                                     v.settings, v.turn});
-            for (const ProjectRange& r : m.ranges)
-                o.ranges.push_back({r.from, r.to, r.settings});
-            const BoundingBox box = o.mesh.bounding_box();
-            o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
-            o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
-            objects.push_back(std::move(o));
-        }
+        std::vector<PlateObject> objects = project_objects(p.models);
         ProjectModel& model = p.models.front();
         if (p.calibration) {
             CalibrationPrint print;
@@ -3845,6 +4740,7 @@ void App::open_project(const std::filesystem::path& path) {
         }
     }
     project_path_ = path;
+    remember_project(path);
     glfwSetWindowTitle(window_, ("Tisma · " + utf8(path.filename())).c_str());
     notify(format(tr(T::ProjectOpened), utf8(path.filename()).c_str()));
 }
@@ -3855,39 +4751,53 @@ void App::begin_save_project(bool ask) {
         save_project_to(project_path_);
         return;
     }
+    // The engine's own file by default; a project kept as .3mf stays one
+    // (formats.md, rule 11). A new project is not offered as .3mf, so it
+    // never takes the name of the model's own 3MF.
     std::filesystem::path name = project_path_.filename();
     if (name.empty())
         name = has_plate_ ? model_path_.stem() : std::filesystem::path("tisma");
-    name.replace_extension(".tisma");
+    if (lower_extension(name) != ".3mf")
+        name.replace_extension(".tisma");
     purpose_ = Purpose::SaveProject;
-    browser_.open(FileBrowser::Mode::Save, tr(T::SaveProject), {".tisma"},
+    browser_.open(FileBrowser::Mode::Save, tr(T::SaveProject), {".tisma", ".3mf"},
                   project_path_.empty() ? last_folder_ : project_path_.parent_path(), utf8(name));
 }
 
-void App::save_project_to(const std::filesystem::path& path) {
+// The plate as a project: the settings, the profiles, each model as placed
+// with its volumes and ranges, the mixes and the calibration.
+Project App::current_project() const {
     Project p;
     p.settings = settings_;
     p.profiles = chosen_profile_;
-    // Each model as placed on the bed, its turn and scale applied.
+    // Each model in its own coordinates, its place on the bed (turn, scale
+    // and position) as its build transform (formats.md, rules 8 and 11 bis:
+    // the part's frame stays the same however it is moved).
     for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
-        p.models.push_back({objects_[i].name, placed_meshes_[i], {0.0, 0.0, 0.0}, objects_[i].painting,
+        const Affine to_bed = placing(objects_[i], placed_meshes_[i]);
+        p.models.push_back({objects_[i].name, objects_[i].mesh, to_bed.b, objects_[i].painting,
                             objects_[i].extruder, objects_[i].wipe_into_infill, objects_[i].wipe_into_object,
                             objects_[i].settings});
-        // The model is saved as placed: its volumes go with it.
-        const Affine to_bed = placing(objects_[i], placed_meshes_[i]);
-        const BoundingBox from = objects_[i].mesh.bounding_box(), to = placed_meshes_[i].bounding_box();
-        for (const PlateVolume& own : objects_[i].volumes) {
-            const PlateVolume v = carried_volume(own, from, to_bed, to);
+        p.models.back().turn = to_bed.a;
+        // Its volumes, ranges and Engineering data, in the same coordinates.
+        for (const PlateVolume& v : objects_[i].volumes)
             p.models.back().volumes.push_back({v.kind == PlateVolume::Kind::Negative, v.shape == PlateVolume::Shape::Cylinder,
-                                               v.offset, v.size, v.settings, v.turn});
-        }
+                                               v.offset, v.size, v.settings, v.turn, v.shape == PlateVolume::Shape::Lattice,
+                                               v.lattice_cell, v.lattice_diameter});
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
+        p.models.back().engineering = objects_[i].engineering;
+        p.models.back().printable = objects_[i].printable;
     }
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
     if (calibration_)
         p.calibration = ProjectCalibration{calibration_->kind, calibration_->unit, calibration_->segments};
+    return p;
+}
+
+void App::save_project_to(const std::filesystem::path& path) {
+    const Project p = current_project();
     try {
         save_project(path, p);
     } catch (const std::exception& e) {
@@ -3896,8 +4806,270 @@ void App::save_project_to(const std::filesystem::path& path) {
         return;
     }
     project_path_ = path;
+    remember_project(path);
     glfwSetWindowTitle(window_, ("Tisma · " + utf8(path.filename())).c_str());
     notify(format(tr(T::ProjectSaved), utf8(path.filename()).c_str()));
+}
+
+// The project first in the recent list, at most ten, each once.
+void App::remember_project(const std::filesystem::path& path) {
+    std::error_code ec;
+    std::filesystem::path full = std::filesystem::absolute(path, ec);
+    if (ec)
+        full = path;
+    std::erase(recent_projects_, full);
+    recent_projects_.insert(recent_projects_.begin(), full);
+    if (recent_projects_.size() > 10)
+        recent_projects_.resize(10);
+}
+
+// Paste (Ctrl+V): the copied model once more on the plate, chosen, and the
+// plate arranged.
+void App::paste() {
+    if (!clipboard_ || calibration_ || viewer_)
+        return;
+    objects_.push_back(*clipboard_);
+    selected_ = int(objects_.size()) - 1;
+    arrange_plate();
+}
+
+bool App::can_reload() const {
+    for (std::size_t i = 0; i < objects_.size(); ++i)
+        if (!objects_[i].source.empty() && (selected_ < 0 || int(i) == selected_))
+            return true;
+    return false;
+}
+
+// Reload from Disk (F5): each model read again from its file, where it is
+// placed; its painting stays only if the triangles are as many as before.
+void App::reload_from_disk() {
+    std::string done;
+    for (std::size_t i = 0; i < objects_.size(); ++i) {
+        PlateObject& o = objects_[i];
+        if (o.source.empty() || (selected_ >= 0 && int(i) != selected_))
+            continue;
+        try {
+            ModelFile file = read_model(from_utf8(o.source));
+            if (file.mesh.empty())
+                throw std::runtime_error(o.source + ": the file has no triangles");
+            if (file.mesh.triangle_count() != o.mesh.triangle_count())
+                o.painting = {};
+            o.mesh = std::move(file.mesh);
+            done += (done.empty() ? "" : ", ") + o.name;
+        } catch (const std::exception& e) {
+            fail(T::CannotOpen, e.what());
+        }
+    }
+    if (done.empty())
+        return;
+    plate_changed();
+    notify(format(tr(T::Reloaded), done.c_str()));
+}
+
+// Window (Ctrl+1 to Ctrl+6): 1 the plate, 2 to 4 the print, filament and
+// printer settings (the panel unfolded), 5 the 3D view (the plate), 6 the
+// preview, once there is a slice.
+void App::window_tab(int n) {
+    if (n == 6) {
+        if (result_)
+            set_tab(Tab::Preview);
+        return;
+    }
+    if (tab_ != Tab::Prepare)
+        set_tab(Tab::Prepare);
+    printer_page_ = false;
+    if (n >= 2 && n <= 4) {
+        panel_folded_ = false;
+        objects_tab_ = false;
+        if (n == 4)
+            printer_page_ = true;
+        else
+            panel_tab_ = n == 2 ? SettingsTab::Print : SettingsTab::Material;
+    }
+    frame_pending_ = true;
+}
+
+// Fullscreen (F11): the window over its whole monitor, and back.
+void App::toggle_fullscreen() {
+    if (GLFWmonitor* now = glfwGetWindowMonitor(window_)) {
+        (void)now;
+        glfwSetWindowMonitor(window_, nullptr, windowed_[0], windowed_[1], std::max(windowed_[2], 640),
+                             std::max(windowed_[3], 480), GLFW_DONT_CARE);
+    } else {
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
+        if (!mode)
+            return;
+        glfwGetWindowPos(window_, &windowed_[0], &windowed_[1]);
+        glfwGetWindowSize(window_, &windowed_[2], &windowed_[3]);
+        glfwSetWindowMonitor(window_, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+    }
+    frame_pending_ = true;
+}
+
+std::vector<std::size_t> App::instances_of(std::size_t index) const {
+    std::vector<std::size_t> out;
+    if (index >= objects_.size())
+        return out;
+    const PlateObject& o = objects_[index];
+    for (std::size_t i = 0; i < objects_.size(); ++i)
+        if (objects_[i].name == o.name && objects_[i].mesh.triangle_count() == o.mesh.triangle_count())
+            out.push_back(i);
+    return out;
+}
+
+// Set number of instances…: copies of the model added or the last ones taken
+// away until there are COUNT; the plate is arranged.
+void App::set_instances(std::size_t index, int count) {
+    count = std::clamp(count, 1, 500);
+    std::vector<std::size_t> same = instances_of(index);
+    if (same.empty())
+        return;
+    const PlateObject model = objects_[index];
+    while (int(same.size()) > count) {
+        const std::size_t last = same.back() == index && same.size() > 1 ? same[same.size() - 2] : same.back();
+        objects_.erase(objects_.begin() + std::ptrdiff_t(last));
+        same = instances_of(index > last ? index - 1 : index);
+        if (index > last)
+            --index;
+    }
+    for (int k = int(same.size()); k < count; ++k)
+        objects_.push_back(model);
+    selected_ = int(index);
+    arrange_plate();
+}
+
+// Scale to print volume: the largest even scale that fits the bed's box and
+// the machine's height, the model then set in the middle of the bed.
+void App::scale_to_volume(std::size_t index) {
+    if (index >= objects_.size() || index >= placed_meshes_.size() || settings_.bed.size() < 3)
+        return;
+    double x0 = 1e30, y0 = 1e30, x1 = -1e30, y1 = -1e30;
+    for (const auto& p : settings_.bed) {
+        x0 = std::min(x0, p[0]), x1 = std::max(x1, p[0]);
+        y0 = std::min(y0, p[1]), y1 = std::max(y1, p[1]);
+    }
+    const BoundingBox box = placed_meshes_[index].bounding_box();
+    const double w = double(box.max.x) - box.min.x, d = double(box.max.y) - box.min.y, h = double(box.max.z) - box.min.z;
+    if (w <= 0.0 || d <= 0.0 || h <= 0.0)
+        return;
+    double f = std::min((x1 - x0) / w, (y1 - y0) / d);
+    if (settings_.max_height > 0.0)
+        f = std::min(f, settings_.max_height / h);
+    f *= 0.995; // a hair inside the edges
+    for (double& s : objects_[index].place.scale)
+        s *= f;
+    objects_[index].place.x = 0.5 * (x0 + x1);
+    objects_[index].place.y = 0.5 * (y0 + y1);
+    plate_changed();
+}
+
+// Appearance «Like the system»: the dark or light theme as the system asks
+// (when it does not say, the theme stays).
+void App::follow_system_theme() {
+    const std::optional<bool> dark = system_prefers_dark();
+    if (!dark || *dark == theme_.dark)
+        return;
+    theme_ = *dark ? dark_theme() : light_theme();
+    apply_theme();
+}
+
+void App::calibration_entries(const char* prefix) {
+    const bool resin = settings_.machine_technology == MachineTechnology::Msla;
+    for (int k = 0; k < kCalibrationKinds; ++k) {
+        const CalibrationKind kind = CalibrationKind(k);
+        if (is_resin_calibration(kind) != resin)
+            continue;
+        const std::string name = std::string(prefix) + calibration_kind_name(kind);
+        const bool hit = ImGui::MenuItem((std::string(calibration_title(kind)) + "##" + name).c_str(), nullptr, false,
+                                         !slice_job_.running());
+        note_rect(name);
+        if (hit) {
+            set_tab(Tab::Calibration);
+            create_calibration(kind, false);
+        }
+    }
+}
+
+// Import ZIP Archive…: a 3MF package opens as one; otherwise every STL, OBJ
+// and 3MF inside goes on the plate, each named by its file.
+void App::import_zip(const std::filesystem::path& path) {
+    try {
+        std::ifstream in(path, std::ios::binary);
+        const std::string data{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        const ZipArchive zip(data);
+        if (zip.find("3D/3dmodel.model")) {
+            add_model(path);
+            return;
+        }
+        std::size_t added = 0;
+        for (const ZipArchive::Entry& e : zip.entries()) {
+            const std::filesystem::path name = from_utf8(e.name);
+            const std::string ext = lower_extension(name);
+            if (ext != ".stl" && ext != ".obj" && ext != ".3mf")
+                continue;
+            if (e.size > (std::uint64_t(1) << 30))
+                throw std::runtime_error(e.name + ": larger than 1 GB");
+            ModelFile m = parse_model(zip.read(e), ext);
+            if (m.mesh.empty())
+                continue;
+            add_mesh(std::move(m.mesh), name.filename());
+            ++added;
+        }
+        if (added == 0)
+            fail(T::CannotOpen, utf8(path.filename()) + ": " + tr(T::ZipNoModels));
+        last_folder_ = path.parent_path();
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
+// Convert ASCII G-code to binary, or binary to ASCII: the file written next
+// to the one chosen, with the other ending (.bgcode, .gcode); the printer's
+// metadata of a binary file come from the printer chosen now.
+void App::convert_gcode(const std::filesystem::path& path, bool to_binary) {
+    try {
+        std::ifstream in(path, std::ios::binary);
+        if (!in)
+            throw std::runtime_error(utf8(path) + ": cannot be read");
+        const std::string data{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        std::filesystem::path out_path = path;
+        out_path.replace_extension(to_binary ? ".bgcode" : ".gcode");
+        if (out_path == path)
+            out_path.replace_extension(to_binary ? ".converted.bgcode" : ".converted.gcode");
+        const std::string out_data = to_binary ? binary_gcode(data, settings_) : ascii_gcode(read_binary_gcode(data));
+        if (!write_aside(out_path, out_data))
+            throw std::runtime_error(utf8(out_path) + ": cannot be written");
+        notify(format(tr(T::GcodeConverted), utf8(out_path.filename()).c_str()));
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
+    }
+}
+
+// Every model off the plate, and the preview with them.
+void App::delete_all() {
+    if (objects_.empty())
+        return;
+    objects_.clear();
+    selected_ = -1;
+    result_.reset();
+    renderer_.clear_preview();
+    vk_view_.clear_preview();
+    plate_changed();
+}
+
+// New Project (Ctrl+N): an empty plate that is no file yet; the printer, the
+// filament and the settings stay as they are.
+void App::new_project() {
+    calibration_.reset();
+    chosen_value_.reset();
+    delete_all();
+    place_undo_.clear();
+    place_redo_.clear();
+    project_path_.clear();
+    if (tab_ != Tab::Prepare && !engineering_tab(tab_))
+        set_tab(Tab::Prepare);
+    glfwSetWindowTitle(window_, "Tisma");
 }
 
 // User profiles live next to the preferences; without a place for those,
@@ -3916,10 +5088,124 @@ void App::load_profile_lists() {
     for (const ProfileKind kind : kProfileKinds) {
         const std::size_t k = std::size_t(kind);
         builtin_profiles_[k] = builtin_profiles(kind);
+        if (kind == ProfileKind::Printer) {
+            pack_printer_number_.clear();
+            pack_printer_model_.clear();
+            pack_printer_bed_.clear();
+            bed_extras_for_ = "\x01";
+            pack_gone_.clear();
+            pack_filament_vendor_.clear();
+            pack_entry_printer_.clear();
+            pack_profile_source_.clear();
+            community_for_ = "\x01";
+            material_community_for_ = "\x01";
+        }
         // The built-in printer is one made from nothing: its speeds are the fallback.
         if (kind == ProfileKind::Printer)
             for (const Profile& p : builtin_profiles_[k])
                 speed_fallback_.insert(p.name);
+        // The pack's printers chosen here, with their filament and print
+        // profile, as factory profiles: not saved over (profile_pack.md, rule 9).
+        // A printer the pack no longer has stays chosen from the copy kept
+        // when it was last made, with a notice (rule 20).
+        if ((!root.empty() || !options_.pack.empty()) && (pack_index_ || !pack_kept_.empty()))
+            for (const std::string& id : pack_printers_) {
+                std::vector<Profile> made;
+                std::optional<int> number;
+                try {
+                    if (!pack_index_)
+                        throw PackError("no pack installed");
+                    const PackProfiles p = pack_profiles(pack_dir(), *pack_index_, id);
+                    made.push_back(p.printer);
+                    if (p.filament)
+                        made.push_back(*p.filament);
+                    if (p.print)
+                        made.push_back(*p.print);
+                    number = p.number;
+                    if (p.filament) {
+                        pack_filament_vendor_[p.filament->name] = p.filament_vendor;
+                        pack_entry_printer_[p.filament->name] = p.filament_printer_settings;
+                        pack_profile_source_[p.filament->name] = {p.filament_license, p.filament_origin};
+                    }
+                    if (p.print) {
+                        pack_entry_printer_[p.print->name] = p.print_printer_settings;
+                        pack_profile_source_[p.print->name] = {p.print_license, p.print_origin};
+                    }
+                    if (kind == ProfileKind::Printer) {
+                        std::vector<std::string> texts;
+                        for (const Profile& m : made)
+                            texts.push_back(profile_file_json(m));
+                        if (pack_kept_[id] != texts)
+                            pack_kept_[id] = std::move(texts), pack_kept_dirty_ = true;
+                    }
+                } catch (const std::exception& e) {
+                    const auto kept = pack_kept_.find(id);
+                    if (kept == pack_kept_.end()) {
+                        if (kind == ProfileKind::Printer)
+                            errors.push_back(id + ": " + e.what());
+                        continue;
+                    }
+                    for (const std::string& text : kept->second) {
+                        try {
+                            made.push_back(parse_profile(text));
+                        } catch (const std::exception&) {
+                        }
+                    }
+                    if (kind == ProfileKind::Printer && !made.empty())
+                        pack_gone_.insert(made.front().name);
+                }
+                for (const Profile& m : made) {
+                    if (m.kind != kind || std::any_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
+                                                      [&](const Profile& b) { return b.name == m.name; }))
+                        continue;
+                    builtin_profiles_[k].push_back(m);
+                    if (kind == ProfileKind::Printer && number) {
+                        pack_printer_number_[m.name] = *number;
+                        const std::string file = id.substr(0, id.rfind('#'));
+                        for (const PackVendor& v : pack_index_->vendors)
+                            for (const PackModel& pm : v.models)
+                                if (pm.file == file) {
+                                    pack_printer_model_[m.name] = {v.name, pm.name};
+                                    pack_printer_bed_[m.name] = {pm.bed_model, pm.bed_texture};
+                                    pack_profile_source_[m.name] = {v.license, v.origin};
+                                }
+                    }
+                }
+            }
+        // Every print profile of the pack for the chosen pack printers (rule
+        // 12), with the printer settings each carries (BH27).
+        if (kind == ProfileKind::Print && pack_index_)
+            for (const auto& [printer_name, number] : pack_printer_number_)
+                for (const PackFilamentRef& ref : pack_prints_for(pack_dir(), *pack_index_, number)) {
+                    try {
+                        std::vector<std::string> ignored;
+                        PackEntry entry = read_pack_entry(pack_dir(), ref.path, ignored);
+                        pack_entry_printer_[entry.profile.name] = entry.printer_settings;
+                        pack_profile_source_[entry.profile.name] = {entry.license, entry.origin};
+                        if (std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
+                                         [&](const Profile& b) { return b.name == entry.profile.name; }))
+                            builtin_profiles_[k].push_back(std::move(entry.profile));
+                    } catch (const std::exception& e) {
+                        errors.push_back(ref.path + ": " + e.what());
+                    }
+                }
+        // The other filaments added from the pack (rule 12).
+        if (kind == ProfileKind::Filament && (!root.empty() || !options_.pack.empty()) && pack_index_)
+            for (const std::string& path : pack_filaments_) {
+                try {
+                    std::vector<std::string> ignored;
+                    PackEntry entry = read_pack_entry(pack_dir(), path, ignored);
+                    pack_filament_vendor_[entry.profile.name] = entry.vendor;
+                    pack_entry_printer_[entry.profile.name] = entry.printer_settings;
+                    pack_profile_source_[entry.profile.name] = {entry.license, entry.origin};
+                    Profile f = std::move(entry.profile);
+                    if (std::none_of(builtin_profiles_[k].begin(), builtin_profiles_[k].end(),
+                                     [&](const Profile& b) { return b.name == f.name; }))
+                        builtin_profiles_[k].push_back(std::move(f));
+                } catch (const std::exception& e) {
+                    errors.push_back(path + ": " + e.what());
+                }
+            }
         user_profiles_[k].clear();
         if (root.empty())
             continue;
@@ -3938,6 +5224,17 @@ void App::load_profile_lists() {
     }
     if (!errors.empty())
         notify(format(tr(T::ProfilesSkipped), int(errors.size())), true);
+    // The kept copies of the pack's profiles, on disk beside the pack.
+    if (pack_kept_dirty_ && !root.empty() && !pack_dir().empty()) {
+        nlohmann::json kept = nlohmann::json::object();
+        for (const auto& [id, texts] : pack_kept_)
+            kept[id] = texts;
+        std::ofstream out(std::filesystem::path(pack_dir().string() + "_profiles.json"), std::ios::binary | std::ios::trunc);
+        out << kept.dump(1);
+        pack_kept_dirty_ = false;
+    }
+    for (const std::string& name : pack_gone_)
+        notify(format(tr(T::PackProfileGone), shown_name(name).c_str()), true);
     profiles_checked_.clear();
 }
 
@@ -3989,6 +5286,23 @@ void App::refresh_profiles() {
 }
 
 void App::choose_profile(ProfileKind kind, const Profile& profile) {
+    // The printer settings a pack filament or print profile carries (its
+    // speeds) replace the current ones, but not those changed by hand: they
+    // stay, and the person is told (BH27, profile_pack.md).
+    std::set<std::string> by_hand;
+    if (kind != ProfileKind::Printer && pack_entry_printer_.contains(profile.name)) {
+        try {
+            const nlohmann::json now = nlohmann::json::parse(settings_json(settings_));
+            const nlohmann::json was = nlohmann::json::parse(settings_json(saved_settings()));
+            const nlohmann::json carried = nlohmann::json::parse(pack_entry_printer_.at(profile.name));
+            for (const auto& [group, keys] : carried.items())
+                for (const auto& [key, value] : keys.items())
+                    if (now.contains(group) && now.at(group).contains(key) && was.contains(group) &&
+                        was.at(group).contains(key) && now.at(group).at(key) != was.at(group).at(key))
+                        by_hand.insert(group + "." + key);
+        } catch (const std::exception&) {
+        }
+    }
     try {
         settings_ = with_profile(settings_, kind, profile.settings);
     } catch (const std::exception& e) {
@@ -3996,6 +5310,15 @@ void App::choose_profile(ProfileKind kind, const Profile& profile) {
         return;
     }
     chosen_profile_[std::size_t(kind)] = profile.name;
+    if (kind != ProfileKind::Printer && pack_entry_printer_.contains(profile.name)) {
+        settings_ = with_carried(settings_, {kind}, &by_hand);
+        if (!by_hand.empty()) {
+            std::string names;
+            for (const std::string& key : by_hand)
+                names += (names.empty() ? "" : ", ") + key_label(key);
+            notify(format(tr(T::PackKeptByHand), names.c_str()));
+        }
+    }
     profiles_checked_.clear();
     if (kind == ProfileKind::Printer)
         fire("printer_selected");
@@ -4068,6 +5391,21 @@ std::vector<double> App::printer_diameters() const {
 }
 
 // compact: the list only, the whole width (the folded panel's card).
+// Under a pack profile's row, a small line with its license and origin and
+// the link to the pack's repository (profile_pack.md, rule 15).
+void App::pack_source_line(ProfileKind kind) {
+    const auto it = pack_profile_source_.find(chosen_profile_[std::size_t(kind)]);
+    if (it == pack_profile_source_.end())
+        return;
+    ImGui::PushID("pack_source");
+    ImGui::PushFont(nullptr, ImGui::GetFontSize() * 0.85f);
+    loc::TextDisabled(tr(T::PackOrigin), it->second.first.c_str(), it->second.second.c_str());
+    ImGui::SameLine();
+    ImGui::TextLinkOpenURL(tr(T::PackRepository), kPackRepository);
+    ImGui::PopFont();
+    ImGui::PopID();
+}
+
 void App::profile_row(ProfileKind kind, bool compact) {
     const std::size_t k = std::size_t(kind);
     ImGui::PushID(int(k));
@@ -4089,7 +5427,8 @@ void App::profile_row(ProfileKind kind, bool compact) {
         };
         ImGui::SeparatorText(tr(T::BuiltinProfiles));
         for (const Profile& p : builtin_profiles_[k])
-            if (listed(p) && ImGui::Selectable((shown_name(p.name) + "##" + p.name).c_str(), chosen == &p))
+            if (listed(p) && (show_templates_ || chosen == &p) &&
+                ImGui::Selectable((shown_name(p.name) + "##" + p.name).c_str(), chosen == &p))
                 picked = &p;
         if (std::any_of(user_profiles_[k].begin(), user_profiles_[k].end(), listed)) {
             ImGui::SeparatorText(tr(T::MyProfiles));
@@ -4132,9 +5471,48 @@ void App::profile_row(ProfileKind kind, bool compact) {
         }
     }
     ImGui::SameLine(0, gap);
-    if (icon_button("##menu", "tisma_more", tr(T::More), size))
+    const bool gear = icon_button("##menu", "tisma_more", tr(T::More), size);
+    note_rect(kind == ProfileKind::Print ? "gear_print" : kind == ProfileKind::Filament ? "gear_filament" : "gear_printer");
+    if (gear)
         ImGui::OpenPopup("##profile_menu");
     if (ImGui::BeginPopup("##profile_menu")) {
+        // The gear's entries (interface.md, «Menús»): its settings, the
+        // extruder's colour, the template profiles shown or not.
+        const bool edit = ImGui::MenuItem(tr(T::EditPresetMenu));
+        note_rect("edit_preset");
+        if (edit)
+            window_tab(kind == ProfileKind::Print ? 2 : kind == ProfileKind::Filament ? 3 : 4);
+        if (kind == ProfileKind::Filament) {
+            const bool colour = ImGui::BeginMenu(tr(T::ExtruderColorMenu));
+            note_rect("extruder_color");
+            if (colour) {
+                if (filament_colors_.empty())
+                    filament_colors_.resize(1);
+                unsigned v = 0x808080;
+                if (const std::string hex = filament_color(1); hex.size() == 7 && hex[0] == '#')
+                    std::sscanf(hex.c_str() + 1, "%6x", &v);
+                float rgb3[3] = {float((v >> 16) & 0xFF) / 255.0f, float((v >> 8) & 0xFF) / 255.0f, float(v & 0xFF) / 255.0f};
+                if (ImGui::ColorPicker3("##extruder_color", rgb3, ImGuiColorEditFlags_NoSidePreview)) {
+                    char hex[8];
+                    std::snprintf(hex, sizeof hex, "#%02X%02X%02X", unsigned(std::lround(rgb3[0] * 255.0f)),
+                                  unsigned(std::lround(rgb3[1] * 255.0f)), unsigned(std::lround(rgb3[2] * 255.0f)));
+                    filament_colors_[0] = hex;
+                    for (ColorMix& m : mixes_) { // the mixed colours made with it (color_mixing.md)
+                        std::vector<std::string> colors;
+                        std::vector<double> shares;
+                        for (const ColorMix::Component& c : m.components)
+                            colors.push_back(filament_color(c.extruder)), shares.push_back(c.share);
+                        m.color = mix_color(colors, shares);
+                    }
+                }
+                ImGui::EndMenu();
+            }
+        }
+        const bool templates = ImGui::MenuItem(tr(T::ShowTemplatesMenu), nullptr, show_templates_);
+        note_rect("show_templates");
+        if (templates)
+            show_templates_ = !show_templates_;
+        ImGui::Separator();
         if (ImGui::MenuItem(tr(T::SaveProfileAs)))
             save_as();
         if (kind != ProfileKind::Print && ImGui::MenuItem(tr(T::FromCatalog)))
@@ -4164,6 +5542,8 @@ void App::catalog_dialog() {
         catalog_open_ = false;
         catalog_pick_ = -1;
         catalog_nozzle_ = 0;
+        catalog_pack_pick_ = -1;
+        catalog_pack_variant_ = 0;
     }
     if (!catalog_kind_)
         return;
@@ -4199,7 +5579,37 @@ void App::catalog_dialog() {
             ImGui::SetKeyboardFocusHere();
         ImGui::SetNextItemWidth(-FLT_MIN);
         if (ImGui::InputTextWithHint("##search", tr(T::CatalogSearch), &catalog_query_))
-            catalog_pick_ = -1, catalog_nozzle_ = 0;
+            catalog_pick_ = -1, catalog_nozzle_ = 0, catalog_pack_pick_ = -1, catalog_pack_variant_ = 0;
+        // The pack's models that match too (profile_pack.md, rule 2).
+        const std::vector<PackModelRef> pack_found =
+            printers && pack_index_ ? find_pack_models(*pack_index_, catalog_query_) : std::vector<PackModelRef>{};
+        // The pack's filaments for the chosen pack printer (rule 12, PK7).
+        std::vector<const PackFilamentRef*> pack_fils;
+        if (!printers && pack_index_) {
+            const auto it = pack_printer_number_.find(chosen_profile_[std::size_t(ProfileKind::Printer)]);
+            const int number = it == pack_printer_number_.end() ? -1 : it->second;
+            if (number != pack_filaments_number_) {
+                pack_filaments_found_ = number < 0 ? std::vector<PackFilamentRef>{}
+                                                   : pack_filaments_for(pack_dir(), *pack_index_, number);
+                pack_filaments_number_ = number;
+            }
+            std::string lower_query = catalog_query_;
+            std::transform(lower_query.begin(), lower_query.end(), lower_query.begin(),
+                           [](unsigned char c) { return char(std::tolower(c)); });
+            std::vector<std::string> words;
+            std::istringstream split(lower_query);
+            for (std::string w; split >> w;)
+                words.push_back(w);
+            for (const PackFilamentRef& f : pack_filaments_found_) {
+                std::string text = f.vendor + " " + f.name;
+                std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+                if (std::all_of(words.begin(), words.end(), [&](const std::string& w) { return text.find(w) != std::string::npos; }))
+                    pack_fils.push_back(&f);
+            }
+        }
+        const int pack_count = printers ? int(pack_found.size()) : int(pack_fils.size());
+        if (catalog_pack_pick_ >= pack_count)
+            catalog_pack_pick_ = -1;
         const std::vector<const PrinterModel*> found_printers =
             printers ? find_printers(*catalog, catalog_query_) : std::vector<const PrinterModel*>{};
         // The filaments the printer takes (pellets.md, rule 1; profiles.md, rule 5).
@@ -4214,7 +5624,9 @@ void App::catalog_dialog() {
                      : int(std::count_if(catalog->filaments.begin(), catalog->filaments.end(), offered));
         if (catalog_pick_ >= found)
             catalog_pick_ = -1;
-        if (catalog_pick_ < 0 && found > 0 && !options_.screenshot.empty())
+        if (catalog_pick_ < 0 && catalog_pack_pick_ < 0 && found == 0 && pack_count > 0 && !options_.screenshot.empty())
+            catalog_pack_pick_ = 0; // a screenshot shows the first pack model when the own catalog has none
+        if (catalog_pick_ < 0 && catalog_pack_pick_ < 0 && found > 0 && !options_.screenshot.empty())
             catalog_pick_ = 0; // a screenshot shows the first entry
         loc::TextDisabled(tr(T::CatalogCount), found, total);
 
@@ -4230,10 +5642,54 @@ void App::catalog_dialog() {
             ImGui::PushID(i);
             const std::string label = printers ? found_printers[std::size_t(i)]->model : found_filaments[std::size_t(i)]->name;
             if (ImGui::Selectable(label.c_str(), catalog_pick_ == i))
-                catalog_pick_ = i, catalog_nozzle_ = 0;
+                catalog_pick_ = i, catalog_nozzle_ = 0, catalog_pack_pick_ = -1;
             ImGui::PopID();
         }
-        if (found == 0) {
+        if (printers) {
+            ImGui::SeparatorText(tr(T::PackSection));
+            if (!pack_index_) {
+                ImGui::PushTextWrapPos(0.0f);
+                loc::TextDisabled("%s", tr(T::PackHint));
+                ImGui::PopTextWrapPos();
+                ImGui::BeginDisabled(pack_job_.valid());
+                if (ImGui::SmallButton(tr(T::PackGetList)))
+                    start_pack_update({}, {});
+                ImGui::EndDisabled();
+            }
+            std::string pack_vendor;
+            for (int i = 0; i < int(pack_found.size()); ++i) {
+                const PackModelRef& ref = pack_found[std::size_t(i)];
+                if (ref.vendor->name != pack_vendor) {
+                    pack_vendor = ref.vendor->name;
+                    loc::TextDisabled("%s", pack_vendor.c_str());
+                }
+                ImGui::PushID(10000 + i);
+                if (ImGui::Selectable(ref.model->name.c_str(), catalog_pack_pick_ == i)) {
+                    catalog_pack_pick_ = i, catalog_pick_ = -1;
+                    // The variant the model names first (rule 11).
+                    catalog_pack_variant_ = 0;
+                    for (std::size_t n = 0; n < ref.model->variants.size(); ++n)
+                        if (ref.model->variants[n].id == ref.model->default_variant)
+                            catalog_pack_variant_ = n;
+                }
+                ImGui::PopID();
+            }
+        }
+        if (!printers && !pack_fils.empty()) {
+            ImGui::SeparatorText(tr(T::PackSection));
+            std::string pack_vendor;
+            for (int i = 0; i < int(pack_fils.size()); ++i) {
+                if (pack_fils[std::size_t(i)]->vendor != pack_vendor) {
+                    pack_vendor = pack_fils[std::size_t(i)]->vendor;
+                    loc::TextDisabled("%s", pack_vendor.c_str());
+                }
+                ImGui::PushID(20000 + i);
+                if (ImGui::Selectable(pack_fils[std::size_t(i)]->name.c_str(), catalog_pack_pick_ == i))
+                    catalog_pack_pick_ = i, catalog_pick_ = -1;
+                ImGui::PopID();
+            }
+        }
+        if (found == 0 && pack_count == 0) {
             ImGui::PushTextWrapPos(0.0f);
             loc::TextDisabled("%s", tr(total == 0 ? T::CatalogNoMaterial : T::CatalogEmpty));
             ImGui::PopTextWrapPos();
@@ -4257,7 +5713,15 @@ void App::catalog_dialog() {
             return std::string(text);
         };
         const std::vector<std::string>* sources = nullptr;
-        if (catalog_pick_ >= 0 && printers) {
+        if (catalog_pack_pick_ >= 0 && printers) {
+            pack_catalog_entry(pack_found[std::size_t(catalog_pack_pick_)]);
+        } else if (catalog_pack_pick_ >= 0) {
+            const PackFilamentRef& f = *pack_fils[std::size_t(catalog_pack_pick_)];
+            ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+            loc::Text("%s", f.name.c_str());
+            ImGui::PopFont();
+            loc::TextDisabled("%s · %s", f.vendor.c_str(), tr(T::PackSection));
+        } else if (catalog_pick_ >= 0 && printers) {
             const PrinterModel& p = *found_printers[std::size_t(catalog_pick_)];
             ImGui::PushFont(nullptr, kTitleSize * 0.9f);
             loc::Text("%s %s", p.vendor.c_str(), p.model.c_str());
@@ -4371,6 +5835,64 @@ void App::catalog_dialog() {
         ImGui::PopTextWrapPos();
         ImGui::EndChild();
 
+        // A pack model: added at once when its vendor is installed, else
+        // downloaded first, in the background (rules 1 and 13).
+        if (catalog_pack_pick_ >= 0 && !printers) {
+            if (ImGui::Button(tr(T::AddToProfiles), ImVec2(200.0f * scale_, 0))) {
+                const std::string path = pack_fils[std::size_t(catalog_pack_pick_)]->path;
+                if (std::find(pack_filaments_.begin(), pack_filaments_.end(), path) == pack_filaments_.end())
+                    pack_filaments_.push_back(path);
+                std::vector<std::string> ignored;
+                std::string name;
+                try {
+                    name = pack_entry_profile(pack_dir(), path, ignored).name;
+                } catch (const std::exception& e) {
+                    fail(T::PackSection, e.what());
+                }
+                load_profile_lists();
+                if (const Profile* added = find_profile(ProfileKind::Filament, name))
+                    choose_profile(ProfileKind::Filament, *added);
+                if (options_.screenshot.empty())
+                    save_preferences();
+                catalog_kind_.reset();
+                ImGui::CloseCurrentPopup();
+                first_run_next();
+            }
+            ImGui::SameLine();
+        } else if (catalog_pack_pick_ >= 0) {
+            const PackModelRef& ref = pack_found[std::size_t(catalog_pack_pick_)];
+            const bool installed = !ref.vendor->archive.sha256.empty();
+            std::string printer;
+            if (!ref.model->variants.empty())
+                printer = ref.model->file + "#" + ref.model->variants[std::min(catalog_pack_variant_, ref.model->variants.size() - 1)].id;
+            ImGui::BeginDisabled(pack_job_.valid() || printer.empty());
+            if (ImGui::Button(tr(installed ? T::AddToProfiles : T::PackDownloadAdd), ImVec2(200.0f * scale_, 0))) {
+                if (installed) {
+                    add_pack_printer(printer);
+                    catalog_kind_.reset();
+                    ImGui::CloseCurrentPopup();
+                    first_run_next();
+                } else {
+                    start_pack_update(PackChoice{false, {ref.vendor->id}}, printer);
+                }
+            }
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+        }
+        if (pack_job_.valid() && pack_state_) {
+            std::string status;
+            {
+                std::lock_guard lock(pack_state_->mutex);
+                status = pack_state_->status;
+            }
+            loc::TextDisabled(tr(T::PackBusy), status.c_str());
+            ImGui::SameLine();
+        } else if (printers && pack_index_ && catalog_pack_pick_ < 0) {
+            if (ImGui::Button(tr(T::PackUpdate), ImVec2(0, 0)))
+                start_pack_update({}, {});
+            ImGui::SameLine();
+        }
+        if (catalog_pack_pick_ < 0) {
         ImGui::BeginDisabled(catalog_pick_ < 0);
         if (ImGui::Button(tr(T::AddToProfiles), ImVec2(200.0f * scale_, 0))) {
             const Profile profile =
@@ -4384,6 +5906,7 @@ void App::catalog_dialog() {
         }
         ImGui::EndDisabled();
         ImGui::SameLine();
+        }
     }
     if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) ||
         (ImGui::IsKeyPressed(ImGuiKey_Escape) && catalog_kind_)) {
@@ -4442,6 +5965,360 @@ void App::add_catalog_profile(const Profile& catalog) {
                   shown_name(profile.name).c_str()));
 }
 
+// A pack printer's bed model (STL) and picture (SVG) in the 3D view
+// (profile_pack.md, rule 14), redone when the printer or its bed changes. A
+// PNG picture is not drawn yet (no PNG reader in the engine; PROGRESS.md).
+void App::refresh_bed_extras() {
+    const std::string& printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
+    double min_x = 0, min_y = 0, max_x = 0, max_y = 0;
+    for (std::size_t i = 0; i < settings_.bed.size(); ++i) {
+        const auto& p = settings_.bed[i];
+        min_x = i ? std::min(min_x, p[0]) : p[0], max_x = i ? std::max(max_x, p[0]) : p[0];
+        min_y = i ? std::min(min_y, p[1]) : p[1], max_y = i ? std::max(max_y, p[1]) : p[1];
+    }
+    const std::string key = printer + "|" + std::to_string(min_x) + "," + std::to_string(min_y) + "," +
+                            std::to_string(max_x) + "," + std::to_string(max_y);
+    if (key == bed_extras_for_)
+        return;
+    bed_extras_for_ = key;
+    BedArt art;
+    std::vector<float> model;
+    if (const auto it = pack_printer_bed_.find(printer); it != pack_printer_bed_.end()) {
+        // A file of the pack, under vendors/ when the index names it without.
+        const auto read_pack = [&](const std::string& path, std::string& data) {
+            for (const std::string& p : {path, "vendors/" + path}) {
+                if (path.empty() || !safe_pack_path(p))
+                    continue;
+                std::ifstream in(pack_dir() / std::filesystem::path(std::u8string(p.begin(), p.end())), std::ios::binary);
+                if (in) {
+                    data.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+                    return true;
+                }
+            }
+            return false;
+        };
+        const auto& [bed_model, bed_texture] = it->second;
+        std::string data;
+        if (read_pack(bed_model, data)) {
+            try {
+                const TriangleMesh mesh = parse_stl(data).mesh;
+                if (!mesh.empty()) {
+                    // Rule 14: the pack's STL is made around its own centre.
+                    double lo[3], hi[3];
+                    for (int a = 0; a < 3; ++a)
+                        lo[a] = 1e300, hi[a] = -1e300;
+                    for (const Vec3f& c : mesh.corners())
+                        for (int a = 0; a < 3; ++a) {
+                            const double v = a == 0 ? c.x : a == 1 ? c.y : c.z;
+                            lo[a] = std::min(lo[a], v), hi[a] = std::max(hi[a], v);
+                        }
+                    const BedModelPlace place = bed_model_place(lo, hi, min_x, min_y, max_x, max_y);
+                    if (place.small)
+                        log_line("bed model " + bed_model + " is under half the bed; drawn anyway");
+                    model = mesh_vertices(mesh, Vec3{float(place.dx), float(place.dy), float(place.dz)});
+                }
+            } catch (const std::exception& e) {
+                log_line(std::string("bed model ") + bed_model + ": " + e.what());
+            }
+        }
+        std::string lower = bed_texture;
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return char(std::tolower(c)); });
+        if (lower.ends_with(".svg") && read_pack(bed_texture, data)) {
+            art = bed_svg_art(data, min_x, min_y, max_x, max_y);
+        } else if (lower.ends_with(".png") && read_pack(bed_texture, data)) {
+            const Image image = decode_image(data);
+            art = bed_image_art(image.width, image.height, image.rgba, min_x, min_y, max_x, max_y);
+            if (art.groups.empty())
+                log_line("bed texture " + bed_texture + ": not a PNG it can read");
+        }
+    }
+    renderer_.set_bed_extras(art, model);
+    vk_view_.set_bed_extras(art, model);
+}
+
+std::filesystem::path App::pack_dir() const {
+    if (!options_.pack.empty())
+        return from_utf8(options_.pack);
+    const std::filesystem::path prefs = preferences_path();
+    return prefs.empty() ? prefs : prefs.parent_path() / "pack";
+}
+
+void App::load_pack() {
+    pack_index_.reset();
+    pack_filaments_number_ = -2;
+    // The copies kept of the pack's printers (rule 20): those on disk join
+    // the ones this session made.
+    if (!pack_dir().empty()) {
+        std::ifstream in(std::filesystem::path(pack_dir().string() + "_profiles.json"), std::ios::binary);
+        if (in) {
+            const nlohmann::json kept = nlohmann::json::parse(in, nullptr, false);
+            if (kept.is_object())
+                for (const auto& [id, texts] : kept.items())
+                    if (texts.is_array())
+                        if (!pack_kept_.count(id))
+                            for (const auto& t : texts)
+                                if (t.is_string())
+                                    pack_kept_[id].push_back(t.get<std::string>());
+        }
+    }
+    const std::filesystem::path dir = pack_dir();
+    // Screenshots read a pack only when given one (--pack).
+    if (dir.empty() || (!options_.screenshot.empty() && options_.pack.empty()))
+        return;
+    try {
+        pack_index_ = pack_installed(dir);
+    } catch (const std::exception&) {
+        // None installed, or one this program cannot read: the own catalog only.
+    }
+}
+
+// Downloads the pack in the background (rules 1 and 20); `add_after`, a
+// printer to add once it is there.
+void App::start_pack_update(PackChoice choice, std::string add_after) {
+    if (pack_job_.valid() || pack_dir().empty())
+        return;
+    pack_state_ = std::make_shared<PackJobState>();
+    pack_add_after_ = std::move(add_after);
+    pack_job_ = std::async(std::launch::async, [state = pack_state_, dir = pack_dir(), url = pack_url_, choice] {
+        try {
+            pack_update(dir, url, choice, [&](const std::string& line) {
+                std::lock_guard lock(state->mutex);
+                state->status = line;
+            });
+            return std::string();
+        } catch (const std::exception& e) {
+            return std::string(e.what());
+        }
+    });
+}
+
+void App::poll_pack_update() {
+    if (pack_newer_job_.valid() && pack_newer_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const std::string version = pack_newer_job_.get();
+        if (!version.empty())
+            notify(format(tr(T::PackNewer), version.c_str()));
+        else if (pack_check_asked_)
+            notify(tr(T::PackUpToDate));
+        pack_check_asked_ = false;
+    }
+    if (!pack_job_.valid() || pack_job_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+    const std::string error = pack_job_.get();
+    load_pack();
+    const bool first_index = std::exchange(pack_first_index_, false);
+    if (!error.empty()) {
+        pack_add_after_.clear();
+        // The first run without a network: the included printers, and a
+        // notice, not an error (rule 3, PK2).
+        if (first_index) {
+            log_line("pack: " + error);
+            notify(tr(T::PackOffline));
+        } else {
+            fail(T::PackSection, format(tr(T::PackFailed), error.c_str()));
+        }
+        return;
+    }
+    if (!pack_add_after_.empty()) {
+        add_pack_printer(std::exchange(pack_add_after_, {}));
+        return;
+    }
+    load_profile_lists();
+    notify(format(tr(T::PackReady), pack_index_ ? pack_index_->pack_version.c_str() : ""));
+}
+
+// A pack printer becomes one of the factory profiles here, and the chosen
+// one with its filament and print profile (rule 13, PK6).
+void App::add_pack_printer(const std::string& printer) {
+    if (!pack_index_)
+        return;
+    PackProfiles p;
+    try {
+        p = pack_profiles(pack_dir(), *pack_index_, printer);
+    } catch (const std::exception& e) {
+        fail(T::PackSection, e.what());
+        return;
+    }
+    if (std::find(pack_printers_.begin(), pack_printers_.end(), printer) == pack_printers_.end())
+        pack_printers_.push_back(printer);
+    load_profile_lists();
+    for (const auto& [kind, profile] : {std::pair{ProfileKind::Printer, std::optional<Profile>(p.printer)},
+                                        std::pair{ProfileKind::Filament, p.filament}, std::pair{ProfileKind::Print, p.print}})
+        if (profile)
+            if (const Profile* found = find_profile(kind, profile->name))
+                choose_profile(kind, *found);
+    if (options_.screenshot.empty())
+        save_preferences();
+    notify(format(tr(T::PackAdded), p.printer.name.c_str()));
+}
+
+// The right side of the catalog for a pack model: its variants (one row
+// per model, PK15), license and origin (rule 15).
+void App::pack_catalog_entry(const PackModelRef& ref) {
+    const PackModel& m = *ref.model;
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    // The model's name alone when it already says the vendor ("Acme One").
+    if (m.name.starts_with(ref.vendor->name))
+        loc::Text("%s", m.name.c_str());
+    else
+        loc::Text("%s %s", ref.vendor->name.c_str(), m.name.c_str());
+    ImGui::PopFont();
+    loc::Text(tr(T::PackTechnology), m.technology == "sla" ? "SLA" : "FFF");
+    if (!m.variants.empty()) {
+        catalog_pack_variant_ = std::min(catalog_pack_variant_, m.variants.size() - 1);
+        const auto label = [](const PackVariant& v) {
+            return v.nozzle > 0.0 ? format("%g mm", v.nozzle) : v.id;
+        };
+        ImGui::SetNextItemWidth(160.0f * scale_);
+        if (ImGui::BeginCombo(tr(T::NozzleSize), label(m.variants[catalog_pack_variant_]).c_str())) {
+            for (std::size_t n = 0; n < m.variants.size(); ++n)
+                if (ImGui::Selectable(label(m.variants[n]).c_str(), n == catalog_pack_variant_))
+                    catalog_pack_variant_ = n;
+            ImGui::EndCombo();
+        }
+    }
+    if (ref.vendor->archive.sha256.empty())
+        loc::TextDisabled("%s", tr(T::PackNotDownloaded));
+    ImGui::Spacing();
+    loc::TextDisabled(tr(T::PackOrigin), ref.vendor->license.c_str(), ref.vendor->origin.c_str());
+}
+
+// «Datos publicados» (rule 23): each value with its badge, unit, conditions
+// and source; **Usar este valor** for the engine's settings (rule 24), at
+// once for the maker's, after a yes for the others (PK13).
+// The name of a community value's key: the engine's setting row, or the
+// community's own keys (profile_pack_format.md, «Datos de la comunidad»).
+std::string community_label(const std::string& key) {
+    static const std::map<std::string, T> own = {
+        {"measured.max_flow", T::CmMaxFlow},
+        {"measured.acceleration", T::CmAccel},
+        {"measured.speed", T::CmSpeed},
+        {"input_shaper.frequency_x", T::CmShaperX},
+        {"input_shaper.frequency_y", T::CmShaperY},
+        {"input_shaper.type", T::CmShaperType},
+        {"head.clearance_radius", T::CmHeadRadius},
+        {"head.gantry_height", T::CmGantry},
+        {"head.nozzle_to_fan_height", T::CmFanHeight},
+        {"bed.mesh_points", T::CmMesh},
+        {"firmware.version", T::CmFirmware},
+        {"filament.tensile_strength_xy", T::CmTensileXY},
+        {"filament.tensile_strength_z", T::CmTensileZ},
+        {"filament.tensile_modulus_xy", T::CmModulusXY},
+        {"filament.tensile_modulus_z", T::CmModulusZ},
+        {"filament.elongation_xy", T::CmElongXY},
+        {"filament.elongation_z", T::CmElongZ},
+        {"filament.impact_strength", T::CmImpact},
+        {"filament.hdt", T::CmHdt},
+        {"filament.glass_transition", T::CmTg},
+        {"filament.shrinkage_xy", T::CmShrinkXY},
+        {"filament.shrinkage_z", T::CmShrinkZ},
+        {"filament.drying_temperature", T::CmDryTemp},
+        {"filament.drying_hours", T::CmDryHours},
+        {"filament.price_per_kg", T::CmPrice},
+        {"resin.exposure", T::CmExposure},
+        {"resin.bottom_exposure", T::CmBottomExposure},
+        {"resin.viscosity", T::CmViscosity}};
+    if (const auto it = own.find(key); it != own.end())
+        return tr(it->second);
+    return key_label(key);
+}
+
+void App::published_values(const std::vector<CommunityValue>& values) {
+    ImGui::PushTextWrapPos(0.0f);
+    loc::TextDisabled("%s", tr(T::PublishedHint));
+    ImGui::PopTextWrapPos();
+    std::map<std::string, std::string> now;
+    for (const auto& [key, value] : describe(settings_))
+        now[key] = value;
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        const CommunityValue& v = values[i];
+        ImGui::PushID(int(i));
+        ImGui::Separator();
+        const ImU32 colour = v.kind == CommunityKind::Official ? 0x3DA35AFF : v.kind == CommunityKind::Measured ? 0x3D8BE8FF : 0xE8A33DFF;
+        loc::TextColored(rgb(colour >> 8), "[%s]", tr(v.kind == CommunityKind::Official   ? T::BadgeOfficial
+                                                      : v.kind == CommunityKind::Measured ? T::BadgeMeasured
+                                                                                          : T::BadgeCommunity));
+        ImGui::SameLine();
+        std::string shown = v.value;
+        if (shown.size() >= 2 && shown.front() == '"' && shown.back() == '"')
+            shown = shown.substr(1, shown.size() - 2);
+        loc::Text("%s: %s %s", community_label(v.key).c_str(), shown.c_str(), v.unit.c_str());
+        if (!v.conditions.empty())
+            loc::TextDisabled("%s", v.conditions.c_str());
+        if (!v.source.url.empty()) {
+            std::string label = v.source.title.empty() ? v.source.url : v.source.title;
+            if (!v.source.author.empty())
+                label += " · " + v.source.author;
+            if (!v.source.at.empty())
+                label += " · " + format(tr(T::PublishedAt), v.source.at.c_str());
+            ImGui::TextLinkOpenURL(label.c_str(), v.source.url.c_str());
+        }
+        const auto it = now.find(v.key);
+        if (it != now.end()) {
+            if (ImGui::SmallButton(tr(T::UseThisValue))) {
+                if (v.kind == CommunityKind::Official)
+                    use_community_value(v);
+                else
+                    community_confirm_ = v;
+            }
+        }
+        ImGui::PopID();
+    }
+    if (community_confirm_)
+        ImGui::OpenPopup("##use_value");
+    if (ImGui::BeginPopupModal("##use_value", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        loc::Text("%s", tr(T::UseValueConfirm));
+        if (ImGui::Button(tr(T::UseThisValue))) {
+            if (community_confirm_)
+                use_community_value(*community_confirm_);
+            community_confirm_.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::Cancel))) {
+            community_confirm_.reset();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+// The chosen pack filament's (on a resin printer, resin's) community data (rule 23).
+void App::refresh_material_community() {
+    const std::string& name = chosen_profile_[std::size_t(ProfileKind::Filament)];
+    const bool resin = settings_.machine_technology == MachineTechnology::Msla;
+    const std::string key = (resin ? "resins/" : "filaments/") + name;
+    if (key == material_community_for_)
+        return;
+    material_community_for_ = key;
+    material_community_.clear();
+    if (const auto it = pack_filament_vendor_.find(name); it != pack_filament_vendor_.end() && !it->second.empty())
+        material_community_ = pack_community(pack_dir(), resin ? "resins" : "filaments", it->second, name);
+}
+
+// «Datos publicados» under the material's card, folded (rule 23).
+void App::material_published() {
+    refresh_material_community();
+    if (material_community_.empty())
+        return;
+    ImGui::PushID("material_published");
+    if (ImGui::CollapsingHeader(tr(T::SecPublished)))
+        published_values(material_community_);
+    ImGui::PopID();
+}
+
+void App::use_community_value(const CommunityValue& v) {
+    try {
+        nlohmann::json j = nlohmann::json::parse(settings_json(settings_));
+        const auto dot = v.key.find('.');
+        j[v.key.substr(0, dot)][v.key.substr(dot + 1)] = nlohmann::json::parse(v.value);
+        settings_ = parse_settings(j.dump());
+        settings_changed();
+        notify(key_label(v.key));
+    } catch (const std::exception& e) {
+        fail(T::SecPublished, e.what());
+    }
+}
+
 void App::export_gcode_to(const std::filesystem::path& path) {
     // The result can go while the dialog is open: say so instead of writing
     // nothing, or an old result, without a word.
@@ -4475,7 +6352,8 @@ void App::export_gcode_to(const std::filesystem::path& path) {
         return;
     }
     std::vector<Warning> warnings;
-    const GcodeExport e = export_gcode(path, *result_->model, result_->settings, &warnings);
+    const std::vector<GcodeThumbnail> thumbnails = gcode_thumbnails(plate_mesh(placed_meshes_), result_->settings, &warnings);
+    const GcodeExport e = export_gcode(path, *result_->model, result_->settings, &warnings, thumbnails);
     if (!e.written) {
         std::vector<std::string> details;
         for (const GcodeProblem& p : e.check.problems)
@@ -4507,48 +6385,38 @@ void App::start_slice() {
         return;
     }
     // Vase mode prints one object (vase_mode.md, rule 2), or several one
-    // after another (sequential.md, rule 5).
-    if (settings_.vase && objects_.size() > 1 && !settings_.sequential) {
+    // after another (sequential.md, rule 5). A model left out of the print
+    // does not count.
+    const auto printed_count =
+        std::count_if(objects_.begin(), objects_.end(), [](const PlateObject& o) { return o.printable; });
+    if (settings_.vase && printed_count > 1 && !settings_.sequential) {
         fail(T::CannotSlice, tr(T::VaseManyObjects));
         return;
     }
-    TriangleMesh placed = plate_now();
-    Settings settings = settings_;
-    // The resin tests print on the platform, without supports, pad or
-    // hollowing (calibration_models.md, "Resina").
-    if (calibration_ && is_resin_calibration(calibration_kind_))
-        settings.resin_supports = settings.resin_pad = settings.resin_pad_around_object = settings.resin_hollow = false;
-    Painting painting = plate_painting(objects_);
-    // Each model's triangles in the plate's mesh, as plate_mesh joins them.
-    std::vector<MeshObject> objects;
-    for (std::size_t i = 0, first = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
-        objects.push_back({objects_[i].name, first, placed_meshes_[i].triangle_count(), i, 0, objects_[i].extruder,
-                           objects_[i].wipe_into_infill, objects_[i].wipe_into_object, objects_[i].settings});
-        for (const PlateRange& r : objects_[i].ranges)
-            objects.back().ranges.push_back({r.from, r.to, r.settings});
-        first += placed_meshes_[i].triangle_count();
-    }
-    // Its modifiers and negative volumes, where the objects stand (model_tools.md, rules 2 and 3).
-    SliceVolumes volumes;
-    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
-        for (std::size_t k = 0; k < objects_[i].volumes.size(); ++k) {
-            const PlateVolume& v = objects_[i].volumes[k];
-            TriangleMesh shape = volume_mesh(v, objects_[i], placed_meshes_[i]);
-            if (v.kind == PlateVolume::Kind::Negative) {
-                for (std::size_t t = 0; t < shape.triangle_count(); ++t)
-                    volumes.negative.add_triangle(shape.corner(t, 0), shape.corner(t, 1), shape.corner(t, 2));
-            } else {
-                volumes.modifiers.push_back(
-                    {objects_[i].name + " modifier " + std::to_string(k + 1), i, std::move(shape), v.settings});
-            }
+    // Only the printable models (interface.md, «Menús»: Printable).
+    std::vector<PlateObject> printed;
+    std::vector<TriangleMesh> printed_meshes;
+    const bool all_printed = std::all_of(objects_.begin(), objects_.end(), [](const PlateObject& o) { return o.printable; });
+    if (!all_printed) {
+        for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i)
+            if (objects_[i].printable)
+                printed.push_back(objects_[i]), printed_meshes.push_back(placed_meshes_[i]);
+        if (printed.empty()) {
+            fail(T::CannotSlice, tr(T::NothingPrintable));
+            return;
         }
     }
-    // The objects go to the slicer when there are several, or when each may
-    // print with its own extruder or a mixed colour.
-    const bool by_object = objects.size() > 1 || settings.extruders > 1 || !volumes.empty() ||
-                           std::any_of(objects_.begin(), objects_.end(), [](const PlateObject& o) {
-                               return !o.settings.empty() || !o.ranges.empty();
-                           });
+    TriangleMesh placed = all_printed ? plate_now() : plate_mesh(printed_meshes);
+    if (!all_printed && offset_ != Vec3{})
+        placed = translated(placed, offset_);
+    // A test prints with its own settings: no supports under the resin tests
+    // or the bridges, for one (calibration_print_settings).
+    const Settings settings = calibration_ ? calibration_print_settings(calibration_kind_, settings_) : settings_;
+    PlateSlice plate = all_printed ? plate_slice(objects_, placed_meshes_, settings) : plate_slice(printed, printed_meshes, settings);
+    Painting painting = std::move(plate.painting);
+    std::vector<MeshObject> objects = std::move(plate.objects);
+    SliceVolumes volumes = std::move(plate.volumes);
+    const bool by_object = plate.by_object;
     slice_started_ = glfwGetTime();
     slice_made_ = revision_;
     slice_job_.start([this, placed = std::move(placed), settings = std::move(settings), load = load_case_,
@@ -4586,8 +6454,11 @@ void App::poll_jobs() {
         if (options_.layer > 0)
             top_layer_ = std::clamp(options_.layer - 1, 0, top_layer_);
         // A screenshot keeps the tab it asked for.
-        const Tab asked = options_.view == "analysis"      ? Tab::Analysis
+        // «analysis», the old tab, opens Structural (engineering_panel.md, rule 1).
+        const Tab asked = options_.view == "analysis"      ? Tab::Structural
                           : options_.view == "design"      ? Tab::Design
+                          : options_.view == "structural"  ? Tab::Structural
+                          : options_.view == "aerodynamics" ? Tab::Aerodynamics
                           : options_.view == "calibration" ? Tab::Calibration
                           : options_.view == "device"      ? Tab::Device
                           : options_.view == "prepare"     ? Tab::Prepare
@@ -4604,14 +6475,6 @@ void App::poll_jobs() {
             fail(T::CannotSlice, format(tr(T::GcodeBad), int(result_->check.problem_count)), std::move(details));
         }
     }
-    if (std::optional<VoxelEstimate> v = voxel_job_.take()) {
-        if (fit(voxels_made_, revision_) == Fit::Current) {
-            voxels_ = std::move(*v);
-        } else {
-            voxels_.reset();
-            voxels_stale_ = true;
-        }
-    }
     if (std::optional<cad::SolidCraftInfo> info = solidcraft_job_.take()) {
         solidcraft_ = std::move(*info);
         solidcraft_probed_ = true;
@@ -4620,9 +6483,16 @@ void App::poll_jobs() {
     }
     if (std::optional<cad::BuildResult> built = design_job_.take())
         design_built(std::move(*built));
-    // The Analysis tab keeps its estimate up to date.
-    if (tab_ == Tab::Analysis)
-        estimate_voxels_if_stale();
+    if (design_session_ && !design_job_.running())
+        design_session_->close_if_idle(600.0);
+    if (std::optional<StructuralRun> run = structural_job_.take())
+        structural_done(std::move(*run));
+    if (std::optional<OptimizeRun> run = optimize_job_.take())
+        optimize_result_ = std::move(*run);
+    if (std::optional<AeroRun> run = aero_job_.take())
+        aerodynamics_done(std::move(*run));
+    update_structural_view();
+    update_aero_view();
 }
 
 void App::show_preview() {
@@ -4645,11 +6515,42 @@ void App::upload_preview() {
     vk_view_.set_preview(buffers);
 }
 
+// The profile's empty limits from what the printer said when it connected
+// (printer_connections.md, «Leer los límites de la impresora», rules 1, 4
+// and 6): only the empty ones, with a one-line notice.
+void App::take_printer_limits() {
+    if (!printer_)
+        return;
+    const device::PrinterStatus st = printer_->status();
+    if (st.m115.empty() && st.m503.empty())
+        return;
+    take_limits(device::parse_marlin_limits(st.m115, st.m503), st.firmware);
+}
+
+void App::take_limits(const device::PrinterLimits& limits, const std::string& firmware) {
+    const bool bed_was_empty = settings_.bed.empty();
+    const std::vector<std::string> taken = device::apply_limits(settings_, limits, true);
+    if (!taken.empty()) {
+        settings_changed();
+        if (std::find(taken.begin(), taken.end(), "bed") != taken.end())
+            bed_changed();
+        const std::string source = limits.source.empty() ? firmware : limits.source;
+        notify(format(tr(T::LimitsTaken), int(taken.size()), source.c_str()));
+        log_line("limits from the printer: " + [&] {
+            std::string names;
+            for (const std::string& n : taken)
+                names += (names.empty() ? "" : ", ") + n;
+            return names;
+        }());
+    }
+    if (bed_was_empty && !limits.has_area)
+        notify(tr(T::LimitsNoBed));
+}
+
 void App::settings_changed() {
     ++revision_.settings;
     if (result_ && !viewer_)
         stale_ = true;
-    voxels_stale_ = true;
 }
 
 void App::bed_changed() {
@@ -4737,8 +6638,6 @@ void App::set_tab(Tab tab) {
     if (tab != tab_)
         printer_page_ = false;
     tab_ = tab;
-    if (tab == Tab::Analysis)
-        estimate_voxels_if_stale();
     // The Design tab shows the design in the same view, over the same bed;
     // leaving it brings the plate back (cad_design.md, rules 3 and 19).
     if (engineering_tab(tab))
@@ -4748,22 +6647,11 @@ void App::set_tab(Tab tab) {
     if (tab == Tab::Design && was != Tab::Design) {
         command_focus_ = true;
         show_page();
-    } else if (engineering_tab(was) && !engineering_tab(tab)) {
+    } else if (was == Tab::Design && tab != Tab::Design) {
+        // The plate back in the view: the print tabs and Structural show it.
         rebuild_plate();
         frame_all();
     }
-}
-
-void App::estimate_voxels_if_stale() {
-    if (!has_plate_ || !voxels_stale_ || voxel_job_.running())
-        return;
-    voxels_stale_ = false;
-    voxels_made_ = revision_;
-    TriangleMesh placed = plate_now();
-    Settings settings = settings_;
-    voxel_job_.start([placed = std::move(placed), settings = std::move(settings)]() {
-        return estimate_voxels(placed, settings);
-    });
 }
 
 void App::top_bar() {
@@ -4805,8 +6693,9 @@ void App::top_bar() {
     };
     const TabButton tabs[] = {{Tab::Prepare, "tisma_plate", T::TabPrepare},
                               {Tab::Preview, "tisma_view", T::TabPreview},
+                              {Tab::Structural, "tisma_engineering", T::TabStructural},
+                              {Tab::Aerodynamics, "tisma_engineering", T::TabAerodynamics},
                               {Tab::Design, "tisma_design", T::TabDesign},
-                              {Tab::Analysis, "tisma_engineering", T::TabAnalysis},
                               {Tab::Calibration, "tisma_calibrate", T::TabCalibration},
                               {Tab::Device, "tisma_printer", T::TabDevice}};
     // A narrow window: the tabs, then the sections too, keep only their icons
@@ -4818,7 +6707,9 @@ void App::top_bar() {
     };
     bool compact_tabs = false, compact_sections = false;
     {
-        const float right = width_of(tr(T::Open)) + button_h + 8.0f * scale_ + 12.0f * scale_ + button_h + 16.0f * scale_;
+        // Open, More, the help and the Tisma Cloud chip (its icon at least).
+        const float right = width_of(tr(T::Open)) + button_h + 8.0f * scale_ + 12.0f * scale_ + button_h + 16.0f * scale_ +
+                            button_h + 8.0f * scale_;
         const float room = ImGui::GetWindowWidth() - right - ImGui::GetCursorPosX();
         const auto needed = [&](bool tabs_short, bool sections_short) {
             float w = 0.0f;
@@ -4842,8 +6733,16 @@ void App::top_bar() {
                                         const char* name) {
             ImGui::SetCursorPosY(top);
             const std::string tip = compact_sections ? std::string(tr(label)) + ": " + tr(tip_text) : std::string(tr(tip_text));
-            if (button(id, icon_name, compact_sections ? nullptr : tr(label), false, on, true, tip.c_str(), button_h) && !on)
+            if (button(id, icon_name, compact_sections ? nullptr : tr(label), false, on, true, nullptr, button_h) && !on)
                 set_tab(to == Tab::Preview && !result_.has_value() ? Tab::Prepare : to);
+            // Its tip under the top bar, at the button's left, so it does
+            // not cover the section's tabs beside it (TR28).
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+                ImGui::SetNextWindowPos(ImVec2(ImGui::GetItemRectMin().x, origin.y + kTopBar * scale_ + 4.0f * scale_));
+                ImGui::BeginTooltip();
+                ImGui::TextUnformatted(tip.c_str());
+                ImGui::EndTooltip();
+            }
             g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
                                         ImGui::GetItemRectMax().y);
         };
@@ -4874,7 +6773,8 @@ void App::top_bar() {
         g_menu_rects[std::string("tab_") + (t.tab == Tab::Prepare       ? "prepare"
                                             : t.tab == Tab::Preview     ? "preview"
                                             : t.tab == Tab::Design      ? "design"
-                                            : t.tab == Tab::Analysis    ? "analysis"
+                                            : t.tab == Tab::Structural  ? "structural"
+                                            : t.tab == Tab::Aerodynamics ? "aerodynamics"
                                             : t.tab == Tab::Calibration ? "calibration"
                                                                         : "device")] =
             ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
@@ -4882,15 +6782,35 @@ void App::top_bar() {
             anchor("preview");
         else if (t.tab == Tab::Calibration)
             anchor("calibrations");
-        else if (t.tab == Tab::Analysis)
+        else if (t.tab == Tab::Structural)
             anchor("engineering_panel");
         ImGui::SameLine(0, 4.0f * scale_);
     }
 
-    // The actions, on the right.
+    // The actions, on the right: the Tisma Cloud chip (interface.md, rule 7:
+    // the person icon and «Tisma Cloud», only the icon when the window is
+    // narrow, none when even that does not fit: More has it too), Open and
+    // More.
     const float more_w = button_h;
     const float gap = 8.0f * scale_;
-    const float right = width_of(tr(T::Open)) + more_w + gap;
+    float right = width_of(tr(T::Open)) + more_w + gap;
+    const char* const chip_label = "Tisma Cloud";
+    const float spare = ImGui::GetWindowWidth() - right - 12.0f * scale_ - ImGui::GetCursorPosX() - 10.0f * scale_;
+    const bool chip_text = spare >= width_of(chip_label) + 2.0f * gap + button_h;
+    const bool chip_shown = chip_text || spare >= button_h + gap;
+    if (chip_shown)
+        right += (chip_text ? width_of(chip_label) : button_h) + gap;
+    // The mode chip (interface.md, «Menús»: Modo): the settings level, three
+    // options with their explanation; only when there is room (the settings
+    // panel has the same choice).
+    const T level_name = view_level_ == ViewLevel::Basic    ? T::LevelBasic
+                         : view_level_ == ViewLevel::Normal ? T::LevelNormal
+                         : view_level_ == ViewLevel::Advanced ? T::LevelAdvanced
+                                                              : T::LevelCustom;
+    const bool mode_shown = tab_ == Tab::Prepare && spare - (chip_shown ? (chip_text ? width_of(chip_label) : button_h) + gap : 0.0f) >=
+                                                        width_of(tr(level_name)) + 2.0f * gap + button_h;
+    if (mode_shown)
+        right += width_of(tr(level_name)) + gap;
     // The help (assistant.md, rule 1), between the tabs and the actions, when
     // there is room; F1 and More open it anyway. The search for a setting is
     // in the settings panel, under the printer (the owner's decision, 2026-10-29).
@@ -4908,6 +6828,44 @@ void App::top_bar() {
     }
     ImGui::SameLine(ImGui::GetWindowWidth() - right - 12.0f * scale_);
     ImGui::SetCursorPosY(top);
+    if (mode_shown) {
+        const bool mode = button("##mode_chip", nullptr, tr(level_name), false, false, true, tr(T::ChooseSettings), button_h);
+        note_rect("mode_chip");
+        if (mode)
+            ImGui::OpenPopup("##mode_menu");
+        if (ImGui::BeginPopup("##mode_menu")) {
+            const struct {
+                const char* name;
+                T label, tip;
+                ViewLevel level;
+            } modes[] = {{"mode_simple", T::LevelBasic, T::LevelBasicTip, ViewLevel::Basic},
+                         {"mode_advanced", T::LevelNormal, T::LevelNormalTip, ViewLevel::Normal},
+                         {"mode_expert", T::LevelAdvanced, T::LevelAdvancedTip, ViewLevel::Advanced}};
+            for (const auto& m : modes) {
+                if (ImGui::RadioButton((std::string(tr(m.label)) + "##" + m.name).c_str(), view_level_ == m.level)) {
+                    choose_level(m.level);
+                    ImGui::CloseCurrentPopup();
+                }
+                note_rect(m.name);
+                ImGui::SameLine();
+                loc::TextDisabled("— %s", tr(m.tip));
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::SameLine(0, gap);
+        ImGui::SetCursorPosY(top);
+    }
+    if (chip_shown) {
+        const bool chip = chip_text ? button("##cloud_chip", "account", chip_label, false, cloud_open_, true,
+                                             tr(T::CloudChipTip), button_h)
+                                    : icon_button("##cloud_chip", "account", tr(T::CloudChipTip), button_h);
+        g_menu_rects["cloud_chip"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                            ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (chip)
+            cloud_open_ = true;
+        ImGui::SameLine(0, gap);
+        ImGui::SetCursorPosY(top);
+    }
     if (button("##open", "tisma_folder", tr(T::Open), false, false, true, tr(T::OpenTip), button_h)) {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
@@ -4919,75 +6877,7 @@ void App::top_bar() {
                                   ImGui::GetItemRectMax().y);
     if (more)
         ImGui::OpenPopup("##more_menu");
-    if (ImGui::BeginPopup("##more_menu")) {
-        // Configuración first (preferences.md, PF8).
-        const bool config = ImGui::MenuItem(tr(T::ConfigMenu), "Ctrl+,");
-        g_menu_rects["config"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                        ImGui::GetItemRectMax().y);
-        if (config)
-            config_open_ = true;
-        ImGui::Separator();
-        if (ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S"))
-            begin_save_project(false);
-        if (ImGui::MenuItem(tr(T::SaveProjectAs), "Ctrl+Shift+S"))
-            begin_save_project(true);
-        ImGui::Separator();
-        if (ImGui::BeginMenu(tr(T::Language))) {
-            if (ImGui::MenuItem("Español", nullptr, language() == Language::Spanish))
-                set_language(Language::Spanish);
-            if (ImGui::MenuItem("English", nullptr, language() == Language::English))
-                set_language(Language::English);
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu(tr(T::Theme))) {
-            if (ImGui::MenuItem(tr(T::Dark), nullptr, theme_.dark)) {
-                theme_ = dark_theme();
-                apply_theme();
-            }
-            if (ImGui::MenuItem(tr(T::Light), nullptr, !theme_.dark)) {
-                theme_ = light_theme();
-                apply_theme();
-            }
-            ImGui::EndMenu();
-        }
-        if (ImGui::MenuItem(tr(T::GcodePreviewMenu))) {
-            purpose_ = Purpose::Open;
-            browser_.open(FileBrowser::Mode::Open, tr(T::GcodePreviewMenu), {".gcode", ".gco", ".g", ".bgcode"}, last_folder_);
-        }
-        if (ImGui::MenuItem(tr(T::ExportView))) {
-            purpose_ = Purpose::ExportView;
-            browser_.open(FileBrowser::Mode::Save, tr(T::ExportViewTitle), {".json"}, last_folder_, "tisma-view.json");
-        }
-        if (ImGui::MenuItem(tr(T::ImportView))) {
-            purpose_ = Purpose::ImportView;
-            browser_.open(FileBrowser::Mode::Open, tr(T::ImportViewTitle), {".json"}, last_folder_);
-        }
-        if (ImGui::MenuItem(tr(T::Tutorial)))
-            tour_step_ = 0;
-        if (ImGui::MenuItem(tr(T::TipsOn), nullptr, tips_))
-            tips_ = !tips_;
-        if (ImGui::MenuItem(tr(T::TipsAgain))) {
-            tips_seen_.clear();
-            tips_ = true;
-        }
-        // The assistant's preferences (assistant.md, «Ajustes»).
-        if (ImGui::MenuItem(tr(T::AssistantTutorials), nullptr, assistant_tutorials_))
-            assistant_tutorials_ = !assistant_tutorials_;
-        if (ImGui::MenuItem(tr(T::AssistantGlossary), nullptr, assistant_glossary_))
-            g_glossary_tips = assistant_glossary_ = !assistant_glossary_;
-        if (ImGui::MenuItem(tr(T::AssistantMaterial), nullptr, assistant_material_))
-            assistant_material_ = !assistant_material_;
-        if (ImGui::MenuItem(tr(T::Help), "F1"))
-            help_open_ = true;
-        if (ImGui::MenuItem(tr(T::Credits)))
-            credits_open_ = true;
-        if (ImGui::MenuItem(tr(T::About)))
-            about_open_ = true;
-        ImGui::Separator();
-        if (ImGui::MenuItem(tr(T::Quit)))
-            glfwSetWindowShouldClose(window_, GLFW_TRUE);
-        ImGui::EndPopup();
-    }
+    more_menu();
     dl->AddLine(ImVec2(origin.x, origin.y + height - 1.0f), ImVec2(origin.x + vp->Size.x, origin.y + height - 1.0f),
                 ImGui::GetColorU32(rgb(theme_.border)));
     ImGui::End();
@@ -5083,7 +6973,37 @@ Settings App::saved_settings() const {
     for (const ProfileKind kind : kProfileKinds)
         if (const Profile* p = find_profile(kind, chosen_profile_[std::size_t(kind)]))
             saved = with_profile(saved, kind, p->settings);
-    return saved;
+    // The printer settings the chosen pack filament and print profile carry
+    // are theirs (BH27), the print's last.
+    return with_carried(saved, {ProfileKind::Filament, ProfileKind::Print});
+}
+
+// `s` with the printer settings the chosen pack profiles of `kinds` carry
+// (BH27), but not the keys in `skip`.
+Settings App::with_carried(const Settings& s, std::initializer_list<ProfileKind> kinds,
+                           const std::set<std::string>* skip) const {
+    nlohmann::json over = nlohmann::json::object();
+    for (const ProfileKind kind : kinds)
+        if (const auto it = pack_entry_printer_.find(chosen_profile_[std::size_t(kind)]); it != pack_entry_printer_.end()) {
+            const nlohmann::json carried = nlohmann::json::parse(it->second, nullptr, false);
+            if (carried.is_object())
+                for (const auto& [group, keys] : carried.items())
+                    if (keys.is_object())
+                        for (const auto& [key, value] : keys.items())
+                            if (!skip || !skip->contains(group + "." + key))
+                                over[group][key] = value;
+        }
+    if (over.empty())
+        return s;
+    try {
+        nlohmann::json all = nlohmann::json::parse(settings_json(s));
+        for (const auto& [group, keys] : over.items())
+            for (const auto& [key, value] : keys.items())
+                all[group][key] = value;
+        return parse_settings(all.dump());
+    } catch (const std::exception&) {
+        return s;
+    }
 }
 
 // A level for the panel; Custom the first time shows what the level before
@@ -5387,7 +7307,11 @@ void App::settings_card(const SubsectionLayout& sub, int changes, bool& reset) {
 // «Basado en Support Fins, de gittrahan» at a card's foot, small and grey,
 // the source's name a link to it (credits.md, rule 3).
 void App::card_credits(std::string_view card, float left, float right) {
-    const std::vector<const FeatureCredit*> from = credits_for_card(credits(), card);
+    std::vector<const FeatureCredit*> from = credits_for_card(credits(), card);
+    // The nonplanar infill card: ZigZagZ is the zigzag's source; the
+    // interlocking waves are the engine's own (zigzag_infill.md, rule 11).
+    if (card == "wavy" && !settings_.infill_nonplanar)
+        from.clear();
     if (from.empty())
         return;
     ImGui::Spacing();
@@ -6158,7 +8082,7 @@ void App::guide_overlay() {
         else if (step.anchor == "help_problems" || step.anchor == "help_procedures")
             help_open_ = true;
         else if (step.anchor.starts_with("engineering_"))
-            set_tab(Tab::Analysis);
+            set_tab(Tab::Structural);
         else if (step.anchor == "calibrations")
             set_tab(Tab::Calibration);
     } else if (found != anchors_.end()) {
@@ -6299,6 +8223,118 @@ void App::help_apply_dialog() {
         help_change_guide_.clear();
         ImGui::CloseCurrentPopup();
     }
+    ImGui::EndPopup();
+}
+
+// The machine as Preferences › Video and Help › System Info show it.
+void App::machine_lines() {
+    const std::string cpu = system_.cpu.empty() ? std::string("?") : system_.cpu;
+    loc::TextDisabled(tr(T::ConfigMachineCpu), cpu.c_str(), system_.physical_cores, system_.logical_cores);
+    loc::TextDisabled(tr(T::ConfigMachineRam), bytes_text(system_.ram_total).c_str(), bytes_text(system_.ram_free).c_str());
+    loc::TextDisabled(tr(T::ConfigMachineGpu), (gpu_vendor_.empty() ? gpu_renderer_ : gpu_vendor_ + " · " + gpu_renderer_).c_str(),
+                      gpu_version_.c_str());
+    if (screen_width_ > 0 && screen_hz_ > 0)
+        loc::TextDisabled(tr(T::ConfigMachineScreen), screen_width_, screen_height_, screen_hz_, double(scale_));
+    else if (screen_width_ > 0) // a screen that does not say its rate (a virtual one)
+        loc::TextDisabled(tr(T::ConfigMachineScreenNoRate), screen_width_, screen_height_, double(scale_));
+    loc::TextDisabled("%s", tr(system_.power == PowerSource::Battery  ? T::ConfigOnBattery
+                               : system_.power == PowerSource::Mains ? T::ConfigOnMains
+                                                                     : T::ConfigPowerUnknown));
+}
+
+// Help › Keyboard Shortcuts (?): every shortcut, by card.
+void App::shortcuts_dialog() {
+    if (shortcuts_open_) {
+        ImGui::OpenPopup("###shortcuts");
+        shortcuts_open_ = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(760.0f * scale_, vp->Size.x * 0.92f), vp->Size.y * 0.8f), ImGuiCond_Appearing);
+    const std::string title = std::string(tr(T::ShortcutsMenu)) + "###shortcuts";
+    if (!ImGui::BeginPopupModal(title.c_str()))
+        return;
+    struct Row {
+        T label;
+        const char* keys;
+    };
+    struct Section {
+        T title;
+        std::vector<Row> rows;
+    };
+    static const std::vector<Section> sections = {
+        {T::MoreFile,
+         {{T::NewProjectMenu, "Ctrl+N"}, {T::OpenProjectMenu, "Ctrl+O"}, {T::SaveProject, "Ctrl+S"},
+          {T::SaveProjectAs, "Ctrl+Alt+S"}, {T::ImportModelMenu, "Ctrl+I"}, {T::ImportConfigMenu, "Ctrl+L"},
+          {T::ImportProjectConfigMenu, "Ctrl+Alt+L"}, {T::ExportGcodeMenu, "Ctrl+G"}, {T::SendGcodeMenu, "Ctrl+Shift+G"},
+          {T::ExportConfigMenu, "Ctrl+E"}, {T::SliceNowMenu, "Ctrl+R"}}},
+        {T::MoreEdit,
+         {{T::DeleteSelectedMenu, "Del"}, {T::DeleteAllMenu, "Ctrl+Del"}, {T::Undo, "Ctrl+Z"}, {T::Redo, "Ctrl+Y"},
+          {T::CopyMenu, "Ctrl+C"}, {T::PasteMenu, "Ctrl+V"}, {T::ReloadMenu, "F5"}, {T::SearchMenu, "Ctrl+F"}}},
+        {T::MoreWindow,
+         {{T::PlaterTabMenu, "Ctrl+1"}, {T::PrintSettingsTabMenu, "Ctrl+2"}, {T::FilamentSettingsTabMenu, "Ctrl+3"},
+          {T::PrinterSettingsTabMenu, "Ctrl+4"}, {T::View3dMenu, "Ctrl+5"}, {T::PreviewMenu, "Ctrl+6"}}},
+        {T::MoreView,
+         {{T::ViewIso, "0"}, {T::ViewTop, "1"}, {T::ViewBottom, "2"}, {T::ViewFront, "3"}, {T::ViewBack, "4"},
+          {T::ViewLeft, "5"}, {T::ViewRight, "6"}, {T::ZoomFit, "Z"}, {T::ShortOrtho, "K"}, {T::ShowLabelsMenu, "E"},
+          {T::ShowLegendMenu, "L"}, {T::CollapseSidebarMenu, "Shift+Tab"}, {T::FullscreenMenu, "F11"}}},
+        {T::ShortcutsPlate,
+         {{T::ShortMove, "M"}, {T::ShortRotate, "R"}, {T::ShortScale, "S"}, {T::ShortLayFlat, "F"}, {T::ShortCut, "C"},
+          {T::ShortMeasure, "U"}, {T::ToolPaint, "P"}, {T::ShortArrange, "A"}, {T::ShortSelect, "Esc"}}},
+        {T::MoreHelp, {{T::PreferencesMenu, "Ctrl+P"}, {T::Help, "F1"}, {T::ShortcutsMenu, "?"}}},
+    };
+    const float bottom = ImGui::GetFrameHeightWithSpacing() + ImGui::GetStyle().ItemSpacing.y;
+    ImGui::BeginChild("##shortcut_list", ImVec2(0, -bottom));
+    if (ImGui::BeginTable("##shortcut_cols", 2, ImGuiTableFlags_SizingStretchSame)) {
+        int n = 0;
+        for (const Section& section : sections) {
+            if (n++ % 2 == 0)
+                ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(section.title));
+            if (ImGui::BeginTable(tr(section.title), 2, ImGuiTableFlags_SizingStretchProp)) {
+                for (const Row& r : section.rows) {
+                    ImGui::TableNextColumn();
+                    loc::Text("%s", tr(r.label));
+                    ImGui::TableNextColumn();
+                    loc::TextDisabled("%s", r.keys);
+                }
+                ImGui::EndTable();
+            }
+            ImGui::Spacing();
+        }
+        ImGui::EndTable();
+    }
+    ImGui::EndChild();
+    note_rect("shortcuts_list");
+    if (ImGui::Button(tr(T::Close), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+// Help › System Info: the program's version, the system and the machine.
+void App::system_info_dialog() {
+    if (system_info_open_) {
+        ImGui::OpenPopup("###system_info");
+        system_info_open_ = false;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(vp->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    const std::string title = std::string(tr(T::SystemInfoMenu)) + "###system_info";
+    if (!ImGui::BeginPopupModal(title.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        return;
+    loc::Text(tr(T::SystemVersion), TISMA_VERSION);
+#if defined(_WIN32)
+    loc::TextDisabled(tr(T::SystemOs), "Windows");
+#elif defined(__APPLE__)
+    loc::TextDisabled(tr(T::SystemOs), "macOS");
+#else
+    loc::TextDisabled(tr(T::SystemOs), "Linux");
+#endif
+    machine_lines();
+    note_rect("system_info");
+    if (ImGui::Button(tr(T::Close), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+        ImGui::CloseCurrentPopup();
     ImGui::EndPopup();
 }
 
@@ -6640,10 +8676,13 @@ void App::settings_panel() {
         return;
     }
     profile_row(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
+    pack_source_line(panel_tab_ == SettingsTab::Material ? ProfileKind::Filament : ProfileKind::Print);
     if (panel_tab_ == SettingsTab::Material)
         anchor("filament_selector");
-    if (panel_tab_ == SettingsTab::Material)
+    if (panel_tab_ == SettingsTab::Material) {
         material_card();
+        material_published();
+    }
     // In Custom, «Choose settings…» (rule 16): only the ones each person wants.
     // Every section shows in one list now (the owner's decision, 2026-10-29).
     if (view_level_ == ViewLevel::Custom) {
@@ -6737,15 +8776,11 @@ void App::settings_panel() {
     // Settings files.
     ImGui::Separator();
     const float third = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2.0f) / 3.0f;
-    if (ImGui::Button(tr(T::LoadSettings), ImVec2(third, 0))) {
-        purpose_ = Purpose::LoadSettings;
-        browser_.open(FileBrowser::Mode::Open, tr(T::LoadSettingsTitle), {".json"}, last_folder_);
-    }
+    if (ImGui::Button(tr(T::LoadSettings), ImVec2(third, 0)))
+        begin_import_config(false);
     ImGui::SameLine();
-    if (ImGui::Button(tr(T::SaveSettings), ImVec2(third, 0))) {
-        purpose_ = Purpose::SaveSettings;
-        browser_.open(FileBrowser::Mode::Save, tr(T::SaveSettingsTitle), {".json"}, last_folder_, "tisma.json");
-    }
+    if (ImGui::Button(tr(T::SaveSettings), ImVec2(third, 0)))
+        begin_export_config();
     ImGui::SameLine();
     if (ImGui::Button(tr(T::ResetSettings), ImVec2(third, 0))) {
         settings_ = default_settings();
@@ -6789,7 +8824,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
     if (!ImGui::BeginTable("##rows", 2, ImGuiTableFlags_SizingStretchProp,
                            ImVec2(ImGui::GetContentRegionAvail().x - 9.0f * scale_, 0)))
         return false;
-    ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 1.25f);
+    ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 1.5f);
     ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch, 1.0f);
     const auto mm = [&](T label, const char* key, double& v, double min, double max, const char* fmt, float speed,
                         const char* tip = nullptr) {
@@ -6930,15 +8965,40 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::ExtraIfNeeded, "walls.extra_if_needed", s.extra_if_needed);
         flag(T::ExtraOnOverhangs, "walls.extra_on_overhangs", s.extra_on_overhangs);
         flag(T::AvoidCurledOverhangs, "walls.avoid_curled_overhangs", s.avoid_curled_overhangs);
+        flag(T::UnsupportedLast, "walls.unsupported_last", s.unsupported_last);
+    } else if (id == "polyholes") {
+        // Round holes as polygons (orca_2_5.md, rule 5).
+        flag(T::Polyholes, "walls.polyholes", s.polyholes);
+        if (shown("walls.polyhole_margin"))
+            changed |= unit_row(T::PolyholeMargin, s.polyhole_margin, 0.001, 100.0, 1000.0, "%.2f mm", 0.01f);
+        flag(T::PolyholeTwist, "walls.polyhole_twist", s.polyhole_twist);
+        whole(T::PolyholeMaxEdges, "walls.polyhole_max_edges", s.polyhole_max_edges, 3, 1000);
     } else if (id == "top_bottom") {
         whole(T::TopLayers, "surfaces.top_layers", s.top_layers, 0, 1000);
         whole(T::BottomLayers, "surfaces.bottom_layers", s.bottom_layers, 0, 1000);
         mm(T::TopMinThickness, "surfaces.top_min_thickness", s.top_min_thickness, 0.0, 100.0, "%.2f mm", 0.01f);
         mm(T::BottomMinThickness, "surfaces.bottom_min_thickness", s.bottom_min_thickness, 0.0, 100.0, "%.2f mm", 0.01f);
+        // The surface patterns (infill_patterns.md, rules 14 to 17).
         if (shown("surfaces.top_pattern"))
-            changed |= row(T::TopPattern, s.monotonic_top, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+            changed |= row(T::TopPattern, s.top_pattern,
+                           {{SurfacePattern::Monotonic, tr(T::Monotonic)},
+                            {SurfacePattern::MonotonicLines, tr(T::MonotonicLines)},
+                            {SurfacePattern::Rectilinear, tr(T::Rectilinear)},
+                            {SurfacePattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
+                            {SurfacePattern::Concentric, tr(T::ConcentricInfill)},
+                            {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
+                            {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
+                            {SurfacePattern::Octagram, tr(T::OctagramInfill)}});
         if (shown("surfaces.bottom_pattern"))
-            changed |= row(T::BottomPattern, s.monotonic_bottom, {{true, tr(T::Monotonic)}, {false, tr(T::Rectilinear)}});
+            changed |= row(T::BottomPattern, s.bottom_pattern,
+                           {{SurfacePattern::Monotonic, tr(T::Monotonic)},
+                            {SurfacePattern::MonotonicLines, tr(T::MonotonicLines)},
+                            {SurfacePattern::Rectilinear, tr(T::Rectilinear)},
+                            {SurfacePattern::AlignedRectilinear, tr(T::AlignedRectilinear)},
+                            {SurfacePattern::Concentric, tr(T::ConcentricInfill)},
+                            {SurfacePattern::Hilbert, tr(T::HilbertInfill)},
+                            {SurfacePattern::Archimedean, tr(T::ArchimedeanInfill)},
+                            {SurfacePattern::Octagram, tr(T::OctagramInfill)}});
         mm(T::BridgeAngle, "surfaces.bridge_angle", s.bridge_angle, -360.0, 360.0, s.bridge_angle != 0.0 ? "%.0f°" : tr(T::AutoValue),
            0.5f);
         flag(T::InterfaceShells, "surfaces.interface_shells", s.interface_shells);
@@ -6972,7 +9032,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SolidBelowArea, "infill.solid_below_area", s.infill_solid_below_area, 0.0, 10000.0, "%.0f mm²", 1.0f,
            tr(T::SolidBelowAreaTip));
         flag(T::DenseUnderTop, "infill.dense_under_top", s.infill_dense_under_top, tr(T::DenseUnderTopTip));
-        mm(T::DenseDensity, "infill.dense_density", s.infill_dense_density, 0.0, 100.0, "%.0f %%", 0.5f,
+        mm(T::DenseDensity, "infill.dense_density", s.infill_dense_density, 1.0, 100.0, "%.0f %%", 0.5f,
            tr(T::DenseUnderTopTip));
         mm(T::StressDensity, "infill.stress_density", s.infill_stress_density, 0.0, 100.0, "%.0f %%", 0.5f,
            tr(T::StressDensityTip));
@@ -6990,18 +9050,31 @@ bool App::card_rows(std::string_view id, bool& bed) {
             changed |= unit_row(T::CombineMaxHeight, s.infill_combine_max_height, 0.01, 10.0, 1000.0, "%.2f mm", 0.01f,
                                 nullptr, s.nozzle_diameter);
     } else if (id == "wavy") {
-        flag(T::NonplanarInfill, "infill.nonplanar", s.infill_nonplanar, tr(T::NonplanarInfillTip));
-        mm(T::NonplanarAmplitude, "infill.nonplanar_amplitude", s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%", 1.0f);
-        mm(T::NonplanarWavelength, "infill.nonplanar_wavelength", s.infill_nonplanar_wavelength, 0.5, 20.0, "%.1f mm",
-           0.05f);
-        // The interlocking waves (interlock_infill.md): one kind at a time.
-        if (shown("infill.waves") && row(T::InterlockWaves, s.infill_waves, tr(T::InterlockWavesTip))) {
-            if (s.infill_waves)
-                s.infill_nonplanar = false;
+        // One row for the two kinds of nonplanar infill (zigzag_infill.md,
+        // rule 11): they never go together, and below it only the chosen
+        // one's settings.
+        enum class Nonplanar { No, Zigzag, Waves };
+        Nonplanar kind = s.infill_nonplanar ? Nonplanar::Zigzag : s.infill_waves ? Nonplanar::Waves : Nonplanar::No;
+        if ((shown("infill.nonplanar") || shown("infill.waves")) &&
+            row(T::NonplanarRow, kind,
+                {{Nonplanar::No, tr(T::NonplanarNo)},
+                 {Nonplanar::Zigzag, tr(T::NonplanarInfill)},
+                 {Nonplanar::Waves, tr(T::InterlockWaves)}},
+                tr(T::NonplanarInfillTip))) {
+            s.infill_nonplanar = kind == Nonplanar::Zigzag;
+            s.infill_waves = kind == Nonplanar::Waves;
             changed = true;
         }
-        mm(T::WaveAmplitude, "infill.wave_amplitude", s.infill_wave_amplitude, 0.0, 200.0, "%.0f %%", 1.0f);
-        mm(T::WaveLength, "infill.wave_length", s.infill_wave_length, 1.0, 100.0, "%.1f mm", 0.1f);
+        if (s.infill_nonplanar) {
+            mm(T::NonplanarAmplitude, "infill.nonplanar_amplitude", s.infill_nonplanar_amplitude, 0.0, 500.0, "%.0f %%",
+               1.0f);
+            mm(T::NonplanarWavelength, "infill.nonplanar_wavelength", s.infill_nonplanar_wavelength, 0.5, 20.0, "%.1f mm",
+               0.05f);
+        }
+        if (s.infill_waves) {
+            mm(T::WaveAmplitude, "infill.wave_amplitude", s.infill_wave_amplitude, 0.0, 200.0, "%.0f %%", 1.0f);
+            mm(T::WaveLength, "infill.wave_length", s.infill_wave_length, 1.0, 100.0, "%.1f mm", 0.1f);
+        }
     }
     // Print: Speed (every speed is the printer's, owner's decision, 2026-10-26).
     else if (id == "first_layer") {
@@ -7025,6 +9098,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::SpeedInfill, "speed.infill", s.infill_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedSupport, "speed.support", s.support_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         share_row(T::SpeedSupportInterface, "speed.support_interface", s.support_interface_speed);
+        share_row(T::SpeedSmallSupport, "speed.small_support", s.small_support_speed);
+        mm(T::SmallSupportThreshold, "speed.small_support_threshold", s.small_support_threshold, 0.0, 100.0,
+           s.small_support_threshold > 0.0 ? "%.1f mm" : tr(T::NotSet), 0.05f);
     } else if (id == "travel") {
         mm(T::SpeedTravel, "speed.travel", s.travel_speed, 1.0, 1000.0, "%.0f mm/s", 0.5f);
         mm(T::SpeedTravelZ, "speed.travel_z", s.travel_z_speed, 0.0, 1000.0, s.travel_z_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue),
@@ -7154,6 +9230,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {BrimType::OuterAndInner, tr(T::BrimBoth)},
                             {BrimType::None, tr(T::BrimNone)}});
         mm(T::BrimGap, "adhesion.brim_gap", s.brim_gap, 0.0, 100.0, "%.2f mm", 0.01f);
+        flag(T::BrimEars, "adhesion.brim_ears", s.brim_ears);
+        mm(T::BrimEarsMaxAngle, "adhesion.brim_ears_max_angle", s.brim_ears_max_angle, 0.0, 180.0, "%.0f°", 0.5f);
+        mm(T::BrimEarsDetection, "adhesion.brim_ears_detection_length", s.brim_ears_detection_length, 0.0, 100.0, "%.2f mm",
+           0.01f);
+        flag(T::BrimEarsOuterOnly, "adhesion.brim_ears_outer_only", s.brim_ears_outer_only);
     } else if (id == "raft") {
         whole(T::RaftLayers, "adhesion.raft_layers", s.raft_layers, 0, 100);
         mm(T::RaftGap, "adhesion.raft_gap", s.raft_gap, 0.0, 100.0, "%.2f mm", 0.01f);
@@ -7217,8 +9298,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         }
     } else if (id == "curved") {
         // Curved layers (nonplanar.md).
-        if (shown("curved.mode"))
-            changed |= row(T::CurvedModeRow, s.curved_mode,
+        const bool mode_changed = shown("curved.mode") &&
+                                  row(T::CurvedModeRow, s.curved_mode,
                            {{CurvedMode::Disabled, tr(T::SumOff)},
                             {CurvedMode::Wave, tr(T::CurvedWave)},
                             {CurvedMode::Conical, tr(T::CurvedCone)},
@@ -7226,6 +9307,18 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {CurvedMode::Stress, tr(T::CurvedStress)},
                             {CurvedMode::Surface, tr(T::CurvedSurface)},
                             {CurvedMode::Automatic, tr(T::CurvedAutomatic)}});
+        changed |= mode_changed;
+        // Curved layers take relative E (nonplanar.md, rule 7): turn it on
+        // when the printer can, else say plainly that slicing will fail.
+        if (mode_changed && s.curved_mode != CurvedMode::Disabled && !relative_e(s)) {
+            s.relative_extrusion = true;
+            if (relative_e(s)) {
+                notify(tr(T::CurvedRelativeOn));
+            } else {
+                s.relative_extrusion = false;
+                notify(tr(T::CurvedRelativeNo), true);
+            }
+        }
         if (shown("curved.pattern"))
             changed |= row(T::CurvedPatternRow, s.curved_pattern,
                            {{CurvedPattern::Egg, tr(T::CurvedEgg)},
@@ -7358,9 +9451,15 @@ bool App::card_rows(std::string_view id, bool& bed) {
     else if (id == "nozzle_temp") {
         if (shown("machine.variables.temperature"))
             changed |= variable_row(T::NozzleTemp, s, "temperature", 0, 450, "%d °C", tr(T::TempTip));
+        if (shown("machine.variables.first_layer_temperature"))
+            changed |= first_layer_variable_row(T::FirstNozzleTemp, s, "first_layer_temperature", "temperature", 0, 450, "%d °C",
+                                                tr(T::FirstTempTip));
     } else if (id == "bed_temp") {
         if (shown("machine.variables.bed_temperature"))
             changed |= variable_row(T::BedTemp, s, "bed_temperature", 0, 150, "%d °C", tr(T::TempTip));
+        if (shown("machine.variables.first_layer_bed_temperature"))
+            changed |= first_layer_variable_row(T::FirstBedTemp, s, "first_layer_bed_temperature", "bed_temperature", 0, 150,
+                                                "%d °C", tr(T::FirstTempTip));
     } else if (id == "chamber") {
         mm(T::ChamberTemp, "extrusion.chamber_temperature", s.chamber_temperature, 0.0, 200.0, "%.0f °C", 0.5f);
         mm(T::ChamberMinTemp, "extrusion.chamber_min_temperature", s.chamber_min_temperature, 0.0, 200.0,
@@ -7381,6 +9480,8 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::FanBridges, "cooling.fan_bridges", s.fan_bridges, 0.0, 100.0, "%.0f %%", 0.5f);
         whole(T::FanOffLayers, "cooling.fan_off_layers", s.fan_off_layers, 0, 100);
         whole(T::FullFanLayer, "cooling.full_fan_layer", s.full_fan_layer, 0, 1000);
+        mm(T::FirstLayerFan, "cooling.first_layer_fan", s.first_layer_fan, -1.0, 100.0,
+           s.first_layer_fan >= 0.0 ? "%.0f %%" : tr(T::NotSet), 0.5f);
     } else if (id == "overhang_fan") {
         flag(T::DynamicOverhangFan, "cooling.dynamic_overhang_fan", s.dynamic_overhang_fan);
         const T labels[4] = {T::OverhangFan0, T::OverhangFan1, T::OverhangFan2, T::OverhangFan3};
@@ -7433,7 +9534,7 @@ bool App::card_rows(std::string_view id, bool& bed) {
         mm(T::RetractSpeed, "retraction.speed", s.retract_speed, 1.0, 200.0, "%.0f mm/s", 0.5f);
         mm(T::UnretractSpeed, "retraction.unretract_speed", s.unretract_speed, 0.0, 1000.0,
            s.unretract_speed > 0.0 ? "%.0f mm/s" : tr(T::AutoValue), 0.5f);
-        mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, 0.0, 10.0, "%.2f mm", 0.01f);
+        mm(T::RestartExtra, "retraction.restart_extra", s.restart_extra, -50.0, 1000.0, "%.2f mm", 0.01f);
         flag(T::RetractLayerChange, "retraction.on_layer_change", s.retract_layer_change);
         flag(T::FirmwareRetraction, "retraction.firmware", s.firmware_retraction);
     } else if (id == "wipe") {
@@ -7661,9 +9762,9 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::SingleExtruderMmu, "machine.single_extruder_mmu", s.single_extruder_mmu);
         for (const auto& [label, key, list, top] :
              {std::tuple{T::ToolchangeLength, "retraction.toolchange_length", &s.toolchange_length, 200.0},
-              std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 10.0}}) {
-            if (list->size() == 1)
-                mm(label, key, list->front(), 0.0, top, "%.2f mm", 0.01f);
+              std::tuple{T::ToolchangeRestartExtra, "retraction.toolchange_restart_extra", &s.toolchange_restart_extra, 1000.0}}) {
+            if (list->size() == 1) // the extra may be negative (less back)
+                mm(label, key, list->front(), top > 200.0 ? -50.0 : 0.0, top, "%.2f mm", 0.01f);
             else
                 count(label, key, list->size());
         }
@@ -7678,6 +9779,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
         top(T::MaxFeedZ, "machine.max_feed_z", s.max_feed_z, 500.0);
         top(T::MaxFeedE, "machine.max_feed_e", s.max_feed_e, 500.0);
         mm(T::CornerSpeed, "machine.corner_speed", s.corner_speed, 0.0, 100.0, "%.1f mm/s", 0.1f);
+    } else if (id == "preparation") {
+        // The preparation in the time estimate (print_time.md, rules 10 and 14).
+        mm(T::HeatRateNozzle, "machine.heat_rate_nozzle", s.heat_rate_nozzle, 0.0, 50.0,
+           s.heat_rate_nozzle > 0.0 ? "%.1f °C/s" : tr(T::NotSet), 0.05f);
+        mm(T::HeatRateBed, "machine.heat_rate_bed", s.heat_rate_bed, 0.0, 50.0,
+           s.heat_rate_bed > 0.0 ? "%.2f °C/s" : tr(T::NotSet), 0.01f);
+        mm(T::HomeTime, "machine.home_time", s.home_time, 0.0, 3600.0, "%.0f s", 0.5f);
+        mm(T::ProbeTime, "machine.probe_time", s.probe_time, 0.0, 3600.0, "%.0f s", 0.5f);
     } else if (id == "accelerations") {
         mm(T::AccelerationRow, "machine.acceleration", s.acceleration, 0.0, 100000.0, "%.0f mm/s²", 10.0f);
         mm(T::TravelAcceleration, "machine.travel_acceleration", s.travel_acceleration, 0.0, 100000.0, "%.0f mm/s²",
@@ -7724,6 +9833,11 @@ bool App::card_rows(std::string_view id, bool& bed) {
                             {GcodeFlavor::Mach3, "Mach3, LinuxCNC"},
                             {GcodeFlavor::Machinekit, "Machinekit"},
                             {GcodeFlavor::NoExtrusion, tr(T::FlavorNoExtrusion)}});
+        // A firmware that reads the whole file first (gcode_firmware.md, rule 7).
+        if (shown("machine.strict_parser"))
+            changed |= row(T::StrictParserRow, s.strict_parser,
+                           {{StrictParser::None, tr(T::StrictParserNone)},
+                            {StrictParser::Anycubic, tr(T::StrictParserAnycubic)}});
         if (shown("machine.limits_usage"))
             changed |= row(T::LimitsUsageRow, s.limits_usage,
                            {{LimitsUsage::TimeOnly, tr(T::LimitsTimeOnly)},
@@ -7741,8 +9855,28 @@ bool App::card_rows(std::string_view id, bool& bed) {
         flag(T::AutoTemperatures, "gcode.auto_temperatures", s.auto_temperatures);
     } else if (id == "output_file") {
         count(T::PostProcessRow, "output.post_process", s.post_process.size());
+        flag(T::SkipConfigBlock, "gcode.skip_config_block", s.gcode_skip_config_block);
     }
     ImGui::EndTable();
+    // The thumbnails, full width (gcode_extras.md, rule 8): kept as typed
+    // while it is wrong, and taken only once it reads.
+    if (id == "gcode_output" && shown("gcode.thumbnails")) {
+        ImGui::TextUnformatted(tr(T::GcodeThumbnails));
+        if (!thumbnails_editing_)
+            thumbnails_draft_ = s.gcode_thumbnails;
+        ImGui::SetNextItemWidth(-9.0f * scale_);
+        ImGui::InputTextWithHint("##thumbnails", "16x16/PNG,220x124/PNG", &thumbnails_draft_);
+        thumbnails_editing_ = ImGui::IsItemActive();
+        try {
+            parse_thumbnails(thumbnails_draft_);
+            if (thumbnails_draft_ != s.gcode_thumbnails) {
+                s.gcode_thumbnails = thumbnails_draft_;
+                changed = true;
+            }
+        } catch (const std::invalid_argument& e) {
+            loc::TextColored(rgb(0xE5484D), "%s", e.what());
+        }
+    }
     // The file's name, full width (gcode_templates.md, rule 15).
     if (id == "output_file" && shown("output.filename_format")) {
         ImGui::TextUnformatted(tr(T::FilenameFormat));
@@ -7838,6 +9972,13 @@ void App::status_bar() {
     ImGui::SameLine(0, 30.0f * scale_);
     if (slice_job_.running()) {
         loc::TextColored(rgb(theme_.accent_hover), "%s %.1f s", tr(T::Slicing), glfwGetTime() - slice_started_);
+    } else if (pack_job_.valid() && pack_state_) { // the pack downloading (rule 1)
+        std::string status;
+        {
+            std::lock_guard lock(pack_state_->mutex);
+            status = pack_state_->status;
+        }
+        loc::TextDisabled(tr(T::PackBusy), status.c_str());
     } else if (result_ && viewer_) {
         loc::TextDisabled("%s", tr(T::ViewerOnly));
     } else if (result_ && stale_) {
@@ -7912,6 +10053,30 @@ void App::status_bar() {
             }
         }
     }
+    // Slicing in the cloud: its state and a way to cancel it (cloud.md, rule 8).
+    if (cloud_slice_.valid() && cloud_slice_state_) {
+        std::string state;
+        {
+            std::lock_guard lock(cloud_slice_state_->mutex);
+            state = cloud_slice_state_->status == "running" ? format(tr(T::CloudSliceRunning), cloud_slice_state_->progress)
+                    : cloud_slice_state_->status == "queued" ? std::string(tr(T::CloudSliceQueued))
+                                                              : std::string(tr(T::CloudSliceSending));
+        }
+        // The cancel button first: after the state, whose text changes
+        // width («Enviando», «En cola», «Calculando 40 %»), it moved under
+        // the pointer.
+        ImGui::SameLine(0, 24.0f * scale_);
+        if (ImGui::SmallButton("x##cloud_slice_cancel"))
+            cloud_slice_state_->cancel = true;
+        g_menu_rects["cloud_slice_cancel"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                                    ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::CloudSliceCancelTip));
+        ImGui::SameLine();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", state.c_str());
+        g_menu_rects["cloud_slice_state"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
+                                                   ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
+    }
     // On the right: the 3D view's time per frame on the GPU, and what sliced.
     std::string right;
     if (view_ms_ > 0.0 && show_frame_time_)
@@ -7980,6 +10145,88 @@ void App::viewport() {
     // chooses one (or lays it on the face clicked, with that tool); dragging a
     // model moves it on the bed, dragging elsewhere turns the view.
     const bool editing = tab_ == Tab::Prepare && !objects_.empty() && !calibration_;
+    // Ingeniería, Estructural: a click with a marking tool marks the part
+    // under the mouse (engineering_panel.md, rule 5): a point where it was
+    // clicked, a zone as the whole face (face_region); with Shift a zone adds
+    // the face to the last zone of its kind.
+    // A double click's second click marks nothing more (UI50).
+    // A press on a force arrow's free end turns the force instead (rule 7).
+    if (tab_ == Tab::Structural && ImGui::IsItemActivated() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        const ImVec2 m = ImGui::GetMousePos();
+        for (const ArrowHandle& h : arrow_handles_)
+            if (std::hypot(m.x - h.tail.x, m.y - h.tail.y) <= 9.0f * scale_ && h.part < objects_.size() &&
+                h.condition < objects_[h.part].engineering.conditions.size()) {
+                remember_engineering(h.part);
+                arrow_drag_ = h;
+                break;
+            }
+    }
+    if (arrow_drag_) {
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || arrow_drag_->part >= objects_.size() ||
+            arrow_drag_->condition >= objects_[arrow_drag_->part].engineering.conditions.size()) {
+            arrow_drag_.reset();
+        } else if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+            // The pointer on the plane through the force's point facing the
+            // camera: the force points from there to its point.
+            const Vec3 d = mouse_ray(), e = camera_.eye(), f = camera_.forward();
+            const Vec3 at{float(arrow_drag_->at[0]), float(arrow_drag_->at[1]), float(arrow_drag_->at[2])};
+            const float den = d.x * f.x + d.y * f.y + d.z * f.z;
+            if (std::abs(den) > 1e-6f) {
+                const float t = ((at.x - e.x) * f.x + (at.y - e.y) * f.y + (at.z - e.z) * f.z) / den;
+                const Vec3 p{e.x + d.x * t, e.y + d.y * t, e.z + d.z * t};
+                const double vx = double(at.x - p.x), vy = double(at.y - p.y), vz = double(at.z - p.z);
+                const double l = std::sqrt(vx * vx + vy * vy + vz * vz);
+                if (l > 1e-6) {
+                    EngineeringCondition& c = objects_[arrow_drag_->part].engineering.conditions[arrow_drag_->condition];
+                    c.direction = ForceDirection::Vector;
+                    // Rounded to a thousandth, as the field shows it.
+                    c.vector = {std::round(vx / l * 1000.0) / 1000.0, std::round(vy / l * 1000.0) / 1000.0,
+                                std::round(vz / l * 1000.0) / 1000.0};
+                }
+            }
+        }
+    }
+    if (!arrow_drag_ && tab_ == Tab::Structural && structural_tool_ > 0 && !objects_.empty() && ImGui::IsItemActivated() &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        const Vec3 d = mouse_ray(), e = camera_.eye();
+        if (const auto hit = pick(placed_meshes_, plate_indexes(), e, d); hit && hit->object < objects_.size()) {
+            PlateObject& o = objects_[hit->object];
+            structural_part_ = int(hit->object);
+            const ConditionKind kind = ConditionKind(structural_tool_ - 1);
+            // Back to the part's own coordinates.
+            const Affine back = between(placing(o, placed_meshes_[hit->object]), Affine{});
+            const double t = hit->distance;
+            const double q[3] = {e.x + d.x * t, e.y + d.y * t, e.z + d.z * t};
+            std::array<double, 3> point{};
+            for (std::size_t r = 0; r < 3; ++r)
+                point[r] = back.a[3 * r] * q[0] + back.a[3 * r + 1] * q[1] + back.a[3 * r + 2] * q[2] + back.b[r];
+            const Vec3f na = o.mesh.corner(hit->triangle, 0), nb = o.mesh.corner(hit->triangle, 1),
+                        nc = o.mesh.corner(hit->triangle, 2);
+            const double u[3] = {double(nb.x) - na.x, double(nb.y) - na.y, double(nb.z) - na.z};
+            const double v[3] = {double(nc.x) - na.x, double(nc.y) - na.y, double(nc.z) - na.z};
+            std::array<double, 3> normal{u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]};
+            const double len = std::sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+            if (len > 0.0)
+                for (double& x : normal)
+                    x /= len;
+            remember_engineering(hit->object);
+            const bool zone = kind == ConditionKind::FixedZone || kind == ConditionKind::ForceZone || kind == ConditionKind::Limit;
+            const std::vector<std::uint32_t> face =
+                zone ? face_region(o.mesh, std::uint32_t(hit->triangle)) : std::vector<std::uint32_t>{};
+            EngineeringCondition* last = nullptr;
+            for (EngineeringCondition& c : o.engineering.conditions)
+                if (c.kind == kind)
+                    last = &c;
+            if (zone && io.KeyShift && last) {
+                for (const std::uint32_t f : face)
+                    if (std::find(last->triangles.begin(), last->triangles.end(), f) == last->triangles.end())
+                        last->triangles.push_back(f);
+                std::sort(last->triangles.begin(), last->triangles.end());
+            } else {
+                add_condition(o.engineering, kind, point, normal, face);
+            }
+        }
+    }
     const auto bed_point = [&](float z) -> std::optional<Vec3> {
         const Vec3 d = mouse_ray(), e = camera_.eye();
         if (std::abs(d.z) < 1e-6f)
@@ -7994,6 +10241,41 @@ void App::viewport() {
     if (tab_ == Tab::Design && sketch_edit_) {
         if (ImGui::IsItemHovered()) {
             sketch_update_cursor();
+            // With no tool, a press on a point drags it; the sketch is
+            // solved every frame while it moves (rule 5).
+            SketchEdit& se = *sketch_edit_;
+            if (se.tool == SketchEdit::Tool::None && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && se.raw && editing_sketch()) {
+                const cad::Sketch& sk = *editing_sketch();
+                double best = sketch_pick_radius();
+                for (std::size_t i = 0; i < sk.entities.size(); ++i) {
+                    const cad::Entity& en = sk.entities[i];
+                    const std::size_t points = en.kind == cad::Entity::Kind::Rectangle ? 4
+                                               : en.kind == cad::Entity::Kind::Circle  ? 1
+                                                                                       : en.points.size();
+                    for (std::size_t k = 0; k < points; ++k) {
+                        const cad::Pt q = cad::point_of(en, k);
+                        if (const double d = std::hypot(q.x - se.raw->x, q.y - se.raw->y); d <= best)
+                            best = d, se.drag = cad::EntityPoint{i, k};
+                    }
+                }
+            }
+            if (se.drag && ImGui::IsMouseDown(ImGuiMouseButton_Left) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] >= 9.0f &&
+                se.raw)
+                sketch_drag_to(*se.raw);
+            if (se.drag && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+                se.drag.reset(); // a release after a drag places no point (it was not a click)
+            // Choosing for an editing tool: a drag is a selection box (rule 17).
+            if (sketch_edit_selecting()) {
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && se.raw)
+                    se.box_from = se.raw;
+                if (se.box_from && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                    if (io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] >= 9.0f && se.raw && editing_sketch())
+                        for (const std::size_t i : cad::select_box(*editing_sketch(), *se.box_from, *se.raw))
+                            if (std::find(se.selected.begin(), se.selected.end(), i) == se.selected.end())
+                                se.selected.push_back(i);
+                    se.box_from.reset();
+                }
+            }
             if (ImGui::IsMouseReleased(ImGuiMouseButton_Left) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] < 9.0f &&
                 sketch_edit_->cursor) {
                 const cad::Snap snap = sketch_edit_->snap;
@@ -8003,6 +10285,13 @@ void App::viewport() {
             sketch_edit_->raw.reset();
             sketch_edit_->cursor.reset();
         }
+    }
+    // An operation's points (stage D4): a click, not a drag, on a body.
+    if (tab_ == Tab::Design && design_pick_ && !sketch_edit_ && ImGui::IsItemHovered() &&
+        ImGui::IsMouseReleased(ImGuiMouseButton_Left) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] < 9.0f) {
+        std::array<double, 3> at{};
+        if (design_hit(at))
+            design_pick_at(at);
     }
     // The Paint tool: the brush follows the face under the mouse, and a
     // stroke paints the model it started on.
@@ -8018,6 +10307,7 @@ void App::viewport() {
             selected_ = int(hit->object);
             painting_object_ = int(hit->object);
             last_stroke_ = io.MousePos;
+            last_dab_.reset();
             brush_stroke(hit->object, io.MousePos);
         }
     } else if (painting && painting_object_ >= 0 && ImGui::IsItemActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left) &&
@@ -8066,6 +10356,7 @@ void App::viewport() {
                 plate_changed();
             } else if (const auto p = bed_point(e.z + d.z * float(hit->distance))) {
                 pressed_object_ = int(hit->object);
+                press_place_ = objects_[hit->object].place;
                 drag_anchor_ = *p;
             }
         }
@@ -8083,20 +10374,28 @@ void App::viewport() {
                 drag_anchor_ = *p;
                 dragged_ = true;
             }
-        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f)) {
+        } else if (pressed_object_ < 0 && painting_object_ < 0 && !gizmo_drag_ && !(sketch_edit_ && sketch_edit_->drag) && !arrow_drag_ &&
+                   ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0f) &&
+                   !ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+            // Not on the press itself: its frame's delta is where the pointer
+            // came from, not a drag (UI50: a click right after a jump of the
+            // pointer turned the view to the top, now and then).
             camera_.orbit(io.MouseDelta.x, io.MouseDelta.y);
             moved_frame_ = ImGui::GetFrameCount();
             camera_framed_ = false;
         }
-        if (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f)) {
+        if ((ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f) && !ImGui::IsMouseClicked(ImGuiMouseButton_Right)) ||
+            (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0f) && !ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) {
             camera_.pan(io.MouseDelta.x, io.MouseDelta.y, view_size_.y);
             moved_frame_ = ImGui::GetFrameCount();
             camera_framed_ = false;
         }
     }
     if (ImGui::IsItemDeactivated() && editing) {
-        if (dragged_)
+        if (dragged_) {
+            remember_place(pressed_object_, press_place_);
             plate_changed(); // the move is over: now the slice is out of date
+        }
         else if (pressed_object_ < 0 && !on_gizmo && tool_ != PlateTool::LayFlat && tool_ != PlateTool::Paint &&
                  ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
                  std::abs(io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left]) < 9.0f)
@@ -8110,7 +10409,9 @@ void App::viewport() {
             moved_frame_ = ImGui::GetFrameCount();
             camera_framed_ = false;
         }
-        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        // A double click frames the plate, but not while marking a part in
+        // Structural: the view stays where it was (UI50).
+        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !(tab_ == Tab::Structural && structural_tool_ > 0))
             frame_all();
     }
     // A right click, not a drag: on a model, its menu (settings_levels.md,
@@ -8127,6 +10428,28 @@ void App::viewport() {
         }
     }
     object_menu();
+    // Set number of instances… (the model's right-click menu).
+    if (instances_open_) {
+        ImGui::OpenPopup("###instances");
+        instances_open_ = false;
+    }
+    if (ImGui::BeginPopupModal((std::string(tr(T::SetInstancesMenu)) + "###instances").c_str(), nullptr,
+                               ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::SetNextItemWidth(140.0f * scale_);
+        ImGui::InputInt(tr(T::InstancesCount), &instances_count_);
+        instances_count_ = std::clamp(instances_count_, 1, 500);
+        note_rect("instances_count");
+        if (ImGui::Button(tr(T::Ok), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            if (selected_ >= 0 && selected_ < int(objects_.size()))
+                set_instances(std::size_t(selected_), instances_count_);
+            ImGui::CloseCurrentPopup();
+        }
+        note_rect("instances_ok");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::Cancel), ImVec2(120.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
     plate_menu();
     ImGui::End();
     ImGui::PopStyleVar();
@@ -8183,8 +10506,19 @@ void App::view_tools() {
     ImGui::SameLine(0, 10.0f * scale_);
     const T modes[] = {T::RenderFast, T::RenderAmbient, T::RenderRay};
     const T mode_tips[] = {T::RenderFastTip, T::RenderAmbientTip, T::RenderRayTip};
-    if (button("##render", nullptr, tr(modes[int(render_mode_)]), false, false, true, tr(T::RenderTip), size))
+    // A narrow view (the spec team's UI42): the mode's name would run past the
+    // view's edge, so the button keeps only its icon and names the mode in its
+    // tooltip, as the top bar's tabs do.
+    const float label_w = ImGui::CalcTextSize(tr(modes[int(render_mode_)])).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+    const float bar_w = float(std::size(tools)) * (size + 4.0f * scale_) + 20.0f * scale_ + 12.0f * scale_;
+    const bool narrow = bar_w + label_w > view_size_.x - 24.0f * scale_;
+    const std::string render_tip = narrow ? std::string(tr(modes[int(render_mode_)])) + ": " + tr(T::RenderTip)
+                                          : std::string(tr(T::RenderTip));
+    if (button("##render", narrow ? "tisma_view" : nullptr, narrow ? nullptr : tr(modes[int(render_mode_)]), false, false,
+               true, render_tip.c_str(), size))
         ImGui::OpenPopup("##render_menu");
+    g_menu_rects["view_render"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                         ImGui::GetItemRectMax().y);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f * scale_, 7.0f * scale_));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0f * scale_, 12.0f * scale_));
     if (ImGui::BeginPopup("##render_menu")) {
@@ -8230,6 +10564,9 @@ void App::view_tools() {
         ImGui::EndPopup();
     }
     ImGui::PopStyleVar(2);
+    g_menu_rects["view_tools"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                        ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                        ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar(3);
@@ -8270,10 +10607,28 @@ void App::slice_panel() {
         anchor("slice_button");
     } else {
         if (!result_->resin && result_->preview.estimated_seconds > 0.0)
-            loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(result_->preview.estimated_seconds).c_str());
-        if (button("##export", "tisma_save", tr(result_->resin ? T::ExportGoo : T::Export), true, false, true,
-                   tr(T::ExportTip), button_h))
+        {
+            const GcodePreview& p = result_->preview;
+            if (p.preparation_seconds > 0.0) // «1 h 4 min (impresión 58 min, preparación 6 min)», rule 14
+                loc::TextDisabled("%s: %s", tr(T::EstimatedTime),
+                                  format(tr(T::TimeSplit), format_duration(p.estimated_seconds).c_str(),
+                                         format_duration(p.estimated_seconds - p.preparation_seconds).c_str(),
+                                         format_duration(p.preparation_seconds).c_str())
+                                      .c_str());
+            else
+                loc::TextDisabled("%s: %s", tr(T::EstimatedTime), format_duration(p.estimated_seconds).c_str());
+        }
+        // With a tested network program, the main button sends (devices.md, rule 19); exporting moves to ▲.
+        const bool to_host = host_ready() && !result_->resin && device_can_print();
+        if (to_host) {
+            if (button("##export", "tisma_print", tr(T::SendToPrinter), true, false, !host_job_.valid(), nullptr, button_h)) {
+                host_dialog_name_ = host_default_name();
+                host_dialog_open_ = true;
+            }
+        } else if (button("##export", "tisma_save", tr(result_->resin ? T::ExportGoo : T::Export), true, false, true,
+                          tr(T::ExportTip), button_h)) {
             begin_export();
+        }
         g_menu_rects["export"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                         ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         anchor("send_button");
@@ -8283,13 +10638,29 @@ void App::slice_panel() {
         g_menu_rects["save_more"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                            ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
         if (ImGui::BeginPopup("##save_menu")) {
+            // The outputs this slice can go to, the main button's one marked
+            // (interface.md, «Menús»): the program on the network, the
+            // printer on USB, the file.
             const bool connected = printer_ && printer_->status().state == device::PrinterState::Idle;
-            const bool send = ImGui::MenuItem(tr(connected ? T::SendToPrinter : T::SendToPrinterNone), nullptr, false,
-                                              connected && device_can_print() && !result_->resin);
-            g_menu_rects["send"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
-                                          ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
-            if (send)
-                device_print();
+            const bool usb = connected && device_can_print() && !result_->resin;
+            if (to_host) {
+                const bool host = ImGui::MenuItem(tr(T::SendToPrinter), nullptr, true, !host_job_.valid());
+                note_rect("send_host");
+                if (host) {
+                    host_dialog_name_ = host_default_name();
+                    host_dialog_open_ = true;
+                }
+            }
+            if (usb) {
+                const bool send = ImGui::MenuItem((std::string(tr(T::SendToPrinter)) + " (USB)").c_str());
+                note_rect("send");
+                if (send)
+                    device_print();
+            }
+            const bool file = ImGui::MenuItem(tr(result_->resin ? T::ExportGoo : T::Export), nullptr, !to_host);
+            note_rect("export_file");
+            if (file)
+                begin_export();
             const bool project = ImGui::MenuItem(tr(T::SaveProject), "Ctrl+S");
             g_menu_rects["project"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y,
                                              ImGui::GetItemRectMax().x, ImGui::GetItemRectMax().y);
@@ -8298,6 +10669,7 @@ void App::slice_panel() {
             ImGui::EndPopup();
         }
     }
+    host_upload_dialog();
     slice_panel_top_ = ImGui::GetWindowPos().y;
     ImGui::End();
     ImGui::PopStyleColor();
@@ -8338,6 +10710,13 @@ void App::plate_menu() {
         }
         ImGui::EndMenu();
     }
+    // The calibration tests (interface.md, «Menús»: Add calibration model ▸).
+    const bool calibrations = ImGui::BeginMenu(tr(T::AddCalibrationModel));
+    placed("calibration");
+    if (calibrations) {
+        calibration_entries("bed_cal_");
+        ImGui::EndMenu();
+    }
     if (cad_design_) { // the Design tab's tools, also with an empty plate (cad_design.md, rule 3)
         const bool sketch = ImGui::MenuItem(tr(T::DesignSketch));
         placed("design_sketch");
@@ -8353,6 +10732,42 @@ void App::plate_menu() {
     if (arrange) {
         arrange_plate();
         tip("arrange");
+    }
+    // Automatic orientation (orientation.md, «menos material de soporte»):
+    // the chosen model, or every model when none is chosen.
+    const bool orient = ImGui::MenuItem(
+        tr(settings_.machine_technology == MachineTechnology::Msla ? T::OrientLeastPeel : T::OrientLeastSupport), nullptr, false,
+        !objects_.empty());
+    placed("orient");
+    if (orient) {
+        int turned = 0;
+        for (std::size_t i = 0; i < objects_.size(); ++i) {
+            if ((selected_ >= 0 && std::size_t(selected_) != i) || i >= placed_meshes_.size() || placed_meshes_[i].empty())
+                continue;
+            // By the printer: least peel for resin, least support for FDM.
+            OrientResult r;
+            if (settings_.machine_technology == MachineTechnology::Msla) {
+                r = orient_least_peel(placed_meshes_[i], settings_);
+            } else {
+                OrientOptions options;
+                if (settings_.support_angle > 0.0)
+                    options.support_angle = settings_.support_angle;
+                r = orient_least_support(placed_meshes_[i], options);
+            }
+            if (r.cost < r.cost_before - 1e-6) {
+                Rotation& rot = objects_[i].place.rotation;
+                Rotation out{};
+                for (int a = 0; a < 3; ++a)
+                    for (int b = 0; b < 3; ++b)
+                        for (int k = 0; k < 3; ++k)
+                            out[std::size_t(a * 3 + b)] += r.rotation[std::size_t(a * 3 + k)] * rot[std::size_t(k * 3 + b)];
+                rot = out;
+                ++turned;
+            }
+        }
+        if (turned > 0)
+            plate_changed();
+        notify(turned > 0 ? format(tr(T::OrientDone), turned) : std::string(tr(T::OrientNothing)));
     }
     ImGui::EndPopup();
 }
@@ -8371,6 +10786,83 @@ void App::object_menu() {
     }
     PlateObject& o = objects_[std::size_t(selected_)];
     loc::TextDisabled("%s", o.name.c_str());
+    ImGui::Separator();
+    // The model itself (interface.md, «Menús»): its instances, delete, reload,
+    // units, export, size, mirror and split.
+    const std::size_t index = std::size_t(selected_);
+    const auto entry = [](const char* name, const char* label, const char* keys = nullptr, bool enabled = true) {
+        const bool hit = ImGui::MenuItem((std::string(label) + "##" + name).c_str(), keys, false, enabled);
+        note_rect(name);
+        if (!enabled)
+            g_menu_disabled.insert(name);
+        return hit;
+    };
+    const std::size_t copies = instances_of(index).size();
+    if (entry("add_instance", tr(T::AddInstanceMenu), "+")) {
+        set_instances(index, int(copies) + 1);
+        ImGui::EndPopup();
+        return;
+    }
+    if (entry("remove_instance", tr(T::RemoveInstanceMenu), "-", copies > 1)) {
+        set_instances(index, int(copies) - 1);
+        ImGui::EndPopup();
+        return;
+    }
+    if (entry("set_instances", tr(T::SetInstancesMenu))) {
+        instances_count_ = int(copies);
+        instances_open_ = true;
+    }
+    if (entry("delete", tr(T::DeleteMenu), "Del")) {
+        delete_selected();
+        ImGui::EndPopup();
+        return;
+    }
+    const bool printable = ImGui::MenuItem((std::string(tr(T::PrintableMenu)) + "##printable").c_str(), nullptr, o.printable);
+    note_rect("printable");
+    if (printable) {
+        o.printable = !o.printable;
+        plate_changed();
+    }
+    ImGui::Separator();
+    if (entry("reload_object", tr(T::ReloadMenu), nullptr, !o.source.empty()))
+        reload_from_disk();
+    if (entry("convert_meters", tr(T::ConvertMetersMenu))) {
+        for (double& v : o.place.scale)
+            v *= 1000.0;
+        plate_changed();
+    }
+    if (entry("convert_inches", tr(T::ConvertInchesMenu))) {
+        for (double& v : o.place.scale)
+            v *= 25.4;
+        plate_changed();
+    }
+    if (entry("export_object", tr(T::ExportObjectMenu))) {
+        export_object_ = index;
+        purpose_ = Purpose::ExportObject;
+        browser_.open(FileBrowser::Mode::Save, tr(T::ExportObjectMenu), {".stl", ".obj"}, last_folder_,
+                      utf8(from_utf8(o.name).stem()) + ".stl");
+    }
+    ImGui::Separator();
+    if (entry("scale_to_volume", tr(T::ScaleToVolumeMenu), nullptr, settings_.bed.size() >= 3))
+        scale_to_volume(index);
+    if (ImGui::BeginMenu(tr(T::MirrorMenu))) {
+        const T axes[] = {T::AxisX, T::AxisY, T::AxisZ};
+        for (int a = 0; a < 3; ++a)
+            if (entry(a == 0 ? "mirror_x" : a == 1 ? "mirror_y" : "mirror_z", tr(axes[a])))
+                mirror_selected(a);
+        ImGui::EndMenu();
+    }
+    note_rect("mirror");
+    if (ImGui::BeginMenu(tr(T::SplitMenu))) {
+        if (entry("split_objects", tr(T::SplitObjectsMenu)))
+            split_selected();
+        ImGui::EndMenu();
+    }
+    note_rect("split");
+    if (std::size_t(selected_) >= objects_.size()) { // split or mirrored away
+        ImGui::EndPopup();
+        return;
+    }
     ImGui::Separator();
     if (view_level_ == ViewLevel::Basic) {
         loc::TextDisabled("%s", tr(T::ObjectSettingsBasic));
@@ -8717,16 +11209,8 @@ void App::plate_tools() {
         purpose_ = Purpose::AddModel;
         browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
     }
-    if (button("##remove", "tool_remove", nullptr, false, false, chosen, tr(T::ToolRemoveTip), size)) {
-        objects_.erase(objects_.begin() + selected_);
-        selected_ = objects_.empty() ? -1 : std::min(selected_, int(objects_.size()) - 1);
-        if (objects_.empty()) {
-            result_.reset();
-            renderer_.clear_preview();
-            vk_view_.clear_preview();
-        }
-        plate_changed();
-    }
+    if (button("##remove", "tool_remove", nullptr, false, false, chosen, tr(T::ToolRemoveTip), size))
+        delete_selected(true);
     if (button("##duplicate", "tool_duplicate", nullptr, false, false, chosen, tr(T::ToolDuplicateTip), size)) {
         objects_.push_back(objects_[std::size_t(selected_)]);
         selected_ = int(objects_.size()) - 1;
@@ -8802,18 +11286,20 @@ void App::plate_tools() {
             arrange_plate();
             tip("arrange");
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        // Esc: back to Select; again, nothing chosen (interface.md, «Más»: Deselect All).
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            if (tool_ == PlateTool::Select)
+                selected_ = -1;
             tool_ = PlateTool::Select;
-        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen) {
-            objects_.erase(objects_.begin() + selected_);
-            selected_ = -1;
-            if (objects_.empty()) {
-                result_.reset();
-                renderer_.clear_preview();
-                vk_view_.clear_preview();
-            }
-            plate_changed();
         }
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen && !ImGui::GetIO().KeyCtrl) // Ctrl+Del: all
+            delete_selected();
+        // + and − add or take away an instance (interface.md, «Menús»).
+        if (chosen && (ImGui::IsKeyPressed(ImGuiKey_KeypadAdd, false) ||
+                       (ImGui::IsKeyPressed(ImGuiKey_Equal, false) && ImGui::GetIO().KeyShift)))
+            set_instances(std::size_t(selected_), int(instances_of(std::size_t(selected_)).size()) + 1);
+        if (chosen && (ImGui::IsKeyPressed(ImGuiKey_KeypadSubtract, false) || ImGui::IsKeyPressed(ImGuiKey_Minus, false)))
+            set_instances(std::size_t(selected_), int(instances_of(std::size_t(selected_)).size()) - 1);
     }
     // The tool's card, next to the column; under the folded panel's card.
     const float card_top = panel_folded_now() && tab_ == Tab::Prepare && compact_bottom_ > strip_min.y
@@ -8828,6 +11314,7 @@ void App::plate_tools() {
 
     // The chosen tool's card.
     PlateObject& o = objects_[std::size_t(selected_)];
+    const Placement card_before = o.place;
     ImGui::SetNextWindowPos(ImVec2(strip_min.x + strip_size.x + 8.0f * scale_, card_top));
     ImGui::SetNextWindowBgAlpha(0.92f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
@@ -9105,8 +11592,14 @@ void App::plate_tools() {
     if (tool_ == PlateTool::Measure)
         measure_overlay();
     if (changed) {
+        // One undo step per edit: a drag of a slider or a field, or a click.
+        if (!card_editing_)
+            remember_place(selected_, card_before);
+        card_editing_ = true;
         selected_changed_live();
     }
+    if (!ImGui::IsAnyItemActive())
+        card_editing_ = false;
     if (mirror_axis >= 0)
         mirror_selected(mirror_axis);
     if (cut)
@@ -9167,6 +11660,7 @@ void App::mirror_selected(int axis) {
     map.b[a] = 2.0 * centre - map.b[a];
     for (PlateVolume& v : o.volumes)
         v = carried_volume(v, from, map, to);
+    move_engineering(o.engineering, map.a, map.b);
     plate_changed();
 }
 
@@ -9245,6 +11739,8 @@ void App::volumes_overlay() {
         if (objects_[i].volumes.empty())
             continue;
         for (const PlateVolume& v : objects_[i].volumes) {
+            if (v.shape == PlateVolume::Shape::Lattice) // its bars, thousands of faces, not outlined
+                continue;
             const ImU32 colour = v.kind == PlateVolume::Kind::Negative ? IM_COL32(170, 170, 180, 220) : IM_COL32(240, 150, 40, 230);
             const TriangleMesh shape = volume_mesh(v, objects_[i], placed_meshes_[i]);
             // The outline of every face but the cylinder's caps' spokes.
@@ -9538,11 +12034,23 @@ void App::paint_card(ImVec2 at) {
     }
     ImGui::Separator();
     if (paint_channel_ != PaintChannel::Fuzzy) { // fuzzy skin is painted or not
+        // Each mark with a swatch of the colour it paints (UI35).
+        const auto swatch = [&](std::uint32_t colour) {
+            ImGui::SameLine(0, 4.0f * scale_);
+            const float s = ImGui::GetTextLineHeight() * 0.8f;
+            const ImVec2 p = ImGui::GetCursorScreenPos();
+            const float y = p.y + (ImGui::GetFrameHeight() - s) * 0.5f;
+            ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(p.x, y), ImVec2(p.x + s, y + s),
+                                                      ImGui::GetColorU32(rgb(colour)), 3.0f * scale_);
+            ImGui::Dummy(ImVec2(s, ImGui::GetFrameHeight()));
+        };
         if (ImGui::RadioButton(tr(T::PaintEnforce), paint_mark_ == kPaintEnforce))
             paint_mark_ = kPaintEnforce;
+        swatch(theme_.paint_mark_enforce);
         ImGui::SameLine();
         if (ImGui::RadioButton(tr(T::PaintBlock), paint_mark_ == kPaintBlock))
             paint_mark_ = kPaintBlock;
+        swatch(theme_.paint_mark_block);
     }
     ImGui::SetNextItemWidth(170.0f * scale_);
     ImGui::SliderFloat(tr(T::BrushSize), &brush_radius_, 0.2f, 20.0f, field_text(tr(T::BrushSize), "%.1f mm", brush_radius_), ImGuiSliderFlags_Logarithmic);
@@ -9564,9 +12072,11 @@ void App::paint_card(ImVec2 at) {
     ImGui::PopStyleVar(2);
 }
 
-// The stroke from the last dab to the mouse: dabs half a brush apart along
-// the way, so a fast mouse leaves a line and not separate dots (the testers'
-// UI37, the owner's video of 31-10-2026).
+// The stroke from the last dab to the mouse: a point of the model about a
+// brush width apart on the screen along the way, each drawn as a band from
+// the one before (Brush::stroke), so a fast mouse on a slow computer still
+// leaves one line and not separate dots (the testers' UI37 and BH44, the
+// owner's video of 31-10-2026), with few dabs a frame.
 void App::brush_drag(std::size_t object) {
     const ImVec2 to = ImGui::GetIO().MousePos;
     const float dx = to.x - last_stroke_.x, dy = to.y - last_stroke_.y;
@@ -9575,47 +12085,64 @@ void App::brush_drag(std::size_t object) {
     float pixels = 4.0f;
     if (brush_depth_ && view_size_.y > 0.0f)
         pixels = brush_radius_ / (*brush_depth_ * std::tan(0.5f * camera_.lens_fov())) * 0.5f * view_size_.y;
-    const int steps = std::clamp(int(std::ceil(distance / std::max(pixels * 0.5f, 1.0f))), 1, 64);
+    const int steps = std::clamp(int(std::ceil(distance / std::max(pixels * 2.0f, 2.0f))), 1, 32);
     for (int k = 1; k <= steps; ++k) {
         const float t = float(k) / float(steps);
-        brush_stroke(object, ImVec2(last_stroke_.x + dx * t, last_stroke_.y + dy * t));
+        brush_stroke(object, ImVec2(last_stroke_.x + dx * t, last_stroke_.y + dy * t), true);
     }
     last_stroke_ = to;
 }
 
-// Paints the face under a point of the view, on this model only; Shift erases.
-void App::brush_stroke(std::size_t object, ImVec2 at) {
+// Paints the face under a point of the view, on this model only; Shift
+// erases. Joined, the band from the stroke's last dab to it, when that dab
+// is near (not across a jump to a face further back).
+void App::brush_stroke(std::size_t object, ImVec2 at, bool joined) {
     const Vec3 d = ray_at(at), e = camera_.eye();
     const auto hit = pick(placed_meshes_, plate_indexes(), e, d);
-    if (!hit || hit->object != object)
+    if (!hit || hit->object != object) {
+        last_dab_.reset();
         return;
+    }
     Brush brush;
     const Vec3 c = e + d * float(hit->distance);
     brush.centre = {c.x, c.y, c.z};
+    Vec3 from = c;
+    if (joined && last_dab_ && length(c - *last_dab_) <= 6.0f * brush_radius_) {
+        from = *last_dab_;
+        brush.stroke = true;
+        brush.from = {from.x, from.y, from.z};
+    }
+    last_dab_ = c;
     brush.radius = brush_radius_;
-    brush.detail = std::max(0.05, double(brush_radius_) / 8.0);
+    brush.detail = std::max(0.05, double(brush_radius_) / 6.0);
     brush.view = {d.x, d.y, d.z};
     brush.mark = ImGui::GetIO().KeyShift                ? kPaintNone
                  : paint_channel_ == PaintChannel::Fuzzy ? kPaintEnforce
                                                          : paint_mark_;
-    const Vec3f lo{c.x - brush_radius_, c.y - brush_radius_, c.z - brush_radius_};
-    const Vec3f hi{c.x + brush_radius_, c.y + brush_radius_, c.z + brush_radius_};
+    const Vec3f lo{std::min(c.x, from.x) - brush_radius_, std::min(c.y, from.y) - brush_radius_,
+                   std::min(c.z, from.z) - brush_radius_};
+    const Vec3f hi{std::max(c.x, from.x) + brush_radius_, std::max(c.y, from.y) + brush_radius_,
+                   std::max(c.z, from.z) + brush_radius_};
     const std::vector<std::uint32_t> near = indexes_[object].near(lo, hi);
-    if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush, &near) > 0) {
+    std::vector<std::uint32_t> touched;
+    if (paint(objects_[object].painting, paint_channel_, placed_meshes_[object], brush, &near, &touched) > 0) {
         painted_ = true;
-        paint_dirty_ = true;
+        paint_cache_.touch(object, touched);
+        paint_stroked_ = true;
     }
 }
 
 // The view's copy of the painted pieces of the channel in use.
 void App::update_paint_view() {
-    if (!paint_dirty_)
+    if (!paint_dirty_ && !paint_stroked_)
         return;
-    paint_dirty_ = false;
-    const PaintMesh m = paint_mesh(objects_, placed_meshes_, paint_channel_);
+    if (paint_dirty_) // anything but a stroke: all the paint walked again
+        paint_cache_.reset();
+    paint_dirty_ = paint_stroked_ = false;
+    const PaintMesh m = paint_cache_.build(objects_, placed_meshes_, paint_channel_);
     std::vector<Renderer::PaintGroup> groups;
     for (const PaintMesh::Group& g : m.groups)
-        groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_block : theme_.paint_enforce)});
+        groups.push_back({g.first, g.count, vec(g.mark == kPaintBlock ? theme_.paint_mark_block : theme_.paint_mark_enforce)});
     renderer_.set_paint(m.vertices, groups);
     vk_view_.set_paint(m.vertices, groups);
 }
@@ -9689,7 +12216,7 @@ void App::help_windows() {
         static const std::map<std::string, PlateTool> tool_of = {{"move", PlateTool::Move}, {"rotate", PlateTool::Rotate},
                                                                  {"scale", PlateTool::Scale}, {"lay", PlateTool::LayFlat},
                                                                  {"paint", PlateTool::Paint}};
-        static const std::map<std::string, Tab> tab_of = {{"preview", Tab::Preview}, {"analysis", Tab::Analysis},
+        static const std::map<std::string, Tab> tab_of = {{"preview", Tab::Preview}, {"analysis", Tab::Structural},
                                                           {"design", Tab::Design}, {"calibration", Tab::Calibration},
                                                           {"device", Tab::Device}};
         const auto tool = tool_of.find(tip_);
@@ -10370,6 +12897,8 @@ void App::preview_panels() {
         };
         if (p.estimated_seconds >= 0.0)
             line(tr(T::EstimatedTime), format_duration(p.estimated_seconds));
+        if (p.preparation_seconds > 0.0) // heating, homing, waits (print_time.md, rule 14)
+            line(tr(T::PreparationTime), format_duration(p.preparation_seconds));
         if (legend_full_) { // folded: the time only
             if (p.first_layer_seconds > 0.0)
                 line(tr(T::FirstLayerTime), format_duration(p.first_layer_seconds));
@@ -10401,74 +12930,6 @@ void App::preview_panels() {
     ImGui::End();
     ImGui::PopStyleColor();
     ImGui::PopStyleVar();
-}
-
-void App::analysis_panel() {
-    const float margin = 12.0f * scale_;
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
-    ImGui::SetNextWindowSizeConstraints(ImVec2(360.0f * scale_, 0), ImVec2(460.0f * scale_, FLT_MAX));
-    ImGui::SetNextWindowBgAlpha(0.92f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.0f * scale_);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
-    ImGui::Begin("##analysis", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav);
-    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
-    ImGui::TextUnformatted(tr(T::AnalysisTitle));
-    ImGui::PopFont();
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 420.0f * scale_);
-    loc::TextDisabled("%s", tr(T::AnalysisHint));
-    ImGui::Separator();
-    if (!has_plate_) {
-        ImGui::TextUnformatted(tr(T::AnalysisNeedsModel));
-    } else if (voxel_job_.running() || !voxels_) {
-        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::Estimating));
-    } else if (!voxels_->ok) {
-        loc::TextColored(rgb(0xE5484D), "%s", voxels_->error.c_str());
-    } else {
-        const auto card = [&](const char* id, T title, const VoxelCount& c) {
-            ImGui::PushID(id);
-            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
-            if (!c.ok) {
-                loc::TextColored(rgb(0xE5484D), "%s", c.error.c_str());
-                ImGui::PopID();
-                return;
-            }
-            const bool counted = c.printed_voxels > 0;
-            ImGui::PushFont(nullptr, kTitleSize * 1.25f);
-            ImGui::TextUnformatted(number_text(counted ? c.printed_voxels : c.grid_voxels).c_str());
-            ImGui::PopFont();
-            loc::TextDisabled("%s", tr(counted ? T::Voxels : T::GridVoxels));
-            if (counted && ImGui::BeginTable("##card", 2)) {
-                auto line = [](const char* name, const std::string& value) {
-                    ImGui::TableNextRow();
-                    ImGui::TableNextColumn();
-                    loc::TextDisabled("%s", name);
-                    ImGui::TableNextColumn();
-                    ImGui::TextUnformatted(value.c_str());
-                };
-                line(tr(T::GridVoxels), number_text(c.grid_voxels));
-                line(tr(T::VoxelSize), format("%.3f mm  ·  %s", c.voxel, format(tr(T::PerLayer), c.rows_per_layer).c_str()));
-                line(tr(T::Memory), format("%.0f MB", c.memory_mb));
-                line(tr(T::ApproxTime), format_duration(c.seconds));
-                ImGui::EndTable();
-            }
-            if (c.over_limit)
-                loc::TextColored(rgb(0xE8A33D), "%s", format(tr(T::OverLimit), number_text(c.limit).c_str()).c_str());
-            ImGui::PopID();
-        };
-        card("normal", T::QualityNormal, voxels_->normal);
-        ImGui::Separator();
-        card("high", T::QualityHigh, voxels_->high);
-    }
-    ImGui::Separator();
-    loc::TextDisabled("%s", tr(T::AnalysisCli));
-    ImGui::TextDisabled("tisma-engine analyze");
-    ImGui::PopTextWrapPos();
-    ImGui::End();
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
 }
 
 // The Design tab (docs/spec/features/cad_design.md, stage D1): the panel on
@@ -10582,6 +13043,228 @@ void App::add_primitive(cad::Primitive kind, const std::array<double, cad::kMaxS
     rebuild_design();
 }
 
+namespace {
+
+T op_label(cad::OperationKind kind) {
+    switch (kind) {
+    case cad::OperationKind::Fillet: return T::OpFillet;
+    case cad::OperationKind::Chamfer: return T::OpChamfer;
+    case cad::OperationKind::Shell: return T::OpShell;
+    case cad::OperationKind::Hole: return T::OpHole;
+    case cad::OperationKind::Mirror: return T::OpMirror;
+    case cad::OperationKind::PatternCircular: return T::OpPatternCircular;
+    case cad::OperationKind::PatternRectangular: return T::OpPatternRectangular;
+    case cad::OperationKind::Combine: return T::OpCombine;
+    case cad::OperationKind::Thread: return T::OpThread;
+    case cad::OperationKind::Move: return T::OpMove;
+    case cad::OperationKind::Split: return T::OpSplit;
+    case cad::OperationKind::Draft: return T::OpDraft;
+    }
+    return T::OpFillet;
+}
+
+// The operations that take points in the view (edges, faces, hole places).
+bool takes_points(cad::OperationKind kind) {
+    return kind == cad::OperationKind::Fillet || kind == cad::OperationKind::Chamfer || kind == cad::OperationKind::Shell ||
+           kind == cad::OperationKind::Hole || kind == cad::OperationKind::Thread || kind == cad::OperationKind::Draft;
+}
+
+T pick_hint(cad::OperationKind kind) {
+    return kind == cad::OperationKind::Shell    ? T::OpPickFaces
+           : kind == cad::OperationKind::Hole   ? T::OpPickHoles
+           : kind == cad::OperationKind::Thread ? T::OpPickThread
+           : kind == cad::OperationKind::Draft  ? T::OpPickDraft
+                                                : T::OpPickEdges;
+}
+
+constexpr cad::OperationKind kOperations[] = {
+    cad::OperationKind::Fillet,  cad::OperationKind::Chamfer,         cad::OperationKind::Shell,
+    cad::OperationKind::Hole,    cad::OperationKind::Mirror,          cad::OperationKind::PatternCircular,
+    cad::OperationKind::PatternRectangular, cad::OperationKind::Combine, cad::OperationKind::Thread,
+    cad::OperationKind::Move,    cad::OperationKind::Split,           cad::OperationKind::Draft};
+
+} // namespace
+
+// An operation on the last body made (rule 7, stage D4): with points to
+// pick, the view takes them until Enter.
+void App::add_operation(cad::OperationKind kind) {
+    std::vector<std::string> bodies;
+    for (const cad::Feature& g : design_.features)
+        if (g.type != cad::Feature::Type::Operation && !g.suppressed)
+            bodies.push_back(g.name);
+    if (bodies.empty()) {
+        command_message_ = tr(T::OpNeedBody);
+        return;
+    }
+    cad::Feature f;
+    f.type = cad::Feature::Type::Operation;
+    f.op.kind = kind;
+    f.op.target = bodies.back();
+    f.name = design_.free_name(tr(op_label(kind)));
+    switch (kind) {
+    case cad::OperationKind::Fillet: f.op.value = 2.0; break;
+    case cad::OperationKind::Chamfer: f.op.value = 1.0; break;
+    case cad::OperationKind::Shell: f.op.value = 2.0; break;
+    case cad::OperationKind::Hole: f.op.standard = "M5"; f.op.value = 5.0; break;
+    case cad::OperationKind::PatternRectangular: f.op.count = 3; break;
+    case cad::OperationKind::Thread: f.op.standard = "M8"; break;
+    case cad::OperationKind::Move: f.op.angle = 0.0; f.op.offset = {10.0, 0.0, 0.0}; break;
+    case cad::OperationKind::Split: f.op.plane = "XY"; break;
+    case cad::OperationKind::Draft: f.op.value = 3.0; f.op.plane = "XY"; break;
+    case cad::OperationKind::Combine:
+        if (bodies.size() >= 2) // the body before it, cut from the last
+            f.op.target = bodies[bodies.size() - 2], f.op.tools = {bodies.back()};
+        break;
+    default: break;
+    }
+    design_.features.push_back(std::move(f));
+    design_scroll_to_ = std::to_string(design_.features.size());
+    if (takes_points(kind)) {
+        design_pick_ = design_.features.size() - 1;
+        command_message_ = tr(pick_hint(kind));
+        command_focus_ = true;
+    } else {
+        design_pick_.reset();
+        rebuild_design();
+    }
+}
+
+// Where the mouse's ray meets the design's bodies, nearest first (Möller and
+// Trumbore's ray-triangle test, every triangle: designs are small).
+bool App::design_hit(std::array<double, 3>& at) const {
+    const Vec3 e = camera_.eye(), d = mouse_ray();
+    double best = std::numeric_limits<double>::infinity();
+    for (std::size_t t = 0; t < design_mesh_.triangle_count(); ++t) {
+        const Vec3f a = design_mesh_.corner(t, 0), b = design_mesh_.corner(t, 1), c = design_mesh_.corner(t, 2);
+        const double e1[3] = {double(b.x) - a.x, double(b.y) - a.y, double(b.z) - a.z};
+        const double e2[3] = {double(c.x) - a.x, double(c.y) - a.y, double(c.z) - a.z};
+        const double p[3] = {d.y * e2[2] - d.z * e2[1], d.z * e2[0] - d.x * e2[2], d.x * e2[1] - d.y * e2[0]};
+        const double det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+        if (std::abs(det) < 1e-12)
+            continue;
+        const double inv = 1.0 / det;
+        const double s[3] = {double(e.x) - a.x, double(e.y) - a.y, double(e.z) - a.z};
+        const double u = (s[0] * p[0] + s[1] * p[1] + s[2] * p[2]) * inv;
+        if (u < 0.0 || u > 1.0)
+            continue;
+        const double q[3] = {s[1] * e1[2] - s[2] * e1[1], s[2] * e1[0] - s[0] * e1[2], s[0] * e1[1] - s[1] * e1[0]};
+        const double v = (d.x * q[0] + d.y * q[1] + d.z * q[2]) * inv;
+        if (v < 0.0 || u + v > 1.0)
+            continue;
+        const double dist = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) * inv;
+        if (dist > 1e-9 && dist < best) {
+            best = dist;
+            at = {e.x + d.x * dist, e.y + d.y * dist, e.z + d.z * dist};
+        }
+    }
+    return std::isfinite(best);
+}
+
+// The design's sharp edges (faces meeting at more than 30 degrees, or an
+// open edge), where a fillet or a chamfer can go.
+void App::update_design_edges() {
+    if (design_edges_tris_ == design_mesh_.triangle_count() && design_edges_volume_ == design_volume_)
+        return;
+    design_edges_tris_ = design_mesh_.triangle_count();
+    design_edges_volume_ = design_volume_;
+    design_edges_.clear();
+    using Key = std::array<long long, 3>;
+    const auto key = [](const Vec3f& v) {
+        return Key{std::llround(double(v.x) * 1e4), std::llround(double(v.y) * 1e4), std::llround(double(v.z) * 1e4)};
+    };
+    std::map<std::pair<Key, Key>, std::vector<std::array<double, 3>>> edges;
+    std::map<std::pair<Key, Key>, std::pair<Vec3f, Vec3f>> ends;
+    for (std::size_t t = 0; t < design_mesh_.triangle_count(); ++t) {
+        const Vec3f c[3] = {design_mesh_.corner(t, 0), design_mesh_.corner(t, 1), design_mesh_.corner(t, 2)};
+        const double u[3] = {double(c[1].x) - c[0].x, double(c[1].y) - c[0].y, double(c[1].z) - c[0].z};
+        const double v[3] = {double(c[2].x) - c[0].x, double(c[2].y) - c[0].y, double(c[2].z) - c[0].z};
+        std::array<double, 3> n{u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]};
+        const double len = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+        if (!(len > 0.0))
+            continue;
+        for (double& x : n)
+            x /= len;
+        for (int k = 0; k < 3; ++k) {
+            Key a = key(c[k]), b = key(c[(k + 1) % 3]);
+            const bool swap = b < a;
+            if (swap)
+                std::swap(a, b);
+            edges[{a, b}].push_back(n);
+            ends[{a, b}] = swap ? std::pair{c[(k + 1) % 3], c[k]} : std::pair{c[k], c[(k + 1) % 3]};
+        }
+    }
+    for (const auto& [k, normals] : edges) {
+        const bool sharp = normals.size() != 2 || normals[0][0] * normals[1][0] + normals[0][1] * normals[1][1] +
+                                                          normals[0][2] * normals[1][2] < std::cos(30.0 * std::numbers::pi / 180.0);
+        if (sharp) {
+            const auto& [p, q] = ends[k];
+            design_edges_.push_back({std::array<float, 3>{p.x, p.y, p.z}, std::array<float, 3>{q.x, q.y, q.z}});
+        }
+    }
+}
+
+// A point picked for the operation being edited: for a fillet or a chamfer
+// the nearest point of the nearest sharp edge (within a few millimetres),
+// away from its ends so it names one edge; for a face, the point itself.
+void App::design_pick_at(const std::array<double, 3>& p) {
+    if (!design_pick_ || *design_pick_ >= design_.features.size() ||
+        design_.features[*design_pick_].type != cad::Feature::Type::Operation) {
+        design_pick_.reset();
+        return;
+    }
+    cad::Feature& f = design_.features[*design_pick_];
+    std::array<double, 3> at = p;
+    if (f.op.kind == cad::OperationKind::Fillet || f.op.kind == cad::OperationKind::Chamfer) {
+        update_design_edges();
+        double best = 3.0;
+        bool found = false;
+        for (const auto& [a, b] : design_edges_) {
+            const double d[3] = {double(b[0]) - a[0], double(b[1]) - a[1], double(b[2]) - a[2]};
+            const double l2 = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+            if (!(l2 > 0.0))
+                continue;
+            const double t = std::clamp(((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1] + (p[2] - a[2]) * d[2]) / l2, 0.1, 0.9);
+            const std::array<double, 3> q{a[0] + t * d[0], a[1] + t * d[1], a[2] + t * d[2]};
+            const double dist = std::hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
+            if (dist < best)
+                best = dist, at = q, found = true;
+        }
+        if (!found) {
+            command_message_ = tr(T::OpNoEdge);
+            return;
+        }
+    }
+    f.op.refs.push_back(at);
+    command_message_ = format(tr(T::OpPointAdded), int(f.op.refs.size()));
+    rebuild_design();
+}
+
+// The points of the operation being picked, over the view.
+void App::design_pick_overlay() {
+    if (!design_pick_ || *design_pick_ >= design_.features.size() || !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const cad::Feature& f = design_.features[*design_pick_];
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    const ImU32 mark = ImGui::GetColorU32(rgb(0x3FBF7F));
+    for (const auto& r : f.op.refs) {
+        const float x = float(r[0]), y = float(r[1]), z = float(r[2]);
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12], cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(w > 1e-6f))
+            continue;
+        const ImVec2 q(view_pos_.x + (cx / w * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / w * 0.5f) * view_size_.y);
+        dl->AddCircleFilled(q, 5.0f * scale_, mark);
+    }
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + 0.5f * view_size_.x, view_pos_.y + 60.0f * scale_), ImGuiCond_Always, ImVec2(0.5f, 0.0f));
+    ImGui::SetNextWindowBgAlpha(0.85f);
+    ImGui::Begin("##design_pick_hint", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs);
+    ImGui::TextUnformatted(tr(pick_hint(f.op.kind)));
+    ImGui::End();
+}
+
 // The design built again by the bundled tool, in the background; while a
 // build runs, the next waits for it (one at a time, the last design wins).
 void App::rebuild_design() {
@@ -10596,10 +13279,21 @@ void App::rebuild_design() {
     const cad::Design copy = design_;
     const std::filesystem::path exe = solidcraft_.exe;
     const cad::MeshQuality quality = cad::quality_for(settings_.cad_chord_tolerance, cad::nominal_size(copy));
-    design_job_.start([exe, copy, quality] { return cad::build_design(exe, copy, quality); });
+    if (!design_session_ || design_session_->exe() != exe)
+        design_session_ = std::make_shared<cad::SolidCraftSession>(exe);
+    std::shared_ptr<cad::SolidCraftSession> session = design_session_;
+    design_job_.start([exe, copy, quality, session] {
+        return cad::build_timeline(exe, copy, quality, 120.0, session.get());
+    });
 }
 
 void App::design_built(cad::BuildResult built) {
+    design_failed_ = built.failed_feature;
+    design_failure_ = built.failure;
+    if (built.session_restarted && !design_restart_noted_) {
+        design_restart_noted_ = true;
+        notify(tr(T::DesignRestarted));
+    }
     if (built.ok) {
         design_error_.clear();
         design_mesh_ = std::move(built.mesh);
@@ -10699,8 +13393,7 @@ void App::design_panel() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
     const auto rect_of = [](const char* name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     const auto section = [&](T title) {
         ImGui::Spacing();
@@ -10714,14 +13407,20 @@ void App::design_panel() {
     ImGui::PushFont(nullptr, kTitleSize * 0.9f);
     ImGui::TextUnformatted(tr(T::DesignTitle));
     ImGui::PopFont();
-    loc::TextColored(rgb(kViolet), "%s", design_.name.c_str());
+    // The design's own name; an untitled one has none (it would only repeat
+    // the title, and in English: TR22).
+    if (!design_.name.empty() && design_.name != cad::Design{}.name)
+        loc::TextColored(rgb(kViolet), "%s", design_.name.c_str());
     ImGui::PushTextWrapPos(0.0f);
     if (!solidcraft_probed_) {
         loc::TextDisabled("%s", tr(T::DesignChecking));
     } else if (!solidcraft_.available) { // rule 22 bis
         loc::TextColored(rgb(0xE5484D), "%s", tr(T::DesignMissing));
         rect_of("design_missing");
-        loc::TextDisabled("%s", solidcraft_.error.c_str());
+        // The component's own words (in English, for a problem report) only
+        // on the line's tooltip: one line in the chosen language (TR22).
+        if (!solidcraft_.error.empty() && ImGui::IsItemHovered())
+            loc::SetTooltip("%s", solidcraft_.error.c_str());
     }
     const bool ready = solidcraft_probed_ && solidcraft_.available;
 
@@ -10817,27 +13516,241 @@ void App::design_panel() {
         ImGui::SameLine();
         ImGui::Checkbox(tr(T::SketchPolar), &e.polar);
         loc::TextDisabled("%s", tr(T::SketchHint));
+        // The degrees of freedom left (rule 5), and the constraint tools.
+        {
+            const cad::SketchSolve& dof = sketch_dof();
+            if (!dof.solved)
+                loc::TextColored(rgb(0xE5484D), "%s", tr(T::SketchDofUnsolved));
+            else if (dof.dof == 0 && !editing_sketch()->empty())
+                loc::TextColored(rgb(theme_.dark ? 0xF5F5F7 : 0x1A1A2E), "%s", tr(T::SketchDofNone));
+            else
+                loc::TextColored(rgb(0x4C9BFF), tr(T::SketchDof), dof.dof);
+            rect_of("design_sketch_dof");
+            const float full = dof.unknowns > 0 ? 1.0f - float(dof.dof) / float(dof.unknowns) : 0.0f;
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(dof.dof == 0 ? theme_.accent : 0x4C9BFF));
+            ImGui::ProgressBar(full, ImVec2(-1.0f, 4.0f * scale_), "");
+            ImGui::PopStyleColor();
+            loc::TextDisabled("%s", tr(T::SketchRules));
+            using R = SketchEdit::Rule;
+            const std::tuple<R, T, const char*> tools[] = {
+                {R::Dimension, T::RuleDimension, "sketch_rule_dimension"},
+                {R::Horizontal, T::RuleHorizontal, "sketch_rule_horizontal"},
+                {R::Vertical, T::RuleVertical, "sketch_rule_vertical"},
+                {R::Parallel, T::RuleParallel, "sketch_rule_parallel"},
+                {R::Perpendicular, T::RulePerpendicular, "sketch_rule_perpendicular"},
+                {R::Equal, T::RuleEqual, "sketch_rule_equal"},
+                {R::Coincident, T::RuleCoincident, "sketch_rule_coincident"},
+                {R::Concentric, T::RuleConcentric, "sketch_rule_concentric"},
+                {R::Tangent, T::RuleTangent, "sketch_rule_tangent"},
+                {R::Fixed, T::RuleFixed, "sketch_rule_fixed"},
+                {R::Angle, T::RuleAngle, "sketch_rule_angle"},
+            };
+            float x = 0.0f;
+            const float room = ImGui::GetContentRegionAvail().x;
+            for (const auto& [rule, label, id] : tools) {
+                const float w = ImGui::CalcTextSize(tr(label)).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+                if (x > 0.0f && x + w <= room)
+                    ImGui::SameLine();
+                else
+                    x = 0.0f;
+                const bool on = e.tool == SketchEdit::Tool::Constrain && e.rule == rule;
+                if (on)
+                    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+                if (ImGui::SmallButton(tr(label)))
+                    sketch_rule_tool(rule);
+                if (on)
+                    ImGui::PopStyleColor();
+                rect_of(id);
+                x += w + ImGui::GetStyle().ItemSpacing.x;
+            }
+        }
+        // Editar (rule 17).
+        {
+            loc::TextDisabled("%s", tr(T::SketchEditTools));
+            using K = SketchEdit::EditKind;
+            const std::tuple<K, T, const char*> edits[] = {
+                {K::Trim, T::EditTrim, "sketch_edit_trim"},       {K::Extend, T::EditExtend, "sketch_edit_extend"},
+                {K::Offset, T::EditOffset, "sketch_edit_offset"}, {K::Fillet, T::EditFillet, "sketch_edit_fillet"},
+                {K::Chamfer, T::EditChamfer, "sketch_edit_chamfer"},
+                {K::Mirror, T::EditMirror, "sketch_edit_mirror"}, {K::Array, T::EditArray, "sketch_edit_array"},
+                {K::Move, T::EditMove, "sketch_edit_move"},       {K::Copy, T::EditCopy, "sketch_edit_copy"},
+                {K::Rotate, T::EditRotate, "sketch_edit_rotate"}, {K::Scale, T::EditScale, "sketch_edit_scale"},
+                {K::Distance, T::EditDistance, "sketch_measure_distance"}, {K::Area, T::EditArea, "sketch_measure_area"},
+            };
+            float x = 0.0f;
+            const float room = ImGui::GetContentRegionAvail().x;
+            for (const auto& [kind, label, id] : edits) {
+                const float w = ImGui::CalcTextSize(tr(label)).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+                if (x > 0.0f && x + w <= room)
+                    ImGui::SameLine();
+                else
+                    x = 0.0f;
+                const bool on = e.tool == SketchEdit::Tool::Edit && e.edit == kind;
+                if (on)
+                    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+                if (ImGui::SmallButton(tr(label)))
+                    sketch_edit_tool(kind);
+                if (on)
+                    ImGui::PopStyleColor();
+                rect_of(id);
+                x += w + ImGui::GetStyle().ItemSpacing.x;
+            }
+        }
+        // Drawings from other programs, and the sketch out (rules 19 bis, 20).
+        if (ImGui::SmallButton(tr(T::SketchImportDxf))) {
+            purpose_ = Purpose::ImportSketchDxf;
+            browser_.open(FileBrowser::Mode::Open, tr(T::SketchImportDxf), {".dxf"}, last_folder_);
+        }
+        rect_of("sketch_import_dxf");
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::SketchImportSvg))) {
+            purpose_ = Purpose::ImportSketchSvg;
+            browser_.open(FileBrowser::Mode::Open, tr(T::SketchImportSvg), {".svg"}, last_folder_);
+        }
+        rect_of("sketch_import_svg");
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::SketchExportDxf))) {
+            purpose_ = Purpose::ExportSketchDxf;
+            browser_.open(FileBrowser::Mode::Save, tr(T::SketchExportDxf), {".dxf"}, last_folder_, "boceto.dxf");
+        }
+        rect_of("sketch_export_dxf");
         if (ImGui::Button(tr(T::SketchFinish)))
             finish_sketch();
         rect_of("design_sketch_finish");
     } else {
         loc::TextDisabled("%s", tr(T::DesignSketch));
     }
-    // The stages to come, greyed out (rule 3), one line each.
-    for (const T title : {T::DesignSecOperations, T::DesignSecParameters}) {
-        ImGui::Spacing();
-        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
-        ImGui::SameLine();
-        loc::TextDisabled("· %s", tr(T::ComingSoon));
-        ImGui::Separator();
+    // Operaciones (rule 7, stage D4): on the bodies made; each one known to
+    // the installed SolidCraft, the rest «Próximamente».
+    section(T::DesignSecOperations);
+    {
+        const bool any_body = std::any_of(design_.features.begin(), design_.features.end(), [](const cad::Feature& g) {
+            return g.type != cad::Feature::Type::Operation && !g.suppressed;
+        });
+        float x = 0.0f;
+        const float room = ImGui::GetContentRegionAvail().x;
+        for (const cad::OperationKind kind : kOperations) {
+            const char* label = tr(op_label(kind));
+            const float w = ImGui::CalcTextSize(label).x + 2.0f * ImGui::GetStyle().FramePadding.x;
+            if (x > 0.0f && x + w <= room)
+                ImGui::SameLine();
+            else
+                x = 0.0f;
+            const bool known = ready && solidcraft_.has(cad::operation_command(kind));
+            ImGui::BeginDisabled(!known || !any_body);
+            if (ImGui::Button(label))
+                add_operation(kind);
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && (!known || !any_body))
+                loc::SetTooltip("%s", tr(!known ? T::ComingSoon : T::OpNeedBody));
+            rect_of((std::string("design_op_") + cad::operation_name(kind)).c_str());
+            x += w + ImGui::GetStyle().ItemSpacing.x;
+        }
+        if (design_pick_ && *design_pick_ < design_.features.size()) {
+            loc::TextColored(rgb(theme_.accent_hover), "%s", tr(pick_hint(design_.features[*design_pick_].op.kind)));
+            if (ImGui::SmallButton(tr(T::DesignDone)))
+                design_pick_.reset(), rebuild_design();
+            rect_of("design_pick_done");
+        }
     }
+
+    // Parámetros (rule 9): a name and an expression each, its value or why
+    // it has none; changing one rebuilds the part.
+    bool changed = false;
+    section(T::DesignSecParameters);
+    {
+        const cad::ParameterValues values = cad::evaluate_parameters(design_.parameters);
+        if (design_.parameters.empty())
+            loc::TextDisabled("%s", tr(T::ParamNone));
+        std::optional<std::size_t> gone;
+        for (std::size_t i = 0; i < design_.parameters.size(); ++i) {
+            cad::Parameter& p = design_.parameters[i];
+            ImGui::PushID(int(i) + 10000);
+            char name[64], expression[256];
+            std::snprintf(name, sizeof name, "%s", p.name.c_str());
+            std::snprintf(expression, sizeof expression, "%s", p.expression.c_str());
+            ImGui::SetNextItemWidth(90.0f * scale_);
+            if (ImGui::InputText("##name", name, sizeof name))
+                p.name = name, design_edited_ = true;
+            rect_of(("design_param_name_" + std::to_string(i + 1)).c_str());
+            ImGui::SameLine();
+            ImGui::TextUnformatted("=");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 30.0f * scale_);
+            if (ImGui::InputText("##expression", expression, sizeof expression))
+                p.expression = expression, design_edited_ = true;
+            rect_of(("design_param_expr_" + std::to_string(i + 1)).c_str());
+            ImGui::SameLine();
+            if (ImGui::SmallButton("×"))
+                gone = i;
+            if (ImGui::IsItemHovered())
+                loc::SetTooltip("%s", tr(T::ParamDelete));
+            if (const auto it = values.values.find(p.name); it != values.values.end())
+                loc::TextDisabled("%s", format(it->second.measure == cad::Measure::Angle ? "%.4g°"
+                                               : it->second.measure == cad::Measure::Length ? "%.4g mm"
+                                                                                            : "%.4g",
+                                               it->second.value)
+                                            .c_str());
+            else
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(T::ParamBadValue));
+            ImGui::PopID();
+        }
+        if (gone) {
+            design_.parameters.erase(design_.parameters.begin() + std::ptrdiff_t(*gone));
+            changed = true;
+        }
+        if (ImGui::SmallButton(tr(T::ParamAdd))) {
+            std::string name = "p1";
+            for (int k = 1; std::any_of(design_.parameters.begin(), design_.parameters.end(),
+                                        [&](const cad::Parameter& q) { return q.name == name; });)
+                name = "p" + std::to_string(++k);
+            design_.parameters.push_back({name, "10 mm"});
+        }
+        rect_of("design_param_add");
+    }
+    // The «fx» beside a size: the expression it takes from the parameters
+    // (rule 9), in a small box; empty, the number again.
+    const auto bind = [&](cad::Feature& f, const std::string& target) {
+        ImGui::SameLine();
+        ImGui::PushID(target.c_str());
+        const auto it = f.bindings.find(target);
+        const bool bound = it != f.bindings.end();
+        if (bound)
+            ImGui::PushStyleColor(ImGuiCol_Text, rgb(theme_.accent_hover));
+        if (ImGui::SmallButton("fx"))
+            ImGui::OpenPopup("##bind");
+        if (bound)
+            ImGui::PopStyleColor();
+        rect_of(("design_fx_" + std::to_string(&f - design_.features.data() + 1) + "_" + target).c_str());
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s%s%s", tr(T::ParamBind), bound ? "\n\n= " : "", bound ? it->second.c_str() : "");
+        if (ImGui::BeginPopup("##bind")) {
+            char text[256];
+            std::snprintf(text, sizeof text, "%s", bound ? it->second.c_str() : "");
+            ImGui::SetNextItemWidth(240.0f * scale_);
+            if (ImGui::IsWindowAppearing())
+                ImGui::SetKeyboardFocusHere();
+            if (ImGui::InputText("##expr", text, sizeof text)) {
+                if (text[0] == '\0')
+                    f.bindings.erase(target);
+                else
+                    f.bindings[target] = text;
+                design_edited_ = true;
+            }
+            // Enter takes the expression and closes the box.
+            if (ImGui::IsItemDeactivated() && ImGui::IsKeyPressed(ImGuiKey_Enter))
+                ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+        ImGui::PopID();
+    };
 
     // Historial: one row per feature, its eye, its name and its sizes.
     section(T::DesignSecHistory);
     if (design_.features.empty())
         loc::TextDisabled("%s", tr(T::DesignNoBodies));
     std::optional<std::size_t> removed;
-    bool changed = false;
+    std::optional<std::pair<std::size_t, std::size_t>> moved;
     for (std::size_t i = 0; i < design_.features.size(); ++i) {
         cad::Feature& f = design_.features[i];
         ImGui::PushID(int(i));
@@ -10854,16 +13767,295 @@ void App::design_panel() {
             loc::SetTooltip("%s", tr(T::DesignSuppress));
         rect_of(("design_eye_" + std::to_string(i + 1)).c_str());
         ImGui::SameLine();
-        ImGui::TextUnformatted(f.name.c_str());
+        // Its name: red when it fails, grey while it waits (rule 8); a
+        // double click renames it.
+        const bool fails = design_failed_ && *design_failed_ == i && !f.suppressed;
+        const bool waits = design_failed_ && i > *design_failed_ && !f.suppressed;
+        if (design_rename_ == int(i)) {
+            ImGui::SetNextItemWidth(160.0f * scale_);
+            if (design_rename_focus_) {
+                ImGui::SetKeyboardFocusHere();
+                design_rename_focus_ = false;
+            }
+            ImGui::InputText("##rename", design_rename_buf_, sizeof design_rename_buf_);
+            rect_of(("design_rename_" + std::to_string(i + 1)).c_str());
+            if (ImGui::IsItemDeactivated()) {
+                std::string name = design_rename_buf_;
+                while (!name.empty() && std::isspace(static_cast<unsigned char>(name.back())))
+                    name.pop_back();
+                while (!name.empty() && std::isspace(static_cast<unsigned char>(name.front())))
+                    name.erase(name.begin());
+                const bool taken = std::any_of(design_.features.begin(), design_.features.end(),
+                                               [&](const cad::Feature& g) { return &g != &f && g.name == name; });
+                if (!ImGui::IsKeyPressed(ImGuiKey_Escape) && !name.empty() && name != f.name) {
+                    if (taken) {
+                        command_message_ = tr(T::DesignNameTaken);
+                    } else {
+                        f.name = name;
+                        changed = true;
+                    }
+                }
+                design_rename_ = -1;
+            }
+        } else {
+            if (fails)
+                ImGui::PushStyleColor(ImGuiCol_Text, rgb(0xE5484D));
+            else if (waits)
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            ImGui::Selectable(f.name.c_str(), false, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(ImGui::CalcTextSize(f.name.c_str()).x, 0.0f));
+            if (fails || waits)
+                ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) {
+                loc::SetTooltip("%s", tr(T::DesignRenameTip));
+                if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                    design_rename_ = int(i);
+                    design_rename_focus_ = true;
+                    std::snprintf(design_rename_buf_, sizeof design_rename_buf_, "%s", f.name.c_str());
+                }
+            }
+            rect_of(("design_name_" + std::to_string(i + 1)).c_str());
+        }
         ImGui::SameLine();
-        loc::TextDisabled("(%s)", f.type == cad::Feature::Type::Sketch ? tr(T::DesignSketch) : primitive_label(f.kind));
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 24.0f * scale_);
+        loc::TextDisabled("(%s)", f.type == cad::Feature::Type::Sketch      ? tr(T::DesignSketch)
+                                  : f.type == cad::Feature::Type::Operation ? tr(op_label(f.op.kind))
+                                                                            : primitive_label(f.kind));
+        // Moved earlier or later in the timeline, or deleted.
+        {
+            const ImGuiStyle& st = ImGui::GetStyle();
+            const float buttons = 2.0f * ImGui::GetFrameHeight() + ImGui::CalcTextSize("×").x + 2.0f * st.FramePadding.x +
+                                  2.0f * st.ItemSpacing.x;
+            ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - buttons);
+        }
+        ImGui::BeginDisabled(i == 0);
+        if (ImGui::ArrowButton("##up", ImGuiDir_Up))
+            moved = std::pair{i, i - 1};
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            loc::SetTooltip("%s", tr(T::DesignMoveUp));
+        rect_of(("design_up_" + std::to_string(i + 1)).c_str());
+        ImGui::SameLine();
+        ImGui::BeginDisabled(i + 1 == design_.features.size());
+        if (ImGui::ArrowButton("##down", ImGuiDir_Down))
+            moved = std::pair{i, i + 1};
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+            loc::SetTooltip("%s", tr(T::DesignMoveDown));
+        rect_of(("design_down_" + std::to_string(i + 1)).c_str());
+        ImGui::SameLine();
         if (ImGui::SmallButton("×"))
             removed = i;
         if (ImGui::IsItemHovered())
             loc::SetTooltip("%s", tr(T::DesignDeleteFeature));
         rect_of(("design_delete_" + std::to_string(i + 1)).c_str());
+        if (fails) {
+            // The tool's own words, without the engine's lead-in.
+            std::string why = design_failure_;
+            if (const std::size_t colon = why.find("refused the design: "); colon != std::string::npos)
+                why = why.substr(colon + std::strlen("refused the design: "));
+            ImGui::PushTextWrapPos(0.0f);
+            loc::TextColored(rgb(0xE5484D), tr(T::DesignFails), why.c_str());
+            ImGui::PopTextWrapPos();
+        }
+        else if (waits)
+            loc::TextDisabled("%s", tr(T::DesignWaiting));
         ImGui::Indent();
+        if (f.type == cad::Feature::Type::Operation) {
+            // Its body, its measures and its points (rule 7, stage D4).
+            cad::BodyOperation& o = f.op;
+            const std::string row = std::to_string(i + 1);
+            std::vector<std::string> bodies;
+            for (std::size_t j = 0; j < i; ++j)
+                if (design_.features[j].type != cad::Feature::Type::Operation)
+                    bodies.push_back(design_.features[j].name);
+            ImGui::SetNextItemWidth(130.0f * scale_);
+            if (ImGui::BeginCombo(tr(T::OpBody), o.target.c_str())) {
+                for (const std::string& b : bodies)
+                    if (ImGui::Selectable(b.c_str(), b == o.target))
+                        o.target = b, changed = true;
+                ImGui::EndCombo();
+            }
+            rect_of(("design_op_body_" + row).c_str());
+            const auto number = [&](T label, double& v, const char* fmt, double step, const char* key) {
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (loc::InputNumber(tr(label), &v, fmt, step))
+                    design_edited_ = true;
+                rect_of(("design_op_" + std::string(key) + "_" + row).c_str());
+                bind(f, key);
+            };
+            switch (o.kind) {
+            case cad::OperationKind::Fillet: number(T::OpRadius, o.value, "%.2f", 0.5, "value"); break;
+            case cad::OperationKind::Chamfer: number(T::OpDistance, o.value, "%.2f", 0.5, "value"); break;
+            case cad::OperationKind::Shell: number(T::OpThickness, o.value, "%.2f", 0.5, "value"); break;
+            case cad::OperationKind::Hole: {
+                static const char* kStandards[] = {"M2", "M2.5", "M3", "M4", "M5", "M6", "M8", "M10", "M12", "M16"};
+                ImGui::SetNextItemWidth(130.0f * scale_);
+                if (ImGui::BeginCombo(tr(T::OpStandard), o.standard.empty() ? tr(T::OpDiameterFree) : o.standard.c_str())) {
+                    if (ImGui::Selectable(tr(T::OpDiameterFree), o.standard.empty()))
+                        o.standard.clear(), changed = true;
+                    for (const char* m : kStandards)
+                        if (ImGui::Selectable(m, o.standard == m))
+                            o.standard = m, changed = true;
+                    ImGui::EndCombo();
+                }
+                rect_of(("design_op_standard_" + row).c_str());
+                if (o.standard.empty()) {
+                    number(T::OpDiameter, o.value, "%.2f", 0.5, "value");
+                } else {
+                    int fit = o.fit == "close" ? 0 : o.fit == "loose" ? 2 : 1;
+                    const char* fits[] = {tr(T::OpFitClose), tr(T::OpFitNormal), tr(T::OpFitLoose)};
+                    ImGui::SetNextItemWidth(110.0f * scale_);
+                    if (ImGui::Combo("##fit", &fit, fits, 3))
+                        o.fit = fit == 0 ? "close" : fit == 2 ? "loose" : "normal", changed = true;
+                }
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (loc::InputNumber(tr(T::OpDepth), &o.depth, "%.2f", 1.0))
+                    design_edited_ = true;
+                if (!o.standard.empty()) {
+                    // Tapped: the tap drill and its thread, drawn or cut.
+                    if (ImGui::Checkbox(tr(T::OpTapped), &o.tapped))
+                        changed = true;
+                    rect_of(("design_op_tapped_" + row).c_str());
+                    if (o.tapped) {
+                        ImGui::SameLine();
+                        if (ImGui::Checkbox(tr(T::OpModeled), &o.modeled))
+                            changed = true;
+                    }
+                }
+                break;
+            }
+            case cad::OperationKind::Move: {
+                ImGui::SetNextItemWidth(200.0f * scale_);
+                if (ImGui::InputScalarN(tr(T::OpOffset), ImGuiDataType_Double, o.offset.data(), 3, nullptr, nullptr, "%.2f"))
+                    design_edited_ = true;
+                rect_of(("design_op_offset_" + row).c_str());
+                number(T::OpTurn, o.angle, "%.1f", 15.0, "angle");
+                int axis = o.axis == 'X' ? 0 : o.axis == 'Y' ? 1 : 2;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo(tr(T::OpAxis), &axis, "X\0Y\0Z\0"))
+                    o.axis = "XYZ"[axis], changed = true;
+                if (ImGui::Checkbox(tr(T::OpCopyBody), &o.copy))
+                    changed = true;
+                break;
+            }
+            case cad::OperationKind::Split:
+            case cad::OperationKind::Draft: {
+                if (o.kind == cad::OperationKind::Draft)
+                    number(T::OpDraftAngle, o.value, "%.1f", 1.0, "value");
+                int plane = o.plane == "XY" ? 0 : o.plane == "XZ" ? 1 : 2;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo(tr(o.kind == cad::OperationKind::Draft ? T::OpNeutral : T::OpPlane), &plane, "XY\0XZ\0YZ\0"))
+                    o.plane = plane == 0 ? "XY" : plane == 1 ? "XZ" : "YZ", changed = true;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (loc::InputNumber(tr(T::OpPlaneOffset), &o.plane_offset, "%.2f", 1.0))
+                    design_edited_ = true;
+                rect_of(("design_op_plane_offset_" + row).c_str());
+                break;
+            }
+            case cad::OperationKind::Thread: {
+                static const char* kThreads[] = {"M2", "M2.5", "M3", "M4", "M5", "M6", "M8", "M10", "M12", "M16", "M20", "M24"};
+                ImGui::SetNextItemWidth(130.0f * scale_);
+                if (ImGui::BeginCombo(tr(T::OpStandard), o.standard.c_str())) {
+                    for (const char* m : kThreads)
+                        if (ImGui::Selectable(m, o.standard == m))
+                            o.standard = m, changed = true;
+                    ImGui::EndCombo();
+                }
+                rect_of(("design_op_standard_" + row).c_str());
+                int hand = o.hand == "left" ? 1 : o.hand == "both" ? 2 : 0;
+                const char* hands[] = {tr(T::OpHandRight), tr(T::OpHandLeft), tr(T::OpHandBoth)};
+                ImGui::SetNextItemWidth(130.0f * scale_);
+                if (ImGui::Combo(tr(T::OpHand), &hand, hands, 3))
+                    o.hand = hand == 1 ? "left" : hand == 2 ? "both" : "right", changed = true;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (loc::InputNumber(tr(T::OpLength), &o.depth, "%.2f", 1.0))
+                    design_edited_ = true;
+                if (ImGui::Checkbox(tr(T::OpModeled), &o.modeled))
+                    changed = true;
+                break;
+            }
+            case cad::OperationKind::Mirror: {
+                int plane = o.plane == "XY" ? 0 : o.plane == "XZ" ? 1 : 2;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo(tr(T::OpPlane), &plane, "XY\0XZ\0YZ\0"))
+                    o.plane = plane == 0 ? "XY" : plane == 1 ? "XZ" : "YZ", changed = true;
+                break;
+            }
+            case cad::OperationKind::PatternCircular: {
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::InputInt(tr(T::OpCount), &o.count))
+                    o.count = std::clamp(o.count, 1, 500), design_edited_ = true;
+                rect_of(("design_op_count_" + row).c_str());
+                number(T::OpAngle, o.angle, "%.1f", 15.0, "angle");
+                int axis = o.axis == 'X' ? 0 : o.axis == 'Y' ? 1 : 2;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo(tr(T::OpAxis), &axis, "X\0Y\0Z\0"))
+                    o.axis = "XYZ"[axis], changed = true;
+                break;
+            }
+            case cad::OperationKind::PatternRectangular: {
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::InputInt(tr(T::OpCount), &o.count))
+                    o.count = std::clamp(o.count, 1, 500), design_edited_ = true;
+                rect_of(("design_op_count_" + row).c_str());
+                number(T::OpSpacing, o.spacing, "%.2f", 1.0, "spacing");
+                int dir = o.direction[1] != 0.0 ? 1 : o.direction[2] != 0.0 ? 2 : 0;
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo(tr(T::OpDirection), &dir, "X\0Y\0Z\0")) {
+                    o.direction = {dir == 0 ? 1.0 : 0.0, dir == 1 ? 1.0 : 0.0, dir == 2 ? 1.0 : 0.0};
+                    changed = true;
+                }
+                break;
+            }
+            case cad::OperationKind::Combine: {
+                int how = o.boolean == "join" ? 0 : o.boolean == "intersect" ? 2 : 1;
+                const char* hows[] = {tr(T::OpJoin), tr(T::OpCut), tr(T::OpIntersect)};
+                ImGui::SetNextItemWidth(110.0f * scale_);
+                if (ImGui::Combo("##boolean", &how, hows, 3))
+                    o.boolean = how == 0 ? "join" : how == 2 ? "intersect" : "cut", changed = true;
+                ImGui::SameLine();
+                ImGui::TextUnformatted(tr(T::OpTools));
+                for (const std::string& b : bodies) {
+                    if (b == o.target)
+                        continue;
+                    bool with = std::find(o.tools.begin(), o.tools.end(), b) != o.tools.end();
+                    if (ImGui::Checkbox(b.c_str(), &with)) {
+                        if (with)
+                            o.tools.push_back(b);
+                        else
+                            std::erase(o.tools, b);
+                        changed = true;
+                    }
+                }
+                break;
+            }
+            }
+            if (takes_points(o.kind)) {
+                if (o.refs.size() == 1)
+                    loc::TextDisabled("%s", tr(T::OpOnePoint));
+                else
+                    loc::TextDisabled(tr(T::OpPoints), int(o.refs.size()));
+                ImGui::SameLine();
+                const bool picking = design_pick_ && *design_pick_ == i;
+                if (picking) {
+                    loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::OpPicking));
+                } else if (ImGui::SmallButton(tr(T::OpPickAgain))) {
+                    design_pick_ = i;
+                    command_message_ = tr(pick_hint(o.kind));
+                }
+                rect_of(("design_op_pick_" + row).c_str());
+                if (!o.refs.empty()) {
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton(tr(T::OpClearPoints)))
+                        o.refs.clear(), changed = true;
+                    rect_of(("design_op_clear_" + row).c_str());
+                }
+            }
+            if (!f.buildable())
+                loc::TextColored(rgb(0xE8A33D), "%s", tr(T::CommandBadNumber));
+            ImGui::Unindent();
+            ImGui::PopID();
+            continue;
+        }
         if (f.type == cad::Feature::Type::Sketch) {
             // Its operation and that operation's measures (rule 7), and the way back in.
             const bool extrude = f.operation.kind == cad::SketchOperation::Kind::Extrude;
@@ -10884,6 +14076,7 @@ void App::design_panel() {
                 ImGui::SetNextItemWidth(110.0f * scale_);
                 if (loc::InputNumber(tr(T::SketchDistance), &f.operation.distance, "%.2f", 0.5))
                     design_edited_ = true;
+                bind(f, "distance");
             } else {
                 int axis = f.operation.axis == 'x' ? 0 : 1;
                 ImGui::SetNextItemWidth(110.0f * scale_);
@@ -10894,6 +14087,24 @@ void App::design_panel() {
                 ImGui::SetNextItemWidth(110.0f * scale_);
                 if (loc::InputNumber(tr(T::SketchAngle), &f.operation.angle, "%.1f", 5.0))
                     design_edited_ = true;
+                bind(f, "angle");
+            }
+            // A rectangle's width and height, to tie to parameters (CD4).
+            for (std::size_t e = 0; e < f.sketch.entities.size(); ++e) {
+                cad::Entity& en = f.sketch.entities[e];
+                if (en.kind != cad::Entity::Kind::Rectangle || en.points.size() < 2)
+                    continue;
+                ImGui::PushID(int(e) + 20000);
+                for (const bool width : {true, false}) {
+                    double v = std::abs(width ? en.points[1].x - en.points[0].x : en.points[1].y - en.points[0].y);
+                    ImGui::SetNextItemWidth(110.0f * scale_);
+                    if (loc::InputNumber(tr(width ? T::RectWidth : T::RectHeight), &v, "%.2f", 0.5) && v > 0.0) {
+                        cad::set_entity_size(f.sketch, e, width ? "width" : "height", v);
+                        design_edited_ = true;
+                    }
+                    bind(f, "e" + std::to_string(e) + (width ? ".width" : ".height"));
+                }
+                ImGui::PopID();
             }
             if (!f.sketch.has_region())
                 loc::TextColored(rgb(0xE8A33D), "%s", tr(T::SketchNoRegion));
@@ -10916,6 +14127,7 @@ void App::design_panel() {
                               at.y + ImGui::GetFrameHeight());
             if (loc::InputNumber(tr(size_label(f.kind, k)), &f.sizes[k], "%.2f", 0.5))
                 design_edited_ = true;
+            bind(f, "size" + std::to_string(k));
             // For the scripted tests, when it is in view (the list scrolls).
             if (rect.y >= ImGui::GetWindowPos().y && rect.w <= ImGui::GetWindowPos().y + ImGui::GetWindowSize().y)
                 g_field_rects[field_key] = rect;
@@ -10926,15 +14138,31 @@ void App::design_panel() {
         ImGui::Unindent();
         ImGui::PopID();
     }
+    // A sketch being drawn is finished first, so its place stays right.
+    if ((removed || moved) && sketch_edit_)
+        finish_sketch();
+    if (removed || moved)
+        design_pick_.reset();
     if (removed) {
         design_.features.erase(design_.features.begin() + std::ptrdiff_t(*removed));
+        design_failed_.reset();
+        design_rename_ = -1;
         changed = true;
     }
-    // A measure typed: the design is built again once the field is left.
+    if (moved) {
+        std::swap(design_.features[moved->first], design_.features[moved->second]);
+        design_failed_.reset();
+        design_rename_ = -1;
+        changed = true;
+    }
+    // A measure typed: the design is built again once the field is left,
+    // its bound sizes set from the parameters first (rule 9).
     if (design_edited_ && !ImGui::IsAnyItemActive()) {
         design_edited_ = false;
         changed = true;
     }
+    if (changed)
+        cad::apply_parameters(design_);
     if (changed)
         rebuild_design();
 
@@ -10947,9 +14175,12 @@ void App::design_panel() {
     } else if (design_mesh_.empty()) {
         loc::TextDisabled("%s", tr(T::DesignNoBodies));
     } else {
-        int bodies = 0;
-        for (const cad::Feature& f : design_.features)
-            bodies += !f.suppressed && f.buildable() ? 1 : 0;
+        int bodies = 0; // built: the ones before a failing feature (rule 8)
+        for (std::size_t i = 0; i < design_.features.size() && !(design_failed_ && i >= *design_failed_); ++i)
+            bodies += !design_.features[i].suppressed && design_.features[i].buildable() &&
+                              design_.features[i].type != cad::Feature::Type::Operation
+                          ? 1
+                          : 0;
         if (ImGui::BeginTable("##measures", 2)) {
             const auto line = [](const char* name, const std::string& value) {
                 ImGui::TableNextRow();
@@ -10965,6 +14196,20 @@ void App::design_panel() {
             ImGui::EndTable();
         }
     }
+    // The view as DXF lines (rule 20, `file.export_view_dxf`).
+    ImGui::Spacing();
+    ImGui::BeginDisabled(design_mesh_.empty());
+    if (ImGui::SmallButton(tr(T::DesignViewDxf))) {
+        purpose_ = Purpose::ExportViewDxf;
+        browser_.open(FileBrowser::Mode::Save, tr(T::DesignViewDxf), {".dxf"}, last_folder_, "vista.dxf");
+    }
+    ImGui::EndDisabled();
+    rect_of("design_view_dxf");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(T::DesignViewDxfTip));
+    ImGui::SameLine();
+    ImGui::Checkbox(tr(T::DesignViewDxfHidden), &view_dxf_hidden_);
+    rect_of("design_view_dxf_hidden");
     ImGui::Spacing();
     loc::TextDisabled("%s", tr(T::DesignBasedOn));
     ImGui::PopTextWrapPos();
@@ -11136,8 +14381,7 @@ void App::fasteners_panel() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
     const auto rect_of = [](const std::string& name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     const auto section = [&](T title) {
         ImGui::Spacing();
@@ -11363,6 +14607,2129 @@ void App::send_gear_to_plate(bool with_mate) {
 
 // The Gears page of the Design panel: the kind, the sizes, the gear it
 // meshes with, what it measures, and the way to the plate.
+void App::structural_panel() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##structural", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    const auto rect_of = [](const std::string& name) {
+        note_rect(name);
+    };
+    const auto section = [&](T title) {
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::Separator();
+    };
+    constexpr std::uint32_t kViolet = 0x8B5CF6;
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::StructTitle));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    loc::TextColored(rgb(kViolet), "%s", tr(T::StructSubtitle));
+    loc::TextDisabled("%s", tr(T::Approximation));
+    rect_of("structural_approximation");
+    if (objects_.empty()) {
+        ImGui::Spacing();
+        loc::TextDisabled("%s", tr(T::StructNoParts));
+        ImGui::PopTextWrapPos();
+        ImGui::End();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+        return;
+    }
+
+    // Which part (rule 2): with one, it is chosen. Analyze stays at the
+    // foot of the panel; the rest scrolls above it.
+    structural_part_ = std::clamp(structural_part_, 0, int(objects_.size()) - 1);
+    const float footer = ImGui::GetFrameHeight() * 1.4f + 2.0f * ImGui::GetTextLineHeightWithSpacing() + 14.0f * scale_;
+    ImGui::BeginChild("##structural_scroll", ImVec2(0, -footer));
+    // The last result (rule 12), big at the top; grey and «Desactualizado»
+    // once something it depends on changed (rule 14).
+    {
+        const PlateObject& po = objects_[std::size_t(structural_part_)];
+        const auto res = std::find_if(po.engineering.results.begin(), po.engineering.results.end(),
+                                      [](const EngineeringResult& r) { return r.kind == "structural"; });
+        if (res != po.engineering.results.end()) {
+            if (structural_parsed_for_ != res->report) {
+                structural_parsed_for_ = res->report;
+                try {
+                    structural_parsed_ = nlohmann::json::parse(res->report);
+                } catch (const nlohmann::json::exception&) {
+                    structural_parsed_ = nlohmann::json::object();
+                }
+            }
+            const nlohmann::json& j = structural_parsed_;
+            const bool stale = structural_stale(std::size_t(structural_part_), *res);
+            const nlohmann::json verdict = j.value("verdict", nlohmann::json::object());
+            const std::string name = verdict.value("name", std::string());
+            struct Shown {
+                const char* name;
+                T label;
+                std::uint32_t colour;
+            };
+            static constexpr Shown kShown[] = {{"holds", T::VerdictHolds, 0x3FBF7F},
+                                               {"low_margin", T::VerdictLowMargin, 0xF5C524},
+                                               {"overloaded", T::VerdictOverloaded, 0xE5484D},
+                                               {"too_flexible", T::VerdictTooFlexible, 0xF59E0B},
+                                               {"over_temperature", T::VerdictOverTemp, 0xE5484D},
+                                               {"not_applicable", T::VerdictNotApplicable, 0x9CA3AF}};
+            for (const Shown& sh : kShown) {
+                if (name != sh.name)
+                    continue;
+                ImGui::PushFont(nullptr, kTitleSize * 1.1f);
+                if (stale)
+                    loc::TextDisabled("%s", tr(sh.label));
+                else
+                    loc::TextColored(rgb(sh.colour), "%s", tr(sh.label));
+                ImGui::PopFont();
+                rect_of("structural_verdict");
+            }
+            if (stale)
+                loc::TextDisabled("%s", tr(T::StructStale));
+            const nlohmann::json result = j.value("result", nlohmann::json::object());
+            if (result.contains("min_safety") && result["min_safety"].is_number())
+                ImGui::TextUnformatted(format(tr(T::StructMinSafety), result["min_safety"].get<double>(), verdict.value("required_safety", 2.0)).c_str());
+            // The adhesion between layers and lines and the band its
+            // uncertainty gives the safety factor (the owner's request,
+            // 2026-11-03: the results are approximations).
+            if (const nlohmann::json ad = j.value("adhesion", nlohmann::json::object()); !ad.empty()) {
+                ImGui::PushTextWrapPos(0.0f);
+                const std::string mode = ad.value("weakest_mode", std::string("none"));
+                const T fails = mode == "between_layers" ? T::StructFailsBetweenLayers
+                                : mode == "between_lines" ? T::StructFailsBetweenLines
+                                                          : T::StructFailsLine;
+                const auto number = [&](const char* key) {
+                    const auto it = ad.find(key);
+                    return it != ad.end() && it->is_number() ? it->get<double>() : std::nan("");
+                };
+                const double low = number("min_safety_low"), high = number("min_safety_high");
+                if (mode != "none" && std::isfinite(low) && std::isfinite(high))
+                    loc::TextDisabled("%s", format(tr(T::StructSafetyBand), low, high, tr(fails)).c_str());
+                if (ad.value("modelled", false))
+                    loc::TextDisabled("%s", format(tr(T::StructAdhesion), ad.value("nozzle_temperature", 0.0),
+                                                   ad.value("reference_temperature", 0.0), 100.0 * ad.value("z_strength_factor", 1.0),
+                                                   100.0 * ad.value("across_strength_factor", 1.0))
+                                                .c_str());
+                else
+                    loc::TextDisabled("%s", tr(T::StructAdhesionNone));
+                if (ad.value("too_cold", false))
+                    loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructTooCold));
+                if (ad.value("too_hot", false))
+                    loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructTooHot));
+                ImGui::PopTextWrapPos();
+            }
+            if (result.contains("max_displacement_mm") && result["max_displacement_mm"].is_number())
+                ImGui::TextUnformatted(format(tr(T::StructMaxDisplacement), result["max_displacement_mm"].get<double>()).c_str());
+            if (verdict.value("mass_g", 0.0) > 0.0)
+                ImGui::TextUnformatted(
+                    format(tr(T::StructMass), verdict.value("mass_g", 0.0), verdict.value("family", std::string()).c_str()).c_str());
+            // Each displacement limit, red when passed («Demasiado flexible»).
+            for (const nlohmann::json& l : verdict.value("limits", nlohmann::json::array())) {
+                const std::string line = format(tr(T::StructLimitLine), l.value("displacement_mm", 0.0), l.value("limit_mm", 0.0));
+                if (l.value("exceeded", false))
+                    loc::TextColored(rgb(0xE5484D), "%s", line.c_str());
+                else
+                    ImGui::TextUnformatted(line.c_str());
+            }
+            // What to try (rule 12): a button each; it picks that family's
+            // typical values as the material, and Analizar runs again.
+            const nlohmann::json suggestions = verdict.value("suggestions", nlohmann::json::array());
+            if (!suggestions.empty()) {
+                loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::StructTryTitle));
+                int shown_count = 0;
+                for (const nlohmann::json& sug : suggestions) {
+                    const std::string fam = sug.value("family", std::string());
+                    const MaterialFamily* f = family_of_material_id("family:" + fam);
+                    if (!f || shown_count >= 6)
+                        continue;
+                    if (shown_count % 3 != 0)
+                        ImGui::SameLine();
+                    if (ImGui::SmallButton(fam.c_str()) && !structural_job_.running()) {
+                        remember_engineering(std::size_t(structural_part_));
+                        objects_[std::size_t(structural_part_)].engineering.overrides.material = family_material_id(*f);
+                        try_material_ = true;
+                    }
+                    rect_of("structural_try_" + fam);
+                    ++shown_count;
+                }
+            }
+            if (!j.value("valid", true)) {
+                loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructNotValid));
+                for (const nlohmann::json& w : j.value("warnings", nlohmann::json::array()))
+                    loc::TextDisabled("· %s", w.value("message", std::string()).c_str());
+            }
+            if (structural_map_ && structural_map_->part == std::size_t(structural_part_) && !stale) {
+                ImGui::Checkbox(tr(T::StructShowMap), &structural_show_map_);
+                rect_of("structural_show_map");
+                if (structural_show_map_) {
+                    // Rule 12: the safety factor (at first), von Mises or the displacement.
+                    const T kinds[3] = {T::StructMapSafety, T::StructMapStress, T::StructMapMotion};
+                    for (int k = 0; k < 3; ++k) {
+                        if (ImGui::RadioButton(tr(kinds[k]), structural_map_kind_ == k))
+                            structural_map_kind_ = k;
+                        rect_of("structural_map_kind_" + std::to_string(k));
+                    }
+                    const StructuralRun& m = *structural_map_;
+                    const float w = (ImGui::GetContentRegionAvail().x - 8.0f * scale_) / 5.0f;
+                    for (int k = 0; k < 5; ++k) {
+                        if (k > 0)
+                            ImGui::SameLine(0.0f, 2.0f * scale_);
+                        const ImVec2 at = ImGui::GetCursorScreenPos();
+                        const std::uint32_t colour = structural_map_kind_ == 0 ? kSafetyBands[k] : kSafetyBands[4 - k];
+                        ImGui::GetWindowDrawList()->AddRectFilled(at, ImVec2(at.x + std::max(w, 8.0f), at.y + 8.0f * scale_),
+                                                                  ImGui::GetColorU32(rgb(colour)));
+                        ImGui::Dummy(ImVec2(std::max(w, 8.0f), 8.0f * scale_));
+                    }
+                    ImGui::PushTextWrapPos(0.0f);
+                    if (structural_map_kind_ == 1)
+                        loc::TextDisabled("%s", format(tr(T::StructLegendStress), m.max_stress).c_str());
+                    else if (structural_map_kind_ == 2)
+                        loc::TextDisabled("%s", format(tr(T::StructLegendMotion), m.max_motion).c_str());
+                    else
+                        loc::TextDisabled("%s", tr(T::StructLegend));
+                    ImGui::PopTextWrapPos();
+                    // The deformed shape, exaggerated so the largest movement
+                    // shows as a tenth of the part at first.
+                    if (m.max_motion > 0.0 && m.moved.size() == m.corners.size()) {
+                        ImGui::Checkbox(tr(T::StructDeformed), &structural_deformed_);
+                        rect_of("structural_deformed");
+                        if (structural_deformed_) {
+                            if (!(structural_exaggerate_ > 0.0f))
+                                structural_exaggerate_ = float(std::clamp(0.1 * m.size / m.max_motion, 1.0, 100000.0));
+                            ImGui::SetNextItemWidth(-FLT_MIN);
+                            ImGui::SliderFloat("##exaggerate", &structural_exaggerate_, 1.0f, 100000.0f, tr(T::StructExaggerate),
+                                               ImGuiSliderFlags_Logarithmic | ImGuiSliderFlags_AlwaysClamp);
+                            rect_of("structural_exaggerate");
+                        }
+                    }
+                }
+            }
+            // Optimizar (rule 13), under the results: the lowest uniform infill.
+            const bool optimize_open = !stale && ImGui::CollapsingHeader(tr(T::StructOptimize));
+            if (!stale)
+                rect_of("structural_optimize");
+            if (optimize_open) {
+                const std::size_t part = std::size_t(structural_part_);
+                if (optimize_job_.running()) {
+                    ImGui::ProgressBar(float(optimize_permille_.load()) / 1000.0f, ImVec2(-FLT_MIN, 0.0f), tr(T::StructOptimizing));
+                    if (ImGui::Button(tr(T::Cancel)))
+                        optimize_cancel_ = true;
+                    rect_of("structural_optimize_cancel");
+                } else {
+                    if (ImGui::Button(tr(T::StructLightestInfill), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize();
+                    rect_of("structural_lightest_infill");
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
+                        loc::SetTooltip("%s", tr(T::StructLightestInfillTip));
+                    if (ImGui::Button(tr(T::StructZonedInfill), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Zones);
+                    rect_of("structural_zoned_infill");
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
+                        loc::SetTooltip("%s", tr(T::StructZonedInfillTip));
+                    if (ImGui::Button(tr(T::StructRibs), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Ribs);
+                    rect_of("structural_ribs");
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
+                        loc::SetTooltip("%s", tr(T::StructRibsTip));
+                    if (ImGui::Button(tr(T::StructReinforce), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Reinforce);
+                    rect_of("structural_reinforce");
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
+                        loc::SetTooltip("%s", tr(T::StructReinforceTip));
+                    if (ImGui::Button(tr(T::StructOrientation), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Orientation);
+                    rect_of("structural_orientation");
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
+                        loc::SetTooltip("%s", tr(T::StructOrientationTip));
+                    if (ImGui::Button(tr(T::StructLattice), ImVec2(-FLT_MIN, 0.0f)))
+                        start_optimize(OptimizeExtra::Lattice);
+                    rect_of("structural_lattice");
+                    if (ImGui::IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_NoSharedDelay) && (!optimize_result_ || optimize_result_->part != part))
+                        loc::SetTooltip("%s", tr(T::StructLatticeTip));
+                }
+                if (optimize_result_ && optimize_result_->part == part && !optimize_job_.running()) {
+                    const OptimizeRun& o = *optimize_result_;
+                    ImGui::PushTextWrapPos(0.0f);
+                    if (o.cancelled)
+                        loc::TextDisabled("%s", tr(T::StructCancelled));
+                    else if (!o.error.empty())
+                        loc::TextColored(rgb(0xE5484D), "%s", o.error.c_str());
+                    else if (o.lattice) {
+                        const LightestLattice& l = o.latticed;
+                        if (!l.found)
+                            loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructLatticeNone));
+                        else {
+                            loc::TextColored(rgb(0x3FBF7F), "%s",
+                                             format(tr(T::StructLatticeFound), l.diameter, l.cell, l.min_safety, l.mass_g).c_str());
+                            if (ImGui::Button(tr(T::StructLatticeApply)) && part < objects_.size()) {
+                                // The part at 0 %, the lattice a solid zone in it, undone together.
+                                remember_part(part);
+                                PlateObject& to = objects_[part];
+                                const std::string settings_before = to.settings;
+                                const std::vector<PlateVolume> volumes_before = to.volumes;
+                                Settings hollow = settings_;
+                                hollow.infill_density = 0.0;
+                                to.settings = with_own_key(to.settings, hollow, "infill.density");
+                                PlateVolume v;
+                                v.shape = PlateVolume::Shape::Lattice;
+                                v.lattice_cell = l.cell;
+                                v.lattice_diameter = l.diameter;
+                                v.settings = "{\"infill\": {\"density\": 100}}";
+                                to.volumes.push_back(v);
+                                plate_changed();
+                                notify_undo(format(tr(T::StructLatticeApplied), l.diameter), [this, part, settings_before, volumes_before] {
+                                    if (part >= objects_.size())
+                                        return;
+                                    objects_[part].settings = settings_before;
+                                    objects_[part].volumes = volumes_before;
+                                    plate_changed();
+                                });
+                            }
+                            rect_of("structural_lattice_apply");
+                        }
+                        rect_of("structural_lattice_found");
+                    } else if (o.orientation) {
+                        const OrientationChoice& r = o.orient;
+                        loc::TextWrapped("%s", format(tr(T::StructOrientationFactors), r.safety[0], r.safety[1], r.safety[2]).c_str());
+                        rect_of("structural_orientation_found");
+                        if (!r.recommend) {
+                            loc::TextDisabled("%s", tr(T::StructOrientationKeep));
+                        } else {
+                            const char* axis = r.best == 1 ? "X" : "Y";
+                            loc::TextColored(rgb(0x3FBF7F), "%s",
+                                             format(tr(T::StructOrientationBetter), axis, r.safety[std::size_t(r.best)],
+                                                    100.0 * (r.safety[std::size_t(r.best)] / std::max(r.safety[0], 1e-9) - 1.0))
+                                                 .c_str());
+                            loc::TextDisabled("%s", tr(T::StructOrientationNote));
+                            if (ImGui::Button(tr(T::StructOrientationApply)) && part < objects_.size()) {
+                                remember_part(part);
+                                PlateObject& turned = objects_[part];
+                                const Rotation before = turned.place.rotation;
+                                const std::array<double, 9> m = layers_along(r.best);
+                                Rotation after{};
+                                for (std::size_t row = 0; row < 3; ++row)
+                                    for (std::size_t col = 0; col < 3; ++col)
+                                        after[3 * row + col] = m[3 * row] * before[col] + m[3 * row + 1] * before[3 + col] + m[3 * row + 2] * before[6 + col];
+                                turned.place.rotation = after;
+                                plate_changed();
+                                notify_undo(format(tr(T::StructOrientationApplied), axis), [this, part, before] {
+                                    if (part >= objects_.size())
+                                        return;
+                                    objects_[part].place.rotation = before;
+                                    plate_changed();
+                                });
+                            }
+                            rect_of("structural_orientation_apply");
+                        }
+                    } else if (o.best.solid)
+                        loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructOptimizeSolid));
+                    else if (!o.best.found)
+                        loc::TextColored(rgb(0xE5484D), "%s", format(tr(T::StructOptimizeNone), o.best.min_safety).c_str());
+                    else {
+                        loc::TextColored(rgb(0x3FBF7F), "%s", format(tr(T::StructOptimizeFound), o.best.density, o.best.min_safety).c_str());
+                        rect_of("structural_optimize_found");
+                        if (std::abs(settings_.infill_density - double(o.best.density)) > 1e-9) {
+                            if (ImGui::Button(format(tr(T::StructOptimizeApply), o.best.density).c_str())) {
+                                const double before = settings_.infill_density;
+                                settings_.infill_density = double(o.best.density);
+                                settings_changed();
+                                notify_undo(format(tr(T::StructOptimizeApplied), o.best.density), [this, before] {
+                                    settings_.infill_density = before;
+                                    settings_changed();
+                                });
+                            }
+                            rect_of("structural_optimize_apply");
+                        }
+                        if (o.zones) {
+                            const ZonedInfill& z = o.zoned;
+                            if (!z.found) {
+                                loc::TextColored(rgb(0xF59E0B), "%s", tr(T::StructZonedNone));
+                            } else {
+                                loc::TextColored(rgb(0x3FBF7F), "%s",
+                                                 format(tr(T::StructZonedFound), z.zones.density[0], z.zones.density[1], z.zones.density[2],
+                                                        z.min_safety, z.mass_g, z.uniform_mass_g)
+                                                     .c_str());
+                                rect_of("structural_zoned_found");
+                                if (!z.lighter)
+                                    loc::TextDisabled("%s", tr(T::StructZonedHeavier));
+                                else if (ImGui::Button(tr(T::StructZonedApply)))
+                                    apply_zones(part, z);
+                                if (z.lighter)
+                                    rect_of("structural_zoned_apply");
+                            }
+                        }
+                        if (o.ribs) {
+                            const RibbedInfill& r = o.ribbed;
+                            if (r.ribs.modifiers.empty()) {
+                                loc::TextDisabled("%s", tr(T::StructRibsNone));
+                            } else if (!r.found || !r.lighter) {
+                                loc::TextDisabled("%s", tr(T::StructRibsNotLighter));
+                            } else {
+                                std::string angles;
+                                for (double a : r.ribs.angles)
+                                    angles += (angles.empty() ? "" : ", ") + std::to_string(int(a)) + "°";
+                                loc::TextColored(rgb(0x3FBF7F), "%s",
+                                                 format(tr(T::StructRibsFound), r.density, r.min_safety, o.best.density,
+                                                        int(r.ribs.angles.size()), angles.c_str())
+                                                     .c_str());
+                                rect_of("structural_ribs_found");
+                                if (ImGui::Button(tr(T::StructRibsApply)))
+                                    apply_ribs(part, r);
+                                rect_of("structural_ribs_apply");
+                            }
+                        }
+                        if (o.reinforce) {
+                            const ReinforcedInfill& r = o.reinforced;
+                            if (!r.found || !r.lighter) {
+                                loc::TextDisabled("%s", tr(T::StructReinforceHeavier));
+                            } else {
+                                loc::TextColored(rgb(0x3FBF7F), "%s",
+                                                 format(tr(T::StructReinforceFound), r.zone.radius, r.best.density, r.best.min_safety,
+                                                        r.mass_g, r.plain_mass_g)
+                                                     .c_str());
+                                rect_of("structural_reinforce_found");
+                                if (ImGui::Button(tr(T::StructReinforceApply)))
+                                    apply_boxes(part, r.zone.modifiers, r.best.density,
+                                                format(tr(T::StructReinforceApplied), r.best.density, int(r.zone.modifiers.size())));
+                                rect_of("structural_reinforce_apply");
+                            }
+                        }
+                    }
+                    ImGui::PopTextWrapPos();
+                }
+            }
+            ImGui::Separator();
+        }
+        if (!structural_message_.empty())
+            loc::TextColored(rgb(0xF59E0B), "%s", structural_message_.c_str());
+    }
+    section(T::StructPart);
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##structural_part", objects_[std::size_t(structural_part_)].name.c_str())) {
+        for (int i = 0; i < int(objects_.size()); ++i) {
+            ImGui::PushID(i);
+            if (ImGui::Selectable(objects_[std::size_t(i)].name.c_str(), i == structural_part_))
+                structural_part_ = i;
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    rect_of("structural_part");
+    ProjectEngineering& e = objects_[std::size_t(structural_part_)].engineering;
+    const EngineeringValues values =
+        engineering_values(settings_, e, chosen_profile_[std::size_t(ProfileKind::Filament)]);
+
+    // The marking tools (rule 5), the chosen one in violet; Esc is Rotar.
+    section(T::StructConditions);
+    {
+        static constexpr T kTools[] = {T::StructToolRotate, T::StructToolFixedPoint, T::StructToolFixedZone,
+                                       T::StructToolForcePoint, T::StructToolForceZone, T::StructToolLimit};
+        static constexpr const char* kIds[] = {"rotate", "fixed_point", "fixed_zone", "force_point", "force_zone", "limit"};
+        const float width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) / 2.0f;
+        for (int k = 0; k < 6; ++k) {
+            if (k % 2 != 0)
+                ImGui::SameLine();
+            const bool on = structural_tool_ == k;
+            if (on) {
+                ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+            }
+            if (ImGui::Button(tr(kTools[k]), ImVec2(width, 0)))
+                structural_tool_ = k;
+            if (on)
+                ImGui::PopStyleColor(3);
+            rect_of(std::string("structural_tool_") + kIds[k]);
+        }
+        if (structural_tool_ > 0)
+            loc::TextDisabled("%s", tr(structural_tool_ == 2 || structural_tool_ == 4 || structural_tool_ == 5
+                                           ? T::StructZoneHint
+                                           : T::StructPointHint));
+    }
+    // The list (rule 8): a line each, an eye to hide it, its force, a cross.
+    ImGui::Spacing();
+    if (e.conditions.empty())
+        loc::TextDisabled("%s", tr(T::StructNoConditions));
+    const TriangleMesh& part_mesh = objects_[std::size_t(structural_part_)].mesh;
+    const std::string_view lang = language() == Language::English ? "en" : "es";
+    std::optional<std::size_t> erase;
+    for (std::size_t i = 0; i < e.conditions.size(); ++i) {
+        EngineeringCondition& c = e.conditions[i];
+        ImGui::PushID(int(i));
+        bool shown = !c.hidden;
+        if (ImGui::Checkbox("##shown", &shown)) {
+            remember_engineering(std::size_t(structural_part_));
+            e.conditions[i].hidden = !shown;
+        }
+        rect_of("structural_condition_eye_" + std::to_string(i));
+        ImGui::SameLine();
+        if (c.hidden)
+            loc::TextDisabled("%s", condition_label(c, part_mesh, lang).c_str());
+        else
+            ImGui::TextUnformatted(condition_label(c, part_mesh, lang).c_str());
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - ImGui::GetFrameHeight());
+        if (ImGui::SmallButton("x"))
+            erase = i;
+        rect_of("structural_condition_remove_" + std::to_string(i));
+        if (c.is_force()) {
+            // Its value in N or in kg (rule 6: g = 9.81 m/s²), and its direction.
+            const bool kg = c.kilograms.has_value();
+            double v = kg ? *c.kilograms : c.newtons;
+            const double lo = 0.0, hi = 1e6;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 44.0f * scale_);
+            const char* fmt = kg ? "%.2f kg" : "%.1f N";
+            if (ImGui::DragScalar("##newtons", ImGuiDataType_Double, &v, kg ? 0.05f : 0.5f, &lo, &hi, field_text("##newtons", fmt, v),
+                                  ImGuiSliderFlags_AlwaysClamp) &&
+                v != (kg ? *c.kilograms : c.newtons)) {
+                if (ImGui::IsItemActivated() || !ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+                    remember_engineering(std::size_t(structural_part_));
+                EngineeringCondition& d = e.conditions[i];
+                if (kg)
+                    d.kilograms = v, d.newtons = v * 9.81;
+                else
+                    d.newtons = v;
+            }
+            rect_of("structural_force_" + std::to_string(i));
+            ImGui::SameLine();
+            if (ImGui::Button(kg ? "kg" : "N", ImVec2(36.0f * scale_, 0.0f))) {
+                remember_engineering(std::size_t(structural_part_));
+                EngineeringCondition& d = e.conditions[i];
+                if (kg)
+                    d.kilograms.reset();
+                else
+                    d.kilograms = d.newtons / 9.81;
+            }
+            if (ImGui::IsItemHovered())
+                loc::SetTooltip("%s", tr(T::StructForceUnitTip));
+            rect_of("structural_force_unit_" + std::to_string(i));
+            if (e.conditions[i].kilograms)
+                loc::TextDisabled(tr(T::StructKgIs), e.conditions[i].newtons);
+            static constexpr const char* kAxes[] = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
+            static constexpr int kAxisOf[] = {1, -1, 2, -2, 3, -3};
+            const EngineeringCondition& d = e.conditions[i];
+            int now = 0;
+            if (d.direction == ForceDirection::Vector)
+                now = 7;
+            else if (d.direction == ForceDirection::Axis)
+                for (int k = 0; k < 6; ++k)
+                    if (kAxisOf[k] == d.axis)
+                        now = k + 1;
+            const auto label = [&](int k) { return k == 0 ? tr(T::StructDirNormal) : k == 7 ? tr(T::StructDirVector) : kAxes[k - 1]; };
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::BeginCombo("##direction", label(now))) {
+                for (int k = 0; k < 8; ++k)
+                    if (ImGui::Selectable(label(k), k == now) && k != now) {
+                        remember_engineering(std::size_t(structural_part_));
+                        EngineeringCondition& w = e.conditions[i];
+                        w.direction = k == 0 ? ForceDirection::Normal : k == 7 ? ForceDirection::Vector : ForceDirection::Axis;
+                        if (k >= 1 && k <= 6)
+                            w.axis = kAxisOf[k - 1];
+                    }
+                ImGui::EndCombo();
+            }
+            rect_of("structural_force_direction_" + std::to_string(i));
+            if (e.conditions[i].direction == ForceDirection::Vector) {
+                double vec[3] = {e.conditions[i].vector[0], e.conditions[i].vector[1], e.conditions[i].vector[2]};
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::InputScalarN("##vector", ImGuiDataType_Double, vec, 3, nullptr, nullptr, "%.2f")) {
+                    if (ImGui::IsItemActivated())
+                        remember_engineering(std::size_t(structural_part_));
+                    e.conditions[i].vector = {vec[0], vec[1], vec[2]};
+                }
+                rect_of("structural_force_vector_" + std::to_string(i));
+            }
+        } else if (c.is_point()) {
+            double r = c.radius;
+            const double lo = 0.1, hi = 500.0;
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::DragScalar("##radius", ImGuiDataType_Double, &r, 0.1f, &lo, &hi,
+                                  field_text("##radius", "r %.1f mm", r), ImGuiSliderFlags_AlwaysClamp) &&
+                r != c.radius)
+                e.conditions[i].radius = r;
+        } else if (c.kind == ConditionKind::Limit) {
+            // How far the zone may move: mm, or % of the part's largest size.
+            double v = c.limit;
+            const double lo = 0.0, hi = c.limit_percent ? 100.0 : 1000.0;
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 44.0f * scale_);
+            if (ImGui::DragScalar("##limit", ImGuiDataType_Double, &v, c.limit_percent ? 0.05f : 0.01f, &lo, &hi,
+                                  field_text("##limit", c.limit_percent ? "%.2f %%" : "%.3f mm", v), ImGuiSliderFlags_AlwaysClamp) &&
+                v != c.limit) {
+                if (ImGui::IsItemActivated() || !ImGui::IsMouseDragging(ImGuiMouseButton_Left))
+                    remember_engineering(std::size_t(structural_part_));
+                e.conditions[i].limit = v;
+            }
+            rect_of("structural_limit_" + std::to_string(i));
+            ImGui::SameLine();
+            if (ImGui::Button(c.limit_percent ? "%" : "mm", ImVec2(36.0f * scale_, 0.0f))) {
+                remember_engineering(std::size_t(structural_part_));
+                e.conditions[i].limit_percent = !e.conditions[i].limit_percent;
+            }
+        }
+        ImGui::PopID();
+    }
+    if (erase) {
+        remember_engineering(std::size_t(structural_part_));
+        e.conditions.erase(e.conditions.begin() + std::ptrdiff_t(*erase));
+    }
+
+    // The values from the profiles, or by hand with a violet dot (rules 3 and 4).
+    section(T::StructValues);
+    const auto source = [&](bool by_hand, ProfileKind kind) {
+        if (by_hand) {
+            loc::TextColored(rgb(kViolet), "● %s", tr(T::StructByHand));
+        } else {
+            // «del perfil de impresión «0,20 mm»»: the kind, and the name
+            // quoted, so it is not read as the value (TR27).
+            const std::string& name = chosen_profile_[std::size_t(kind)];
+            const char* from = tr(kind == ProfileKind::Filament ? T::StructFromFilamentProfile : T::StructFromPrintProfile);
+            if (name.empty())
+                loc::TextDisabled("%s", from);
+            else
+                loc::TextDisabled(language() == Language::Spanish ? "%s «%s»" : "%s “%s”", from, name.c_str());
+        }
+    };
+    const auto back = [&](const char* id, std::optional<double>& hand) {
+        if (!hand)
+            return;
+        ImGui::SameLine();
+        ImGui::PushID(id);
+        if (ImGui::SmallButton(tr(T::StructBackToProfile)))
+            hand.reset();
+        ImGui::PopID();
+    };
+    // A number of the panel: its field, where it comes from, and the way back.
+    const auto number = [&](T label, const char* id, const PanelValue& v, std::optional<double>& hand, double min,
+                            double max, const char* fmt, float speed, ProfileKind kind) {
+        ImGui::TextUnformatted(tr(label));
+        double value = v.value;
+        ImGui::SetNextItemWidth(-1.0f);
+        const std::string field = std::string("##") + id;
+        if (ImGui::DragScalar(field.c_str(), ImGuiDataType_Double, &value, speed, &min, &max,
+                              field_text(field.c_str(), fmt, value), ImGuiSliderFlags_AlwaysClamp) &&
+            value != v.value)
+            hand = value;
+        rect_of(std::string("structural_") + id);
+        source(v.by_hand, kind);
+        back(id, hand);
+    };
+    // The material: the filament type's record, or one chosen here (EP10).
+    ImGui::TextUnformatted(tr(T::StructMaterial));
+    const MaterialRecord* material = values.material_id.empty() ? nullptr : ::tisma::find_material(values.material_id);
+    ImGui::SetNextItemWidth(-1.0f);
+    // A record's name for the list: without its data sheet's version, which
+    // is English and says nothing to choose by (TR27).
+    const auto shown_name = [](std::string_view name) {
+        const std::size_t sheet = name.find(" (sheet");
+        return std::string(sheet == std::string_view::npos ? name : name.substr(0, sheet));
+    };
+    // Or a family of the spec's table, with its typical values (rule 12's
+    // «probar» a material that has no measured record).
+    const MaterialFamily* chosen_family = family_of_material_id(values.material_id);
+    const std::string family_label = chosen_family ? format(tr(T::StructFamilyTypical), std::string(chosen_family->name).c_str()) : std::string();
+    if (ImGui::BeginCombo("##structural_material", material         ? shown_name(material->name).c_str()
+                                                   : chosen_family ? family_label.c_str()
+                                                                   : tr(T::StructChooseMaterial))) {
+        for (const MaterialRecord& r : ::tisma::material_records()) {
+            ImGui::PushID(r.id.data(), r.id.data() + r.id.size());
+            if (ImGui::Selectable(shown_name(r.name).c_str(), material == &r))
+                e.overrides.material = std::string(r.id);
+            ImGui::PopID();
+        }
+        ImGui::Separator();
+        for (const MaterialFamily& f : material_families()) {
+            if (f.elastomer)
+                continue;
+            ImGui::PushID(f.name.data(), f.name.data() + f.name.size());
+            if (ImGui::Selectable(format(tr(T::StructFamilyTypical), std::string(f.name).c_str()).c_str(), chosen_family == &f))
+                e.overrides.material = family_material_id(f);
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    rect_of("structural_material");
+    source(values.material_by_hand, ProfileKind::Filament);
+    if (values.material_by_hand) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton((std::string(tr(T::StructBackToProfile)) + "##material").c_str()))
+            e.overrides.material.reset();
+    }
+    number(T::StructExtrusionTemp, "extrusion_temperature", values.extrusion_temperature, e.overrides.extrusion_temperature,
+           150.0, 450.0, "%.0f °C", 0.5f, ProfileKind::Filament);
+    loc::TextDisabled("%s: %.0f °C", tr(T::StructBedTemp), values.bed_temperature);
+    number(T::StructLayerHeight, "layer_height", values.layer_height, e.overrides.layer_height, 0.01, 2.0, "%.2f mm",
+           0.005f, ProfileKind::Print);
+    number(T::StructFirstLayer, "first_layer_height", values.first_layer_height, e.overrides.first_layer_height, 0.01, 2.0,
+           "%.2f mm", 0.005f, ProfileKind::Print);
+    number(T::StructLineWidth, "line_width", values.line_width, e.overrides.line_width, 0.05, 3.0, "%.2f mm", 0.005f,
+           ProfileKind::Print);
+    // Walls and infill (rule 3): from the print profile, shown only.
+    loc::TextDisabled(tr(T::StructWallsInfill), settings_.wall_count, settings_.top_layers, settings_.bottom_layers,
+                      settings_.infill_density, infill_pattern_name(settings_.infill_pattern));
+    source(false, ProfileKind::Print);
+    // The safety factor asked for (rule 10), 2 to begin with.
+    ImGui::TextUnformatted(tr(T::StructSafetyFactor));
+    ImGui::SetNextItemWidth(-1.0f);
+    {
+        const double lo = 1.0, hi = 10.0;
+        ImGui::DragScalar("##structural_safety_factor", ImGuiDataType_Double, &e.structural.safety_factor, 0.05f, &lo, &hi,
+                          field_text("##structural_safety_factor", "%.1f", e.structural.safety_factor), ImGuiSliderFlags_AlwaysClamp);
+        rect_of("structural_safety_factor");
+    }
+    // The resolution (rule 10) and the size it comes to, counted on the
+    // box of the part as it is on the bed (cheap: no slicing).
+    ImGui::TextUnformatted(tr(T::StructResolution));
+    {
+        static constexpr const char* kQualities[] = {"fast", "normal", "high", "extreme"};
+        static constexpr T kQualityLabels[] = {T::StructQualityFast, T::StructQualityNormal, T::StructQualityHigh, T::StructQualityExtreme};
+        int q = 1;
+        for (int k = 0; k < 4; ++k)
+            if (e.structural.quality == kQualities[k])
+                q = k;
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##structural_quality", tr(kQualityLabels[q]))) {
+            for (int k = 0; k < 4; ++k)
+                if (ImGui::Selectable(tr(kQualityLabels[k]), k == q) && k != q) {
+                    remember_engineering(std::size_t(structural_part_));
+                    objects_[std::size_t(structural_part_)].engineering.structural.quality = kQualities[k];
+                }
+            ImGui::EndCombo();
+        }
+        rect_of("structural_quality");
+        const std::size_t part = std::size_t(structural_part_);
+        const std::string key = std::to_string(part) + "|" + e.structural.quality + "|" + std::to_string(plate_version_) + "|" +
+                                std::to_string(settings_.wall_width) + "|" + std::to_string(settings_.layer_height) + "|" +
+                                engineering_json(e);
+        static std::string estimated_for;
+        static std::pair<std::size_t, double> estimate{0, 0.0};
+        static std::function<StructuralEstimate()> asked_estimate;
+        if (key != estimated_for && part < placed_meshes_.size() && !placed_meshes_[part].empty()) {
+            estimated_for = key;
+            Settings settings = settings_;
+            std::vector<std::string> notes;
+            apply_engineering_overrides(settings, e, notes);
+            ProjectEngineering bare = e;
+            bare.conditions.clear(); // the size does not depend on them
+            AnalysisCase c =
+                engineering_analysis_case(bare, placed_meshes_[part], {}, notes, settings_.filament_type, settings.layer_height,
+                                          print_conditions(settings, bare));
+            const IndexedMesh mesh = weld_exact(placed_meshes_[part]);
+            fit_voxel_limit(c, mesh, settings); // what Analizar will use (BH24)
+            estimate = {analysis_grid_voxels(mesh, settings, c), analysis_resolution(c, settings).first};
+            // The memory and the time, in the background (the old Analysis
+            // tab's cards, engineering_panel.md rule 10): the latest asked
+            // starts when the running one ends.
+            asked_estimate = [key, mesh, settings, c]() {
+                const AnalysisEstimate a = estimate_analysis(mesh, settings, c);
+                return StructuralEstimate{key, a.memory_mb, a.seconds};
+            };
+        }
+        if (std::optional<StructuralEstimate> done = structural_estimate_job_.take())
+            structural_estimate_ = std::move(*done);
+        if (asked_estimate && !structural_estimate_job_.running()) {
+            structural_estimate_job_.start(std::move(asked_estimate));
+            asked_estimate = nullptr;
+        }
+        if (estimate.first > 0)
+            loc::TextDisabled("%s", format(tr(T::StructEstimate), estimate.first, estimate.second).c_str());
+        if (structural_estimate_.key == key && structural_estimate_.memory_mb > 0.0)
+            loc::TextDisabled("%s", format(tr(T::StructEstimateCost), structural_estimate_.memory_mb,
+                                           format_duration(structural_estimate_.seconds).c_str()).c_str());
+    }
+    // The print direction (rule 10): Z, or the belt printer's.
+    ImGui::TextUnformatted(tr(T::StructPrintDirection));
+    {
+        const bool belt = e.structural.print_direction == "belt";
+        const std::string belt_label = format(tr(T::StructPrintBelt), settings_.belt_angle);
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##structural_print_direction", belt ? belt_label.c_str() : tr(T::StructPrintZ))) {
+            if (ImGui::Selectable(tr(T::StructPrintZ), !belt) && belt) {
+                remember_engineering(std::size_t(structural_part_));
+                objects_[std::size_t(structural_part_)].engineering.structural.print_direction = "z";
+            }
+            ImGui::BeginDisabled(!settings_.belt_enabled);
+            if (ImGui::Selectable(belt_label.c_str(), belt) && !belt) {
+                remember_engineering(std::size_t(structural_part_));
+                objects_[std::size_t(structural_part_)].engineering.structural.print_direction = "belt";
+            }
+            ImGui::EndDisabled();
+            ImGui::EndCombo();
+        }
+        rect_of("structural_print_direction");
+        if (belt && !settings_.belt_enabled)
+            loc::TextDisabled("%s", tr(T::StructPrintBeltOff));
+    }
+    ImGui::TextUnformatted(tr(T::StructWorkingTemp));
+    if (ImGui::IsItemHovered())
+        loc::SetTooltip("%s", tr(T::StructWorkingTempTip));
+    ImGui::SetNextItemWidth(-1.0f);
+    {
+        const double lo = -60.0, hi = 300.0;
+        ImGui::DragScalar("##structural_working_temperature", ImGuiDataType_Double, &e.working_temperature, 0.5f, &lo,
+                          &hi, field_text("##structural_working_temperature", "%.0f °C", e.working_temperature),
+                          ImGuiSliderFlags_AlwaysClamp);
+        rect_of("structural_working_temperature");
+    }
+
+    ImGui::EndChild();
+    // Analyze (rule 9): off until there is a material, something fixed and a
+    // force, and what is missing said below.
+    ImGui::Separator();
+    ImGui::Spacing();
+    const AnalyzeBlock block = analyze_block(e, values);
+    if (try_material_ && !structural_job_.running()) {
+        try_material_ = false;
+        if (block == AnalyzeBlock::None)
+            start_structural();
+    }
+    if (cloud_eng_.valid() && cloud_eng_state_) {
+        // In the cloud: the job's state and its progress, and Cancelar.
+        std::string status;
+        int progress = 0;
+        {
+            std::lock_guard lock(cloud_eng_state_->mutex);
+            status = cloud_eng_state_->status;
+            progress = cloud_eng_state_->progress;
+        }
+        ImGui::ProgressBar(float(progress) / 100.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
+                           format(tr(T::StructCloudState), status.empty() ? "…" : status.c_str(), progress).c_str());
+        rect_of("structural_cloud_state");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            cloud_eng_state_->cancel = true;
+        rect_of("structural_cloud_cancel");
+    } else if (structural_job_.running()) {
+        // While it calculates (rule 11): its progress and Cancelar; the view
+        // still turns.
+        const int permille = structural_permille_.load();
+        ImGui::ProgressBar(float(permille) / 1000.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
+                           format(tr(T::StructAnalyzing), permille / 10).c_str());
+        rect_of("structural_progress");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            structural_cancel_ = true;
+        rect_of("structural_cancel");
+    } else {
+        ImGui::BeginDisabled(block != AnalyzeBlock::None);
+        ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+        const bool in_cloud = e.structural.cloud && !cloud_token_.empty() &&
+                              !(cloud_account_ && !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "fea"));
+        if (ImGui::Button(tr(in_cloud ? T::StructAnalyzeCloud : T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f))) {
+            if (in_cloud)
+                start_cloud_engineering("structural");
+            else
+                start_structural();
+        }
+        ImGui::PopStyleColor(3);
+        ImGui::EndDisabled();
+    }
+    rect_of("structural_analyze");
+    // «En la nube» (rule 10; cloud.md, rule 10b): off at first on a
+    // computer, and only with a session (without one everything is local).
+    // A plan without "fea" (rule 10b): the lock and the plans that have it,
+    // which open the account page.
+    const bool fea_locked = !cloud_token_.empty() && cloud_account_ &&
+                            !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "fea");
+    ImGui::BeginDisabled(cloud_token_.empty() || cloud_eng_.valid() || fea_locked);
+    {
+        bool cloud = e.structural.cloud && !fea_locked;
+        if (ImGui::Checkbox(tr(T::StructCloud), &cloud)) {
+            remember_engineering(std::size_t(structural_part_));
+            objects_[std::size_t(structural_part_)].engineering.structural.cloud = cloud;
+        }
+    }
+    ImGui::EndDisabled();
+    rect_of("structural_cloud");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(cloud_token_.empty() ? T::StructCloudLogin : T::StructCloudTip));
+    if (fea_locked) {
+        const std::string with = cloud::plans_with(cloud_plans_, "fea");
+        if (ImGui::SmallButton(format(tr(T::CloudPlanLock), with.empty() ? "…" : with.c_str()).c_str()))
+            cloud_open_ = true;
+        rect_of("structural_cloud_lock");
+    }
+    if (block != AnalyzeBlock::None)
+        loc::TextDisabled("%s", tr(block == AnalyzeBlock::Material ? T::StructNeedMaterial
+                                   : block == AnalyzeBlock::Fixed  ? T::StructNeedFixed
+                                                                   : T::StructNeedForce));
+    ImGui::PopTextWrapPos();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+namespace {
+
+// How a part's own mesh becomes the one on the bed: p -> a p + b (a by rows),
+// the turn and scale of its placement and the shift that set it down.
+void own_to_placed(const PlateObject& o, const TriangleMesh& placed, std::array<double, 9>& a, std::array<double, 3>& b) {
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c)
+            a[std::size_t(3 * r + c)] = o.place.rotation[std::size_t(3 * r + c)] * o.place.scale[std::size_t(c)];
+    const Vec3f p = o.mesh.corner(0, 0), q = placed.corner(0, 0);
+    for (int r = 0; r < 3; ++r)
+        b[std::size_t(r)] = double((&q.x)[r]) -
+                            (a[std::size_t(3 * r)] * p.x + a[std::size_t(3 * r + 1)] * p.y + a[std::size_t(3 * r + 2)] * p.z);
+}
+
+int safety_band(double s, double asked) {
+    return s < 1.0 ? 0 : s < asked ? 1 : s < 2.0 * asked ? 2 : s < 4.0 * asked ? 3 : 4;
+}
+
+} // namespace
+
+// The Aerodynamics tab (engineering_panel.md, rules 15 and 16): where the
+// air goes, how fast, the quality and the layer height; Analizar in the
+// background; the results of aerodynamics.md and the part painted with the
+// pressure coefficient or the roughness.
+namespace {
+
+constexpr std::uint32_t kCpBands[6] = {0x2B59C3, 0x4C9BFF, 0x8FD3FF, 0xF5C524, 0xF59E0B, 0xE5484D};
+constexpr std::uint32_t kRaBands[4] = {0x4C9BFF, 0x3FBF7F, 0xF5C524, 0xE5484D};
+
+int cp_band(float cp) { return cp < -1.0f ? 0 : cp < -0.5f ? 1 : cp < 0.0f ? 2 : cp < 0.33f ? 3 : cp < 0.66f ? 4 : 5; }
+int ra_band(float ra) { return ra < 12.0f ? 0 : ra < 20.0f ? 1 : ra < 28.0f ? 2 : 3; }
+
+} // namespace
+
+std::array<double, 3> App::aero_direction(const AerodynamicsInputs& a) const {
+    static const std::pair<const char*, std::array<double, 3>> kAxes[] = {
+        {"+x", {1, 0, 0}}, {"-x", {-1, 0, 0}}, {"+y", {0, 1, 0}}, {"-y", {0, -1, 0}}, {"+z", {0, 0, 1}}, {"-z", {0, 0, -1}}};
+    for (const auto& [name, v] : kAxes)
+        if (a.direction == name)
+            return v;
+    if (a.direction == "view") {
+        const Vec3 f = camera_.forward();
+        return {f.x, f.y, f.z};
+    }
+    return {1, 0, 0};
+}
+
+void App::aerodynamics_panel() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + top));
+    ImGui::SetNextWindowSize(ImVec2(kPanel * scale_, vp->Size.y - top - bottom));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f * scale_, 14.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##aerodynamics", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
+    const auto rect_of = [](const std::string& name) {
+        note_rect(name);
+    };
+    const auto section = [&](T title) {
+        ImGui::Spacing();
+        loc::TextColored(rgb(theme_.accent_hover), "%s", tr(title));
+        ImGui::Separator();
+    };
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    ImGui::TextUnformatted(tr(T::AeroTitle));
+    ImGui::PopFont();
+    ImGui::PushTextWrapPos(0.0f);
+    loc::TextColored(rgb(0x8B5CF6), "%s", tr(T::AeroSubtitle));
+    loc::TextDisabled("%s", tr(T::Approximation));
+    rect_of("aero_approximation");
+    if (objects_.empty()) {
+        ImGui::Spacing();
+        loc::TextDisabled("%s", tr(T::StructNoParts));
+        ImGui::PopTextWrapPos();
+        ImGui::End();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+        return;
+    }
+    structural_part_ = std::clamp(structural_part_, 0, int(objects_.size()) - 1);
+    const std::size_t part = std::size_t(structural_part_);
+    const float footer = ImGui::GetFrameHeight() * 1.4f + ImGui::GetTextLineHeightWithSpacing() + 14.0f * scale_;
+    ImGui::BeginChild("##aero_scroll", ImVec2(0, -footer));
+
+    // The last result (rule 16), grey and «Desactualizado» once an input
+    // changed.
+    {
+        const PlateObject& po = objects_[part];
+        const auto res = std::find_if(po.engineering.results.begin(), po.engineering.results.end(),
+                                      [](const EngineeringResult& r) { return r.kind == "aerodynamics"; });
+        if (res != po.engineering.results.end()) {
+            if (aero_parsed_for_ != res->report) {
+                aero_parsed_for_ = res->report;
+                try {
+                    aero_parsed_ = nlohmann::json::parse(res->report);
+                } catch (const nlohmann::json::exception&) {
+                    aero_parsed_ = nlohmann::json::object();
+                }
+            }
+            const nlohmann::json& j = aero_parsed_;
+            const bool stale = structural_stale(part, *res);
+            const auto num = [&](const char* key) { return j.contains(key) && j[key].is_number() ? j[key].get<double>() : 0.0; };
+            ImGui::PushFont(nullptr, kTitleSize * 1.1f);
+            const std::string drag = format(tr(T::AeroDrag), num("drag_n"));
+            if (stale)
+                loc::TextDisabled("%s", drag.c_str());
+            else
+                ImGui::TextUnformatted(drag.c_str());
+            ImGui::PopFont();
+            rect_of("aero_drag");
+            if (stale)
+                loc::TextDisabled("%s", tr(T::StructStale));
+            if (j.value("simulated", false))
+                ImGui::TextUnformatted(format(tr(T::AeroCd), num("cd"), num("cd_pressure"), num("cd_friction")).c_str());
+            else
+                ImGui::TextUnformatted(format(tr(T::AeroCdFriction), num("cd_friction")).c_str());
+            // The likely range (the owner's request: the most reliable
+            // result each quality gives, and how far it can be off).
+            if (j.contains("cd_low") && j["cd_low"].is_number() && num("uncertainty") > 0.0) {
+                ImGui::PushTextWrapPos(0.0f);
+                loc::TextDisabled("%s", format(tr(j.value("simulated", false) ? T::AeroRange : T::AeroRangeFriction), num("cd_low"),
+                                               num("cd_high"), 100.0 * num("uncertainty"))
+                                            .c_str());
+                ImGui::PopTextWrapPos();
+            }
+            ImGui::TextUnformatted(format(tr(T::AeroSide), num("side_force_n")).c_str());
+            ImGui::TextUnformatted(format(tr(T::AeroArea), num("frontal_area_mm2")).c_str());
+            ImGui::TextUnformatted(format(tr(T::AeroReynolds), num("reynolds"), num("reynolds_simulated")).c_str());
+            ImGui::TextUnformatted(format(tr(T::AeroRoughness), num("ra_mean_um"), 100.0 * num("roughness_share")).c_str());
+            // The map: the pressure coefficient or the roughness.
+            ImGui::TextUnformatted(tr(T::AeroMap));
+            ImGui::SameLine();
+            if (ImGui::RadioButton(tr(T::AeroMapCp), aero_map_kind_ == 0))
+                aero_map_kind_ = 0;
+            rect_of("aero_map_cp");
+            ImGui::SameLine();
+            if (ImGui::RadioButton(tr(T::AeroMapRa), aero_map_kind_ == 1))
+                aero_map_kind_ = 1;
+            rect_of("aero_map_ra");
+            const auto swatches = [&](const std::uint32_t* colours, int n) {
+                for (int k = 0; k < n; ++k) {
+                    if (k > 0)
+                        ImGui::SameLine(0, 2.0f * scale_);
+                    ImGui::ColorButton("##band", rgb(colours[k]), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f * scale_, 10.0f * scale_));
+                }
+            };
+            if (aero_map_kind_ == 0)
+                swatches(kCpBands, 6);
+            else
+                swatches(kRaBands, 4);
+            loc::TextDisabled("%s", tr(aero_map_kind_ == 0 ? T::AeroLegendCp : T::AeroLegendRa));
+            if (j.value("simulated", false)) {
+                ImGui::Checkbox(tr(T::AeroLines), &aero_lines_);
+                rect_of("aero_lines");
+            }
+        }
+        if (!aero_message_.empty())
+            loc::TextColored(rgb(0xE8A33D), "%s", aero_message_.c_str());
+    }
+
+    section(T::StructPart);
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##aero_part", objects_[part].name.c_str())) {
+        for (int i = 0; i < int(objects_.size()); ++i) {
+            ImGui::PushID(i);
+            if (ImGui::Selectable(objects_[std::size_t(i)].name.c_str(), i == structural_part_))
+                structural_part_ = i;
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    rect_of("aero_part");
+    ProjectEngineering& e = objects_[std::size_t(structural_part_)].engineering;
+    AerodynamicsInputs& a = e.aerodynamics;
+
+    // Inputs (rule 15).
+    section(T::AeroDirection);
+    {
+        static const std::pair<const char*, const char*> kDirections[] = {{"+x", "+X"}, {"-x", "−X"}, {"+y", "+Y"}, {"-y", "−Y"},
+                                                                          {"+z", "+Z"}, {"-z", "−Z"}};
+        int k = 0;
+        for (const auto& [name, label] : kDirections) {
+            if (k++ % 6 != 0)
+                ImGui::SameLine();
+            const bool on = a.direction == name;
+            if (on)
+                ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+            if (ImGui::SmallButton(label) && !on) {
+                remember_engineering(std::size_t(structural_part_));
+                a.direction = name;
+            }
+            if (on)
+                ImGui::PopStyleColor();
+            rect_of(std::string("aero_dir_") + (name[0] == '+' ? "p" : "m") + name[1]);
+        }
+        const bool view = a.direction == "view";
+        if (view)
+            ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+        if (ImGui::SmallButton(tr(T::AeroDirectionView)) && !view) {
+            remember_engineering(std::size_t(structural_part_));
+            a.direction = "view";
+        }
+        if (view)
+            ImGui::PopStyleColor();
+        rect_of("aero_dir_view");
+    }
+    section(T::AeroSpeed);
+    ImGui::SetNextItemWidth(-1.0f);
+    double speed = a.speed;
+    if (loc::InputNumber("##aero_speed", &speed, "%.1f", 1.0) && speed > 0.0 && speed <= 100.0 && speed != a.speed) {
+        remember_engineering(std::size_t(structural_part_));
+        a.speed = speed;
+    }
+    rect_of("aero_speed");
+    section(T::AeroQuality);
+    {
+        static constexpr T kLabels[] = {T::AeroQualityFriction, T::AeroQualityFast, T::AeroQualityNormal, T::AeroQualityHigh,
+                                        T::AeroQualityExtreme};
+        static constexpr const char* kNames[] = {"friction", "fast", "normal", "high", "extreme"};
+        int q = 2;
+        for (int i = 0; i < 5; ++i)
+            if (a.quality == kNames[i])
+                q = i;
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##aero_quality", tr(kLabels[q]))) {
+            for (int i = 0; i < 5; ++i) {
+                if (ImGui::Selectable(tr(kLabels[i]), i == q) && i != q) {
+                    remember_engineering(std::size_t(structural_part_));
+                    a.quality = kNames[i];
+                }
+                rect_of(std::string("aero_quality_") + kNames[i]);
+            }
+            ImGui::EndCombo();
+        }
+        rect_of("aero_quality");
+    }
+    section(T::AeroLayer);
+    {
+        // From the profile, or changed by hand (rule 3).
+        double layer = e.overrides.layer_height.value_or(settings_.layer_height);
+        ImGui::SetNextItemWidth(-1.0f);
+        if (loc::InputNumber("##aero_layer", &layer, "%.2f", 0.02) && layer > 0.0 && layer <= 2.0) {
+            remember_engineering(std::size_t(structural_part_));
+            if (std::abs(layer - settings_.layer_height) < 1e-9)
+                e.overrides.layer_height.reset();
+            else
+                e.overrides.layer_height = layer;
+        }
+        rect_of("aero_layer");
+    }
+    ImGui::BeginDisabled(true);
+    bool cloud = false;
+    ImGui::Checkbox(tr(T::AeroCloud), &cloud);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(T::ComingSoon));
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    ImGui::Spacing();
+    const bool aero_locked = !cloud_token_.empty() && cloud_account_ &&
+                             !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "aero");
+    if (cloud_eng_.valid() && cloud_eng_state_) {
+        std::string status;
+        int progress = 0;
+        {
+            std::lock_guard lock(cloud_eng_state_->mutex);
+            status = cloud_eng_state_->status;
+            progress = cloud_eng_state_->progress;
+        }
+        ImGui::ProgressBar(float(progress) / 100.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
+                           format(tr(T::StructCloudState), status.empty() ? "…" : status.c_str(), progress).c_str());
+        rect_of("aero_cloud_state");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            cloud_eng_state_->cancel = true;
+        rect_of("aero_cloud_cancel");
+    } else if (aero_job_.running()) {
+        const int permille = aero_permille_.load();
+        ImGui::ProgressBar(float(permille) / 1000.0f, ImVec2(ImGui::GetContentRegionAvail().x - 100.0f * scale_, ImGui::GetFrameHeight() * 1.4f),
+                           format(tr(T::AeroAnalyzing), permille / 10).c_str());
+        rect_of("aero_progress");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::StructCancel), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f)))
+            aero_cancel_ = true;
+        rect_of("aero_cancel");
+    } else {
+        ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+        const AerodynamicsInputs& inputs = objects_[std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1))].engineering.aerodynamics;
+        const bool in_cloud = inputs.cloud && !cloud_token_.empty() && !aero_locked;
+        if (ImGui::Button(tr(in_cloud ? T::StructAnalyzeCloud : T::StructAnalyze), ImVec2(-1.0f, ImGui::GetFrameHeight() * 1.4f))) {
+            if (in_cloud)
+                start_cloud_engineering("aerodynamics");
+            else
+                start_aerodynamics();
+        }
+        ImGui::PopStyleColor(3);
+    }
+    rect_of("aero_analyze");
+    // «En la nube» (rule 16; cloud.md, rule 10b), as in Structural.
+    ImGui::BeginDisabled(cloud_token_.empty() || cloud_eng_.valid() || aero_locked);
+    {
+        const std::size_t shown = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+        bool on = objects_[shown].engineering.aerodynamics.cloud && !aero_locked;
+        if (ImGui::Checkbox(tr(T::StructCloud), &on)) {
+            remember_engineering(shown);
+            objects_[shown].engineering.aerodynamics.cloud = on;
+        }
+    }
+    ImGui::EndDisabled();
+    rect_of("aero_cloud");
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        loc::SetTooltip("%s", tr(cloud_token_.empty() ? T::StructCloudLogin : T::StructCloudTip));
+    if (aero_locked) {
+        const std::string with = cloud::plans_with(cloud_plans_, "aero");
+        if (ImGui::SmallButton(format(tr(T::CloudPlanLock), with.empty() ? "…" : with.c_str()).c_str()))
+            cloud_open_ = true;
+        rect_of("aero_cloud_lock");
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+}
+
+void App::start_aerodynamics() {
+    if (aero_job_.running() || objects_.empty())
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    TriangleMesh placed = placed_mesh(o);
+    if (placed.empty())
+        return;
+    aero::AeroInput in;
+    in.direction = aero_direction(o.engineering.aerodynamics);
+    in.speed = o.engineering.aerodynamics.speed;
+    if (!aero::quality_named(o.engineering.aerodynamics.quality, in.quality))
+        in.quality = aero::AeroQuality::Normal;
+    in.layer_height = o.engineering.overrides.layer_height.value_or(settings_.layer_height);
+    if (aero_test_cells_ > 0 && in.quality != aero::AeroQuality::Friction) {
+        in.cells = aero_test_cells_;
+        in.flow_throughs = 2.0;
+    }
+    const std::string fingerprint = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), "aerodynamics");
+    aero_cancel_ = false;
+    aero_permille_ = 0;
+    aero_message_.clear();
+    aero_job_.start([this, part, placed = std::move(placed), in, fingerprint]() mutable {
+        AeroRun run;
+        run.part = part;
+        run.fingerprint = fingerprint;
+        in.mesh = std::move(placed);
+        const aero::AeroResult r = aero::analyze(in, [this](double done) {
+            aero_permille_ = int(done * 1000.0);
+            return !aero_cancel_.load();
+        });
+        if (aero_cancel_) {
+            run.cancelled = true;
+            return run;
+        }
+        if (!r.ok) {
+            run.error = r.error;
+            return run;
+        }
+        run.report = aero::result_json(r, in);
+        run.corners.reserve(in.mesh.triangle_count() * 9);
+        for (std::size_t t = 0; t < in.mesh.triangle_count(); ++t)
+            for (int k = 0; k < 3; ++k) {
+                const Vec3f c = in.mesh.corner(t, k);
+                run.corners.insert(run.corners.end(), {c.x, c.y, c.z});
+            }
+        run.cp = r.cp;
+        run.ra = r.ra_um;
+        run.streamlines = r.streamlines;
+        run.ok = true;
+        return run;
+    });
+}
+
+void App::aerodynamics_done(AeroRun run) {
+    if (run.cancelled) {
+        aero_message_ = tr(T::StructCancelled);
+        return;
+    }
+    if (!run.ok) {
+        aero_message_ = format(tr(T::StructFailed), run.error.c_str());
+        return;
+    }
+    if (run.part < objects_.size()) {
+        std::vector<EngineeringResult>& results = objects_[run.part].engineering.results;
+        std::erase_if(results, [](const EngineeringResult& r) { return r.kind == "aerodynamics"; });
+        results.push_back({"aerodynamics", run.fingerprint, run.report});
+    }
+    aero_map_in_view_ = false;
+    aero_map_ = std::move(run);
+}
+
+// The map in the view while the tab shows the part of the last run, still up
+// to date; its colours follow the map chosen.
+void App::update_aero_view() {
+    bool want = false;
+    if (tab_ == Tab::Aerodynamics && aero_map_ && !objects_.empty()) {
+        const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+        if (aero_map_->part == part) {
+            const ProjectEngineering& e = objects_[part].engineering;
+            const auto it = std::find_if(e.results.begin(), e.results.end(), [](const EngineeringResult& r) { return r.kind == "aerodynamics"; });
+            static int frame = 0;
+            static bool fresh = false;
+            if (++frame % 10 == 0 || !aero_map_in_view_)
+                fresh = it != e.results.end() && it->fingerprint == aero_map_->fingerprint && !structural_stale(part, *it);
+            want = fresh;
+        }
+    }
+    if (want && (!aero_map_in_view_ || aero_map_shown_ != aero_map_kind_)) {
+        const AeroRun& m = *aero_map_;
+        const std::size_t tris = m.corners.size() / 9;
+        const int bands = aero_map_kind_ == 0 ? 6 : 4;
+        std::vector<std::vector<float>> by_band(static_cast<std::size_t>(bands));
+        for (std::size_t t = 0; t < tris; ++t) {
+            const float* p = &m.corners[9 * t];
+            const Vec3f a{p[0], p[1], p[2]}, b{p[3], p[4], p[5]}, c{p[6], p[7], p[8]};
+            const Vec3f u{b.x - a.x, b.y - a.y, b.z - a.z}, s{c.x - a.x, c.y - a.y, c.z - a.z};
+            Vec3f n{u.y * s.z - u.z * s.y, u.z * s.x - u.x * s.z, u.x * s.y - u.y * s.x};
+            const float len = std::sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+            if (len > 0.0f)
+                n = Vec3f{n.x / len, n.y / len, n.z / len};
+            const int band = aero_map_kind_ == 0 ? cp_band(t < m.cp.size() ? m.cp[t] : 0.0f) : ra_band(t < m.ra.size() ? m.ra[t] : 0.0f);
+            std::vector<float>& out = by_band[std::size_t(band)];
+            for (const Vec3f* q : {&a, &b, &c})
+                out.insert(out.end(), {q->x, q->y, q->z, n.x, n.y, n.z});
+        }
+        std::vector<float> surface;
+        std::vector<Vec3f> corners;
+        std::vector<Renderer::PaintGroup> groups;
+        std::size_t first = 0;
+        for (int k = 0; k < bands; ++k) {
+            const std::size_t count = by_band[std::size_t(k)].size() / 6;
+            if (count > 0)
+                groups.push_back({first, count, vec(aero_map_kind_ == 0 ? kCpBands[k] : kRaBands[k])});
+            first += count;
+            surface.insert(surface.end(), by_band[std::size_t(k)].begin(), by_band[std::size_t(k)].end());
+        }
+        for (std::size_t i = 0; i + 5 < surface.size(); i += 6)
+            corners.push_back(Vec3f{surface[i], surface[i + 1], surface[i + 2]});
+        show_in_view(TriangleMesh(std::move(corners)));
+        renderer_.set_paint(surface, groups);
+        vk_view_.set_paint(surface, groups);
+        aero_map_in_view_ = true;
+        aero_map_shown_ = aero_map_kind_;
+    } else if (!want && aero_map_in_view_) {
+        aero_map_in_view_ = false;
+        aero_map_shown_ = -1;
+        paint_dirty_ = true;
+        if (tab_ != Tab::Design && !structural_map_in_view_)
+            rebuild_plate();
+    }
+}
+
+// Where the air comes from (rule 15): a big blue arrow pointing at the part.
+void App::aero_overlay() {
+    if (tab_ != Tab::Aerodynamics || objects_.empty() || !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    const TriangleMesh placed = placed_mesh(o);
+    if (placed.empty())
+        return;
+    const BoundingBox box = placed.bounding_box();
+    const std::array<double, 3> c{0.5 * (box.min.x + box.max.x), 0.5 * (box.min.y + box.max.y), 0.5 * (box.min.z + box.max.z)};
+    const double size = std::max({double(box.max.x - box.min.x), double(box.max.y - box.min.y), double(box.max.z - box.min.z), 1.0});
+    std::array<double, 3> d = aero_direction(o.engineering.aerodynamics);
+    const double dl = std::hypot(d[0], d[1], d[2]);
+    if (!(dl > 0.0))
+        return;
+    for (double& v : d)
+        v /= dl;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](const std::array<double, 3>& w, ImVec2& out) {
+        const float x = float(w[0]), y = float(w[1]), z = float(w[2]);
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+        const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float ww = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(ww > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / ww * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / ww * 0.5f) * view_size_.y);
+        return true;
+    };
+    // Big whatever the part's size: at least 40 mm long, ending just short
+    // of the part.
+    const double near = 0.6 * size + 4.0, far = near + std::max(1.5 * size, 40.0);
+    const std::array<double, 3> from{c[0] - d[0] * far, c[1] - d[1] * far, c[2] - d[2] * far};
+    const std::array<double, 3> to{c[0] - d[0] * near, c[1] - d[1] * near, c[2] - d[2] * near};
+    ImVec2 a, b;
+    if (!project(from, a) || !project(to, b))
+        return;
+    ImDrawList* dl_ = ImGui::GetBackgroundDrawList();
+    dl_->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    // The streamlines, each piece in the colour of the pressure where it
+    // passes (the map's scale), while the map is up to date.
+    if (aero_lines_ && aero_map_in_view_ && aero_map_ && aero_map_->part == part) {
+        const float width = 1.6f * scale_;
+        for (const aero::AeroResult::Streamline& s : aero_map_->streamlines) {
+            ImVec2 prev;
+            bool have = false;
+            for (std::size_t i = 0; i < s.points.size(); ++i) {
+                ImVec2 q;
+                const bool ok = project({s.points[i][0], s.points[i][1], s.points[i][2]}, q);
+                if (ok && have)
+                    dl_->AddLine(prev, q, ImGui::GetColorU32(rgb(kCpBands[cp_band(s.cp[i])], 0.9f)), width);
+                prev = q;
+                have = ok;
+            }
+        }
+    }
+    const ImU32 blue = ImGui::GetColorU32(rgb(0x4C9BFF, 0.95f));
+    const float len = std::hypot(b.x - a.x, b.y - a.y);
+    if (len > 4.0f) {
+        const ImVec2 u((b.x - a.x) / len, (b.y - a.y) / len), n(-u.y, u.x);
+        const float head = std::min(26.0f * scale_, 0.45f * len), half = 13.0f * scale_;
+        const ImVec2 base(b.x - u.x * head, b.y - u.y * head);
+        dl_->AddLine(a, base, blue, 9.0f * scale_);
+        dl_->AddTriangleFilled(b, ImVec2(base.x + n.x * half, base.y + n.y * half), ImVec2(base.x - n.x * half, base.y - n.y * half), blue);
+    } else {
+        dl_->AddCircleFilled(b, 10.0f * scale_, blue); // straight at the eye
+    }
+    dl_->PopClipRect();
+}
+
+// Analizar (rules 9 and 11): the part as it is on the bed, its conditions
+// moved with it, the values changed by hand, in the background; Cancelar
+// stops it at its next step.
+void App::start_cloud_engineering(const std::string& kind) {
+    if (cloud_eng_.valid() || objects_.empty() || cloud_token_.empty())
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    const std::filesystem::path dir = std::filesystem::temp_directory_path();
+    const std::string stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const std::filesystem::path project = dir / ("tisma-cloud-" + stamp + ".3mf");
+    try {
+        save_project(project, current_project());
+    } catch (const std::exception& e) {
+        fail(T::CannotSave, e.what());
+        return;
+    }
+    // The fingerprint now: the result belongs to the part as it was sent.
+    const bool aero = kind == "aerodynamics";
+    cloud_eng_part_ = part;
+    cloud_eng_kind_ = kind;
+    cloud_eng_fingerprint_ = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), kind);
+    nlohmann::json params{{"object", part}, {"instance", 0}};
+    if (aero) {
+        // cloud.md, rule 6: the direction as an axis without its plus, or
+        // three numbers (the view's).
+        const AerodynamicsInputs& a = o.engineering.aerodynamics;
+        params["quality"] = a.quality;
+        params["speed"] = a.speed;
+        if (a.direction == "view") {
+            const std::array<double, 3> d = aero_direction(a);
+            params["direction"] = format("%.6g,%.6g,%.6g", d[0], d[1], d[2]);
+        } else {
+            params["direction"] = a.direction.starts_with("+") ? a.direction.substr(1) : a.direction;
+        }
+    } else {
+        params["mode"] = "analyze";
+        params["quality"] = o.engineering.structural.quality;
+    }
+    log_line("cloud: " + std::string(aero ? "aero" : "fea") + " of part " + std::to_string(part) + " on " + cloud_server_);
+    auto state = std::make_shared<CloudSliceState>();
+    cloud_eng_state_ = state;
+    cloud_eng_ = std::async(std::launch::async, [state, project, dir, stamp, params = params.dump(), server = cloud_server_,
+                                                 token = cloud_token_, aero] {
+        CloudSliceReply r;
+        cloud::Client client(server, token);
+        const std::filesystem::path result = dir / ("tisma-cloud-" + stamp + (aero ? ".taero" : ".tea"));
+        r.ok = client.run(aero ? "aero" : "fea", params, utf8(project), utf8(result), r.job, r.error,
+                          [&](const cloud::Job& job) {
+                              std::lock_guard lock(state->mutex);
+                              state->status = job.status;
+                              state->progress = job.progress;
+                          },
+                          state->cancel);
+        std::error_code ec;
+        std::filesystem::remove(project, ec);
+        r.result = result;
+        return r;
+    });
+}
+
+void App::cloud_engineering_step() {
+    if (!cloud_eng_.valid())
+        return;
+    frame_pending_ = true;
+    if (cloud_eng_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+    const CloudSliceReply r = cloud_eng_.get();
+    cloud_eng_state_.reset();
+    if (r.ok) {
+        // The .tea: the report, kept with the part as a local result (its
+        // map stays local-only: the file has no voxels).
+        std::string report;
+        try {
+            std::ifstream in(r.result, std::ios::binary);
+            const nlohmann::json t = nlohmann::json::parse(in);
+            if (cloud_eng_kind_ == "aerodynamics") { // the .taero is the result itself
+                if (!t.is_object() || !t.contains("drag_n"))
+                    throw std::runtime_error("not an aerodynamics result");
+                report = t.dump();
+            } else {
+                if (t.value("kind", std::string()) != "structural" || !t.contains("report"))
+                    throw std::runtime_error("not a structural result");
+                report = t["report"].dump();
+            }
+        } catch (const std::exception& e) {
+            notify(format(tr(T::StructCloudFailed), e.what()), true);
+            return;
+        }
+        std::error_code ec;
+        std::filesystem::remove(r.result, ec);
+        if (cloud_eng_part_ < objects_.size()) {
+            std::vector<EngineeringResult>& results = objects_[cloud_eng_part_].engineering.results;
+            const std::string kind = cloud_eng_kind_;
+            std::erase_if(results, [&](const EngineeringResult& x) { return x.kind == kind; });
+            results.push_back({kind, cloud_eng_fingerprint_, report});
+        }
+        if (cloud_eng_kind_ == "aerodynamics") {
+            aero_map_.reset();
+            aero_map_in_view_ = false;
+        } else {
+            structural_map_.reset();
+            structural_map_in_view_ = false;
+        }
+        notify(tr(T::StructCloudDone));
+        return;
+    }
+    if (r.error.message == "Cancelled") {
+        notify(tr(T::StructCancelled));
+        return;
+    }
+    if (r.error.expired()) {
+        cloud_token_.clear();
+        cloud_account_.reset();
+        cloud::forget_secret(cloud_server_);
+        notify(tr(T::CloudExpired), true);
+        cloud_open_ = true;
+        return;
+    }
+    const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
+                            : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
+                            : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
+                            : r.job.status == "failed" ? cloud::job_error(r.job, language() == Language::Spanish)
+                                                    : r.error.message;
+    notify(format(tr(T::StructCloudFailed), why.c_str()), true);
+}
+
+// The zones as the part's own modifiers (structural_optimization.md, rule
+// 3): its own infill at the lowest level, a box modifier for each zone of the
+// two denser ones; undone together.
+void App::apply_zones(std::size_t part, const ZonedInfill& zoned) {
+    if (part >= objects_.size())
+        return;
+    PlateObject& o = objects_[part];
+    if (!optimize_result_ || o.mesh.triangle_count() != optimize_result_->triangles)
+        return;
+    std::vector<PlateVolume> added;
+    for (const MeshModifier& m : zoned.zones.modifiers) {
+        const BoundingBox b = m.mesh.bounding_box();
+        const std::optional<PlateVolume> v =
+            volume_for_bed_box(o, optimize_result_->to_bed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
+        if (!v) {
+            structural_message_ = tr(T::StructZonedTurned);
+            return;
+        }
+        added.push_back(*v);
+    }
+    remember_part(part);
+    const std::string settings_before = o.settings;
+    const std::vector<PlateVolume> volumes_before = o.volumes;
+    Settings lowest = settings_;
+    lowest.infill_density = zoned.zones.density[0];
+    o.settings = with_own_key(o.settings, lowest, "infill.density");
+    o.volumes.insert(o.volumes.end(), added.begin(), added.end());
+    plate_changed();
+    notify_undo(format(tr(T::StructZonedApplied), int(added.size())), [this, part, settings_before, volumes_before] {
+        if (part >= objects_.size())
+            return;
+        objects_[part].settings = settings_before;
+        objects_[part].volumes = volumes_before;
+        plate_changed();
+    });
+}
+
+// The ribs as the part's own modifiers (structural_optimization.md, rule
+// 4): its infill at the density found with them, a box modifier with
+// one-direction infill for each rib zone; undone together.
+void App::apply_ribs(std::size_t part, const RibbedInfill& ribbed) {
+    if (part >= objects_.size())
+        return;
+    PlateObject& o = objects_[part];
+    if (!optimize_result_ || o.mesh.triangle_count() != optimize_result_->triangles)
+        return;
+    std::vector<PlateVolume> added;
+    for (const MeshModifier& m : ribbed.ribs.modifiers) {
+        const BoundingBox b = m.mesh.bounding_box();
+        const std::optional<PlateVolume> v =
+            volume_for_bed_box(o, optimize_result_->to_bed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
+        if (!v) {
+            structural_message_ = tr(T::StructZonedTurned);
+            return;
+        }
+        added.push_back(*v);
+    }
+    remember_part(part);
+    const std::string settings_before = o.settings;
+    const std::vector<PlateVolume> volumes_before = o.volumes;
+    Settings at = settings_;
+    at.infill_density = double(ribbed.density);
+    o.settings = with_own_key(o.settings, at, "infill.density");
+    o.volumes.insert(o.volumes.end(), added.begin(), added.end());
+    plate_changed();
+    notify_undo(format(tr(T::StructRibsApplied), ribbed.density, int(added.size())), [this, part, settings_before, volumes_before] {
+        if (part >= objects_.size())
+            return;
+        objects_[part].settings = settings_before;
+        objects_[part].volumes = volumes_before;
+        plate_changed();
+    });
+}
+
+bool App::apply_boxes(std::size_t part, const std::vector<MeshModifier>& boxes, int density, const std::string& note) {
+    if (part >= objects_.size() || !optimize_result_ || objects_[part].mesh.triangle_count() != optimize_result_->triangles)
+        return false;
+    PlateObject& o = objects_[part];
+    std::vector<PlateVolume> added;
+    for (const MeshModifier& m : boxes) {
+        const BoundingBox b = m.mesh.bounding_box();
+        const std::optional<PlateVolume> v =
+            volume_for_bed_box(o, optimize_result_->to_bed, {b.min.x, b.min.y, b.min.z}, {b.max.x, b.max.y, b.max.z}, m.settings);
+        if (!v) {
+            structural_message_ = tr(T::StructZonedTurned);
+            return false;
+        }
+        added.push_back(*v);
+    }
+    remember_part(part);
+    const std::string settings_before = o.settings;
+    const std::vector<PlateVolume> volumes_before = o.volumes;
+    Settings at = settings_;
+    at.infill_density = double(density);
+    o.settings = with_own_key(o.settings, at, "infill.density");
+    o.volumes.insert(o.volumes.end(), added.begin(), added.end());
+    plate_changed();
+    notify_undo(note, [this, part, settings_before, volumes_before] {
+        if (part >= objects_.size())
+            return;
+        objects_[part].settings = settings_before;
+        objects_[part].volumes = volumes_before;
+        plate_changed();
+    });
+    return true;
+}
+
+void App::start_optimize(OptimizeExtra extra) {
+    if (optimize_job_.running() || objects_.empty())
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    TriangleMesh placed = placed_mesh(o);
+    if (placed.empty())
+        return;
+    std::array<double, 9> a{};
+    std::array<double, 3> b{};
+    own_to_placed(o, placed, a, b);
+    ProjectEngineering moved = o.engineering;
+    move_engineering(moved, a, b);
+    Settings settings = settings_;
+    std::vector<std::string> notes;
+    apply_engineering_overrides(settings, o.engineering, notes);
+    const std::string filament_type = settings_.filament_type;
+    optimize_cancel_ = false;
+    optimize_permille_ = 0;
+    // The last search's result is stale from here: nothing reads it as this
+    // one's while it runs, nor in the frame between its end and its take.
+    optimize_result_.reset();
+    const bool zones = extra == OptimizeExtra::Zones, ribs = extra == OptimizeExtra::Ribs, reinforce = extra == OptimizeExtra::Reinforce,
+               orientation = extra == OptimizeExtra::Orientation, lattice = extra == OptimizeExtra::Lattice;
+    const Affine to_bed{a, b};
+    const std::size_t triangles = o.mesh.triangle_count();
+    optimize_job_.start([this, part, placed = std::move(placed), moved, settings, filament_type, zones, ribs, reinforce, orientation, lattice, to_bed, triangles]() {
+        OptimizeRun run;
+        run.part = part;
+        run.to_bed = to_bed;
+        run.triangles = triangles;
+        run.zones = zones;
+        run.ribs = ribs;
+        run.reinforce = reinforce;
+        run.orientation = orientation;
+        run.lattice = lattice;
+        struct Cancelled {};
+        try {
+            std::vector<std::string> case_notes;
+            AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height,
+                                                       print_conditions(settings, moved));
+            const IndexedMesh mesh = weld_exact(placed);
+            fit_voxel_limit(c, mesh, settings);
+            if (orientation) { // the three orientations alone, no infill search
+                run.orient = recommended_orientation(placed, settings, moved, filament_type, [this](double done) {
+                    optimize_permille_ = int(done * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+                return run;
+            }
+            if (lattice) { // the lattice alone, the part hollow
+                run.latticed = lightest_lattice(mesh, placed, settings, c, moved, [this](double done) {
+                    optimize_permille_ = int(done * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+                return run;
+            }
+            // By zones the uniform search is the first half of the bar.
+            const double share = zones || ribs || reinforce ? 0.5 : 1.0;
+            run.best = lightest_infill(mesh, placed, settings, c, moved, [this, share](double done) {
+                optimize_permille_ = int(done * share * 1000.0);
+                if (optimize_cancel_)
+                    throw Cancelled{};
+            });
+            if (zones && run.best.found && !run.best.solid)
+                run.zoned = zoned_infill(mesh, placed, settings, c, moved, run.best.density, [this](double done) {
+                    optimize_permille_ = int((0.5 + 0.5 * done) * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+            if (reinforce && run.best.found && !run.best.solid)
+                run.reinforced = reinforced_infill(mesh, placed, settings, c, moved, run.best.density, [this](double done) {
+                    optimize_permille_ = int((0.5 + 0.5 * done) * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+            if (ribs && run.best.found && !run.best.solid)
+                run.ribbed = ribbed_infill(mesh, placed, settings, c, moved, run.best.density, [this](double done) {
+                    optimize_permille_ = int((0.5 + 0.5 * done) * 1000.0);
+                    if (optimize_cancel_)
+                        throw Cancelled{};
+                });
+        } catch (const Cancelled&) {
+            run.cancelled = true;
+        } catch (const std::exception& e) {
+            run.error = e.what();
+        }
+        return run;
+    });
+}
+
+void App::start_structural() {
+    if (structural_job_.running() || objects_.empty())
+        return;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    const PlateObject& o = objects_[part];
+    TriangleMesh placed = placed_mesh(o);
+    if (placed.empty() || o.mesh.empty())
+        return;
+    std::array<double, 9> a{};
+    std::array<double, 3> b{};
+    own_to_placed(o, placed, a, b);
+    ProjectEngineering moved = o.engineering;
+    move_engineering(moved, a, b);
+    // Printed on a belt (rule 10): the analysis runs on the part turned so its
+    // layers lie flat, and its map and points are turned back for the view.
+    const bool on_belt = o.engineering.structural.print_direction == "belt" && settings_.belt_enabled;
+    const std::array<double, 9> turn = on_belt ? belt_layer_rotation(settings_) : std::array<double, 9>{1, 0, 0, 0, 1, 0, 0, 0, 1};
+    if (on_belt) {
+        std::vector<Vec3f> corners = placed.corners();
+        for (Vec3f& v : corners)
+            v = Vec3f{float(turn[0] * v.x + turn[1] * v.y + turn[2] * v.z), float(turn[3] * v.x + turn[4] * v.y + turn[5] * v.z),
+                      float(turn[6] * v.x + turn[7] * v.y + turn[8] * v.z)};
+        placed = TriangleMesh(std::move(corners));
+        turn_engineering(moved, turn);
+    }
+    // And back, for the report's points (in the part's own frame).
+    std::array<double, 12> to_part{1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
+    const double det = a[0] * (a[4] * a[8] - a[5] * a[7]) - a[1] * (a[3] * a[8] - a[5] * a[6]) + a[2] * (a[3] * a[7] - a[4] * a[6]);
+    if (std::abs(det) > 1e-12) {
+        const std::array<double, 9> inv{(a[4] * a[8] - a[5] * a[7]) / det, (a[2] * a[7] - a[1] * a[8]) / det,
+                                        (a[1] * a[5] - a[2] * a[4]) / det, (a[5] * a[6] - a[3] * a[8]) / det,
+                                        (a[0] * a[8] - a[2] * a[6]) / det, (a[2] * a[3] - a[0] * a[5]) / det,
+                                        (a[3] * a[7] - a[4] * a[6]) / det, (a[1] * a[6] - a[0] * a[7]) / det,
+                                        (a[0] * a[4] - a[1] * a[3]) / det};
+        for (std::size_t i = 0; i < 9; ++i)
+            to_part[i] = inv[i];
+        for (std::size_t i = 0; i < 3; ++i)
+            to_part[9 + i] = -(inv[3 * i] * b[0] + inv[3 * i + 1] * b[1] + inv[3 * i + 2] * b[2]);
+    }
+    if (on_belt) { // from the turned frame: first back by the transpose
+        std::array<double, 12> m = to_part;
+        for (std::size_t i = 0; i < 3; ++i)
+            for (std::size_t j = 0; j < 3; ++j)
+                m[3 * i + j] = to_part[3 * i] * turn[3 * j] + to_part[3 * i + 1] * turn[3 * j + 1] + to_part[3 * i + 2] * turn[3 * j + 2];
+        to_part = m;
+    }
+    Settings settings = settings_;
+    if (on_belt)
+        settings.belt_enabled = false; // already turned
+    std::vector<std::string> notes;
+    apply_engineering_overrides(settings, o.engineering, notes);
+    const std::string fingerprint = engineering_fingerprint(o.mesh, o.engineering, settings_json(settings_), "structural");
+    const std::string filament_type = settings_.filament_type;
+    const double asked = o.engineering.structural.safety_factor;
+    structural_cancel_ = false;
+    structural_permille_ = 0;
+    structural_message_.clear();
+    structural_job_.start([this, part, placed = std::move(placed), moved, settings, fingerprint, filament_type, to_part,
+                           asked, on_belt, turn]() {
+        StructuralRun run;
+        run.part = part;
+        run.fingerprint = fingerprint;
+        struct Cancelled {};
+        try {
+            std::vector<std::string> case_notes;
+            AnalysisCase c = engineering_analysis_case(moved, placed, {}, case_notes, filament_type, settings.layer_height,
+                                                       print_conditions(settings, moved));
+            const IndexedMesh mesh = weld_exact(placed);
+            // A quality finer than the part allows: the finest voxels that fit (BH24).
+            fit_voxel_limit(c, mesh, settings);
+            const AnalysisReport r = run_analysis(mesh, settings, c, nullptr, [this](std::string_view, double done) {
+                structural_permille_ = int(done * 1000.0);
+                if (structural_cancel_)
+                    throw Cancelled{};
+            });
+            run.report = structural_report_json(r, c, moved, to_part, &placed);
+            // The map's data: the voxels' outside with each triangle's
+            // values and each corner's displacement; the view paints it by
+            // the chosen kind (paint_structural_map).
+            const VoxelSurface v = voxel_surface(r.grid, r.result.safety, &r.result.elasticity.displacement);
+            const VoxelSurface vm = voxel_surface(r.grid, r.result.elasticity.von_mises);
+            run.asked = asked;
+            run.corners = v.corners;
+            run.moved = v.displacement;
+            run.safety.reserve(v.value.size());
+            for (double x : v.value)
+                run.safety.push_back(float(x));
+            run.stress.assign(v.value.size(), 0.0f);
+            if (vm.value.size() == v.value.size())
+                for (std::size_t t = 0; t < vm.value.size(); ++t)
+                    run.stress[t] = float(vm.value[t]);
+            run.motion.assign(v.value.size(), 0.0f);
+            if (run.moved.size() == run.corners.size())
+                for (std::size_t t = 0; t < run.motion.size(); ++t) {
+                    float sum = 0.0f;
+                    for (std::size_t q = 3 * t; q < 3 * t + 3; ++q)
+                        sum += std::sqrt(run.moved[q].x * run.moved[q].x + run.moved[q].y * run.moved[q].y + run.moved[q].z * run.moved[q].z);
+                    run.motion[t] = sum / 3.0f;
+                }
+            for (float x : run.stress)
+                run.max_stress = std::max(run.max_stress, double(x));
+            for (float x : run.motion)
+                run.max_motion = std::max(run.max_motion, double(x));
+            run.size = std::max(1e-6, double(std::max({r.grid.nx * r.grid.hx, r.grid.ny * r.grid.hy,
+                                                       r.grid.z.empty() ? 0.0 : r.grid.z.back() - r.grid.z.front()})));
+            if (r.valid && std::isfinite(r.result.min_safety)) {
+                run.weakest = r.weakest;
+                run.weakest_safety = r.result.min_safety;
+            }
+            if (on_belt) { // back to the bed's frame: the transpose
+                const auto back = [&](float x, float y, float z) {
+                    return Vec3f{float(turn[0] * x + turn[3] * y + turn[6] * z), float(turn[1] * x + turn[4] * y + turn[7] * z),
+                                 float(turn[2] * x + turn[5] * y + turn[8] * z)};
+                };
+                for (Vec3f& q : run.corners)
+                    q = back(q.x, q.y, q.z);
+                for (Vec3f& q : run.moved)
+                    q = back(q.x, q.y, q.z);
+                if (run.weakest) {
+                    const Vec3f w = back(float((*run.weakest)[0]), float((*run.weakest)[1]), float((*run.weakest)[2]));
+                    run.weakest = std::array<double, 3>{w.x, w.y, w.z};
+                }
+            }
+            run.ok = true;
+        } catch (const Cancelled&) {
+            run.cancelled = true;
+        } catch (const std::exception& e) {
+            run.error = e.what();
+        }
+        return run;
+    });
+}
+
+// A finished run: its report kept with the part (saved with the project,
+// rule 11 bis, EP8), its map shown.
+void App::structural_done(StructuralRun run) {
+    if (run.cancelled) {
+        structural_message_ = tr(T::StructCancelled);
+        return;
+    }
+    if (!run.ok) {
+        structural_message_ = format(tr(T::StructFailed), run.error.c_str());
+        return;
+    }
+    if (run.part < objects_.size()) {
+        std::vector<EngineeringResult>& results = objects_[run.part].engineering.results;
+        std::erase_if(results, [](const EngineeringResult& r) { return r.kind == "structural"; });
+        results.push_back({"structural", run.fingerprint, run.report});
+    }
+    structural_map_in_view_ = false;
+    structural_exaggerate_ = 0.0f; // chosen again for the new result
+    structural_map_ = std::move(run);
+}
+
+bool App::structural_stale(std::size_t part, const EngineeringResult& r) {
+    if (part >= objects_.size())
+        return true;
+    const PlateObject& o = objects_[part];
+    ProjectEngineering inputs = o.engineering;
+    inputs.results.clear();
+    const std::string settings = settings_json(settings_);
+    std::string key = r.kind + "|" + std::to_string(part) + "|" + std::to_string(plate_version_) + "|" + std::to_string(o.mesh.triangle_count()) +
+                      "|" + engineering_json(inputs) + "|" + settings;
+    if (key != stale_key_) {
+        stale_key_ = std::move(key);
+        stale_fingerprint_ = engineering_fingerprint(o.mesh, o.engineering, settings, r.kind);
+    }
+    return r.fingerprint != stale_fingerprint_;
+}
+
+// The map is in the view while Structural shows a part whose last run of
+// this session is still up to date.
+bool App::structural_map_wanted() {
+    if (tab_ != Tab::Structural || !structural_show_map_ || !structural_map_ || objects_.empty())
+        return false;
+    const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+    if (structural_map_->part != part)
+        return false;
+    const ProjectEngineering& e = objects_[part].engineering;
+    const auto it = std::find_if(e.results.begin(), e.results.end(), [](const EngineeringResult& r) { return r.kind == "structural"; });
+    return it != e.results.end() && it->fingerprint == structural_map_->fingerprint &&
+           !structural_stale(part, *it);
+}
+
+// The map in the view (rule 12): the voxels' outside, deformed when asked
+// (corner + exaggeration * displacement), its triangles grouped by colour
+// band of the chosen kind: the safety factor's five bands, or von Mises and
+// the displacement in five equal steps from 0 (blue) to the largest (red).
+void App::paint_structural_map() {
+    StructuralRun& m = *structural_map_;
+    const std::size_t n = m.safety.size();
+    const float scale = structural_deformed_ && m.moved.size() == m.corners.size() ? structural_exaggerate_ : 0.0f;
+    const auto band_of = [&](std::size_t t) {
+        if (structural_map_kind_ == 1 || structural_map_kind_ == 2) {
+            const double v = structural_map_kind_ == 1 ? m.stress[t] : m.motion[t];
+            const double top = structural_map_kind_ == 1 ? m.max_stress : m.max_motion;
+            return top > 0.0 ? std::clamp(int(v / top * 5.0), 0, 4) : 0;
+        }
+        return safety_band(m.safety[t], m.asked);
+    };
+    std::array<std::vector<float>, 5> bands;
+    for (std::size_t t = 0; t < n && 3 * t + 2 < m.corners.size(); ++t) {
+        Vec3f c[3];
+        for (std::size_t k = 0; k < 3; ++k) {
+            c[k] = m.corners[3 * t + k];
+            if (scale != 0.0f) {
+                const Vec3f& d = m.moved[3 * t + k];
+                c[k] = Vec3f{c[k].x + scale * d.x, c[k].y + scale * d.y, c[k].z + scale * d.z};
+            }
+        }
+        const Vec3f u{c[1].x - c[0].x, c[1].y - c[0].y, c[1].z - c[0].z}, w{c[2].x - c[0].x, c[2].y - c[0].y, c[2].z - c[0].z};
+        Vec3f nn{u.y * w.z - u.z * w.y, u.z * w.x - u.x * w.z, u.x * w.y - u.y * w.x};
+        const float len = std::sqrt(nn.x * nn.x + nn.y * nn.y + nn.z * nn.z);
+        if (len > 0.0f)
+            nn = Vec3f{nn.x / len, nn.y / len, nn.z / len};
+        std::vector<float>& out = bands[std::size_t(band_of(t))];
+        for (const Vec3f& q : c)
+            out.insert(out.end(), {q.x, q.y, q.z, nn.x, nn.y, nn.z});
+    }
+    m.surface.clear();
+    m.band.clear();
+    for (std::size_t k = 0; k < bands.size(); ++k) {
+        m.band.insert(m.band.end(), bands[k].size() / 18, std::uint8_t(k));
+        m.surface.insert(m.surface.end(), bands[k].begin(), bands[k].end());
+    }
+    std::vector<Vec3f> corners;
+    corners.reserve(m.surface.size() / 6);
+    for (std::size_t i = 0; i + 5 < m.surface.size(); i += 6)
+        corners.push_back(Vec3f{m.surface[i], m.surface[i + 1], m.surface[i + 2]});
+    show_in_view(TriangleMesh(std::move(corners)));
+    std::vector<Renderer::PaintGroup> groups;
+    std::size_t first = 0;
+    for (std::size_t k = 0; k < 5; ++k) {
+        const std::size_t count = 3 * std::size_t(std::count(m.band.begin(), m.band.end(), std::uint8_t(k)));
+        const std::uint32_t colour = structural_map_kind_ == 0 ? kSafetyBands[k] : kSafetyBands[4 - k];
+        if (count > 0)
+            groups.push_back({first, count, vec(colour)});
+        first += count;
+    }
+    renderer_.set_paint(m.surface, groups);
+    vk_view_.set_paint(m.surface, groups);
+}
+
+void App::update_structural_view() {
+    // Checked a few times a second: the fingerprint hashes the part's mesh.
+    // A new map kind or exaggeration repaints at once.
+    static int frame = 0;
+    const std::string key = std::to_string(structural_map_kind_) + "|" + (structural_deformed_ ? std::to_string(structural_exaggerate_) : "flat");
+    if (++frame % 10 != 0 && structural_map_in_view_ == (tab_ == Tab::Structural && structural_show_map_ && structural_map_.has_value()) &&
+        (!structural_map_in_view_ || key == structural_paint_key_))
+        return;
+    const bool want = structural_map_wanted();
+    if (want && (!structural_map_in_view_ || key != structural_paint_key_)) {
+        paint_structural_map();
+        structural_paint_key_ = key;
+        structural_map_in_view_ = true;
+    } else if (!want && structural_map_in_view_) {
+        structural_map_in_view_ = false;
+        paint_dirty_ = true; // the painting tool's view, when it comes back
+        if (tab_ != Tab::Design)
+            rebuild_plate();
+    }
+}
+
+// Over the view in Structural (rules 6, 7 and 12): each force as a red arrow
+// as long as its value says, each point as a disc (blue fixed, red force),
+// and with the map, the critical point and its factor.
+void App::structural_overlay() {
+    arrow_handles_.clear();
+    if (tab_ != Tab::Structural || objects_.empty() || !(view_size_.x > 1.0f) || !(view_size_.y > 1.0f))
+        return;
+    const Mat4 vp = camera_.projection(view_size_.x / view_size_.y) * camera_.view();
+    const auto project = [&](const std::array<double, 3>& w, ImVec2& out) {
+        const float x = float(w[0]), y = float(w[1]), z = float(w[2]);
+        const float cx = vp[0] * x + vp[4] * y + vp[8] * z + vp[12];
+        const float cy = vp[1] * x + vp[5] * y + vp[9] * z + vp[13];
+        const float ww = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+        if (!(ww > 1e-6f))
+            return false;
+        out = ImVec2(view_pos_.x + (cx / ww * 0.5f + 0.5f) * view_size_.x, view_pos_.y + (0.5f - cy / ww * 0.5f) * view_size_.y);
+        return true;
+    };
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
+    const float thick = 2.5f * scale_;
+    if (structural_map_in_view_ && structural_map_ && structural_map_->weakest) {
+        ImVec2 q;
+        if (project(*structural_map_->weakest, q)) {
+            const ImU32 white = ImGui::GetColorU32(ImVec4(1, 1, 1, 1));
+            dl->AddCircle(q, 9.0f * scale_, white, 24, thick);
+            dl->AddCircle(q, 3.0f * scale_, white, 12, thick);
+            const std::string text = format(tr(T::StructCritical), structural_map_->weakest_safety);
+            dl->AddRectFilled(ImVec2(q.x + 12.0f * scale_, q.y - 10.0f * scale_),
+                              ImVec2(q.x + 18.0f * scale_ + ImGui::CalcTextSize(text.c_str()).x, q.y + 10.0f * scale_),
+                              ImGui::GetColorU32(rgb(0x1E1E24, 0.85f)), 4.0f * scale_);
+            dl->AddText(ImVec2(q.x + 15.0f * scale_, q.y - 0.5f * ImGui::GetTextLineHeight()), white, text.c_str());
+        }
+    }
+    if (!structural_map_in_view_) {
+        const std::size_t part = std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1));
+        const PlateObject& o = objects_[part];
+        if (part < placed_meshes_.size() && !placed_meshes_[part].empty() && !o.mesh.empty()) {
+            const TriangleMesh& placed = placed_meshes_[part];
+            std::array<double, 9> a{};
+            std::array<double, 3> b{};
+            own_to_placed(o, placed, a, b);
+            const auto move = [&](const std::array<double, 3>& p) {
+                return std::array<double, 3>{a[0] * p[0] + a[1] * p[1] + a[2] * p[2] + b[0], a[3] * p[0] + a[4] * p[1] + a[5] * p[2] + b[1],
+                                             a[6] * p[0] + a[7] * p[1] + a[8] * p[2] + b[2]};
+            };
+            const auto turn = [&](const std::array<double, 3>& n) {
+                std::array<double, 3> t{a[0] * n[0] + a[1] * n[1] + a[2] * n[2], a[3] * n[0] + a[4] * n[1] + a[5] * n[2],
+                                        a[6] * n[0] + a[7] * n[1] + a[8] * n[2]};
+                const double l = std::sqrt(t[0] * t[0] + t[1] * t[1] + t[2] * t[2]);
+                return l > 0.0 ? std::array<double, 3>{t[0] / l, t[1] / l, t[2] / l} : n;
+            };
+            const ImU32 red = ImGui::GetColorU32(rgb(0xE5484D)), blue = ImGui::GetColorU32(rgb(0x4C9BFF)),
+                        yellow = ImGui::GetColorU32(rgb(0xF5C524));
+            for (const EngineeringCondition& c : o.engineering.conditions) {
+                if (c.hidden)
+                    continue;
+                // Where it acts: a point, or the area-weighted middle of its
+                // zone with the zone's mean normal.
+                std::array<double, 3> at{}, normal{};
+                if (c.is_point()) {
+                    at = move(c.point);
+                    normal = turn(c.normal);
+                } else {
+                    double area = 0.0;
+                    for (const std::uint32_t t : c.triangles) {
+                        if (t >= placed.triangle_count())
+                            continue;
+                        const Vec3f p = placed.corner(t, 0), q = placed.corner(t, 1), w = placed.corner(t, 2);
+                        const double ux = q.x - p.x, uy = q.y - p.y, uz = q.z - p.z, vx = w.x - p.x, vy = w.y - p.y, vz = w.z - p.z;
+                        const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+                        const double s = 0.5 * std::sqrt(nx * nx + ny * ny + nz * nz);
+                        area += s;
+                        at[0] += s * (p.x + q.x + w.x) / 3.0, at[1] += s * (p.y + q.y + w.y) / 3.0, at[2] += s * (p.z + q.z + w.z) / 3.0;
+                        normal[0] += 0.5 * nx, normal[1] += 0.5 * ny, normal[2] += 0.5 * nz;
+                    }
+                    if (!(area > 0.0))
+                        continue;
+                    for (double& v : at)
+                        v /= area;
+                    const double l = std::sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
+                    if (l > 0.0)
+                        for (double& v : normal)
+                            v /= l;
+                }
+                ImVec2 q;
+                if (!project(at, q))
+                    continue;
+                const ImU32 colour = c.is_force() ? red : c.kind == ConditionKind::Limit ? yellow : blue;
+                if (c.is_point()) {
+                    dl->AddCircle(q, 7.0f * scale_, colour, 20, thick);
+                } else if (!c.is_force()) {
+                    // A zone: a hatched mark at its middle.
+                    const float r = 8.0f * scale_;
+                    const ImVec2 box[4] = {ImVec2(q.x - r, q.y - r), ImVec2(q.x + r, q.y - r), ImVec2(q.x + r, q.y + r), ImVec2(q.x - r, q.y + r)};
+                    dl->AddPolyline(box, 4, colour, thick, ImDrawFlags_Closed);
+                    for (int k = 0; k < 3; ++k) { // three slanted lines inside it
+                        const float t = (float(k) + 1.0f) / 4.0f * 2.0f * r;
+                        dl->AddLine(ImVec2(q.x - r, q.y - r + t), ImVec2(q.x - r + t, q.y - r), colour, 1.5f * scale_);
+                        dl->AddLine(ImVec2(q.x + r - t, q.y + r), ImVec2(q.x + r, q.y + r - t), colour, 1.5f * scale_);
+                    }
+                }
+                if (!c.is_force())
+                    continue;
+                // The force's direction: into the part along the normal, an
+                // axis or its vector; its length grows with its value.
+                std::array<double, 3> d{-normal[0], -normal[1], -normal[2]};
+                if (c.direction == ForceDirection::Axis) {
+                    d = {0.0, 0.0, 0.0};
+                    d[std::size_t(std::clamp(std::abs(c.axis), 1, 3) - 1)] = c.axis < 0 ? -1.0 : 1.0;
+                } else if (c.direction == ForceDirection::Vector) {
+                    const double l = std::sqrt(c.vector[0] * c.vector[0] + c.vector[1] * c.vector[1] + c.vector[2] * c.vector[2]);
+                    if (l > 0.0)
+                        d = {c.vector[0] / l, c.vector[1] / l, c.vector[2] / l};
+                }
+                const double length = std::clamp(5.0 + 3.0 * std::sqrt(std::max(c.newtons, 0.0)), 5.0, 40.0);
+                const std::array<double, 3> tail{at[0] - d[0] * length, at[1] - d[1] * length, at[2] - d[2] * length};
+                ImVec2 from;
+                if (!project(tail, from))
+                    continue;
+                dl->AddLine(from, q, red, thick);
+                const float dx = q.x - from.x, dy = q.y - from.y, l = std::sqrt(dx * dx + dy * dy);
+                if (l > 1.0f) {
+                    const float ux = dx / l, uy = dy / l, h = 10.0f * scale_;
+                    dl->AddTriangleFilled(q, ImVec2(q.x - ux * h - uy * h * 0.5f, q.y - uy * h + ux * h * 0.5f),
+                                          ImVec2(q.x - ux * h + uy * h * 0.5f, q.y - uy * h - ux * h * 0.5f), red);
+                }
+                // The free end: a handle to drag (rule 7), named for the
+                // scripted tests (structural_arrow_1 is the first condition).
+                const std::size_t index = std::size_t(&c - o.engineering.conditions.data());
+                const bool held = arrow_drag_ && arrow_drag_->part == part && arrow_drag_->condition == index;
+                dl->AddCircleFilled(from, (held ? 6.0f : 5.0f) * scale_, held ? ImGui::GetColorU32(ImVec4(1, 1, 1, 1)) : red, 16);
+                arrow_handles_.push_back({part, index, from, at});
+                const float r = 8.0f * scale_;
+                g_menu_rects["structural_arrow_" + std::to_string(index + 1)] = ImVec4(from.x - r, from.y - r, from.x + r, from.y + r);
+            }
+        }
+    }
+    dl->PopClipRect();
+}
+
 void App::gears_panel() {
     const ImGuiViewport* vp = ImGui::GetMainViewport();
     const float top = kTopBar * scale_, bottom = kStatusBar * scale_;
@@ -11375,8 +16742,7 @@ void App::gears_panel() {
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNav);
     const auto rect_of = [](const std::string& name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     const auto section = [&](T title) {
         ImGui::Spacing();
@@ -11669,8 +17035,10 @@ bool App::gizmo(bool editing) {
     if (gizmo_drag_) {
         GizmoDrag& g = *gizmo_drag_;
         if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-            if (g.moved)
+            if (g.moved) {
+                remember_place(selected_, g.place0);
                 plate_changed();
+            }
             gizmo_drag_.reset();
             return true;
         }
@@ -11801,9 +17169,10 @@ bool App::panel_folded_now() const {
 // the high one, or with ui.lower_while_moving off. The first still frame has
 // the whole picture again.
 void App::update_view_hold() {
-    const Mat4 view = camera_.view();
-    const bool camera_moves = view != last_view_;
-    last_view_ = view;
+    // Only the camera the person moves (orbit, pan, zoom): the program's own
+    // framing keeps the picture, and so do the command line's screenshots
+    // (rule 9).
+    const bool camera_moves = moved_frame_ >= ImGui::GetFrameCount() - 1;
     const bool painting = painting_object_ >= 0;
     const bool model_moves = dragged_ || (gizmo_drag_ && gizmo_drag_->moved);
     const int before = ao_hold_;
@@ -11830,6 +17199,489 @@ void App::update_view_hold() {
         notify(tr(T::ViewLoweredNotice));
         save_preferences();
     }
+}
+
+// A model's placement before a drag or an edit, for Ctrl+Z (UI45). Nothing
+// when it did not change; a new step forgets what was undone.
+void App::remember_place(int object, const Placement& before) {
+    if (object < 0 || std::size_t(object) >= objects_.size())
+        return;
+    const Placement& now = objects_[std::size_t(object)].place;
+    if (now.x == before.x && now.y == before.y && now.rotation == before.rotation && now.scale == before.scale)
+        return;
+    place_undo_.push_back({std::size_t(object), objects_.size(), before});
+    if (place_undo_.size() > 100)
+        place_undo_.erase(place_undo_.begin());
+    place_redo_.clear();
+}
+
+// A part's Engineering data before a change, for Ctrl+Z in Structural.
+void App::remember_engineering(std::size_t object) {
+    if (object >= objects_.size())
+        return;
+    engineering_undo_.push_back({object, objects_.size(), objects_[object].engineering});
+    if (engineering_undo_.size() > 100)
+        engineering_undo_.erase(engineering_undo_.begin());
+    engineering_redo_.clear();
+}
+
+// A part's turn, settings and volumes before Optimizar changes them.
+void App::remember_part(std::size_t object) {
+    if (object >= objects_.size())
+        return;
+    const PlateObject& o = objects_[object];
+    engineering_undo_.push_back({object, objects_.size(), o.engineering, true, o.place, o.settings, o.volumes});
+    if (engineering_undo_.size() > 100)
+        engineering_undo_.erase(engineering_undo_.begin());
+    engineering_redo_.clear();
+}
+
+void App::undo_engineering(bool redo) {
+    std::vector<EngineeringStep>& from = redo ? engineering_redo_ : engineering_undo_;
+    std::vector<EngineeringStep>& to = redo ? engineering_undo_ : engineering_redo_;
+    while (!from.empty() && (from.back().count != objects_.size() || from.back().object >= objects_.size()))
+        from.pop_back();
+    if (from.empty())
+        return;
+    EngineeringStep step = std::move(from.back());
+    from.pop_back();
+    PlateObject& o = objects_[step.object];
+    to.push_back({step.object, step.count, o.engineering, step.part, o.place, o.settings, o.volumes});
+    o.engineering = std::move(step.before);
+    if (step.part) {
+        o.place = step.place;
+        o.settings = std::move(step.settings);
+        o.volumes = std::move(step.volumes);
+        plate_changed();
+    }
+    structural_part_ = int(step.object);
+}
+
+// Ctrl+Z puts the last moved model back where it was; Ctrl+Y (or
+// Ctrl+Shift+Z) moves it again. Steps from a plate with other models are
+// dropped: their numbers no longer name the same models.
+// The chosen model off the plate; KEEP_CHOICE picks the next one (the
+// toolbar's button), otherwise nothing stays chosen (Del, «Más»).
+void App::delete_selected(bool keep_choice) {
+    if (selected_ < 0 || selected_ >= int(objects_.size()))
+        return;
+    objects_.erase(objects_.begin() + selected_);
+    selected_ = keep_choice && !objects_.empty() ? std::min(selected_, int(objects_.size()) - 1) : -1;
+    if (objects_.empty()) {
+        result_.reset();
+        renderer_.clear_preview();
+        vk_view_.clear_preview();
+    }
+    plate_changed();
+}
+
+// «Más» (interface.md, «Más»): cards in columns of three, each with its grey
+// subtitle; every action shows its shortcut on the right, in grey, and is
+// greyed when it can't be used. Only the actions the program has are listed
+// (the audit in PROGRESS.md, 2026-11-10, keeps the rest in order).
+void App::more_menu() {
+    // The page behind the cards, so the white cards stand out.
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, rgb(theme_.window));
+    const bool open = ImGui::BeginPopup("##more_menu");
+    ImGui::PopStyleColor();
+    if (!open)
+        return;
+    // An entry, named for --ui-script's menu step.
+    // Drawn here, not with MenuItem: its shortcut column is the window's,
+    // past the card's edge. The shortcut and the check mark go on the right.
+    const auto item = [&](const char* name, const char* label, const char* keys = nullptr, bool enabled = true,
+                          bool checked = false) {
+        const std::string id = std::string(label) + "##" + name;
+        ImGui::BeginDisabled(!enabled);
+        const bool hit = ImGui::Selectable(id.c_str(), false, ImGuiSelectableFlags_None,
+                                           ImVec2(ImGui::GetContentRegionAvail().x, 0.0f));
+        ImGui::EndDisabled();
+        const ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        float right = hi.x;
+        if (checked) {
+            const float h = ImGui::GetTextLineHeight();
+            right -= h;
+            ImGui::RenderCheckMark(dl, ImVec2(right + 0.15f * h, lo.y + 0.5f * (hi.y - lo.y - 0.7f * h)),
+                                   ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled), 0.7f * h);
+            right -= 4.0f * scale_;
+        }
+        if (keys)
+            dl->AddText(ImVec2(right - ImGui::CalcTextSize(keys).x, lo.y + 0.5f * (hi.y - lo.y - ImGui::GetTextLineHeight())),
+                        ImGui::GetColorU32(ImGuiCol_TextDisabled), keys);
+        note_rect(name);
+        if (!enabled)
+            g_menu_disabled.insert(name);
+        if (g_keep_texts) // the label and its shortcut, for expect-text
+            g_texts.push_back(keys ? std::string(label) + "  " + keys : std::string(label));
+        return hit;
+    };
+    const auto title = [&](const char* text) {
+        // Grey and bold: drawn twice, a pixel apart.
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        const ImU32 grey = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddText(at, grey, text);
+        dl->AddText(ImVec2(at.x + std::max(1.0f, scale_), at.y), grey, text);
+        ImGui::Dummy(ImVec2(ImGui::CalcTextSize(text).x + 1.0f, ImGui::GetTextLineHeight()));
+        ImGui::Spacing();
+        if (g_keep_texts)
+            g_texts.push_back(text);
+    };
+    const bool can_export = result_ && result_->ok && !viewer_ && !stale_;
+    const bool to_host = can_export && host_ready() && !result_->resin && device_can_print() && !host_job_.valid();
+    const bool to_usb = can_export && !result_->resin && device_can_print() && printer_ &&
+                        printer_->status().state == device::PrinterState::Idle;
+    const bool on_plate = tab_ == Tab::Prepare && !printer_page_;
+    const bool chosen = selected_ >= 0 && selected_ < int(objects_.size());
+
+    const float card_w = 270.0f * scale_;
+    const ImU32 card_bg = ImGui::GetColorU32(rgb(theme_.panel));
+    ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(10.0f * scale_, 8.0f * scale_));
+    if (ImGui::BeginTable("##more_cards", 3, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_PadOuterX)) {
+        for (int c = 0; c < 3; ++c)
+            ImGui::TableSetupColumn(nullptr, ImGuiTableColumnFlags_WidthFixed, card_w);
+        const auto card = [&](const char* text) {
+            ImGui::TableNextColumn();
+            ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, card_bg);
+            title(text);
+        };
+
+        // 1. Tisma.
+        card(tr(T::MoreTisma));
+        if (item("thingiverse", tr(T::ThingiverseMenu)))
+            open_link("https://www.thingiverse.com/");
+        if (item("cloud", tr(T::CloudMenu)))
+            cloud_open_ = true;
+        if (item("config", tr(T::ConfigMenu), "Ctrl+,"))
+            config_open_ = true;
+
+        // 2. File.
+        card(tr(T::MoreFile));
+        if (item("new_project", tr(T::NewProjectMenu), "Ctrl+N"))
+            new_project();
+        if (item("open_project", tr(T::OpenProjectMenu), "Ctrl+O")) {
+            purpose_ = Purpose::Open;
+            browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
+        }
+        // Numbered, newest first; one no longer there is dropped when chosen.
+        if (ImGui::BeginMenu(tr(T::RecentProjects), !recent_projects_.empty())) {
+            std::optional<std::filesystem::path> open;
+            for (std::size_t i = 0; i < recent_projects_.size(); ++i) {
+                const std::string label = std::to_string(i + 1) + "  " + utf8(recent_projects_[i].filename()) +
+                                          "##recent" + std::to_string(i);
+                if (ImGui::MenuItem(label.c_str()))
+                    open = recent_projects_[i];
+                note_rect("recent_" + std::to_string(i + 1));
+                ImGui::SetItemTooltip("%s", utf8(recent_projects_[i]).c_str());
+            }
+            ImGui::EndMenu();
+            if (open) {
+                std::error_code ec;
+                if (std::filesystem::exists(*open, ec))
+                    open_project(*open);
+                else {
+                    std::erase(recent_projects_, *open);
+                    fail(T::CannotOpen, utf8(*open));
+                }
+            }
+        }
+        note_rect("recent");
+        if (recent_projects_.empty())
+            g_menu_disabled.insert("recent");
+        if (item("save_project", tr(T::SaveProject), "Ctrl+S", has_plate_))
+            begin_save_project(false);
+        if (item("save_project_as", tr(T::SaveProjectAs), "Ctrl+Alt+S", has_plate_))
+            begin_save_project(true);
+        ImGui::Separator();
+        if (item("import_model", tr(T::ImportModelMenu), "Ctrl+I")) {
+            purpose_ = Purpose::AddModel;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
+        }
+        if (item("import_inches", tr(T::ImportInchesMenu))) {
+            purpose_ = Purpose::AddModelInches;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ImportInchesMenu), {".stl", ".obj"}, last_folder_);
+        }
+        if (item("import_zip", tr(T::ImportZipMenu))) {
+            purpose_ = Purpose::ImportZip;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ImportZipMenu), {".zip"}, last_folder_);
+        }
+        if (item("import_config", tr(T::ImportConfigMenu), "Ctrl+L"))
+            begin_import_config(false);
+        if (item("import_project_config", tr(T::ImportProjectConfigMenu), "Ctrl+Alt+L"))
+            begin_import_config(true);
+        ImGui::Separator();
+        if (item("export_gcode", tr(T::ExportGcodeMenu), "Ctrl+G", can_export))
+            begin_export();
+        if (item("export_plate", tr(T::ExportPlateMenu), nullptr, has_plate_)) {
+            purpose_ = Purpose::ExportPlate;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportPlateMenu), {".stl", ".obj"},
+                          project_path_.empty() ? last_folder_ : project_path_.parent_path(),
+                          utf8((project_path_.empty() ? model_path_.stem() : project_path_.stem()).replace_extension(".stl")));
+        }
+        if (item("export_toolpaths", tr(T::ExportToolpathsMenu), nullptr, result_ && result_->ok && !result_->resin)) {
+            purpose_ = Purpose::ExportToolpaths;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportToolpathsMenu), {".obj"}, last_folder_,
+                          utf8((project_path_.empty() ? model_path_.stem() : project_path_.stem()).replace_extension(".obj")));
+        }
+        if (item("export_config", tr(T::ExportConfigMenu), "Ctrl+E"))
+            begin_export_config();
+        if (item("send_gcode", tr(T::SendGcodeMenu), "Ctrl+Shift+G", to_host || to_usb))
+            send_gcode();
+        // A plan without "slice" (cloud.md, rule 10b): the entry shows which
+        // plans have it and opens the account page instead.
+        const bool slice_locked = !cloud_token_.empty() && cloud_account_ &&
+                                  !cloud::plan_includes(cloud_plans_, cloud_account_->plan, "slice");
+        const std::string slice_label =
+            slice_locked ? std::string(tr(T::CloudSliceMenu)) + " — " +
+                               format(tr(T::CloudPlanLock), cloud::plans_with(cloud_plans_, "slice").c_str())
+                         : std::string(tr(T::CloudSliceMenu));
+        if (item("cloud_slice", slice_label.c_str(), nullptr, has_plate_ && !cloud_slice_.valid())) {
+            if (slice_locked)
+                cloud_open_ = true;
+            else
+                start_cloud_slice();
+        }
+        ImGui::Separator();
+        if (item("convert_to_binary", tr(T::ConvertToBinaryMenu))) {
+            purpose_ = Purpose::ConvertToBinary;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ConvertToBinaryMenu), {".gcode", ".gco", ".g"}, last_folder_);
+        }
+        if (item("convert_to_ascii", tr(T::ConvertToAsciiMenu))) {
+            purpose_ = Purpose::ConvertToAscii;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ConvertToAsciiMenu), {".bgcode"}, last_folder_);
+        }
+        if (item("slice_now", tr(T::SliceNowMenu), "Ctrl+R", has_plate_))
+            start_slice();
+        if (item("gcode_preview", tr(T::GcodePreviewMenu))) {
+            purpose_ = Purpose::Open;
+            browser_.open(FileBrowser::Mode::Open, tr(T::GcodePreviewMenu), {".gcode", ".gco", ".g", ".bgcode"},
+                          last_folder_);
+        }
+        if (item("quit", tr(T::Quit)))
+            glfwSetWindowShouldClose(window_, GLFW_TRUE);
+
+        // 3. Edit.
+        card(tr(T::MoreEdit));
+        if (item("deselect_all", tr(T::DeselectAllMenu), "Esc", on_plate && chosen)) {
+            selected_ = -1;
+            tool_ = PlateTool::Select;
+        }
+        if (item("delete_selected", tr(T::DeleteSelectedMenu), "Del", on_plate && chosen))
+            delete_selected();
+        if (item("delete_all", tr(T::DeleteAllMenu), "Ctrl+Del", on_plate && !objects_.empty()))
+            delete_all();
+        if (item("copy", tr(T::CopyMenu), "Ctrl+C", on_plate && chosen))
+            clipboard_ = objects_[std::size_t(selected_)];
+        if (item("paste", tr(T::PasteMenu), "Ctrl+V", on_plate && clipboard_.has_value()))
+            paste();
+        if (item("reload", tr(T::ReloadMenu), "F5", on_plate && can_reload()))
+            reload_from_disk();
+        if (item("undo", tr(T::Undo), "Ctrl+Z", on_plate && !place_undo_.empty()))
+            undo_place(false);
+        if (item("redo", tr(T::Redo), "Ctrl+Y", on_plate && !place_redo_.empty()))
+            undo_place(true);
+        if (item("search", tr(T::SearchMenu), "Ctrl+F"))
+            search_focus_ = true, printer_page_ = false;
+
+        // 4. Window.
+        card(tr(T::MoreWindow));
+        static constexpr struct {
+            const char* name;
+            T label;
+            const char* keys;
+        } tabs[] = {{"window_plater", T::PlaterTabMenu, "Ctrl+1"},
+                    {"window_print", T::PrintSettingsTabMenu, "Ctrl+2"},
+                    {"window_filament", T::FilamentSettingsTabMenu, "Ctrl+3"},
+                    {"window_printer", T::PrinterSettingsTabMenu, "Ctrl+4"},
+                    {"window_3d", T::View3dMenu, "Ctrl+5"},
+                    {"window_preview", T::PreviewMenu, "Ctrl+6"}};
+        for (int i = 0; i < 6; ++i)
+            if (item(tabs[i].name, tr(tabs[i].label), tabs[i].keys, i != 5 || result_.has_value()))
+                window_tab(i + 1);
+        // The shapes the empty bed's menu adds, 20 mm across.
+        if (ImGui::BeginMenu(tr(T::ShapeGalleryMenu))) {
+            const struct {
+                const char* name;
+                T label;
+            } shapes[] = {{"gallery_cube", T::ShapeCube}, {"gallery_cylinder", T::ShapeCylinder}, {"gallery_sphere", T::ShapeSphere}};
+            for (const auto& shape : shapes) {
+                const bool hit = ImGui::MenuItem(tr(shape.label));
+                note_rect(shape.name);
+                if (hit)
+                    add_shape(shape.label == T::ShapeCube       ? make_box(20, 20, 20)
+                              : shape.label == T::ShapeCylinder ? make_cylinder(10, 20)
+                                                                : make_sphere(10),
+                              shape.label);
+            }
+            ImGui::EndMenu();
+        }
+        note_rect("shape_gallery");
+
+        // 5. View.
+        card(tr(T::MoreView));
+        static constexpr struct {
+            const char* name;
+            T label;
+            const char* key;
+            StandardView view;
+        } views[] = {{"view_iso", T::ViewIso, "0", StandardView::Iso},
+                     {"view_top", T::ViewTop, "1", StandardView::Top},
+                     {"view_bottom", T::ViewBottom, "2", StandardView::Bottom},
+                     {"view_front", T::ViewFront, "3", StandardView::Front},
+                     {"view_back", T::ViewBack, "4", StandardView::Back},
+                     {"view_left", T::ViewLeft, "5", StandardView::Left},
+                     {"view_right", T::ViewRight, "6", StandardView::Right}};
+        for (const auto& v : views)
+            if (item(v.name, tr(v.label), v.key)) {
+                camera_.set_view(v.view);
+                frame_all();
+            }
+        ImGui::Separator();
+        if (item("show_labels", tr(T::ShowLabelsMenu), "E", true, show_labels_))
+            show_labels_ = !show_labels_;
+        if (item("show_legend", tr(T::ShowLegendMenu), "L", true, show_legend_))
+            show_legend_ = !show_legend_;
+        if (item("collapse_sidebar", tr(T::CollapseSidebarMenu), "Shift+Tab", true, panel_folded_)) {
+            panel_folded_ = !panel_folded_;
+            frame_pending_ = true;
+        }
+        if (item("fullscreen", tr(T::FullscreenMenu), "F11", true, glfwGetWindowMonitor(window_) != nullptr))
+            toggle_fullscreen();
+        ImGui::Separator();
+        if (item("export_view", tr(T::ExportView))) {
+            purpose_ = Purpose::ExportView;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ExportViewTitle), {".json"}, last_folder_, "tisma-view.json");
+        }
+        if (item("import_view", tr(T::ImportView))) {
+            purpose_ = Purpose::ImportView;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ImportViewTitle), {".json"}, last_folder_);
+        }
+
+        // 6. Configuration.
+        card(tr(T::MoreConfiguration));
+        // The first run's assistant again: the printer, then the filament, from the catalog.
+        if (item("wizard", tr(T::WizardMenu))) {
+            first_run_ = true;
+            setup_step_ = 1;
+            catalog_kind_ = ProfileKind::Printer, catalog_open_ = true;
+        }
+        // The profile pack's newer version, looked for now (profile_pack.md, rule 19).
+        if (item("check_config_updates", tr(T::CheckConfigUpdatesMenu), nullptr,
+                 pack_index_.has_value() && !pack_newer_job_.valid())) {
+            pack_checked_ = static_cast<long long>(std::time(nullptr));
+            pack_check_asked_ = true;
+            pack_newer_job_ = std::async(std::launch::async, [dir = pack_dir(), url = pack_url_] { return pack_newer(dir, url); });
+        }
+        if (item("preferences", tr(T::PreferencesMenu), "Ctrl+P"))
+            config_open_ = true;
+        if (item("print_usb", tr(T::PrintUsbMenu)))
+            set_tab(Tab::Device);
+        if (ImGui::BeginMenu(tr(T::Language))) {
+            if (ImGui::MenuItem("Español", nullptr, language() == Language::Spanish))
+                set_language(Language::Spanish);
+            if (ImGui::MenuItem("English", nullptr, language() == Language::English))
+                set_language(Language::English);
+            ImGui::EndMenu();
+        }
+        note_rect("language");
+        if (ImGui::BeginMenu(tr(T::Theme))) {
+            if (ImGui::MenuItem(tr(T::LikeSystem), nullptr, theme_system_)) {
+                theme_system_ = true;
+                follow_system_theme();
+            }
+            if (ImGui::MenuItem(tr(T::Dark), nullptr, !theme_system_ && theme_.dark)) {
+                theme_system_ = false;
+                theme_ = dark_theme();
+                apply_theme();
+            }
+            if (ImGui::MenuItem(tr(T::Light), nullptr, !theme_system_ && !theme_.dark)) {
+                theme_system_ = false;
+                theme_ = light_theme();
+                apply_theme();
+            }
+            note_rect("theme_menu_light");
+            ImGui::EndMenu();
+        }
+        note_rect("theme");
+        if (item("cloud_account", tr(T::CloudMenu)))
+            cloud_open_ = true;
+        ImGui::Separator();
+        // The assistant's preferences (assistant.md, «Ajustes»).
+        if (item("assistant_tutorials", tr(T::AssistantTutorials), nullptr, true, assistant_tutorials_))
+            assistant_tutorials_ = !assistant_tutorials_;
+        if (item("assistant_glossary", tr(T::AssistantGlossary), nullptr, true, assistant_glossary_))
+            g_glossary_tips = assistant_glossary_ = !assistant_glossary_;
+        if (item("assistant_material", tr(T::AssistantMaterial), nullptr, true, assistant_material_))
+            assistant_material_ = !assistant_material_;
+
+        // 7. Calibration: the tests, each made in its tab.
+        card(tr(T::MoreCalibration));
+        calibration_entries("cal_");
+
+        // 8. Help.
+        card(tr(T::MoreHelp));
+        if (item("help", tr(T::Help), "F1"))
+            help_open_ = true;
+        if (item("tutorial", tr(T::Tutorial)))
+            tour_step_ = 0;
+        if (item("tips", tr(T::TipsOn), nullptr, true, tips_))
+            tips_ = !tips_;
+        if (item("tips_again", tr(T::TipsAgain))) {
+            tips_seen_.clear();
+            tips_ = true;
+        }
+        ImGui::Separator();
+        if (item("releases", tr(T::ReleasesMenu)))
+            open_link("https://github.com/adriangrochi-code/tisma_engine/releases");
+        if (item("system_info", tr(T::SystemInfoMenu)))
+            system_info_open_ = true;
+        if (item("config_folder", tr(T::ConfigFolderMenu), nullptr, !preferences_path().empty()))
+            open_folder(preferences_path().parent_path());
+        if (item("shortcuts", tr(T::ShortcutsMenu), "?"))
+            shortcuts_open_ = true;
+        if (item("report", tr(T::ReportMenu)))
+            report_open_ = true;
+        if (item("credits", tr(T::Credits)))
+            credits_open_ = true;
+        if (item("about", tr(T::About)))
+            about_open_ = true;
+        ImGui::EndTable();
+    }
+    ImGui::PopStyleVar();
+    ImGui::EndPopup();
+}
+
+// «Send G-code…» (Ctrl+Shift+G): to the tested network program, or to the
+// printer on USB (devices.md, rule 19).
+void App::send_gcode() {
+    if (!result_ || !result_->ok || viewer_ || stale_ || result_->resin || !device_can_print())
+        return;
+    if (host_ready()) {
+        if (!host_job_.valid()) {
+            host_dialog_name_ = host_default_name();
+            host_dialog_open_ = true;
+        }
+    } else if (printer_ && printer_->status().state == device::PrinterState::Idle) {
+        device_print();
+    }
+}
+
+void App::undo_place(bool redo) {
+    std::vector<PlaceStep>& from = redo ? place_redo_ : place_undo_;
+    std::vector<PlaceStep>& to = redo ? place_undo_ : place_redo_;
+    while (!from.empty() && (from.back().count != objects_.size() || from.back().object >= objects_.size()))
+        from.pop_back();
+    if (from.empty())
+        return;
+    const PlaceStep step = from.back();
+    from.pop_back();
+    PlateObject& o = objects_[step.object];
+    to.push_back({step.object, step.count, o.place});
+    o.place = step.place;
+    selected_ = int(step.object);
+    gizmo_drag_.reset();
+    plate_changed();
 }
 
 void App::compact_panel() {
@@ -11987,6 +17839,7 @@ App::ConfigState App::config_state() const {
     ConfigState c;
     c.english = language() == Language::English;
     c.dark = theme_.dark;
+    c.theme_system = theme_system_;
     c.render = render_mode_, c.msaa = msaa_, c.fxaa = fxaa_, c.moire = moire_, c.ao_strength = ao_strength_;
     c.tips = tips_, c.tutorials = assistant_tutorials_, c.glossary = assistant_glossary_, c.material = assistant_material_;
     c.cad_design = cad_design_, c.orthographic = camera_.orthographic, c.level = view_level_, c.gpu = settings_.gpu;
@@ -11999,6 +17852,7 @@ App::ConfigState App::config_state() const {
 void App::restore_config(const ConfigState& c) {
     if ((language() == Language::English) != c.english)
         set_language(c.english ? Language::English : Language::Spanish);
+    theme_system_ = c.theme_system;
     if (theme_.dark != c.dark) {
         theme_ = c.dark ? dark_theme() : light_theme();
         apply_theme();
@@ -12025,6 +17879,705 @@ void App::restore_config(const ConfigState& c) {
 // Configuración (preferences.md): pages on the left, the options on the
 // right, a search over all of them, Cancelar and Aceptar at the foot. The
 // view stays visible behind it, so the Video page's changes show at once.
+namespace {
+
+// The address as typed, with https:// when it has no scheme (problem_reports.md, rule 5).
+std::string cloud_address(std::string text) {
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))
+        text.pop_back();
+    while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())))
+        text.erase(text.begin());
+    if (!text.empty() && text.rfind("http://", 0) != 0 && text.rfind("https://", 0) != 0)
+        text = "https://" + text;
+    return text;
+}
+
+// This computer's name, sent as the session's device (cloud.md, rule 2).
+std::string device_name() {
+    for (const char* name : {"COMPUTERNAME", "HOSTNAME"})
+        if (const char* v = std::getenv(name); v && *v)
+            return std::string("Tisma (") + v + ")";
+    return "Tisma";
+}
+
+} // namespace
+
+// One call to Tisma Cloud at a time, outside the interface's thread; the
+// dialog keeps showing what it had until the answer comes.
+void App::cloud_start(CloudReply::Kind kind) {
+    if (cloud_job_.valid())
+        return;
+    cloud_server_ = cloud_address(cloud_server_);
+    if (cloud_server_.empty()) {
+        cloud_status_ = tr(T::CloudNeedServer);
+        cloud_status_error_ = true;
+        return;
+    }
+    if (kind == CloudReply::Kind::Login && (cloud_email_.empty() || cloud_password_.empty())) {
+        cloud_status_ = tr(T::CloudNeedLogin);
+        cloud_status_error_ = true;
+        return;
+    }
+    cloud_status_ = tr(T::CloudWorking);
+    cloud_status_error_ = false;
+    std::string password = std::move(cloud_password_);
+    cloud_password_.clear();
+    cloud_job_ = std::async(std::launch::async, [kind, server = cloud_server_, email = cloud_email_,
+                                                 password = std::move(password), token = cloud_token_,
+                                                 read = cloud_token_read_]() mutable {
+        CloudReply r;
+        r.kind = kind;
+        if (kind == CloudReply::Kind::Refresh && token.empty() && !read) {
+            token = cloud::load_secret(server).value_or("");
+            r.token_read = true;
+        }
+        cloud::Client client(server, token);
+        if (kind == CloudReply::Kind::Logout) {
+            cloud::Failure ignored;
+            client.logout(ignored); // a closed session is closed already
+            cloud::forget_secret(server);
+            r.ok = true;
+            return r;
+        }
+        if (kind == CloudReply::Kind::Login) {
+            if (!client.login(email, password, device_name(), token, r.error))
+                return r;
+            if (!cloud::store_secret(server, token, r.store_error))
+                r.store_error = r.store_error.empty() ? "none" : r.store_error;
+        }
+        r.token = token;
+        cloud::Failure quiet;
+        client.health(r.billing_url, quiet);
+        cloud::Failure plans_error;
+        r.plans_ok = client.plans(r.plans, plans_error);
+        r.plans_failure = r.plans_ok ? -1 : plans_error.status;
+        if (!token.empty()) {
+            cloud::Account account;
+            if (client.account(account, r.error))
+                r.account = account;
+            else
+                return r;
+            r.jobs_ok = client.jobs(r.jobs, quiet);
+            r.reports_ok = client.my_reports(r.reports, quiet);
+        }
+        r.ok = true;
+        return r;
+    });
+}
+
+void App::cloud_finished(CloudReply r) {
+    if (r.token_read)
+        cloud_token_read_ = true;
+    cloud_status_error_ = !r.ok;
+    if (r.kind == CloudReply::Kind::Logout) {
+        cloud_token_.clear();
+        cloud_account_.reset();
+        cloud_jobs_.clear();
+        cloud_reports_.clear();
+        cloud_status_ = tr(T::CloudNotLogged);
+        return;
+    }
+    if (r.ok || !r.error.expired())
+        cloud_token_ = r.token;
+    if (r.plans_ok)
+        cloud_plans_ = std::move(r.plans);
+    if (r.plans_ok || r.plans_failure >= 0)
+        cloud_plans_failure_ = r.plans_failure;
+    if (!r.billing_url.empty())
+        cloud_billing_ = r.billing_url;
+    if (!r.ok) {
+        // A session that ended (401: expired, closed or the account turned
+        // off) asks to log in again (rules 2 and 4, CC2, CC15).
+        if (r.error.expired()) {
+            cloud_token_.clear();
+            cloud_account_.reset();
+            cloud_jobs_.clear();
+            cloud_reports_.clear();
+            cloud::forget_secret(cloud_server_);
+            cloud_status_ = r.kind == CloudReply::Kind::Login ? r.error.message : std::string(tr(T::CloudExpired));
+        } else if (r.error.status == 429) {
+            cloud_status_ = tr(T::CloudTooMany);
+        } else {
+            cloud_status_ = r.error.message;
+        }
+        return;
+    }
+    cloud_account_ = r.account;
+    if (r.jobs_ok)
+        cloud_jobs_ = std::move(r.jobs);
+    if (r.reports_ok)
+        cloud_reports_ = std::move(r.reports);
+    cloud_status_ = cloud_account_ ? format(tr(T::CloudLoggedAs), cloud_account_->email.c_str()) : tr(T::CloudNotLogged);
+    if (r.kind == CloudReply::Kind::Login) {
+        save_preferences(); // the server and the e-mail, never the token
+        if (!r.store_error.empty())
+            notify(tr(T::CloudNoStore));
+    }
+}
+
+// Slicing in the cloud (cloud.md, rules 6 to 9; CC3, CC4, CC5): the plate as
+// a project (3MF), sent with the session; its state in the status bar; the
+// G-code, when it comes, opened in the preview as a local slice.
+void App::start_cloud_slice() {
+    if (cloud_slice_.valid() || !has_plate_)
+        return;
+    if (cloud_token_.empty() || cloud_address(cloud_server_).empty()) {
+        notify(tr(T::CloudSliceLogin));
+        cloud_open_ = true;
+        return;
+    }
+    const std::filesystem::path dir = std::filesystem::temp_directory_path();
+    const std::string stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const std::filesystem::path project = dir / ("tisma-cloud-" + stamp + ".3mf");
+    try {
+        save_project(project, current_project());
+    } catch (const std::exception& e) {
+        fail(T::CannotSave, e.what());
+        return;
+    }
+    log_line("cloud: slicing " + utf8(project.filename()) + " on " + cloud_server_);
+    auto state = std::make_shared<CloudSliceState>();
+    cloud_slice_state_ = state;
+    cloud_slice_ = std::async(std::launch::async, [state, project, dir, stamp, server = cloud_server_, token = cloud_token_] {
+        CloudSliceReply r;
+        cloud::Client client(server, token);
+        const std::filesystem::path result = dir / ("tisma-cloud-" + stamp + ".gcode");
+        r.ok = client.run("slice", "{}", utf8(project), utf8(result), r.job, r.error,
+                          [&](const cloud::Job& job) {
+                              std::lock_guard lock(state->mutex);
+                              state->status = job.status;
+                              state->progress = job.progress;
+                          },
+                          state->cancel);
+        std::error_code ec;
+        std::filesystem::remove(project, ec);
+        if (r.ok) {
+            // Binary G-code is known by its first bytes (cloud.md, rule 18).
+            std::ifstream in(result, std::ios::binary);
+            char magic[4] = {};
+            in.read(magic, 4);
+            in.close();
+            r.result = result;
+            if (std::string(magic, 4) == "GCDE") {
+                r.result = dir / ("tisma-cloud-" + stamp + ".bgcode");
+                std::filesystem::rename(result, r.result, ec);
+            }
+        }
+        return r;
+    });
+}
+
+void App::cloud_slice_step() {
+    if (!cloud_slice_.valid())
+        return;
+    frame_pending_ = true; // the state changes while it runs
+    if (cloud_slice_.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+        return;
+    const CloudSliceReply r = cloud_slice_.get();
+    cloud_slice_state_.reset();
+    if (r.ok) {
+        const auto t = r.job.summary.find("print_time");
+        notify(format(tr(T::CloudSliceDone), t != r.job.summary.end() ? t->second.c_str() : utf8(r.result.filename()).c_str()));
+        open_path(r.result); // the preview, as a local slice (rule 9)
+        return;
+    }
+    if (r.error.message == "Cancelled") {
+        notify(tr(T::CloudSliceCancelled));
+        return;
+    }
+    if (r.error.expired()) {
+        cloud_token_.clear();
+        cloud_account_.reset();
+        cloud::forget_secret(cloud_server_);
+        notify(tr(T::CloudExpired), true);
+        cloud_open_ = true;
+        return;
+    }
+    const std::string why = r.error.status == 413   ? std::string(tr(T::CloudTooLarge))
+                            : r.error.status == 422 ? format(tr(T::CloudBadParams), r.error.message.c_str())
+                            : r.error.status == 429 ? std::string(tr(T::CloudTooMany))
+                            : r.job.status == "failed" ? cloud::job_error(r.job, language() == Language::Spanish)
+                                                    : r.error.message;
+    notify(format(tr(T::CloudSliceFailed), why.c_str()), true);
+}
+
+// The Tisma Cloud dialog (interface.md, «Diálogos»; cloud.md, rules 1 to 5a):
+// the server, the e-mail and the password; with a session, the account and
+// its hours; always, the public plans, the current one marked, and the way
+// to the account's page for paying.
+void App::cloud_window() {
+    cloud_slice_step();
+    cloud_engineering_step();
+    if (cloud_job_.valid() && cloud_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+        cloud_finished(cloud_job_.get());
+    if (cloud_job_.valid())
+        frame_pending_ = true; // keep drawing until the answer comes
+    if (cloud_open_) {
+        ImGui::OpenPopup("###cloud");
+        cloud_open_ = false;
+        cloud_start(CloudReply::Kind::Refresh); // the plans are asked again each time (rule 5a)
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing,
+                            ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(560.0f * scale_, vp->Size.x - 40.0f * scale_), 0.0f), ImGuiCond_Appearing);
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, rgb(theme_.panel));
+    if (!ImGui::BeginPopupModal((std::string(tr(T::CloudTitle)) + "###cloud").c_str(), nullptr,
+                                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::PopStyleColor();
+        return;
+    }
+    const auto rect_of = [](const std::string& name) {
+        note_rect(name);
+    };
+    g_menu_rects["cloud_window"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                          ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                          ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    const float width = 520.0f * scale_;
+    const bool busy = cloud_job_.valid();
+    const bool signed_in = cloud_account_.has_value();
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::CloudTitle));
+    ImGui::PopFont();
+    loc::TextDisabled("%s", tr(T::CloudWhat));
+    ImGui::Spacing();
+    const float label_w = 120.0f * scale_;
+    const auto field = [&](T label, const char* id, std::string& value, ImGuiInputTextFlags flags) {
+        ImGui::AlignTextToFramePadding();
+        loc::Text("%s", tr(label));
+        ImGui::SameLine(label_w);
+        ImGui::SetNextItemWidth(width - label_w);
+        ImGui::BeginDisabled(busy || signed_in);
+        ImGui::InputText(id, &value, flags);
+        ImGui::EndDisabled();
+        rect_of(id + 2);
+    };
+    field(T::CloudServer, "##cloud.server", cloud_server_, 0);
+    field(T::CloudEmail, "##cloud.email", cloud_email_, 0);
+    if (!signed_in)
+        field(T::CloudPassword, "##cloud.password", cloud_password_, ImGuiInputTextFlags_Password);
+    // The state: working, an error in red, or who is logged in.
+    if (!cloud_status_.empty()) {
+        if (cloud_status_error_)
+            loc::TextColored(rgb(0xE5484D), "%s", cloud_status_.c_str());
+        else
+            loc::TextDisabled("%s", cloud_status_.c_str());
+    } else {
+        loc::TextDisabled("%s", tr(T::CloudNotLogged));
+    }
+    rect_of("cloud_status");
+
+    // The account (cloud.md, rule 5a: the hours as the server sends them).
+    if (cloud_account_) {
+        const cloud::Account& a = *cloud_account_;
+        ImGui::SeparatorText(a.email.c_str());
+        const auto row = [&](T label, const std::string& value) {
+            loc::TextDisabled("%s", tr(label));
+            ImGui::SameLine(label_w + 40.0f * scale_);
+            loc::Text("%s", value.c_str());
+        };
+        row(T::CloudPlan, a.plan + " · " +
+                              (a.paid ? format(tr(T::CloudPaidUntil), a.paid_until.substr(0, 10).c_str())
+                                      : std::string(tr(T::CloudNotPaid))));
+        row(T::CloudHours, format(tr(T::CloudHoursValue), number(a.hours_used, 2).c_str(),
+                                  number(a.hours_included, 2).c_str(), number(a.hours_left, 2).c_str()));
+        rect_of("cloud_hours");
+        row(T::CloudJobs, format(tr(T::CloudJobsValue), a.active_jobs, a.max_concurrent));
+
+        // The account's jobs (rule 10), the server's order, in a box that
+        // scrolls past five rows so the dialog keeps its buttons on screen.
+        ImGui::SeparatorText(tr(T::CloudJobList));
+        if (cloud_jobs_.empty()) {
+            loc::TextDisabled("%s", busy ? tr(T::CloudWorking) : tr(T::CloudNoJobs));
+        } else {
+            const float row_h = ImGui::GetTextLineHeightWithSpacing() + 2.0f * ImGui::GetStyle().CellPadding.y;
+            const float table_h = row_h * float(std::min<std::size_t>(cloud_jobs_.size(), 5)) + 2.0f;
+            if (ImGui::BeginTable("##cloud_job_list", 4,
+                                  ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                                  ImVec2(0.0f, table_h))) {
+                for (const cloud::Job& j : cloud_jobs_) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    std::string when = j.created_at.substr(0, 16);
+                    std::replace(when.begin(), when.end(), 'T', ' ');
+                    loc::TextDisabled("%s", when.c_str());
+                    ImGui::TableNextColumn();
+                    loc::Text("%s", j.kind == "fea" ? tr(T::CloudKindFea) : j.kind == "slice" ? tr(T::CloudKindSlice) : j.kind.c_str());
+                    ImGui::TableNextColumn();
+                    const T state = j.status == "queued"    ? T::CloudStateQueued
+                                    : j.status == "running" ? T::CloudStateRunning
+                                    : j.status == "done"    ? T::CloudStateDone
+                                    : j.status == "failed"  ? T::CloudStateFailed
+                                                            : T::CloudStateCancelled;
+                    if (j.status == "running")
+                        loc::Text("%s %d %%", tr(state), j.progress);
+                    else if (j.status == "failed")
+                        loc::TextColored(rgb(kWarningColour), "%s", tr(state));
+                    else
+                        loc::Text("%s", tr(state));
+                    if (!j.error.empty() && ImGui::IsItemHovered())
+                        loc::SetTooltip("%s", cloud::job_error(j, language() == Language::Spanish).c_str());
+                    ImGui::TableNextColumn();
+                    loc::TextDisabled(tr(T::CloudJobMinutes), number(j.seconds / 60.0, 1).c_str());
+                }
+                ImGui::EndTable();
+            }
+        }
+        rect_of("cloud_job_list");
+
+        // The reports this account sent (problem_reports.md, rule 11; IP10),
+        // in their own window over the dialog.
+        if (ImGui::SmallButton(format(tr(T::MyReportsButton), int(cloud_reports_.size())).c_str()))
+            ImGui::OpenPopup("###my_reports");
+        rect_of("cloud_my_reports");
+        ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing,
+                                ImVec2(0.5f, 0.5f));
+        if (ImGui::BeginPopupModal((std::string(tr(T::MyReportsTitle)) + "###my_reports").c_str(), nullptr,
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+            rect_of("my_reports_window");
+            if (cloud_reports_.empty()) {
+                loc::TextDisabled("%s", tr(T::MyReportsNone));
+            } else if (const float row_h = ImGui::GetTextLineHeightWithSpacing() + 2.0f * ImGui::GetStyle().CellPadding.y;
+                       ImGui::BeginTable(
+                           "##my_reports", 3, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                           ImVec2(std::min(620.0f * scale_, vp->Size.x - 80.0f * scale_),
+                                  std::min(row_h * float(std::min<std::size_t>(cloud_reports_.size(), 10)) + 2.0f,
+                                           vp->Size.y - 200.0f * scale_)))) {
+                for (const cloud::SentReport& sent : cloud_reports_) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn();
+                    loc::TextDisabled("%s", sent.created_at.substr(0, 10).c_str());
+                    ImGui::TableNextColumn();
+                    loc::Text("%s", sent.title.c_str());
+                    ImGui::TableNextColumn();
+                    const std::string& s = sent.status;
+                    const char* state = s == "new"         ? tr(T::ReportStateNew)
+                                        : s == "confirmed" ? tr(T::ReportStateConfirmed)
+                                        : s == "fixed"     ? tr(T::ReportStateFixed)
+                                        : s == "wontfix"   ? tr(T::ReportStateWontFix)
+                                        : s == "duplicate" ? tr(T::ReportStateDuplicate)
+                                                           : s.c_str();
+                    loc::Text("%s", state);
+                }
+                ImGui::EndTable();
+            }
+            if (ImGui::Button(tr(T::Close), ImVec2(110.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+                ImGui::CloseCurrentPopup();
+            rect_of("my_reports_close");
+            ImGui::EndPopup();
+        }
+    }
+
+    // The public plans, the current one marked (rule 5a).
+    ImGui::SeparatorText(tr(T::CloudPlans));
+    if (cloud_plans_.empty()) {
+        // No answer is not an empty list (UI49).
+        if (busy)
+            loc::TextDisabled("%s", tr(T::CloudWorking));
+        else if (cloud_plans_failure_ == 0)
+            loc::TextDisabled("%s", tr(T::CloudNoConnection));
+        else if (cloud_plans_failure_ > 0)
+            loc::TextDisabled(tr(T::CloudPlansFailed), cloud_plans_failure_);
+        else
+            loc::TextDisabled("%s", tr(T::CloudNoPlans));
+    } else if (ImGui::BeginTable("##cloud_plans", 4, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+        for (const cloud::Plan& p : cloud_plans_) {
+            const bool yours = cloud_account_ && cloud_account_->plan == p.name;
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            if (yours)
+                loc::TextColored(rgb(theme_.accent_hover), "%s (%s)", p.name.c_str(), tr(T::CloudPlanYours));
+            else
+                loc::Text("%s", p.name.c_str());
+            ImGui::TableNextColumn();
+            loc::Text(tr(T::CloudPlanHours), number(p.monthly_hours, p.monthly_hours == std::floor(p.monthly_hours) ? 0 : 1).c_str());
+            ImGui::TableNextColumn();
+            loc::Text(tr(T::CloudPlanJobs), p.max_concurrent);
+            ImGui::TableNextColumn();
+            if (p.price_cents == 0)
+                loc::Text("%s", tr(T::CloudFree));
+            else
+                loc::Text("%.2f %s", double(p.price_cents) / 100.0, p.currency.c_str());
+        }
+        ImGui::EndTable();
+    }
+    rect_of("cloud_plans");
+    if (!cloud_billing_.empty()) {
+        if (ImGui::SmallButton(tr(T::CloudBilling)))
+            ui::open_link(cloud_billing_);
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::CloudBillingTip));
+    }
+    ImGui::PopTextWrapPos();
+
+    // The buttons, at the bottom right: the action that applies (Log out
+    // with a session, Log in without one; the spec team's UI47), and Close.
+    ImGui::Spacing();
+    ImGui::Separator();
+    const float bw = 130.0f * scale_, gap = ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, width - 2.0f * bw - gap));
+    if (signed_in) {
+        ImGui::BeginDisabled(busy);
+        if (ImGui::Button(tr(T::CloudLogOut), ImVec2(bw, 0)))
+            cloud_start(CloudReply::Kind::Logout);
+        ImGui::EndDisabled();
+        rect_of("cloud_logout");
+        ImGui::SameLine();
+    }
+    if (ImGui::Button(tr(T::Close), ImVec2(bw, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+        cloud_password_.clear();
+        ImGui::CloseCurrentPopup();
+    }
+    rect_of("cloud_close");
+    if (!signed_in) {
+        ImGui::SameLine();
+        ImGui::BeginDisabled(busy);
+        ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+        if (ImGui::Button(tr(T::CloudLogIn), ImVec2(bw, 0)) ||
+            (!busy && ImGui::IsKeyPressed(ImGuiKey_Enter) && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows)))
+            cloud_start(CloudReply::Kind::Login);
+        ImGui::PopStyleColor(3);
+        ImGui::EndDisabled();
+        rect_of("cloud_login");
+    }
+    ImGui::EndPopup();
+    ImGui::PopStyleColor();
+}
+
+// A line of this session's log, with the time since the program started
+// (the report's log, problem_reports.md rule 3); its last 400 000 bytes.
+void App::log_line(const std::string& line) {
+    const std::string text = format("[%8.1f] ", ImGui::GetCurrentContext() ? ImGui::GetTime() : 0.0) + line + "\n";
+    session_log_ += text;
+    if (session_log_.size() > 400000)
+        session_log_.erase(0, session_log_.size() - 300000);
+    // On disk too, line by line: what the next start offers if this one
+    // closes unexpectedly. Past 1 MB it starts again from the kept part.
+    if (session_file_.is_open()) {
+        if (session_file_bytes_ + text.size() > 1000000) {
+            session_file_.close();
+            session_file_.open(session_mark_.log, std::ios::binary | std::ios::trunc);
+            session_file_ << session_log_;
+            session_file_bytes_ = session_log_.size();
+        } else {
+            session_file_ << text;
+            session_file_bytes_ += text.size();
+        }
+        session_file_.flush();
+    }
+}
+
+// Report a problem (problem_reports.md, rules 1 to 9; cloud.md, rule 11).
+void App::report_window() {
+    if (report_job_.valid() && report_job_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const ReportReply r = report_job_.get();
+        if (r.ok) {
+            std::string text = tr(T::ReportSent);
+            if (r.similar > 0)
+                text += " " + format(tr(T::ReportSimilar), r.similar);
+            notify(text);
+            report_title_.clear(), report_description_.clear(), report_steps_.clear(), report_expected_.clear();
+            report_status_.clear();
+            crashed_log_.clear();
+            save_preferences(); // the server typed here (rule 7)
+            ImGui::OpenPopup("###report");
+            report_open_ = false;
+            report_status_ = "\x01close"; // closes below, after the popup is current
+        } else {
+            report_status_ = r.error.status == 429 ? std::string(tr(T::ReportTooMany))
+                                                   : format(tr(T::ReportFailed), r.error.message.c_str());
+        }
+    }
+    if (report_job_.valid())
+        frame_pending_ = true;
+    // After an unexpected closing: the dialog with «Tisma closed» chosen and
+    // that session's log (rule 10), once the window is up.
+    if (offer_crash_report_ && ImGui::GetFrameCount() > 2) {
+        offer_crash_report_ = false;
+        report_kind_ = 1;
+        report_open_ = true;
+    }
+    if (report_open_) {
+        ImGui::OpenPopup("###report");
+        report_open_ = false;
+        report_focus_title_ = true;
+    }
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing,
+                            ImVec2(0.5f, 0.5f));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, rgb(theme_.panel));
+    if (!ImGui::BeginPopupModal((std::string(tr(T::ReportTitle)) + "###report").c_str(), nullptr,
+                                ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::PopStyleColor();
+        return;
+    }
+    if (report_status_ == "\x01close") {
+        report_status_.clear();
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        ImGui::PopStyleColor();
+        return;
+    }
+    const auto rect_of = [](const std::string& name) {
+        note_rect(name);
+    };
+    g_menu_rects["report_window"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                           ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                           ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    const float width = std::min(560.0f * scale_, vp->Size.x - 80.0f * scale_);
+    const bool busy = report_job_.valid();
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + width);
+    ImGui::PushFont(nullptr, kTitleSize * 0.9f);
+    loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ReportTitle));
+    ImGui::PopFont();
+    loc::TextDisabled("%s", tr(T::ReportWhat));
+    loc::TextDisabled("%s", tr(T::ReportPrivacy));
+    ImGui::Spacing();
+    // The kind: three buttons (rule 2).
+    static constexpr T kKinds[] = {T::ReportKindBug, T::ReportKindCrash, T::ReportKindSuggestion};
+    static constexpr const char* kKindIds[] = {"report_bug", "report_crash", "report_suggestion"};
+    for (int k = 0; k < 3; ++k) {
+        if (k > 0)
+            ImGui::SameLine();
+        if (ImGui::RadioButton(tr(kKinds[k]), report_kind_ == k))
+            report_kind_ = k;
+        rect_of(kKindIds[k]);
+    }
+    ImGui::BeginDisabled(busy);
+    loc::Text("%s", tr(T::ReportFewWords));
+    ImGui::SetNextItemWidth(width);
+    if (report_focus_title_) {
+        ImGui::SetKeyboardFocusHere();
+        report_focus_title_ = false;
+    }
+    ImGui::InputTextWithHint("##report.title", tr(T::ReportFewWordsHint), &report_title_);
+    rect_of("report.title");
+    const auto multiline = [&](T label, const char* id, std::string& value, float lines) {
+        loc::Text("%s", tr(label));
+        ImGui::InputTextMultiline(id, &value, ImVec2(width, ImGui::GetTextLineHeight() * lines + 8.0f * scale_));
+        if (value.size() > cloud::kReportTextMax)
+            value.resize(cloud::kReportTextMax);
+        rect_of(id + 2);
+    };
+    multiline(T::ReportHappened, "##report.description", report_description_, 4.0f);
+    multiline(T::ReportSteps, "##report.steps", report_steps_, 3.0f);
+    loc::Text("%s", tr(T::ReportExpected));
+    ImGui::SetNextItemWidth(width);
+    ImGui::InputText("##report.expected", &report_expected_);
+    // The server, only when Configuración has none (rule 2).
+    const bool ask_server = cloud_address(cloud_server_).empty();
+    if (ask_server) {
+        loc::Text("%s", tr(T::CloudServer));
+        ImGui::SetNextItemWidth(width);
+        ImGui::InputText("##report.server", &cloud_server_);
+        rect_of("report.server");
+    }
+    ImGui::Checkbox(tr(T::ReportAttach), &report_attach_);
+    rect_of("report_attach");
+    ImGui::EndDisabled();
+    // What is attached: exactly the log that goes (IP5).
+    cloud::ReportInput input;
+    static constexpr const char* kKindNames[] = {"bug", "crash", "suggestion"};
+    input.kind = kKindNames[report_kind_];
+    input.title = report_title_, input.description = report_description_, input.steps = report_steps_;
+    input.expected = report_expected_, input.attach = report_attach_;
+    input.app_version = TISMA_VERSION;
+#if defined(_WIN32)
+    input.os = "Windows";
+#elif defined(__APPLE__)
+    input.os = "macOS";
+#else
+    input.os = "Linux";
+#endif
+    if (!system_.cpu.empty())
+        input.os += ", " + system_.cpu;
+    if (!gpu_renderer_.empty())
+        input.os += ", " + gpu_renderer_;
+    input.printer = chosen_profile_[std::size_t(ProfileKind::Printer)];
+    input.print_profile = chosen_profile_[std::size_t(ProfileKind::Print)];
+    input.material_profile = chosen_profile_[std::size_t(ProfileKind::Filament)];
+    input.session_log = crashed_log_.empty() ? session_log_ : crashed_log_;
+    if (report_attach_) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton(tr(T::ReportSeeAttached)))
+            ImGui::OpenPopup("###report_attached");
+        rect_of("report_see_attached");
+    }
+    // What is attached, in its own window over the dialog: exactly what goes (IP5).
+    ImGui::SetNextWindowPos(ImVec2(vp->Pos.x + vp->Size.x * 0.5f, vp->Pos.y + vp->Size.y * 0.5f), ImGuiCond_Appearing,
+                            ImVec2(0.5f, 0.5f));
+    if (ImGui::BeginPopupModal((std::string(tr(T::ReportSeeAttached)) + "###report_attached").c_str(), nullptr,
+                               ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_AlwaysAutoResize)) {
+        std::string attached = cloud::report_log(input);
+        ImGui::InputTextMultiline("##report.attached", &attached,
+                                  ImVec2(std::min(640.0f * scale_, vp->Size.x - 80.0f * scale_),
+                                         std::min(360.0f * scale_, vp->Size.y - 160.0f * scale_)),
+                                  ImGuiInputTextFlags_ReadOnly);
+        rect_of("report.attached");
+        if (ImGui::Button(tr(T::Close), ImVec2(110.0f * scale_, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape))
+            ImGui::CloseCurrentPopup();
+        rect_of("report_attached_close");
+        ImGui::EndPopup();
+    }
+    // The account it goes with, and the state.
+    loc::TextDisabled("%s", cloud_account_ ? format(tr(T::ReportWithAccount), cloud_account_->email.c_str()).c_str()
+                                           : tr(T::ReportWithoutAccount));
+    if (busy)
+        loc::TextDisabled("%s", tr(T::CloudWorking));
+    else if (!report_status_.empty())
+        loc::TextColored(rgb(0xE5484D), "%s", report_status_.c_str());
+    rect_of("report_status");
+    ImGui::PopTextWrapPos();
+
+    // Send and Cancel, at the bottom right.
+    ImGui::Separator();
+    const float bw = 110.0f * scale_;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, width - 2.0f * bw - ImGui::GetStyle().ItemSpacing.x));
+    if (ImGui::Button(tr(T::Cancel), ImVec2(bw, 0)) || (!busy && ImGui::IsKeyPressed(ImGuiKey_Escape))) {
+        report_status_.clear();
+        crashed_log_.clear(); // not asked again about that closing
+        ImGui::CloseCurrentPopup();
+    }
+    rect_of("report_cancel");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(busy);
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+    const bool send = ImGui::Button(tr(T::ReportSend), ImVec2(bw, 0));
+    ImGui::PopStyleColor(3);
+    ImGui::EndDisabled();
+    rect_of("report_send");
+    if (send) {
+        // Before sending (rule 5): a few words, and a server.
+        std::string title = report_title_;
+        while (!title.empty() && std::isspace(static_cast<unsigned char>(title.back())))
+            title.pop_back();
+        if (title.size() < 3) {
+            report_status_ = tr(T::ReportNeedTitle);
+            report_focus_title_ = true;
+        } else if (cloud_address(cloud_server_).empty()) {
+            report_status_ = tr(T::CloudNeedServer);
+        } else {
+            cloud_server_ = cloud_address(cloud_server_);
+            report_status_.clear();
+            input.title = title;
+            report_job_ = std::async(std::launch::async, [server = cloud_server_, token = cloud_token_,
+                                                          fields = cloud::report_fields(input)] {
+                ReportReply r;
+                cloud::Client client(server, token);
+                r.ok = client.report(fields, r.similar, r.error);
+                return r;
+            });
+        }
+    }
+    ImGui::EndPopup();
+    ImGui::PopStyleColor();
+}
+
 void App::config_window() {
     if (!config_open_) {
         config_before_.reset();
@@ -12050,8 +18603,7 @@ void App::config_window() {
                                            ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
                                            ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
     const auto rect_of = [](const std::string& name) {
-        g_menu_rects[name] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
-                                    ImGui::GetItemRectMax().y);
+        note_rect(name);
     };
     // The search (rule 3), over every page.
     ImGui::SetNextItemWidth(-FLT_MIN);
@@ -12137,11 +18689,24 @@ void App::config_window() {
 
     // Interfaz.
     row(1, T::Theme, "theme", [&] {
-        if (ImGui::BeginCombo("##v", tr(theme_.dark ? T::Dark : T::Light))) {
-            if (ImGui::Selectable(tr(T::Dark), theme_.dark) && !theme_.dark)
-                theme_ = dark_theme(), apply_theme();
-            if (ImGui::Selectable(tr(T::Light), !theme_.dark) && theme_.dark)
-                theme_ = light_theme(), apply_theme();
+        if (ImGui::BeginCombo("##v", tr(theme_system_ ? T::LikeSystem : theme_.dark ? T::Dark : T::Light))) {
+            if (ImGui::Selectable(tr(T::LikeSystem), theme_system_)) {
+                theme_system_ = true;
+                follow_system_theme();
+            }
+            rect_of("theme_system");
+            if (ImGui::Selectable(tr(T::Light), !theme_system_ && !theme_.dark)) {
+                theme_system_ = false;
+                if (theme_.dark)
+                    theme_ = light_theme(), apply_theme();
+            }
+            rect_of("theme_light");
+            if (ImGui::Selectable(tr(T::Dark), !theme_system_ && theme_.dark)) {
+                theme_system_ = false;
+                if (!theme_.dark)
+                    theme_ = dark_theme(), apply_theme();
+            }
+            rect_of("theme_dark");
             ImGui::EndCombo();
         }
     });
@@ -12169,18 +18734,7 @@ void App::config_window() {
     if (wanted.empty() && config_page_ == 2) {
         loc::TextColored(rgb(theme_.accent_hover), "%s", tr(T::ConfigMachine));
         ImGui::Separator();
-        const std::string cpu = system_.cpu.empty() ? std::string("?") : system_.cpu;
-        loc::TextDisabled(tr(T::ConfigMachineCpu), cpu.c_str(), system_.physical_cores, system_.logical_cores);
-        loc::TextDisabled(tr(T::ConfigMachineRam), bytes_text(system_.ram_total).c_str(), bytes_text(system_.ram_free).c_str());
-        loc::TextDisabled(tr(T::ConfigMachineGpu), (gpu_vendor_.empty() ? gpu_renderer_ : gpu_vendor_ + " · " + gpu_renderer_).c_str(),
-                          gpu_version_.c_str());
-        if (screen_width_ > 0 && screen_hz_ > 0)
-            loc::TextDisabled(tr(T::ConfigMachineScreen), screen_width_, screen_height_, screen_hz_, double(scale_));
-        else if (screen_width_ > 0) // a screen that does not say its rate (a virtual one)
-            loc::TextDisabled(tr(T::ConfigMachineScreenNoRate), screen_width_, screen_height_, double(scale_));
-        loc::TextDisabled("%s", tr(system_.power == PowerSource::Battery  ? T::ConfigOnBattery
-                                   : system_.power == PowerSource::Mains ? T::ConfigOnMains
-                                                                         : T::ConfigPowerUnknown));
+        machine_lines();
         if (ImGui::Button(tr(T::ConfigRecommended)))
             apply_quality("automatic");
         rect_of("config_recommended");
@@ -12335,7 +18889,19 @@ void App::config_window() {
             ImGui::EndPopup();
         }
     }, tr(T::ConfigFactoryNote));
-    row(6, T::ConfigExport, "export", soon);
+    row(6, T::ConfigExport, "export", [&] {
+        if (ImGui::Button(tr(T::ExportPrefsButton))) {
+            purpose_ = Purpose::ExportPreferences;
+            browser_.open(FileBrowser::Mode::Save, tr(T::ConfigExport), {".json"}, last_folder_, "tisma-preferences.json");
+        }
+        rect_of("prefs_export");
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::ImportPrefsButton))) {
+            purpose_ = Purpose::ImportPreferences;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ConfigExport), {".json"}, last_folder_);
+        }
+        rect_of("prefs_import");
+    });
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
 
@@ -12346,7 +18912,10 @@ void App::config_window() {
     bool cancel = ImGui::Button(tr(T::Cancel), ImVec2(button_w, 0));
     rect_of("config_cancel");
     ImGui::SameLine();
-    const bool ok = ImGui::Button(tr(T::ConfigOk), ImVec2(button_w, 0));
+    // Enter is Aceptar too, while no field is being edited.
+    const bool ok = ImGui::Button(tr(T::ConfigOk), ImVec2(button_w, 0)) ||
+                    (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::IsAnyItemActive() &&
+                     !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Enter, false));
     rect_of("config_ok");
     if (!open || (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsKeyPressed(ImGuiKey_Escape)))
         cancel = true;
@@ -12528,6 +19097,12 @@ void App::run_command(std::string text) {
     }
     if (sketch_edit_ && sketch_command(lower_ascii(text), text))
         return;
+    // Points being picked for an operation: Enter on an empty line ends it.
+    if (design_pick_ && !sketch_edit_ && text.empty()) {
+        design_pick_.reset();
+        rebuild_design();
+        return;
+    }
     if (command_prompt_) {
         CommandPrompt& c = *command_prompt_;
         if (!text.empty()) {
@@ -12593,6 +19168,37 @@ void App::run_command(std::string text) {
         open_page(DesignPage::Gears);
         return;
     }
+    // The operations of stage D4 (rule 7), in both languages.
+    static const std::pair<const char*, cad::OperationKind> kOperationWords[] = {
+        {"redondeo", cad::OperationKind::Fillet},           {"redondear", cad::OperationKind::Fillet},
+        {"fillet", cad::OperationKind::Fillet},             {"chaflan", cad::OperationKind::Chamfer},
+        {"chaflán", cad::OperationKind::Chamfer},           {"chamfer", cad::OperationKind::Chamfer},
+        {"vaciado", cad::OperationKind::Shell},             {"vaciar", cad::OperationKind::Shell},
+        {"shell", cad::OperationKind::Shell},               {"agujero", cad::OperationKind::Hole},
+        {"hole", cad::OperationKind::Hole},                 {"simetria", cad::OperationKind::Mirror},
+        {"simetría", cad::OperationKind::Mirror},           {"espejo", cad::OperationKind::Mirror},
+        {"mirror", cad::OperationKind::Mirror},             {"patron", cad::OperationKind::PatternCircular},
+        {"patrón", cad::OperationKind::PatternCircular},    {"polar", cad::OperationKind::PatternCircular},
+        {"fila", cad::OperationKind::PatternRectangular},   {"pattern", cad::OperationKind::PatternRectangular},
+        {"combinar", cad::OperationKind::Combine},          {"combine", cad::OperationKind::Combine},
+        {"restar", cad::OperationKind::Combine},            {"unir", cad::OperationKind::Combine},
+        {"rosca", cad::OperationKind::Thread},              {"roscar", cad::OperationKind::Thread},
+        {"thread", cad::OperationKind::Thread},
+        {"mover", cad::OperationKind::Move},                {"move", cad::OperationKind::Move},
+        {"partir", cad::OperationKind::Split},              {"split", cad::OperationKind::Split},
+        {"desmoldeo", cad::OperationKind::Draft},           {"draft", cad::OperationKind::Draft}};
+    for (const auto& [name, kind] : kOperationWords)
+        if (word == name) {
+            if (!solidcraft_probed_ || !solidcraft_.available || !solidcraft_.has(cad::operation_command(kind))) {
+                command_message_ = format(tr(T::CommandSoon), text.c_str());
+                return;
+            }
+            add_operation(kind);
+            if (kind == cad::OperationKind::Combine && !design_.features.empty() &&
+                design_.features.back().type == cad::Feature::Type::Operation && word == "unir")
+                design_.features.back().op.boolean = "join", rebuild_design();
+            return;
+        }
     if (const std::optional<cad::Primitive> kind = primitive_named(word)) {
         last_command_ = word;
         command_prompt_ = CommandPrompt{*kind, cad::default_sizes(*kind), 0};
@@ -12664,6 +19270,33 @@ std::optional<cad::Constraint> constraint_of(const cad::Snap& snap, const cad::E
 }
 
 } // namespace
+
+// «Traer DXF» and «Traer SVG» (rule 19 bis): the curves join the sketch
+// being edited; a file that cannot be read says why and changes nothing.
+void App::import_sketch_file(const std::filesystem::path& path, bool svg) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch)
+        return;
+    std::ifstream in(path, std::ios::binary);
+    const std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (!in && !in.eof()) {
+        fail(T::SketchImportFailed, utf8(path.filename()) + ": " + std::string(tr(T::SketchCannotRead)));
+        return;
+    }
+    const cad::SketchImport r = svg ? cad::read_svg(data) : cad::read_dxf(data);
+    if (!r.ok()) {
+        fail(T::SketchImportFailed, utf8(path.filename()) + ": " + r.error);
+        return;
+    }
+    sketch->entities.insert(sketch->entities.end(), r.entities.begin(), r.entities.end());
+    if (sketch_edit_)
+        sketch_edit_->selected.clear();
+    design_dirty_ = true;
+    std::string message = format(tr(T::SketchImported), int(r.entities.size()), utf8(path.filename()).c_str());
+    for (const std::string& note : r.notes)
+        message += " · " + note;
+    notify(message);
+}
 
 cad::Sketch* App::editing_sketch() {
     if (!sketch_edit_ || sketch_edit_->feature >= design_.features.size() ||
@@ -12767,7 +19400,9 @@ void App::sketch_end_tool(bool close) {
         if (e.points.size() >= 3)
             entity = cad::Entity{cad::Entity::Kind::Arc, {e.points[0], e.points[1], e.points[2]}};
         break;
-    case SketchEdit::Tool::None: break;
+    case SketchEdit::Tool::None:
+    case SketchEdit::Tool::Constrain:
+    case SketchEdit::Tool::Edit: break;
     }
     if (entity) {
         const std::size_t index = sketch->entities.size();
@@ -12797,6 +19432,13 @@ void App::sketch_end_tool(bool close) {
                     sketch->dimensions.push_back({index, segment, length});
     }
     e.tool = SketchEdit::Tool::None;
+    e.edit_step = 0;
+    e.edit_points.clear();
+    e.edit_entity.reset();
+    e.box_from.reset();
+    e.selected.clear();
+    e.picks.clear();
+    e.pending.reset();
     e.points.clear();
     e.point_snaps.clear();
     e.typed_lengths.clear();
@@ -12809,6 +19451,20 @@ void App::sketch_place(const cad::Pt& p, const cad::Snap* snap, std::optional<do
     if (!sketch_edit_ || !editing_sketch())
         return;
     SketchEdit& e = *sketch_edit_;
+    if (e.tool == SketchEdit::Tool::Constrain) {
+        sketch_pick(p);
+        return;
+    }
+    if (e.tool == SketchEdit::Tool::Edit) {
+        // A click picks where the mouse is (a snap would move it onto an end);
+        // a typed or snapped base point is taken as it is.
+        const bool picking = sketch_edit_selecting() || e.edit == SketchEdit::EditKind::Trim ||
+                             e.edit == SketchEdit::EditKind::Extend || e.edit == SketchEdit::EditKind::Offset ||
+                             e.edit == SketchEdit::EditKind::Chamfer || e.edit == SketchEdit::EditKind::Fillet ||
+                             e.edit == SketchEdit::EditKind::Area;
+        sketch_edit_point(p, snap && picking ? e.raw.value_or(p) : p);
+        return;
+    }
     if (e.tool == SketchEdit::Tool::None)
         e.tool = SketchEdit::Tool::Line;
     if (snap && snap->kind != cad::SnapKind::None && snap->kind != cad::SnapKind::Grid)
@@ -12836,6 +19492,602 @@ void App::sketch_place(const cad::Pt& p, const cad::Snap* snap, std::optional<do
     }
 }
 
+// The constraint tool (rule 5): pick what the constraint binds, in the view
+// or by a typed point; a dimension then asks for its value.
+void App::sketch_rule_tool(SketchEdit::Rule rule) {
+    if (!sketch_edit_)
+        return;
+    sketch_end_tool(false);
+    sketch_edit_->tool = SketchEdit::Tool::Constrain;
+    sketch_edit_->rule = rule;
+    sketch_rule_prompt();
+    command_focus_ = true;
+}
+
+namespace {
+T rule_label(int rule) {
+    constexpr T labels[] = {T::RuleDimension, T::RuleHorizontal, T::RuleVertical, T::RuleParallel, T::RulePerpendicular,
+                            T::RuleEqual, T::RuleCoincident, T::RuleConcentric, T::RuleTangent, T::RuleFixed, T::RuleAngle};
+    return labels[std::clamp(rule, 0, int(std::size(labels)) - 1)];
+}
+} // namespace
+
+void App::sketch_rule_prompt() {
+    if (!sketch_edit_)
+        return;
+    using R = SketchEdit::Rule;
+    using W = SketchEdit::Pick::What;
+    const SketchEdit& e = *sketch_edit_;
+    const char* name = tr(rule_label(int(e.rule)));
+    const bool second = !e.picks.empty();
+    switch (e.rule) {
+    case R::Dimension:
+        command_message_ = second ? format(tr(T::RulePickSecondPoint), name) : std::string(tr(T::RulePickAny));
+        break;
+    case R::Horizontal:
+    case R::Vertical: command_message_ = format(tr(T::RulePickSegment), name); break;
+    case R::Parallel:
+    case R::Perpendicular:
+    case R::Angle: command_message_ = format(tr(second ? T::RulePickSecondSegment : T::RulePickSegment), name); break;
+    case R::Equal:
+        command_message_ = !second                                   ? format(tr(T::RulePickSegment), name)
+                           : e.picks[0].what == W::Round ? format(tr(T::RulePickSecondRound), name)
+                                                                     : format(tr(T::RulePickSecondSegment), name);
+        break;
+    case R::Coincident:
+    case R::Fixed: command_message_ = format(tr(second ? T::RulePickSecondPoint : T::RulePickPoint), name); break;
+    case R::Concentric: command_message_ = format(tr(second ? T::RulePickSecondRound : T::RulePickRound), name); break;
+    case R::Tangent: command_message_ = format(tr(second ? T::RulePickRound : T::RulePickSegment), name); break;
+    }
+}
+
+double App::sketch_pick_radius() const {
+    // About 10 pixels, in the plane's millimetres, as the snaps take it.
+    const float pixels_per_mm = view_size_.y / std::max(2.0f * camera_.lens_distance() * std::tan(0.5f * camera_.lens_fov()), 1e-3f);
+    return 10.0 / std::max(double(pixels_per_mm), 1e-3);
+}
+
+// The editing tools of the sketch (cad_design.md, rule 17). Each starts at
+// step 0; the tools that work on a selection ask for one first when nothing
+// is picked yet.
+bool App::sketch_edit_selecting() const {
+    if (!sketch_edit_ || sketch_edit_->tool != SketchEdit::Tool::Edit)
+        return false;
+    using K = SketchEdit::EditKind;
+    const K k = sketch_edit_->edit;
+    return sketch_edit_->edit_step == 0 && k != K::Trim && k != K::Extend && k != K::Offset && k != K::Chamfer && k != K::Fillet &&
+           k != K::Distance && k != K::Area;
+}
+
+void App::sketch_edit_tool(SketchEdit::EditKind kind) {
+    if (!sketch_edit_ || !editing_sketch())
+        return;
+    // A selection made before the tool is kept for it.
+    std::vector<std::size_t> selected = sketch_edit_->selected;
+    sketch_end_tool(false);
+    SketchEdit& e = *sketch_edit_;
+    e.tool = SketchEdit::Tool::Edit;
+    e.edit = kind;
+    e.edit_step = 0;
+    e.selected = std::move(selected);
+    if (sketch_edit_selecting() && !e.selected.empty())
+        e.edit_step = 1;
+    sketch_edit_prompt();
+}
+
+void App::sketch_edit_prompt() {
+    if (!sketch_edit_ || sketch_edit_->tool != SketchEdit::Tool::Edit)
+        return;
+    const SketchEdit& e = *sketch_edit_;
+    using K = SketchEdit::EditKind;
+    if (sketch_edit_selecting()) {
+        command_message_ = tr(T::PromptSelect);
+        return;
+    }
+    const int st = e.edit_step;
+    switch (e.edit) {
+    case K::Trim: command_message_ = tr(T::PromptTrim); break;
+    case K::Extend: command_message_ = tr(T::PromptExtend); break;
+    case K::Offset:
+        command_message_ = st == 0 ? format(tr(T::PromptOffsetDistance), offset_distance_)
+                           : st == 1 ? std::string(tr(T::PromptOffsetPick))
+                                     : std::string(tr(T::PromptOffsetSide));
+        break;
+    case K::Chamfer:
+        command_message_ = st == 0 ? format(tr(T::PromptChamferDistance), chamfer_distance_) : std::string(tr(T::PromptChamferPick));
+        break;
+    case K::Distance: command_message_ = tr(e.edit_points.empty() ? T::PromptDistance1 : T::PromptDistance2); break;
+    case K::Area: command_message_ = tr(T::PromptArea); break;
+    case K::Fillet:
+        command_message_ = st == 0 ? format(tr(T::PromptFilletRadius), fillet_radius_) : std::string(tr(T::PromptFilletPick));
+        break;
+    case K::Mirror: command_message_ = tr(st == 1 ? T::PromptMirror1 : T::PromptMirror2); break;
+    case K::Array:
+        if (st == 1)
+            command_message_ = tr(T::PromptArrayKind);
+        else if (e.array_polar)
+            command_message_ = st == 2 ? std::string(tr(T::PromptArrayCentre))
+                               : st == 3 ? format(tr(T::PromptArrayCount), e.array_count)
+                                         : format(tr(T::PromptArrayAngle), e.array_angle);
+        else
+            command_message_ = st == 2 ? format(tr(T::PromptArrayColumns), e.array_columns)
+                               : st == 3 ? format(tr(T::PromptArrayRows), e.array_rows)
+                               : st == 4 ? format(tr(T::PromptArrayDx), e.array_dx)
+                                         : format(tr(T::PromptArrayDy), e.array_dy);
+        break;
+    case K::Move:
+    case K::Copy: command_message_ = tr(st == 1 ? T::PromptBase : T::PromptSecond); break;
+    case K::Rotate: command_message_ = st == 1 ? std::string(tr(T::PromptBase)) : format(tr(T::PromptAngle), rotate_angle_); break;
+    case K::Scale: command_message_ = st == 1 ? std::string(tr(T::PromptBase)) : format(tr(T::PromptFactor), scale_factor_); break;
+    }
+}
+
+// The tool done: the sketch's constraints counted again; the tools that
+// repeat (trim, extend, offset, chamfer) stay on.
+void App::sketch_edit_finish(bool changed) {
+    if (!sketch_edit_)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    using K = SketchEdit::EditKind;
+    if (changed && editing_sketch()) {
+        // Indices may have moved (an entity trimmed away): the selection goes.
+        e.selected.clear();
+        e.drag.reset();
+    }
+    if (e.edit == K::Trim || e.edit == K::Extend || e.edit == K::Chamfer || e.edit == K::Fillet || (e.edit == K::Offset && e.edit_step > 0)) {
+        if (e.edit == K::Offset)
+            e.edit_step = 1, e.edit_entity.reset();
+        sketch_edit_prompt();
+        if (changed)
+            command_message_ = std::string(tr(T::EditDone)) + " · " + command_message_;
+        return;
+    }
+    sketch_end_tool(false);
+    command_message_ = tr(changed ? T::EditDone : T::EditNothing);
+}
+
+void App::sketch_edit_point(const cad::Pt& p, const cad::Pt& raw) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    using K = SketchEdit::EditKind;
+    const double radius = sketch_pick_radius();
+    // The entity under a point: a small crossing box round it.
+    const auto under = [&](const cad::Pt& q) -> std::optional<std::size_t> {
+        const std::vector<std::size_t> hit = cad::select_box(*sketch, {q.x + radius, q.y + radius}, {q.x - radius, q.y - radius});
+        if (hit.empty())
+            return std::nullopt;
+        return hit.back(); // the last drawn, on top
+    };
+    if (sketch_edit_selecting()) {
+        if (const auto i = under(raw)) {
+            const auto it = std::find(e.selected.begin(), e.selected.end(), *i);
+            if (it == e.selected.end())
+                e.selected.push_back(*i);
+            else
+                e.selected.erase(it);
+        }
+        return;
+    }
+    e.last = p;
+    switch (e.edit) {
+    case K::Distance:
+        // Two points: the distance, its parts along x and y and its angle;
+        // then again from the start (rule 18: nothing is added).
+        e.edit_points.push_back(p);
+        if (e.edit_points.size() == 2) {
+            const cad::Pt a = e.edit_points[0], b = e.edit_points[1];
+            command_message_ = format(tr(T::SketchMeasureDistance), std::hypot(b.x - a.x, b.y - a.y), b.x - a.x, b.y - a.y,
+                                      std::atan2(b.y - a.y, b.x - a.x) * 180.0 / std::numbers::pi);
+            e.edit_points.clear();
+        } else {
+            sketch_edit_prompt();
+        }
+        return;
+    case K::Area:
+        if (const auto m = cad::measure_region_at(*sketch, raw)) {
+            command_message_ = format(tr(T::SketchMeasureArea), m->area, m->perimeter);
+            if (m->holes > 0)
+                command_message_ += format(tr(T::SketchMeasureHoles), m->holes);
+        } else {
+            command_message_ = tr(T::EditNoRegion);
+        }
+        return;
+    case K::Trim: sketch_edit_finish(cad::trim_at(*sketch, raw, radius)); return;
+    case K::Extend: sketch_edit_finish(cad::extend_at(*sketch, raw, radius)); return;
+    case K::Offset:
+        if (e.edit_step == 0)
+            e.edit_step = 1; // a click takes the distance shown
+        if (e.edit_step == 1) {
+            e.edit_entity = under(raw);
+            if (!e.edit_entity) {
+                command_message_ = tr(T::EditNothing);
+                return;
+            }
+            e.edit_step = 2;
+            sketch_edit_prompt();
+            return;
+        }
+        sketch_edit_finish(cad::offset_entity(*sketch, *e.edit_entity, offset_distance_, raw).has_value());
+        return;
+    case K::Chamfer:
+    case K::Fillet: {
+        if (e.edit_step == 0)
+            e.edit_step = 1;
+        // The nearest corner within reach.
+        std::optional<std::pair<std::size_t, std::size_t>> corner;
+        double best = radius;
+        for (std::size_t i = 0; i < sketch->entities.size(); ++i) {
+            const cad::Entity& en = sketch->entities[i];
+            const std::size_t n = en.kind == cad::Entity::Kind::Rectangle ? 4 : en.kind == cad::Entity::Kind::Chain ? en.points.size() : 0;
+            for (std::size_t k = 0; k < n; ++k) {
+                const cad::Pt q = cad::point_of(en, k);
+                if (const double d = std::hypot(q.x - raw.x, q.y - raw.y); d <= best)
+                    best = d, corner = std::pair{i, k};
+            }
+        }
+        sketch_edit_finish(corner && (e.edit == K::Fillet ? cad::fillet_corner(*sketch, corner->first, corner->second, fillet_radius_)
+                                                           : cad::chamfer_corner(*sketch, corner->first, corner->second, chamfer_distance_)));
+        return;
+    }
+    case K::Mirror:
+        e.edit_points.push_back(p);
+        if (e.edit_points.size() < 2) {
+            e.edit_step = 2;
+            sketch_edit_prompt();
+            return;
+        }
+        sketch_edit_finish(!cad::mirror_entities(*sketch, e.selected, e.edit_points[0], e.edit_points[1]).empty());
+        return;
+    case K::Array:
+        if (e.edit_step == 1) // a click instead of a word: polar about it
+            e.array_polar = true, e.edit_step = 2;
+        if (e.array_polar && e.edit_step == 2) {
+            e.edit_points = {p};
+            e.edit_step = 3;
+            sketch_edit_prompt();
+        }
+        return;
+    case K::Move:
+    case K::Copy:
+        e.edit_points.push_back(p);
+        if (e.edit_points.size() < 2) {
+            e.edit_step = 2;
+            sketch_edit_prompt();
+            return;
+        }
+        sketch_edit_finish(!cad::map_entities(*sketch, e.selected,
+                                              cad::moved(e.edit_points[1].x - e.edit_points[0].x, e.edit_points[1].y - e.edit_points[0].y),
+                                              e.edit == K::Copy)
+                                .empty());
+        return;
+    case K::Rotate:
+    case K::Scale:
+        if (e.edit_step == 1) {
+            e.edit_points = {p};
+            e.edit_step = 2;
+            sketch_edit_prompt();
+        }
+        return;
+    }
+}
+
+// The command line while an editing tool is on, or a tool's name: true when
+// taken.
+bool App::sketch_edit_text(const std::string& word, const std::string& text) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return false;
+    SketchEdit& e = *sketch_edit_;
+    using K = SketchEdit::EditKind;
+    static const std::pair<const char*, K> kNames[] = {
+        {"tr", K::Trim},       {"recortar", K::Trim},     {"trim", K::Trim},         {"ex", K::Extend},
+        {"alargar", K::Extend}, {"extend", K::Extend},    {"o", K::Offset},          {"desfasar", K::Offset},
+        {"offset", K::Offset}, {"f", K::Fillet},          {"redondear", K::Fillet},  {"empalme", K::Fillet},
+        {"fillet", K::Fillet}, {"cha", K::Chamfer},       {"chaflan", K::Chamfer},   {"chaflán", K::Chamfer},
+        {"chamfer", K::Chamfer}, {"mi", K::Mirror},       {"simetria", K::Mirror},   {"simetría", K::Mirror},
+        {"mirror", K::Mirror}, {"ar", K::Array},          {"matriz", K::Array},      {"array", K::Array},
+        {"m", K::Move},        {"mover", K::Move},        {"move", K::Move},         {"co", K::Copy},
+        {"copiar", K::Copy},   {"copy", K::Copy},         {"ro", K::Rotate},         {"girar", K::Rotate},
+        {"di", K::Distance},   {"distancia", K::Distance}, {"distance", K::Distance}, {"dist", K::Distance},
+        {"area", K::Area},     {"área", K::Area},
+        {"rotate", K::Rotate}, {"sc", K::Scale},          {"escalar", K::Scale},     {"scale", K::Scale}};
+    for (const auto& [name, kind] : kNames)
+        if (word == name) {
+            last_command_ = word;
+            sketch_edit_tool(kind);
+            return true;
+        }
+    if (e.tool != SketchEdit::Tool::Edit)
+        return false;
+    const std::optional<double> number = cad::parse_typed_value(text);
+    // Enter: the selection is done, the number shown is kept, or the tool ends.
+    if (word.empty()) {
+        if (sketch_edit_selecting()) {
+            if (e.selected.empty()) {
+                command_message_ = tr(T::EditNoSelection);
+                return true;
+            }
+            e.edit_step = 1;
+            sketch_edit_prompt();
+            return true;
+        }
+    }
+    const int st = e.edit_step;
+    const bool wants_number =
+        ((e.edit == K::Offset || e.edit == K::Chamfer || e.edit == K::Fillet) && st == 0) || (e.edit == K::Array && st >= 2 && !(e.array_polar && st == 2)) ||
+        ((e.edit == K::Rotate || e.edit == K::Scale) && st == 2);
+    if (wants_number && (word.empty() || number)) {
+        const bool given = !word.empty();
+        const double v = number.value_or(0.0);
+        switch (e.edit) {
+        case K::Offset:
+        case K::Chamfer:
+        case K::Fillet:
+            if (given && !(v > 0.0)) {
+                command_message_ = tr(T::CommandBadNumber);
+                return true;
+            }
+            if (given)
+                (e.edit == K::Offset ? offset_distance_ : e.edit == K::Fillet ? fillet_radius_ : chamfer_distance_) = v;
+            e.edit_step = 1;
+            sketch_edit_prompt();
+            return true;
+        case K::Rotate:
+            if (given)
+                rotate_angle_ = v;
+            sketch_edit_finish(!cad::map_entities(*sketch, e.selected, cad::rotated(e.edit_points.at(0), rotate_angle_), false).empty());
+            return true;
+        case K::Scale:
+            if (given && !(v > 0.0)) {
+                command_message_ = tr(T::CommandBadNumber);
+                return true;
+            }
+            if (given)
+                scale_factor_ = v;
+            sketch_edit_finish(!cad::map_entities(*sketch, e.selected, cad::scaled(e.edit_points.at(0), scale_factor_), false).empty());
+            return true;
+        case K::Array: {
+            const auto whole = [&](int& field) {
+                if (given) {
+                    if (!(v >= 1.0) || v > 1000.0 || v != std::floor(v)) {
+                        command_message_ = tr(T::CommandBadNumber);
+                        return false;
+                    }
+                    field = int(v);
+                }
+                return true;
+            };
+            if (e.array_polar && st == 3) {
+                if (!whole(e.array_count))
+                    return true;
+            } else if (e.array_polar && st == 4) {
+                if (given)
+                    e.array_angle = v;
+                sketch_edit_finish(!cad::pattern_polar(*sketch, e.selected, e.edit_points.at(0), e.array_count, e.array_angle).empty());
+                return true;
+            } else if (st == 2) {
+                if (!whole(e.array_columns))
+                    return true;
+            } else if (st == 3) {
+                if (!whole(e.array_rows))
+                    return true;
+            } else if (st == 4) {
+                if (given)
+                    e.array_dx = v;
+            } else {
+                if (given)
+                    e.array_dy = v;
+                sketch_edit_finish(
+                    !cad::pattern_rectangular(*sketch, e.selected, e.array_columns, e.array_dx, e.array_rows, e.array_dy).empty());
+                return true;
+            }
+            ++e.edit_step;
+            sketch_edit_prompt();
+            return true;
+        }
+        default: break;
+        }
+    }
+    if (e.edit == K::Array && st == 1) {
+        if (word.empty() || word == "p" || word == "polar")
+            e.array_polar = true;
+        else if (word == "r" || word == "rectangular")
+            e.array_polar = false;
+        else
+            return false;
+        e.edit_step = 2;
+        sketch_edit_prompt();
+        return true;
+    }
+    if (word.empty()) { // Enter with nothing asked: the tool ends
+        sketch_end_tool(false);
+        command_message_ = tr(T::SketchToolLeft);
+        return true;
+    }
+    return false;
+}
+
+void App::sketch_pick(const cad::Pt& p) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    using R = SketchEdit::Rule;
+    using W = SketchEdit::Pick::What;
+    SketchEdit& e = *sketch_edit_;
+    if (e.pending)
+        return; // the value first
+    const double radius = sketch_pick_radius();
+    // The nearest point, line and circle to p.
+    std::optional<SketchEdit::Pick> point, segment, round;
+    double point_d = radius, segment_d = radius, round_d = radius;
+    for (std::size_t i = 0; i < sketch->entities.size(); ++i) {
+        const cad::Entity& en = sketch->entities[i];
+        const std::size_t points = en.kind == cad::Entity::Kind::Rectangle ? 4
+                                   : en.kind == cad::Entity::Kind::Circle  ? 1
+                                                                           : en.points.size();
+        for (std::size_t k = 0; k < points; ++k) {
+            const cad::Pt q = cad::point_of(en, k);
+            if (const double d = std::hypot(q.x - p.x, q.y - p.y); d <= point_d)
+                point_d = d, point = SketchEdit::Pick{W::Point, {i, k}};
+        }
+        const auto segments = cad::segments_of(en);
+        for (std::size_t k = 0; k < segments.size(); ++k) {
+            const auto& [a, b] = segments[k];
+            const double dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy;
+            const double t = l2 > 0.0 ? std::clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0.0, 1.0) : 0.0;
+            if (const double d = std::hypot(a.x + t * dx - p.x, a.y + t * dy - p.y); d <= segment_d)
+                segment_d = d, segment = SketchEdit::Pick{W::Segment, {i, k}};
+        }
+        if ((en.kind == cad::Entity::Kind::Circle && !en.points.empty()) || (en.kind == cad::Entity::Kind::Arc && en.points.size() >= 3)) {
+            const cad::Pt c = en.points[0];
+            const double r = en.kind == cad::Entity::Kind::Circle ? en.radius : std::hypot(en.points[1].x - c.x, en.points[1].y - c.y);
+            if (const double d = std::abs(std::hypot(p.x - c.x, p.y - c.y) - r); d <= round_d)
+                round_d = d, round = SketchEdit::Pick{W::Round, {i, 0}};
+        }
+    }
+    // What this step of the tool wants.
+    const bool first = e.picks.empty();
+    std::optional<SketchEdit::Pick> got;
+    switch (e.rule) {
+    case R::Dimension:
+        if (first)
+            got = point ? point : segment && (!round || segment_d <= round_d) ? segment : round;
+        else
+            got = point;
+        break;
+    case R::Horizontal:
+    case R::Vertical:
+    case R::Parallel:
+    case R::Perpendicular:
+    case R::Angle: got = segment; break;
+    case R::Equal:
+        got = first ? (segment && (!round || segment_d <= round_d) ? segment : round) : e.picks[0].what == W::Round ? round : segment;
+        break;
+    case R::Coincident:
+    case R::Fixed: got = point; break;
+    case R::Concentric: got = round; break;
+    case R::Tangent: got = first ? segment : round; break;
+    }
+    if (!got) {
+        command_message_ = tr(T::RuleNothingThere);
+        return;
+    }
+    e.picks.push_back(*got);
+    // Enough picked: the constraint.
+    const std::size_t needed = e.rule == R::Horizontal || e.rule == R::Vertical || e.rule == R::Fixed ? 1
+                               : e.rule == R::Dimension && e.picks[0].what != W::Point             ? 1
+                                                                                                    : 2;
+    if (e.picks.size() < needed) {
+        sketch_rule_prompt();
+        return;
+    }
+    using K = cad::GeoConstraint::Kind;
+    cad::GeoConstraint rule;
+    rule.a = e.picks[0].ref;
+    if (e.picks.size() > 1)
+        rule.b = e.picks[1].ref;
+    const auto segment_of = [&](const cad::EntityPoint& r) { return cad::segments_of(sketch->entities[r.entity])[r.index]; };
+    const auto radius_of = [&](const cad::EntityPoint& r) {
+        const cad::Entity& en = sketch->entities[r.entity];
+        return en.kind == cad::Entity::Kind::Circle ? en.radius
+                                                    : std::hypot(en.points[1].x - en.points[0].x, en.points[1].y - en.points[0].y);
+    };
+    switch (e.rule) {
+    case R::Dimension:
+        if (e.picks[0].what == W::Segment) {
+            const auto [a, b] = segment_of(rule.a);
+            rule.kind = K::Length, rule.value = std::hypot(b.x - a.x, b.y - a.y);
+        } else if (e.picks[0].what == W::Round) {
+            const bool circle = sketch->entities[rule.a.entity].kind == cad::Entity::Kind::Circle;
+            rule.kind = circle ? K::Diameter : K::Radius;
+            rule.value = circle ? 2.0 * radius_of(rule.a) : radius_of(rule.a);
+        } else {
+            const cad::Pt a = cad::point_of(sketch->entities[rule.a.entity], rule.a.index);
+            const cad::Pt b = cad::point_of(sketch->entities[rule.b.entity], rule.b.index);
+            rule.kind = K::Distance, rule.value = std::hypot(b.x - a.x, b.y - a.y);
+        }
+        break;
+    case R::Horizontal: rule.kind = K::Horizontal; break;
+    case R::Vertical: rule.kind = K::Vertical; break;
+    case R::Parallel: rule.kind = K::Parallel; break;
+    case R::Perpendicular: rule.kind = K::Perpendicular; break;
+    case R::Equal: rule.kind = K::Equal; break;
+    case R::Coincident: rule.kind = K::Coincident; break;
+    case R::Concentric: rule.kind = K::Concentric; break;
+    case R::Tangent: rule.kind = K::Tangent; break;
+    case R::Fixed:
+        rule.kind = K::Fixed;
+        rule.at = cad::point_of(sketch->entities[rule.a.entity], rule.a.index);
+        break;
+    case R::Angle: {
+        const auto [a0, a1] = segment_of(rule.a);
+        const auto [b0, b1] = segment_of(rule.b);
+        const double ax = a1.x - a0.x, ay = a1.y - a0.y, bx = b1.x - b0.x, by = b1.y - b0.y;
+        rule.kind = K::Angle;
+        rule.value = std::atan2(ax * by - ay * bx, ax * bx + ay * by) * 180.0 / std::numbers::pi;
+        break;
+    }
+    }
+    if (cad::is_dimension(rule.kind)) {
+        e.pending = rule;
+        command_message_ = format(tr(T::RuleValue), format("%.4g", rule.value).c_str());
+        command_focus_ = true;
+        return;
+    }
+    sketch_apply_rule(rule);
+}
+
+void App::sketch_apply_rule(const cad::GeoConstraint& rule) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch)
+        return;
+    SketchEdit& e = *sketch_edit_;
+    const cad::AddRule result = cad::add_rule(*sketch, rule);
+    e.picks.clear();
+    e.pending.reset();
+    switch (result) {
+    case cad::AddRule::Added: command_message_ = format(tr(T::RuleAdded), tr(rule_label(int(e.rule)))); break;
+    case cad::AddRule::Redundant: command_message_ = tr(T::RuleRedundant); break;
+    case cad::AddRule::Conflicting: command_message_ = tr(T::RuleConflicting); break;
+    case cad::AddRule::Invalid: command_message_ = tr(T::RuleNothingThere); break;
+    }
+}
+
+// The dragged point taken to `p` with the sketch solved around it; where the
+// constraints do not let it go, it stays.
+void App::sketch_drag_to(const cad::Pt& p) {
+    cad::Sketch* sketch = editing_sketch();
+    if (!sketch_edit_ || !sketch || !sketch_edit_->drag)
+        return;
+    cad::Sketch trial = *sketch;
+    cad::GeoConstraint pin;
+    pin.kind = cad::GeoConstraint::Kind::Fixed;
+    pin.a = *sketch_edit_->drag;
+    pin.at = p;
+    trial.rules.push_back(pin);
+    if (!cad::solve_sketch(trial).solved)
+        return;
+    trial.rules.pop_back();
+    *sketch = std::move(trial);
+}
+
+const cad::SketchSolve& App::sketch_dof() {
+    const cad::Sketch* sketch = editing_sketch();
+    if (!sketch) {
+        dof_ = {};
+        dof_valid_ = false;
+        return dof_;
+    }
+    if (!dof_valid_ || !(dof_sketch_ == *sketch)) {
+        dof_ = cad::analyze_sketch(*sketch);
+        dof_sketch_ = *sketch;
+        dof_valid_ = true;
+    }
+    return dof_;
+}
+
 // The command line in a sketch (rule 12): the tools by their aliases, a
 // typed point for the tool, a number for a circle's radius or a segment's
 // length, E and REV to make the body, C to close the chain.
@@ -12849,6 +20101,50 @@ bool App::sketch_command(const std::string& word, const std::string& text) {
                 return true;
         return false;
     };
+    // A dimension asking for its value: Enter keeps what is drawn.
+    if (e.pending) {
+        if (word.empty()) {
+            sketch_apply_rule(*e.pending);
+            return true;
+        }
+        if (const std::optional<double> v = cad::parse_typed_value(text)) {
+            cad::GeoConstraint rule = *e.pending;
+            rule.value = *v;
+            sketch_apply_rule(rule);
+            return true;
+        }
+    }
+    // The editing tools (rule 17): their names, and what a step asks for.
+    if (sketch_edit_text(word, text))
+        return true;
+    // The constraint tools by their names (rule 5).
+    {
+        using R = SketchEdit::Rule;
+        struct Names {
+            const char* names[4];
+            R rule;
+        };
+        static constexpr Names rules[] = {
+            {{"cota", "dim", "dimension", "dimensión"}, R::Dimension},
+            {{"h", "horizontal"}, R::Horizontal},
+            {{"v", "vertical"}, R::Vertical},
+            {{"par", "paralela", "parallel"}, R::Parallel},
+            {{"per", "perpendicular"}, R::Perpendicular},
+            {{"igual", "equal", "="}, R::Equal},
+            {{"coi", "coincidente", "coincident"}, R::Coincident},
+            {{"con", "concentrica", "concéntrica", "concentric"}, R::Concentric},
+            {{"tan", "tangente", "tangent"}, R::Tangent},
+            {{"fijo", "fix", "fixed"}, R::Fixed},
+            {{"ang", "angulo", "ángulo", "angle"}, R::Angle},
+        };
+        for (const Names& n : rules)
+            for (const char* name : n.names)
+                if (name && word == name) {
+                    last_command_ = word;
+                    sketch_rule_tool(n.rule);
+                    return true;
+                }
+    }
     if (word.empty()) {
         // Enter on an empty line ends the chain, or repeats the last tool.
         if (e.tool == SketchEdit::Tool::Line && !e.points.empty()) {
@@ -13054,12 +20350,101 @@ void App::sketch_overlay() {
             circle(c, r, colour, w, a0, a1);
         }
     };
-    for (const cad::Entity& en : sketch->entities)
-        draw_entity(en, ink);
+    // Fully fixed in ink (black, white on the dark theme); what can still
+    // move in blue (rule 5); the constraint tool's picks in green.
+    const cad::SketchSolve& dof = sketch_dof();
+    const ImU32 loose = ImGui::GetColorU32(rgb(0x4C9BFF, 0.95f));
+    for (std::size_t i = 0; i < sketch->entities.size(); ++i)
+        draw_entity(sketch->entities[i], i < dof.entity_fixed.size() && dof.entity_fixed[i] ? ink : loose);
+    // What an editing tool has picked, in the accent colour; the selection
+    // box being dragged: a window blue, a crossing green (rule 17).
+    for (const std::size_t i : e.selected)
+        if (i < sketch->entities.size())
+            draw_entity(sketch->entities[i], ImGui::GetColorU32(rgb(theme_.accent_hover, 1.0f)));
+    if (e.box_from && e.raw) {
+        const cad::Pt& a = *e.box_from;
+        const cad::Pt& b = *e.raw;
+        const bool window = b.x >= a.x;
+        const ImU32 edge = ImGui::GetColorU32(rgb(window ? 0x4C9BFF : 0x3FBF7F, 0.9f));
+        const ImU32 fill = ImGui::GetColorU32(rgb(window ? 0x4C9BFF : 0x3FBF7F, 0.15f));
+        ImVec2 q[4];
+        if (project(a, q[0]) && project({b.x, a.y}, q[1]) && project(b, q[2]) && project({a.x, b.y}, q[3])) {
+            dl->AddConvexPolyFilled(q, 4, fill);
+            dl->AddPolyline(q, 4, edge, 1.5f * scale_, ImDrawFlags_Closed);
+        }
+    }
+    // Each dimension's value beside what it measures.
+    for (const cad::GeoConstraint& r : sketch->rules) {
+        if (!cad::is_dimension(r.kind) || r.a.entity >= sketch->entities.size())
+            continue;
+        const cad::Entity& en = sketch->entities[r.a.entity];
+        std::optional<cad::Pt> at;
+        std::string text;
+        using K = cad::GeoConstraint::Kind;
+        if (r.kind == K::Length || r.kind == K::Angle) {
+            const auto segments = cad::segments_of(en);
+            if (r.a.index < segments.size())
+                at = cad::Pt{0.5 * (segments[r.a.index].first.x + segments[r.a.index].second.x),
+                             0.5 * (segments[r.a.index].first.y + segments[r.a.index].second.y)};
+            text = r.kind == K::Angle ? format("%.4g°", r.value) : format("%.4g", r.value);
+        } else if (r.kind == K::Radius || r.kind == K::Diameter) {
+            if (!en.points.empty()) {
+                const double rr = r.kind == K::Radius ? r.value : 0.5 * r.value;
+                at = cad::Pt{en.points[0].x + rr * 0.7071, en.points[0].y + rr * 0.7071};
+            }
+            text = format(r.kind == K::Radius ? "R%.4g" : "Ø%.4g", r.value);
+        } else if (r.b.entity < sketch->entities.size()) {
+            const cad::Pt a = cad::point_of(en, r.a.index), b = cad::point_of(sketch->entities[r.b.entity], r.b.index);
+            at = cad::Pt{0.5 * (a.x + b.x), 0.5 * (a.y + b.y)};
+            text = format("%.4g", r.value);
+        }
+        ImVec2 q;
+        if (at && project(*at, q)) {
+            const ImVec2 size = ImGui::CalcTextSize(text.c_str());
+            const ImVec2 lo(q.x - 0.5f * size.x - 3.0f * scale_, q.y - 0.5f * size.y - 1.0f * scale_);
+            const ImVec2 hi(q.x + 0.5f * size.x + 3.0f * scale_, q.y + 0.5f * size.y + 1.0f * scale_);
+            dl->AddRectFilled(lo, hi, ImGui::GetColorU32(rgb(theme_.dark ? 0x1E1E24 : 0xFFFFFF, 0.85f)), 3.0f * scale_);
+            dl->AddText(ImVec2(lo.x + 3.0f * scale_, lo.y + 1.0f * scale_), ink, text.c_str());
+        }
+    }
+    for (const SketchEdit::Pick& pick : e.picks) {
+        if (pick.ref.entity >= sketch->entities.size())
+            continue;
+        const cad::Entity& en = sketch->entities[pick.ref.entity];
+        if (pick.what == SketchEdit::Pick::What::Segment) {
+            const auto segments = cad::segments_of(en);
+            if (pick.ref.index < segments.size())
+                line(segments[pick.ref.index].first, segments[pick.ref.index].second, mark, 2.0f * thick);
+        } else if (pick.what == SketchEdit::Pick::What::Round) {
+            draw_entity(en, mark);
+        } else {
+            ImVec2 q;
+            if (project(cad::point_of(en, pick.ref.index), q))
+                dl->AddCircleFilled(q, 4.0f * scale_, mark);
+        }
+    }
     // The tool's rubber band to the cursor.
     if (e.cursor) {
         const cad::Pt c = *e.cursor;
         switch (e.tool) {
+        case SketchEdit::Tool::Edit:
+            // Moved or copied: the picked entities follow the cursor; a mirror
+            // line from its first point.
+            if ((e.edit == SketchEdit::EditKind::Move || e.edit == SketchEdit::EditKind::Copy) && e.edit_points.size() == 1) {
+                cad::Sketch ghosts;
+                for (const std::size_t i : e.selected)
+                    if (i < sketch->entities.size())
+                        ghosts.entities.push_back(sketch->entities[i]);
+                std::vector<std::size_t> all(ghosts.entities.size());
+                for (std::size_t i = 0; i < all.size(); ++i)
+                    all[i] = i;
+                cad::map_entities(ghosts, all, cad::moved(c.x - e.edit_points[0].x, c.y - e.edit_points[0].y), false);
+                for (const cad::Entity& g : ghosts.entities)
+                    draw_entity(g, ghost);
+            } else if (e.edit == SketchEdit::EditKind::Mirror && e.edit_points.size() == 1) {
+                line(e.edit_points[0], c, ghost, 1.0f * scale_);
+            }
+            break;
         case SketchEdit::Tool::Line:
             for (std::size_t i = 0; i + 1 < e.points.size(); ++i)
                 line(e.points[i], e.points[i + 1], ghost, thick);
@@ -13084,7 +20469,8 @@ void App::sketch_overlay() {
                 draw_entity(a, ghost);
             }
             break;
-        case SketchEdit::Tool::None: break;
+        case SketchEdit::Tool::None:
+        case SketchEdit::Tool::Constrain: break;
         }
         // The polar guide through the start, when tracking took the angle.
         if (e.polar && !e.ortho && e.snap.kind == cad::SnapKind::None && !e.points.empty() &&
@@ -13337,7 +20723,8 @@ void App::calibration_panel() {
         if (c.unit.empty())
             std::snprintf(text, sizeof text, "%s", format("%g", v).c_str());
         else
-            std::snprintf(text, sizeof text, "%s", format("%g %s", v, c.unit == "C" ? "°C" : c.unit.c_str()).c_str());
+            std::snprintf(text, sizeof text, "%s",
+                          c.unit == "°" ? format("%g°", v).c_str() : format("%g %s", v, c.unit == "C" ? "°C" : c.unit.c_str()).c_str());
         return std::string(text);
     };
 
@@ -13357,6 +20744,7 @@ void App::calibration_panel() {
         {CalibrationKind::Speed, T::CalSpeed, T::CalSpeedWhat, T::CalSpeedHint},
         {CalibrationKind::MaxFlow, T::CalMaxFlow, T::CalMaxFlowWhat, T::CalMaxFlowHint},
         {CalibrationKind::Acceleration, T::CalAcceleration, T::CalAccelerationWhat, T::CalAccelerationHint},
+        {CalibrationKind::BridgesOverhangs, T::CalBridges, T::CalBridgesWhat, T::CalBridgesHint},
         {CalibrationKind::Fit, T::CalFit, T::CalFitWhat, T::CalFitHint},
         {CalibrationKind::ResinExposure, T::CalResinExposure, T::CalResinExposureWhat, T::CalResinExposureHint},
         {CalibrationKind::ResinMeasure, T::CalResinMeasure, T::CalResinMeasureWhat, T::CalResinMeasureHint},
@@ -13611,7 +20999,7 @@ void App::calibration_panel() {
                     }
                 }
                 // The range, for whoever wants to change it.
-                if (calibration_ && ImGui::TreeNode(tr(T::AdjustRange))) {
+                if (calibration_ && is_tower(card.kind) && ImGui::TreeNode(tr(T::AdjustRange))) {
                     TowerRange& r = ranges_[int(card.kind)];
                     double lo = 0.0, hi = 600.0, step_lo = 0.05;
                     float drag = 0.1f;
@@ -13880,8 +21268,62 @@ void App::toasts() {
 
 void App::dialogs() {
     std::filesystem::path chosen;
-    if (browser_.draw(chosen, icon("tisma_folder"), rgb(theme_.accent_hover))) {
+    if (browser_.draw(chosen, icon("tisma_folder"), rgb(theme_.accent_hover)))
+        file_chosen(chosen);
+    dialogs_rest();
+}
+
+// What the file browser was opened for, done with the file chosen.
+void App::file_chosen(const std::filesystem::path& chosen) {
+    {
         switch (purpose_) {
+        case Purpose::LoadProjectConfig: load_project_config(chosen); break;
+        case Purpose::ExportPlate: export_plate_to(chosen); break;
+        case Purpose::ExportPreferences: save_preferences(chosen); break;
+        case Purpose::AddModelInches: {
+            const auto before = revision_.model;
+            add_model(chosen);
+            if (revision_.model != before && !objects_.empty()) {
+                PlateObject& o = objects_.back(); // the model read, in inches: ×25.4 to millimetres
+                for (double& v : o.place.scale)
+                    v *= 25.4;
+                arrange_plate();
+            }
+            break;
+        }
+        case Purpose::ImportZip: import_zip(chosen); break;
+        case Purpose::ConvertToBinary:
+        case Purpose::ConvertToAscii: convert_gcode(chosen, purpose_ == Purpose::ConvertToBinary); break;
+        case Purpose::ExportToolpaths: {
+            std::ofstream out(chosen, std::ios::binary);
+            if (result_)
+                out << toolpaths_obj(result_->preview);
+            out.close();
+            if (!result_ || !out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::PlateExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
+        case Purpose::ImportPreferences:
+            load_preferences(chosen);
+            apply_theme();
+            save_preferences(); // they are this machine's now
+            break;
+        case Purpose::ExportObject: {
+            if (export_object_ >= placed_meshes_.size())
+                break;
+            const TriangleMesh& m = placed_meshes_[export_object_];
+            const std::string name = export_object_ < objects_.size() ? objects_[export_object_].name : std::string();
+            std::ofstream out(chosen, std::ios::binary);
+            out << (lower_extension(chosen) == ".obj" ? obj_text(m, name) : stl_binary(m, "Tisma " + name));
+            out.close();
+            if (!out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::PlateExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
         case Purpose::Open: open_path(chosen); break;
         case Purpose::AddModel: add_model(chosen); break;
         case Purpose::SaveGcode: export_gcode_to(chosen); break;
@@ -13913,6 +21355,35 @@ void App::dialogs() {
             break;
         }
         case Purpose::SaveProject: save_project_to(chosen); break;
+        case Purpose::ImportSketchDxf:
+        case Purpose::ImportSketchSvg: import_sketch_file(chosen, purpose_ == Purpose::ImportSketchSvg); break;
+        case Purpose::ExportSketchDxf: {
+            cad::Sketch* sketch = editing_sketch();
+            std::ofstream out(chosen, std::ios::binary);
+            if (sketch)
+                out << cad::write_dxf(*sketch);
+            out.close();
+            if (!sketch || !out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::SketchExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
+        case Purpose::ExportViewDxf: {
+            cad::ViewDxfOptions view;
+            const Vec3 look = camera_.forward(), up = camera_.up();
+            view.look = {look.x, look.y, look.z};
+            view.up = {up.x, up.y, up.z};
+            view.hidden = view_dxf_hidden_;
+            std::ofstream out(chosen, std::ios::binary);
+            out << cad::write_view_dxf(cad::view_lines(design_mesh_, view));
+            out.close();
+            if (!out)
+                fail(T::CannotSave, utf8(chosen));
+            else
+                notify(format(tr(T::DesignViewExported), utf8(chosen.filename()).c_str()));
+            break;
+        }
         case Purpose::LoadCase: load_case_file(chosen); break;
         case Purpose::SaveExtruderTest: {
             std::ofstream out(chosen, std::ios::binary);
@@ -13926,6 +21397,10 @@ void App::dialogs() {
         }
         }
     }
+}
+
+// The dialogs other than the file browser.
+void App::dialogs_rest() {
     if (!browser_.is_open() && !browser_.folder().empty())
         last_folder_ = browser_.folder();
 
@@ -13999,6 +21474,8 @@ void App::dialogs() {
     catalog_dialog();
     choose_settings_dialog();
     credits_dialog();
+    shortcuts_dialog();
+    system_info_dialog();
     // A pause's message, or the G-code for a layer (preview.md, rule 12).
     if (change_dialog_) {
         ImGui::OpenPopup("###layer_change");
@@ -14054,6 +21531,7 @@ void App::layout() {
     anchors_.clear();
     g_field_rects.clear();
     g_menu_rects.clear();
+    g_menu_disabled.clear();
     g_dump_rows.clear();
     moves_top_ = 0.0f;
     // A large model's field let go: its plate made again once.
@@ -14063,6 +21541,8 @@ void App::layout() {
         plate_changed();
     }
     g_row_ids.clear();
+    g_texts.clear();
+    g_keep_texts = !script_.empty();
     viewport();
     update_view_hold();
     anchor_rect("plate", view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y));
@@ -14086,6 +21566,10 @@ void App::layout() {
             gears_panel();
         else if (tab_ == Tab::Design)
             design_panel();
+        else if (tab_ == Tab::Structural)
+            structural_panel();
+        else if (tab_ == Tab::Aerodynamics)
+            aerodynamics_panel();
         else
             settings_panel();
         if (help_open_)
@@ -14107,16 +21591,20 @@ void App::layout() {
             slice_panel();
         if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
             part_labels();
-        if (tab_ == Tab::Analysis)
-            analysis_panel();
         if (tab_ == Tab::Design && design_page_ == DesignPage::Design) {
             design_command_line();
             if (sketch_edit_) {
                 sketch_strip();
                 sketch_cursor_input();
                 sketch_overlay();
+            } else {
+                design_pick_overlay();
             }
         }
+        if (tab_ == Tab::Structural)
+            structural_overlay();
+        if (tab_ == Tab::Aerodynamics)
+            aero_overlay();
         if (tab_ == Tab::Calibration)
             calibration_panel();
         if (tab_ == Tab::Device)
@@ -14133,12 +21621,12 @@ void App::layout() {
     }
     if (tab_ != last_tab_) {
         last_tab_ = tab_;
-        static const std::map<Tab, const char*> tab_tips = {{Tab::Preview, "preview"}, {Tab::Analysis, "analysis"},
+        static const std::map<Tab, const char*> tab_tips = {{Tab::Preview, "preview"}, {Tab::Structural, "analysis"},
                                                             {Tab::Design, "design"},
                                                             {Tab::Calibration, "calibration"}, {Tab::Device, "device"}};
         if (const auto it = tab_tips.find(tab_); it != tab_tips.end())
             tip(it->second);
-        if (tab_ == Tab::Analysis && !guide_memory_.done.contains("opened:engineering")) {
+        if (tab_ == Tab::Structural && !guide_memory_.done.contains("opened:engineering")) {
             guide_memory_.done.insert("opened:engineering");
             offer_tutorials("first_open:engineering");
         }
@@ -14149,6 +21637,8 @@ void App::layout() {
     }
     help_windows();
     config_window();
+    cloud_window();
+    report_window();
     guide_overlay();
     if (!g_clamped.empty()) {
         notify(std::move(g_clamped));
@@ -14158,8 +21648,10 @@ void App::layout() {
     dialogs();
 
     // Shortcuts.
-    if (no_popup() && cad_design_ && engineering_tab(tab_) &&
-        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_P, ImGuiInputFlags_RouteGlobal)) {
+    // Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Ctrl+, and Ctrl+P come from the key
+    // events themselves (UI48, g_chords), and only for this frame: one not
+    // taken here (a text field or a dialog had the keys) is dropped below.
+    if (no_popup() && cad_design_ && engineering_tab(tab_) && take_chord('p', true)) {
         if (design_page_ == DesignPage::Fasteners)
             send_fastener_to_plate(false);
         else if (design_page_ == DesignPage::Gears)
@@ -14168,8 +21660,7 @@ void App::layout() {
             send_design_to_plate(); // cad_design.md, rule 21
     }
     // Configuración: Ctrl+, and Ctrl+P (preferences.md).
-    if (no_popup() && (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Comma, ImGuiInputFlags_RouteGlobal) ||
-                       ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_P, ImGuiInputFlags_RouteGlobal)))
+    if (no_popup() && (take_chord(',', false) || take_chord('p', false)))
         config_open_ = true;
     if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, ImGuiInputFlags_RouteGlobal)) {
         purpose_ = Purpose::Open;
@@ -14179,8 +21670,17 @@ void App::layout() {
         search_focus_ = true, printer_page_ = false; // the field is in the settings panel
     if (ImGui::Shortcut(ImGuiKey_F1, ImGuiInputFlags_RouteGlobal))
         help_open_ = !help_open_;
+    // Keyboard Shortcuts: "?" (Shift and the key "/" on most keyboards).
+    if (plate_keys() && ImGui::IsKeyPressed(ImGuiKey_Slash, false) && ImGui::GetIO().KeyShift)
+        shortcuts_open_ = true;
     // The sketch's toggles (cad_design.md, rules 15 and 16) and its two
     // levels of Esc (rule 11, CD10), while no field has the keyboard.
+    // Esc ends picking an operation's points.
+    if (tab_ == Tab::Design && design_pick_ && !sketch_edit_ && no_popup() && !ImGui::IsAnyItemActive() &&
+        esc_frame_ != ImGui::GetFrameCount() && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+        design_pick_.reset();
+        rebuild_design();
+    }
     if (tab_ == Tab::Design && sketch_edit_ && no_popup()) {
         if (ImGui::Shortcut(ImGuiKey_F3, ImGuiInputFlags_RouteGlobal))
             sketch_edit_->snaps = !sketch_edit_->snaps;
@@ -14215,8 +21715,9 @@ void App::layout() {
             }
         if (ImGui::IsKeyPressed(ImGuiKey_K, false))
             camera_.orthographic = !camera_.orthographic;
-        if (ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
-            // The chosen part, or everything.
+        if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && !ImGui::IsKeyDown(ImGuiKey_LeftCtrl) &&
+            !ImGui::IsKeyDown(ImGuiKey_RightCtrl) && glfwGetTime() - g_ctrl_z_time > 0.5) {
+            // The chosen part, or everything (not with Ctrl: that is undo, UI45).
             if (tab_ == Tab::Prepare && selected_ >= 0 && std::size_t(selected_) < placed_meshes_.size() &&
                 !placed_meshes_[std::size_t(selected_)].empty()) {
                 Vec3 lo{1e30f, 1e30f, 1e30f}, hi{-1e30f, -1e30f, -1e30f};
@@ -14236,13 +21737,77 @@ void App::layout() {
     }
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(false);
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
+    // The plate's undo and redo (UI45), not while a text field takes the keys
+    // (it undoes its own typing).
+    if (tab_ == Tab::Prepare && !ImGui::GetIO().WantTextInput && !printer_page_) {
+        if (take_chord('z', false))
+            undo_place(false);
+        if (take_chord('y', false) || take_chord('z', true))
+            undo_place(true);
+    }
+    // In Structural, the conditions' (rule 8); Esc back to Rotar (rule 5).
+    if (tab_ == Tab::Structural && !ImGui::GetIO().WantTextInput) {
+        if (take_chord('z', false))
+            undo_engineering(false);
+        if (take_chord('y', false) || take_chord('z', true))
+            undo_engineering(true);
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            structural_tool_ = 0;
+    }
+    // Save Project as… is Ctrl+Alt+S (interface.md, «Más»); Ctrl+Shift+S, the
+    // old one, still works.
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_S, ImGuiInputFlags_RouteGlobal) ||
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S, ImGuiInputFlags_RouteGlobal))
         begin_save_project(true);
     if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_R, ImGuiInputFlags_RouteGlobal))
         start_slice();
-    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_E, ImGuiInputFlags_RouteGlobal) && result_ && result_->ok && !viewer_ &&
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, ImGuiInputFlags_RouteGlobal))
+        new_project();
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_I, ImGuiInputFlags_RouteGlobal)) {
+        purpose_ = Purpose::AddModel;
+        browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
+    }
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_L, ImGuiInputFlags_RouteGlobal))
+        begin_import_config(false);
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Alt | ImGuiKey_L, ImGuiInputFlags_RouteGlobal))
+        begin_import_config(true);
+    if (no_popup() && ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_E, ImGuiInputFlags_RouteGlobal))
+        begin_export_config();
+    if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput &&
+        ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Delete, ImGuiInputFlags_RouteGlobal))
+        delete_all();
+    // Window's tabs (Ctrl+1 to Ctrl+6), Fullscreen (F11), Collapse Sidebar
+    // (Shift+Tab, not while a field takes Tab).
+    if (no_popup()) {
+        for (int i = 0; i < 6; ++i)
+            if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey(int(ImGuiKey_1) + i), ImGuiInputFlags_RouteGlobal))
+                window_tab(i + 1);
+        if (ImGui::Shortcut(ImGuiKey_F11, ImGuiInputFlags_RouteGlobal))
+            toggle_fullscreen();
+        if (!ImGui::GetIO().WantTextInput && ImGui::Shortcut(ImGuiMod_Shift | ImGuiKey_Tab, ImGuiInputFlags_RouteGlobal)) {
+            panel_folded_ = !panel_folded_;
+            frame_pending_ = true;
+        }
+    }
+    // Copy, Paste and Reload on the plate, not while a text field has the
+    // keys (it copies and pastes its own text).
+    if (tab_ == Tab::Prepare && !printer_page_ && !ImGui::GetIO().WantTextInput && no_popup()) {
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_C, ImGuiInputFlags_RouteGlobal) && selected_ >= 0 &&
+            selected_ < int(objects_.size()))
+            clipboard_ = objects_[std::size_t(selected_)];
+        if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_V, ImGuiInputFlags_RouteGlobal))
+            paste();
+        if (ImGui::Shortcut(ImGuiKey_F5, ImGuiInputFlags_RouteGlobal))
+            reload_from_disk();
+    }
+    // Export G-code… is Ctrl+G and Send G-code… Ctrl+Shift+G (interface.md,
+    // «Más»); Ctrl+E is kept for Export Config….
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_G, ImGuiInputFlags_RouteGlobal) && result_ && result_->ok && !viewer_ &&
         !stale_)
         begin_export();
+    if (ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_G, ImGuiInputFlags_RouteGlobal))
+        send_gcode();
+    g_chords.clear();
 }
 
 // The frame of the 3D view: where it is, the camera, the lights (they follow
@@ -14274,6 +21839,8 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.plate = vec(theme_.plate);
     f.model = vec(theme_.model);
     f.model_selected = f.model * 0.6f + Vec3{1, 1, 1} * 0.4f;
+    if (tab_ == Tab::Prepare && tool_ == PlateTool::Paint) // the marks stand out on a light part (UI35)
+        f.model = f.model_selected = vec(theme_.paint_part);
     if (tab_ == Tab::Prepare && objects_.size() > 1 && selected_ >= 0 &&
         std::size_t(selected_) + 1 < object_vertices_.size()) {
         f.selected_first = object_vertices_[std::size_t(selected_)];
@@ -14312,6 +21879,11 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     f.show_paint = f.show_model && tab_ == Tab::Prepare && tool_ == PlateTool::Paint;
     if (f.show_paint)
         update_paint_view();
+    // The Structural map is drawn as paint over the voxels' outside (rule 12).
+    if (structural_map_in_view_ && tab_ == Tab::Structural)
+        f.show_paint = true;
+    if (aero_map_in_view_ && tab_ == Tab::Aerodynamics)
+        f.show_paint = true;
     f.show_preview = preview;
     f.show_travels = show_travels_;
     f.first_layer = std::size_t(bottom_layer_);
@@ -14544,7 +22116,11 @@ void App::device_poll() {
     for (const device::PrinterEvent& e : printer_->take_events()) {
         std::string line;
         switch (e.kind) {
-        case K::Connected: line = format(tr(T::DeviceConnected), e.text.c_str()); notify(line); break;
+        case K::Connected:
+            line = format(tr(T::DeviceConnected), e.text.c_str());
+            notify(line);
+            take_printer_limits();
+            break;
         case K::Started: line = format(tr(T::DevicePrintStarted), e.text.c_str()); break;
         case K::Finished:
             line = format(tr(T::DevicePrintFinished), e.text.c_str());
@@ -14586,6 +22162,603 @@ void App::device_print() {
     printer_->start_print(result_->gcode, name);
 }
 
+// A Bambu Lab printer on the local network (printer_connections.md, «Bambu Lab
+// en red local»; devices.md, rules 11 and 16): every call runs apart, the
+// page shows the last answer. The access code is a secret: kept in the
+// system's store (cloud/secret_store), never in the preferences or a log.
+void App::host_test() {
+    if (host_test_job_.valid() || host_.url.empty())
+        return;
+    host_tested_ = false;
+    host_test_job_ = std::async(std::launch::async, [h = host_] { return device::host_version(h); });
+}
+
+void App::host_refresh() {
+    if (host_status_job_.valid() || host_.url.empty())
+        return;
+    host_status_job_ = std::async(std::launch::async, [h = host_] { return device::host_status(h); });
+}
+
+bool App::host_ready() const {
+    return device_host_ && host_tested_ && host_version_.ok && !host_.url.empty();
+}
+
+// The file's name: output.filename_format with the print's time and weight
+// (devices.md, rule 20: «cube20_ABS_18m.gcode»); the model's when it cannot.
+std::string App::host_default_name() const {
+    const std::string fallback = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.filename())
+                                 : model_path_.empty()          ? std::string("tisma.gcode")
+                                                                : utf8(model_path_.stem()) + ".gcode";
+    if (!result_ || !result_->model || viewer_)
+        return fallback;
+    GcodeTotals totals;
+    totals.print_seconds = std::max(0.0, result_->preview.estimated_seconds);
+    const std::string mark = "; total filament used [g] = ";
+    if (const std::size_t at = result_->gcode.rfind(mark); at != std::string::npos)
+        totals.grams = std::atof(result_->gcode.c_str() + at + mark.size());
+    try {
+        const std::string name = output_filename(result_->settings, *result_->model, totals);
+        return name.empty() ? fallback : name;
+    } catch (const std::exception&) {
+        return fallback;
+    }
+}
+
+// The upload dialog (devices.md, rule 20).
+void App::host_upload_dialog() {
+    if (host_dialog_open_) {
+        ImGui::OpenPopup("##host_upload");
+        host_dialog_open_ = false;
+    }
+    ImGui::SetNextWindowSize(ImVec2(460.0f * scale_, 0.0f));
+    if (!ImGui::BeginPopupModal("##host_upload", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize))
+        return;
+    ImGui::PushTextWrapPos(0.0f);
+    ImGui::TextUnformatted(tr(T::HostUploadName));
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::InputText("##host_upload_name", &host_dialog_name_);
+    loc::TextDisabled("%s", tr(T::HostUploadSlashes));
+    ImGui::PopTextWrapPos();
+    const bool named = !host_dialog_name_.empty();
+    ImGui::BeginDisabled(!named);
+    if (ImGui::Button(tr(T::HostUpload))) {
+        host_send(false, host_dialog_name_);
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::HostUploadPrint))) {
+        host_send(true, host_dialog_name_);
+        ImGui::CloseCurrentPopup();
+    }
+    if (host_.kind == device::HostKind::Duet) {
+        ImGui::SameLine();
+        if (ImGui::Button(tr(T::HostUploadSimulate))) {
+            host_send(false, host_dialog_name_, true);
+            ImGui::CloseCurrentPopup();
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button(tr(T::Cancel)))
+        ImGui::CloseCurrentPopup();
+    ImGui::EndPopup();
+}
+
+void App::host_send(bool start, std::string name, bool simulate) {
+    if (host_job_.valid() || !device_can_print() || host_.url.empty())
+        return;
+    if (name.empty())
+        name = host_default_name();
+    host_job_what_ = name;
+    host_job_ = std::async(std::launch::async, [h = host_, gcode = result_->gcode, name, start, simulate] {
+        // The program takes a file: the G-code goes through a temporary one.
+        const std::filesystem::path temp =
+            std::filesystem::temp_directory_path() / ("tisma_send_" + std::to_string(std::random_device{}()) + ".gcode");
+        {
+            std::ofstream f(temp, std::ios::binary);
+            f << gcode;
+            if (!f)
+                return device::HostResult{false, "failed", "cannot write a temporary file to send"};
+        }
+        device::HostResult r = device::host_upload(h, temp.string(), name, start, simulate);
+        std::error_code ignored;
+        std::filesystem::remove(temp, ignored);
+        return r;
+    });
+}
+
+void App::host_command(int what) {
+    if (host_job_.valid() || host_.url.empty())
+        return;
+    host_job_what_.clear();
+    host_job_ = std::async(std::launch::async, [h = host_, what] {
+        return what == 2 ? device::host_cancel(h) : device::host_pause(h, what == 0);
+    });
+}
+
+void App::host_poll() {
+    using namespace std::chrono_literals;
+    if (host_test_job_.valid() && host_test_job_.wait_for(0ms) == std::future_status::ready) {
+        host_version_ = host_test_job_.get();
+        host_tested_ = true;
+        const char* name = device::host_kind_name(host_.kind);
+        if (host_version_.ok) {
+            notify(format(tr(T::HostTestOk), name));
+            // Works: keep the secrets in the system's store (devices.md, rule 14 tests without saving).
+            std::string error;
+            if (!host_.api_key.empty())
+                cloud::store_secret("host-key:" + host_.url, host_.api_key, error);
+            if (!host_.password.empty())
+                cloud::store_secret("host-password:" + host_.url, host_.password, error);
+            host_refresh();
+            // Klipper's limits, for the profile's empty values (printer_connections.md, rule 8).
+            if (host_.kind == device::HostKind::Moonraker && !host_limits_job_.valid())
+                host_limits_job_ = std::async(std::launch::async, [h = host_] { return device::host_limits(h); });
+        } else {
+            notify(format(tr(T::HostTestFailed), name, host_version_.error.c_str(), host_version_.code.c_str()), true);
+        }
+    }
+    if (host_status_job_.valid() && host_status_job_.wait_for(0ms) == std::future_status::ready)
+        host_status_ = host_status_job_.get();
+    if (host_limits_job_.valid() && host_limits_job_.wait_for(0ms) == std::future_status::ready) {
+        const device::HostLimits got = host_limits_job_.get();
+        if (got.ok)
+            take_limits(device::parse_klipper_limits(got.toolhead, got.settings), "Klipper");
+    }
+    if (host_search_.valid() && host_search_.wait_for(0ms) == std::future_status::ready) {
+        host_found_ = host_search_.get();
+        host_searched_ = true;
+    }
+    if (host_job_.valid() && host_job_.wait_for(0ms) == std::future_status::ready) {
+        const device::HostResult r = host_job_.get();
+        if (r.ok && !host_job_what_.empty())
+            notify(format(tr(T::HostSent), host_job_what_.c_str(), host_.url.c_str()));
+        else if (!r.ok)
+            notify(format(tr(T::HostFailed), r.error.c_str()), true);
+        host_refresh();
+    }
+}
+
+void App::host_panel(float field, float button_h) {
+    ImGui::Separator();
+    const bool working = host_test_job_.valid() || host_status_job_.valid() || host_job_.valid();
+    ImGui::BeginDisabled(working);
+    ImGui::SetNextItemWidth(field * 1.4f);
+    if (ImGui::BeginCombo(tr(T::HostKindRow), device::host_kind_name(host_.kind))) {
+        for (const device::HostKind k : {device::HostKind::OctoPrint, device::HostKind::Moonraker, device::HostKind::PrusaLink,
+                                         device::HostKind::Duet})
+            if (ImGui::Selectable(device::host_kind_name(k), k == host_.kind)) {
+                host_.kind = k;
+                host_tested_ = false;
+                host_status_ = {};
+            }
+        ImGui::EndCombo();
+    }
+    // OctoPrint announces itself by Zeroconf (printer_connections.md, «Búsqueda en la red»).
+    if (host_.kind == device::HostKind::OctoPrint) {
+        ImGui::BeginDisabled(host_search_.valid());
+        if (ImGui::SmallButton(tr(T::BambuSearch))) {
+            host_searched_ = false;
+            host_search_ = std::async(std::launch::async, [] { return device::mdns_browse("_octoprint._tcp.local", 4000); });
+        }
+        ImGui::EndDisabled();
+        if (host_search_.valid()) {
+            ImGui::SameLine();
+            loc::TextDisabled("%s", tr(T::BambuSearching));
+        }
+        for (const device::MdnsService& m : host_found_) {
+            const auto model = m.txt.find("model");
+            const std::string label = m.instance + (model != m.txt.end() ? "  " + model->second : std::string()) + "  " + m.url();
+            if (ImGui::Selectable(label.c_str(), m.url() == host_.url)) {
+                host_.url = m.url();
+                host_tested_ = false;
+            }
+        }
+        if (host_searched_ && host_found_.empty())
+            loc::TextDisabled("%s", tr(T::HostNoneFound));
+    }
+    ImGui::SetNextItemWidth(field * 1.4f);
+    if (ImGui::InputTextWithHint(tr(T::HostUrl), "http://192.168.1.50", &host_.url))
+        host_tested_ = false;
+    // What each program asks for (devices.md, «Tipos de conexión»).
+    if (host_.kind == device::HostKind::Duet) {
+        ImGui::SetNextItemWidth(field);
+        ImGui::InputText(tr(T::HostBoardPassword), &host_.password, ImGuiInputTextFlags_Password);
+    } else {
+        ImGui::SetNextItemWidth(field);
+        ImGui::InputText(tr(T::HostApiKey), &host_.api_key, ImGuiInputTextFlags_Password);
+        if (host_.kind == device::HostKind::PrusaLink) {
+            ImGui::SetNextItemWidth(field);
+            ImGui::InputText(tr(T::HostUser), &host_.user);
+            ImGui::SetNextItemWidth(field);
+            ImGui::InputText(tr(T::HostPassword), &host_.password, ImGuiInputTextFlags_Password);
+        }
+    }
+    ImGui::EndDisabled();
+    if (button("##host_test", "tisma_printer", tr(T::HostTest), !host_tested_ || !host_version_.ok, false,
+               !working && !host_.url.empty(), nullptr, button_h))
+        host_test();
+    ImGui::SameLine();
+    if (button("##host_web", nullptr, tr(T::HostOpenWeb), false, false, !host_.url.empty(), nullptr, button_h))
+        ui::open_link(host_.url);
+    loc::TextDisabled("%s", tr(T::HostWebHelp));
+    if (working)
+        loc::TextDisabled("%s", tr(T::BambuWorking));
+    if (host_tested_ && !host_version_.ok)
+        loc::TextColored(rgb(0xE5484D), tr(T::HostTestFailed), device::host_kind_name(host_.kind),
+                         host_version_.error.c_str(), host_version_.code.c_str());
+    if (!host_tested_ || !host_version_.ok)
+        return;
+
+    // The state (devices.md, rule 16's one line), refreshed on request.
+    ImGui::Separator();
+    loc::TextDisabled("%s", host_version_.server.c_str());
+    const device::HostStatus& st = host_status_;
+    if (st.ok) {
+        loc::Text(tr(T::BambuState), st.state.c_str(), st.nozzle, st.nozzle_target, st.bed, st.bed_target);
+        if (st.printing) {
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(theme_.accent));
+            ImGui::ProgressBar(float(std::max(0.0, st.progress) / 100.0), ImVec2(-FLT_MIN, 0.0f));
+            ImGui::PopStyleColor();
+            loc::Text("%s: %.0f %%, %s", st.file.c_str(), std::max(0.0, st.progress),
+                      format_duration(std::max(0.0, st.seconds_left)).c_str());
+        }
+    } else if (!st.code.empty()) {
+        loc::TextColored(rgb(0xE5484D), tr(T::HostFailed), st.error.c_str());
+    }
+    if (button("##host_refresh", nullptr, tr(T::BambuRefresh), false, false, !working, nullptr, button_h))
+        host_refresh();
+
+    // Sending, pausing, cancelling (devices.md, rule 22: upload, and print if «Start printing»).
+    ImGui::Separator();
+    if (st.printing) {
+        if (st.paused) {
+            if (button("##host_resume", nullptr, tr(T::DeviceResume), true, false, !working, nullptr, button_h))
+                host_command(1);
+        } else if (button("##host_pause", nullptr, tr(T::DevicePause), false, false, !working, nullptr, button_h)) {
+            host_command(0);
+        }
+        ImGui::SameLine();
+        if (button("##host_cancel", nullptr, tr(T::BambuStop), false, false, !working, nullptr, button_h))
+            host_command(2);
+    } else if (device_can_print()) {
+        ImGui::Checkbox(tr(T::HostStartPrinting), &host_start_);
+        if (button("##host_send", "tisma_print", tr(T::HostSend), true, false, !working, nullptr, button_h))
+            host_send(host_start_);
+    }
+}
+
+void App::bambu_simulate() {
+    bambu_sim_ = std::make_unique<device::BambuSimulator>("01S00SIMULATED", "12345678");
+    bambu_.host = "127.0.0.1";
+    bambu_.access_code = "12345678";
+    bambu_.serial.clear();
+    bambu_.pinned_sha256.clear();
+    bambu_.mqtt_port = bambu_sim_->mqtt_port();
+    bambu_.ftps_port = bambu_sim_->ftps_port();
+    bambu_.camera_port = bambu_sim_->camera_port();
+}
+
+void App::bambu_camera_on() {
+    if (bambu_camera_job_.valid() || bambu_.host.empty())
+        return;
+    bambu_camera_ = std::make_shared<BambuCamera>();
+    bambu_camera_shown_ = 0;
+    bambu_camera_job_ = std::async(std::launch::async, [c = bambu_, cam = bambu_camera_] {
+        const device::BambuResult r = device::bambu_camera_stream(
+            c,
+            [cam](std::string jpeg) {
+                const std::lock_guard<std::mutex> hold(cam->lock);
+                cam->jpeg = std::move(jpeg);
+                ++cam->frames;
+                return true;
+            },
+            10000, &cam->stop);
+        const std::lock_guard<std::mutex> hold(cam->lock);
+        cam->ended = true;
+        cam->code = r.code;
+        cam->sha256 = r.sha256;
+        if (!r.ok && !cam->stop) {
+            // What happened, in the person's language (printer_connections.md, rule 6).
+            const std::string fingerprint = r.sha256.substr(0, std::min<std::size_t>(r.sha256.size(), 16));
+            cam->error = r.code == "confirm_certificate"   ? std::string(tr(T::BambuCameraConfirm))
+                         : r.code == "confirm_camera_certificate"
+                             ? format(tr(T::BambuCameraOwn), fingerprint.c_str())
+                         : r.code == "certificate_changed" ? format(tr(T::BambuCameraChanged), fingerprint.c_str())
+                         : r.code == "unreachable"         ? format(tr(T::BambuCameraUnreachable), r.error.c_str())
+                         : r.code == "unauthorized"        ? std::string(tr(T::BambuCameraRefused))
+                         : r.code == "timeout"             ? std::string(tr(T::BambuCameraSilent))
+                         : r.code == "bad_answer"          ? std::string(tr(T::BambuCameraBad))
+                                                           : r.error;
+        }
+    });
+}
+
+void App::bambu_camera_off() {
+    if (bambu_camera_)
+        bambu_camera_->stop = true;
+    if (bambu_camera_job_.valid())
+        bambu_camera_job_.get();
+    bambu_camera_.reset();
+    drop_texture(bambu_camera_tex_);
+    bambu_camera_tex_ = 0;
+    bambu_camera_w_ = bambu_camera_h_ = 0;
+    bambu_camera_shown_ = 0;
+}
+
+// The newest camera frame, `width` wide (rule 6).
+void App::bambu_camera_view(float width) {
+    if (!bambu_camera_)
+        return;
+    std::string jpeg, error, code, sha256;
+    long long frames = 0;
+    bool ended = false;
+    {
+        const std::lock_guard<std::mutex> hold(bambu_camera_->lock);
+        frames = bambu_camera_->frames;
+        ended = bambu_camera_->ended;
+        error = bambu_camera_->error;
+        code = bambu_camera_->code;
+        sha256 = bambu_camera_->sha256;
+        if (frames != bambu_camera_shown_)
+            jpeg = bambu_camera_->jpeg;
+    }
+    if (!jpeg.empty()) {
+        const Image image = decode_image(jpeg);
+        if (!image.rgba.empty()) {
+            drop_texture(bambu_camera_tex_);
+            bambu_camera_tex_ = upload_texture(image, true);
+            bambu_camera_w_ = image.width;
+            bambu_camera_h_ = image.height;
+        }
+        bambu_camera_shown_ = frames;
+    }
+    if (bambu_camera_tex_ && bambu_camera_w_ > 0)
+        ImGui::Image(ImTextureRef(bambu_camera_tex_),
+                     ImVec2(width, width * float(bambu_camera_h_) / float(bambu_camera_w_)));
+    else if (!ended)
+        loc::TextDisabled("%s", tr(T::BambuCameraWaiting));
+    if (ended)
+        loc::TextColored(rgb(0xE5484D), tr(T::BambuCameraEnded), error.empty() ? "-" : error.c_str());
+    // The camera's own certificate, accepted apart as the printer's was
+    // (printer_connections.md, rules 4 and 6), then the camera again.
+    if (ended && (code == "confirm_camera_certificate" || code == "certificate_changed") && sha256.size() == 64 &&
+        ImGui::Button(tr(T::BambuCameraAccept))) {
+        bambu_camera_off();
+        bambu_.camera_pinned_sha256 = sha256;
+        save_preferences();
+        bambu_camera_on();
+    }
+}
+
+void App::bambu_refresh() {
+    if (bambu_status_job_.valid() || bambu_.host.empty())
+        return;
+    bambu_status_job_ = std::async(std::launch::async, [c = bambu_] { return device::bambu_status(c); });
+}
+
+void App::bambu_send(const std::string& command) {
+    if (bambu_job_.valid())
+        return;
+    bambu_job_name_.clear();
+    bambu_job_ = std::async(std::launch::async, [c = bambu_, command] { return device::bambu_command(c, command); });
+}
+
+void App::bambu_print_now() {
+    if (bambu_job_.valid() || !device_can_print())
+        return;
+    device::BambuPrint job;
+    job.name = viewer_ && !gcode_path_.empty() ? utf8(gcode_path_.stem())
+               : model_path_.empty()          ? std::string("tisma")
+                                              : utf8(model_path_.stem());
+    job.gcode = result_->gcode;
+    job.use_ams = bambu_use_ams_;
+    // The send options (gcode_macros.md, rule 12), from the bambu.* settings.
+    job.bed_leveling = settings_.bambu_bed_leveling;
+    job.flow_calibration = settings_.bambu_flow_calibration;
+    job.vibration_calibration = settings_.bambu_vibration_calibration;
+    job.timelapse = settings_.bambu_timelapse;
+    job.bed_type = settings_.bambu_plate;
+    bambu_job_name_ = job.name;
+    bambu_sent_->store(0.0);
+    bambu_job_ = std::async(std::launch::async, [c = bambu_, job = std::move(job), sent = bambu_sent_] {
+        return device::bambu_print(c, job, [sent](std::size_t done, std::size_t all) {
+            sent->store(all ? 100.0 * double(done) / double(all) : 0.0);
+        });
+    });
+}
+
+void App::bambu_poll() {
+    using namespace std::chrono_literals;
+    if (bambu_search_.valid() && bambu_search_.wait_for(0ms) == std::future_status::ready) {
+        const device::SsdpListen found = bambu_search_.get();
+        bambu_found_ = found.printers;
+        bambu_busy_ports_ = found.busy_ports;
+        bambu_searched_ = true;
+    }
+    if (bambu_status_job_.valid() && bambu_status_job_.wait_for(0ms) == std::future_status::ready) {
+        bambu_status_ = bambu_status_job_.get();
+        if (bambu_status_.ok) {
+            // Remembered: the printer and its certificate in the
+            // preferences, the access code in the system's store.
+            bambu_.serial = bambu_status_.serial;
+            std::string error;
+            if (!bambu_sim_)
+                cloud::store_secret("bambu:" + bambu_.serial, bambu_.access_code, error);
+            save_preferences();
+        } else {
+            device_log_.push_back("Bambu Lab: " + bambu_status_.code);
+        }
+    }
+    if (bambu_job_.valid() && bambu_job_.wait_for(0ms) == std::future_status::ready) {
+        bambu_result_ = bambu_job_.get();
+        bambu_sent_->store(-1.0);
+        if (bambu_result_.ok && !bambu_job_name_.empty())
+            notify(format(tr(T::BambuSent), bambu_job_name_.c_str()));
+        else if (!bambu_result_.ok)
+            notify(format(tr(T::BambuFailed), bambu_result_.error.c_str()), true);
+        bambu_refresh();
+    }
+}
+
+void App::bambu_panel(float field, float button_h) {
+    ImGui::Separator();
+    loc::TextDisabled("%s", tr(T::BambuHelp));
+    loc::TextDisabled("%s", tr(T::BambuNotTested));
+    const bool working = bambu_status_job_.valid() || bambu_job_.valid();
+
+    // Finding it (printer_connections.md, «Búsqueda en la red»).
+    ImGui::BeginDisabled(bambu_search_.valid());
+    if (ImGui::SmallButton(tr(T::BambuSearch))) {
+        bambu_searched_ = false;
+        bambu_search_ = std::async(std::launch::async, [] { return device::ssdp_listen(6000); });
+    }
+    ImGui::EndDisabled();
+    if (bambu_search_.valid()) {
+        ImGui::SameLine();
+        loc::TextDisabled("%s", tr(T::BambuSearching));
+    }
+    for (const device::SsdpPrinter& p : bambu_found_) {
+        const std::string label = (p.name.empty() ? p.id : p.name) + "  " + p.model + "  " + p.address;
+        if (ImGui::Selectable(label.c_str(), p.address == bambu_.host)) {
+            bambu_camera_off();
+            bambu_sim_.reset();
+            bambu_ = device::BambuConfig{};
+            bambu_.host = p.address;
+            bambu_.serial = p.id;
+            if (const std::optional<std::string> code = cloud::load_secret("bambu:" + p.id))
+                bambu_.access_code = *code;
+        }
+    }
+    if (!bambu_busy_ports_.empty())
+        loc::TextColored(rgb(0xE5484D), "%s", tr(T::BambuPortBusy));
+    else if (bambu_searched_ && bambu_found_.empty())
+        loc::TextDisabled("%s", tr(T::BambuNoneFound));
+
+    // The address and the access code.
+    ImGui::BeginDisabled(working || bambu_sim_ != nullptr);
+    ImGui::SetNextItemWidth(field * 1.4f);
+    ImGui::InputText(tr(T::BambuHost), &bambu_.host);
+    ImGui::SetNextItemWidth(field);
+    ImGui::InputText(tr(T::BambuCode), &bambu_.access_code, ImGuiInputTextFlags_Password);
+    ImGui::EndDisabled();
+    bool simulated = bambu_sim_ != nullptr;
+    ImGui::BeginDisabled(working);
+    if (ImGui::Checkbox(tr(T::BambuSimulated), &simulated)) {
+        bambu_camera_off();
+        if (simulated) {
+            bambu_simulate();
+        } else {
+            bambu_sim_.reset();
+            bambu_ = device::BambuConfig{};
+        }
+        bambu_status_ = {};
+    }
+    ImGui::EndDisabled();
+    const bool known = bambu_status_.ok;
+    if (button("##bambu_connect", "tisma_printer", tr(known ? T::BambuRefresh : T::BambuConnect), !known, false,
+               !working && !bambu_.host.empty() && !bambu_.access_code.empty(), nullptr, button_h))
+        bambu_refresh();
+    if (working)
+        loc::TextDisabled("%s", tr(T::BambuWorking));
+
+    // The certificate, once (rule 4).
+    const device::BambuStatus& st = bambu_status_;
+    if (st.code == "confirm_certificate" || st.code == "certificate_changed") {
+        ImGui::Separator();
+        if (st.code == "certificate_changed")
+            loc::TextColored(rgb(0xE5484D), "%s", tr(T::BambuCertChanged));
+        loc::Text(tr(T::BambuConfirm), st.serial.c_str(), st.sha256.c_str());
+        if (button("##bambu_accept", nullptr, tr(st.code == "confirm_certificate" ? T::BambuAccept : T::BambuAcceptAgain),
+                   true, false, !working, nullptr, button_h)) {
+            bambu_.pinned_sha256 = st.sha256;
+            bambu_.serial = st.serial;
+            bambu_status_ = {};
+            bambu_refresh();
+        }
+    } else if (st.code == "unauthorized") {
+        loc::TextColored(rgb(0xE5484D), "%s", tr(T::BambuUnauthorized));
+    } else if (st.code == "unreachable" || st.code == "timeout") {
+        loc::TextColored(rgb(0xE5484D), tr(T::BambuUnreachable), st.error.c_str());
+    } else if (!st.ok && !st.code.empty()) {
+        loc::TextColored(rgb(0xE5484D), tr(T::BambuFailed), st.error.c_str());
+    }
+    if (!st.ok) {
+        if (bambu_camera_)
+            bambu_camera_off();
+        return;
+    }
+
+    // The state (devices.md, rule 16: one line; refreshed on request).
+    ImGui::Separator();
+    loc::TextDisabled(tr(T::BambuSerial), st.serial.c_str());
+    loc::Text(tr(T::BambuState), st.state.c_str(), st.nozzle, st.nozzle_target, st.bed, st.bed_target);
+    if (st.printing || st.paused) {
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, rgb(theme_.accent));
+        ImGui::ProgressBar(float(std::max(0.0, st.progress) / 100.0), ImVec2(-FLT_MIN, 0.0f));
+        ImGui::PopStyleColor();
+        loc::Text(tr(T::BambuJob), st.job.c_str(), std::max(0.0, st.progress), st.layer, st.layers,
+                  format_duration(std::max(0.0, st.minutes_left) * 60.0).c_str());
+    }
+    if (!st.trays.empty()) {
+        loc::Text("%s", tr(T::BambuAms));
+        for (const device::BambuTray& t : st.trays) {
+            const float r = ImGui::GetTextLineHeight() * 0.35f;
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            std::uint32_t colour = 0x8B8D98;
+            if (t.color.size() == 6)
+                colour = std::uint32_t(std::strtoul(t.color.c_str(), nullptr, 16));
+            ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(at.x + r, at.y + ImGui::GetTextLineHeight() * 0.5f), r,
+                                                        ImGui::GetColorU32(rgb(colour)));
+            ImGui::Dummy(ImVec2(r * 2.0f, ImGui::GetTextLineHeight()));
+            ImGui::SameLine(0, 6.0f * scale_);
+            const bool now = st.tray_now == t.ams * 4 + t.slot;
+            if (t.type.empty())
+                loc::TextDisabled("%d · %s", t.slot + 1, tr(T::BambuEmptySlot));
+            else if (t.remain >= 0)
+                loc::Text("%d · %s · %d %%%s", t.slot + 1, t.type.c_str(), t.remain, now ? " *" : "");
+            else
+                loc::Text("%d · %s%s", t.slot + 1, t.type.c_str(), now ? " *" : "");
+        }
+    }
+
+    // The camera (rule 6: the A1 and P1 series; the X1 has none here).
+    bool camera = bambu_camera_ != nullptr;
+    if (ImGui::Checkbox(tr(T::BambuCamera), &camera)) {
+        if (camera)
+            bambu_camera_on();
+        else
+            bambu_camera_off();
+    }
+    if (camera)
+        bambu_camera_view(std::min(ImGui::GetContentRegionAvail().x, 480.0f * scale_));
+
+    // Printing, pausing, stopping.
+    ImGui::Separator();
+    if (st.printing || st.paused) {
+        if (st.paused) {
+            if (button("##bambu_resume", nullptr, tr(T::DeviceResume), true, false, !working, nullptr, button_h))
+                bambu_send("resume");
+        } else if (button("##bambu_pause", nullptr, tr(T::DevicePause), false, false, !working, nullptr, button_h)) {
+            bambu_send("pause");
+        }
+        ImGui::SameLine();
+        if (button("##bambu_stop", nullptr, tr(T::BambuStop), false, false, !working, nullptr, button_h))
+            bambu_send("stop");
+    } else if (device_can_print()) {
+        ImGui::Checkbox(tr(T::BambuUseAms), &bambu_use_ams_);
+        if (settings_.gcode_binary)
+            loc::TextColored(rgb(0xE5484D), "%s", tr(T::BambuBinary));
+        if (button("##bambu_print", "tisma_print", tr(T::BambuPrint), true, false, !working && !settings_.gcode_binary, nullptr,
+                   button_h))
+            bambu_print_now();
+    } else {
+        loc::TextDisabled("%s", tr(T::DeviceNothingToPrint));
+    }
+    if (const double sent = bambu_sent_->load(); sent >= 0.0)
+        loc::TextDisabled(tr(T::BambuSending), sent);
+}
+
 void App::device_panel() {
     const float margin = 12.0f * scale_;
     ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + 60.0f * scale_));
@@ -14605,6 +22778,28 @@ void App::device_panel() {
     loc::TextDisabled("%s", tr(T::DeviceHint));
     const float button_h = 30.0f * scale_;
     const float field = 150.0f * scale_;
+
+    // USB or a Bambu Lab printer on the network.
+    if (ImGui::RadioButton(tr(T::DeviceKindUsb), !device_bambu_ && !device_host_))
+        device_bambu_ = device_host_ = false;
+    ImGui::SameLine();
+    if (ImGui::RadioButton(tr(T::DeviceKindBambu), device_bambu_))
+        device_bambu_ = true, device_host_ = false;
+    ImGui::SameLine();
+    if (ImGui::RadioButton(tr(T::DeviceKindHost), device_host_))
+        device_host_ = true, device_bambu_ = false;
+    if (device_bambu_ || device_host_) {
+        if (device_bambu_)
+            bambu_panel(field, button_h);
+        else
+            host_panel(field, button_h);
+        ImGui::PopTextWrapPos();
+        ImGui::EndChild();
+        ImGui::End();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+        return;
+    }
 
     const device::PrinterStatus s = printer_ ? printer_->status() : device::PrinterStatus{};
     using State = device::PrinterState;
@@ -14938,7 +23133,7 @@ void App::dump_ui() {
     for (const DumpRow& r : g_dump_rows) {
         const std::string key = r.name.substr(0, r.name.find('#'));
         const auto rect = g_field_rects.find(r.name);
-        nlohmann::json row = {{"key", key}, {"label", r.label}, {"cut", r.cut}};
+        nlohmann::json row = {{"key", key}, {"label", r.label}, {"cut", r.cut}, {"shortened", r.shortened}};
         if (r.ranged)
             row["min"] = r.min, row["max"] = r.max;
         if (const auto v = values.find(key); v != values.end())
@@ -14980,6 +23175,15 @@ void App::script_input() {
         script_at_ = script_.size();
     };
     const auto key_named = [](std::string_view name) {
+        if (name.size() == 1 && name[0] >= 'a' && name[0] <= 'z') // any letter
+            return ImGuiKey(int(ImGuiKey_A) + (name[0] - 'a'));
+        if (name.size() == 1 && name[0] >= '0' && name[0] <= '9') // any digit
+            return ImGuiKey(int(ImGuiKey_0) + (name[0] - '0'));
+        if (name.size() >= 2 && name[0] == 'f' && name.substr(1).find_first_not_of("0123456789") == std::string_view::npos) {
+            const int n = std::atoi(std::string(name.substr(1)).c_str());
+            if (n >= 1 && n <= 12)
+                return ImGuiKey(int(ImGuiKey_F1) + n - 1);
+        }
         return name == "enter" ? ImGuiKey_Enter : name == "escape" ? ImGuiKey_Escape : name == "tab" ? ImGuiKey_Tab
                : name == "backspace"                               ? ImGuiKey_Backspace
                : name == "delete"                                  ? ImGuiKey_Delete
@@ -14988,6 +23192,14 @@ void App::script_input() {
                : name == "f8"                                      ? ImGuiKey_F8
                : name == "f9"                                      ? ImGuiKey_F9
                : name == "f10"                                     ? ImGuiKey_F10
+               : name == "a"                                       ? ImGuiKey_A
+               : name == "z"                                       ? ImGuiKey_Z
+               : name == "y"                                       ? ImGuiKey_Y
+               : name == "p"                                       ? ImGuiKey_P
+               : name == "comma"                                   ? ImGuiKey_Comma
+               : name == "slash"                                   ? ImGuiKey_Slash
+               : name == "minus"                                   ? ImGuiKey_Minus
+               : name == "equal"                                   ? ImGuiKey_Equal
                                                                    : ImGuiKey_None;
     };
     if (step.verb == "click") {
@@ -15020,16 +23232,50 @@ void App::script_input() {
     } else if (step.verb == "type") {
         io.AddInputCharactersUTF8(step.value.c_str());
         next();
-    } else if (step.verb == "key") {
-        const ImGuiKey key = key_named(step.key);
+    } else if (step.verb == "key" || step.verb == "key-quick") {
+        // A key, with ctrl+ and shift+ before it as they are held; key-quick
+        // presses and lets go of all of it within one frame (UI48).
+        std::string_view name = step.key;
+        std::vector<ImGuiKey> mods;
+        for (bool more = true; more;) {
+            more = false;
+            for (const auto& [prefix, mod] : {std::pair{std::string_view("ctrl+"), ImGuiMod_Ctrl},
+                                              std::pair{std::string_view("shift+"), ImGuiMod_Shift},
+                                              std::pair{std::string_view("alt+"), ImGuiMod_Alt}})
+                if (name.starts_with(prefix)) {
+                    mods.push_back(mod);
+                    name.remove_prefix(prefix.size());
+                    more = true;
+                }
+        }
+        const ImGuiKey key = key_named(name);
         if (key == ImGuiKey_None)
             return fail_step("unknown key");
-        if (f == 0)
+        if (f == 0) {
+            for (const ImGuiKey m : mods)
+                io.AddKeyEvent(m, true);
             io.AddKeyEvent(key, true);
-        else if (f == 1)
+            // As a person's key event brings it (UI48, g_chords).
+            const bool ctrl = std::find(mods.begin(), mods.end(), ImGuiMod_Ctrl) != mods.end();
+            const bool shift = std::find(mods.begin(), mods.end(), ImGuiMod_Shift) != mods.end();
+            const char c = key == ImGuiKey_Z ? 'z' : key == ImGuiKey_Y ? 'y' : key == ImGuiKey_Comma ? ',' : key == ImGuiKey_P ? 'p' : 0;
+            if (ctrl && c) {
+                g_chords.push_back({c, shift, glfwGetTime()});
+                if (c == 'z')
+                    g_ctrl_z_time = glfwGetTime();
+            }
+            if (step.verb == "key-quick") {
+                io.AddKeyEvent(key, false);
+                for (const ImGuiKey m : mods)
+                    io.AddKeyEvent(m, false);
+            }
+        } else if (f == 1 && step.verb == "key") {
             io.AddKeyEvent(key, false);
-        else
+            for (const ImGuiKey m : mods)
+                io.AddKeyEvent(m, false);
+        } else if (f >= 1) {
             next();
+        }
     } else if (step.verb == "select-all") {
         if (f == 0) {
             io.AddKeyEvent(ImGuiMod_Ctrl, true);
@@ -15040,6 +23286,60 @@ void App::script_input() {
         } else {
             next();
         }
+    } else if (step.verb == "pack-remove") { // a file taken out of the test pack (--pack), then it is read again (rule 20)
+        if (options_.pack.empty() || !safe_pack_path(step.key)) {
+            fail_step("pack-remove needs --pack and a path in the pack");
+        } else {
+            std::error_code ec;
+            std::filesystem::remove(pack_dir() / step.key, ec);
+            load_pack();
+            load_profile_lists();
+            std::printf("ui-script: pack-remove %s: printer %s\n", step.key.c_str(),
+                        chosen_profile_[std::size_t(ProfileKind::Printer)].c_str());
+            next();
+        }
+    } else if (step.verb == "choose-profile") { // choose-profile filament|print <name>: as picked in its list
+        const std::optional<ProfileKind> kind = profile_kind_from_name(step.key);
+        const Profile* p = kind ? find_profile(*kind, step.value) : nullptr;
+        if (!p) {
+            std::fprintf(stderr, "ui-script: no %s profile '%s'\n", step.key.c_str(), step.value.c_str());
+            failed_ = true;
+        } else {
+            choose_profile(*kind, *p);
+        }
+        next();
+    } else if (step.verb == "set") { // set <group.key> <JSON value>: a setting changed by hand
+        try {
+            nlohmann::json all = nlohmann::json::parse(settings_json(settings_));
+            const auto dot = step.key.find('.');
+            all[step.key.substr(0, dot)][step.key.substr(dot + 1)] = nlohmann::json::parse(step.value);
+            settings_ = parse_settings(all.dump());
+            settings_changed();
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "ui-script: set %s: %s\n", step.key.c_str(), e.what());
+            failed_ = true;
+        }
+        next();
+    } else if (step.verb == "use-published-material") { // the same for the chosen pack filament's values
+        refresh_material_community();
+        const std::size_t n = std::size_t(std::atoi(step.key.c_str()));
+        if (n >= material_community_.size()) {
+            std::fprintf(stderr, "ui-script: no published material value %zu (there are %zu, for %s)\n", n,
+                         material_community_.size(), material_community_for_.c_str());
+            failed_ = true;
+        } else {
+            use_community_value(material_community_[n]);
+        }
+        next();
+    } else if (step.verb == "use-published") { // a published value's «Usar este valor», confirmed (rule 24)
+        const std::size_t n = std::size_t(std::atoi(step.key.c_str()));
+        if (n >= community_values_.size()) {
+            std::fprintf(stderr, "ui-script: no published value %zu (there are %zu)\n", n, community_values_.size());
+            failed_ = true;
+        } else {
+            use_community_value(community_values_[n]);
+        }
+        next();
     } else if (step.verb == "printer-page") {
         printer_page_ = true;
         if (!step.key.empty())
@@ -15049,9 +23349,18 @@ void App::script_input() {
     } else if (step.verb == "wait") {
         if (f >= std::atoi(step.key.c_str()))
             next();
-    } else if (step.verb == "expect-objects") { // how many objects the plate holds
-        if (objects_.size() != std::size_t(std::atoi(step.key.c_str())))
-            return fail_step("the plate holds " + std::to_string(objects_.size()) + " objects");
+    } else if (step.verb == "expect-structural") { // what keeps Analyze off: material, fixed, force or none
+        if (objects_.empty())
+            return fail_step("no part on the plate");
+        const ProjectEngineering& e = objects_[std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1))].engineering;
+        const AnalyzeBlock block =
+            analyze_block(e, engineering_values(settings_, e, chosen_profile_[std::size_t(ProfileKind::Filament)]));
+        const char* got = block == AnalyzeBlock::Material ? "material"
+                          : block == AnalyzeBlock::Fixed  ? "fixed"
+                          : block == AnalyzeBlock::Force  ? "force"
+                                                          : "none";
+        if (step.key != got)
+            return fail_step(std::string("Analyze is off for: ") + got);
         next();
     } else if (step.verb == "expect" || step.verb == "expect-contains") {
         std::string got;
@@ -15162,8 +23471,10 @@ void App::script_input() {
             next();
         }
     } else if (step.verb == "menu") { // a click on an open menu's entry, by its name in English
-        if (f == 0)
+        if (f == 0) {
+            g_scroll_to = step.key;
             return;
+        }
         if (f >= 1008) // clicked: the menu has closed
             return next();
         const auto it = g_menu_rects.find(step.key);
@@ -15237,6 +23548,77 @@ void App::script_input() {
         if (!ok)
             return fail_step("it is " + std::to_string(got));
         next();
+    } else if (step.verb == "expect-optimize") { // Optimizar's search ended: found, none, solid or cancelled
+        if (optimize_job_.running() || !optimize_result_)
+            return f >= 20000 ? fail_step("the search did not end") : void();
+        const OptimizeRun& o = *optimize_result_;
+        const std::string got = o.cancelled        ? "cancelled"
+                                : !o.error.empty() ? "error"
+                                : o.orientation    ? "orientation"
+                                : o.best.solid     ? "solid"
+                                : o.best.found     ? "found"
+                                                   : "none";
+        std::printf("ui-script: expect-optimize %s: got %s (%d %%)\n", step.key.c_str(), got.c_str(), o.best.density);
+        if (got != step.key)
+            return fail_step("got " + got);
+        next();
+    } else if (step.verb == "expect-error") { // the error dialog's message contains VALUE (the whole line)
+        const std::string what = step.key + (step.value.empty() ? "" : " " + step.value);
+        if (error_message_.find(what) == std::string::npos)
+            return f >= 60 ? fail_step("the error says: " + error_message_) : void();
+        std::printf("ui-script: expect-error %s: ok\n", what.c_str());
+        error_title_.clear(), error_message_.clear(); // expected: it does not fail the run
+        next();
+    } else if (step.verb == "expect-scale") { // the last model's scale in X, to 0.001
+        if (objects_.empty())
+            return fail_step("no model");
+        const double got = objects_.back().place.scale[0], want = std::atof(step.key.c_str());
+        std::printf("ui-script: expect-scale %s: %.4f\n", step.key.c_str(), got);
+        if (std::abs(got - want) > 1e-3)
+            return fail_step("the scale is " + std::to_string(got));
+        next();
+    } else if (step.verb == "expect-tab") { // prepare, preview, calibration, device, design...
+        const char* got = tab_ == Tab::Prepare       ? "prepare"
+                          : tab_ == Tab::Preview     ? "preview"
+                          : tab_ == Tab::Calibration ? "calibration"
+                          : tab_ == Tab::Device      ? "device"
+                          : tab_ == Tab::Design      ? "design"
+                                                     : "other";
+        std::printf("ui-script: expect-tab %s: %s\n", step.key.c_str(), got);
+        if (step.key != got)
+            return f >= 30 ? fail_step(std::string("the tab is ") + got) : void();
+        next();
+    } else if (step.verb == "expect-catalog") { // the catalog is open: printer or filament
+        const bool open = catalog_kind_.has_value() &&
+                          (step.key == "printer" ? *catalog_kind_ == ProfileKind::Printer : *catalog_kind_ == ProfileKind::Filament);
+        if (!open)
+            return f >= 30 ? fail_step("the " + step.key + " catalog is not open") : void();
+        std::printf("ui-script: expect-catalog %s: ok\n", step.key.c_str());
+        next();
+    } else if (step.verb == "expect-theme") { // dark or light
+        const char* got = theme_.dark ? "dark" : "light";
+        std::printf("ui-script: expect-theme %s: %s\n", step.key.c_str(), got);
+        if (step.key != got)
+            return fail_step(std::string("the theme is ") + got);
+        next();
+    } else if (step.verb == "expect-level") { // the settings level: basic, normal, advanced or custom
+        const char* got = view_level_ == ViewLevel::Basic    ? "basic"
+                          : view_level_ == ViewLevel::Normal ? "normal"
+                          : view_level_ == ViewLevel::Advanced ? "advanced"
+                                                               : "custom";
+        std::printf("ui-script: expect-level %s: %s\n", step.key.c_str(), got);
+        if (step.key != got)
+            return fail_step(std::string("the level is ") + got);
+        next();
+    } else if (step.verb == "expect-enabled") { // a named menu entry on the screen, usable (yes) or greyed (no)
+        if (!g_menu_rects.contains(step.key))
+            return f >= 30 ? fail_step("it is not on the screen") : void();
+        const bool enabled = !g_menu_disabled.contains(step.key);
+        std::printf("ui-script: expect-enabled %s %s: %s\n", step.key.c_str(), step.value.c_str(),
+                    enabled ? "enabled" : "greyed");
+        if (enabled != (step.value == "yes"))
+            return fail_step(enabled ? "it is enabled" : "it is greyed");
+        next();
     } else if (step.verb == "expect-control") { // a named control (menu entry, slider, button) is on the screen
         if (g_menu_rects.contains(step.key)) {
             std::printf("ui-script: expect-control %s: ok\n", step.key.c_str());
@@ -15244,6 +23626,198 @@ void App::script_input() {
         }
         if (f >= 30)
             fail_step("it is not on the screen");
+    } else if (step.verb == "cloud-field") { // a field of the Tisma Cloud dialog: server, email or password
+        std::string& field = step.key == "server" ? cloud_server_ : step.key == "email" ? cloud_email_ : cloud_password_;
+        if (step.key != "server" && step.key != "email" && step.key != "password")
+            return fail_step("no such field");
+        field = step.value;
+        next();
+    } else if (step.verb == "cloud-fea-wait") { // until the analysis in the cloud ends (up to 60 s)
+        if (!cloud_eng_.valid() && f >= 2)
+            next();
+        else if (f > 3600)
+            fail_step("no answer");
+    } else if (step.verb == "cloud-slice-wait") { // until the slicing in the cloud ends (up to 60 s)
+        if (!cloud_slice_.valid() && f >= 2)
+            next();
+        else if (f > 3600)
+            fail_step("no answer");
+    } else if (step.verb == "report-wait") { // until the problem report is answered (up to 20 s)
+        if (!report_job_.valid() && f >= 2) {
+            std::printf("ui-script: report-wait: %s (title \"%s\")\n", report_status_.c_str(), report_title_.c_str());
+            next();
+        }
+        else if (f > 1200)
+            fail_step("no answer");
+    } else if (step.verb == "bambu") { // sim, connect, accept, print, pause, resume, stop (on the Device page)
+        tab_ = Tab::Device;
+        device_bambu_ = true;
+        if (step.key == "sim")
+            bambu_simulate();
+        else if (step.key == "connect")
+            bambu_refresh();
+        else if (step.key == "accept") {
+            bambu_.pinned_sha256 = bambu_status_.sha256;
+            bambu_.serial = bambu_status_.serial;
+            bambu_status_ = {};
+            bambu_refresh();
+        } else if (step.key == "print")
+            bambu_print_now();
+        else if (step.key == "camera")
+            bambu_camera_on();
+        else if (step.key == "camera-off")
+            bambu_camera_off();
+        else if (step.key == "pause" || step.key == "resume" || step.key == "stop")
+            bambu_send(step.key);
+        else
+            return fail_step("unknown bambu step");
+        next();
+    } else if (step.verb == "host") { // KIND URL (octoprint, moonraker, prusalink, duet), or test, refresh (Device page)
+        tab_ = Tab::Device;
+        device_host_ = true;
+        device_bambu_ = false;
+        if (step.key == "test")
+            host_test();
+        else if (step.key == "refresh")
+            host_refresh();
+        else if (device::host_kind_from(step.key, host_.kind))
+            host_.url = step.value;
+        else
+            return fail_step("unknown host step");
+        next();
+    } else if (step.verb == "host-wait") { // until the program answered (up to 30 s)
+        if (!host_test_job_.valid() && !host_status_job_.valid() && !host_job_.valid() && f >= 2) {
+            std::printf("ui-script: host-wait: %s %s\n", host_version_.code.c_str(), host_status_.state.c_str());
+            next();
+        } else if (f > 1800) {
+            fail_step("no answer from the printer's program");
+        }
+    } else if (step.verb == "expect-host") { // code CODE, ok yes|no
+        std::string got;
+        if (step.key == "code")
+            got = host_version_.code;
+        else if (step.key == "ok")
+            got = host_tested_ && host_version_.ok ? "yes" : "no";
+        else
+            return fail_step("unknown expect-host key");
+        if (got == step.value) {
+            std::printf("ui-script: expect-host %s %s: ok\n", step.key.c_str(), step.value.c_str());
+            next();
+        } else {
+            fail_step("host " + step.key + " is «" + got + "», not «" + step.value + "»");
+        }
+    } else if (step.verb == "bambu-wait") { // until the printer answered (up to 20 s)
+        if (!bambu_status_job_.valid() && !bambu_job_.valid() && f >= 2) {
+            std::printf("ui-script: bambu-wait: %s %s\n", bambu_status_.state.c_str(), bambu_status_.code.c_str());
+            next();
+        } else if (f > 1200) {
+            fail_step("no answer from the printer");
+        }
+    } else if (step.verb == "expect-bambu") { // state IDLE, code confirm_certificate, trays 4, sent NAME, camera WxH
+        std::string got;
+        if (step.key == "state")
+            got = bambu_status_.state;
+        else if (step.key == "code")
+            got = bambu_status_.code;
+        else if (step.key == "trays")
+            got = std::to_string(bambu_status_.trays.size());
+        else if (step.key == "sent")
+            got = bambu_sim_ && bambu_sim_->files().count(step.value + ".gcode.3mf") ? step.value : "nothing";
+        else if (step.key == "camera") // the size of the frame shown, WxH; "none"
+            got = bambu_camera_tex_ ? std::to_string(bambu_camera_w_) + "x" + std::to_string(bambu_camera_h_) : "none";
+        else if (step.key == "camera-error") { // why the camera stopped, as the person reads it
+            if (bambu_camera_) {
+                const std::lock_guard<std::mutex> hold(bambu_camera_->lock);
+                got = bambu_camera_->error;
+            }
+        } else
+            return fail_step("unknown expect-bambu key");
+        if (got == step.value) {
+            std::printf("ui-script: expect-bambu %s %s: ok\n", step.key.c_str(), step.value.c_str());
+            next();
+        } else if (f > (step.key == "camera-error" ? 6000 : step.key == "camera" ? 600 : 2)) {
+            fail_step("bambu " + step.key + " is «" + got + "», not «" + step.value + "»");
+        }
+    } else if (step.verb == "cloud-wait") { // until the call to Tisma Cloud is answered (up to 20 s)
+        if (!cloud_job_.valid() && f >= 2) {
+            std::printf("ui-script: cloud-wait: %s\n", cloud_status_.c_str());
+            next();
+        } else if (f > 1200) {
+            fail_step("no answer");
+        }
+    } else if (step.verb == "expect-cloud") { // logged yes|no, plans N, jobs N, plan NAME, hours LEFT, status TEXT
+        std::string got;
+        if (step.key == "logged")
+            got = cloud_account_ ? "yes" : "no";
+        else if (step.key == "plans")
+            got = std::to_string(cloud_plans_.size());
+        else if (step.key == "plans_failure") // none, no_connection or the HTTP status (UI49)
+            got = cloud_plans_failure_ < 0    ? "none"
+                  : cloud_plans_failure_ == 0 ? "no_connection"
+                                              : std::to_string(cloud_plans_failure_);
+        else if (step.key == "jobs")
+            got = std::to_string(cloud_jobs_.size());
+        else if (step.key == "server")
+            got = cloud_server_;
+        else if (step.key == "reports") // the account's own, newest first: "N TITLE-OF-THE-FIRST"
+            got = std::to_string(cloud_reports_.size()) + (cloud_reports_.empty() ? "" : " " + cloud_reports_.front().title);
+        else if (step.key == "plan")
+            got = cloud_account_ ? cloud_account_->plan : "";
+        else if (step.key == "hours")
+            got = cloud_account_ ? format("%g", cloud_account_->hours_left) : "";
+        else if (step.key == "status")
+            got = cloud_status_;
+        else if (step.key == "report")
+            got = report_status_;
+        else if (step.key == "crashed") // a closed session's log goes with the report
+            got = crashed_log_.empty() ? "no" : "yes";
+        else if (step.key == "report_kind")
+            got = report_kind_ == 1 ? "crash" : report_kind_ == 2 ? "suggestion" : "bug";
+        else if (step.key == "report_log")
+            got = crashed_log_.empty() ? session_log_ : crashed_log_;
+        else if (step.key == "viewer")
+            got = viewer_ ? "yes" : "no";
+        else if (step.key == "slicing")
+            got = cloud_slice_.valid() ? "yes" : "no";
+        else
+            return fail_step("unknown key");
+        const bool ok = step.key == "status" || step.key == "report" || step.key == "report_log" || step.key == "reports" ? got.find(step.value) != std::string::npos
+                                                                     : got == step.value;
+        std::printf("ui-script: expect-cloud %s %s: %s%s\n", step.key.c_str(), step.value.c_str(), ok ? "ok" : "got ",
+                    ok ? "" : got.c_str());
+        if (!ok)
+            return fail_step("it is " + got);
+        next();
+    } else if (step.verb == "expect-in-view") { // a named control drawn whole inside the 3D view
+        const auto it = g_menu_rects.find(step.key);
+        if (it == g_menu_rects.end())
+            return f >= 30 ? fail_step("it is not on the screen") : void();
+        const ImVec4 r = it->second;
+        const bool inside = r.x >= view_pos_.x - 0.5f && r.y >= view_pos_.y - 0.5f &&
+                            r.z <= view_pos_.x + view_size_.x + 0.5f && r.w <= view_pos_.y + view_size_.y + 0.5f;
+        std::printf("ui-script: expect-in-view %s: %s\n", step.key.c_str(), inside ? "ok" : "it runs past the view");
+        if (!inside)
+            return fail_step(format("it spans x %.0f..%.0f, the view %.0f..%.0f", r.x, r.z, view_pos_.x,
+                                    view_pos_.x + view_size_.x));
+        next();
+    } else if (step.verb == "expect-text") { // a text drawn contains VALUE (the whole line), within 60 frames
+        const std::string what = step.key + (step.value.empty() ? "" : " " + step.value);
+        for (const std::string& t : g_texts)
+            if (t.find(what) != std::string::npos) {
+                std::printf("ui-script: expect-text %s: \"%s\"\n", what.c_str(), t.c_str());
+                return next();
+            }
+        if (f >= 60)
+            return fail_step("no text on the screen contains it");
+    } else if (step.verb == "expect-no-text") { // no text drawn contains VALUE (the whole line), for 10 frames
+        const std::string what = step.key + (step.value.empty() ? "" : " " + step.value);
+        for (const std::string& t : g_texts)
+            if (t.find(what) != std::string::npos)
+                return fail_step("\"" + t + "\" is on the screen");
+        if (f >= 10) {
+            std::printf("ui-script: expect-no-text %s: ok\n", what.c_str());
+            next();
+        }
     } else if (step.verb == "expect-no-control") { // a named control is not on the screen, for 10 frames
         if (g_menu_rects.contains(step.key))
             return fail_step("it is on the screen");
@@ -15274,6 +23848,35 @@ void App::script_input() {
                     sketch_edit_->cursor->x, sketch_edit_->cursor->y, cad::snap_name(snap.kind));
         sketch_place(*sketch_edit_->cursor, &snap, std::nullopt);
         next();
+    } else if (step.verb == "expect-command-message") { // the command line's message contains TEXT
+        const std::string want = step.value.empty() ? step.key : step.key + " " + step.value;
+        const bool ok = command_message_.find(want) != std::string::npos;
+        std::printf("ui-script: expect-command-message %s: %s%s\n", want.c_str(), ok ? "ok, " : "got ", command_message_.c_str());
+        if (!ok)
+            return fail_step("the message is \"" + command_message_ + "\"");
+        next();
+    } else if (step.verb == "aero-cells") { // the next Aerodynamics runs on a lattice of N cells across (tests only)
+        aero_test_cells_ = std::max(0, std::atoi(step.key.c_str()));
+        next();
+    } else if (step.verb == "expect-aero") { // the Aerodynamics run finished: drag above 0 N, simulated (1) or not (0)
+        if (aero_job_.running() || cloud_eng_.valid())
+            return f >= 120000 ? fail_step("the analysis is still running") : void();
+        if (f < 2)
+            return;
+        const std::size_t part = std::size_t(std::clamp(structural_part_, 0, std::max(0, int(objects_.size()) - 1)));
+        nlohmann::json j;
+        if (part < objects_.size())
+            for (const EngineeringResult& r : objects_[part].engineering.results)
+                if (r.kind == "aerodynamics")
+                    j = nlohmann::json::parse(r.report, nullptr, false);
+        const double drag = j.is_object() ? j.value("drag_n", 0.0) : 0.0;
+        const bool simulated = j.is_object() && j.value("simulated", false);
+        const bool ok = drag > 0.0 && simulated == (step.key == "1");
+        std::printf("ui-script: expect-aero %s: %sdrag %.4g N, simulated %d (%s)\n", step.key.c_str(), ok ? "ok, " : "got ", drag,
+                    int(simulated), aero_message_.c_str());
+        if (!ok)
+            return fail_step("no aerodynamic result as asked: " + aero_message_);
+        next();
     } else if (step.verb == "expect-sketch-entities") { // the sketch being drawn (or the last sketch feature) has N entities
         const cad::Sketch* s = editing_sketch();
         if (!s)
@@ -15299,6 +23902,58 @@ void App::script_input() {
         std::printf("ui-script: expect-sketch-constraints %zu: got %zu\n", want, s->constraints.size());
         if (s->constraints.size() != want)
             return fail_step("the sketch has " + std::to_string(s->constraints.size()) + " constraints");
+        next();
+    } else if (step.verb == "choose-file") { // the open file browser answered with KEY (relative to the working folder)
+        if (!browser_.is_open())
+            return f >= 30 ? fail_step("no file browser is open") : void();
+        browser_.close();
+        if (ImGui::GetCurrentContext()->OpenPopupStack.Size > 0) // its modal too, as its own buttons close it
+            ImGui::ClosePopupToLevel(0, true);
+        // "@/name": next to the script (its test data); otherwise from the working folder.
+        file_chosen(step.key.starts_with("@/") ? std::filesystem::path(options_.ui_script).parent_path() / step.key.substr(2)
+                                               : std::filesystem::absolute(step.key));
+        next();
+    } else if (step.verb == "save-project") { // writes the plate as a project to KEY (relative to the working folder)
+        save_project_to(step.key);
+        next();
+    } else if (step.verb == "open-project") { // opens the project KEY, as Abrir does
+        open_project(step.key);
+        next();
+    } else if (step.verb == "expect-structural-verdict") { // the chosen part's last result: holds, low_margin... (waits for a run)
+        if (structural_job_.running())
+            return f >= 120000 ? fail_step("the analysis is still running") : void();
+        if (objects_.empty())
+            return fail_step("no part");
+        const ProjectEngineering& pe = objects_[std::size_t(std::clamp(structural_part_, 0, int(objects_.size()) - 1))].engineering;
+        std::string got = "none";
+        for (const EngineeringResult& r : pe.results)
+            if (r.kind == "structural")
+                got = nlohmann::json::parse(r.report).value("verdict", nlohmann::json::object()).value("name", std::string("?"));
+        // The run may start a few frames after the click (a loaded CI machine,
+        // 2026-11-04): no result yet is not «none» until it had time to start.
+        if (got == "none" && step.key != "none" && f < 120)
+            return;
+        std::printf("ui-script: expect-structural-verdict %s: got %s%s\n", step.key.c_str(), got.c_str(),
+                    structural_message_.empty() ? "" : (" (" + structural_message_ + ")").c_str());
+        if (got != step.key)
+            return fail_step("the verdict is " + got);
+        next();
+    } else if (step.verb == "expect-design-failed") { // the timeline's failing feature: N (from 1) or "none"
+        if (design_job_.running() || !solidcraft_probed_ || design_dirty_)
+            return f >= 600 ? fail_step("the design is still building") : void();
+        const std::string got = design_failed_ ? std::to_string(*design_failed_ + 1) : "none";
+        std::printf("ui-script: expect-design-failed %s: got %s\n", step.key.c_str(), got.c_str());
+        if (got != step.key)
+            return fail_step("the failing feature is " + got);
+        next();
+    } else if (step.verb == "expect-sketch-dof") { // the sketch being drawn has N degrees of freedom left
+        if (!editing_sketch())
+            return fail_step("no sketch being drawn");
+        const cad::SketchSolve& dof = sketch_dof();
+        const int want = std::atoi(step.key.c_str());
+        std::printf("ui-script: expect-sketch-dof %d: got %d%s\n", want, dof.dof, dof.solved ? "" : " (not solved)");
+        if (dof.dof != want || !dof.solved)
+            return fail_step("the sketch has " + std::to_string(dof.dof) + " degrees of freedom");
         next();
     } else if (step.verb == "expect-sketch-point") { // entity E (from 1), point I (from 0) at "x y" within 0.01; "closed" as I checks the chain is closed
         const cad::Sketch* s = editing_sketch();
@@ -15326,6 +23981,14 @@ void App::script_input() {
         std::printf("ui-script: expect-sketch-point %zu %s: %s%.3f %.3f\n", entity, step.value.c_str(), ok ? "ok, " : "got ", got.x, got.y);
         if (!ok)
             return fail_step("the point is at " + std::to_string(got.x) + ", " + std::to_string(got.y));
+        next();
+    } else if (step.verb == "design-pick") { // a point "X Y Z" picked in the view for the operation taking points
+        double x = 0, y = 0, z = 0;
+        const std::string text = step.key + " " + step.value;
+        if (!design_pick_ || std::sscanf(text.c_str(), "%lf %lf %lf", &x, &y, &z) != 3)
+            return fail_step("no operation is taking points, or the point is not X Y Z");
+        design_pick_at({x, y, z});
+        std::printf("ui-script: design-pick %g %g %g\n", x, y, z);
         next();
     } else if (step.verb == "expect-design") { // the design's bodies built: VALUE "none" or a volume in mm3 within 1 %
         if (design_job_.running() || !solidcraft_probed_ || design_dirty_)
@@ -15467,13 +24130,20 @@ void App::script_input() {
         if (!ok)
             return fail_step("the plate has " + std::to_string(objects_.size()) + " models, the last " + last);
         next();
-    } else if (step.verb == "expect-toast") { // a toast with this text, within 30 frames
+    } else if (step.verb == "expect-toast") { // a toast with this text, within 300 frames (a background job's may be late)
+        // Also one already gone: on a busy machine a toast's 6 s can pass
+        // before the script gets to look (ui_pack_offline_first_run).
+        for (const std::string& shown : toasts_shown_)
+            if (shown.find(step.value) != std::string::npos) {
+                std::printf("ui-script: expect-toast %s: ok\n", step.value.c_str());
+                return next();
+            }
         for (const Toast& toast : toasts_)
             if (toast.text.find(step.value) != std::string::npos) {
                 std::printf("ui-script: expect-toast %s: ok\n", step.value.c_str());
                 return next();
             }
-        if (f >= 30)
+        if (f >= 300)
             fail_step("no toast says \"" + step.value + "\"");
     } else {
         fail_step("unknown step");
@@ -15481,6 +24151,24 @@ void App::script_input() {
 }
 
 void App::frame() {
+    poll_pack_update();
+    refresh_bed_extras();
+    // --pick-pack-printer: that pack printer added and chosen (profile_pack.md, PK6).
+    if (!options_.pick_pack_printer.empty() && !pack_printer_picked_ && frames_ >= 2) {
+        pack_printer_picked_ = true;
+        add_pack_printer(options_.pick_pack_printer);
+        const Profile* now_printer = find_profile(ProfileKind::Printer, chosen_profile_[std::size_t(ProfileKind::Printer)]);
+        bool builtin = false;
+        if (!now_printer || !find_profile(ProfileKind::Printer, now_printer->name, &builtin) || !builtin ||
+            chosen_profile_[std::size_t(ProfileKind::Filament)].empty()) {
+            std::fprintf(stderr, "error: the pack printer %s was not chosen with its filament\n", options_.pick_pack_printer.c_str());
+            failed_ = true;
+        } else {
+            std::fprintf(stderr, "pack printer: %s · %s · %s\n", now_printer->name.c_str(),
+                         chosen_profile_[std::size_t(ProfileKind::Filament)].c_str(),
+                         chosen_profile_[std::size_t(ProfileKind::Print)].c_str());
+        }
+    }
     if (frames_ < 8) {
         static char step[32];
         std::snprintf(step, sizeof step, "frame %d", frames_);
@@ -15491,7 +24179,7 @@ void App::frame() {
     // were used in the last 3 s (a tooltip shows after a delay with no event)
     // or a printer is connected (its status comes from its own thread); else
     // up to 2 s. A background job wakes the window when it ends.
-    const bool busy = !options_.screenshot.empty() || slice_job_.running() || voxel_job_.running() ||
+    const bool busy = !options_.screenshot.empty() || slice_job_.running() || structural_estimate_job_.running() || optimize_job_.running() ||
                       ray_job_.running() || !toasts_.empty() || ImGui::IsAnyItemActive() ||
                       (render_mode_ == RenderMode::RayTraced && renderer_.has_ray_scene() &&
                        renderer_.ray_samples() < 256);
@@ -15513,13 +24201,15 @@ void App::frame() {
     if (!browser_.is_open())
         for (const std::filesystem::path& path : std::exchange(dropped_, {})) {
             // A model dropped on a plate joins it, as Add does.
-            if (is_model(path) && !objects_.empty() && !calibration_ && !viewer_)
+            if (is_model(path) && !objects_.empty() && !calibration_ && !viewer_ && !is_project_file(path))
                 add_model(path);
             else
                 open_path(path);
         }
     poll_jobs();
     device_poll();
+    bambu_poll();
+    host_poll();
 
 #ifdef TISMA_VULKAN_WINDOW
     if (vulkan_)
@@ -15652,7 +24342,11 @@ void App::frame() {
 
     // Screenshot mode: once everything asked for is ready, read the frame back.
     if (!options_.screenshot.empty()) {
-        ++frames_;
+        // An analysis, a slice or a print on the printer is waited for by its
+        // own step (and by the test's timeout), not by the frame count: under
+        // the sanitizers or a loaded machine they take far more frames.
+        if (!structural_job_.running() && !slice_job_.running() && !(options_.device_print && !device_print_done_))
+            ++frames_;
         // A preview waits for its slice, unless the slice failed (the error is the picture then).
         const bool slice_pending =
             (options_.view == "preview" || options_.device_print) && has_plate_ && !result_ && error_title_.empty();
@@ -15680,7 +24374,7 @@ void App::frame() {
         }
         const bool device_pending =
             options_.device_print && !device_print_done_ && (printer_ != nullptr || !options_.device.empty());
-        const bool waiting = slice_job_.running() || voxel_job_.running() || design_job_.running() ||
+        const bool waiting = slice_job_.running() || structural_estimate_job_.running() || optimize_job_.running() || design_job_.running() ||
                              solidcraft_job_.running() || slice_pending || rays_pending ||
                              (options_.coarse && (coarse_job_.running() || coarse_version_ != scene_version_)) ||
                              script_at_ < script_.size() ||
@@ -15688,9 +24382,13 @@ void App::frame() {
                              frame_pending_; // the camera (and --look) not set yet: in Preview it waits for the legend
         if (frames_ == 2) {
             if (options_.view == "analysis")
-                set_tab(Tab::Analysis);
+                set_tab(Tab::Structural);
             else if (options_.view == "design")
                 set_tab(Tab::Design);
+            else if (options_.view == "structural")
+                set_tab(Tab::Structural);
+            else if (options_.view == "aerodynamics")
+                set_tab(Tab::Aerodynamics);
             else if (options_.view == "preview" && result_)
                 set_tab(Tab::Preview);
             else if (options_.view == "prepare")
@@ -15770,7 +24468,101 @@ int App::run() {
 
 } // namespace
 
+// The settings panel as data (the phone builds its Print and Material
+// screens from it, mobile_app.md rule 7): tabs, cards (sections), their
+// groups (subsections) with their closed line, and each row's key, level,
+// name, help and CONFIG.md's type, default and range, in the language set.
+int write_settings_layout(const AppOptions& options) {
+    if (options.language_given)
+        set_language(options.language);
+    Settings settings;
+    if (!options.settings_summary.empty()) {
+        try {
+            settings = load_settings(options.settings_summary);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "error: %s\n", e.what());
+            return 2;
+        }
+    }
+    std::map<std::string, std::string> values;
+    for (const auto& [key, value] : describe(settings))
+        values[key] = value;
+    for (const auto& [name, list] : settings.variables) // each variable as its own row's value
+        if (!list.empty())
+            values["machine.variables." + name] = list.front();
+    const auto level_name = [](SettingLevel l) {
+        return l == SettingLevel::Basic ? "basic" : l == SettingLevel::Normal ? "normal" : "advanced";
+    };
+    nlohmann::ordered_json root;
+    root["version"] = TISMA_VERSION;
+    root["language"] = language() == Language::English ? "en" : "es";
+    nlohmann::ordered_json tabs = nlohmann::ordered_json::array();
+    for (const auto& [tab, name] : {std::pair{SettingsTab::Print, "print"}, std::pair{SettingsTab::Material, "material"},
+                                    std::pair{SettingsTab::Printer, "printer"}}) {
+        nlohmann::ordered_json t{{"id", name}, {"sections", nlohmann::ordered_json::array()}};
+        for (const SectionLayout& section : settings_layout(tab)) {
+            nlohmann::ordered_json sj{{"id", std::string(section.id)},
+                                      {"title", tr(section.title)},
+                                      {"icon", std::string(section.icon)},
+                                      {"subsections", nlohmann::ordered_json::array()}};
+            for (const SubsectionLayout& sub : section.subsections) {
+                nlohmann::ordered_json bj{{"id", std::string(sub.id)},
+                                          {"title", tr(sub.title)},
+                                          {"summary", subsection_summary(sub.id, settings)},
+                                          {"settings", nlohmann::ordered_json::array()}};
+                for (const SettingEntry& entry : sub.settings) {
+                    const std::string key(entry.key);
+                    nlohmann::ordered_json row{{"key", key}, {"level", level_name(entry.level)}, {"label", key_label(key)}};
+                    const auto doc = setting_docs().find(key);
+                    if (doc != setting_docs().end()) {
+                        row["help"] = doc->second.meaning;
+                        row["type"] = doc->second.type;
+                        row["default"] = doc->second.default_value;
+                        row["range"] = doc->second.range;
+                    }
+                    // The temperature variables have no row in CONFIG.md's tables:
+                    // the same limits as the panel's fields.
+                    if (doc == setting_docs().end() && key.starts_with("machine.variables.")) {
+                        const bool bed = key.find("bed_") != std::string::npos;
+                        const bool first = key.find("first_layer_") != std::string::npos;
+                        row["type"] = "entero";
+                        row["unit"] = "°C";
+                        row["min"] = 0;
+                        row["max"] = bed ? 150 : 450;
+                        row["range"] = bed ? "0 a 150" : "0 a 450";
+                        row["default"] = first ? "" : "0";
+                        if (first) // empty: the same as on the other layers
+                            row["fallback"] = bed ? "machine.variables.bed_temperature" : "machine.variables.temperature";
+                    }
+                    if (const auto v = values.find(key); v != values.end())
+                        row["value"] = v->second;
+                    bj["settings"].push_back(std::move(row));
+                }
+                sj["subsections"].push_back(std::move(bj));
+            }
+            t["sections"].push_back(std::move(sj));
+        }
+        tabs.push_back(std::move(t));
+    }
+    root["tabs"] = std::move(tabs);
+    const std::string text = root.dump(1);
+    if (options.settings_layout == "-") {
+        std::fwrite(text.data(), 1, text.size(), stdout);
+        std::fputc('\n', stdout);
+        return 0;
+    }
+    std::ofstream out(options.settings_layout, std::ios::binary);
+    out << text << '\n';
+    if (!out) {
+        std::fprintf(stderr, "error: cannot write %s\n", options.settings_layout.c_str());
+        return 2;
+    }
+    return 0;
+}
+
 int run_app(const AppOptions& options) {
+    if (!options.settings_layout.empty())
+        return write_settings_layout(options);
     App app(options);
     return app.run();
 }

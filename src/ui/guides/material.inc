@@ -184,6 +184,15 @@
      "especially with materials that lift at the corners. One exception: if one of those layers is so short that it "
      "has to slow down for the minimum layer time, it gets full fan anyway.\n\nExample: 1 to 3 for PLA; 3 to 5 for "
      "PETG or ABS."},
+    {"cooling.first_layer_fan",
+     "Un valor fijo del ventilador, en %, solo para la primera capa, por encima de los demás ajustes de enfriamiento. "
+     "Sirve cuando el material se pega mejor con un poco de aire desde el comienzo.\n\nSolo vale con 0 capas sin "
+     "ventilador. Con «Ventilador completo desde la capa», la subida arranca desde este valor. −1 lo apaga.\n\n"
+     "Ejemplo: −1 (apagado); 20 % para PLA en una cama que pega bien.",
+     "A fixed fan value, in %, only for the first layer, over the other cooling settings. It helps when the material "
+     "sticks better with a little air from the start.\n\nIt only applies with 0 layers without fan. With «Full fan "
+     "from layer», the ramp starts from this value. −1 turns it off.\n\nExample: −1 (off); 20 % for PLA on a bed "
+     "that grips well."},
     {"cooling.full_fan_layer",
      "Después de las capas sin ventilador, el aire puede entrar de golpe o ir subiendo de a poco. Este ajuste es la "
      "capa (contando desde 1) en la que el ventilador llega a su valor completo; antes sube en línea recta.\n\nSubirlo "

@@ -110,6 +110,15 @@ if(TISMA_GPU)
   )
   FetchContent_MakeAvailable(volk)
 endif()
+# stb_image_write 1.16 (MIT of its MIT-or-public-domain choice), only its one
+# header, in the core: the G-code thumbnails in JPG and compressed PNG.
+FetchContent_Declare(
+  stb_write
+  URL https://raw.githubusercontent.com/nothings/stb/d14d46f6b44456eb88beac58cba833a4135d4c89/stb_image_write.h
+  URL_HASH SHA256=cbd5f0ad7a9cf4468affb36354a1d2338034f2c12473cf1a8e32053cb6914a05
+  DOWNLOAD_NO_EXTRACT TRUE
+)
+FetchContent_MakeAvailable(stb_write)
 if(TISMA_BUILD_UI)
   # GLFW 3.4 (Zlib), Dear ImGui 1.92.9b (MIT; its Roboto Medium font is
   # Apache-2.0) and nanosvg (Zlib), see THIRD_PARTY.md: the interface only.
@@ -138,7 +147,15 @@ if(TISMA_BUILD_UI)
     GIT_TAG 239e102ec2c691f2902e20ace2ed36ee4a35cfe6 # no tags; 2026-07-10
     SOURCE_SUBDIR no-cmake
   )
-  FetchContent_MakeAvailable(glfw imgui nanosvg)
+  # stb_image (MIT of its MIT-or-public-domain choice), only its one header:
+  # the JPEG frames of a Bambu Lab printer's camera and PNG pictures.
+  FetchContent_Declare(
+    stb
+    URL https://raw.githubusercontent.com/nothings/stb/d14d46f6b44456eb88beac58cba833a4135d4c89/stb_image.h
+    URL_HASH SHA256=594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3
+    DOWNLOAD_NO_EXTRACT TRUE
+  )
+  FetchContent_MakeAvailable(glfw imgui nanosvg stb)
 endif()
 set(BUILD_SHARED_LIBS ${_tisma_shared})
 
@@ -167,7 +184,11 @@ add_custom_command(
 add_library(tisma_core
   src/mesh/mesh.cpp
   src/mesh/indexed_mesh.cpp
+  src/mesh/face_region.cpp
+  src/mesh/inspect.cpp
   src/mesh/shapes.cpp
+  src/mesh/lattice.cpp
+  src/mesh/orient.cpp
   src/mesh/paint.cpp
   src/slice/level_set.cpp
   src/slice/contours.cpp
@@ -176,7 +197,9 @@ add_library(tisma_core
   src/slice/variable_layers.cpp
   src/slice/zaa.cpp
   src/geom/bitgrid.cpp
+  src/geom/distance.cpp
   src/geom/polygons.cpp
+  src/geom/polyholes.cpp
   src/config/settings.cpp
   src/config/profiles.cpp
   src/slice/painted.cpp
@@ -207,6 +230,7 @@ add_library(tisma_core
   src/gcode/arcs.cpp
   src/gcode/corners.cpp
   src/gcode/template.cpp
+  src/gcode/macro_variables.cpp
   src/gcode/output.cpp
   src/gcode/binary.cpp
   src/gcode/scarf.cpp
@@ -217,6 +241,8 @@ add_library(tisma_core
   src/gcode/travel.cpp
   src/gcode/cooling.cpp
   src/gcode/print_time.cpp
+  src/gcode/thumbnail.cpp
+  src/gcode/image_write.cpp
   src/report/stability.cpp
   src/report/warnings.cpp
   src/slice/printable.cpp
@@ -241,35 +267,67 @@ add_library(tisma_core
   src/fea/material.cpp
   src/fea/as_printed.cpp
   src/fea/materials.cpp
+  src/fea/verdict.cpp
+  src/fea/adhesion.cpp
   src/fea/analysis.cpp
   src/config/analysis_case.cpp
   src/report/analysis_json.cpp
   src/io/vtk.cpp
   src/io/ply.cpp
   src/io/stl.cpp
+  src/io/png.cpp
   src/io/checksum.cpp
   src/io/zip.cpp
   src/io/xml.cpp
   src/io/model.cpp
   src/io/threemf.cpp
+  src/io/project_import.cpp
   src/io/paths.cpp
   src/cad/design.cpp
   src/cad/sketch.cpp
+  src/cad/sketch_edit.cpp
+  src/cad/sketch_io.cpp
+  src/cad/view_dxf.cpp
+  src/aero/lbm.cpp
+  src/aero/aero.cpp
+  src/cad/parameters.cpp
+  src/cad/constraints.cpp
   src/cad/fasteners.cpp
   src/cad/lathe.cpp
   src/cad/gears.cpp
   src/cad/process.cpp
   src/cad/solidcraft.cpp
   src/calibration/calibration.cpp
+  src/project/engineering.cpp
+  src/project/engineering_case.cpp
+  src/project/engineering_values.cpp
+  src/fea/zone.cpp
   src/project/project.cpp
   src/catalog/catalog.cpp
+  src/catalog/pack.cpp
+  src/catalog/pack_install.cpp
+  src/library/library.cpp
+  src/catalog/xz.cpp
   src/device/gcode_host.cpp
+  src/device/printer_limits.cpp
   src/device/printer.cpp
   src/device/serial_port.cpp
   src/device/simulator.cpp
   src/device/stream.cpp
   ${CMAKE_CURRENT_BINARY_DIR}/catalog_files.cpp
+  # The plate and the slicing job behind the interface's buttons, without
+  # OpenGL: the command line slices a project with them too (cloud.md, rule 18).
+  src/ui/plate.cpp
+  src/ui/slicing.cpp
+  src/ui/project_slice.cpp
   src/cli/cli.cpp
+  src/cli/c_cli.cpp
+  src/cli/node.cpp
+  src/cli/pack_cli.cpp
+  src/cli/part_cli.cpp
+  src/cli/calibration_cli.cpp
+  src/cli/design_cli.cpp
+  src/cli/library_cli.cpp
 )
 if(TISMA_GPU)
   target_sources(tisma_core PRIVATE src/gpu/compute_vulkan.cpp)
@@ -277,7 +335,8 @@ if(TISMA_GPU)
 else()
   target_sources(tisma_core PRIVATE src/gpu/compute_none.cpp)
 endif()
-target_include_directories(tisma_core PUBLIC src)
+target_include_directories(tisma_core PUBLIC src include)
+target_include_directories(tisma_core SYSTEM PRIVATE ${stb_write_SOURCE_DIR})
 # Kernels must give the same bits on the CPU and the GPU: no fused multiply-add.
 if(NOT MSVC)
   target_compile_options(tisma_core PRIVATE -ffp-contract=off)
@@ -287,19 +346,107 @@ target_compile_definitions(tisma_core PUBLIC TISMA_VERSION="${TISMA_VERSION_TEXT
 
 add_executable(tisma-engine apps/main.cpp)
 target_link_libraries(tisma-engine PRIVATE tisma_core tisma_warnings)
+if(WIN32)
+  # The command-line program shows the Tisma icon too (the testers' UI31: the
+  # package's other .exe had none).
+  configure_file(apps/tisma/tisma.rc.in ${CMAKE_CURRENT_BINARY_DIR}/tisma-engine.rc @ONLY)
+  target_sources(tisma-engine PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/tisma-engine.rc)
+endif()
+
+# The cloud client (cloud.md) and its HTTP layer: WinHTTP on Windows; on
+# Linux and macOS cpp-httplib (MIT, only its header) over the system's
+# OpenSSL 3 (Apache-2.0) for HTTPS. See THIRD_PARTY.md. The tests' mock
+# server uses cpp-httplib's server on every system.
+FetchContent_Declare(
+  cpphttplib
+  GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+  GIT_TAG 74ef3c42188acd6391f027c4337fb0e1a68c0024 # v0.62.0
+  SOURCE_SUBDIR no-cmake
+)
+FetchContent_MakeAvailable(cpphttplib)
+# Every user of the header sees the same definitions (its classes change with
+# OpenSSL): they go on this target, never on one user alone.
+add_library(tisma_httplib INTERFACE)
+target_include_directories(tisma_httplib SYSTEM INTERFACE ${cpphttplib_SOURCE_DIR})
+find_package(Threads REQUIRED)
+target_link_libraries(tisma_httplib INTERFACE Threads::Threads)
+if(NOT WIN32)
+  find_package(OpenSSL 3 QUIET)
+  if(OpenSSL_FOUND)
+    target_compile_definitions(tisma_httplib INTERFACE CPPHTTPLIB_OPENSSL_SUPPORT)
+    target_link_libraries(tisma_httplib INTERFACE OpenSSL::SSL OpenSSL::Crypto)
+  else()
+    message(STATUS "OpenSSL 3 not found: the cloud client talks only http://")
+  endif()
+endif()
+add_library(tisma_net STATIC src/net/http.cpp src/cloud/client.cpp src/cloud/secret_store.cpp src/cloud/report.cpp
+  src/device/print_host.cpp src/net/digest.cpp src/catalog/pack_fetch.cpp)
+target_include_directories(tisma_net PUBLIC src)
+# tisma_core: running secret-tool or security (cad/process).
+target_link_libraries(tisma_net PRIVATE tisma_core nlohmann_json::nlohmann_json tisma_warnings)
+if(WIN32)
+  target_sources(tisma_net PRIVATE src/net/http_winhttp.cpp)
+  target_link_libraries(tisma_net PRIVATE winhttp advapi32)
+else()
+  target_sources(tisma_net PRIVATE src/net/http_httplib.cpp)
+  target_link_libraries(tisma_net PRIVATE tisma_httplib)
+  if(APPLE)
+    # cpp-httplib takes the system's certificates from the keychain.
+    target_link_libraries(tisma_net PRIVATE "-framework Security" "-framework CoreFoundation")
+  endif()
+endif()
+
+# Bambu Lab printers on the local network (printer_connections.md, «Bambu Lab
+# en red local»): TLS for MQTT, FTPS and the camera through Mbed TLS 3.6 LTS
+# (Apache-2.0 of its dual licence; THIRD_PARTY.md), the same on every system.
+# Its release archive carries the generated files, so no Python is needed.
+set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
+set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+set(GEN_FILES OFF CACHE BOOL "" FORCE)
+set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
+set(USE_SHARED_MBEDTLS_LIBRARY OFF CACHE BOOL "" FORCE)
+set(USE_STATIC_MBEDTLS_LIBRARY ON CACHE BOOL "" FORCE)
+set(DISABLE_PACKAGE_CONFIG_AND_INSTALL ON CACHE BOOL "" FORCE)
+FetchContent_Declare(
+  mbedtls
+  URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.2/mbedtls-3.6.2.tar.bz2
+  URL_HASH SHA256=8b54fb9bcf4d5a7078028e0520acddefb7900b3e66fec7f7175bb5b7d85ccdca
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(mbedtls)
+add_library(tisma_bambu STATIC src/net/tls.cpp src/device/mqtt.cpp src/device/ftps.cpp src/device/bambu.cpp
+  src/device/ssdp.cpp src/device/mdns.cpp)
+target_include_directories(tisma_bambu PUBLIC src)
+target_link_libraries(tisma_bambu PUBLIC tisma_core tisma_net PRIVATE mbedtls mbedx509 mbedcrypto nlohmann_json::nlohmann_json
+  tisma_warnings Threads::Threads)
+if(WIN32)
+  target_link_libraries(tisma_bambu PUBLIC ws2_32 PRIVATE bcrypt)
+endif()
 
 if(TISMA_BUILD_UI)
   # What the interface does without OpenGL (camera, draw data, icons, texts,
   # files, the slicing job): tested with the engine.
+  # The project's Ed25519 public key for the updater (app_updates.md, rule 5;
+  # docs/FIRMAR_VERSIONES.md): 64 hex digits, given at build time. Empty: the
+  # updater stays off.
+  set(TISMA_UPDATES_KEY "" CACHE STRING "The updates' Ed25519 public key, 64 hex digits (empty: no updater)")
+  if(NOT TISMA_UPDATES_KEY STREQUAL "" AND NOT TISMA_UPDATES_KEY MATCHES "^[0-9a-fA-F]+$")
+    message(FATAL_ERROR "TISMA_UPDATES_KEY must be 64 hex digits")
+  endif()
+  string(LENGTH "${TISMA_UPDATES_KEY}" tisma_updates_key_length)
+  if(NOT tisma_updates_key_length EQUAL 0 AND NOT tisma_updates_key_length EQUAL 64)
+    message(FATAL_ERROR "TISMA_UPDATES_KEY must be 64 hex digits")
+  endif()
   add_library(tisma_ui STATIC
     src/ui/camera.cpp
     src/ui/scene.cpp
     src/ui/icons.cpp
+    src/ui/bed_art.cpp
+    src/ui/image_decode.cpp
     src/ui/png.cpp
     src/ui/text.cpp
     src/ui/setting_guide.cpp
     src/ui/files.cpp
-    src/ui/slicing.cpp
     src/ui/presets.cpp
     src/ui/settings_layout.cpp
     src/ui/settings_view.cpp
@@ -309,13 +456,19 @@ if(TISMA_BUILD_UI)
     src/ui/knowledge.cpp
     src/ui/guide.cpp
     src/ui/raytrace.cpp
-    src/ui/plate.cpp
     src/ui/measure.cpp
     src/ui/help.cpp
     src/ui/system_info.cpp
+    src/ui/links.cpp
+    src/ui/session_marks.cpp
   )
   target_include_directories(tisma_ui SYSTEM PRIVATE ${nanosvg_SOURCE_DIR}/src)
+  target_include_directories(tisma_ui SYSTEM PRIVATE ${stb_SOURCE_DIR})
   target_link_libraries(tisma_ui PUBLIC tisma_core PRIVATE nlohmann_json::nlohmann_json tisma_warnings)
+  target_compile_definitions(tisma_ui PUBLIC TISMA_UPDATES_KEY="${TISMA_UPDATES_KEY}")
+  if(WIN32)
+    target_link_libraries(tisma_ui PRIVATE shell32) # ShellExecuteW (ui/links)
+  endif()
   add_subdirectory(apps/tisma)
 endif()
 

@@ -92,6 +92,8 @@ std::vector<LayerSurfaces> classify_surfaces(const std::vector<Polygons>& region
             s.bottom = Clipper2Lib::Difference(rest, covered_by_all(regions, i, bottom_layers, -1), FillRule::NonZero);
             s.bottom = widen_thin(s.bottom, rest, min_width);
             rest = Clipper2Lib::Difference(rest, s.bottom, FillRule::NonZero);
+            s.bottom_exposed =
+                i == 0 ? s.bottom : Clipper2Lib::Difference(s.bottom, regions[i - 1], FillRule::NonZero);
         }
         s.sparse = std::move(rest);
     });

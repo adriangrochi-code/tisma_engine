@@ -1,0 +1,58 @@
+# Constraints and dimensions with their degrees of freedom (cad_design.md,
+# rule 5, CD3): a 40 x 30 rectangle has 4; its width and height dimensioned,
+# 2; a corner fixed, 0. A redundant constraint and a contradicting
+# dimension are refused and change nothing; then the sketch, extruded 20 mm,
+# is still 24 000 mm3. The dimensions are picked by typed points on the lines.
+menu mode_engineering
+menu tab_design
+menu design_sketch
+menu design_plane_xy
+expect-control sketch_line
+menu design_command
+type rec
+key enter
+type 0,0
+key enter
+type 40,30
+key enter
+expect-sketch-entities 1
+expect-sketch-dof 4
+expect-control sketch_rule_dimension
+type cota
+key enter
+type 20,0
+key enter
+type 40
+key enter
+expect-sketch-dof 3
+type cota
+key enter
+type 40,15
+key enter
+key enter
+expect-sketch-dof 2
+type fijo
+key enter
+type 0,0
+key enter
+expect-sketch-dof 0
+expect-sketch-point 1 2 40 30
+type h
+key enter
+type 20,30
+key enter
+expect-sketch-dof 0
+type cota
+key enter
+type 20,0
+key enter
+type 50
+key enter
+expect-sketch-dof 0
+expect-sketch-point 1 2 40 30
+key escape
+type E
+key enter
+type 20
+key enter
+expect-design 24000

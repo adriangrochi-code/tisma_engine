@@ -88,6 +88,7 @@ struct GcodePreview {
     double extruded = 0.0;  // mm of extruding path
     double travelled = 0.0; // mm of travel path
     double estimated_seconds = -1.0; // from "; estimated printing time = 1h 7m 36s"; -1 when absent
+    double preparation_seconds = 0.0; // from "; estimated preparation time = …" (print_time.md, rule 14), part of the above
     std::size_t lines = 0;
     std::size_t arcs = 0; // G2/G3 moves (with I and J, drawn along their circle)
     std::array<std::size_t, kLineKinds> kind_moves{}; // extrusions per kind (travels for Travel)
@@ -116,6 +117,12 @@ GcodePreview read_gcode_preview(std::string_view text, double filament_diameter 
 // estimate's kinematics, print_time.hpp), planned layer by layer from rest to
 // rest, and the sums by layer and by kind (preview.md, rules 6 and 8).
 void time_preview(GcodePreview& preview, const Kinematics& kinematics, double filament_diameter = 1.75);
+
+// The extrusions as Wavefront OBJ polylines (Export Toolpaths as OBJ…,
+// interface.md): a group per line kind ("g outer_wall"), each run of
+// extrusions that join end to start as one "l" element over its points,
+// in the file's order. Travels are left out.
+std::string toolpaths_obj(const GcodePreview& preview);
 
 // Seconds in a duration written as "2d 1h 7m 36s" (any of the parts, in that
 // order, as format_duration writes them); -1 if it does not read so.

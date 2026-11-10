@@ -1,0 +1,10 @@
+# Preferences (interface.md): Appearance offers «Like the system», Light and
+# Dark; Enter is OK, as the button.
+menu more
+menu config
+expect-control config_window
+menu config_page_interface
+expect-control pref.theme
+key enter
+wait 3
+expect-no-control config_window

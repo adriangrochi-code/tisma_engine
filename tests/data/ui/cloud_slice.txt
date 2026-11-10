@@ -1,0 +1,28 @@
+# Slicing in the cloud against the mock server (cloud.md, rules 6 to 9): the
+# plate goes as a project, the status bar shows the state, and the G-code
+# that comes back opens in the preview as a local slice (CC3). Cancelling
+# cancels on the server too and the plate stays (CC4).
+menu more
+menu cloud_slice
+expect-toast Log in to Tisma Cloud
+expect-control cloud_window
+cloud-wait
+cloud-field email ana@example.com
+cloud-field password secret123
+menu cloud_login
+cloud-wait
+expect-cloud logged yes
+menu cloud_close
+menu more
+menu cloud_slice
+expect-cloud slicing yes
+expect-control cloud_slice_state
+menu cloud_slice_cancel
+cloud-slice-wait
+expect-toast Slicing in the cloud cancelled
+expect-cloud viewer no
+menu more
+menu cloud_slice
+cloud-slice-wait
+expect-toast Sliced in the cloud: 1h 2m 3s
+expect-cloud viewer yes

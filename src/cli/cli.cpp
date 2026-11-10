@@ -1,4 +1,13 @@
 #include "cli/cli.hpp"
+#include "io/number.hpp"
+#include "cli/node.hpp"
+#include "cli/library_cli.hpp"
+#include "cli/pack_cli.hpp"
+#include "cli/part_cli.hpp"
+#include "cli/calibration_cli.hpp"
+#include "cli/design_cli.hpp"
+#include "catalog/catalog.hpp"
+#include "config/profiles.hpp"
 
 #include "io/model.hpp"
 #include "io/paths.hpp"
@@ -9,8 +18,11 @@
 #include "config/analysis_case.hpp"
 #include "config/settings.hpp"
 #include "fea/analysis.hpp"
+#include "project/engineering_case.hpp"
+#include "project/project.hpp"
 #include "report/analysis_json.hpp"
 #include "gcode/export.hpp"
+#include "gcode/thumbnail.hpp"
 #include "gcode/output.hpp"
 #include "gcode/template.hpp"
 #include "gcode/writer.hpp"
@@ -20,6 +32,8 @@
 #include "geom/polygons.hpp"
 #include "gpu/compute.hpp"
 #include "mesh/indexed_mesh.hpp"
+#include "mesh/inspect.hpp"
+#include "gcode/preview.hpp"
 #include "perimeters/sites.hpp"
 #include "perimeters/transitions.hpp"
 #include "slice/layers.hpp"
@@ -29,7 +43,16 @@
 #include "resin/goo.hpp"
 #include "resin/resin.hpp"
 
+#include <oneapi/tbb/global_control.h>
+
 #include <algorithm>
+#include <nlohmann/json.hpp>
+#include <array>
+#include <cmath>
+#include <cstring>
+#include <sstream>
+#include <map>
+#include <charconv>
 #include <cctype>
 #include <cstdlib>
 #include <chrono>
@@ -40,28 +63,13 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <vector>
 #include <ostream>
 #include <string>
 
 namespace tisma {
-namespace {
 
-constexpr std::string_view kUsage =
-    "usage:\n"
-    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode | out.goo | folder> [--warnings <out.json>]\n"
-    "                     (a .goo file: for a resin printer, docs/spec/features/resin.md)\n"
-    "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
-    "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
-    "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
-    "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
-    "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
-    "  tisma-engine info <model>\n"
-    "  tisma-engine --help | --version\n"
-    "A model is an STL, OBJ or 3MF file.\n";
-
-// Writes a file in one piece: into "<path>.part" first, renamed over the
-// path once complete, so a process stopped half way never leaves a partial
-// file under the real name. False (and no temporary left) on failure.
+// Declared in cli/node.hpp.
 bool write_file(const std::string& path, const std::function<void(std::ostream&)>& write) {
     // A link's file, next to it (BH16); never over a device or a folder.
     const std::filesystem::path target = write_target(path);
@@ -90,11 +98,58 @@ bool write_file(const std::string& path, const std::function<void(std::ostream&)
     return true;
 }
 
+namespace {
+
+constexpr std::string_view kUsage =
+    "usage:\n"
+    "  tisma-engine slice <model> --config <settings.json> -o <out.gcode | out.goo | folder> [--warnings <out.json>]\n"
+    "                     (a .goo file: for a resin printer, docs/spec/features/resin.md)\n"
+    "                     [--case <case.json>]   (the load case of infill.stress_density)\n"
+    "                     [--yes]   (run the settings' post-processing scripts without asking)\n"
+    "                     [--summary <summary.json>]   (the nodes' summary: print time, filament, layers)\n"
+    "                     [--copies <n>]   (n copies of the model, arranged; sequential.enabled prints them one by one)\n"
+    "                     [--align-to-y-axis]   (the copies in one column along Y)\n"
+    "                     [--strict]   (a warning is an error: no G-code, exit code 4)\n"
+    "                     [--ground-largest-face | --ground-face-normal X,Y,Z | --ground-face-point X,Y,Z]\n"
+    "                     [--inspect-mesh <out.json|->] [--export-statistics <out.json|->] [--export-settings <out.json|->]\n"
+    "  tisma-engine slice <project> -o <out.gcode> --summary <summary.json> [--sandbox] [--no-gpu] [--yes]\n"
+    "                     (a project saved by the interface, as the cloud's nodes run it: docs/spec/features/cloud.md)\n"
+    "  on a project's slice, analyze, aero and orient: [--config-over <partial.json>] [--set group.key=value ...]\n"
+    "  aero and orient also take a model with --config <settings.json> instead of a project\n"
+    "                     (changes over the project's own settings)\n"
+    "  tisma-engine analyze <model> --config <settings.json> --case <case.json> -o <report.json>\n"
+    "                       [--vtk <map.vtk>] [--mesh <voxels.ply>] [--progress] [--estimate]\n"
+    "  tisma-engine analyze <project> -o <report.json> [--config <settings.json>] [...]\n"
+    "                       (the first part with Engineering conditions, as the project keeps them)\n"
+    "  tisma-engine analyze <project> -o <result.tea> --summary <summary.json> --sandbox --mode analyze\n"
+    "                       --quality <fast|normal|high|extreme> --object <n> --instance <n> [--solid] [--no-gpu]\n"
+    "                       (the nodes' way: progress lines, the result and a JSON summary)\n"
+    "  tisma-engine aero <project> -o <result.taero> --summary <summary.json> --sandbox --object <n> --instance <n>\n"
+    "                    --quality <friction|fast|normal|high|extreme> --speed <m/s> --direction <x|-x|y|-y|z|-z|x,y,z>\n"
+    "  tisma-engine orient <project> -o <orientation.json> --summary <summary.json> --sandbox --object <n> --instance <n>\n"
+    "                      (least support for FDM: the rotation, its cost and the cost before)\n"
+    "  tisma-engine profile --printer \"<vendor> <model>\" [--nozzle <mm>] [--filament \"<vendor> <name>\"] -o <settings.json>\n"
+    "                       (the settings the engine makes from its catalog, for slice --config)\n"
+    "  tisma-engine profile --pack <folder> --printer \"<model file>#<variant>\" [--filament <path>] [--print <path>] -o <settings.json>\n"
+    "                       (a printer of the installed profile pack, with its default filament and print profile)\n"
+    "  tisma-engine pack plan|install|list --data <folder> ...   (the profile pack: tisma-engine pack for help)\n"
+    "  tisma-engine library list|show|save|check|printed|delete|export|import --dir <folder> ...   (My library)\n"
+    "  tisma-engine part gear|fastener <spec.json> -o <out.stl> | --defaults   (a gear, bolt, nut, washer or rod)\n"
+    "  tisma-engine calibration <kind> --config <settings.json> --model <out.stl> --settings <out.json> [range]\n"
+    "  tisma-engine calibration apply <kind> --value <v> --config <settings.json> -o <out.json>\n"
+    "  tisma-engine design new | check <design.json> | build <design.json> --solidcraft <exe> -o <out.stl|out.3mf>\n"
+    "                       [--quality standard|fine|finest] [--timeline] [--save <design.sc>]\n"
+    "  tisma-engine info <model>\n"
+    "  --threads <n> on any command: at most n threads of work (cloud.md, rule 19d); without it, all\n"
+    "  tisma-engine --help | --version\n"
+    "A model is an STL, OBJ or 3MF file.\n";
+
 struct SliceArgs {
     std::string model;
     std::string config;
     std::string output;
     std::string warnings; // empty: not written
+    std::string summary;  // slice only: the nodes' JSON summary; empty: not written
     std::string analysis_case; // analyze; slice: the load case of stress-guided infill
     std::string vtk;           // analyze only; empty: not written
     std::string mesh;          // analyze only; empty: not written
@@ -102,6 +157,17 @@ struct SliceArgs {
     bool estimate = false;     // analyze only: the voxels, memory and time, without solving
     bool yes = false;          // slice only: run the settings' post-processing scripts without asking
     std::size_t copies = 1;    // slice only: copies of the model on the bed
+    bool project = false;      // analyze only: the model is a project, with its settings and conditions
+    // orca_2_5.md, O6 (slice only): warnings as errors (rule 24); the face put
+    // on the bed (25); the mesh's summary (26); statistics and the resolved
+    // settings, "-" for the standard output (27); copies along Y (28).
+    bool strict = false;
+    enum class Ground { None, Largest, Normal, Point } ground = Ground::None;
+    std::array<double, 3> ground_value{0.0, 0.0, 0.0};
+    std::string inspect_mesh;
+    std::string statistics;
+    std::string export_settings;
+    bool align_y = false;
 };
 
 // Returns the arguments of 'slice' or 'analyze', or writes the problem to err.
@@ -127,6 +193,9 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
         } else if (a == "--warnings" && !analyze) {
             if (!value(out.warnings))
                 return std::nullopt;
+        } else if (a == "--summary" && !analyze) {
+            if (!value(out.summary))
+                return std::nullopt;
         } else if (a == "--case") {
             if (!value(out.analysis_case))
                 return std::nullopt;
@@ -142,6 +211,39 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
             out.estimate = true;
         } else if (a == "--yes" && !analyze) {
             out.yes = true;
+        } else if (a == "--strict" && !analyze) {
+            out.strict = true;
+        } else if (a == "--align-to-y-axis" && !analyze) {
+            out.align_y = true;
+        } else if (a == "--ground-largest-face" && !analyze) {
+            out.ground = SliceArgs::Ground::Largest;
+        } else if ((a == "--ground-face-normal" || a == "--ground-face-point") && !analyze) {
+            std::string v;
+            if (!value(v))
+                return std::nullopt;
+            std::array<double, 3> xyz{};
+            char* end = v.data();
+            bool ok = true;
+            for (std::size_t k = 0; k < 3 && ok; ++k) {
+                const char* from = end;
+                xyz[k] = std::strtod(from, &end);
+                ok = end != from && std::isfinite(xyz[k]) && (k == 2 ? *end == '\0' : *end++ == ',');
+            }
+            if (!ok || (a == "--ground-face-normal" && xyz[0] == 0.0 && xyz[1] == 0.0 && xyz[2] == 0.0)) {
+                err << "error: " << a << " needs X,Y,Z" << (a == "--ground-face-normal" ? " (not all 0)" : "") << "\n";
+                return std::nullopt;
+            }
+            out.ground = a == "--ground-face-normal" ? SliceArgs::Ground::Normal : SliceArgs::Ground::Point;
+            out.ground_value = xyz;
+        } else if (a == "--inspect-mesh" && !analyze) {
+            if (!value(out.inspect_mesh))
+                return std::nullopt;
+        } else if (a == "--export-statistics" && !analyze) {
+            if (!value(out.statistics))
+                return std::nullopt;
+        } else if (a == "--export-settings" && !analyze) {
+            if (!value(out.export_settings))
+                return std::nullopt;
         } else if (a == "--copies" && !analyze) {
             std::string n;
             if (!value(n))
@@ -163,11 +265,17 @@ std::optional<SliceArgs> parse_slice_args(std::span<const std::string_view> args
             return std::nullopt;
         }
     }
-    if (analyze && (out.model.empty() || out.config.empty() || out.analysis_case.empty() || out.output.empty())) {
-        err << "error: analyze needs a model, --config, --case and -o\n";
+    // A project carries its settings and its parts' conditions (formats.md,
+    // rule 11 bis): analyze needs only it and -o; --case replaces the
+    // conditions, --config the settings.
+    const bool project = analyze && !out.model.empty() && is_project_file(out.model);
+    out.project = project;
+    if (analyze && !project &&
+        (out.model.empty() || out.config.empty() || out.analysis_case.empty() || out.output.empty())) {
+        err << "error: analyze needs a model, --config, --case and -o (or a project and -o)\n";
         return std::nullopt;
     }
-    if (out.model.empty() || out.config.empty() || out.output.empty()) {
+    if (out.model.empty() || (out.config.empty() && !project) || out.output.empty()) {
         err << "error: slice needs a model, --config and -o\n";
         return std::nullopt;
     }
@@ -182,10 +290,12 @@ bool outputs_are_safe(const SliceArgs& a, std::ostream& err) {
     const std::pair<const char*, const std::string*> inputs[] = {
         {"the model", &a.model}, {"--config", &a.config}, {"--case", &a.analysis_case}};
     const std::pair<const char*, const std::string*> outputs[] = {
-        {"-o", &a.output}, {"--warnings", &a.warnings}, {"--vtk", &a.vtk}, {"--mesh", &a.mesh}};
+        {"-o", &a.output},           {"--warnings", &a.warnings},          {"--vtk", &a.vtk},
+        {"--mesh", &a.mesh},         {"--summary", &a.summary},            {"--inspect-mesh", &a.inspect_mesh},
+        {"--export-statistics", &a.statistics}, {"--export-settings", &a.export_settings}};
     for (std::size_t i = 0; i < std::size(outputs); ++i) {
         const auto& [name, path] = outputs[i];
-        if (path->empty())
+        if (path->empty() || *path == "-") // "-": the standard output
             continue;
         // -o may be a folder: the file gets its name there (gcode_templates.md, rule 15).
         const bool folder = i == 0 && std::filesystem::is_directory(*path);
@@ -199,7 +309,7 @@ bool outputs_are_safe(const SliceArgs& a, std::ostream& err) {
                 return false;
             }
         for (std::size_t j = 0; j < i; ++j)
-            if (!outputs[j].second->empty() && same_file(*path, *outputs[j].second)) {
+            if (!outputs[j].second->empty() && *outputs[j].second != "-" && same_file(*path, *outputs[j].second)) {
                 err << "error: " << name << " and " << outputs[j].first << " are the same file\n";
                 return false;
             }
@@ -237,6 +347,116 @@ int load_model(const std::string& path, ModelFile& stl, double& seconds, std::os
         return kExitInput;
     }
     seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    return kExitOk;
+}
+
+namespace {
+
+std::string lower(std::string_view text) {
+    std::string out(text);
+    for (char& c : out)
+        c = char(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+// One catalog entry by its full name ("Vendor Model", any case), else the
+// only one holding every word; null with the reason otherwise.
+template <class Entry>
+const Entry* pick_entry(const std::vector<Entry>& all, const std::vector<const Entry*>& found,
+                        const std::string& query, const char* what, std::string& reason,
+                        std::string (*name_of)(const Entry&)) {
+    for (const Entry& e : all)
+        if (lower(name_of(e)) == lower(query))
+            return &e;
+    if (found.size() == 1)
+        return found.front();
+    if (found.empty()) {
+        reason = std::string("no ") + what + " in the catalog is called '" + query + "'";
+    } else {
+        reason = std::string("'") + query + "' names " + std::to_string(found.size()) + " " + what + "s:";
+        for (std::size_t i = 0; i < found.size() && i < 8; ++i)
+            reason += (i ? ", " : " ") + name_of(*found[i]);
+        if (found.size() > 8)
+            reason += "...";
+    }
+    return nullptr;
+}
+
+std::string printer_name(const PrinterModel& p) { return p.vendor + " " + p.model; }
+std::string filament_name(const FilamentModel& f) { return f.vendor + " " + f.name; }
+
+} // namespace
+
+// The settings the engine makes from its catalog (the Android app's request,
+// 2026-11-04): the printer's profile for the nozzle and, when named, the
+// filament's, the rest the defaults; the same document slice --config reads.
+int cmd_profile(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
+    std::string printer, filament, output, nozzle_text, usage;
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        const std::string_view a = args[i];
+        std::string* value = a == "--printer" ? &printer : a == "--filament" ? &filament : a == "--nozzle" ? &nozzle_text
+                             : a == "-o"      ? &output
+                                              : nullptr;
+        if (value && i + 1 < args.size())
+            *value = std::string(args[++i]);
+        else if (usage.empty())
+            usage = value ? "profile: " + std::string(a) + " needs a value" : "profile: unexpected argument '" + std::string(a) + "'";
+    }
+    if (usage.empty() && printer.empty())
+        usage = "profile needs --printer";
+    double nozzle = 0.0;
+    if (usage.empty() && !nozzle_text.empty()) {
+        const auto [end, ec] = chars_to(nozzle_text.data(), nozzle_text.data() + nozzle_text.size(), nozzle);
+        if (ec != std::errc() || end != nozzle_text.data() + nozzle_text.size() || !(nozzle > 0.0))
+            usage = "profile: --nozzle needs a diameter in mm";
+    }
+    if (!usage.empty()) {
+        err << "error: " << usage << "\n" << kUsage;
+        return kExitUsage;
+    }
+    const Catalog& catalog = builtin_catalog();
+    std::string reason;
+    const PrinterModel* p = pick_entry(catalog.printers, find_printers(catalog, printer), printer, "printer", reason, printer_name);
+    if (!p) {
+        err << "error: " << reason << "\n";
+        return kExitInput;
+    }
+    if (nozzle_text.empty()) {
+        nozzle = p->nozzles.empty() ? 0.4 : p->nozzles.front();
+    } else if (!p->nozzles.empty() &&
+               std::none_of(p->nozzles.begin(), p->nozzles.end(), [&](double n) { return std::abs(n - nozzle) < 1e-6; })) {
+        std::string offered;
+        for (double n : p->nozzles) {
+            char buf[32];
+            const auto [end, ec] = std::to_chars(buf, buf + sizeof buf, n);
+            offered += (offered.empty() ? "" : ", ") + std::string(buf, ec == std::errc() ? end : buf);
+        }
+        err << "error: the " << printer_name(*p) << " takes nozzles of " << offered << " mm, not " << nozzle_text << "\n";
+        return kExitInput;
+    }
+    Settings settings = with_profile(Settings{}, ProfileKind::Printer, printer_profile(*p, nozzle).settings);
+    if (!filament.empty()) {
+        const FilamentModel* f =
+            pick_entry(catalog.filaments, find_filaments(catalog, filament), filament, "filament", reason, filament_name);
+        if (!f) {
+            err << "error: " << reason << "\n";
+            return kExitInput;
+        }
+        if (!filament_offered(*f, settings.feedstock, {p->filament_diameter})) {
+            err << "error: " << filament_name(*f) << " does not fit the " << printer_name(*p) << " (its filament or feedstock differs)\n";
+            return kExitInput;
+        }
+        settings = with_profile(settings, ProfileKind::Filament, filament_profile(*f).settings);
+    }
+    const std::string json = settings_json(settings);
+    if (output.empty() || output == "-") {
+        out << json;
+        return kExitOk;
+    }
+    if (!write_file(output, [&](std::ostream& f) { f << json; })) {
+        err << "error: cannot write '" << output << "'\n";
+        return kExitInput;
+    }
     return kExitOk;
 }
 
@@ -324,13 +544,15 @@ int cmd_info(std::span<const std::string_view> args, std::ostream& out, std::ost
 // cut or a split made, side by side. False, with the problem in err, when
 // pieces and copies are both asked for.
 bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copies, const std::string& name,
-                 std::vector<MeshObject>& objects, std::ostream& err, TriangleMesh* negative = nullptr) {
+                 std::vector<MeshObject>& objects, std::ostream& err, TriangleMesh* negative = nullptr,
+                 bool along_y = false) {
     if (negative && negative->empty())
         negative = nullptr;
     // The negative volumes (model_tools.md, rule 2) follow the part; not yet
     // through a cut, a split or copies.
     if (negative && (copies > 1 || settings.transform_cut_z || settings.transform_split)) {
-        err << "error: negative volumes do not go with --copies, transform.cut_z or transform.split yet\n";
+        err << "error: negative volumes and support blockers or enforcers do not go with --copies, transform.cut_z or "
+               "transform.split yet\n";
         return false;
     }
     std::vector<TriangleMesh> parts = apply_transform(std::move(mesh), settings, negative);
@@ -354,11 +576,11 @@ bool place_model(TriangleMesh& mesh, const Settings& settings, std::size_t copie
     }
     mesh = parts.empty() ? TriangleMesh{} : std::move(parts.front());
     if (copies > 1) {
-        if (const std::size_t fit = copies_that_fit(mesh, copies, settings); fit < copies) {
+        if (const std::size_t fit = copies_that_fit(mesh, copies, settings, along_y); fit < copies) {
             err << "error: " << copies << " copies do not fit on the bed (machine.bed): " << fit << " fit\n";
             return false;
         }
-        mesh = place_copies(mesh, copies, settings, name, &objects);
+        mesh = place_copies(mesh, copies, settings, name, &objects, along_y);
     } else {
         place_on_bed(mesh, settings, negative);
         objects.push_back({name, 0, mesh.triangle_count(), 0, 0});
@@ -417,6 +639,62 @@ int slice_resin_file(const SliceArgs& args, Settings settings, ModelFile& model,
     return kExitOk;
 }
 
+// A text to a file, or to the standard output for "-".
+bool write_text_or_stdout(const std::string& path, const std::string& text, std::ostream& out) {
+    if (path == "-") {
+        out << text;
+        return true;
+    }
+    if (!write_file(path, [&](std::ostream& f) { f << text; }))
+        return false;
+    out << "wrote " << path << "\n";
+    return true;
+}
+
+// --export-statistics (orca_2_5.md, rule 27): for each plate (one here), the
+// time, the filament by extruder (mm, cm3, g, cost) and the layers, from the
+// G-code's closing summary.
+std::string gcode_statistics_json(const std::filesystem::path& gcode, std::size_t layers) {
+    std::ifstream in(gcode, std::ios::binary);
+    std::string line, time;
+    std::map<std::string, std::string> lists;
+    const std::pair<const char*, const char*> keys[] = {{"; filament used [mm] = ", "mm"},
+                                                        {"; filament used [cm3] = ", "cm3"},
+                                                        {"; filament used [g] = ", "g"},
+                                                        {"; filament cost = ", "cost"}};
+    while (std::getline(in, line)) {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        if (line.starts_with("; estimated printing time = "))
+            time = line.substr(std::strlen("; estimated printing time = "));
+        for (const auto& [key, name] : keys)
+            if (line.starts_with(key))
+                lists[name] = line.substr(std::strlen(key));
+    }
+    nlohmann::json filament = nlohmann::json::array();
+    std::map<std::string, std::vector<double>> values;
+    std::size_t extruders = 0;
+    for (const auto& [name, text] : lists) {
+        std::stringstream s(text);
+        for (std::string item; std::getline(s, item, ',');)
+            values[name].push_back(std::atof(item.c_str()));
+        extruders = std::max(extruders, values[name].size());
+    }
+    for (std::size_t e = 0; e < extruders; ++e) {
+        nlohmann::json one{{"extruder", e + 1}};
+        for (const char* name : {"mm", "cm3", "g", "cost"})
+            if (values.count(name) && e < values[name].size())
+                one[name] = values[name][e];
+        filament.push_back(one);
+    }
+    const nlohmann::json plate{{"plate", 1},
+                               {"print_time", time},
+                               {"print_seconds", parse_duration(time)},
+                               {"layers", layers},
+                               {"filament", filament}};
+    return nlohmann::json{{"plates", nlohmann::json::array({plate})}}.dump(2);
+}
+
 int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::ostream& err) {
     const std::optional<SliceArgs> parsed = parse_slice_args(args, err);
     if (!parsed) {
@@ -462,12 +740,61 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
     if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
         return rc;
     out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+    // A face on the bed (orca_2_5.md, rule 25), before the transforms and the placement.
+    if (parsed->ground != SliceArgs::Ground::None) {
+        if (!stl.negative.empty() || !stl.support_blockers.empty() || !stl.support_enforcers.empty()) {
+            err << "error: --ground-* does not go with negative volumes or support blockers and enforcers yet\n";
+            return kExitUsage;
+        }
+        const std::optional<std::array<double, 3>> normal =
+            parsed->ground == SliceArgs::Ground::Largest ? largest_flat_face(stl.mesh)
+            : parsed->ground == SliceArgs::Ground::Point ? face_through(stl.mesh, parsed->ground_value)
+                                                         : std::optional<std::array<double, 3>>(parsed->ground_value);
+        if (!normal) {
+            err << "error: " << (parsed->ground == SliceArgs::Ground::Point ? "no face of the model passes through that point"
+                                                                           : "the model has no face")
+                << "\n";
+            return kExitModel;
+        }
+        stl.mesh = laid_on_face(stl.mesh, *normal);
+    }
+    // The mesh's summary (rule 26).
+    if (!parsed->inspect_mesh.empty()) {
+        const std::string json = inspection_json(inspect_mesh(stl.mesh));
+        if (!write_text_or_stdout(parsed->inspect_mesh, json + "\n", out)) {
+            err << "error: cannot write '" << parsed->inspect_mesh << "'\n";
+            return kExitInput;
+        }
+    }
+    // The resolved settings (rule 27).
+    if (!parsed->export_settings.empty() &&
+        !write_text_or_stdout(parsed->export_settings, settings_json(settings) + "\n", out)) {
+        err << "error: cannot write '" << parsed->export_settings << "'\n";
+        return kExitInput;
+    }
     // The copies, each an object of the plate (placement.md, rule 2;
     // sequential.md, rule 2), or the model alone.
     std::vector<MeshObject> objects;
     const std::string file_name = std::filesystem::path(parsed->model).filename().string();
-    if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &stl.negative))
+    // The negative volumes and the support blockers and enforcers follow the
+    // part together, then are taken apart again (their triangles in order).
+    const std::size_t negatives = stl.negative.triangle_count(), blockers = stl.support_blockers.triangle_count();
+    TriangleMesh followers = stl.negative;
+    for (const TriangleMesh* more : {&stl.support_blockers, &stl.support_enforcers})
+        for (std::size_t t = 0; t < more->triangle_count(); ++t)
+            followers.add_triangle(more->corner(t, 0), more->corner(t, 1), more->corner(t, 2));
+    if (!place_model(stl.mesh, settings, parsed->copies, file_name, objects, err, &followers, parsed->align_y))
         return kExitUsage;
+    const auto piece = [&](std::size_t from, std::size_t to) {
+        TriangleMesh m;
+        for (std::size_t t = from; t < to && t < followers.triangle_count(); ++t)
+            m.add_triangle(followers.corner(t, 0), followers.corner(t, 1), followers.corner(t, 2));
+        return m;
+    };
+    stl.negative = piece(0, negatives);
+    SupportVolumes support_volumes;
+    support_volumes.blockers = weld_exact(piece(negatives, negatives + blockers));
+    support_volumes.enforcers = weld_exact(piece(negatives + blockers, followers.triangle_count()));
 
     const auto start = std::chrono::steady_clock::now();
     const IndexedMesh mesh = weld_exact(stl.mesh);
@@ -515,13 +842,15 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         warnings.push_back({"speed_fallback", -1, 0.0,
                             "the printer's profile gives no speed for " + fallback + ": a stock Ender-3's are used", 0.0});
     try {
-        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut);
+        sliced = slice_model(mesh, settings, gpu.get(), &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut,
+                             nullptr, &support_volumes);
     } catch (const std::runtime_error& e) {
         if (!gpu)
             throw;
         err << "warning: GPU failed (" << e.what() << "), slicing on the CPU\n";
         warnings.push_back({"gpu_fallback", -1, 0.0, std::string("the GPU failed (") + e.what() + "), sliced on the CPU", 0.0});
-        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut);
+        sliced = slice_model(mesh, settings, nullptr, &stress, nullptr, objects.empty() ? nullptr : &objects, nullptr, cut,
+                             nullptr, &support_volumes);
     }
     const double slice_ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
     if (const std::string reason = unprintable_reason(sliced, settings); !reason.empty()) {
@@ -577,7 +906,8 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         err << "error: " << e.what() << "\n";
         return kExitInput;
     }
-    const GcodeExport exported = export_gcode(target, sliced, settings, &warnings);
+    const std::vector<GcodeThumbnail> thumbnails = gcode_thumbnails(stl.mesh, settings, &warnings);
+    const GcodeExport exported = export_gcode(target, sliced, settings, &warnings, thumbnails);
     if (!exported.written) {
         err << "error: " << exported.error << "\n";
         for (const GcodeProblem& p : exported.check.problems)
@@ -629,6 +959,103 @@ int cmd_slice(std::span<const std::string_view> args, std::ostream& out, std::os
         }
         out << "wrote " << parsed->warnings << "\n";
     }
+    // --strict (orca_2_5.md, rule 24): a warning is an error; no G-code is
+    // kept, the warnings file lists them all. Information is not a warning.
+    if (parsed->strict) {
+        const auto first = std::find_if(warnings.begin(), warnings.end(),
+                                        [](const Warning& w) { return w.severity != "information" && w.severity != "info"; });
+        if (first != warnings.end()) {
+            std::error_code ignored;
+            std::filesystem::remove(target, ignored);
+            err << "error: --strict: " << first->message << " (" << first->kind << ")\n";
+            return kExitModel;
+        }
+    }
+    // The statistics of the plate (rule 27).
+    if (!parsed->statistics.empty()) {
+        const std::string json = gcode_statistics_json(target, sliced.layers.size());
+        if (!write_text_or_stdout(parsed->statistics, json + "\n", out)) {
+            err << "error: cannot write '" << parsed->statistics << "'\n";
+            return kExitInput;
+        }
+    }
+    if (!parsed->summary.empty()) {
+        const std::string summary = slice_summary_json(target, exported.check.stats.filament, sliced.layers.size(),
+                                                       settings.filament_density > 0.0);
+        if (!write_file(parsed->summary, [&](std::ostream& f) { f << summary << "\n"; })) {
+            err << "error: cannot write '" << parsed->summary << "'\n";
+            return kExitInput;
+        }
+        out << "wrote " << parsed->summary << "\n";
+    }
+    return kExitOk;
+}
+
+// The settings, case and placed mesh of `analyze <project>`: the project's
+// settings (or --config's) with the part's values changed by hand, and its
+// conditions as the case (FM25), or --case's. The part is the first with
+// Engineering conditions; with --case and none, the first part.
+int project_analysis(const SliceArgs& a, Settings& settings, AnalysisCase& analysis, TriangleMesh& mesh,
+                     std::array<double, 12>& to_part, std::ostream& out, std::ostream& err) {
+    Project project;
+    try {
+        project = load_project(a.model);
+    } catch (const std::exception& e) {
+        err << "error: " << a.model << ": " << e.what() << "\n";
+        return kExitInput;
+    }
+    for (const std::string& notice : project.notices)
+        err << "warning: " << notice << "\n";
+    auto it = std::find_if(project.models.begin(), project.models.end(), [](const ProjectModel& m) {
+        return std::any_of(m.engineering.conditions.begin(), m.engineering.conditions.end(),
+                           [](const EngineeringCondition& c) { return !c.hidden; });
+    });
+    if (it == project.models.end() && !a.analysis_case.empty() && !project.models.empty())
+        it = project.models.begin();
+    if (it == project.models.end()) {
+        err << "error: no part of the project has Engineering conditions (mark them in the Engineering mode, or "
+               "give --case)\n";
+        return kExitInput;
+    }
+    if (a.config.empty()) {
+        settings = std::move(project.settings);
+        for (const std::string& key : fill_missing_speeds(settings))
+            err << "warning: the printer's profile gives no speed for " << key << ": a stock Ender-3's is used\n";
+    } else {
+        try {
+            settings = load_settings(a.config);
+        } catch (const SettingsError& e) {
+            err << "error: " << a.config << ": " << e.what() << "\n";
+            return kExitInput;
+        }
+    }
+    // The part where it is on the bed: its mesh turned and moved by its
+    // build transform, and its conditions with it.
+    PlacedPart part = placed_part(*it);
+    mesh = std::move(part.mesh);
+    ProjectEngineering placed = std::move(part.engineering);
+    to_part = part.to_part;
+    std::vector<std::string> notes;
+    apply_engineering_overrides(settings, it->engineering, notes);
+    if (a.analysis_case.empty()) {
+        analysis = engineering_analysis_case(placed, mesh, {}, notes, settings.filament_type, settings.layer_height,
+                                             print_conditions(settings, placed));
+    } else {
+        try {
+            analysis = load_analysis_case(a.analysis_case);
+        } catch (const SettingsError& e) {
+            err << "error: " << a.analysis_case << ": " << e.what() << "\n";
+            return kExitInput;
+        }
+    }
+    for (const std::string& note : notes)
+        err << "warning: " << note << "\n";
+    if (a.analysis_case.empty() && (analysis.fixtures.empty() || analysis.loads.empty())) {
+        err << "error: " << it->name << ": the analysis needs a fixed point or zone and a force\n";
+        return kExitInput;
+    }
+    out << "part: " << it->name << ", " << mesh.triangle_count() << " triangles, " << analysis.fixtures.size()
+        << " fixtures, " << analysis.loads.size() << " loads\n";
     return kExitOk;
 }
 
@@ -642,24 +1069,40 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
         return kExitInput;
     Settings settings;
     AnalysisCase analysis;
-    try {
-        settings = load_settings(parsed->config);
-    } catch (const SettingsError& e) {
-        err << "error: " << parsed->config << ": " << e.what() << "\n";
-        return kExitInput;
-    }
-    try {
-        analysis = load_analysis_case(parsed->analysis_case);
-    } catch (const SettingsError& e) {
-        err << "error: " << parsed->analysis_case << ": " << e.what() << "\n";
-        return kExitInput;
-    }
     ModelFile stl;
-    double seconds = 0.0;
-    if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
-        return rc;
-    out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
-    place_on_bed(stl.mesh, settings);
+    // From the analysis (on the bed) back to the part's own coordinates, for
+    // the report's points: a project's build transform undone, or what
+    // placement.arrange moved the model file.
+    std::array<double, 12> to_part{1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};
+    if (parsed->project) {
+        // A project: its settings (or --config's), and the first part with
+        // Engineering conditions, where it is on the bed.
+        if (int rc = project_analysis(*parsed, settings, analysis, stl.mesh, to_part, out, err); rc != kExitOk)
+            return rc;
+    } else {
+        try {
+            settings = load_settings(parsed->config);
+        } catch (const SettingsError& e) {
+            err << "error: " << parsed->config << ": " << e.what() << "\n";
+            return kExitInput;
+        }
+        try {
+            analysis = load_analysis_case(parsed->analysis_case);
+        } catch (const SettingsError& e) {
+            err << "error: " << parsed->analysis_case << ": " << e.what() << "\n";
+            return kExitInput;
+        }
+        double seconds = 0.0;
+        if (int rc = load_model(parsed->model, stl, seconds, err); rc != kExitOk)
+            return rc;
+        out << "read " << stl.mesh.triangle_count() << " triangles in " << seconds * 1000.0 << " ms\n";
+        const BoundingBox own = stl.mesh.bounding_box();
+        place_on_bed(stl.mesh, settings); // in X and Y only
+        const BoundingBox placed = stl.mesh.bounding_box();
+        to_part[9] = double(own.min.x) - double(placed.min.x);
+        to_part[10] = double(own.min.y) - double(placed.min.y);
+        to_part[11] = double(own.min.z) - double(placed.min.z);
+    }
     const IndexedMesh mesh = weld_exact(stl.mesh);
     if (const std::string reason = unprintable_reason(mesh, settings); !reason.empty()) {
         err << "error: " << reason << "\n";
@@ -727,7 +1170,7 @@ int cmd_analyze(std::span<const std::string_view> args, std::ostream& out, std::
     for (const AnalysisWarning& w : report.warnings)
         err << "warning: " << w.message << "\n";
 
-    if (!write_file(parsed->output, [&](std::ostream& json) { json << analysis_json(report, analysis); })) {
+    if (!write_file(parsed->output, [&](std::ostream& json) { json << analysis_json(report, analysis, to_part); })) {
         err << "error: cannot write '" << parsed->output << "'\n";
         return kExitInput;
     }
@@ -766,13 +1209,51 @@ int run_cli(std::span<const std::string_view> args, std::ostream& out, std::ostr
         out << "tisma-engine " << TISMA_VERSION << "\n";
         return kExitOk;
     }
+    // --threads <n> on any command (cloud.md, rule 19d): at most n threads of
+    // work, so a node shares its cores between jobs; without it, all.
+    std::vector<std::string_view> kept;
+    std::optional<tbb::global_control> threads;
+    for (std::size_t i = 0; i < rest.size(); ++i) {
+        if (rest[i] != "--threads") {
+            kept.push_back(rest[i]);
+            continue;
+        }
+        int n = 0;
+        const std::string_view value = i + 1 < rest.size() ? rest[i + 1] : std::string_view();
+        const auto [end, ec] = chars_to(value.data(), value.data() + value.size(), n);
+        if (value.empty() || ec != std::errc() || end != value.data() + value.size() || n < 1 || n > 4096) {
+            err << "error: --threads needs a whole number from 1\n" << kUsage;
+            return kExitUsage;
+        }
+        threads.emplace(tbb::global_control::max_allowed_parallelism, std::size_t(n));
+        ++i;
+    }
+    const std::span<const std::string_view> args_left(kept);
     try {
         if (command == "slice")
-            return cmd_slice(rest, out, err);
+            return node_slice_wanted(args_left) ? cmd_slice_project(args_left, out, err) : cmd_slice(args_left, out, err);
         if (command == "info")
-            return cmd_info(rest, out, err);
+            return cmd_info(args_left, out, err);
+        if (command == "profile")
+            return std::find(args_left.begin(), args_left.end(), "--pack") != args_left.end()
+                       ? cmd_pack_profile(args_left, out, err)
+                       : cmd_profile(args_left, out, err);
+        if (command == "pack")
+            return cmd_pack(args_left, out, err);
+        if (command == "library")
+            return cmd_library(args_left, out, err);
+        if (command == "part")
+            return cmd_part(args_left, out, err);
+        if (command == "calibration")
+            return cmd_calibration(args_left, out, err);
+        if (command == "design")
+            return cmd_design(args_left, out, err);
+        if (command == "aero")
+            return cmd_aero_project(args_left, out, err);
+        if (command == "orient")
+            return cmd_orient_project(args_left, out, err);
         if (command == "analyze")
-            return cmd_analyze(rest, out, err);
+            return node_analyze_wanted(args_left) ? cmd_analyze_project(args_left, out, err) : cmd_analyze(args_left, out, err);
     } catch (const std::exception& e) {
         // What the commands do not catch is the engine's own fault: said, not a crash.
         err << "error: internal: " << e.what() << "\n";

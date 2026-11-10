@@ -3,6 +3,7 @@
 
 #include "support/tree.hpp"
 
+#include "geom/distance.hpp"
 #include "infill/rectilinear.hpp"
 
 #include <oneapi/tbb/parallel_for.h>
@@ -462,7 +463,9 @@ std::vector<Polygons> tree_support_areas(const std::vector<Polygons>& regions,
         Polygons area = Clipper2Lib::Union(discs, Clipper2Lib::FillRule::NonZero);
         if (l < regions.size() && !regions[l].empty())
             area = Clipper2Lib::Difference(area, offset(regions[l], params.xy_gap), Clipper2Lib::FillRule::NonZero);
-        out[l] = std::move(area);
+        // An eighth of a bead is finer than any line of it: fewer points for
+        // every offset of the fill, and in the G-code.
+        out[l] = Clipper2Lib::Union(simplify(area, params.bead / 8.0), Clipper2Lib::FillRule::NonZero);
     });
     return out;
 }
@@ -483,7 +486,9 @@ TreeFill tree_fill(const Polygons& area, const Polygons& above, double bead, dou
     Polygons inside = offset(branches, -bead);
     // Where a disc of double_wall fits (a round branch that wide), a second wall.
     if (double_wall > 0.0 && !inside.empty()) {
-        const Polygons wide = offset(offset(branches, -double_wall / 2.0), double_wall / 2.0);
+        // No core that wide, no second wall: the growing back is skipped.
+        const Polygons core = offset(branches, -double_wall / 2.0);
+        const Polygons wide = core.empty() ? Polygons{} : offset(core, double_wall / 2.0);
         if (!wide.empty()) {
             for (const Polygon& ring : offset(wide, -bead * 1.5))
                 if (ring.size() > 2)
@@ -495,6 +500,125 @@ TreeFill tree_fill(const Polygons& area, const Polygons& above, double bead, dou
     for (Toolpath& t : rectilinear_fill(inside, spacing, angle, bead, true))
         out.support.push_back(std::move(t));
     return out;
+}
+
+namespace {
+
+// A quarter of a bead a pixel: the walls' places within an eighth of a bead.
+constexpr int kTreePixelsPerBead = 4;
+
+} // namespace
+
+std::vector<BitGrid> tree_branch_grids(const Polygons& area, const Polygons& above, double bead) {
+    const Polygons branches = above.empty() ? area : Clipper2Lib::Difference(area, above, Clipper2Lib::FillRule::NonZero);
+    std::vector<BitGrid> out;
+    if (branches.empty())
+        return out;
+    // Islands: each outer ring with the holes inside its box (Clipper gives
+    // outers counter-clockwise, holes clockwise).
+    std::vector<Polygons> islands;
+    std::vector<Clipper2Lib::Rect64> boxes;
+    for (const Polygon& ring : branches)
+        if (Clipper2Lib::Area(ring) > 0.0) {
+            islands.push_back({ring});
+            boxes.push_back(Clipper2Lib::GetBounds(ring));
+        }
+    for (const Polygon& ring : branches)
+        if (Clipper2Lib::Area(ring) < 0.0) {
+            const Clipper2Lib::Rect64 r = Clipper2Lib::GetBounds(ring);
+            for (std::size_t i = 0; i < boxes.size(); ++i)
+                if (boxes[i].left <= r.left && boxes[i].right >= r.right && boxes[i].top <= r.top &&
+                    boxes[i].bottom >= r.bottom && Clipper2Lib::PointInPolygon(ring.front(), islands[i].front()) !=
+                                                       Clipper2Lib::PointInPolygonResult::IsOutside) {
+                    islands[i].push_back(ring);
+                    break;
+                }
+        }
+    const std::int64_t pixel = std::max<std::int64_t>(to_units(bead / kTreePixelsPerBead), 1);
+    const int margin = 2;
+    for (std::size_t i = 0; i < islands.size(); ++i) {
+        const Clipper2Lib::Rect64& box = boxes[i];
+        BitGrid grid(box.left - margin * pixel, box.top - margin * pixel, pixel,
+                     int((box.right - box.left) / pixel) + 2 * margin + 1,
+                     int((box.bottom - box.top) / pixel) + 2 * margin + 1);
+        grid.fill(islands[i]);
+        out.push_back(std::move(grid));
+    }
+    return out;
+}
+
+namespace {
+
+// A level of a field without most of its points (one a pixel): simplified to
+// a twelfth of a bead. An eighth, as the areas are, would cut a thin
+// branch's wall by a tenth.
+Polygons level(const BitGrid& grid, const std::vector<float>& squared, double pixels, double bead) {
+    return simplify(distance_level(grid, squared, pixels), bead / 12.0);
+}
+
+} // namespace
+
+TreeFieldWalls tree_field_walls(std::span<const BitGrid> grids, std::span<const std::vector<float>> squared, double bead,
+                                double double_wall) {
+    TreeFieldWalls out;
+    for (std::size_t i = 0; i < grids.size() && i < squared.size(); ++i) {
+        const BitGrid& grid = grids[i];
+        if (grid.width() == 0)
+            continue;
+        const double px = to_mm(grid.pixel());
+        for (const Polygon& ring : level(grid, squared[i], bead / 2.0 / px, bead))
+            if (ring.size() > 2)
+                out.walls.push_back(ring_path(ring, bead));
+        Polygons island = level(grid, squared[i], bead / px, bead);
+        // A disc of double_wall fits somewhere (the distance reaches its
+        // radius, a pixel's half in hand): a second wall.
+        if (double_wall > 0.0 && !island.empty() && !out.wide) {
+            const float r = float(double_wall / 2.0 / px + 0.5);
+            out.wide = std::any_of(squared[i].begin(), squared[i].end(), [&](float d) { return d >= r * r; });
+        }
+        out.inside.insert(out.inside.end(), island.begin(), island.end()); // islands apart: no union needed
+    }
+    return out;
+}
+
+TreeFill tree_field_finish(const Polygons& area, const Polygons& above, TreeFieldWalls walls, double bead,
+                           double spacing, double double_wall, double angle) {
+    TreeFill out;
+    if (area.empty())
+        return out;
+    // The interface as in tree_fill: dense lines, no wall (rule 17).
+    const Polygons dense = above.empty() ? Polygons{} : Clipper2Lib::Intersect(area, above, Clipper2Lib::FillRule::NonZero);
+    if (!dense.empty())
+        out.interface = rectilinear_fill(dense, bead, angle + 45.0, bead, true);
+    out.support = std::move(walls.walls);
+    Polygons inside = std::move(walls.inside);
+    // The second wall as tree_fill makes it (an opening of the branches by
+    // offsets), only on the layers where the field found a branch that wide:
+    // from bits it came out up to a tenth short where two branches meet.
+    if (walls.wide && !inside.empty()) {
+        const Polygons branches = dense.empty() ? area : Clipper2Lib::Difference(area, above, Clipper2Lib::FillRule::NonZero);
+        const Polygons core = offset(branches, -double_wall / 2.0);
+        const Polygons wide = core.empty() ? Polygons{} : offset(core, double_wall / 2.0);
+        if (!wide.empty()) {
+            for (const Polygon& ring : offset(wide, -bead * 1.5))
+                if (ring.size() > 2)
+                    out.support.push_back(ring_path(ring, bead));
+            inside = Clipper2Lib::Union(Clipper2Lib::Difference(inside, offset(wide, -bead), Clipper2Lib::FillRule::NonZero),
+                                        offset(wide, -bead * 2.0), Clipper2Lib::FillRule::NonZero);
+        }
+    }
+    for (Toolpath& t : rectilinear_fill(inside, spacing, angle, bead, true))
+        out.support.push_back(std::move(t));
+    return out;
+}
+
+TreeFill tree_fill_field(const Polygons& area, const Polygons& above, std::span<const BitGrid> grids,
+                         std::span<const std::vector<float>> squared, double bead, double spacing, double double_wall,
+                         double angle) {
+    if (area.empty())
+        return {};
+    return tree_field_finish(area, above, tree_field_walls(grids, squared, bead, double_wall), bead, spacing,
+                             double_wall, angle);
 }
 
 } // namespace tisma

@@ -1,4 +1,5 @@
 #include "device/gcode_host.hpp"
+#include "io/number.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -30,7 +31,7 @@ std::optional<double> number_at(std::string_view line, std::size_t& at) {
     const char* begin = line.data() + at;
     const char* end = line.data() + line.size();
     double v = 0.0;
-    const auto r = std::from_chars(begin, end, v);
+    const auto r = chars_to(begin, end, v);
     if (r.ec != std::errc() || r.ptr == begin)
         return std::nullopt;
     at = std::size_t(r.ptr - line.data());
@@ -240,6 +241,10 @@ std::optional<std::string> GcodeHost::read_line(std::chrono::milliseconds timeou
 }
 
 void GcodeHost::handle_report(std::string_view line) {
+    if (capture_ && !parse_temperatures(line)) {
+        capture_->append(line);
+        capture_->push_back('\n');
+    }
     if (const std::optional<Temperatures> t = parse_temperatures(line)) {
         std::lock_guard lock(mutex_);
         if (t->nozzle)
@@ -380,7 +385,11 @@ bool GcodeHost::handshake() {
         }
     }
     line_number_ = 1;
-    if (send_line("M115") != Reply::Ok)
+    std::string m115, m503;
+    capture_ = &m115;
+    const Reply identified = send_line("M115");
+    capture_ = nullptr;
+    if (identified != Reply::Ok)
         return false;
     unknown_command_ = false;
     if (send_line("M155 S2") != Reply::Ok) // temperatures by themselves, every 2 s
@@ -388,6 +397,20 @@ bool GcodeHost::handshake() {
     auto_report_ = !unknown_command_;
     if (send_line("M105") != Reply::Ok) // the temperatures now, not at the first report
         return false;
+    // The limits in use, for the profile's empty values (printer_connections.md,
+    // «Leer los límites de la impresora», rule 2). A firmware without M503 says
+    // it does not know it: nothing is kept.
+    unknown_command_ = false;
+    capture_ = &m503;
+    const Reply limits = send_line("M503");
+    capture_ = nullptr;
+    if (limits == Reply::Gone)
+        return false;
+    {
+        std::lock_guard lock(mutex_);
+        status_.m115 = std::move(m115);
+        status_.m503 = unknown_command_ ? std::string() : std::move(m503);
+    }
     last_temperatures_ = std::chrono::steady_clock::now();
     return true;
 }

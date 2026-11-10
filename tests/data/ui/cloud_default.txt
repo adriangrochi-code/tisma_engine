@@ -1,0 +1,3 @@
+# Without a saved server or --cloud-server, the server field holds Tisma
+# Cloud's own (cloud.md, rule 1). Nothing is asked of it here.
+expect-cloud server https://tismaservidores.net

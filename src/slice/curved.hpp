@@ -38,6 +38,7 @@ struct CurvedField {
     double flat_below = 0.6, ramp_height = 5.0;
     bool flat_top = false;
     double radius = 0.0;        // how far from the centre the nozzle may go (the bed's corners), mm
+    double reach = 0.0;         // the analytic cone is level past this radius (the part's box), mm; 0: no limit
     // Top faces (nonplanar_modes.md, rules 14 to 18): h on a grid of nx by
     // ny nodes `cell` mm apart from (grid_x, grid_y), bilinear between and
     // level past its edges, by `scale`; ramped in evenly from flat_below up

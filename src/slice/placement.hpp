@@ -79,13 +79,14 @@ std::array<double, 2> bed_centre(const Settings& settings);
 // placement.spacing between their boxes, at least sequential.clearance_radius
 // in sequential printing, the set centred; else on top of one another where
 // the model is. Each copy, an instance of object 0 named `name`, in `objects`.
+// With along_y, in one column along Y instead (orca_2_5.md, rule 28).
 TriangleMesh place_copies(const TriangleMesh& mesh, std::size_t copies, const Settings& settings, const std::string& name,
-                          std::vector<MeshObject>* objects);
+                          std::vector<MeshObject>* objects, bool along_y = false);
 
 // How many of `copies` place_copies would lay inside the bed's box, all of
 // them when the copies are not arranged on a bed (the spec team's BH8: 100
 // copies said only that a point was outside the bed).
-std::size_t copies_that_fit(const TriangleMesh& mesh, std::size_t copies, const Settings& settings);
+std::size_t copies_that_fit(const TriangleMesh& mesh, std::size_t copies, const Settings& settings, bool along_y = false);
 
 // Several objects in one mesh (model_tools.md, rules 13 and 14): each
 // lowered onto the bed and the set arranged as copies are, with

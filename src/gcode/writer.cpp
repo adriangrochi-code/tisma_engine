@@ -1,6 +1,7 @@
 // G-code output (docs/spec/GCODE_OUTPUT.md). Own design; see PROVENANCE.md.
 
 #include "gcode/writer.hpp"
+#include "io/number.hpp"
 
 #include "gcode/arcs.hpp"
 #include "gcode/cooling.hpp"
@@ -9,6 +10,7 @@
 #include "gcode/order.hpp"
 #include "gcode/print_time.hpp"
 #include "gcode/resolution.hpp"
+#include "gcode/macro_variables.hpp"
 #include "gcode/template.hpp"
 #include "gcode/scarf.hpp"
 #include "gcode/travel.hpp"
@@ -22,6 +24,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <charconv>
 #include <array>
 #include <cstdint>
@@ -56,6 +59,9 @@ namespace {
 // than 0.001 away from one half rounds the same way as the exact value; the
 // rest (near a half, huge, or more than 9 decimals) go to std::to_chars.
 constexpr std::size_t kNumberCapacity = 400; // any finite double with a few decimals
+// A stock Ender-3's Z speed, mm/s (Marlin's example configuration for it), for Z moves
+// when the profile gives no machine.max_feed_z (zigzag_infill.md, rule 7).
+constexpr double kStockZFeed = 5.0;
 std::size_t format_fixed(char* buffer, double v, int decimals) {
     static constexpr double kScale[] = {1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9};
     static constexpr std::uint64_t kDivisor[] = {1,         10,         100,         1000,         10000,
@@ -119,6 +125,88 @@ std::string trimmed(double v, int decimals) {
 std::string fixed_number(double v, int decimals) { return fixed(v, decimals); }
 
 namespace {
+
+// walls.unsupported_last (orca_2_5.md, rule 3): each wall loop's turn, by its
+// index: 0 with the walls; 1 after them, inside out, when nothing of it lies
+// over the layer below (`below`) but it touches a loop that is held (held
+// directly, or through another such loop); 2 after the layer's fills, when it
+// touches nothing held. Own design.
+std::map<int, std::vector<char>> unsupported_turns(const std::map<int, std::vector<Toolpath>, std::greater<int>>& walls,
+                                                   const Polygons& below) {
+    struct Loop {
+        int index;
+        std::size_t k;
+        const Toolpath* t;
+        char turn = 2;
+    };
+    std::vector<Loop> loops;
+    std::map<int, std::vector<char>> turns;
+    for (const auto& [index, paths] : walls) {
+        turns[index].assign(paths.size(), 0);
+        for (std::size_t k = 0; k < paths.size(); ++k)
+            loops.push_back({index, k, &paths[k]});
+    }
+    // Held: some point over the layer below (inside an odd number of its
+    // paths); each path's box first, so most are not walked.
+    std::vector<Clipper2Lib::Rect64> boxes;
+    boxes.reserve(below.size());
+    for (const Polygon& path : below)
+        boxes.push_back(Clipper2Lib::GetBounds(path));
+    const auto over = [&](const Point2d& p) {
+        const Clipper2Lib::Point64 q{to_units(p.x), to_units(p.y)};
+        int inside = 0;
+        for (std::size_t k = 0; k < below.size(); ++k) {
+            const Clipper2Lib::Rect64& b = boxes[k];
+            if (q.x < b.left || q.x > b.right || q.y < b.top || q.y > b.bottom)
+                continue;
+            if (Clipper2Lib::PointInPolygon(q, below[k]) != Clipper2Lib::PointInPolygonResult::IsOutside)
+                ++inside;
+        }
+        return inside % 2 == 1;
+    };
+    bool any_free = false;
+    for (Loop& loop : loops) {
+        bool held = false;
+        for (const ToolpathPoint& p : loop.t->points)
+            if (over(p.p)) {
+                held = true;
+                break;
+            }
+        loop.turn = held ? 0 : 2;
+        any_free = any_free || !held;
+    }
+    if (!any_free)
+        return {};
+    // Two loops touch when some point of one is within their half widths (and
+    // a little) of the other's line.
+    const auto touch = [](const Toolpath& a, const Toolpath& b) {
+        const std::size_t n = b.points.size();
+        for (const ToolpathPoint& p : a.points)
+            for (std::size_t j = 0; j + (b.closed ? 0 : 1) < n; ++j) {
+                const ToolpathPoint& u = b.points[j];
+                const ToolpathPoint& v = b.points[(j + 1) % n];
+                const double dx = v.p.x - u.p.x, dy = v.p.y - u.p.y, l2 = dx * dx + dy * dy;
+                const double t = l2 > 0.0 ? std::clamp(((p.p.x - u.p.x) * dx + (p.p.y - u.p.y) * dy) / l2, 0.0, 1.0) : 0.0;
+                const double d = std::hypot(p.p.x - (u.p.x + t * dx), p.p.y - (u.p.y + t * dy));
+                if (d <= 0.55 * (p.width + u.width) + 1e-6)
+                    return true;
+            }
+        return false;
+    };
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (Loop& loop : loops)
+            if (loop.turn == 2)
+                for (const Loop& other : loops)
+                    if (other.turn != 2 && touch(*loop.t, *other.t)) {
+                        loop.turn = 1, grew = true;
+                        break;
+                    }
+    }
+    for (const Loop& loop : loops)
+        turns[loop.index][loop.k] = loop.turn;
+    return turns;
+}
 
 // The stretches of a wall whose bead lies wholly off the layer below
 // (walls_extra.md, rule 8), by each piece's middle in `hanging`, and of those
@@ -800,6 +888,12 @@ Kinematics kinematics_of(const Settings& s) {
                  s.acceleration,
                  s.travel_acceleration,
                  s.corner_speed};
+    // Klipper's own corners (print_time.md, rule 12): its documented default
+    // minimum_cruise_ratio is 0.5.
+    if (s.flavor == GcodeFlavor::Klipper) {
+        k.klipper = true;
+        k.min_cruise_ratio = 0.5;
+    }
     if (s.limits_usage == LimitsUsage::Ignore)
         return k;
     k.retract_acceleration = s.retract_acceleration;
@@ -839,6 +933,12 @@ public:
         const double r = s.filament_diameter / 2.0;
         filament_area_ = std::numbers::pi * r * r;
         verbose_ = s.verbose_comments;
+        rrf_ = s.flavor == GcodeFlavor::RepRapFirmware;
+        heat_rate_nozzle_ = s.heat_rate_nozzle, heat_rate_bed_ = s.heat_rate_bed;
+        home_time_ = s.home_time, probe_time_ = s.probe_time;
+        // How fast Z may move while extruding (zigzag_infill.md, rule 7): the
+        // machine's limit, or a stock Ender-3's 5 mm/s when the profile gives none.
+        z_limit_ = s.max_feed_z > 0.0 ? s.max_feed_z : kStockZFeed;
         // A silent mode: a second estimate with its limits (gcode_extras.md, rule 7).
         if (s.silent_mode)
             silent_.emplace(kinematics_of(silent_settings(s)));
@@ -885,7 +985,10 @@ public:
               const MmuSwap& mmu) {
         const char* was = type_;
         type("Custom");
+        // A speed of 0 is a step not used (the filament's settings, «no se usa»): skipped.
         const auto push = [&](double amount, double speed, const char* note, std::optional<Point2d> to = std::nullopt) {
+            if (!(speed > 0.0))
+                return;
             e_ = relative_ ? amount : e_ + amount;
             move("G1", to ? std::optional<double>(to->x) : std::nullopt, to ? std::optional<double>(to->y) : std::nullopt,
                  std::nullopt, e_, speed, {}, {}, note);
@@ -911,6 +1014,8 @@ public:
         for (int k = 0; k < mmu.cooling_moves; ++k) {
             const double v = mmu.cooling_moves > 1 ? mmu.cool_from + (mmu.cool_to - mmu.cool_from) * k / (mmu.cooling_moves - 1)
                                                    : mmu.cool_from;
+            if (!(v > 0.0))
+                continue;
             for (const double sign : {1.0, -1.0}) {
                 if (mmu.across) {
                     // The head along the line, as long as the filament's move takes.
@@ -971,7 +1076,10 @@ public:
         double& pulled = pulled_[std::size_t(std::clamp(tool_, 0, int(pulled_.size()) - 1))];
         if (firmware_) {
             retract(0.0);
-            pulled = retracted_ ? retract_ : 0.0;
+            // A G10 still out stays the leaving tool's until its G11, even when
+            // the length is 0 now (a change by height set the one it pulled
+            // with; fuzzer seed 6112026, run 1728).
+            pulled = retracted_ ? std::max(retract_, 1e-6) : 0.0;
         } else {
             const double now = retracted_ ? retracted_amount_ : 0.0;
             if (length > now + 1e-9) {
@@ -1108,6 +1216,144 @@ public:
     void set_flow(double factor) { flow_ = factor; }
     void set_forced_flow(double flow) { forced_flow_ = flow; }
 
+    // What a machine's own G-code does to the print time (print_time.md,
+    // rules 8, 9 and 13): its waits (G4 S seconds, G4 P milliseconds) count,
+    // and the accelerations it sets (M204 S, P and T; Klipper's
+    // SET_VELOCITY_LIMIT ACCEL) hold for the moves after it.
+    // Time that is not printing (print_time.md, rule 14): counted in the
+    // estimate and shown apart.
+    void preparation(double seconds) {
+        if (!(seconds > 0.0))
+            return;
+        time_.dwell(seconds);
+        if (silent_)
+            silent_->dwell(seconds);
+        other_time_ += seconds;
+        preparation_ += seconds;
+    }
+    double preparation_time() const { return preparation_; }
+
+    void machine_gcode(std::string_view lines) {
+        std::size_t at = 0;
+        while (at < lines.size()) {
+            std::size_t end = lines.find('\n', at);
+            if (end == std::string_view::npos)
+                end = lines.size();
+            std::string_view line = lines.substr(at, end - at);
+            at = end + 1;
+            line = line.substr(0, line.find(';'));
+            const std::size_t first = line.find_first_not_of(" \t");
+            if (first == std::string_view::npos)
+                continue;
+            line.remove_prefix(first);
+            // The words after the command: (letter, number).
+            const auto value = [&](std::string_view word_start) -> std::optional<double> {
+                std::size_t k = line.find(word_start);
+                while (k != std::string_view::npos && k > 0 && line[k - 1] != ' ' && line[k - 1] != '\t')
+                    k = line.find(word_start, k + 1);
+                if (k == std::string_view::npos)
+                    return std::nullopt;
+                const std::string number(line.substr(k + word_start.size(), line.find_first_of(" \t\r", k) - k - word_start.size()));
+                char* stop = nullptr;
+                const double v = std::strtod(number.c_str(), &stop);
+                if (number.empty() || stop != number.c_str() + number.size())
+                    return std::nullopt;
+                return v;
+            };
+            const auto command = [&](std::string_view name) {
+                return line.starts_with(name) && (line.size() == name.size() || line[name.size()] == ' ' || line[name.size()] == '\t' || line[name.size()] == '\r');
+            };
+            // Heating to a temperature waited for, from the last one reached
+            // (print_time.md, rule 10): with no rate known, not counted.
+            const auto heat_to = [&](double& now, double target, double rate) {
+                if (target > now && rate > 0.0)
+                    preparation((target - now) / rate);
+                if (target > 0.0)
+                    now = target;
+            };
+            const auto target = [&]() -> std::optional<double> {
+                if (const auto r = value("R"))
+                    return r;
+                return value("S");
+            };
+            if (command("G4") || command("G04")) {
+                double wait = 0.0;
+                if (const auto ms = value("P"))
+                    wait += *ms / 1000.0;
+                if (const auto sec = value("S"))
+                    wait += *sec;
+                preparation(wait);
+            } else if (command("G28")) {
+                preparation(home_time_);
+            } else if (command("G29")) {
+                preparation(probe_time_);
+            } else if (command("M104") || command("M109")) {
+                if (const auto c = target(); c && *c > 0.0) {
+                    nozzle_target_ = *c;
+                    if (command("M109"))
+                        heat_to(nozzle_now_, *c, heat_rate_nozzle_);
+                }
+            } else if (command("M140") || command("M190")) {
+                if (const auto c = target(); c && *c > 0.0) {
+                    bed_target_ = *c;
+                    if (command("M190"))
+                        heat_to(bed_now_, *c, heat_rate_bed_);
+                }
+            } else if (command("M116")) { // RepRapFirmware: every heater
+                heat_to(bed_now_, bed_target_, heat_rate_bed_);
+                heat_to(nozzle_now_, nozzle_target_, heat_rate_nozzle_);
+            } else if (command("TEMPERATURE_WAIT")) { // Klipper
+                if (const auto c = value("MINIMUM="); c && line.find("heater_bed") != std::string_view::npos)
+                    heat_to(bed_now_, *c, heat_rate_bed_);
+                else if (c && line.find("extruder") != std::string_view::npos)
+                    heat_to(nozzle_now_, *c, heat_rate_nozzle_);
+            } else if (command("M204")) {
+                double print = accel_print_, travel = accel_travel_;
+                if (const auto both = value("S"))
+                    print = travel = *both;
+                if (const auto p = value("P"))
+                    print = *p;
+                if (const auto t = value("T"); t && marlin_) // Marlin 1: T is for retractions
+                    travel = *t;
+                if (print > 0.0 && travel > 0.0) {
+                    accel_print_ = print, accel_travel_ = travel;
+                    time_.set_accelerations(print, travel);
+                }
+            } else if (command("SET_VELOCITY_LIMIT")) {
+                if (const auto a = value("ACCEL="); a && *a > 0.0) {
+                    accel_print_ = accel_travel_ = *a;
+                    time_.set_accelerations(*a, *a);
+                }
+                if (const auto v = value("VELOCITY="); v && *v > 0.0)
+                    time_.limits().max_feed[0] = time_.limits().max_feed[1] = *v;
+                if (const auto c = value("SQUARE_CORNER_VELOCITY="); c && *c >= 0.0)
+                    time_.limits().corner_speed = *c;
+                if (const auto r = value("MINIMUM_CRUISE_RATIO="); r && *r >= 0.0 && *r < 1.0)
+                    time_.limits().min_cruise_ratio = *r;
+            } else if (command("M220")) {
+                if (const auto percent = value("S"); percent && *percent > 0.0) {
+                    time_.set_speed_factor(*percent / 100.0);
+                    if (silent_)
+                        silent_->set_speed_factor(*percent / 100.0);
+                }
+            } else if (command("M201") || command("M203") || command("M205") || command("M566")) {
+                // Per axis: M201 accelerations (mm/s2), M203 feeds and M566
+                // jerks (mm/s; mm/min in RepRapFirmware, and always for M566),
+                // M205 jerks (mm/s) and its J the junction deviation (mm).
+                Kinematics& k = time_.limits();
+                const bool per_minute = command("M566") || (command("M203") && rrf_);
+                double* axis = command("M201") ? k.max_accel : command("M203") ? k.max_feed : k.jerk;
+                static constexpr const char* kAxes[4] = {"X", "Y", "Z", "E"};
+                for (int i = 0; i < 4; ++i)
+                    if (const auto v = value(kAxes[i]); v && *v >= 0.0)
+                        axis[i] = per_minute ? *v / 60.0 : *v;
+                if (command("M205"))
+                    if (const auto j = value("J"); j && *j >= 0.0)
+                        k.junction_deviation = *j;
+            }
+        }
+    }
+
     // Lines written as they are (a temperature, the user's G-code of a change),
     // as user G-code; then the type before comes back, so the engine's own
     // moves that follow (a travel that retracts) are not taken for the user's.
@@ -1119,6 +1365,7 @@ public:
         text_ += lines;
         if (lines.back() != '\n')
             text_ += '\n';
+        machine_gcode(lines);
         if (user)
             resync();
         if (before && std::string_view(before) != "Custom")
@@ -1222,6 +1469,7 @@ public:
             text_ += text;
             if (text.back() != '\n')
                 text_ += '\n';
+            machine_gcode(text);
             if (was && std::string_view(was) != "Custom")
                 type(was);
         };
@@ -1503,6 +1751,7 @@ public:
         const double section = !(height_ > 0.0) ? extruded_section(section_, width, height)
                                                 : extruded_section(section_, width, height_) * height / height_;
         feed = melt_feed(feed, width, height);
+        feed = z_limited(feed, length, z_to - z_from);
         const double e = section * length / filament_area_ * flow_ * speed_flow(feed);
         if (bridge_ || tail_)
             other_time_ += length / feed;
@@ -1533,6 +1782,16 @@ public:
         z_now_ = z_to;
     }
 
+    // The feed of a move `length` mm in XY and `dz` in Z, slowed so that Z
+    // goes no faster than z_limit_ (zigzag_infill.md, rule 7, ZI7): the
+    // G-code then asks what the machine does, and the estimate agrees.
+    double z_limited(double feed, double length, double dz) const {
+        const double up = std::abs(dz);
+        if (!(up > 1e-9))
+            return feed;
+        return std::min(feed, z_limit_ * std::hypot(length, up) / up);
+    }
+
     // Coasting (coasting.md, rule 1): a path's end run at its feed with no E;
     // the pressure left in the nozzle lays it. As an extrusion for the
     // layer's time, the slowdown and the wipe that may follow.
@@ -1541,6 +1800,7 @@ public:
         walk(length);
         const double z_to = written(z_value_ - drop_ + to.dz);
         feed = melt_feed(feed, (from.width + to.width) / 2.0, height_);
+        feed = z_limited(feed, length, z_to - z_now_);
         if (bridge_ || tail_)
             other_time_ += length / feed;
         else
@@ -1784,9 +2044,14 @@ private:
         // A tool back from a change: its own extra (multi_extruder.md, rule 5).
         const double extra = tool_back_ ? tool_restart_ : restart_extra_;
         tool_back_ = false;
-        const double back = retracted_amount_ + extra;
+        // A negative extra brings less back, never less than nothing: with
+        // only part of the length retracted (a wipe's), the filament stays
+        // short and no move is written.
+        const double back = std::max(0.0, retracted_amount_ + extra);
+        count_e(back - retracted_amount_);
+        if (back <= 1e-9)
+            return;
         e_ = relative_ ? back : e_ + back;
-        count_e(extra);
         move("G1", std::nullopt, std::nullopt, std::nullopt, e_, feed, {}, {}, "unretract");
         other_time_ += back / feed;
     }
@@ -2054,6 +2319,7 @@ private:
     double overhang_ = -1.0;         // the current paths' own fan
     bool weak_ = false;
     double filament_area_ = 1.0;
+    double z_limit_ = 5.0; // mm/s Z may move while extruding
     double e_scale_ = 1.0; // the E written per mm of filament
     double retract_, retract_feed_, lift_, min_travel_;
     double z_feed_; // mm/s of the moves in Z (speeds_accels.md, rule 4); 0: the travel's
@@ -2061,6 +2327,10 @@ private:
     // printing and T for travels, or M204 S for both; as last set.
     bool marlin_;
     double accel_print_, accel_travel_;
+    bool rrf_ = false; // RepRapFirmware: M203 in mm/min
+    // The preparation (print_time.md, rules 10 and 14): heaters from 25 C.
+    double heat_rate_nozzle_ = 0.0, heat_rate_bed_ = 0.0, home_time_ = 0.0, probe_time_ = 0.0;
+    double nozzle_now_ = 25.0, bed_now_ = 25.0, nozzle_target_ = 0.0, bed_target_ = 0.0, preparation_ = 0.0;
     double travel_accel_, short_travel_accel_; // asked for travels; 0: none
     double retracted_amount_ = 0.0; // the E the last retraction pulled back (none with G10)
     // retraction_travel.md: the push back's feed (0: the retraction's) and
@@ -2131,7 +2401,7 @@ std::string substitute_variables(std::string_view text, const std::map<std::stri
                         const std::string digits = name.substr(bracket + 1, name.size() - bracket - 2);
                         // from_chars: an index too big for a size_t is no index
                         // (std::stoul threw out of the writer).
-                        const auto [last, error] = std::from_chars(digits.data(), digits.data() + digits.size(), index);
+                        const auto [last, error] = chars_to(digits.data(), digits.data() + digits.size(), index);
                         ok = !digits.empty() && error == std::errc() && last == digits.data() + digits.size();
                         name = name.substr(0, bracket);
                     }
@@ -2274,6 +2544,13 @@ std::vector<Warning> capability_warnings(const Settings& s) {
     }
     // Wavy infill asked, with an infill whose lines move from layer to layer
     // or sit too close: it stays flat, and says so.
+    // The zigzag's moves in Z slowed to a stock Z when the profile gives no
+    // limit (zigzag_infill.md, rule 7), said like the other speeds taken.
+    if (s.infill_nonplanar && s.infill_density > 0.0 && wave_params(s) && !(s.max_feed_z > 0.0))
+        add("speed_fallback",
+            "the printer's profile gives no speed for machine.max_feed_z: a stock Ender-3's 5 mm/s limits the zigzag "
+            "infill's moves in Z",
+            kStockZFeed);
     if (s.infill_nonplanar && s.infill_density > 0.0 && !wave_params(s))
         add("nonplanar_ignored",
             std::string("wavy infill needs an infill that repeats layer to layer (aligned_rectilinear, grid, "
@@ -2308,6 +2585,19 @@ std::string acceleration_gcode(GcodeFlavor flavor, double print, double travel) 
 
 std::string machine_limits_gcode(const Settings& s) {
     const Dialect d = dialect_of(s.flavor);
+    // Klipper keeps its limits in its own configuration: only what it takes
+    // from the G-code, the accelerations and the speed.
+    if (s.flavor == GcodeFlavor::Klipper) {
+        std::string out = "M204 S" + trimmed(s.acceleration, 2) + "\n";
+        std::string limit = "SET_VELOCITY_LIMIT";
+        if (s.acceleration > 0.0)
+            limit += " ACCEL=" + trimmed(s.acceleration, 2);
+        if (const double v = std::min(s.max_feed_x, s.max_feed_y); v > 0.0)
+            limit += " VELOCITY=" + trimmed(v, 2);
+        if (limit.size() > std::strlen("SET_VELOCITY_LIMIT"))
+            out += limit + "\n";
+        return out;
+    }
     if (d.limits == Dialect::Limits::None)
         return {};
     const bool rrf = d.limits == Dialect::Limits::RepRapFirmware;
@@ -2367,6 +2657,13 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
             items.push_back(TemplateValue::parse(v));
         c.variables[name] = list(std::move(items));
     }
+    // The temperature variables always exist, 0 when the filament lacks them,
+    // so a start macro can be given them (profile_pack.md rules 17 and 18 bis,
+    // BH30).
+    for (const char* name : {"temperature", "first_layer_temperature", "bed_temperature", "first_layer_bed_temperature",
+                             "chamber_temperature", "chamber_minimal_temperature", "idle_temperature"})
+        if (!c.variables.contains(name))
+            c.variables[name] = list({TemplateValue::of(0LL)});
     // The profiles' own parameters (presets.md, rule 21): the material's one
     // per extruder.
     for (const auto& [name, value] : s.printer_parameters)
@@ -2379,6 +2676,28 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
         c.variables["print_" + name] = TemplateValue::parse(value);
     // The print's own (gcode_templates.md, rule 7).
     c.variables["total_layer_count"] = TemplateValue::of(static_cast<long long>(model.layers.size()));
+    // Bambu Lab's (gcode_macros.md, rule 10 quater): the highest Z printed and
+    // the first layer's centre (the wipe tower is not in the part's regions);
+    // with nothing sliced, the bed's centre.
+    if (!model.layers.empty())
+        c.variables["max_print_z"] = TemplateValue::of(std::round(model.layers.back().top * 1000.0) / 1000.0);
+    {
+        std::optional<std::array<double, 2>> centre;
+        if (!model.regions.empty() && !model.regions.front().empty()) {
+            const Clipper2Lib::Rect64 b = Clipper2Lib::GetBounds(model.regions.front());
+            centre = std::array<double, 2>{to_mm((b.left + b.right) / 2), to_mm((b.top + b.bottom) / 2)};
+        } else if (!s.bed.empty()) {
+            std::array<double, 2> lo = s.bed.front(), hi = s.bed.front();
+            for (const auto& p : s.bed)
+                for (int a = 0; a < 2; ++a)
+                    lo[a] = std::min(lo[a], p[a]), hi[a] = std::max(hi[a], p[a]);
+            centre = std::array<double, 2>{(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0};
+        }
+        if (centre)
+            c.variables["first_layer_center_no_wipe_tower"] =
+                list({TemplateValue::of(std::round((*centre)[0] * 1000.0) / 1000.0),
+                      TemplateValue::of(std::round((*centre)[1] * 1000.0) / 1000.0)});
+    }
     c.variables["num_extruders"] = TemplateValue::of(1LL);
     c.variables["initial_extruder"] = c.variables["initial_tool"] = TemplateValue::of(0LL);
     c.variables["is_extruder_used"] = list({TemplateValue::of(true)});
@@ -2401,6 +2720,18 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     c.variables["first_layer_print_min"] = pair(lo[0], lo[1]);
     c.variables["first_layer_print_max"] = pair(hi[0], hi[1]);
     c.variables["first_layer_print_size"] = pair(hi[0] - lo[0], hi[1] - lo[1]);
+    // The same box one number each, and the other names the profile pack's
+    // start G-code uses (profile_pack_format.md, «G-code de inicio y de fin»,
+    // rule 3).
+    const auto mm3 = [](double v) { return TemplateValue::of(std::round(v * 1000.0) / 1000.0); };
+    c.variables["first_layer_min_x"] = mm3(lo[0]);
+    c.variables["first_layer_min_y"] = mm3(lo[1]);
+    c.variables["first_layer_max_x"] = mm3(hi[0]);
+    c.variables["first_layer_max_y"] = mm3(hi[1]);
+    c.variables["first_layer_size_x"] = mm3(hi[0] - lo[0]);
+    c.variables["first_layer_size_y"] = mm3(hi[1] - lo[1]);
+    c.variables["layer_count"] = c.variables["total_layer_count"];
+    c.variables["travel_speed"] = TemplateValue::of(s.travel_speed);
     const std::time_t now = std::time(nullptr);
     std::tm local{};
 #ifdef _WIN32
@@ -2411,12 +2742,79 @@ TemplateContext template_context(const Settings& s, const SlicedModel& model) {
     char stamp[32];
     std::strftime(stamp, sizeof stamp, "%Y%m%d-%H%M%S", &local);
     c.variables["year"] = TemplateValue::of(static_cast<long long>(local.tm_year + 1900));
+    c.variables["month"] = TemplateValue::of(static_cast<long long>(local.tm_mon + 1));
+    c.variables["day"] = TemplateValue::of(static_cast<long long>(local.tm_mday));
+    c.variables["hour"] = TemplateValue::of(static_cast<long long>(local.tm_hour));
+    c.variables["minute"] = TemplateValue::of(static_cast<long long>(local.tm_min));
+    c.variables["second"] = TemplateValue::of(static_cast<long long>(local.tm_sec));
     c.variables["timestamp"] = TemplateValue::of(std::string(stamp));
     // The layer the templates are at: the first, until a layer change.
     const double first_z = model.layers.empty() ? 0.0 : model.layers.front().top - model.layers.front().bottom;
     c.variables["layer_num"] = TemplateValue::of(0LL);
     c.variables["layer_z"] = c.variables["max_layer_z"] = TemplateValue::of(std::round(first_z * 1000.0) / 1000.0);
+    // The names of the printers' own G-code (gcode_macros.md, rules 7 to 10 bis).
+    add_macro_variables(c, s);
+    // An F0 left in a machine's G-code moves at the travel speed (gcode_macros.md,
+    // rule 10 quater): the profile's, else 100 mm/s.
+    c.zero_feed = 60.0 * (s.travel_speed > 0.0 ? s.travel_speed : 100.0);
+    // The machine's G-code from the pack (gcode_macros.md, rule 10 bis): cura
+    // only replaces {name}; the orcaslicer family's machine values fill the
+    // names the engine cannot.
+    if (s.machine_macros.dialect == "cura")
+        c.braces_only = true;
+    for (const auto& [name, values] : s.machine_macros.values) {
+        if (c.variables.contains(name) && !c.unfilled.contains(name))
+            continue;
+        std::vector<TemplateValue> items;
+        for (const std::string& v : values)
+            items.push_back(TemplateValue::parse(v));
+        c.variables[name] = items.size() == 1 ? items.front() : TemplateValue::of(std::move(items));
+        c.unfilled.erase(name);
+    }
     return c;
+}
+
+// The settings with the machine's own G-code from the pack in place of the
+// simple version (gcode_macros.md, rules 10 bis, 10 ter and 11): each
+// template where the engine runs one, and the extrusion it expects.
+Settings with_machine_macros(const Settings& given) {
+    Settings s = given;
+    const MachineMacros& m = given.machine_macros;
+    const std::pair<const char*, std::string*> places[] = {
+        {"start", &s.start_gcode},
+        {"end", &s.end_gcode},
+        {"before_layer_change", &s.gcode_before_layer},
+        {"layer_change", &s.gcode_after_layer},
+        {"toolchange", &s.gcode_toolchange},
+        {"between_objects", &s.gcode_between_objects},
+        {"color_change", &s.gcode_color_change},
+        {"pause", &s.gcode_pause},
+        {"custom", &s.gcode_custom_template},
+    };
+    for (const auto& [name, place] : places)
+        if (const auto it = m.templates.find(name); it != m.templates.end())
+            *place = it->second;
+    // cura: the first extruder's own start and end, before the filament's.
+    const auto join = [](const std::string& a, const std::string& b) {
+        return a.empty() ? b : b.empty() ? a : a + "\n" + b;
+    };
+    if (!m.extruder_start.empty())
+        s.filament_start_gcode = join(m.extruder_start.front(), s.filament_start_gcode);
+    if (!m.extruder_end.empty())
+        s.filament_end_gcode = join(m.extruder_end.front(), s.filament_end_gcode);
+    if (m.relative_extrusion)
+        s.relative_extrusion = *m.relative_extrusion;
+    // Rendered once: the templates are in place now.
+    s.machine_macros.templates.clear();
+    s.machine_macros.extruder_start.clear();
+    s.machine_macros.extruder_end.clear();
+    return s;
+}
+
+bool uses_machine_macros(const Settings& s) {
+    return !s.machine_macros.empty() &&
+           (!s.machine_macros.templates.empty() || !s.machine_macros.extruder_start.empty() ||
+            !s.machine_macros.extruder_end.empty());
 }
 
 std::string toolchange_template_error(const Settings& s) {
@@ -2500,6 +2898,30 @@ std::string pressure_advance_gcode(GcodeFlavor flavor, double value) {
 }
 
 void write_gcode(std::ostream& target, const SlicedModel& model, const Settings& given, std::vector<Warning>* warnings) {
+    // The machine's own G-code from the pack: written whole first, so that a
+    // template the engine cannot read leaves no half G-code; then the simple
+    // version, with a warning in the log (gcode_macros.md, rule 10 bis).
+    if (uses_machine_macros(given)) {
+        std::ostringstream whole;
+        std::vector<Warning> notes;
+        try {
+            write_gcode(whole, model, with_machine_macros(given), warnings ? &notes : nullptr);
+        } catch (const TemplateError& e) {
+            Settings plain = given;
+            plain.machine_macros = {};
+            if (warnings)
+                warnings->push_back({"gcode_macro", -1, 0.0,
+                                     "The printer's own G-code (" + given.machine_macros.dialect +
+                                         ") could not be read: the simple start and end G-code are used. " + e.what(),
+                                     0.0, "warning"});
+            write_gcode(target, model, plain, warnings);
+            return;
+        }
+        if (warnings)
+            warnings->insert(warnings->end(), notes.begin(), notes.end());
+        target << whole.view();
+        return;
+    }
     // The filament's own retraction and travel values in place of the
     // printer's (retraction_travel.md, rule 10).
     std::optional<Settings> resolved;
@@ -2517,7 +2939,85 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         return s.belt_enabled ? belt_gcode(text, s) : curve_gcode(text, *model.curved, s);
     };
     std::ostream& out = s.gcode_progress || curved ? static_cast<std::ostream&>(held) : target;
-    out << "; generated by Tisma engine " << TISMA_VERSION << "\n";
+    // A firmware that reads the whole file first (gcode_firmware.md, rule 7)
+    // gets the blocks its maker's program writes: the summary at the start,
+    // the commands between EXECUTABLE_BLOCK_START and _END, no settings and
+    // no value with ';' in it. The names are those of the owner's Kobra 3
+    // file from Anycubic Slicer Next (FW10, read as a black box).
+    const bool strict = s.strict_parser == StrictParser::Anycubic;
+    // The material as those files name it in paint_info: the filament's type
+    // (PLA when not known, as that firmware takes a missing one) and its
+    // colour from the variable filament_colour ("#RRGGBB"; white when not given).
+    const std::string material_type = [&] {
+        std::string type;
+        for (const char c : s.filament_type)
+            if (std::isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '+' || c == '_')
+                type += c;
+        return type.empty() ? std::string("PLA") : type;
+    }();
+    if (strict && material_type != s.filament_type && warnings)
+        warnings->push_back({"strict_parser", -1, 0.0,
+                             "The filament's type (extrusion.type) is not set: the file names it PLA, and the "
+                             "printer may take the material as PLA",
+                             0.0, "warning"});
+    // Klipper keeps the rest of its limits in its own configuration.
+    if (s.flavor == GcodeFlavor::Klipper && s.limits_usage == LimitsUsage::Emit && warnings)
+        warnings->push_back({"limits_klipper", -1, 0.0,
+                             "Klipper takes its limits from its own configuration: the G-code only sets the "
+                             "acceleration and the speed (M204, SET_VELOCITY_LIMIT); the time estimate uses all of them",
+                             0.0, "info"});
+    const std::string paint_info = [&] {
+        const std::string& type = material_type;
+        int rgb[3] = {255, 255, 255};
+        if (const auto it = s.variables.find("filament_colour"); it != s.variables.end() && !it->second.empty()) {
+            const std::string& c = it->second.front();
+            if (c.size() == 7 && c[0] == '#' &&
+                std::all_of(c.begin() + 1, c.end(), [](char x) { return std::isxdigit(static_cast<unsigned char>(x)); }))
+                for (int k = 0; k < 3; ++k)
+                    rgb[k] = std::stoi(c.substr(std::size_t(1 + 2 * k), 2), nullptr, 16);
+        }
+        return "[{\"material_type\":\"" + type + "\",\"paint_color\":[" + std::to_string(rgb[0]) + "," +
+               std::to_string(rgb[1]) + "," + std::to_string(rgb[2]) + "],\"paint_index\":0}]";
+    }();
+    // The height printed: the layers keep the model's own heights.
+    const double top_z = model.layers.empty() ? 0.0 : model.layers.back().top - model.layers.front().bottom;
+    // The zigzag asked and possible with this pattern, but no layer has room
+    // for a wave (zigzag_infill.md, rule 5, ZI8): a small part or a dense
+    // infill. Said like a pattern that cannot have it (rule 2).
+    if (warnings && s.infill_nonplanar && s.infill_density > 0.0 && wave_params(s)) {
+        const bool waved = std::any_of(model.fills.begin(), model.fills.end(), [](const LayerFill& f) {
+            return std::any_of(f.sparse.begin(), f.sparse.end(), [](const Toolpath& t) {
+                return t.wavy && std::any_of(t.points.begin(), t.points.end(),
+                                             [](const ToolpathPoint& q) { return std::abs(q.dz) > 1e-9; });
+            });
+        });
+        if (!waved) {
+            const std::string part = model.objects.size() == 1 ? model.objects.front().name : std::string("the part");
+            warnings->push_back({"nonplanar_ignored", -1, 0.0,
+                                 "the zigzag in Z does not fit in " + part + ": it is too small or its infill too dense",
+                                 0.0, "warning"});
+        }
+    }
+    if (strict && s.gcode_binary && warnings)
+        warnings->push_back({"strict_parser", -1, 0.0,
+                             "The printer reads only plain G-code (machine.strict_parser): the file is not binary",
+                             0.0, "information"});
+    if (strict) {
+        out << "; HEADER_BLOCK_START\n";
+        out << "; generated by Tisma engine " << TISMA_VERSION << "\n";
+        out << "; total layer number: " << model.layers.size() << "\n";
+        out << "; filament_density: " << trimmed(s.filament_density, 4) << "\n";
+        out << "; filament_diameter: " << trimmed(s.filament_diameter, 4) << "\n";
+        out << "; max_z_height: " << trimmed(top_z, 3) << "\n";
+        out << "; exclude_object: " << (s.object_labels == ObjectLabels::Firmware ? 1 : 0) << "\n";
+        out << "; model_instances: " << std::max<std::size_t>(1, model.objects.size()) << "\n";
+        out << "; paint_info = " << paint_info << "\n";
+        out << "; test_mode: 0\n";
+        out << "; HEADER_BLOCK_END\n\n";
+        out << "; EXECUTABLE_BLOCK_START\n";
+    } else {
+        out << "; generated by Tisma engine " << TISMA_VERSION << "\n";
+    }
     // The dialect of the firmware (gcode_extras.md, rule 6; gcode_firmware.md).
     const Dialect dialect = dialect_of(s.flavor);
     Emitter g(s);
@@ -2549,10 +3049,23 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                  : s.flavor == GcodeFlavor::Klipper                                     ? Labels::Klipper
                                                                                         : Labels::None;
     const auto klipper_name = [&](std::size_t k) {
-        std::string name = model.objects[k].label();
+        const SlicedObject& o = model.objects[k];
+        if (strict) {
+            // As Anycubic's program names them: "<model>_id_<object>_copy_<copy>",
+            // bare, the model's name as it is (with its extension) but for
+            // what would end the value: anything but letters, digits, '.',
+            // '-' and '_' becomes '_'.
+            std::string name = o.name;
+            for (char& c : name)
+                if (!std::isalnum(static_cast<unsigned char>(c)) && c != '.' && c != '-' && c != '_')
+                    c = '_';
+            return (name.empty() ? std::string("object") : name) + "_id_" + std::to_string(o.object) + "_copy_" +
+                   std::to_string(o.instance);
+        }
+        std::string name = o.label();
         std::replace(name.begin(), name.end(), ' ', '_');
         std::replace(name.begin(), name.end(), '.', '_');
-        return name;
+        return "'" + name + "'";
     };
     const auto label_start = [&](std::size_t k) {
         const SlicedObject& o = model.objects[k];
@@ -2561,7 +3074,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         case Labels::M486Named:
             return "M486 S" + std::to_string(k) + "\n";
         case Labels::Klipper:
-            return "EXCLUDE_OBJECT_START NAME='" + klipper_name(k) + "'\n";
+            return "EXCLUDE_OBJECT_START NAME=" + klipper_name(k) + "\n";
         case Labels::OctoPrint:
             return "; printing object " + o.name + " id:" + std::to_string(o.object) + " copy " + std::to_string(o.instance) + "\n";
         case Labels::None:
@@ -2576,7 +3089,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         case Labels::M486Named:
             return std::string("M486 S-1\n");
         case Labels::Klipper:
-            return "EXCLUDE_OBJECT_END NAME='" + klipper_name(k) + "'\n";
+            return "EXCLUDE_OBJECT_END NAME=" + klipper_name(k) + "\n";
         case Labels::OctoPrint:
             return "; stop printing object " + o.name + " id:" + std::to_string(o.object) + " copy " + std::to_string(o.instance) + "\n";
         case Labels::None:
@@ -2599,7 +3112,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                     lo[a] = std::min(lo[a], p[a]), hi[a] = std::max(hi[a], p[a]);
                 polygon += (polygon.empty() ? "[" : ",[") + fixed(p[0], 3) + "," + fixed(p[1], 3) + "]";
             }
-            out << "EXCLUDE_OBJECT_DEFINE NAME='" << klipper_name(k) << "' CENTER=" << fixed((lo[0] + hi[0]) / 2.0, 3) << ","
+            out << "EXCLUDE_OBJECT_DEFINE NAME=" << klipper_name(k) << " CENTER=" << fixed((lo[0] + hi[0]) / 2.0, 3) << ","
                 << fixed((lo[1] + hi[1]) / 2.0, 3) << " POLYGON=[" << polygon << "]\n";
         }
     }
@@ -2691,22 +3204,37 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // The bed's first-layer temperature: with several extruders that of
     // extruders.bed_temperature_from, or of the first to print (rule 4).
     const int bed_tool = s.bed_temperature_from > 0 ? s.bed_temperature_from : initial_tool;
+    // The first layer's temperatures, else the print's (the spec team's
+    // black-box measure, 2026-11-09: the start heats to them and the second
+    // layer changes to the print's).
+    const auto first_layer_value = [&](const char* first, const char* rest, std::size_t extruder) {
+        const double v = value_of(first, extruder);
+        return v > 0.0 ? v : value_of(rest, extruder);
+    };
     // A temperature change at Z 0 (a temperature test's first band,
     // calibrations.md, rule 2) is the one waited for at the start.
-    double start_nozzle = value_of("temperature");
+    double start_nozzle = first_layer_value("first_layer_temperature", "temperature", 0);
+    bool nozzle_changes = false;
     for (const HeightChange& c : s.changes)
-        if (c.z <= 1e-9 && c.temperature)
-            start_nozzle = *c.temperature;
+        if (c.temperature) {
+            nozzle_changes = true;
+            if (c.z <= 1e-9)
+                start_nozzle = *c.temperature;
+        }
     const double nozzle = start_nozzle,
-                 bed = s.extruders > 1 && value_of("first_layer_bed_temperature", std::size_t(bed_tool - 1)) > 0.0
-                           ? value_of("first_layer_bed_temperature", std::size_t(bed_tool - 1))
-                           : value_of("bed_temperature", std::size_t(std::max(bed_tool - 1, 0)));
+                 bed = first_layer_value("first_layer_bed_temperature", "bed_temperature", std::size_t(std::max(bed_tool - 1, 0)));
     // The bed first, waited for, then the nozzle set (gcode_templates.md, rule 10, T10).
     const bool heat = s.auto_temperatures && !sets_temperature(start_gcode);
     const bool heat_nozzle = heat && nozzle > 0.0;
+    // What the start writes, as the time estimate reads it too (its heating
+    // and waits, print_time.md, rules 8 to 10 and 14).
+    const auto start_text = [&](const std::string& text) {
+        out << text;
+        g.machine_gcode(text);
+    };
     if (heat && bed > 0.0)
-        out << (dialect.wait == Dialect::Wait::None ? "M140 " : "M190 ") << dialect.temperature << std::lround(bed)
-            << "\n";
+        start_text(std::string(dialect.wait == Dialect::Wait::None ? "M140 " : "M190 ") + dialect.temperature +
+                   std::to_string(std::lround(bed)) + "\n");
     // Several extruders: each one used set, then waited for after the start
     // (ME1); with extruders.ooze_prevention, the ones that wait at their
     // temperature plus extruders.standby_delta, and only the first waited
@@ -2752,14 +3280,19 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     if (heat && s.extruders > 1) {
         for (int e = 1; e <= kMaxExtruders; ++e)
             if (tools_used[std::size_t(e)] && value_of("temperature", std::size_t(e - 1)) > 0.0)
-                out << nozzle_gcode(false, e,
-                                    s.ooze_prevention && e != initial_tool ? standby(e)
-                                                                           : value_of("temperature", std::size_t(e - 1)));
+                start_text(nozzle_gcode(false, e,
+                                        s.ooze_prevention && e != initial_tool
+                                            ? standby(e)
+                                            : first_layer_value("first_layer_temperature", "temperature", std::size_t(e - 1))));
     } else if (heat_nozzle) {
-        out << nozzle_gcode(false, 0, nozzle);
+        start_text(nozzle_gcode(false, 0, nozzle));
     }
-    if (!start_gcode.empty())
+    if (!start_gcode.empty()) {
         out << start_gcode << "\n";
+        g.machine_gcode(start_gcode); // its waits and accelerations (print_time.md, rules 8 and 9)
+    }
+    if (strict) // where the maker's files end the printer's start (FW10)
+        out << "; EXECUTABLE_BLOCK_HEAD\n";
     // E in mm3 on a pellet printer (pellets.md, rule 3, PE4): after the start
     // G-code, the firmware's command for it; Marlin's M200 D S1, and
     // RepRapFirmware's M200 D, whose S came only in 3.5. Not on a filament
@@ -2776,9 +3309,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         for (int e = 1; e <= kMaxExtruders; ++e)
             if (tools_used[std::size_t(e)] && value_of("temperature", std::size_t(e - 1)) > 0.0 &&
                 (!s.ooze_prevention || e == initial_tool))
-                out << nozzle_gcode(true, e, value_of("temperature", std::size_t(e - 1)));
+                start_text(nozzle_gcode(true, e, first_layer_value("first_layer_temperature", "temperature", std::size_t(e - 1))));
     } else if (heat_nozzle && dialect.wait != Dialect::Wait::None) {
-        out << nozzle_gcode(true, 0, nozzle);
+        start_text(nozzle_gcode(true, 0, nozzle));
     }
     // Several extruders: the change's G-code to the first one too, from
     // none (rule 6), and its T unless that G-code has it.
@@ -2788,7 +3321,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     }
     // The filament's own start, after the printer's (rule 9).
     if (const std::string text = render_template(s.filament_start_gcode, templates, "extrusion.start_gcode"); !text.empty())
-        out << text << "\n";
+        start_text(text + "\n");
+    // The start's time (its waits and heating) closed apart, so the first
+    // layer's time is only the first layer (print_time.md, rule 14).
+    g.end_layer();
     // How far an arc may stray from the path (gcode.resolution; with every
     // point kept, a thousandth).
     const double arc_tolerance = s.gcode_resolution > 0.0 ? s.gcode_resolution : 0.001;
@@ -3183,6 +3719,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         if (l < model.seam_block.size())
             painted.block = &model.seam_block[l];
         // over: the feed of what lies over a bridge (solid infill).
+        // The fills' kinds, as the G-code names them.
+        const char* const fill_type[7] = {"Solid infill",    "Top solid infill", "Bridge infill",
+                                          "Gap fill",        "Internal infill",  "Support material",
+                                          "Support material interface"};
         // A closed wall shorter than kSmallLoop, the outer one too, at
         // speed.small_loops (gcode_motion.md, rule 3).
         const auto small_loop = [&](const Toolpath& t) {
@@ -3194,6 +3734,18 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                      t.points[(k + 1) % t.points.size()].p.y - t.points[k].p.y);
             return length < kSmallLoop;
         };
+        // A support extrusion no longer than 2 pi speed.small_support_threshold
+        // goes at speed.small_support, or that share of its own speed
+        // (orca_2_5.md, rule 16); a threshold of 0 turns it off.
+        const auto small_support = [&](const Toolpath& t) {
+            if (!(s.small_support_threshold > 0.0) || !(s.small_support_speed.value > 0.0) || t.points.size() < 2)
+                return false;
+            double length = 0.0;
+            const std::size_t n = t.points.size(), segments = t.closed ? n : n - 1;
+            for (std::size_t k = 0; k < segments; ++k)
+                length += std::hypot(t.points[(k + 1) % n].p.x - t.points[k].p.x, t.points[(k + 1) % n].p.y - t.points[k].p.y);
+            return length <= 2.0 * std::numbers::pi * s.small_support_threshold + 1e-9;
+        };
         auto group = [&](const std::vector<Toolpath>& paths, const char* type, double group_feed, SeamMode seam,
                          bool walls = false, std::span<const std::vector<std::size_t>* const> candidates = {},
                          double over = 0.0) {
@@ -3201,9 +3753,12 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                                         walls && !painted.empty() ? &painted : nullptr, candidates);
             std::vector<Pending> typed;
             typed.reserve(ordered.size());
+            const bool support_kind = type == fill_type[5] || type == fill_type[6];
             for (Toolpath& t : ordered) {
-                const double feed =
-                    walls && small_loop(t) ? speed(s.small_loop_speed.of(s.wall_speed)) : group_feed;
+                const double feed = walls && small_loop(t) ? speed(s.small_loop_speed.of(s.wall_speed))
+                                    : support_kind && small_support(t)
+                                        ? speed(s.small_support_speed.of(fill_speed[type == fill_type[5] ? 5 : 6]))
+                                        : group_feed;
                 if (over > 0.0 && over_bridge && !in_thick) {
                     for (WallPiece& piece : wall_pieces(t, *over_bridge, *nowhere, 0.0, true))
                         typed.push_back({std::move(piece.path), type, piece.overhang ? over : feed});
@@ -3279,9 +3834,6 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // 3): the one the layer below ended with first, the rest in order;
         // what any extruder may print goes with the first.
         const std::vector<int>& order = tool_plan.order[l];
-        const char* const fill_type[7] = {"Solid infill",    "Top solid infill", "Bridge infill",
-                                          "Gap fill",        "Internal infill",  "Support material",
-                                          "Support material interface"};
         int label_now = -1;
         // The wipe tower (multi_extruder.md, rules 10 to 12): on a layer with
         // no change, and on the first, its brim, outline and fill first, by
@@ -3558,12 +4110,35 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 --left[current];
                 const std::size_t first_step = steps.size();
                 const Island& i = islands[next];
-                auto walls = [&](int index, const std::vector<Toolpath>& paths) {
+                // walls.unsupported_last (orca_2_5.md, rule 3): each loop's turn.
+                const std::map<int, std::vector<char>> turns =
+                    s.unsupported_last && l > 0 && l - 1 < model.regions.size()
+                        ? unsupported_turns(i.walls, model.regions[l - 1])
+                        : std::map<int, std::vector<char>>{};
+                auto walls = [&](int index, const std::vector<Toolpath>& paths, char turn = 0) {
                     const bool outer = index == 0;
                     const auto found = i.candidates.find(index);
-                    group(paths, outer ? "External perimeter" : "Perimeter",
-                          speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed), s.seam, true,
-                          found == i.candidates.end() ? std::span<const std::vector<std::size_t>* const>{} : found->second);
+                    std::span<const std::vector<std::size_t>* const> candidates =
+                        found == i.candidates.end() ? std::span<const std::vector<std::size_t>* const>{} : found->second;
+                    const auto feed = speed(outer ? s.outer_wall_speed.of(s.wall_speed) : s.wall_speed);
+                    const char* type = outer ? "External perimeter" : "Perimeter";
+                    const auto own = turns.find(index);
+                    if (own == turns.end()) {
+                        if (turn == 0)
+                            group(paths, type, feed, s.seam, true, candidates);
+                        return;
+                    }
+                    std::vector<Toolpath> kept;
+                    std::vector<const std::vector<std::size_t>*> kept_candidates;
+                    for (std::size_t k = 0; k < paths.size(); ++k)
+                        if (own->second[k] == turn) {
+                            kept.push_back(paths[k]);
+                            if (k < candidates.size())
+                                kept_candidates.push_back(candidates[k]);
+                        }
+                    if (kept_candidates.size() != kept.size())
+                        kept_candidates.clear();
+                    group(kept, type, feed, s.seam, true, kept_candidates);
                 };
                 if (s.zaa) {
                     for (const auto& [index, paths] : i.walls)
@@ -3594,12 +4169,22 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                 else
                     for (const auto& [index, paths] : i.walls)
                         walls(index, paths);
+                // The loops held only through other loops, after the walls that
+                // hold them, inside out (orca_2_5.md, rule 3).
+                if (!turns.empty())
+                    for (const auto& [index, paths] : i.walls)
+                        walls(index, paths, 1);
                 // The loops over an overhang, from its outline in, after the walls
                 // they hang from (walls_extra.md, rule 5).
                 for (Toolpath t : i.overhang_walls)
                     lay(std::move(t), "Overhang perimeter", speed(bridge_feed));
                 if (!s.infill_before_walls)
                     fills();
+                // The loops that touch nothing held: a second pass of walls,
+                // after the fills (and the layer's bridges) they rest on.
+                if (!turns.empty())
+                    for (const auto& [index, paths] : i.walls)
+                        walls(index, paths, 2);
                 // Ironing, in the same layer after the island's fills (ironing.md, rule 1).
                 group(i.ironing, "Ironing", speed(s.ironing_speed), SeamMode::Nearest);
                 flush();
@@ -3838,7 +4423,7 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         // The bed for the rest of the print, from the second layer
         // (multi_extruder.md, rule 4): that of extruders.bed_temperature_from,
         // or of the first extruder to print on that layer.
-        if (s.extruders > 1 && l == 1) {
+        if (l == 1 && heat) {
             int first = g.tool();
             for (const Step& st : steps)
                 if (st.type && st.tool > 0) {
@@ -3849,6 +4434,20 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             const double rest = value_of("bed_temperature", std::size_t(from - 1));
             if (rest > 0.0 && std::lround(rest) != std::lround(bed))
                 g.custom(std::string("M140 ") + dialect.temperature + std::to_string(std::lround(rest)) + "\n");
+            // Each extruder used from its first layer's temperature to the
+            // print's, when they differ, without waiting (a temperature test
+            // sets its own bands).
+            if (!nozzle_changes)
+                for (int e = 1; e <= std::max(s.extruders, 1); ++e) {
+                    if (s.extruders > 1 && !tools_used[std::size_t(e)])
+                        continue;
+                    if (s.ooze_prevention && s.extruders > 1 && e != g.tool())
+                        continue; // a standby one keeps its own temperature
+                    const double start = first_layer_value("first_layer_temperature", "temperature", std::size_t(e - 1));
+                    const double print = value_of("temperature", std::size_t(e - 1));
+                    if (print > 0.0 && std::lround(print) != std::lround(start))
+                        g.custom(nozzle_gcode(false, s.extruders > 1 ? e : 0, print));
+                }
         }
         g.set_retraction(a.retract_length, a.retract_speed);
         g.set_flow(a.flow);
@@ -4011,14 +4610,14 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
             if (wipe_inward && std::strcmp(step.type, "External perimeter") == 0 && l < model.regions.size()) {
                 const std::vector<ToolpathPoint>& last = coasted.size() >= 2 ? coasted : points;
                 if (last.size() >= 2) {
-                    const Point2d a = last[last.size() - 2].p, b = last.back().p;
-                    const double dx = b.x - a.x, dy = b.y - a.y, len = std::hypot(dx, dy);
+                    const Point2d from = last[last.size() - 2].p, to = last.back().p;
+                    const double dx = to.x - from.x, dy = to.y - from.y, len = std::hypot(dx, dy);
                     const double width = last.back().width;
                     const double distance = std::min(width, s.wipe_inward_distance.of(width));
                     if (len > 0.0 && distance > 0.0) {
                         const double off = 0.5 * width;
-                        const Clipper2Lib::Point64 probe{to_units((a.x + b.x) / 2.0 - dy / len * off),
-                                                         to_units((a.y + b.y) / 2.0 + dx / len * off)};
+                        const Clipper2Lib::Point64 probe{to_units((from.x + to.x) / 2.0 - dy / len * off),
+                                                         to_units((from.y + to.y) / 2.0 + dx / len * off)};
                         int inside = 0;
                         for (const Polygon& ring : model.regions[l])
                             if (Clipper2Lib::PointInPolygon(probe, ring) == Clipper2Lib::PointInPolygonResult::IsInside)
@@ -4167,10 +4766,20 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
                                                                  Slowdown{}),
                                                       s.min_layer_time, s.fan_below_time, s.fan_min, s.fan_max,
                                                       s.fan_always);
+        // The first layer's own fan (orca_2_5.md, rule 17): exact, over the
+        // rest, only with no layers off; the ramp to full_fan_layer then
+        // starts from it.
+        const bool first_fan = s.first_layer_fan >= 0.0 && s.fan_off_layers == 0 && !a.fan;
         if (const double n = double(local(l) + 1), off = double(std::max(s.fan_off_layers, 0)), full = double(s.full_fan_layer);
-            !a.fan && full > off && n > off && n < full)
+            first_fan && n == 1.0) {
+            fan = s.first_layer_fan;
+        } else if (first_fan && full > 1.0 && n < full) {
+            fan = s.first_layer_fan + (fan - s.first_layer_fan) * (n - 1.0) / (full - 1.0);
+        } else if (!a.fan && full > off && n > off && n < full) {
             fan *= (n - off) / (full - off);
-        g.settle_fan(fan, a.fan || fan_off ? fan : s.fan_bridges, !a.fan && !fan_off);
+        }
+        const bool exact = first_fan && local(l) == 0;
+        g.settle_fan(fan, a.fan || fan_off || exact ? fan : s.fan_bridges, !a.fan && !fan_off && !exact);
         const double seconds = g.end_layer();
         if (l == 0)
             first_layer = {seconds, g.last_silent_layer()};
@@ -4321,10 +4930,47 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         out << text << "\n";
     if (const std::string text = render_template(s.end_gcode, templates, "machine.end_gcode"); !text.empty())
         out << text << "\n";
+    // Variables of the printer's own G-code the engine cannot fill yet, by
+    // name (gcode_macros.md, rule 9).
+    if (warnings && !templates.estimated_used.empty()) {
+        std::string names;
+        for (const std::string& name : templates.estimated_used)
+            names += (names.empty() ? "" : ", ") + name;
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora usa velocidades que los ajustes no dan; van con un caudal "
+                             "seguro de 8 mm³/s: " + names + ".",
+                             double(templates.estimated_used.size()), "warning"});
+    }
+    if (warnings && !templates.index_clamped.empty()) {
+        std::string names;
+        for (const std::string& name : templates.index_clamped)
+            names += (names.empty() ? "" : ", ") + name;
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora lee listas más allá de su último valor; se usó el último: " +
+                                 names + ".",
+                             double(templates.index_clamped.size()), "warning"});
+    }
+    if (warnings && templates.zero_feeds > 0)
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora pedía velocidad 0 (F0) en " +
+                                 std::to_string(templates.zero_feeds) +
+                                 " líneas; van con la velocidad de viaje del perfil.",
+                             double(templates.zero_feeds), "warning"});
+    if (warnings && !templates.unfilled_used.empty()) {
+        std::string names;
+        for (const std::string& name : templates.unfilled_used)
+            names += (names.empty() ? "" : ", ") + name;
+        warnings->push_back({"gcode_macro", -1, 0.0,
+                             "El G-code de la impresora usa variables que el motor todavía no llena; van en 0, no o "
+                             "vacío: " + names + ".",
+                             double(templates.unfilled_used.size()), "information"});
+    }
     if (s.chamber_temperature > 0.0 && s.max_chamber_temp > 0.0)
         out << chamber_gcode(s.flavor, 0.0) << "\n";
     if (dialect.ends_m2)
         out << "M2\n";
+    if (strict)
+        out << "; EXECUTABLE_BLOCK_END\n\n";
     // docs/spec/GCODE_OUTPUT.md, "Tiempos" (the start and end G-code not
     // counted); the same by mode and for the first layer, as hosts read them
     // (gcode_firmware.md, rule 6; print_time.md, rule 7).
@@ -4335,6 +4981,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     out << "; estimated first layer printing time (normal mode) = " << format_duration(first_layer[0]) << "\n";
     if (s.silent_mode)
         out << "; estimated first layer printing time (silent mode) = " << format_duration(first_layer[1]) << "\n";
+    // The preparation apart (print_time.md, rule 14): waits, heating, homing and levelling.
+    if (g.preparation_time() > 0.0)
+        out << "; estimated preparation time = " << format_duration(g.preparation_time()) << "\n";
     // The filament, its weight and cost (gcode_extras.md, rule 1).
     {
         const double r = s.filament_diameter / 2.0;
@@ -4410,8 +5059,75 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         }
         return line;
     };
-    for (const auto& [key, value] : describe(s))
-        out << "; " << one_line(key) << " = " << one_line(value) << "\n";
+    if (strict) {
+        // No settings: the firmware's reader stops at values it does not
+        // know. The totals as the maker's program closes the file.
+        double lo[2] = {std::numeric_limits<double>::max(), std::numeric_limits<double>::max()}, hi[2] = {-lo[0], -lo[1]};
+        const auto take = [&](const auto& points) {
+            for (const auto& q : points) {
+                const double p[2] = {to_mm(q.x), to_mm(q.y)};
+                for (int a = 0; a < 2; ++a)
+                    lo[a] = std::min(lo[a], p[a]), hi[a] = std::max(hi[a], p[a]);
+            }
+        };
+        if (!model.objects.empty())
+            for (const SlicedObject& o : model.objects)
+                take(o.outline);
+        else
+            for (const Polygons& region : model.regions)
+                for (const auto& polygon : region)
+                    take(polygon);
+        const double size[2] = {hi[0] >= lo[0] ? hi[0] - lo[0] : 0.0, hi[1] >= lo[1] ? hi[1] - lo[1] : 0.0};
+        out << "; total layers count = " << model.layers.size() << "\n\n";
+        out << "; ams_info = begin\n; paint_info = " << paint_info << "\n; ams_info = end\n\n";
+        out << "; statistics = begin\n";
+        out << "; used_filament = " << fixed(g.total_e() / 1000.0, 2) << "\n";
+        out << "; print_time = " << format_duration(g.print_time()) << "\n";
+        out << "; model_size = " << fixed(size[0], 2) << "," << fixed(size[1], 2) << "," << fixed(top_z, 2) << "\n";
+        out << "; total_layers = " << model.layers.size() << "\n";
+        out << "; statistics = end\n\n";
+        // The few settings that firmware reads for its screen and its
+        // filament check (the material and the temperatures; reports in
+        // OrcaSlicer's issue tracker, #16336), one value each, under the
+        // names of the maker's file. A value that is not known is left out.
+        out << "; CONFIG_BLOCK_START = begin\n";
+        const auto first_variable = [&](const char* name) -> std::string {
+            const auto it = s.variables.find(name);
+            if (it == s.variables.end() || it->second.empty())
+                return {};
+            std::string v = it->second.front();
+            return v.find_first_of(";\n\r") == std::string::npos ? v : std::string();
+        };
+        const auto line = [&](const char* name, const std::string& value) {
+            if (!value.empty())
+                out << "; " << name << " = " << value << "\n";
+        };
+        line("filament_type", material_type); // as paint_info names it
+
+        if (s.filament_density > 0.0)
+            line("filament_density", trimmed(s.filament_density, 4));
+        line("filament_diameter", trimmed(s.filament_diameter, 4));
+        line("layer_height", trimmed(s.layer_height, 4));
+        line("initial_layer_print_height", trimmed(s.first_layer_height, 4));
+        line("nozzle_diameter", trimmed(s.nozzle_diameter, 4));
+        const std::string nozzle_temp = first_variable("temperature"), bed_temp = first_variable("bed_temperature");
+        const std::string first_nozzle = first_variable("first_layer_temperature").empty()
+                                             ? nozzle_temp
+                                             : first_variable("first_layer_temperature");
+        const std::string first_bed = first_variable("first_layer_bed_temperature").empty()
+                                          ? bed_temp
+                                          : first_variable("first_layer_bed_temperature");
+        line("nozzle_temperature", nozzle_temp);
+        line("nozzle_temperature_initial_layer", first_nozzle);
+        line("first_layer_height", fixed(s.first_layer_height, 3));
+        line("first_layer_temperature", first_nozzle);
+        line("first_layer_bed_temperature", first_bed);
+        line("bed_temperature", bed_temp);
+        out << "; CONFIG_BLOCK_END = end\n";
+    } else if (!s.gcode_skip_config_block) { // for firmware that rejects those lines (orca_2_5.md, rule 22)
+        for (const auto& [key, value] : describe(s))
+            out << "; " << one_line(key) << " = " << one_line(value) << "\n";
+    }
     if (!s.gcode_progress) {
         if (curved)
             target << moved(std::move(held).str());
@@ -4436,7 +5152,14 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         const long now[4] = {share(g.time_at(id), g.print_time()), minutes(g.time_at(id), g.print_time()),
                              share(g.silent_time_at(id), g.silent_time()), minutes(g.silent_time_at(id), g.silent_time())};
         if (now[0] != shown[0] || now[1] != shown[1])
-            target << "M73 P" << now[0] << " R" << now[1] << note;
+            target << "M73 P" << now[0] << " R" << now[1]
+                   // As the maker's files write it for those printers: the
+                   // minutes left in the quiet and the sport modes too (the
+                   // silent mode's when there is one; else the normal's).
+                   << (s.strict_parser == StrictParser::Anycubic
+                           ? " QuietR" + std::to_string(s.silent_mode ? now[3] : now[1]) + " SportR" + std::to_string(now[1])
+                           : std::string())
+                   << note;
         if (silent && (now[2] != shown[2] || now[3] != shown[3]))
             target << "M73 Q" << now[2] << " S" << now[3] << note;
         std::copy(now, now + 4, shown);

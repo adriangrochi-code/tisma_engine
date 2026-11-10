@@ -134,6 +134,10 @@ std::optional<ProfileKind> setting_kind(std::string_view group, std::string_view
             return ProfileKind::Filament;
         return ProfileKind::Printer;
     }
+    // The options of a print sent to a Bambu Lab printer (gcode_macros.md,
+    // rule 12) are that printer's.
+    if (group == "bambu")
+        return ProfileKind::Printer;
     // Every speed is the printer's (owner's decision, 2026-10-26).
     if (group == "retraction" || group == "gcode" || group == "speed" || (group == "cooling" && key == "min_speed") ||
         group == "mmu")
@@ -304,8 +308,11 @@ static Profile parse_profile_checked(std::string_view text) {
             continue; // parse_settings names the error
         for (const auto& [key, value] : keys.items()) {
             if (group == "machine" && key == "variables" && value.is_object()) {
+                // A filament may carry any of the printer G-code's variables:
+                // its own values for them (gcode_macros.md, rule 10 quater;
+                // the pack's source_values).
                 for (const auto& [name, v] : value.items())
-                    if (setting_kind(group, key, name) != p.kind)
+                    if (p.kind != ProfileKind::Filament && setting_kind(group, key, name) != p.kind)
                         fail(group + "." + key + "." + name + ": not a " + kind_name + " setting");
             } else if (const auto k = setting_kind(group, key); k && *k != p.kind) {
                 fail(group + "." + key + ": a " + std::string(profile_kind_name(*k)) + " setting, not a " + kind_name +

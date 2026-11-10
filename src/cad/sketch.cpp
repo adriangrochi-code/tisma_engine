@@ -98,6 +98,47 @@ json command(const char* name, json params) {
 
 } // namespace
 
+namespace {
+constexpr std::pair<GeoConstraint::Kind, const char*> geo_names[] = {
+    {GeoConstraint::Kind::Horizontal, "horizontal"},
+    {GeoConstraint::Kind::Vertical, "vertical"},
+    {GeoConstraint::Kind::Parallel, "parallel"},
+    {GeoConstraint::Kind::Perpendicular, "perpendicular"},
+    {GeoConstraint::Kind::Equal, "equal"},
+    {GeoConstraint::Kind::Concentric, "concentric"},
+    {GeoConstraint::Kind::Tangent, "tangent"},
+    {GeoConstraint::Kind::Coincident, "coincident"},
+    {GeoConstraint::Kind::Fixed, "fixed"},
+    {GeoConstraint::Kind::Length, "length"},
+    {GeoConstraint::Kind::Distance, "distance"},
+    {GeoConstraint::Kind::HorizontalDistance, "horizontal_distance"},
+    {GeoConstraint::Kind::VerticalDistance, "vertical_distance"},
+    {GeoConstraint::Kind::Radius, "radius"},
+    {GeoConstraint::Kind::Diameter, "diameter"},
+    {GeoConstraint::Kind::Angle, "angle"},
+};
+} // namespace
+
+const char* geo_kind_name(GeoConstraint::Kind kind) {
+    for (const auto& [k, name] : geo_names)
+        if (k == kind)
+            return name;
+    return "";
+}
+
+std::optional<GeoConstraint::Kind> geo_kind_named(const std::string& name) {
+    for (const auto& [k, n] : geo_names)
+        if (name == n)
+            return k;
+    return std::nullopt;
+}
+
+bool is_dimension(GeoConstraint::Kind kind) {
+    using K = GeoConstraint::Kind;
+    return kind == K::Length || kind == K::Distance || kind == K::HorizontalDistance || kind == K::VerticalDistance ||
+           kind == K::Radius || kind == K::Diameter || kind == K::Angle;
+}
+
 Pt point_of(const Entity& e, std::size_t index) {
     switch (e.kind) {
     case Entity::Kind::Chain: return e.points.empty() ? Pt{} : e.points[std::min(index, e.points.size() - 1)];
@@ -133,7 +174,84 @@ bool Sketch::has_region() const {
         if (e.kind == Entity::Kind::Circle && e.radius > 0.0)
             return true;
     }
-    return false;
+    return !joined_loops(*this).empty();
+}
+
+std::vector<std::vector<Pt>> joined_loops(const Sketch& sketch) {
+    constexpr double kNear = 1e-6;
+    const auto near = [](const Pt& a, const Pt& b) { return std::hypot(a.x - b.x, a.y - b.y) <= kNear; };
+    // The pieces as polylines from one end to the other.
+    std::vector<std::vector<Pt>> pieces;
+    for (const Entity& e : sketch.entities) {
+        if (e.construction)
+            continue;
+        if (e.kind == Entity::Kind::Chain && !e.closed && e.points.size() >= 2) {
+            pieces.push_back(e.points);
+        } else if (e.kind == Entity::Kind::Arc && e.points.size() >= 3) {
+            const Pt& c = e.points[0];
+            const double r = std::hypot(e.points[1].x - c.x, e.points[1].y - c.y);
+            if (!(r > 0.0))
+                continue;
+            const double a0 = std::atan2(e.points[1].y - c.y, e.points[1].x - c.x);
+            double sweep = std::atan2(e.points[2].y - c.y, e.points[2].x - c.x) - a0; // counter-clockwise
+            if (e.clockwise) {
+                while (sweep >= 0.0)
+                    sweep -= 2.0 * std::numbers::pi;
+            } else {
+                while (sweep <= 0.0)
+                    sweep += 2.0 * std::numbers::pi;
+            }
+            const int n = std::max(4, int(std::ceil(std::abs(sweep) / (2.0 * std::numbers::pi) * 720.0)));
+            std::vector<Pt> q;
+            for (int k = 0; k <= n; ++k) {
+                const double a = a0 + sweep * k / n;
+                q.push_back({c.x + r * std::cos(a), c.y + r * std::sin(a)});
+            }
+            q.front() = e.points[1];
+            q.back() = e.points[2];
+            pieces.push_back(std::move(q));
+        }
+    }
+    std::vector<std::vector<Pt>> loops;
+    std::vector<bool> used(pieces.size(), false);
+    for (std::size_t i = 0; i < pieces.size(); ++i) {
+        if (used[i])
+            continue;
+        used[i] = true;
+        std::vector<Pt> loop = pieces[i];
+        std::vector<std::size_t> taken{i};
+        // Walk on from the loose end until back at the start or stuck.
+        for (;;) {
+            if (loop.size() > 2 && near(loop.back(), loop.front())) {
+                loop.pop_back();
+                loops.push_back(std::move(loop));
+                break;
+            }
+            std::optional<std::size_t> next;
+            bool reversed = false;
+            for (std::size_t j = 0; j < pieces.size() && !next; ++j) {
+                if (used[j])
+                    continue;
+                if (near(pieces[j].front(), loop.back()))
+                    next = j;
+                else if (near(pieces[j].back(), loop.back()))
+                    next = j, reversed = true;
+            }
+            if (!next) {
+                // A dead end: its pieces may still close a loop with others.
+                for (const std::size_t t : taken)
+                    used[t] = t == i;
+                break;
+            }
+            used[*next] = true;
+            taken.push_back(*next);
+            std::vector<Pt> add = pieces[*next];
+            if (reversed)
+                std::reverse(add.begin(), add.end());
+            loop.insert(loop.end(), add.begin() + 1, add.end());
+        }
+    }
+    return loops;
 }
 
 namespace {
@@ -249,7 +367,7 @@ Snap snap_point(const Sketch& sketch, const Pt& cursor, const SnapOptions& optio
             if (!e.points.empty()) {
                 add(SnapKind::Center, e.points[0], i, 0);
                 for (std::size_t q = 0; q < 4; ++q) {
-                    const double a = q * std::numbers::pi / 2.0;
+                    const double a = double(q) * std::numbers::pi / 2.0;
                     add(SnapKind::Quadrant, {e.points[0].x + e.radius * std::cos(a), e.points[0].y + e.radius * std::sin(a)}, i, q);
                 }
                 circs.push_back({e.points[0], e.radius, i});
@@ -528,6 +646,16 @@ std::string sketch_json(const Sketch& sketch, const SketchOperation& op) {
     json dimensions = json::array();
     for (const Dimension& d : sketch.dimensions)
         dimensions.push_back({{"entity", d.entity}, {"segment", d.segment}, {"length", d.length}});
+    json rules = json::array();
+    for (const GeoConstraint& r : sketch.rules) {
+        json j{{"kind", geo_kind_name(r.kind)}, {"a", json::array({r.a.entity, r.a.index})},
+               {"b", json::array({r.b.entity, r.b.index})}};
+        if (is_dimension(r.kind))
+            j["value"] = r.value;
+        if (r.kind == GeoConstraint::Kind::Fixed)
+            j["at"] = pt(r.at);
+        rules.push_back(std::move(j));
+    }
     json operation = op.kind == SketchOperation::Kind::Extrude
                          ? json{{"kind", "extrude"}, {"distance", op.distance}}
                          : json{{"kind", "revolve"}, {"axis", std::string(1, op.axis)}, {"angle", op.angle}};
@@ -535,6 +663,7 @@ std::string sketch_json(const Sketch& sketch, const SketchOperation& op) {
                 {"entities", std::move(entities)},
                 {"constraints", std::move(constraints)},
                 {"dimensions", std::move(dimensions)},
+                {"rules", std::move(rules)},
                 {"operation", std::move(operation)}}
         .dump();
 }
@@ -589,6 +718,25 @@ void parse_sketch(const std::string& text, Sketch& sketch, SketchOperation& op) 
     }
     for (const json& d : j.value("dimensions", json::array()))
         s.dimensions.push_back({d.value("entity", std::size_t(0)), d.value("segment", std::size_t(0)), d.value("length", 0.0)});
+    const auto read_ref = [](const json& v) {
+        if (!v.is_array() || v.size() != 2 || !v[0].is_number_unsigned() || !v[1].is_number_unsigned())
+            throw std::runtime_error("a constraint's reference is not [entity, index]");
+        return EntityPoint{v[0].get<std::size_t>(), v[1].get<std::size_t>()};
+    };
+    for (const json& r : j.value("rules", json::array())) {
+        const std::string kind = r.value("kind", std::string());
+        const std::optional<GeoConstraint::Kind> k = geo_kind_named(kind);
+        if (!k)
+            throw std::runtime_error("unknown sketch constraint \"" + kind + "\"");
+        GeoConstraint rule;
+        rule.kind = *k;
+        rule.a = read_ref(r.value("a", json::array({0, 0})));
+        rule.b = read_ref(r.value("b", json::array({0, 0})));
+        rule.value = r.value("value", 0.0);
+        if (r.contains("at"))
+            rule.at = read_pt(r["at"]);
+        s.rules.push_back(rule);
+    }
     const json operation = j.value("operation", json::object());
     const std::string kind = operation.value("kind", std::string("extrude"));
     if (kind == "extrude") {

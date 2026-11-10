@@ -105,6 +105,7 @@ private:
     std::uint32_t line_number_ = 0;   // of the next numbered line
     bool auto_report_ = false;        // the firmware sends temperatures by itself (M155)
     bool unknown_command_ = false;    // the firmware did not know the last command
+    std::string* capture_ = nullptr;  // the answer lines of a command, kept (M115, M503)
     std::chrono::steady_clock::time_point last_temperatures_{};
 };
 

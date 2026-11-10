@@ -6,6 +6,8 @@
 #include "cad/fasteners.hpp"
 #include "cad/lathe.hpp"
 
+#include "cad/spec_json.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -353,30 +355,24 @@ std::string fastener_json(const FastenerSpec& spec) {
 }
 
 FastenerSpec parse_fastener(std::string_view text) {
-    try {
-        const nlohmann::json j = nlohmann::json::parse(text);
-        if (j.value("format", "") != "tisma-fastener-1")
-            throw std::runtime_error("not a fastener");
-        FastenerSpec spec;
-        const std::string kind = j.value("kind", "hex_bolt");
-        bool found = false;
-        for (const FastenerKind k : kFastenerKinds)
-            if (kind == fastener_id(k))
-                spec.kind = k, found = true;
-        if (!found)
-            throw std::runtime_error("unknown fastener kind " + kind);
-        spec.size = j.value("size", spec.size);
-        spec.diameter = j.value("diameter", spec.diameter);
-        spec.pitch = j.value("pitch", spec.pitch);
-        spec.length = j.value("length", spec.length);
-        spec.clearance = j.value("clearance", spec.clearance);
-        spec.segments = j.value("segments", spec.segments);
-        if (const std::string why = check_fastener(spec); !why.empty())
-            throw std::runtime_error(why);
-        return spec;
-    } catch (const nlohmann::json::exception& e) {
-        throw std::runtime_error(std::string("fastener: ") + e.what());
-    }
+    const nlohmann::json j = spec_object(text, "tisma-fastener-1", "fastener");
+    FastenerSpec spec;
+    const std::string kind = spec_field(j, "kind", std::string("hex_bolt"));
+    bool found = false;
+    for (const FastenerKind k : kFastenerKinds)
+        if (kind == fastener_id(k))
+            spec.kind = k, found = true;
+    if (!found)
+        throw std::runtime_error("unknown fastener kind " + kind);
+    spec.size = spec_field(j, "size", spec.size);
+    spec.diameter = spec_field(j, "diameter", spec.diameter);
+    spec.pitch = spec_field(j, "pitch", spec.pitch);
+    spec.length = spec_field(j, "length", spec.length);
+    spec.clearance = spec_field(j, "clearance", spec.clearance);
+    spec.segments = spec_field(j, "segments", spec.segments);
+    if (const std::string why = check_fastener(spec); !why.empty())
+        throw std::runtime_error(why);
+    return spec;
 }
 
 } // namespace tisma::cad

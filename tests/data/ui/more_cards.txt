@@ -1,0 +1,35 @@
+# «Más» as the cards of interface.md: each card's grey subtitle, each action's
+# shortcut on the right (Save Project as… Ctrl+Alt+S, Export G-code… Ctrl+G)
+# and greyed while it can't be used: export before slicing, undo with nothing
+# to undo, Delete Selected with nothing chosen, Save and Slice with an empty
+# plate. Delete Selected takes the chosen model (the opened one) off the plate.
+expect-objects 1
+menu more
+expect-text File
+expect-text Edit
+expect-text Configuration
+expect-text Ctrl+Alt+S
+expect-text Ctrl+G
+expect-text Ctrl+Shift+G
+expect-enabled save_project_as yes
+expect-enabled export_gcode no
+expect-enabled send_gcode no
+expect-enabled undo no
+expect-enabled redo no
+expect-enabled delete_selected yes
+menu delete_selected
+expect-objects 0
+menu more
+expect-enabled delete_selected no
+expect-enabled slice_now no
+expect-enabled save_project no
+menu view_top
+right-click-plate
+menu shape
+menu cube
+expect-objects 1 Cube
+slice
+menu more
+expect-enabled export_gcode yes
+expect-enabled slice_now yes
+menu view_iso

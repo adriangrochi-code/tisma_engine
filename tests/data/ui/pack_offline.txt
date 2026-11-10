@@ -1,0 +1,4 @@
+# The first run with no pack and no network (profile_pack.md, rule 3, PK2):
+# the included printers, a notice instead of an error, and the engine as usual.
+wait 30
+expect-toast Sin conexión

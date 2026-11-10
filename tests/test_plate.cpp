@@ -1,6 +1,7 @@
 #include "ui/plate.hpp"
 #include "mesh/shapes.hpp"
 #include "ui/measure.hpp"
+#include "project/engineering_case.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
@@ -142,6 +143,48 @@ TEST_CASE("plate: a click picks the nearest model and its face", "[plate]") {
     const TriangleMesh both = plate_mesh(placed);
     CHECK(both.triangle_count() == 24);
     CHECK_THAT(both.signed_volume(), WithinAbs(3000.0, 1e-3));
+}
+
+TEST_CASE("plate: the kept paint view walks again only the touched triangles, and equals the whole one (BH44)",
+          "[plate][paint]") {
+    std::vector<PlateObject> objects = {{"a", box(0, 0, 0, 10, 10, 10), {}, {}}, {"b", box(0, 0, 0, 20, 10, 5), {}, {}}};
+    objects[0].place.x = 50, objects[0].place.y = 50;
+    objects[1].place.x = 100, objects[1].place.y = 50;
+    const std::vector<TriangleMesh> placed = {placed_mesh(objects[0]), placed_mesh(objects[1])};
+    PaintMeshCache cache;
+    CHECK(cache.build(objects, placed, PaintChannel::Seam).vertices.empty());
+    const auto same = [&](const PaintMesh& a, const PaintMesh& b) {
+        REQUIRE(a.groups.size() == b.groups.size());
+        for (std::size_t g = 0; g < a.groups.size(); ++g) {
+            CHECK(a.groups[g].mark == b.groups[g].mark);
+            CHECK(a.groups[g].first == b.groups[g].first);
+            CHECK(a.groups[g].count == b.groups[g].count);
+        }
+        CHECK(a.vertices == b.vertices);
+    };
+    // Strokes on both models, then a block over one and an erase: after each,
+    // the kept view (told only the changed triangles) is the whole one.
+    const struct {
+        std::size_t object;
+        Vec3f centre;
+        std::uint8_t mark;
+    } strokes[] = {{1, {100, 50, 5}, kPaintEnforce}, {0, {50, 50, 10}, kPaintEnforce}, {1, {102, 50, 5}, kPaintBlock},
+                   {0, {50, 50, 10}, kPaintNone}};
+    for (const auto& st : strokes) {
+        Brush brush;
+        brush.centre = st.centre;
+        brush.radius = 3.0;
+        brush.view = {0, 0, -1};
+        brush.mark = st.mark;
+        std::vector<std::uint32_t> touched;
+        paint(objects[st.object].painting, PaintChannel::Seam, placed[st.object], brush, nullptr, &touched);
+        CHECK_FALSE(touched.empty());
+        cache.touch(st.object, touched);
+        same(cache.build(objects, placed, PaintChannel::Seam), paint_mesh(objects, placed, PaintChannel::Seam));
+    }
+    // After a reset, everything again: the same.
+    cache.reset();
+    same(cache.build(objects, placed, PaintChannel::Seam), paint_mesh(objects, placed, PaintChannel::Seam));
 }
 
 TEST_CASE("plate: the paint follows each model, and the plate joins it in order", "[plate][paint]") {
@@ -502,3 +545,71 @@ TEST_CASE("plate: the painting carried onto a design built again (cad_design.md,
     CHECK(carried_painting({}, before, after).empty());
 }
 
+
+TEST_CASE("plate: a box on the bed becomes a modifier that lands on it (structural_optimization.md, rule 3)", "[plate]") {
+    PlateObject o{"box", box(-50, 7, 40, 10, 20, 30), {}, {}};
+    o.place.x = 100, o.place.y = 120;
+    const std::array<double, 3> lo{96.0, 112.0, 2.0}, hi{99.0, 125.0, 8.5};
+    const auto lands = [&](const PlateObject& object) {
+        const TriangleMesh placed = placed_mesh(object);
+        const std::optional<PlateVolume> v = volume_for_bed_box(object, placed, lo, hi, R"({"infill": {"density": 70}})");
+        REQUIRE(v);
+        CHECK(v->kind == PlateVolume::Kind::Modifier);
+        CHECK(v->settings.find("70") != std::string::npos);
+        const BoundingBox b = volume_mesh(*v, object, placed).bounding_box();
+        CHECK_THAT(b.min.x, WithinAbs(lo[0], 1e-3));
+        CHECK_THAT(b.min.y, WithinAbs(lo[1], 1e-3));
+        CHECK_THAT(b.min.z, WithinAbs(lo[2], 1e-3));
+        CHECK_THAT(b.max.x, WithinAbs(hi[0], 1e-3));
+        CHECK_THAT(b.max.y, WithinAbs(hi[1], 1e-3));
+        CHECK_THAT(b.max.z, WithinAbs(hi[2], 1e-3));
+    };
+    lands(o);
+    o.place.scale = {2.0, 1.5, 0.5}; // scaled along its own axes
+    lands(o);
+    o.place.scale = {1.5, 1.5, 1.5};
+    o.place.rotation = rotated(rotated(kNoRotation, 2, 90.0), 0, 90.0); // turned, the same scale on every axis
+    lands(o);
+    // A turn by other than right angles with unequal scales: no box fits.
+    o.place.scale = {2.0, 1.0, 1.0};
+    o.place.rotation = rotated(kNoRotation, 2, 30.0);
+    const TriangleMesh placed = placed_mesh(o);
+    CHECK_FALSE(volume_for_bed_box(o, placed, lo, hi, "{}"));
+}
+
+TEST_CASE("plate: a lattice volume is its bars on the part where it stands (structural_optimization.md, rule 7)", "[plate]") {
+    PlateObject o{"cube", box(0, 0, 0, 10, 10, 10), {}, {}};
+    o.place.x = 50, o.place.y = 60;
+    o.place.rotation = rotated(kNoRotation, 2, 30.0); // turned: the bars still stand
+    PlateVolume v;
+    v.shape = PlateVolume::Shape::Lattice;
+    v.lattice_cell = 5.0;
+    v.lattice_diameter = 1.0;
+    const TriangleMesh placed = placed_mesh(o);
+    const TriangleMesh bars = volume_mesh(v, o, placed);
+    REQUIRE_FALSE(bars.empty());
+    const BoundingBox p = placed.bounding_box(), b = bars.bounding_box();
+    CHECK(b.min.z >= p.min.z - 0.51f);
+    CHECK(b.max.z <= p.max.z + 0.51f);
+    CHECK(b.min.x >= p.min.x - 0.51f);
+    CHECK(b.max.x <= p.max.x + 5.51f); // whole cells from the box's corner
+    // The vertical bars: some triangle edge runs straight up.
+    bool upright = false;
+    for (std::size_t t = 0; t < bars.triangle_count() && !upright; ++t) {
+        for (int k = 0; k < 3; ++k) {
+            const Vec3f a = bars.corner(t, k), c = bars.corner(t, (k + 1) % 3);
+            upright |= std::fabs(a.x - c.x) < 1e-3f && std::fabs(a.y - c.y) < 1e-3f && std::fabs(a.z - c.z) > 4.9f;
+        }
+    }
+    CHECK(upright);
+}
+
+TEST_CASE("plate: the recommended orientation turns the part so its layers stack along that axis (rule 8)", "[plate]") {
+    PlateObject o{"bar", box(0, 0, 0, 24, 6, 6), {}, {}};
+    for (int axis = 1; axis < 3; ++axis) {
+        o.place.rotation = layers_along(axis); // as «Girar la pieza» turns a part that was not turned
+        const BoundingBox b = placed_mesh(o).bounding_box();
+        CHECK_THAT(b.max.z - b.min.z, WithinAbs(axis == 1 ? 24.0 : 6.0, 1e-4));
+        CHECK_THAT(b.min.z, WithinAbs(0.0, 1e-4));
+    }
+}

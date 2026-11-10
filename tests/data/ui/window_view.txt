@@ -1,0 +1,33 @@
+# Window (Ctrl+1 to Ctrl+6) and View (interface.md, «Más»): Ctrl+4 opens the
+# printer's settings and Ctrl+2 the print settings again; the Preview entry is
+# greyed until a slice; Shift+Tab folds the settings panel and unfolds it;
+# F11 takes the whole screen and gives it back.
+menu more
+expect-enabled window_preview no
+expect-enabled window_printer yes
+menu view_iso
+key ctrl+4
+wait 3
+click machine.max_height
+key escape
+key ctrl+2
+wait 3
+expect-no-control compact_panel
+key shift+tab
+wait 3
+expect-control compact_panel
+key shift+tab
+wait 3
+expect-no-control compact_panel
+key f11
+wait 5
+key f11
+wait 5
+slice
+menu more
+expect-enabled window_preview yes
+menu window_plater
+menu more
+menu shape_gallery
+menu gallery_cylinder
+expect-objects 2 Cylinder

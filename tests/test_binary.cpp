@@ -138,3 +138,20 @@ TEST_CASE("binary G-code: exported with gcode.binary, named .bgcode", "[binary]"
     CHECK(totals->grams > 1.0);
     std::filesystem::remove(path);
 }
+
+// File › Convert binary G-code to ASCII… (interface.md, «Más»): the G-code
+// comes back with its closing summary and its settings, and made binary again
+// it is the same file, byte for byte.
+TEST_CASE("binary G-code: back to ASCII with its summary, and binary again the same", "[gcode][binary]") {
+    const Settings s = printer();
+    const SlicedModel model = slice_model(cube(), s);
+    std::ostringstream out;
+    write_gcode(out, model, s);
+    const std::string text = out.str();
+    const std::string b = binary_gcode(text, s);
+    const std::string ascii = ascii_gcode(read_binary_gcode(b));
+    CHECK(ascii.find("; estimated printing time = ") != std::string::npos);
+    CHECK(ascii.find("; layers.height = 0.2") != std::string::npos);
+    CHECK(text.starts_with(read_binary_gcode(b).gcode));
+    CHECK(binary_gcode(ascii, s) == b);
+}

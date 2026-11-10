@@ -192,10 +192,6 @@ std::vector<Polygons> supported_overhangs(const std::vector<Polygons>& regions, 
     return over;
 }
 
-namespace {
-void keep_from_bed(std::vector<Polygons>& support, const std::vector<Polygons>& regions, int bottom_gap);
-} // namespace
-
 std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const std::vector<double>& heights,
                                     const SupportParams& params) {
     const std::size_t n = regions.size();
@@ -279,8 +275,6 @@ std::vector<Polygons> support_areas(const std::vector<Polygons>& regions, const 
     return out;
 }
 
-namespace {
-
 // support.buildplate_only (supports_more.md, rule 2): the support's islands,
 // each layer's joined to the ones of the layer below they overlap, make
 // zones; a zone with an island right over the part (within the bottom gap)
@@ -345,8 +339,6 @@ void keep_from_bed(std::vector<Polygons>& support, const std::vector<Polygons>& 
         support[l] = std::move(kept);
     }
 }
-
-} // namespace
 
 void support_column(BitGrid& column, std::span<const BitGrid> parts, std::span<const BitGrid> adds,
                     std::span<BitGrid> kept, int radius) {

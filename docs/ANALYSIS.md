@@ -19,6 +19,36 @@ imprimir; 5 el análisis no dio un resultado válido. Con 5 el informe se escrib
 Cada archivo de salida se escribe primero como `<archivo>.part` y se renombra al terminar. Si el proceso se corta (por
 ejemplo, porque la interfaz lo cancela), nunca queda un archivo a medias con el nombre pedido.
 
+## Sobre un proyecto
+
+```
+tisma-engine analyze proyecto.3mf -o informe.json [--config ajustes.json] [--vtk mapa.vtk] [...]
+```
+
+Un proyecto guardado por la interfaz (el archivo propio o el 3MF) ya trae los ajustes y las condiciones marcadas en
+el apartado Ingeniería (`formats.md`, regla 11 bis), así que no hace falta `--case`:
+- se analiza la primera pieza que tenga alguna condición visible, en el lugar de la cama donde está;
+- los ajustes son los del proyecto, o los de `--config` si se da;
+- con `--case`, las condiciones son las del caso y no las marcadas (la pieza es la primera con condiciones, o la
+  primera de la placa si ninguna tiene); sigue sin hacer falta `--config`;
+- los puntos del informe van en las coordenadas propias de la pieza, como en el STL suelto (ver «El informe»);
+- el material es el cambiado a mano en el panel, o si no el del tipo de filamento del perfil (PLA, PLA+, PLA-CF,
+  PETG, PETG-CF, ABS, ASA, PA-CF, PA6-CF, PAHT-CF; un tipo que no está en la tabla da un aviso y se usa el PLA);
+- los otros valores cambiados a mano en el panel reemplazan a los del perfil: altura de capa, altura de la
+  primera capa y ancho de línea (como `walls.width`). La temperatura de extrusión entra en la adhesión
+  entre capas y entre cordones (`fea/adhesion`, relativa a la recomendada del material); el módulo y la
+  resistencia del material en sí no cambian con ella;
+- la calidad sale de las opciones de la pestaña Estructural («high» es alta; lo demás, normal);
+- cada zona fija o con fuerza es el conjunto de sus triángulos, y cada punto, un disco de su radio sobre la
+  superficie. Un nodo está en la zona si queda a menos de un vóxel de ella. Una fuerza se reparte solo entre las caras
+  de los vóxeles que miran hacia el mismo lado que la superficie marcada (a menos de 60°), así el costado de la pieza
+  junto a una cara de arriba marcada no se lleva parte de la carga;
+- los límites de desplazamiento todavía no se comprueban (lo dice un aviso).
+
+Sin ninguna pieza con condiciones, termina con el código 2 y dice qué falta. Medido: un cubo de 10 mm sujeto por
+abajo y empujado arriba con 100 N da por los triángulos marcados un desplazamiento máximo 1,2 % distinto del de las
+caras `bottom` y `top` del caso.
+
 ## El caso (`--case caso.json`)
 
 Un objeto JSON. Todas las claves son opcionales y una clave desconocida es un error. Las longitudes van en mm y las
@@ -60,6 +90,11 @@ Las partes de la pieza que ningún apoyo sostiene (unidas por caras a un vóxel 
 cálculo: su desplazamiento no está determinado. El informe dice cuántos vóxeles quedaron fuera.
 
 ## El informe (`-o informe.json`)
+
+Los puntos del informe van en las coordenadas propias de la pieza (`"frame": "part"`, `structural_analysis.md`): las
+del archivo del modelo, o en las que un proyecto guarda sus condiciones. Así la misma pieza da el mismo punto crítico
+suelta, en un proyecto, en el escritorio o en la nube, aunque se mueva en la cama. `result.weakest_on_bed` da además
+ese punto donde está en la cama, para marcarlo en la vista.
 
 El cubo de prueba de 10 mm en PLA Basic de Bambu Lab, calidad `high`, base fija y 100 N de corte en la cara de arriba
 (recortado; el análisis tardó 29,2 s y el chequeo de resolución unos 4 s más):

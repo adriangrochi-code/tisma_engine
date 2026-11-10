@@ -37,6 +37,15 @@
      "engine does not tell it the diameter: you add that to the start G-code yourself, or the part gets too much or "
      "too little plastic. On a pellet printer the engine writes it for Marlin and RepRapFirmware.\n\nExample: off for "
      "almost everyone; on, with M200 D1.75 in the start G-code, if your firmware uses volumetric extrusion."},
+    {"gcode.skip_config_block",
+     "Al final del G-code, el programa escribe todos los ajustes con que se laminó, como comentarios. Así se puede "
+     "abrir el archivo más tarde y recuperarlos. Algunas impresoras rechazan esas líneas.\n\nCon este ajuste el "
+     "archivo sale sin ese bloque: la pieza es la misma, pero el G-code ya no guarda sus ajustes.\n\nEjemplo: "
+     "apagado; encendido solo si la impresora da un error al leer el final del archivo.",
+     "At the end of the G-code, the program writes every setting it sliced with, as comments. That way the file can "
+     "be opened later and its settings brought back. Some printers reject those lines.\n\nWith this on, the file "
+     "comes out without that block: the part is the same, but the G-code no longer keeps its settings.\n\nExample: "
+     "off; on only if the printer gives an error reading the end of the file."},
     {"gcode.verbose_comments",
      "El G-code es el archivo de órdenes que lee la impresora. Con este ajuste, cada línea que escribe el motor lleva "
      "al final un comentario corto que dice qué hace: pared, relleno, retracción, viaje, ventilador.\n\nLa impresora "
@@ -66,14 +75,25 @@
      "Guarda el archivo en el formato binario .bgcode en vez del G-code de texto de siempre. Además de las órdenes, "
      "lleva en bloques aparte los datos de la impresión (impresora, filamento, tiempos, todos los ajustes) y una suma "
      "de control en cada bloque, que deja ver si el archivo llegó dañado.\n\nSolo lo leen las impresoras que aceptan "
-     ".bgcode; las demás no lo entienden. Por ahora no lleva miniaturas y no se comprime. Si el nombre termina en "
+     ".bgcode; las demás no lo entienden. Por ahora no se comprime; lleva las miniaturas que pidas. Si el nombre termina en "
      ".gcode, pasa a .bgcode.\n\nEjemplo: apagado para casi todas las impresoras; encendido solo si el manual de la "
      "tuya dice que lee .bgcode.",
      "Saves the file in the binary .bgcode format instead of the usual text G-code. Besides the instructions, it "
      "holds the print's data in separate blocks (printer, filament, times, every setting) and a checksum in each "
      "block, which shows whether the file arrived damaged.\n\nOnly printers that accept .bgcode can read it; the rest "
-     "do not understand it. For now it has no thumbnails and is not compressed. A name ending in .gcode becomes "
+     "do not understand it. For now it is not compressed; it holds the thumbnails you ask for. A name ending in .gcode becomes "
      ".bgcode.\n\nExample: off for almost every printer; on only if your printer's manual says it reads .bgcode."},
+    {"gcode.thumbnails",
+     "Pequeñas imágenes de la pieza que el archivo lleva al principio, para que la pantalla de la impresora o tu "
+     "programa de impresión muestren qué es antes de abrirlo. Se escriben como ancho x alto / formato, separadas por "
+     "comas; el formato puede ser PNG, JPG o QOI.\n\nCada impresora pide sus tamaños: los dice su manual o su perfil. "
+     "Por ahora van solo en el G-code binario (.bgcode); con G-code de texto el motor lo avisa.\n\n"
+     "Ejemplo: 16x16/PNG,220x124/PNG para una impresora que muestra una imagen chica y una mediana.",
+     "Small pictures of the part at the start of the file, so the printer's screen or your print program can show "
+     "what it is before opening it. Write them as width x height / format, separated by commas; the format can be "
+     "PNG, JPG or QOI.\n\nEach printer asks for its own sizes: its manual or its profile says them. For now they go "
+     "only in binary G-code (.bgcode); with text G-code the engine warns about it.\n\n"
+     "Example: 16x16/PNG,220x124/PNG for a printer that shows a small picture and a medium one."},
     {"gcode.corner_smoothing",
      "En una esquina en punta la impresora tiene que frenar casi del todo, girar y volver a acelerar. Este ajuste "
      "redondea esas esquinas con una curvita que se aparta del vértice como mucho esta distancia, para que pase sin "

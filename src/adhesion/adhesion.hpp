@@ -32,6 +32,13 @@ struct AdhesionShape {
     double brim_width = 0.0; // mm
     BrimType brim_type = BrimType::Outer;
     double brim_gap = 0.0; // mm between the part and the brim's first loop (rule 8)
+    // Brim ears (orca_2_5.md, rule 14): only discs of brim_width round the
+    // sharp corners (inner angle under ears_max_angle degrees, on the contour
+    // simplified by ears_detection mm), in the holes too unless ears_outer_only.
+    bool ears = false;
+    double ears_max_angle = 125.0;
+    double ears_detection = 1.0;
+    bool ears_outer_only = false;
     int skirt_loops = 0;
     double skirt_distance = 0.0; // mm
     // A draft shield (rule 4): the skirt measured from the part, and the

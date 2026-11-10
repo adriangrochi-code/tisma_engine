@@ -2,6 +2,7 @@
 #include "config/settings.hpp"
 #include "gcode/check.hpp"
 #include "gcode/preview.hpp"
+#include "gcode/template.hpp"
 #include "gcode/writer.hpp"
 #include "geom/bead.hpp"
 #include "report/warnings.hpp"
@@ -100,6 +101,65 @@ TEST_CASE("start and end G-code variables", "[gcode]") {
     CHECK(substitute_variables("T{list[2]} T{list[0]}", vars) == "Tc Ta");
     // Unknown names, indices out of range and stray brackets stay as they are.
     CHECK(substitute_variables("[nope] {list[9]} {temp[x]} [ ] {", vars) == "[nope] {list[9]} {temp[x]} [ ] {");
+}
+
+TEST_CASE("the temperature variables always exist, 0 when the filament lacks them (profile_pack.md rule 18 bis, BH30)",
+          "[gcode]") {
+    Settings s = test_printer();
+    s.start_gcode = "M104 S[temp]\nSTART_PRINT CHAMBER={chamber_temperature[0]} MIN={chamber_minimal_temperature[0]} "
+                    "IDLE={idle_temperature[0]}";
+    s.variables["temp"] = {"210"};
+    const std::vector<std::string> lines = lines_of(cube_gcode(s));
+    CHECK(std::find(lines.begin(), lines.end(), "START_PRINT CHAMBER=0 MIN=0 IDLE=0") != lines.end());
+}
+
+TEST_CASE("the old [name] form takes the pack's names and an index with a variable in it (BH41, GM5)", "[gcode][bh41]") {
+    Settings s = test_printer();
+    s.variables["first_layer_bed_temperature"] = {"60"};
+    s.variables["first_layer_temperature"] = {"215"};
+    s.variables["temperature"] = {"210"};
+    // Pasted from Anycubic's own program for a Kobra 3.
+    s.start_gcode = "G9111 bedTemp=[first_layer_bed_temperature] extruderTemp=[first_layer_temperature[initial_tool]]\n"
+                    "M104 S[temperature_0]\n;===== [Checks] =====";
+    const std::vector<std::string> lines = lines_of(cube_gcode(s));
+    CHECK(std::find(lines.begin(), lines.end(), "G9111 bedTemp=60 extruderTemp=215") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "M104 S210") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), ";===== [Checks] =====") != lines.end()); // a word in a comment
+}
+
+TEST_CASE("other programs' names, unfilled ones and indexes out of the list (gcode_macros.md rules 5, 9, 10 bis, GM11)",
+          "[gcode][bh41]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"220"};
+    s.variables["first_layer_bed_temperature"] = {"65"};
+    s.bed = {{0, 0}, {250, 0}, {250, 220}, {0, 220}};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // An OrcaSlicer name as the engine's, a list as a list, a single value as the list's first.
+    CHECK(render_template("{nozzle_temperature_initial_layer[0]}", c, "t") == "220");
+    CHECK(render_template("[bed_temperature_initial_layer_single]", c, "t") == "65");
+    CHECK(render_template("{print_bed_max[0]}x{print_bed_max[1]}", c, "t") == "250x220");
+    CHECK(render_template("{printable_height}", c, "t") == render_template("{max_print_height}", c, "t"));
+    // One the engine cannot fill yet: a neutral value, named for the log.
+    CHECK(c.unfilled.contains("curr_bed_type"));
+    CHECK(render_template("[curr_bed_type]", c, "t").empty());
+    CHECK(c.unfilled_used.contains("curr_bed_type"));
+    // An index past the list's end gives its last value, named for the log
+    // (rule 10 quater, BH45); one too large to read, or with an unknown
+    // variable in it, fails.
+    CHECK(render_template("[first_layer_temperature[3]]", c, "t") == "220");
+    CHECK(render_template("{first_layer_temperature[2] + 1}", c, "t") == "221");
+    CHECK(c.index_clamped.contains("first_layer_temperature"));
+    CHECK_THROWS_AS(render_template("[first_layer_temperature[99999999999999999999]]", c, "t"), TemplateError);
+    CHECK_THROWS_AS(render_template("[first_layer_temperature_99999999999999999999]", c, "t"), TemplateError);
+    CHECK_THROWS_AS(render_template("[first_layer_temperature[no_such]]", c, "t"), TemplateError);
+    // The plate chosen for a Bambu Lab printer fills curr_bed_type (rule 12).
+    Settings bambu = s;
+    bambu.bambu_plate = "Textured PEI Plate";
+    TemplateContext bc = template_context(bambu, SlicedModel{});
+    CHECK(render_template("{if curr_bed_type==\"Textured PEI Plate\"}textured{endif}", bc, "t") == "textured");
+    CHECK_FALSE(bc.unfilled.contains("curr_bed_type"));
+    // A name that is in no list still fails (rule 5, GM6).
+    CHECK_THROWS_AS(render_template("[no_such_variable]", c, "t"), TemplateError);
 }
 
 TEST_CASE("the cube's G-code follows the format Tisma's preview reads", "[gcode]") {
@@ -1443,6 +1503,15 @@ TEST_CASE("raft: support under the part, which goes up by it and the gap (skirt_
     // interface 1.5; half a bead in from each.
     CHECK_THAT(layers["0.200"].reach, Catch::Matchers::WithinAbs(4.5 - 0.2, 0.25));
     CHECK_THAT(layers["0.800"].reach, Catch::Matchers::WithinAbs(1.5 - 0.2, 0.25));
+    // OR15 (orca_2_5.md, rule 15): expansion 1.5 and 2 more on the first layer: 3.5 mm.
+    {
+        Settings or15 = s;
+        or15.raft_expansion = 1.5;
+        or15.raft_first_layer_expansion = 2.0;
+        std::map<std::string, RaftLayer> l15 = raft_layers(gcode(or15));
+        CHECK_THAT(l15["0.200"].reach, Catch::Matchers::WithinAbs(3.5 - 0.2, 0.25));
+        CHECK_THAT(l15["0.800"].reach, Catch::Matchers::WithinAbs(1.5 - 0.2, 0.25));
+    }
     // R6: the first layer's lines by its density.
     Settings sparse = s;
     sparse.raft_first_layer_density = 50.0;
@@ -2181,6 +2250,29 @@ TEST_CASE("cooling: the fan up step by step to cooling.full_fan_layer (cooling_m
     s.full_fan_layer = 0; // without it: the whole value from layer 4
     f = fans(s);
     CHECK(f[3] == "M106 S102");
+    // The first layer's own fan (orca_2_5.md, rule 17, OR17): 20 % on layer 1,
+    // then up to the normal value on layer 4; only with no layers off.
+    s.fan_min = s.fan_max = 100.0;
+    s.fan_off_layers = 0;
+    s.full_fan_layer = 4;
+    s.first_layer_fan = 20.0;
+    f = fans(s);
+    CHECK(f[0] == "M106 S51");  // 20 %
+    CHECK(f[1] == "M106 S119"); // 20 + 80 / 3 = 46.7 %
+    CHECK(f[2] == "M106 S187"); // 73.3 %
+    CHECK(f[3] == "M106 S255");
+    s.first_layer_fan = 0.0; // exactly off on layer 1, and from 0 up
+    f = fans(s);
+    CHECK(f[0] == "M107");
+    CHECK(f[1] == "M106 S85");
+    s.fan_off_layers = 1; // with layers off, the setting does nothing
+    s.first_layer_fan = 20.0;
+    f = fans(s);
+    CHECK(f[0] == "M107");
+    s.fan_off_layers = 3;
+    s.first_layer_fan = -1.0;
+    s.full_fan_layer = 0;
+    s.fan_min = s.fan_max = 40.0;
     // Cooling off: no fan by the layer's time and no slowing down.
     s.cooling_enabled = false;
     s.fan_always = false;
@@ -2333,7 +2425,7 @@ TEST_CASE("support: a gap and interface layers over the part it stands on (suppo
     CHECK(at(model, 7).second > 0);
 }
 
-TEST_CASE("support: from the bed only, a zone that stands on the part goes whole (supports_more.md, rule 2, SM2)", "[gcode][support]") {
+TEST_CASE("support: from the bed only, a zone that stands on the part goes whole (supports_more.md, rule 2, SM2)", "[gcode][support][bh39]") {
     const auto lifted = [](IndexedMesh& m, float x0, float y0, float x1, float y1, float z0, float z1) {
         const auto base = std::uint32_t(m.vertices.size());
         add_box(m, x0, y0, x1, y1, z1 - z0);
@@ -2361,6 +2453,13 @@ TEST_CASE("support: from the bed only, a zone that stands on the part goes whole
     IndexedMesh t;
     add_box(t, 8, 8, 12, 12, 3);
     lifted(t, 0, 0, 20, 20, 3, 4);
+    CHECK(support_layers(slice_model(t, s)) > 5);
+    // The same with organic trees (BH39: the option was ignored for them).
+    s.support_style = SupportStyle::Organic;
+    s.support_buildplate_only = false;
+    CHECK(support_layers(slice_model(shelf, s)) > 5);
+    s.support_buildplate_only = true;
+    CHECK(support_layers(slice_model(shelf, s)) == 0);
     CHECK(support_layers(slice_model(t, s)) > 5);
 }
 
@@ -2617,4 +2716,508 @@ TEST_CASE("filament per mm from the bead's rounded section (gcode_motion.md, rul
             CHECK_THAT(x.e / x.length(), Catch::Matchers::WithinAbs(0.033849, 0.00002));
         }
     CHECK(walls >= 8);
+}
+
+namespace {
+// The E values of the G1 moves, in order.
+std::vector<double> e_values(const std::string& gcode) {
+    std::vector<double> out;
+    for (const std::string& line : lines_of(gcode)) {
+        if (line.rfind("G1 ", 0) != 0)
+            continue;
+        const std::size_t at = line.find(" E");
+        if (at != std::string::npos)
+            out.push_back(std::atof(line.c_str() + at + 2));
+    }
+    return out;
+}
+} // namespace
+
+TEST_CASE("a cura printer's own G-code: only {name}, and the extrusion its start expects (GM10, rule 10 ter)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"210"};
+    s.relative_extrusion = true; // the profile says relative, the machine's G-code absolute
+    s.machine_macros.dialect = "cura";
+    s.machine_macros.templates["start"] =
+        "M82 ;absolute\nM104 S{material_print_temperature}\nG1 Z{no_such_cura_name}\n{if x}[kept]";
+    s.machine_macros.relative_extrusion = false;
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s, &warnings);
+    const std::string g = out.str();
+    const std::vector<std::string> lines = lines_of(g);
+    CHECK(std::find(lines.begin(), lines.end(), "M104 S210") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "G1 Z{no_such_cura_name}") != lines.end()); // left as written
+    CHECK(std::find(lines.begin(), lines.end(), "{if x}[kept]") != lines.end());           // no conditions in cura
+    CHECK(g.find("M83") == std::string::npos);
+    // Absolute: the same E as the profile set to absolute.
+    Settings absolute = test_printer();
+    absolute.relative_extrusion = false;
+    const std::vector<double> e = e_values(g);
+    REQUIRE(e.size() > 10);
+    CHECK(e == e_values(cube_gcode(absolute)));
+    // Not the simple version: only the log's note of the name left as written.
+    for (const Warning& w : warnings)
+        if (w.kind == "gcode_macro") {
+            CHECK(w.severity == "information");
+            CHECK_THAT(w.message, Catch::Matchers::ContainsSubstring("no_such_cura_name"));
+        }
+}
+
+TEST_CASE("an orcaslicer printer's own G-code with its names and machine values (GM11, rule 10 bis)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["first_layer_temperature"] = {"220"};
+    s.start_gcode = "; the simple start";
+    s.machine_macros.dialect = "orcaslicer";
+    s.machine_macros.templates["start"] = "M109 S{nozzle_temperature_initial_layer[0]}\n; model {printer_model}";
+    s.machine_macros.values["printer_model"] = {"Bambu Lab A1"};
+    const std::vector<std::string> lines = lines_of(cube_gcode(s));
+    CHECK(std::find(lines.begin(), lines.end(), "M109 S220") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "; model Bambu Lab A1") != lines.end());
+    CHECK(std::find(lines.begin(), lines.end(), "; the simple start") == lines.end());
+}
+
+TEST_CASE("a machine G-code the engine cannot read: the simple version, with a warning (rule 10 bis)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.start_gcode = "; the simple start";
+    s.machine_macros.dialect = "prusaslicer";
+    s.machine_macros.templates["start"] = "{if layer_height > 0}no end";
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s, &warnings);
+    const std::vector<std::string> lines = lines_of(out.str());
+    CHECK(std::find(lines.begin(), lines.end(), "; the simple start") != lines.end());
+    CHECK(std::count(lines.begin(), lines.end(), "no end") == 0);
+    CHECK(std::any_of(warnings.begin(), warnings.end(), [](const Warning& w) {
+        return w.kind == "gcode_macro" && w.message.find("prusaslicer") != std::string::npos;
+    }));
+}
+
+TEST_CASE("a machine's G-code speeds come from the settings, never F0 (gcode_macros.md rule 10 quater, GM12, BH45)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"215"};
+    s.wall_speed = 60.0;
+    s.outer_wall_speed = {50.0, false};
+    s.filament_max_flow = 21.0;
+    s.travel_speed = 200.0;
+    // Speeds computed from a machine's own variables, as a printer's start
+    // G-code does, and an F0 written as it is.
+    s.start_gcode = "G1 E10 F{outer_wall_volumetric_speed/(24/20)*60}\n"
+                    "G0 X128 E8 F{flush_volumetric_speeds[initial_no_support_extruder]/2.4053*60}\n"
+                    "M109 S{flush_temperatures[initial_no_support_extruder]}\n"
+                    "M620.1 E F0 T{nozzle_temperature_range_high[initial_no_support_extruder]}\n"
+                    "G1 X5 F0.0 ; F0 in a comment stays\n"
+                    "G0 F0\nG00 X1 F0\nM862.1 F{(0 ? 1 : 0)}";
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s, &warnings);
+    const std::vector<std::string> lines = lines_of(out.str());
+    for (const std::string& line : lines) {
+        const std::string code = line.substr(0, line.find(';'));
+        CAPTURE(line);
+        if (!code.starts_with("G"))
+            continue;
+        CHECK(code.find(" F0 ") == std::string::npos);
+        CHECK(!code.ends_with(" F0"));
+        CHECK(!code.ends_with(" F0.0"));
+    }
+    // 50 mm/s × the outer bead × 0.2 mm, under the filament's 21 mm³/s.
+    const double outer = 50.0 * auto_wall_width(s.nozzle_diameter) * s.layer_height;
+    const auto has_prefix = [&](const std::string& prefix) {
+        return std::any_of(lines.begin(), lines.end(), [&](const std::string& l) { return l.starts_with(prefix); });
+    };
+    CHECK(has_prefix("G1 E10 F" + template_text(TemplateValue::of(std::round(outer * 1000.0) / 1000.0 / (24 / 20) * 60))));
+    CHECK(has_prefix("G0 X128 E8 F523"));          // 21 / 2.4053 × 60
+    CHECK(has_prefix("M109 S215"));
+    CHECK(has_prefix("M620.1 E F0 T215"));          // not a move: an F that is no speed stays
+    CHECK(has_prefix("G1 X5 F12000 ; F0 in a comment stays"));
+    CHECK(has_prefix("G0 F12000"));
+    CHECK(has_prefix("G00 X1 F12000"));
+    CHECK(has_prefix("M862.1 F0"));
+    CHECK(std::any_of(warnings.begin(), warnings.end(),
+                      [](const Warning& w) { return w.kind == "gcode_macro" && w.message.find("F0") != std::string::npos; }));
+    // Without any flow in the settings: a safe one, named.
+    Settings bare = test_printer();
+    bare.start_gcode = "G1 E10 F{filament_max_volumetric_speed[0]*60}";
+    std::vector<Warning> bare_warnings;
+    std::ostringstream bare_out;
+    write_gcode(bare_out, slice_model(m, bare), bare, &bare_warnings);
+    CHECK(bare_out.str().find("G1 E10 F480") != std::string::npos);
+    CHECK(std::any_of(bare_warnings.begin(), bare_warnings.end(), [](const Warning& w) {
+        return w.kind == "gcode_macro" && w.message.find("filament_max_volumetric_speed") != std::string::npos;
+    }));
+}
+
+TEST_CASE("Bambu Lab's own variables are filled, and a list read past its end gives its last value (rule 10 quater)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.max_accel_y = 9000.0;
+    s.bed = {{0, 0}, {256, 0}, {256, 256}, {0, 256}};
+    s.start_gcode = "; centre {first_layer_center_no_wipe_tower[0]},{first_layer_center_no_wipe_tower[1]}\n"
+                    "; top {max_print_z} filament {first_non_support_filaments[initial_no_support_extruder]} "
+                    "second {first_non_support_filaments[1]}\n"
+                    "; y {curr_y_acceleration_limit} vitrification {min_vitrification_temperature} "
+                    "hold {hold_chamber_temp_for_flat_print} id \"{filament_ids[0]}\"";
+    std::vector<Warning> warnings;
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    const SlicedModel model = slice_model(m, s);
+    write_gcode(out, model, s, &warnings);
+    const std::string text = out.str();
+    CHECK(text.find("; top 10 filament 0 second 0") != std::string::npos);
+    CHECK(text.find("; y 9000 vitrification 0 hold false id \"\"") != std::string::npos);
+    // The cube's first layer, wherever the test printer puts it.
+    const std::size_t at = text.find("; centre ");
+    REQUIRE(at != std::string::npos);
+    CHECK(text.substr(at, 12) != "; centre 0,0");
+    CHECK(std::any_of(warnings.begin(), warnings.end(), [](const Warning& w) {
+        return w.kind == "gcode_macro" && w.message.find("first_non_support_filaments") != std::string::npos;
+    }));
+}
+
+TEST_CASE("OrcaSlicer and Creality Print filaments' own G-code names (gcode_variables.md, 2026-11-10)", "[gcode][macros]") {
+    Settings s = test_printer();
+    TemplateContext c = template_context(s, SlicedModel{});
+    CHECK(render_template("{if support_air_filtration}on{else}off{endif}", c, "extrusion.start_gcode") == "off");
+    CHECK(render_template("{initial_layer_height}", c, "extrusion.start_gcode") ==
+          template_text(TemplateValue::of(s.first_layer_height)));
+}
+
+TEST_CASE("the profile pack's machine G-code: what its full run found (BH45, third part)", "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"215"};
+    TemplateContext c = template_context(s, SlicedModel{});
+    // PrusaSlicer's filaments: the tool they run for; Cura's print temperature.
+    CHECK(render_template("T{filament_extruder_id}", c, "t") == "T0");
+    CHECK(render_template("{print_temperature}", c, "t") == "215");
+    // The old form with a variable index, and random() the same every time.
+    CHECK(render_template("M109 S[temperature_[current_extruder]]", c, "t") == "M109 S215");
+    CHECK(render_template("G1 Y{random(2,8)}", c, "t") == "G1 Y5");
+    // The OrcaSlicer family's filament map is 1-based.
+    CHECK(render_template("{filament_map[0] - 1}", c, "t") == "0");
+    // Several statements in a block; assigning a variable and a list's item.
+    CHECK(render_template("{global retract_toolchange = 8; local n = 2}R{retract_toolchange * n}", c, "t") == "R16");
+    CHECK(render_template("{e_retracted = (0, 0)}{e_retracted[1] = 1.5 * 2}{e_retracted[1]}", c, "t") == "3");
+    CHECK(render_template("{temperature[0] = 230}{temperature[0]}", c, "t") == "230");
+    CHECK(render_template("{1 == 1}", c, "t") == "true");
+    // ~name: a variable's text as a regular expression in one_of() (the CORE
+    // One INDX's dock fan): the whole value matches.
+    CHECK(render_template("{global low_temp_types = \"PLA|PVA|BVOH|FLEX|TPU|TPE|PVB\"}", c, "t").empty());
+    for (const auto& [type, yes] : std::vector<std::pair<std::string, bool>>{
+             {"PLA", true}, {"TPU", true}, {"PETG", false}, {"PC", false}, {"ASA", false}, {"PLAX", false}})
+        CHECK(render_template("{one_of(\"" + type + "\", ~low_temp_types)}", c, "t") == (yes ? "true" : "false"));
+    CHECK_THROWS_WITH(render_template("{one_of(\"PLA\", ~layer_height)}", c, "t"),
+                      Catch::Matchers::ContainsSubstring("'~layer_height' is not a text"));
+}
+
+TEST_CASE("a RepRapFirmware macro (M98) may heat a nozzle set to 0 before it: only a note", "[gcode][check]") {
+    Settings s = test_printer();
+    s.start_gcode = "M104 S0\nM98 P\"start_print.g\" A215";
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    const SlicedModel model = slice_model(m, s);
+    CHECK_NOTHROW(write_gcode(out, model, s));
+    CHECK(check_gcode(out.str(), gcode_limits(model, s)).ok());
+}
+
+TEST_CASE("a machine's own G-code comes out as written, but for what is evaluated (gcode_macros.md 10 quinquies, GM13, "
+          "GM14)",
+          "[gcode][macros]") {
+    Settings s = test_printer();
+    s.variables["temperature"] = {"215"};
+    s.machine_macros.dialect = "prusaslicer";
+    s.machine_macros.values["nozzle_high_flow"] = {"0"};
+    // Lines with nothing to evaluate: spaces, tabs, comments, blank lines,
+    // odd commands and words in brackets that are not variables.
+    const std::string plain = "  G28   ; home all [Checks]\n"
+                              "\tM862.3 P \"MK4\" ; printer model check\n"
+                              "\n"
+                              "M862.1 P0.4 F0\n"
+                              "M900 K0.05;no space\n"
+                              "G1 Z5 F720   \n"
+                              "; ünïcode comment\n"
+                              "M117 Starting...";
+    s.machine_macros.templates["start"] = plain + "\nM104 S{temperature[0]} ; evaluated\nM862.1 P0.4 F{(nozzle_high_flow[0] ? 1 : 0)}";
+    std::ostringstream out;
+    const IndexedMesh m = weld_exact(read_stl(std::filesystem::path(TISMA_TEST_DATA_DIR) / "cube_ascii.stl").mesh);
+    write_gcode(out, slice_model(m, s), s);
+    const std::string text = out.str();
+    // GM13: every plain line, in the same order, byte for byte.
+    CHECK(text.find(plain + "\nM104 S215 ; evaluated\n") != std::string::npos);
+    // GM14: Prusa's nozzle check keeps its F0 (no high-flow nozzle).
+    CHECK(text.find("\nM862.1 P0.4 F0\n") != std::string::npos);
+    CHECK(text.find("M862.1 P0.4 F1") == std::string::npos);
+    CHECK(text.find("M862.1 P0.4 F10") == std::string::npos);
+}
+
+TEST_CASE("gcode: no settings block with gcode.skip_config_block (orca_2_5.md, rule 22, OR22)", "[gcode]") {
+    Settings s = test_printer();
+    const std::string with = cube_gcode(s);
+    CHECK(with.find("; layers.height = ") != std::string::npos);
+    s.gcode_skip_config_block = true;
+    const std::string without = cube_gcode(s);
+    CHECK(without.find("; layers.height = ") == std::string::npos);
+    CHECK(without.find("; estimated printing time = ") != std::string::npos); // the totals stay
+    CHECK(parse_settings(R"({"gcode": {"skip_config_block": true}})").gcode_skip_config_block);
+}
+
+TEST_CASE("support: small extrusions at speed.small_support (orca_2_5.md, rule 16, OR16)", "[gcode][support]") {
+    IndexedMesh m;
+    add_box(m, 4, 4, 6, 6, 2);
+    const auto base = std::uint32_t(m.vertices.size());
+    add_box(m, 0, 0, 10, 10, 1);
+    for (std::size_t v = base; v < m.vertices.size(); ++v)
+        m.vertices[v].z += 2.0f;
+    Settings s = test_printer();
+    s.skirt_loops = 0;
+    s.support = true;
+    s.support_speed = 40.0;
+    s.support_interface_speed = {};
+    s.gcode_resolution = 0.0;
+    s.min_layer_time = 0.0;      // no slowing down for cooling
+    s.first_layer_speed = 100.0; // nor on the first layer
+    s.speed_max_flow = 0.0;
+    // Each support path (extrusions between two moves that do not extrude)
+    // with its length and its feeds.
+    struct Path {
+        double length = 0.0;
+        std::set<long> feeds;
+    };
+    const auto paths = [&](const Settings& settings) {
+        std::ostringstream out;
+        write_gcode(out, slice_model(m, settings), settings);
+        std::vector<Path> found;
+        bool support = false, open = false;
+        double x = 0, y = 0;
+        long feed = 0;
+        for (const std::string& line : lines_of(out.str())) {
+            if (line.rfind(";TYPE:", 0) == 0) {
+                support = line.rfind(";TYPE:Support material", 0) == 0;
+                open = false;
+            }
+            if (line.rfind("G1 ", 0) != 0 && line.rfind("G0 ", 0) != 0)
+                continue;
+            const auto word = [&](char c) -> std::optional<double> {
+                const std::size_t at = line.find(std::string(" ") + c);
+                if (at == std::string::npos)
+                    return std::nullopt;
+                return std::atof(line.c_str() + at + 2);
+            };
+            const double nx = word('X').value_or(x), ny = word('Y').value_or(y);
+            if (const auto f = word('F'))
+                feed = std::lround(*f);
+            const bool extrudes = word('E') && *word('E') > 0.0 && (nx != x || ny != y);
+            if (extrudes && support) {
+                if (!open)
+                    found.push_back({}), open = true;
+                found.back().length += std::hypot(nx - x, ny - y);
+                found.back().feeds.insert(feed);
+            } else if (nx != x || ny != y) {
+                open = false;
+            }
+            x = nx, y = ny;
+        }
+        return found;
+    };
+    // Off: every support path at 40 mm/s.
+    for (const Path& p : paths(s))
+        CHECK(p.feeds == std::set<long>{2400});
+    s.small_support_threshold = 2.0; // up to 12.57 mm
+    s.small_support_speed = {20.0, false};
+    std::size_t small = 0, large = 0;
+    for (const Path& p : paths(s)) {
+        INFO("length " << p.length);
+        if (p.length < 12.4) {
+            CHECK(p.feeds == std::set<long>{1200});
+            ++small;
+        } else if (p.length > 12.7) {
+            CHECK(p.feeds == std::set<long>{2400});
+            ++large;
+        }
+    }
+    CHECK(small > 0);
+    CHECK(large > 0);
+    // As a share of the support's own speed.
+    s.small_support_speed = {25.0, true};
+    for (const Path& p : paths(s))
+        if (p.length < 12.4)
+            CHECK(p.feeds == std::set<long>{600});
+    CHECK(parse_settings(R"({"speed": {"small_support": "50%", "small_support_threshold": 2}})").small_support_speed.percent);
+}
+
+TEST_CASE("brim: ears at the sharp corners only (orca_2_5.md, rule 14, OR14)", "[gcode][brim]") {
+    // A 20 mm square with an 8 mm square hole in the middle.
+    const auto square = [](double x0, double y0, double x1, double y1, bool hole) {
+        Polygon p{{std::llround(x0 * kUnitsPerMm), std::llround(y0 * kUnitsPerMm)},
+                  {std::llround(x1 * kUnitsPerMm), std::llround(y0 * kUnitsPerMm)},
+                  {std::llround(x1 * kUnitsPerMm), std::llround(y1 * kUnitsPerMm)},
+                  {std::llround(x0 * kUnitsPerMm), std::llround(y1 * kUnitsPerMm)}};
+        if (hole)
+            std::reverse(p.begin(), p.end());
+        return p;
+    };
+    const Polygons region{square(0, 0, 20, 20, false), square(6, 6, 14, 14, true)};
+    AdhesionShape a;
+    a.brim_width = 3.0;
+    a.ears = true;
+    a.ears_max_angle = 125.0;
+    a.ears_outer_only = true;
+    const std::vector<Toolpath> ears = brim_loops(region, a, 0.45, 0.2);
+    REQUIRE_FALSE(ears.empty());
+    // Every piece near an outer corner, outside the part, none in the hole.
+    std::set<int> corners;
+    for (const Toolpath& t : ears) {
+        CHECK_FALSE(t.closed);
+        for (const ToolpathPoint& p : t.points) {
+            const double cx = p.p.x < 10.0 ? 0.0 : 20.0, cy = p.p.y < 10.0 ? 0.0 : 20.0;
+            CHECK(std::hypot(p.p.x - cx, p.p.y - cy) <= 3.0 + 1e-6);
+            CHECK_FALSE((p.p.x > 0.0 && p.p.x < 20.0 && p.p.y > 0.0 && p.p.y < 20.0));
+            corners.insert(int(cx > 0.0) * 2 + int(cy > 0.0));
+        }
+    }
+    CHECK(corners.size() == 4);
+    // Without outer only: ears in the hole's corners too.
+    a.ears_outer_only = false;
+    bool in_hole = false;
+    for (const Toolpath& t : brim_loops(region, a, 0.45, 0.2))
+        for (const ToolpathPoint& p : t.points)
+            in_hole = in_hole || (p.p.x > 6.0 && p.p.x < 14.0 && p.p.y > 6.0 && p.p.y < 14.0);
+    CHECK(in_hole);
+    // An angle of 0: no ears; and less brim than the whole one.
+    a.ears_max_angle = 0.0;
+    CHECK(brim_loops(region, a, 0.45, 0.2).empty());
+    a.ears_max_angle = 125.0;
+    a.ears_outer_only = true;
+    const auto length = [](const std::vector<Toolpath>& paths) {
+        double total = 0.0;
+        for (const Toolpath& t : paths)
+            for (std::size_t i = 0; i + 1 < t.points.size() + (t.closed ? 1 : 0); ++i) {
+                const Point2d& p = t.points[i].p;
+                const Point2d& q = t.points[(i + 1) % t.points.size()].p;
+                total += std::hypot(q.x - p.x, q.y - p.y);
+            }
+        return total;
+    };
+    AdhesionShape whole = a;
+    whole.ears = false;
+    CHECK(length(brim_loops(region, a, 0.45, 0.2)) < 0.6 * length(brim_loops(region, whole, 0.45, 0.2)));
+    // An octagon's corners (135 degrees) get none at 125.
+    Polygon octagon;
+    for (int k = 0; k < 8; ++k)
+        octagon.push_back({std::llround(10.0 * std::cos(k * std::numbers::pi / 4.0) * kUnitsPerMm),
+                           std::llround(10.0 * std::sin(k * std::numbers::pi / 4.0) * kUnitsPerMm)});
+    CHECK(brim_loops(Polygons{octagon}, a, 0.45, 0.2).empty());
+    CHECK_FALSE(parse_settings(R"({"adhesion": {"brim_ears": true, "brim_ears_max_angle": 90}})").brim_ears_outer_only);
+}
+
+TEST_CASE("temperatures: the first layer's at the start, the print's from the second layer (spec team, 2026-11-09)",
+          "[gcode]") {
+    Settings s = test_printer();
+    s.start_gcode = "G28 ; home";
+    s.variables["temperature"] = {"205"};
+    s.variables["first_layer_temperature"] = {"215"};
+    s.variables["bed_temperature"] = {"60"};
+    s.variables["first_layer_bed_temperature"] = {"65"};
+    std::string g = cube_gcode(s);
+    const std::size_t first = g.find(";LAYER_CHANGE"), second = g.find(";LAYER_CHANGE", first + 1),
+                      third = g.find(";LAYER_CHANGE", second + 1);
+    REQUIRE(third != std::string::npos);
+    const std::string start = g.substr(0, first), layer2 = g.substr(second, third - second);
+    CHECK(start.find("M190 S65\n") != std::string::npos);
+    CHECK(start.find("M104 S215\n") != std::string::npos);
+    CHECK(start.find("M109 S215\n") != std::string::npos);
+    CHECK(start.find("S205") == std::string::npos);
+    CHECK(layer2.find("M104 S205\n") != std::string::npos);
+    CHECK(layer2.find("M140 S60\n") != std::string::npos);
+    // The same values: no change on the second layer.
+    s.variables["first_layer_temperature"] = {"205"};
+    s.variables["first_layer_bed_temperature"] = {"60"};
+    g = cube_gcode(s);
+    const std::size_t f2 = g.find(";LAYER_CHANGE");
+    CHECK(g.find("M104", f2) == std::string::npos);
+    CHECK(g.find("M140", f2) == std::string::npos);
+    // A start that heats itself: nothing written by the engine.
+    s.start_gcode = "M109 S[first_layer_temperature]";
+    s.variables["first_layer_temperature"] = {"215"};
+    g = cube_gcode(s);
+    CHECK(g.find("M104 S205") == std::string::npos);
+}
+
+// Export Toolpaths as OBJ (interface.md, the owner's QA 2026-11-10): every
+// extrusion of the G-code is one segment of an "l" polyline, joined runs in
+// one element, a group per kind, at the G-code's own points; travels are not
+// there.
+TEST_CASE("toolpaths as OBJ: each extrusion once, at its points, grouped by kind", "[gcode]") {
+    const std::string gcode = "G90\nM82\nG92 E0\n;LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\n"
+                              "G1 Z0.2 F600\nG1 X10 Y10 F6000\n;TYPE:External perimeter\n;WIDTH:0.45\n"
+                              "G1 X20 Y10 E1\nG1 X20 Y20 E2\nG1 X10 Y20 E3\nG1 X10 Y10 E4\n"
+                              "G1 X30 Y30 F6000\n;TYPE:Internal infill\nG1 X40 Y40 E5\n";
+    const GcodePreview preview = read_gcode_preview(gcode);
+    REQUIRE(preview.extrusions.size() == 5);
+    const std::string obj = toolpaths_obj(preview);
+    std::vector<std::array<double, 3>> v;
+    std::size_t segments = 0, polylines = 0, groups = 0;
+    std::istringstream in(obj);
+    for (std::string line; std::getline(in, line);) {
+        std::istringstream l(line);
+        std::string tag;
+        l >> tag;
+        if (tag == "v") {
+            std::array<double, 3> p{};
+            l >> p[0] >> p[1] >> p[2];
+            v.push_back(p);
+        } else if (tag == "l") {
+            std::vector<std::size_t> ids;
+            for (std::size_t id; l >> id;)
+                ids.push_back(id);
+            REQUIRE(ids.size() >= 2);
+            for (const std::size_t id : ids)
+                REQUIRE((id >= 1 && id <= v.size()));
+            segments += ids.size() - 1;
+            ++polylines;
+        } else if (tag == "g") {
+            ++groups;
+        }
+    }
+    CHECK(segments == preview.extrusions.size());
+    CHECK(polylines == 2); // the closed outer loop, then the infill line
+    CHECK(groups == 2);
+    REQUIRE(v.size() == 7);
+    CHECK(v.front() == std::array<double, 3>{10, 10, 0.2});
+    CHECK(v.back() == std::array<double, 3>{40, 40, 0.2});
+}
+
+// The preview's legend against the G-code it shows (the owner's QA,
+// 2026-11-10): the time by kind adds up to the moves' time, which is the
+// estimate the file states less its retractions and waits; the filament by
+// kind adds up to the filament the file pushes; every extrusion of the file
+// is in some kind.
+TEST_CASE("the preview's legend adds up to the G-code it shows", "[gcode]") {
+    Settings s = test_printer();
+    const std::string gcode = cube_gcode(s);
+    GcodePreview p = read_gcode_preview(gcode, s.filament_diameter);
+    time_preview(p, machine_kinematics(s), s.filament_diameter);
+    double seconds = 0.0, filament = 0.0;
+    std::size_t moves = 0;
+    for (std::size_t k = 0; k < kLineKinds; ++k) {
+        seconds += p.kind_seconds[k];
+        filament += p.kind_filament[k];
+        if (k != std::size_t(LineKind::Travel))
+            moves += p.kind_moves[k];
+    }
+    INFO("moves " << p.moves_seconds << " s, estimate " << p.estimated_seconds << " s, filament " << p.filament
+                  << " mm, by kind " << filament << " mm");
+    CHECK_THAT(seconds, WithinRel(p.moves_seconds, 1e-6)); // sums of floats in another order
+    CHECK(moves == p.extrusions.size());
+    CHECK_THAT(filament, WithinRel(p.filament, 0.02));
+    REQUIRE(p.estimated_seconds > 0.0);
+    CHECK(p.moves_seconds <= p.estimated_seconds + 1.0);
+    CHECK(p.moves_seconds >= 0.75 * p.estimated_seconds);
 }

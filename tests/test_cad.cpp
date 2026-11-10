@@ -2,10 +2,15 @@
 // the design as a SolidCraft script, the bundled tool driven through its
 // stand-in (tests/fake_solidcraft_cli.cpp), and the 3MF written and read.
 
+#include "cad/constraints.hpp"
+#include "cli/cli.hpp"
 #include "cad/design.hpp"
+#include "cad/parameters.hpp"
 #include "cad/process.hpp"
 #include "cad/sketch.hpp"
 #include "cad/solidcraft.hpp"
+#include "cad/sketch_io.hpp"
+#include "cad/view_dxf.hpp"
 #include "io/model.hpp"
 #include "mesh/shapes.hpp"
 
@@ -15,9 +20,16 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 #include <catch2/matchers/catch_matchers_string.hpp>
 
+#include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <random>
+#include <sstream>
+#include <map>
 #include <cstdlib>
+#include <fstream>
 #include <numbers>
+#include <tuple>
 
 using namespace tisma;
 using namespace tisma::cad;
@@ -165,7 +177,8 @@ TEST_CASE("cad: the bundled tool probed and a design built through it (CD2's box
     CHECK_THAT(info.version, ContainsSubstring(kSolidCraftVersion));
     CHECK(info.has("solid.box"));
     CHECK(info.has("solid.torus"));
-    CHECK_FALSE(info.has("solid.fillet")); // «Próximamente»
+    CHECK(info.has("solid.fillet"));
+    CHECK_FALSE(info.has("solid.loft")); // «Próximamente»
     // A 40 x 30 x 20 box: 24 000 mm3 and that box, standing on the bed.
     const BuildResult built = build_design(kFake, box_design(), MeshQuality::Standard);
     INFO(built.error);
@@ -451,3 +464,770 @@ TEST_CASE("cad: a rectangle extruded and a profile revolved through the tool (CD
     CHECK_THAT(built.volume_mm3, WithinRel(2.0 * std::numbers::pi * std::numbers::pi * 15.0 * 16.0, 0.01));
 }
 
+
+TEST_CASE("cad: parameters with units, their order and their errors (rule 9)", "[cad]") {
+    std::map<std::string, Quantity> v{{"ancho", {40.0, Measure::Length}}, {"angulo", {60.0, Measure::Angle}}};
+    const auto value = [&](const std::string& e) {
+        const Evaluation r = evaluate(e, v);
+        INFO(e << ": " << r.error);
+        REQUIRE(r.value);
+        return *r.value;
+    };
+    CHECK(value("2 * ancho + 5 mm").value == 85.0);
+    CHECK(value("2 * ancho + 5 mm").measure == Measure::Length);
+    CHECK(value("angulo / 2").value == 30.0);
+    CHECK(value("angulo / 2").measure == Measure::Angle);
+    CHECK(value("2,5 cm").value == 25.0);
+    CHECK(value("1 in").value == 25.4);
+    CHECK_THAT(value("1 rad").value, WithinRel(57.29578, 1e-6));
+    CHECK(value("-(ancho - 10) * 2").value == -60.0);
+    CHECK(value("ancho / 4 mm").measure == Measure::None); // a length over a length
+    CHECK(value("30°").measure == Measure::Angle);
+    // What is not a value says why.
+    for (const char* bad : {"ancho + angulo", "ancho * ancho", "2 *", "(1 + 2", "largo + 1", "1 / 0", "5 mm mm"})
+        CHECK_FALSE(evaluate(bad, v).value);
+    // Parameters in any order, each using others; a cycle and a missing name fail.
+    const ParameterValues p = evaluate_parameters({{"total", "2 * ancho + borde"},
+                                                   {"ancho", "40 mm"},
+                                                   {"borde", "5"},
+                                                   {"a", "b + 1"},
+                                                   {"b", "a + 1"},
+                                                   {"c", "nada * 2"},
+                                                   {"mm", "1"}});
+    CHECK(p.values.at("total").value == 85.0);
+    CHECK(p.values.at("total").measure == Measure::Length);
+    CHECK(p.errors.count("a"));
+    CHECK(p.errors.count("b"));
+    CHECK(p.errors.count("c"));
+    CHECK(p.errors.count("mm")); // a unit is not a name
+    CHECK(valid_parameter_name("ancho_2"));
+    CHECK_FALSE(valid_parameter_name("2ancho"));
+}
+
+TEST_CASE("cad: CD4, a parameter changes the part without redoing it by hand", "[cad]") {
+    // CD2's rectangle, its width tied to «ancho», its extrusion to «alto».
+    Design d;
+    d.parameters = {{"ancho", "40 mm"}, {"alto", "ancho / 2"}};
+    Feature f;
+    f.name = "Plate";
+    f.type = Feature::Type::Sketch;
+    f.sketch.entities.push_back({Entity::Kind::Rectangle, {{0.0, 0.0}, {40.0, 30.0}}});
+    f.bindings = {{"e0.width", "ancho"}, {"distance", "alto"}};
+    d.features.push_back(f);
+    CHECK(apply_parameters(d).empty());
+    CHECK(d.features[0].operation.distance == 20.0);
+    d.parameters[0].expression = "50 mm";
+    CHECK(apply_parameters(d).empty());
+    CHECK(d.features[0].sketch.entities[0].points[1].x == 50.0);
+    CHECK(d.features[0].operation.distance == 25.0);
+    // A primitive's size, and a wrong measure or target said, the size kept.
+    Feature box;
+    box.name = "Box";
+    box.bindings = {{"size0", "ancho"}, {"size1", "30 deg"}, {"size7", "1"}};
+    d.features.push_back(box);
+    const std::vector<std::string> problems = apply_parameters(d);
+    CHECK(d.features[1].sizes[0] == 50.0);
+    CHECK(d.features[1].sizes[1] == 20.0);
+    REQUIRE(problems.size() == 2);
+    // Kept with the design.
+    const Design back = parse_design(design_json(d));
+    CHECK(back.parameters == d.parameters);
+    CHECK(back.features[0].bindings == d.features[0].bindings);
+    CHECK(back.features[1].bindings == d.features[1].bindings);
+    // Through the tool: 40 wide gives 24 000 mm3 (20 high), 50 wide 50 x 30 x 25.
+    if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
+        SKIP("the stand-in solidcraft-cli was not built");
+    set_env("TISMA_FAKE_SOLIDCRAFT_HANG", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_BROKEN", nullptr);
+    d.features.pop_back();
+    d.parameters[0].expression = "40 mm";
+    BuildResult built = build_design(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    CHECK_THAT(built.volume_mm3, WithinAbs(24000.0, 1e-3));
+    d.parameters[0].expression = "50 mm";
+    built = build_design(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    CHECK_THAT(built.volume_mm3, WithinAbs(50.0 * 30.0 * 25.0, 1e-3));
+}
+
+TEST_CASE("cad: CD3, a rectangle's degrees of freedom, its dimensions and a fixed corner (rule 5)", "[cad]") {
+    using K = GeoConstraint::Kind;
+    Sketch s;
+    Entity rect;
+    rect.kind = Entity::Kind::Rectangle;
+    rect.points = {{0.0, 0.0}, {40.0, 30.0}};
+    s.entities.push_back(rect);
+    SketchSolve a = analyze_sketch(s);
+    CHECK(a.solved);
+    CHECK(a.dof == 4); // x, y, width and height
+    CHECK_FALSE(a.entity_fixed[0]);
+
+    // The width and the height: the rectangle can still slide.
+    CHECK(add_rule(s, {K::Length, {0, 0}, {}, 40.0, {}}) == AddRule::Added);
+    CHECK(add_rule(s, {K::Length, {0, 1}, {}, 30.0, {}}) == AddRule::Added);
+    a = analyze_sketch(s);
+    CHECK(a.dof == 2);
+    CHECK_FALSE(a.entity_fixed[0]);
+
+    // Fixed at a corner: nothing left, the sketch is fully fixed.
+    CHECK(add_rule(s, {K::Fixed, {0, 0}, {}, 0.0, {0.0, 0.0}}) == AddRule::Added);
+    a = analyze_sketch(s);
+    CHECK(a.dof == 0);
+    CHECK(a.entity_fixed[0]);
+
+    // A side already horizontal, or the width again: redundant; another
+    // width: contradicts. None is added and the sketch stays.
+    const Sketch before = s;
+    CHECK(add_rule(s, {K::Horizontal, {0, 0}, {}, 0.0, {}}) == AddRule::Redundant);
+    CHECK(add_rule(s, {K::Length, {0, 2}, {}, 40.0, {}}) == AddRule::Redundant);
+    CHECK(add_rule(s, {K::Length, {0, 0}, {}, 50.0, {}}) == AddRule::Conflicting);
+    CHECK(add_rule(s, {K::Length, {3, 0}, {}, 50.0, {}}) == AddRule::Invalid);
+    CHECK(add_rule(s, {K::Length, {0, 0}, {}, -5.0, {}}) == AddRule::Invalid);
+    CHECK(s == before);
+
+    // A width changed by hand: solving moves the far side.
+    s.rules[0].value = 50.0;
+    a = solve_sketch(s);
+    CHECK(a.solved);
+    CHECK_THAT(s.entities[0].points[1].x - s.entities[0].points[0].x, Catch::Matchers::WithinAbs(50.0, 1e-6));
+    CHECK_THAT(s.entities[0].points[0].x, Catch::Matchers::WithinAbs(0.0, 1e-6));
+
+    // The width set from its field or a parameter: the dimension follows, so
+    // the two never disagree, and the fixed corner stays.
+    CHECK(set_entity_size(s, 0, "width", 60.0));
+    CHECK(s.rules[0].value == 60.0);
+    a = analyze_sketch(s);
+    CHECK(a.solved);
+    CHECK(a.dof == 0);
+    CHECK_THAT(s.entities[0].points[1].x, Catch::Matchers::WithinAbs(60.0, 1e-6));
+    CHECK_THAT(s.entities[0].points[0].x, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    CHECK_FALSE(set_entity_size(s, 0, "diameter", 5.0));
+}
+
+TEST_CASE("cad: constraints move a chain and a circle as little as they can (rule 5)", "[cad]") {
+    using K = GeoConstraint::Kind;
+    Sketch s;
+    Entity chain;
+    chain.kind = Entity::Kind::Chain;
+    chain.points = {{0.0, 0.0}, {20.0, 1.0}, {21.0, 15.0}};
+    s.entities.push_back(chain);
+    CHECK(analyze_sketch(s).dof == 6);
+    CHECK(add_rule(s, {K::Horizontal, {0, 0}, {}, 0.0, {}}) == AddRule::Added);
+    CHECK(add_rule(s, {K::Perpendicular, {0, 0}, {0, 1}, 0.0, {}}) == AddRule::Added);
+    const std::vector<Pt>* points = &s.entities[0].points;
+    const auto& p = *points;
+    CHECK_THAT(p[1].y - p[0].y, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    CHECK_THAT(p[2].x - p[1].x, Catch::Matchers::WithinAbs(0.0, 1e-6));
+    // Little moved: the points stay within a mm of where they were drawn.
+    CHECK(std::abs(p[1].x - 20.0) < 1.0);
+    CHECK(std::abs(p[2].y - 15.0) < 1.0);
+    CHECK(analyze_sketch(s).dof == 4);
+    // Vertical on the second segment says nothing new.
+    CHECK(add_rule(s, {K::Vertical, {0, 1}, {}, 0.0, {}}) == AddRule::Redundant);
+    CHECK(add_rule(s, {K::Equal, {0, 0}, {0, 1}, 0.0, {}}) == AddRule::Added);
+    const auto& q = s.entities[0].points; // the sketch was replaced
+    CHECK_THAT(std::hypot(q[1].x - q[0].x, q[1].y - q[0].y),
+               Catch::Matchers::WithinAbs(std::hypot(q[2].x - q[1].x, q[2].y - q[1].y), 1e-6));
+    CHECK(add_rule(s, {K::Angle, {0, 0}, {0, 1}, 90.0, {}}) == AddRule::Redundant);
+
+    // A circle: its diameter, then concentric with an arc.
+    Entity circle;
+    circle.kind = Entity::Kind::Circle;
+    circle.points = {{50.0, 50.0}};
+    circle.radius = 5.0;
+    s.entities.push_back(circle);
+    Entity arc;
+    arc.kind = Entity::Kind::Arc;
+    arc.points = {{52.0, 49.0}, {60.0, 49.0}, {52.0, 57.0}};
+    s.entities.push_back(arc);
+    CHECK(analyze_sketch(s).dof == 3 + 3 + 5); // the chain keeps 3 after equal
+    CHECK(add_rule(s, {K::Diameter, {1, 0}, {}, 12.0, {}}) == AddRule::Added);
+    CHECK_THAT(s.entities[1].radius, Catch::Matchers::WithinAbs(6.0, 1e-6));
+    CHECK(add_rule(s, {K::Concentric, {1, 0}, {2, 0}, 0.0, {}}) == AddRule::Added);
+    CHECK_THAT(s.entities[1].points[0].x, Catch::Matchers::WithinAbs(s.entities[2].points[0].x, 1e-6));
+    CHECK(add_rule(s, {K::Radius, {2, 0}, {}, 10.0, {}}) == AddRule::Added);
+    const Pt c = s.entities[2].points[0];
+    CHECK_THAT(std::hypot(s.entities[2].points[2].x - c.x, s.entities[2].points[2].y - c.y),
+               Catch::Matchers::WithinAbs(10.0, 1e-6));
+    CHECK(add_rule(s, {K::Equal, {1, 0}, {2, 0}, 0.0, {}}) == AddRule::Conflicting);
+    CHECK(analyze_sketch(s).dof == 3 + 4); // circle and arc: 8, less diameter, concentric (2) and radius
+
+    // The rules are kept with the sketch.
+    Sketch back;
+    SketchOperation op;
+    parse_sketch(sketch_json(s, {}), back, op);
+    CHECK(back == s);
+}
+
+TEST_CASE("cad: the timeline marks the first feature that fails and keeps the ones before (rule 8)", "[cad]") {
+    if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
+        SKIP("the stand-in solidcraft-cli was not built");
+    set_env("TISMA_FAKE_SOLIDCRAFT_HANG", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_BROKEN", nullptr);
+    // Four boxes of 10, 20, 30 and 40 mm on a side; the tool refuses the third.
+    Design d;
+    for (int k = 1; k <= 4; ++k) {
+        Feature f;
+        f.name = "Caja " + std::to_string(k);
+        f.kind = Primitive::Box;
+        f.sizes = {10.0 * k, 10.0 * k, 10.0 * k};
+        d.features.push_back(f);
+    }
+    set_env("TISMA_FAKE_SOLIDCRAFT_REFUSE", "Caja 3");
+    BuildResult built = build_timeline(kFake, d, MeshQuality::Standard);
+    INFO(built.error);
+    REQUIRE(built.ok);
+    REQUIRE(built.failed_feature);
+    CHECK(*built.failed_feature == 2);
+    CHECK_THAT(built.failure, ContainsSubstring("Caja 3"));
+    CHECK_THAT(built.volume_mm3, WithinRel(1000.0 + 8000.0, 1e-6)); // the two before it; the fourth waits
+    // Suppressed, it no longer fails: the fourth is built again.
+    d.features[2].suppressed = true;
+    built = build_timeline(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    CHECK_FALSE(built.failed_feature);
+    CHECK_THAT(built.volume_mm3, WithinRel(1000.0 + 8000.0 + 64000.0, 1e-6));
+    // The first one refused: nothing before it.
+    d.features[2].suppressed = false;
+    set_env("TISMA_FAKE_SOLIDCRAFT_REFUSE", "Caja 1");
+    built = build_timeline(kFake, d, MeshQuality::Standard);
+    REQUIRE(built.ok);
+    REQUIRE(built.failed_feature);
+    CHECK(*built.failed_feature == 0);
+    CHECK(built.mesh.empty());
+    set_env("TISMA_FAKE_SOLIDCRAFT_REFUSE", nullptr);
+    built = build_timeline(kFake, d, MeshQuality::Standard);
+    CHECK(built.ok);
+    CHECK_FALSE(built.failed_feature);
+}
+
+TEST_CASE("cad: random sketches and constraints never hang, and what is added holds (maintenance)", "[cad]") {
+    using K = GeoConstraint::Kind;
+    std::mt19937 rng(20261103);
+    std::uniform_real_distribution<double> coord(-50.0, 50.0), size(1.0, 30.0);
+    std::uniform_int_distribution<int> pick(0, 1000);
+    int added = 0, refused = 0;
+    const auto start = std::chrono::steady_clock::now();
+    for (int round = 0; round < 60; ++round) {
+        Sketch s;
+        const int entities = 1 + pick(rng) % 4;
+        for (int i = 0; i < entities; ++i) {
+            Entity e;
+            switch (pick(rng) % 4) {
+            case 0:
+                e.kind = Entity::Kind::Chain;
+                for (int k = 0, n = 2 + pick(rng) % 4; k < n; ++k)
+                    e.points.push_back({coord(rng), coord(rng)});
+                e.closed = e.points.size() > 2 && pick(rng) % 2;
+                break;
+            case 1: {
+                e.kind = Entity::Kind::Rectangle;
+                const Pt a{coord(rng), coord(rng)};
+                e.points = {a, {a.x + size(rng), a.y + size(rng)}};
+                break;
+            }
+            case 2:
+                e.kind = Entity::Kind::Circle;
+                e.points = {{coord(rng), coord(rng)}};
+                e.radius = size(rng);
+                break;
+            default: {
+                e.kind = Entity::Kind::Arc;
+                const Pt c{coord(rng), coord(rng)};
+                const double r = size(rng);
+                e.points = {c, {c.x + r, c.y}, {c.x, c.y + r}};
+                break;
+            }
+            }
+            s.entities.push_back(e);
+        }
+        for (int t = 0; t < 8; ++t) {
+            GeoConstraint r;
+            r.kind = K(pick(rng) % 16);
+            r.a = {std::size_t(pick(rng) % entities), std::size_t(pick(rng) % 5)};
+            r.b = {std::size_t(pick(rng) % entities), std::size_t(pick(rng) % 5)};
+            r.value = r.kind == K::Angle ? double(pick(rng) % 180) : size(rng);
+            r.at = {coord(rng), coord(rng)};
+            const AddRule result = add_rule(s, r);
+            if (result == AddRule::Added) {
+                ++added;
+                const SketchSolve now = analyze_sketch(s);
+                INFO("round " << round << " rule " << t << " kind " << geo_kind_name(r.kind));
+                CHECK(now.solved);
+                CHECK(now.dof >= 0);
+                CHECK(now.dof <= now.unknowns);
+            } else {
+                ++refused;
+            }
+        }
+    }
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    INFO(added << " added, " << refused << " refused, " << seconds << " s");
+    CHECK(added > 50);
+    CHECK(seconds < 60.0);
+}
+
+TEST_CASE("cad: any text as an expression gives a value or an error, never a hang (maintenance)", "[cad]") {
+    std::mt19937 rng(20261103);
+    const std::string alphabet = "0123456789.+-*/()  mmcinrad°degpabc_,e";
+    std::uniform_int_distribution<std::size_t> letter(0, alphabet.size() - 1), length(0, 40);
+    const std::map<std::string, Quantity> known{{"a", {2.0, Measure::Length}}, {"b", {30.0, Measure::Angle}}};
+    int values = 0;
+    for (int i = 0; i < 20000; ++i) {
+        std::string text;
+        for (std::size_t k = 0, n = length(rng); k < n; ++k)
+            text += alphabet[letter(rng)];
+        const Evaluation e = evaluate(text, known);
+        CHECK((e.value.has_value() != !e.error.empty()));
+        if (e.value) {
+            ++values;
+            CHECK(std::isfinite(e.value->value));
+        }
+    }
+    // Deep nesting is refused or read, not a crash.
+    // Deep nesting is refused, not a crash (it ran the stack out under the
+    // address sanitizer).
+    const Evaluation deep = evaluate(std::string(5000, '(') + "1" + std::string(5000, ')'), known);
+    CHECK_FALSE(deep.value);
+    CHECK_FALSE(deep.error.empty());
+    CHECK_FALSE(evaluate(std::string(5000, '-') + "1", known).value);
+    const Evaluation fine = evaluate(std::string(50, '(') + "1 mm" + std::string(50, ')'), known);
+    REQUIRE(fine.value);
+    CHECK(fine.value->value == 1.0);
+    INFO(values);
+    CHECK(values > 100);
+}
+
+namespace {
+Feature operation(const std::string& name, OperationKind kind, const std::string& target) {
+    Feature f;
+    f.name = name;
+    f.type = Feature::Type::Operation;
+    f.op.kind = kind;
+    f.op.target = target;
+    return f;
+}
+Feature box_feature(const std::string& name, double side) {
+    Feature f;
+    f.name = name;
+    f.kind = Primitive::Box;
+    f.sizes = {side, side, side};
+    return f;
+}
+} // namespace
+
+TEST_CASE("cad: D4 operations as SolidCraft commands, kept with the design (rule 7)", "[cad]") {
+    Design d;
+    d.features.push_back(box_feature("Caja", 20.0));
+    Feature fillet = operation("Redondeo", OperationKind::Fillet, "Caja");
+    fillet.op.refs = {{10.0, 10.0, 5.0}};
+    fillet.op.value = 3.0;
+    d.features.push_back(fillet);
+    Feature hole = operation("Agujero", OperationKind::Hole, "Caja");
+    hole.op.refs = {{0.0, 0.0, 20.0}, {5.0, 5.0, 20.0}};
+    hole.op.standard = "M5";
+    d.features.push_back(hole);
+    const std::vector<std::string> cmds = build_commands(d);
+    REQUIRE(cmds.size() == 4); // the box, the fillet, a hole at each point
+    const nlohmann::json f = nlohmann::json::parse(cmds[1]);
+    CHECK(f["command"] == "solid.fillet");
+    CHECK(f["params"]["radius"] == 3.0);
+    CHECK(f["params"]["body"] == "Caja");
+    CHECK(f["params"]["edges"][0] == nlohmann::json::array({10.0, 10.0, 5.0}));
+    const nlohmann::json h = nlohmann::json::parse(cmds[3]);
+    CHECK(h["command"] == "solid.hole");
+    CHECK(h["params"]["clearance"] == "M5");
+    CHECK(h["params"]["fit"] == "normal");
+    CHECK(h["params"]["targets"][0] == "Caja");
+    CHECK_FALSE(h["params"].contains("depth")); // through all
+    // Not buildable without what it needs: no edges, no tools, one copy.
+    Feature bare = operation("Chaflán", OperationKind::Chamfer, "Caja");
+    CHECK_FALSE(bare.buildable());
+    Feature combine = operation("Combinar", OperationKind::Combine, "Caja");
+    CHECK_FALSE(combine.buildable());
+    Feature pattern = operation("Patrón", OperationKind::PatternCircular, "Caja");
+    pattern.op.count = 1;
+    CHECK_FALSE(pattern.buildable());
+    // An operation alone makes no body.
+    Design only;
+    only.features.push_back(fillet);
+    CHECK_FALSE(only.has_body());
+    // Its size tied to a parameter.
+    d.parameters = {{"r", "4 mm"}};
+    d.features[1].bindings = {{"value", "r"}};
+    CHECK(target_measure(d.features[1], "value") == Measure::Length);
+    CHECK(apply_parameters(d).empty());
+    CHECK(d.features[1].op.value == 4.0);
+    // Kept and read back the same.
+    const Design back = parse_design(design_json(d));
+    REQUIRE(back.features.size() == 3);
+    CHECK(back.features[1].type == Feature::Type::Operation);
+    CHECK(back.features[1].op == d.features[1].op);
+    CHECK(back.features[2].op == d.features[2].op);
+    CHECK(back.features[1].bindings == d.features[1].bindings);
+}
+
+TEST_CASE("cad: a thread and a tapped hole as SolidCraft commands", "[cad]") {
+    Design d;
+    Feature box = box_feature("Caja", 20);
+    d.features.push_back(box);
+    Feature thread = operation("Rosca", OperationKind::Thread, "Caja");
+    CHECK_FALSE(thread.buildable()); // no face yet
+    thread.op.refs = {{10.0, 0.0, 5.0}, {-10.0, 0.0, 5.0}};
+    thread.op.standard = "M8";
+    thread.op.hand = "left";
+    thread.op.modeled = true;
+    thread.op.depth = 12;
+    CHECK(thread.buildable());
+    d.features.push_back(thread);
+    Feature hole = operation("Agujero", OperationKind::Hole, "Caja");
+    hole.op.refs = {{0.0, 0.0, 20.0}};
+    hole.op.standard = "M6";
+    hole.op.tapped = true;
+    d.features.push_back(hole);
+    std::vector<nlohmann::json> threads, holes;
+    for (const std::string& c : build_commands(d)) {
+        const nlohmann::json j = nlohmann::json::parse(c);
+        if (j.value("command", "") == "solid.thread")
+            threads.push_back(j.at("params"));
+        if (j.value("command", "") == "solid.hole")
+            holes.push_back(j.at("params"));
+    }
+    REQUIRE(threads.size() == 2);
+    CHECK(threads[0].at("designation") == "M8");
+    CHECK(threads[0].at("hand") == "left");
+    CHECK(threads[0].at("modeled") == true);
+    CHECK(threads[0].at("length") == 12.0);
+    REQUIRE(holes.size() == 1);
+    CHECK(holes[0].at("thread") == "M6");
+    CHECK_FALSE(holes[0].contains("clearance"));
+    // Kept with the design.
+    const Design back = parse_design(design_json(d));
+    CHECK(back.features[1].op == d.features[1].op);
+    CHECK(back.features[2].op == d.features[2].op);
+}
+
+TEST_CASE("cad: move, copy, split and draft through the tool", "[cad]") {
+    if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
+        SKIP("the stand-in solidcraft-cli was not built");
+    set_env("TISMA_FAKE_SOLIDCRAFT_HANG", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_BROKEN", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_REFUSE", nullptr);
+    Design d;
+    d.features.push_back(box_feature("Caja", 20));
+    Feature move = operation("Mover", OperationKind::Move, "Caja");
+    move.op.angle = 0.0;
+    CHECK_FALSE(move.buildable()); // nothing to do
+    move.op.offset = {30.0, 0.0, 0.0};
+    move.op.copy = true;
+    move.op.angle = 90.0;
+    move.op.axis = 'Z';
+    REQUIRE(move.buildable());
+    d.features.push_back(move);
+    BuildResult b = build_timeline(kFake, d, MeshQuality::Standard);
+    REQUIRE(b.ok);
+    REQUIRE_FALSE(b.failed_feature);
+    CHECK_THAT(b.volume_mm3, WithinRel(16000.0, 1e-6)); // the copy beside it
+    Feature split = operation("Partir", OperationKind::Split, "Caja");
+    split.op.plane = "XY";
+    d.features.push_back(split);
+    b = build_timeline(kFake, d, MeshQuality::Standard);
+    REQUIRE(b.failed_feature); // the XY plane is the box's bottom face: nothing to split
+    CHECK(*b.failed_feature == 2);
+    d.features.back().op.plane_offset = 10.0;
+    b = build_timeline(kFake, d, MeshQuality::Standard);
+    CHECK_FALSE(b.failed_feature);
+    CHECK_THAT(b.volume_mm3, WithinRel(16000.0, 1e-6));
+    Feature draft = operation("Desmoldeo", OperationKind::Draft, "Caja");
+    draft.op.value = 3.0;
+    draft.op.plane = "XY";
+    CHECK_FALSE(draft.buildable()); // no face
+    draft.op.refs = {{10.0, 0.0, 10.0}};
+    d.features.push_back(draft);
+    b = build_timeline(kFake, d, MeshQuality::Standard);
+    CHECK_FALSE(b.failed_feature);
+    // As commands: the plane moved along its normal.
+    bool found = false;
+    for (const std::string& c : build_commands(d)) {
+        const nlohmann::json j = nlohmann::json::parse(c);
+        if (j.value("command", "") == "solid.split_body") {
+            found = true;
+            CHECK(j["params"]["plane"]["origin"] == nlohmann::json::array({0.0, 0.0, 10.0}));
+        }
+    }
+    CHECK(found);
+    const Design back = parse_design(design_json(d));
+    for (std::size_t i = 1; i < d.features.size(); ++i)
+        CHECK(back.features[i].op == d.features[i].op);
+}
+
+TEST_CASE("cad: CD5 and CD6, a standard hole and a fillet through the tool (rule 7)", "[cad]") {
+    if (kFake.empty() || !std::filesystem::is_regular_file(kFake))
+        SKIP("the stand-in solidcraft-cli was not built");
+    set_env("TISMA_FAKE_SOLIDCRAFT_HANG", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_BROKEN", nullptr);
+    set_env("TISMA_FAKE_SOLIDCRAFT_REFUSE", nullptr);
+    const auto volume = [&](const Design& d) {
+        const BuildResult b = build_timeline(kFake, d, MeshQuality::Standard);
+        INFO(b.error << " " << b.failure);
+        REQUIRE(b.ok);
+        REQUIRE_FALSE(b.failed_feature);
+        return b.volume_mm3;
+    };
+    // CD5: a cylinder 20 across and 10 high, an M5 clearance hole through it
+    // from the top: 5.5 mm (ISO 273, medium).
+    Design cd5;
+    Feature cyl;
+    cyl.name = "Cilindro";
+    cyl.kind = Primitive::Cylinder;
+    cyl.sizes = {20.0, 10.0, 0.0};
+    cd5.features.push_back(cyl);
+    const double solid = volume(cd5);
+    Feature hole = operation("Agujero", OperationKind::Hole, "Cilindro");
+    hole.op.refs = {{0.0, 0.0, 10.0}};
+    hole.op.standard = "M5";
+    cd5.features.push_back(hole);
+    const double holed = volume(cd5);
+    CHECK_THAT(solid - holed, WithinRel(std::numbers::pi * 2.75 * 2.75 * 10.0, 0.01));
+    // Tapped instead: the M5 tap drill, 5 - 0.8 = 4.2 mm (ISO 261 coarse pitch).
+    cd5.features.back().op.tapped = true;
+    const double tapped = volume(cd5);
+    CHECK_THAT(solid - tapped, WithinRel(std::numbers::pi * 2.1 * 2.1 * 10.0, 0.01));
+    // A thread on the outside of the cylinder: drawn on its face, the body
+    // as it was (the stand-in does not cut it).
+    cd5.features.pop_back();
+    Feature thread = operation("Rosca", OperationKind::Thread, "Cilindro");
+    thread.op.refs = {{10.0, 0.0, 5.0}};
+    thread.op.standard = "M20";
+    cd5.features.push_back(thread);
+    {
+        const BuildResult b = build_timeline(kFake, cd5, MeshQuality::Standard);
+        // M20 is not in the stand-in's table: the thread is refused and
+        // marked (rule 8), the cylinder before it still built.
+        REQUIRE(b.failed_feature);
+        CHECK(*b.failed_feature == 1);
+        CHECK_THAT(b.volume_mm3, WithinRel(solid, 1e-9));
+    }
+    cd5.features.back().op.standard = "M16";
+    cd5.features.back().op.depth = 6.0;
+    CHECK_THAT(volume(cd5), WithinRel(solid, 1e-9));
+
+    // CD6: CD2's 40 x 30 x 20 block, a 3 mm fillet on one edge; deleted, it
+    // is 24 000 mm3 again.
+    Design cd6;
+    Feature plate;
+    plate.name = "Bloque";
+    plate.type = Feature::Type::Sketch;
+    plate.sketch.entities.push_back({Entity::Kind::Rectangle, {{0.0, 0.0}, {40.0, 30.0}}});
+    plate.operation.distance = 20.0;
+    cd6.features.push_back(plate);
+    CHECK_THAT(volume(cd6), WithinAbs(24000.0, 1e-3));
+    Feature round = operation("Redondeo", OperationKind::Fillet, "Bloque");
+    round.op.refs = {{40.0, 30.0, 10.0}};
+    round.op.value = 3.0;
+    cd6.features.push_back(round);
+    CHECK_THAT(24000.0 - volume(cd6), WithinRel((1.0 - std::numbers::pi / 4.0) * 9.0 * 20.0, 0.01));
+    cd6.features.pop_back();
+    CHECK_THAT(volume(cd6), WithinAbs(24000.0, 1e-3));
+    // A 2 mm chamfer there takes 2 x 2 / 2 x 20.
+    Feature cut = operation("Chaflán", OperationKind::Chamfer, "Bloque");
+    cut.op.refs = {{40.0, 30.0, 10.0}};
+    cut.op.value = 2.0;
+    cd6.features.push_back(cut);
+    CHECK_THAT(volume(cd6), WithinAbs(24000.0 - 40.0, 1e-3));
+
+    // Shell, mirror, patterns and combine on a 20 mm box (8000 mm3).
+    const auto with = [&](Feature op) {
+        Design d;
+        d.features.push_back(box_feature("Caja", 20.0));
+        d.features.push_back(std::move(op));
+        return volume(d);
+    };
+    Feature shell = operation("Vaciado", OperationKind::Shell, "Caja");
+    shell.op.value = 2.0;
+    shell.op.refs = {{0.0, 0.0, 20.0}}; // the top left open
+    CHECK_THAT(with(shell), WithinAbs(8000.0 - 16.0 * 16.0 * 18.0, 1e-3));
+    Feature mirror = operation("Simetría", OperationKind::Mirror, "Caja");
+    CHECK_THAT(with(mirror), WithinAbs(16000.0, 1e-3));
+    Feature ring = operation("Patrón", OperationKind::PatternCircular, "Caja");
+    ring.op.count = 6;
+    CHECK_THAT(with(ring), WithinRel(48000.0, 1e-4)); // float corners turned
+    Feature row = operation("Fila", OperationKind::PatternRectangular, "Caja");
+    row.op.count = 3;
+    row.op.spacing = 30.0;
+    CHECK_THAT(with(row), WithinAbs(24000.0, 1e-3));
+    Design cut_box;
+    cut_box.features.push_back(box_feature("Caja", 20.0));
+    cut_box.features.push_back(box_feature("Cubo", 10.0));
+    Feature combine = operation("Combinar", OperationKind::Combine, "Caja");
+    combine.op.tools = {"Cubo"};
+    cut_box.features.push_back(combine);
+    CHECK_THAT(volume(cut_box), WithinAbs(7000.0, 1e-3));
+    // An edge that is not there: the operation fails, the box is built.
+    Design wrong;
+    wrong.features.push_back(box_feature("Caja", 20.0));
+    Feature miss = operation("Redondeo", OperationKind::Fillet, "Caja");
+    miss.op.refs = {{3.0, 3.0, 3.0}};
+    wrong.features.push_back(miss);
+    const BuildResult b = build_timeline(kFake, wrong, MeshQuality::Standard);
+    REQUIRE(b.ok);
+    REQUIRE(b.failed_feature);
+    CHECK(*b.failed_feature == 1);
+    CHECK_THAT(b.volume_mm3, WithinAbs(8000.0, 1e-3));
+}
+
+TEST_CASE("CD25: one design session for twenty builds, and opened again when it dies", "[cad]") {
+    const auto starts = std::filesystem::temp_directory_path() / "tisma_cd25_starts.txt";
+    const auto die = std::filesystem::temp_directory_path() / "tisma_cd25_die";
+    std::filesystem::remove(starts);
+    std::filesystem::remove(die);
+#ifdef _WIN32
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_STARTS", starts.string().c_str());
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_MCP_DIE", die.string().c_str());
+#else
+    setenv("TISMA_FAKE_SOLIDCRAFT_STARTS", starts.string().c_str(), 1);
+    setenv("TISMA_FAKE_SOLIDCRAFT_MCP_DIE", die.string().c_str(), 1);
+#endif
+    {
+        SolidCraftSession session(kFake);
+        for (int i = 0; i < 20; ++i) {
+            const BuildResult built = build_design(kFake, box_design(), MeshQuality::Standard, 60.0, &session);
+            INFO(built.error);
+            REQUIRE(built.ok);
+            CHECK_THAT(built.volume_mm3, WithinAbs(24000.0, 1e-3));
+            CHECK_FALSE(built.session_restarted);
+            CHECK_THAT(built.measure, ContainsSubstring("volume_mm3"));
+            CHECK_FALSE(built.design_file.empty());
+        }
+        CHECK(session.starts() == 1);
+        CHECK(session.open());
+        // Killed: the next build opens it again and gives the same design.
+        { std::ofstream(die) << "x"; }
+        const BuildResult again = build_design(kFake, box_design(), MeshQuality::Standard, 60.0, &session);
+        INFO(again.error);
+        REQUIRE(again.ok);
+        CHECK(again.session_restarted);
+        CHECK_THAT(again.volume_mm3, WithinAbs(24000.0, 1e-3));
+        CHECK(session.starts() == 2);
+        CHECK(session.restarts() == 1);
+        // Idle: closed after the time, opened again by the next build.
+        session.close_if_idle(0.0);
+        CHECK_FALSE(session.open());
+    }
+    std::ifstream f(starts);
+    int lines = 0;
+    for (std::string l; std::getline(f, l);)
+        ++lines;
+    CHECK(lines == 2);
+#ifdef _WIN32
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_STARTS", "");
+    _putenv_s("TISMA_FAKE_SOLIDCRAFT_MCP_DIE", "");
+#else
+    unsetenv("TISMA_FAKE_SOLIDCRAFT_STARTS");
+    unsetenv("TISMA_FAKE_SOLIDCRAFT_MCP_DIE");
+#endif
+}
+
+#ifndef _WIN32
+TEST_CASE("CD25: a stopped child whose own child keeps the pipes open does not hang", "[cad]") {
+    cad::ChildProcess child;
+    std::string error;
+    REQUIRE(child.start("/bin/sh", {"-c", "sleep 30 & echo ready; sleep 30"}, error));
+    const std::optional<std::string> line = child.read_line(10.0);
+    REQUIRE(line);
+    CHECK(*line == "ready");
+    const auto t0 = std::chrono::steady_clock::now();
+    child.stop();
+    CHECK(std::chrono::steady_clock::now() - t0 < std::chrono::seconds(5));
+    CHECK_FALSE(child.running());
+}
+#endif
+
+namespace {
+std::pair<double, double> view_lengths(const std::vector<cad::ViewLine>& lines) {
+    double shown = 0, hidden = 0;
+    for (const cad::ViewLine& l : lines)
+        (l.hidden ? hidden : shown) += std::hypot(l.x1 - l.x0, l.y1 - l.y0);
+    return {shown, hidden};
+}
+} // namespace
+
+TEST_CASE("view as DXF: a cube from the front and from a corner, hidden edges dashed or left out", "[cad]") {
+    const TriangleMesh cube = make_box(10, 10, 10);
+    cad::ViewDxfOptions front;
+    front.look = {0, 1, 0};
+    front.up = {0, 0, 1};
+    auto [shown, hidden] = view_lengths(cad::view_lines(cube, front));
+    CHECK_THAT(shown, Catch::Matchers::WithinAbs(40.0, 0.01)); // the front square
+    CHECK_THAT(hidden, Catch::Matchers::WithinAbs(40.0, 0.01)); // the back one, behind it
+
+    // From the corner (+,+,+): nine edges seen, the three at the far corner hidden.
+    cad::ViewDxfOptions corner;
+    corner.look = {-1, -1, -1};
+    corner.up = {0, 0, 1};
+    const double edge = 10.0 * std::sqrt(2.0 / 3.0);
+    std::tie(shown, hidden) = view_lengths(cad::view_lines(cube, corner));
+    CHECK_THAT(shown, Catch::Matchers::WithinRel(9 * edge, 0.02));
+    CHECK_THAT(hidden, Catch::Matchers::WithinRel(3 * edge, 0.05));
+
+    corner.hidden = false;
+    const std::vector<cad::ViewLine> seen = cad::view_lines(cube, corner);
+    CHECK(std::none_of(seen.begin(), seen.end(), [](const cad::ViewLine& l) { return l.hidden; }));
+
+    const std::string dxf = cad::write_view_dxf(cad::view_lines(cube, front));
+    CHECK_THAT(dxf, Catch::Matchers::ContainsSubstring("DASHED"));
+    CHECK_THAT(dxf, Catch::Matchers::ContainsSubstring("8\nHIDDEN\n"));
+    CHECK_THAT(dxf, Catch::Matchers::ContainsSubstring("8\nVISIBLE\n"));
+    // Our own reader takes it back as lines.
+    const cad::SketchImport back = cad::read_dxf(dxf);
+    REQUIRE(back.ok());
+    CHECK(back.entities.size() == cad::view_lines(cube, front).size());
+}
+
+TEST_CASE("view as DXF: a cylinder from above, its rim seen and the bottom one hidden, no facet lines", "[cad]") {
+    const TriangleMesh cylinder = make_cylinder(10, 20, 64);
+    cad::ViewDxfOptions top;
+    const double rim = 64 * 2 * 10 * std::sin(3.14159265358979323846 / 64);
+    auto [shown, hidden] = view_lengths(cad::view_lines(cylinder, top));
+    CHECK_THAT(shown, Catch::Matchers::WithinRel(rim, 0.01));
+    CHECK_THAT(hidden, Catch::Matchers::WithinRel(rim, 0.01));
+
+    // From the side: two silhouettes, the front halves of the rims seen, the
+    // back halves behind them.
+    cad::ViewDxfOptions side;
+    side.look = {0, 1, 0};
+    side.up = {0, 0, 1};
+    std::tie(shown, hidden) = view_lengths(cad::view_lines(cylinder, side));
+    CHECK_THAT(shown, Catch::Matchers::WithinRel(2 * 20.0 + 2 * 20.0, 0.02));
+    CHECK_THAT(hidden, Catch::Matchers::WithinRel(2 * 20.0, 0.02));
+}
+
+TEST_CASE("design on the command line: new, check and build through SolidCraft, for the phone", "[cad][cli]") {
+    REQUIRE(!kFake.empty());
+    const auto dir = std::filesystem::temp_directory_path() / "tisma_test_design_cli";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    const auto run = [](std::vector<std::string> args, std::string& out, std::string& err) {
+        std::vector<std::string_view> views(args.begin(), args.end());
+        std::ostringstream o, e;
+        const int code = tisma::run_cli(views, o, e);
+        out = o.str(), err = e.str();
+        return code;
+    };
+    std::string out, err;
+    REQUIRE(run({"design", "new"}, out, err) == 0);
+    CHECK(parse_design(out).features.empty());
+    const auto spec = dir / "box.json", stl = dir / "box.stl", sc = dir / "box.sc";
+    std::ofstream(spec) << design_json(box_design());
+    REQUIRE(run({"design", "check", spec.string()}, out, err) == 0);
+    CHECK(nlohmann::json::parse(out)["has_body"] == true);
+    REQUIRE(run({"design", "build", spec.string(), "--solidcraft", kFake.string(), "-o", stl.string(), "--save", sc.string()},
+                out, err) == 0);
+    const nlohmann::json j = nlohmann::json::parse(out);
+    CHECK(j["ok"] == true);
+    CHECK(j["triangles"].get<int>() > 0);
+    CHECK(std::filesystem::exists(stl));
+    CHECK(std::filesystem::exists(sc));
+    CHECK(run({"design", "build", spec.string(), "-o", stl.string()}, out, err) == 1); // no --solidcraft
+    std::filesystem::remove_all(dir);
+}

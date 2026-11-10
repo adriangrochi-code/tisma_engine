@@ -13,6 +13,8 @@ interface (`apps/tisma/`), are required before Tisma Slicer is dropped.
 
 - Never read, copy or translate the source of PrusaSlicer, Slic3r, SuperSlicer, OrcaSlicer, Bambu Studio, Cura,
   CuraEngine, Tisma Slicer (`adriangrochi-code/Nuevo-slicer-basado-en-prusa-`) or any other GPL/AGPL code.
+  - This includes the server's repository, `adriangrochi-code/tisma-cloud` (owner's decision, 2026-11-04: it holds
+    open-source scanning tools, GPL ones too, and was moved apart so the engine stays clean). What the engine needs from the server comes as specs or black-box tests.
   - This includes the history of `imported/` and `docs/tisma/` in this repository (commits `4768a57` and `759eccd`,
     removed on 2026-10-24): never read it, by `git log`, `git show` or any other way.
   - Do not clone them.
@@ -88,6 +90,24 @@ one stopped.
 Every 8 hours, one block is a maintenance block instead (owner's decision, 2026-10-24): optimize, hunt bugs and
 errors, and fix what is still unresolved, to polish the engine and keep it stable. What it covers is in
 `docs/DEVELOPMENT.md`, "Mantenimiento".
+
+## Working economy (owner's decision, 2026-11-04)
+
+- Don't wait idle on CI: start `tools/ci_linux.sh` in the background and keep working. Push when it ends with EXIT 0.
+- Short messages between sessions: what changed, the commit, and how to try it, in a few lines. No repeated context.
+- Scheduled blocks (night blocks, the 8 h maintenance) end in one line when there is nothing to do: no rebuild and no
+  test run when nothing changed.
+- Test what the change touches, not everything; the full CI still runs before each push. Screenshots only of the
+  screens that changed.
+- Message the owner only for a milestone, a decision, something broken, or the morning summary.
+- Low effort for routine steps (checks, merges, small fixes); high effort for design and hard bugs.
+- Per push, a quick check: the build and the tests the change touches. The full `tools/ci_linux.sh` (with ASan) runs
+  in the background or every few hours; what it finds is fixed first (owner's decision, 2026-11-04).
+- Follow the roadmap order without detours; when unsure, pick what the roadmap and the specs say, write the decision
+  in PROGRESS.md and keep going. Real prints are not gates: write "not tested on hardware".
+- State lives in files (PROGRESS.md, PLAN.md), not in the conversation. Short command output (tails, errors only);
+  big files read in parts; screenshots cropped and small, text dumps preferred.
+- No session renewal for the engine session (owner, 2026-11-04).
 
 ## CI
 

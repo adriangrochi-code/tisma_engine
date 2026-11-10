@@ -130,6 +130,10 @@ uniform mat4 u_view;
 uniform float u_ao_strength;
 uniform int u_debug;
 out vec4 colour;
+// 0 where the occlusion is not worked out (the infill: inside the part, it
+// would load the GPU for nothing; the owner's request, 2026-11-03), written
+// as the G-buffer's alpha.
+float g_occlusion = 1.0;
 
 vec3 to_linear(vec3 c) { return pow(max(c, vec3(0.0)), vec3(2.2)); }
 
@@ -139,7 +143,7 @@ bool gbuffer(vec3 n) {
     vec3 nv = normalize(mat3(u_view) * n);
     if (nv.z < 0.0)
         nv = -nv;
-    colour = vec4(nv * 0.5 + 0.5, 1.0);
+    colour = vec4(nv * 0.5 + 0.5, g_occlusion);
     return true;
 }
 
@@ -310,6 +314,7 @@ flat out vec3 v_up;
 flat out vec2 v_size;  // the line's width and height
 flat out float v_cap;  // 1 on the end caps, 0 on the sides
 flat out vec2 v_neighbours; // 1 where a bead of the layer above (x) and below (y) touches this one
+flat out float v_infill;    // 1 on sparse and solid infill: no occlusion worked out there
 
 // The kinds that usually have a bead of the layer above on them, and those
 // that lie on one of the layer below (not the top surface, a bridge or an
@@ -333,6 +338,7 @@ vec3 ramp(float t) {
 
 void main() {
     uint kind = a_kind_layer & 0xFFu;
+    v_infill = kind == 4u || kind == 5u ? 1.0 : 0.0; // LineKind::SparseInfill, SolidInfill
     vec3 along = a_p1 - a_p0;
     float len = length(along);
     v_base = vec3(0.0);
@@ -457,6 +463,7 @@ flat in vec3 v_up;
 flat in vec2 v_size;
 flat in float v_cap;
 flat in vec2 v_neighbours;
+flat in float v_infill;
 uniform int u_moire;
 void main() {
     vec3 n = normalize(v_normal);
@@ -500,6 +507,7 @@ void main() {
             }
         }
     }
+    g_occlusion = v_infill > 0.5 ? 0.0 : 1.0;
     if (gbuffer(n))
         return;
     colour = vec4(shade(v_base, n, v_position, shininess, specular, seen), 1.0);
@@ -568,8 +576,13 @@ void main() {
         return;
     }
     vec3 c = view_position(p);
-    vec3 n = normalize(texelFetch(u_normal, p, 0).xyz * 2.0 - 1.0);
+    vec4 g = texelFetch(u_normal, p, 0);
+    vec3 n = normalize(g.xyz * 2.0 - 1.0);
     float key = key_light(c, n);
+    if (g.a < 0.5) { // infill: no occlusion samples (the expensive part)
+        colour = vec4(1.0, key, 0.0, 1.0);
+        return;
+    }
     float pixels = min(u_radius * u_projection.y * 0.5 * u_size.y / -c.z, 80.0);
     if (pixels < 1.5) {
         colour = vec4(1.0, key, 0.0, 1.0);
@@ -829,12 +842,14 @@ void main() {
         light = occluded(o, l, 1e30) ? 0.0 : 1.0;
     }
     float open = 0.0;
-    for (int i = 0; i < u_ambient_rays; ++i) {
+    // Infill: no ambient rays, open sky (as the screen-space occlusion).
+    bool infill = texelFetch(u_normal, p, 0).a < 0.5;
+    for (int i = 0; i < (infill ? 0 : u_ambient_rays); ++i) {
         float r = random(seed);
         vec3 d = around(n, sqrt(1.0 - r), 6.2831853 * random(seed));
         open += occluded(o, d * u_radius, 1.0) ? 0.0 : 1.0;
     }
-    open /= float(max(u_ambient_rays, 1));
+    open = infill ? 1.0 : open / float(max(u_ambient_rays, 1));
     colour = vec4(mix(previous.rg, vec2(light, open), u_blend), 0.0, 1.0);
 }
 )";
@@ -1203,7 +1218,7 @@ void Renderer::shutdown() {
             glDeleteProgram(*p);
             *p = 0;
         }
-    for (Buffer* b : {&plate_, &grid_, &model_, &model_coarse_, &paint_, &extrusions_, &travels_}) {
+    for (Buffer* b : {&plate_, &grid_, &model_, &model_coarse_, &paint_, &extrusions_, &travels_, &bed_art_, &bed_model_}) {
         if (b->vbo)
             glDeleteBuffers(1, &b->vbo);
         if (b->vao)
@@ -1241,6 +1256,25 @@ void Renderer::set_bed(const BedPolygon& bed, const BedLook& look) {
     grid_outline_ = lines.empty() ? 0 : static_cast<int>(2 * bed.size()); // bed_lines puts it last
     grid_step_ = float(look.step);
     grid_major_every_ = std::max(look.major_every, 1);
+    scene_changed();
+}
+
+void Renderer::set_bed_extras(const BedArt& art, const std::vector<float>& model) {
+    if (!ready_)
+        return;
+    upload(bed_art_.vao, bed_art_.vbo, art.vertices.data(), art.vertices.size() * sizeof(float));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
+    bed_art_.count = static_cast<int>(art.vertices.size() / 6);
+    bed_art_groups_ = art.groups;
+    upload(bed_model_.vao, bed_model_.vbo, model.data(), model.size() * sizeof(float));
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(0));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), offset(3 * sizeof(float)));
+    bed_model_.count = static_cast<int>(model.size() / 6);
     scene_changed();
 }
 
@@ -1378,7 +1412,9 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_TRUE);
-    if (plate_.count > 0 && !casters) {
+    // From under the bed, no plate: the part's underside shows (BH43).
+    const bool under = plate_hidden(f.eye);
+    if (plate_.count > 0 && !casters && !under) {
         // Pushed back a little so the grid, and the first layer, draw over it.
         glEnable(GL_POLYGON_OFFSET_FILL);
         glPolygonOffset(1.0f, 1.0f);
@@ -1387,6 +1423,33 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
         glBindVertexArray(plate_.vao);
         glDrawArrays(GL_TRIANGLES, 0, plate_.count);
         glDisable(GL_POLYGON_OFFSET_FILL);
+    }
+    // A pack printer's bed (rule 14): its model in the plate's colour, then its
+    // picture pulled towards the eye in depth, as the paint over a model, so
+    // it wins over the plate and the model's top. Neither casts a shadow.
+    if ((bed_model_.count > 0 || bed_art_.count > 0) && !casters && !under) {
+        lit_uniforms(p_.mesh, f, vp, gbuffer, visibility);
+        uniform(p_.mesh, "u_offset", Vec3{0, 0, 0});
+        uniform(p_.mesh, "u_model", identity());
+        if (bed_model_.count > 0) {
+            uniform(p_.mesh, "u_colour", f.plate);
+            glBindVertexArray(bed_model_.vao);
+            glDrawArrays(GL_TRIANGLES, 0, bed_model_.count);
+        }
+        if (bed_art_.count > 0) {
+            // Without writing depth, so the grid and the axes still draw over it.
+            glBindVertexArray(bed_art_.vao);
+            glDepthMask(GL_FALSE);
+            glEnable(GL_POLYGON_OFFSET_FILL);
+            glPolygonOffset(-1.0f, -4.0f);
+            for (const BedArt::Group& g : bed_art_groups_) {
+                uniform(p_.mesh, "u_colour",
+                        Vec3{float((g.rgb >> 16) & 0xFF) / 255.0f, float((g.rgb >> 8) & 0xFF) / 255.0f, float(g.rgb & 0xFF) / 255.0f});
+                glDrawArrays(GL_TRIANGLES, GLint(g.first), GLsizei(g.count));
+            }
+            glDisable(GL_POLYGON_OFFSET_FILL);
+            glDepthMask(GL_TRUE);
+        }
     }
     if (!gbuffer && grid_.count > 0) {
         glEnable(GL_BLEND);
@@ -1449,6 +1512,7 @@ void Renderer::draw_scene(const ViewFrame& f, const Mat4& vp, bool gbuffer, unsi
                 glDrawArrays(GL_TRIANGLES, GLint(g.first), GLsizei(g.count));
             }
             glDisable(GL_POLYGON_OFFSET_FILL);
+            glDepthMask(GL_TRUE);
         }
     }
     if (f.show_preview)
@@ -1473,8 +1537,10 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
     const PreviewDrawOrder* walls = orders_.far_walls(group, whole);
     if (!gbuffer)
         drawn_group_ = walls ? group : 1;
+    // Cut below the top: the infill only on the top layer (cut_preview_draws).
     std::vector<PreviewRange> draws =
-        preview_draws(walls ? *walls : orders_.full, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
+        walls ? preview_draws(*walls, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp)
+              : cut_preview_draws(orders_, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
     if (walls) {
         const std::vector<PreviewRange> rest =
             preview_draws(orders_.others, lo, hi, f.kind_mask, f.eye.z, f.top_shown, f.top_hidden, &vp);
@@ -1523,7 +1589,9 @@ void Renderer::draw_preview(const ViewFrame& f, const Mat4& vp, bool gbuffer, un
             drawn_extrusions_ += count;
     }
     if (!gbuffer && f.show_travels && travels_.count > 0 && layer_travels_.size() > hi + 1) {
-        const std::size_t t0 = layer_travels_[lo], tn = layer_travels_[hi + 1] - t0;
+        // Cut: the top layer's travels only; the others are inside the part.
+        const std::size_t from = cut_buries(orders_, lo, hi, f.kind_mask, f.top_shown, f.top_hidden) ? hi : lo;
+        const std::size_t t0 = layer_travels_[from], tn = layer_travels_[hi + 1] - t0;
         if (tn > 0) {
             glUseProgram(p_.line);
             uniform(p_.line, "u_view_projection", vp);
@@ -1557,7 +1625,11 @@ void Renderer::shadow_pass(const ViewFrame& f) {
     glClear(GL_DEPTH_BUFFER_BIT);
     const std::array<float, 4> eye = face_eye_;
     face_eye_ = {f.key.x, f.key.y, f.key.z, 0.0f}; // the faces the light sees
-    draw_scene(f, shadow_vp_, true, white_, true);
+    // The infill casts no shadow: it is inside the walls, and drawing it for
+    // the light too loaded the GPU for nothing (the owner, 2026-11-03).
+    ViewFrame casters = f;
+    casters.kind_mask &= ~((1u << unsigned(LineKind::SparseInfill)) | (1u << unsigned(LineKind::SolidInfill)));
+    draw_scene(casters, shadow_vp_, true, white_, true);
     face_eye_ = eye;
     glViewport(0, 0, width_, height_);
     shadowed_ = true;

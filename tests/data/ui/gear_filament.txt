@@ -1,0 +1,17 @@
+# The filament's gear (interface.md, «Menús»): Edit preset, Change extruder
+# color, Show/Hide template presets; the print profile's gear has no colour.
+key ctrl+3
+wait 3
+menu gear_filament
+expect-control edit_preset
+expect-control extruder_color
+expect-control show_templates
+menu show_templates
+menu gear_filament
+menu edit_preset
+key ctrl+2
+wait 3
+menu gear_print
+expect-control edit_preset
+expect-no-control extruder_color
+menu edit_preset

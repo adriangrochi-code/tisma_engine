@@ -669,10 +669,6 @@ PreviewOrders preview_orders(const PreviewBuffers& preview) {
     out.instances = std::move(out.full.instances);
     out.full.instances = {};
     const std::size_t layers = out.full.layer_z.size();
-    if (layers < 4)
-        return out;
-    PreviewDrawOrder whole = out.full;
-    whole.instances.assign(out.instances.begin(), out.instances.begin() + std::ptrdiff_t(out.full.layer_shown.back()));
     // Its instances after the full order's, its ranges counted there.
     const auto append = [&](PreviewDrawOrder o) {
         const std::size_t base = out.instances.size();
@@ -684,6 +680,15 @@ PreviewOrders preview_orders(const PreviewBuffers& preview) {
             v += base;
         return o;
     };
+    {
+        PreviewDrawOrder all = out.full;
+        all.instances = out.instances;
+        out.buried = append(without_infill(all));
+    }
+    if (layers < 4)
+        return out;
+    PreviewDrawOrder whole = out.full;
+    whole.instances.assign(out.instances.begin(), out.instances.begin() + std::ptrdiff_t(out.full.layer_shown.back()));
     out.others = append(other_than_walls(whole));
     for (int k = 2, i = 0; k <= kFarGroups && layers >= std::size_t(2 * k); k *= 2, ++i)
         out.far[std::size_t(i)] = append(merged_layers(whole, k));
@@ -706,6 +711,49 @@ PreviewDrawOrder other_than_walls(const PreviewDrawOrder& order) {
         out.layer_shown.push_back(out.instances.size());
     }
     out.layer_hidden.assign(out.layer_shown.size(), out.instances.size());
+    return out;
+}
+
+PreviewDrawOrder without_infill(const PreviewDrawOrder& order) {
+    PreviewDrawOrder out;
+    const std::size_t layers = order.layer_z.size();
+    out.layer_z = order.layer_z;
+    out.layer_box = order.layer_box;
+    out.layer_shown.assign(1, 0);
+    const auto keep = [&](std::size_t i) {
+        const LineKind k = LineKind(order.instances[i].kind_layer & 0xFFu);
+        if (k != LineKind::SparseInfill && k != LineKind::SolidInfill)
+            out.instances.push_back(order.instances[i]);
+    };
+    for (std::size_t l = 0; l < layers && l + 1 < order.layer_shown.size(); ++l) {
+        for (std::size_t i = order.layer_shown[l]; i < order.layer_shown[l + 1] && i < order.instances.size(); ++i)
+            keep(i);
+        if (l + 1 < order.layer_hidden.size())
+            for (std::size_t i = order.layer_hidden[l]; i < order.layer_hidden[l + 1] && i < order.instances.size(); ++i)
+                keep(i);
+        out.layer_shown.push_back(out.instances.size());
+    }
+    out.layer_hidden.assign(out.layer_shown.size(), out.instances.size());
+    return out;
+}
+
+bool cut_buries(const PreviewOrders& orders, std::size_t lo, std::size_t hi, std::uint32_t kind_mask,
+                std::size_t top_shown, std::size_t top_hidden) {
+    constexpr std::uint32_t kWalls = (1u << unsigned(LineKind::OuterWall)) | (1u << unsigned(LineKind::InnerWall));
+    return (kind_mask & kWalls) == kWalls && hi > lo && orders.buried.layer_shown.size() == orders.full.layer_shown.size() &&
+           !preview_whole(orders.full, lo, hi, kind_mask, top_shown, top_hidden);
+}
+
+std::vector<PreviewRange> cut_preview_draws(const PreviewOrders& orders, std::size_t lo, std::size_t hi,
+                                            std::uint32_t kind_mask, float eye_z, std::size_t top_shown,
+                                            std::size_t top_hidden, const Mat4* clip) {
+    constexpr std::uint32_t kInfill = (1u << unsigned(LineKind::SparseInfill)) | (1u << unsigned(LineKind::SolidInfill));
+    const PreviewDrawOrder& full = orders.full;
+    if ((kind_mask & kInfill) == 0 || !cut_buries(orders, lo, hi, kind_mask, top_shown, top_hidden))
+        return preview_draws(full, lo, hi, kind_mask, eye_z, top_shown, top_hidden, clip);
+    std::vector<PreviewRange> out = preview_draws(full, hi, hi, kind_mask, eye_z, top_shown, top_hidden, clip);
+    const std::vector<PreviewRange> under = preview_draws(orders.buried, lo, hi - 1, kind_mask, eye_z, kWholeLayer, kWholeLayer, clip);
+    out.insert(out.end(), under.begin(), under.end());
     return out;
 }
 

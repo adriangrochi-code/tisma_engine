@@ -1,4 +1,5 @@
 #include "device/simulator.hpp"
+#include "io/number.hpp"
 
 #include "device/gcode_host.hpp"
 
@@ -18,7 +19,7 @@ std::optional<double> argument(std::string_view command, char letter) {
             continue;
         double v = 0.0;
         const char* begin = command.data() + i + 1;
-        const auto r = std::from_chars(begin, command.data() + command.size(), v);
+        const auto r = chars_to(begin, command.data() + command.size(), v);
         if (r.ec == std::errc() && r.ptr != begin)
             return v;
     }
@@ -127,7 +128,7 @@ void SimulatedPrinter::handle(const std::string& line) {
         // A numbered line: the number must follow the last, the checksum match.
         const std::size_t star = line.rfind('*');
         std::uint32_t number = 0;
-        const auto r = std::from_chars(line.data() + 1, line.data() + line.size(), number);
+        const auto r = chars_to(line.data() + 1, line.data() + line.size(), number);
         const std::size_t space = line.find(' ');
         if (r.ec != std::errc() || star == std::string::npos || space == std::string::npos || star < space) {
             reply("Error:No Checksum with line number, Last Line: " + std::to_string(last_line_));
@@ -136,7 +137,7 @@ void SimulatedPrinter::handle(const std::string& line) {
             return;
         }
         int checksum = -1;
-        std::from_chars(line.data() + star + 1, line.data() + line.size(), checksum);
+        chars_to(line.data() + star + 1, line.data() + line.size(), checksum);
         const bool corrupt = options_.fail_line != 0 && number == options_.fail_line && !failed_once_;
         if (corrupt)
             failed_once_ = true;
@@ -166,6 +167,15 @@ void SimulatedPrinter::handle(const std::string& line) {
         reply("ok");
     } else if (code == "M115") {
         reply("FIRMWARE_NAME:TismaSim 1.0 SOURCE_CODE_URL:none PROTOCOL_VERSION:1.0 MACHINE_TYPE:Simulated");
+        // The geometry report as Marlin's documentation of M115 shows it.
+        reply("area:{full:{min:{x:0,y:0,z:0},max:{x:220,y:220,z:250}},work:{min:{x:0,y:0,z:0},max:{x:220,y:220,z:250}}}");
+        reply("ok");
+    } else if (code == "M503") { // the limits in use (printer_connections.md, «Leer los límites»)
+        reply("echo:  G21 ; Units in mm");
+        reply("echo:  M203 X300.00 Y300.00 Z10.00 E60.00");
+        reply("echo:  M201 X2000.00 Y2000.00 Z200.00 E5000.00");
+        reply("echo:  M204 P1500.00 R1500.00 T2000.00");
+        reply("echo:  M205 B20000.00 S0.00 T0.00 J0.05");
         reply("ok");
     } else if (code == "M105") {
         std::lock_guard lock(mutex_);

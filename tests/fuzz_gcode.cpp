@@ -119,7 +119,7 @@ int main(int argc, char** argv) {
         s.infill_angle = uni(0, 180);
         s.top_layers = pick(6);
         s.bottom_layers = pick(6);
-        s.monotonic_top = pick(2) == 0;
+        s.top_pattern = SurfacePattern(pick(8));
         s.support = pick(3) == 0;
         s.support_angle = pick(2) == 0 ? 0.0 : uni(20, 70);
         if (pick(2) == 0) { // organic supports
@@ -147,7 +147,7 @@ int main(int argc, char** argv) {
         s.relative_extrusion = pick(2) == 0;
         if (pick(3) == 0) { // retraction and travel options (retraction_travel.md)
             s.unretract_speed = pick(2) == 0 ? uni(5, 80) : 0.0;
-            s.restart_extra = pick(2) == 0 ? uni(0, 1) : 0.0;
+            s.restart_extra = pick(2) == 0 ? uni(-0.5, 1) : 0.0; // negative: less back (2026-11-09)
             s.retract_layer_change = pick(2) == 0;
             s.firmware_retraction = pick(4) == 0;
             s.wipe = !s.firmware_retraction && pick(2) == 0;
@@ -164,6 +164,9 @@ int main(int argc, char** argv) {
             s.top_one_wall = std::array{TopOneWall::None, TopOneWall::Top, TopOneWall::Topmost}[std::size_t(pick(3))];
             s.first_layer_one_wall = pick(3) == 0;
             s.extra_on_overhangs = pick(3) == 0;
+            s.polyholes = pick(3) == 0;
+            s.polyhole_twist = pick(2) == 0;
+            s.unsupported_last = pick(3) == 0;
             if (pick(3) == 0) // the filament's own values
                 s.filament_retraction = {{"retraction.length", pick(3) == 0 ? 0.0 : uni(0.2, 4)},
                                          {"retraction.lift", uni(0, 0.6)},
@@ -317,8 +320,6 @@ int main(int argc, char** argv) {
                                              GcodeFlavor::MarlinLegacy, GcodeFlavor::RepRapFirmware}[std::size_t(pick(5))];
         if (pick(4) == 0) { // the firmware's limits, a silent mode, M73
             s.limits_usage = std::array{LimitsUsage::TimeOnly, LimitsUsage::Emit, LimitsUsage::Ignore}[std::size_t(pick(3))];
-            if (s.flavor == GcodeFlavor::Klipper && s.limits_usage == LimitsUsage::Emit)
-                s.limits_usage = LimitsUsage::TimeOnly;
             s.max_accel_x = s.max_accel_y = pick(2) == 0 ? uni(200, 5000) : 0.0;
             s.retract_acceleration = pick(2) == 0 ? uni(200, 5000) : 0.0;
             s.jerk_x = s.jerk_y = pick(2) == 0 ? uni(1, 20) : 0.0;
@@ -328,6 +329,10 @@ int main(int argc, char** argv) {
             if (s.silent_mode)
                 s.silent_limits = {{"acceleration", uni(100, 1000)}, {"max_feed_x", uni(50, 200)}};
             s.gcode_progress = pick(2) == 0;
+            // The preparation (print_time.md, rules 10 and 14).
+            s.heat_rate_nozzle = pick(2) == 0 ? uni(0.5, 5) : 0.0;
+            s.heat_rate_bed = pick(2) == 0 ? uni(0.1, 2) : 0.0;
+            s.home_time = pick(2) == 0 ? uni(0, 30) : 0.0;
             s.variables["temperature"] = {std::to_string(int(uni(180, 260)))};
         }
         s.machine_max_flow = pick(3) == 0 ? uni(2, 30) : 0.0;
@@ -387,7 +392,7 @@ int main(int argc, char** argv) {
             s.ooze_prevention = pick(3) == 0;
             s.standby_delta = -uni(0, 40);
             s.toolchange_length = {uni(0, 12), uni(0, 12)};
-            s.toolchange_restart_extra = {uni(0, 2)};
+            s.toolchange_restart_extra = {uni(-0.5, 2)};
             s.interface_shells = pick(2) == 0;
             // Mixed colours (color_mixing.md): a blend, or a gradient, for some copies.
             if (pick(3) == 0) {
@@ -435,6 +440,8 @@ int main(int argc, char** argv) {
                 s.wipe_tower = true;
                 s.relative_extrusion = true;
                 s.single_extruder_mmu = pick(2) == 0;
+                if (pick(3) == 0) // a step not used (2026-11-09)
+                    s.cooling_initial_speed = s.cooling_final_speed = s.loading_speed = 0.0;
                 s.wipe_tower_x = uni(80, 100), s.wipe_tower_y = uni(80, 100);
                 s.wipe_tower_rotation = pick(2) == 0 ? 0.0 : uni(-90, 90);
                 s.wipe_tower_width = uni(20, 60);
@@ -493,7 +500,7 @@ int main(int argc, char** argv) {
         s.support_under_bridges = pick(3) == 0;
         s.support_enforce_layers = pick(4) == 0 ? pick(30) : 0;
         s.corner_smoothing = pick(3) == 0 ? 0.01 * double(pick(6)) : 0.0;
-        s.monotonic_bottom = pick(2) == 0;
+        s.bottom_pattern = SurfacePattern(pick(8));
         s.infill_before_walls = pick(4) == 0;
         s.infill_max_link = pick(3) == 0 ? double(pick(60)) : 50.0;
         s.bridge_angle = pick(4) == 0 ? double(pick(180)) : 0.0;
@@ -505,6 +512,10 @@ int main(int argc, char** argv) {
         // settings go to TISMA_FUZZ_DUMP before it is sliced (one that hangs).
         if (const char* only = std::getenv("TISMA_FUZZ_RUN"); only && std::atoi(only) == run)
             dump(run, mesh, s, {});
+        // With TISMA_FUZZ_ONLY set to a run's number, only that run is sliced:
+        // the ones before it only draw their numbers (the same sequence).
+        if (const char* only = std::getenv("TISMA_FUZZ_ONLY"); only && std::atoi(only) != run)
+            continue;
         try {
             const SlicedModel model =
                 slice_model(mesh, s, nullptr, nullptr, nullptr, objects.empty() ? nullptr : &objects, &mixes);
@@ -549,11 +560,13 @@ int main(int argc, char** argv) {
                             s.transition_distance, int(s.support_pattern), int(s.support_sheath),
                             int(s.support_interface_pattern), s.support_interface_spacing,
                             int(s.support_contact_loops), s.support_enforce_layers, int(s.support_style),
-                            s.support_closing_radius, s.corner_smoothing, int(s.monotonic_bottom),
+                            s.support_closing_radius, s.corner_smoothing, int(s.bottom_pattern),
                             int(s.infill_before_walls), s.infill_max_link, s.bridge_angle);
                 std::printf("  arcs %d overlap %.1f speed %.1f max %.2f\n", int(s.arcs), s.arcs_overlap, s.arcs_speed,
                             s.arcs_max_distance);
                 std::printf("  support under bridges %d\n", int(s.support_under_bridges));
+                std::printf("  polyholes %d twist %d unsupported last %d\n", int(s.polyholes), int(s.polyhole_twist),
+                            int(s.unsupported_last));
                 std::printf("  flavor %d flow caps %.1f %.1f accel %.0f %.0f chamber %.0f/%.0f changes", int(s.flavor),
                             s.machine_max_flow, s.filament_max_flow, s.acceleration, s.travel_acceleration,
                             s.chamber_temperature, s.max_chamber_temp);

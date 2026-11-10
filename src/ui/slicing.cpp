@@ -122,6 +122,7 @@ Settings without_gcode_settings(Settings s) {
     s.slowdown_logic = d.slowdown_logic, s.transition_distance = d.transition_distance;
     s.corner_smoothing = d.corner_smoothing;
     s.start_gcode = d.start_gcode, s.end_gcode = d.end_gcode, s.variables = d.variables;
+    s.machine_macros = d.machine_macros;
     s.printer_parameters = d.printer_parameters, s.filament_parameters = d.filament_parameters;
     s.print_parameters = d.print_parameters, s.print_variables = d.print_variables;
     s.flow = d.flow, s.pressure_advance = d.pressure_advance, s.filament_max_flow = d.filament_max_flow;
@@ -251,6 +252,8 @@ SliceResult Slicer::run(const TriangleMesh& mesh, const Settings& settings, cons
                 }
                 out.preview_seconds = seconds_since(begin);
             });
+        for (const GcodeProblem& n : out.check.notes)
+            out.warnings.push_back({"gcode_check", -1, 0.0, "G-code line " + std::to_string(n.line) + ": " + n.message, 0.0});
         out.ok = true;
     } catch (const std::exception& e) {
         out.error = e.what();

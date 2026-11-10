@@ -47,7 +47,12 @@ bool around_hole(const Toolpath& loop, const Polygons& region) {
 // The loop through new points spaced from half to one and a half times the
 // mean distance apart, each moved off the line by up to the thickness either
 // way. With `painted`, only inside it: elsewhere the loop keeps its points.
-void fuzz_loop(Toolpath& loop, const FuzzyParams& params, const Polygons* painted, std::uint64_t& state) {
+void fuzz_loop(Toolpath& loop, const FuzzyParams& params, const Polygons* painted, const Polygons* air,
+               std::uint64_t& state) {
+    // Whether a point of the wall is roughened.
+    const auto rough = [&](double x, double y) {
+        return (!painted || region_contains(*painted, x, y)) && (!air || !region_contains(*air, x, y));
+    };
     const std::size_t n = loop.points.size();
     const double d = params.point_distance;
     const auto gap = [&] { return (0.5 + uniform(state)) * d; };
@@ -57,13 +62,13 @@ void fuzz_loop(Toolpath& loop, const FuzzyParams& params, const Polygons* painte
         const ToolpathPoint& a = loop.points[i];
         const ToolpathPoint& b = loop.points[(i + 1) % n];
         const double dx = b.p.x - a.p.x, dy = b.p.y - a.p.y, length = std::hypot(dx, dy);
-        if (painted && !region_contains(*painted, a.p.x, a.p.y))
+        if (!rough(a.p.x, a.p.y))
             out.push_back(a);
         for (; ahead < length; ahead += gap()) {
             const double t = ahead / length;
             ToolpathPoint q{{a.p.x + t * dx, a.p.y + t * dy}, a.width + t * (b.width - a.width), a.dz + t * (b.dz - a.dz),
                             a.below + t * (b.below - a.below)};
-            if (painted && !region_contains(*painted, q.p.x, q.p.y))
+            if (!rough(q.p.x, q.p.y))
                 continue;
             const double off = (2.0 * uniform(state) - 1.0) * params.thickness;
             q.p.x += -dy / length * off;
@@ -79,7 +84,7 @@ void fuzz_loop(Toolpath& loop, const FuzzyParams& params, const Polygons* painte
 } // namespace
 
 void fuzz_walls(std::vector<Toolpath>& walls, const Polygons& region, const FuzzyParams& params,
-                const Polygons* painted, std::uint64_t seed) {
+                const Polygons* painted, std::uint64_t seed, const Polygons* air) {
     if (!(params.point_distance > 0.0) || (params.mode == FuzzyMode::None && (!painted || painted->empty())))
         return;
     std::uint64_t k = 0;
@@ -89,9 +94,9 @@ void fuzz_walls(std::vector<Toolpath>& walls, const Polygons& region, const Fuzz
         std::uint64_t state = seed * 0x9e3779b97f4a7c15ull + (k++);
         const bool whole = params.mode == FuzzyMode::All || (params.mode == FuzzyMode::External && !around_hole(t, region));
         if (whole)
-            fuzz_loop(t, params, nullptr, state);
+            fuzz_loop(t, params, nullptr, air, state);
         else if (painted && !painted->empty())
-            fuzz_loop(t, params, painted, state);
+            fuzz_loop(t, params, painted, air, state);
     }
 }
 

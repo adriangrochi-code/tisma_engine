@@ -2,6 +2,8 @@
 # gear, then helical with more teeth, sent with its mate; a rack; back to the
 # design.
 menu mode_engineering
+expect-control tab_design
+menu tab_design
 menu design_gears
 expect-control gears_back
 expect-control gears_kind_spur
