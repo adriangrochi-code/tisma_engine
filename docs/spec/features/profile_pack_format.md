@@ -170,7 +170,9 @@ para las impresoras 5 y 9.
    (con `base`, otra clave), `first_item` (primer valor de una lista), `number_strip_percent`, `number_or_percent`,
    `absolute_only`, `at_least`, `points` y `rule` (una regla con nombre, documentada en el `FORMAT.md` del paquete).
 3. **En los dialectos que no son `prusaslicer`:** además `prusaslicer` (el nombre equivalente), `seen` (en cuántos
-   perfiles coincide) y `prusaslicer_values` (mapa de valores, si cambian).
+   perfiles coincide) y `prusaslicer_values` (mapa de valores, si cambian; también en una clave que conserva su nombre, por ejemplo
+   `seam_position` `back` → `rear`). Primero se aplica `prusaslicer_values` y después la conversión; un valor que no
+   está en el mapa pasa igual.
 4. **Es la misma traducción** con que el paquete convierte los perfiles: un proyecto y un perfil del mismo programa
    dan los mismos ajustes del motor.
 5. **Cobertura** (09-11-2026, claves de origen / con clave del motor): prusaslicer 806 / 88; orcaslicer 881 / 57;
