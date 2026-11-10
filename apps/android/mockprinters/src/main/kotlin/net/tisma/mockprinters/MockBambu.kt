@@ -122,6 +122,7 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
     }
 
     private fun push() {
+        if (silent) return
         val r = report()
         synchronized(clients) {
             clients.forEach { out -> runCatching { MqttClient.writeTo(out, 0x30, publishBody("device/$serial/report", r)) } }
@@ -153,6 +154,7 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
         try {
             while (running) {
                 val (type, body) = MqttClient.readFrom(input) ?: break
+                if (silent) continue
                 when (type shr 4) {
                     8 -> MqttClient.writeTo(out, 0x90, byteArrayOf(body[0], body[1], 0)) // SUBACK
                     12 -> MqttClient.writeTo(out, 0xD0, ByteArray(0)) // PINGRESP
@@ -192,6 +194,8 @@ class MockBambu(val serial: String = "01S00C123456789", val accessCode: String =
     }
 
     /** Refuse the next upload after opening its data connection (a full card), and whether the phone closed it. */
+    /** Tests: the link goes silent without closing (Wi-Fi lost): nothing is answered or pushed. */
+    @Volatile var silent = false
     @Volatile var refuseStore = false
     @Volatile var refusedDataClosed: Boolean? = null
 

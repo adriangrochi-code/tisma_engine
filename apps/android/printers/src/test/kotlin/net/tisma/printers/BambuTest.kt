@@ -19,6 +19,22 @@ class BambuTest {
         BambuConnection.of(printer.url, code, pinned)
 
     @Test
+    fun `a link that goes silent without closing is not shown as the last state for ever`() {
+        val c = BambuConnection.of(printer.url, printer.accessCode, null, staleMs = 600)
+        printer.gcodeState = "RUNNING"; printer.percent = 45
+        assertEquals(PrinterState.PRINTING, c.status().state)
+        // Wi-Fi lost: the socket stays open, nothing comes.
+        printer.silent = true
+        Thread.sleep(700)
+        val e = assertFailsWith<PrinterException> { c.status() }
+        assertEquals(PrinterException.Kind.NETWORK, e.kind)
+        // Back: a new link, and the printer's own state, not the old 45 %.
+        printer.silent = false
+        printer.gcodeState = "IDLE"; printer.percent = 0
+        assertEquals(PrinterState.READY, c.status().state)
+    }
+
+    @Test
     fun `a refused upload closes its data connection`() {
         val c = connect()
         printer.refuseStore = true

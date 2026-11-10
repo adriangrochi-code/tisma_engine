@@ -30,6 +30,8 @@ class BambuConnection(
     private val mqttPort: Int = 8883,
     private val ftpPort: Int = 990,
     private val cameraPort: Int = 6000,
+    /** Silence after which the link counts as lost: the printer pushes its state at least this often when asked. */
+    private val staleMs: Long = 30_000,
 ) : PrinterConnection {
     val tls = PinnedTls(pinnedSha256)
     @Volatile private var mqtt: MqttClient? = null
@@ -55,6 +57,8 @@ class BambuConnection(
                 throw PrinterException(PrinterException.Kind.NETWORK, e.message ?: "MQTT failed", e)
             }
             c.subscribe("device/$sn/report")
+            // A new link starts from the printer's own report, not from what the last one left.
+            synchronized(lock) { state.clear() }
             mqtt = c
             request(buildJsonObject {
                 put("pushing", buildJsonObject {
@@ -98,7 +102,21 @@ class BambuConnection(
     }
 
     override fun status(): PrinterStatus {
-        client()
+        val c = client()
+        // Ask for everything again when it has been quiet, and give up on a link that stays silent: a Wi-Fi lost
+        // without the socket closing would otherwise show the last state («printing 45 %») for ever.
+        val quiet = System.currentTimeMillis() - c.lastReceived
+        if (quiet > staleMs / 3) {
+            runCatching { request(buildJsonObject { put("pushing", buildJsonObject {
+                put("sequence_id", "0"); put("command", "pushall"); put("version", 1); put("push_target", 1) }) }) }
+            val asked = System.currentTimeMillis()
+            synchronized(lock) { while (c.lastReceived < asked && System.currentTimeMillis() - asked < 3_000) lock.wait(50) }
+            if (c.lastReceived < asked && System.currentTimeMillis() - c.lastReceived > staleMs) {
+                close()
+                synchronized(lock) { state.clear() }
+                throw PrinterException(PrinterException.Kind.NETWORK, "The printer stopped answering")
+            }
+        }
         waitForState(3_000)
         val s = synchronized(lock) { JsonObject(state.toMap()) }
         if (!s.containsKey("gcode_state")) return PrinterStatus(PrinterState.BUSY)
@@ -238,10 +256,10 @@ class BambuConnection(
 
     companion object {
         /** From a saved address, `bambu://host` (tests may give other ports: `bambu://host:mqtt?ftp=port`). */
-        fun of(url: String, accessCode: String, pinned: String?): BambuConnection {
+        fun of(url: String, accessCode: String, pinned: String?, staleMs: Long = 30_000): BambuConnection {
             val u = URI(if (url.startsWith("bambu://")) url else "bambu://$url")
             fun q(k: String) = u.query?.split('&')?.firstOrNull { it.startsWith("$k=") }?.substringAfter('=')?.toIntOrNull()
-            return BambuConnection(u.host, accessCode, pinned, if (u.port > 0) u.port else 8883, q("ftp") ?: 990, q("cam") ?: 6000)
+            return BambuConnection(u.host, accessCode, pinned, if (u.port > 0) u.port else 8883, q("ftp") ?: 990, q("cam") ?: 6000, staleMs)
         }
 
         /** The camera's 80-byte login: the header, then `bblp` and the access code, 32 bytes each. */

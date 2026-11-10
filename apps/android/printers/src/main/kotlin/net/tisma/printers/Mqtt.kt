@@ -27,6 +27,9 @@ class MqttClient(
     @Volatile var connected = false
         private set
     private var reader: Thread? = null
+    /** When the last packet came in (ms). A link lost without a close (Wi-Fi gone) shows here as silence. */
+    @Volatile var lastReceived: Long = System.currentTimeMillis()
+        private set
 
     /** Section 3.1: CONNECT; waits for CONNACK. Throws [PrinterException] AUTH on a refused login. */
     fun connect(user: String?, password: String?, keepAliveS: Int = 60) {
@@ -140,6 +143,7 @@ class MqttClient(
         if (len > MAX_PACKET) throw IOException("MQTT packet too big: $len bytes")
         val body = ByteArray(len)
         input.readFully(body)
+        lastReceived = System.currentTimeMillis()
         return first to body
     }
 
