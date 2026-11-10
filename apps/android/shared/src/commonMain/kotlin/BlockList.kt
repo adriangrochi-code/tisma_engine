@@ -61,11 +61,14 @@ class BlockList(
     val accounts: Set<String>,
     val peers: Set<String>,
     val revokedKeys: Set<String>,
+    /** p2p_library.md, rule 3 novies: one publication blocked by its code (the index's `id`) → reason. */
+    val models: Map<String, String> = emptyMap(),
 ) {
     class BadList(message: String) : Exception(message)
 
     fun blocksFile(sha256: String) = sha256.lowercase() in files
     fun blocksAccount(id: String) = id in accounts
+    fun blocksModel(id: String) = id in models
     fun blocksPeer(key: String) = key in peers
 
     /** Rule 6: past `expires` (7 days without a new signature), sharing stops until it is renewed. */
@@ -99,8 +102,16 @@ class BlockList(
                     else -> null
                 }
             }.toMap()
+            val models = (o["models"] as? JsonArray).orEmpty().mapNotNull { e ->
+                when (e) {
+                    is JsonPrimitive -> e.contentOrNull?.let { it to "" }
+                    is JsonObject -> ((e["id"] ?: e["code"]) as? JsonPrimitive)?.contentOrNull
+                        ?.let { it to ((e["reason"] as? JsonPrimitive)?.contentOrNull ?: "") }
+                    else -> null
+                }
+            }.toMap()
             val list = BlockList(generated, sequence, expires, files, strings("accounts"), strings("peers"),
-                strings("revoked_keys").map { it.lowercase() }.toSet())
+                strings("revoked_keys").map { it.lowercase() }.toSet(), models)
             if (LibraryKey.hex(libraryKey) in list.revokedKeys) throw BadList("The library key that signed it is revoked")
             return list
         }

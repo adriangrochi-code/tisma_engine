@@ -82,7 +82,7 @@ class BlockListTest {
                      revoked: List<String> = emptyList()) = """{"format":"tisma-library-blocklist","version":1,
         "generated":"$generated","sequence":$sequence,"expires":"${generated + 7.days}",
         "files":[${files.joinToString(",") { "{\"sha256\":\"$it\",\"reason\":\"rights\"}" }}],
-        "accounts":["acct-9"],"peers":["peer-1"],"addresses":[],
+        "accounts":["acct-9"],"peers":["peer-1"],"addresses":[],"models":[{"id":"m-blocked","reason":"rights"}],
         "revoked_keys":[${revoked.joinToString(",") { "\"$it\"" }}]}""".toByteArray()
 
     private fun model(id: String, name: String, account: String, sha: String, extra: String = "") =
@@ -109,12 +109,14 @@ class BlockListTest {
         val l = BlockList.read(json, sign(library, json), libraryKey)
         assertTrue(l.blocksAccount("acct-9"))
         assertTrue(l.blocksPeer("peer-1"))
+        assertTrue(l.blocksModel("m-blocked"))
         assertFailsWith<BlockList.BadList> { BlockList.read(list(5, files = listOf("ab")), sign(library, json), libraryKey) }
         assertFailsWith<BlockList.BadList> { BlockList.read(json, sign(pair(), json), libraryKey) }
         // An older list is a replay.
         assertFailsWith<BlockList.BadList> { BlockList.read(json, sign(library, json), libraryKey, lastSequence = 6) }
         val revoked = list(7, revoked = listOf(LibraryKey.hex(libraryKey)))
         assertFailsWith<BlockList.BadList> { BlockList.read(revoked, sign(library, revoked), libraryKey) }
+        assertEquals("rights", l.models["m-blocked"])
     }
 
     @Test
@@ -188,6 +190,7 @@ class BlockListTest {
         compose.onNodeWithTag("shared_report_reason_${R.string.report_rights}").performScrollTo().performClick()
         compose.waitUntil(10_000) { ShadowLooper.idleMainLooper(); compose.onAllNodes(hasTestTag("shared_reported")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals("m1", server.reports.single().first)
+        compose.onNodeWithTag("shared_code_m1").assertExists()
     }
 
     @Test

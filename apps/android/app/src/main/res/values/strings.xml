@@ -245,6 +245,7 @@
     <string name="connection_error">The printer does not answer</string>
     <string name="nozzle_hardened">hardened steel</string>
     <string name="eng_temperature">Nozzle temperature (layer adhesion)</string>
+    <string name="shared_code">Publication code: %1$s</string>
     <string name="plate_share">Share the G-code</string>
     <string name="plate_send_to">Send to</string>
     <string name="plate_print">Print</string>

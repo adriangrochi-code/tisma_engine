@@ -36,5 +36,8 @@ class SharedLogicTest {
         val index = LibraryIndex(1, listOf(m("a", "acct-1", "x.3mf"), m("b", "acct-9", "y.3mf"), m("c", "acct-1", "z.gcode")))
         val list = BlockList(now, 1, now + 7.days, emptyMap(), setOf("acct-9"), emptySet(), emptySet())
         assertEquals(listOf("a"), index.search("gear", list).map { it.id })
+        // Rule 3 novies: one publication blocked by its code, the account's others stay.
+        val one = BlockList(now, 1, now + 7.days, emptyMap(), emptySet(), emptySet(), emptySet(), mapOf("a" to "rights"))
+        assertEquals(listOf("b"), index.search("gear", one).map { it.id })
     }
 }

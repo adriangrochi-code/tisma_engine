@@ -137,6 +137,9 @@ private fun ModelCard(m: net.tisma.app.p2p.LibraryIndex.Model, report: (String) 
     TismaCard(Modifier.testTag("shared_model_" + m.id)) {
         Text(m.name, style = MaterialTheme.typography.titleMedium)
         Text(listOf(m.author, m.license, sizeText(m.size)).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+        // Rule 3 novies: the publication's code, the one a report or a block names.
+        Text(stringResource(R.string.shared_code, m.id), style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("shared_code_" + m.id))
         if (m.checked) Text(stringResource(R.string.shared_checked), style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (m.description.isNotBlank()) Text(m.description, style = MaterialTheme.typography.bodySmall, maxLines = 3)
