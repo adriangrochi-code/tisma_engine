@@ -54,6 +54,17 @@ desventajas».
 7. **Denunciar:** desde un modelo, «Denunciar» manda al servidor la huella y el motivo; lo revisa una persona en el
    panel de administración, que puede retirar el modelo (entra en la lista de bloqueo).
 
+## Desde el escáner
+
+7 bis. **Pieza escaneada** (pedido del dueño, 10-11-2026: «que desde el escáner 3D se puedan subir archivos a la misma
+   nube así se pueden imprimir archivos escaneados»): cuando la nube termina un escaneo, la pieza (malla y medidas)
+   queda en la cuenta de la persona como un archivo propio. Desde la app del escáner hay dos botones:
+   - **«Imprimir»:** la pieza aparece en Tisma (teléfono y computadora, misma cuenta) en «Mi biblioteca» como entrada
+     nueva, lista para laminar e imprimir (`local_library.md`);
+   - **«Publicar»:** la publica en la biblioteca compartida como cualquier modelo (reglas 1 a 7), con nombre, licencia y
+     miniatura del escaneo. La revisa un sembrador como cualquier otra.
+   La pieza escaneada es privada hasta que se publica.
+
 ## Privacidad
 
 8. La app no comparte nada que la persona no haya publicado o bajado de la biblioteca. «Mi biblioteca» local
