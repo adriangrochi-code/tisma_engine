@@ -109,9 +109,11 @@ Están en Configuración › General (`preferences.md`, que ya tiene «Notify ab
 
     - **campos:** `version` según `docs/VERSIONING.md` (con etiqueta de pre-release si la tiene); `channel` `stable` o
       `beta` (con `beta` elegido se ofrecen las dos); `notes` en cada idioma del programa (si falta el del programa, en
-      inglés); `system` uno de `windows-x64`, `windows-x86`, `linux-x64`, `android`; `family` `current` o `legacy`
+      inglés); `system` uno de `windows-x64`, `windows-x86`, `linux-x64`, `macos-arm64`, `macos-x64`, `android`; `family` `current` o `legacy`
       (`legacy_windows.md`); `min_system` la versión mínima del sistema (en Android, el nivel de API, por ejemplo
-      `"26"`); `size` en bytes; `sha256` en hexadecimal; `signature` la firma Ed25519 del paquete en base64;
+      `"26"`; en macOS, la versión del sistema, `"13.0"` mientras el motor no pida otra); `size` en bytes; `sha256` en hexadecimal; `signature` la firma Ed25519 del paquete en base64;
+    - **macOS** (pregunta del motor, 10-11-2026): el paquete de actualización es el `.zip` con la app (`Tisma.app`), que
+      reemplaza la app entera; el `.dmg` es solo para la primera instalación y no va en la lista;
     - **orden:** de la más nueva a la más vieja; el programa elige la primera de su canal, sistema y familia cuyo
       `min_system` cumple la máquina (regla 2), y la ofrece solo si es más nueva que la instalada;
     - una clave desconocida se ignora; un `format` distinto o una `version` mayor de la lista, se ignora la lista y se
