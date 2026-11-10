@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- p2p_library.md, rule 3: share only on Wi-Fi (an unmetered network). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- The checked update APK goes to Android's installer, which asks the person (app_updates.md, rule 11). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Following a print with the app closed (docs/MOBILE.md, «Avisos»). -->

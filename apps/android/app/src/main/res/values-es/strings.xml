@@ -627,4 +627,21 @@
     <string name="site_bad_link">El enlace no se puede leer.</string>
     <string name="site_failed">No se pudo bajar el modelo: %1$s</string>
     <string name="pref_site_downloads">Permitir descargas de sitios compatibles</string>
+    <string name="shared_title">Compartida</string>
+    <string name="shared_withdrawn">%1$d archivos fueron retirados de la biblioteca de Tisma y se borraron de este teléfono.</string>
+    <string name="shared_ok">Entendido</string>
+    <string name="shared_index">Buscar y bajar</string>
+    <string name="shared_index_soon">La búsqueda en la biblioteca compartida llega con el índice del servidor.</string>
+    <string name="shared_blocklist">Lista de bloqueo</string>
+    <string name="shared_no_list">Todavía no hay una lista firmada: no se comparte nada.</string>
+    <string name="shared_list_date">Lista del %1$s</string>
+    <string name="shared_share">Compartir con otros teléfonos</string>
+    <string name="shared_privacy">Solo se comparte lo que publicaste o bajaste de la biblioteca compartida, nunca Mi biblioteca. Los teléfonos con que te conectás ven tu dirección IP.</string>
+    <string name="shared_now_sharing">Compartiendo ahora.</string>
+    <string name="shared_off">No compartís: solo bajás cuando lo pedís.</string>
+    <string name="shared_why_no_list">No comparte: falta la lista de bloqueo firmada.</string>
+    <string name="shared_why_stale">No comparte: la lista de bloqueo tiene más de 7 días. Se renueva con red.</string>
+    <string name="shared_why_wifi">No comparte: solo con Wi-Fi, no con datos móviles.</string>
+    <string name="shared_why_charging">No comparte: solo con el cargador puesto.</string>
+    <string name="shared_upload_cap">Subida máxima por día (MB)</string>
 </resources>

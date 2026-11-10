@@ -11934,3 +11934,22 @@ Decisión de la sesión de especificación (como Tisma Slicer): `tisma://open?fi
 - STEP se baja pero todavía no abre (el motor no lo lee).
 - Pruebas: `SiteLinkTest` (enlaces aceptados y rechazados, el ZIP con una ruta `../`, y el enlace hasta el plato con
   una descarga de prueba). No probado con Printables real ni en un teléfono.
+
+## 2026-11-10 — Android: biblioteca compartida entre pares (p2p_library.md), la pantalla y el bloqueo
+
+Prioridad del dueño («lo antes posible así subimos modelos»), por la sesión de especificación: empezar por la
+pantalla y el bloqueo; el formato del índice lo propone el servidor.
+- `p2p/BlockList.kt`: la lista de bloqueo firmada con la clave de Tisma (Ed25519, como la de actualizaciones): sin
+  firma válida no se usa (P2P5). Huellas, cuentas, pares y bloqueos de IP cortos que se descartan al vencer (regla 5).
+  Formato propuesto por la app hasta que llegue el del servidor (`tisma-blocklist` v1, en el código).
+- `SharedCopies`: los archivos de la biblioteca compartida en el teléfono, por su SHA-256 (calculado, no tomado del
+  nombre). Una huella bloqueada se borra y se avisa «retirados de la biblioteca de Tisma» (regla 4, P2P3).
+- `SharingPolicy`: se comparte solo con el interruptor prendido, una lista firmada de menos de 7 días, Wi-Fi (red no
+  medida) y cargando (reglas 3 y 6, P2P6 y P2P7); la pantalla dice por qué no.
+- Pantalla: Biblioteca tiene dos pestañas, «Mi biblioteca» y «Compartida» (lista, retirados, compartir, tope de
+  subida por día, y el aviso de que los pares ven la IP, regla 8). Buscar y bajar esperan el índice del servidor.
+- La clave pública de Tisma todavía no existe (decisión del dueño): mientras tanto ninguna lista se acepta y no se
+  comparte nada.
+- Pruebas: `BlockListTest` (firma con una clave de prueba, P2P3, P2P5, P2P6, P2P7, bloqueo de IP que vence).
+- Falta: el índice y su búsqueda, bajar y publicar (red de pares: la biblioteca la elige el motor), «Denunciar»
+  (necesita la dirección del servidor) y renovar la lista cada 6 h mientras comparte.

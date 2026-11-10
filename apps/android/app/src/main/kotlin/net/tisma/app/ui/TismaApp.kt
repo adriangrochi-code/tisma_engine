@@ -145,6 +145,7 @@ fun TismaApp(
     nav: Navigator = remember { Navigator() },
     updates: net.tisma.app.updates.UpdatesViewModel? = null,
     library: net.tisma.app.engine.LibraryViewModel? = null,
+    shared: net.tisma.app.p2p.SharedViewModel? = null,
 ) {
     val state by cloud.state.collectAsStateWithLifecycle()
     val printerState by printers.state.collectAsStateWithLifecycle()
@@ -316,8 +317,11 @@ fun TismaApp(
                         Section.PLATE -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav)
                         Section.ENGINEERING -> PlateScreen(sliceState, slice, printerState, printers, state.signedIn, nav,
                             engineering = true)
-                        Section.LIBRARY -> if (library != null && sliceState.libraryAvailable) LibraryScreen(library, slice, nav, settings.libraryCapMb)
+                        Section.LIBRARY -> LibraryTabs(shared != null) { sharedTab ->
+                            if (sharedTab && shared != null) SharedScreen(shared)
+                            else if (library != null && sliceState.libraryAvailable) LibraryScreen(library, slice, nav, settings.libraryCapMb)
                             else LibraryUnavailable(nav)
+                        }
                         else -> SectionHome(nav.section, state.signedIn, state.email, nav, updates?.let { u -> {
                             // Rule 1: «Buscar actualizaciones» in More.
                             MoreItem(R.string.updates_check, null, "more_updates") { u.check() }
@@ -528,5 +532,20 @@ private fun LibraryUnavailable(nav: Navigator) {
         Button(onClick = { nav.select(Section.PLATE) }, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("library_to_plate")) {
             Text(stringResource(R.string.library_to_plate))
         }
+    }
+}
+
+/** «Mi biblioteca» and the shared library (p2p_library.md) side by side in the Library section. */
+@Composable
+private fun LibraryTabs(withShared: Boolean, content: @Composable (shared: Boolean) -> Unit) {
+    var tab by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(0) }
+    Column(Modifier.fillMaxSize()) {
+        if (withShared) androidx.compose.material3.TabRow(selectedTabIndex = tab) {
+            androidx.compose.material3.Tab(tab == 0, { tab = 0 }, text = { Text(stringResource(R.string.library_title)) },
+                modifier = Modifier.testTag("tab_my_library"))
+            androidx.compose.material3.Tab(tab == 1, { tab = 1 }, text = { Text(stringResource(R.string.shared_title)) },
+                modifier = Modifier.testTag("tab_shared"))
+        }
+        Box(Modifier.weight(1f)) { content(withShared && tab == 1) }
     }
 }

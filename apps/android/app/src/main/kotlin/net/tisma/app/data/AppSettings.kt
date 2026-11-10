@@ -29,6 +29,16 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("site.downloads", false)
         set(value) = prefs.edit().putBoolean("site.downloads", value).apply()
 
+    /** p2p_library.md, rule 3: share the shared library's files with other phones (only Wi-Fi and charging). Off at first. */
+    var p2pSharing: Boolean
+        get() = prefs.getBoolean("p2p.sharing", false)
+        set(value) = prefs.edit().putBoolean("p2p.sharing", value).apply()
+
+    /** Rule 3's upload limit, in MB a day. */
+    var p2pUploadCapMb: Int
+        get() = prefs.getInt("p2p.upload_cap_mb", 500)
+        set(value) = prefs.edit().putInt("p2p.upload_cap_mb", value).apply()
+
     var libraryCapMb: Int
         get() = prefs.getInt("library.cap_mb", 500)
         set(value) = prefs.edit().putInt("library.cap_mb", value).apply()

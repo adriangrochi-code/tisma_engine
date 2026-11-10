@@ -105,6 +105,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** The shared library (p2p_library.md): its block list is checked with Tisma's key (none yet: sharing stays off). */
+    private val shared: net.tisma.app.p2p.SharedViewModel by viewModels {
+        val app = application as TismaApplication
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T = net.tisma.app.p2p.SharedViewModel(
+                java.io.File(app.filesDir, "p2p"), net.tisma.app.updates.AppUpdater.hexKey(BuildConfig.UPDATES_KEY) ?: ByteArray(0),
+                saved = app.settings) as T
+        }
+    }
+
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         handleShared(intent)
@@ -139,7 +150,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             TismaTheme {
-                TismaApp(cloud, printers, slice, app.settings, nav, updates, library)
+                TismaApp(cloud, printers, slice, app.settings, nav, updates, library, shared)
             }
         }
     }

@@ -643,4 +643,21 @@
     <string name="site_bad_link">The link cannot be read.</string>
     <string name="site_failed">The model could not be downloaded: %1$s</string>
     <string name="pref_site_downloads">Allow downloads from supported websites</string>
+    <string name="shared_title">Shared</string>
+    <string name="shared_withdrawn">%1$d files were withdrawn from Tisma\'s library and deleted from this phone.</string>
+    <string name="shared_ok">OK</string>
+    <string name="shared_index">Search and download</string>
+    <string name="shared_index_soon">Searching the shared library comes with the server\'s index.</string>
+    <string name="shared_blocklist">Block list</string>
+    <string name="shared_no_list">No signed list yet: nothing is shared.</string>
+    <string name="shared_list_date">List of %1$s</string>
+    <string name="shared_share">Share with other phones</string>
+    <string name="shared_privacy">Only what you published or downloaded from the shared library is shared, never My library. The phones you connect to see your IP address.</string>
+    <string name="shared_now_sharing">Sharing now.</string>
+    <string name="shared_off">Not sharing: you only download when you ask.</string>
+    <string name="shared_why_no_list">Not sharing: the signed block list is missing.</string>
+    <string name="shared_why_stale">Not sharing: the block list is more than 7 days old. It is renewed with a network.</string>
+    <string name="shared_why_wifi">Not sharing: only on Wi-Fi, not on mobile data.</string>
+    <string name="shared_why_charging">Not sharing: only while charging.</string>
+    <string name="shared_upload_cap">Upload limit a day (MB)</string>
 </resources>
