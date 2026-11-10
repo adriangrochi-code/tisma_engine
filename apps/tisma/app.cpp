@@ -1785,6 +1785,7 @@ private:
     // Recent projects), kept with the preferences.
     std::vector<std::filesystem::path> recent_projects_;
     bool theme_system_ = false; // Appearance «Like the system»: the theme follows the system's
+    bool show_templates_ = true; // the built-in (template) profiles in the lists; off: only the chosen one
     void follow_system_theme();
     void remember_project(const std::filesystem::path& path);
     void new_project(); // an empty plate, no project file (Ctrl+N)
@@ -4007,6 +4008,7 @@ void App::load_preferences() {
             theme_ = light_theme();
         theme_system_ = j.value("theme", "dark") == "system";
         last_folder_ = from_utf8(j.value("folder", std::string()));
+        show_templates_ = j.value("show_templates", true);
         if (const auto r = j.find("recent_projects"); r != j.end() && r->is_array())
             for (const auto& e : *r)
                 if (e.is_string() && recent_projects_.size() < 10)
@@ -4137,6 +4139,7 @@ void App::save_preferences() {
         j["language"] = language() == Language::English ? "en" : "es";
         j["theme"] = theme_system_ ? "system" : theme_.dark ? "dark" : "light";
         j["folder"] = utf8(last_folder_);
+        j["show_templates"] = show_templates_;
         j["recent_projects"] = nlohmann::json::array();
         for (const std::filesystem::path& r : recent_projects_)
             j["recent_projects"].push_back(utf8(r));
@@ -5350,7 +5353,8 @@ void App::profile_row(ProfileKind kind, bool compact) {
         };
         ImGui::SeparatorText(tr(T::BuiltinProfiles));
         for (const Profile& p : builtin_profiles_[k])
-            if (listed(p) && ImGui::Selectable((shown_name(p.name) + "##" + p.name).c_str(), chosen == &p))
+            if (listed(p) && (show_templates_ || chosen == &p) &&
+                ImGui::Selectable((shown_name(p.name) + "##" + p.name).c_str(), chosen == &p))
                 picked = &p;
         if (std::any_of(user_profiles_[k].begin(), user_profiles_[k].end(), listed)) {
             ImGui::SeparatorText(tr(T::MyProfiles));
@@ -5393,9 +5397,48 @@ void App::profile_row(ProfileKind kind, bool compact) {
         }
     }
     ImGui::SameLine(0, gap);
-    if (icon_button("##menu", "tisma_more", tr(T::More), size))
+    const bool gear = icon_button("##menu", "tisma_more", tr(T::More), size);
+    note_rect(kind == ProfileKind::Print ? "gear_print" : kind == ProfileKind::Filament ? "gear_filament" : "gear_printer");
+    if (gear)
         ImGui::OpenPopup("##profile_menu");
     if (ImGui::BeginPopup("##profile_menu")) {
+        // The gear's entries (interface.md, «Menús»): its settings, the
+        // extruder's colour, the template profiles shown or not.
+        const bool edit = ImGui::MenuItem(tr(T::EditPresetMenu));
+        note_rect("edit_preset");
+        if (edit)
+            window_tab(kind == ProfileKind::Print ? 2 : kind == ProfileKind::Filament ? 3 : 4);
+        if (kind == ProfileKind::Filament) {
+            const bool colour = ImGui::BeginMenu(tr(T::ExtruderColorMenu));
+            note_rect("extruder_color");
+            if (colour) {
+                if (filament_colors_.empty())
+                    filament_colors_.resize(1);
+                unsigned v = 0x808080;
+                if (const std::string hex = filament_color(1); hex.size() == 7 && hex[0] == '#')
+                    std::sscanf(hex.c_str() + 1, "%6x", &v);
+                float rgb3[3] = {float((v >> 16) & 0xFF) / 255.0f, float((v >> 8) & 0xFF) / 255.0f, float(v & 0xFF) / 255.0f};
+                if (ImGui::ColorPicker3("##extruder_color", rgb3, ImGuiColorEditFlags_NoSidePreview)) {
+                    char hex[8];
+                    std::snprintf(hex, sizeof hex, "#%02X%02X%02X", unsigned(std::lround(rgb3[0] * 255.0f)),
+                                  unsigned(std::lround(rgb3[1] * 255.0f)), unsigned(std::lround(rgb3[2] * 255.0f)));
+                    filament_colors_[0] = hex;
+                    for (ColorMix& m : mixes_) { // the mixed colours made with it (color_mixing.md)
+                        std::vector<std::string> colors;
+                        std::vector<double> shares;
+                        for (const ColorMix::Component& c : m.components)
+                            colors.push_back(filament_color(c.extruder)), shares.push_back(c.share);
+                        m.color = mix_color(colors, shares);
+                    }
+                }
+                ImGui::EndMenu();
+            }
+        }
+        const bool templates = ImGui::MenuItem(tr(T::ShowTemplatesMenu), nullptr, show_templates_);
+        note_rect("show_templates");
+        if (templates)
+            show_templates_ = !show_templates_;
+        ImGui::Separator();
         if (ImGui::MenuItem(tr(T::SaveProfileAs)))
             save_as();
         if (kind != ProfileKind::Print && ImGui::MenuItem(tr(T::FromCatalog)))

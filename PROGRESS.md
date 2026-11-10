@@ -12403,3 +12403,9 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   tarjeta Calibración, con las pruebas de la pestaña (las de resina con una impresora de resina); elegir una la arma
   y la lamina en la pestaña Calibración. Prueba `ui_script_calibration_menus`. Queda: «Corrección dimensional…» y
   «Aplicar un resultado…» como entradas propias (hoy están dentro de la pestaña).
+- **Paso 7d (engranaje del perfil):** Editar el perfil (abre sus ajustes: impresión, filamento o la página de la
+  impresora), Cambiar el color del extrusor (solo filamento; el color del extrusor 1 y las mezclas que lo usan) y
+  Mostrar los perfiles de plantilla (casilla; apagada, la lista integrada muestra solo el elegido; se guarda en las
+  preferencias). Prueba `ui_script_gear_filament`.
+- CI local b111be9: 1165/1166 en gcc; `aero_drag_coefficients` por tiempo con la máquina cargada por compilaciones en
+  paralelo (se repite sola).
