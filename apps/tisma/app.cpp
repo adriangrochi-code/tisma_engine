@@ -58,6 +58,7 @@
 #include "io/model.hpp"
 #include "io/project_import.hpp"
 #include "io/stl.hpp"
+#include "io/zip.hpp"
 #include "mesh/shapes.hpp"
 #include "mesh/orient.hpp"
 #include "project/project.hpp"
@@ -574,6 +575,8 @@ enum class Purpose {
     ExportViewDxf,
     ExportObject,      // a model's right-click menu: Export as STL/OBJ…
     ExportToolpaths,   // File › Export Toolpaths as OBJ…
+    AddModelInches,    // File › Import STL (Imperial Units)…
+    ImportZip,         // File › Import ZIP Archive…
     ExportPreferences, // Preferences › Other: export and import them
     ImportPreferences,
     LoadProjectConfig, // interface.md, «Más»: Import Config from Project…
@@ -1798,6 +1801,7 @@ private:
     bool can_reload() const;
     void reload_from_disk(); // F5: the chosen model, or every one, read again from its file
     void window_tab(int n);  // Window › Ctrl+1 to Ctrl+6 (interface.md, «Más»)
+    void import_zip(const std::filesystem::path& path); // every STL, OBJ and 3MF in it onto the plate
     // The calibration tests as menu entries (Más › Calibration, the empty
     // bed's Add calibration model ▸): the chosen one made, in its tab.
     void calibration_entries(const char* prefix);
@@ -4978,6 +4982,39 @@ void App::calibration_entries(const char* prefix) {
             set_tab(Tab::Calibration);
             create_calibration(kind, false);
         }
+    }
+}
+
+// Import ZIP Archive…: a 3MF package opens as one; otherwise every STL, OBJ
+// and 3MF inside goes on the plate, each named by its file.
+void App::import_zip(const std::filesystem::path& path) {
+    try {
+        std::ifstream in(path, std::ios::binary);
+        const std::string data{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+        const ZipArchive zip(data);
+        if (zip.find("3D/3dmodel.model")) {
+            add_model(path);
+            return;
+        }
+        std::size_t added = 0;
+        for (const ZipArchive::Entry& e : zip.entries()) {
+            const std::filesystem::path name = from_utf8(e.name);
+            const std::string ext = lower_extension(name);
+            if (ext != ".stl" && ext != ".obj" && ext != ".3mf")
+                continue;
+            if (e.size > (std::uint64_t(1) << 30))
+                throw std::runtime_error(e.name + ": larger than 1 GB");
+            ModelFile m = parse_model(zip.read(e), ext);
+            if (m.mesh.empty())
+                continue;
+            add_mesh(std::move(m.mesh), name.filename());
+            ++added;
+        }
+        if (added == 0)
+            fail(T::CannotOpen, utf8(path.filename()) + ": " + tr(T::ZipNoModels));
+        last_folder_ = path.parent_path();
+    } catch (const std::exception& e) {
+        fail(T::CannotOpen, e.what());
     }
 }
 
@@ -17321,6 +17358,14 @@ void App::more_menu() {
             purpose_ = Purpose::AddModel;
             browser_.open(FileBrowser::Mode::Open, tr(T::ToolAdd), kModelExtensions, last_folder_);
         }
+        if (item("import_inches", tr(T::ImportInchesMenu))) {
+            purpose_ = Purpose::AddModelInches;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ImportInchesMenu), {".stl", ".obj"}, last_folder_);
+        }
+        if (item("import_zip", tr(T::ImportZipMenu))) {
+            purpose_ = Purpose::ImportZip;
+            browser_.open(FileBrowser::Mode::Open, tr(T::ImportZipMenu), {".zip"}, last_folder_);
+        }
         if (item("import_config", tr(T::ImportConfigMenu), "Ctrl+L"))
             begin_import_config(false);
         if (item("import_project_config", tr(T::ImportProjectConfigMenu), "Ctrl+Alt+L"))
@@ -21150,6 +21195,18 @@ void App::file_chosen(const std::filesystem::path& chosen) {
         case Purpose::LoadProjectConfig: load_project_config(chosen); break;
         case Purpose::ExportPlate: export_plate_to(chosen); break;
         case Purpose::ExportPreferences: save_preferences(chosen); break;
+        case Purpose::AddModelInches: {
+            const auto before = revision_.model;
+            add_model(chosen);
+            if (revision_.model != before && !objects_.empty()) {
+                PlateObject& o = objects_.back(); // the model read, in inches: ×25.4 to millimetres
+                for (double& v : o.place.scale)
+                    v *= 25.4;
+                arrange_plate();
+            }
+            break;
+        }
+        case Purpose::ImportZip: import_zip(chosen); break;
         case Purpose::ExportToolpaths: {
             std::ofstream out(chosen, std::ios::binary);
             if (result_)
@@ -23425,6 +23482,14 @@ void App::script_input() {
         std::printf("ui-script: expect-error %s: ok\n", what.c_str());
         error_title_.clear(), error_message_.clear(); // expected: it does not fail the run
         next();
+    } else if (step.verb == "expect-scale") { // the last model's scale in X, to 0.001
+        if (objects_.empty())
+            return fail_step("no model");
+        const double got = objects_.back().place.scale[0], want = std::atof(step.key.c_str());
+        std::printf("ui-script: expect-scale %s: %.4f\n", step.key.c_str(), got);
+        if (std::abs(got - want) > 1e-3)
+            return fail_step("the scale is " + std::to_string(got));
+        next();
     } else if (step.verb == "expect-theme") { // dark or light
         const char* got = theme_.dark ? "dark" : "light";
         std::printf("ui-script: expect-theme %s: %s\n", step.key.c_str(), got);
@@ -23739,7 +23804,9 @@ void App::script_input() {
         browser_.close();
         if (ImGui::GetCurrentContext()->OpenPopupStack.Size > 0) // its modal too, as its own buttons close it
             ImGui::ClosePopupToLevel(0, true);
-        file_chosen(std::filesystem::absolute(step.key));
+        // "@/name": next to the script (its test data); otherwise from the working folder.
+        file_chosen(step.key.starts_with("@/") ? std::filesystem::path(options_.ui_script).parent_path() / step.key.substr(2)
+                                               : std::filesystem::absolute(step.key));
         next();
     } else if (step.verb == "save-project") { // writes the plate as a project to KEY (relative to the working folder)
         save_project_to(step.key);

@@ -12429,3 +12429,7 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   tiempo de los movimientos (339,3 s), que queda bajo el estimado que escribe el archivo (351 s, que suma retracciones
   y esperas) y por encima del 75 % de él; el filamento por tipo suma el del archivo (389,9 mm); cada extrusión está en
   algún tipo. Sin diferencias encontradas.
+- **Paso 2c (Importar):** Importar STL (en pulgadas)… (el modelo ×25,4) e Importar un archivo ZIP… (un 3MF se abre
+  como tal; si no, cada STL, OBJ y 3MF de adentro a la placa, con su nombre; más de 1 GB por archivo se rechaza).
+  Prueba `ui_script_import_zip_inches` con `tests/data/ui/two_models.zip` (datos propios: el cubo de las pruebas y un
+  tetraedro); los scripts aceptan `@/` para archivos junto al script y el verbo `expect-scale`.

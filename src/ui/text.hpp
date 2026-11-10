@@ -1754,6 +1754,9 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(ImportInchesMenu, "Importar STL (en pulgadas)…", "Import STL (Imperial Units)…") \
+    X(ImportZipMenu, "Importar un archivo ZIP…", "Import ZIP Archive…") \
+    X(ZipNoModels, "el ZIP no tiene modelos STL, OBJ ni 3MF", "the ZIP has no STL, OBJ or 3MF models") \
     X(ExportToolpathsMenu, "Exportar las trayectorias como OBJ…", "Export Toolpaths as OBJ…") \
     X(PrintableMenu, "Imprimible", "Printable") \
     X(NothingPrintable, "Ningún modelo de la placa es imprimible.", "No model on the plate is printable.") \
