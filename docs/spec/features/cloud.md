@@ -50,6 +50,17 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
 
 5. **El cobro no pasa por el motor:** pagar y cambiar de plan se hace en la página de la cuenta, en el navegador. El
    motor abre esa página; no maneja datos de pago.
+5b. **Cobro por las tiendas oficiales** (decisión del dueño, 10-11-2026: «usar Google Play, la tienda de Mac y tiendas
+    oficiales, que me simplifiquen lo más posible»):
+    - la suscripción a un plan se compra dentro de la app, con la tienda del sistema: Google Play en Android, App Store
+      en iPhone y en Mac (compras dentro de la app, suscripción automática), y Microsoft Store en Windows cuando la
+      app esté publicada ahí;
+    - el plan queda en la cuenta de Tisma Cloud: lo comprado en una tienda vale en todos los equipos de esa cuenta
+      (Linux, Windows fuera de la tienda y la computadora usan el plan de la cuenta);
+    - el servidor solo acepta la compra verificada con la tienda (recibo firmado o aviso del servidor de la tienda) y
+      toma de la tienda el vencimiento, la renovación, la cancelación y el reembolso; no guarda datos de tarjetas;
+    - cancelar y cambiar de plan se hace en la tienda donde se compró; la app abre esa página;
+    - el cobro directo por la web queda solo para quien no tenga ninguna tienda, y apagado por defecto.
 
 5a. **Planes a la vista:** el panel de la cuenta muestra los planes de `GET /v1/plans` (no hace falta sesión): `name`,
     `monthly_hours`, `max_concurrent`, `price_cents` y `currency`, tal como los manda el servidor, con el plan actual
