@@ -211,7 +211,7 @@ fun PackWizardScreen(state: SliceState, slice: SliceViewModel, nav: Navigator, o
                 modifier = Modifier.testTag("pack_offline"))
             Button(onClick = { slice.loadPackIndex() }, modifier = Modifier.testTag("pack_retry")) { Text(stringResource(R.string.pack_retry)) }
         }
-        state.packError?.takeIf { index != null }?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        state.packError?.takeIf { index != null }?.let { Text(ctx().appMessage(it), color = MaterialTheme.colorScheme.error) }
         androidx.compose.material3.OutlinedButton(onClick = { onDone(); nav.replace(Screen.ProfilePicker) },
             modifier = Modifier.testTag("pack_builtin")) { Text(stringResource(R.string.pack_builtin)) }
         if (index == null) return@Column

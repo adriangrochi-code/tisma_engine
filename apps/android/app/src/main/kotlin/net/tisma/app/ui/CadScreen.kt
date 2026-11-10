@@ -64,7 +64,7 @@ fun CadScreen(state: SliceState, slice: SliceViewModel, nav: Navigator) {
         }
         state.designVolume?.let { Text(stringResource(R.string.cad_volume, String.format(Locale.getDefault(), "%.1f", it / 1000.0)),
             style = MaterialTheme.typography.bodySmall) }
-        state.designMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("cad_message")) }
+        state.designMessage?.let { Text(ctx().appMessage(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("cad_message")) }
         if (state.designBusy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { slice.buildDesign() }, enabled = !state.designBusy && doc.features.isNotEmpty(),

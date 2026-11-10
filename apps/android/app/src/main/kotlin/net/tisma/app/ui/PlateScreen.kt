@@ -224,7 +224,7 @@ private fun PlateControls(
             TismaCard {
                 Text(stringResource(R.string.job_error), style = MaterialTheme.typography.titleMedium)
                 val text = if (context.isSpanish() && e.errorEs.isNotBlank()) e.errorEs
-                    else context.jobCodeText(e.code) ?: e.error
+                    else context.jobCodeText(e.code) ?: context.appMessage(e.error)
                 Text(text, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("plate_error"))
             }
         }
@@ -583,7 +583,7 @@ fun Context.sliceNoticeText(n: SliceNotice): String = when (n) {
     is SliceNotice.PackUpdated -> getString(R.string.pack_updated, n.version)
     is SliceNotice.Calibrated -> getString(R.string.cal_applied, calibrationName(n.kind), n.value.toString().removeSuffix(".0"))
     is SliceNotice.LibrarySaved -> getString(R.string.library_saved, n.name)
-    is SliceNotice.LibraryFailed -> getString(R.string.library_failed, n.message)
+    is SliceNotice.LibraryFailed -> getString(R.string.library_failed, appMessage(n.message))
     is SliceNotice.Unsafe -> getString(R.string.unsafe_file, getString(when (n.problem) {
         net.tisma.app.p2p.SafeFile.Problem.EMPTY -> R.string.unsafe_empty
         net.tisma.app.p2p.SafeFile.Problem.NOT_A_KIND -> R.string.unsafe_kind

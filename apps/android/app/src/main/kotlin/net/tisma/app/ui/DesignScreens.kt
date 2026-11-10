@@ -100,7 +100,7 @@ fun PartsScreen(slice: SliceViewModel, nav: Navigator) {
                 }
             }
         }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("part_error")) }
+        error?.let { Text(ctx().appMessage(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("part_error")) }
         Button(onClick = {
             busy = true; error = null
             slice.makePart(kind, JsonObject(values.toMap())) { e ->
@@ -185,7 +185,7 @@ fun CalibrateScreen(slice: SliceViewModel, nav: Navigator) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.weight(1f).testTag("cal_step"))
             }
         }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("cal_error")) }
+        error?.let { Text(ctx().appMessage(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("cal_error")) }
         Button(onClick = {
             val r = listOf(start, end, step).map { it.replace(',', '.').toDoubleOrNull() }
             val range = if (r.all { it != null } && kind !in CALIBRATIONS_WITHOUT_VALUE) r.map { it!! }.toDoubleArray() else null

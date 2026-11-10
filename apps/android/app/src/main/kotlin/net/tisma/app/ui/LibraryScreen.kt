@@ -90,7 +90,7 @@ fun LibraryScreen(lib: LibraryViewModel, slice: SliceViewModel, nav: Navigator, 
     }
     Column(Modifier.fillMaxSize().padding(16.dp).testTag("library"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (state.busy) LinearProgressIndicator(Modifier.fillMaxWidth())
-        state.message?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("library_message")) }
+        state.message?.let { Text(context.appMessage(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("library_message")) }
         state.undo?.let {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.library_deleted), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)

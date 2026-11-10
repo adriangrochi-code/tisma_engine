@@ -247,6 +247,10 @@
     <string name="eng_temperature">Nozzle temperature (layer adhesion)</string>
     <string name="shared_code">Publication code: %1$s</string>
     <string name="filament_switched">The filament did not work with this print: it was changed to %1$s</string>
+    <string name="err_engine_timeout">The engine took too long and was stopped.</string>
+    <string name="err_engine_answer">The engine gave an answer the app cannot read.</string>
+    <string name="err_engine_stopped">The engine stopped (code %1$d).</string>
+    <string name="err_incomplete">%1$s arrived incomplete: try again.</string>
     <string name="plate_share">Share the G-code</string>
     <string name="plate_send_to">Send to</string>
     <string name="plate_print">Print</string>

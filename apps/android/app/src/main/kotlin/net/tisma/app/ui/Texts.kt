@@ -54,7 +54,23 @@ fun Context.jobCodeText(code: String): String? = when (code) {
     "needs_conditions" -> getString(R.string.code_needs_conditions)
     "no_valid_result" -> getString(R.string.code_no_valid_result)
     "usage" -> getString(R.string.code_usage)
+    "timeout" -> getString(R.string.err_engine_timeout)
+    "bad_answer" -> getString(R.string.err_engine_answer)
     else -> null
+}
+
+/**
+ * The app's own messages about the engine (written in English in the code, as its logs are) in the person's
+ * language. Anything else, such as the engine's own words, is shown as it comes.
+ */
+fun Context.appMessage(m: String): String {
+    Regex("""^The engine stopped \((?:exit code )?(-?\d+)\)$""").find(m)?.let { return getString(R.string.err_engine_stopped, it.groupValues[1].toInt()) }
+    Regex("""^(.+) arrived incomplete$""").find(m)?.let { return getString(R.string.err_incomplete, it.groupValues[1]) }
+    return when (m) {
+        "The engine took too long", "The design took too long" -> getString(R.string.err_engine_timeout)
+        "Unexpected answer from the engine" -> getString(R.string.err_engine_answer)
+        else -> m
+    }
 }
 
 /** What a failed job says to the person, or null. */
