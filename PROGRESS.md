@@ -12248,3 +12248,7 @@ QA; bundle id `net.tismaservidores.tisma`).
 - macOS CI, segunda vuelta: x86_64 ya pasa `template.cpp`; ahora cortaba en `mdns.cpp` y `ssdp.cpp` (`timeval`:
   `tv_usec` es `int` en macOS), arreglado en aa8312f. arm64: los trabajos en `macos-14` se cancelan sin empezar (sin
   registro); pasa a `macos-15` (arm64).
+- Bloque nocturno 2026-11-10 02:14 (Montevideo): regla 4 del convertidor, volúmenes de soporte. `volume_sections`
+  (el corte por capas de un volumen, el de los volúmenes negativos) queda aparte para usarlo con bloqueadores y
+  forzadores. **Sin terminar:** falta pasar `support_blockers`/`support_enforcers` de `ModelFile` hasta
+  `slice_layers` y sumarlos a las zonas pintadas de `SupportParams` (supports_more.md, reglas 4 y 5, prueba SM12).

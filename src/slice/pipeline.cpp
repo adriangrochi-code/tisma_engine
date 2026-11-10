@@ -1260,6 +1260,26 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
 
 namespace {
 
+// A volume's section on each level (a negative volume, a support blocker or
+// enforcer): its outline, whatever way its triangles face. Own design.
+std::vector<Polygons> volume_sections(const IndexedMesh& volume, const std::vector<float>& heights,
+                                      double gap_closing, gpu::Context* gpu) {
+    IndexedMesh oriented = volume;
+    orient_consistently(oriented);
+    std::vector<char> same;
+    const std::vector<std::vector<Contour>> contours =
+        slice_levels(oriented, height_field(oriented), heights, gap_closing, gpu, &same);
+    // A level like the one below comes back empty: it takes that one's.
+    std::vector<std::size_t> from(heights.size());
+    for (std::size_t l = 0; l < heights.size(); ++l)
+        from[l] = l > 0 && same[l] ? from[l - 1] : l;
+    std::vector<Polygons> out(heights.size());
+    tbb::parallel_for(std::size_t(0), heights.size(), [&](std::size_t l) {
+        out[l] = layer_region(to_polygons(contours[from[l]]), FillMode::Union);
+    });
+    return out;
+}
+
 // The squared distances inside many grids at once: on the GPU when there is
 // one, on the CPU (the same numbers) when there is none or Vulkan fails.
 std::vector<std::vector<float>> distances_inside(std::span<const BitGrid> grids, gpu::Context* gpu) {
@@ -1375,21 +1395,8 @@ SlicedModel slice_layers(const IndexedMesh& compensated_mesh, const Settings& gi
     // The negative volumes' sections on the same levels (model_tools.md, rule
     // 2): taken away from every layer they cross; the layers stay the part's.
     std::vector<Polygons> cut;
-    if (negative) {
-        IndexedMesh oriented = *negative;
-        orient_consistently(oriented);
-        std::vector<char> cut_same;
-        const std::vector<std::vector<Contour>> cut_contours =
-            slice_levels(oriented, height_field(oriented), heights, settings.gap_closing_radius, gpu, &cut_same);
-        // A level like the one below comes back empty: it takes that one's.
-        std::vector<std::size_t> from(heights.size());
-        for (std::size_t l = 0; l < heights.size(); ++l)
-            from[l] = l > 0 && cut_same[l] ? from[l - 1] : l;
-        cut.resize(heights.size());
-        tbb::parallel_for(std::size_t(0), heights.size(), [&](std::size_t l) {
-            cut[l] = layer_region(to_polygons(cut_contours[from[l]]), FillMode::Union);
-        });
-    }
+    if (negative)
+        cut = volume_sections(*negative, heights, settings.gap_closing_radius, gpu);
 
     out.regions.resize(out.layers.size());
     out.walls.resize(out.layers.size());
