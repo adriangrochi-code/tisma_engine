@@ -2,6 +2,13 @@
 # file; the project saved before is first in File › Recent projects, numbered,
 # and opens from there. Edit › Delete All (Ctrl+Del) takes every model off.
 expect-objects 1
+menu more
+expect-enabled deselect_all yes
+menu deselect_all
+menu more
+expect-enabled deselect_all no
+expect-enabled delete_selected no
+menu view_iso
 save-project ui_new_project.tisma
 menu more
 menu new_project

@@ -12433,3 +12433,8 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   como tal; si no, cada STL, OBJ y 3MF de adentro a la placa, con su nombre; más de 1 GB por archivo se rechaza).
   Prueba `ui_script_import_zip_inches` con `tests/data/ui/two_models.zip` (datos propios: el cubo de las pruebas y un
   tetraedro); los scripts aceptan `@/` para archivos junto al script y el verbo `expect-scale`.
+- **Paso 3b (Editar):** No elegir nada (Esc): Esc vuelve primero a Elegir y, otra vez, deja la placa sin pieza
+  elegida; también en «Más» (gris sin elección). Prueba en `ui_script_new_project`. Seleccionar todo (Ctrl+A) queda
+  para cuando la placa elija varias piezas (hoy `selected_` es una sola).
+- CI local 1234fc8 (gcc): 1172/1176; Xvfb no arrancó en 2, `ui_bambu_print` esperó al simulador y aero por tiempo con
+  la máquina cargada; se repiten aparte.

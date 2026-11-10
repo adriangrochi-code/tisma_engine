@@ -1754,6 +1754,7 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(DeselectAllMenu, "No elegir nada", "Deselect All") \
     X(ImportInchesMenu, "Importar STL (en pulgadas)…", "Import STL (Imperial Units)…") \
     X(ImportZipMenu, "Importar un archivo ZIP…", "Import ZIP Archive…") \
     X(ZipNoModels, "el ZIP no tiene modelos STL, OBJ ni 3MF", "the ZIP has no STL, OBJ or 3MF models") \

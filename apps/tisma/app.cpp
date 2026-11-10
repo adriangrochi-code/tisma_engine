@@ -11252,8 +11252,12 @@ void App::plate_tools() {
             arrange_plate();
             tip("arrange");
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        // Esc: back to Select; again, nothing chosen (interface.md, «Más»: Deselect All).
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+            if (tool_ == PlateTool::Select)
+                selected_ = -1;
             tool_ = PlateTool::Select;
+        }
         if (ImGui::IsKeyPressed(ImGuiKey_Delete, false) && chosen && !ImGui::GetIO().KeyCtrl) // Ctrl+Del: all
             delete_selected();
         // + and − add or take away an instance (interface.md, «Menús»).
@@ -17415,6 +17419,10 @@ void App::more_menu() {
 
         // 3. Edit.
         card(tr(T::MoreEdit));
+        if (item("deselect_all", tr(T::DeselectAllMenu), "Esc", on_plate && chosen)) {
+            selected_ = -1;
+            tool_ = PlateTool::Select;
+        }
         if (item("delete_selected", tr(T::DeleteSelectedMenu), "Del", on_plate && chosen))
             delete_selected();
         if (item("delete_all", tr(T::DeleteAllMenu), "Ctrl+Del", on_plate && !objects_.empty()))
