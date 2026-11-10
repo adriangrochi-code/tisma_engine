@@ -365,6 +365,11 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
         if (kind && is_resin_calibration(*kind))
             settings.resin_supports = settings.resin_pad = settings.resin_pad_around_object = settings.resin_hollow = false;
     }
+    // A model marked not printable stays out, as on the desktop (interface.md, «Menús»).
+    std::erase_if(project.models, [](const ProjectModel& m) { return !m.printable; });
+    if (project.models.empty())
+        return fail(kExitModel, "no model in the project is printable", "nothing_printable",
+                    "ningún modelo del proyecto es imprimible");
     const std::vector<ui::PlateObject> objects = ui::project_objects(project.models);
     project.models.clear();
     if (settings.vase && objects.size() > 1 && !settings.sequential)
