@@ -20,6 +20,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 
 ### Corregido
 
+- Los contadores con uno dicen «1 aviso», «1 capa», «1 pared» (antes «1 avisos»), también en inglés.
 - `--ground-*` con un 3MF que trae bloqueadores o forzadores de soporte ya no los deja fuera de lugar: avisa que
   todavía no se puede.
 

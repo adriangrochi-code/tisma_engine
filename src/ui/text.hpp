@@ -2433,6 +2433,9 @@ const char* tr(T id);
 // the language's, a comma in Spanish (the spec team's TR1). Other
 // conversions are as printf writes them.
 std::string vformat(const char* fmt, std::va_list args);
+// "1 avisos" → "1 aviso", "1 layers" → "1 layer": a count of one before a
+// known plural takes the singular (format() does it for every text).
+std::string singular_counts(std::string text);
 std::string format(const char* fmt, ...)
 #if defined(__GNUC__)
     __attribute__((format(printf, 1, 2)))

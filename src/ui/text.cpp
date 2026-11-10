@@ -10,6 +10,7 @@
 #include <cstring>
 #include <optional>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace tisma::ui {
@@ -169,9 +170,43 @@ std::string vformat(const char* fmt, std::va_list args) {
 std::string format(const char* fmt, ...) {
     std::va_list args;
     va_start(args, fmt);
-    std::string out = vformat(fmt, args);
+    std::string out = singular_counts(vformat(fmt, args));
     va_end(args);
     return out;
+}
+
+std::string singular_counts(std::string text) {
+    // A count of one with a plural after it ("1 avisos", "1 layers") takes
+    // the singular: the counters' texts are written for many.
+    static constexpr std::pair<std::string_view, std::string_view> kWords[] = {
+        {"avisos", "aviso"},       {"capas", "capa"},           {"paredes", "pared"},
+        {"piezas", "pieza"},       {"triángulos", "triángulo"}, {"extrusores", "extrusor"},
+        {"objetos", "objeto"},     {"copias", "copia"},         {"cordones", "cordón"},
+        {"perímetros", "perímetro"}, {"filamentos", "filamento"}, {"partes", "parte"},
+        {"warnings", "warning"},   {"layers", "layer"},         {"walls", "wall"},
+        {"models", "model"},       {"pieces", "piece"},         {"triangles", "triangle"},
+        {"extruders", "extruder"}, {"objects", "object"},       {"copies", "copy"},
+        {"beads", "bead"},         {"perimeters", "perimeter"}, {"filaments", "filament"},
+        {"parts", "part"},
+    };
+    std::size_t at = 0;
+    while ((at = text.find("1 ", at)) != std::string::npos) {
+        const bool alone = at == 0 || !(std::isdigit(static_cast<unsigned char>(text[at - 1])) || text[at - 1] == '.' ||
+                                        text[at - 1] == ',');
+        const std::size_t word = at + 2;
+        if (alone)
+            for (const auto& [many, one] : kWords) {
+                const std::size_t end = word + many.size();
+                const bool whole = end == text.size() || !(std::isalpha(static_cast<unsigned char>(text[end])) ||
+                                                          static_cast<unsigned char>(text[end]) >= 0x80);
+                if (text.compare(word, many.size(), many) == 0 && whole) {
+                    text.replace(word, many.size(), one);
+                    break;
+                }
+            }
+        at = word;
+    }
+    return text;
 }
 
 namespace {

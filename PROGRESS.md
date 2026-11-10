@@ -12308,3 +12308,6 @@ QA; bundle id `net.tismaservidores.tisma`).
   clave que conserva su nombre (seam_position back→rear, aligned_back→aligned; fuzzy_skin disabled_fuzzy→none);
   primero el mapa de valores, después la conversión; un valor fuera del mapa pasa igual. El motor todavía no aplica
   los ajustes del proyecto (solo los ordena): entra con la regla 6/8 del convertidor.
+- QA del dueño (2026-11-10), punto 3: «1 avisos» → «1 aviso». `singular_counts` en `format()`: «1» delante de un
+  plural conocido (avisos, capas, paredes, piezas, triángulos, extrusores, objetos, copias, cordones, perímetros,
+  filamentos, partes y sus inglés) pasa al singular; «11», «2,1» y «0.1» no. Prueba en `[ui]`.
