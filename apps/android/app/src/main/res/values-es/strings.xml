@@ -229,6 +229,7 @@
     <string name="connection_connected">Conectada por red</string>
     <string name="connection_error">La impresora no responde</string>
     <string name="nozzle_hardened">acero endurecido</string>
+    <string name="eng_temperature">Temperatura de la boquilla (adhesión entre capas)</string>
     <string name="plate_share">Compartir el G-code</string>
     <string name="plate_send_to">Mandar a</string>
     <string name="plate_print">Imprimir</string>

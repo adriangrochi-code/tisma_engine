@@ -74,6 +74,11 @@ class EngineeringScreenTest {
         compose.runOnIdle { slice.pick(floatArrayOf(cx, cy, 50f), floatArrayOf(0f, 0f, -1f)) }
         compose.waitUntil(5_000) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); slice.state.value.case.conditions.size == 1 }
         compose.onNodeWithTag("eng_analyze_model").performScrollTo().assertIsNotEnabled()
+        // Rule 13: the temperature, the profile's nozzle temperature that the engine uses for layer adhesion.
+        compose.onNodeWithTag("eng_temperature").performScrollTo().performTextReplacement("235")
+        compose.runOnIdle {
+            assertEquals(235.0, (slice.state.value.value("machine.variables.temperature") as kotlinx.serialization.json.JsonPrimitive).content.toDouble())
+        }
     }
 
     @Test

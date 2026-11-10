@@ -432,6 +432,16 @@ private fun ModelEngineeringCard(state: SliceState, slice: SliceViewModel) {
         }, singleLine = true, label = { Text(stringResource(R.string.eng_required)) },
             keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth().testTag("eng_required"))
+        // mobile_app.md, rule 13: the temperature. The engine reads the profile's nozzle temperature for the adhesion
+        // between layers and beads (engineering_values: machine.variables.temperature), the same the Material tab edits.
+        val tempKey = "machine.variables.temperature"
+        var temp by rememberSaveable { mutableStateOf((state.value(tempKey) as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()) }
+        androidx.compose.material3.OutlinedTextField(temp, { t ->
+            temp = t.filter { it.isDigit() || it == '.' || it == ',' }.take(5)
+            temp.replace(',', '.').toDoubleOrNull()?.takeIf { it in 100.0..500.0 }?.let { slice.setValue(tempKey, kotlinx.serialization.json.JsonPrimitive(it)) }
+        }, singleLine = true, label = { Text(stringResource(R.string.eng_temperature)) }, suffix = { Text("°C") },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth().testTag("eng_temperature"))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = case.solid, onClick = { slice.setCase(case.copy(solid = true, quality = "normal")) },
                 label = { Text(stringResource(R.string.eng_fast_solid)) }, modifier = Modifier.testTag("eng_quality_fast"))
