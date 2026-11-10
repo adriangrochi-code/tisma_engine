@@ -616,3 +616,23 @@ TEST_CASE("rule 8: each new condition is numbered by its kind and listed by its 
     e.conditions[1].triangles = two;
     CHECK(condition_label(e.conditions[1], cube, "es") == "Zona fija 2 · 2 caras");
 }
+
+// Printable (interface.md, «Menús»): a model that is not printed keeps that
+// in the project, in both the engine's file and the 3MF package; a printed
+// one writes nothing for it.
+TEST_CASE("a project keeps which models are not printable", "[project]") {
+    Project p = sample();
+    REQUIRE(p.models.size() == 2);
+    p.models[1].printable = false;
+    const std::string json = write_project(p);
+    CHECK(json.find("\"printable\"") != std::string::npos);
+    const Project back = read_project(json);
+    REQUIRE(back.models.size() == 2);
+    CHECK(back.models[0].printable);
+    CHECK_FALSE(back.models[1].printable);
+    const Project back_3mf = read_project(write_project_3mf(p));
+    REQUIRE(back_3mf.models.size() == 2);
+    CHECK(back_3mf.models[0].printable);
+    CHECK_FALSE(back_3mf.models[1].printable);
+    CHECK(write_project(sample()).find("\"printable\"") == std::string::npos);
+}

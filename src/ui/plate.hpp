@@ -89,6 +89,7 @@ struct PlateObject {
     // The file it was read from, for Reload from Disk (interface.md, «Más»);
     // empty for a shape, a design or a project's model.
     std::string source{};
+    bool printable = true; // off: it stays on the bed and out of the slice (interface.md, «Menús»)
 };
 
 // The painting of a model carried onto another mesh of the same part (a

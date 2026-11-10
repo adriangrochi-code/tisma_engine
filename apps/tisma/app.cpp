@@ -4776,6 +4776,7 @@ Project App::current_project() const {
         for (const PlateRange& r : objects_[i].ranges)
             p.models.back().ranges.push_back({r.from, r.to, r.settings});
         p.models.back().engineering = objects_[i].engineering;
+        p.models.back().printable = objects_[i].printable;
     }
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
@@ -6320,11 +6321,26 @@ void App::start_slice() {
         fail(T::CannotSlice, tr(T::VaseManyObjects));
         return;
     }
-    TriangleMesh placed = plate_now();
+    // Only the printable models (interface.md, «Menús»: Printable).
+    std::vector<PlateObject> printed;
+    std::vector<TriangleMesh> printed_meshes;
+    const bool all_printed = std::all_of(objects_.begin(), objects_.end(), [](const PlateObject& o) { return o.printable; });
+    if (!all_printed) {
+        for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i)
+            if (objects_[i].printable)
+                printed.push_back(objects_[i]), printed_meshes.push_back(placed_meshes_[i]);
+        if (printed.empty()) {
+            fail(T::CannotSlice, tr(T::NothingPrintable));
+            return;
+        }
+    }
+    TriangleMesh placed = all_printed ? plate_now() : plate_mesh(printed_meshes);
+    if (!all_printed && offset_ != Vec3{})
+        placed = translated(placed, offset_);
     // A test prints with its own settings: no supports under the resin tests
     // or the bridges, for one (calibration_print_settings).
     const Settings settings = calibration_ ? calibration_print_settings(calibration_kind_, settings_) : settings_;
-    PlateSlice plate = plate_slice(objects_, placed_meshes_, settings);
+    PlateSlice plate = all_printed ? plate_slice(objects_, placed_meshes_, settings) : plate_slice(printed, printed_meshes, settings);
     Painting painting = std::move(plate.painting);
     std::vector<MeshObject> objects = std::move(plate.objects);
     SliceVolumes volumes = std::move(plate.volumes);
@@ -10728,6 +10744,12 @@ void App::object_menu() {
         delete_selected();
         ImGui::EndPopup();
         return;
+    }
+    const bool printable = ImGui::MenuItem((std::string(tr(T::PrintableMenu)) + "##printable").c_str(), nullptr, o.printable);
+    note_rect("printable");
+    if (printable) {
+        o.printable = !o.printable;
+        plate_changed();
     }
     ImGui::Separator();
     if (entry("reload_object", tr(T::ReloadMenu), nullptr, !o.source.empty()))
@@ -23378,6 +23400,13 @@ void App::script_input() {
         std::printf("ui-script: expect-optimize %s: got %s (%d %%)\n", step.key.c_str(), got.c_str(), o.best.density);
         if (got != step.key)
             return fail_step("got " + got);
+        next();
+    } else if (step.verb == "expect-error") { // the error dialog's message contains VALUE (the whole line)
+        const std::string what = step.key + (step.value.empty() ? "" : " " + step.value);
+        if (error_message_.find(what) == std::string::npos)
+            return f >= 60 ? fail_step("the error says: " + error_message_) : void();
+        std::printf("ui-script: expect-error %s: ok\n", what.c_str());
+        error_title_.clear(), error_message_.clear(); // expected: it does not fail the run
         next();
     } else if (step.verb == "expect-theme") { // dark or light
         const char* got = theme_.dark ? "dark" : "light";

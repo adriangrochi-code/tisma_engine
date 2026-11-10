@@ -1754,6 +1754,8 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(PrintableMenu, "Imprimible", "Printable") \
+    X(NothingPrintable, "Ningún modelo de la placa es imprimible.", "No model on the plate is printable.") \
     X(ExportPrefsButton, "Exportar…", "Export…") \
     X(ImportPrefsButton, "Importar…", "Import…") \
     X(EditPresetMenu, "Editar el perfil", "Edit preset") \

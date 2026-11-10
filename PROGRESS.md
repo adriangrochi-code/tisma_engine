@@ -12417,3 +12417,7 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   de paso: cargar preferencias con `theme: dark` no volvía al tema oscuro si estaba el claro. Prueba
   `ui_script_prefs_export_import` (con su propio HOME). Siguen «Próximamente»: nivel de OpenGL, sombra sobre la cama,
   resolución de la vista y correr complementos (necesitan esas funciones en la vista y en los complementos).
+- **Paso 6b (Imprimible):** casilla en el menú de la pieza; una pieza no imprimible queda en la cama y fuera del
+  laminado; sin ninguna imprimible, laminar lo dice. El proyecto lo guarda (`"printable": false`, en el archivo propio
+  y en el 3MF). Pruebas `[project]` (ida y vuelta en los dos formatos) y `ui_script_printable`; verbo `expect-error`.
+  No hecho: la pieza no imprimible no se ve distinta en la vista; la nube (`node`) todavía la lamina.
