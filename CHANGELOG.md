@@ -9,6 +9,11 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- La barra de estado ya no lee fuera del texto con un «1 » al final (lo encontró ASan).
+- Importar preferencias reemplaza la lista de proyectos recientes en vez de duplicarla.
+- «Más» en tarjetas, con atajos y entradas en gris; Archivo, Editar, Ventana, Vista, Configuración, Calibración y
+  Ayuda con casi todas sus acciones; menú de la pieza con copias, Imprimible, espejo, separar y más; chip de Modo.
+- El 3MF de una sola pieza guarda los vértices exactos (antes se movían hasta 0,5 µm).
 
 ### Agregado
 

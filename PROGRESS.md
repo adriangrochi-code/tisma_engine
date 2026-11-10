@@ -12499,3 +12499,18 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   traducido si chocan (pack profiles/next 881642c, 2299 perfiles de impresión). (2) gcode_macros.md 10 bis bis, GM15:
   en el dialecto orcaslicer, una variable de lista sin índice en un cálculo o comparación vale su único elemento o el
   del extrusor activo (hoy 12 variantes caen al G-code simple por esto).
+
+## 2026-11-10 16:41 UTC — mantenimiento (cada 8 h)
+
+- **Revisado:** `origin/main` y `origin/dev` al día. CI local completa sobre ad7181d: gcc 1184/1184, clang 1184/1184,
+  ASan 1174/1183. Fuzz de G-code 2000 corridas, semilla 1011202611: 18 rechazadas como imprimibles a medias, 0 fallas.
+- **Encontrado y arreglado (d280842):**
+  - ASan: `singular_counts` (el «1 aviso» de esta mañana) leía un byte después del final del texto cuando a un «1 » le
+    seguía menos texto que una palabra plural; lo veía la barra de estado en 9 pruebas de interfaz. Ahora mide antes
+    de leer. Prueba `[ui]` con textos cortos; las 9 pasan con ASan.
+  - Importar preferencias sumaba los proyectos recientes del archivo a los que había (duplicados); ahora los
+    reemplaza. Prueba en `ui_script_prefs_export_import`.
+- **Medido:** esfera de banco de 100 mm (`bench/gen_sphere.py --segments 400`, `tests/data/printer_settings.json`):
+  0,97–1,12 s el laminado completo con la escritura (3 corridas). Sin cambio que medir en este bloque.
+- **Revisado sin hallazgos:** el código nuevo de la interfaz de hoy (instancias, recargar, ZIP, pulgadas, convertir,
+  Imprimible, atajos).
