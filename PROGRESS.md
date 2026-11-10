@@ -12304,3 +12304,7 @@ QA; bundle id `net.tismaservidores.tisma`).
   la vista: la fuga de 112 bytes es de llvmpipe al dibujar la cama del proyecto y la traza no nombra módulos (una
   supresión de LSan por biblioteca no se puede escribir sin tapar las del motor). El resto de ASan sigue activo en
   ellas; las demás pruebas siguen viendo fugas. Con ASan: las 5 `ui_project_import*` pasan.
+- Cola (ficha, spec/next 23a88e6, profile_pack_format.md regla 3 de la tabla): `prusaslicer_values` también en una
+  clave que conserva su nombre (seam_position back→rear, aligned_back→aligned; fuzzy_skin disabled_fuzzy→none);
+  primero el mapa de valores, después la conversión; un valor fuera del mapa pasa igual. El motor todavía no aplica
+  los ajustes del proyecto (solo los ordena): entra con la regla 6/8 del convertidor.
