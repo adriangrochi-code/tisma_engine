@@ -11881,3 +11881,7 @@ arreglado en 9d8dc76 y subido.
   en cada envío (arm64 y x86_64), vista con MoltenVK u OpenGL, diálogos nativos, cámara USB con AVFoundation y su
   permiso, `.dmg` sin firmar por ahora, y el motor como biblioteca para iOS. Anotado en PLAN.md («macOS antes de la
   beta»). Orden de trabajo: el conversor sigue; macOS empieza por el CI (lo que más destraba).
+- **Regla del dueño (2026-11-10):** cada 3 h, una parte del bloque a buscar bugs generales y optimizar (cierres,
+  resultados mal, caminos lentos, memoria, textos en castellano) en el área del motor; se anota acá y se manda un
+  resumen corto al equipo de especificación. Primera vuelta: el mantenimiento de las 00:40 (advertencias, cámara
+  Bambu en inglés, carrera en la prueba estructural).
