@@ -238,6 +238,11 @@
     <string name="plate_filament">Filament</string>
     <string name="plate_layers">Layers</string>
     <string name="plate_save">Save the G-code</string>
+    <string name="connection_none">Connect a printer</string>
+    <string name="connection_found">Found on the network: connect</string>
+    <string name="connection_connecting">Connecting…</string>
+    <string name="connection_connected">Connected over the network</string>
+    <string name="connection_error">The printer does not answer</string>
     <string name="plate_share">Share the G-code</string>
     <string name="plate_send_to">Send to</string>
     <string name="plate_print">Print</string>

@@ -37,7 +37,7 @@ import java.util.Locale
 
 /** The printer card on the plate (mobile_app.md, rule 6): the printer, nozzle and filament; a tap changes them. */
 @Composable
-fun PrinterCard(state: SliceState, onClick: () -> Unit) {
+fun PrinterCard(state: SliceState, connection: Connection? = null, onConnection: () -> Unit = {}, onClick: () -> Unit) {
     val p = state.profile
     Card(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag("printer_card")) {
         androidx.compose.foundation.layout.Row(Modifier.padding(16.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -49,6 +49,8 @@ fun PrinterCard(state: SliceState, onClick: () -> Unit) {
                         ?: stringResource(if (p.pack) R.string.pack_default_filament else R.string.profile_generic_filament)),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            // settings_panel.md, rule 42: right of the name, the connection's icon.
+            connection?.let { ConnectionIcon(it, onConnection) }
         }
     }
 }

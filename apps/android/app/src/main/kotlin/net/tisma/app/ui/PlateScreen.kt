@@ -123,7 +123,7 @@ private fun PlateControls(
     val context = ctx()
     if (engineering) { EngineeringControls(state, slice, nav, pick, view); return }
     ScreenColumn {
-        PrinterCard(state) { nav.open(Screen.ProfilePicker) }
+        PrinterCard(state, connectionOf(printerState, sendTo), onConnection = { nav.select(Section.PRINTER) }) { nav.open(Screen.ProfilePicker) }
         view?.invoke(Modifier.fillMaxWidth().height(320.dp))
         if (!state.engineAvailable) {
             Text(stringResource(R.string.plate_no_engine), color = MaterialTheme.colorScheme.onSurfaceVariant)
