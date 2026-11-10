@@ -12311,3 +12311,40 @@ QA; bundle id `net.tismaservidores.tisma`).
 - QA del dueño (2026-11-10), punto 3: «1 avisos» → «1 aviso». `singular_counts` en `format()`: «1» delante de un
   plural conocido (avisos, capas, paredes, piezas, triángulos, extrusores, objetos, copias, cordones, perímetros,
   filamentos, partes y sus inglés) pasa al singular; «11», «2,1» y «0.1» no. Prueba en `[ui]`.
+
+## 2026-11-10 12:30 UTC — auditoría de la interfaz contra interface.md (pedido del dueño)
+
+Leído `docs/spec/features/interface.md` (pasa `tools/check_spec.py`) contra `apps/tisma/app.cpp`. «Más» es hoy un solo
+desplegable (`##more_menu`) de unas 25 entradas, sin secciones; la mayoría de las tarjetas del spec no existen.
+Leyenda: ✔ presente, ✘ falta, ◐ parcial o distinto, ∅ presente pero no hace nada.
+
+| Menú | ✔ presente | ◐ parcial / distinto | ✘ falta |
+|---|---|---|---|
+| Más › Tisma | Cuenta de Tisma Cloud, Preferencias (Ctrl+, y Ctrl+P) | | Thingiverse |
+| Más › Archivo | Guardar (Ctrl+S), Laminar en la nube (gris sin placa), Vista previa de G-code, Salir | Guardar como usa Ctrl+Shift+S (spec Ctrl+Alt+S); Exportar G-code es el botón principal y usa Ctrl+E (spec Ctrl+G; Ctrl+E es Exportar configuración); Mandar G-code solo en ▲; Abrir (Ctrl+O) y Relaminar (Ctrl+R) solo como tecla o botón | Nuevo proyecto (Ctrl+N), Recientes, todo Importar (Ctrl+I, Imperial, SLA, ZIP, Config Ctrl+L, Config de proyecto Ctrl+Alt+L, Paquete), Exportar a SD (Ctrl+U), Exportar placa STL/OBJ (con y sin soportes), Trayectorias OBJ, Exportar configuración y paquetes, los dos Convertir, Expulsar SD (Ctrl+T), Reparar STL |
+| Más › Editar | | Borrar (Supr), Deshacer, Rehacer, Buscar (Ctrl+F) solo como teclas; Esc solo vuelve a Seleccionar | Seleccionar todo (Ctrl+A), Borrar todo (Ctrl+Supr), Copiar, Pegar, Recargar (F5), Ajustes de la placa |
+| Más › Ventana | | pestañas en la barra superior, sin Ctrl+1…6 | las diez entradas (Ctrl+1…6, Galería de formas, Cola de envíos Ctrl+J, Nueva instancia, Comparar perfiles) |
+| Más › Vista | | teclas 0–6, E, L funcionan, sin entradas en el menú; Plegar panel solo en Preferencias, sin Shift+Tab | Pantalla completa (F11) |
+| Más › Configuración | Preferencias, Idioma, Cuenta | | Asistente, Instantáneas (ver y tomar), Buscar actualizaciones (config y programa), Integración con el escritorio, Grabar firmware, Imprimir por USB, Archivo de Wi-Fi |
+| Más › Calibración | | las pruebas viven en la pestaña Calibración, no en «Más» | la sección entera en «Más» |
+| Más › Ayuda | Reportar un problema, Acerca de | Información del sistema solo dentro de Preferencias › Video | Sitio web, Versiones, Carpeta de configuración, Atajos de teclado (?) |
+| Más (general) | | solo 4 entradas muestran su atajo; solo «Laminar en la nube» se pone gris | |
+| Clic derecho, pieza | Modificador de altura, Relleno, Perímetros, Agregar ajuste ▸ | Modificador y Volumen negativo son entradas sueltas, no submenús; «Capas sólidas» en vez de Material de soporte; nivel Básico bloquea el menú | Instancias (+, −, cantidad, llenar cama), Borrar, Objetos separados, Imprimible ☑, Recargar, Convertir de metros / pulgadas, Reemplazar por STL, Exportar STL/OBJ, Escalar al volumen, Simplificar, Reteselar, Revisar CAD, Espejo ▸, Dividir ▸, Dividir para la impresora, Agregar parte ▸, Bloqueador ▸, Forzador ▸ |
+| Clic derecho, cama | Agregar forma ▸ (cubo, cilindro, esfera) | | Agregar modelo de calibración ▸ |
+| Modo | | 4 niveles (Básico/Normal/Avanzado/Personalizado) en el panel, no 3 en la barra; explicación solo al pasar el mouse; sin botones de radio | |
+| Engranaje del filamento | | el menú del perfil tiene Guardar como, Del catálogo, Borrar | Editar perfil, Color del extrusor, Mostrar/ocultar plantillas |
+| Flecha del botón principal | Exportar, Mandar a la impresora (gris sin conexión), Guardar proyecto | sin marca en la salida elegida; las salidas imposibles salen en gris en vez de no salir | |
+| Preferencias | General, Cámara, Otros, Cancelar/Aceptar, Esc = Cancelar | «GUI» se llama «Interfaz»; tema sin «Como el sistema»; Enter no acepta | |
+| Preferencias (∅) | | | Nivel de OpenGL, Sombra sobre la cama, Resolución de la vista, Correr complementos, Exportar/importar preferencias: muestran «Próximamente» y no hacen nada |
+
+No hay otra entrada presente que no haga nada (ningún manejador vacío). Dudas: si la pestaña Calibración cubre
+«Corrección dimensional» y «Aplicar un resultado»; el color de los interruptores de Preferencias.
+
+Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prueba `--ui-script` o `--dump-ui`:
+1. «Más» con secciones, atajo a la derecha y gris cuando no se puede; atajos del spec (Ctrl+Alt+S, Ctrl+G).
+2. Archivo: Nuevo proyecto, Recientes, Importar, Exportar placa y configuración.
+3. Editar: Seleccionar todo, Borrar todo, Copiar/Pegar, Recargar.
+4. Ventana y Vista: Ctrl+1…6, pantalla completa, plegar panel (Shift+Tab).
+5. Ayuda: atajos de teclado, carpeta de configuración, información del sistema.
+6. Clic derecho de la pieza (instancias, espejo, dividir, borrar, imprimible) y de la cama.
+7. Engranaje del filamento, ▲ con marca, Preferencias (Como el sistema, Enter) y las filas «Próximamente».
