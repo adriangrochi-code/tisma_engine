@@ -4,7 +4,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.URI
 import java.security.MessageDigest
@@ -143,17 +142,23 @@ class BambuConnection(
 
     override fun upload(name: String, length: Long, start: Boolean, options: PrintOptions, open: () -> InputStream) {
         client()
-        val gcode = open().use { it.readBytes() }
         val base = name.substringAfterLast('/').removeSuffix(".gcode").removeSuffix(".3mf")
-        val packed = pack(gcode)
         val remote = "$base.gcode.3mf"
-        FtpsUpload(tls, host, ftpPort).store("bblp", accessCode, remote, packed.size.toLong()) { packed.inputStream() }
+        // Through a temporary file, never whole in memory: a long print's G-code is hundreds of MB.
+        val packed = java.io.File.createTempFile("bambu", ".gcode.3mf")
+        val gcodeMd5 = try {
+            val sum = open().use { pack(it, packed) }
+            FtpsUpload(tls, host, ftpPort).store("bblp", accessCode, remote, packed.length()) { packed.inputStream().buffered() }
+            sum
+        } finally {
+            packed.delete()
+        }
         if (start) printCommand("project_file", {
             put("param", "Metadata/plate_1.gcode")
             put("project_id", "0"); put("profile_id", "0"); put("task_id", "0"); put("subtask_id", "0")
             put("subtask_name", base)
             put("url", "ftp:///$remote")
-            put("md5", md5(gcode))
+            put("md5", gcodeMd5)
             put("timelapse", options.timelapse); put("bed_type", "auto"); put("bed_levelling", options.bedLeveling)
             put("flow_cali", options.flowCalibration); put("vibration_cali", options.vibrationCalibration); put("layer_inspect", false)
             put("ams_mapping", ""); put("use_ams", false)
@@ -253,13 +258,27 @@ class BambuConnection(
                 ((b[at + 2].toLong() and 0xFF) shl 16) or ((b[at + 3].toLong() and 0xFF) shl 24)
 
         /** The G-code packed as Bambu Lab's local mode reads it: `Metadata/plate_1.gcode` and its MD5. */
-        fun pack(gcode: ByteArray): ByteArray {
-            val out = ByteArrayOutputStream()
-            ZipOutputStream(out).use { z ->
-                z.putNextEntry(ZipEntry("Metadata/plate_1.gcode")); z.write(gcode); z.closeEntry()
-                z.putNextEntry(ZipEntry("Metadata/plate_1.gcode.md5")); z.write(md5(gcode).toByteArray()); z.closeEntry()
+        /**
+         * Streams [gcode] into a Bambu project file at [out] (the G-code and its MD5 beside it) and returns that MD5.
+         * The G-code is read once, to a temporary copy, so its MD5 is known before the ZIP is written.
+         */
+        fun pack(gcode: InputStream, out: java.io.File): String {
+            val copy = java.io.File.createTempFile("bambu", ".gcode")
+            try {
+                val md = MessageDigest.getInstance("MD5")
+                copy.outputStream().buffered().use { o ->
+                    val b = ByteArray(64 * 1024)
+                    while (true) { val n = gcode.read(b); if (n < 0) break; md.update(b, 0, n); o.write(b, 0, n) }
+                }
+                val sum = md.digest().joinToString("") { "%02x".format(it) }
+                ZipOutputStream(out.outputStream().buffered()).use { z ->
+                    z.putNextEntry(ZipEntry("Metadata/plate_1.gcode")); copy.inputStream().use { it.copyTo(z, 64 * 1024) }; z.closeEntry()
+                    z.putNextEntry(ZipEntry("Metadata/plate_1.gcode.md5")); z.write(sum.toByteArray()); z.closeEntry()
+                }
+                return sum
+            } finally {
+                copy.delete()
             }
-            return out.toByteArray()
         }
 
         fun md5(b: ByteArray): String = MessageDigest.getInstance("MD5").digest(b).joinToString("") { "%02x".format(it) }

@@ -22,3 +22,6 @@ dependencies {
     testImplementation(libs.kotlin.test)
     testImplementation(libs.junit)
 }
+
+// A phone's small heap: the tests that stream big files must pass within it (BambuPackTest).
+tasks.withType<Test>().configureEach { maxHeapSize = "256m" }
