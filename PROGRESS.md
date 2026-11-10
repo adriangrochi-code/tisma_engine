@@ -12703,6 +12703,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
   interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
   (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
+- Caja negra del camino de `color_mixing.md` combinado (sin hallazgos): mezcla 1 : 1 en una boquilla con jarrón,
+  planchado, balsa, soportes y un degradé de un componente: G-code que pasa la comprobación, 50 cambios donde
+  corresponde y nunca la herramienta de la mezcla (`T2` con dos filamentos); los soportes no toman la mezcla.
 - BH52 (búsqueda profunda, copias + falda): `--copies 1000` en una MK4S decía «182 fit», pero con 182 la falda se salía
   de la cama y no había G-code («the skirt goes off the bed»). La cuenta de las que caben ahora resta de la cama lo
   que el borde y la falda llegan más allá de las copias de afuera. Prueba `[cli]` BH52, que falla sin el arreglo.
