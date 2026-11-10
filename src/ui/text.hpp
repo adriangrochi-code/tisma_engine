@@ -1754,6 +1754,8 @@
     X(MoreHelp, "Ayuda", "Help") \
     X(OpenProjectMenu, "Abrir un proyecto…", "Open Project…") \
     X(NewProjectMenu, "Proyecto nuevo", "New Project") \
+    X(AddCalibrationModel, "Agregar un modelo de calibración", "Add calibration model") \
+    X(MoreCalibration, "Calibración", "Calibration") \
     X(AddInstanceMenu, "Agregar una copia", "Add instance") \
     X(RemoveInstanceMenu, "Quitar una copia", "Remove instance") \
     X(SetInstancesMenu, "Cantidad de copias…", "Set number of instances…") \

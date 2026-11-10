@@ -12399,3 +12399,7 @@ Orden de trabajo (el del spec, lo más chico y útil primero), cada uno con prue
   en macOS y color-scheme de GNOME; se guarda como `theme: system` y se aplica al abrir), Claro y Oscuro, también en
   el submenú Tema de «Más»; Enter es Aceptar cuando no se está editando un campo. Prueba
   `ui_script_config_theme_enter`. No probado: la lectura del tema en Windows y macOS (sin esas máquinas acá).
+- **Paso 7c (calibración en los menús):** la cama vacía tiene «Agregar un modelo de calibración ▸» y «Más» la
+  tarjeta Calibración, con las pruebas de la pestaña (las de resina con una impresora de resina); elegir una la arma
+  y la lamina en la pestaña Calibración. Prueba `ui_script_calibration_menus`. Queda: «Corrección dimensional…» y
+  «Aplicar un resultado…» como entradas propias (hoy están dentro de la pestaña).

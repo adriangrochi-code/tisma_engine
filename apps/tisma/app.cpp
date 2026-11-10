@@ -1794,6 +1794,9 @@ private:
     bool can_reload() const;
     void reload_from_disk(); // F5: the chosen model, or every one, read again from its file
     void window_tab(int n);  // Window › Ctrl+1 to Ctrl+6 (interface.md, «Más»)
+    // The calibration tests as menu entries (Más › Calibration, the empty
+    // bed's Add calibration model ▸): the chosen one made, in its tab.
+    void calibration_entries(const char* prefix);
     // A model's instances: the models with its name and as many triangles.
     std::vector<std::size_t> instances_of(std::size_t index) const;
     void set_instances(std::size_t index, int count);
@@ -4947,6 +4950,23 @@ void App::follow_system_theme() {
         return;
     theme_ = *dark ? dark_theme() : light_theme();
     apply_theme();
+}
+
+void App::calibration_entries(const char* prefix) {
+    const bool resin = settings_.machine_technology == MachineTechnology::Msla;
+    for (int k = 0; k < kCalibrationKinds; ++k) {
+        const CalibrationKind kind = CalibrationKind(k);
+        if (is_resin_calibration(kind) != resin)
+            continue;
+        const std::string name = std::string(prefix) + calibration_kind_name(kind);
+        const bool hit = ImGui::MenuItem((std::string(calibration_title(kind)) + "##" + name).c_str(), nullptr, false,
+                                         !slice_job_.running());
+        note_rect(name);
+        if (hit) {
+            set_tab(Tab::Calibration);
+            create_calibration(kind, false);
+        }
+    }
 }
 
 // Every model off the plate, and the preview with them.
@@ -10512,6 +10532,13 @@ void App::plate_menu() {
                                                        : make_sphere(10),
                       item.label);
         }
+        ImGui::EndMenu();
+    }
+    // The calibration tests (interface.md, «Menús»: Add calibration model ▸).
+    const bool calibrations = ImGui::BeginMenu(tr(T::AddCalibrationModel));
+    placed("calibration");
+    if (calibrations) {
+        calibration_entries("bed_cal_");
         ImGui::EndMenu();
     }
     if (cad_design_) { // the Design tab's tools, also with an empty plate (cad_design.md, rule 3)
@@ -17341,7 +17368,11 @@ void App::more_menu() {
         if (item("assistant_material", tr(T::AssistantMaterial), nullptr, true, assistant_material_))
             assistant_material_ = !assistant_material_;
 
-        // 8. Help (7. Calibration lives in its tab for now).
+        // 7. Calibration: the tests, each made in its tab.
+        card(tr(T::MoreCalibration));
+        calibration_entries("cal_");
+
+        // 8. Help.
         card(tr(T::MoreHelp));
         if (item("help", tr(T::Help), "F1"))
             help_open_ = true;
