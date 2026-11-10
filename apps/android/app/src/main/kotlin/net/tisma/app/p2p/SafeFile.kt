@@ -19,6 +19,8 @@ object SafeFile {
         data class Unsafe(val problem: Problem, val detail: String = "") : Verdict
     }
 
+    private val OBJ_VERTEX = Regex("""(?m)^\s*v\s+[-+0-9.eE]+\s+[-+0-9.eE]+\s+[-+0-9.eE]+""")
+
     const val MAX_UNPACKED = 2L * 1024 * 1024 * 1024
 
     /** Programs and macros that never travel in a model (rule 3 octies). */
@@ -27,10 +29,12 @@ object SafeFile {
 
     fun check(f: File): Verdict {
         if (!f.isFile || f.length() == 0L) return Verdict.Unsafe(Problem.EMPTY)
-        val head = f.inputStream().use { i -> ByteArray(minOf(f.length(), 512L).toInt()).also { var o = 0; while (o < it.size) { val n = i.read(it, o, it.size - o); if (n < 0) break; o += n } } }
+        val head = f.inputStream().use { i -> ByteArray(minOf(f.length(), 8192L).toInt()).also { var o = 0; while (o < it.size) { val n = i.read(it, o, it.size - o); if (n < 0) break; o += n } } }
         fun starts(vararg b: Int) = head.size >= b.size && b.indices.all { head[it] == b[it].toByte() }
         val text = String(head, Charsets.ISO_8859_1)
         return when {
+            // A program first: a script's later lines (a «# comment») must not make it pass as a model.
+            starts(0x7F, 0x45, 0x4C, 0x46) || starts(0x4D, 0x5A) || text.startsWith("#!") -> Verdict.Unsafe(Problem.PROGRAM)
             starts(0x50, 0x4B, 0x03, 0x04) -> zip(f)
             starts(0x89, 0x50, 0x4E, 0x47) -> Verdict.Safe(Kind.PNG)
             starts(0xFF, 0xD8, 0xFF) -> Verdict.Safe(Kind.JPEG)
@@ -39,8 +43,8 @@ object SafeFile {
             binaryStl(f) -> Verdict.Safe(Kind.STL)
             text.trimStart().startsWith("solid") && isText(head) -> Verdict.Safe(Kind.STL)
             text.trimStart().startsWith("{") && isText(head) -> Verdict.Safe(Kind.JSON)
-            isText(head) && Regex("(?m)^\\s*(v|vn|vt|f|o|g|#|mtllib|usemtl|s)\\s").containsMatchIn(text) -> Verdict.Safe(Kind.OBJ)
-            starts(0x7F, 0x45, 0x4C, 0x46) || starts(0x4D, 0x5A) || text.startsWith("#!") -> Verdict.Unsafe(Problem.PROGRAM)
+            // An OBJ has vertices: a «v» line with three numbers, not only comments.
+            isText(head) && OBJ_VERTEX.containsMatchIn(text) -> Verdict.Safe(Kind.OBJ)
             else -> Verdict.Unsafe(Problem.NOT_A_KIND)
         }
     }

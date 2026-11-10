@@ -42,6 +42,9 @@ class SafeFileTest {
         assertEquals(SafeFile.Problem.PROGRAM, problem(tmp.newFile("model.3mf").apply { writeText("#!/bin/sh\nrm -rf x\n") }))
         assertEquals(SafeFile.Problem.PROGRAM, problem(zip("h.3mf", "3D/3dmodel.model" to "<m/>".toByteArray(), "Metadata/run.exe" to "MZ".toByteArray())))
         assertEquals(SafeFile.Problem.NOT_A_KIND, problem(tmp.newFile("x.stl").apply { writeBytes(byteArrayOf(1, 2, 0, 3)) }))
+        // A script with a comment line is still a program, not an OBJ; text with only comments is no model.
+        assertEquals(SafeFile.Problem.PROGRAM, problem(tmp.newFile("s.obj").apply { writeText("#!/bin/sh\n# cleanup\nrm -rf x\n") }))
+        assertEquals(SafeFile.Problem.NOT_A_KIND, problem(tmp.newFile("c.obj").apply { writeText("# just a note\ng group\n") }))
         assertEquals(SafeFile.Problem.EMPTY, problem(tmp.newFile("empty.stl")))
     }
 
