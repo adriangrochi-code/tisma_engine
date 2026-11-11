@@ -155,13 +155,24 @@ class MeshFile(
             }
         }
 
-        /** Binary STL when its size matches the triangle count; else ASCII. */
+        /**
+         * Binary STL when its size matches the triangle count. A size that does not match is still binary unless the
+         * file reads as ASCII (`solid` and then `facet` in its first KB): some programs write a count of 0 or add
+         * bytes at the end, and a cut file keeps its whole triangles.
+         */
         fun readStl(file: File): MeshFile {
             val len = file.length()
             if (len >= 84) {
-                val head = file.inputStream().use { input -> ByteArray(84).also { readFully(input, it) } }
-                val count = ByteBuffer.wrap(head, 80, 4).order(ByteOrder.LITTLE_ENDIAN).int.toLong() and 0xFFFFFFFFL
+                val start = file.inputStream().use { input -> ByteArray(minOf(len, 1024L).toInt()).also { readFully(input, it) } }
+                val count = ByteBuffer.wrap(start, 80, 4).order(ByteOrder.LITTLE_ENDIAN).int.toLong() and 0xFFFFFFFFL
                 if (84 + count * 50 == len) return file.inputStream().buffered().use { readBinaryStl(it, count.toInt()) }
+                val text = String(start, Charsets.ISO_8859_1)
+                val ascii = text.trimStart().startsWith("solid", ignoreCase = true) && text.contains("facet", ignoreCase = true)
+                val whole = (len - 84) / 50
+                if (!ascii && whole > 0) {
+                    val n = if (count in 1..whole) count else whole
+                    return file.inputStream().buffered().use { readBinaryStl(it, n.toInt()) }
+                }
             }
             return file.bufferedReader().use { r ->
                 val b = Builder()

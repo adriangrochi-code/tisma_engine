@@ -34,6 +34,24 @@ class MeshFileTest {
     }
 
     @Test
+    fun `a binary STL with a count of 0, extra bytes or a cut end is still read`() {
+        fun stl(name: String, count: Int, triangles: Int, extra: Int): File {
+            val bb = ByteBuffer.allocate(84 + 50 * triangles + extra).order(ByteOrder.LITTLE_ENDIAN)
+            bb.put("solid exported by a CAD program".toByteArray())
+            bb.position(80); bb.putInt(count)
+            repeat(triangles) { t ->
+                bb.position(84 + 50 * t + 12)
+                listOf(0f, 0f, 0f, 10f, 0f, 0f, 0f, 10f, 1f + t).forEach { bb.putFloat(it) }
+            }
+            return tmp.newFile(name).apply { writeBytes(bb.array()) }
+        }
+        assertEquals(3, MeshFile.read(stl("zero.stl", 0, 3, 0)).triangles)
+        assertEquals(3, MeshFile.read(stl("tail.stl", 3, 3, 7)).triangles)
+        assertEquals(2, MeshFile.read(stl("cut.stl", 5, 2, 20)).triangles)
+        assertEquals(listOf(0f, 0f, 0f, 10f, 10f, 3f), MeshFile.read(stl("b.stl", 0, 3, 0)).bounds.toList())
+    }
+
+    @Test
     fun `OBJ quads become two triangles`() {
         val f = tmp.newFile("q.obj").apply { writeText("v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n") }
         assertEquals(2, MeshFile.read(f).triangles)
