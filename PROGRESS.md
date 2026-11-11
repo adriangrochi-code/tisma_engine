@@ -12703,6 +12703,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
   interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
   (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
+- ME15 (spec/next, `multi_extruder.md` regla 8 quater; filamentos de la Prusa XL a 170 °C): `filament.idle_temperature`
+  (o `material.idle_temperature`) va a `machine.variables.idle_temperature`. Sin prevención de goteo, la herramienta
+  que deja de imprimir baja a esa temperatura (`M104 S170 T0 ;idle`) y antes de volver a imprimir se calienta y se
+  espera (`M109 S215 T0 ;back from idle`). Con prevención de goteo manda su regla. Prueba `[extruders]` ME15, que
+  falla sin el arreglo.
 - ME14 (spec/next, `multi_extruder.md` regla 8 ter; perfiles Prusa CORE One «SOLUBLE»): `extruders.support` 5 en una
   boquilla daba «extruder 5, but the machine has 1». Ahora un extrusor que la máquina no tiene (perímetros, relleno,
   sólido, soporte, interfaz, torre) es el 1, con el aviso `missing_extruder`; `bed_temperature_from` sigue

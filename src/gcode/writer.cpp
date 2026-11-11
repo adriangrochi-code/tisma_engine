@@ -3349,6 +3349,11 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
     // the machine's start G-code; one never heated is heated, and waited
     // for, before it first prints (multi_extruder.md, rule 8 bis, ME13).
     std::set<int> heated = heat ? std::set<int>{} : heated_tools(start_gcode, 0);
+    // Without ooze prevention, a tool that stops printing waits at its
+    // filament's idle temperature, and is heated back, waited for, before it
+    // prints again (multi_extruder.md, rule 8 quater, ME15). From 1.
+    const auto idle_of = [&](int tool) { return tool >= 1 ? value_of("idle_temperature", std::size_t(tool - 1)) : 0.0; };
+    std::set<int> idling;
     const auto toolchange_text = [&](int previous, int next, bool middle) {
         std::string lines, user;
         const auto add_user = [&](const std::string& text) {
@@ -3359,6 +3364,10 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         };
         if (middle && s.ooze_prevention && value_of("temperature", std::size_t(previous - 1)) > 0.0)
             lines += nozzle_gcode(false, previous, standby(previous), "cooldown");
+        if (middle && !s.ooze_prevention && s.extruders > 1 && previous != next && idle_of(previous) > 0.0) {
+            lines += nozzle_gcode(false, previous, idle_of(previous), "idle");
+            idling.insert(previous);
+        }
         if (middle) {
             templates.variables["current_extruder"] = TemplateValue::of(static_cast<long long>(previous - 1));
             add_user(render_template(s.filament_end_gcode, templates, "extrusion.end_gcode"));
@@ -3390,6 +3399,9 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         if (middle && s.ooze_prevention && value_of("temperature", std::size_t(next - 1)) > 0.0 &&
             dialect.wait != Dialect::Wait::None)
             lines += nozzle_gcode(true, next, value_of("temperature", std::size_t(next - 1)));
+        if (middle && idling.erase(next) && value_of("temperature", std::size_t(next - 1)) > 0.0 &&
+            dialect.wait != Dialect::Wait::None)
+            lines += nozzle_gcode(true, next, value_of("temperature", std::size_t(next - 1)), "back from idle");
         templates.variables["current_extruder"] = TemplateValue::of(static_cast<long long>(next - 1));
         if (middle)
             add_user(render_template(s.filament_start_gcode, templates, "extrusion.start_gcode"));

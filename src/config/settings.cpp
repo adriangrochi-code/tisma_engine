@@ -768,6 +768,7 @@ std::optional<std::string> engine_setting_key(std::string_view key) {
         {"first_nozzle_temp", "first_layer_temperature"},
         {"bed_temp", "bed_temperature"},
         {"first_bed_temp", "first_layer_bed_temperature"},
+        {"idle_temperature", "idle_temperature"}, // multi_extruder.md, rule 8 quater
     };
     if (const auto t = temperatures.find(name); t != temperatures.end())
         return "machine.variables." + t->second;
@@ -803,6 +804,18 @@ namespace {
 // extrusion.flow in %, the rest to extrusion) and the group is dropped. A key
 // given in both places, or one the engine does not know, is an error.
 void material_aliases(json& root) {
+    // filament.idle_temperature (multi_extruder.md, rule 8 quater) is the
+    // material's, to machine.variables.idle_temperature.
+    if (const auto f = root.find("filament"); f != root.end() && f->is_object() && f->contains("idle_temperature")) {
+        json& m = root["material"];
+        if (m.is_null())
+            m = json::object();
+        if (m.is_object() && !m.contains("idle_temperature"))
+            m["idle_temperature"] = (*f)["idle_temperature"];
+        f->erase("idle_temperature");
+        if (f->empty())
+            root.erase(f);
+    }
     const auto it = root.find("material");
     if (it == root.end())
         return;
@@ -840,6 +853,7 @@ void material_aliases(json& root) {
         {"first_nozzle_temp", "first_layer_temperature"},
         {"bed_temp", "bed_temperature"},
         {"first_bed_temp", "first_layer_bed_temperature"},
+        {"idle_temperature", "idle_temperature"}, // multi_extruder.md, rule 8 quater
     };
     static const std::set<std::string> extrusion = {
         "min_purge_on_tower", "infill_max_speed", "infill_max_crossing_speed", "loading_speed", "loading_speed_start",

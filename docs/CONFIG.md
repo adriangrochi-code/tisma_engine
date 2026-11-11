@@ -929,6 +929,7 @@ escribe: al leer, cada clave pasa a su lugar.
 | Clave | Va a |
 |---|---|
 | `nozzle_temp`, `first_nozzle_temp` | `machine.variables.temperature` y `first_layer_temperature` |
+| `idle_temperature` (también `filament.idle_temperature`) | `machine.variables.idle_temperature`: °C de espera de una herramienta que deja de imprimir, sin `extruders.ooze_prevention`; 0 o sin poner, no se usa (`multi_extruder.md`, regla 8 quater, ME15) |
 | `bed_temp`, `first_bed_temp` | `machine.variables.bed_temperature` y `first_layer_bed_temperature` |
 | `flow_factor` | `extrusion.flow` × 100 (un factor 0,95 es un flujo de 95 %) |
 | `variables` | `machine.variables`, cada nombre |

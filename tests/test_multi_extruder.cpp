@@ -1074,3 +1074,46 @@ TEST_CASE("extruders: one the machine does not have is the first, with a warning
     s.bed_temperature_from = 5;
     CHECK_THROWS(check_settings(s));
 }
+
+TEST_CASE("extruders: a tool that stops printing waits at its idle temperature (multi_extruder.md, rule 8 quater, ME15)",
+          "[extruders]") {
+    // Two nozzles, a part of each on every layer; PLA 215 with idle 170.
+    // filament.idle_temperature, as the spec names it, is the machine's variable.
+    std::string written = settings_json(base());
+    written.insert(written.find('{') + 1, R"("filament": {"idle_temperature": 170},)");
+    Settings s = parse_settings(written);
+    REQUIRE(s.variables.contains("idle_temperature"));
+    CHECK(s.variables.at("idle_temperature") == std::vector<std::string>{"170"});
+    s.variables["temperature"] = {"215", "215"};
+    s.ooze_prevention = false;
+    const std::string text = gcode_of(two_colours(), s);
+    // Leaving a tool: down to 170; coming back to it: 215, waited for.
+    CHECK_THAT(text, ContainsSubstring("M104 S170 T0"));
+    CHECK_THAT(text, ContainsSubstring("M104 S170 T1"));
+    // Each M104 S170 T<n> is followed, before T<n> prints again, by M109 S215 T<n>.
+    for (const std::string tool : {"0", "1"}) {
+        std::size_t at = text.find("M104 S170 T" + tool);
+        int checked = 0;
+        while (at != std::string::npos && checked < 5) {
+            const std::size_t back = text.find("\nT" + tool + "\n", at);
+            if (back == std::string::npos)
+                break;
+            const std::size_t wait = text.find("M109 S215 T" + tool, at);
+            INFO("tool " << tool << " at " << at);
+            CHECK(wait != std::string::npos);
+            CHECK(wait > back);
+            const std::size_t extrude = text.find(" E", back);
+            CHECK(wait < extrude);
+            at = text.find("M104 S170 T" + tool, back);
+            ++checked;
+        }
+        CHECK(checked > 0);
+    }
+    // With ooze prevention, its own rule: no idle temperature.
+    s.ooze_prevention = true;
+    CHECK_THAT(gcode_of(two_colours(), s), !ContainsSubstring("S170"));
+    // Without an idle temperature, nothing changes.
+    s.ooze_prevention = false;
+    s.variables.erase("idle_temperature");
+    CHECK_THAT(gcode_of(two_colours(), s), !ContainsSubstring("back from idle"));
+}
