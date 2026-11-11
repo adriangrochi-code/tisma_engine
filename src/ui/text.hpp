@@ -2549,6 +2549,8 @@
       "How a blend's colour is foreseen; the spectral one uses each filament's TD") \
     X(MixPredictorMixer, "Simple", "Simple") \
     X(MixPredictorSpectral, "Espectral (con la TD)", "Spectral (with the TD)") \
+    X(MixFilamentGone, "Una mezcla usa un filamento que ya no está: quedó apagada y sus piezas van con el filamento 1", \
+      "A blend uses a filament no longer there: it is off and its models print with filament 1") \
     X(CutConnectors, "Conectores", "Connectors") \
     X(CutConnectorNone, "Sin conectores", "No connectors") \
     X(CutConnectorDowel, "Espiga fija", "Fixed dowel") \

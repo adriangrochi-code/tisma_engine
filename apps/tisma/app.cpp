@@ -889,6 +889,12 @@ private:
     std::string blend_color(const ColorMix& m) const;
     std::vector<double> filament_transmission() const; // empty with the simple mixer
     void recolor_mixes();
+    // After the number of filaments changes (color_mixing_plus.md, «Número de
+    // una mezcla», MX30): the blends numbered right after the filaments, and
+    // the models, their painting and their parts follow; a blend that needs a
+    // filament no longer there is turned off and its models print with the 1st.
+    void renumber_mixes();
+    int mix_extruders_ = 0; // the filaments the blends' numbers follow
     // The plate's blends before slicing (color_mixing_plus.md, rules 12 and 38).
     struct MixCost {
         int changes = 0;
@@ -4998,6 +5004,7 @@ void App::open_project(const std::filesystem::path& path) {
     // not have are dropped (color_mixing.md, rule 5).
     mixes_ = std::move(p.mixes);
     std::erase_if(mixes_, [&](const ColorMix& m) { return !mix_usable(m, settings_.extruders); });
+    mix_extruders_ = std::max(settings_.extruders, 1);
     filament_colors_ = std::move(p.filament_colors);
     bed_changed();
     settings_changed();
@@ -6877,6 +6884,7 @@ void App::take_limits(const device::PrinterLimits& limits, const std::string& fi
 
 void App::settings_changed() {
     ++revision_.settings;
+    renumber_mixes();
     recolor_mixes(); // the prediction or a filament's TD may have changed (color_mixing_plus.md, rule 21)
     if (result_ && !viewer_)
         stale_ = true;
@@ -12471,6 +12479,56 @@ std::string App::blend_color(const ColorMix& m) const {
             td.push_back(all[std::size_t(std::clamp(c.extruder, 1, int(all.size())) - 1)]);
     }
     return all.empty() ? mix_color(colors, shares) : mix_color_spectral(colors, shares, td);
+}
+
+void App::renumber_mixes() {
+    const int n = std::max(settings_.extruders, 1);
+    if (mix_extruders_ == 0)
+        mix_extruders_ = n;
+    if (n == mix_extruders_)
+        return;
+    mix_extruders_ = n;
+    std::map<int, int> to; // old number → new
+    bool lost = false;
+    int next = n + 1;
+    for (ColorMix& m : mixes_) {
+        const bool missing =
+            std::any_of(m.components.begin(), m.components.end(), [&](const ColorMix::Component& c) { return c.extruder > n; }) ||
+            std::any_of(m.pattern.begin(), m.pattern.end(), [&](int f) { return f > n; });
+        const int old = m.id;
+        m.id = next++;
+        if (missing) {
+            lost |= m.enabled;
+            m.enabled = false;
+            to[old] = 1;
+        } else {
+            to[old] = m.id;
+        }
+    }
+    if (to.empty())
+        return;
+    const auto moved = [&](int e) {
+        const auto it = to.find(e);
+        return it == to.end() ? e : it->second;
+    };
+    for (PlateObject& o : objects_) {
+        o.extruder = moved(o.extruder);
+        // The colour painting: its marks are extruder numbers.
+        for (std::size_t t = 0; t < o.painting.size(PaintChannel::Color); ++t) {
+            Painting::Tree tree = o.painting.tree(PaintChannel::Color, t);
+            bool changed = false;
+            for (std::uint8_t& mark : tree)
+                if (mark != Painting::kSplit && mark != kPaintNone && to.contains(int(mark))) {
+                    mark = std::uint8_t(moved(int(mark)));
+                    changed = true;
+                }
+            if (changed)
+                o.painting.set_tree(PaintChannel::Color, t, std::move(tree));
+        }
+    }
+    if (lost)
+        notify(tr(T::MixFilamentGone));
+    plate_changed();
 }
 
 void App::recolor_mixes() {
@@ -25221,6 +25279,20 @@ void App::script_input() {
         std::printf("ui-script: expect-model %zu: %s (height %.2f, holes%s)\n", i, ok ? "ok" : "no", got[2], holes.c_str());
         if (!ok)
             return fail_step("model " + std::to_string(i) + " is not so");
+        next();
+    } else if (step.verb == "expect-extruder") { // model I prints with extruder or blend N; with "off", that blend is off: "I N [off]"
+        std::size_t i = 0;
+        int want = 0;
+        char off[8] = "";
+        std::sscanf((step.key + " " + step.value).c_str(), "%zu %d %7s", &i, &want, off);
+        if (i >= objects_.size())
+            return fail_step("no such model");
+        const int got = objects_[i].extruder;
+        const bool off_ok = std::string(off) != "off" ||
+                            std::any_of(mixes_.begin(), mixes_.end(), [](const ColorMix& m) { return !m.enabled; });
+        std::printf("ui-script: expect-extruder %zu %d: %s%d\n", i, want, got == want && off_ok ? "ok, " : "got ", got);
+        if (got != want || !off_ok)
+            return fail_step("model " + std::to_string(i) + " prints with " + std::to_string(got));
         next();
     } else if (step.verb == "expect-objects") { // this many models on the plate, the last one's name with VALUE
         const std::size_t want = std::size_t(std::atoll(step.key.c_str()));

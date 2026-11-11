@@ -13065,3 +13065,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `cut_connectors.txt` (MT22: mitad de 8 mm con la espiga, hueco de 4,2 × 3,1 mm) y `cut_pin.txt`
   (MT23 y la espiga invertida). No laminado con los conectores ni impreso: «not tested on hardware».
 - **Sigue:** plano libre, encastre a presión, cola de milano, base hexagonal, el resultado en dos partes (MT24).
+
+## 2026-11-11 — interfaz: el número de una mezcla sigue a los filamentos (MX30)
+
+- **Hecho** (respuesta de fichas, spec/next, `color_mixing_plus.md` «Número de una mezcla»): al cambiar la cantidad
+  de filamentos, las mezclas se renumeran después de ellos (de 2 a 4, la #3 pasa a #5) y los modelos y su pintura de
+  color las siguen; una mezcla que usa un filamento que ya no está queda apagada, sus modelos van con el filamento 1 y
+  un aviso lo dice. Los ajustes propios de una parte que nombren una mezcla todavía no se renumeran.
+- **Pruebas:** `mix_numbers.txt`. Orden de guion nueva: `expect-extruder`.
+- **CI local:** el de 7af18c8 corre en segundo plano; el tramo de gcc quedó mezclado con una compilación mía y no
+  cuenta; clang y ASan cubren este commit.
