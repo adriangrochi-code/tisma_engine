@@ -1,5 +1,9 @@
 # Biblioteca de Tisma Cloud: modelos listos para imprimir
 
+> **Reemplazada en parte (decisión del dueño, 2026-11-10, `p2p_library.md`):** el maestro guarda solo el índice,
+> sin modelos ni G-code. Lo que aquí dice que el servidor guarda modelos, lamina o guarda laminados (reglas 14 a 16,
+> «Laminado gratis», el 10 % reservado) no vale; manda `p2p_library.md`.
+
 **Qué hace:** un sitio de modelos propio de Tisma Cloud, como Thingiverse, donde cada modelo puede traer más que el
 archivo:
 - **perfiles probados** por su autor, por impresora;
