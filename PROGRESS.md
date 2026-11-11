@@ -12731,6 +12731,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   El aviso de costo de la interfaz habría mostrado un número equivocado. `MixChangeOptions` suma `cadence_heights`,
   `height_a` y `height_b`, y con ellos cuenta las capas como `slice_model`. Prueba `[mixing]` («rules 8 and 12»),
   igual al G-code laminado; falla sin el arreglo.
+- **Pendiente, PF12 (`profile_pack_format.md` regla 3, `percent_of: "nozzle"`):** el motor todavía no convierte los
+  valores de un proyecto al abrirlo (`sort_settings` solo los clasifica, y `project_settings` lee solo la familia
+  PrusaSlicer). PF12 va con esa conversión: un `"N%"` de una fila con `percent_of: "nozzle"` pasa a mm con la boquilla
+  del proyecto antes de la conversión de `prusaslicer` (OrcaSlicer 0,6 y "105%" → 0,63 mm).
 - **Cola de baja prioridad (después del orden de la beta; spec/next, 2026-11-11):** `ironing.md`, `ironing.angle`
   (desplazamiento sobre el relleno de arriba, 45 por defecto, negativo = por defecto) e `ironing.angle_fixed` (ángulo
   absoluto), prueba IR8. Ningún perfil del paquete plancha con ángulo hoy.
