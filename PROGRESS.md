@@ -13516,4 +13516,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   piezas por sus ítems de la placa con los ajustes por defecto y los cambios de la línea de comandos (`formats.md`,
   reglas 5 y 18: los ajustes del archivo no se usan), con un aviso; si no tiene modelo, `not_a_project` como antes.
   Prueba `[cloud]`: la caja de 20 × 20 × 10 en (128, 128) de su prueba da 50 capas.
+  Segunda parte (pedido de QA, prioridad antes de Full Spectrum): con `--config` el 3MF ajeno toma los ajustes del
+  trabajo; con `--translation <tabla>` los ajustes propios del archivo (familias PrusaSlicer y OrcaSlicer) se traducen
+  encima, como en la interfaz (`project_import.md` reglas 6, 8 y 11); `--config-over` y `--set` van al final. Prueba
+  `[cloud]`: un 3MF de la familia OrcaSlicer con capa 0,25 da 50 capas sin tabla, 40 con ella y 50 con `--set
+  layers.height=0.2`; una tabla rota es un error de entrada.
 

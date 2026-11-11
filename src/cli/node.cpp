@@ -18,6 +18,7 @@
 #include "gcode/thumbnail.hpp"
 #include "io/model.hpp"
 #include "io/paths.hpp"
+#include "io/project_import.hpp"
 #include "project/project.hpp"
 #include "ui/project_slice.hpp"
 
@@ -50,6 +51,7 @@ struct NodeArgs {
     std::string over;              // --config-over: a partial settings JSON
     std::string config;            // --config: the settings of a bare model (aero, orient, analyze)
     std::string inspect_paint;     // --inspect-paint: the painting's summary, "-" for the standard output
+    std::string translation;       // --translation: the pack's table for another program's 3MF (project_import.md, rule 11)
 };
 
 std::optional<std::string> read_whole(const std::filesystem::path& path);
@@ -175,7 +177,7 @@ std::string first_input(std::span<const std::string_view> args) {
         if (a == "-o" || a == "--output" || a == "--summary" || a == "--config" || a == "-c" || a == "--warnings" ||
             a == "--case" || a == "--copies" || a == "--set" || a == "--config-over" || a == "--inspect-paint" ||
             a == "--inspect-mesh" || a == "--export-statistics" || a == "--export-settings" ||
-            a == "--ground-face-normal" || a == "--ground-face-point") {
+            a == "--ground-face-normal" || a == "--ground-face-point" || a == "--translation") {
             ++i;
             continue;
         }
@@ -270,6 +272,8 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
             a.config = std::string(args[++i]);
         } else if (arg == "--inspect-paint" && has_value) {
             a.inspect_paint = std::string(args[++i]);
+        } else if (arg == "--translation" && has_value) {
+            a.translation = std::string(args[++i]);
         } else if (arg == "--sandbox") {
             a.sandbox = true;
         } else if (arg == "--no-gpu") {
@@ -338,6 +342,35 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
         if (items.empty())
             return fail(kExitInput, "'" + a.project + "' is not a project saved by Tisma, nor a 3MF with a model",
                         "not_a_project", "el archivo no es un proyecto de Tisma");
+        // The job's settings (--config), else the defaults; another
+        // program's own settings over them, translated with the pack's table
+        // when the job gives it (project_import.md, rules 6, 8 and 11); the
+        // job's changes go over both, below.
+        if (!a.config.empty()) {
+            try {
+                project.settings = load_settings(a.config);
+            } catch (const std::exception& e) {
+                return fail(kExitInput, e.what(), "bad_settings", "un ajuste del trabajo no es válido");
+            }
+        }
+        std::string translated;
+        if (!a.translation.empty()) {
+            const std::optional<std::string> table = read_whole(a.translation);
+            if (!table)
+                return fail(kExitInput, "cannot read the translation table '" + a.translation + "'", "cannot_read",
+                            "no se puede leer la tabla de traducción");
+            try {
+                const auto own = project_settings(*data);
+                if (!own.empty()) {
+                    const ProjectSettings p = translate_settings(parse_translation(*table), own, project.settings);
+                    project.settings = p.settings;
+                    translated = " its settings translated, " + std::to_string(p.skipped.size()) + " without equivalent;";
+                }
+            } catch (const std::exception& e) {
+                return fail(kExitInput, a.translation + ": " + e.what(), "bad_translation",
+                            "la tabla de traducción no se puede leer");
+            }
+        }
         for (ThreeMfItem& item : items) {
             ProjectModel model;
             model.name = item.name.empty() ? "model" : item.name;
@@ -346,8 +379,10 @@ int cmd_slice_project(std::span<const std::string_view> args, std::ostream& out,
             model.offset = item.offset;
             project.models.push_back(std::move(model));
         }
-        err << "warning: '" << a.project << "' is a 3MF without Tisma's project: its parts with the default settings "
-            << "(and the changes given); its own settings are not used\n";
+        err << "warning: '" << a.project << "' is a 3MF without Tisma's project: its parts with "
+            << (a.config.empty() ? "the default settings" : "the job's settings") << ";"
+            << (translated.empty() ? " its own settings, if any, are not used (no --translation, or none in it);" : translated)
+            << " the changes given go over them\n";
     } else {
         try {
             project = read_project(*data);

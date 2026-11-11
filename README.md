@@ -84,6 +84,9 @@ Por la salida estándar va solo una línea `progress N` (0 a 100) cada vez que a
 errores. El resumen lleva `print_time` («1h 2m 3s»), `print_time_s`, `filament_mm`, `filament_g` (solo si se conoce
 la densidad del filamento) y `layers`, o `error` si falló. `--sandbox` no corre los scripts de posproceso de los
 ajustes; `--no-gpu` lamina con la CPU. En cualquier orden, `--threads <n>` usa como mucho `n` hilos de cálculo.
+Un 3MF que no es un proyecto de Tisma (un modelo suelto, o el proyecto de otro programa) se lamina con sus piezas y
+los ajustes de `--config <ajustes.json>` (o los de fábrica); con `--translation <translation/<dialecto>.json del paquete
+de perfiles>`, los ajustes propios del archivo se traducen encima (`project_import.md`).
 
 Para cambiar ajustes del proyecto sin tocar el archivo, en `slice`, `analyze`, `aero` y `orient` de un proyecto:
 - `--config-over <parcial.json>`: un JSON con solo los grupos y claves que cambian, encima de los del proyecto;
