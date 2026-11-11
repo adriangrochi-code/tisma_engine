@@ -12856,3 +12856,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   selección múltiple (siguiente).
 - **Sigue:** selección múltiple, barra de vista abajo al centro, aspecto (degradé y grilla), y después Diseño:
   barra de herramientas con pestañas (11 bis, CD26).
+- **Después (mismo día):** el rectángulo de derecha a izquierda se dibuja punteado (respuesta de fichas, spec/next
+  c7e828f). Costo de las mezclas antes de laminar (`color_mixing_plus.md`, regla 12, con `mix_changes_estimate` de la
+  otra sesión): el aviso al prender la mezcla con una sola boquilla y la tarjeta «Boquillas distintas y colores»
+  dicen «unos N cambios de filamento» para los modelos de la placa (49 para el cubo de 10 mm en 1 : 1); todavía sin
+  zonas pintadas ni partes con mezcla propia. Guion `mix_changes.txt`. Orden de guion nueva: `add-mix A B`.
+- **CI local (a4bc6aa sobre d420339):** gcc y clang 1209/1209. ASan: un uso después de liberar en
+  `tests/test_color_mix.cpp:473` (de la otra sesión, avisada; ya arreglado en ba84a92) y
+  `ui_project_import_settings` sin el aviso a tiempo con la máquina cargada; sola, en ASan, pasa (lentitud, no error).

@@ -882,6 +882,7 @@ private:
     void paint_card(ImVec2 at);
     void mixing_dialog();
     std::string filament_color(int extruder) const;
+    int mix_changes_planned() const;
     void objects_material_changed();
     void brush_stroke(std::size_t object, ImVec2 at, bool joined = false);
     void brush_drag(std::size_t object);
@@ -9577,9 +9578,17 @@ bool App::card_rows(std::string_view id, bool& bed) {
                     changed = true;
                 }
             }
+            // What the blends on the plate will cost, before slicing (rule 12).
+            if (color_mixing_offered(s) && s.single_extruder_mmu)
+                if (const int changes = mix_changes_planned(); changes > 0) {
+                    loc::TextDisabled("%s", format(tr(T::MixChangesPlanned), changes).c_str());
+                    note_rect("mix_changes_planned");
+                }
             if (ImGui::BeginPopup("##mixing_cost")) {
                 ImGui::PushTextWrapPos(ImGui::GetFontSize() * 24.0f);
                 ImGui::TextUnformatted(tr(T::ColorMixingCost));
+                if (const int changes = mix_changes_planned(); changes > 0)
+                    loc::TextColored(rgb(theme_.accent_hover), "%s", format(tr(T::MixChangesPlanned), changes).c_str());
                 ImGui::PopTextWrapPos();
                 if (ImGui::Button(tr(T::Cancel)))
                     ImGui::CloseCurrentPopup();
@@ -10722,15 +10731,30 @@ void App::viewport() {
         }
     if (box_selecting_) {
         const ImVec2 a = io.MouseClickedPos[ImGuiMouseButton_Left], b = io.MousePos;
-        // Left to right: what is inside (a solid line); right to left: also
-        // what it touches (dashed in CAD programs; here a lighter fill).
+        // Left to right: what is inside, a solid line; right to left: also
+        // what it touches, a dashed line (interface.md, navigation, rule 1).
         const bool touching = b.x < a.x;
         ImDrawList* dl = ImGui::GetWindowDrawList();
         const ImVec2 lo(std::min(a.x, b.x), std::min(a.y, b.y)), hi(std::max(a.x, b.x), std::max(a.y, b.y));
         ImVec4 fill = rgb(theme_.accent);
         fill.w = touching ? 0.10f : 0.18f;
         dl->AddRectFilled(lo, hi, ImGui::GetColorU32(fill));
-        dl->AddRect(lo, hi, ImGui::GetColorU32(rgb(theme_.accent)), 0.0f, (touching ? 1.0f : 1.5f) * scale_);
+        const ImU32 line = ImGui::GetColorU32(rgb(theme_.accent));
+        if (!touching) {
+            dl->AddRect(lo, hi, line, 0.0f, 1.5f * scale_);
+        } else {
+            const ImVec2 c[4] = {lo, ImVec2(hi.x, lo.y), hi, ImVec2(lo.x, hi.y)};
+            const float dash = 6.0f * scale_, gap = 4.0f * scale_;
+            for (int e = 0; e < 4; ++e) {
+                const ImVec2 p0 = c[e], p1 = c[(e + 1) % 4];
+                const float len = std::hypot(p1.x - p0.x, p1.y - p0.y);
+                for (float t = 0.0f; t < len; t += dash + gap) {
+                    const float t1 = std::min(t + dash, len);
+                    dl->AddLine(ImVec2(p0.x + (p1.x - p0.x) * t / len, p0.y + (p1.y - p0.y) * t / len),
+                                ImVec2(p0.x + (p1.x - p0.x) * t1 / len, p0.y + (p1.y - p0.y) * t1 / len), line, 1.5f * scale_);
+                }
+            }
+        }
         if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             box_select(a, b);
             box_selecting_ = false;
@@ -12151,6 +12175,28 @@ void App::objects_material_changed() {
 }
 
 // Filament `extruder`'s colour (from 1): the project's, else one of eight.
+// The filament changes the plate's blends will take, before slicing
+// (color_mixing_plus.md, rule 12): each model printed with a blend, by its
+// height. Painted zones and parts with a blend of their own are not counted yet.
+int App::mix_changes_planned() const {
+    MixChangeOptions options;
+    options.first_layer_height = settings_.first_layer_height;
+    options.layer_height = settings_.layer_height;
+    options.subdivide = settings_.mix_subdivide;
+    options.sub_first_layer = settings_.mix_sub_first_layer;
+    options.sub_min_height = settings_.mix_sub_min_height;
+    int changes = 0;
+    for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
+        const auto mix = std::find_if(mixes_.begin(), mixes_.end(), [&](const ColorMix& m) { return m.id == objects_[i].extruder; });
+        if (mix == mixes_.end() || placed_meshes_[i].empty())
+            continue;
+        const BoundingBox box = placed_meshes_[i].bounding_box();
+        if (!box.empty)
+            changes += mix_changes_estimate(*mix, double(box.max.z), options);
+    }
+    return changes;
+}
+
 std::string App::filament_color(int extruder) const {
     static const char* const kColors[] = {"#FCE94F", "#204A87", "#CC0000", "#4E9A06",
                                           "#F57900", "#75507B", "#C17D11", "#555753"};
@@ -23687,6 +23733,17 @@ void App::script_input() {
             std::fprintf(stderr, "ui-script: set %s: %s\n", step.key.c_str(), e.what());
             failed_ = true;
         }
+        next();
+    } else if (step.verb == "add-mix") { // a 1 : 1 blend of filaments A and B, for every model: "A B"
+        ColorMix m;
+        m.id = std::max(settings_.extruders, 1) + 1;
+        for (const ColorMix& other : mixes_)
+            m.id = std::max(m.id, other.id + 1);
+        m.components = {{std::atoi(step.key.c_str()), 0.5}, {std::atoi(step.value.c_str()), 0.5}};
+        mixes_.push_back(m);
+        for (PlateObject& o : objects_)
+            o.extruder = m.id;
+        std::printf("ui-script: add-mix: %d changes for the plate\n", mix_changes_planned());
         next();
     } else if (step.verb == "use-published-material") { // the same for the chosen pack filament's values
         refresh_material_community();

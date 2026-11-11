@@ -2514,7 +2514,9 @@
     X(NavigationRightOrbits, "Botón derecho gira", "Right button turns") \
     X(NavigationClassic, "Clásica", "Classic") \
     X(NavigationNote, "Rueda: desplaza; Mayús + rueda: gira; doble clic con la rueda: encuadra", \
-      "Wheel: moves; Shift + wheel: turns; double click with the wheel: frames")
+      "Wheel: moves; Shift + wheel: turns; double click with the wheel: frames") \
+    X(MixChangesPlanned, "Con los modelos de la placa: unos %d cambios de filamento", \
+      "With the plate's models: about %d filament changes")
 
 #include <cstdarg>
 #include <optional>
