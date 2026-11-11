@@ -885,6 +885,49 @@ void denser_for_purge(SlicedModel& model, const ColorMix& mix, const std::vector
     }
 }
 
+// A gradient in X or Y (color_mixing_plus.md, rule 3; own design): bands
+// about 5 mm wide (2 to 11) across the blend's paths on every layer; each
+// band takes its blend (gradient_cycle) and goes by its cycle layer by layer,
+// so without sublayers it changes in steps of one layer.
+void gradient_in_plane(SlicedModel& model, const ColorMix& mix, const std::vector<char>& present) {
+    const int axis = mix.axis == 'y' ? 1 : 0;
+    double lo = std::numeric_limits<double>::infinity(), hi = -lo;
+    std::size_t first = model.layers.size();
+    part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
+        for (const Toolpath& t : paths)
+            if (t.tool == mix.id)
+                for (const ToolpathPoint& q : t.points) {
+                    const double v = axis == 1 ? q.p.y : q.p.x;
+                    lo = std::min(lo, v), hi = std::max(hi, v);
+                    first = std::min(first, l);
+                }
+    });
+    if (!(hi > lo))
+        return;
+    const int bands = std::clamp(int(std::lround((hi - lo) / 5.0)), 2, 11);
+    const double band = (hi - lo) / bands;
+    std::vector<std::vector<int>> cycles;
+    for (int b = 0; b < bands; ++b)
+        cycles.push_back(gradient_cycle(mix, (b + 0.5) / bands));
+    part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {
+        if (l >= present.size() || !present[l])
+            return;
+        std::vector<Toolpath> out;
+        for (Toolpath& t : paths) {
+            if (t.tool != mix.id) {
+                out.push_back(std::move(t));
+                continue;
+            }
+            for (auto& [b, piece] : split_by_bands(t, axis, lo, band, bands)) {
+                const std::vector<int>& c = cycles[std::size_t(b)];
+                piece.tool = std::uint8_t(c[(l - std::min(first, l)) % c.size()]);
+                out.push_back(std::move(piece));
+            }
+        }
+        paths = std::move(out);
+    });
+}
+
 void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const Settings& settings) {
     // Each layer's filament from the blends already laid, for the next
     // blend's cycle to agree with where it can (rule 39).
@@ -899,6 +942,10 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const S
         if (std::none_of(present.begin(), present.end(), [](char c) { return c != 0; }))
             continue;
         model.blended = true;
+        if (mix.gradient && (mix.axis == 'x' || mix.axis == 'y')) {
+            gradient_in_plane(model, mix, present);
+            continue;
+        }
         // The step (rule 9): 0, or the layer height with layers all of it, by layer.
         const double step =
             settings.mix_step > 0.0 &&

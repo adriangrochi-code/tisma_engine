@@ -9,6 +9,7 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Mezclas de color: degradé a lo largo de X o Y (cada franja de la capa con su mezcla) y pieza de la paleta de mezclas.
 - Mezclas de color: el estimado de cambios antes de laminar sigue el alto por filamento y el paso
   (`mixing.cadence_heights`, `mixing.step`).
 - Mezclas de color: ajuste `mixing.predictor` (`mixer` o `spectral`) para predecir el color buscado; nombres de los

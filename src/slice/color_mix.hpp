@@ -32,6 +32,9 @@ struct ColorMix {
     std::string color; // "#rrggbb"
     bool gradient = false;
     std::optional<double> min_z, max_z; // mm
+    // A gradient's axis (color_mixing_plus.md, rule 3): 'z', 'x' or 'y'. In X
+    // or Y each band of the layer, across the blend's paths, takes its blend.
+    char axis = 'z';
     struct Component {
         int extruder = 1;
         double share = 0.0; // a ratio, or a gradient's position
@@ -101,7 +104,8 @@ bool mix_usable(const ColorMix& mix, int extruders);
 // The project's blends in their JSON (rules 14 to 16): {"version": 1,
 // "physical_extruders": [{"id", "color"}], "virtual_extruders": [{"id",
 // "kind": "fullspectrum" or "gradient", "color", "components": [{"extruder",
-// "ratio"}] or, for a gradient, [{"extruder", "position"}], "minz", "maxz"}]}.
+// "ratio"}] or, for a gradient, [{"extruder", "position"}], "minz", "maxz" and
+// "axis" ("x", "y"; "z" when left out, rule 3)}]}.
 // color_mixing_plus.md (rule 30) adds "kind": "pattern" with "pattern": [1,
 // 1, 2], and "enabled", "name" and "bias", written only when they are not
 // the default, so a project of ratio blends is written as before.

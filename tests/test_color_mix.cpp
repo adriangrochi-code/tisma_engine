@@ -1241,3 +1241,41 @@ TEST_CASE("color mixing plus: a path cut at the bands of a gradient in X or Y (r
     CHECK(gradient_cycle(g, 1.0) == std::vector<int>{2});
     CHECK(gradient_cycle(g, 0.5).size() == 2);
 }
+
+TEST_CASE("color mixing plus: a gradient in X prints each band of the layer with its blend (rule 3)", "[mixing]") {
+    Settings s = base();
+    s.infill_density = 20.0;
+    ColorMix g = blend(3, {{1, 0.0}, {2, 1.0}});
+    g.gradient = true;
+    g.axis = 'x';
+    // The axis travels with the blends' JSON.
+    const std::vector<ColorMix> read = parse_color_mixes(color_mixes_json({g}, {"#ffffff", "#000000"}));
+    REQUIRE(read.size() == 1);
+    CHECK(read.front().axis == 'x');
+    const SlicedModel model = sliced(box(3), s, {g});
+    // A middle layer has both filaments: 1 to the left, 2 to the right.
+    const LayerWalls& w = model.walls[20];
+    double sum[3] = {0, 0, 0}, count[3] = {0, 0, 0};
+    for (const Toolpath& t : w.toolpaths) {
+        REQUIRE((t.tool == 1 || t.tool == 2));
+        for (const ToolpathPoint& q : t.points)
+            sum[t.tool] += q.p.x, count[t.tool] += 1;
+    }
+    REQUIRE(count[1] > 0);
+    REQUIRE(count[2] > 0);
+    CHECK(sum[1] / count[1] < sum[2] / count[2]);
+    // The outer bands (12.5 % and 87.5 % of the way, 1 : 9 by 10 %) are
+    // mostly one filament: 1 at the left, 2 at the right.
+    double left[3] = {0, 0, 0}, right[3] = {0, 0, 0};
+    for (const LayerWalls& layer : model.walls)
+        for (const Toolpath& t : layer.toolpaths)
+            for (const ToolpathPoint& q : t.points) {
+                if (q.p.x < 91.0 && t.tool <= 2)
+                    left[t.tool] += 1;
+                if (q.p.x > 109.0 && t.tool <= 2)
+                    right[t.tool] += 1;
+            }
+    CHECK(left[1] > 4.0 * left[2]);
+    CHECK(right[2] > 4.0 * right[1]);
+    gcode_of(model, s); // checked G-code
+}

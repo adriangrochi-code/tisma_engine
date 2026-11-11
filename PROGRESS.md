@@ -12728,13 +12728,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   El aviso de costo de la interfaz habría mostrado un número equivocado. `MixChangeOptions` suma `cadence_heights`,
   `height_a` y `height_b`, y con ellos cuenta las capas como `slice_model`. Prueba `[mixing]` («rules 8 and 12»),
   igual al G-code laminado; falla sin el arreglo.
-- **Full Spectrum, regla 3: degradé en X o Y, paso 1 de 2** (2026-11-11, bloque nocturno). `split_by_bands(camino,
-  eje, desde, ancho, franjas)` corta cada camino en los bordes de las franjas (interpola ancho, `dz` y `below`; un
-  lazo abierto por el corte vuelve en piezas abiertas, la última unida a la primera si caen en la misma franja; un lazo
-  dentro de una franja sigue siendo lazo) y `gradient_cycle(mezcla, posición)` da el ciclo del degradé en un punto
-  (la misma cuenta que el degradé en Z, ahora compartida). Prueba `[mixing]`. Falta (paso 2): el eje en la mezcla
-  (`"axis"` en el JSON), aplicarlo en `apply_mixes` (cada franja con su ciclo por capa, sin `subdivide` en escalones de
-  una capa) y su prueba contra el G-code.
+- **Full Spectrum, regla 3: degradé en X o Y** (2026-11-11, bloque nocturno). `ColorMix::axis` ('z', 'x', 'y';
+  `"axis"` en el JSON, escrito solo si no es Z). En `apply_mixes`, `gradient_in_plane`: franjas de unos 5 mm (de 2 a
+  11) a lo largo del eje sobre los caminos de la mezcla; `split_by_bands` corta cada camino en los bordes (interpola
+  ancho, `dz` y `below`; un lazo cortado vuelve en piezas abiertas, la última unida a la primera si caen en la misma
+  franja) y cada franja toma su ciclo (`gradient_cycle`, la misma cuenta que el degradé en Z, al 10 %) capa por capa,
+  así que sin subcapas cambia en escalones de una capa. Pruebas `[mixing]`: el corte y el ciclo; un cubo de 20 mm con
+  degradé 1→2 en X: la capa del medio con los dos filamentos, el 1 a la izquierda; las franjas de los bordes casi
+  todas de un filamento (1 : 9); el eje en el JSON de ida y vuelta; G-code verificado. Falta: el degradé en X/Y con
+  `subdivide` (cada franja en subcapas), entre dos puntos de la pieza, y el eje en el diálogo (interfaz).
 - **Paleta de mezclas (pieza, CM8)** (2026-11-11, bloque nocturno; `calibration_models.md` de spec/next, «Piezas
   para medir»; `color_mixing_plus.md` regla 22). `palette_piece(n)` en `src/calibration/calibration.*`: base de 1 mm
   (filamento 1) con los números 1 a n en relieve de 4 mm (regla 6, 0,6 mm de relieve) y una muestra de 15 × 15 × 2 mm

@@ -397,6 +397,12 @@ std::vector<ColorMix> parse_color_mixes(std::string_view text) {
             out.push_back(std::move(mix));
             continue;
         }
+        if (mix.gradient && v.contains("axis")) {
+            const json& a = v.at("axis");
+            if (!a.is_string() || (a != "x" && a != "y" && a != "z"))
+                fail("a gradient's axis is \"x\", \"y\" or \"z\"");
+            mix.axis = a.get<std::string>()[0];
+        }
         for (const char* key : {"minz", "maxz"})
             if (v.contains(key) && v.at(key).is_number())
                 (std::string_view(key) == "minz" ? mix.min_z : mix.max_z) = v.at(key).get<double>();
@@ -440,6 +446,8 @@ std::string color_mixes_json(const std::vector<ColorMix>& mixes, const std::vect
             v["name"] = m.name;
         if (m.bias != 0.0)
             v["bias"] = m.bias;
+        if (m.gradient && m.axis != 'z')
+            v["axis"] = std::string(1, m.axis);
         if (m.min_z)
             v["minz"] = *m.min_z;
         if (m.max_z)
