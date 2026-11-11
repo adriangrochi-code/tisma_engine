@@ -13439,4 +13439,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `design_dialog.txt` (Cancelar saca la caja; Aceptar la deja); `design_radial.txt` acepta el cuadro
   antes del clic derecho; pasan los 220 de interfaz y diseño.
 - **Falta** de la regla: flechas y anillos en la vista para arrastrar distancias y ángulos.
+- **Después** (QA de fichas): las teclas del guion no distinguen mayúsculas («key Escape» = «key escape»; Esc ya
+  cerraba el cuadro); en Diseño el encuadre deja la pieza llenando unos dos tercios de la vista, centrada (antes,
+  un tercio).
 

@@ -7096,7 +7096,10 @@ void App::frame_now() {
     if (part) {
         const Vec3 centre = (part->first + part->second) * 0.5f;
         const Vec3 half = (part->second - part->first) * 0.5f;
-        const float reach = std::max({half.x, half.y, half.z, 20.0f}) * 1.6f;
+        // In Design the part fills about two thirds of the view, as Fusion 360
+        // frames a body; elsewhere some bed around it.
+        const float reach = tab_ == Tab::Design ? std::max({half.x, half.y, half.z, 3.0f}) * 1.05f
+                                                : std::max({half.x, half.y, half.z, 20.0f}) * 1.6f;
         lo = {centre.x - reach, centre.y - reach, 0.0f};
         hi = {centre.x + reach, centre.y + reach, part->second.z};
     }
@@ -25936,7 +25939,12 @@ void App::script_input() {
         failed_ = true;
         script_at_ = script_.size();
     };
-    const auto key_named = [](std::string_view name) {
+    const auto key_named = [](std::string_view given) {
+        // In any case: «Escape» and «escape» are the same key.
+        std::string lower(given);
+        for (char& c : lower)
+            c = char(std::tolower(static_cast<unsigned char>(c)));
+        const std::string_view name = lower;
         if (name.size() == 1 && name[0] >= 'a' && name[0] <= 'z') // any letter
             return ImGuiKey(int(ImGuiKey_A) + (name[0] - 'a'));
         if (name.size() == 1 && name[0] >= '0' && name[0] <= '9') // any digit
