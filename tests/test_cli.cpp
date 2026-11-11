@@ -540,8 +540,11 @@ TEST_CASE("slice --mixes and --mix: a blend from the command line (color_mixing.
                  "-o", gcode.string()});
     INFO(r.err);
     REQUIRE(r.code == kExitOk);
-    std::ifstream f(gcode);
-    const std::string text((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    std::string text;
+    {
+        std::ifstream f(gcode); // closed before the folder is removed: Windows keeps an open file
+        text.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    }
     CHECK_THAT(text, ContainsSubstring("\nT0\n"));
     CHECK_THAT(text, ContainsSubstring("\nT1\n"));
     // A blend the file does not have, or not a number.
