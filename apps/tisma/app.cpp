@@ -14096,37 +14096,43 @@ void App::help_windows() {
 }
 
 void App::empty_hint() {
-    const char* text = tr(T::DropHint);
+    // A big «Abrir un archivo» button, and under it that a file can be
+    // dropped (the owner's request, 2026-11-11).
+    const char* title = tr(T::DropHint);
+    const char* sub = tr(T::DropHintSub);
     ImGui::PushFont(nullptr, kTitleSize);
-    const ImVec2 size = ImGui::CalcTextSize(text);
+    const ImVec2 title_size = ImGui::CalcTextSize(title);
     ImGui::PopFont();
-    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + (view_size_.x - size.x) * 0.5f - 24.0f * scale_,
-                                   view_pos_.y + view_size_.y * 0.5f - size.y));
-    ImGui::SetNextWindowBgAlpha(0.8f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.0f * scale_);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24.0f * scale_, 16.0f * scale_));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    const ImVec2 button(title_size.x + 48.0f * scale_, title_size.y + 24.0f * scale_);
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x * 0.5f, view_pos_.y + view_size_.y * 0.5f), ImGuiCond_Always,
+                            ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowBgAlpha(0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 10.0f * scale_);
     ImGui::Begin("##hint", nullptr,
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove |
-                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav);
-    // A click on it opens the file dialog (the owner's request, 2026-11-11).
-    const ImVec2 at = ImGui::GetCursorScreenPos();
-    const bool open = ImGui::InvisibleButton("##open_hint", size);
-    const bool hovered = ImGui::IsItemHovered();
-    if (hovered)
-        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-    g_menu_rects["open_hint"] = ImVec4(at.x, at.y, at.x + size.x, at.y + size.y);
-    ImGui::SetCursorScreenPos(at);
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoBackground);
+    ImGui::PushStyleColor(ImGuiCol_Button, rgb(theme_.accent));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, rgb(theme_.accent_hover));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, rgb(theme_.accent_hover));
+    ImGui::PushStyleColor(ImGuiCol_Text, rgb(0xFFFFFF));
+    const float sub_w = ImGui::CalcTextSize(sub).x, width = std::max(button.x, sub_w);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (width - button.x) * 0.5f);
     ImGui::PushFont(nullptr, kTitleSize);
-    loc::TextColored(rgb(hovered ? theme_.accent_hover : theme_.text_dim), "%s", text);
+    const bool open = ImGui::Button(title, button);
     ImGui::PopFont();
+    ImGui::PopStyleColor(4);
+    if (ImGui::IsItemHovered())
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    g_menu_rects["open_hint"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                       ImGui::GetItemRectMax().y);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (width - sub_w) * 0.5f);
+    loc::TextColored(rgb(theme_.text_dim), "%s", sub);
     ImGui::End();
+    ImGui::PopStyleVar();
     if (open) {
         purpose_ = Purpose::Open;
         browser_.open(FileBrowser::Mode::Open, tr(T::OpenFile), kOpenExtensions, last_folder_);
     }
-    ImGui::PopStyleColor();
-    ImGui::PopStyleVar(2);
 }
 
 // What the icon row shows over the paths (preview.md, rule 11), drawn over
@@ -23716,6 +23722,9 @@ ViewFrame App::view_frame(int fb_w, int fb_h) {
     // The chosen model lights up and an outline with a glow marks every one
     // chosen (the owner's request, 2026-11-11: much more visible, as Fusion 360).
     f.model_selected = f.model * 0.6f + Vec3{1, 1, 1} * 0.4f;
+    // The ones not chosen a little dimmer, as Fusion 360 shows a selection.
+    if (tab_ == Tab::Prepare && selected_ >= 0 && objects_.size() > 1)
+        f.model = f.model * 0.8f;
     if (tab_ == Tab::Prepare && tool_ == PlateTool::Paint) // the marks stand out on a light part (UI35)
         f.model = f.model_selected = vec(theme_.paint_part);
     if (tab_ == Tab::Prepare && objects_.size() > 1 && selected_ >= 0 &&

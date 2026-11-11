@@ -13293,4 +13293,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   pruebas usan su sustituto y no conviene bajar 43 a 96 MB en cada CI.
 - **Probado:** en Linux, configurar con la opción baja y copia `solidcraft-cli` y sus cuatro archivos de licencia; la
   pestaña Diseño ya no muestra el aviso. En Windows no se probó (el mismo zip que usa el paquete).
+- **Después** (pedido de fichas, 16:16): «Abrir un archivo» es un botón grande del acento en el medio de la placa
+  vacía, con «o arrastrá un STL, un 3MF o un G-code acá» debajo; con algo elegido y más de un modelo, los no elegidos
+  se ven un poco atenuados (al 80 %). Pasan los 203 `ui_`.
 
