@@ -33,14 +33,18 @@ std::vector<Polygons> painted_areas(const std::vector<PaintedPiece>& pieces, con
 // layer's region takes the mark of the nearest face, painted or not (an
 // unpainted face keeps the part's own filament), found by growing each
 // mark's band at the outline `step` mm at a time, at most `depth` mm in (0: no
-// limit). By layer, the marks present with their zone.
+// limit). A part thinner than two steps takes a painted side's colour through
+// (two colours meet in its middle), and painted tops and bottoms colour the
+// layers under and over them, `depth` mm (with 0: `top_layers` and
+// `bottom_layers` layers). multi_extruder.md, rule 18 (ME16, ME17). By layer,
+// the marks present with their zone.
 struct ColorZone {
     std::uint8_t mark = 0;
     Polygons area;
 };
 std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const Painting& painting,
                                                 const std::vector<Layer>& layers, const std::vector<Polygons>& regions,
-                                                double step, double depth);
+                                                double step, double depth, int top_layers = 0, int bottom_layers = 0);
 
 // A path cut where it crosses the zones, each piece with the zone's mark or
 // 0 outside them; pieces of at most `step` mm are told apart by their middle,

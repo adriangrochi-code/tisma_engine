@@ -10,6 +10,7 @@
 #include "mesh/paint.hpp"
 #include "project/project.hpp"
 #include "slice/color_mix.hpp"
+#include "slice/painted.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/placement.hpp"
 #include "slice/wipe_tower.hpp"
@@ -23,6 +24,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <set>
 #include <sstream>
@@ -1573,4 +1575,76 @@ TEST_CASE("painted colours are printed: each zone with its filament or blend (mu
         if (!paint.tree(PaintChannel::Color, t).empty())
             paint.set_tree(PaintChannel::Color, t, {9});
     CHECK(count(slice({}), 108.5, 110, 1) > 0);
+}
+
+TEST_CASE("painted colours: how far in, thin walls and painted tops (multi_extruder.md rule 18, ME16, ME17)",
+          "[mixing][paint]") {
+    const auto paint_where = [](const Plate& p, const std::function<bool(const Vec3f&)>& on, std::uint8_t mark,
+                                Painting& paint) {
+        for (std::size_t t = 0; t < p.mesh.triangle_count(); ++t) {
+            bool all = true;
+            for (int k = 0; k < 3; ++k)
+                all = all && on(p.mesh.corner(t, k));
+            if (all)
+                paint.set_tree(PaintChannel::Color, t, {mark});
+        }
+    };
+    const auto tools_at = [](const SlicedModel& m, std::size_t l, double x0, double x1, double y0 = 94, double y1 = 106) {
+        std::set<int> out;
+        for (const auto* list : {&m.walls[l].toolpaths, &m.fills[l].sparse, &m.fills[l].solid, &m.fills[l].top})
+            for (const Toolpath& t : *list)
+                for (std::size_t i = 1; i < t.points.size(); ++i) {
+                    const double x = 0.5 * (t.points[i].p.x + t.points[i - 1].p.x);
+                    const double y = 0.5 * (t.points[i].p.y + t.points[i - 1].p.y);
+                    if (x > x0 && x < x1 && y > y0 && y < y1)
+                        out.insert(std::max<int>(t.tool, 1));
+                }
+        return out;
+    };
+    Settings s = base(3);
+    s.infill_density = 20.0;
+    // ME16: the cube's +X face with 2; 0: the half nearer +X; 3: a 3 mm strip.
+    {
+        Plate p = box(1);
+        Painting paint;
+        paint_where(p, [](const Vec3f& v) { return v.x > 109.9f; }, 2, paint);
+        const auto slice = [&](double width) {
+            Settings w = s;
+            w.paint_max_region_width = width;
+            return slice_model(weld_exact(p.mesh), w, nullptr, nullptr, &paint, &p.objects, nullptr);
+        };
+        const SlicedModel half = slice(0.0);
+        // Nearer +X than any other face: a wedge, its middle along Y.
+        CHECK(tools_at(half, 20, 102.5, 109, 98, 102) == std::set<int>{2});
+        CHECK(tools_at(half, 20, 91, 97.5) == std::set<int>{1});
+        const SlicedModel strip = slice(3.0);
+        CHECK(tools_at(strip, 20, 108, 109.5) == std::set<int>{2});
+        CHECK(tools_at(strip, 20, 101, 105) == std::set<int>{1});
+    }
+    // ME17: a 0.8 mm wall painted on one side with 2: all of it 2; with 2 and
+    // 3 on its two sides: both, one each side.
+    {
+        Plate p;
+        add_box(p.mesh, 99.6, 90, 0, 100.4, 110, 10);
+        p.objects = {{"wall", 0, 12, 0, 0, 1}};
+        Painting one;
+        paint_where(p, [](const Vec3f& v) { return v.x > 100.3f; }, 2, one);
+        const SlicedModel a = slice_model(weld_exact(p.mesh), s, nullptr, nullptr, &one, &p.objects, nullptr);
+        CHECK(tools_at(a, 20, 99, 101) == std::set<int>{2});
+        Painting two = one;
+        paint_where(p, [](const Vec3f& v) { return v.x < 99.7f; }, 3, two);
+        const SlicedModel b = slice_model(weld_exact(p.mesh), s, nullptr, nullptr, &two, &p.objects, nullptr);
+        CHECK(tools_at(b, 20, 99, 101) == std::set<int>{2, 3});
+    }
+    // A painted top: the top layers with its colour (0: the solid top layers).
+    {
+        Plate p = box(1);
+        Painting paint;
+        paint_where(p, [](const Vec3f& v) { return v.z > 9.9f; }, 2, paint);
+        const SlicedModel m = slice_model(weld_exact(p.mesh), s, nullptr, nullptr, &paint, &p.objects, nullptr);
+        const std::size_t top = m.layers.size() - 1;
+        CHECK(tools_at(m, top, 95, 105) == std::set<int>{2});
+        CHECK(tools_at(m, top - std::size_t(s.top_layers) + 1, 95, 105) == std::set<int>{2});
+        CHECK(tools_at(m, top - std::size_t(s.top_layers) - 2, 95, 105) == std::set<int>{1});
+    }
 }

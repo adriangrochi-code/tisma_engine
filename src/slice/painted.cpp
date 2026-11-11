@@ -110,16 +110,51 @@ std::vector<Polygons> painted_areas(const std::vector<PaintedPiece>& pieces, con
 
 std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const Painting& painting,
                                                 const std::vector<Layer>& layers, const std::vector<Polygons>& regions,
-                                                double step, double depth) {
+                                                double step, double depth, int top_layers, int bottom_layers) {
     std::vector<std::vector<ColorZone>> out(layers.size());
     if (painting.empty(PaintChannel::Color) || !(step > 0.0))
         return out;
-    // Each mark's band at the outline, by layer.
+    // Each mark's band at the outline, by layer: its side faces' band, and its
+    // tops' and bottoms' areas carried down and up into the part.
     std::vector<std::pair<std::uint8_t, std::vector<Polygons>>> bands;
-    for (int m = 1; m < Painting::kSplit; ++m)
-        if (painting.has(PaintChannel::Color, std::uint8_t(m)))
-            bands.push_back({std::uint8_t(m), painted_areas(painted_pieces(mesh, painting, PaintChannel::Color, std::uint8_t(m)),
-                                                            layers, step)});
+    for (int m = 1; m < Painting::kSplit; ++m) {
+        if (!painting.has(PaintChannel::Color, std::uint8_t(m)))
+            continue;
+        std::vector<PaintedPiece> sides, tops, bottoms;
+        for (const PaintedPiece& p : painted_pieces(mesh, painting, PaintChannel::Color, std::uint8_t(m))) {
+            const double ux = p[1].x - p[0].x, uy = p[1].y - p[0].y, uz = p[1].z - p[0].z;
+            const double vx = p[2].x - p[0].x, vy = p[2].y - p[0].y, vz = p[2].z - p[0].z;
+            const double nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+            const double len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            if (len > 0.0 && nz > 0.7 * len)
+                tops.push_back(p);
+            else if (len > 0.0 && nz < -0.7 * len)
+                bottoms.push_back(p);
+            else
+                sides.push_back(p);
+        }
+        std::vector<Polygons> band = painted_areas(sides, layers, step);
+        const auto carry = [&](const std::vector<PaintedPiece>& pieces, bool down, int count) {
+            const std::vector<Polygons> at = painted_areas(pieces, layers, step / 2.0);
+            for (std::size_t l = 0; l < at.size(); ++l) {
+                if (at[l].empty())
+                    continue;
+                const double from = down ? layers[l].top : layers[l].bottom;
+                for (std::size_t k = 0; k < layers.size(); ++k) {
+                    const std::size_t j = down ? l - std::min(l, k) : l + k;
+                    if (j >= layers.size() || (down && k > l))
+                        break;
+                    const double reach = down ? from - layers[j].top : layers[j].bottom - from;
+                    if (depth > 0.0 ? reach > depth - 1e-9 : int(k) >= std::max(count, 1))
+                        break;
+                    band[j] = Clipper2Lib::Union(band[j], at[l], Clipper2Lib::FillRule::NonZero);
+                }
+            }
+        };
+        carry(tops, true, top_layers);
+        carry(bottoms, false, bottom_layers);
+        bands.push_back({std::uint8_t(m), std::move(band)});
+    }
     if (bands.empty())
         return out;
     const std::size_t steps =
@@ -170,6 +205,23 @@ std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const P
             taken = std::move(now);
             if (!grew)
                 break;
+        }
+        // Two steps thin or thinner there is no room for two filaments: a painted
+        // side's colour goes through (multi_extruder.md, rule 18, ME17); two
+        // colours keep the halves they grew.
+        // Two widths count (ME17: a 0.8 mm wall with 0.4 mm lines).
+        const Polygons thin = Clipper2Lib::Difference(region, offset(offset(region, -1.05 * step), 1.05 * step),
+                                                      Clipper2Lib::FillRule::NonZero);
+        if (!thin.empty()) {
+            const std::vector<Polygons> grown = zone;
+            for (std::size_t k = 1; k < zone.size(); ++k) {
+                Polygons more = Clipper2Lib::Intersect(thin, offset(grown[k], 2.0 * step), Clipper2Lib::FillRule::NonZero);
+                for (std::size_t o = 1; o < zone.size(); ++o)
+                    if (o != k)
+                        more = Clipper2Lib::Difference(more, grown[o], Clipper2Lib::FillRule::NonZero);
+                if (!more.empty())
+                    zone[k] = Clipper2Lib::Union(zone[k], more, Clipper2Lib::FillRule::NonZero);
+            }
         }
         for (std::size_t k = 1; k < zone.size(); ++k)
             if (!zone[k].empty())

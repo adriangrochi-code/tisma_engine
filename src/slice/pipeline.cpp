@@ -1009,7 +1009,8 @@ void paint_colors(SlicedModel& model, const IndexedMesh& mesh, const Painting* p
         return;
     const double step = std::max(settings.wall_width, 0.2);
     std::vector<std::vector<ColorZone>> zones =
-        color_zones(mesh, *painting, model.layers, model.regions, step, settings.paint_max_region_width);
+        color_zones(mesh, *painting, model.layers, model.regions, step, settings.paint_max_region_width,
+                    settings.top_layers, settings.bottom_layers);
     const auto known = [&](int mark) {
         return (mark >= 1 && mark <= settings.extruders) ||
                std::any_of(blends.begin(), blends.end(), [&](const ColorMix& m) { return m.id == mark; });
