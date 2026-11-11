@@ -13337,3 +13337,14 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Sigue:** navegador a la izquierda (11 ter), línea de tiempo abajo (11 quater, CD27), cuadros flotantes (11
   quinquies), menú radial (CD28) y buscar herramienta con S (CD29).
 
+## 2026-11-11 — interfaz: la línea de tiempo de Diseño (cad_design.md, regla 11 quater; CD27)
+
+- **Hecho:** abajo de la vista, a todo el ancho, un ícono por paso del diseño en orden (los mismos dibujos de la
+  barra): rojo con el motivo al pasar el mouse si falla, gris si espera o está suprimido; un clic lleva el historial
+  a él, doble clic lo renombra, clic derecho suprime/vuelve a usar, renombra o borra. La marca al final se arrastra
+  para volver atrás: lo de después espera (se construye sin eso) hasta que vuelve al final (CD27). La línea de
+  comandos queda arriba de la línea de tiempo.
+- **Pruebas:** `design_timeline_marker.txt` (caja y vaciado: 3904 mm³; la marca antes del vaciado, 8000; al final,
+  3904 de nuevo); pasan las 31 de Diseño.
+- **Sigue:** el navegador a la izquierda (11 ter) con el editor de lo elegido, los cuadros flotantes (11 quinquies).
+

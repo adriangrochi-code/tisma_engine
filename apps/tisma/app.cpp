@@ -614,6 +614,12 @@ private:
     // rule 11 bis): tabs, groups with their main tools and a menu of all.
     void design_toolbar();
     int design_tab_ = 0;           // Sólido, Boceto, Inspeccionar, Utilidades
+    // The timeline under the view (cad_design.md, rule 11 quater): its
+    // marker, how many features count (the rest wait, grey, CD27); the
+    // feature its menu is open for.
+    void design_timeline();
+    std::size_t design_rollback_ = SIZE_MAX;
+    int timeline_menu_ = -1;
     float view_top_inset_ = 0.0f;  // what the toolbar takes from the view's top, this frame
     void design_command_line();
     void run_command(std::string text);
@@ -15088,7 +15094,10 @@ void App::rebuild_design() {
         design_error_ = design_missing_text();
         return;
     }
-    const cad::Design copy = design_;
+    cad::Design copy = design_;
+    // Rolled back on the timeline (CD27): what comes after the marker waits.
+    for (std::size_t k = design_rollback_; k < copy.features.size(); ++k)
+        copy.features[k].suppressed = true;
     const std::filesystem::path exe = solidcraft_.exe;
     const cad::MeshQuality quality = cad::quality_for(settings_.cad_chord_tolerance, cad::nominal_size(copy));
     if (!design_session_ || design_session_->exe() != exe)
@@ -15552,6 +15561,135 @@ void App::design_toolbar() {
     ImGui::PopStyleVar(2);
     if (chosen)
         chosen();
+}
+
+
+// The design's timeline (cad_design.md, rule 11 quater): an icon for each
+// feature in order, red with its reason when it fails, grey while it waits
+// or is suppressed; a click takes the history to it, a double click names
+// it, a right click suppresses, renames or deletes it; the marker at the
+// end goes back in the history while it is dragged (CD27), and back to the
+// end what waits builds again.
+void App::design_timeline() {
+    const float h = 50.0f * scale_, margin = 12.0f * scale_, icon_w = 34.0f * scale_;
+    ImGui::SetNextWindowPos(ImVec2(view_pos_.x + margin, view_pos_.y + view_size_.y - h - margin));
+    ImGui::SetNextWindowSize(ImVec2(std::max(view_size_.x - 2.0f * margin, 200.0f * scale_), h));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f * scale_);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f * scale_, 6.0f * scale_));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+    ImGui::Begin("##design_timeline", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_HorizontalScrollbar);
+    g_menu_rects["design_timeline"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                             ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                             ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    const std::size_t n = design_.features.size();
+    const std::size_t end = std::min(design_rollback_, n);
+    const ImU32 ink = ImGui::GetColorU32(rgb(theme_.text)), grey = ImGui::GetColorU32(rgb(theme_.text_dim, 0.4f)),
+                red = IM_COL32(229, 72, 77, 255), accent = ImGui::GetColorU32(rgb(theme_.accent_hover));
+    if (n == 0) {
+        ImGui::AlignTextToFramePadding();
+        loc::TextDisabled("%s", tr(T::DesignTimelineEmpty));
+    }
+    std::vector<float> slots; // each feature's left edge, and the end
+    bool changed = false;
+    std::optional<std::size_t> erase;
+    for (std::size_t i = 0; i < n; ++i) {
+        cad::Feature& f = design_.features[i];
+        if (i > 0)
+            ImGui::SameLine(0, 4.0f * scale_);
+        const ImVec2 at = ImGui::GetCursorScreenPos();
+        slots.push_back(at.x);
+        ImGui::PushID(int(i) + 7000);
+        ImGui::InvisibleButton("##feature", ImVec2(icon_w, icon_w));
+        const bool hover = ImGui::IsItemHovered();
+        const bool fails = design_failed_ && *design_failed_ == i && !f.suppressed && i < end;
+        const bool waits = i >= end || f.suppressed || (design_failed_ && i > *design_failed_);
+        if (hover)
+            dl->AddRectFilled(at, ImVec2(at.x + icon_w, at.y + icon_w), ImGui::GetColorU32(rgb(theme_.accent, 0.3f)), 5.0f * scale_);
+        const char* icon = f.type == cad::Feature::Type::Sketch      ? "sketch"
+                           : f.type == cad::Feature::Type::Operation ? operation_icon(f.op.kind)
+                                                                     : primitive_id(f.kind);
+        cad_icon(dl, icon, ImVec2(at.x + icon_w * 0.15f, at.y + icon_w * 0.15f), icon_w * 0.7f, fails ? red : waits ? grey : ink);
+        note_rect("design_timeline_" + std::to_string(i + 1));
+        if (hover) {
+            ImGui::BeginTooltip();
+            loc::Text("%s", f.name.c_str());
+            if (fails && !design_failure_.empty())
+                loc::TextColored(rgb(0xE5484D), "%s", design_failure_.c_str());
+            else if (i >= end)
+                loc::TextDisabled("%s", tr(T::DesignTimelineWaits));
+            ImGui::EndTooltip();
+        }
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+            design_scroll_to_ = std::to_string(i + 1);
+        if (hover && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            design_rename_ = int(i);
+            design_rename_focus_ = true;
+            design_scroll_to_ = std::to_string(i + 1);
+            std::snprintf(design_rename_buf_, sizeof design_rename_buf_, "%s", f.name.c_str());
+        }
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) {
+            timeline_menu_ = int(i);
+            ImGui::OpenPopup("##timeline_menu");
+        }
+        ImGui::PopID();
+    }
+    if (ImGui::BeginPopup("##timeline_menu")) {
+        if (timeline_menu_ >= 0 && std::size_t(timeline_menu_) < n) {
+            cad::Feature& f = design_.features[std::size_t(timeline_menu_)];
+            if (ImGui::MenuItem(tr(f.suppressed ? T::DesignTimelineUnsuppress : T::DesignTimelineSuppress)))
+                f.suppressed = !f.suppressed, changed = true;
+            note_rect("design_timeline_suppress");
+            if (ImGui::MenuItem(tr(T::DesignTimelineRename))) {
+                design_rename_ = timeline_menu_;
+                design_rename_focus_ = true;
+                design_scroll_to_ = std::to_string(timeline_menu_ + 1);
+                std::snprintf(design_rename_buf_, sizeof design_rename_buf_, "%s", f.name.c_str());
+            }
+            if (ImGui::MenuItem(tr(T::DesignTimelineDelete)))
+                erase = std::size_t(timeline_menu_);
+            note_rect("design_timeline_delete");
+        }
+        ImGui::EndPopup();
+    }
+    // The marker: before the first feature that waits, dragged along them.
+    if (n > 0) {
+        ImGui::SameLine(0, 4.0f * scale_);
+        slots.push_back(ImGui::GetCursorScreenPos().x);
+        const float top = ImGui::GetCursorScreenPos().y;
+        const float x = slots[end] - 2.0f * scale_;
+        ImGui::SetCursorScreenPos(ImVec2(x - 6.0f * scale_, top));
+        ImGui::InvisibleButton("##marker", ImVec2(12.0f * scale_, icon_w));
+        note_rect("design_timeline_marker");
+        dl->AddRectFilled(ImVec2(x - 1.5f * scale_, top), ImVec2(x + 1.5f * scale_, top + icon_w), accent);
+        dl->AddTriangleFilled(ImVec2(x - 6.0f * scale_, top), ImVec2(x + 6.0f * scale_, top), ImVec2(x, top + 8.0f * scale_), accent);
+        if (ImGui::IsItemHovered())
+            loc::SetTooltip("%s", tr(T::DesignTimelineMarker));
+        if (ImGui::IsItemActive()) {
+            // The nearest place between two features to the mouse.
+            const float mx = ImGui::GetIO().MousePos.x;
+            std::size_t best = 0;
+            for (std::size_t k = 1; k < slots.size(); ++k)
+                if (std::abs(slots[k] - mx) < std::abs(slots[best] - mx))
+                    best = k;
+            const std::size_t to = best >= n ? SIZE_MAX : best;
+            if (to != design_rollback_)
+                design_rollback_ = to, changed = true;
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
+    if (erase) {
+        design_.features.erase(design_.features.begin() + std::ptrdiff_t(*erase));
+        changed = true;
+    }
+    if (design_rollback_ != SIZE_MAX && design_rollback_ >= design_.features.size())
+        design_rollback_ = SIZE_MAX;
+    if (changed)
+        rebuild_design();
 }
 
 void App::design_panel() {
@@ -21106,7 +21244,8 @@ void App::config_window() {
 void App::design_command_line() {
     const float margin = 12.0f * scale_, height = 36.0f * scale_;
     const float left = view_pos_.x + margin;
-    ImGui::SetNextWindowPos(ImVec2(left, view_pos_.y + view_size_.y - height - margin));
+    // Above the timeline (rule 11 quater).
+    ImGui::SetNextWindowPos(ImVec2(left, view_pos_.y + view_size_.y - height - margin - 62.0f * scale_));
     ImGui::SetNextWindowSize(ImVec2(std::max(view_pos_.x + view_size_.x - margin - left, 200.0f * scale_), height));
     ImGui::SetNextWindowBgAlpha(0.95f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f * scale_);
@@ -23766,7 +23905,7 @@ void App::layout() {
         if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
             part_labels();
         if (tab_ == Tab::Design && design_page_ == DesignPage::Design) {
-            design_command_line();
+            design_command_line(), design_timeline();
             if (sketch_edit_) {
                 sketch_strip();
                 sketch_cursor_input();

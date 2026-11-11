@@ -1,0 +1,21 @@
+# The timeline under the view (cad_design.md, rule 11 quater; CD27): one
+# icon a step; dragging the marker back before the shell leaves the box
+# whole (the shell waits, grey) and back to the end hollows it again.
+menu mode_engineering
+expect-control tab_design
+menu tab_design
+menu design_box
+expect-design 8000
+menu design_op_shell
+expect-control design_pick_done
+menu design_command
+key enter
+expect-design 3904
+expect-control design_timeline_1
+expect-control design_timeline_2
+drag-control design_timeline_marker -38 0
+wait 5
+expect-design 8000
+drag-control design_timeline_marker 38 0
+wait 5
+expect-design 3904

@@ -1510,6 +1510,13 @@
     X(DesignMeasureTool, "Medir", "Measure") \
     X(DesignSectionTool, "Sección", "Section") \
     X(DesignToolSearch, "Buscar herramienta", "Search tools") \
+    X(DesignTimelineEmpty, "La línea de tiempo muestra cada paso del diseño", "The timeline shows each step of the design") \
+    X(DesignTimelineWaits, "Después de la marca: espera", "After the marker: waiting") \
+    X(DesignTimelineSuppress, "Suprimir", "Suppress") \
+    X(DesignTimelineUnsuppress, "Volver a usar", "Use again") \
+    X(DesignTimelineRename, "Renombrar", "Rename") \
+    X(DesignTimelineDelete, "Borrar", "Delete") \
+    X(DesignTimelineMarker, "Arrastrala para volver atrás en el historial", "Drag it to go back in the history") \
     X(DesignChecking, "Comprobando el componente de diseño…", "Checking the design component…") \
     X(DesignBuilding, "Construyendo…", "Building…") \
     X(DesignVolume, "Volumen", "Volume") \
