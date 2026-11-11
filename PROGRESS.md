@@ -13490,4 +13490,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   (antes copiaba la fila y `extrusion_width` habría pisado la pared externa). La placa: el primer campo de `select` con
   valor la nombra; «Default Plate» (0) o ninguna, el orden. Prueba `[project_import]` con las filas tal cual
   (outer_wall_line_width, initial_layer_acceleration de Creality Print, hot_plate_temp y el bloque de placas).
+- **F6 cambia (dueño, 2026-11-11 20:30 UTC: «Tisma slicer olvidate»).** Sin comparación contra Tisma Slicer ni
+  migración de sus proyectos y perfiles; queda medir el motor solo, con y sin GPU. Números de la CPU que midió QA en dev
+  3e535f1 (Linux, 4 núcleos; capa 0,2, 2 paredes, 15 % de giroide, 3 sólidas arriba y abajo): cubo de 20 mm 0,05 s,
+  100 capas, 15 min 27 s, 1091 mm; esfera de 100 mm con 19 800 triángulos 1,11 s, 500 capas, 7 h 12 min, 38 497 mm; la
+  de 1 001 112 triángulos 1,78 s, 7 h 13 min, 38 535 mm; tubo de 20 mm 0,08 s, 50 capas, 8 min 49 s, 500 mm; big.stl
+  (60 mm, 319 200 triángulos) 0,56 s, 300 capas, 1 h 59 min, 9421 mm; T de 18 mm con apoyos 0,04 s, 90 capas, 19 min,
+  1215 mm; sin apoyos 0,04 s, 10 min, 382 mm. Con GPU: en este contenedor solo hay llvmpipe (Vulkan por software), sin
+  diferencia y con el mismo G-code; falta medir en la PC del dueño con una GPU real (no medido).
 
