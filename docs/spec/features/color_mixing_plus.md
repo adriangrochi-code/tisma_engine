@@ -95,6 +95,12 @@ existe queda apagada, con aviso (MX30).
 3. **Degradé:** de 2 a 4 filamentos, en un eje (X, Y o Z) o entre dos puntos de la pieza. Cada capa (o cada zona
    de la capa, si el degradé es en X o Y) usa la proporción del lugar, con el ciclo de `color_mixing.md`, regla 10.
    El degradé en X o Y necesita `subdivide` (regla 10) o cambia en escalones de una capa.
+   **Entre dos puntos** (diseño, 11-11-2026): la persona marca el punto de inicio y el de fin con un clic sobre la
+   superficie de la pieza (o los escribe en mm, X, Y y Z, en el diálogo); se ven como dos esferas unidas por una
+   flecha y se pueden arrastrar. Cada lugar de la pieza toma la proporción de su proyección sobre la recta entre los dos
+   puntos: 0 en el inicio, 1 en el fin, y fuera del tramo se queda en el extremo más cercano. En cada capa, la zona se
+   parte en franjas perpendiculares a la proyección de la recta en XY, como el degradé en X o Y; si la recta es casi
+   vertical (menos de 1 mm de recorrido en XY por cada 10 mm en Z), es un degradé en Z (MX31).
 4. **Color buscado:**
    - se prueban todas las mezclas de 2 y de 3 filamentos con ciclos de hasta `max_cycle` capas, sin partes menores que
      `min_part`;
@@ -291,6 +297,7 @@ salvo donde se dice.
 | MX28 | Ciclo A, B (1 : 1) sin `subdivide`, `step` 0,2, altura de capa variable 0,1 y 0,3 | Cada 0,2 mm de altura cambia el filamento: las capas de 0,1 van de a dos con el mismo, las de 0,3 alternan según su centro |
 | MX29 | Ciclo A, B, `subdivide`, `step` 0,1; capa 0,2 / capa 0,3 | Capa 0,2: dos pasadas de 0,1 por capa, el ciclo sigue de una capa a la otra / capa 0,3: la capa entera con el filamento de su centro y el aviso de `mixing.step` |
 | MX30 | Mezcla 1 : 1 de 1 y 2 creada con 2 filamentos (es la 3) asignada a una pieza; se pasa a 4 filamentos / después a 1 | La mezcla pasa a ser la 5 y la pieza sigue con ella, no con el filamento 3 / la mezcla queda apagada con aviso y la pieza usa el filamento 1 |
+| MX31 | Cubo de 20 mm, degradé entre (−10, −10, 0) y (10, 10, 20) del cubo, 1 a 2 | La esquina de abajo adelante a la izquierda con 1, la de arriba atrás a la derecha con 2, el centro mitad y mitad; puntos (0, 0, 0) y (0, 0, 20): igual que un degradé en Z |
 | MX11 | `surface_only` con `surface_depth` 0,8 | Solo las 2 paredes de afuera y las superficies alternan; el relleno de un solo filamento |
 | MX12 | MX11 contra la caja sin `surface_only` | Menos cambios de filamento en MX11 en las capas que tienen relleno |
 | MX13 | `bias` 0,5 en una mezcla 1 : 1 | Las paredes de afuera de las capas del segundo filamento quedan más adentro que las del primero |
