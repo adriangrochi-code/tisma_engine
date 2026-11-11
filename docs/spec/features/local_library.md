@@ -26,6 +26,9 @@ las decisiones abiertas las tomó el equipo de fichas el 05-11-2026 y quedan mar
      con que se calcularon (`model_library.md`, regla 2);
    - una miniatura (PNG de 256 × 256), el nombre, etiquetas, notas y, si se imprimió, «La imprimí» con fecha, una foto
      opcional y una nota.
+   - la fecha de «La imprimí» es un día real en formato `AAAA-MM-DD` (ISO 8601); sin fecha, el día de hoy en la
+     computadora. Otra cosa («ayer», `2026-13-45`, `2026-02-30`) es un error de uso que nombra el formato, y no se
+     guarda nada. La app del teléfono manda la fecha en ese mismo formato.
 2. **Ninguna ruta de la computadora** queda guardada: la entrada se puede mover entre equipos.
 
 ## Acciones
