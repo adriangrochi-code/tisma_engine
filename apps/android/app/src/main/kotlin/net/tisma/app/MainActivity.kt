@@ -118,6 +118,7 @@ class MainActivity : ComponentActivity() {
                     override fun report(model: String?, sha256: String?, reason: String) =
                         net.tisma.cloud.CloudClient(app.settings.server, app.secrets.get(net.tisma.app.cloud.CloudViewModel.TOKEN))
                             .libraryReport(model, sha256, reason)
+                    override val origin: String get() = app.settings.server
                 },
                 saved = app.settings) as T
         }

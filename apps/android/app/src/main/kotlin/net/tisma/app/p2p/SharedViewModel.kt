@@ -42,6 +42,8 @@ data class SharedState(
 interface LibraryServer {
     fun file(name: String): ByteArray
     fun report(model: String?, sha256: String?, reason: String): String
+    /** The server these files come from: another one (Preferences) has its own sequences and key. */
+    val origin: String get() = ""
 }
 
 /**
@@ -82,6 +84,22 @@ class SharedViewModel(
         return json to sig
     }
 
+    /**
+     * The person changed the cloud server (Preferences): the last server's sequences and kept files are not this
+     * one's. Kept, its lists would be refused for ever as «older» than the other's.
+     */
+    private fun forgetOtherServer() {
+        val s = saved ?: return
+        val origin = server?.origin.orEmpty()
+        if (origin.isEmpty() || s.p2pOrigin == origin) return
+        if (s.p2pOrigin.isNotEmpty()) {
+            listOf("key", "blocklist.json", "blocklist.json.sig", "index.json", "index.json.sig").forEach { kept(it).delete() }
+            s.p2pListSequence = -1
+            s.p2pIndexSequence = -1
+        }
+        s.p2pOrigin = origin
+    }
+
     private fun keep(name: String, b: ByteArray) = kept(name).apply { parentFile?.mkdirs(); writeBytes(b) }
 
     /** Rule 6: on opening the library (and every 6 h while sharing): the key, the list (applied), then the index. */
@@ -89,6 +107,7 @@ class SharedViewModel(
         viewModelScope.launch {
             val r = withContext(io) {
                 runCatching {
+                    forgetOtherServer()
                     val keyJson = fetchOrKept("key") ?: return@runCatching Triple<BlockList?, LibraryIndex?, List<SharedCopies.Copy>>(null, null, emptyList())
                     val key = LibraryKey.read(keyJson, projectKey)
                     keep("key", keyJson)

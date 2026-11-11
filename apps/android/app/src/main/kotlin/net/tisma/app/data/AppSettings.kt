@@ -42,6 +42,11 @@ class AppSettings(context: Context) {
         get() = prefs.getStringSet("scans.kept", null)?.toSet() ?: emptySet()
         set(v) = prefs.edit().putStringSet("scans.kept", v).apply()
 
+    /** The server the shared library's sequences and kept files belong to. */
+    var p2pOrigin: String
+        get() = prefs.getString("p2p.origin", "") ?: ""
+        set(value) = prefs.edit().putString("p2p.origin", value).apply()
+
     /** p2p_library.md, rule 3 ter: the highest block list and index sequences seen (an older one is refused). */
     var p2pListSequence: Long
         get() = prefs.getLong("p2p.list_sequence", -1)

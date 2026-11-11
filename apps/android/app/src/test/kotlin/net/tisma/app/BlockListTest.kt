@@ -150,7 +150,7 @@ class BlockListTest {
         assertFailsWith<LibraryIndex.BadIndex> { LibraryIndex.read(json, sign(library, json), libraryKey, lastSequence = 4) }
     }
 
-    private class FakeServer(val files: Map<String, ByteArray>) : LibraryServer {
+    private class FakeServer(val files: Map<String, ByteArray>, override val origin: String = "") : LibraryServer {
         val reports = mutableListOf<Triple<String?, String?, String>>()
         override fun file(name: String) = files[name] ?: throw java.io.IOException("404 $name")
         override fun report(model: String?, sha256: String?, reason: String): String { reports += Triple(model, sha256, reason); return "r1" }
@@ -252,5 +252,25 @@ class BlockListTest {
         }
         assertNull(shared.state.value.problem)
         assertEquals(4L, shared.state.value.list?.sequence)
+    }
+
+    @Test
+    fun `another cloud server starts from its own sequences, not the last server's`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val settings = AppSettings(context).apply { p2pOrigin = "https://a.example"; p2pListSequence = 9; p2pIndexSequence = 9 }
+        val dir = tmp.newFolder("p2p")
+        val json = list(2)
+        val server = FakeServer(mapOf("key" to keyJson(), "blocklist.json" to json, "blocklist.json.sig" to sign(library, json)),
+            origin = "https://b.example")
+        val shared = SharedViewModel(dir, projectKey, server, settings)
+        shared.refresh()
+        val deadline = System.currentTimeMillis() + 10_000
+        while (shared.state.value.list == null && shared.state.value.problem == null && System.currentTimeMillis() < deadline) {
+            ShadowLooper.idleMainLooper(); Thread.sleep(10)
+        }
+        assertNull(shared.state.value.problem)
+        assertEquals(2L, shared.state.value.list?.sequence)
+        assertEquals("https://b.example", settings.p2pOrigin)
+        assertEquals(2L, settings.p2pListSequence)
     }
 }
