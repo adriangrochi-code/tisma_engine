@@ -57,7 +57,9 @@ class StoreBillingTest {
         val play = FakePlay()
         val vm = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5, billing = play)
         val nav = Navigator(Section.MORE)
-        compose.setContent { TismaTheme { TismaApp(vm, PrintersViewModel(PrinterStore(context, MemorySecrets())), noEngine(context), settings, nav) } }
+        val printers = PrintersViewModel(PrinterStore(context, MemorySecrets()))
+        val slice = noEngine(context)
+        compose.setContent { TismaTheme { TismaApp(vm, printers, slice, settings, nav) } }
         compose.runOnIdle { vm.signIn("ana@example.com", "password1"); nav.open(Screen.Account) }
         until { vm.state.value.account?.plan == "Maker" && compose.onAllNodes(hasTestTag("plan_buy_Pro")).fetchSemanticsNodes().isNotEmpty() }
         // Only the plan sold in Play is offered.
