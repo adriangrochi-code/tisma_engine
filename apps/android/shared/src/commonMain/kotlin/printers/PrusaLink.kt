@@ -4,8 +4,8 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import net.tisma.cloud.FormPart
 import net.tisma.cloud.Http
-import java.io.InputStream
-import java.net.URLEncoder
+import net.tisma.io.ByteInput
+import net.tisma.cloud.percentEncode
 
 /**
  * PrusaLink (Prusa printers' local interface), from its published OpenAPI
@@ -72,13 +72,13 @@ class PrusaLinkConnection(url: String, user: String, password: String, http: Htt
         rest.delete("/api/v1/job/${jobId()}")
     }
 
-    override fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream) {
+    override fun upload(name: String, length: Long, start: Boolean, open: () -> ByteInput) {
         // The storage: the first one the printer lists (USB on the MK4 and the MINI), else «local».
         val storage = runCatching {
             (rest.get("/api/v1/storage").obj()?.get("storage_list") as? JsonArray)?.filterIsInstance<JsonObject>()
                 ?.firstOrNull { it.str("available") != "false" && it.str("read_only") != "true" }?.str("path")
         }.getOrNull()?.trim('/')?.ifBlank { null } ?: "local"
-        val path = "/api/v1/files/$storage/" + URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+        val path = "/api/v1/files/$storage/" + percentEncode(name)
         rest.uploadRaw("PUT", path, FormPart("file", "application/octet-stream", name, length, open),
             mapOf("Print-After-Upload" to if (start) "?1" else "?0", "Overwrite" to "?1"))
     }

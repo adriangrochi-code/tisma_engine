@@ -4,7 +4,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import net.tisma.cloud.FormPart
 import net.tisma.cloud.Http
-import java.io.InputStream
+import net.tisma.io.ByteInput
 
 /**
  * Klipper through Moonraker, from its public API documentation
@@ -75,7 +75,7 @@ class MoonrakerConnection(url: String, apiKey: String?, http: Http) : PrinterCon
         rest.post("/printer/print/cancel")
     }
 
-    override fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream) {
+    override fun upload(name: String, length: Long, start: Boolean, open: () -> ByteInput) {
         val parts = buildList {
             add(FormPart.text("root", "gcodes"))
             if (start) add(FormPart.text("print", "true"))
@@ -96,7 +96,7 @@ class MoonrakerConnection(url: String, apiKey: String?, http: Http) : PrinterCon
 
     /** Runs G-code through Moonraker's script endpoint; Klipper's refusal comes back as the error. */
     private fun gcode(script: String) {
-        rest.post("/printer/gcode/script?script=" + java.net.URLEncoder.encode(script, "UTF-8").replace("+", "%20"))
+        rest.post("/printer/gcode/script?script=" + net.tisma.cloud.percentEncode(script))
     }
 
     override fun camera(): Camera? {

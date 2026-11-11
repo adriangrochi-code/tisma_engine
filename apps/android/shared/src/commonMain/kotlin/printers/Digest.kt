@@ -1,7 +1,9 @@
 package net.tisma.printers
 
-import java.security.MessageDigest
-import java.security.SecureRandom
+import net.tisma.io.Md5
+import net.tisma.io.hex
+import net.tisma.io.secureRandomBytes
+import net.tisma.io.Lock
 
 /**
  * HTTP Digest access authentication, RFC 7616 (MD5, qop "auth"), as PrusaLink
@@ -14,11 +16,12 @@ class Digest(private val user: String, private val password: String) {
     private var opaque: String? = null
     private var qop: String? = null
     private var nc = 0
-    private val random = SecureRandom()
+    private val lock = Lock()
 
     /** Reads a `WWW-Authenticate: Digest …` challenge; false if it is not a Digest one. */
-    @Synchronized
-    fun learn(header: String): Boolean {
+    fun learn(header: String): Boolean = lock.locked { learnLocked(header) }
+
+    private fun learnLocked(header: String): Boolean {
         if (!header.trim().startsWith("Digest", ignoreCase = true)) return false
         val p = params(header.trim().substring(6))
         realm = p["realm"] ?: return false
@@ -30,8 +33,9 @@ class Digest(private val user: String, private val password: String) {
     }
 
     /** The `Authorization` header for a request, once a challenge is known. */
-    @Synchronized
-    fun authorization(method: String, uri: String): String? {
+    fun authorization(method: String, uri: String): String? = lock.locked { authorizationLocked(method, uri) }
+
+    private fun authorizationLocked(method: String, uri: String): String? {
         val r = realm ?: return null
         val n = nonce ?: return null
         val ha1 = md5("$user:$r:$password")
@@ -40,8 +44,8 @@ class Digest(private val user: String, private val password: String) {
             .append("\", nonce=\"").append(n).append("\", uri=\"").append(uri).append('"')
         if (qop != null) {
             nc++
-            val ncText = "%08x".format(nc)
-            val cnonce = ByteArray(8).also { random.nextBytes(it) }.joinToString("") { "%02x".format(it) }
+            val ncText = nc.toString(16).padStart(8, '0')
+            val cnonce = hex(secureRandomBytes(8))
             val response = md5("$ha1:$n:$ncText:$cnonce:$qop:$ha2")
             sb.append(", qop=").append(qop).append(", nc=").append(ncText).append(", cnonce=\"").append(cnonce)
                 .append("\", response=\"").append(response).append('"')
@@ -55,7 +59,7 @@ class Digest(private val user: String, private val password: String) {
 
     companion object {
         fun md5(s: String): String =
-            MessageDigest.getInstance("MD5").digest(s.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+            hex(Md5.digest(s.encodeToByteArray()))
 
         /** `key="value", key=value` pairs of an auth header. */
         fun params(text: String): Map<String, String> {

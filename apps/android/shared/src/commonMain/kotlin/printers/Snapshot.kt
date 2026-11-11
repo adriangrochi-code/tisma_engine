@@ -2,9 +2,9 @@ package net.tisma.printers
 
 import net.tisma.cloud.Http
 import net.tisma.cloud.HttpRequest
-import net.tisma.cloud.UrlConnectionHttp
+import net.tisma.cloud.PlatformHttp
 import net.tisma.cloud.readUpTo
-import java.io.IOException
+import net.tisma.io.IOException
 
 /**
  * One still image from a printer's camera (printer_connections.md, «Cámara de
@@ -14,7 +14,7 @@ import java.io.IOException
 object Snapshot {
     const val MAX_BYTES = 8 * 1024 * 1024
 
-    fun fetch(url: String, http: Http = UrlConnectionHttp): ByteArray {
+    fun fetch(url: String, http: Http = PlatformHttp): ByteArray {
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             throw PrinterException(PrinterException.Kind.UNEXPECTED, "Not an http address: $url")
         }

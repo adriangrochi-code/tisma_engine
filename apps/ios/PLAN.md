@@ -14,8 +14,9 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    modelos y errores de la nube (`Account`, `Plan`, `Job`, `CloudException`…; `:cloud` los toma de `shared`). El cliente
    de la nube también (11-11, paso 2).
 2. **Red**: sin biblioteca nueva (11-11): tipos HTTP propios en `shared` (`Http`, `HttpRequest`, `HttpResponse`,
-   flujos `ByteInput`/`ByteOutput`), enviados con HttpURLConnection en Android y con NSURLSession en iOS. Hecho para
-   Tisma Cloud; falta pasar los clientes de Moonraker, OctoPrint, PrusaLink y Duet. Las bajadas grandes en iOS (hasta
+   flujos `ByteInput`/`ByteOutput`), enviados con HttpURLConnection en Android y con NSURLSession en iOS. Hechos (11-11)
+   Tisma Cloud y los clientes de Moonraker, OctoPrint, PrusaLink y Duet (con MD5 propio para Digest). Bambu queda
+   en la JVM hasta su `expect`/`actual` de TLS. Las bajadas grandes en iOS (hasta
    1 GB) irán a un archivo con la tarea de descarga de NSURLSession, no a memoria.
    Bambu (MQTT con TLS, FTPS implícito, cámara del puerto 6000) necesita sockets TLS con el certificado propio de la
    impresora: `expect`/`actual` con Network.framework en iOS.

@@ -1,13 +1,14 @@
 package net.tisma.printers
 
+import kotlin.concurrent.Volatile
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.intOrNull
 import net.tisma.cloud.FormPart
 import net.tisma.cloud.Http
-import java.io.InputStream
-import java.net.URLEncoder
+import net.tisma.io.ByteInput
+import net.tisma.cloud.percentEncode
 
 /**
  * Duet (RepRapFirmware) over its HTTP requests (the RepRapFirmware wiki,
@@ -111,7 +112,7 @@ class DuetConnection(url: String, private val password: String, http: Http) : Pr
         gcode("M0")
     }
 
-    override fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream) {
+    override fun upload(name: String, length: Long, start: Boolean, open: () -> ByteInput) {
         val path = "0:/gcodes/" + name.substringAfterLast('/')
         val r = session {
             rest.uploadRaw("POST", "/rr_upload?name=" + q(path), FormPart("file", "application/octet-stream", name, length, open))
@@ -134,6 +135,6 @@ class DuetConnection(url: String, private val password: String, http: Http) : Pr
 
     private fun unexpected() = PrinterException(PrinterException.Kind.UNEXPECTED, "Unexpected answer of the Duet")
 
-    private fun q(s: String) = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+    private fun q(s: String) = percentEncode(s)
 
 }

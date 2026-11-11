@@ -1,5 +1,8 @@
 package net.tisma.io
 
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
+
 actual abstract class ByteInput actual constructor() : AutoCloseable {
     actual abstract fun read(): Int
     actual open fun read(b: ByteArray, off: Int, len: Int): Int {
@@ -23,3 +26,16 @@ actual abstract class ByteOutput actual constructor() : AutoCloseable {
 }
 
 actual open class IOException actual constructor(message: String?) : Exception(message)
+
+@OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+actual fun secureRandomBytes(n: Int): ByteArray = ByteArray(n).also { b ->
+    if (n > 0) b.usePinned { p -> platform.posix.arc4random_buf(p.addressOf(0), n.toULong()) }
+}
+
+actual class Lock actual constructor() {
+    private val lock = platform.Foundation.NSRecursiveLock()
+    actual fun <T> locked(block: () -> T): T {
+        lock.lock()
+        try { return block() } finally { lock.unlock() }
+    }
+}

@@ -1,5 +1,6 @@
 package net.tisma.printers
 
+import kotlin.concurrent.Volatile
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -10,10 +11,10 @@ import net.tisma.cloud.FormPart
 import net.tisma.cloud.Http
 import net.tisma.cloud.HttpRequest
 import net.tisma.cloud.HttpResponse
-import java.io.IOException
+import net.tisma.io.IOException
 
 /** JSON over HTTP to a printer's program on the local network. */
-internal class Rest(
+class Rest(
     baseUrl: String,
     private val headers: Map<String, String>,
     private val http: Http,
@@ -28,7 +29,7 @@ internal class Rest(
 
     fun post(path: String, body: JsonObject? = null): JsonElement {
         val h = if (body != null) all() + ("Content-Type" to "application/json") else all()
-        return call(HttpRequest("POST", base + path, h, body?.toString()?.toByteArray() ?: ByteArray(0), timeoutMs = 15_000))
+        return call(HttpRequest("POST", base + path, h, body?.toString()?.encodeToByteArray() ?: ByteArray(0), timeoutMs = 15_000))
     }
 
     fun put(path: String): JsonElement = call(HttpRequest("PUT", base + path, all(), ByteArray(0), timeoutMs = 15_000))
@@ -98,18 +99,40 @@ internal class Rest(
     }.getOrNull()?.ifBlank { null } ?: body.take(200).trim()
 }
 
-internal fun JsonElement?.obj(): JsonObject? = this as? JsonObject
-internal fun JsonObject.o(key: String): JsonObject? = this[key] as? JsonObject
-internal fun JsonObject.str(key: String): String = (this[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
-internal fun JsonObject.num(key: String): Double? =
+fun JsonElement?.obj(): JsonObject? = this as? JsonObject
+fun JsonObject.o(key: String): JsonObject? = this[key] as? JsonObject
+fun JsonObject.str(key: String): String = (this[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
+fun JsonObject.num(key: String): Double? =
     (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
-internal fun JsonObject.flag(key: String): Boolean = (this[key] as? JsonPrimitive)?.contentOrNull == "true"
+fun JsonObject.flag(key: String): Boolean = (this[key] as? JsonPrimitive)?.contentOrNull == "true"
 
-internal fun temperature(o: JsonObject?, actual: String = "actual", target: String = "target"): Temperature? {
+fun temperature(o: JsonObject?, actual: String = "actual", target: String = "target"): Temperature? {
     o ?: return null
     val a = o.num(actual) ?: return null
     return Temperature(a, o.num(target) ?: 0.0)
 }
 
 /** A number for G-code: no exponent, no trailing zeros. */
-internal fun num(v: Double): String = java.math.BigDecimal.valueOf(v).stripTrailingZeros().toPlainString()
+/**
+ * A number as G-code and the printers' APIs write it: plain decimal, no exponent, no trailing zeros, a point
+ * whatever the phone's language («0.1», «-12», «0.0001»).
+ */
+fun num(v: Double): String {
+    val t = v.toString()
+    val e = t.indexOfFirst { it == 'E' || it == 'e' }
+    val plain = if (e < 0) t else {
+        val exp = t.substring(e + 1).toInt()
+        val mantissa = t.substring(0, e)
+        val negative = mantissa.startsWith('-')
+        val digits = mantissa.removePrefix("-").replace(".", "")
+        val point = mantissa.removePrefix("-").indexOf('.').let { if (it < 0) mantissa.removePrefix("-").length else it } + exp
+        val body = when {
+            point <= 0 -> "0." + "0".repeat(-point) + digits
+            point >= digits.length -> digits + "0".repeat(point - digits.length)
+            else -> digits.substring(0, point) + "." + digits.substring(point)
+        }
+        (if (negative) "-" else "") + body
+    }
+    val trimmed = if ('.' in plain) plain.trimEnd('0').trimEnd('.') else plain
+    return if (trimmed == "-0") "0" else trimmed
+}

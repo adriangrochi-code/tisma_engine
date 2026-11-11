@@ -5,7 +5,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import net.tisma.cloud.FormPart
 import net.tisma.cloud.Http
-import java.io.InputStream
+import net.tisma.io.ByteInput
 
 /**
  * OctoPrint, from its REST API documentation (docs.octoprint.org: General
@@ -67,7 +67,7 @@ class OctoPrintConnection(url: String, apiKey: String, http: Http) : PrinterConn
         rest.post("/api/job", command("cancel"))
     }
 
-    override fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream) {
+    override fun upload(name: String, length: Long, start: Boolean, open: () -> ByteInput) {
         val parts = buildList {
             add(FormPart("file", "application/octet-stream", name, length, open))
             if (start) {

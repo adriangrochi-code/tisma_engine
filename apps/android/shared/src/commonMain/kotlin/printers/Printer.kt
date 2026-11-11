@@ -1,6 +1,6 @@
 package net.tisma.printers
 
-import java.io.InputStream
+import net.tisma.io.ByteInput
 
 /**
  * A printer on the network, as the app sees it (docs/MOBILE.md, «Qué hace»;
@@ -25,13 +25,13 @@ interface PrinterConnection {
     fun cancel()
 
     /** Uploads a G-code and, if [start], starts printing it. */
-    fun upload(name: String, length: Long, start: Boolean, open: () -> InputStream)
+    fun upload(name: String, length: Long, start: Boolean, open: () -> ByteInput)
 
     /**
      * The same with the print options a printer takes when it starts (gcode_macros.md, rule 12: Bambu Lab's
      * levelling, calibrations and timelapse). The others ignore them.
      */
-    fun upload(name: String, length: Long, start: Boolean, options: PrintOptions, open: () -> InputStream) =
+    fun upload(name: String, length: Long, start: Boolean, options: PrintOptions, open: () -> ByteInput) =
         upload(name, length, start, open)
 
     /** The camera's addresses, if the printer has one. */
@@ -119,7 +119,7 @@ data class Camera(
 )
 
 /** Images one after another from a printer's camera; [next] waits for the next JPEG. */
-interface CameraFrames : java.io.Closeable {
+interface CameraFrames : AutoCloseable {
     fun next(): ByteArray
 }
 
@@ -175,16 +175,6 @@ data class PrinterConfig(
         }
     }
 }
-
-/** Opens the connection of a saved printer, with its key or password (null when it needs none). */
-fun PrinterConfig.connect(secret: String?, http: net.tisma.cloud.Http = net.tisma.cloud.UrlConnectionHttp): PrinterConnection =
-    when (kind) {
-        PrinterKind.MOONRAKER -> MoonrakerConnection(url, secret, http)
-        PrinterKind.OCTOPRINT -> OctoPrintConnection(url, secret.orEmpty(), http)
-        PrinterKind.PRUSALINK -> PrusaLinkConnection(url, user.ifBlank { "maker" }, secret.orEmpty(), http)
-        PrinterKind.DUET -> DuetConnection(url, secret.orEmpty().ifEmpty { "reprap" }, http)
-        PrinterKind.BAMBU -> BambuConnection.of(url, secret.orEmpty(), certSha256.ifBlank { null })
-    }
 
 /**
  * What a Bambu Lab does before printing (gcode_macros.md, rule 12; printer_connections.md, «Bambu Lab en red

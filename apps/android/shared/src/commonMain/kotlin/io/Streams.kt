@@ -73,3 +73,8 @@ class BytesOutput : ByteOutput() {
     override fun flush() {}
     override fun close() {}
 }
+
+/** A lock for state that two threads may touch (a printer polled while the screen sends a command). */
+expect class Lock() {
+    fun <T> locked(block: () -> T): T
+}
