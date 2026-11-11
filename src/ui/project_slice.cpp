@@ -82,7 +82,7 @@ std::vector<PlateObject> project_objects(std::vector<ProjectModel>& models) {
         for (const ProjectRange& r : m.ranges)
             o.ranges.push_back({r.from, r.to, r.settings});
         for (const ProjectPart& part : m.parts)
-            o.parts.push_back({part.name, part.first, part.count, part.extruder});
+            o.parts.push_back({part.name, part.first, part.count, part.extruder, part.settings});
         // The conditions move with the mesh when it is baked; otherwise they
         // stay in the part's coordinates, as the mesh.
         o.engineering = std::move(m.engineering);
@@ -114,7 +114,8 @@ PlateSlice plate_slice(const std::vector<PlateObject>& objects, const std::vecto
         for (const PlatePart& run : runs) {
             out.objects.push_back({runs.size() > 1 ? o.name + " / " + run.name : o.name, first + run.first, run.count, i, 0,
                                    run.extruder != 0 ? run.extruder : o.extruder, o.wipe_into_infill, o.wipe_into_object,
-                                   o.settings});
+                                   run.settings.empty() ? o.settings : merged_own(o.settings, run.settings),
+                                   run.settings});
             for (const PlateRange& r : o.ranges)
                 out.objects.back().ranges.push_back({r.from, r.to, r.settings});
         }
@@ -137,8 +138,10 @@ PlateSlice plate_slice(const std::vector<PlateObject>& objects, const std::vecto
     // The objects go to the slicer when there are several, or when each may
     // print with its own extruder or a mixed colour.
     out.by_object = parts || out.objects.size() > 1 || settings.extruders > 1 || !out.volumes.empty() ||
-                    std::any_of(objects.begin(), objects.end(),
-                                [](const PlateObject& o) { return !o.settings.empty() || !o.ranges.empty(); });
+                    std::any_of(objects.begin(), objects.end(), [](const PlateObject& o) {
+                        return !o.settings.empty() || !o.ranges.empty() ||
+                               std::any_of(o.parts.begin(), o.parts.end(), [](const PlatePart& p) { return !p.settings.empty(); });
+                    });
     return out;
 }
 

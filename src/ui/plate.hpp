@@ -62,11 +62,13 @@ struct PlateRange {
 
 // A part of an object (model_tools.md, «Tipos de malla»; formats.md, rule 7):
 // a run of its mesh's triangles, printed with its own extruder (from 1, or a
-// blend's number; 0: the object's).
+// blend's number; 0: the object's) and its own settings over the object's
+// (model_tools.md, rule 18: MT24).
 struct PlatePart {
     std::string name;
     std::size_t first = 0, count = 0;
     int extruder = 0;
+    std::string settings{};
     friend bool operator==(const PlatePart&, const PlatePart&) = default;
 };
 
@@ -273,9 +275,9 @@ std::vector<std::string> own_keys(const std::string& own);
 // (walls, infill and surfaces, in that order, then any other), one per
 // modifier or negative volume, one per height range.
 struct ObjectRow {
-    enum class Kind { Settings, Volume, Range } kind = Kind::Settings;
+    enum class Kind { Settings, Volume, Range, Part } kind = Kind::Settings;
     std::string group{};   // Settings: its group
-    std::size_t index = 0; // Volume and Range: which one
+    std::size_t index = 0; // Volume, Range and Part: which one
     friend bool operator==(const ObjectRow&, const ObjectRow&) = default;
 };
 std::vector<ObjectRow> object_rows(const PlateObject& object);

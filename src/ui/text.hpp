@@ -1791,6 +1791,7 @@
     X(MirrorMenu, "Espejar", "Mirror") \
     X(SplitMenu, "Separar", "Split") \
     X(SplitObjectsMenu, "En piezas", "To objects") \
+    X(SplitPartsMenu, "En partes", "To parts") \
     X(AxisX, "En X", "Along X axis") \
     X(AxisY, "En Y", "Along Y axis") \
     X(AxisZ, "En Z", "Along Z axis") \
@@ -2581,6 +2582,11 @@
     X(GradientAddFilament, "Añadir filamento", "Add filament") \
     X(GradientSteps, "Sin subcapas, un degradé en X o Y cambia en escalones de una capa", "Without sublayers, a gradient in X or Y changes in steps of one layer") \
     X(ObjectParts, "Partes", "Parts") \
+    X(PartItem, "Parte: %s", "Part: %s") \
+    X(CutTwoObjects, "Dos objetos", "Two objects") \
+    X(CutTwoParts, "Un objeto con dos partes", "One object, two parts") \
+    X(CutPartBelow, "Abajo", "Lower") \
+    X(CutPartAbove, "Arriba", "Upper") \
     X(PartObjectsExtruder, "El del objeto", "The object's") \
     X(PalettePieceLoad, "Poner la pieza de muestras en la placa", "Put the sample card on the plate") \
     X(PalettePieceNames, "Nombre de cada muestra", "Each sample's name") \

@@ -13148,3 +13148,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **CI local** de 9793f19: gcc 1245/1245; clang falló solo en `ui_script_palette_piece` porque leyó el guion mientras
   lo editaba (no del código); se vuelve a correr entero.
 
+## 2026-11-11 — interfaz: ajustes por parte, corte en dos partes (MT24) y separar en partes (regla 19)
+
+- **Hecho:** cada parte tiene sus ajustes propios sobre los del objeto (el laminado recibe los dos unidos y los de la
+  parte aparte, `part_settings`); se editan en la lista de Objetos («Parte: …») y en la ventana de la pieza; el
+  proyecto los guarda en `parts[k].settings`. La herramienta Cortar ofrece «Dos objetos» o «Un objeto con dos
+  partes»: las mitades quedan juntas donde estaban, sin conectores ni dar vuelta. «Separar › En partes» deja los
+  pedazos como partes del mismo objeto, en su lugar; la pintura y los datos de Ingeniería quedan si los triángulos
+  no cambian de orden.
+- **Pruebas:** `[project]` (los ajustes de una parte de ida y vuelta y unidos al laminar, MT24), `cut_parts.txt`
+  (`cut 4 parts`). «Separar en partes» no tiene prueba propia todavía: falta un modelo de prueba con dos pedazos.
+- **Sigue:** abrir las partes de un 3MF (FM9, hace falta que la lectura dé los tramos: lo pido a la otra sesión),
+  el degradé entre dos puntos (MX31) cuando el motor suba `from`/`to`.
+

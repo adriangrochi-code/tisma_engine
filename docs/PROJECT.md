@@ -72,8 +72,9 @@ El JSON:
   guarda como está en la cama, con su giro y su escala aplicados: sus volúmenes se guardan donde quedan, y uno de
   una pieza girada se guarda con `turn`.
 - `models[i].parts` (solo si tiene) son sus partes (`formats.md`, regla 7): cada una con `name`, `first` y `count`
-  (sus triángulos en la malla, una parte detrás de otra, desde el 0 hasta el último) y `extruder` (solo si no es el de
-  la pieza: desde 1, o el número de una mezcla). Partes que no cubren toda la malla son un error al abrir.
+  (sus triángulos en la malla, una parte detrás de otra, desde el 0 hasta el último) `extruder` (solo si no es el de
+  la pieza: desde 1, o el número de una mezcla) y `settings` (solo si tiene: sus ajustes propios, sobre los de la
+  pieza). Partes que no cubren toda la malla son un error al abrir.
 - `models[i].ranges` (solo si tiene) son sus rangos de alturas: `from` y `to` en mm sobre la base de la pieza y
   `settings`, que pueden tener `layers.height` (regla 6).
 - `color_mixing` (solo si hay mezclas o colores de filamento) tiene las mezclas del proyecto en el formato de la ficha

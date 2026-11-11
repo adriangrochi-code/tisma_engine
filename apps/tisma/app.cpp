@@ -870,6 +870,7 @@ private:
     void use_mesh(TriangleMesh mesh, const std::filesystem::path& name, Tab tab);
     void add_model(const std::filesystem::path& path);
     void add_mesh(TriangleMesh mesh, const std::filesystem::path& name);
+    void split_into_parts();
     void rebuild_plate();
     void plate_changed();
     void arrange_plate();
@@ -1229,6 +1230,7 @@ private:
     // the bed, and whether the part below is turned over onto its cut face.
     double cut_height_ = 5.0;
     bool cut_flip_lower_ = false;
+    bool cut_parts_ = false; // the result: one object with two parts (rule 18: MT24), not two objects
     // The cut's connectors (model_tools.md, rule 18): 0 none, 1 a fixed dowel,
     // 2 a loose pin; round or square; size, depth and tolerance in mm; where
     // they go on the cut plane (x, y on the plate; none: the section's middle);
@@ -3882,7 +3884,8 @@ bool App::init(std::string& error) {
         for (const ObjectRow& r : object_rows(objects_.front()))
             if ((r.kind == ObjectRow::Kind::Settings && r.group == row) ||
                 (r.kind == ObjectRow::Kind::Volume && row == "volume" + std::to_string(r.index + 1)) ||
-                (r.kind == ObjectRow::Kind::Range && row == "range" + std::to_string(r.index + 1)))
+                (r.kind == ObjectRow::Kind::Range && row == "range" + std::to_string(r.index + 1)) ||
+                (r.kind == ObjectRow::Kind::Part && row == "part" + std::to_string(r.index + 1)))
                 list_row_ = r;
     }
     // The mixed colours' dialog open, with the project's first blend (for screenshots).
@@ -5096,7 +5099,7 @@ Project App::current_project() const {
         p.models.back().engineering = objects_[i].engineering;
         p.models.back().printable = objects_[i].printable;
         for (const PlatePart& part : objects_[i].parts)
-            p.models.back().parts.push_back({part.name, part.first, part.count, part.extruder});
+            p.models.back().parts.push_back({part.name, part.first, part.count, part.extruder, part.settings});
     }
     p.mixes = mixes_;
     p.filament_colors = filament_colors_;
@@ -11400,6 +11403,8 @@ void App::object_menu() {
     if (ImGui::BeginMenu(tr(T::SplitMenu))) {
         if (entry("split_objects", tr(T::SplitObjectsMenu)))
             split_selected();
+        else if (entry("split_parts", tr(T::SplitPartsMenu)))
+            split_into_parts();
         ImGui::EndMenu();
     }
     note_rect("split");
@@ -11581,6 +11586,14 @@ void App::object_settings_window() {
             if (removed)
                 break;
         }
+        // Its parts' own settings, over the object's (rule 18: MT24).
+        for (std::size_t k = 0; k < o.parts.size(); ++k) {
+            ImGui::PushID(int(k) + 4000);
+            const std::string head = format(tr(T::PartItem), o.parts[k].name.c_str());
+            if (ImGui::CollapsingHeader((head + "###part").c_str()))
+                changed |= own_settings_editor(o.parts[k].settings, o.settings, false, head);
+            ImGui::PopID();
+        }
         // Its height ranges (rule 6).
         for (std::size_t k = 0; k < o.ranges.size(); ++k) {
             ImGui::PushID(int(k) + 2000);
@@ -11691,6 +11704,8 @@ void App::objects_list() {
                         : row.group == "infill" ? tr(T::ObjectInfill)
                         : row.group == "surfaces" ? tr(T::ObjectSurfaces)
                                                   : row.group;
+            else if (row.kind == ObjectRow::Kind::Part)
+                label = format(tr(T::PartItem), o.parts[row.index].name.c_str());
             else if (row.kind == ObjectRow::Kind::Volume)
                 label = format(tr(o.volumes[row.index].kind == PlateVolume::Kind::Negative ? T::NegativeVolumeItem
                                                                                             : T::ModifierItem),
@@ -11725,6 +11740,9 @@ void App::objects_list() {
     bool removed = false;
     if (!list_row_ || list_row_->kind == ObjectRow::Kind::Settings)
         changed |= own_settings_editor(o.settings, {}, false, o.name);
+    else if (list_row_->kind == ObjectRow::Kind::Part)
+        changed |= own_settings_editor(o.parts[list_row_->index].settings, o.settings, false,
+                                       format(tr(T::PartItem), o.parts[list_row_->index].name.c_str()));
     else if (list_row_->kind == ObjectRow::Kind::Volume)
         changed |= volume_editor(o, list_row_->index, removed);
     else
@@ -12082,6 +12100,15 @@ void App::plate_tools() {
         const double lo = 0.0;
         ImGui::DragScalar("##cut_z", ImGuiDataType_Double, &cut_height_, 0.1f, &lo, &tall, field_text("##cut_z", "%.2f mm", cut_height_),
                           ImGuiSliderFlags_AlwaysClamp);
+        // The result (rule 18): two objects, or one with two parts that stay
+        // together, each with settings of its own; no connectors then.
+        int result = cut_parts_ ? 1 : 0;
+        ImGui::RadioButton(tr(T::CutTwoObjects), &result, 0);
+        ImGui::SameLine();
+        ImGui::RadioButton(tr(T::CutTwoParts), &result, 1);
+        note_rect("cut_two_parts");
+        cut_parts_ = result == 1;
+        ImGui::BeginDisabled(cut_parts_);
         ImGui::Checkbox(tr(T::CutFlipLower), &cut_flip_lower_);
         // Connectors (model_tools.md, rule 18): a click on the plane adds one,
         // a right click takes the nearest away; none placed, one in the middle.
@@ -12119,6 +12146,7 @@ void App::plate_tools() {
             if (!cut_points_.empty() && ImGui::SmallButton(tr(T::ResetSettings)))
                 cut_points_.clear();
         }
+        ImGui::EndDisabled();
         ImGui::BeginDisabled(!(cut_height_ > 0.0 && cut_height_ < tall));
         if (ImGui::Button(tr(T::CutButton), ImVec2(120.0f * scale_, 0)))
             cut = true;
@@ -12244,6 +12272,33 @@ void App::split_selected() {
     arrange_plate();
 }
 
+// The loose pieces as parts of the same object (model_tools.md, rule 19):
+// each where it was. The paint and the Engineering data stay when the
+// triangles keep their order.
+void App::split_into_parts() {
+    PlateObject& o = objects_[std::size_t(selected_)];
+    std::vector<TriangleMesh> pieces = split_mesh(o.mesh);
+    if (pieces.size() < 2) {
+        notify(tr(T::SplitOnePiece));
+        return;
+    }
+    TriangleMesh whole;
+    std::vector<PlatePart> parts;
+    for (std::size_t k = 0; k < pieces.size(); ++k) {
+        parts.push_back({std::to_string(k + 1), whole.triangle_count(), pieces[k].triangle_count(), 0, {}});
+        for (std::size_t t = 0; t < pieces[k].triangle_count(); ++t)
+            whole.add_triangle(pieces[k].corner(t, 0), pieces[k].corner(t, 1), pieces[k].corner(t, 2));
+    }
+    if (whole.corners() != o.mesh.corners()) {
+        o.painting = {};
+        o.engineering = {};
+    }
+    o.mesh = std::move(whole);
+    o.parts = std::move(parts);
+    tool_ = PlateTool::Select;
+    plate_changed();
+}
+
 void App::mirror_selected(int axis) {
     PlateObject& o = objects_[std::size_t(selected_)];
     const BoundingBox from = o.mesh.bounding_box();
@@ -12283,6 +12338,30 @@ void App::cut_selected() {
     CutResult halves = cut_mesh(placed_mesh(o), cut_height_);
     if (halves.below.empty() || halves.above.empty())
         return;
+    // One object with two parts (rule 18: MT24): where they were, together,
+    // each part able to take settings of its own; no connectors.
+    if (cut_parts_) {
+        const std::size_t below_count = halves.below.triangle_count();
+        TriangleMesh whole = std::move(halves.below);
+        for (std::size_t t = 0; t < halves.above.triangle_count(); ++t)
+            whole.add_triangle(halves.above.corner(t, 0), halves.above.corner(t, 1), halves.above.corner(t, 2));
+        PlateObject joined{o.name, std::move(whole), {}, {}};
+        joined.parts = {{tr(T::CutPartBelow), 0, below_count, 0, {}},
+                        {tr(T::CutPartAbove), below_count, halves.above.triangle_count(), 0, {}}};
+        joined.extruder = o.extruder;
+        joined.wipe_into_infill = o.wipe_into_infill, joined.wipe_into_object = o.wipe_into_object;
+        joined.settings = o.settings;
+        joined.ranges = o.ranges;
+        joined.printable = o.printable;
+        const BoundingBox box = joined.mesh.bounding_box();
+        joined.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
+        joined.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
+        objects_[index] = std::move(joined);
+        cut_points_.clear();
+        tool_ = PlateTool::Select;
+        plate_changed();
+        return;
+    }
     // The connectors (model_tools.md, rule 18): a fixed dowel added to one
     // half and a hole in the other; a pin, a hole in both and the pin apart.
     // Each hole is a negative volume its tolerance wider all round and deeper.
@@ -25574,7 +25653,7 @@ void App::script_input() {
         if (!apart)
             return fail_step("they overlap");
         next();
-    } else if (step.verb == "cut") { // the last model cut at a height, with connectors: "HEIGHT [none|dowel|pin SIZE DEPTH TOL [invert]]"
+    } else if (step.verb == "cut") { // the last model cut at a height, with connectors or as parts: "HEIGHT [none|dowel|pin|parts SIZE DEPTH TOL [invert]]"
         double height = 0.0, size = 4.0, depth = 3.0, tol = 0.1;
         char kind[16] = "none", invert[16] = "";
         std::sscanf((step.key + " " + step.value).c_str(), "%lf %15s %lf %lf %lf %15s", &height, kind, &size, &depth, &tol, invert);
@@ -25585,6 +25664,7 @@ void App::script_input() {
         cut_connector_ = std::string(kind) == "dowel" ? 1 : std::string(kind) == "pin" ? 2 : 0;
         cut_size_ = size, cut_depth_ = depth, cut_tolerance_ = tol;
         cut_invert_ = std::string(invert) == "invert";
+        cut_parts_ = std::string(kind) == "parts";
         cut_selected();
         next();
     } else if (step.verb == "part-extruder") { // part K of model I prints with E (0: the model's): "I K E"

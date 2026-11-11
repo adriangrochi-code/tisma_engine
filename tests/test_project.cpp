@@ -246,6 +246,21 @@ TEST_CASE("a project keeps a model's parts, each with its extruder, and slices t
     CHECK(plate.objects[1].object == 0);
     CHECK(plate.objects[2].first == 4);
     CHECK(plate.objects[2].object == 1);
+    // MT24: a part's own infill is its alone, over the object's settings.
+    Project own = p;
+    own.models.front().settings = R"({"walls":{"count":3}})";
+    own.models.front().parts[1].settings = R"({"infill":{"density":60}})";
+    const Project own_back = read_project(write_project(own));
+    CHECK(own_back.models.front().parts[1].settings == own.models.front().parts[1].settings);
+    CHECK(own_back.models.front().parts[0].settings.empty());
+    std::vector<ProjectModel> own_models = own_back.models;
+    const std::vector<ui::PlateObject> own_objects = ui::project_objects(own_models);
+    const ui::PlateSlice own_plate = ui::plate_slice(own_objects, placed, Settings{});
+    REQUIRE(own_plate.objects.size() == 3);
+    CHECK(own_plate.objects[0].settings == own.models.front().settings);
+    CHECK(own_plate.objects[1].settings == R"({"infill":{"density":60},"walls":{"count":3}})");
+    CHECK(own_plate.objects[1].part_settings == own.models.front().parts[1].settings);
+    CHECK(own_plate.objects[0].part_settings.empty());
 }
 
 TEST_CASE("a project as a 3MF package: any reader sees the plate, the engine reads it all back (formats.md, rule 11)",

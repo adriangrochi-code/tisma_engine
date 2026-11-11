@@ -55,6 +55,7 @@ struct ProjectPart {
     std::string name;
     std::size_t first = 0, count = 0;
     int extruder = 0;
+    std::string settings{}; // its own, over the model's
 };
 
 struct ProjectModel {

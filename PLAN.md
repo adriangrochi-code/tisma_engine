@@ -760,6 +760,8 @@ cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y 
 - [x] Partes de un objeto (cada una con su extrusor, en el proyecto y en el laminado), la pieza de muestras
   `palette_piece` (CM8) en la placa con sus mezclas y el nombre de cada muestra, y la vista previa de colores antes de
   laminar: cada parte con el color de su filamento o mezcla y la pintura de color encima (regla 17) (2026-11-11)
+- [x] Ajustes propios de cada parte, en la lista de Objetos y en la ventana de la pieza; cortar en «un objeto con dos
+  partes» (MT24) y «Separar › En partes» (regla 19) (2026-11-11)
 - [ ] Mezclas, cuando el motor lo suba: selector `mixing.predictor` con las TD a `match_color` y a la vista previa
   (reglas 20 y 21); pestaña «Color buscado» (regla 4); paleta rápida con `quick_palette` y `color_name` (regla 22) y
   la pieza de muestras `palette_piece` (CM8) cargada en la placa con sus mezclas y la lista de nombres

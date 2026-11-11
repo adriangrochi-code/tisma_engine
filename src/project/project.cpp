@@ -128,6 +128,8 @@ static ordered_json project_json(const Project& project, bool offsets) {
             ordered_json item = {{"name", part.name}, {"first", part.first}, {"count", part.count}};
             if (part.extruder != 0)
                 item["extruder"] = part.extruder;
+            if (!part.settings.empty())
+                item["settings"] = ordered_json::parse(part.settings);
             models.back()["parts"].push_back(std::move(item));
         }
         for (const ProjectRange& r : m.ranges) {
@@ -398,6 +400,11 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
                             r.at("extruder").get<int>() > 255)
                             fail(at + ".extruder: must be from 0 to 255");
                         part.extruder = r.at("extruder").get<int>();
+                    }
+                    if (r.contains("settings")) {
+                        if (!r.at("settings").is_object())
+                            fail(at + ".settings: must be an object of groups");
+                        part.settings = r.at("settings").dump();
                     }
                     model.parts.push_back(std::move(part));
                 }
