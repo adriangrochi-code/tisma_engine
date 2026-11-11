@@ -13375,3 +13375,17 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Pruebas:** `design_tool_search.txt` (CD29: «redo» muestra Redondeo y no Chaflán; Enter la empieza y pide las
   aristas); pasan las 32 de Diseño.
 
+## 2026-11-11 — interfaz: el menú radial de Diseño (cad_design.md, regla 11 septies; CD28) y un arreglo del componente
+
+- **Hecho:** clic derecho en la vista de Diseño abre un menú en anillo alrededor del clic: Repetir (la última
+  herramienta usada, con su nombre), Boceto, Extruir («Próximamente» hasta los cuadros flotantes), Redondeo,
+  Mover/Copiar, Medir («Próximamente») y Borrar (el último paso: todavía no hay selección de cuerpos en Diseño); debajo,
+  el último paso con Suprimir y Renombrar.
+- **Arreglado:** la carpeta donde la sesión de SolidCraft puede escribir se nombraba con `std::rand()` sin semilla:
+  todas las ejecuciones probaban los mismos nombres, y después de 100 carpetas sobrantes en el temporal la sesión
+  arrancaba sin carpeta permitida y toda construcción fallaba (lo encontraron las pruebas). Ahora va con el número
+  del proceso y la hora, y se borra al salir. Quedaron 100 carpetas viejas vacías en el `/tmp` de esta sesión (no se
+  pudieron borrar desde acá).
+- **Pruebas:** `design_radial.txt` (CD28: los siete del anillo y lo del último paso; Repetir hace otra caja, Borrar
+  la saca); pasan las 39 de Diseño.
+

@@ -621,6 +621,10 @@ private:
     std::size_t design_rollback_ = SIZE_MAX;
     int timeline_menu_ = -1;
     bool tool_search_open_ = false; // the tool search (rule 11 octies, CD29)
+    // The right button's radial menu in Design (rule 11 septies, CD28): open
+    // at this place; the last tool chosen, for Repeat.
+    std::optional<ImVec2> design_radial_;
+    std::string last_design_tool_;
     char tool_search_[64] = "";
     float view_top_inset_ = 0.0f;  // what the toolbar takes from the view's top, this frame
     void design_command_line();
@@ -11140,6 +11144,10 @@ void App::viewport() {
     // A right click, not a drag: on a model, its menu (settings_levels.md,
     // rule 10); on the plate, add a model or a shape, or arrange them (own
     // design, the owner's request).
+    // In Design, the radial menu (cad_design.md, rule 11 septies).
+    if (tab_ == Tab::Design && ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
+        io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f && !sketch_edit_)
+        design_radial_ = io.MousePos;
     if (tab_ == Tab::Prepare && !calibration_ && !viewer_ && ImGui::IsItemHovered() &&
         !(tool_ == PlateTool::Cut && cut_connector_ != 0) &&
         ImGui::IsMouseReleased(ImGuiMouseButton_Right) && io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < 9.0f) {
@@ -15579,7 +15587,7 @@ void App::design_toolbar() {
             tool_tip(tool);
             ImGui::PopID();
             if (hit && tool.ready)
-                chosen = tool.act;
+                chosen = tool.act, last_design_tool_ = tool.id;
         }
         // Its name and the arrow with all of them.
         const std::string head = std::string(tr(group.name)) + "##" + group.id;
@@ -15616,7 +15624,7 @@ void App::design_toolbar() {
                                                         dim, tr(T::ComingSoon));
                 ImGui::PopID();
                 if (hit && tool.ready) {
-                    chosen = tool.act;
+                    chosen = tool.act, last_design_tool_ = tool.id;
                     ImGui::CloseCurrentPopup();
                 }
             }
@@ -15676,18 +15684,113 @@ void App::design_toolbar() {
                                                         tool.ready ? ink : dim, tool.label.c_str());
                     ImGui::PopID();
                     if (hit && tool.ready) {
-                        chosen = tool.act;
+                        chosen = tool.act, last_design_tool_ = tool.id;
                         ImGui::CloseCurrentPopup();
                     }
                 }
         if (shown == 0)
             loc::TextDisabled("%s", tr(T::DesignSearchNothing));
         if (enter && first) {
-            chosen = first->act;
+            chosen = first->act, last_design_tool_ = first->id;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
+    // The radial menu: the most used tools round the click, the last one
+    // first as Repeat; under it, what can be done with the last step.
+    if (design_radial_) {
+        ImGui::OpenPopup("##design_radial");
+        const float r = 96.0f * scale_, room = r + 44.0f * scale_;
+        ImGui::SetNextWindowPos(ImVec2(design_radial_->x - room, design_radial_->y - room));
+        ImGui::SetNextWindowSize(ImVec2(2.0f * room, 0.0f));
+        design_radial_.reset();
+    }
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, rgb(theme_.panel, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border, rgb(theme_.panel, 0.0f));
+    if (ImGui::BeginPopup("##design_radial", ImGuiWindowFlags_NoMove)) {
+        const auto find = [&](const std::string& id) -> const Tool* {
+            for (const auto& [tab, tab_groups] : tabs)
+                for (const Group& grp : tab_groups)
+                    for (const Tool& tool : grp.tools)
+                        if (tool.id == id)
+                            return &tool;
+            return nullptr;
+        };
+        const Tool* repeat = last_design_tool_.empty() ? nullptr : find(last_design_tool_);
+        Tool remove{"design_radial_delete", "split", tr(T::DesignTimelineDelete), tr(T::DesignTipDeleteLast), "Supr",
+                    !design_.features.empty(), false, [this] {
+                        if (!design_.features.empty()) {
+                            design_.features.pop_back();
+                            rebuild_design();
+                        }
+                    }};
+        Tool again{"design_radial_repeat", repeat ? repeat->icon : "search",
+                   repeat ? format(tr(T::DesignRepeat), repeat->label.c_str()) : std::string(tr(T::DesignRepeatNone)),
+                   tr(T::DesignTipRepeat), "", repeat && repeat->ready, false, repeat ? repeat->act : std::function<void()>{}};
+        Tool extrude = soon("design_radial_extrude", "press_pull", T::SketchExtrude);
+        std::vector<const Tool*> ring{&again, find("design_sketch"), &extrude, find("design_op_fillet"), find("design_op_move"),
+                                      find("design_measure_tool"), &remove};
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        const float r = 96.0f * scale_, button = 44.0f * scale_, room = r + 44.0f * scale_;
+        const ImVec2 centre(ImGui::GetWindowPos().x + room, ImGui::GetWindowPos().y + room);
+        // Over everything: the ring is wider than the window's own clip.
+        ImDrawList* rd = ImGui::GetForegroundDrawList();
+        rd->AddCircleFilled(centre, r + button * 0.7f, ImGui::GetColorU32(rgb(theme_.panel, 0.92f)), 48);
+        rd->AddCircle(centre, 8.0f * scale_, ImGui::GetColorU32(rgb(theme_.text_dim)), 16, 1.5f);
+        for (std::size_t k = 0; k < ring.size(); ++k) {
+            const Tool* tool = ring[k];
+            if (!tool)
+                continue;
+            const float ang = -1.5708f + float(k) * 6.28318f / float(ring.size());
+            const ImVec2 at(centre.x + r * std::cos(ang) - button * 0.5f, centre.y + r * std::sin(ang) - button * 0.5f);
+            ImGui::SetCursorScreenPos(at);
+            ImGui::PushID(tool->id.c_str());
+            ImGui::BeginDisabled(!tool->ready);
+            const bool hit = ImGui::InvisibleButton("##radial", ImVec2(button, button));
+            ImGui::EndDisabled();
+            note_rect(tool->id == "design_radial_repeat" || tool->id == "design_radial_delete" || tool->id == "design_radial_extrude"
+                          ? tool->id
+                          : "design_radial_" + tool->id.substr(std::min<std::size_t>(7, tool->id.size())));
+            const bool hover = ImGui::IsItemHovered();
+            rd->AddCircleFilled(ImVec2(at.x + button * 0.5f, at.y + button * 0.5f), button * 0.5f,
+                                ImGui::GetColorU32(hover && tool->ready ? rgb(theme_.accent, 0.6f) : rgb(theme_.panel)), 24);
+            cad_icon(rd, tool->icon, ImVec2(at.x + button * 0.2f, at.y + button * 0.2f), button * 0.6f, tool->ready ? ink : dim);
+            tool_tip(*tool);
+            ImGui::PopID();
+            if (hit && tool->ready) {
+                chosen = tool->act;
+                if (tool->id != "design_radial_repeat" && tool->id != "design_radial_delete")
+                    last_design_tool_ = tool->id;
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        // The last step's own entries, under the ring.
+        ImGui::SetCursorScreenPos(ImVec2(origin.x, centre.y + r + button * 0.8f));
+        if (!design_.features.empty()) {
+            const std::size_t last = design_.features.size() - 1;
+            cad::Feature& f = design_.features[last];
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, rgb(theme_.panel));
+            ImGui::BeginChild("##radial_context", ImVec2(0, 0), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Borders);
+            loc::TextDisabled("%s", f.name.c_str());
+            if (ImGui::Selectable(tr(f.suppressed ? T::DesignTimelineUnsuppress : T::DesignTimelineSuppress))) {
+                f.suppressed = !f.suppressed;
+                chosen = [this] { rebuild_design(); };
+                ImGui::CloseCurrentPopup();
+            }
+            note_rect("design_radial_suppress");
+            if (ImGui::Selectable(tr(T::DesignTimelineRename))) {
+                design_rename_ = int(last);
+                design_rename_focus_ = true;
+                design_scroll_to_ = std::to_string(last + 1);
+                std::snprintf(design_rename_buf_, sizeof design_rename_buf_, "%s", f.name.c_str());
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndChild();
+            ImGui::PopStyleColor();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleColor(2);
     view_top_inset_ = ImGui::GetWindowSize().y;
     g_menu_rects["design_toolbar"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
                                             ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
