@@ -12302,3 +12302,8 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 | Giro de pantalla y muerte del proceso a mitad de laminar/subir | Pendiente | |
 | Sin red ↔ con red (nube, impresoras, Compartida) | Revisado 10-11 | Seguir un trabajo se cortaba para siempre (`CloudOfflineTest`); una Bambu con el Wi-Fi perdido sin cierre mostraba su último estado para siempre (`BambuTest`); Compartida: lista nueva con firma vieja guardada si se cortaba la red entre las dos (8f4b478, `BlockListTest`) |
 | Textos: plurales, castellano/inglés | Revisado 10-11 | Plurales (ba8b30a); mensajes propios del motor en inglés en Mi biblioteca, paquete, CAD, piezas, calibraciones y placa (`AppMessageTest`) |
+- Suscripciones por tienda (`cloud.md` 5b y 5c, spec/next 99b7ee2): «Administrar la suscripción» abre la página de
+  Google Play (8471567); los planes traen `store_products`, «Suscribirme» compra con la tienda del teléfono y manda la
+  prueba a `POST /v1/me/purchases`; al entrar se restauran las compras; se lee `subscription` de `GET /v1/me`
+  (`PurchaseTest` CC21/CC22, `StoreBillingTest`). La tienda va detrás de `StoreBilling`: sin implementación hasta
+  que el dueño decida la licencia de la biblioteca de Google Play Billing (no es permisiva). No probado con Play real.
