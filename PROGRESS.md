@@ -12752,8 +12752,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   caminos en los bordes (a medio paso) y `paint_colors` les pone la marca antes de `apply_mixes` (una mezcla pintada se
   lamina como mezcla; una marca que no es filamento ni mezcla deja el de la pieza). En la placa, en secuencial y sin
   objetos. Prueba `[paint]`: cubo con la cara +X pintada con 2: las paredes de ese lado con 2, las del otro con 1;
-  pintada con una mezcla 1:1, ese lado con los dos; marca 9 sin filamento: el de la pieza; G-code verificado. Diseño
-  propio de la profundidad, a confirmar con la sesión de spec. Falta: paredes propias en el borde entre colores (hoy
+  pintada con una mezcla 1:1, ese lado con los dos; marca 9 sin filamento: el de la pieza; G-code verificado. Aceptado
+  por la sesión de spec (`multi_extruder.md` regla 18, ME16, ME17), con dos agregados ya hechos: una pared de dos
+  anchos o menos lleva el color de su lado pintado en todo el espesor (pintada de dos colores, mitad y mitad), y los
+  techos y pisos pintados colorean las capas de abajo y de arriba hasta `max_region_width` (con 0, las capas sólidas de
+  arriba o de abajo). Pruebas ME16 (0: la cuña más cerca de +X; 3 mm: una franja), ME17 (0,8 mm de un lado y de dos) y
+  techo. Falta: paredes propias en el borde entre colores (hoy
   los caminos se cortan; MX14 `extra_walls` en zonas pintadas), `painting.interlocking_depth`, la tabla casilla→número
   de MX33 en el proyecto.
 - **Formatos FM9, partes de un 3MF para la interfaz** (2026-11-11, pedido de la sesión de interfaz).
