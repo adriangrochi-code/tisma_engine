@@ -163,33 +163,42 @@ class GcodeLayers private constructor(val layers: List<Layer>, val types: List<S
                 }
                 return
             }
-            // Words may be separated by tabs as well as spaces.
-            val code = t.substringBefore(';').replace('\t', ' ').trim()
-            val word = code.substringBefore(' ').uppercase()
+            val (word, a) = words(t.substringBefore(';'))
             when (word) {
                 "G90" -> absolute = true
                 "G91" -> absolute = false
                 "M82" -> absoluteE = true
                 "M83" -> absoluteE = false
-                "G92" -> args(code)['E']?.let { e = it }
-                "G0", "G1", "G00", "G01" -> move(args(code))
-                "G2", "G3", "G02", "G03" -> arc(args(code), clockwise = word == "G2" || word == "G02")
+                "G92" -> a['E']?.let { e = it }
+                "G0", "G1", "G00", "G01" -> move(a)
+                "G2", "G3", "G02", "G03" -> arc(a, clockwise = word == "G2" || word == "G02")
             }
         }
 
-        fun args(code: String): Map<Char, Double> {
+        /**
+         * The command (`G1`) and its arguments. Words are a letter and a number, with or without spaces between
+         * them (`G1X10Y5E.4` is the same as `G1 X10 Y5 E.4`); a line number (`N12`) and a checksum (`*71`) are
+         * skipped.
+         */
+        fun words(code: String): Pair<String, Map<Char, Double>> {
             val out = HashMap<Char, Double>(6)
-            var i = code.indexOf(' ')
-            while (i in 0 until code.length) {
-                while (i < code.length && code[i] == ' ') i++
-                if (i >= code.length) break
-                val letter = code[i].uppercaseChar()
+            var command = ""
+            var i = 0
+            while (i < code.length) {
+                val c = code[i]
+                if (c == '*') break
+                if (!c.isLetter()) { i++; continue }
                 var j = i + 1
-                while (j < code.length && code[j] != ' ') j++
-                code.substring(i + 1, j).toDoubleOrNull()?.let { out[letter] = it }
+                while (j < code.length && (code[j] == ' ' || code[j] == '\t') && j + 1 < code.length && !code[j + 1].isLetter()) j++
+                val start = j
+                while (j < code.length && (code[j].isDigit() || code[j] == '.' || code[j] == '-' || code[j] == '+')) j++
+                val letter = c.uppercaseChar()
+                val number = code.substring(start, j)
+                if (command.isEmpty() && (letter == 'G' || letter == 'M' || letter == 'T')) command = letter + number
+                else if (letter != 'N') number.toDoubleOrNull()?.let { out[letter] = it }
                 i = j
             }
-            return out
+            return command to out
         }
 
         /** How much the move extrudes, and updates E. */

@@ -168,4 +168,28 @@ class GcodeLayersTest {
         assertEquals(12 * (g.layers[upTo].count + g.layers[upTo - 1].count), capped.size)
         assertEquals(12 * g.layers[upTo].count, g.lines3d(upTo, maxSegments = 1) { _, _ -> 0 }.size)
     }
+
+    @Test
+    fun `compact words, line numbers and checksums are read like spaced ones`() {
+        val spaced = read("""
+            M83
+            G1 Z0.2
+            G1 X10 Y0 E0.4 F1200
+            G1 X10 Y10 E-.4
+            G1 X10 Y10 E.4
+            G1 X0 Y10 E0.4
+        """)
+        val compact = read("""
+            m83
+            G1Z0.2
+            N3 G1X10Y0E0.4F1200*71
+            G1 X10 Y10 E-.4
+            G1X10Y10E.4
+            g1 x0 y10 e0.4 ; a comment X99
+        """)
+        assertEquals(1, compact.layers.size)
+        assertEquals(spaced.layers[0].count, compact.layers[0].count)
+        assertEquals(spaced.layers[0].segments.toList(), compact.layers[0].segments.toList())
+        assertEquals(20f, compact.layers[0].speeds[0])
+    }
 }
