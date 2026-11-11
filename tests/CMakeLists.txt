@@ -555,7 +555,7 @@ if(TISMA_BUILD_UI AND NOT WIN32)
               --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_script_object_menu_actions.png)
     set_tests_properties(ui_script_object_menu_actions PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300)
     # The 3D view's navigation (interface.md, «Navegación de la vista 3D»: UI17, UI18).
-    foreach(script navigation view_cube mix_changes mix_settings mix_match cut_connectors cut_pin mix_numbers)
+    foreach(script navigation view_cube mix_changes mix_settings mix_match cut_connectors cut_pin mix_numbers mix_gradient)
       add_test(NAME ui_script_${script}
         COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
                 ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760

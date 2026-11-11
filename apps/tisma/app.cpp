@@ -12460,6 +12460,14 @@ static MixChangeOptions mix_change_options(const Settings& s) {
     return options;
 }
 
+// A part's options: a gradient in X or Y counts its bands over the part's
+// size along that axis (color_mixing_plus.md, rule 3).
+static MixChangeOptions mix_part_options(MixChangeOptions options, const ColorMix& mix, const BoundingBox& box) {
+    if (mix.gradient && (mix.axis == 'x' || mix.axis == 'y'))
+        options.extent = double(mix.axis == 'x' ? box.max.x - box.min.x : box.max.y - box.min.y);
+    return options;
+}
+
 std::vector<double> App::filament_transmission() const {
     if (settings_.mix_predictor != "spectral")
         return {};
@@ -12471,11 +12479,28 @@ std::vector<double> App::filament_transmission() const {
     return td;
 }
 
+// A gradient's filaments at `at` (0 to 1) of its range, each with its share
+// of the cycle the slicing prints there.
+static std::vector<ColorMix::Component> gradient_shares(const ColorMix& m, double at) {
+    const std::vector<int> cycle = gradient_cycle(m, at);
+    std::vector<ColorMix::Component> out;
+    for (const int f : cycle) {
+        auto it = std::find_if(out.begin(), out.end(), [&](const ColorMix::Component& c) { return c.extruder == f; });
+        if (it == out.end())
+            out.push_back({f, 0.0}), it = out.end() - 1;
+        it->share += 1.0 / double(cycle.size());
+    }
+    return out;
+}
+
 std::string App::blend_color(const ColorMix& m) const {
     std::vector<std::string> colors;
     std::vector<double> shares, td;
     const std::vector<double> all = filament_transmission();
-    for (const ColorMix::Component& c : m.components) {
+    std::vector<ColorMix::Component> parts = m.components;
+    if (m.gradient) // its colour in the middle (color_mixing_plus.md, rule 17)
+        parts = gradient_shares(m, 0.5);
+    for (const ColorMix::Component& c : parts) {
         colors.push_back(filament_color(c.extruder));
         shares.push_back(c.share);
         if (!all.empty())
@@ -12566,7 +12591,7 @@ App::MixCost App::mix_cost() const {
         const BoundingBox box = placed_meshes_[i].bounding_box();
         if (box.empty)
             continue;
-        const int changes = mix_changes_estimate(*mix, double(box.max.z), options);
+        const int changes = mix_changes_estimate(*mix, double(box.max.z), mix_part_options(options, *mix, box));
         cost.changes += changes;
         // A change's purge: the mean over the blend's pairs of filaments.
         double purge = 0.0;
@@ -12680,7 +12705,7 @@ int App::mix_changes_planned() const {
             continue;
         const BoundingBox box = placed_meshes_[i].bounding_box();
         if (!box.empty)
-            changes += mix_changes_estimate(*mix, double(box.max.z), options);
+            changes += mix_changes_estimate(*mix, double(box.max.z), mix_part_options(options, *mix, box));
     }
     return changes;
 }
@@ -12733,9 +12758,17 @@ void App::mixing_dialog() {
         ImGui::ColorButton("##color", color_of(m.color), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f * scale_, 18.0f * scale_));
         ImGui::SameLine();
         std::string shares;
-        for (const ColorMix::Component& c : m.components)
-            shares += (shares.empty() ? "" : ", ") + std::to_string(c.extruder) + " - " +
-                      std::to_string(int(std::lround(c.share * 100.0))) + " %";
+        if (m.gradient) { // its filaments from one end to the other
+            std::vector<ColorMix::Component> ends = m.components;
+            std::stable_sort(ends.begin(), ends.end(), [](const auto& a, const auto& b) { return a.share < b.share; });
+            shares = std::string(tr(T::GradientBlend)) + " " + char(std::toupper(static_cast<unsigned char>(m.axis))) + ":";
+            for (std::size_t c = 0; c < ends.size(); ++c)
+                shares += (c ? " - " : " ") + std::to_string(ends[c].extruder);
+        } else {
+            for (const ColorMix::Component& c : m.components)
+                shares += (shares.empty() ? "" : ", ") + std::to_string(c.extruder) + " - " +
+                          std::to_string(int(std::lround(c.share * 100.0))) + " %";
+        }
         // Its name, when it has one (color_mixing_plus.md, rule 6).
         const std::string title = format(tr(T::VirtualExtruder), m.id) + (m.name.empty() ? "" : " · " + m.name);
         if (ImGui::Selectable((title + "\n" + shares + "##mix").c_str(), mix_edit_ == int(k), 0,
@@ -12895,43 +12928,102 @@ void App::mixing_dialog() {
                 ImGui::EndCombo();
             }
         };
-        if (m.components.size() >= 2) {
-            pick("##a", m.components[0].extruder);
-            ImGui::SameLine();
-            int share = int(std::lround(m.components[1].share * 100.0));
-            ImGui::SetNextItemWidth(200.0f * scale_);
-            if (ImGui::SliderInt("##share", &share, 0, 100, "%d %%")) {
-                const double rest = 1.0 - share / 100.0, others = m.components[0].share + (m.components.size() > 2 ? m.components[2].share : 0.0);
-                m.components[1].share = share / 100.0;
-                for (std::size_t c : {std::size_t(0), std::size_t(2)})
-                    if (c < m.components.size())
-                        m.components[c].share = others > 0.0 ? rest * m.components[c].share / others
-                                                              : rest / double(m.components.size() - 1);
-                edited = true;
-            }
-            ImGui::SameLine();
-            pick("##b", m.components[1].extruder);
-            loc::Text("%d %% / %d %%", int(std::lround(m.components[0].share * 100.0)),
-                        int(std::lround(m.components[1].share * 100.0)));
-        }
-        bool third = m.components.size() > 2;
-        ImGui::BeginDisabled(filaments < 3);
-        if (ImGui::Checkbox(tr(T::AddThirdExtruder), &third)) {
-            if (third) {
-                for (ColorMix::Component& c : m.components)
-                    c.share *= 2.0 / 3.0;
-                m.components.push_back({3, 1.0 / 3.0});
-            } else if (m.components.size() > 2) {
-                const double gone = m.components[2].share;
-                m.components.pop_back();
-                for (ColorMix::Component& c : m.components)
-                    c.share += gone / 2.0;
-            }
+        // A gradient (color_mixing_plus.md, rule 3): 2 to 4 filaments, each at
+        // its place along X, Y or Z of the part.
+        bool gradient = m.gradient;
+        if (ImGui::Checkbox(tr(T::GradientBlend), &gradient)) {
+            m.gradient = gradient;
+            const std::size_t n = m.components.size();
+            for (std::size_t c = 0; c < n; ++c)
+                m.components[c].share = gradient ? (n > 1 ? double(c) / double(n - 1) : 0.0) : 1.0 / double(n);
             edited = true;
         }
-        ImGui::EndDisabled();
-        if (third && m.components.size() > 2)
-            pick("##c", m.components[2].extruder);
+        note_rect("mix_gradient");
+        if (m.gradient) {
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(70.0f * scale_);
+            static const char kAxes[] = {'z', 'x', 'y'};
+            const std::string axis_name(1, char(std::toupper(static_cast<unsigned char>(m.axis))));
+            if (ImGui::BeginCombo(tr(T::GradientAxis), axis_name.c_str())) {
+                for (const char a : kAxes)
+                    if (ImGui::Selectable(std::string(1, char(std::toupper(static_cast<unsigned char>(a)))).c_str(), a == m.axis))
+                        m.axis = a, edited = true;
+                ImGui::EndCombo();
+            }
+            note_rect("mix_axis");
+            for (std::size_t c = 0; c < m.components.size(); ++c) {
+                ImGui::PushID(int(c) + 2000);
+                pick("##g", m.components[c].extruder);
+                ImGui::SameLine();
+                int at = int(std::lround(m.components[c].share * 100.0));
+                ImGui::SetNextItemWidth(200.0f * scale_);
+                if (ImGui::SliderInt("##at", &at, 0, 100, tr(T::GradientPlace)))
+                    m.components[c].share = at / 100.0, edited = true;
+                if (m.components.size() > 2) {
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("X")) {
+                        m.components.erase(m.components.begin() + std::ptrdiff_t(c));
+                        edited = true;
+                        ImGui::PopID();
+                        break;
+                    }
+                }
+                ImGui::PopID();
+            }
+            ImGui::BeginDisabled(m.components.size() >= 4);
+            if (ImGui::Button(tr(T::GradientAddFilament))) {
+                int f = 1;
+                while (f < filaments && std::any_of(m.components.begin(), m.components.end(),
+                                                    [&](const ColorMix::Component& c) { return c.extruder == f; }))
+                    ++f;
+                m.components.push_back({f, 1.0});
+                edited = true;
+            }
+            ImGui::EndDisabled();
+            if (m.axis != 'z' && !settings_.mix_subdivide) {
+                ImGui::PushTextWrapPos(0.0f);
+                loc::TextDisabled("%s", tr(T::GradientSteps));
+                ImGui::PopTextWrapPos();
+            }
+        } else {
+            if (m.components.size() >= 2) {
+                pick("##a", m.components[0].extruder);
+                ImGui::SameLine();
+                int share = int(std::lround(m.components[1].share * 100.0));
+                ImGui::SetNextItemWidth(200.0f * scale_);
+                if (ImGui::SliderInt("##share", &share, 0, 100, "%d %%")) {
+                    const double rest = 1.0 - share / 100.0, others = m.components[0].share + (m.components.size() > 2 ? m.components[2].share : 0.0);
+                    m.components[1].share = share / 100.0;
+                    for (std::size_t c : {std::size_t(0), std::size_t(2)})
+                        if (c < m.components.size())
+                            m.components[c].share = others > 0.0 ? rest * m.components[c].share / others
+                                                                  : rest / double(m.components.size() - 1);
+                    edited = true;
+                }
+                ImGui::SameLine();
+                pick("##b", m.components[1].extruder);
+                loc::Text("%d %% / %d %%", int(std::lround(m.components[0].share * 100.0)),
+                            int(std::lround(m.components[1].share * 100.0)));
+            }
+            bool third = m.components.size() > 2;
+            ImGui::BeginDisabled(filaments < 3);
+            if (ImGui::Checkbox(tr(T::AddThirdExtruder), &third)) {
+                if (third) {
+                    for (ColorMix::Component& c : m.components)
+                        c.share *= 2.0 / 3.0;
+                    m.components.push_back({3, 1.0 / 3.0});
+                } else if (m.components.size() > 2) {
+                    const double gone = m.components[2].share;
+                    m.components.pop_back();
+                    for (ColorMix::Component& c : m.components)
+                        c.share += gone / 2.0;
+                }
+                edited = true;
+            }
+            ImGui::EndDisabled();
+            if (third && m.components.size() > 2)
+                pick("##c", m.components[2].extruder);
+        }
         if (edited)
             recolor(m);
         ImGui::TextUnformatted(tr(T::DisplayColor));
@@ -12944,7 +13036,20 @@ void App::mixing_dialog() {
         for (const ColorMix::Component& c : m.components)
             if (c.share > 0.0)
                 shares.push_back(c.share), used.push_back(c.extruder);
-        if (!shares.empty()) {
+        if (m.gradient) {
+            // Its colour from one end to the other.
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            const ImVec2 at = ImGui::GetCursorScreenPos();
+            const float w = 12.0f * scale_, h = 18.0f * scale_;
+            for (int k = 0; k < 24; ++k) {
+                ColorMix here = m;
+                here.gradient = false;
+                here.components = gradient_shares(m, (k + 0.5) / 24.0);
+                dl->AddRectFilled(ImVec2(at.x + float(k) * w, at.y), ImVec2(at.x + float(k + 1) * w, at.y + h),
+                                  ImGui::GetColorU32(color_of(blend_color(here))));
+            }
+            ImGui::Dummy(ImVec2(24.0f * w, h));
+        } else if (!shares.empty()) {
             const std::vector<int> order = mix_order(mix_cycle(shares));
             ImDrawList* dl = ImGui::GetWindowDrawList();
             const ImVec2 at = ImGui::GetCursorScreenPos();
@@ -24315,6 +24420,24 @@ void App::script_input() {
         for (PlateObject& o : objects_)
             o.extruder = m.id;
         std::printf("ui-script: add-mix: %d changes for the plate\n", mix_changes_planned());
+        next();
+    } else if (step.verb == "mix-gradient") { // the last blend becomes a gradient of its filaments: "z|x|y"
+        if (mixes_.empty() || (step.key != "x" && step.key != "y" && step.key != "z"))
+            return fail_step("needs a blend and an axis x, y or z");
+        ColorMix& m = mixes_.back();
+        m.gradient = true;
+        m.axis = step.key[0];
+        for (std::size_t c = 0; c < m.components.size(); ++c)
+            m.components[c].share = m.components.size() > 1 ? double(c) / double(m.components.size() - 1) : 0.0;
+        m.color = blend_color(m);
+        mix_edit_ = int(mixes_.size()) - 1;
+        std::printf("ui-script: mix-gradient %s: %d changes for the plate\n", step.key.c_str(), mix_changes_planned());
+        next();
+    } else if (step.verb == "expect-mix-changes") { // the filament changes the plate's blends take: "N"
+        const int want = std::atoi(step.key.c_str()), got = mix_changes_planned();
+        std::printf("ui-script: expect-mix-changes %d: %s%d\n", want, got == want ? "ok, " : "got ", got);
+        if (got != want)
+            return fail_step("the blends take " + std::to_string(got) + " changes");
         next();
     } else if (step.verb == "open-mixing") { // the mixed colours' dialog, as its button opens it
         mixing_open_ = true;

@@ -1,0 +1,21 @@
+# A gradient blend (color_mixing_plus.md, rules 3 and 17): in Z each band of
+# the height takes its blend; in X or Y every layer prints the filaments its
+# bands take, so it takes more changes. The dialog edits its axis and each
+# filament's place, and shows its colour from one end to the other.
+wait 3
+set machine.extruders 2
+set machine.single_extruder_mmu true
+add-mix 1 2
+expect-mix-changes 49
+mix-color-mark
+mix-gradient z
+expect-mix-changes 25
+# Its colour before slicing is the middle one, here the 1 : 1 blend (rule 17).
+expect-mix-color same
+mix-gradient x
+expect-mix-changes 41
+open-mixing
+wait 2
+expect-control mix_gradient
+expect-control mix_axis
+expect-text Sin subcapas
