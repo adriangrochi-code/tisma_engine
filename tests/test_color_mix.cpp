@@ -1298,3 +1298,21 @@ TEST_CASE("color mixing plus: the estimate before slicing for a gradient in X (r
     o.extent = 20.0; // the box along X
     CHECK(mix_changes_estimate(g, 10.0, o) == counted);
 }
+
+TEST_CASE("color mixing plus: a gradient in X takes its bands from the part's size, as its estimate (rules 3 and 12)", "[mixing]") {
+    // 22.6 mm wide: 4.52 bands of 5 mm, so 5; the walls' middles span only
+    // 22.15 mm (4.43: 4 bands) if the beads' half widths are left out.
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 112.6, 110, 10);
+    p.objects = {{"box", 0, 12, 0, 0, 3}};
+    Settings s = base();
+    ColorMix g = blend(3, {{1, 0.0}, {2, 1.0}});
+    g.gradient = true;
+    g.axis = 'x';
+    const int counted = changes(gcode_of(sliced(p, s, {g}), s));
+    MixChangeOptions o;
+    o.first_layer_height = s.first_layer_height;
+    o.layer_height = s.layer_height;
+    o.extent = 22.6;
+    CHECK(mix_changes_estimate(g, 10.0, o) == counted);
+}
