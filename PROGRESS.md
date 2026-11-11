@@ -12607,10 +12607,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 | Retracción y viajes | revisado (parcial) | 10-11 | balance de retracciones en tres G-codes (cubo, secuencial, altura variable): ninguna extrusión retraída | — |
 | Anchos y flujo | revisado | 10-11 | E/mm de cada tipo = sección redondeada / sección del filamento (exacto); `extrusion.flow` 95 % → 0,95 exacto en cada tipo | — (y P15) |
 | Filamento | revisado (parcial) | 10-11 | temperaturas de primera capa (boquilla y cama) y paso a las normales en la capa 2; `compatible_prints` | — |
-| Impresora y G-code (incl. secuencial) | revisado (parcial) | 10-11 | secuencial: orden, paso al siguiente objeto, falda; macros: `ceil`, bloques de sentencias (GM16 a GM18) | falda única; bloques `if … then` |
-| Multimaterial | revisado (parcial) | 10-11 | temperatura de cada boquilla con G-code de inicio propio (ME13), cambio inicial de herramienta (BH49) | ME13, BH49 |
+| Impresora y G-code (incl. secuencial) | revisado (parcial) | 10-11 | secuencial: orden, paso al siguiente objeto, falda; macros: `ceil`, bloques de sentencias (GM16 a GM18) | falda única; bloques `if … then`; BH50 (lista o texto numérico en comparaciones) |
+| Multimaterial | revisado (parcial) | 11-11 | temperatura de cada boquilla (ME13), cambio inicial (BH49), extrusor inexistente (ME14), temperatura de espera (ME15), mezclas con jarrón, planchado, balsa, soportes | ME13, BH49, ME14, ME15 |
 | Resina | revisado (parcial) | 10-11 | primera capa propia (RE11) | ajuste nuevo de la ficha |
-| Herramientas sobre los modelos (corte, acomodo, pintura) | pendiente | | | |
+| Herramientas sobre los modelos (corte, acomodo, pintura) | revisado (parcial) | 11-11 | copias que entran en la cama con falda | BH52 (la falda se salía con el número que «entraba») |
 | Vista previa / visor de G-code | revisado (parcial) | 10-11 | leyenda frente al G-code, OBJ de trayectorias | — |
 | Archivos (STL/OBJ/3MF, G-code binario, unidades) | revisado (parcial) | 10-11 | idas y vueltas STL/OBJ/3MF, binario↔ASCII, normales invertidas | 3MF a `%.9g` |
 | Perfiles y configuración (paquete) | revisado (parcial) | 10-11 | `compatible_prints`, cambio de filamento | regla nueva |
@@ -12619,7 +12619,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 | Servicios (nube, nodos, biblioteca) | pendiente | | | |
 | Interfaz: menús, diálogos, preferencias | revisado (parcial) | 10-11 | auditoría de interface.md (tabla de arriba), Imprimible, vaso | vaso con modelos no imprimibles |
 | Interfaz: calibraciones | pendiente | | | |
-| Línea de comandos | pendiente | | | |
+| Línea de comandos | revisado (parcial) | 11-11 | `profile` por nombre de impresora y filamento, `--copies` | BH51 (nombre sin marca ambiguo) |
 | Análisis (FEA, CFD) | pendiente | | | |
 | Migración | pendiente | | | |
 | Modelos extremos (diminutos, enormes, no cerrados, fuera de la cama) | revisado (parcial) | 10-11 | normales invertidas, paredes finas, cubo diminuto | — |
