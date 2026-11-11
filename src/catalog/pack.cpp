@@ -64,6 +64,8 @@ const std::set<std::string>& known_keys() {
         k.insert("extrusion.retraction");
         k.insert("extrusion.travel");
         k.insert("machine.variables");
+        // The firmwares a printer may run (PF15), written only when given.
+        k.insert("machine.flavor_choices");
         k.insert("machine.macros");
         return k;
     }();

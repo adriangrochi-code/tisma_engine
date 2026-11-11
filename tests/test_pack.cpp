@@ -722,3 +722,15 @@ TEST_CASE("pack: a filament's own travels and a resin print's base layers are re
     CHECK(warnings.empty());
     CHECK(nlohmann::json::parse(print.filament_settings) == nlohmann::json::parse(R"({"resin": {"bottom_layers": 4}})"));
 }
+
+TEST_CASE("pack: a printer's flavor_choices is read, not left out (profile_pack_format.md, PF15)", "[pack]") {
+    std::vector<std::string> warnings;
+    const PackEntry printer = parse_pack_entry(
+        R"({"format": "tisma-pack-entry", "profile": {"format": "tisma-profile", "version": 2, "kind": "printer",
+            "name": "101Hero", "settings": {"machine": {"flavor": "marlin", "flavor_choices": ["marlin_legacy", "marlin"]}}}})",
+        warnings);
+    INFO(nlohmann::json(warnings).dump());
+    CHECK(warnings.empty());
+    CHECK(printer.profile.settings.flavor == GcodeFlavor::Marlin);
+    CHECK(printer.profile.settings.flavor_choices == std::vector<GcodeFlavor>{GcodeFlavor::MarlinLegacy, GcodeFlavor::Marlin});
+}

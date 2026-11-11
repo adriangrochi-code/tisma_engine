@@ -13526,4 +13526,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   con un aviso. Decisión: las tablas siguen en el paquete y no en el motor (`project_import.md` regla 11: «el motor no
   lleva tabla propia»); el nodo suma la carpeta `translation/` del paquete. Prueba `[cloud]`: 40 capas con la tabla de
   OrcaSlicer en la carpeta, 50 sin ella.
+- **PF15 en el lector del paquete** (aviso de la sesión de perfiles: `profile --pack ... --printer` dejaba afuera
+  `machine.flavor_choices` como «unknown setting» en las 617 corridas de impresoras de Cura). La lista de claves del
+  paquete sale de `describe`, que no escribe la lista vacía; ahora la conoce. Prueba `[pack]` PF15.
 
