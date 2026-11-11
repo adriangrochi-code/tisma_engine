@@ -144,6 +144,10 @@ Las medidas exactas de cada control las fija el motor; las reglas dicen qué tie
       - **encastre a presión:** la pieza con traba de un lado y su hueco del otro;
     - **cola de milano:** un perfil trapezoidal a lo largo del corte, con su ancho, profundidad, ángulo y tolerancia;
     - «Invertir plano» cambia qué mitad lleva la espiga o el encastre;
+    - una mitad que se apoya sobre la cara del corte no puede llevar la espiga ni la traba (no apoyaría plana): en esa
+      mitad la espiga o la traba pasan solas a la otra mitad, la que no se apoya en la cara, y la primera queda con el
+      hueco; se avisa «Los conectores pasaron a la otra mitad para que apoye plana». Si las dos mitades se apoyan sobre
+      la cara del corte, la espiga fija se cambia por un pasador, con el mismo aviso (11-11-2026, MT32);
     - **resultado:**
       - dos objetos, cada uno sin girar, apoyado sobre la cara del corte o dado vuelta, a elección de la persona;
       - o un objeto con dos partes, que siguen juntas y pueden tener ajustes distintos (no con cola de milano);
@@ -255,3 +259,4 @@ Herramientas de la interfaz (reglas 16 a 29), con la pieza de MT14:
 | MT29 | 12 cubos de 80 mm en una cama de 250 × 210 y Ordenar | Se reparten en varias camas, ninguna con piezas que se pisen |
 | MT30 | Pintar con relleno inteligente a 30° sobre un cilindro | Se pinta todo el costado; la tapa (90°) no |
 | MT31 | Cortar, pintar y mover; después Deshacer tres veces | Vuelve a la pieza entera, sin pintura, en su lugar |
+| MT32 | Corte con una espiga fija en la mitad de abajo y «apoyar sobre la cara del corte» en esa mitad / en las dos | La espiga queda en la mitad de arriba, la de abajo apoya plana con el hueco, y el aviso / un pasador aparte y los dos huecos, con el aviso |
