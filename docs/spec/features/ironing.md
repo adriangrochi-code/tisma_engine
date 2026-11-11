@@ -14,6 +14,8 @@ líneas muy juntas, para alisarla.
 | `ironing.flow` | % | 15 % | Material por mm, en % de una capa de la altura normal |
 | `ironing.spacing` | mm | 0,1 | Separación entre líneas |
 | `ironing.speed` | mm/s | 15 | Velocidad |
+| `ironing.angle` | ° | 45 | Desplazamiento de las líneas de planchado sobre la dirección del relleno sólido de arriba (wiki de OrcaSlicer, «quality_settings_ironing»). Un valor negativo vale como el por defecto (los perfiles de OrcaSlicer traen −1 sin que su documentación lo defina; diseño, 11-11-2026) |
+| `ironing.angle_fixed` | — | no | Sí: `ironing.angle` es el ángulo absoluto de las líneas, en grados desde X, en todas las capas |
 
 ## Reglas
 
@@ -48,3 +50,4 @@ Medidas en Tisma Slicer (24-10-2026) como caja negra. Ajustes base de `gcode_mot
 | IR5 | El escalón de IR3 | `solid` | Planchado en Z 0,2, 0,4 y 0,6 (3822 mm cada una; la de Z 0,2 a 30 mm/s), en Z 4,4 (128 mm), 4,8 (1775 mm), 5,0, 9,4 (163 mm), 9,8 (1862 mm) y 10,0 |
 | IR6 | Cubo de IR1 | `ironing.flow` 30 %, `ironing.spacing` 0,2, `ironing.speed` 25 | 0,004989 mm de filamento por mm (4 veces IR1: el doble de material y el doble de separación), 25 mm/s, 1901 mm; a lo ancho, de Y 90,5 a 109,7 |
 | IR7 | Marco de 20 × 20 × 6 mm con un agujero de 8 × 8 mm en el medio | `ironing.enabled` sí | 3116 mm en Z 6,0; nada sobre el agujero |
+| IR8 | Cubo de 20 mm, relleno de arriba a 45° | `ironing.enabled`; `angle` 90 / `angle` 90 y `angle_fixed` / `angle` −1 | Planchado a 135° (45 + 90) / a 90° en todas las capas / como sin `angle` (45 + 45 = 90°) |
