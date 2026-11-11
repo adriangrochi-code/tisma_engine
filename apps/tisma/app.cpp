@@ -15524,14 +15524,15 @@ void App::design_toolbar() {
                 const ImVec2 at = ImGui::GetCursorScreenPos();
                 const float small = ImGui::GetFrameHeight();
                 const bool hit = ImGui::Selectable((std::string("##item") + tool.id).c_str(), false,
-                                                   tool.ready ? 0 : ImGuiSelectableFlags_Disabled, ImVec2(220.0f * scale_, small));
+                                                   tool.ready ? 0 : ImGuiSelectableFlags_Disabled, ImVec2(280.0f * scale_, small));
                 note_rect(tool.id);
                 tool_tip(tool);
                 cad_icon(ImGui::GetWindowDrawList(), tool.icon, ImVec2(at.x + 2.0f, at.y + 2.0f), small - 4.0f, tool.ready ? ink : dim);
                 ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + small + 8.0f * scale_, at.y + (small - ImGui::GetFontSize()) * 0.5f),
                                                     tool.ready ? ink : dim, tool.label.c_str());
                 if (tool.soon)
-                    ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + 150.0f * scale_, at.y + (small - ImGui::GetFontSize()) * 0.5f),
+                    ImGui::GetWindowDrawList()->AddText(ImVec2(at.x + small + 16.0f * scale_ + ImGui::CalcTextSize(tool.label.c_str()).x,
+                                                               at.y + (small - ImGui::GetFontSize()) * 0.5f),
                                                         dim, tr(T::ComingSoon));
                 ImGui::PopID();
                 if (hit && tool.ready) {
