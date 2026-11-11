@@ -135,6 +135,9 @@ struct MixChangeOptions {
     // layers: 0, or the layer height, by layer; finer than the layers
     // without `subdivide`, by layer too, as the slicing does.
     double step = 0.0;
+    // A gradient in X or Y (rule 3): the part's size along its axis, mm, for
+    // its bands as the slicing makes them (0: two bands).
+    double extent = 0.0;
 };
 int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOptions& options);
 

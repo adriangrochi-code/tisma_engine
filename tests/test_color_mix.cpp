@@ -1279,3 +1279,16 @@ TEST_CASE("color mixing plus: a gradient in X prints each band of the layer with
     CHECK(right[2] > 4.0 * right[1]);
     gcode_of(model, s); // checked G-code
 }
+
+TEST_CASE("color mixing plus: the estimate before slicing for a gradient in X (rules 3 and 12)", "[mixing]") {
+    Settings s = base();
+    ColorMix g = blend(3, {{1, 0.0}, {2, 1.0}});
+    g.gradient = true;
+    g.axis = 'x';
+    const int counted = changes(gcode_of(sliced(box(3), s, {g}), s));
+    MixChangeOptions o;
+    o.first_layer_height = s.first_layer_height;
+    o.layer_height = s.layer_height;
+    o.extent = 20.0; // the box along X
+    CHECK(mix_changes_estimate(g, 10.0, o) == counted);
+}

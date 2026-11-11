@@ -12735,8 +12735,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   franja) y cada franja toma su ciclo (`gradient_cycle`, la misma cuenta que el degradé en Z, al 10 %) capa por capa,
   así que sin subcapas cambia en escalones de una capa. Pruebas `[mixing]`: el corte y el ciclo; un cubo de 20 mm con
   degradé 1→2 en X: la capa del medio con los dos filamentos, el 1 a la izquierda; las franjas de los bordes casi
-  todas de un filamento (1 : 9); el eje en el JSON de ida y vuelta; G-code verificado. Falta: el degradé en X/Y con
-  `subdivide` (cada franja en subcapas), entre dos puntos de la pieza, y el eje en el diálogo (interfaz).
+  todas de un filamento (1 : 9); el eje en el JSON de ida y vuelta; G-code verificado. Búsqueda profunda: el estimado de cambios lo
+  contaba como un degradé en Z (25 contra 50 en el cubo); ahora cuenta las franjas de cada capa
+  (`MixChangeOptions::extent`, el tamaño de la pieza a lo largo del eje) con el orden del escritor; prueba contra el
+  G-code. Falta: el degradé en X/Y con `subdivide` (cada franja en subcapas), entre dos puntos de la pieza, y en la
+  interfaz el eje en el diálogo y `extent` en el estimado.
 - **Paleta de mezclas (pieza, CM8)** (2026-11-11, bloque nocturno; `calibration_models.md` de spec/next, «Piezas
   para medir»; `color_mixing_plus.md` regla 22). `palette_piece(n)` en `src/calibration/calibration.*`: base de 1 mm
   (filamento 1) con los números 1 a n en relieve de 4 mm (regla 6, 0,6 mm de relieve) y una muestra de 15 × 15 × 2 mm

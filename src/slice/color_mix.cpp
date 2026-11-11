@@ -499,6 +499,32 @@ int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOpti
             return layers - 1;
         }
     }
+    // A gradient in X or Y (rule 3): each layer prints the filaments its bands
+    // take that layer, one group each; the writer starts with the one the
+    // layer below ended with.
+    if (mix.gradient && (mix.axis == 'x' || mix.axis == 'y')) {
+        const int bands = o.extent > 0.0 ? std::clamp(int(std::lround(o.extent / 5.0)), 2, 11) : 2;
+        std::vector<std::vector<int>> cycles;
+        for (int b = 0; b < bands; ++b)
+            cycles.push_back(gradient_cycle(mix, (b + 0.5) / bands));
+        int count = 0, last = 0;
+        std::size_t l = 0;
+        for (double z = 0.0; z < height - 1e-9 && l < 100000; ++l) {
+            z += l == 0 ? o.first_layer_height : o.layer_height;
+            std::vector<int> tools;
+            for (const auto& c : cycles)
+                tools.push_back(c[l % c.size()]);
+            std::sort(tools.begin(), tools.end());
+            tools.erase(std::unique(tools.begin(), tools.end()), tools.end());
+            if (const auto it = std::find(tools.begin(), tools.end(), last); it != tools.end())
+                std::rotate(tools.begin(), it, it + 1);
+            for (const int f : tools) {
+                count += last != 0 && f != last;
+                last = f;
+            }
+        }
+        return count;
+    }
     std::vector<Layer> layers;
     for (double z = 0.0; z < height - 1e-9 && layers.size() < 100000;) {
         const double h = layers.empty() ? o.first_layer_height : o.layer_height;
