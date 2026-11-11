@@ -174,6 +174,15 @@
      "capa. Se ajusta a los límites de la impresora.\n\nEjemplo: 0,3 mm.",
      "The layer height of the mix's first filament, with per-filament heights on. 0 uses the layer height. It is "
      "kept within the printer's limits.\n\nExample: 0.3 mm."},
+    {"mixing.step",
+     "La altura en la que se cuenta el ciclo de la mezcla. 0, o el alto de capa, cuenta por capa, como siempre. Con "
+     "otro valor, el color sigue la altura: cada capa toma el filamento que le toca a la altura de su centro, así la "
+     "proporción se mantiene aunque la altura de capa cambie. Con subcapas y un paso más fino que la capa, la parte con "
+     "mezcla se imprime en pasadas de ese alto.\n\nEjemplo: 0,2 mm.",
+     "The height the mix's cycle is counted in. 0, or the layer height, counts by layer, as usual. Any other value "
+     "makes the colour follow the height: each layer takes the filament due at the height of its middle, so the "
+     "proportion holds even when the layer height changes. With sublayers and a step finer than the layer, the part "
+     "with the mix prints in passes that high.\n\nExample: 0.2 mm."},
     {"mixing.height_b",
      "El alto de las capas del segundo filamento de la mezcla, con el alto por filamento encendido. 0 usa el alto de "
      "capa. Se ajusta a los límites de la impresora.\n\nEjemplo: 0,15 mm.",

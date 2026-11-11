@@ -500,6 +500,9 @@ struct Settings {
     // layer height. Only when one blend prints the whole plate.
     bool mix_cadence_heights = false;
     double mix_height_a = 0.0, mix_height_b = 0.0; // mm
+    // The height the blends' cycle is counted in (rule 9); 0 or the layer
+    // height: by layer, as rules 7 and 10 say.
+    double mix_step = 0.0; // mm
     // Curved layers (docs/spec/features/nonplanar.md): each layer the
     // surface z = s + D(x, y, z), D a wave or a cone, ramped in from
     // curved_flat_below over curved_ramp_height (and out at the top with

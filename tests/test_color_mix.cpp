@@ -567,3 +567,66 @@ TEST_CASE("color mixing plus: each filament with its own layer height (rule 8, M
     CHECK(std::any_of(cycle.notices.begin(), cycle.notices.end(),
                       [](const std::string& n) { return n.find("cadence_heights needs one blend") != std::string::npos; }));
 }
+
+TEST_CASE("color mixing plus: the cycle counted in height (rule 9, MX28, MX29)", "[mixing]") {
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    // MX28: no sublayers, step 0.2, layers of 0.1 then 0.3: the filament
+    // changes every 0.2 mm of height, by each layer's middle.
+    Settings s = base();
+    s.mix_step = 0.2;
+    s.layer_heights = {{0.2, 0.1}, {4.2, 0.3}};
+    const SlicedModel model = sliced(box(3), s, {half});
+    REQUIRE(model.layers.size() > 20);
+    int thin = 0, thick = 0;
+    for (std::size_t l = 0; l < model.layers.size(); ++l) {
+        const Layer& layer = model.layers[l];
+        const double middle = 0.5 * (layer.bottom + layer.top) - model.layers.front().bottom;
+        const int want = int(std::floor(middle / 0.2 + 1e-9)) % 2 == 0 ? 1 : 2;
+        REQUIRE_FALSE(model.walls[l].toolpaths.empty());
+        INFO("layer " << l << " middle " << middle);
+        CHECK(model.walls[l].toolpaths.front().tool == want);
+        const double h = layer.top - layer.bottom;
+        thin += std::abs(h - 0.1) < 1e-6, thick += std::abs(h - 0.3) < 1e-6;
+    }
+    CHECK(thin >= 10);
+    CHECK(thick >= 10);
+    // Two 0.1 mm layers in a row with the same filament.
+    for (std::size_t l = 1; l + 1 < model.layers.size(); ++l)
+        if (std::abs(model.layers[l].bottom - 1.0) < 1e-6) {
+            CHECK(model.walls[l].toolpaths.front().tool == model.walls[l + 1].toolpaths.front().tool);
+            CHECK(model.walls[l].toolpaths.front().tool != model.walls[l + 2].toolpaths.front().tool);
+        }
+    gcode_of(model, s);
+    // The step as the layer: as without it.
+    Settings same = base();
+    same.mix_step = 0.2;
+    CHECK(sequence(sliced(box(3), same, {half})) == sequence(sliced(box(3), base(), {half})));
+
+    // MX29 with two filaments: sublayers, layer 0.2, step 0.1: two passes of
+    // 0.1 a layer, each with the cycle's next element.
+    Settings sub = base();
+    sub.mix_subdivide = true;
+    sub.mix_step = 0.1;
+    const SlicedModel passes = sliced(box(3), sub, {half});
+    for (const std::size_t l : {std::size_t(5), std::size_t(6)}) {
+        std::set<int> tools;
+        for (const Toolpath& t : passes.walls[l].toolpaths) {
+            tools.insert(t.tool);
+            CHECK(t.wavy);
+            const double dz = t.points.front().dz;
+            CHECK((std::abs(dz + 0.1) < 1e-9 || std::abs(dz) < 1e-9));
+        }
+        CHECK(tools == std::set<int>{1, 2});
+    }
+    gcode_of(passes, sub);
+    // MX29 as written (layer 0.3, step 0.1: A, B, A): one filament twice in a
+    // layer is not printed in passes yet; by height, whole, with a notice.
+    sub.layer_height = sub.first_layer_height = 0.3;
+    const SlicedModel three = sliced(box(3), sub, {half});
+    CHECK(std::any_of(three.notices.begin(), three.notices.end(),
+                      [](const std::string& n) { return n.find("mixing.step") != std::string::npos; }));
+    for (std::size_t l = 0; l < three.layers.size(); ++l)
+        for (const Toolpath& t : three.walls[l].toolpaths)
+            CHECK_FALSE(t.wavy);
+    gcode_of(three, sub);
+}

@@ -81,7 +81,15 @@ std::vector<int> mix_order(const std::vector<int>& counts);
 // and a cycle of its own from its first layer; under its first point all
 // the first filament, over its last all the last. A layer's band goes by its
 // top, the layers' heights added up from the bed to the micrometre.
-std::vector<int> mix_layers(const ColorMix& mix, const std::vector<Layer>& layers, const std::vector<char>& present);
+// With `step` above 0 (color_mixing_plus.md, rule 9), a blend that is not a
+// gradient goes by height: the layer whose middle is z above the first
+// layer's bottom takes element floor(z / step) of its cycle.
+std::vector<int> mix_layers(const ColorMix& mix, const std::vector<Layer>& layers, const std::vector<char>& present,
+                            double step = 0.0);
+
+// A blend's cycle as the filaments in order: its written sequence, or the
+// cycle of its shares (rules 2, 7 and 8). Empty for a gradient.
+std::vector<int> mix_sequence(const ColorMix& mix);
 
 // Whether a blend can print on a machine with `extruders` filaments: its
 // number after theirs and its filaments among them (rule 5), and it is

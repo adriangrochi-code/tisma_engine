@@ -592,26 +592,62 @@ int object_tool(const MeshObject& o, const Settings&) {
 // mixing.sub_min_height leaves the layer to the cycle; so does a gradient.
 // The sparse infill goes once, by the last pass's filament, unless
 // mixing.sub_infill. Own design (PROVENANCE.md).
-bool subdivide_layer(SlicedModel& model, std::size_t l, const ColorMix& mix, const Settings& s, int& last) {
+constexpr const char* kStepRepeatNotice =
+    "mixing.step: a layer would print one filament in two passes; such layers follow the cycle by height, whole";
+
+bool subdivide_layer(SlicedModel& model, std::size_t l, const ColorMix& mix, const Settings& s, int& last, double step,
+                     std::size_t& passes) {
     if (!s.mix_subdivide || mix.gradient || l >= model.layers.size() || (l == 0 && !s.mix_sub_first_layer))
         return false;
     const double h = model.layers[l].top - model.layers[l].bottom;
-    std::vector<std::pair<int, double>> parts;
-    for (const ColorMix::Component& c : mix.pattern.empty() ? mix.components : pattern_mix(mix.id, mix.pattern).components)
-        if (c.share > 0.0)
-            parts.push_back({c.extruder, c.share});
-    double total = 0.0;
-    for (const auto& p : parts)
-        total += p.second;
-    if (parts.size() < 2 || !(total > 0.0) || !(h > 0.0))
+    if (!(h > 0.0))
         return false;
-    for (const auto& p : parts)
-        if (p.second / total * h < s.mix_sub_min_height - 1e-9)
+    std::vector<std::pair<int, double>> parts;
+    double total = 0.0;
+    if (step > 0.0) {
+        // Passes of `step`, the last what is left, each with the cycle's
+        // next element across the layers (rule 9, MX29); a last pass thinner
+        // than sub_min_height joins the one before.
+        if (step >= h - 1e-9 || step < s.mix_sub_min_height - 1e-9)
             return false;
-    // The filament the layer below ended with first.
-    if (const auto it = std::find_if(parts.begin(), parts.end(), [&](const auto& p) { return p.first == last; });
-        it != parts.end())
-        std::rotate(parts.begin(), it, it + 1);
+        const std::vector<int> cycle = mix_sequence(mix);
+        if (cycle.empty())
+            return false;
+        std::vector<double> heights(static_cast<std::size_t>(std::floor(h / step + 1e-9)), step);
+        const double rest = h - double(heights.size()) * step;
+        if (rest > 1e-9) {
+            if (rest < s.mix_sub_min_height - 1e-9)
+                heights.back() += rest;
+            else
+                heights.push_back(rest);
+        }
+        std::size_t next = passes;
+        for (const double t : heights)
+            parts.push_back({cycle[next++ % cycle.size()], t}), total += t;
+        // One group per filament a layer in the G-code: a filament twice in
+        // a layer (A, B, A) is not printed in passes yet; that layer by height.
+        for (std::size_t i = 0; i < parts.size(); ++i)
+            for (std::size_t j = i + 1; j < parts.size(); ++j)
+                if (parts[i].first == parts[j].first) {
+                    if (std::find(model.notices.begin(), model.notices.end(), kStepRepeatNotice) == model.notices.end())
+                        model.notices.push_back(kStepRepeatNotice);
+                    return false;
+                }
+        passes = next;
+    } else {
+        for (const ColorMix::Component& c : mix.pattern.empty() ? mix.components : pattern_mix(mix.id, mix.pattern).components)
+            if (c.share > 0.0)
+                parts.push_back({c.extruder, c.share}), total += c.share;
+        if (parts.size() < 2 || !(total > 0.0))
+            return false;
+        for (const auto& p : parts)
+            if (p.second / total * h < s.mix_sub_min_height - 1e-9)
+                return false;
+        // The filament the layer below ended with first.
+        if (const auto it = std::find_if(parts.begin(), parts.end(), [&](const auto& p) { return p.first == last; });
+            it != parts.end())
+            std::rotate(parts.begin(), it, it + 1);
+    }
     std::vector<double> bottom(parts.size()), top(parts.size());
     double z = 0.0;
     for (std::size_t i = 0; i < parts.size(); ++i) {
@@ -675,11 +711,18 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const S
         });
         if (std::none_of(present.begin(), present.end(), [](char c) { return c != 0; }))
             continue;
-        const std::vector<int> filament = mix_layers(mix, model.layers, present);
+        // The step (rule 9): 0, or the layer height with layers all of it, by layer.
+        const double step =
+            settings.mix_step > 0.0 &&
+                    (std::abs(settings.mix_step - settings.layer_height) > 1e-9 || variable_layers(settings))
+                ? settings.mix_step
+                : 0.0;
+        const std::vector<int> filament = mix_layers(mix, model.layers, present, step);
         int last = 0;
+        std::size_t passes = 0;
         for (std::size_t l = 0; l < model.layers.size(); ++l)
             if (present[l]) {
-                if (!subdivide_layer(model, l, mix, settings, last) && l < filament.size() && filament[l] > 0)
+                if (!subdivide_layer(model, l, mix, settings, last, step, passes) && l < filament.size() && filament[l] > 0)
                     last = filament[l];
             }
         part_paths(model, [&](std::size_t l, std::vector<Toolpath>& paths) {

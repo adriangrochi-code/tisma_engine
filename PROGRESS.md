@@ -12678,7 +12678,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   | 4 | Color buscado (CIEDE2000, recomendaciones) | pendiente |
   | 5 | Pares automáticos | parcial: `auto_pair_mixes` (MX1); falta `mixing.auto_pairs` y crearlos en la interfaz |
   | 6–7 | Lista de mezclas, nombre, acciones; asignar | parcial: asignar a pieza y pintar; `enabled` y `name` en el motor, una mezcla apagada avisa al laminar (MX2) |
-  | 8–9 | Alto por filamento, paso | 8 hecho (MX7; `mixing.cadence_heights`, `height_a`, `height_b`); 9 (`step`) pendiente: la ficha dice «a confirmar» |
+  | 8–9 | Alto por filamento, paso | 8 hecho (MX7; `mixing.cadence_heights`, `height_a`, `height_b`); 9 hecho (`mixing.step`, MX28; MX29 con dos pasadas distintas por capa; A, B, A en una capa pendiente: el G-code imprime cada filamento una vez por capa) |
   | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | 10 y 11 hechos (MX8 a MX10; grupo `mixing`); 12: el motor estima los cambios antes de laminar (`mix_changes_estimate`); falta que la interfaz los muestre en el aviso |
   | 13–14 | Solo la superficie, paredes de más | pendiente |
   | 15 | Sesgo | pendiente |
@@ -12723,6 +12723,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 9: paso** (2026-11-11; spec/next, MX28 y MX29). `mixing.step`: 0, o el alto de capa con
+  capas parejas, cuenta por capa como antes. Con otro valor, la capa con centro a la altura `z` toma el elemento
+  `floor(z / step)` del ciclo (`mix_layers` con `step`; `mix_sequence` da el ciclo como lista de filamentos). Con
+  subcapas y un paso menor que la capa, pasadas de `step` con el elemento siguiente, que sigue de una capa a la otra.
+  Pendiente: una capa con un filamento dos veces (MX29 tal como está escrito, capa 0,3 y paso 0,1: A, B, A). El
+  escritor imprime cada filamento en un solo grupo por capa, así que A, A, B pondría la pasada de arriba antes que la
+  del medio. Esa capa va entera por altura, con aviso. Hace falta que el plan de herramientas acepte un filamento dos
+  veces por capa (torre, purgas, grupos). Pruebas `[mixing]` MX28 (capas de 0,1 y 0,3: el filamento por el centro;
+  dos de 0,1 seguidas iguales), paso igual a la capa sin cambios, dos pasadas de 0,1 por capa de 0,2, y el aviso con
+  A, B, A.
 - **Full Spectrum, paso 3: alto por filamento** (2026-11-11; `color_mixing_plus.md` regla 8, MX7). Ajustes
   `mixing.cadence_heights`, `height_a` y `height_b`, en una tarjeta nueva «Mezcla de colores: capas» que también
   lleva las subcapas (la de boquillas pasaba de 8 ajustes). Con una sola mezcla de dos filamentos en toda la cama, las

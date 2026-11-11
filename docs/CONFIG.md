@@ -564,7 +564,7 @@ objetos, en gramos si se conoce `extrusion.density` (aviso `purge`, regla 10, MM
 
 ### `mixing`
 
-De la ficha `docs/spec/features/color_mixing_plus.md`: subcapas en las zonas con mezcla de colores (reglas 10 y 11) y el alto por filamento (regla 8). Va
+De la ficha `docs/spec/features/color_mixing_plus.md`: subcapas en las zonas con mezcla de colores (reglas 10 y 11) el alto por filamento (regla 8) y el paso (regla 9). Va
 en el perfil de impresión.
 
 | Clave | Tipo | Por defecto | Rango | Significado |
@@ -576,6 +576,7 @@ en el perfil de impresión.
 | `cadence_heights` | booleano | `false` | | Regla 8 (MX7): con una sola mezcla de dos filamentos en toda la cama, sin pintura ni modificadores ni otra altura de capa, las capas se alternan: una de `height_a` con el primer filamento y una de `height_b` con el segundo (la primera capa, del primero, con su propio alto). Si no se cumple, el ciclo de siempre y un aviso. Con esto no hay subcapas |
 | `height_a` | mm | 0 | 0 o 0,01 a 2 | Alto de las capas del primer filamento; 0: `layers.height`. Se ajusta a `machine.min_layer_height`, `machine.max_layer_height` y la boquilla, con aviso |
 | `height_b` | mm | 0 | 0 o 0,01 a 2 | Alto de las capas del segundo filamento; 0: `layers.height`. Igual que `height_a` |
+| `step` | mm | 0 | 0 o 0,01 a 2 | Regla 9 (MX28, MX29): la altura en la que se cuenta el ciclo. 0, o `layers.height` con capas parejas: por capa, como siempre. Con otro valor, la capa con centro a la altura `z` (desde la base) toma el elemento `floor(z / step)` del ciclo. Con `subdivide` y un paso menor que la capa, la zona con mezcla va en pasadas de `step`, cada una con el elemento siguiente del ciclo (la última, lo que falte; menos de `sub_min_height` se junta con la anterior). Una capa en la que un filamento saldría dos veces (A, B, A) va entera, por altura, con aviso: el G-code imprime cada filamento una vez por capa |
 
 Las mezclas no son ajustes: van en el proyecto (`color_mixing.md`, regla 15). Desde la línea de comandos, `slice <modelo>
 --config <ajustes.json> --mixes <mezclas.json> --mix <n>` lee las mezclas en ese mismo JSON (`{"version": 1,

@@ -92,10 +92,35 @@ std::vector<int> cycle_of(const std::vector<std::pair<int, double>>& parts) {
 
 } // namespace
 
-std::vector<int> mix_layers(const ColorMix& mix, const std::vector<Layer>& layers, const std::vector<char>& present) {
+std::vector<int> mix_sequence(const ColorMix& mix) {
+    if (mix.gradient)
+        return {};
+    if (!mix.pattern.empty())
+        return mix.pattern;
+    std::vector<std::pair<int, double>> parts;
+    for (const ColorMix::Component& c : mix.components)
+        parts.push_back({c.extruder, c.share});
+    return parts.empty() ? std::vector<int>{} : cycle_of(parts);
+}
+
+std::vector<int> mix_layers(const ColorMix& mix, const std::vector<Layer>& layers, const std::vector<char>& present,
+                            double step) {
     const std::size_t n = layers.size();
     std::vector<int> out(n, 0);
     const auto in = [&](std::size_t l) { return l < present.size() && present[l]; };
+    if (step > 0.0 && !mix.gradient && n > 0) { // by height (rule 9)
+        const std::vector<int> cycle = mix_sequence(mix);
+        if (cycle.empty())
+            return out;
+        const double base = layers.front().bottom;
+        for (std::size_t l = 0; l < n; ++l)
+            if (in(l)) {
+                const double z = 0.5 * (layers[l].bottom + layers[l].top) - base;
+                const auto k = static_cast<std::size_t>(std::max(0.0, std::floor(z / step + 1e-9)));
+                out[l] = cycle[k % cycle.size()];
+            }
+        return out;
+    }
     if (!mix.pattern.empty()) { // a written sequence, as it is (color_mixing_plus.md, rule 2)
         std::size_t first = n;
         for (std::size_t l = 0; l < n; ++l)

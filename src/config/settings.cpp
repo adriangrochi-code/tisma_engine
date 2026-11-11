@@ -1480,9 +1480,15 @@ Settings parse_checked(std::string_view text) {
     });
     // Sublayers in the blends' zones (color_mixing_plus.md, rules 10 and 11).
     read_group(root, "mixing", {"subdivide", "sub_min_height", "sub_first_layer", "sub_infill", "cadence_heights", "height_a",
-                                "height_b"},
+                                "height_b", "step"},
                [&](const json& g, const std::string& n, const std::string& k) {
         const json& v = g.at(n);
+        if (n == "step") { // rule 9
+            if (!v.is_number() || !(v.get<double>() == 0.0 || (v.get<double>() >= 0.01 && v.get<double>() <= 2.0)))
+                fail(k, "must be 0 (the layer height) or from 0.01 to 2 mm");
+            s.mix_step = v.get<double>();
+            return;
+        }
         if (n == "height_a" || n == "height_b") { // rule 8; the machine's limits when slicing
             if (!v.is_number() || !(v.get<double>() == 0.0 || (v.get<double>() >= 0.01 && v.get<double>() <= 2.0)))
                 fail(k, "must be 0 (the layer height) or from 0.01 to 2 mm");
@@ -3486,6 +3492,7 @@ std::vector<std::pair<std::string, std::string>> describe(const Settings& s) {
         {"mixing.cadence_heights", flag(s.mix_cadence_heights)},
         {"mixing.height_a", num(s.mix_height_a)},
         {"mixing.height_b", num(s.mix_height_b)},
+        {"mixing.step", num(s.mix_step)},
         {"infill.density", num(s.infill_density)},
         {"infill.angle", num(s.infill_angle)},
         {"infill.pattern", pattern},
@@ -4049,7 +4056,8 @@ std::string settings_json(const Settings& s) {
           {"sub_infill", s.mix_sub_infill},
           {"cadence_heights", s.mix_cadence_heights},
           {"height_a", s.mix_height_a},
-          {"height_b", s.mix_height_b}}},
+          {"height_b", s.mix_height_b},
+          {"step", s.mix_step}}},
         {"mmu",
          {{"cooling_tube_length", s.mmu_cooling_tube_length},
           {"cooling_tube_position", s.mmu_cooling_tube_position},
