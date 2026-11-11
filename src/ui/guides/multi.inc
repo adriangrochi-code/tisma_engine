@@ -207,6 +207,13 @@
      "With mixes on a single-nozzle printer, after each filament change the purge prints as the parts' inside "
      "infill, with the new filament. The infill stays hidden, so it does not show, and less filament goes to the "
      "tower.\n\nExample: on."},
+    {"mixing.predictor",
+     "Cómo se calcula el color de una mezcla al buscar un color. «mixer» promedia los colores por su parte. "
+     "«spectral» tiene en cuenta cuánta luz deja pasar cada filamento (su distancia de transmisión): uno más "
+     "translúcido deja ver el de abajo y pesa más.\n\nEjemplo: spectral si conocés la TD de tus filamentos.",
+     "How a blend's colour is worked out when looking for a colour. \"mixer\" averages the colours by their share. "
+     "\"spectral\" takes into account how much light each filament lets through (its transmission distance): a more "
+     "translucent one shows the one below and weighs more.\n\nExample: spectral if you know your filaments' TD."},
     {"mixing.purge_infill_max",
      "Si la purga de un cambio no entra en el relleno de su capa, el relleno de esa capa se hace más denso, hasta este "
      "porcentaje, para que entre y no se tire. La pieza pesa más, pero se gasta menos en la torre. 0 lo apaga.\n\n"
