@@ -15,6 +15,8 @@ kotlin {
 }
 
 dependencies {
+    // The account, plan and job models and the API's errors live in :shared, so the iPhone app reads them alike.
+    api(project(":shared"))
     api(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.serialization.json)
     testImplementation(project(":mockcloud"))

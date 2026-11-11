@@ -188,21 +188,22 @@ data class Download(val filename: String, val bytes: Long)
 
 // Lenient readers. Ids may come as numbers; they are kept as their digits.
 
-internal fun JsonObject.text(key: String): String {
+/** Lenient field readers, also used by the cloud client (another module since they moved here). */
+fun JsonObject.text(key: String): String {
     val p = this[key] as? JsonPrimitive ?: return ""
     if (p is JsonNull) return ""
     return p.contentOrNull ?: ""
 }
 
-internal fun JsonObject.number(key: String): Double {
+fun JsonObject.number(key: String): Double {
     val p = this[key] as? JsonPrimitive ?: return 0.0
     if (p.isString) return 0.0
     return p.doubleOrNull ?: p.longOrNull?.toDouble() ?: 0.0
 }
 
-internal fun JsonObject.bool(key: String): Boolean = (this[key] as? JsonPrimitive)?.booleanOrNull ?: false
+fun JsonObject.bool(key: String): Boolean = (this[key] as? JsonPrimitive)?.booleanOrNull ?: false
 
-internal fun JsonObject.texts(key: String): List<String> =
+fun JsonObject.texts(key: String): List<String> =
     (this[key] as? kotlinx.serialization.json.JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
         ?: emptyList()
 

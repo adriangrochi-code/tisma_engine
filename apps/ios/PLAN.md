@@ -10,6 +10,9 @@ reutilizando todo lo posible de la de Android. Mismo diseño (`docs/spec/feature
    bloqueo, índice, `SafeFile`, `SharingPolicy`, Ed25519 (propio), perfiles del paquete, estimación de memoria,
    enlaces de sitios, G-code binario. Lo de `java.io`/`MessageDigest`/`zip` pasa a `expect`/`actual` (o kotlinx-io).
    Android sigue compilando contra `shared` y sus pruebas siguen verdes en cada paso.
+   Hecho (11-11): lista de bloqueo, índice, `SharingPolicy`, `PublishText`, búsqueda sin tildes, Ed25519, y los
+   modelos y errores de la nube (`Account`, `Plan`, `Job`, `CloudException`…; `:cloud` los toma de `shared`). Falta el
+   cliente de la nube (necesita la red común, paso 2).
 2. **Red**: Ktor (Apache-2.0; motor Darwin en iOS) para Tisma Cloud, Moonraker, OctoPrint, PrusaLink y Duet.
    Bambu (MQTT con TLS, FTPS implícito, cámara del puerto 6000) necesita sockets TLS con el certificado propio de la
    impresora: `expect`/`actual` con Network.framework en iOS.
