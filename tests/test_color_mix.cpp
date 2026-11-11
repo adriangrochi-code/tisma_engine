@@ -1028,3 +1028,27 @@ TEST_CASE("color mixing plus: without a tower the purge goes to the discard, cou
     CHECK_THAT(purge->message, !ContainsSubstring("(0.00 g into their infill")); // the infill took its share first
     CHECK(out.str().find(";TYPE:Wipe tower") == std::string::npos);
 }
+
+TEST_CASE("color mixing plus: the colour sought, by CIEDE2000 (rule 4, MX5, MX6)", "[mixing]") {
+    // Sharma, Wu and Dalal's published test pairs.
+    CHECK_THAT(ciede2000_lab({50.0, 2.6772, -79.7751}, {50.0, 0.0, -82.7485}), WithinAbs(2.0425, 1e-4));
+    CHECK_THAT(ciede2000_lab({50.0, 2.5, 0.0}, {73.0, 25.0, -18.0}), WithinAbs(27.1492, 1e-4));
+    CHECK_THAT(ciede2000_lab({2.0776, 0.0795, -1.135}, {0.9033, -0.0636, -0.5514}), WithinAbs(0.9082, 1e-4));
+    CHECK(ciede2000("#123456", "#123456") == 0.0);
+    // MX5: grey from white and black: a blend of the two, with up to 3 more.
+    const auto grey = match_color("#808080", {"#ffffff", "#000000"}, 3);
+    REQUIRE_FALSE(grey.empty());
+    CHECK(grey.size() <= 4);
+    CHECK(grey.front().mix.components.size() == 2);
+    CHECK(color_reached(grey));
+    for (std::size_t k = 1; k < grey.size(); ++k)
+        CHECK(grey[k].distance >= grey[k - 1].distance);
+    // MX6: green is out of reach of white and black.
+    CHECK_FALSE(color_reached(match_color("#00ff00", {"#ffffff", "#000000"}, 3)));
+    // Three filaments: blends of 3 are tried too.
+    const std::vector<std::string> rgb = {"#ff0000", "#00ff00", "#0000ff"};
+    const auto three = match_color(mix_color(rgb, {1.0, 1.0, 1.0}), rgb, 4);
+    REQUIRE_FALSE(three.empty());
+    CHECK(three.front().mix.components.size() == 3);
+    CHECK(three.front().distance < 0.5);
+}

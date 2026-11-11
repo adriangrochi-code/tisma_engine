@@ -2,6 +2,7 @@
 
 #include "slice/layers.hpp"
 
+#include <array>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -142,6 +143,28 @@ std::vector<MixSuggestion> mix_purge_suggestions(const ColorMix& mix, double hei
 // by their shares, by the Yule-Nielsen relation (n = 2) on each channel.
 // An approximation: the colours real filaments give were not measured.
 std::string mix_color(const std::vector<std::string>& colors, const std::vector<double>& shares);
+
+// The CIEDE2000 colour difference between two "#rrggbb" colours (CIELAB,
+// D65), after G. Sharma, W. Wu and E. N. Dalal, "The CIEDE2000
+// color-difference formula: implementation notes, supplementary test data,
+// and mathematical observations", Color Research & Application 30 (2005).
+double ciede2000(const std::string& a, const std::string& b);
+// The same between two CIELAB colours (L*, a*, b*).
+double ciede2000_lab(const std::array<double, 3>& a, const std::array<double, 3>& b);
+
+// The colour sought (color_mixing_plus.md, rule 4): every blend of 2 and of
+// 3 of the filaments with a cycle of up to `max_cycle` layers and no share
+// under `min_part` (0 to 1), its colour by mix_color, the closest first by
+// CIEDE2000; the best and the next 3 at most. `id` numbers the blends.
+// Reached when the best is 10 or less apart.
+struct MixMatch {
+    ColorMix mix;
+    std::string color;
+    double distance = 0.0;
+};
+std::vector<MixMatch> match_color(const std::string& target, const std::vector<std::string>& filament_colors, int id,
+                                  int max_cycle = 6, double min_part = 0.0);
+inline bool color_reached(const std::vector<MixMatch>& m) { return !m.empty() && m.front().distance <= 10.0; }
 
 // The purge between two filaments by their colours ("#rrggbb"), mm3
 // (color_mixing_plus.md, rule 37; own design): 0 for the same colour, else

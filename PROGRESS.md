@@ -12675,7 +12675,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   | 1 | Cuatro tipos (ratio, pattern, match, gradient) | parcial: ratio, pattern y gradient; falta match |
   | 2 | Secuencia escrita | hecho en el motor (MX3, MX4); falta el campo en rojo de la interfaz |
   | 3 | Degradé de 2 a 4 filamentos en Z / X / Y / entre puntos | parcial: solo en Z |
-  | 4 | Color buscado (CIEDE2000, recomendaciones) | pendiente |
+  | 4 | Color buscado (CIEDE2000, recomendaciones) | hecho en el motor (MX5, MX6; `match_color`, `ciede2000`); falta la pestaña de la interfaz |
   | 5 | Pares automáticos | parcial: `auto_pair_mixes` (MX1); falta `mixing.auto_pairs` y crearlos en la interfaz |
   | 6–7 | Lista de mezclas, nombre, acciones; asignar | parcial: asignar a pieza y pintar; `enabled` y `name` en el motor, una mezcla apagada avisa al laminar (MX2) |
   | 8–9 | Alto por filamento, paso | 8 hecho (MX7; `mixing.cadence_heights`, `height_a`, `height_b`); 9 hecho (`mixing.step`, MX28; MX29 con dos pasadas distintas por capa; A, B, A en una capa pendiente: el G-code imprime cada filamento una vez por capa) |
@@ -12723,6 +12723,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 4: color buscado** (2026-11-11, bloque nocturno; MX5 y MX6). `ciede2000` y
+  `ciede2000_lab` (fórmula publicada de Sharma, Wu y Dalal 2005; verificada con tres pares de su tabla a 1e-4) y
+  `match_color(objetivo, colores, id, max_cycle, min_part)` en `src/slice/color_mix.*`. Prueba todas las mezclas de 2
+  y de 3 filamentos con ciclos de hasta `max_cycle` capas (sin repetir proporciones), predice el color con
+  `mix_color` y da la mejor y las 3 siguientes por distancia. `color_reached` dice si la mejor está a 10 o menos.
+  Prueba `[mixing]`: gris con blanco y negro (MX5), verde inalcanzable (MX6), un 1 : 1 : 1 de RGB encontrado.
+  Falta: la predicción espectral (regla 21) y la pestaña «Color buscado» (interfaz).
 - **Full Spectrum, regla 38: sugerencias del aviso** (2026-11-11, bloque nocturno). `mix_purge_suggestions(mezcla,
   alto, opciones, purga por cambio, volumen de la pieza, alto máximo)` en `src/slice/color_mix.*`: si la purga pasa
   del 50 % del filamento, da cada medida con sus cambios y su parte de purga. Las medidas son: subcapas apagadas;

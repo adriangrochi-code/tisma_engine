@@ -533,4 +533,100 @@ std::vector<MixSuggestion> mix_purge_suggestions(const ColorMix& mix, double hei
     return out;
 }
 
+double ciede2000(const std::string& first, const std::string& second) { return ciede2000_lab(lab_of(first), lab_of(second)); }
+
+double ciede2000_lab(const std::array<double, 3>& a, const std::array<double, 3>& b) {
+    constexpr double pi = 3.14159265358979323846;
+    const auto rad = [](double d) { return d * pi / 180.0; };
+    const auto deg = [](double r) { return r * 180.0 / pi; };
+    const double c1 = std::hypot(a[1], a[2]), c2 = std::hypot(b[1], b[2]);
+    const double cbar = 0.5 * (c1 + c2);
+    const double c7 = std::pow(cbar, 7.0);
+    const double g = 0.5 * (1.0 - std::sqrt(c7 / (c7 + std::pow(25.0, 7.0))));
+    const double a1 = (1.0 + g) * a[1], a2 = (1.0 + g) * b[1];
+    const double cp1 = std::hypot(a1, a[2]), cp2 = std::hypot(a2, b[2]);
+    const auto hue = [&](double x, double y) {
+        if (x == 0.0 && y == 0.0)
+            return 0.0;
+        double h = deg(std::atan2(y, x));
+        return h < 0.0 ? h + 360.0 : h;
+    };
+    const double h1 = hue(a1, a[2]), h2 = hue(a2, b[2]);
+    const double dl = b[0] - a[0], dc = cp2 - cp1;
+    double dh = 0.0;
+    if (cp1 * cp2 != 0.0) {
+        dh = h2 - h1;
+        if (dh > 180.0)
+            dh -= 360.0;
+        else if (dh < -180.0)
+            dh += 360.0;
+    }
+    const double dH = 2.0 * std::sqrt(cp1 * cp2) * std::sin(rad(dh / 2.0));
+    const double lbar = 0.5 * (a[0] + b[0]), cpbar = 0.5 * (cp1 + cp2);
+    double hbar = h1 + h2;
+    if (cp1 * cp2 != 0.0) {
+        if (std::abs(h1 - h2) <= 180.0)
+            hbar = 0.5 * (h1 + h2);
+        else
+            hbar = h1 + h2 < 360.0 ? 0.5 * (h1 + h2 + 360.0) : 0.5 * (h1 + h2 - 360.0);
+    }
+    const double t = 1.0 - 0.17 * std::cos(rad(hbar - 30.0)) + 0.24 * std::cos(rad(2.0 * hbar)) +
+                     0.32 * std::cos(rad(3.0 * hbar + 6.0)) - 0.20 * std::cos(rad(4.0 * hbar - 63.0));
+    const double dtheta = 30.0 * std::exp(-std::pow((hbar - 275.0) / 25.0, 2.0));
+    const double cp7 = std::pow(cpbar, 7.0);
+    const double rc = 2.0 * std::sqrt(cp7 / (cp7 + std::pow(25.0, 7.0)));
+    const double sl = 1.0 + 0.015 * std::pow(lbar - 50.0, 2.0) / std::sqrt(20.0 + std::pow(lbar - 50.0, 2.0));
+    const double sc = 1.0 + 0.045 * cpbar, sh = 1.0 + 0.015 * cpbar * t;
+    const double rt = -std::sin(rad(2.0 * dtheta)) * rc;
+    return std::sqrt(std::pow(dl / sl, 2.0) + std::pow(dc / sc, 2.0) + std::pow(dH / sh, 2.0) +
+                     rt * (dc / sc) * (dH / sh));
+}
+
+std::vector<MixMatch> match_color(const std::string& target, const std::vector<std::string>& colors, int id, int max_cycle,
+                                  double min_part) {
+    std::vector<MixMatch> all;
+    const int n = int(colors.size());
+    max_cycle = std::clamp(max_cycle, 2, 64);
+    const auto add = [&](const std::vector<int>& filaments, const std::vector<int>& counts) {
+        const int sum = std::accumulate(counts.begin(), counts.end(), 0);
+        int common = 0;
+        for (const int c : counts)
+            common = std::gcd(common, c);
+        if (common != 1) // the same blend as a shorter cycle
+            return;
+        ColorMix mix;
+        mix.id = id;
+        std::vector<std::string> cs;
+        std::vector<double> shares;
+        for (std::size_t k = 0; k < filaments.size(); ++k) {
+            const double share = double(counts[k]) / sum;
+            if (share < min_part - 1e-12)
+                return;
+            mix.components.push_back({filaments[k] + 1, share});
+            cs.push_back(colors[std::size_t(filaments[k])]);
+            shares.push_back(share);
+        }
+        MixMatch m{mix, mix_color(cs, shares), 0.0};
+        m.distance = ciede2000(target, m.color);
+        mix.color = m.color;
+        m.mix.color = m.color;
+        all.push_back(std::move(m));
+    };
+    for (int i = 0; i < n; ++i)
+        for (int j = i + 1; j < n; ++j) {
+            for (int a = 1; a < max_cycle; ++a)
+                for (int b = 1; a + b <= max_cycle; ++b)
+                    add({i, j}, {a, b});
+            for (int k = j + 1; k < n; ++k)
+                for (int a = 1; a < max_cycle; ++a)
+                    for (int b = 1; a + b < max_cycle; ++b)
+                        for (int c = 1; a + b + c <= max_cycle; ++c)
+                            add({i, j, k}, {a, b, c});
+        }
+    std::stable_sort(all.begin(), all.end(), [](const MixMatch& x, const MixMatch& y) { return x.distance < y.distance; });
+    if (all.size() > 4)
+        all.resize(4);
+    return all;
+}
+
 } // namespace tisma
