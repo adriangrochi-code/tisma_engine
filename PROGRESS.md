@@ -12706,8 +12706,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - BH57 (búsqueda profunda, servicios): `library export --entry e1 -o e1.tismalib`, con el archivo en la carpeta
   actual, fallaba con «cannot create directories: Invalid argument []» (la carpeta madre vacía). Ahora un nombre suelto
   va a la carpeta actual. Prueba `[library]`, que falla sin el arreglo. Visto sin cambio: los identificadores con `..`
-  o `/` se rechazan; un nombre con comillas, barra y ñ se guarda tal cual. A consultar: `printed --date` acepta
-  cualquier texto («ayer», «2026-13-45»).
+  o `/` se rechazan; un nombre con comillas, barra y ñ se guarda tal cual. - BH58 (spec/next 058df3b, `local_library.md` regla 1): `library printed --date` aceptaba cualquier texto («ayer»,
+  «2026-13-45», «2026-02-30»). Ahora solo un día real AAAA-MM-DD (el 29-02 en años bisiestos); otra cosa es un error de
+  uso que nombra el formato, sin guardar nada; sin `--date`, hoy (antes la fecha y la hora). Prueba `[library]`, que
+  falla sin el arreglo.
 - `slice --mixes <mezclas.json> --mix <n>` (pedido de la sesión de spec para la caja negra de MX8): las mezclas en el
   JSON del proyecto (`color_mixing.md`, regla 15) y la que imprime el modelo, desde la línea de comandos. Antes solo
   entraban con un proyecto. Prueba `[cli]`.

@@ -20,7 +20,7 @@ constexpr std::string_view kLibraryUsage =
     "  save (--new | --entry ID) --model P.3mf --config S.json --recipe R.json [--summary S.json]\n"
     "       [--analysis A.tea|A.taero [--analysis-summary A.json]] [--name N] [--thumb T.png]\n"
     "  check --entry ID --recipe N --config S.json\n"
-    "  printed --entry ID [--date ISO] [--photo P.jpg] [--note TEXT]\n"
+    "  printed --entry ID [--date YYYY-MM-DD] [--photo P.jpg] [--note TEXT]\n"
     "  delete --entry ID [--recipe N | --analysis N]\n"
     "  export --entry ID -o F.tismalib\n"
     "  import F.tismalib [--replace | --new]\n";
