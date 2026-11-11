@@ -1,6 +1,7 @@
 // Mixed colours with one nozzle (docs/spec/features/color_mixing.md, rules
 // 5 to 16; tests FS1 to FS14).
 
+#include "calibration/calibration.hpp"
 #include "config/settings.hpp"
 #include "gcode/check.hpp"
 #include "gcode/writer.hpp"
@@ -1380,4 +1381,53 @@ TEST_CASE("color mixing plus: the estimate before slicing for a gradient between
     g.from = std::array<double, 3>{0, 0, 0};
     g.to = std::array<double, 3>{0, 0, 20};
     CHECK(mix_changes_estimate(g, 20.0, o) == changes(gcode_of(sliced(p, s, {g}), s)));
+}
+
+TEST_CASE("color mixing plus: the blend palette piece slices, each sample with its blend (CM8, MX18)", "[mixing][calibration]") {
+    // As the interface loads it: one object, a part per piece of the mesh,
+    // the base with filament 1 and each sample with its blend.
+    const std::vector<std::string> four = {"#00ffff", "#ff00ff", "#ffff00", "#ffffff"};
+    const std::vector<PaletteSample> palette = quick_palette(four, 2, 5);
+    const PalettePiece piece = palette_piece(palette.size());
+    Plate p;
+    const auto add = [&](const TriangleMesh& m, int extruder) {
+        const std::size_t first = p.mesh.triangle_count();
+        for (std::size_t t = 0; t < m.triangle_count(); ++t) {
+            Vec3f c[3];
+            for (int k = 0; k < 3; ++k)
+                c[k] = m.corner(t, k), c[k].x += 125.0f, c[k].y += 105.0f;
+            p.mesh.add_triangle(c[0], c[1], c[2]);
+        }
+        p.objects.push_back({"palette", first, m.triangle_count(), 0, 0, extruder});
+    };
+    add(piece.base, 1);
+    std::vector<ColorMix> mixes;
+    for (std::size_t k = 0; k < palette.size(); ++k) {
+        add(piece.samples[k], palette[k].mix.id);
+        mixes.push_back(palette[k].mix); // a filament's sample is a blend of one
+    }
+    Settings s = base(4);
+    const SlicedModel model = sliced(p, s, mixes);
+    const std::string gcode = gcode_of(model, s); // checked
+    // Every filament prints, on the samples' layers too.
+    for (const char* tool : {"T0", "T1", "T2", "T3"})
+        CHECK(gcode.find(std::string("\n") + tool) != std::string::npos);
+    // Each filament's own sample prints with it (the samples' layers: 1 to 3 mm).
+    for (std::size_t k = 0; k < 4; ++k) {
+        const BoundingBox box = piece.samples[k].bounding_box();
+        std::set<int> tools;
+        for (std::size_t l = 0; l < model.layers.size(); ++l)
+            if (model.layers[l].bottom > 1.2 && model.layers[l].top < 2.8)
+                for (const Toolpath& t : model.walls[l].toolpaths)
+                    for (const ToolpathPoint& q : t.points)
+                        if (q.p.x > box.min.x + 125.5 && q.p.x < box.max.x + 124.5 && q.p.y > box.min.y + 105.5 &&
+                            q.p.y < box.max.y + 104.5)
+                            tools.insert(t.tool);
+        INFO("sample " << k + 1);
+        CHECK(tools == std::set<int>{int(k) + 1});
+    }
+    // No toolpath is left with a blend's number.
+    for (const LayerWalls& w : model.walls)
+        for (const Toolpath& t : w.toolpaths)
+            CHECK(t.tool <= 4);
 }
