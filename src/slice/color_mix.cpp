@@ -105,6 +105,76 @@ std::vector<int> mix_sequence(const ColorMix& mix) {
     return parts.empty() ? std::vector<int>{} : cycle_of(parts);
 }
 
+std::vector<int> gradient_cycle(const ColorMix& mix, double at) {
+    std::vector<ColorMix::Component> points = mix.components;
+    if (points.empty())
+        return {1};
+    std::stable_sort(points.begin(), points.end(), [](const auto& a, const auto& b) { return a.share < b.share; });
+    // The blend at `at`, between its two points, rounded to 10 %.
+    if (at <= points.front().share)
+        return {points.front().extruder};
+    if (at >= points.back().share)
+        return {points.back().extruder};
+    std::size_t b = 1;
+    while (b + 1 < points.size() && points[b].share < at)
+        ++b;
+    const ColorMix::Component& lo = points[b - 1];
+    const ColorMix::Component& hi = points[b];
+    const double t = hi.share > lo.share ? (at - lo.share) / (hi.share - lo.share) : 1.0;
+    const double share = std::round(t * 10.0) / 10.0;
+    return cycle_of({{lo.extruder, 1.0 - share}, {hi.extruder, share}});
+}
+
+std::vector<std::pair<int, Toolpath>> split_by_bands(const Toolpath& path, int axis, double lo, double band, int bands) {
+    std::vector<std::pair<int, Toolpath>> out;
+    if (path.points.empty() || !(band > 0.0) || bands < 1)
+        return out;
+    const auto coord = [&](const ToolpathPoint& q) { return axis == 1 ? q.p.y : q.p.x; };
+    const auto band_of = [&](double v) { return std::clamp(int(std::floor((v - lo) / band)), 0, bands - 1); };
+    std::vector<ToolpathPoint> points = path.points;
+    if (path.closed && points.size() > 1)
+        points.push_back(points.front());
+    Toolpath piece = path;
+    piece.closed = false;
+    piece.points = {points.front()};
+    int now = band_of(coord(points.front()));
+    for (std::size_t i = 1; i < points.size(); ++i) {
+        const ToolpathPoint& a = points[i - 1];
+        const ToolpathPoint& b = points[i];
+        const int to = band_of(coord(b));
+        // Cut at each band edge the segment crosses, in order.
+        while (now != to) {
+            const int next = now + (to > now ? 1 : -1);
+            const double edge = lo + band * double(std::max(now, next));
+            const double ca = coord(a), cb = coord(b);
+            const double t = cb != ca ? std::clamp((edge - ca) / (cb - ca), 0.0, 1.0) : 0.0;
+            ToolpathPoint cut = a;
+            cut.p.x = a.p.x + (b.p.x - a.p.x) * t;
+            cut.p.y = a.p.y + (b.p.y - a.p.y) * t;
+            cut.width = a.width + (b.width - a.width) * t;
+            cut.dz = a.dz + (b.dz - a.dz) * t;
+            cut.below = a.below + (b.below - a.below) * t;
+            piece.points.push_back(cut);
+            if (piece.points.size() >= 2)
+                out.push_back({now, piece});
+            piece.points = {cut};
+            now = next;
+        }
+        piece.points.push_back(b);
+    }
+    if (piece.points.size() >= 2)
+        out.push_back({now, piece});
+    // A loop cut open: its last piece and its first, in the same band, are one.
+    if (path.closed && out.size() > 1 && out.front().first == out.back().first) {
+        Toolpath& last = out.back().second;
+        last.points.insert(last.points.end(), out.front().second.points.begin() + 1, out.front().second.points.end());
+        out.erase(out.begin());
+    } else if (path.closed && out.size() == 1) {
+        out.front().second = path; // all in one band: still a loop
+    }
+    return out;
+}
+
 std::vector<int> mix_layers(const ColorMix& mix, const std::vector<Layer>& layers, const std::vector<char>& present,
                             double step) {
     const std::size_t n = layers.size();
@@ -197,22 +267,7 @@ std::vector<int> mix_layers(const ColorMix& mix, const std::vector<Layer>& layer
             const int band = std::clamp(int(std::floor((top[l] - r.lo) / band_height)), 0, bands - 1);
             if (band != band_now) {
                 band_now = band, start = l;
-                // The blend at the band's middle, rounded to 10 %.
-                const double at = (band + 0.5) / bands;
-                if (at <= points.front().share)
-                    cycle = {points.front().extruder};
-                else if (at >= points.back().share)
-                    cycle = {points.back().extruder};
-                else {
-                    std::size_t b = 1;
-                    while (b + 1 < points.size() && points[b].share < at)
-                        ++b;
-                    const ColorMix::Component& lo = points[b - 1];
-                    const ColorMix::Component& hi = points[b];
-                    const double t = hi.share > lo.share ? (at - lo.share) / (hi.share - lo.share) : 1.0;
-                    const double share = std::round(t * 10.0) / 10.0;
-                    cycle = cycle_of({{lo.extruder, 1.0 - share}, {hi.extruder, share}});
-                }
+                cycle = gradient_cycle(mix, (band + 0.5) / bands);
             }
             out[l] = cycle[(l - start) % cycle.size()];
         }

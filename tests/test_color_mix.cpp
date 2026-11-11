@@ -1196,3 +1196,48 @@ TEST_CASE("color mixing plus: the estimate before slicing with mixing.step and s
             CHECK(mix_changes_estimate(mix, 10.0, o) == counted);
         }
 }
+
+TEST_CASE("color mixing plus: a path cut at the bands of a gradient in X or Y (rule 3)", "[mixing]") {
+    const auto at = [](double x, double y) { return ToolpathPoint{{x, y}, 0.45}; };
+    // A line from x 0 to 25 across bands of 10 mm from 0: three pieces.
+    Toolpath line;
+    line.points = {at(0, 0), at(25, 0)};
+    line.tool = 7;
+    const auto pieces = split_by_bands(line, 0, 0.0, 10.0, 3);
+    REQUIRE(pieces.size() == 3);
+    CHECK(pieces[0].first == 0);
+    CHECK(pieces[1].first == 1);
+    CHECK(pieces[2].first == 2);
+    CHECK(pieces[0].second.points.back().p.x == 10.0);
+    CHECK(pieces[2].second.points.front().p.x == 20.0);
+    CHECK(pieces[1].second.tool == 7);
+    // Back again: the bands in reverse.
+    std::swap(line.points[0], line.points[1]);
+    const auto back = split_by_bands(line, 0, 0.0, 10.0, 3);
+    REQUIRE(back.size() == 3);
+    CHECK(back[0].first == 2);
+    CHECK(back[2].first == 0);
+    // A square loop from 2 to 18 across the edge at 10, by Y... and by X.
+    Toolpath loop;
+    loop.closed = true;
+    loop.points = {at(2, 2), at(18, 2), at(18, 18), at(2, 18)};
+    const auto two = split_by_bands(loop, 0, 0.0, 10.0, 2);
+    REQUIRE(two.size() == 2); // the last piece and the first, both in band 0, are one
+    double length = 0.0;
+    for (const auto& [band, p] : two) {
+        CHECK_FALSE(p.closed);
+        for (std::size_t i = 1; i < p.points.size(); ++i)
+            length += std::hypot(p.points[i].p.x - p.points[i - 1].p.x, p.points[i].p.y - p.points[i - 1].p.y);
+    }
+    CHECK_THAT(length, WithinAbs(64.0, 1e-9)); // nothing lost
+    // Inside one band, the loop stays a loop.
+    const auto one = split_by_bands(loop, 1, 0.0, 30.0, 2);
+    REQUIRE(one.size() == 1);
+    CHECK(one.front().second.closed);
+    // The cycle along the gradient: filament 1 at the start, 2 at the end, 1 : 1 in the middle.
+    ColorMix g = blend(5, {{1, 0.0}, {2, 1.0}});
+    g.gradient = true;
+    CHECK(gradient_cycle(g, 0.0) == std::vector<int>{1});
+    CHECK(gradient_cycle(g, 1.0) == std::vector<int>{2});
+    CHECK(gradient_cycle(g, 0.5).size() == 2);
+}

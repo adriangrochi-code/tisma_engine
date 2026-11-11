@@ -1,5 +1,6 @@
 #pragma once
 
+#include "perimeters/sites.hpp"
 #include "slice/layers.hpp"
 
 #include <array>
@@ -196,6 +197,17 @@ struct ColorName {
     std::string en, es;
 };
 ColorName color_name(const std::string& hex);
+
+// A gradient's cycle at `at` (0 to 1) of its range: the blend of its two
+// points around `at`, rounded to 10 % (rule 10 of color_mixing.md).
+std::vector<int> gradient_cycle(const ColorMix& mix, double at);
+
+// A gradient in X or Y (color_mixing_plus.md, rule 3) cuts each path at the
+// edges of `bands` bands `band` mm wide from `lo` along X (`axis` 0) or Y (1);
+// each piece with its band, in the path's order. A loop cut open comes back
+// as open pieces (the last joined to the first when both are in one band); a
+// loop inside one band stays a loop.
+std::vector<std::pair<int, Toolpath>> split_by_bands(const Toolpath& path, int axis, double lo, double band, int bands);
 
 // The quick palette (color_mixing_plus.md, rule 22, MX18): one sample per
 // filament, then every blend of 2 and of 3 filaments whose cycle has at most
