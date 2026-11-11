@@ -884,6 +884,11 @@ private:
     void mixing_dialog();
     std::string filament_color(int extruder) const;
     int mix_changes_planned() const;
+    // A blend's colour as `mixing.predictor` foresees it (rules 20, 21): the
+    // simple mixer, or the spectral one with each filament's TD.
+    std::string blend_color(const ColorMix& m) const;
+    std::vector<double> filament_transmission() const; // empty with the simple mixer
+    void recolor_mixes();
     // The plate's blends before slicing (color_mixing_plus.md, rules 12 and 38).
     struct MixCost {
         int changes = 0;
@@ -1588,6 +1593,7 @@ private:
     bool cube_drag_ = false;
     std::map<std::string, ImVec2> cube_spots_; // script: where each face, edge and corner of the cube is
     OrbitCamera camera_mark_;                  // script: the camera at camera-mark
+    std::string mix_color_mark_;               // script: the blend's colour at mix-color-mark
     bool camera_framed_ = false; // the camera is as the last framing left it (no orbit, pan or zoom since)
     bool last_coarse_ = false; // the last frame drew the coarse copy (--ui-script's expect-coarse)
     std::uint64_t scene_version_ = 1, ray_version_ = 0;
@@ -2150,6 +2156,13 @@ const std::map<T, const char*>& row_keys() {
         {T::InterlockAvoidance, "interlocking.boundary_avoidance"}, {T::PaintMaxRegionWidth, "painting.max_region_width"},
         {T::PaintInterlockingDepth, "painting.interlocking_depth"}, {T::SyncSupportLayers, "support.synchronize_layers"},
         {T::FineWallsCoarseInfill, "multi.fine_walls_coarse_infill"}, {T::ColorMixingRow, "multi.color_mixing"},
+        {T::TransmissionRow, "extrusion.transmission_distance"}, {T::MixSubdivideRow, "mixing.subdivide"}, {T::MixSubMinHeightRow, "mixing.sub_min_height"},
+        {T::MixSubFirstLayerRow, "mixing.sub_first_layer"}, {T::MixSubInfillRow, "mixing.sub_infill"},
+        {T::MixCadenceRow, "mixing.cadence_heights"}, {T::MixHeightARow, "mixing.height_a"},
+        {T::MixHeightBRow, "mixing.height_b"}, {T::MixStepRow, "mixing.step"},
+        {T::MixSurfaceOnlyRow, "mixing.surface_only"}, {T::MixSurfaceDepthRow, "mixing.surface_depth"},
+        {T::MixExtraWallsRow, "mixing.extra_walls"}, {T::MixPurgeIntoInfillRow, "mixing.purge_into_infill"},
+        {T::MixPurgeInfillMaxRow, "mixing.purge_infill_max"}, {T::MixPredictorRow, "mixing.predictor"},
         {T::CurvedModeRow, "curved.mode"}, {T::CurvedPatternRow, "curved.pattern"}, {T::CurvedFitHead, "curved.fit_head"},
         {T::CurvedAmplitude, "curved.amplitude"}, {T::CurvedWavelength, "curved.wavelength"},
         {T::CurvedAngle, "curved.angle"}, {T::CurvedTwist, "curved.twist"}, {T::CurvedConeAngle, "curved.cone_angle"},
@@ -5801,13 +5814,7 @@ void App::profile_row(ProfileKind kind, bool compact) {
                     std::snprintf(hex, sizeof hex, "#%02X%02X%02X", unsigned(std::lround(rgb3[0] * 255.0f)),
                                   unsigned(std::lround(rgb3[1] * 255.0f)), unsigned(std::lround(rgb3[2] * 255.0f)));
                     filament_colors_[0] = hex;
-                    for (ColorMix& m : mixes_) { // the mixed colours made with it (color_mixing.md)
-                        std::vector<std::string> colors;
-                        std::vector<double> shares;
-                        for (const ColorMix::Component& c : m.components)
-                            colors.push_back(filament_color(c.extruder)), shares.push_back(c.share);
-                        m.color = mix_color(colors, shares);
-                    }
+                    recolor_mixes(); // the mixed colours made with it (color_mixing.md)
                 }
                 ImGui::EndMenu();
             }
@@ -6859,6 +6866,7 @@ void App::take_limits(const device::PrinterLimits& limits, const std::string& fi
 
 void App::settings_changed() {
     ++revision_.settings;
+    recolor_mixes(); // the prediction or a filament's TD may have changed (color_mixing_plus.md, rule 21)
     if (result_ && !viewer_)
         stale_ = true;
 }
@@ -9572,6 +9580,37 @@ bool App::card_rows(std::string_view id, bool& bed) {
         whole(T::BedTemperatureFrom, "extruders.bed_temperature_from", s.bed_temperature_from, 0, kMaxExtruders);
         flag(T::OozePrevention, "extruders.ooze_prevention", s.ooze_prevention);
         mm(T::StandbyDelta, "extruders.standby_delta", s.standby_delta, -300.0, 300.0, "%.0f °C", 0.5f);
+    } else if (id == "color_mix") {
+        // How the blends are laid in layers (color_mixing_plus.md, rules 8 to
+        // 10); 0 mm: the layer's height.
+        flag(T::MixSubdivideRow, "mixing.subdivide", s.mix_subdivide);
+        mm(T::MixSubMinHeightRow, "mixing.sub_min_height", s.mix_sub_min_height, 0.01, 10.0, "%.2f mm", 0.002f);
+        flag(T::MixSubFirstLayerRow, "mixing.sub_first_layer", s.mix_sub_first_layer);
+        flag(T::MixSubInfillRow, "mixing.sub_infill", s.mix_sub_infill);
+        flag(T::MixCadenceRow, "mixing.cadence_heights", s.mix_cadence_heights);
+        mm(T::MixHeightARow, "mixing.height_a", s.mix_height_a, 0.0, 10.0, "%.2f mm", 0.002f, tr(T::MixZeroIsLayer));
+        mm(T::MixHeightBRow, "mixing.height_b", s.mix_height_b, 0.0, 10.0, "%.2f mm", 0.002f, tr(T::MixZeroIsLayer));
+        mm(T::MixStepRow, "mixing.step", s.mix_step, 0.0, 10.0, "%.2f mm", 0.002f, tr(T::MixZeroIsLayer));
+    } else if (id == "color_mix_zones") {
+        // Where the blends go and how their colour is foreseen (rules 13, 14,
+        // 20, 21, 35).
+        flag(T::MixSurfaceOnlyRow, "mixing.surface_only", s.mix_surface_only);
+        mm(T::MixSurfaceDepthRow, "mixing.surface_depth", s.mix_surface_depth, 0.1, 5.0, "%.1f mm", 0.01f);
+        whole(T::MixExtraWallsRow, "mixing.extra_walls", s.mix_extra_walls, 0, 8);
+        flag(T::MixPurgeIntoInfillRow, "mixing.purge_into_infill", s.mix_purge_into_infill);
+        mm(T::MixPurgeInfillMaxRow, "mixing.purge_infill_max", s.mix_purge_infill_max, 0.0, 100.0, "%.0f %%", 0.5f);
+        if (shown("mixing.predictor")) {
+            label_cell(T::MixPredictorRow, tr(T::MixPredictorTip));
+            const bool spectral = s.mix_predictor == "spectral";
+            if (ImGui::BeginCombo("##v", tr(spectral ? T::MixPredictorSpectral : T::MixPredictorMixer))) {
+                for (const auto& [value, name] : {std::pair{"mixer", T::MixPredictorMixer}, std::pair{"spectral", T::MixPredictorSpectral}})
+                    if (ImGui::Selectable(tr(name), s.mix_predictor == value) && s.mix_predictor != value) {
+                        s.mix_predictor = value;
+                        changed = true;
+                    }
+                ImGui::EndCombo();
+            }
+        }
     } else if (id == "multi_nozzle") {
         // Different nozzles and mixed colours (multimaterial.md, rules 3, 9
         // and 11): with one nozzle for every filament, turning the mixing on
@@ -9871,6 +9910,14 @@ bool App::card_rows(std::string_view id, bool& bed) {
             mm(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.front(), 0.0, 10000.0, "%.0f mm³", 0.5f);
         else
             count(T::MinPurgeOnTower, "extrusion.min_purge_on_tower", s.min_purge_on_tower.size());
+        // How far light goes through it (HueForge's TD; color_mixing_plus.md, rules 21 and 33).
+        if (s.transmission_distance.size() == 1) {
+            if (shown("extrusion.transmission_distance")) {
+                changed |= row(T::TransmissionRow, s.transmission_distance.front(), 0.0, 100.0, "%.1f mm", 0.05f, tr(T::TransmissionTip));
+            }
+        } else {
+            count(T::TransmissionRow, "extrusion.transmission_distance", s.transmission_distance.size());
+        }
         count(T::FlowBySpeedRow, "extrusion.flow_by_speed", s.flow_by_speed.size()); // pellets.md, rule 5
         if (shown("extrusion.section")) // pellets.md, rule 4
             changed |= row(T::BeadSectionRow, s.bead_section,
@@ -12256,6 +12303,35 @@ static MixChangeOptions mix_change_options(const Settings& s) {
     return options;
 }
 
+std::vector<double> App::filament_transmission() const {
+    if (settings_.mix_predictor != "spectral")
+        return {};
+    std::vector<double> td;
+    for (int e = 1; e <= std::max(settings_.extruders, 1); ++e) {
+        const auto& v = settings_.transmission_distance;
+        td.push_back(v.empty() ? 0.0 : v[std::min(std::size_t(e - 1), v.size() - 1)]);
+    }
+    return td;
+}
+
+std::string App::blend_color(const ColorMix& m) const {
+    std::vector<std::string> colors;
+    std::vector<double> shares, td;
+    const std::vector<double> all = filament_transmission();
+    for (const ColorMix::Component& c : m.components) {
+        colors.push_back(filament_color(c.extruder));
+        shares.push_back(c.share);
+        if (!all.empty())
+            td.push_back(all[std::size_t(std::clamp(c.extruder, 1, int(all.size())) - 1)]);
+    }
+    return all.empty() ? mix_color(colors, shares) : mix_color_spectral(colors, shares, td);
+}
+
+void App::recolor_mixes() {
+    for (ColorMix& m : mixes_)
+        m.color = blend_color(m);
+}
+
 std::vector<std::vector<double>> App::color_purge_table() const {
     std::vector<std::string> colors;
     for (int e = 1; e <= std::max(settings_.extruders, 1); ++e)
@@ -12424,13 +12500,7 @@ void App::mixing_dialog() {
         return ImVec4(float((v >> 16) & 0xFF) / 255.0f, float((v >> 8) & 0xFF) / 255.0f, float(v & 0xFF) / 255.0f, 1.0f);
     };
     const int filaments = std::max(settings_.extruders, 1);
-    const auto recolor = [&](ColorMix& m) {
-        std::vector<std::string> colors;
-        std::vector<double> shares;
-        for (const ColorMix::Component& c : m.components)
-            colors.push_back(filament_color(c.extruder)), shares.push_back(c.share);
-        m.color = mix_color(colors, shares);
-    };
+    const auto recolor = [&](ColorMix& m) { m.color = blend_color(m); };
     const auto add = [&](int a, int b) {
         ColorMix m;
         m.id = filaments + 1;
@@ -23945,10 +24015,22 @@ void App::script_input() {
         for (const ColorMix& other : mixes_)
             m.id = std::max(m.id, other.id + 1);
         m.components = {{std::atoi(step.key.c_str()), 0.5}, {std::atoi(step.value.c_str()), 0.5}};
+        m.color = blend_color(m);
         mixes_.push_back(m);
         for (PlateObject& o : objects_)
             o.extruder = m.id;
         std::printf("ui-script: add-mix: %d changes for the plate\n", mix_changes_planned());
+        next();
+    } else if (step.verb == "mix-color-mark") { // remember the last blend's colour, for expect-mix-color
+        mix_color_mark_ = mixes_.empty() ? std::string() : mixes_.back().color;
+        next();
+    } else if (step.verb == "expect-mix-color") { // since mix-color-mark: changed | same
+        const std::string now = mixes_.empty() ? std::string() : mixes_.back().color;
+        const bool ok = step.key == "changed" ? now != mix_color_mark_ : now == mix_color_mark_;
+        std::printf("ui-script: expect-mix-color %s: %s (%s, was %s)\n", step.key.c_str(), ok ? "ok" : "no", now.c_str(),
+                    mix_color_mark_.c_str());
+        if (!ok)
+            return fail_step("the blend's colour is not " + step.key);
         next();
     } else if (step.verb == "use-published-material") { // the same for the chosen pack filament's values
         refresh_material_community();

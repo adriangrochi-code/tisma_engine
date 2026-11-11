@@ -13035,3 +13035,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `height_a`, `height_b`; 3aff0cf de la otra sesión): con 0,3 y 0,15 mm el cubo da 44 cambios, no 49 (guion).
 - **Sigue:** selector `mixing.predictor` y la pestaña «Color buscado» cuando el motor los suba; selección múltiple y
   barra de vista abajo al centro.
+
+## 2026-11-11 — interfaz: las tarjetas de la mezcla de colores y la predicción espectral
+
+- **Encontrado:** las tarjetas «Mezcla de colores: capas» y «…: dónde va» (de la otra sesión) no tenían filas en la
+  app: ningún ajuste `mixing.*` se podía cambiar desde el panel, ni `extrusion.transmission_distance`.
+- **Hecho:** sus filas (subcapas, alto por filamento, altura del ciclo, solo la superficie, paredes de más, purga en
+  el relleno, predicción del color) y la TD en «Flujo». El color de cada mezcla sale de un solo lugar
+  (`App::blend_color`): el mezclador simple o, con `mixing.predictor = "spectral"`, `mix_color_spectral` con la TD
+  de cada filamento; se recalcula con cada cambio de ajustes. Guion `mix_settings.txt` (campos con coma decimal, y
+  el color de la mezcla cambia al pasar a la predicción espectral con TD 3 mm).
+- **Sigue:** «Color buscado» (`match_color` con las TD), paleta rápida (`quick_palette`, `color_name`) y la pieza
+  de muestras (`palette_piece`), el eje del degradé y `MixChangeOptions::extent` cuando llegue a209135.

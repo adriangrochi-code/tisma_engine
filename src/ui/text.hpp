@@ -2529,7 +2529,29 @@
     X(PurgeByColorsHint, "por colores", "by colours") \
     X(PurgePairsRow, "Purga por par", "Purge by pair") \
     X(PurgePairsTitle, "Purga entre filamentos, mm³ (fila: de; columna: a)", "Purge between filaments, mm³ (row: from; column: to)") \
-    X(PurgeResetColors, "Volver a los colores", "Back to the colours")
+    X(PurgeResetColors, "Volver a los colores", "Back to the colours") \
+    X(MixSubdivideRow, "Subcapas en las mezclas", "Sublayers in the blends") \
+    X(MixSubMinHeightRow, "Alto mínimo de una subcapa", "Lowest sublayer") \
+    X(MixSubFirstLayerRow, "Dividir la primera capa", "Divide the first layer") \
+    X(MixSubInfillRow, "Dividir también el relleno", "Divide the infill too") \
+    X(MixCadenceRow, "Alto de capa por filamento", "Layer height by filament") \
+    X(MixHeightARow, "Alto del primer filamento", "First filament's height") \
+    X(MixHeightBRow, "Alto del segundo filamento", "Second filament's height") \
+    X(MixStepRow, "Altura del ciclo", "Cycle's height") \
+    X(MixZeroIsLayer, "0: el alto de la capa", "0: the layer's height") \
+    X(MixSurfaceOnlyRow, "Mezcla solo en la superficie", "Blend only on the surface") \
+    X(MixSurfaceDepthRow, "Grosor de la superficie", "Surface's thickness") \
+    X(MixExtraWallsRow, "Paredes de más en las mezclas", "Extra walls in the blends") \
+    X(MixPurgeIntoInfillRow, "Purgar en el relleno", "Purge into the infill") \
+    X(MixPurgeInfillMaxRow, "Relleno máximo para la purga", "Highest infill for the purge") \
+    X(MixPredictorRow, "Predicción del color", "Colour prediction") \
+    X(MixPredictorTip, "Cómo se prevé el color de una mezcla; la espectral usa la TD de cada filamento", \
+      "How a blend's colour is foreseen; the spectral one uses each filament's TD") \
+    X(MixPredictorMixer, "Simple", "Simple") \
+    X(MixPredictorSpectral, "Espectral (con la TD)", "Spectral (with the TD)") \
+    X(TransmissionRow, "Distancia de transmisión (TD)", "Transmission distance (TD)") \
+    X(TransmissionTip, "El espesor en el que el filamento deja pasar casi nada de luz; 0: desconocida. Por encima de 10 mm se ve lo de adentro y no se purga en su relleno", \
+      "The thickness through which the filament lets almost no light pass; 0: unknown. Above 10 mm what is inside shows, so no purge into its infill")
 
 #include <cstdarg>
 #include <optional>
