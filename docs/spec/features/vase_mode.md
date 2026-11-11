@@ -35,6 +35,10 @@ Las capas sólidas de abajo (`surfaces.bottom_layers`), la falda y el borde sigu
    segunda (prueba VA3).
 6. **Tiempo de capa:** cada vuelta cuenta como una capa para el enfriamiento (`cooling.md`): una vuelta corta se frena
    hasta tardar `cooling.min_layer_time` (prueba VA2).
+7. **Agujeros y varias islas** (11-11-2026, comportamiento medido en el motor y aceptado): la espiral es solo la vuelta
+   de afuera de la isla más grande. Los agujeros y las otras islas se imprimen en cada capa como una vuelta plana
+   aparte, con viaje y retracción; Z nunca baja. Al laminar se avisa una vez: «Modo jarrón con agujeros o varias
+   piezas: esas vueltas no son en espiral y dejan una costura» (VA5).
 
 ## Pruebas
 
@@ -48,3 +52,4 @@ de 0,2, sin falda ni borde, centro en (100, 100)) y `vase.enabled` en sí. **Cil
 | VA2 | Cilindro de VA1 | — | Capa 3: una vuelta de 61,43 mm de Z 0,6 a 0,8 (`G1 Z0.601`, `Z0.604`… `Z0.800`), 66 tramos. Capa 10: de Z 2,0 a 2,2, empieza y termina en (91,975; 105,568). Última capa (24): de Z 4,8 a 5,0. Caudal de 0,999 mm³/s en toda la vuelta, también en la primera y la última. Velocidad 12,3 mm/s: 61,4 mm en 5 s |
 | VA3 | Cubo, sin capas sólidas abajo | — | Capa 0: vuelta plana de 78,34 mm a Z 0,2. Capa 1: de Z 0,2 a 0,4. Con 2 capas sólidas abajo: capa 0 relleno sólido, capa 1 superficie de arriba, espiral desde la capa 2 |
 | VA4 | Cilindro; voladizo de `supports_skirt.md` | Dos copias; dos copias impresas una por una; soportes | Dos copias: «Only a single object may be printed at a time in Spiral Vase mode», no lamina. Una por una: lamina, 50 capas (25 por copia). Con soportes: «Spiral vase mode is not compatible with support material», no lamina |
+| VA5 | Tubo de 20 mm con un agujero de 8 mm, modo jarrón | Afuera en espiral sin retracciones; el agujero, una vuelta plana por capa con su retracción; Z no baja nunca; el aviso una vez |
