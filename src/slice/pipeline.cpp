@@ -347,6 +347,19 @@ Painting object_painting(const Painting& painting, const MeshObject& object) {
     return out;
 }
 
+// Whether triangles first to first + count have a colour painted: such a
+// part takes mixing.extra_walls (color_mixing_plus.md, rule 14, MX14), all
+// of it, as a blend's part (own design: walls only in the painted zones would
+// change the infill under them layer by layer).
+bool colour_painted(const Painting* painting, std::size_t first, std::size_t count) {
+    if (!painting || painting->empty(PaintChannel::Color))
+        return false;
+    for (std::size_t t = first; t < first + count && t < painting->size(PaintChannel::Color); ++t)
+        if (!painting->tree(PaintChannel::Color, t).empty())
+            return true;
+    return false;
+}
+
 // The convex hull of points on the bed, counter-clockwise.
 Polygon outline_of(std::span<const Vec3f> points) {
     std::vector<Clipper2Lib::Point64> p;
@@ -1474,7 +1487,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                 if (mesh.triangles.empty())
                     continue;
                 const Painting paint = painting ? object_painting(*painting, o) : Painting{};
-                const Settings own = own_settings(settings, o.settings, o.name);
+                Settings own = own_settings(settings, o.settings, o.name);
+                if (settings.mix_extra_walls > 0 && own.wall_count > 0 &&
+                    (object_tool(o, settings) > settings.extruders || colour_painted(painting, o.first, o.count)))
+                    own.wall_count += settings.mix_extra_walls; // a blend's or a painted part (rule 14)
                 SlicedModel part = slice_plate(mesh, own, gpu, stress, painting ? &paint : nullptr, nullptr,
                                                object_tool(o, settings), negative, nullptr, volumes);
                 if (part.layers.empty())
@@ -1522,8 +1538,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             out = slice_plate(input, settings, gpu, stress, painting, objects, 1, negative, modifiers, volumes);
         } else {
             Settings own = own_settings(settings, objects->front().settings, objects->front().name);
-            if (settings.mix_extra_walls > 0 && own.wall_count > 0 && object_tool(objects->front(), settings) > settings.extruders)
-                own.wall_count += settings.mix_extra_walls; // a blend's part (rule 14)
+            if (settings.mix_extra_walls > 0 && own.wall_count > 0 &&
+                (object_tool(objects->front(), settings) > settings.extruders ||
+                 colour_painted(painting, objects->front().first, objects->front().count)))
+                own.wall_count += settings.mix_extra_walls; // a blend's or a painted part (rule 14)
             out = slice_plate(input, own, gpu, stress, painting, nullptr, object_tool(objects->front(), settings), negative,
                               nullptr, volumes);
             if (object_tool(objects->front(), settings) != 1)
@@ -1558,7 +1576,10 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
         out.notices.insert(out.notices.end(), mix_notices.begin(), mix_notices.end());
         return out;
     }
-    SlicedModel plate = slice_plate(input, settings, gpu, stress, painting, nullptr, 1, negative, nullptr, volumes);
+    Settings plain = settings;
+    if (settings.mix_extra_walls > 0 && plain.wall_count > 0 && colour_painted(painting, 0, input.triangle_count()))
+        plain.wall_count += settings.mix_extra_walls; // a painted part (rule 14)
+    SlicedModel plate = slice_plate(input, plain, gpu, stress, painting, nullptr, 1, negative, nullptr, volumes);
     paint_colors(plate, input, painting, settings, {});
     plate.notices.insert(plate.notices.end(), mix_notices.begin(), mix_notices.end());
     return plate;
@@ -1751,7 +1772,7 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         std::size_t last = 0;
         bool zone = false; // more walls (color_mixing_plus.md, rule 14)
     };
-    // A zone with a blend, or a part printed with another filament than its
+    // A zone with a blend, a part with colours painted, or a part printed with another filament than its
     // object's first part.
     const auto zone_of = [&](const MeshObject& o) {
         if (settings.mix_extra_walls <= 0)
@@ -1759,7 +1780,8 @@ SlicedModel slice_tools(const IndexedMesh& mesh, const Settings& settings, gpu::
         const int tool = object_tool(o, settings);
         const auto first =
             std::find_if(objects.begin(), objects.end(), [&](const MeshObject& x) { return x.object == o.object; });
-        return tool > settings.extruders || object_tool(*first, settings) != tool;
+        return tool > settings.extruders || object_tool(*first, settings) != tool ||
+               colour_painted(painting, o.first, o.count);
     };
     std::vector<Group> groups;
     for (std::size_t i = 0; i < objects.size(); ++i) {

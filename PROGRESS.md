@@ -12685,13 +12685,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   | 10–12 | Subcapas en las zonas con mezcla, varias zonas, costo | 10 y 11 hechos (MX8 a MX10; grupo `mixing`); 12: el motor estima los cambios antes de laminar (`mix_changes_estimate`); falta que la interfaz los muestre en el aviso |
   | 13–14 | Solo la superficie, paredes de más | 13 hecho (MX11, MX12; `mixing.surface_only`, `surface_depth`); 14 hecho (`mixing.extra_walls`, MX14) |
   | 15 | Sesgo | hecho en el motor (MX13; `bias` de la mezcla); falta mostrarlo en la vista previa del color |
-  | 16 | Pintado con mezcla | parcial: las trayectorias pintadas toman el ciclo; falta con las reglas 10–15 |
+  | 16 | Pintado con mezcla | hecho: las zonas pintadas son caminos con el número de la mezcla, y las reglas 10, 13 y 15 trabajan por ese número; 14 con MX14 (2026-11-11) |
   | 17 | Vista previa del color antes de laminar | parcial: color previsto de la mezcla |
   | 18–19 | Soportes y torre sin mezcla; sin mezcla, G-code igual | parcial: a probar con las opciones nuevas (MX16) |
   | 20–21 | Mezclador Oklab; espectral con TD | pendiente (hoy Yule-Nielsen n = 2) |
   | 22–24 | Paleta de calibración, recomendaciones, nombres de colores | pendiente |
   | 25–29 | Colores desde imagen | pendiente (fase posterior, por la ficha) |
-  | 30–31 | Proyecto con los datos nuevos; 3MF de Full Spectrum | 30 hecho (MX19: sin datos nuevos se escribe igual); 31 pendiente |
+  | 30–31 | Proyecto con los datos nuevos; 3MF de Full Spectrum | 30 hecho (MX19: sin datos nuevos se escribe igual); 31 bloqueada: el formato no está documentado, falta un archivo real (MX20) |
   | 32 | Aviso de costo con estimación | parcial: aviso de `multimaterial.md` regla 9 |
   | 33 | Purgar en el relleno, por defecto con mezclas | parcial: `object.wipe_into_infill` existe, no prendido por mezcla ni limitado por `surface_depth` / TD |
   | 34 | Primero el relleno en capas con cambio | parcial: `infill.before_walls` existe; falta por capa con cambio |
@@ -13336,4 +13336,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   interfaz y de diseño.
 - **Sigue:** navegador a la izquierda (11 ter), línea de tiempo abajo (11 quater, CD27), cuadros flotantes (11
   quinquies), menú radial (CD28) y buscar herramienta con S (CD29).
+- **Full Spectrum, regla 14 en piezas pintadas (MX14)** (2026-11-11, hoja de ruta; el dueño cortó la búsqueda de
+  errores a las 17:16). Una pieza con colores pintados lleva `mixing.extra_walls` paredes más, como una pieza con
+  mezcla, en la placa con objetos, con un solo objeto, sin objetos y en secuencial (en secuencial tampoco las llevaba
+  una pieza con mezcla; ahora sí). Decisión: en toda la pieza y no solo en la zona pintada, porque paredes solo en la
+  zona cambiarían el relleno de abajo capa por capa; las paredes de más que caen en la zona pintada toman su color.
+  Prueba `[mixing][paint]` MX14: 2 paredes y `extra_walls` 2 dan 4, las del lado pintado con 2; sin pintura, 2.
+  Regla 16 cerrada (subcapas, solo la superficie y sesgo trabajan por el número de la mezcla, también en lo pintado).
+  Regla 31 bloqueada hasta tener un 3MF real de Full Spectrum (MX20). Sigue: la regla 9 con A, B, A en una capa.
 

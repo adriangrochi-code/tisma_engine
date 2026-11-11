@@ -1745,3 +1745,41 @@ TEST_CASE("painted colours: a painted side ending on a layer's bottom does not c
     CHECK(tools(above - 1) == std::set<int>{2});
     CHECK(tools(above) == std::set<int>{1});
 }
+
+TEST_CASE("color mixing plus: extra walls on a painted part (rule 14, MX14)", "[mixing][paint]") {
+    // A 20 mm cube, 2 walls, its +X face painted with 2: mixing.extra_walls 2
+    // gives 4 walls, the painted side's in its colour; unpainted, 2.
+    Plate p = box(1);
+    Painting paint;
+    for (std::size_t t = 0; t < p.mesh.triangle_count(); ++t) {
+        bool right = true;
+        for (int k = 0; k < 3; ++k)
+            right = right && p.mesh.corner(t, k).x > 109.9f;
+        if (right)
+            paint.set_tree(PaintChannel::Color, t, {2});
+    }
+    Settings s = base();
+    s.mix_extra_walls = 2;
+    const auto walls = [&](const Painting* painting, const std::vector<MeshObject>* objects) {
+        const SlicedModel m = slice_model(weld_exact(p.mesh), s, nullptr, nullptr, painting, objects, nullptr);
+        int most = -1;
+        std::set<int> right;
+        for (const Toolpath& t : m.walls[20].toolpaths) {
+            most = std::max(most, t.index);
+            for (const ToolpathPoint& q : t.points)
+                if (q.p.x > 107.5 && q.p.y > 95 && q.p.y < 105)
+                    right.insert(std::max<int>(t.tool, 1));
+        }
+        return std::make_pair(most + 1, right);
+    };
+    CHECK(walls(nullptr, &p.objects).first == 2);
+    const auto [count, right] = walls(&paint, &p.objects);
+    CHECK(count == 4);
+    CHECK(right == std::set<int>{2});
+    CHECK(walls(&paint, nullptr).first == 4); // no objects: the plate as one part
+    Plate two = p;
+    add_box(two.mesh, 130, 90, 0, 150, 110, 10);
+    two.objects.push_back({"other", 12, 12, 1, 0, 1});
+    s.sequential = true;
+    CHECK(walls(&paint, &two.objects).first == 4); // one after another
+}
