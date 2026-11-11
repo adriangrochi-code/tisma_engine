@@ -113,7 +113,7 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
      nodos, archivos de impresoras). Visto en la app de Android, 04-11-2026 (AND1).
      - `slice`: vacío.
      - `fea`: `mode` (`analyze`, `lightest-infill`, `resin-structure`), `quality` (`fast`, `normal`, `high`,
-       `ultra`), `object`, `instance`, y opcionales `solid`, `zones`, `ribs`.
+       `extreme`; el servidor acepta también `ultra`, el nombre viejo), `object`, `instance`, y opcionales `solid`, `zones`, `ribs`.
      - `aero` (análisis aerodinámico, `aerodynamics.md`): `object`, `instance`, `quality` (`friction`, `fast`,
        `normal`, `high`, `extreme`: solo rozamiento, 16, 24, 32 o 48 celdas en el tamaño frontal; `extreme` a pedido
        del dueño, 03-11-2026), `speed` (m/s, más de 0 y hasta
@@ -142,7 +142,7 @@ ficha (`INTEGRATION.md`, camino 2). Los cambios del lado del servidor los hace e
     - lo que incluye el plan está en `classes` de `GET /v1/plans` (los nombres de cola: `slice`, `slice_large`,
       `fea`, `fea_optimize`, `aero`, `orient`). Un cálculo que el plan no incluye se muestra con un candado y «Incluido
       en el plan …», con los planes que lo tienen, y abre la página de la cuenta; si igual se manda, el servidor
-      contesta 402 con ese mismo texto en `detail` (regla 4);
+      contesta 402 y la interfaz muestra su propio «Incluido en el plan …» en el idioma de la persona (lo arma con `GET /v1/plans`); el `detail` del servidor, en inglés, queda para el registro (decisión del equipo de especificación, 11-11-2026);
     - sin sesión o sin conexión, todo se sigue calculando en la computadora como siempre: la nube nunca es
       obligatoria en el escritorio.
 10c. **Resultados de los cálculos nuevos:** `aero` da un archivo `.taero` del motor (el resultado de
@@ -252,18 +252,18 @@ Los nodos corren el motor como programa aparte para cada trabajo. El contrato es
     (`plugins.md`), no abre conexiones de red y no lee ni escribe fuera de las rutas que recibe. El tiempo máximo lo
     pone el nodo, que corta el proceso.
 21. **El lado del servidor ya está hecho:** con `tisma_engine` en la configuración de un nodo, el nodo corre los
-    trabajos con este contrato. Sin esa opción, sigue con los programas de Tisma Slicer.
+    trabajos con este contrato. Desde el 11-11-2026 es el único programa de los nodos (decisión del dueño: Tisma Slicer
+    se abandona); un nodo sin motor solo hace escaneos y rechaza lo demás con `needs_engine`.
 
 ## Biblioteca de modelos
 
-23. La biblioteca de Tisma Cloud (modelos con perfiles probados, laminados hechos y análisis, e «Imprimir» en dos
-    toques) va en `model_library.md`. Usa los trabajos, los puentes y los planes de esta ficha.
+23. La biblioteca de Tisma Cloud va en `p2p_library.md` (el maestro guarda solo el índice; decisión del dueño,
+    10-11-2026). `model_library.md` queda reemplazada en lo que la contradice.
 
 ## Thingiverse por el servidor
 
-22. **Paso a la API de Thingiverse:** `GET /v1/thingiverse/<ruta>`, con o sin sesión. El servidor agrega el token de
-    la aplicación de Tisma y devuelve la respuesta de Thingiverse sin cambios. Las rutas permitidas, los límites y lo
-    que no hace están en `thingiverse.md`, reglas 12 y 21. Falta programarlo del lado del servidor.
+22. **Descartada** (decisión del dueño, 11-11-2026: «Thingiverse olvidate, ya que usaremos nuestro servicio»): no hay
+    paso a Thingiverse; `thingiverse.md` queda descartada.
 
 ## Pruebas
 
@@ -286,7 +286,7 @@ Contra un servidor de prueba que el equipo del motor arma desde esta ficha.
 | CC13 | Abrir el panel de la cuenta sin sesión | Se ven los planes públicos que manda el servidor; un plan oculto no aparece |
 | CC14 | La administración da 3 horas a una cuenta de un plan de 5 | El panel muestra 8 horas del mes al volver a pedir `/v1/me` |
 | CC15 | La administración deshabilita la cuenta con la sesión abierta | El próximo pedido da 401; la interfaz pide entrar de nuevo |
-| CC16 | Plan que incluye solo `slice`; pedir un análisis aerodinámico | Candado e «Incluido en el plan …» antes de mandar; si se manda, 402 con el texto del servidor |
+| CC16 | Plan que incluye solo `slice`; pedir un análisis aerodinámico | Candado e «Incluido en el plan …» antes de mandar; si se manda, 402 y la interfaz muestra su propio texto, en español |
 | CC17 | `tisma-engine aero` de un cubo de 20 mm, `--quality fast --speed 10 --direction x --sandbox` | Archivo `.taero`, resumen con `cd` entre 0,8 y 1,3 (un cubo de cara al aire, Hoerner) y código 0 |
 | CC18 | `tisma-engine orient` de una pieza en L apoyada de canto | JSON con `rotation`; `cost` no mayor que `cost_before` (regla 1 de `orientation.md`) |
 | CC19 | `tisma-engine slice … --threads 1` en una máquina de 4 núcleos | El proceso no pasa de un núcleo ocupado; el G-code es el mismo que sin la opción |
