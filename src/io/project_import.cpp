@@ -180,11 +180,20 @@ TranslationTable parse_translation(std::string_view text) {
                     r.renamed[from] = text(to);
             if (row.contains("percent_of") && row.at("percent_of").is_string())
                 r.percent_of = row.at("percent_of").get<std::string>();
-            table[key] = r;
             if (row.contains("with") && row.at("with").is_array())
                 for (const json& w : row.at("with"))
-                    if (w.is_string() && !table.count(w.get<std::string>()))
-                        table[w.get<std::string>()] = r;
+                    if (w.is_string())
+                        r.with.push_back(w.get<std::string>());
+            // A row of its own wins over a helper of another row's rule.
+            if (const auto had = table.find(key); had == table.end() || !had->second.with_of.empty())
+                table[key] = r;
+            for (const std::string& w : r.with)
+                if (!table.count(w)) {
+                    TranslationRow helper = r;
+                    helper.with_of = key;
+                    helper.with.clear();
+                    table[w] = helper;
+                }
         }
     }
     return out;
@@ -372,10 +381,9 @@ ProjectSettings translate_settings(const TranslationTable& table,
             std::string name = trimmed(*named);
             if (const auto n = number_of(name); n && *n >= 0 && std::size_t(*n) < t.index.size())
                 name = t.index[std::size_t(*n)];
-            if (t.plates.count(name)) {
+            if (t.plates.count(name))
                 plate = name;
-                break;
-            }
+            break; // the first field with a value; "Default Plate": the order
         }
         for (std::size_t i = 0; plate.empty() && i < t.order.size(); ++i) {
             const std::string& o = t.order[i];
@@ -422,6 +430,30 @@ ProjectSettings translate_settings(const TranslationTable& table,
                 text << *mm;
                 v = text.str();
             }
+        // role_width: a width in mm (after the % above); 0 takes the "with"
+        // key's, the same way; both 0, the engine's own (0).
+        if (row.rule == "role_width") {
+            auto d = number_of(v);
+            for (std::size_t i = 0; d && *d == 0.0 && i < row.with.size(); ++i)
+                for (const auto& [k, w] : settings)
+                    if (k == row.with[i]) {
+                        std::string t = trimmed(w);
+                        if (!t.empty() && t.back() == '%' && row.percent_of == "nozzle")
+                            if (const auto n = number_of(std::string_view(t).substr(0, t.size() - 1))) {
+                                d = *n / 100.0 * nozzle;
+                                break;
+                            }
+                        d = number_of(t);
+                        break;
+                    }
+            if (!d || *d < 0.0)
+                return false;
+            v = [&] {
+                std::ostringstream text;
+                text << *d;
+                return text.str();
+            }();
+        }
         std::optional<nlohmann::json> to;
         // number and its kin: a value outside the row's limits is not written.
         const auto limited = [&](double d) -> std::optional<nlohmann::json> {
@@ -429,7 +461,7 @@ ProjectSettings translate_settings(const TranslationTable& table,
                 return std::nullopt;
             return nlohmann::json(d);
         };
-        if (row.how == "number" || row.how.empty() || (row.how == "rule" && row.rule == "plate_temperature")) {
+        if (row.how == "number" || row.how.empty() || (row.how == "rule" && (row.rule == "plate_temperature" || row.rule == "role_width"))) {
             if (const auto d = number_of(v))
                 to = limited(*d);
             else if (row.how.empty() && node->is_string())
@@ -558,7 +590,9 @@ ProjectSettings translate_settings(const TranslationTable& table,
                 continue;
             if (row->rule == "plate_temperature" && row->plate != plate)
                 continue; // only the project's plate counts
-            if (row->how == "rule" && row->rule != "plate_temperature") {
+            if (!row->with_of.empty())
+                continue; // read by its row's rule
+            if (row->how == "rule" && row->rule != "plate_temperature" && row->rule != "role_width") {
                 if (pass == 0)
                     out.skipped.push_back(key + " = " + value); // a named rule not done yet
                 continue;

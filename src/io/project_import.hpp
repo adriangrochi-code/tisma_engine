@@ -59,6 +59,10 @@ struct TranslationRow {
     std::optional<double> min, max, bare_percent_over;
     bool nonnegative = false, nonzero = false;
     std::string rule, plate;
+    // The other source keys the row's rule reads ("with"); a key that is only
+    // there names `with_of`, the row it helps, and is not written by itself.
+    std::vector<std::string> with;
+    std::string with_of;
 };
 // The OrcaSlicer family's bed temperatures by plate (PF14): each plate's
 // pair of source keys (bed, first layer), the project keys that name the

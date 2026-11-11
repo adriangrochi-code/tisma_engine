@@ -365,3 +365,62 @@ TEST_CASE("project import: the bed's temperature by the project's plate, and the
     // Two points are no bed.
     CHECK(translate_settings(orca, {{"printable_area", "0x0,220x0"}}, base).settings.bed == base.bed);
 }
+
+TEST_CASE("project import: the pack's own rows (profiles/next, PF12 to PF14)", "[project_import]") {
+    // The rows as the pack's session gave them, as data.
+    const TranslationTable t = parse_translation(R"({"format": "tisma-pack-translation", "version": 1,
+      "dialect": "crealityprint", "source": "test",
+      "plate_temperature": {"plates": {"Cool Plate": ["cool_plate_temp", "cool_plate_temp_initial_layer"],
+        "Engineering Plate": ["eng_plate_temp", "eng_plate_temp_initial_layer"],
+        "High Temp Plate": ["hot_plate_temp", "hot_plate_temp_initial_layer"],
+        "Textured PEI Plate": ["textured_plate_temp", "textured_plate_temp_initial_layer"],
+        "Textured Cool Plate": ["textured_cool_plate_temp", "textured_cool_plate_temp_initial_layer"],
+        "Supertack Plate": ["supertack_plate_temp", "supertack_plate_temp_initial_layer"]},
+       "select": ["curr_bed_type", "default_bed_type"],
+       "index": ["Default Plate", "Cool Plate", "Engineering Plate", "High Temp Plate", "Textured PEI Plate",
+                 "Textured Cool Plate", "Supertack Plate"],
+       "order": ["hot_plate_temp", "textured_plate_temp", "eng_plate_temp", "cool_plate_temp", "textured_cool_plate_temp",
+                 "supertack_plate_temp"]},
+      "kinds": {"print": {
+        "outer_wall_line_width": {"engine": "walls.outer_width", "group": "translated",
+          "conversion": {"how": "rule", "rule": "role_width", "auto": null}, "note": "in mm",
+          "with": ["extrusion_width"], "prusaslicer": "external_perimeter_extrusion_width", "percent_of": "nozzle"},
+        "default_acceleration": {"engine": "acceleration.default", "group": "translated", "conversion": {"how": "number"}},
+        "initial_layer_acceleration": {"engine": "acceleration.first_layer", "group": "translated",
+          "conversion": {"how": "number"}, "prusaslicer": "first_layer_acceleration",
+          "percent_of": "acceleration.default", "renamed_by": "converter"}},
+       "filament": {
+        "hot_plate_temp": {"engine": "machine.variables.bed_temperature", "group": "translated",
+          "conversion": {"how": "first_item"}, "prusaslicer": "bed_temperature", "rule": "plate_temperature",
+          "plate": "High Temp Plate"},
+        "textured_plate_temp": {"engine": "machine.variables.bed_temperature", "group": "translated",
+          "conversion": {"how": "first_item"}, "prusaslicer": "bed_temperature", "rule": "plate_temperature",
+          "plate": "Textured PEI Plate"}},
+       "printer": {
+        "nozzle_diameter": {"engine": "machine.nozzle_diameter", "group": "translated", "conversion": {"how": "first_item"}}}}})");
+    Settings base;
+    const auto width = [&](std::vector<std::pair<std::string, std::string>> p) {
+        p.push_back({"nozzle_diameter", "0.6"});
+        return translate_settings(t, p, base).settings.outer_wall_width;
+    };
+    CHECK_THAT(width({{"outer_wall_line_width", "105%"}}), Catch::Matchers::WithinAbs(0.63, 1e-9)); // PF12
+    CHECK_THAT(width({{"outer_wall_line_width", "0.5"}}), Catch::Matchers::WithinAbs(0.5, 1e-9));
+    CHECK_THAT(width({{"outer_wall_line_width", "0"}, {"extrusion_width", "110%"}}), Catch::Matchers::WithinAbs(0.66, 1e-9));
+    CHECK(width({{"outer_wall_line_width", "0"}, {"extrusion_width", "0"}}) == 0.0); // the engine's own
+    // extrusion_width alone is not written anywhere by itself.
+    CHECK(translate_settings(t, {{"extrusion_width", "0.7"}}, base).settings.outer_wall_width == base.outer_wall_width);
+    // PF13 with Creality Print's row.
+    const ProjectSettings a = translate_settings(t, {{"initial_layer_acceleration", "50%"}, {"default_acceleration", "5000"}}, base);
+    CHECK(a.settings.accel_first_layer == 2500.0);
+    // PF14: the named plate; "Default Plate" (0) goes to the order, High Temp first.
+    const auto bed = [&](std::vector<std::pair<std::string, std::string>> p) {
+        p.push_back({"hot_plate_temp", "55,55"});
+        p.push_back({"textured_plate_temp", "65,65"});
+        const std::string json = settings_json(translate_settings(t, p, base).settings);
+        const auto at = json.find("\"bed_temperature\"");
+        return at == std::string::npos ? std::string() : json.substr(at, json.find(']', at) - at + 1);
+    };
+    CHECK(bed({{"curr_bed_type", "Textured PEI Plate"}}).find("\"65\"") != std::string::npos);
+    CHECK(bed({{"curr_bed_type", "0"}, {"default_bed_type", "Textured PEI Plate"}}).find("\"55\"") != std::string::npos);
+    CHECK(bed({}).find("\"55\"") != std::string::npos);
+}

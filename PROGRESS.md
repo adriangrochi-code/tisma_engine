@@ -13484,4 +13484,10 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
     con una impresora real en la red: «not tested on hardware».
 - **Pruebas:** `project_import_settings.txt` (orden nueva `expect-setting`: el ancho de pared externa del proyecto,
   0,45 mm, queda puesto; antes 0); pasan las 131 de importar, proyecto e impresora.
+- **Ítem 4: las filas del paquete** (2026-11-11, filas de profiles/next que mandó la sesión de perfiles, como datos).
+  La regla `role_width` (ancho de un rol: `"N%"` de la boquilla con `percent_of`, un número en mm; 0 toma el de
+  `with`, igual; los dos 0, el automático del motor). Una clave que solo está en `with` de otra fila no se escribe sola
+  (antes copiaba la fila y `extrusion_width` habría pisado la pared externa). La placa: el primer campo de `select` con
+  valor la nombra; «Default Plate» (0) o ninguna, el orden. Prueba `[project_import]` con las filas tal cual
+  (outer_wall_line_width, initial_layer_acceleration de Creality Print, hot_plate_temp y el bloque de placas).
 
