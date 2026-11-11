@@ -101,6 +101,9 @@ existe queda apagada, con aviso (MX30).
    puntos: 0 en el inicio, 1 en el fin, y fuera del tramo se queda en el extremo más cercano. En cada capa, la zona se
    parte en franjas perpendiculares a la proyección de la recta en XY, como el degradé en X o Y; si la recta es casi
    vertical (menos de 1 mm de recorrido en XY por cada 10 mm en Z), es un degradé en Z (MX31).
+   Un degradé (en Z, en X o Y, o entre dos puntos) se mide sobre cada objeto por separado, no sobre toda la placa: dos
+   cubos con la misma mezcla de degradé van cada uno de 1 a 2 entero; las copias, igual. Las partes de un mismo objeto
+   comparten su degradé (11-11-2026, MX32).
 4. **Color buscado:**
    - se prueban todas las mezclas de 2 y de 3 filamentos con ciclos de hasta `max_cycle` capas, sin partes menores que
      `min_part`;
@@ -298,6 +301,7 @@ salvo donde se dice.
 | MX29 | Ciclo A, B, `subdivide`, `step` 0,1; capa 0,2 / capa 0,3 | Capa 0,2: dos pasadas de 0,1 por capa, el ciclo sigue de una capa a la otra / capa 0,3: la capa entera con el filamento de su centro y el aviso de `mixing.step` |
 | MX30 | Mezcla 1 : 1 de 1 y 2 creada con 2 filamentos (es la 3) asignada a una pieza; se pasa a 4 filamentos / después a 1 | La mezcla pasa a ser la 5 y la pieza sigue con ella, no con el filamento 3 / la mezcla queda apagada con aviso y la pieza usa el filamento 1 |
 | MX31 | Cubo de 20 mm, degradé entre (−10, −10, 0) y (10, 10, 20) del cubo, 1 a 2 | La esquina de abajo adelante a la izquierda con 1, la de arriba atrás a la derecha con 2, el centro mitad y mitad; puntos (0, 0, 0) y (0, 0, 20): igual que un degradé en Z |
+| MX32 | Dos cubos de 20 mm separados, la misma mezcla de degradé en X de 1 a 2 | Cada cubo va de 1 a la izquierda a 2 a la derecha; no un solo degradé a lo ancho de los dos |
 | MX11 | `surface_only` con `surface_depth` 0,8 | Solo las 2 paredes de afuera y las superficies alternan; el relleno de un solo filamento |
 | MX12 | MX11 contra la caja sin `surface_only` | Menos cambios de filamento en MX11 en las capas que tienen relleno |
 | MX13 | `bias` 0,5 en una mezcla 1 : 1 | Las paredes de afuera de las capas del segundo filamento quedan más adentro que las del primero |
