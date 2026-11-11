@@ -43,7 +43,7 @@ desventajas».
    `GET /v1/library/mine`, `POST /v1/library/reports`. `manifest_signature` es la firma Ed25519 de la clave del par
    sobre el JSON canónico `{"files":[...]}` (claves ordenadas, sin espacios, UTF-8, archivos ordenados por `path`).
    Licencias: CC0-1.0, CC-BY-4.0, CC-BY-SA-4.0, CC-BY-NC-4.0, CC-BY-NC-SA-4.0, CC-BY-ND-4.0, CC-BY-NC-ND-4.0, MIT,
-   GPL-3.0-or-later, LicenseRef-All-Rights-Reserved. Una IP que se bloquea se manda al panel como dirección o como red de una sola dirección (`203.0.113.5/32`; un rango se rechaza); en la lista publicada va como huella (3 quater). Sin certificado
+   GPL-3.0-or-later, LicenseRef-All-Rights-Reserved. Una IP que se bloquea se manda al panel como dirección o como red de una sola dirección (`203.0.113.5/32`), o una IPv6 como su red de 64 bits (`2001:db8:1:2::/64`, escrita como dice RFC 5952; regla 8 quinquies); cualquier otro rango se rechaza; en la lista publicada va como huella (3 quater). Sin certificado
    el servidor responde 503, salvo en pruebas (`TISMA_LIBRARY_UNCERTIFIED`).
 3 quinquies. **Clave** (decisión del dueño, 10-11-2026): el maestro genera una clave Ed25519 propia de la biblioteca
    (`storage/library.key`). El dueño firma una sola vez su clave pública con la clave del proyecto del USB
