@@ -12703,6 +12703,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
   interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
   (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
+- BH56, PF10 y PF11 (perfiles, `validate.py --reader`, 19000 corridas; spec/next 653d6cd): `extrusion.travel` de un
+  filamento (4831 veces) se dejaba afuera como «unknown setting»; ahora se lee como `extrusion.retraction`.
+  `resin.bottom_layers` de una impresión de resina (35 impresiones) se dejaba afuera como «filament setting»; ahora va
+  sobre el de la resina. Prueba `[pack]` BH56, que falla sin el arreglo.
+- Cola, después del orden de la beta (servidor 9a62834 y c95da34, cloud.md 5b y 5c): cobro por Microsoft Store en la
+  app de Windows: `GET /v1/billing/microsoft/ticket`, `StoreContext.GetCustomerPurchaseIdAsync`, `POST
+  /v1/billing/microsoft/purchase` al comprar y al arrancar, y `POST /v1/me/purchases`; errores 402/404/409/422/503.
+- Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
+  CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
+  `origin/dev` con un merge antes de cada push.
 - **Full Spectrum, paso 2: subcapas** (`color_mixing_plus.md` reglas 10 y 11; MX8 a MX10). Grupo nuevo `mixing`:
   `subdivide`, `sub_min_height` (0,04), `sub_first_layer`, `sub_infill`. En las capas con una mezcla por proporción o
   secuencia, cada trayectoria de la mezcla se imprime una vez por filamento, de abajo hacia arriba, con su parte del

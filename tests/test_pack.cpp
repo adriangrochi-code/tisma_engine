@@ -695,3 +695,30 @@ TEST_CASE("pack: settings that cross profiles, the print's bridges and the print
     REQUIRE(p.print);
     CHECK(p.print->settings.purge_volumes[0][1] == 120.0);
 }
+
+TEST_CASE("pack: a filament's own travels and a resin print's base layers are read (profile_pack_format.md, print "
+          "profiles, rule 6, PF10, PF11; BH56)",
+          "[pack]") {
+    // PF10: the filament's travels, an object like its retraction.
+    std::vector<std::string> warnings;
+    const PackEntry filament = parse_pack_entry(
+        R"({"format": "tisma-pack-entry", "profile": {"format": "tisma-profile", "version": 2, "kind": "filament",
+            "name": "Ramp PLA", "settings": {"extrusion": {"travel": {"ramping_lift": true, "slope": 1, "max_lift": 0.6}}}}})",
+        warnings);
+    INFO(nlohmann::json(warnings).dump());
+    CHECK(warnings.empty());
+    const auto& own = filament.profile.settings.filament_retraction;
+    REQUIRE(own.contains("travel.max_lift"));
+    CHECK(own.at("travel.max_lift") == 0.6);
+    CHECK(own.at("travel.ramping_lift") == 1.0);
+    CHECK(own.at("travel.slope") == 1.0);
+    // PF11: a resin print's base layers, laid over the resin's.
+    warnings.clear();
+    const PackEntry print = parse_pack_entry(
+        R"({"format": "tisma-pack-entry", "profile": {"format": "tisma-profile", "version": 2, "kind": "resin_print",
+            "name": "Fine resin", "settings": {"resin": {"layer_height": 0.05, "bottom_layers": 4}}}})",
+        warnings);
+    INFO(nlohmann::json(warnings).dump());
+    CHECK(warnings.empty());
+    CHECK(nlohmann::json::parse(print.filament_settings) == nlohmann::json::parse(R"({"resin": {"bottom_layers": 4}})"));
+}

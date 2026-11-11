@@ -59,6 +59,10 @@ const std::set<std::string>& known_keys() {
         // The filament's material type, which the settings' file writes only
         // when given (profile_pack_format.md, print profiles, rule 6, PF9).
         k.insert("extrusion.type");
+        // A filament's own retraction and travels, objects of their own
+        // (retraction_travel.md, rule 10; PF10).
+        k.insert("extrusion.retraction");
+        k.insert("extrusion.travel");
         k.insert("machine.variables");
         k.insert("machine.macros");
         return k;
@@ -458,8 +462,9 @@ PackEntry parse_pack_entry(std::string_view json_text, std::vector<std::string>&
                     continue;
                 if (*k == ProfileKind::Printer)
                     printer_part[group][key] = value;
-                else if (*own == ProfileKind::Print && group == "extrusion" && key == "bridge_flow_ratio")
-                    filament_part[group][key] = value; // the print's bridges' flow (PF7)
+                else if (*own == ProfileKind::Print && ((group == "extrusion" && key == "bridge_flow_ratio") ||
+                                                         (group == "resin" && key == "bottom_layers")))
+                    filament_part[group][key] = value; // the print's bridges' flow (PF7), a resin print's base (PF11)
                 else
                     warnings.push_back(where + ": " + group + "." + key + " is a " + std::string(profile_kind_name(*k)) +
                                        " setting: left out");
