@@ -9,6 +9,10 @@ y ahora se comporta distinto), **Obsoleto** (lo que se va a quitar), **Quitado**
 **Seguridad**. Una categoría sin cambios no se escribe.
 
 ## [Sin publicar]
+- Mezclas de color: el estimado de cambios antes de laminar sigue el alto por filamento y el paso
+  (`mixing.cadence_heights`, `mixing.step`).
+- Mezclas de color: ajuste `mixing.predictor` (`mixer` o `spectral`) para predecir el color buscado; nombres de los
+  colores en inglés y español y paleta rápida de 10 y 26 muestras.
 - Mandar a la impresora: un nombre de archivo con espacios, `#`, acentos o comillas llega entero (PrusaLink,
   OctoPrint, Moonraker).
 - Paquete de perfiles: el flujo de puentes de la impresión, el volumen de purga de la impresora y el tipo de

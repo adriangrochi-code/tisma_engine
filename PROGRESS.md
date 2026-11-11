@@ -12961,6 +12961,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   del bloque anterior, sin carga. Sin cambio de rendimiento que medir.
 - **Arreglado en este turno (búsqueda profunda y pedidos de spec):** BH50 a BH54, ME14, ME15; entradas de arriba.
 
+## 2026-11-11 08:43 UTC — mantenimiento (cada 8 h)
+
+- **Revisado:** `tools/ci_linux.sh` (ASan) sobre b300395 y 4d82ade; `tisma_fuzz_gcode 2000 20261111`: 2000 casos,
+  19 descartados por no imprimibles, 0 fallas; cambios recientes de mezclas.
+- **Encontrado y arreglado:** el ajuste nuevo `mixing.predictor` no tenía tarjeta (prueba SP1 del panel; ahora en
+  «zonas con mezcla», con su guía, 4d82ade); el estimado de cambios ignoraba `mixing.step` (49 contra 24, 059ec05;
+  la interfaz lo pasa en 1f26c24).
+- **No medido:** el banco de la esfera, con la máquina cargada por el CI local y el fuzz.
+
 ## 2026-11-11 — interfaz: navegación de Fusion 360 y cubo de vistas (segunda sesión del motor)
 
 - **Fichas:** `interface.md` y `cad_design.md` de `spec/next` (todavía no en `main`); `tools/check_spec.py` limpio.
