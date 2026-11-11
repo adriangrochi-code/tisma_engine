@@ -12735,6 +12735,8 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   valores de un proyecto al abrirlo (`sort_settings` solo los clasifica, y `project_settings` lee solo la familia
   PrusaSlicer). PF12 va con esa conversión: un `"N%"` de una fila con `percent_of: "nozzle"` pasa a mm con la boquilla
   del proyecto antes de la conversión de `prusaslicer` (OrcaSlicer 0,6 y "105%" → 0,63 mm).
+  PF13: `percent_of` también puede nombrar una clave del motor; el porcentaje es de su valor por defecto
+  (`bridge_acceleration` "50%" con 5000 por defecto → 2500).
 - **Cola de baja prioridad (después del orden de la beta; spec/next, 2026-11-11):** `ironing.md`, `ironing.angle`
   (desplazamiento sobre el relleno de arriba, 45 por defecto, negativo = por defecto) e `ironing.angle_fixed` (ángulo
   absoluto), prueba IR8. Ningún perfil del paquete plancha con ángulo hoy.
