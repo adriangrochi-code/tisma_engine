@@ -148,6 +148,9 @@ Las medidas exactas de cada control las fija el motor; las reglas dicen qué tie
       mitad la espiga o la traba pasan solas a la otra mitad, la que no se apoya en la cara, y la primera queda con el
       hueco; se avisa «Los conectores pasaron a la otra mitad para que apoye plana». Si las dos mitades se apoyan sobre
       la cara del corte, la espiga fija se cambia por un pasador, con el mismo aviso (11-11-2026, MT32);
+    - con «Un objeto con dos partes» las mitades quedan juntas en su lugar y se imprimen pegadas, así que los conectores
+      no tienen sentido: quedan deshabilitados con la nota «Los conectores son para piezas separadas» y no se pierden;
+      si se vuelve a «Dos objetos», vuelven a valer (MT33);
     - **resultado:**
       - dos objetos, cada uno sin girar, apoyado sobre la cara del corte o dado vuelta, a elección de la persona;
       - o un objeto con dos partes, que siguen juntas y pueden tener ajustes distintos (no con cola de milano);
@@ -260,3 +263,4 @@ Herramientas de la interfaz (reglas 16 a 29), con la pieza de MT14:
 | MT30 | Pintar con relleno inteligente a 30° sobre un cilindro | Se pinta todo el costado; la tapa (90°) no |
 | MT31 | Cortar, pintar y mover; después Deshacer tres veces | Vuelve a la pieza entera, sin pintura, en su lugar |
 | MT32 | Corte con una espiga fija en la mitad de abajo y «apoyar sobre la cara del corte» en esa mitad / en las dos | La espiga queda en la mitad de arriba, la de abajo apoya plana con el hueco, y el aviso / un pasador aparte y los dos huecos, con el aviso |
+| MT33 | Corte con dos espigas puestas y «Un objeto con dos partes» / después «Dos objetos» | Sin espigas ni huecos, la nota en los conectores / las dos espigas vuelven |
