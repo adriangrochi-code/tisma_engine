@@ -10,6 +10,7 @@
 #include "slice/color_mix.hpp"
 #include "slice/pipeline.hpp"
 #include "slice/placement.hpp"
+#include "slice/wipe_tower.hpp"
 #include "test_printer.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -774,4 +775,41 @@ TEST_CASE("color mixing plus: a step finer than the layers without sublayers goe
     const SlicedModel passes = sliced(box(3), s, {blend(3, {{1, 0.5}, {2, 0.5}})});
     CHECK(std::none_of(passes.notices.begin(), passes.notices.end(),
                        [](const std::string& n) { return n.find("finer than the layers") != std::string::npos; }));
+}
+
+TEST_CASE("color mixing plus: blends on one nozzle purge into the infill by default (rule 33, MX22)", "[mixing]") {
+    Settings s = base();
+    s.single_extruder_mmu = true;
+    s.wipe_tower = true;
+    s.infill_density = 0.2;
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    const auto tower = [](const SlicedModel& m, const Settings& t, std::size_t& sinks) {
+        const ToolPlan plan = plan_tools(m, t);
+        double v = 0.0;
+        sinks = 0;
+        for (std::size_t l = 0; l < plan.tower_purge.size(); ++l) {
+            for (const double p : plan.tower_purge[l])
+                v += p;
+            for (const auto& g : plan.sinks[l])
+                sinks += g.size();
+        }
+        return v;
+    };
+    std::size_t into = 0, none = 0;
+    const SlicedModel model = sliced(box(3), s, {half});
+    REQUIRE_FALSE(model.objects.empty());
+    CHECK(model.objects.front().wipe_into_infill);
+    const double with = tower(model, s, into);
+    Settings off = s;
+    off.mix_purge_into_infill = false;
+    const SlicedModel plain = sliced(box(3), off, {half});
+    CHECK_FALSE(plain.objects.front().wipe_into_infill);
+    const double without = tower(plain, off, none);
+    INFO("tower " << with << " mm3 with " << into << " sinks, " << without << " mm3 without");
+    CHECK(into > 0);
+    CHECK(none == 0);
+    CHECK(with < without);
+    gcode_of(model, s);
+    // A plate without blends keeps its parts' own choice.
+    CHECK_FALSE(sliced(box(1), s, {}).objects.front().wipe_into_infill);
 }

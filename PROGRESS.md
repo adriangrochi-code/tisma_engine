@@ -12723,6 +12723,15 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 33: purgar en el relleno por defecto** (2026-11-11, bloque nocturno; MX22). Con mezclas en
+  una boquilla (`multi.single_extruder_mmu`), todas las piezas de la placa dejan purgar en su relleno disperso
+  (`wipe_into_infill`, multi_extruder.md regla 13). Las purgas se imprimen justo después del cambio con el filamento
+  nuevo, que es lo que ya hacía `plan_sinks`, y antes van `material.min_purge_on_tower` a la torre. Clave propia
+  `mixing.purge_into_infill` (sí por defecto) para apagarlo. Prueba `[mixing]` MX22: la caja 1 : 1 con relleno al 20 %
+  manda menos a la torre que con la opción apagada; sin mezclas no cambia nada. Pasan también las pruebas de
+  multiextrusor. Pendiente de la regla 33: el filamento transparente (`filament.transmission_distance` > 10, MX27),
+  porque el ajuste todavía no existe en el motor. Regla 34 (paredes después del relleno en la capa del cambio):
+  falta ver si el orden de la capa la cumple entera.
 - **Búsqueda profunda (05:15): mezclas nuevas combinadas.** Probé sesgo con solo la superficie, paredes de más con
   alto por filamento, solo la superficie con subcapas, un degradé con paso y subcapas, sesgo con paso y subcapas, y
   sesgo con jarrón. El G-code pasa el control en todos. Hallazgo: `mixing.step` más fino que las capas y sin

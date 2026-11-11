@@ -200,6 +200,13 @@
      "una parte pintada). Así el color de afuera no se ve mezclado con el del relleno de adentro.\n\nEjemplo: 2.",
      "Extra walls in the parts with a mix and in the parts of another colour than the rest of their object (a "
      "painted part, say). That way the outside colour does not show mixed with the infill's inside.\n\nExample: 2."},
+    {"mixing.purge_into_infill",
+     "Con mezclas en una impresora de una sola boquilla, después de cada cambio de filamento la purga se imprime como "
+     "relleno de adentro de las piezas, con el filamento nuevo. El relleno queda tapado, así que no se ve, y se tira "
+     "menos filamento en la torre.\n\nEjemplo: encendido.",
+     "With mixes on a single-nozzle printer, after each filament change the purge prints as the parts' inside "
+     "infill, with the new filament. The infill stays hidden, so it does not show, and less filament goes to the "
+     "tower.\n\nExample: on."},
     {"mixing.height_b",
      "El alto de las capas del segundo filamento de la mezcla, con el alto por filamento encendido. 0 usa el alto de "
      "capa. Se ajusta a los límites de la impresora.\n\nEjemplo: 0,15 mm.",

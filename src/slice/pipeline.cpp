@@ -1087,6 +1087,14 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
                                           std::to_string(o.extruder));
             }
     }
+    // Blends on one nozzle purge into the parts' sparse infill
+    // (color_mixing_plus.md, rule 33): every part on the plate lets them.
+    if (given && settings.single_extruder_mmu && settings.mix_purge_into_infill &&
+        std::any_of(resolved.begin(), resolved.end(), [&](const MeshObject& o) {
+            return std::any_of(blends.begin(), blends.end(), [&](const ColorMix& m) { return m.id == o.extruder; });
+        }))
+        for (MeshObject& o : resolved)
+            o.wipe_into_infill = true;
     const std::vector<MeshObject>* objects = given ? &resolved : nullptr;
     // Each filament with its own layer height (color_mixing_plus.md, rule
     // 8): one blend of two filaments printing the whole plate, its layers

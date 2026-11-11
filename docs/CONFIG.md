@@ -580,6 +580,7 @@ en el perfil de impresión.
 | `surface_only` | booleano | `false` | | Regla 13 (MX11, MX12): la mezcla va solo en la cáscara. Las paredes que empiezan a `surface_depth` o más de afuera (sumando el ancho de los cordones) y el relleno disperso van con el filamento de mayor parte de la mezcla; las paredes de afuera, los huecos entre ellas y las superficies sólidas, con la mezcla. Un degradé va entero con su mezcla |
 | `surface_depth` | mm | 0,8 | 0,1 a 5 | Grosor de la cáscara con mezcla |
 | `extra_walls` | entero | 0 | 0 a 8 | Regla 14 (MX14): paredes de más en las piezas con mezcla y en las partes impresas con otro filamento que la primera parte de su objeto (una parte pintada); las demás piezas, con `walls.count` |
+| `purge_into_infill` | booleano | `true` | | Regla 33 (MX22): con mezclas en una boquilla (`multi.single_extruder_mmu`), todas las piezas de la placa dejan purgar en su relleno disperso (`object.wipe_into_infill`), impreso justo después del cambio con el filamento nuevo; antes va siempre `material.min_purge_on_tower` en la torre. Clave propia del motor para apagarlo |
 
 Las mezclas no son ajustes: van en el proyecto (`color_mixing.md`, regla 15). Desde la línea de comandos, `slice <modelo>
 --config <ajustes.json> --mixes <mezclas.json> --mix <n>` lee las mezclas en ese mismo JSON (`{"version": 1,

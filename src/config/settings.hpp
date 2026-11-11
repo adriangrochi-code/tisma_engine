@@ -511,6 +511,9 @@ struct Settings {
     // More walls where a blend prints, or a part of an object printed with
     // another filament than the rest (rule 14).
     int mix_extra_walls = 0;
+    // On one nozzle with blends, every part lets the changes purge into its
+    // sparse infill (color_mixing_plus.md, rule 33; object.wipe_into_infill).
+    bool mix_purge_into_infill = true;
     // Curved layers (docs/spec/features/nonplanar.md): each layer the
     // surface z = s + D(x, y, z), D a wave or a cone, ramped in from
     // curved_flat_below over curved_ramp_height (and out at the top with
