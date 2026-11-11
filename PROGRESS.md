@@ -12295,7 +12295,7 @@ Hecho en este bloque: compartir el G-code (`ShareGcodeTest`), los plurales (`Plu
 | Informar un problema | Revisado 11-11 | Sin hallazgos: nada se manda sin «Enviar»; el registro adjunto (500 líneas) no lleva códigos de acceso, claves ni sesión (revisadas todas las líneas que escribe la app) |
 | Actualizaciones de la app | Revisado 10-11 | Tamaño sin tope y huella en mayúsculas (18d78d2) |
 | Secretos (Keystore) | Revisado 10-11 | Un error pasajero borraba los códigos (735dccf) |
-| Ayuda sin conexión, glosario, materiales | Pendiente | |
+| Ayuda sin conexión, glosario, materiales | Revisado 11-11 | La búsqueda no encontraba palabras escritas sin tildes; igual en ajustes, impresoras y Mi biblioteca (`FoldTest`) |
 | CAD (SolidCraft) y Piezas | Revisado 11-11 | Un campo con valor entero por defecto (módulo 1) cortaba 1,5 a 1 y no daba coma en el teclado (`SpecNumberTest`); CAD y panel: sin signo menos en el teclado no se podían escribir negativos, ahora botón ± (`SettingsPanelTest`) |
 | Calibraciones | Revisado 11-11 | Un rango completado en parte usaba el de siempre sin avisar; valores con punto en castellano (`CalibrationRangeTest`) |
 | Preferencias, créditos, visión de color | Revisado 11-11 (servidor) | Cambiar el servidor dejaba las secuencias de Compartida del anterior: la lista nueva se rechazaba para siempre (`BlockListTest`); créditos y visión de color: pendiente |
