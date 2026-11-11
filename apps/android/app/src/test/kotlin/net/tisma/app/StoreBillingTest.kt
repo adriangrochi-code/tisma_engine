@@ -98,8 +98,33 @@ class StoreBillingTest {
         assertEquals("Maker", vm.state.value.account?.plan)
         // The next refresh sends it again; the store answers now.
         vm.refreshAccount()
-        while (vm.state.value.account?.plan != "Pro" && System.currentTimeMillis() < end) { ShadowLooper.idleMainLooper(); Thread.sleep(10) }
+        // The account refresh may show the plan before the purchase's own answer is back: wait for both.
+        while ((vm.state.value.account?.plan != "Pro" || settings.pendingPurchases.isNotEmpty()) && System.currentTimeMillis() < end) {
+            ShadowLooper.idleMainLooper(); Thread.sleep(10)
+        }
         assertEquals("Pro", vm.state.value.account?.plan)
         assertEquals(emptySet(), settings.pendingPurchases)
+    }
+
+    @Test
+    fun `a kept purchase is never sent from another account signed in later`() {
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val settings = AppSettings(context).apply { this.server = this@StoreBillingTest.server.url; pendingPurchases = emptySet() }
+        val vm = CloudViewModel(settings, KeystoreSecretStore(context) { testKey }, "Test phone (Android)", pollMs = 5, billing = FakePlay())
+        val end = System.currentTimeMillis() + 20_000
+        fun wait(c: () -> Boolean) { while (!c() && System.currentTimeMillis() < end) { ShadowLooper.idleMainLooper(); Thread.sleep(10) } }
+        vm.signIn("ana@example.com", "password1")
+        wait { vm.state.value.account != null && vm.state.value.plans.isNotEmpty() }
+        server.storeDown = 1
+        vm.buy(vm.state.value.plans.first { it.name == "Pro" })
+        wait { settings.pendingPurchases.isNotEmpty() }
+        vm.signOut()
+        wait { !vm.state.value.signedIn }
+        vm.signIn("free@example.com", "password1")
+        wait { vm.state.value.account?.email == "free@example.com" }
+        Thread.sleep(300); ShadowLooper.idleMainLooper()
+        assertEquals("Free", vm.state.value.account?.plan)
+        assertEquals(1, settings.pendingPurchases.size)
+        assertEquals("Maker", server.accounts["ana@example.com"]!!.plan)
     }
 }

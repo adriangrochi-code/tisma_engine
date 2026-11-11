@@ -165,10 +165,16 @@ class CloudViewModel(
         return r
     }
 
+    /** A kept purchase belongs to the account it was bought with: never sent from another one signed in later. */
     private fun purchaseLine(p: net.tisma.cloud.StorePurchase) = kotlinx.serialization.json.buildJsonObject {
-        put("store", p.store); put("product_id", p.productId); put("purchase_token", p.purchaseToken)
+        put("account", state.value.email ?: settings.email ?: ""); put("store", p.store); put("product_id", p.productId); put("purchase_token", p.purchaseToken)
         put("signed_transaction", p.signedTransaction); put("store_id_key", p.storeIdKey)
     }.toString()
+
+    private fun accountOf(line: String): String? = runCatching {
+        ((kotlinx.serialization.json.Json.parseToJsonElement(line) as kotlinx.serialization.json.JsonObject)["account"]
+            as? kotlinx.serialization.json.JsonPrimitive)?.content
+    }.getOrNull()
 
     private fun purchaseOf(line: String): net.tisma.cloud.StorePurchase? = runCatching {
         val o = kotlinx.serialization.json.Json.parseToJsonElement(line) as kotlinx.serialization.json.JsonObject
@@ -180,7 +186,8 @@ class CloudViewModel(
     private fun restorePurchases() {
         val b = billing
         viewModelScope.launch {
-            val kept = settings.pendingPurchases.mapNotNull { purchaseOf(it) }
+            val me = state.value.email ?: settings.email
+            val kept = settings.pendingPurchases.filter { accountOf(it) == me }.mapNotNull { purchaseOf(it) }
             val active = b?.let { runCatching { it.active() }.getOrDefault(emptyList()) }.orEmpty()
             for (p in (kept + active).distinct()) send(p, quiet = true)
         }
