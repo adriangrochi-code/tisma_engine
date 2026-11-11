@@ -750,6 +750,11 @@ cortar/partir/medir, pintar colores, ajustes en una sola página por pestaña y 
 - [x] Rectángulo de selección con el izquierdo desde un lugar vacío (2026-11-11; la placa elige un solo modelo:
   el más cercano al punto de partida)
 - [x] Punto del centro de giro mientras se gira (2026-11-11)
+- [x] Costo de las mezclas antes de laminar, purga por colores y lo que la baja (`color_mixing_plus.md`, reglas 12, 37 y
+  38) (2026-11-11)
+- [ ] Mezclas, cuando el motor lo suba: selector `mixing.predictor` con las TD a `match_color` y a la vista previa
+  (reglas 20 y 21); pestaña «Color buscado» (regla 4); paleta rápida con `quick_palette` y `color_name` (regla 22) y
+  la pieza de muestras `palette_piece` (CM8) cargada en la placa con sus mezclas y la lista de nombres
 - [ ] Selección de varios modelos (Ctrl/Mayús suman; el rectángulo elige todos)
 - [ ] Barra de vista abajo al centro (girar, desplazar, acercar, encuadrar, perspectiva/ortogonal, estilo)
 - [ ] Aspecto: degradé gris claro en el tema claro, grilla con líneas cada 10 mm marcadas
