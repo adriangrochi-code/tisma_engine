@@ -621,6 +621,20 @@ private:
     std::size_t design_rollback_ = SIZE_MAX;
     int timeline_menu_ = -1;
     bool tool_search_open_ = false; // the tool search (rule 11 octies, CD29)
+    // The step being made or edited in its own panel at the right of the view
+    // (rule 11 quinquies): its fields, «Aceptar» and «Cancelar»; a new one
+    // is taken away by Cancelar, an old one goes back to how it was.
+    int design_dialog_ = -1;
+    bool design_dialog_new_ = false;
+    std::optional<cad::Feature> design_dialog_before_;
+    void design_handles(); // arrows in the view to drag the step's measures (rule 11 quinquies)
+    void open_feature_dialog(std::size_t feature, bool fresh) {
+        design_dialog_ = feature < design_.features.size() ? int(feature) : -1;
+        design_dialog_new_ = fresh;
+        design_dialog_before_.reset();
+        if (design_dialog_ >= 0)
+            design_dialog_before_ = design_.features[feature];
+    }
     // The right button's radial menu in Design (rule 11 septies, CD28): open
     // at this place; the last tool chosen, for Repeat.
     std::optional<ImVec2> design_radial_;
@@ -7083,7 +7097,10 @@ void App::frame_now() {
     if (part) {
         const Vec3 centre = (part->first + part->second) * 0.5f;
         const Vec3 half = (part->second - part->first) * 0.5f;
-        const float reach = std::max({half.x, half.y, half.z, 20.0f}) * 1.6f;
+        // In Design the part fills about two thirds of the view, as Fusion 360
+        // frames a body; elsewhere some bed around it.
+        const float reach = tab_ == Tab::Design ? std::max({half.x, half.y, half.z, 3.0f}) * 1.05f
+                                                : std::max({half.x, half.y, half.z, 20.0f}) * 1.6f;
         lo = {centre.x - reach, centre.y - reach, 0.0f};
         hi = {centre.x + reach, centre.y + reach, part->second.z};
     }
@@ -7095,9 +7112,19 @@ void App::frame_now() {
         if (show_legend_ && legend_rect_.z > legend_rect_.x)
             left = std::clamp(legend_rect_.z - view_pos_.x, 0.0f, view_size_.x * 0.5f);
     }
-    camera_.fit(lo, hi, std::max(view_size_.x - left - right, 1.0f) / std::max(view_size_.y, 1.0f));
-    if (left != right)
-        camera_.pan(0.5f * (left - right), 0.0f, view_size_.y);
+    // In Design the toolbar covers the top of the view and the command line
+    // and the timeline its bottom: the part fits between them, whole.
+    float top = 0.0f, bottom = 0.0f;
+    if (tab_ == Tab::Design) {
+        top = view_top_inset_ > 0.0f ? view_top_inset_ : 100.0f * scale_;
+        bottom = 120.0f * scale_;
+    }
+    const float tall = std::max(view_size_.y - top - bottom, 1.0f);
+    camera_.fit(lo, hi, std::max(view_size_.x - left - right, 1.0f) / tall);
+    if (top + bottom > 0.0f) // fit() fills the height: as if the view were that tall
+        camera_.distance *= view_size_.y / tall;
+    if (left != right || top != bottom)
+        camera_.pan(0.5f * (left - right), 0.5f * (top - bottom), view_size_.y);
     // The calibration and device panels cover the left of the view: the part goes right.
     if (tab_ == Tab::Calibration || tab_ == Tab::Device)
         camera_.pan(225.0f * scale_, 0.0f, view_size_.y);
@@ -14932,6 +14959,7 @@ void App::add_primitive(cad::Primitive kind, const std::array<double, cad::kMaxS
     f.name = design_.free_name(primitive_label(kind));
     design_.features.push_back(std::move(f));
     design_scroll_to_ = std::to_string(design_.features.size()); // the new row in view
+    open_feature_dialog(design_.features.size() - 1, true);
     rebuild_design();
 }
 
@@ -15011,6 +15039,7 @@ void App::add_operation(cad::OperationKind kind) {
     }
     design_.features.push_back(std::move(f));
     design_scroll_to_ = std::to_string(design_.features.size());
+    open_feature_dialog(design_.features.size() - 1, true);
     if (takes_points(kind)) {
         design_pick_ = design_.features.size() - 1;
         command_message_ = tr(pick_hint(kind));
@@ -15755,6 +15784,13 @@ void App::design_toolbar() {
             rd->AddCircleFilled(ImVec2(at.x + button * 0.5f, at.y + button * 0.5f), button * 0.5f,
                                 ImGui::GetColorU32(hover && tool->ready ? rgb(theme_.accent, 0.6f) : rgb(theme_.panel)), 24);
             cad_icon(rd, tool->icon, ImVec2(at.x + button * 0.2f, at.y + button * 0.2f), button * 0.6f, tool->ready ? ink : dim);
+            { // its name under it, small
+                std::string name = tool->id == "design_radial_repeat" ? std::string(tr(T::DesignRepeatShort)) : tool->label;
+                const float size = ImGui::GetFontSize() * 0.8f;
+                const ImVec2 text = ImGui::GetFont()->CalcTextSizeA(size, FLT_MAX, 0.0f, name.c_str());
+                rd->AddText(ImGui::GetFont(), size, ImVec2(at.x + button * 0.5f - text.x * 0.5f, at.y + button + 1.0f * scale_),
+                            tool->ready ? ink : dim, name.c_str());
+            }
             tool_tip(*tool);
             ImGui::PopID();
             if (hit && tool->ready) {
@@ -15929,6 +15965,94 @@ void App::design_timeline() {
         design_rollback_ = SIZE_MAX;
     if (changed)
         rebuild_design();
+}
+
+
+// The arrows of the step in its panel (cad_design.md, rule 11 quinquies): on
+// the face each measure moves, dragged along it; the value goes beside the
+// mouse while dragging, and the part is built again when let go. For now the
+// step must be the design's only body (the build gives one box for all).
+void App::design_handles() {
+    if (design_dialog_ < 0 || std::size_t(design_dialog_) >= design_.features.size() || design_box_.empty)
+        return;
+    cad::Feature& f = design_.features[std::size_t(design_dialog_)];
+    if (f.type != cad::Feature::Type::Primitive || f.suppressed)
+        return;
+    const std::size_t bodies = std::count_if(design_.features.begin(), design_.features.end(), [](const cad::Feature& g) {
+        return g.type != cad::Feature::Type::Operation && !g.suppressed;
+    });
+    if (bodies != 1)
+        return;
+    // Each measure's axis and how much it grows for a millimetre dragged.
+    struct Handle {
+        std::size_t size;
+        int axis; // 0 X, 1 Y, 2 Z
+        double per_mm;
+    };
+    std::vector<Handle> handles;
+    switch (f.kind) {
+    case cad::Primitive::Box: handles = {{0, 0, 2.0}, {1, 1, 2.0}, {2, 2, 1.0}}; break;
+    case cad::Primitive::Cylinder: handles = {{0, 0, 2.0}, {1, 2, 1.0}}; break;
+    case cad::Primitive::Sphere: handles = {{0, 0, 2.0}}; break;
+    case cad::Primitive::Cone: handles = {{0, 0, 2.0}, {2, 2, 1.0}}; break;
+    case cad::Primitive::Tube: handles = {{0, 0, 2.0}, {2, 2, 1.0}}; break;
+    case cad::Primitive::Torus: handles = {{0, 0, 2.0}}; break;
+    }
+    const BoundingBox& b = design_box_;
+    const Vec3 centre{0.5f * (b.min.x + b.max.x), 0.5f * (b.min.y + b.max.y), 0.5f * (b.min.z + b.max.z)};
+    const ImU32 colours[3] = {IM_COL32(229, 72, 77, 255), IM_COL32(63, 191, 127, 255), IM_COL32(59, 130, 246, 255)};
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    for (const Handle& h : handles) {
+        if (h.size >= cad::size_count(f.kind))
+            continue;
+        Vec3 face = centre, dir{0, 0, 0};
+        (h.axis == 0 ? face.x : h.axis == 1 ? face.y : face.z) = h.axis == 0 ? b.max.x : h.axis == 1 ? b.max.y : b.max.z;
+        (h.axis == 0 ? dir.x : h.axis == 1 ? dir.y : dir.z) = 1.0f;
+        const auto a = screen_of(face), one = screen_of(face + dir);
+        if (!a || !one)
+            continue;
+        // The arrow: 50 px out of the face, along the axis on the screen.
+        ImVec2 s(one->x - a->x, one->y - a->y);
+        const float px_per_mm = std::max(std::hypot(s.x, s.y), 1e-3f);
+        s = ImVec2(s.x / px_per_mm, s.y / px_per_mm);
+        const ImVec2 tip(a->x + s.x * 50.0f * scale_, a->y + s.y * 50.0f * scale_);
+        dl->AddLine(*a, tip, colours[h.axis], 2.5f * scale_);
+        const ImVec2 n(-s.y, s.x);
+        const float head = 9.0f * scale_;
+        dl->AddTriangleFilled(ImVec2(tip.x + s.x * head, tip.y + s.y * head), ImVec2(tip.x + n.x * head * 0.6f, tip.y + n.y * head * 0.6f),
+                              ImVec2(tip.x - n.x * head * 0.6f, tip.y - n.y * head * 0.6f), colours[h.axis]);
+        // Its handle, a small window of its own so the view still takes the rest.
+        const float r = 11.0f * scale_;
+        ImGui::SetNextWindowPos(ImVec2(tip.x - r, tip.y - r));
+        ImGui::SetNextWindowSize(ImVec2(2.0f * r, 2.0f * r));
+        const std::string id = "##design_handle" + std::to_string(h.size);
+        ImGui::Begin(id.c_str(), nullptr,
+                     ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoSavedSettings |
+                         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
+        ImGui::SetCursorScreenPos(ImVec2(tip.x - r, tip.y - r));
+        ImGui::InvisibleButton("##drag", ImVec2(2.0f * r, 2.0f * r));
+        note_rect("design_handle_" + std::to_string(h.size + 1));
+        const bool active = ImGui::IsItemActive();
+        if (ImGui::IsItemHovered() || active)
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
+        if (active) {
+            const ImVec2 d = ImGui::GetIO().MouseDelta;
+            const double mm = double(d.x * s.x + d.y * s.y) / double(px_per_mm);
+            if (mm != 0.0) {
+                f.sizes[h.size] = std::max(0.1, f.sizes[h.size] + mm * h.per_mm);
+                design_edited_ = true;
+            }
+            const std::string value = format("%s %.2f mm", tr(size_label(f.kind, h.size)), f.sizes[h.size]);
+            const ImVec2 m = ImGui::GetIO().MousePos;
+            dl->AddRectFilled(ImVec2(m.x + 14.0f * scale_, m.y + 8.0f * scale_),
+                              ImVec2(m.x + 22.0f * scale_ + ImGui::CalcTextSize(value.c_str()).x, m.y + 12.0f * scale_ + ImGui::GetFontSize() + 4.0f * scale_),
+                              ImGui::GetColorU32(rgb(theme_.panel, 0.95f)), 4.0f * scale_);
+            dl->AddText(ImVec2(m.x + 18.0f * scale_, m.y + 10.0f * scale_), ImGui::GetColorU32(rgb(theme_.text)), value.c_str());
+        }
+        ImGui::End();
+        dl->AddCircleFilled(tip, (active ? 8.0f : 6.0f) * scale_, colours[h.axis]);
+        dl->AddCircle(tip, (active ? 8.0f : 6.0f) * scale_, IM_COL32(255, 255, 255, 220), 0, 1.5f * scale_);
+    }
 }
 
 void App::design_panel() {
@@ -16449,7 +16573,57 @@ void App::design_panel() {
         }
         else if (waits)
             loc::TextDisabled("%s", tr(T::DesignWaiting));
-        ImGui::Indent();
+        // The step being made or edited: its fields in a panel of its own at
+        // the right of the view (rule 11 quinquies), drawn from here.
+        const bool in_dialog = design_dialog_ == int(i);
+        if (in_dialog) {
+            loc::TextDisabled("%s", tr(T::DesignInPanel));
+            const float w = 300.0f * scale_;
+            // At the bottom right, over the command line: the view cube stays free.
+            ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 16.0f * scale_, view_pos_.y + view_size_.y - 130.0f * scale_),
+                                    ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+            ImGui::SetNextWindowSize(ImVec2(w, 0.0f));
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+            ImGui::Begin("##design_dialog", nullptr,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
+            g_menu_rects["design_dialog"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                                   ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                                   ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+            ImGui::PushFont(nullptr, kTitleSize * 0.8f);
+            loc::TextColored(rgb(theme_.accent_hover), "%s", f.name.c_str());
+            ImGui::PopFont();
+            ImGui::Separator();
+        } else {
+            ImGui::Indent();
+        }
+        // The end of its fields: in the panel, Aceptar and Cancelar (Enter, Esc).
+        const auto end_fields = [&] {
+            if (!in_dialog) {
+                ImGui::Unindent();
+                return;
+            }
+            ImGui::Separator();
+            const bool typing = ImGui::GetIO().WantTextInput;
+            const bool accept = ImGui::Button(tr(T::DesignAccept), ImVec2(130.0f * scale_, 0)) ||
+                                (!typing && ImGui::IsKeyPressed(ImGuiKey_Enter, false) && !command_focus_);
+            rect_of("design_dialog_accept");
+            ImGui::SameLine();
+            const bool cancel = ImGui::Button(tr(T::Cancel), ImVec2(130.0f * scale_, 0)) ||
+                                (!typing && ImGui::IsKeyPressed(ImGuiKey_Escape, false));
+            rect_of("design_dialog_cancel");
+            ImGui::End();
+            ImGui::PopStyleColor();
+            if (accept) {
+                design_dialog_ = -1;
+            } else if (cancel) {
+                if (design_dialog_new_)
+                    removed = i;
+                else if (design_dialog_before_)
+                    f = *design_dialog_before_, changed = true;
+                design_dialog_ = -1;
+            }
+        };
         if (f.type == cad::Feature::Type::Operation) {
             // Its body, its measures and its points (rule 7, stage D4).
             cad::BodyOperation& o = f.op;
@@ -16643,7 +16817,7 @@ void App::design_panel() {
             }
             if (!f.buildable())
                 loc::TextColored(rgb(0xE8A33D), "%s", tr(T::CommandBadNumber));
-            ImGui::Unindent();
+            end_fields();
             ImGui::PopID();
             continue;
         }
@@ -16699,7 +16873,7 @@ void App::design_panel() {
             }
             if (!f.sketch.has_region())
                 loc::TextColored(rgb(0xE8A33D), "%s", tr(T::SketchNoRegion));
-            ImGui::Unindent();
+            end_fields();
             ImGui::PopID();
             continue;
         }
@@ -16726,12 +16900,14 @@ void App::design_panel() {
         }
         if (!f.buildable())
             loc::TextColored(rgb(0xE8A33D), "%s", tr(T::CommandBadNumber));
-        ImGui::Unindent();
+        end_fields();
         ImGui::PopID();
     }
     // A sketch being drawn is finished first, so its place stays right.
     if ((removed || moved) && sketch_edit_)
         finish_sketch();
+    if (removed || moved) // the steps' numbers change: the panel closes
+        design_dialog_ = -1;
     if (removed || moved)
         design_pick_.reset();
     if (removed) {
@@ -22004,6 +22180,8 @@ void App::edit_sketch(std::size_t feature) {
 void App::finish_sketch() {
     if (!sketch_edit_)
         return;
+    // Its extrusion's panel (CD26: Extruir with its panel at the right).
+    open_feature_dialog(sketch_edit_->feature, false);
     sketch_end_tool(false);
     sketch_edit_.reset();
     camera_.orthographic = sketch_prev_ortho_;
@@ -24253,7 +24431,7 @@ void App::layout() {
         if (show_labels_ && (tab_ == Tab::Prepare || tab_ == Tab::Preview))
             part_labels();
         if (tab_ == Tab::Design && design_page_ == DesignPage::Design) {
-            design_command_line(), design_timeline();
+            design_command_line(), design_timeline(), design_handles();
             if (sketch_edit_) {
                 sketch_strip();
                 sketch_cursor_input();
@@ -25850,7 +26028,12 @@ void App::script_input() {
         failed_ = true;
         script_at_ = script_.size();
     };
-    const auto key_named = [](std::string_view name) {
+    const auto key_named = [](std::string_view given) {
+        // In any case: «Escape» and «escape» are the same key.
+        std::string lower(given);
+        for (char& c : lower)
+            c = char(std::tolower(static_cast<unsigned char>(c)));
+        const std::string_view name = lower;
         if (name.size() == 1 && name[0] >= 'a' && name[0] <= 'z') // any letter
             return ImGuiKey(int(ImGuiKey_A) + (name[0] - 'a'));
         if (name.size() == 1 && name[0] >= '0' && name[0] <= '9') // any digit
@@ -26844,6 +27027,14 @@ void App::script_input() {
             return fail_step("no operation is taking points, or the point is not X Y Z");
         design_pick_at({x, y, z});
         std::printf("ui-script: design-pick %g %g %g\n", x, y, z);
+        next();
+    } else if (step.verb == "expect-design-above") { // the design's volume more than VALUE mm3, once built
+        if (design_job_.running() || !solidcraft_probed_ || design_dirty_ || design_edited_)
+            return f >= 600 ? fail_step("the design is still building") : void();
+        const double want = std::atof(step.key.c_str());
+        std::printf("ui-script: expect-design-above %s: %s%.1f\n", step.key.c_str(), design_volume_ > want ? "ok, " : "got ", design_volume_);
+        if (!(design_volume_ > want))
+            return fail_step("the design's volume is " + std::to_string(design_volume_));
         next();
     } else if (step.verb == "expect-design") { // the design's bodies built: VALUE "none" or a volume in mm3 within 1 %
         if (design_job_.running() || !solidcraft_probed_ || design_dirty_)

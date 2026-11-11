@@ -1519,9 +1519,12 @@
     X(DesignTipSearch, "Busca una herramienta por su nombre; Enter empieza la primera.", "Finds a tool by its name; Enter starts the first one.") \
     X(DesignSearchNothing, "Ninguna herramienta se llama así", "No tool by that name") \
     X(DesignRepeat, "Repetir: %s", "Repeat: %s") \
+    X(DesignRepeatShort, "Repetir", "Repeat") \
     X(DesignRepeatNone, "Repetir (todavía nada)", "Repeat (nothing yet)") \
     X(DesignTipRepeat, "Vuelve a empezar la última herramienta usada.", "Starts the last tool used again.") \
     X(DesignTipDeleteLast, "Borra el último paso del diseño.", "Deletes the design's last step.") \
+    X(DesignAccept, "Aceptar", "OK") \
+    X(DesignInPanel, "Se edita en el cuadro de la derecha", "Being edited in the panel on the right") \
     X(DesignTimelineEmpty, "La línea de tiempo muestra cada paso del diseño", "The timeline shows each step of the design") \
     X(DesignTimelineWaits, "Después de la marca: espera", "After the marker: waiting") \
     X(DesignTimelineSuppress, "Suprimir", "Suppress") \

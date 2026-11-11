@@ -6,6 +6,8 @@ menu mode_engineering
 menu tab_design
 menu design_box
 expect-design 8000
+menu design_dialog_accept
+wait 3
 mouse right 0.6 0.55 0 0
 wait 2
 expect-control design_radial_repeat
@@ -19,6 +21,8 @@ expect-control design_radial_suppress
 menu design_radial_repeat
 wait 30
 expect-control design_timeline_2
+menu design_dialog_accept
+wait 3
 mouse right 0.6 0.55 0 0
 wait 2
 menu design_radial_delete
