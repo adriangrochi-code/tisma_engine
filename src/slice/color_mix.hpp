@@ -123,6 +123,21 @@ struct MixChangeOptions {
 };
 int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOptions& options);
 
+// What lowers a blend's purge when it passes half the filament
+// (color_mixing_plus.md, rule 38), each with its estimate before slicing:
+// "subdivide" (sublayers off), "cadence_heights" (a blend of two with the
+// larger share's layers twice as high, at most `max_height` when above 0) and
+// "surface_only" (the same changes, their purge into the hidden infill).
+// `purge` is mm3 a change, `part` the part's own plastic, mm3. Empty when
+// the purge is half the filament or less.
+struct MixSuggestion {
+    std::string key;
+    int changes = 0;
+    double purge_share = 0.0; // of all the filament, 0 to 1
+};
+std::vector<MixSuggestion> mix_purge_suggestions(const ColorMix& mix, double height, const MixChangeOptions& options,
+                                                 double purge, double part, double max_height = 0.0);
+
 // The colour a blend shows from afar (rule 8): its filaments' colours mixed
 // by their shares, by the Yule-Nielsen relation (n = 2) on each channel.
 // An approximation: the colours real filaments give were not measured.

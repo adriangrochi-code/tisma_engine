@@ -984,3 +984,28 @@ TEST_CASE("color mixing plus: blends on a plate line up their cycles (rule 39, M
     CHECK(sequence(alone).substr(0, 4) == "3131");
     gcode_of(model, s);
 }
+
+TEST_CASE("color mixing plus: what to suggest when the purge passes half the filament (rule 38)", "[mixing]") {
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    MixChangeOptions o;
+    o.subdivide = true;
+    // A 10 mm box of 4000 mm3: 49+ changes of 140 mm3 are far above half.
+    const auto list = mix_purge_suggestions(half, 10.0, o, 140.0, 4000.0);
+    REQUIRE(list.size() == 3);
+    CHECK(list[0].key == "subdivide");
+    CHECK(list[1].key == "cadence_heights");
+    CHECK(list[2].key == "surface_only");
+    const int now = mix_changes_estimate(half, 10.0, o);
+    CHECK(list[0].changes <= now);
+    CHECK(list[1].changes < now);
+    CHECK(list[1].purge_share < list[2].purge_share);
+    for (const MixSuggestion& m : list) {
+        CHECK(m.purge_share > 0.0);
+        CHECK(m.purge_share < 1.0);
+    }
+    // Little purge: nothing to suggest.
+    CHECK(mix_purge_suggestions(half, 10.0, o, 1.0, 4000.0).empty());
+    // Three filaments: no cadence heights.
+    const auto three = mix_purge_suggestions(blend(4, {{1, 1.0}, {2, 1.0}, {3, 1.0}}), 10.0, {}, 140.0, 4000.0);
+    CHECK(std::none_of(three.begin(), three.end(), [](const MixSuggestion& m) { return m.key == "cadence_heights"; }));
+}

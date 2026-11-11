@@ -500,4 +500,37 @@ std::vector<std::vector<double>> purge_table(const std::vector<std::string>& col
     return out;
 }
 
+std::vector<MixSuggestion> mix_purge_suggestions(const ColorMix& mix, double height, const MixChangeOptions& o,
+                                                 double purge, double part, double max_height) {
+    std::vector<MixSuggestion> out;
+    const auto share = [&](int changes) {
+        const double p = std::max(0.0, purge) * changes;
+        return p + part > 0.0 ? p / (p + std::max(0.0, part)) : 0.0;
+    };
+    const int now = mix_changes_estimate(mix, height, o);
+    if (share(now) <= 0.5)
+        return out;
+    if (o.subdivide) {
+        MixChangeOptions off = o;
+        off.subdivide = false;
+        const int c = mix_changes_estimate(mix, height, off);
+        out.push_back({"subdivide", c, share(c)});
+    }
+    if (!mix.gradient && mix.pattern.empty() && mix.components.size() == 2 && o.layer_height > 0.0) {
+        // The larger share's layers twice as high, the other's as they are:
+        // one change a layer, with fewer layers.
+        double tall = 2.0 * o.layer_height;
+        if (max_height > 0.0)
+            tall = std::min(tall, max_height);
+        const double pair = tall + o.layer_height;
+        const int layers = int(std::ceil(std::max(0.0, height - o.first_layer_height) / pair * 2.0)) + 1;
+        const int c = std::max(0, layers - 1);
+        if (c < now)
+            out.push_back({"cadence_heights", c, share(c)});
+    }
+    // The same changes, the purge into the infill the shell hides (rules 13 and 33).
+    out.push_back({"surface_only", now, share(now)});
+    return out;
+}
+
 } // namespace tisma

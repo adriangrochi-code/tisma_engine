@@ -12723,6 +12723,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 38: sugerencias del aviso** (2026-11-11, bloque nocturno). `mix_purge_suggestions(mezcla,
+  alto, opciones, purga por cambio, volumen de la pieza, alto máximo)` en `src/slice/color_mix.*`: si la purga pasa
+  del 50 % del filamento, da cada medida con sus cambios y su parte de purga. Las medidas son: subcapas apagadas;
+  alto por filamento (en una mezcla de dos, las capas del de mayor parte al doble, hasta el máximo); solo la
+  superficie (los mismos cambios, la purga al relleno escondido). Diseño propio: la estimación sin laminar. La
+  interfaz la muestra en el aviso de costo (aviso a esa sesión). Prueba `[mixing]`, regla 38. Falta: «un ciclo más
+  corto»; con las proporciones dadas no baja los cambios por capa sin cambiar el color.
 - **Full Spectrum, regla 40: informe de purga** (2026-11-11, bloque nocturno). El aviso «purge» después de laminar ya
   daba torre y objetos. Ahora separa los objetos entre relleno y resto: «… g into the objects (… g into their
   infill, … g into the rest)», en proporción al volumen de los sumideros de cada tipo. El texto de antes sigue
