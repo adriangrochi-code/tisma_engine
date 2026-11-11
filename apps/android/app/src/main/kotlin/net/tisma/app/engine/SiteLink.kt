@@ -97,6 +97,8 @@ object SiteLink {
                 val e = z.nextEntry ?: break
                 if (e.isDirectory) continue
                 val name = e.name.substringAfterLast('/')
+                // A Mac's ZIP carries «__MACOSX/._cube.stl»: the file's metadata, not a model.
+                if (name.startsWith("._") || e.name.startsWith("__MACOSX/")) continue
                 if (name.substringAfterLast('.', "").lowercase() !in setOf("stl", "obj", "3mf", "step", "stp")) continue
                 val out = File(dir, safeName(name))
                 copyCapped(z, out)

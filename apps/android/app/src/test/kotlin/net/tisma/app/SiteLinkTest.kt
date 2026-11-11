@@ -73,6 +73,19 @@ class SiteLinkTest {
     }
 
     @Test
+    fun `a Mac's ZIP gives the model, not its metadata`() {
+        val zip = tmp.newFile("mac.zip")
+        ZipOutputStream(zip.outputStream()).use { z ->
+            z.putNextEntry(ZipEntry("__MACOSX/._cube.stl")); z.write(byteArrayOf(0, 5, 22, 7)); z.closeEntry()
+            z.putNextEntry(ZipEntry("parts/._cube.stl")); z.write(byteArrayOf(0, 5, 22, 7)); z.closeEntry()
+            z.putNextEntry(ZipEntry("parts/cube.stl")); z.write("solid c\nendsolid c\n".toByteArray()); z.closeEntry()
+        }
+        val m = SiteLink.unzipModel(zip, tmp.newFolder("mac"))
+        assertEquals("cube.stl", m.name)
+        assertTrue(m.readText().startsWith("solid"))
+    }
+
+    @Test
     fun `the link asks first, offers to allow downloads, and the model reaches the plate`() {
         val context: Context = ApplicationProvider.getApplicationContext()
         val settings = AppSettings(context).apply { packWizardDone = true; allowSiteDownloads = false }
