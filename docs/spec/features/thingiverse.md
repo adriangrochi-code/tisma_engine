@@ -1,5 +1,8 @@
 # Thingiverse dentro del programa
 
+> **Descartada (decisión del dueño, 2026-11-11):** «Thingiverse olvidate, ya que usaremos nuestro servicio». No se
+> hace: la biblioteca de Tisma (`p2p_library.md`) la reemplaza.
+
 **Qué hace:** busca modelos en Thingiverse sin salir del programa y los carga en la placa con un botón.
 
 **Fase:** después de la primera versión.
