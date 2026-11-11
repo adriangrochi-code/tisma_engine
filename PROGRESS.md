@@ -12799,3 +12799,25 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   escritura, con la máquina cargada por el CI local (carga 13,9 en 4 núcleos); no se compara con los 0,97 a 1,12 s
   del bloque anterior, sin carga. Sin cambio de rendimiento que medir.
 - **Arreglado en este turno (búsqueda profunda y pedidos de spec):** BH50 a BH54, ME14, ME15; entradas de arriba.
+
+## 2026-11-11 — interfaz: navegación de Fusion 360 y cubo de vistas (segunda sesión del motor)
+
+- **Fichas:** `interface.md` y `cad_design.md` de `spec/next` (todavía no en `main`); `tools/check_spec.py` limpio.
+- **Hecho:** navegación por defecto como Fusion 360 (rueda apretada desplaza; Mayús + rueda gira alrededor del punto
+  de la pieza bajo el mouse, o del centro de lo elegido o de la cama; la rueda acerca hacia el mouse, hacia atrás
+  acerca como Fusion por defecto; doble clic con la rueda encuadra; izquierdo desde un lugar vacío dibuja un
+  rectángulo de selección; clic derecho abre el menú). Preferencia «Navegación» (Configuración › Interfaz, clave
+  `ui.navigation`: `fusion`, `right_orbits`, `classic`). Punto del centro de giro mientras se gira. Cubo de vistas
+  arriba a la derecha (caras, aristas, esquinas, arrastre, «Inicio», animación de 0,25 s), menos en Calibración y
+  Dispositivo. Órdenes nuevas de guion: `mouse`, `mouse-double`, `wheel`, `cube`, `camera-mark`, `expect-camera`,
+  `pref navigation`.
+- **Arreglado (encontrado al probar):** cuando la calidad automática bajaba la oclusión al mover la vista
+  (`update_view_hold`), pedía un encuadre nuevo en vez de solo despertar la ventana: en una máquina lenta la cámara
+  volvía al encuadre mientras se la giraba o desplazaba. Ahora despierta la ventana (`glfwPostEmptyEvent`).
+- **Pruebas:** `ui: CAD navigation keeps the pivot and the point under the mouse still` (perspectiva y ortogonal);
+  guiones `navigation.txt` (UI17, los tres modos y el rectángulo) y `view_cube.txt` (UI18). Las 227 pruebas de
+  interfaz y las `[ui]` pasan en Release con gcc. No probado en Windows ni con un mouse real.
+- **Decisión:** la placa elige un solo modelo; el rectángulo elige el más cercano a donde empezó, hasta que haya
+  selección múltiple (siguiente).
+- **Sigue:** selección múltiple, barra de vista abajo al centro, aspecto (degradé y grilla), y después Diseño:
+  barra de herramientas con pestañas (11 bis, CD26).
