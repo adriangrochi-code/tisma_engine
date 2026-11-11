@@ -1014,6 +1014,14 @@ if(TISMA_BUILD_UI AND NOT WIN32)
     set_tests_properties(ui_settings_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_level_basic;ui_level_custom")
     set_tests_properties(ui_settings_basic ui_settings_custom_search PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0"
                          TIMEOUT 300)
+    add_test(NAME ui_paint_color_cli
+      COMMAND ${TISMA_XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:tisma>
+              ${CMAKE_CURRENT_SOURCE_DIR}/data/cube_ascii.stl --lang es --size 1200x760 --tool paint
+              --paint color,2,133,128,5,3
+              --ui-script ${CMAKE_CURRENT_SOURCE_DIR}/data/ui/paint_color_cli.txt
+              --screenshot ${CMAKE_CURRENT_BINARY_DIR}/ui_paint_color_cli.png)
+    set_tests_properties(ui_paint_color_cli PROPERTIES ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0" TIMEOUT 300
+                         FAIL_REGULAR_EXPRESSION "error: ")
     set_tests_properties(ui_paint_save PROPERTIES FIXTURES_SETUP ui_paint)
     set_tests_properties(ui_paint_reopen PROPERTIES FIXTURES_REQUIRED ui_paint FIXTURES_SETUP ui_paint_b)
     set_tests_properties(ui_paint_same_gcode PROPERTIES FIXTURES_REQUIRED "ui_paint;ui_paint_b")

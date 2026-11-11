@@ -3936,13 +3936,14 @@ bool App::init(std::string& error) {
     for (const AppOptions::Stroke& b : options_.strokes) {
         const PaintChannel channel = b.channel == "seam"    ? PaintChannel::Seam
                                      : b.channel == "fuzzy" ? PaintChannel::Fuzzy
+                                     : b.channel == "color" ? PaintChannel::Color
                                                             : PaintChannel::Support;
         for (std::size_t i = 0; i < objects_.size() && i < placed_meshes_.size(); ++i) {
             Brush brush;
             brush.centre = {b.x, b.y, b.z};
             brush.radius = b.radius;
             brush.detail = std::max(0.05, b.radius / 6.0);
-            brush.mark = b.block ? kPaintBlock : kPaintEnforce;
+            brush.mark = b.color > 0 ? std::uint8_t(b.color) : b.block ? kPaintBlock : kPaintEnforce;
             paint(objects_[i].painting, channel, placed_meshes_[i], brush);
         }
         paint_channel_ = channel;

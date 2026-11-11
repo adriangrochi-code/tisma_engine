@@ -13256,4 +13256,6 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   sola); ASan en curso.
 - **Después** (MT33, respuesta de fichas): en «Un objeto con dos partes», los conectores quedan deshabilitados con la
   nota «Los conectores son para piezas separadas» y vuelven a valer con «Dos objetos». Prueba: `cut_parts.txt`.
+- **Después** (pedido de fichas, para ME16 y ME17 por caja negra): `--paint color,N,X,Y,Z,RADIO` pinta con el
+  filamento o la mezcla N (de 1 a 16, la marca que el motor lee hoy). Prueba: `ui_paint_color_cli`.
 
