@@ -421,6 +421,21 @@ std::string mix_color(const std::vector<std::string>& colors, const std::vector<
 int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOptions& o) {
     if (!(height > 0.0) || !(o.layer_height > 0.0) || !(o.first_layer_height > 0.0))
         return 0;
+    // Each filament with its own height (rule 8): one change a layer, with
+    // the layers it makes, as slice_model lays them.
+    if (o.cadence_heights && !mix.gradient && mix.pattern.empty()) {
+        int two = 0;
+        for (const ColorMix::Component& c : mix.components)
+            two += c.share > 0.0;
+        if (two == 2) {
+            const double ha = o.height_a > 0.0 ? o.height_a : o.layer_height;
+            const double hb = o.height_b > 0.0 ? o.height_b : o.layer_height;
+            int layers = 1;
+            for (double z = o.first_layer_height; z < height - 1e-9 && layers < 100000; ++layers)
+                z += layers % 2 ? hb : ha;
+            return layers - 1;
+        }
+    }
     std::vector<Layer> layers;
     for (double z = 0.0; z < height - 1e-9 && layers.size() < 100000;) {
         const double h = layers.empty() ? o.first_layer_height : o.layer_height;

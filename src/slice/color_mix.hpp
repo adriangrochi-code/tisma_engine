@@ -121,6 +121,11 @@ struct MixChangeOptions {
     double first_layer_height = 0.2, layer_height = 0.2;
     bool subdivide = false, sub_first_layer = false;
     double sub_min_height = 0.04;
+    // Each filament of a blend of two with its own height (rule 8): the
+    // first layer, then height_b and height_a in turn (0: the layer height),
+    // as the slicing lays them, when nothing else on the plate stops it.
+    bool cadence_heights = false;
+    double height_a = 0.0, height_b = 0.0;
 };
 int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOptions& options);
 

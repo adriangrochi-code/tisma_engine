@@ -12723,6 +12723,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Búsqueda profunda (07:15): la estimación antes de laminar no conocía el alto por filamento.** Con
+  `cadence_heights` (0,3 y 0,15), `mix_changes_estimate` contaba capas de 0,2 (49 cambios) y el laminado da unos 44.
+  El aviso de costo de la interfaz habría mostrado un número equivocado. `MixChangeOptions` suma `cadence_heights`,
+  `height_a` y `height_b`, y con ellos cuenta las capas como `slice_model`. Prueba `[mixing]` («rules 8 and 12»),
+  igual al G-code laminado; falla sin el arreglo.
 - **Full Spectrum, regla 21: predicción espectral** (2026-11-11, bloque nocturno; MX17). `mix_color_spectral(colores,
   partes, TD)` en `src/slice/color_mix.*`: Kubelka y Munk por canal (reflectancia lineal a K/S y de vuelta), cada
   filamento pesado por su parte × (1 + TD / 10). El factor es diseño propio: un filamento más translúcido pesa más.

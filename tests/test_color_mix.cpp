@@ -1068,3 +1068,19 @@ TEST_CASE("color mixing plus: the spectral prediction (rule 21, MX17)", "[mixing
     // A filament alone keeps its colour (within rounding).
     CHECK(ciede2000(mix_color_spectral({"#c04020"}, {1.0}, {5.0}), "#c04020") < 1.0);
 }
+
+TEST_CASE("color mixing plus: the estimate before slicing with each filament's own height (rules 8 and 12)", "[mixing]") {
+    Settings s = base();
+    s.mix_cadence_heights = true;
+    s.mix_height_a = 0.3;
+    s.mix_height_b = 0.15;
+    const ColorMix half = blend(3, {{1, 0.5}, {2, 0.5}});
+    const int counted = changes(gcode_of(sliced(box(3), s, {half}), s));
+    MixChangeOptions o;
+    o.first_layer_height = s.first_layer_height;
+    o.layer_height = s.layer_height;
+    o.cadence_heights = true;
+    o.height_a = s.mix_height_a;
+    o.height_b = s.mix_height_b;
+    CHECK(mix_changes_estimate(half, 10.0, o) == counted);
+}
