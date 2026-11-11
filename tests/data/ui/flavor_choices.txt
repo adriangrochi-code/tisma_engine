@@ -1,0 +1,8 @@
+# A printer that names the firmwares it can run (machine.flavor_choices, PF15:
+# Cura's printers in the pack) offers only those in the firmware row.
+set machine.flavor_choices ["marlin_legacy","marlin"]
+set machine.flavor "marlin"
+pref level advanced
+click machine.flavor
+wait 3
+expect-no-text Klipper
