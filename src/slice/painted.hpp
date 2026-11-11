@@ -24,9 +24,11 @@ std::vector<PaintedPiece> painted_pieces(const IndexedMesh& mesh, const Painting
 // The XY area of each layer the pieces reach into (bottom to top, both
 // included): each piece cut to the layer, projected straight down and grown by
 // `grow` mm. A painted strip of a wall projects to a line; grown, it is a band
-// the wall's loops cross. Empty where nothing is painted. Layers in parallel.
+// the wall's loops cross; with `exact_ends` the band ends square at the
+// painted border instead of `grow` mm past it. Empty where nothing is painted.
+// Layers in parallel.
 std::vector<Polygons> painted_areas(const std::vector<PaintedPiece>& pieces, const std::vector<Layer>& layers,
-                                    double grow);
+                                    double grow, bool exact_ends = false);
 
 // The zones of each layer painted with a colour (multi_extruder.md, rule 1;
 // color_mixing_plus.md, rule 16; own design for the depth): every point of the

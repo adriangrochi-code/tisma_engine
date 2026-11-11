@@ -55,7 +55,7 @@ std::vector<PaintedPiece> painted_pieces(const IndexedMesh& mesh, const Painting
 }
 
 std::vector<Polygons> painted_areas(const std::vector<PaintedPiece>& pieces, const std::vector<Layer>& layers,
-                                    double grow) {
+                                    double grow, bool exact_ends) {
     std::vector<Polygons> out(layers.size());
     if (layers.empty() || pieces.empty())
         return out;
@@ -100,7 +100,8 @@ std::vector<Polygons> painted_areas(const std::vector<PaintedPiece>& pieces, con
             if (!lines.empty())
                 area = Clipper2Lib::Union(area,
                                           Clipper2Lib::InflatePaths(lines, grow * kUnitsPerMm, Clipper2Lib::JoinType::Miter,
-                                                                    Clipper2Lib::EndType::Square),
+                                                                    exact_ends ? Clipper2Lib::EndType::Butt
+                                                                               : Clipper2Lib::EndType::Square),
                                           Clipper2Lib::FillRule::NonZero);
         }
         out[l] = std::move(area);
@@ -133,7 +134,8 @@ std::vector<std::vector<ColorZone>> color_zones(const IndexedMesh& mesh, const P
             else
                 sides.push_back(p);
         }
-        std::vector<Polygons> band = painted_areas(sides, layers, step);
+        // Ending at the painted border: past it the outline is the next face's.
+        std::vector<Polygons> band = painted_areas(sides, layers, step, true);
         const auto carry = [&](const std::vector<PaintedPiece>& pieces, bool down, int count) {
             const std::vector<Polygons> at = painted_areas(pieces, layers, step / 2.0);
             for (std::size_t l = 0; l < at.size(); ++l) {
