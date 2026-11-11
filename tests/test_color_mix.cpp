@@ -1712,3 +1712,36 @@ TEST_CASE("painted colours: through a thin wall, not along it past the painted b
     CHECK(before == std::set<int>{2});
     CHECK(past == std::set<int>{1});
 }
+
+TEST_CASE("painted colours: a painted side ending on a layer's bottom does not colour that layer", "[mixing][paint]") {
+    // A 20 mm cube from two boxes, z 0 to 5 and 5 to 10; the +X face of the
+    // lower one painted with 2. The layer from z 5 up is the part's own.
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 110, 110, 5);
+    add_box(p.mesh, 90, 90, 5, 110, 110, 10);
+    p.objects = {{"cube", 0, 24, 0, 0, 1}};
+    Painting paint;
+    for (std::size_t t = 0; t < 12; ++t) {
+        bool on = true;
+        for (int k = 0; k < 3; ++k)
+            on = on && p.mesh.corner(t, k).x > 109.9f;
+        if (on)
+            paint.set_tree(PaintChannel::Color, t, {2});
+    }
+    Settings s = base();
+    const SlicedModel m = slice_model(weld_exact(p.mesh), s, nullptr, nullptr, &paint, &p.objects, nullptr);
+    const auto tools = [&](std::size_t l) {
+        std::set<int> out;
+        for (const Toolpath& t : m.walls[l].toolpaths)
+            for (const ToolpathPoint& q : t.points)
+                if (q.p.x > 109.5 && q.p.y > 95 && q.p.y < 105)
+                    out.insert(std::max<int>(t.tool, 1));
+        return out;
+    };
+    std::size_t above = 0;
+    while (above < m.layers.size() && m.layers[above].bottom < 5.0 - 1e-6)
+        ++above;
+    REQUIRE(above + 1 < m.layers.size());
+    CHECK(tools(above - 1) == std::set<int>{2});
+    CHECK(tools(above) == std::set<int>{1});
+}

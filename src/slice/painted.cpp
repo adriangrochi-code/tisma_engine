@@ -66,9 +66,12 @@ std::vector<Polygons> painted_areas(const std::vector<PaintedPiece>& pieces, con
     for (std::size_t i = 0; i < pieces.size(); ++i) {
         const PaintedPiece& p = pieces[i];
         const double lo = std::min({p[0].z, p[1].z, p[2].z}), hi = std::max({p[0].z, p[1].z, p[2].z});
-        const auto first = std::lower_bound(layers.begin(), layers.end(), lo - kTouch,
+        // A flat face on a boundary belongs to both layers; a sloped or
+        // upright one only to those it goes into, not to the one it ends on.
+        const double touch = hi - lo > 2.0 * kTouch ? -kTouch : kTouch;
+        const auto first = std::lower_bound(layers.begin(), layers.end(), lo - touch,
                                             [](const Layer& l, double z) { return l.top < z; });
-        for (auto it = first; it != layers.end() && it->bottom <= hi + kTouch; ++it)
+        for (auto it = first; it != layers.end() && it->bottom <= hi + touch; ++it)
             by_layer[std::size_t(it - layers.begin())].push_back(std::uint32_t(i));
     }
     tbb::parallel_for(std::size_t(0), layers.size(), [&](std::size_t l) {
