@@ -621,6 +621,19 @@ private:
     std::size_t design_rollback_ = SIZE_MAX;
     int timeline_menu_ = -1;
     bool tool_search_open_ = false; // the tool search (rule 11 octies, CD29)
+    // The step being made or edited in its own panel at the right of the view
+    // (rule 11 quinquies): its fields, «Aceptar» and «Cancelar»; a new one
+    // is taken away by Cancelar, an old one goes back to how it was.
+    int design_dialog_ = -1;
+    bool design_dialog_new_ = false;
+    std::optional<cad::Feature> design_dialog_before_;
+    void open_feature_dialog(std::size_t feature, bool fresh) {
+        design_dialog_ = feature < design_.features.size() ? int(feature) : -1;
+        design_dialog_new_ = fresh;
+        design_dialog_before_.reset();
+        if (design_dialog_ >= 0)
+            design_dialog_before_ = design_.features[feature];
+    }
     // The right button's radial menu in Design (rule 11 septies, CD28): open
     // at this place; the last tool chosen, for Repeat.
     std::optional<ImVec2> design_radial_;
@@ -14942,6 +14955,7 @@ void App::add_primitive(cad::Primitive kind, const std::array<double, cad::kMaxS
     f.name = design_.free_name(primitive_label(kind));
     design_.features.push_back(std::move(f));
     design_scroll_to_ = std::to_string(design_.features.size()); // the new row in view
+    open_feature_dialog(design_.features.size() - 1, true);
     rebuild_design();
 }
 
@@ -15021,6 +15035,7 @@ void App::add_operation(cad::OperationKind kind) {
     }
     design_.features.push_back(std::move(f));
     design_scroll_to_ = std::to_string(design_.features.size());
+    open_feature_dialog(design_.features.size() - 1, true);
     if (takes_points(kind)) {
         design_pick_ = design_.features.size() - 1;
         command_message_ = tr(pick_hint(kind));
@@ -15765,6 +15780,13 @@ void App::design_toolbar() {
             rd->AddCircleFilled(ImVec2(at.x + button * 0.5f, at.y + button * 0.5f), button * 0.5f,
                                 ImGui::GetColorU32(hover && tool->ready ? rgb(theme_.accent, 0.6f) : rgb(theme_.panel)), 24);
             cad_icon(rd, tool->icon, ImVec2(at.x + button * 0.2f, at.y + button * 0.2f), button * 0.6f, tool->ready ? ink : dim);
+            { // its name under it, small
+                std::string name = tool->id == "design_radial_repeat" ? std::string(tr(T::DesignRepeatShort)) : tool->label;
+                const float size = ImGui::GetFontSize() * 0.8f;
+                const ImVec2 text = ImGui::GetFont()->CalcTextSizeA(size, FLT_MAX, 0.0f, name.c_str());
+                rd->AddText(ImGui::GetFont(), size, ImVec2(at.x + button * 0.5f - text.x * 0.5f, at.y + button + 1.0f * scale_),
+                            tool->ready ? ink : dim, name.c_str());
+            }
             tool_tip(*tool);
             ImGui::PopID();
             if (hit && tool->ready) {
@@ -16459,7 +16481,57 @@ void App::design_panel() {
         }
         else if (waits)
             loc::TextDisabled("%s", tr(T::DesignWaiting));
-        ImGui::Indent();
+        // The step being made or edited: its fields in a panel of its own at
+        // the right of the view (rule 11 quinquies), drawn from here.
+        const bool in_dialog = design_dialog_ == int(i);
+        if (in_dialog) {
+            loc::TextDisabled("%s", tr(T::DesignInPanel));
+            const float w = 300.0f * scale_;
+            // At the bottom right, over the command line: the view cube stays free.
+            ImGui::SetNextWindowPos(ImVec2(view_pos_.x + view_size_.x - 16.0f * scale_, view_pos_.y + view_size_.y - 130.0f * scale_),
+                                    ImGuiCond_Always, ImVec2(1.0f, 1.0f));
+            ImGui::SetNextWindowSize(ImVec2(w, 0.0f));
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, rgb(theme_.panel));
+            ImGui::Begin("##design_dialog", nullptr,
+                         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
+            g_menu_rects["design_dialog"] = ImVec4(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y,
+                                                   ImGui::GetWindowPos().x + ImGui::GetWindowSize().x,
+                                                   ImGui::GetWindowPos().y + ImGui::GetWindowSize().y);
+            ImGui::PushFont(nullptr, kTitleSize * 0.8f);
+            loc::TextColored(rgb(theme_.accent_hover), "%s", f.name.c_str());
+            ImGui::PopFont();
+            ImGui::Separator();
+        } else {
+            ImGui::Indent();
+        }
+        // The end of its fields: in the panel, Aceptar and Cancelar (Enter, Esc).
+        const auto end_fields = [&] {
+            if (!in_dialog) {
+                ImGui::Unindent();
+                return;
+            }
+            ImGui::Separator();
+            const bool typing = ImGui::GetIO().WantTextInput;
+            const bool accept = ImGui::Button(tr(T::DesignAccept), ImVec2(130.0f * scale_, 0)) ||
+                                (!typing && ImGui::IsKeyPressed(ImGuiKey_Enter, false) && !command_focus_);
+            rect_of("design_dialog_accept");
+            ImGui::SameLine();
+            const bool cancel = ImGui::Button(tr(T::Cancel), ImVec2(130.0f * scale_, 0)) ||
+                                (!typing && ImGui::IsKeyPressed(ImGuiKey_Escape, false));
+            rect_of("design_dialog_cancel");
+            ImGui::End();
+            ImGui::PopStyleColor();
+            if (accept) {
+                design_dialog_ = -1;
+            } else if (cancel) {
+                if (design_dialog_new_)
+                    removed = i;
+                else if (design_dialog_before_)
+                    f = *design_dialog_before_, changed = true;
+                design_dialog_ = -1;
+            }
+        };
         if (f.type == cad::Feature::Type::Operation) {
             // Its body, its measures and its points (rule 7, stage D4).
             cad::BodyOperation& o = f.op;
@@ -16653,7 +16725,7 @@ void App::design_panel() {
             }
             if (!f.buildable())
                 loc::TextColored(rgb(0xE8A33D), "%s", tr(T::CommandBadNumber));
-            ImGui::Unindent();
+            end_fields();
             ImGui::PopID();
             continue;
         }
@@ -16709,7 +16781,7 @@ void App::design_panel() {
             }
             if (!f.sketch.has_region())
                 loc::TextColored(rgb(0xE8A33D), "%s", tr(T::SketchNoRegion));
-            ImGui::Unindent();
+            end_fields();
             ImGui::PopID();
             continue;
         }
@@ -16736,12 +16808,14 @@ void App::design_panel() {
         }
         if (!f.buildable())
             loc::TextColored(rgb(0xE8A33D), "%s", tr(T::CommandBadNumber));
-        ImGui::Unindent();
+        end_fields();
         ImGui::PopID();
     }
     // A sketch being drawn is finished first, so its place stays right.
     if ((removed || moved) && sketch_edit_)
         finish_sketch();
+    if (removed || moved) // the steps' numbers change: the panel closes
+        design_dialog_ = -1;
     if (removed || moved)
         design_pick_.reset();
     if (removed) {
@@ -22014,6 +22088,8 @@ void App::edit_sketch(std::size_t feature) {
 void App::finish_sketch() {
     if (!sketch_edit_)
         return;
+    // Its extrusion's panel (CD26: Extruir with its panel at the right).
+    open_feature_dialog(sketch_edit_->feature, false);
     sketch_end_tool(false);
     sketch_edit_.reset();
     camera_.orthographic = sketch_prev_ortho_;

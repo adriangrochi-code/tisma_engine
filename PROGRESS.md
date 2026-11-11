@@ -13427,3 +13427,16 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   de arriba y la línea de comandos y la de tiempo de abajo (antes quedaba medio tapada). Fichas confirmó el tema
   oscuro por defecto en Diseño (el claro, como opción en Preferencias: pendiente).
 
+## 2026-11-11 — interfaz: el cuadro de cada paso en Diseño (cad_design.md, regla 11 quinquies) y nombres en el menú radial
+
+- **Hecho:** al agregar una primitiva o una operación, o al terminar un boceto (su extrusión, CD26), sus campos se
+  abren en un cuadro propio abajo a la derecha de la vista (sobre la línea de comandos, el cubo queda libre), con el
+  nombre arriba y «Aceptar» / «Cancelar» (Enter y Esc cuando no se escribe en un campo). Cancelar saca el paso nuevo
+  o vuelve el paso editado a como estaba. En el historial, ese paso dice «Se edita en el cuadro de la derecha». La
+  vista ya construye mientras se cambian los campos (vista previa en vivo). Con el cuadro abierto, el clic derecho no
+  abre el menú radial (se acepta o cancela primero).
+- **Menú radial** (QA de fichas): cada ícono lleva su nombre debajo.
+- **Pruebas:** `design_dialog.txt` (Cancelar saca la caja; Aceptar la deja); `design_radial.txt` acepta el cuadro
+  antes del clic derecho; pasan los 220 de interfaz y diseño.
+- **Falta** de la regla: flechas y anillos en la vista para arrastrar distancias y ángulos.
+
