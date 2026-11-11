@@ -11799,8 +11799,11 @@ void App::plate_tools() {
                                         ImGui::GetItemRectMax().y);
     if (paint)
         tool_ = tool_ == PlateTool::Paint ? PlateTool::Select : PlateTool::Paint;
-    if (button("##material", "tool_material", nullptr, false, tool_ == PlateTool::Material, true, tr(T::ToolMaterialTip),
-               size))
+    const bool material_tool = button("##material", "tool_material", nullptr, false, tool_ == PlateTool::Material, true,
+                                 tr(T::ToolMaterialTip), size);
+    g_menu_rects["tool_material"] = ImVec4(ImGui::GetItemRectMin().x, ImGui::GetItemRectMin().y, ImGui::GetItemRectMax().x,
+                                           ImGui::GetItemRectMax().y);
+    if (material_tool)
         tool_ = tool_ == PlateTool::Material ? PlateTool::Select : PlateTool::Material;
     const ImVec2 strip_min = ImGui::GetWindowPos(), strip_size = ImGui::GetWindowSize();
     g_menu_rects["plate_tools"] = ImVec4(strip_min.x, strip_min.y, strip_min.x + strip_size.x, strip_min.y + strip_size.y);
@@ -12151,6 +12154,36 @@ void App::plate_tools() {
                     material = true;
                 }
             ImGui::EndCombo();
+        }
+        // Each part's own (formats.md, rule 7): the object's, or another.
+        if (!o.parts.empty()) {
+            ImGui::SeparatorText(tr(T::ObjectParts));
+            for (std::size_t k = 0; k < o.parts.size(); ++k) {
+                PlatePart& part = o.parts[k];
+                ImGui::PushID(int(k) + 3000);
+                ImGui::AlignTextToFramePadding();
+                loc::Text("%s", part.name.c_str());
+                ImGui::SameLine(110.0f * scale_);
+                ImGui::SetNextItemWidth(170.0f * scale_);
+                const std::string shown = part.extruder == 0 ? std::string(tr(T::PartObjectsExtruder)) : name_of(part.extruder);
+                if (ImGui::BeginCombo("##part", shown.c_str())) {
+                    std::vector<int> choices{0};
+                    for (int e = 1; e <= std::max(settings_.extruders, 1); ++e)
+                        choices.push_back(e);
+                    for (const ColorMix& m : mixes_)
+                        if (mix_usable(m, settings_.extruders))
+                            choices.push_back(m.id);
+                    for (const int e : choices)
+                        if (ImGui::Selectable(e == 0 ? tr(T::PartObjectsExtruder) : name_of(e).c_str(), e == part.extruder) &&
+                            e != part.extruder) {
+                            part.extruder = e;
+                            material = true;
+                        }
+                    ImGui::EndCombo();
+                }
+                note_rect("part_extruder." + std::to_string(k));
+                ImGui::PopID();
+            }
         }
         material |= ImGui::Checkbox(tr(T::WipeIntoInfill), &o.wipe_into_infill);
         material |= ImGui::Checkbox(tr(T::WipeIntoObject), &o.wipe_into_object);
@@ -12555,6 +12588,9 @@ void App::renumber_mixes() {
     };
     for (PlateObject& o : objects_) {
         o.extruder = moved(o.extruder);
+        for (PlatePart& part : o.parts)
+            if (part.extruder != 0)
+                part.extruder = moved(part.extruder);
         // The colour painting: its marks are extruder numbers.
         for (std::size_t t = 0; t < o.painting.size(PaintChannel::Color); ++t) {
             Painting::Tree tree = o.painting.tree(PaintChannel::Color, t);
@@ -24603,8 +24639,8 @@ void App::script_input() {
         if (got != want)
             return fail_step("the blends take " + std::to_string(got) + " changes");
         next();
-    } else if (step.verb == "open-mixing") { // the mixed colours' dialog, as its button opens it
-        mixing_open_ = true;
+    } else if (step.verb == "open-mixing") { // the mixed colours' dialog, as its button opens it ("off": closed)
+        mixing_open_ = step.key != "off";
         next();
     } else if (step.verb == "filament-color") { // a filament's colour: "N #rrggbb"
         const int n = std::atoi(step.key.c_str());
@@ -25550,6 +25586,15 @@ void App::script_input() {
         cut_size_ = size, cut_depth_ = depth, cut_tolerance_ = tol;
         cut_invert_ = std::string(invert) == "invert";
         cut_selected();
+        next();
+    } else if (step.verb == "part-extruder") { // part K of model I prints with E (0: the model's): "I K E"
+        std::size_t i = 0, k = 0;
+        int e = 0;
+        if (std::sscanf((step.key + " " + step.value).c_str(), "%zu %zu %d", &i, &k, &e) != 3 || i >= objects_.size() ||
+            k >= objects_[i].parts.size())
+            return fail_step("no such part");
+        objects_[i].parts[k].extruder = e;
+        objects_material_changed();
         next();
     } else if (step.verb == "expect-parts") { // model I's parts and, in order, their extruders: "I N [E1 E2 ...]"
         std::istringstream in(step.key + " " + step.value);

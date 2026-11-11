@@ -13117,4 +13117,8 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Decisión:** compilo en `build-ui` para no pisar el `build` del CI local.
 - **Sigue:** la lista de partes en el panel de objetos (cambiar el extrusor de una parte), abrir las partes de un 3MF
   (FM9) y el corte en dos partes (MT24).
+- **Después:** en la herramienta Material, cada parte con su extrusor («El del objeto» o uno propio); las partes
+  siguen a sus mezclas cuando se renumeran (MX30). Pruebas: `palette_piece.txt` (`part-extruder`, `open-mixing off`).
+- **CI local** de 9793f19: gcc 1245/1245; clang falló solo en `ui_script_palette_piece` porque leyó el guion mientras
+  lo editaba (no del código); se vuelve a correr entero.
 

@@ -2580,6 +2580,8 @@
     X(GradientPlace, "en el %d %%", "at %d %%") \
     X(GradientAddFilament, "Añadir filamento", "Add filament") \
     X(GradientSteps, "Sin subcapas, un degradé en X o Y cambia en escalones de una capa", "Without sublayers, a gradient in X or Y changes in steps of one layer") \
+    X(ObjectParts, "Partes", "Parts") \
+    X(PartObjectsExtruder, "El del objeto", "The object's") \
     X(PalettePieceLoad, "Poner la pieza de muestras en la placa", "Put the sample card on the plate") \
     X(PalettePieceNames, "Nombre de cada muestra", "Each sample's name") \
     X(PalettePieceName, "Paleta de colores", "Colour palette") \
