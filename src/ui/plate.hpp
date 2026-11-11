@@ -60,6 +60,16 @@ struct PlateRange {
     friend bool operator==(const PlateRange&, const PlateRange&) = default;
 };
 
+// A part of an object (model_tools.md, «Tipos de malla»; formats.md, rule 7):
+// a run of its mesh's triangles, printed with its own extruder (from 1, or a
+// blend's number; 0: the object's).
+struct PlatePart {
+    std::string name;
+    std::size_t first = 0, count = 0;
+    int extruder = 0;
+    friend bool operator==(const PlatePart&, const PlatePart&) = default;
+};
+
 struct PlateObject {
     std::string name;
     TriangleMesh mesh; // as its file has it
@@ -75,6 +85,8 @@ struct PlateObject {
     std::string settings{};
     std::vector<PlateVolume> volumes{};
     std::vector<PlateRange> ranges{};
+    // Its parts, one after another in the mesh; empty: one part, all of it.
+    std::vector<PlatePart> parts{};
     // Where it came from, when it came from the Design tab (cad_design.md,
     // rules 21 and 22): the design as `cad::design_json` writes it, the
     // SolidCraft design file, and a number of this session that «Editar en

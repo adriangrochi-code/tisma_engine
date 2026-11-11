@@ -2580,6 +2580,12 @@
     X(GradientPlace, "en el %d %%", "at %d %%") \
     X(GradientAddFilament, "Añadir filamento", "Add filament") \
     X(GradientSteps, "Sin subcapas, un degradé en X o Y cambia en escalones de una capa", "Without sublayers, a gradient in X or Y changes in steps of one layer") \
+    X(ObjectParts, "Partes", "Parts") \
+    X(PartObjectsExtruder, "El del objeto", "The object's") \
+    X(PalettePieceLoad, "Poner la pieza de muestras en la placa", "Put the sample card on the plate") \
+    X(PalettePieceNames, "Nombre de cada muestra", "Each sample's name") \
+    X(PalettePieceName, "Paleta de colores", "Colour palette") \
+    X(PalettePieceBase, "Base", "Base") \
     X(TransmissionRow, "Distancia de transmisión (TD)", "Transmission distance (TD)") \
     X(TransmissionTip, "El espesor en el que el filamento deja pasar casi nada de luz; 0: desconocida. Por encima de 10 mm se ve lo de adentro y no se purga en su relleno", \
       "The thickness through which the filament lets almost no light pass; 0: unknown. Above 10 mm what is inside shows, so no purge into its infill")

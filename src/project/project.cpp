@@ -124,6 +124,12 @@ static ordered_json project_json(const Project& project, bool offsets) {
                 item["settings"] = ordered_json::parse(v.settings);
             models.back()["volumes"].push_back(std::move(item));
         }
+        for (const ProjectPart& part : m.parts) {
+            ordered_json item = {{"name", part.name}, {"first", part.first}, {"count", part.count}};
+            if (part.extruder != 0)
+                item["extruder"] = part.extruder;
+            models.back()["parts"].push_back(std::move(item));
+        }
         for (const ProjectRange& r : m.ranges) {
             ordered_json item = {{"from", r.from}, {"to", r.to}};
             if (!r.settings.empty())
@@ -365,6 +371,38 @@ static Project project_from_json(std::string_view json_text, const ProjectParts&
                     }
                     model.volumes.push_back(std::move(volume));
                 }
+            }
+            if (m.contains("parts")) {
+                if (!m.at("parts").is_array())
+                    fail(what + ".parts: must be a list");
+                std::size_t next = 0;
+                for (std::size_t k = 0; k < m.at("parts").size(); ++k) {
+                    const ordered_json& r = m.at("parts")[k];
+                    const std::string at = what + ".parts[" + std::to_string(k) + "]";
+                    if (!r.is_object() || !r.contains("first") || !r.contains("count") ||
+                        !r.at("first").is_number_unsigned() || !r.at("count").is_number_unsigned())
+                        fail(at + ": must have first and count, whole numbers");
+                    ProjectPart part;
+                    part.first = r.at("first").get<std::size_t>();
+                    part.count = r.at("count").get<std::size_t>();
+                    if (part.count == 0 || part.first != next || part.first + part.count > model.mesh.triangle_count())
+                        fail(at + ": its triangles must follow the last part's, within the mesh");
+                    next = part.first + part.count;
+                    if (r.contains("name")) {
+                        if (!r.at("name").is_string())
+                            fail(at + ".name: must be text");
+                        part.name = r.at("name").get<std::string>();
+                    }
+                    if (r.contains("extruder")) {
+                        if (!r.at("extruder").is_number_integer() || r.at("extruder").get<int>() < 0 ||
+                            r.at("extruder").get<int>() > 255)
+                            fail(at + ".extruder: must be from 0 to 255");
+                        part.extruder = r.at("extruder").get<int>();
+                    }
+                    model.parts.push_back(std::move(part));
+                }
+                if (next != model.mesh.triangle_count())
+                    fail(what + ".parts: must cover all the mesh's triangles");
             }
             if (m.contains("ranges")) {
                 if (!m.at("ranges").is_array())

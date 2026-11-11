@@ -13125,3 +13125,26 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   ancho no cambia la cuenta: cada capa tiene los dos en alguna franja).
 - **Pruebas:** `mix_gradient.txt` (órdenes nuevas `mix-gradient`, `expect-mix-changes`). No laminado ni impreso.
 - **Sigue:** la pieza de muestras `palette_piece` (CM8) en la placa.
+
+## 2026-11-11 — interfaz: partes de un objeto, pieza de muestras (CM8) y vista previa de colores (regla 17)
+
+- **Hecho:**
+  - un objeto de la placa puede tener partes: tramos seguidos de sus triángulos, cada uno con su extrusor (0: el del
+    objeto). El laminado recibe cada parte como un objeto aparte con su extrusor (el motor ya las une); el proyecto
+    las guarda en `models[i].parts` (`docs/PROJECT.md`) y rechaza partes que no cubren la malla. «Recargar desde el
+    disco» las borra si cambian los triángulos;
+  - en el diálogo de mezclas, después de la paleta rápida, «Poner la pieza de muestras en la placa» carga
+    `palette_piece(n)`: un modelo «Paleta de colores» con la base (filamento 1) y una parte por muestra, con su
+    filamento o su mezcla, y la lista con el nombre de cada número;
+  - en Preparar, con más de un filamento o con mezclas, cada parte se ve con el color de su filamento o mezcla, y la
+    pintura de color encima (hasta 2 millones de triángulos; se dibuja con las piezas de la pintura).
+- **Pruebas:** `[project]` (partes de ida y vuelta, nativo y 3MF; el reparto al laminar), `palette_piece.txt`
+  (orden nueva `expect-parts`). No laminado entero ni impreso: «not tested on hardware».
+- **Decisión:** compilo en `build-ui` para no pisar el `build` del CI local.
+- **Sigue:** la lista de partes en el panel de objetos (cambiar el extrusor de una parte), abrir las partes de un 3MF
+  (FM9) y el corte en dos partes (MT24).
+- **Después:** en la herramienta Material, cada parte con su extrusor («El del objeto» o uno propio); las partes
+  siguen a sus mezclas cuando se renumeran (MX30). Pruebas: `palette_piece.txt` (`part-extruder`, `open-mixing off`).
+- **CI local** de 9793f19: gcc 1245/1245; clang falló solo en `ui_script_palette_piece` porque leyó el guion mientras
+  lo editaba (no del código); se vuelve a correr entero.
+

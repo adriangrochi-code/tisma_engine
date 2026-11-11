@@ -1,0 +1,30 @@
+# The quick palette's sample card (calibration_models.md, CM8;
+# color_mixing_plus.md, rule 22): one model on the plate, the base a part
+# with filament 1 and each of its 10 samples a part with its filament or its
+# blend, in the palette's order, each named in the dialog.
+wait 3
+set machine.extruders 4
+filament-color 1 #FFFFFF
+filament-color 2 #000000
+filament-color 3 #FF0000
+filament-color 4 #0000FF
+open-mixing
+wait 3
+menu quick_palette.2
+expect-text 10 muestras en la paleta
+menu palette_piece
+wait 2
+expect-parts 1 11 1 1 2 3 4 5 6 7 8 9 10
+open-mixing off
+wait 2
+# The Material tool lists the parts, each with its extruder.
+menu tool_material
+wait 2
+expect-control part_extruder.0
+expect-control part_extruder.10
+part-extruder 1 1 3
+expect-parts 1 11 1 3 2 3 4 5 6 7 8 9 10
+# A fifth filament: the blends move after it, and the parts follow them.
+set machine.extruders 5
+wait 2
+expect-parts 1 11 1 3 2 3 4 6 7 8 9 10 11
