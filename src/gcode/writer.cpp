@@ -5172,22 +5172,33 @@ void write_gcode(std::ostream& target, const SlicedModel& model, const Settings&
         }
         const double infill_share = sparse_sinks + other_sinks > 0.0 ? sparse_sinks / (sparse_sinks + other_sinks) : 0.0;
         const double r = s.filament_diameter / 2.0, area = std::numbers::pi * r * r;
-        const double tower_mm = g.tower_e(), objects_mm = into_objects / area;
+        double tower_mm = g.tower_e(), objects_mm = into_objects / area;
+        // No tower on one nozzle: the machine purges outside the part (a
+        // chute), and what the objects do not take goes there
+        // (color_mixing_plus.md, rule 36, MX24).
+        if (!s.wipe_tower) {
+            double left = 0.0;
+            for (const auto& layer : tool_plan.tower_purge)
+                for (const double v : layer)
+                    left += v;
+            tower_mm = left / area;
+        }
+        const char* where = s.wipe_tower ? "on the wipe tower" : "to the discard";
         if (tower_mm + objects_mm > 0.0) {
-            char text[240];
+            char text[260];
             if (s.filament_density > 0.0) {
                 const auto grams = [&](double mm) { return mm * area / 1000.0 * s.filament_density; };
                 std::snprintf(text, sizeof text,
-                              "The filament changes purge %.2f g of filament: %.2f g on the wipe tower and %.2f g into "
+                              "The filament changes purge %.2f g of filament: %.2f g %s and %.2f g into "
                               "the objects (%.2f g into their infill, %.2f g into the rest)",
-                              grams(tower_mm + objects_mm), grams(tower_mm), grams(objects_mm),
+                              grams(tower_mm + objects_mm), grams(tower_mm), where, grams(objects_mm),
                               grams(objects_mm * infill_share), grams(objects_mm * (1.0 - infill_share)));
                 warnings->push_back({"purge", -1, 0.0, text, grams(tower_mm + objects_mm), "information"});
             } else {
                 std::snprintf(text, sizeof text,
-                              "The filament changes purge %.0f mm of filament: %.0f mm on the wipe tower and %.0f mm "
+                              "The filament changes purge %.0f mm of filament: %.0f mm %s and %.0f mm "
                               "into the objects (%.0f mm into their infill, %.0f mm into the rest)",
-                              tower_mm + objects_mm, tower_mm, objects_mm, objects_mm * infill_share,
+                              tower_mm + objects_mm, tower_mm, where, objects_mm, objects_mm * infill_share,
                               objects_mm * (1.0 - infill_share));
                 warnings->push_back({"purge", -1, 0.0, text, tower_mm + objects_mm, "information"});
             }

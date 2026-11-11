@@ -12733,8 +12733,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Full Spectrum, regla 40: informe de purga** (2026-11-11, bloque nocturno). El aviso «purge» después de laminar ya
   daba torre y objetos. Ahora separa los objetos entre relleno y resto: «… g into the objects (… g into their
   infill, … g into the rest)», en proporción al volumen de los sumideros de cada tipo. El texto de antes sigue
-  igual. Prueba `[extruders]` MM5 ampliada: con purga solo al relleno, todo va al relleno. Falta: el descarte
-  (regla 36, impresoras que purgan afuera). Necesita un ajuste de máquina que el motor todavía no tiene.
+  igual. Prueba `[extruders]` MM5 ampliada: con purga solo al relleno, todo va al relleno. Regla 36, el descarte
+  (MX24, mismo día): con una boquilla y sin torre (la impresora purga afuera de la pieza), lo que no toman los
+  objetos se informa como «… g to the discard». No hace falta un ajuste nuevo: la ficha no define ninguno, y sin
+  torre en una boquilla es la máquina la que descarta. Antes, sin torre no se informaba nada; ahora se informa
+  también sin mezclas. Prueba `[mixing]` MX24.
 - **Full Spectrum, regla 39: ciclos alineados** (2026-11-11, bloque nocturno; MX26). En `apply_mixes`, con varias
   mezclas en la placa, cada mezcla después de la primera prueba las rotaciones de su ciclo y se queda con la que más
   capas comparte filamento con lo ya puesto (en un empate, sin rotar). Solo con el ciclo por capa, no con `step`.

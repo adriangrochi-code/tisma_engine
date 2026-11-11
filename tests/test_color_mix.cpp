@@ -1009,3 +1009,22 @@ TEST_CASE("color mixing plus: what to suggest when the purge passes half the fil
     const auto three = mix_purge_suggestions(blend(4, {{1, 1.0}, {2, 1.0}, {3, 1.0}}), 10.0, {}, 140.0, 4000.0);
     CHECK(std::none_of(three.begin(), three.end(), [](const MixSuggestion& m) { return m.key == "cadence_heights"; }));
 }
+
+TEST_CASE("color mixing plus: without a tower the purge goes to the discard, counted apart (rule 36, MX24)", "[mixing]") {
+    Settings s = base();
+    s.single_extruder_mmu = true;
+    s.wipe_tower = false; // a printer that purges into a chute
+    s.infill_density = 20.0;
+    s.filament_density = 1.24;
+    const SlicedModel model = sliced(box(3), s, {blend(3, {{1, 0.5}, {2, 0.5}})});
+    std::ostringstream out;
+    std::vector<Warning> warnings;
+    write_gcode(out, model, s, &warnings);
+    const auto purge = std::find_if(warnings.begin(), warnings.end(), [](const Warning& w) { return w.kind == "purge"; });
+    REQUIRE(purge != warnings.end());
+    INFO(purge->message);
+    CHECK_THAT(purge->message, ContainsSubstring("to the discard"));
+    CHECK_THAT(purge->message, !ContainsSubstring("0.00 g to the discard"));
+    CHECK_THAT(purge->message, !ContainsSubstring("(0.00 g into their infill")); // the infill took its share first
+    CHECK(out.str().find(";TYPE:Wipe tower") == std::string::npos);
+}
