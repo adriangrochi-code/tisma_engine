@@ -4422,7 +4422,48 @@ void App::load_model(const std::filesystem::path& path) {
             settings_changed();
         }
         calibration_.reset();
+        const std::vector<ModelFile::Piece> pieces = std::move(stl.pieces);
         use_mesh(std::move(stl.mesh), path, Tab::Prepare);
+        // A 3MF's objects and parts as they were (formats.md, rule 5: FM9):
+        // one model for each build item, its parts with their names and
+        // extruders, each where the file has it.
+        if (!objects_.empty() && pieces.size() > 1 && std::all_of(pieces.begin(), pieces.end(), [&](const ModelFile::Piece& p) {
+                return p.first + p.count <= objects_.front().mesh.triangle_count();
+            })) {
+            const TriangleMesh whole = std::move(objects_.front().mesh);
+            const std::string file_name = objects_.front().name;
+            std::vector<std::size_t> order; // the build items, as they first come
+            for (const ModelFile::Piece& p : pieces)
+                if (std::find(order.begin(), order.end(), p.object) == order.end())
+                    order.push_back(p.object);
+            std::vector<PlateObject> made;
+            for (const std::size_t item : order) {
+                PlateObject o{order.size() > 1 ? file_name + " (" + std::to_string(made.size() + 1) + ")" : file_name, {}, {}, {}};
+                std::vector<PlatePart> parts;
+                for (const ModelFile::Piece& p : pieces) {
+                    if (p.object != item)
+                        continue;
+                    parts.push_back({p.name, o.mesh.triangle_count(), p.count, p.extruder, {}});
+                    for (std::size_t t = p.first; t < p.first + p.count; ++t)
+                        o.mesh.add_triangle(whole.corner(t, 0), whole.corner(t, 1), whole.corner(t, 2));
+                }
+                if (parts.size() > 1)
+                    o.parts = std::move(parts);
+                else if (parts.size() == 1 && parts.front().extruder > 0)
+                    o.extruder = parts.front().extruder;
+                const BoundingBox box = o.mesh.bounding_box();
+                o.place.x = 0.5 * (double(box.min.x) + double(box.max.x));
+                o.place.y = 0.5 * (double(box.min.y) + double(box.max.y));
+                if (order.size() == 1)
+                    o.source = utf8(std::filesystem::absolute(path));
+                made.push_back(std::move(o));
+            }
+            objects_ = std::move(made);
+            selected_ = 0;
+            also_selected_.clear();
+            plate_changed();
+            frame_all();
+        }
         // Another program's project (project_import.md, rules 1, 2 and 9):
         // which one, its parts, and that its settings stay out for now.
         if (lower_extension(path) == ".3mf") {
@@ -12610,7 +12651,16 @@ void App::selection_outline() {
     if (chosen.empty() || tool_ == PlateTool::Paint)
         return;
     const Vec3 eye = camera_.eye();
-    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    // In a window of its own behind the others: the Vulkan view draws over
+    // the background list, and the tools' cards must stay over the outline.
+    ImGui::SetNextWindowPos(view_pos_);
+    ImGui::SetNextWindowSize(view_size_);
+    ImGui::Begin("##selection_outline", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoBackground |
+                     ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                     ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGui::BringWindowToDisplayBack(ImGui::GetCurrentWindow());
+    ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->PushClipRect(view_pos_, ImVec2(view_pos_.x + view_size_.x, view_pos_.y + view_size_.y), true);
     const ImU32 bright = ImGui::GetColorU32(rgb(theme_.accent_hover)), faint = ImGui::GetColorU32(rgb(theme_.accent_hover, 0.35f));
     for (const int i : chosen) {
@@ -12680,6 +12730,7 @@ void App::selection_outline() {
         }
     }
     dl->PopClipRect();
+    ImGui::End();
 }
 
 // The models' modifiers (orange) and negative volumes (grey) over the 3D

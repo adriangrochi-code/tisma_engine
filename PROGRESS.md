@@ -13259,3 +13259,14 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Después** (pedido de fichas, para ME16 y ME17 por caja negra): `--paint color,N,X,Y,Z,RADIO` pinta con el
   filamento o la mezcla N (de 1 a 16, la marca que el motor lee hoy). Prueba: `ui_paint_color_cli`.
 
+## 2026-11-11 — interfaz: las partes de un 3MF al abrirlo (formats.md, regla 5: FM9) y el contorno con Vulkan
+
+- **Hecho:** con `ModelFile::pieces` del motor (ee7e6b2), un 3MF se abre con un modelo por objeto de su placa, cada
+  uno en su lugar y con sus partes (nombre y extrusor del archivo); uno solo sin partes queda como antes. El contorno
+  de lo elegido se dibuja en una ventana propia detrás de las demás: en la lista de fondo, la vista Vulkan lo tapaba
+  (lo encontró `ui_view_sphere_prepare_vulkan_same_as_opengl` en ASan; ahora coinciden y los dos lo muestran).
+- **Pruebas:** `ui_open_3mf_parts` (`box_parts.3mf`: un modelo, dos partes); pasan las 98 de 3MF, importar,
+  proyecto, recargar y vistas.
+- **CI local** (ASan de abaaed6): 1254/1256; `ui_script_cut_parts` falló porque cambié su guion durante la corrida,
+  y la de Vulkan es la arreglada acá.
+
