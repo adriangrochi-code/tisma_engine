@@ -859,6 +859,9 @@ TEST_CASE("nozzles: the purge after slicing, on the tower and into the objects (
     const Warning into = purge_of(infill).first;
     REQUIRE(into.kind == "purge");
     CHECK_THAT(into.message, !ContainsSubstring("0.00 g into the objects"));
+    // Into the infill alone: all of it in "into their infill" (color_mixing_plus.md, rule 40).
+    CHECK_THAT(into.message, ContainsSubstring("0.00 g into the rest)"));
+    CHECK_THAT(into.message, !ContainsSubstring("(0.00 g into their infill"));
     // A purge is a purge, wherever it goes: about as much in all.
     CHECK_THAT(into.value, WithinAbs(plain.value, 0.25 * plain.value));
     // A nozzle per filament: no purge to report.

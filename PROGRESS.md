@@ -12723,6 +12723,11 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 40: informe de purga** (2026-11-11, bloque nocturno). El aviso «purge» después de laminar ya
+  daba torre y objetos. Ahora separa los objetos entre relleno y resto: «… g into the objects (… g into their
+  infill, … g into the rest)», en proporción al volumen de los sumideros de cada tipo. El texto de antes sigue
+  igual. Prueba `[extruders]` MM5 ampliada: con purga solo al relleno, todo va al relleno. Falta: el descarte
+  (regla 36, impresoras que purgan afuera). Necesita un ajuste de máquina que el motor todavía no tiene.
 - **Full Spectrum, regla 39: ciclos alineados** (2026-11-11, bloque nocturno; MX26). En `apply_mixes`, con varias
   mezclas en la placa, cada mezcla después de la primera prueba las rotaciones de su ciclo y se queda con la que más
   capas comparte filamento con lo ya puesto (en un empate, sin rotar). Solo con el ciclo por capa, no con `step`.
