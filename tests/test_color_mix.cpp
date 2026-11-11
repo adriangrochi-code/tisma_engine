@@ -1052,3 +1052,19 @@ TEST_CASE("color mixing plus: the colour sought, by CIEDE2000 (rule 4, MX5, MX6)
     CHECK(three.front().mix.components.size() == 3);
     CHECK(three.front().distance < 0.5);
 }
+
+TEST_CASE("color mixing plus: the spectral prediction (rule 21, MX17)", "[mixing]") {
+    const std::vector<std::string> by = {"#0000ff", "#ffff00"};
+    // MX17: every TD at 0, the simple mixer's colour.
+    CHECK(mix_color_spectral(by, {0.5, 0.5}, {0.0, 0.0}) == mix_color(by, {0.5, 0.5}));
+    CHECK(mix_color_spectral(by, {0.5, 0.5}, {}) == mix_color(by, {0.5, 0.5}));
+    // Same TD on both: a colour between the two, not either.
+    const std::string even = mix_color_spectral(by, {0.5, 0.5}, {5.0, 5.0});
+    CHECK(even != by[0]);
+    CHECK(even != by[1]);
+    // The more translucent filament weighs more: closer to its colour.
+    const std::string yellow_clear = mix_color_spectral(by, {0.5, 0.5}, {1.0, 20.0});
+    CHECK(ciede2000(yellow_clear, by[1]) < ciede2000(even, by[1]));
+    // A filament alone keeps its colour (within rounding).
+    CHECK(ciede2000(mix_color_spectral({"#c04020"}, {1.0}, {5.0}), "#c04020") < 1.0);
+}

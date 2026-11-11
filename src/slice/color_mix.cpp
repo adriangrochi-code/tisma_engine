@@ -629,4 +629,40 @@ std::vector<MixMatch> match_color(const std::string& target, const std::vector<s
     return all;
 }
 
+std::string mix_color_spectral(const std::vector<std::string>& colors, const std::vector<double>& shares,
+                               const std::vector<double>& transmission) {
+    const auto td = [&](std::size_t k) { return k < transmission.size() ? std::max(0.0, transmission[k]) : 0.0; };
+    bool any = false;
+    for (std::size_t k = 0; k < colors.size(); ++k)
+        any = any || td(k) > 0.0;
+    if (!any)
+        return mix_color(colors, shares);
+    double ks[3] = {0.0, 0.0, 0.0}, total = 0.0;
+    for (std::size_t k = 0; k < colors.size() && k < shares.size(); ++k) {
+        unsigned value = 0;
+        const std::string& c = colors[k];
+        if (c.size() != 7 || c[0] != '#' || std::sscanf(c.c_str() + 1, "%6x", &value) != 1 || !(shares[k] > 0.0))
+            continue;
+        const double w = shares[k] * (1.0 + td(k) / 10.0);
+        for (int ch = 0; ch < 3; ++ch) {
+            double r = double((value >> (16 - 8 * ch)) & 0xFFu) / 255.0;
+            r = r <= 0.04045 ? r / 12.92 : std::pow((r + 0.055) / 1.055, 2.4); // linear reflectance
+            r = std::clamp(r, 1e-4, 1.0);
+            ks[ch] += w * (1.0 - r) * (1.0 - r) / (2.0 * r);
+        }
+        total += w;
+    }
+    if (total <= 0.0)
+        return "#808080";
+    char text[8];
+    const auto channel = [&](int ch) {
+        const double k = ks[ch] / total;
+        double r = 1.0 + k - std::sqrt(k * k + 2.0 * k);
+        r = r <= 0.0031308 ? 12.92 * r : 1.055 * std::pow(r, 1.0 / 2.4) - 0.055;
+        return unsigned(std::lround(std::clamp(r, 0.0, 1.0) * 255.0));
+    };
+    std::snprintf(text, sizeof text, "#%02x%02x%02x", channel(0), channel(1), channel(2));
+    return text;
+}
+
 } // namespace tisma

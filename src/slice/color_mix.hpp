@@ -144,6 +144,14 @@ std::vector<MixSuggestion> mix_purge_suggestions(const ColorMix& mix, double hei
 // An approximation: the colours real filaments give were not measured.
 std::string mix_color(const std::vector<std::string>& colors, const std::vector<double>& shares);
 
+// The spectral prediction (color_mixing_plus.md, rule 21): Kubelka and Munk,
+// each filament's K/S per channel from its colour, mixed by its share times
+// 1 + TD / 10 (`transmission_distance`, mm: a more translucent filament shows
+// more than its share; own design), back to a colour. With every TD at 0, the
+// simple mixer (mix_color), MX17.
+std::string mix_color_spectral(const std::vector<std::string>& colors, const std::vector<double>& shares,
+                               const std::vector<double>& transmission);
+
 // The CIEDE2000 colour difference between two "#rrggbb" colours (CIELAB,
 // D65), after G. Sharma, W. Wu and E. N. Dalal, "The CIEDE2000
 // color-difference formula: implementation notes, supplementary test data,

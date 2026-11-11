@@ -12723,6 +12723,13 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - Desde el 11-11 01:24 hay una segunda sesión del motor para la interfaz (`apps/tisma`, session_01QadJfN9DQTkS2Risyp8H6x):
   CAD estilo Fusion y huecos de P1. Esta sigue con `src/` (Full Spectrum, P2, F6). Las dos en dev; esta trae
   `origin/dev` con un merge antes de cada push.
+- **Full Spectrum, regla 21: predicción espectral** (2026-11-11, bloque nocturno; MX17). `mix_color_spectral(colores,
+  partes, TD)` en `src/slice/color_mix.*`: Kubelka y Munk por canal (reflectancia lineal a K/S y de vuelta), cada
+  filamento pesado por su parte × (1 + TD / 10). El factor es diseño propio: un filamento más translúcido pesa más.
+  Con todas las TD en 0, el mezclador simple (MX17). Prueba `[mixing]`: MX17, color entre los dos con la misma TD,
+  más cerca del más translúcido, un filamento solo conserva su color. Falta: elegir `mixer` o `spectral` como ajuste
+  y usarlo en `match_color` y en la vista previa (interfaz). El degradé en X/Y (regla 3) queda pendiente: hay que
+  partir las zonas de la capa.
 - **Full Spectrum, regla 4: color buscado** (2026-11-11, bloque nocturno; MX5 y MX6). `ciede2000` y
   `ciede2000_lab` (fórmula publicada de Sharma, Wu y Dalal 2005; verificada con tres pares de su tabla a 1e-4) y
   `match_color(objetivo, colores, id, max_cycle, min_part)` en `src/slice/color_mix.*`. Prueba todas las mezclas de 2
