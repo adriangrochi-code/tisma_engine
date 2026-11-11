@@ -12214,6 +12214,13 @@ void App::plate_tools() {
         ImGui::RadioButton(tr(T::CutTwoParts), &result, 1);
         note_rect("cut_two_parts");
         cut_parts_ = result == 1;
+        // MT33: the connectors stay as they were, unused, until two objects again.
+        if (cut_parts_) {
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 260.0f * scale_);
+            loc::TextDisabled("%s", tr(T::CutConnectorsApart));
+            ImGui::PopTextWrapPos();
+            note_rect("cut_connectors_apart");
+        }
         ImGui::BeginDisabled(cut_parts_);
         ImGui::Checkbox(tr(T::CutFlipLower), &cut_flip_lower_);
         // Connectors (model_tools.md, rule 18): a click on the plane adds one,

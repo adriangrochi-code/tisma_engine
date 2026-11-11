@@ -13254,4 +13254,6 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
 - **Falta:** mover, girar y escalar varios juntos (hoy actúan sobre uno).
 - **CI local** (clang de 9a1a7c4): 1253/1255; las dos fallaron por pantallas (una «Xvfb failed to start», la otra pasa
   sola); ASan en curso.
+- **Después** (MT33, respuesta de fichas): en «Un objeto con dos partes», los conectores quedan deshabilitados con la
+  nota «Los conectores son para piezas separadas» y vuelven a valer con «Dos objetos». Prueba: `cut_parts.txt`.
 

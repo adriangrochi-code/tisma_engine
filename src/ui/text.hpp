@@ -2593,6 +2593,7 @@
     X(ObjectParts, "Partes", "Parts") \
     X(PartItem, "Parte: %s", "Part: %s") \
     X(CutTwoObjects, "Dos objetos", "Two objects") \
+    X(CutConnectorsApart, "Los conectores son para piezas separadas", "Connectors are for separate pieces") \
     X(CutTwoParts, "Un objeto con dos partes", "One object, two parts") \
     X(CutPartBelow, "Abajo", "Lower") \
     X(CutPartAbove, "Arriba", "Upper") \
