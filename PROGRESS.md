@@ -12727,7 +12727,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   alto por filamento, solo la superficie con subcapas, un degradé con paso y subcapas, sesgo con paso y subcapas, y
   sesgo con jarrón. El G-code pasa el control en todos. Hallazgo: `mixing.step` más fino que las capas y sin
   subcapas (paso 0,05 con capas de 0,2) imprime la mezcla 1 : 1 toda con el filamento 1, sin ningún cambio, porque
-  cada centro cae en un elemento par del ciclo. Es la fórmula de la regla 9, así que no la cambio: ahora se avisa.
+  cada centro cae en un elemento par del ciclo. Ahora esas capas siguen el ciclo capa por capa, con aviso: la ficha
+  se corrigió el mismo día. Decisión propia: solo cuando el paso es más fino que todas las capas con mezcla, para que
+  MX28 (capas de 0,3 con paso 0,2, por su centro) siga como está escrito.
   Prueba `[mixing]`, que falla sin el aviso. Consultado a la sesión de especificaciones. CI local con ASan en
   ba84a92: EXIT 0.
 - **Full Spectrum, regla 37: purga según los colores** (2026-11-11, bloque nocturno; MX25). `purge_from_colors` y

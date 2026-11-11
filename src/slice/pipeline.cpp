@@ -829,19 +829,24 @@ void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const S
                     (std::abs(settings.mix_step - settings.layer_height) > 1e-9 || variable_layers(settings))
                 ? settings.mix_step
                 : 0.0;
+        // A step finer than every layer without sublayers would fall on the
+        // same elements of the cycle each layer (all one filament with 1 : 1):
+        // the layers go by the cycle, layer by layer, and it is said (rule 9).
+        double by_height = step;
         if (step > 0.0 && !settings.mix_subdivide && !mix.gradient) {
             double thinnest = std::numeric_limits<double>::infinity();
             for (std::size_t l = 0; l < model.layers.size(); ++l)
                 if (present[l])
                     thinnest = std::min(thinnest, model.layers[l].top - model.layers[l].bottom);
-            // A step finer than every layer skips elements of the cycle: the
-            // colour can come out of fewer filaments (rule 9).
             static const std::string finer =
-                "mixing.step is finer than the layers without mixing.subdivide: some of a blend's filaments may not print";
-            if (step < thinnest - 1e-9 && std::find(model.notices.begin(), model.notices.end(), finer) == model.notices.end())
-                model.notices.push_back(finer);
+                "mixing.step is finer than the layers without mixing.subdivide: the layers follow the cycle layer by layer";
+            if (step < thinnest - 1e-9) {
+                by_height = 0.0;
+                if (std::find(model.notices.begin(), model.notices.end(), finer) == model.notices.end())
+                    model.notices.push_back(finer);
+            }
         }
-        const std::vector<int> filament = mix_layers(mix, model.layers, present, step);
+        const std::vector<int> filament = mix_layers(mix, model.layers, present, by_height);
         int last = 0;
         std::size_t passes = 0;
         for (std::size_t l = 0; l < model.layers.size(); ++l)

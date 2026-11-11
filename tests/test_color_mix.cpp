@@ -760,7 +760,7 @@ TEST_CASE("color mixing plus: the purge by the colours, more from dark to light 
     CHECK(purge_from_colors("nonsense", "#808080") < 61.0); // unreadable: mid grey
 }
 
-TEST_CASE("color mixing plus: a step finer than the layers without sublayers is said (rule 9)", "[mixing]") {
+TEST_CASE("color mixing plus: a step finer than the layers without sublayers goes by layer, and is said (rule 9)", "[mixing]") {
     // Step 0.05 on layers of 0.2: every layer's middle falls on an even
     // element of A, B, so the blend would print all in one filament.
     Settings s = base();
@@ -768,6 +768,8 @@ TEST_CASE("color mixing plus: a step finer than the layers without sublayers is 
     const SlicedModel model = sliced(box(3), s, {blend(3, {{1, 0.5}, {2, 0.5}})});
     CHECK(std::any_of(model.notices.begin(), model.notices.end(),
                       [](const std::string& n) { return n.find("finer than the layers") != std::string::npos; }));
+    // The layers follow the cycle layer by layer: both filaments, in turn.
+    CHECK(sequence(model).substr(0, 6) == "121212");
     s.mix_subdivide = true; // with sublayers the passes follow the step: nothing to say
     const SlicedModel passes = sliced(box(3), s, {blend(3, {{1, 0.5}, {2, 0.5}})});
     CHECK(std::none_of(passes.notices.begin(), passes.notices.end(),
