@@ -13443,3 +13443,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   cerraba el cuadro); en Diseño el encuadre deja la pieza llenando unos dos tercios de la vista, centrada (antes,
   un tercio).
 
+## 2026-11-11 — interfaz: flechas para arrastrar las medidas en Diseño (cad_design.md, regla 11 quinquies)
+
+- **Hecho:** con el cuadro de una primitiva abierto, una flecha por medida sale de la cara que mueve (roja en X,
+  verde en Y, azul en Z, como el gizmo de la placa); se arrastra con el mouse, el valor va al lado del puntero y la
+  pieza se construye de nuevo al soltar. Por ahora solo cuando ese paso es el único cuerpo del diseño (la
+  construcción da una sola caja para todos); los diámetros internos y las operaciones no tienen flecha todavía.
+- **Pruebas:** `design_handles.txt` (tres flechas en la caja; subir la del alto la hace más alta; Aceptar las saca);
+  orden nueva `expect-design-above`.
+
