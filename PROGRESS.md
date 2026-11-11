@@ -12728,6 +12728,8 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   El aviso de costo de la interfaz habría mostrado un número equivocado. `MixChangeOptions` suma `cadence_heights`,
   `height_a` y `height_b`, y con ellos cuenta las capas como `slice_model`. Prueba `[mixing]` («rules 8 and 12»),
   igual al G-code laminado; falla sin el arreglo.
+- **Para P2 (sesión de especificaciones, 2026-11-11):** el puente de impresoras (`cloud.md` reglas 12 a 17) manda dos
+  veces la misma impresora si la ve por red y por USB; tiene que mandar una por id, la de red si están las dos.
 - **Full Spectrum, regla 3: degradé en X o Y** (2026-11-11, bloque nocturno). `ColorMix::axis` ('z', 'x', 'y';
   `"axis"` en el JSON, escrito solo si no es Z). En `apply_mixes`, `gradient_in_plane`: franjas de unos 5 mm (de 2 a
   11) a lo largo del eje sobre los caminos de la mezcla; `split_by_bands` corta cada camino en los bordes (interpola
