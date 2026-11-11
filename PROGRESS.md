@@ -12703,7 +12703,7 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   boquilla (32–40; MX21–MX27); (8) predicción Oklab/espectral y color buscado (20, 21, 4; MX5, MX6, MX17); (9)
   interfaz: diálogo de cuatro pestañas, lista, paleta (6, 7, 22–24; MX4, MX18). Intercalado con la búsqueda profunda
   (un bloque cada uno) y con revisión de caja negra del camino de `color_mixing.md`. Imágenes (25–29) al final.
-- PF7 a PF9 (spec/next 3f1decf, `profile_pack_format.md`, perfiles de impresión, regla 6; perfiles de Anycubic Predator):
+- BH54, PF7 a PF9 (spec/next 3f1decf, `profile_pack_format.md`, perfiles de impresión, regla 6; perfiles de Anycubic Predator):
   `extrusion.bridge_flow_ratio` de una impresión del paquete se dejaba afuera con aviso («is a filament setting»);
   ahora se pone sobre el del filamento. `wipe_tower.purge_volumes` de una impresora se dejaba afuera; ahora es el
   valor por defecto de la impresión, y el de la impresión manda si lo trae. `extrusion.type` del filamento avisaba
