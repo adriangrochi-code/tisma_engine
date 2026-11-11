@@ -149,7 +149,7 @@ de abajo.
       como del filamento de la pieza; donde dos colores se encuentran adentro, gana la cara más cercana;
     - con `painting.max_region_width` mayor que 0, un color solo llega hasta esa distancia de su cara; más adentro,
       el filamento de la pieza. Con 0, sin límite;
-    - una pared más fina que dos anchos de línea pintada de un lado lleva el color en todo su espesor (no hay lugar para
+    - una pared de dos anchos de línea o menos pintada de un lado lleva el color en todo su espesor (no hay lugar para
       dos filamentos); pintada distinto de cada lado, se parte por la mitad;
     - las caras de arriba y de abajo pintadas también cuentan: un techo pintado de rojo pone rojo las capas de arriba
       hasta `max_region_width` (o las capas sólidas de arriba, si es 0) (ME16, ME17).
@@ -185,5 +185,5 @@ de 0,2, 2 perímetros, sin relleno, sin falda ni borde, centro en (100, 100)), d
 | ME13 | Dos boquillas, filamentos PLA 210 y PETG 240, una pieza de cada uno | `M104`/`M109` del extrusor 1 a 240 antes de su primera extrusión; ninguna extrusión con su boquilla en 0 |
 | ME14 | Cubo con voladizo, una boquilla | `extruders.support` 5, `extruders.support_interface` 5 | Lamina; soporte e interfaz con T0; aviso de extrusor que no existe |
 | ME15 | Dos boquillas, una pieza de cada una alternando capas; PLA 215 con `filament.idle_temperature` 170 | sin prevención de goteo | Al dejar la herramienta, `M104 T… S170`; antes de volver a ella, `M109 T… S215` |
-| ME16 | Cubo de 20 mm, la cara +X pintada con el filamento 2, `max_region_width` 0 / 3 | 0: la mitad de cada capa más cerca de +X con 2, el resto con 1 / 3: solo una franja de 3 mm junto a +X con 2 |
+| ME16 | Cubo de 20 mm, la cara +X pintada con el filamento 2, `max_region_width` 0 / 3 | 0: la zona de cada capa más cerca de +X que de cualquier otra cara con 2 (una cuña), el resto con 1 / 3: solo una franja de 3 mm junto a +X con 2 |
 | ME17 | Pared de 0,8 mm pintada de un lado con 2 / de un lado con 2 y del otro con 3 | Todo el espesor con 2 / mitad 2 y mitad 3 |
