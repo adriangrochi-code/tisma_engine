@@ -12843,4 +12843,4 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   zonas pintadas ni partes con mezcla propia. Guion `mix_changes.txt`. Orden de guion nueva: `add-mix A B`.
 - **CI local (a4bc6aa sobre d420339):** gcc y clang 1209/1209. ASan: un uso después de liberar en
   `tests/test_color_mix.cpp:473` (de la otra sesión, avisada; ya arreglado en ba84a92) y
-  `ui_project_import_settings` sin el aviso a tiempo (pasa en gcc y clang; se repite sola abajo).
+  `ui_project_import_settings` sin el aviso a tiempo con la máquina cargada; sola, en ASan, pasa (lentitud, no error).
