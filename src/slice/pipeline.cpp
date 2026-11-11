@@ -996,7 +996,50 @@ bool gradient_between(SlicedModel& model, ColorMix& mix, const std::vector<char>
     return true;
 }
 
-void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& mixes, const Settings& settings) {
+// Every gradient is measured on each object (color_mixing_plus.md, rule 3,
+// MX32): with several objects (or copies) on the plate, each one's paths of a
+// gradient take a number of their own (from 200, by the object's outline)
+// and the gradient is laid on each apart; the parts of one object share it.
+std::vector<ColorMix> gradients_by_object(SlicedModel& model, const std::vector<ColorMix>& mixes,
+                                          const std::vector<Polygon>& outlines) {
+    if (outlines.size() < 2)
+        return mixes;
+    std::vector<ColorMix> out;
+    int next = 200;
+    for (const ColorMix& m : mixes) {
+        out.push_back(m); // what falls in no outline keeps the blend's own number
+        if (!m.gradient || next + int(outlines.size()) > 255)
+            continue;
+        const int first = next;
+        next += int(outlines.size());
+        std::vector<char> used(outlines.size(), 0);
+        part_paths(model, [&](std::size_t, std::vector<Toolpath>& paths) {
+            for (Toolpath& t : paths) {
+                if (t.tool != m.id || t.points.empty())
+                    continue;
+                const Point2d& q = t.points[t.points.size() / 2].p;
+                const Clipper2Lib::Point64 at{to_units(q.x), to_units(q.y)};
+                for (std::size_t k = 0; k < outlines.size(); ++k)
+                    if (Clipper2Lib::PointInPolygon(at, outlines[k]) != Clipper2Lib::PointInPolygonResult::IsOutside) {
+                        t.tool = std::uint8_t(first + int(k));
+                        used[k] = 1;
+                        break;
+                    }
+            }
+        });
+        for (std::size_t k = 0; k < outlines.size(); ++k)
+            if (used[k]) {
+                ColorMix copy = m;
+                copy.id = first + int(k);
+                out.push_back(std::move(copy));
+            }
+    }
+    return out;
+}
+
+void apply_mixes(SlicedModel& model, const std::vector<ColorMix>& all, const Settings& settings,
+                 const std::vector<Polygon>& outlines = {}) {
+    const std::vector<ColorMix> mixes = gradients_by_object(model, all, outlines);
     // Each layer's filament from the blends already laid, for the next
     // blend's cycle to agree with where it can (rule 39).
     std::vector<int> laid(model.layers.size(), 0);
@@ -1442,7 +1485,21 @@ SlicedModel slice_model(const IndexedMesh& input, const Settings& settings, gpu:
             if (object_tool(objects->front(), settings) != 1)
                 tag_tool(out, object_tool(objects->front(), settings));
         }
-        apply_mixes(out, blends, settings);
+        // Each object's (and copy's) outline, its parts together, for the
+        // gradients measured on each (rule 3, MX32).
+        std::vector<Polygon> outlines;
+        {
+            std::map<std::pair<std::size_t, std::size_t>, std::vector<Vec3f>> points;
+            for (const MeshObject& o : *objects) {
+                std::vector<Vec3f> p = object_points(input, o);
+                auto& to = points[{o.object, o.instance}];
+                to.insert(to.end(), p.begin(), p.end());
+            }
+            for (const auto& [key, p] : points)
+                if (!p.empty())
+                    outlines.push_back(outline_of(std::span<const Vec3f>(p)));
+        }
+        apply_mixes(out, blends, settings, outlines);
         for (const MeshObject& o : *objects) {
             const std::vector<Vec3f> points = object_points(input, o); // its height and outline, without its mesh
             if (points.empty())

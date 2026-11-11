@@ -12740,6 +12740,12 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   IPv4 y `::ffff:a.b.c.d`, por dirección como antes. Huella = SHA-256(sal del día + texto); texto IPv6 = la red en
   RFC 5952 (comprimida, minúsculas) + «/64» (`2800:A4:1234:5600:abcd::9` → «2800:a4:1234:5600::/64»); IPv4 =
   «200.40.10.7». Exacto, para coincidir con el servidor.
+- **Full Spectrum, regla 3: cada degradé se mide sobre cada objeto (MX32, spec/next)** (2026-11-11). Con varios
+  objetos o copias en la placa, `gradients_by_object` da a los caminos de cada degradé un número propio por objeto
+  (desde 200, por el contorno del objeto: la envolvente de sus partes juntas, por objeto y copia) y el degradé se aplica
+  a cada uno aparte; las partes de un objeto lo comparten. En secuencial ya iba por objeto. Prueba `[mixing]`: dos
+  cubos de 20 mm con un degradé en X: cada uno va de 1 a la izquierda a 2 a la derecha (sin el arreglo, 84 contra 648
+  en el borde derecho del primero); ningún número temporal queda; G-code verificado.
 - **Full Spectrum, regla 3: degradé entre dos puntos (MX31)** (2026-11-11). `ColorMix::from`/`to` (`"from"`, `"to"` en
   el JSON, en mm de la pieza: X e Y desde el centro de lo que imprime con la mezcla, con el medio ancho de los cordones;
   Z desde su primera capa). `gradient_between` en `apply_mixes`: la proporción es la proyección sobre la recta, recortada

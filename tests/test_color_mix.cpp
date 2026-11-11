@@ -1431,3 +1431,34 @@ TEST_CASE("color mixing plus: the blend palette piece slices, each sample with i
         for (const Toolpath& t : w.toolpaths)
             CHECK(t.tool <= 4);
 }
+
+TEST_CASE("color mixing plus: a gradient is measured on each object (rule 3, MX32)", "[mixing]") {
+    // Two 20 mm cubes 20 mm apart with one gradient in X, 1 to 2: each one
+    // goes from 1 at its left to 2 at its right.
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 110, 110, 10);
+    add_box(p.mesh, 130, 90, 0, 150, 110, 10);
+    p.objects = {{"a", 0, 12, 0, 0, 3}, {"b", 12, 12, 1, 0, 3}};
+    Settings s = base();
+    ColorMix g = blend(3, {{1, 0.0}, {2, 1.0}});
+    g.gradient = true;
+    g.axis = 'x';
+    const SlicedModel model = sliced(p, s, {g});
+    const auto count = [&](double x0, double x1, int tool) {
+        int n = 0;
+        for (const LayerWalls& w : model.walls)
+            for (const Toolpath& t : w.toolpaths)
+                for (const ToolpathPoint& q : t.points)
+                    n += q.p.x > x0 && q.p.x < x1 && t.tool == tool;
+        return n;
+    };
+    for (const double left : {90.0, 130.0}) {
+        INFO("cube from x " << left);
+        CHECK(count(left, left + 2, 1) > 3 * count(left, left + 2, 2));
+        CHECK(count(left + 18, left + 20, 2) > 3 * count(left + 18, left + 20, 1));
+    }
+    for (const LayerWalls& w : model.walls)
+        for (const Toolpath& t : w.toolpaths)
+            CHECK(t.tool <= 2); // no temporary number left
+    gcode_of(model, s);
+}
