@@ -199,6 +199,9 @@ para las impresoras 5 y 9.
      anchos de OrcaSlicer, por ejemplo `line_width`), y no de la altura de capa como en `prusaslicer`. Al leerlo, el
      motor pasa `"N%"` a mm con la boquilla del proyecto (o del perfil de impresora) antes de seguir con la conversión
      de `prusaslicer`; un valor en mm pasa igual (PF12).
+     `percent_of` también puede nombrar una clave del motor (por ejemplo `"acceleration.default"`): `"N%"` se pasa a
+     número con el valor de esa clave en el proyecto antes de traducir; las aceleraciones en % de OrcaSlicer usan esto
+     (PF13).
 4. **Es la misma traducción** con que el paquete convierte los perfiles: un proyecto y un perfil del mismo programa
    dan los mismos ajustes del motor.
 5. **Cobertura** (09-11-2026, claves de origen / con clave del motor): prusaslicer 806 / 88; orcaslicer 881 / 57;
@@ -260,3 +263,4 @@ para las impresoras 5 y 9.
 | PF10 | Filamento con `extrusion.travel` `{"ramping_lift": true, "slope": 1, "max_lift": 0.6}` | Sin aviso; los viajes con ese filamento suben en rampa hasta 0,6 mm |
 | PF11 | Impresión de resina con `resin.bottom_layers` 4, resina con 6 | 4 capas de base, sin aviso |
 | PF12 | Proyecto 3MF de OrcaSlicer con boquilla 0,6 y `outer_wall_line_width` "105%" | La pared externa a 0,63 mm (no 105 % de la altura de capa) |
+| PF13 | Proyecto 3MF de OrcaSlicer con `default_acceleration` 5000 y `bridge_acceleration` "50%" | Puentes a 2500 mm/s² |
