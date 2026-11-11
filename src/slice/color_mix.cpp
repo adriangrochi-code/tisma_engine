@@ -521,6 +521,54 @@ int mix_changes_estimate(const ColorMix& mix, double height, const MixChangeOpti
     // A gradient in X or Y (rule 3): each layer prints the filaments its bands
     // take that layer, one group each; the writer starts with the one the
     // layer below ended with.
+    // A gradient between two points (MX31): the bands each layer crosses, as
+    // the slicing cuts them, over the part `extent` mm wide across the line
+    // and centred on the points' origin; nearly vertical, a gradient in Z.
+    if (mix.gradient && mix.from && mix.to) {
+        const std::array<double, 3>& f = *mix.from;
+        const double dx = (*mix.to)[0] - f[0], dy = (*mix.to)[1] - f[1], dz = (*mix.to)[2] - f[2];
+        const double xy = std::hypot(dx, dy), len2 = dx * dx + dy * dy + dz * dz;
+        if (!(len2 > 0.0))
+            return 0;
+        ColorMix plain = mix;
+        plain.from.reset(), plain.to.reset();
+        if (xy < 0.1 * std::abs(dz)) {
+            plain.min_z = std::min(f[2], f[2] + dz), plain.max_z = std::max(f[2], f[2] + dz);
+            if (dz < 0.0)
+                for (ColorMix::Component& c : plain.components)
+                    c.share = 1.0 - c.share;
+            return mix_changes_estimate(plain, height, o);
+        }
+        const double ux = dx / xy, uy = dy / xy, half = (o.extent > 0.0 ? o.extent : xy) / 2.0;
+        const int bands = std::clamp(int(std::lround(len2 / xy / 5.0)), 2, 11);
+        std::vector<std::vector<int>> cycles{gradient_cycle(plain, 0.0)};
+        for (int b = 0; b < bands; ++b)
+            cycles.push_back(gradient_cycle(plain, (b + 0.5) / bands));
+        cycles.push_back(gradient_cycle(plain, 1.0));
+        const auto band_at = [&](double c, double z) {
+            const double tt = (xy * (c - (f[0] * ux + f[1] * uy)) + dz * (z - f[2])) / len2;
+            return std::clamp(int(std::floor(tt * bands)) + 1, 0, bands + 1);
+        };
+        int count = 0, last = 0;
+        double z = 0.0;
+        for (std::size_t l = 0; z < height - 1e-9 && l < 100000; ++l) {
+            const double h = l == 0 ? o.first_layer_height : o.layer_height;
+            const double mid = z + h / 2.0;
+            z += h;
+            std::vector<int> tools;
+            for (int b = band_at(-half, mid); b <= band_at(half, mid); ++b)
+                tools.push_back(cycles[std::size_t(b)][l % cycles[std::size_t(b)].size()]);
+            std::sort(tools.begin(), tools.end());
+            tools.erase(std::unique(tools.begin(), tools.end()), tools.end());
+            if (const auto it = std::find(tools.begin(), tools.end(), last); it != tools.end())
+                std::rotate(tools.begin(), it, it + 1);
+            for (const int tool : tools) {
+                count += last != 0 && tool != last;
+                last = tool;
+            }
+        }
+        return count;
+    }
     if (mix.gradient && (mix.axis == 'x' || mix.axis == 'y')) {
         const int bands = o.extent > 0.0 ? std::clamp(int(std::lround(o.extent / 5.0)), 2, 11) : 2;
         std::vector<std::vector<int>> cycles;

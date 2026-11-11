@@ -1361,3 +1361,23 @@ TEST_CASE("color mixing plus: a gradient between two points of the part (rule 3,
     z.max_z = 20.0;
     CHECK(sequence(sliced(p, s, {up})) == sequence(sliced(p, s, {z})));
 }
+
+TEST_CASE("color mixing plus: the estimate before slicing for a gradient between two points (MX31, rule 12)", "[mixing]") {
+    Plate p;
+    add_box(p.mesh, 90, 90, 0, 110, 110, 20);
+    p.objects = {{"cube", 0, 12, 0, 0, 3}};
+    Settings s = base();
+    ColorMix g = blend(3, {{1, 0.0}, {2, 1.0}});
+    g.gradient = true;
+    g.from = std::array<double, 3>{-10, -10, 0};
+    g.to = std::array<double, 3>{10, 10, 20};
+    MixChangeOptions o;
+    o.first_layer_height = s.first_layer_height;
+    o.layer_height = s.layer_height;
+    o.extent = 20.0 * std::sqrt(2.0); // the cube across the diagonal
+    CHECK(mix_changes_estimate(g, 20.0, o) == changes(gcode_of(sliced(p, s, {g}), s)));
+    // Nearly vertical: as a gradient in Z.
+    g.from = std::array<double, 3>{0, 0, 0};
+    g.to = std::array<double, 3>{0, 0, 20};
+    CHECK(mix_changes_estimate(g, 20.0, o) == changes(gcode_of(sliced(p, s, {g}), s)));
+}

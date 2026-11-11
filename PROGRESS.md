@@ -12747,8 +12747,9 @@ salidas incorrectas (no solo cierres), con prueba por hallazgo. Se recorren las 
   `split_by_bands` en cualquier dirección), más una franja en cada extremo para lo de fuera del tramo; casi vertical
   (< 1 mm en XY por 10 mm en Z) pasa a degradé en Z entre las dos alturas. Prueba `[mixing]` MX31: cubo de 20 mm de
   (−10, −10, 0) a (10, 10, 20): esquina de abajo con más del triple de 1, de arriba con más del triple de 2, la capa del
-  medio con los dos; (0, 0, 0) a (0, 0, 20) igual que el degradé en Z; JSON de ida y vuelta; G-code verificado. Falta:
-  el estimado de cambios para este degradé (lo cuenta como en Z) y los puntos en la interfaz.
+  medio con los dos; (0, 0, 0) a (0, 0, 20) igual que el degradé en Z; JSON de ida y vuelta; G-code verificado. El
+  estimado de cambios cuenta las franjas de cada capa como el laminado (`extent`: el tamaño de la pieza a lo largo de
+  la recta en XY; casi vertical, como en Z); prueba contra el G-code del cubo. Falta: los puntos en la interfaz.
 - **Full Spectrum, regla 3: degradé en X o Y** (2026-11-11, bloque nocturno). `ColorMix::axis` ('z', 'x', 'y';
   `"axis"` en el JSON, escrito solo si no es Z). En `apply_mixes`, `gradient_in_plane`: franjas de unos 5 mm (de 2 a
   11) a lo largo del eje sobre los caminos de la mezcla; `split_by_bands` corta cada camino en los bordes (interpola
